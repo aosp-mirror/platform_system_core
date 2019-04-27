@@ -43,7 +43,6 @@
 #include "uevent_listener.h"
 #include "util.h"
 
-using android::base::ReadFileToString;
 using android::base::Split;
 using android::base::Timer;
 using android::fs_mgr::AvbHandle;
@@ -55,6 +54,7 @@ using android::fs_mgr::Fstab;
 using android::fs_mgr::FstabEntry;
 using android::fs_mgr::ReadDefaultFstab;
 using android::fs_mgr::ReadFstabFromDt;
+using android::fs_mgr::SkipMountingPartitions;
 
 using namespace std::literals;
 
@@ -524,38 +524,10 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
     return true;
 }
 
-// For GSI to skip mounting /product and /product_services, until there are
-// well-defined interfaces between them and /system. Otherwise, the GSI flashed
-// on /system might not be able to work with /product and /product_services.
-// When they're skipped here, /system/product and /system/product_services in
-// GSI will be used.
-bool FirstStageMount::TrySkipMountingPartitions() {
-    constexpr const char kSkipMountConfig[] = "/system/etc/init/config/skip_mount.cfg";
-
-    std::string skip_config;
-    if (!ReadFileToString(kSkipMountConfig, &skip_config)) {
-        return true;
-    }
-
-    for (const auto& skip_mount_point : Split(skip_config, "\n")) {
-        if (skip_mount_point.empty()) {
-            continue;
-        }
-        auto it = std::remove_if(fstab_.begin(), fstab_.end(),
-                                 [&skip_mount_point](const auto& entry) {
-                                     return entry.mount_point == skip_mount_point;
-                                 });
-        fstab_.erase(it, fstab_.end());
-        LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
-    }
-
-    return true;
-}
-
 bool FirstStageMount::MountPartitions() {
     if (!TrySwitchSystemAsRoot()) return false;
 
-    if (!TrySkipMountingPartitions()) return false;
+    if (!SkipMountingPartitions(&fstab_)) return false;
 
     for (auto current = fstab_.begin(); current != fstab_.end();) {
         // We've already mounted /system above.
