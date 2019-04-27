@@ -19,16 +19,6 @@
 #include <sys/cdefs.h>
 #include <unistd.h>
 
-/*
- * Declare this library function as reimplementation.
- * Prevent circular dependencies, but allow _real_ library to hijack
- */
-#if defined(_WIN32)
-#define LIBLOG_WEAK static /* Accept that it is totally private */
-#else
-#define LIBLOG_WEAK extern "C" __attribute__((weak, visibility("default")))
-#endif
-
 /* possible missing definitions in sys/cdefs.h */
 
 /* DECLS */
