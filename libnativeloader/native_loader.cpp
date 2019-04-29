@@ -126,7 +126,7 @@ static constexpr const char* kRuntimeNamespaceName = "runtime";
 // classloader, the classloader-namespace namespace associated with that
 // classloader is selected for dlopen. The namespace is configured so that its
 // search path is set to the app-local JNI directory and it is linked to the
-// platform namespace with the names of libs listed in the public.libraries.txt.
+// default namespace with the names of libs listed in the public.libraries.txt.
 // This way an app can only load its own JNI libraries along with the public libs.
 static constexpr const char* kClassloaderNamespaceName = "classloader-namespace";
 // Same thing for vendor APKs.
@@ -307,24 +307,21 @@ class LibraryNamespaces {
       }
     }
 
-    std::string runtime_exposed_libraries = runtime_public_libraries_;
+    std::string runtime_exposed_libraries = base::Join(kRuntimePublicLibraries, ":");
 
     NativeLoaderNamespace native_loader_ns;
     if (!is_native_bridge) {
-      // The platform namespace is called "default" for binaries in /system and
-      // "platform" for those in the Runtime APEX. Try "platform" first since
-      // "default" always exists.
-      android_namespace_t* platform_ns = android_get_exported_namespace(kPlatformNamespaceName);
-      if (platform_ns == nullptr) {
-        platform_ns = android_get_exported_namespace(kDefaultNamespaceName);
-      }
-
       android_namespace_t* android_parent_ns;
       if (parent_ns != nullptr) {
         android_parent_ns = parent_ns->get_android_ns();
       } else {
-        // Fall back to the platform namespace if no parent is found.
-        android_parent_ns = platform_ns;
+        // Fall back to the platform namespace if no parent is found. It is
+        // called "default" for binaries in /system and "platform" for those in
+        // the Runtime APEX. Try "platform" first since "default" always exists.
+        android_parent_ns = android_get_exported_namespace(kPlatformNamespaceName);
+        if (android_parent_ns == nullptr) {
+          android_parent_ns = android_get_exported_namespace(kDefaultNamespaceName);
+        }
       }
 
       android_namespace_t* ns = android_create_namespace(namespace_name,
@@ -345,7 +342,7 @@ class LibraryNamespaces {
 
       android_namespace_t* runtime_ns = android_get_exported_namespace(kRuntimeNamespaceName);
 
-      if (!android_link_namespaces(ns, platform_ns, system_exposed_libraries.c_str())) {
+      if (!android_link_namespaces(ns, nullptr, system_exposed_libraries.c_str())) {
         *error_msg = dlerror();
         return nullptr;
       }
@@ -375,19 +372,14 @@ class LibraryNamespaces {
 
       native_loader_ns = NativeLoaderNamespace(ns);
     } else {
-      // Same functionality as in the branch above, but calling through native bridge.
-
-      native_bridge_namespace_t* platform_ns =
-          NativeBridgeGetExportedNamespace(kPlatformNamespaceName);
-      if (platform_ns == nullptr) {
-        platform_ns = NativeBridgeGetExportedNamespace(kDefaultNamespaceName);
-      }
-
       native_bridge_namespace_t* native_bridge_parent_namespace;
       if (parent_ns != nullptr) {
         native_bridge_parent_namespace = parent_ns->get_native_bridge_ns();
       } else {
-        native_bridge_parent_namespace = platform_ns;
+        native_bridge_parent_namespace = NativeBridgeGetExportedNamespace(kPlatformNamespaceName);
+        if (native_bridge_parent_namespace == nullptr) {
+          native_bridge_parent_namespace = NativeBridgeGetExportedNamespace(kDefaultNamespaceName);
+        }
       }
 
       native_bridge_namespace_t* ns = NativeBridgeCreateNamespace(namespace_name,
@@ -405,7 +397,7 @@ class LibraryNamespaces {
       native_bridge_namespace_t* runtime_ns =
           NativeBridgeGetExportedNamespace(kRuntimeNamespaceName);
 
-      if (!NativeBridgeLinkNamespaces(ns, platform_ns, system_exposed_libraries.c_str())) {
+      if (!NativeBridgeLinkNamespaces(ns, nullptr, system_exposed_libraries.c_str())) {
         *error_msg = NativeBridgeGetError();
         return nullptr;
       }
@@ -457,7 +449,6 @@ class LibraryNamespaces {
     std::string root_dir = android_root_env != nullptr ? android_root_env : "/system";
     std::string public_native_libraries_system_config =
             root_dir + kPublicNativeLibrariesSystemConfigPathFromRoot;
-    std::string runtime_public_libraries = base::Join(kRuntimePublicLibraries, ":");
     std::string llndk_native_libraries_system_config =
             root_dir + kLlndkNativeLibrariesSystemConfigPathFromRoot;
     std::string vndksp_native_libraries_system_config =
@@ -479,10 +470,6 @@ class LibraryNamespaces {
         std::vector<std::string> additional_libs_vector = base::Split(additional_libs, ":");
         std::copy(additional_libs_vector.begin(), additional_libs_vector.end(),
                   std::back_inserter(sonames));
-        // Apply the same list to the runtime namespace, since some libraries
-        // might reside there.
-        CHECK(sizeof(kRuntimePublicLibraries) > 0);
-        runtime_public_libraries = runtime_public_libraries + ':' + additional_libs;
       }
     }
 
@@ -508,7 +495,6 @@ class LibraryNamespaces {
     }
 
     system_public_libraries_ = base::Join(sonames, ':');
-    runtime_public_libraries_ = runtime_public_libraries;
 
     // read /system/etc/public.libraries-<companyname>.txt which contain partner defined
     // system libs that are exposed to apps. The libs in the txt files must be
@@ -736,7 +722,6 @@ class LibraryNamespaces {
   bool initialized_;
   std::list<std::pair<jweak, NativeLoaderNamespace>> namespaces_;
   std::string system_public_libraries_;
-  std::string runtime_public_libraries_;
   std::string vendor_public_libraries_;
   std::string oem_public_libraries_;
   std::string product_public_libraries_;

@@ -43,9 +43,6 @@ additional.namespaces = runtime,conscrypt,media,resolv,sphal,vndk,rs
 # can't be loaded in this namespace.
 ###############################################################################
 namespace.default.isolated = true
-# Visible to allow links to be created at runtime, e.g. through
-# android_link_namespaces in libnativeloader.
-namespace.default.visible = true
 
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
@@ -124,7 +121,7 @@ namespace.default.asan.permitted.paths += /mnt/expand
 namespace.default.asan.permitted.paths += /apex/com.android.runtime/${LIB}/bionic
 namespace.default.asan.permitted.paths += /system/${LIB}/bootstrap
 
-# Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 # If a shared library or an executable requests a shared library that
 # cannot be loaded into the default namespace, the dynamic linker tries
 # to load the shared library from the runtime namespace. And then, if the
@@ -132,6 +129,9 @@ namespace.default.asan.permitted.paths += /system/${LIB}/bootstrap
 # dynamic linker tries to load the shared library from the resolv namespace.
 # Finally, if all attempts fail, the dynamic linker returns an error.
 namespace.default.links = runtime,resolv
+# Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
+# libart.
+namespace.default.visible = true
 namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
@@ -150,13 +150,11 @@ namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 # "runtime" APEX namespace
 #
 # This namespace exposes externally accessible libraries from the Runtime APEX.
-# Keep in sync with the "runtime" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.runtime.isolated = true
-# Visible to allow links to be created at runtime, e.g. through
-# android_link_namespaces in libnativeloader.
 namespace.runtime.visible = true
 
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
@@ -189,11 +187,11 @@ namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # "conscrypt" APEX namespace
 #
 # This namespace is for libraries within the conscrypt APEX.
-# Keep in sync with the "conscrypt" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.conscrypt.isolated = true
 namespace.conscrypt.visible = true
 
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
@@ -236,8 +234,6 @@ namespace.resolv.link.default.shared_libs += libvndksupport.so
 # Note that there is no link from the default namespace to this namespace.
 ###############################################################################
 namespace.sphal.isolated = true
-# Visible to allow links to be created at runtime, e.g. through
-# android_link_namespaces in libnativeloader.
 namespace.sphal.visible = true
 
 namespace.sphal.search.paths  = /odm/${LIB}
@@ -327,8 +323,6 @@ namespace.rs.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
 # This namespace is exclusively for vndk-sp libs.
 ###############################################################################
 namespace.vndk.isolated = true
-# Visible to allow links to be created at runtime, e.g. through
-# android_link_namespaces in libnativeloader.
 namespace.vndk.visible = true
 
 namespace.vndk.search.paths  = /odm/${LIB}/vndk-sp
@@ -436,10 +430,10 @@ namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
 # "runtime" APEX namespace
 #
 # This namespace exposes externally accessible libraries from the Runtime APEX.
-# Keep in sync with the "runtime" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.runtime.isolated = true
 
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = system
@@ -570,10 +564,6 @@ namespace.vndk_in_system.link.vndk.allow_all_shared_libs = true
 [unrestricted]
 additional.namespaces = runtime,media,conscrypt,resolv
 
-# Visible to allow links to be created at runtime, e.g. through
-# android_link_namespaces in libnativeloader.
-namespace.default.visible = true
-
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /odm/${LIB}
 namespace.default.search.paths += /vendor/${LIB}
@@ -585,8 +575,10 @@ namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
 
-# Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.default.links = runtime,resolv
+namespace.default.visible = true
+
 namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
@@ -602,13 +594,11 @@ namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 # "runtime" APEX namespace
 #
 # This namespace exposes externally accessible libraries from the Runtime APEX.
-# Keep in sync with the "runtime" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.runtime.isolated = true
-# Visible to allow links to be created at runtime, e.g. through
-# android_link_namespaces in libnativeloader.
 namespace.runtime.visible = true
 
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
@@ -639,11 +629,11 @@ namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # "conscrypt" APEX namespace
 #
 # This namespace is for libraries within the conscrypt APEX.
-# Keep in sync with the "conscrypt" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.conscrypt.isolated = true
 namespace.conscrypt.visible = true
 
+# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
