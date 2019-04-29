@@ -96,6 +96,10 @@ class DeviceMapper final {
     // successfully read and stored in 'targets'. Returns 'false' otherwise.
     bool GetAvailableTargets(std::vector<DmTargetTypeInfo>* targets);
 
+    // Finds a target by name and returns its information if found. |info| may
+    // be null to check for the existence of a target.
+    bool GetTargetByName(const std::string& name, DmTargetTypeInfo* info);
+
     // Return 'true' if it can successfully read the list of device mapper block devices
     // currently created. 'devices' will be empty if the kernel interactions
     // were successful and there are no block devices at the moment. Returns
