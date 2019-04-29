@@ -904,12 +904,12 @@ static int adb_sideload_install(const char* filename, bool rescue_mode) {
         }
         buf[8] = '\0';
 
-        if (strcmp(kSideloadServiceExitSuccess, buf) == 0 ||
-            strcmp(kSideloadServiceExitFailure, buf) == 0) {
+        if (strcmp(kMinadbdServicesExitSuccess, buf) == 0 ||
+            strcmp(kMinadbdServicesExitFailure, buf) == 0) {
             printf("\rTotal xfer: %.2fx%*s\n",
                    static_cast<double>(xfer) / (sb.st_size ? sb.st_size : 1),
                    static_cast<int>(strlen(filename) + 10), "");
-            if (strcmp(kSideloadServiceExitFailure, buf) == 0) {
+            if (strcmp(kMinadbdServicesExitFailure, buf) == 0) {
                 return 1;
             }
             return 0;
@@ -959,6 +959,33 @@ static int adb_sideload_install(const char* filename, bool rescue_mode) {
             last_percent = percent;
         }
     }
+}
+
+static int adb_wipe_devices() {
+    auto wipe_devices_message_size = strlen(kMinadbdServicesExitSuccess);
+    std::string error;
+    unique_fd fd(adb_connect(
+            android::base::StringPrintf("rescue-wipe:userdata:%zu", wipe_devices_message_size),
+            &error));
+    if (fd < 0) {
+        fprintf(stderr, "adb: wipe device connection failed: %s\n", error.c_str());
+        return 1;
+    }
+
+    std::string message(wipe_devices_message_size, '\0');
+    if (!ReadFdExactly(fd, message.data(), wipe_devices_message_size)) {
+        fprintf(stderr, "adb: failed to read wipe result: %s\n", strerror(errno));
+        return 1;
+    }
+
+    if (message == kMinadbdServicesExitSuccess) {
+        return 0;
+    }
+
+    if (message != kMinadbdServicesExitFailure) {
+        fprintf(stderr, "adb: got unexpected message from rescue wipe %s\n", message.c_str());
+    }
+    return 1;
 }
 
 /**
@@ -1643,6 +1670,7 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "rescue")) {
         // adb rescue getprop <prop>
         // adb rescue install <filename>
+        // adb rescue wipe userdata
         if (argc != 3) error_exit("rescue requires two arguments");
         if (!strcmp(argv[1], "getprop")) {
             return adb_connect_command(android::base::StringPrintf("rescue-getprop:%s", argv[2]));
@@ -1650,6 +1678,8 @@ int adb_commandline(int argc, const char** argv) {
             if (adb_sideload_install(argv[2], true /* rescue_mode */) != 0) {
                 return 1;
             }
+        } else if (!strcmp(argv[1], "wipe") && !strcmp(argv[2], "userdata")) {
+            return adb_wipe_devices();
         } else {
             error_exit("invalid rescue argument");
         }
