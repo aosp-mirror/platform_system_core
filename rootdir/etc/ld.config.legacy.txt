@@ -20,6 +20,9 @@ dir.legacy = /data
 
 [legacy]
 namespace.default.isolated = false
+# Visible to allow links to be created at runtime, e.g. through
+# android_link_namespaces in libnativeloader.
+namespace.default.visible = true
 
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /product/${LIB}
@@ -41,7 +44,7 @@ namespace.default.asan.search.paths +=           /odm/${LIB}
 
 additional.namespaces = runtime,conscrypt,media,resolv
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+# Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
 # If a shared library or an executable requests a shared library that
 # cannot be loaded into the default namespace, the dynamic linker tries
 # to load the shared library from the runtime namespace. And then, if the
@@ -50,9 +53,6 @@ additional.namespaces = runtime,conscrypt,media,resolv
 # Finally, if all attempts fail, the dynamic linker returns an error.
 namespace.default.links = runtime,resolv
 namespace.default.asan.links = runtime,resolv
-# Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
-# libart.
-namespace.default.visible = true
 namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
@@ -71,11 +71,13 @@ namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 # "runtime" APEX namespace
 #
 # This namespace exposes externally accessible libraries from the Runtime APEX.
+# Keep in sync with the "runtime" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.runtime.isolated = true
+# Visible to allow links to be created at runtime, e.g. through
+# android_link_namespaces in libnativeloader.
 namespace.runtime.visible = true
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
@@ -119,11 +121,11 @@ namespace.media.link.default.shared_libs += libclang_rt.hwasan-aarch64-android.s
 # "conscrypt" APEX namespace
 #
 # This namespace is for libraries within the conscrypt APEX.
+# Keep in sync with the "conscrypt" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.conscrypt.isolated = true
 namespace.conscrypt.visible = true
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
