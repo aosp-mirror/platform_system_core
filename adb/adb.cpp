@@ -280,6 +280,9 @@ void parse_banner(const std::string& banner, atransport* t) {
     } else if (type == "sideload") {
         D("setting connection_state to kCsSideload");
         t->SetConnectionState(kCsSideload);
+    } else if (type == "rescue") {
+        D("setting connection_state to kCsRescue");
+        t->SetConnectionState(kCsRescue);
     } else {
         D("setting connection_state to kCsHost");
         t->SetConnectionState(kCsHost);
