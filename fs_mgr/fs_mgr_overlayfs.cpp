@@ -646,6 +646,25 @@ bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std:
     return true;
 }
 
+static void TruncatePartitionsWithSuffix(MetadataBuilder* builder, const std::string& suffix) {
+    auto& dm = DeviceMapper::Instance();
+
+    // Remove <other> partitions
+    for (const auto& group : builder->ListGroups()) {
+        for (const auto& part : builder->ListPartitionsInGroup(group)) {
+            const auto& name = part->name();
+            if (!android::base::EndsWith(name, suffix)) {
+                continue;
+            }
+            if (dm.GetState(name) != DmDeviceState::INVALID && !DestroyLogicalPartition(name, 2s)) {
+                continue;
+            }
+            builder->ResizePartition(builder->FindPartition(name), 0);
+        }
+    }
+}
+
+// This is where we find and steal backing storage from the system.
 bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_device,
                                      bool* partition_exists, bool* change) {
     *scratch_device = fs_mgr_overlayfs_scratch_device();
@@ -692,15 +711,24 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
             // the adb remount overrides :-( .
             auto margin_size = uint64_t(3 * 256 * 1024);
             BlockDeviceInfo info;
-            if (builder->GetBlockDeviceInfo(partition_name, &info)) {
+            if (builder->GetBlockDeviceInfo(fs_mgr_get_super_partition_name(slot_number), &info)) {
                 margin_size = 3 * info.logical_block_size;
             }
             partition_size = std::max(std::min(kMinimumSize, partition_size - margin_size),
                                       partition_size / 2);
             if (partition_size > partition->size()) {
                 if (!builder->ResizePartition(partition, partition_size)) {
-                    LERROR << "resize " << partition_name;
-                    return false;
+                    // Try to free up space by deallocating partitions in the other slot.
+                    TruncatePartitionsWithSuffix(builder.get(), fs_mgr_get_other_slot_suffix());
+
+                    partition_size =
+                            builder->AllocatableSpace() - builder->UsedSpace() + partition->size();
+                    partition_size = std::max(std::min(kMinimumSize, partition_size - margin_size),
+                                              partition_size / 2);
+                    if (!builder->ResizePartition(partition, partition_size)) {
+                        LERROR << "resize " << partition_name;
+                        return false;
+                    }
                 }
                 if (!partition_create) DestroyLogicalPartition(partition_name, 10s);
                 changed = true;
