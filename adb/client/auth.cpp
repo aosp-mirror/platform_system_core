@@ -53,6 +53,25 @@ static std::map<std::string, std::shared_ptr<RSA>>& g_keys =
     *new std::map<std::string, std::shared_ptr<RSA>>;
 static std::map<int, std::string>& g_monitored_paths = *new std::map<int, std::string>;
 
+static std::string get_user_info() {
+    std::string hostname;
+    if (getenv("HOSTNAME")) hostname = getenv("HOSTNAME");
+#if !defined(_WIN32)
+    char buf[64];
+    if (hostname.empty() && gethostname(buf, sizeof(buf)) != -1) hostname = buf;
+#endif
+    if (hostname.empty()) hostname = "unknown";
+
+    std::string username;
+    if (getenv("LOGNAME")) username = getenv("LOGNAME");
+#if !defined(_WIN32)
+    if (username.empty() && getlogin()) username = getlogin();
+#endif
+    if (username.empty()) hostname = "unknown";
+
+    return " " + username + "@" + hostname;
+}
+
 static bool calculate_public_key(std::string* out, RSA* private_key) {
     uint8_t binary_key_data[ANDROID_PUBKEY_ENCODED_SIZE];
     if (!android_pubkey_encode(private_key, binary_key_data, sizeof(binary_key_data))) {
@@ -70,6 +89,7 @@ static bool calculate_public_key(std::string* out, RSA* private_key) {
     size_t actual_length = EVP_EncodeBlock(reinterpret_cast<uint8_t*>(out->data()), binary_key_data,
                                            sizeof(binary_key_data));
     out->resize(actual_length);
+    out->append(get_user_info());
     return true;
 }
 
@@ -79,6 +99,7 @@ static int generate_key(const std::string& file) {
     mode_t old_mask;
     FILE *f = nullptr;
     int ret = 0;
+    std::string pubkey;
 
     EVP_PKEY* pkey = EVP_PKEY_new();
     BIGNUM* exponent = BN_new();
@@ -92,6 +113,11 @@ static int generate_key(const std::string& file) {
     RSA_generate_key_ex(rsa, 2048, exponent, nullptr);
     EVP_PKEY_set1_RSA(pkey, rsa);
 
+    if (!calculate_public_key(&pubkey, rsa)) {
+        LOG(ERROR) << "failed to calculate public key";
+        goto out;
+    }
+
     old_mask = umask(077);
 
     f = fopen(file.c_str(), "w");
@@ -104,7 +130,12 @@ static int generate_key(const std::string& file) {
     umask(old_mask);
 
     if (!PEM_write_PrivateKey(f, pkey, nullptr, nullptr, 0, nullptr, nullptr)) {
-        D("Failed to write key");
+        LOG(ERROR) << "Failed to write key";
+        goto out;
+    }
+
+    if (!android::base::WriteStringToFile(pubkey, file + ".pub")) {
+        PLOG(ERROR) << "failed to write public key";
         goto out;
     }
 
