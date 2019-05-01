@@ -343,6 +343,16 @@ TEST_F(TombstoneTest, dump_header_info) {
   ASSERT_STREQ(expected.c_str(), amfd_data_.c_str());
 }
 
+TEST_F(TombstoneTest, dump_thread_info_uid) {
+  dump_thread_info(&log_, ThreadInfo{.uid = 1,
+                                     .pid = 2,
+                                     .tid = 3,
+                                     .thread_name = "some_thread",
+                                     .process_name = "some_process"});
+  std::string expected = "pid: 2, tid: 3, name: some_thread  >>> some_process <<<\nuid: 1\n";
+  ASSERT_STREQ(expected.c_str(), amfd_data_.c_str());
+}
+
 TEST_F(TombstoneTest, dump_timestamp) {
   setenv("TZ", "UTC", 1);
   tzset();
