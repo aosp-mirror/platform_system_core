@@ -104,21 +104,35 @@ static void ForEachServiceInClass(const std::string& classname, F function) {
     }
 }
 
-static Result<Success> do_class_start(const BuiltinArguments& args) {
+static Result<Success> class_start(const std::string& class_name, bool post_data_only) {
     // Do not start a class if it has a property persist.dont_start_class.CLASS set to 1.
-    if (android::base::GetBoolProperty("persist.init.dont_start_class." + args[1], false))
+    if (android::base::GetBoolProperty("persist.init.dont_start_class." + class_name, false))
         return Success();
     // Starting a class does not start services which are explicitly disabled.
     // They must  be started individually.
     for (const auto& service : ServiceList::GetInstance()) {
-        if (service->classnames().count(args[1])) {
+        if (service->classnames().count(class_name)) {
+            if (post_data_only && !service->is_post_data()) {
+                continue;
+            }
             if (auto result = service->StartIfNotDisabled(); !result) {
                 LOG(ERROR) << "Could not start service '" << service->name()
-                           << "' as part of class '" << args[1] << "': " << result.error();
+                           << "' as part of class '" << class_name << "': " << result.error();
             }
         }
     }
     return Success();
+}
+
+static Result<Success> do_class_start(const BuiltinArguments& args) {
+    return class_start(args[1], false /* post_data_only */);
+}
+
+static Result<Success> do_class_start_post_data(const BuiltinArguments& args) {
+    if (args.context != kInitContext) {
+        return Error() << "command 'class_start_post_data' only available in init context";
+    }
+    return class_start(args[1], true /* post_data_only */);
 }
 
 static Result<Success> do_class_stop(const BuiltinArguments& args) {
@@ -128,6 +142,14 @@ static Result<Success> do_class_stop(const BuiltinArguments& args) {
 
 static Result<Success> do_class_reset(const BuiltinArguments& args) {
     ForEachServiceInClass(args[1], &Service::Reset);
+    return Success();
+}
+
+static Result<Success> do_class_reset_post_data(const BuiltinArguments& args) {
+    if (args.context != kInitContext) {
+        return Error() << "command 'class_reset_post_data' only available in init context";
+    }
+    ForEachServiceInClass(args[1], &Service::ResetIfPostData);
     return Success();
 }
 
@@ -1053,6 +1075,12 @@ static Result<Success> do_init_user0(const BuiltinArguments& args) {
         {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"}, args.context});
 }
 
+static Result<Success> do_mark_post_data(const BuiltinArguments& args) {
+    ServiceList::GetInstance().MarkPostData();
+
+    return Success();
+}
+
 static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
     glob_t glob_result;
     // @ is added to filter out the later paths, which are bind mounts of the places
@@ -1104,8 +1132,10 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"chmod",                   {2,     2,    {true,   do_chmod}}},
         {"chown",                   {2,     3,    {true,   do_chown}}},
         {"class_reset",             {1,     1,    {false,  do_class_reset}}},
+        {"class_reset_post_data",   {1,     1,    {false,  do_class_reset_post_data}}},
         {"class_restart",           {1,     1,    {false,  do_class_restart}}},
         {"class_start",             {1,     1,    {false,  do_class_start}}},
+        {"class_start_post_data",   {1,     1,    {false,  do_class_start_post_data}}},
         {"class_stop",              {1,     1,    {false,  do_class_stop}}},
         {"copy",                    {2,     2,    {true,   do_copy}}},
         {"domainname",              {1,     1,    {true,   do_domainname}}},
@@ -1125,6 +1155,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"load_persist_props",      {0,     0,    {false,  do_load_persist_props}}},
         {"load_system_props",       {0,     0,    {false,  do_load_system_props}}},
         {"loglevel",                {1,     1,    {false,  do_loglevel}}},
+        {"mark_post_data",          {0,     0,    {false,  do_mark_post_data}}},
         {"mkdir",                   {1,     4,    {true,   do_mkdir}}},
         // TODO: Do mount operations in vendor_init.
         // mount_all is currently too complex to run in vendor_init as it queues action triggers,
