@@ -405,6 +405,8 @@ on late-fs
     class_start early_hal
 
 on post-fs-data
+    mark_post_data
+
     # Start checkpoint before we touch data
     start vold
     exec - system system -- /system/bin/vdc checkpoint prepareCheckpoint
@@ -753,9 +755,6 @@ on property:sys.init_log_level=*
 on charger
     class_start charger
 
-on property:vold.decrypt=trigger_reset_main
-    class_reset main
-
 on property:vold.decrypt=trigger_load_persist_props
     load_persist_props
     start logd
@@ -773,6 +772,8 @@ on property:vold.decrypt=trigger_restart_min_framework
 on property:vold.decrypt=trigger_restart_framework
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier
+    class_start_post_data hal
+    class_start_post_data core
     class_start main
     class_start late_start
     setprop service.bootanim.exit 0
@@ -781,6 +782,8 @@ on property:vold.decrypt=trigger_restart_framework
 on property:vold.decrypt=trigger_shutdown_framework
     class_reset late_start
     class_reset main
+    class_reset_post_data core
+    class_reset_post_data hal
 
 on property:sys.boot_completed=1
     bootchart stop
