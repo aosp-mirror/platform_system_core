@@ -509,6 +509,52 @@ cc_binary {
 }
 
 cc_binary {
+    name: "static_adbd",
+    defaults: ["adbd_defaults", "host_adbd_supported"],
+
+    recovery_available: false,
+    static_executable: true,
+    host_supported: false,
+
+    srcs: [
+        "daemon/main.cpp",
+    ],
+
+    cflags: [
+        "-D_GNU_SOURCE",
+        "-Wno-deprecated-declarations",
+    ],
+
+    strip: {
+        keep_symbols: true,
+    },
+
+    static_libs: [
+        "libadbd",
+        "libadbd_services",
+        "libasyncio",
+        "libavb_user",
+        "libbase",
+        "libbootloader_message",
+        "libcap",
+        "libcrypto",
+        "libcrypto_utils",
+        "libcutils",
+        "libdiagnose_usb",
+        "libext4_utils",
+        "libfec",
+        "libfec_rs",
+        "libfs_mgr",
+        "liblog",
+        "liblp",
+        "libmdnssd",
+        "libminijail",
+        "libselinux",
+        "libsquashfs_utils",
+    ],
+}
+
+cc_binary {
     name: "abb",
 
     defaults: ["adbd_defaults"],
