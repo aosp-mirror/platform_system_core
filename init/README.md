@@ -191,7 +191,7 @@ runs the service.
 
 `critical`
 > This is a device-critical service. If it exits more than four times in
-  four minutes, the device will reboot into bootloader.
+  four minutes or before boot completes, the device will reboot into bootloader.
 
 `disabled`
 > This service will not automatically start with its class.
@@ -412,6 +412,10 @@ Commands
   not already running.  See the start entry for more information on
   starting services.
 
+`class_start_post_data <serviceclass>`
+> Like `class_start`, but only considers services that were started
+  after /data was mounted. Only used for FDE devices.
+
 `class_stop <serviceclass>`
 > Stop and disable all services of the specified class if they are
   currently running.
@@ -420,6 +424,10 @@ Commands
 > Stop all services of the specified class if they are
   currently running, without disabling them. They can be restarted
   later using `class_start`.
+
+`class_reset_post_data <serviceclass>`
+> Like `class_reset`, but only considers services that were started
+  after /data was mounted. Only used for FDE devices.
 
 `class_restart <serviceclass>`
 > Restarts all services of the specified class.
@@ -489,6 +497,10 @@ Commands
 
 `loglevel <level>`
 > Sets the kernel log level to level. Properties are expanded within _level_.
+
+`mark_post_data`
+> Used to mark the point right after /data is mounted. Used to implement the
+  `class_reset_post_data` and `class_start_post_data` commands.
 
 `mkdir <path> [mode] [owner] [group]`
 > Create a directory at _path_, optionally with the given mode, owner, and

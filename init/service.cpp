@@ -362,7 +362,7 @@ void Service::Reap(const siginfo_t& siginfo) {
 
     // Oneshot processes go into the disabled state on exit,
     // except when manually restarted.
-    if ((flags_ & SVC_ONESHOT) && !(flags_ & SVC_RESTART)) {
+    if ((flags_ & SVC_ONESHOT) && !(flags_ & SVC_RESTART) && !(flags_ & SVC_RESET)) {
         flags_ |= SVC_DISABLED;
     }
 
@@ -372,16 +372,20 @@ void Service::Reap(const siginfo_t& siginfo) {
         return;
     }
 
-    // If we crash > 4 times in 4 minutes, reboot into bootloader or set crashing property
+    // If we crash > 4 times in 4 minutes or before boot_completed,
+    // reboot into bootloader or set crashing property
     boot_clock::time_point now = boot_clock::now();
     if (((flags_ & SVC_CRITICAL) || !pre_apexd_) && !(flags_ & SVC_RESTART)) {
-        if (now < time_crashed_ + 4min) {
+        bool boot_completed = android::base::GetBoolProperty("sys.boot_completed", false);
+        if (now < time_crashed_ + 4min || !boot_completed) {
             if (++crash_count_ > 4) {
                 if (flags_ & SVC_CRITICAL) {
                     // Aborts into bootloader
-                    LOG(FATAL) << "critical process '" << name_ << "' exited 4 times in 4 minutes";
+                    LOG(FATAL) << "critical process '" << name_ << "' exited 4 times "
+                               << (boot_completed ? "in 4 minutes" : "before boot completed");
                 } else {
-                    LOG(ERROR) << "updatable process '" << name_ << "' exited 4 times in 4 minutes";
+                    LOG(ERROR) << "updatable process '" << name_ << "' exited 4 times "
+                               << (boot_completed ? "in 4 minutes" : "before boot completed");
                     // Notifies update_verifier and apexd
                     property_set("ro.init.updatable_crashing", "1");
                 }
@@ -947,6 +951,8 @@ Result<Success> Service::Start() {
         pre_apexd_ = true;
     }
 
+    post_data_ = ServiceList::GetInstance().IsPostData();
+
     LOG(INFO) << "starting service '" << name_ << "'...";
 
     pid_t pid = -1;
@@ -1146,6 +1152,12 @@ void Service::Reset() {
     StopOrReset(SVC_RESET);
 }
 
+void Service::ResetIfPostData() {
+    if (post_data_) {
+        StopOrReset(SVC_RESET);
+    }
+}
+
 void Service::Stop() {
     StopOrReset(SVC_DISABLED);
 }
@@ -1337,6 +1349,14 @@ void ServiceList::DumpState() const {
     for (const auto& s : services_) {
         s->DumpState();
     }
+}
+
+void ServiceList::MarkPostData() {
+    post_data_ = true;
+}
+
+bool ServiceList::IsPostData() {
+    return post_data_;
 }
 
 void ServiceList::MarkServicesUpdate() {
