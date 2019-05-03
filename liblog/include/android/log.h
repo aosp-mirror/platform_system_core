@@ -122,9 +122,10 @@ int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap)
  *
  * Most callers should use
  * [assert(3)](http://man7.org/linux/man-pages/man3/assert.3.html) from
- * `<assert.h>` instead, or the `__assert` and `__assert2` functions provided by
- * bionic if more control is needed. They support automatically including the
- * source filename and line number more conveniently than this function.
+ * `&lt;assert.h&gt;` instead, or the `__assert` and `__assert2` functions
+ * provided by bionic if more control is needed. They support automatically
+ * including the source filename and line number more conveniently than this
+ * function.
  */
 void __android_log_assert(const char* cond, const char* tag, const char* fmt,
                           ...)
