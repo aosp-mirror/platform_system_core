@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#include "nativeloader/native_loader.h"
 #define LOG_TAG "nativeloader"
+
+#include "nativeloader/native_loader.h"
 
 #include <dlfcn.h>
 #include <sys/types.h>
@@ -25,16 +26,17 @@
 #include <string>
 #include <vector>
 
-#include "android-base/file.h"
-#include "android-base/macros.h"
-#include "android-base/strings.h"
+#include <android-base/file.h>
+#include <android-base/macros.h>
+#include <android-base/strings.h>
+#include <nativebridge/native_bridge.h>
+#include <nativehelper/ScopedUtfChars.h>
+
 #ifdef __ANDROID__
+#include <log/log.h>
 #include "library_namespaces.h"
-#include "log/log.h"
 #include "nativeloader/dlext_namespaces.h"
 #endif
-#include "nativebridge/native_bridge.h"
-#include "nativehelper/ScopedUtfChars.h"
 
 namespace android {
 
