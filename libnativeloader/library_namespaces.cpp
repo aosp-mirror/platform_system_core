@@ -30,6 +30,7 @@
 #include "nativehelper/ScopedUtfChars.h"
 #include "nativeloader/dlext_namespaces.h"
 #include "public_libraries.h"
+#include "utils.h"
 
 namespace android::nativeloader {
 
@@ -61,14 +62,8 @@ constexpr const char* kVendorClassloaderNamespaceName = "vendor-classloader-name
 // This list includes all directories app is allowed to access this way.
 constexpr const char* kWhitelistedDirectories = "/data:/mnt/expand";
 
-// TODO(b/130388701) use macro LIB to eliminate the conditional
-#if defined(__LP64__)
-constexpr const char* kVendorLibPath = "/vendor/lib64";
-constexpr const char* kProductLibPath = "/product/lib64:/system/product/lib64";
-#else
-constexpr const char* kVendorLibPath = "/vendor/lib";
-constexpr const char* kProductLibPath = "/product/lib:/system/product/lib";
-#endif
+constexpr const char* kVendorLibPath = "/vendor/" LIB;
+constexpr const char* kProductLibPath = "/product/" LIB ":/system/product/" LIB;
 
 const std::regex kVendorDexPathRegex("(^|:)/vendor/");
 const std::regex kProductDexPathRegex("(^|:)(/system)?/product/");
