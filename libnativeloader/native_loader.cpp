@@ -40,6 +40,8 @@ namespace android {
 
 namespace {
 #if defined(__ANDROID__)
+using android::nativeloader::LibraryNamespaces;
+
 constexpr const char* kApexPath = "/apex/";
 
 std::mutex g_namespaces_mutex;
