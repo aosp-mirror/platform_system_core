@@ -122,7 +122,7 @@ void LibraryNamespaces::Initialize() {
   // we might as well end up loading them from /system/lib or /product/lib
   // For now we rely on CTS test to catch things like this but
   // it should probably be addressed in the future.
-  for (const auto& soname : android::base::Split(system_public_libraries(), ":")) {
+  for (const auto& soname : android::base::Split(default_public_libraries(), ":")) {
     LOG_ALWAYS_FATAL_IF(dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE) == nullptr,
                         "Error preloading public library %s: %s", soname.c_str(), dlerror());
   }
@@ -186,7 +186,7 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
     is_native_bridge = NativeBridgeIsPathSupported(library_path.c_str());
   }
 
-  std::string system_exposed_libraries = system_public_libraries();
+  std::string system_exposed_libraries = default_public_libraries();
   const char* namespace_name = kClassloaderNamespaceName;
   android_namespace_t* vndk_ns = nullptr;
   if ((apk_origin == APK_ORIGIN_VENDOR ||
@@ -222,7 +222,7 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
     permitted_path = permitted_path + ":" + origin_lib_path;
 
     // Also give access to LLNDK libraries since they are available to vendors
-    system_exposed_libraries = system_exposed_libraries + ":" + system_llndk_libraries().c_str();
+    system_exposed_libraries = system_exposed_libraries + ":" + llndk_libraries().c_str();
 
     // Give access to VNDK-SP libraries from the 'vndk' namespace.
     vndk_ns = android_get_exported_namespace(kVndkNamespaceName);
@@ -235,13 +235,10 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
     ALOGD("classloader namespace configured for unbundled %s apk. library_path=%s",
           origin_partition, library_path.c_str());
   } else {
-    // oem and product public libraries are NOT available to vendor apks, otherwise it
+    // extended public libraries are NOT available to vendor apks, otherwise it
     // would be system->vendor violation.
-    if (!oem_public_libraries().empty()) {
-      system_exposed_libraries = system_exposed_libraries + ':' + oem_public_libraries();
-    }
-    if (!product_public_libraries().empty()) {
-      system_exposed_libraries = system_exposed_libraries + ':' + product_public_libraries();
+    if (!extended_public_libraries().empty()) {
+      system_exposed_libraries = system_exposed_libraries + ':' + extended_public_libraries();
     }
   }
   std::string runtime_exposed_libraries = runtime_public_libraries();
@@ -292,9 +289,9 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
       }
     }
 
-    if (vndk_ns != nullptr && !system_vndksp_libraries().empty()) {
+    if (vndk_ns != nullptr && !vndksp_libraries().empty()) {
       // vendor apks are allowed to use VNDK-SP libraries.
-      if (!android_link_namespaces(ns, vndk_ns, system_vndksp_libraries().c_str())) {
+      if (!android_link_namespaces(ns, vndk_ns, vndksp_libraries().c_str())) {
         *error_msg = dlerror();
         return nullptr;
       }
@@ -383,7 +380,7 @@ bool LibraryNamespaces::InitPublicNamespace(const char* library_path, std::strin
   // code is one example) unknown to linker in which  case linker uses anonymous
   // namespace. The second argument specifies the search path for the anonymous
   // namespace which is the library_path of the classloader.
-  initialized_ = android_init_anonymous_namespace(system_public_libraries().c_str(),
+  initialized_ = android_init_anonymous_namespace(default_public_libraries().c_str(),
                                                   is_native_bridge ? nullptr : library_path);
   if (!initialized_) {
     *error_msg = dlerror();
@@ -392,7 +389,7 @@ bool LibraryNamespaces::InitPublicNamespace(const char* library_path, std::strin
 
   // and now initialize native bridge namespaces if necessary.
   if (NativeBridgeInitialized()) {
-    initialized_ = NativeBridgeInitAnonymousNamespace(system_public_libraries().c_str(),
+    initialized_ = NativeBridgeInitAnonymousNamespace(default_public_libraries().c_str(),
                                                       is_native_bridge ? library_path : nullptr);
     if (!initialized_) {
       *error_msg = NativeBridgeGetError();

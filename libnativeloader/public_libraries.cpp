@@ -34,17 +34,13 @@ namespace android::nativeloader {
 using namespace std::string_literals;
 
 namespace {
-// TODO(b/130388701) simplify the names below
-constexpr const char kPublicNativeLibrariesSystemConfigPathFromRoot[] = "/etc/public.libraries.txt";
-constexpr const char kPublicNativeLibrariesExtensionConfigPrefix[] = "public.libraries-";
-constexpr const size_t kPublicNativeLibrariesExtensionConfigPrefixLen =
-    sizeof(kPublicNativeLibrariesExtensionConfigPrefix) - 1;
-constexpr const char kPublicNativeLibrariesExtensionConfigSuffix[] = ".txt";
-constexpr const size_t kPublicNativeLibrariesExtensionConfigSuffixLen =
-    sizeof(kPublicNativeLibrariesExtensionConfigSuffix) - 1;
-constexpr const char kPublicNativeLibrariesVendorConfig[] = "/vendor/etc/public.libraries.txt";
-constexpr const char kLlndkNativeLibrariesSystemConfigPathFromRoot[] = "/etc/llndk.libraries.txt";
-constexpr const char kVndkspNativeLibrariesSystemConfigPathFromRoot[] = "/etc/vndksp.libraries.txt";
+
+constexpr const char* kDefaultPublicLibrariesFile = "/etc/public.libraries.txt";
+constexpr const char* kExtendedPublicLibrariesFilePrefix = "public.libraries-";
+constexpr const char* kExtendedPublicLibrariesFileSuffix = ".txt";
+constexpr const char* kVendorPublicLibrariesFile = "/vendor/etc/public.libraries.txt";
+constexpr const char* kLlndkLibrariesFile = "/system/etc/llndk.libraries.txt";
+constexpr const char* kVndkLibrariesFile = "/system/etc/vndksp.libraries.txt";
 
 const std::vector<const std::string> kRuntimePublicLibraries = {
     "libicuuc.so",
@@ -53,26 +49,26 @@ const std::vector<const std::string> kRuntimePublicLibraries = {
 
 constexpr const char* kRuntimeApexLibPath = "/apex/com.android.runtime/" LIB;
 
+// TODO(b/130388701): do we need this?
 std::string root_dir() {
   static const char* android_root_env = getenv("ANDROID_ROOT");
   return android_root_env != nullptr ? android_root_env : "/system";
 }
 
 bool debuggable() {
-  bool debuggable = false;
-  debuggable = android::base::GetBoolProperty("ro.debuggable", false);
+  static bool debuggable = android::base::GetBoolProperty("ro.debuggable", false);
   return debuggable;
 }
 
 std::string vndk_version_str() {
-  std::string version = android::base::GetProperty("ro.vndk.version", "");
+  static std::string version = android::base::GetProperty("ro.vndk.version", "");
   if (version != "" && version != "current") {
     return "." + version;
   }
   return "";
 }
 
-void insert_vndk_version_str(std::string* file_name) {
+void InsertVndkVersionStr(std::string* file_name) {
   CHECK(file_name != nullptr);
   size_t insert_pos = file_name->find_last_of(".");
   if (insert_pos == std::string::npos) {
@@ -142,11 +138,10 @@ void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonam
         continue;
       }
       const std::string filename(ent->d_name);
-      if (android::base::StartsWith(filename, kPublicNativeLibrariesExtensionConfigPrefix) &&
-          android::base::EndsWith(filename, kPublicNativeLibrariesExtensionConfigSuffix)) {
-        const size_t start = kPublicNativeLibrariesExtensionConfigPrefixLen;
-        const size_t end = filename.size() - kPublicNativeLibrariesExtensionConfigSuffixLen;
-        const std::string company_name = filename.substr(start, end - start);
+      std::string_view fn = filename;
+      if (android::base::ConsumePrefix(&fn, kExtendedPublicLibrariesFilePrefix) &&
+          android::base::ConsumeSuffix(&fn, kExtendedPublicLibrariesFileSuffix)) {
+        const std::string company_name(fn);
         const std::string config_file_path = dirname + "/"s + filename;
         LOG_ALWAYS_FATAL_IF(
             company_name.empty(),
@@ -178,11 +173,11 @@ void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonam
 
 }  // namespace
 
-const std::string& system_public_libraries() {
+const std::string& default_public_libraries() {
   static bool cached = false;
   static std::string list;
   if (!cached) {
-    std::string config_file = root_dir() + kPublicNativeLibrariesSystemConfigPathFromRoot;
+    std::string config_file = root_dir() + kDefaultPublicLibrariesFile;
     std::vector<std::string> sonames;
     std::string error_msg;
     LOG_ALWAYS_FATAL_IF(!ReadConfig(config_file, &sonames, always_true, &error_msg),
@@ -251,35 +246,23 @@ const std::string& vendor_public_libraries() {
   if (!cached) {
     // This file is optional, quietly ignore if the file does not exist.
     std::vector<std::string> sonames;
-    ReadConfig(kPublicNativeLibrariesVendorConfig, &sonames, always_true, nullptr);
+    ReadConfig(kVendorPublicLibrariesFile, &sonames, always_true, nullptr);
     list = android::base::Join(sonames, ':');
     cached = true;
   }
   return list;
 }
 
-// read /system/etc/public.libraries-<companyname>.txt which contain partner defined
+// read /system/etc/public.libraries-<companyname>.txt and
+// /product/etc/public.libraries-<companyname>.txt which contain partner defined
 // system libs that are exposed to apps. The libs in the txt files must be
 // named as lib<name>.<companyname>.so.
-const std::string& oem_public_libraries() {
+const std::string& extended_public_libraries() {
   static bool cached = false;
   static std::string list;
   if (!cached) {
     std::vector<std::string> sonames;
     ReadExtensionLibraries("/system/etc", &sonames);
-    list = android::base::Join(sonames, ':');
-    cached = true;
-  }
-  return list;
-}
-
-// read /product/etc/public.libraries-<companyname>.txt which contain partner defined
-// product libs that are exposed to apps.
-const std::string& product_public_libraries() {
-  static bool cached = false;
-  static std::string list;
-  if (!cached) {
-    std::vector<std::string> sonames;
     ReadExtensionLibraries("/product/etc", &sonames);
     list = android::base::Join(sonames, ':');
     cached = true;
@@ -287,12 +270,12 @@ const std::string& product_public_libraries() {
   return list;
 }
 
-const std::string& system_llndk_libraries() {
+const std::string& llndk_libraries() {
   static bool cached = false;
   static std::string list;
   if (!cached) {
-    std::string config_file = root_dir() + kLlndkNativeLibrariesSystemConfigPathFromRoot;
-    insert_vndk_version_str(&config_file);
+    std::string config_file = kLlndkLibrariesFile;
+    InsertVndkVersionStr(&config_file);
     std::vector<std::string> sonames;
     ReadConfig(config_file, &sonames, always_true, nullptr);
     list = android::base::Join(sonames, ':');
@@ -301,12 +284,12 @@ const std::string& system_llndk_libraries() {
   return list;
 }
 
-const std::string& system_vndksp_libraries() {
+const std::string& vndksp_libraries() {
   static bool cached = false;
   static std::string list;
   if (!cached) {
-    std::string config_file = root_dir() + kVndkspNativeLibrariesSystemConfigPathFromRoot;
-    insert_vndk_version_str(&config_file);
+    std::string config_file = kVndkLibrariesFile;
+    InsertVndkVersionStr(&config_file);
     std::vector<std::string> sonames;
     ReadConfig(config_file, &sonames, always_true, nullptr);
     list = android::base::Join(sonames, ':');
