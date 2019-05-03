@@ -25,6 +25,7 @@
 #include <algorithm>
 
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #include <demangle.h>
 
@@ -168,7 +169,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       // If this elf is memory backed, and there is a valid file, then set
       // an indicator that we couldn't open the file.
       if (!elf_from_memory_not_file_ && map_info->memory_backed_elf && !map_info->name.empty() &&
-          map_info->name[0] != '[') {
+          map_info->name[0] != '[' && !android::base::StartsWith(map_info->name, "/memfd:")) {
         elf_from_memory_not_file_ = true;
       }
       step_pc = regs_->pc();
