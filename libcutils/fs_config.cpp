@@ -216,6 +216,7 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "init*" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "odm/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "product/bin/*" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
@@ -295,20 +296,21 @@ static bool fs_config_cmp(bool dir, const char* prefix, size_t len, const char* 
     const int fnm_flags = FNM_NOESCAPE;
     if (fnmatch(pattern.c_str(), input.c_str(), fnm_flags) == 0) return true;
 
-    static constexpr const char* kSystem = "system/";
-    if (StartsWith(input, kSystem)) {
-        input.erase(0, strlen(kSystem));
-    } else if (input.size() <= strlen(kSystem)) {
-        return false;
-    } else if (StartsWith(pattern, kSystem)) {
-        pattern.erase(0, strlen(kSystem));
-    } else {
-        return false;
+    // Check match between logical partition's files and patterns.
+    static constexpr const char* kLogicalPartitions[] = {"system/product/",
+                                                         "system/product_services/",
+                                                         "system/vendor/",
+                                                         "vendor/odm/"};
+    for (auto& logical_partition : kLogicalPartitions) {
+        if (StartsWith(input, logical_partition)) {
+            std::string input_in_partition = input.substr(input.find('/') + 1);
+            if (!is_partition(input_in_partition)) continue;
+            if (fnmatch(pattern.c_str(), input_in_partition.c_str(), fnm_flags) == 0) {
+                return true;
+            }
+        }
     }
-
-    if (!is_partition(pattern)) return false;
-    if (!is_partition(input)) return false;
-    return fnmatch(pattern.c_str(), input.c_str(), fnm_flags) == 0;
+    return false;
 }
 #ifndef __ANDROID_VNDK__
 auto __for_testing_only__fs_config_cmp = fs_config_cmp;
