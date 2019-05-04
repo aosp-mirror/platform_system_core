@@ -126,6 +126,12 @@ class UnwinderTest : public ::testing::Test {
     const auto& info5 = *--maps_->end();
     info5->memory_backed_elf = true;
 
+    elf = new ElfFake(new MemoryFake);
+    elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
+    AddMapInfo(0xc3000, 0xc4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/memfd:/jit-cache", elf);
+    const auto& info6 = *--maps_->end();
+    info6->memory_backed_elf = true;
+
     process_memory_.reset(new MemoryFake);
   }
 
@@ -1230,6 +1236,36 @@ TEST_F(UnwinderTest, elf_from_memory_but_empty_filename) {
   EXPECT_EQ(0U, frame->map_exact_offset);
   EXPECT_EQ(0xc2000U, frame->map_start);
   EXPECT_EQ(0xc3000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, elf_from_memory_but_from_memfd) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+
+  regs_.set_pc(0xc3050);
+  regs_.set_sp(0x10000);
+  ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
+
+  Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+  EXPECT_FALSE(unwinder.elf_from_memory_not_file());
+
+  ASSERT_EQ(1U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x50U, frame->rel_pc);
+  EXPECT_EQ(0xc3050U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/memfd:/jit-cache", frame->map_name);
+  EXPECT_EQ(0U, frame->map_elf_start_offset);
+  EXPECT_EQ(0U, frame->map_exact_offset);
+  EXPECT_EQ(0xc3000U, frame->map_start);
+  EXPECT_EQ(0xc4000U, frame->map_end);
   EXPECT_EQ(0U, frame->map_load_bias);
   EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame->map_flags);
 }
