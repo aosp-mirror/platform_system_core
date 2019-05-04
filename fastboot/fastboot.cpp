@@ -502,9 +502,8 @@ static std::vector<char> LoadBootableImage(const std::string& kernel, const std:
 
 static bool UnzipToMemory(ZipArchiveHandle zip, const std::string& entry_name,
                           std::vector<char>* out) {
-    ZipString zip_entry_name(entry_name.c_str());
     ZipEntry zip_entry;
-    if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
+    if (FindEntry(zip, entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name.c_str());
         return false;
     }
@@ -614,9 +613,8 @@ static void delete_fbemarker_tmpdir(const std::string& dir) {
 static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd(entry_name));
 
-    ZipString zip_entry_name(entry_name);
     ZipEntry zip_entry;
-    if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
+    if (FindEntry(zip, entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name);
         errno = ENOENT;
         return -1;
