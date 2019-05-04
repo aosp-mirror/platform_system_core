@@ -295,3 +295,19 @@ TEST(strings, EqualsIgnoreCase) {
 TEST(strings, ubsan_28729303) {
   android::base::Split("/dev/null", ":");
 }
+
+TEST(strings, ConsumePrefix) {
+  std::string_view s{"foo.bar"};
+  ASSERT_FALSE(android::base::ConsumePrefix(&s, "bar."));
+  ASSERT_EQ("foo.bar", s);
+  ASSERT_TRUE(android::base::ConsumePrefix(&s, "foo."));
+  ASSERT_EQ("bar", s);
+}
+
+TEST(strings, ConsumeSuffix) {
+  std::string_view s{"foo.bar"};
+  ASSERT_FALSE(android::base::ConsumeSuffix(&s, ".foo"));
+  ASSERT_EQ("foo.bar", s);
+  ASSERT_TRUE(android::base::ConsumeSuffix(&s, ".bar"));
+  ASSERT_EQ("foo", s);
+}
