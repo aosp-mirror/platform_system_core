@@ -121,9 +121,14 @@ cc_binary {
     shared_libs: [
         "libbootloader_message",
         "libbase",
+        "libcutils",
         "libcrypto",
+        "libext4_utils",
         "libfec",
         "libfs_mgr",
+        "liblog",
+        "liblp",
+        "libselinux",
     ],
     header_libs: [
         "libcutils_headers",
