@@ -229,16 +229,12 @@ static bool SendSyncFailErrno(int fd, const std::string& reason) {
 static bool handle_send_file(int s, const char* path, uint32_t* timestamp, uid_t uid, gid_t gid,
                              uint64_t capabilities, mode_t mode, std::vector<char>& buffer,
                              bool do_unlink) {
+    int rc;
     syncmsg msg;
 
     __android_log_security_bswrite(SEC_TAG_ADB_SEND_FILE, path);
 
     unique_fd fd(adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode));
-
-    if (posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE | POSIX_FADV_WILLNEED) <
-        0) {
-        D("[ Failed to fadvise: %d ]", errno);
-    }
 
     if (fd < 0 && errno == ENOENT) {
         if (!secure_mkdirs(Dirname(path))) {
@@ -268,6 +264,12 @@ static bool handle_send_file(int s, const char* path, uint32_t* timestamp, uid_t
         // Ignore the result of calling fchmod. It's not supported
         // by all filesystems, so we don't check for success. b/12441485
         fchmod(fd.get(), mode);
+    }
+
+    rc = posix_fadvise(fd.get(), 0, 0,
+                       POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE | POSIX_FADV_WILLNEED);
+    if (rc != 0) {
+        D("[ Failed to fadvise: %s ]", strerror(rc));
     }
 
     while (true) {
@@ -464,8 +466,9 @@ static bool do_recv(int s, const char* path, std::vector<char>& buffer) {
         return false;
     }
 
-    if (posix_fadvise(fd.get(), 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE) < 0) {
-        D("[ Failed to fadvise: %d ]", errno);
+    int rc = posix_fadvise(fd.get(), 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE);
+    if (rc != 0) {
+        D("[ Failed to fadvise: %s ]", strerror(rc));
     }
 
     syncmsg msg;
