@@ -111,8 +111,11 @@ static bool set_verity_enabled_state(int fd, const char* block_device, const cha
             WriteFdFmt(fd, "%s overlayfs for %s\n", enable ? "disabling" : "using", mount_point);
         }
     } else if (errno) {
-        WriteFdFmt(fd, "Overlayfs %s for %s failed with error %s\n", enable ? "teardown" : "setup",
-                   mount_point, strerror(errno));
+        int expected_errno = enable ? EBUSY : ENOENT;
+        if (errno != expected_errno) {
+            WriteFdFmt(fd, "Overlayfs %s for %s failed with error %s\n",
+                       enable ? "teardown" : "setup", mount_point, strerror(errno));
+        }
     }
     WriteFdFmt(fd, "Verity %s on %s\n", enable ? "enabled" : "disabled", mount_point);
     return true;
