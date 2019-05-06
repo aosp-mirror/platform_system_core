@@ -261,6 +261,13 @@ adb_wait() {
   return ${ret}
 }
 
+[ "USAGE: adb_user > /dev/stdout
+
+Returns: the adb daemon user" ]
+adb_user() {
+  adb_sh echo '${USER}' </dev/null
+}
+
 [ "USAGE: usb_status > stdout 2> stderr
 
 Assumes referenced right after adb_wait or fastboot_wait failued.
@@ -276,7 +283,7 @@ usb_status() {
   elif inRecovery; then
     echo "(In recovery mode)"
   elif inAdb; then
-    echo "(In adb mode)"
+    echo "(In adb mode `adb_user`)"
   else
     echo "(USB stack borken for ${USB_ADDRESS})"
     USB_DEVICE=`usb_devnum`
@@ -423,11 +430,11 @@ NB: This can be flakey on devices due to USB state
 
 Returns: true if device in root state" ]
 adb_root() {
-  [ root != "`adb_sh echo '${USER}' </dev/null`" ] || return 0
+  [ root != "`adb_user`" ] || return 0
   adb root >/dev/null </dev/null 2>/dev/null
   sleep 2
   adb_wait 2m &&
-    [ root = "`adb_sh echo '${USER}' </dev/null`" ]
+    [ root = "`adb_user`" ]
 }
 
 [ "USAGE: adb_unroot
@@ -436,11 +443,11 @@ NB: This can be flakey on devices due to USB state
 
 Returns: true if device in un root state" ]
 adb_unroot() {
-  [ root = "`adb_sh echo '${USER}' </dev/null`" ] || return 0
+  [ root = "`adb_user`" ] || return 0
   adb unroot >/dev/null </dev/null 2>/dev/null
   sleep 2
   adb_wait 2m &&
-    [ root != "`adb_sh echo '${USER}' </dev/null`" ]
+    [ root != "`adb_user`" ]
 }
 
 [ "USAGE: fastboot_getvar var expected >/dev/stderr
