@@ -261,10 +261,6 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
                     LWARNING << "Warning: zramsize= flag malformed: " << arg;
                 }
             }
-        } else if (StartsWith(flag, "verify=")) {
-            // If the verify flag is followed by an = and the location for the verity state.
-            entry->fs_mgr_flags.verify = true;
-            entry->verity_loc = arg;
         } else if (StartsWith(flag, "forceencrypt=")) {
             // The forceencrypt flag is followed by an = and the location of the keys.
             entry->fs_mgr_flags.force_crypt = true;
