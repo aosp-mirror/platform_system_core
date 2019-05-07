@@ -40,6 +40,18 @@ class DmTargetTypeInfo {
         return std::to_string(major_) + "." + std::to_string(minor_) + "." + std::to_string(patch_);
     }
 
+    uint32_t major_version() const { return major_; }
+    uint32_t minor_version() const { return minor_; }
+    uint32_t patch_level() const { return patch_; }
+
+    bool IsAtLeast(uint32_t major, uint32_t minor, uint32_t patch) const {
+        if (major_ > major) return true;
+        if (major_ < major) return false;
+        if (minor_ > minor) return true;
+        if (minor_ < minor) return false;
+        return patch_ >= patch;
+    }
+
   private:
     std::string name_;
     uint32_t major_;
@@ -168,6 +180,65 @@ class DmTargetBow final : public DmTarget {
 
   private:
     std::string target_string_;
+};
+
+enum class SnapshotStorageMode {
+    // The snapshot will be persisted to the COW device.
+    Persistent,
+    // The snapshot will be lost on reboot.
+    Transient,
+    // The snapshot will be merged from the COW device into the base device,
+    // in the background.
+    Merge
+};
+
+// Writes to a snapshot device will be written to the given COW device. Reads
+// will read from the COW device or base device. The chunk size is specified
+// in sectors.
+class DmTargetSnapshot final : public DmTarget {
+  public:
+    DmTargetSnapshot(uint64_t start, uint64_t length, const std::string& base_device,
+                     const std::string& cow_device, SnapshotStorageMode mode, uint64_t chunk_size)
+        : DmTarget(start, length),
+          base_device_(base_device),
+          cow_device_(cow_device),
+          mode_(mode),
+          chunk_size_(chunk_size) {}
+
+    std::string name() const override;
+    std::string GetParameterString() const override;
+    bool Valid() const override { return true; }
+
+    struct Status {
+        uint64_t sectors_allocated;
+        uint64_t total_sectors;
+        uint64_t metadata_sectors;
+        std::string error;
+    };
+
+    static bool ParseStatusText(const std::string& text, Status* status);
+    static bool ReportsOverflow(const std::string& target_type);
+
+  private:
+    std::string base_device_;
+    std::string cow_device_;
+    SnapshotStorageMode mode_;
+    uint64_t chunk_size_;
+};
+
+// snapshot-origin will read/write directly to the backing device, updating any
+// snapshot devices with a matching origin.
+class DmTargetSnapshotOrigin final : public DmTarget {
+  public:
+    DmTargetSnapshotOrigin(uint64_t start, uint64_t length, const std::string& device)
+        : DmTarget(start, length), device_(device) {}
+
+    std::string name() const override { return "snapshot-origin"; }
+    std::string GetParameterString() const override { return device_; }
+    bool Valid() const override { return true; }
+
+  private:
+    std::string device_;
 };
 
 }  // namespace dm
