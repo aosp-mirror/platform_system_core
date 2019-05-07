@@ -690,8 +690,7 @@ static int32_t FindEntry(const ZipArchive* archive, const int32_t ent, ZipEntry*
 
 struct IterationHandle {
   uint32_t position;
-  // We're not using vector here because this code is used in the Windows SDK
-  // where the STL is not available.
+  // TODO: switch these to std::string now that Windows uses libc++ too.
   ZipString prefix;
   ZipString suffix;
   ZipArchive* archive;
@@ -742,6 +741,7 @@ void EndIteration(void* cookie) {
   delete reinterpret_cast<IterationHandle*>(cookie);
 }
 
+// TODO: remove this internally.
 int32_t FindEntry(const ZipArchiveHandle archive, const ZipString& entryName, ZipEntry* data) {
   if (entryName.name_length == 0) {
     ALOGW("Zip: Invalid filename %.*s", entryName.name_length, entryName.name);
@@ -752,6 +752,23 @@ int32_t FindEntry(const ZipArchiveHandle archive, const ZipString& entryName, Zi
                                    archive->central_directory.GetBasePtr());
   if (ent < 0) {
     ALOGV("Zip: Could not find entry %.*s", entryName.name_length, entryName.name);
+    return static_cast<int32_t>(ent);  // kEntryNotFound is safe to truncate.
+  }
+  // We know there are at most hast_table_size entries, safe to truncate.
+  return FindEntry(archive, static_cast<uint32_t>(ent), data);
+}
+
+int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryName,
+                  ZipEntry* data) {
+  if (entryName.empty() || entryName.size() > static_cast<size_t>(UINT16_MAX)) {
+    ALOGW("Zip: Invalid filename of length %zu", entryName.size());
+    return kInvalidEntryName;
+  }
+
+  const int64_t ent = EntryToIndex(archive->hash_table, archive->hash_table_size,
+                                   ZipString(entryName), archive->central_directory.GetBasePtr());
+  if (ent < 0) {
+    ALOGV("Zip: Could not find entry %.*s", static_cast<int>(entryName.size()), entryName.data());
     return static_cast<int32_t>(ent);  // kEntryNotFound is safe to truncate.
   }
   // We know there are at most hast_table_size entries, safe to truncate.
@@ -1152,8 +1169,9 @@ int GetFileDescriptor(const ZipArchiveHandle archive) {
   return archive->mapped_zip.GetFileDescriptor();
 }
 
-ZipString::ZipString(const char* entry_name) : name(reinterpret_cast<const uint8_t*>(entry_name)) {
-  size_t len = strlen(entry_name);
+ZipString::ZipString(std::string_view entry_name)
+    : name(reinterpret_cast<const uint8_t*>(entry_name.data())) {
+  size_t len = entry_name.size();
   CHECK_LE(len, static_cast<size_t>(UINT16_MAX));
   name_length = static_cast<uint16_t>(len);
 }
