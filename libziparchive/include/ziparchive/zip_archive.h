@@ -163,8 +163,6 @@ void CloseArchive(ZipArchiveHandle archive);
  * can be called concurrently.
  */
 int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryName, ZipEntry* data);
-// TODO: remove this internally, where there is a new user.
-int32_t FindEntry(const ZipArchiveHandle archive, const ZipString& entryName, ZipEntry* data);
 
 /*
  * Start iterating over all entries of a zip file. The order of iteration
