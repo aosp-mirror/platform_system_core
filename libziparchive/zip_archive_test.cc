@@ -64,12 +64,6 @@ static int32_t OpenArchiveWrapper(const std::string& name, ZipArchiveHandle* han
   return OpenArchive(abs_path.c_str(), handle);
 }
 
-static void SetZipString(ZipString* zip_str, const std::string& str) {
-  zip_str->name = reinterpret_cast<const uint8_t*>(str.c_str());
-  CHECK_LE(str.size(), std::numeric_limits<uint16_t>::max());
-  zip_str->name_length = static_cast<uint16_t>(str.size());
-}
-
 TEST(ziparchive, Open) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
@@ -192,9 +186,7 @@ TEST(ziparchive, FindEntry) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   ZipEntry data;
-  ZipString name;
-  SetZipString(&name, kATxtName);
-  ASSERT_EQ(0, FindEntry(handle, name, &data));
+  ASSERT_EQ(0, FindEntry(handle, kATxtName, &data));
 
   // Known facts about a.txt, from zipinfo -v.
   ASSERT_EQ(63, data.offset);
@@ -205,9 +197,28 @@ TEST(ziparchive, FindEntry) {
   ASSERT_EQ(static_cast<uint32_t>(0x438a8005), data.mod_time);
 
   // An entry that doesn't exist. Should be a negative return code.
-  ZipString absent_name;
-  SetZipString(&absent_name, kNonexistentTxtName);
-  ASSERT_LT(FindEntry(handle, absent_name, &data), 0);
+  ASSERT_LT(FindEntry(handle, kNonexistentTxtName, &data), 0);
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, FindEntry_empty) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  ZipEntry data;
+  ASSERT_EQ(kInvalidEntryName, FindEntry(handle, "", &data));
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, FindEntry_too_long) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  std::string very_long_name(65536, 'x');
+  ZipEntry data;
+  ASSERT_EQ(kInvalidEntryName, FindEntry(handle, very_long_name, &data));
 
   CloseArchive(handle);
 }
@@ -234,9 +245,7 @@ TEST(ziparchive, ExtractToMemory) {
 
   // An entry that's deflated.
   ZipEntry data;
-  ZipString a_name;
-  SetZipString(&a_name, kATxtName);
-  ASSERT_EQ(0, FindEntry(handle, a_name, &data));
+  ASSERT_EQ(0, FindEntry(handle, kATxtName, &data));
   const uint32_t a_size = data.uncompressed_length;
   ASSERT_EQ(a_size, kATxtContents.size());
   uint8_t* buffer = new uint8_t[a_size];
@@ -245,9 +254,7 @@ TEST(ziparchive, ExtractToMemory) {
   delete[] buffer;
 
   // An entry that's stored.
-  ZipString b_name;
-  SetZipString(&b_name, kBTxtName);
-  ASSERT_EQ(0, FindEntry(handle, b_name, &data));
+  ASSERT_EQ(0, FindEntry(handle, kBTxtName, &data));
   const uint32_t b_size = data.uncompressed_length;
   ASSERT_EQ(b_size, kBTxtContents.size());
   buffer = new uint8_t[b_size];
@@ -302,9 +309,7 @@ TEST(ziparchive, EmptyEntries) {
   ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle, false));
 
   ZipEntry entry;
-  ZipString empty_name;
-  SetZipString(&empty_name, kEmptyTxtName);
-  ASSERT_EQ(0, FindEntry(handle, empty_name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, kEmptyTxtName, &entry));
   ASSERT_EQ(static_cast<uint32_t>(0), entry.uncompressed_length);
   uint8_t buffer[1];
   ASSERT_EQ(0, ExtractToMemory(handle, &entry, buffer, 1));
@@ -327,9 +332,7 @@ TEST(ziparchive, EntryLargerThan32K) {
   ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EntryLargerThan32KTest", &handle, false));
 
   ZipEntry entry;
-  ZipString ab_name;
-  SetZipString(&ab_name, kAbTxtName);
-  ASSERT_EQ(0, FindEntry(handle, ab_name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, kAbTxtName, &entry));
   ASSERT_EQ(kAbUncompressedSize, entry.uncompressed_length);
 
   // Extract the entry to memory.
@@ -386,9 +389,7 @@ TEST(ziparchive, ExtractToFile) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   ZipEntry entry;
-  ZipString name;
-  SetZipString(&name, kATxtName);
-  ASSERT_EQ(0, FindEntry(handle, name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, kATxtName, &entry));
   ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, tmp_file.fd));
 
   // Assert that the first 8 bytes of the file haven't been clobbered.
@@ -424,10 +425,8 @@ TEST(ziparchive, OpenFromMemory) {
             OpenArchiveFromMemory(file_map->data(), file_map->size(), zip_path.c_str(), &handle));
 
   // Assert one entry can be found and extracted correctly.
-  std::string BINARY_PATH("META-INF/com/google/android/update-binary");
-  ZipString binary_path(BINARY_PATH.c_str());
   ZipEntry binary_entry;
-  ASSERT_EQ(0, FindEntry(handle, binary_path, &binary_entry));
+  ASSERT_EQ(0, FindEntry(handle, "META-INF/com/google/android/update-binary", &binary_entry));
   TemporaryFile tmp_binary;
   ASSERT_NE(-1, tmp_binary.fd);
   ASSERT_EQ(0, ExtractEntryToFile(handle, &binary_entry, tmp_binary.fd));
@@ -436,9 +435,7 @@ TEST(ziparchive, OpenFromMemory) {
 
 static void ZipArchiveStreamTest(ZipArchiveHandle& handle, const std::string& entry_name, bool raw,
                                  bool verified, ZipEntry* entry, std::vector<uint8_t>* read_data) {
-  ZipString name;
-  SetZipString(&name, entry_name);
-  ASSERT_EQ(0, FindEntry(handle, name, entry));
+  ASSERT_EQ(0, FindEntry(handle, entry_name, entry));
   std::unique_ptr<ZipArchiveStreamEntry> stream;
   if (raw) {
     stream.reset(ZipArchiveStreamEntry::CreateRaw(handle, *entry));
@@ -589,11 +586,7 @@ static void ExtractEntryToMemory(const std::vector<uint8_t>& zip_data,
   // an entry whose name is "name" and whose size is 12 (contents =
   // "abdcdefghijk").
   ZipEntry entry;
-  ZipString name;
-  std::string name_str = "name";
-  SetZipString(&name, name_str);
-
-  ASSERT_EQ(0, FindEntry(handle, name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, "name", &entry));
   ASSERT_EQ(static_cast<uint32_t>(12), entry.uncompressed_length);
 
   entry_out->resize(12);
