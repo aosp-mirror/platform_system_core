@@ -1610,38 +1610,6 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
     return ret;
 }
 
-bool fs_mgr_load_verity_state(int* mode) {
-    /* return the default mode, unless any of the verified partitions are in
-     * logging mode, in which case return that */
-    *mode = VERITY_MODE_DEFAULT;
-
-    Fstab fstab;
-    if (!ReadDefaultFstab(&fstab)) {
-        LERROR << "Failed to read default fstab";
-        return false;
-    }
-
-    for (const auto& entry : fstab) {
-        if (entry.fs_mgr_flags.avb) {
-            *mode = VERITY_MODE_RESTART;  // avb only supports restart mode.
-            break;
-        } else if (!entry.fs_mgr_flags.verify) {
-            continue;
-        }
-
-        int current;
-        if (load_verity_state(entry, &current) < 0) {
-            continue;
-        }
-        if (current != VERITY_MODE_DEFAULT) {
-            *mode = current;
-            break;
-        }
-    }
-
-    return true;
-}
-
 bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
     if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
         return false;
