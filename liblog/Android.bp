@@ -45,6 +45,7 @@ cc_library_headers {
     host_supported: true,
     vendor_available: true,
     recovery_available: true,
+    native_bridge_supported: true,
     export_include_dirs: ["include"],
     system_shared_libs: [],
     stl: "none",
@@ -67,6 +68,7 @@ cc_library {
     name: "liblog",
     host_supported: true,
     recovery_available: true,
+    native_bridge_supported: true,
     srcs: liblog_sources,
 
     target: {
@@ -138,6 +140,7 @@ ndk_library {
 
 llndk_library {
     name: "liblog",
+    native_bridge_supported: true,
     symbol_file: "liblog.map.txt",
     export_include_dirs: ["include_vndk"],
 }

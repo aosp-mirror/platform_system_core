@@ -84,6 +84,7 @@ cc_library {
     host_supported: true,
     vendor_available: true,
     recovery_available: true,
+    native_bridge_supported: true,
     vndk: {
         enabled: true,
     },
