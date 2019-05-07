@@ -598,9 +598,6 @@ Commands
 `umount <path>`
 > Unmount the filesystem mounted at that path.
 
-`verity_load_state`
-> Internal implementation detail used to load dm-verity state.
-
 `verity_update_state <mount-point>`
 > Internal implementation detail used to update dm-verity state and
   set the partition._mount-point_.verified properties used by adb remount
