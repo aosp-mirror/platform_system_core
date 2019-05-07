@@ -241,6 +241,60 @@ class DmTargetSnapshotOrigin final : public DmTarget {
     std::string device_;
 };
 
+class DmTargetCrypt final : public DmTarget {
+  public:
+    DmTargetCrypt(uint64_t start, uint64_t length, const std::string& cipher,
+                  const std::string& key, uint64_t iv_sector_offset, const std::string& device,
+                  uint64_t device_sector)
+        : DmTarget(start, length),
+          cipher_(cipher),
+          key_(key),
+          iv_sector_offset_(iv_sector_offset),
+          device_(device),
+          device_sector_(device_sector) {}
+
+    void AllowDiscards() { allow_discards_ = true; }
+    void AllowEncryptOverride() { allow_encrypt_override_ = true; }
+    void SetIvLargeSectors() { iv_large_sectors_ = true; }
+    void SetSectorSize(uint32_t sector_size) { sector_size_ = sector_size; }
+
+    std::string name() const override { return "crypt"; }
+    bool Valid() const override { return true; }
+    std::string GetParameterString() const override;
+
+  private:
+    std::string cipher_;
+    std::string key_;
+    uint64_t iv_sector_offset_;
+    std::string device_;
+    uint64_t device_sector_;
+    bool allow_discards_ = false;
+    bool allow_encrypt_override_ = false;
+    bool iv_large_sectors_ = false;
+    uint32_t sector_size_ = 0;
+};
+
+class DmTargetDefaultKey final : public DmTarget {
+  public:
+    DmTargetDefaultKey(uint64_t start, uint64_t length, const std::string& cipher,
+                       const std::string& key, const std::string& blockdev, uint64_t start_sector)
+        : DmTarget(start, length),
+          cipher_(cipher),
+          key_(key),
+          blockdev_(blockdev),
+          start_sector_(start_sector) {}
+
+    std::string name() const override { return "default-key"; }
+    bool Valid() const override { return true; }
+    std::string GetParameterString() const override;
+
+  private:
+    std::string cipher_;
+    std::string key_;
+    std::string blockdev_;
+    uint64_t start_sector_;
+};
+
 }  // namespace dm
 }  // namespace android
 
