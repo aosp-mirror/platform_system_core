@@ -729,17 +729,6 @@ static Result<Success> do_sysclktz(const BuiltinArguments& args) {
     return Success();
 }
 
-static Result<Success> do_verity_load_state(const BuiltinArguments& args) {
-    int mode = -1;
-    bool loaded = fs_mgr_load_verity_state(&mode);
-    if (loaded && mode != VERITY_MODE_DEFAULT) {
-        ActionManager::GetInstance().QueueEventTrigger("verity-logging");
-    }
-    if (!loaded) return Error() << "Could not load verity state";
-
-    return Success();
-}
-
 static Result<Success> do_verity_update_state(const BuiltinArguments& args) {
     int mode;
     if (!fs_mgr_load_verity_state(&mode)) {
@@ -1181,7 +1170,6 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"symlink",                 {2,     2,    {true,   do_symlink}}},
         {"sysclktz",                {1,     1,    {false,  do_sysclktz}}},
         {"trigger",                 {1,     1,    {false,  do_trigger}}},
-        {"verity_load_state",       {0,     0,    {false,  do_verity_load_state}}},
         {"verity_update_state",     {0,     0,    {false,  do_verity_update_state}}},
         {"wait",                    {1,     2,    {true,   do_wait}}},
         {"wait_for_prop",           {2,     2,    {false,  do_wait_for_prop}}},

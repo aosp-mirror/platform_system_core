@@ -38,15 +38,7 @@
 #include <vector>
 
 using namespace std::literals::string_literals;
-
-using DeviceMapper = ::android::dm::DeviceMapper;
-using DmTable = ::android::dm::DmTable;
-using DmTarget = ::android::dm::DmTarget;
-using DmTargetLinear = ::android::dm::DmTargetLinear;
-using DmTargetZero = ::android::dm::DmTargetZero;
-using DmTargetAndroidVerity = ::android::dm::DmTargetAndroidVerity;
-using DmTargetBow = ::android::dm::DmTargetBow;
-using DmTargetTypeInfo = ::android::dm::DmTargetTypeInfo;
+using namespace android::dm;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
 static int Usage(void) {
@@ -57,6 +49,7 @@ static int Usage(void) {
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets> [-v]" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
+    std::cerr << "  status <dm-name>" << std::endl;
     std::cerr << "  table <dm-name>" << std::endl;
     std::cerr << "  help" << std::endl;
     std::cerr << std::endl;
@@ -122,6 +115,62 @@ class TargetParser final {
             }
             std::string block_device = NextArg();
             return std::make_unique<DmTargetBow>(start_sector, num_sectors, block_device);
+        } else if (target_type == "snapshot-origin") {
+            if (!HasArgs(1)) {
+                std::cerr << "Expected \"snapshot-origin\" <block_device>" << std::endl;
+                return nullptr;
+            }
+            std::string block_device = NextArg();
+            return std::make_unique<DmTargetSnapshotOrigin>(start_sector, num_sectors,
+                                                            block_device);
+        } else if (target_type == "snapshot") {
+            if (!HasArgs(4)) {
+                std::cerr
+                        << "Expected \"snapshot\" <block_device> <block_device> <mode> <chunk_size>"
+                        << std::endl;
+                return nullptr;
+            }
+            std::string base_device = NextArg();
+            std::string cow_device = NextArg();
+            std::string mode_str = NextArg();
+            std::string chunk_size_str = NextArg();
+
+            SnapshotStorageMode mode;
+            if (mode_str == "P") {
+                mode = SnapshotStorageMode::Persistent;
+            } else if (mode_str == "N") {
+                mode = SnapshotStorageMode::Transient;
+            } else {
+                std::cerr << "Unrecognized mode: " << mode_str << "\n";
+                return nullptr;
+            }
+
+            uint32_t chunk_size;
+            if (!android::base::ParseUint(chunk_size_str, &chunk_size)) {
+                std::cerr << "Chunk size must be an unsigned integer.\n";
+                return nullptr;
+            }
+            return std::make_unique<DmTargetSnapshot>(start_sector, num_sectors, base_device,
+                                                      cow_device, mode, chunk_size);
+        } else if (target_type == "snapshot-merge") {
+            if (!HasArgs(3)) {
+                std::cerr
+                        << "Expected \"snapshot-merge\" <block_device> <block_device> <chunk_size>"
+                        << std::endl;
+                return nullptr;
+            }
+            std::string base_device = NextArg();
+            std::string cow_device = NextArg();
+            std::string chunk_size_str = NextArg();
+            SnapshotStorageMode mode = SnapshotStorageMode::Merge;
+
+            uint32_t chunk_size;
+            if (!android::base::ParseUint(chunk_size_str, &chunk_size)) {
+                std::cerr << "Chunk size must be an unsigned integer.\n";
+                return nullptr;
+            }
+            return std::make_unique<DmTargetSnapshot>(start_sector, num_sectors, base_device,
+                                                      cow_device, mode, chunk_size);
         } else {
             std::cerr << "Unrecognized target type: " << target_type << std::endl;
             return nullptr;
@@ -308,7 +357,7 @@ static int GetPathCmdHandler(int argc, char** argv) {
     return 0;
 }
 
-static int TableCmdHandler(int argc, char** argv) {
+static int DumpTable(const std::string& mode, int argc, char** argv) {
     if (argc != 1) {
         std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
         return -EINVAL;
@@ -316,9 +365,18 @@ static int TableCmdHandler(int argc, char** argv) {
 
     DeviceMapper& dm = DeviceMapper::Instance();
     std::vector<DeviceMapper::TargetInfo> table;
-    if (!dm.GetTableInfo(argv[0], &table)) {
-        std::cerr << "Could not query table status of device \"" << argv[0] << "\"." << std::endl;
-        return -EINVAL;
+    if (mode == "status") {
+        if (!dm.GetTableStatus(argv[0], &table)) {
+            std::cerr << "Could not query table status of device \"" << argv[0] << "\"."
+                      << std::endl;
+            return -EINVAL;
+        }
+    } else if (mode == "table") {
+        if (!dm.GetTableInfo(argv[0], &table)) {
+            std::cerr << "Could not query table status of device \"" << argv[0] << "\"."
+                      << std::endl;
+            return -EINVAL;
+        }
     }
     std::cout << "Targets in the device-mapper table for " << argv[0] << ":" << std::endl;
     for (const auto& target : table) {
@@ -333,6 +391,14 @@ static int TableCmdHandler(int argc, char** argv) {
     return 0;
 }
 
+static int TableCmdHandler(int argc, char** argv) {
+    return DumpTable("table", argc, argv);
+}
+
+static int StatusCmdHandler(int argc, char** argv) {
+    return DumpTable("status", argc, argv);
+}
+
 static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         // clang-format off
         {"create", DmCreateCmdHandler},
@@ -341,6 +407,7 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         {"help", HelpCmdHandler},
         {"getpath", GetPathCmdHandler},
         {"table", TableCmdHandler},
+        {"status", StatusCmdHandler},
         // clang-format on
 };
 

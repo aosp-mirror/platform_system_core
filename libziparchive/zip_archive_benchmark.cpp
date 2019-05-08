@@ -55,7 +55,7 @@ static void FindEntry_no_match(benchmark::State& state) {
 
   // In order to walk through all file names in the archive, look for a name
   // that does not exist in the archive.
-  ZipString name("thisFileNameDoesNotExist");
+  std::string_view name("thisFileNameDoesNotExist");
 
   // Start the benchmark.
   while (state.KeepRunning()) {
