@@ -741,23 +741,6 @@ void EndIteration(void* cookie) {
   delete reinterpret_cast<IterationHandle*>(cookie);
 }
 
-// TODO: remove this internally.
-int32_t FindEntry(const ZipArchiveHandle archive, const ZipString& entryName, ZipEntry* data) {
-  if (entryName.name_length == 0) {
-    ALOGW("Zip: Invalid filename %.*s", entryName.name_length, entryName.name);
-    return kInvalidEntryName;
-  }
-
-  const int64_t ent = EntryToIndex(archive->hash_table, archive->hash_table_size, entryName,
-                                   archive->central_directory.GetBasePtr());
-  if (ent < 0) {
-    ALOGV("Zip: Could not find entry %.*s", entryName.name_length, entryName.name);
-    return static_cast<int32_t>(ent);  // kEntryNotFound is safe to truncate.
-  }
-  // We know there are at most hast_table_size entries, safe to truncate.
-  return FindEntry(archive, static_cast<uint32_t>(ent), data);
-}
-
 int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryName,
                   ZipEntry* data) {
   if (entryName.empty() || entryName.size() > static_cast<size_t>(UINT16_MAX)) {
@@ -771,7 +754,7 @@ int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryNa
     ALOGV("Zip: Could not find entry %.*s", static_cast<int>(entryName.size()), entryName.data());
     return static_cast<int32_t>(ent);  // kEntryNotFound is safe to truncate.
   }
-  // We know there are at most hast_table_size entries, safe to truncate.
+  // We know there are at most hash_table_size entries, safe to truncate.
   return FindEntry(archive, static_cast<uint32_t>(ent), data);
 }
 
