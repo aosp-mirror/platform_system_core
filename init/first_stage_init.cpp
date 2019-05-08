@@ -235,9 +235,8 @@ int FirstStageMain(int argc, char** argv) {
 
     SetInitAvbVersionInRecovery();
 
-    static constexpr uint32_t kNanosecondsPerMillisecond = 1e6;
-    uint64_t start_ms = start_time.time_since_epoch().count() / kNanosecondsPerMillisecond;
-    setenv("INIT_STARTED_AT", std::to_string(start_ms).c_str(), 1);
+    setenv("FIRST_STAGE_STARTED_AT", std::to_string(start_time.time_since_epoch().count()).c_str(),
+           1);
 
     const char* path = "/system/bin/init";
     const char* args[] = {path, "selinux_setup", nullptr};
