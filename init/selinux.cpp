@@ -544,7 +544,7 @@ int SetupSelinux(char** argv) {
         PLOG(FATAL) << "restorecon failed of /system/bin/init failed";
     }
 
-    setenv("SELINUX_STARTED_AT", std::to_string(start_time.time_since_epoch().count()).c_str(), 1);
+    setenv(kEnvSelinuxStartedAt, std::to_string(start_time.time_since_epoch().count()).c_str(), 1);
 
     const char* path = "/system/bin/init";
     const char* args[] = {path, "second_stage", nullptr};

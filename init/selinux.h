@@ -35,6 +35,8 @@ bool SelabelLookupFileContextBestMatch(const std::string& key,
                                        const std::vector<std::string>& aliases, int type,
                                        std::string* result);
 
+static constexpr char kEnvSelinuxStartedAt[] = "SELINUX_STARTED_AT";
+
 }  // namespace init
 }  // namespace android
 
