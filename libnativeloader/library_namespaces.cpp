@@ -29,28 +29,12 @@
 #include "android-base/strings.h"
 #include "nativehelper/ScopedUtfChars.h"
 #include "nativeloader/dlext_namespaces.h"
+#include "public_libraries.h"
+#include "utils.h"
 
-namespace android {
+namespace android::nativeloader {
 
 namespace {
-using namespace std::string_literals;
-
-constexpr const char kPublicNativeLibrariesSystemConfigPathFromRoot[] = "/etc/public.libraries.txt";
-constexpr const char kPublicNativeLibrariesExtensionConfigPrefix[] = "public.libraries-";
-constexpr const size_t kPublicNativeLibrariesExtensionConfigPrefixLen =
-    sizeof(kPublicNativeLibrariesExtensionConfigPrefix) - 1;
-constexpr const char kPublicNativeLibrariesExtensionConfigSuffix[] = ".txt";
-constexpr const size_t kPublicNativeLibrariesExtensionConfigSuffixLen =
-    sizeof(kPublicNativeLibrariesExtensionConfigSuffix) - 1;
-constexpr const char kPublicNativeLibrariesVendorConfig[] = "/vendor/etc/public.libraries.txt";
-constexpr const char kLlndkNativeLibrariesSystemConfigPathFromRoot[] = "/etc/llndk.libraries.txt";
-constexpr const char kVndkspNativeLibrariesSystemConfigPathFromRoot[] = "/etc/vndksp.libraries.txt";
-
-const std::vector<const std::string> kRuntimePublicLibraries = {
-    "libicuuc.so",
-    "libicui18n.so",
-};
-
 // The device may be configured to have the vendor libraries loaded to a separate namespace.
 // For historical reasons this namespace was named sphal but effectively it is intended
 // to use to load vendor libraries to separate namespace with controlled interface between
@@ -78,15 +62,8 @@ constexpr const char* kVendorClassloaderNamespaceName = "vendor-classloader-name
 // This list includes all directories app is allowed to access this way.
 constexpr const char* kWhitelistedDirectories = "/data:/mnt/expand";
 
-#if defined(__LP64__)
-constexpr const char* kRuntimeApexLibPath = "/apex/com.android.runtime/lib64";
-constexpr const char* kVendorLibPath = "/vendor/lib64";
-constexpr const char* kProductLibPath = "/product/lib64:/system/product/lib64";
-#else
-constexpr const char* kRuntimeApexLibPath = "/apex/com.android.runtime/lib";
-constexpr const char* kVendorLibPath = "/vendor/lib";
-constexpr const char* kProductLibPath = "/product/lib:/system/product/lib";
-#endif
+constexpr const char* kVendorLibPath = "/vendor/" LIB;
+constexpr const char* kProductLibPath = "/product/" LIB ":/system/product/" LIB;
 
 const std::regex kVendorDexPathRegex("(^|:)/vendor/");
 const std::regex kProductDexPathRegex("(^|:)(/system)?/product/");
@@ -97,146 +74,6 @@ typedef enum {
   APK_ORIGIN_VENDOR = 1,
   APK_ORIGIN_PRODUCT = 2,
 } ApkOrigin;
-
-bool is_debuggable() {
-  bool debuggable = false;
-  debuggable = android::base::GetBoolProperty("ro.debuggable", false);
-  return debuggable;
-}
-
-std::string vndk_version_str() {
-  std::string version = android::base::GetProperty("ro.vndk.version", "");
-  if (version != "" && version != "current") {
-    return "." + version;
-  }
-  return "";
-}
-
-void insert_vndk_version_str(std::string* file_name) {
-  CHECK(file_name != nullptr);
-  size_t insert_pos = file_name->find_last_of(".");
-  if (insert_pos == std::string::npos) {
-    insert_pos = file_name->length();
-  }
-  file_name->insert(insert_pos, vndk_version_str());
-}
-
-const std::function<bool(const std::string&, std::string*)> always_true =
-    [](const std::string&, std::string*) { return true; };
-
-bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames,
-                const std::function<bool(const std::string& /* soname */,
-                                         std::string* /* error_msg */)>& check_soname,
-                std::string* error_msg = nullptr) {
-  // Read list of public native libraries from the config file.
-  std::string file_content;
-  if (!base::ReadFileToString(configFile, &file_content)) {
-    if (error_msg) *error_msg = strerror(errno);
-    return false;
-  }
-
-  std::vector<std::string> lines = base::Split(file_content, "\n");
-
-  for (auto& line : lines) {
-    auto trimmed_line = base::Trim(line);
-    if (trimmed_line[0] == '#' || trimmed_line.empty()) {
-      continue;
-    }
-    size_t space_pos = trimmed_line.rfind(' ');
-    if (space_pos != std::string::npos) {
-      std::string type = trimmed_line.substr(space_pos + 1);
-      if (type != "32" && type != "64") {
-        if (error_msg) *error_msg = "Malformed line: " + line;
-        return false;
-      }
-#if defined(__LP64__)
-      // Skip 32 bit public library.
-      if (type == "32") {
-        continue;
-      }
-#else
-      // Skip 64 bit public library.
-      if (type == "64") {
-        continue;
-      }
-#endif
-      trimmed_line.resize(space_pos);
-    }
-
-    if (check_soname(trimmed_line, error_msg)) {
-      sonames->push_back(trimmed_line);
-    } else {
-      return false;
-    }
-  }
-  return true;
-}
-
-void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonames) {
-  std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(dirname), closedir);
-  if (dir != nullptr) {
-    // Failing to opening the dir is not an error, which can happen in
-    // webview_zygote.
-    while (struct dirent* ent = readdir(dir.get())) {
-      if (ent->d_type != DT_REG && ent->d_type != DT_LNK) {
-        continue;
-      }
-      const std::string filename(ent->d_name);
-      if (android::base::StartsWith(filename, kPublicNativeLibrariesExtensionConfigPrefix) &&
-          android::base::EndsWith(filename, kPublicNativeLibrariesExtensionConfigSuffix)) {
-        const size_t start = kPublicNativeLibrariesExtensionConfigPrefixLen;
-        const size_t end = filename.size() - kPublicNativeLibrariesExtensionConfigSuffixLen;
-        const std::string company_name = filename.substr(start, end - start);
-        const std::string config_file_path = dirname + "/"s + filename;
-        LOG_ALWAYS_FATAL_IF(
-            company_name.empty(),
-            "Error extracting company name from public native library list file path \"%s\"",
-            config_file_path.c_str());
-
-        std::string error_msg;
-
-        LOG_ALWAYS_FATAL_IF(
-            !ReadConfig(config_file_path, sonames,
-                        [&company_name](const std::string& soname, std::string* error_msg) {
-                          if (android::base::StartsWith(soname, "lib") &&
-                              android::base::EndsWith(soname, "." + company_name + ".so")) {
-                            return true;
-                          } else {
-                            *error_msg = "Library name \"" + soname +
-                                         "\" does not end with the company name: " + company_name +
-                                         ".";
-                            return false;
-                          }
-                        },
-                        &error_msg),
-            "Error reading public native library list from \"%s\": %s", config_file_path.c_str(),
-            error_msg.c_str());
-      }
-    }
-  }
-}
-
-/**
- * Remove the public libs in runtime namespace
- */
-void removePublicLibsIfExistsInRuntimeApex(std::vector<std::string>& sonames) {
-  for (const std::string& lib_name : kRuntimePublicLibraries) {
-    std::string path(kRuntimeApexLibPath);
-    path.append("/").append(lib_name);
-
-    struct stat s;
-    // Do nothing if the path in /apex does not exist.
-    // Runtime APEX must be mounted since libnativeloader is in the same APEX
-    if (stat(path.c_str(), &s) != 0) {
-      continue;
-    }
-
-    auto it = std::find(sonames.begin(), sonames.end(), lib_name);
-    if (it != sonames.end()) {
-      sonames.erase(it);
-    }
-  }
-}
 
 jobject GetParentClassLoader(JNIEnv* env, jobject class_loader) {
   jclass class_loader_class = env->FindClass("java/lang/ClassLoader");
@@ -277,48 +114,6 @@ void LibraryNamespaces::Initialize() {
     return;
   }
 
-  std::vector<std::string> sonames;
-  const char* android_root_env = getenv("ANDROID_ROOT");
-  std::string root_dir = android_root_env != nullptr ? android_root_env : "/system";
-  std::string public_native_libraries_system_config =
-      root_dir + kPublicNativeLibrariesSystemConfigPathFromRoot;
-  std::string runtime_public_libraries = base::Join(kRuntimePublicLibraries, ":");
-  std::string llndk_native_libraries_system_config =
-      root_dir + kLlndkNativeLibrariesSystemConfigPathFromRoot;
-  std::string vndksp_native_libraries_system_config =
-      root_dir + kVndkspNativeLibrariesSystemConfigPathFromRoot;
-
-  std::string product_public_native_libraries_dir = "/product/etc";
-
-  std::string error_msg;
-  LOG_ALWAYS_FATAL_IF(
-      !ReadConfig(public_native_libraries_system_config, &sonames, always_true, &error_msg),
-      "Error reading public native library list from \"%s\": %s",
-      public_native_libraries_system_config.c_str(), error_msg.c_str());
-
-  // For debuggable platform builds use ANDROID_ADDITIONAL_PUBLIC_LIBRARIES environment
-  // variable to add libraries to the list. This is intended for platform tests only.
-  if (is_debuggable()) {
-    const char* additional_libs = getenv("ANDROID_ADDITIONAL_PUBLIC_LIBRARIES");
-    if (additional_libs != nullptr && additional_libs[0] != '\0') {
-      std::vector<std::string> additional_libs_vector = base::Split(additional_libs, ":");
-      std::copy(additional_libs_vector.begin(), additional_libs_vector.end(),
-                std::back_inserter(sonames));
-      // Apply the same list to the runtime namespace, since some libraries
-      // might reside there.
-      CHECK(sizeof(kRuntimePublicLibraries) > 0);
-      runtime_public_libraries = runtime_public_libraries + ':' + additional_libs;
-    }
-  }
-
-  // Remove the public libs in the runtime namespace.
-  // These libs are listed in public.android.txt, but we don't want the rest of android
-  // in default namespace to dlopen the libs.
-  // For example, libicuuc.so is exposed to classloader namespace from runtime namespace.
-  // Unfortunately, it does not have stable C symbols, and default namespace should only use
-  // stable symbols in libandroidicu.so. http://b/120786417
-  removePublicLibsIfExistsInRuntimeApex(sonames);
-
   // android_init_namespaces() expects all the public libraries
   // to be loaded so that they can be found by soname alone.
   //
@@ -327,44 +122,10 @@ void LibraryNamespaces::Initialize() {
   // we might as well end up loading them from /system/lib or /product/lib
   // For now we rely on CTS test to catch things like this but
   // it should probably be addressed in the future.
-  for (const auto& soname : sonames) {
+  for (const auto& soname : android::base::Split(default_public_libraries(), ":")) {
     LOG_ALWAYS_FATAL_IF(dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE) == nullptr,
                         "Error preloading public library %s: %s", soname.c_str(), dlerror());
   }
-
-  system_public_libraries_ = base::Join(sonames, ':');
-  runtime_public_libraries_ = runtime_public_libraries;
-
-  // read /system/etc/public.libraries-<companyname>.txt which contain partner defined
-  // system libs that are exposed to apps. The libs in the txt files must be
-  // named as lib<name>.<companyname>.so.
-  sonames.clear();
-  ReadExtensionLibraries(base::Dirname(public_native_libraries_system_config).c_str(), &sonames);
-  oem_public_libraries_ = base::Join(sonames, ':');
-
-  // read /product/etc/public.libraries-<companyname>.txt which contain partner defined
-  // product libs that are exposed to apps.
-  sonames.clear();
-  ReadExtensionLibraries(product_public_native_libraries_dir.c_str(), &sonames);
-  product_public_libraries_ = base::Join(sonames, ':');
-
-  // Insert VNDK version to llndk and vndksp config file names.
-  insert_vndk_version_str(&llndk_native_libraries_system_config);
-  insert_vndk_version_str(&vndksp_native_libraries_system_config);
-
-  sonames.clear();
-  ReadConfig(llndk_native_libraries_system_config, &sonames, always_true);
-  system_llndk_libraries_ = base::Join(sonames, ':');
-
-  sonames.clear();
-  ReadConfig(vndksp_native_libraries_system_config, &sonames, always_true);
-  system_vndksp_libraries_ = base::Join(sonames, ':');
-
-  sonames.clear();
-  // This file is optional, quietly ignore if the file does not exist.
-  ReadConfig(kPublicNativeLibrariesVendorConfig, &sonames, always_true, nullptr);
-
-  vendor_public_libraries_ = base::Join(sonames, ':');
 }
 
 NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sdk_version,
@@ -425,7 +186,7 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
     is_native_bridge = NativeBridgeIsPathSupported(library_path.c_str());
   }
 
-  std::string system_exposed_libraries = system_public_libraries_;
+  std::string system_exposed_libraries = default_public_libraries();
   const char* namespace_name = kClassloaderNamespaceName;
   android_namespace_t* vndk_ns = nullptr;
   if ((apk_origin == APK_ORIGIN_VENDOR ||
@@ -461,7 +222,7 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
     permitted_path = permitted_path + ":" + origin_lib_path;
 
     // Also give access to LLNDK libraries since they are available to vendors
-    system_exposed_libraries = system_exposed_libraries + ":" + system_llndk_libraries_.c_str();
+    system_exposed_libraries = system_exposed_libraries + ":" + llndk_libraries().c_str();
 
     // Give access to VNDK-SP libraries from the 'vndk' namespace.
     vndk_ns = android_get_exported_namespace(kVndkNamespaceName);
@@ -474,16 +235,13 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
     ALOGD("classloader namespace configured for unbundled %s apk. library_path=%s",
           origin_partition, library_path.c_str());
   } else {
-    // oem and product public libraries are NOT available to vendor apks, otherwise it
+    // extended public libraries are NOT available to vendor apks, otherwise it
     // would be system->vendor violation.
-    if (!oem_public_libraries_.empty()) {
-      system_exposed_libraries = system_exposed_libraries + ':' + oem_public_libraries_;
-    }
-    if (!product_public_libraries_.empty()) {
-      system_exposed_libraries = system_exposed_libraries + ':' + product_public_libraries_;
+    if (!extended_public_libraries().empty()) {
+      system_exposed_libraries = system_exposed_libraries + ':' + extended_public_libraries();
     }
   }
-  std::string runtime_exposed_libraries = runtime_public_libraries_;
+  std::string runtime_exposed_libraries = runtime_public_libraries();
 
   NativeLoaderNamespace native_loader_ns;
   if (!is_native_bridge) {
@@ -531,16 +289,16 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
       }
     }
 
-    if (vndk_ns != nullptr && !system_vndksp_libraries_.empty()) {
+    if (vndk_ns != nullptr && !vndksp_libraries().empty()) {
       // vendor apks are allowed to use VNDK-SP libraries.
-      if (!android_link_namespaces(ns, vndk_ns, system_vndksp_libraries_.c_str())) {
+      if (!android_link_namespaces(ns, vndk_ns, vndksp_libraries().c_str())) {
         *error_msg = dlerror();
         return nullptr;
       }
     }
 
-    if (!vendor_public_libraries_.empty()) {
-      if (!android_link_namespaces(ns, vendor_ns, vendor_public_libraries_.c_str())) {
+    if (!vendor_public_libraries().empty()) {
+      if (!android_link_namespaces(ns, vendor_ns, vendor_public_libraries().c_str())) {
         *error_msg = dlerror();
         return nullptr;
       }
@@ -586,8 +344,8 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
         return nullptr;
       }
     }
-    if (!vendor_public_libraries_.empty()) {
-      if (!NativeBridgeLinkNamespaces(ns, vendor_ns, vendor_public_libraries_.c_str())) {
+    if (!vendor_public_libraries().empty()) {
+      if (!NativeBridgeLinkNamespaces(ns, vendor_ns, vendor_public_libraries().c_str())) {
         *error_msg = NativeBridgeGetError();
         return nullptr;
       }
@@ -622,7 +380,7 @@ bool LibraryNamespaces::InitPublicNamespace(const char* library_path, std::strin
   // code is one example) unknown to linker in which  case linker uses anonymous
   // namespace. The second argument specifies the search path for the anonymous
   // namespace which is the library_path of the classloader.
-  initialized_ = android_init_anonymous_namespace(system_public_libraries_.c_str(),
+  initialized_ = android_init_anonymous_namespace(default_public_libraries().c_str(),
                                                   is_native_bridge ? nullptr : library_path);
   if (!initialized_) {
     *error_msg = dlerror();
@@ -631,7 +389,7 @@ bool LibraryNamespaces::InitPublicNamespace(const char* library_path, std::strin
 
   // and now initialize native bridge namespaces if necessary.
   if (NativeBridgeInitialized()) {
-    initialized_ = NativeBridgeInitAnonymousNamespace(system_public_libraries_.c_str(),
+    initialized_ = NativeBridgeInitAnonymousNamespace(default_public_libraries().c_str(),
                                                       is_native_bridge ? library_path : nullptr);
     if (!initialized_) {
       *error_msg = NativeBridgeGetError();
@@ -657,4 +415,4 @@ NativeLoaderNamespace* LibraryNamespaces::FindParentNamespaceByClassLoader(JNIEn
   return nullptr;
 }
 
-}  // namespace android
+}  // namespace android::nativeloader
