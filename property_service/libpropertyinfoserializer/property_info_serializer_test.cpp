@@ -585,6 +585,7 @@ TEST(propertyinfoserializer, RealProperties) {
       {"ro.boottime.imsdatadaemon", "u:object_r:boottime_prop:s0"},
       {"ro.boottime.imsqmidaemon", "u:object_r:boottime_prop:s0"},
       {"ro.boottime.init", "u:object_r:boottime_prop:s0"},
+      {"ro.boottime.init.first_stage", "u:object_r:boottime_prop:s0"},
       {"ro.boottime.init.cold_boot_wait", "u:object_r:boottime_prop:s0"},
       {"ro.boottime.init.mount_all.default", "u:object_r:boottime_prop:s0"},
       {"ro.boottime.init.selinux", "u:object_r:boottime_prop:s0"},
