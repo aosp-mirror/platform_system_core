@@ -29,6 +29,7 @@ cc_library_headers {
     vendor_available: true,
     recovery_available: true,
     host_supported: true,
+    native_bridge_supported: true,
     export_include_dirs: ["include"],
 
     target: {
@@ -100,6 +101,7 @@ cc_library {
     vendor_available: true,
     recovery_available: true,
     host_supported: true,
+    native_bridge_supported: true,
     vndk: {
         enabled: true,
         support_system_process: true,
