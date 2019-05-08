@@ -22,6 +22,7 @@
 #include "android/dlext.h"
 #include "log/log.h"
 #include "nativebridge/native_bridge.h"
+#include "utils.h"
 
 namespace android {
 
