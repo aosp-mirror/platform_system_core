@@ -71,7 +71,7 @@ static int adb_get_emulator_console_port(const char* serial) {
         return -1;
     }
 
-    int port;
+    int port = -1;
     size_t emulator_count = 0;
     for (const auto& device : android::base::Split(devices, "\n")) {
         if (sscanf(device.c_str(), "emulator-%d", &port) == 1) {
