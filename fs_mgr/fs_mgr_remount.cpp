@@ -256,7 +256,7 @@ int main(int argc, char* argv[]) {
         auto& mount_point = entry.mount_point;
         if (fs_mgr_is_verity_enabled(entry)) {
             retval = VERITY_PARTITION;
-            if (android::base::GetProperty("ro.boot.vbmeta.devices_state", "") != "locked") {
+            if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") != "locked") {
                 if (AvbOps* ops = avb_ops_user_new()) {
                     auto ret = avb_user_verity_set(
                             ops, android::base::GetProperty("ro.boot.slot_suffix", "").c_str(),
