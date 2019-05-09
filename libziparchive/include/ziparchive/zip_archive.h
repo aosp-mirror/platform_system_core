@@ -177,7 +177,10 @@ int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryNa
  *
  * Returns 0 on success and negative values on failure.
  */
-// TODO: switch these ZipStrings to std::string_view.
+int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
+                       const std::string_view optional_prefix = "",
+                       const std::string_view optional_suffix = "");
+// TODO: remove this.
 int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
                        const ZipString* optional_prefix, const ZipString* optional_suffix);
 
