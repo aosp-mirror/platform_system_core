@@ -170,9 +170,6 @@ static void help() {
         "     remove this app package from the device\n"
         "     '-k': keep the data and cache directories\n"
         "\n"
-        "backup/restore:\n"
-        "   to show usage run \"adb shell bu help\"\n"
-        "\n"
         "debugging:\n"
         " bugreport [PATH]\n"
         "     write bugreport to given PATH [default=bugreport.zip];\n"
@@ -1229,6 +1226,8 @@ static void write_zeros(int bytes, int fd) {
 }
 
 static int backup(int argc, const char** argv) {
+    fprintf(stdout, "WARNING: adb backup is deprecated and may be removed in a future release\n");
+
     const char* filename = "backup.ab";
 
     /* find, extract, and use any -f argument */
@@ -1278,6 +1277,8 @@ static int backup(int argc, const char** argv) {
 }
 
 static int restore(int argc, const char** argv) {
+    fprintf(stdout, "WARNING: adb restore is deprecated and may be removed in a future release\n");
+
     if (argc != 2) error_exit("restore requires an argument");
 
     const char* filename = argv[1];
