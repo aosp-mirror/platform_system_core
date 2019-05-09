@@ -107,7 +107,7 @@ TEST(ziparchive, OpenDoNotAssumeFdOwnership) {
   close(fd);
 }
 
-static void AssertIterationOrder(const ZipString* prefix, const ZipString* suffix,
+static void AssertIterationOrder(const std::string_view prefix, const std::string_view suffix,
                                  const std::vector<std::string>& expected_names_sorted) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
@@ -137,30 +137,26 @@ TEST(ziparchive, Iteration) {
   static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b.txt", "b/", "b/c.txt",
                                                                   "b/d.txt"};
 
-  AssertIterationOrder(nullptr, nullptr, kExpectedMatchesSorted);
+  AssertIterationOrder("", "", kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithPrefix) {
-  ZipString prefix("b/");
   static const std::vector<std::string> kExpectedMatchesSorted = {"b/", "b/c.txt", "b/d.txt"};
 
-  AssertIterationOrder(&prefix, nullptr, kExpectedMatchesSorted);
+  AssertIterationOrder("b/", "", kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithSuffix) {
-  ZipString suffix(".txt");
   static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b.txt", "b/c.txt",
                                                                   "b/d.txt"};
 
-  AssertIterationOrder(nullptr, &suffix, kExpectedMatchesSorted);
+  AssertIterationOrder("", ".txt", kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithPrefixAndSuffix) {
-  ZipString prefix("b");
-  ZipString suffix(".txt");
   static const std::vector<std::string> kExpectedMatchesSorted = {"b.txt", "b/c.txt", "b/d.txt"};
 
-  AssertIterationOrder(&prefix, &suffix, kExpectedMatchesSorted);
+  AssertIterationOrder("b", ".txt", kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
@@ -168,9 +164,7 @@ TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   void* iteration_cookie;
-  ZipString prefix("x");
-  ZipString suffix("y");
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, &suffix));
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, "x", "y"));
 
   ZipEntry data;
   ZipString name;
@@ -228,7 +222,7 @@ TEST(ziparchive, TestInvalidDeclaredLength) {
   ASSERT_EQ(0, OpenArchiveWrapper("declaredlength.zip", &handle));
 
   void* iteration_cookie;
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, nullptr, nullptr));
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie));
 
   ZipString name;
   ZipEntry data;
