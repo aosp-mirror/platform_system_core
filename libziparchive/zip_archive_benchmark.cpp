@@ -75,7 +75,7 @@ static void Iterate_all_files(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     OpenArchive(temp_file->path, &handle);
-    StartIteration(handle, &iteration_cookie, nullptr, nullptr);
+    StartIteration(handle, &iteration_cookie);
     while (Next(iteration_cookie, &data, &name) == 0) {
     }
     EndIteration(iteration_cookie);

@@ -689,52 +689,57 @@ static int32_t FindEntry(const ZipArchive* archive, const int32_t ent, ZipEntry*
 }
 
 struct IterationHandle {
-  uint32_t position;
-  // TODO: switch these to std::string now that Windows uses libc++ too.
-  ZipString prefix;
-  ZipString suffix;
   ZipArchive* archive;
 
-  IterationHandle(const ZipString* in_prefix, const ZipString* in_suffix) {
-    if (in_prefix) {
-      uint8_t* name_copy = new uint8_t[in_prefix->name_length];
-      memcpy(name_copy, in_prefix->name, in_prefix->name_length);
-      prefix.name = name_copy;
-      prefix.name_length = in_prefix->name_length;
-    } else {
-      prefix.name = NULL;
-      prefix.name_length = 0;
-    }
-    if (in_suffix) {
-      uint8_t* name_copy = new uint8_t[in_suffix->name_length];
-      memcpy(name_copy, in_suffix->name, in_suffix->name_length);
-      suffix.name = name_copy;
-      suffix.name_length = in_suffix->name_length;
-    } else {
-      suffix.name = NULL;
-      suffix.name_length = 0;
-    }
-  }
+  std::string prefix_holder;
+  ZipString prefix;
 
-  ~IterationHandle() {
-    delete[] prefix.name;
-    delete[] suffix.name;
-  }
+  std::string suffix_holder;
+  ZipString suffix;
+
+  uint32_t position = 0;
+
+  IterationHandle(ZipArchive* archive, const std::string_view in_prefix,
+                  const std::string_view in_suffix)
+      : archive(archive),
+        prefix_holder(in_prefix),
+        prefix(prefix_holder),
+        suffix_holder(in_suffix),
+        suffix(suffix_holder) {}
 };
 
 int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
-                       const ZipString* optional_prefix, const ZipString* optional_suffix) {
+                       const std::string_view optional_prefix,
+                       const std::string_view optional_suffix) {
   if (archive == NULL || archive->hash_table == NULL) {
     ALOGW("Zip: Invalid ZipArchiveHandle");
     return kInvalidHandle;
   }
 
-  IterationHandle* cookie = new IterationHandle(optional_prefix, optional_suffix);
-  cookie->position = 0;
-  cookie->archive = archive;
+  if (optional_prefix.size() > static_cast<size_t>(UINT16_MAX) ||
+      optional_suffix.size() > static_cast<size_t>(UINT16_MAX)) {
+    ALOGW("Zip: prefix/suffix too long");
+    return kInvalidEntryName;
+  }
 
-  *cookie_ptr = cookie;
+  *cookie_ptr = new IterationHandle(archive, optional_prefix, optional_suffix);
   return 0;
+}
+
+// TODO: remove this.
+int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
+                       const ZipString* optional_prefix, const ZipString* optional_suffix) {
+  std::string prefix;
+  if (optional_prefix) {
+    prefix = std::string(reinterpret_cast<const char*>(optional_prefix->name),
+                         optional_prefix->name_length);
+  }
+  std::string suffix;
+  if (optional_suffix) {
+    suffix = std::string(reinterpret_cast<const char*>(optional_suffix->name),
+                         optional_suffix->name_length);
+  }
+  return StartIteration(archive, cookie_ptr, prefix.c_str(), suffix.c_str());
 }
 
 void EndIteration(void* cookie) {
