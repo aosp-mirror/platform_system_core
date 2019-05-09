@@ -34,7 +34,7 @@
 #include "adb_utils.h"
 #include "sysdeps.h"
 
-bool SendProtocolString(int fd, std::string_view s) {
+bool SendProtocolString(borrowed_fd fd, std::string_view s) {
     unsigned int length = s.size();
     if (length > MAX_PAYLOAD - 4) {
         errno = EMSGSIZE;
@@ -47,7 +47,7 @@ bool SendProtocolString(int fd, std::string_view s) {
     return WriteFdExactly(fd, str);
 }
 
-bool ReadProtocolString(int fd, std::string* s, std::string* error) {
+bool ReadProtocolString(borrowed_fd fd, std::string* s, std::string* error) {
     char buf[5];
     if (!ReadFdExactly(fd, buf, 4)) {
         *error = perror_str("protocol fault (couldn't read status length)");
@@ -65,57 +65,57 @@ bool ReadProtocolString(int fd, std::string* s, std::string* error) {
     return true;
 }
 
-bool SendOkay(int fd) {
+bool SendOkay(borrowed_fd fd) {
     return WriteFdExactly(fd, "OKAY", 4);
 }
 
-bool SendFail(int fd, std::string_view reason) {
+bool SendFail(borrowed_fd fd, std::string_view reason) {
     return WriteFdExactly(fd, "FAIL", 4) && SendProtocolString(fd, reason);
 }
 
-bool ReadFdExactly(int fd, void* buf, size_t len) {
+bool ReadFdExactly(borrowed_fd fd, void* buf, size_t len) {
     char* p = reinterpret_cast<char*>(buf);
 
     size_t len0 = len;
 
-    D("readx: fd=%d wanted=%zu", fd, len);
+    D("readx: fd=%d wanted=%zu", fd.get(), len);
     while (len > 0) {
         int r = adb_read(fd, p, len);
         if (r > 0) {
             len -= r;
             p += r;
         } else if (r == -1) {
-            D("readx: fd=%d error %d: %s", fd, errno, strerror(errno));
+            D("readx: fd=%d error %d: %s", fd.get(), errno, strerror(errno));
             return false;
         } else {
-            D("readx: fd=%d disconnected", fd);
+            D("readx: fd=%d disconnected", fd.get());
             errno = 0;
             return false;
         }
     }
 
-    VLOG(RWX) << "readx: fd=" << fd << " wanted=" << len0 << " got=" << (len0 - len)
-              << " " << dump_hex(reinterpret_cast<const unsigned char*>(buf), len0);
+    VLOG(RWX) << "readx: fd=" << fd.get() << " wanted=" << len0 << " got=" << (len0 - len) << " "
+              << dump_hex(reinterpret_cast<const unsigned char*>(buf), len0);
 
     return true;
 }
 
-bool WriteFdExactly(int fd, const void* buf, size_t len) {
+bool WriteFdExactly(borrowed_fd fd, const void* buf, size_t len) {
     const char* p = reinterpret_cast<const char*>(buf);
     int r;
 
-    VLOG(RWX) << "writex: fd=" << fd << " len=" << len
-              << " " << dump_hex(reinterpret_cast<const unsigned char*>(buf), len);
+    VLOG(RWX) << "writex: fd=" << fd.get() << " len=" << len << " "
+              << dump_hex(reinterpret_cast<const unsigned char*>(buf), len);
 
     while (len > 0) {
         r = adb_write(fd, p, len);
         if (r == -1) {
-            D("writex: fd=%d error %d: %s", fd, errno, strerror(errno));
+            D("writex: fd=%d error %d: %s", fd.get(), errno, strerror(errno));
             if (errno == EAGAIN) {
                 std::this_thread::yield();
                 continue;
             } else if (errno == EPIPE) {
-                D("writex: fd=%d disconnected", fd);
+                D("writex: fd=%d disconnected", fd.get());
                 errno = 0;
                 return false;
             } else {
@@ -129,15 +129,15 @@ bool WriteFdExactly(int fd, const void* buf, size_t len) {
     return true;
 }
 
-bool WriteFdExactly(int fd, const char* str) {
+bool WriteFdExactly(borrowed_fd fd, const char* str) {
     return WriteFdExactly(fd, str, strlen(str));
 }
 
-bool WriteFdExactly(int fd, const std::string& str) {
+bool WriteFdExactly(borrowed_fd fd, const std::string& str) {
     return WriteFdExactly(fd, str.c_str(), str.size());
 }
 
-bool WriteFdFmt(int fd, const char* fmt, ...) {
+bool WriteFdFmt(borrowed_fd fd, const char* fmt, ...) {
     std::string str;
 
     va_list ap;
@@ -148,7 +148,7 @@ bool WriteFdFmt(int fd, const char* fmt, ...) {
     return WriteFdExactly(fd, str);
 }
 
-bool ReadOrderlyShutdown(int fd) {
+bool ReadOrderlyShutdown(borrowed_fd fd) {
     char buf[16];
 
     // Only call this function if you're sure that the peer does
@@ -178,7 +178,7 @@ bool ReadOrderlyShutdown(int fd) {
         // data. We don't repeatedly call adb_read() until we get zero because
         // we don't know how long that would take, but we do know that the
         // caller wants to close the socket soon.
-        VLOG(RWX) << "ReadOrderlyShutdown(" << fd << ") unexpectedly read "
+        VLOG(RWX) << "ReadOrderlyShutdown(" << fd.get() << ") unexpectedly read "
                   << dump_hex(buf, result);
         // Shutdown the socket to prevent the caller from reading or writing to
         // it which doesn't make sense if we just read and discarded some data.
