@@ -235,7 +235,7 @@ int FirstStageMain(int argc, char** argv) {
 
     SetInitAvbVersionInRecovery();
 
-    setenv("FIRST_STAGE_STARTED_AT", std::to_string(start_time.time_since_epoch().count()).c_str(),
+    setenv(kEnvFirstStageStartedAt, std::to_string(start_time.time_since_epoch().count()).c_str(),
            1);
 
     const char* path = "/system/bin/init";
