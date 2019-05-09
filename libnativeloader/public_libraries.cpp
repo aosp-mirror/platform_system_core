@@ -68,6 +68,16 @@ std::string vndk_version_str() {
   return "";
 }
 
+// For debuggable platform builds use ANDROID_ADDITIONAL_PUBLIC_LIBRARIES environment
+// variable to add libraries to the list. This is intended for platform tests only.
+std::string additional_public_libraries() {
+  if (debuggable()) {
+    const char* val = getenv("ANDROID_ADDITIONAL_PUBLIC_LIBRARIES");
+    return val ? val : "";
+  }
+  return "";
+}
+
 void InsertVndkVersionStr(std::string* file_name) {
   CHECK(file_name != nullptr);
   size_t insert_pos = file_name->find_last_of(".");
@@ -171,130 +181,119 @@ void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonam
   }
 }
 
-}  // namespace
+static std::string InitDefaultPublicLibraries() {
+  std::string config_file = root_dir() + kDefaultPublicLibrariesFile;
+  std::vector<std::string> sonames;
+  std::string error_msg;
+  LOG_ALWAYS_FATAL_IF(!ReadConfig(config_file, &sonames, always_true, &error_msg),
+                      "Error reading public native library list from \"%s\": %s",
+                      config_file.c_str(), error_msg.c_str());
 
-const std::string& default_public_libraries() {
-  static bool cached = false;
-  static std::string list;
-  if (!cached) {
-    std::string config_file = root_dir() + kDefaultPublicLibrariesFile;
-    std::vector<std::string> sonames;
-    std::string error_msg;
-    LOG_ALWAYS_FATAL_IF(!ReadConfig(config_file, &sonames, always_true, &error_msg),
-                        "Error reading public native library list from \"%s\": %s",
-                        config_file.c_str(), error_msg.c_str());
+  std::string additional_libs = additional_public_libraries();
+  if (!additional_libs.empty()) {
+    auto vec = base::Split(additional_libs, ":");
+    std::copy(vec.begin(), vec.end(), std::back_inserter(sonames));
+  }
 
-    // For debuggable platform builds use ANDROID_ADDITIONAL_PUBLIC_LIBRARIES environment
-    // variable to add libraries to the list. This is intended for platform tests only.
-    if (debuggable()) {
-      const char* additional_libs = getenv("ANDROID_ADDITIONAL_PUBLIC_LIBRARIES");
-      if (additional_libs != nullptr && additional_libs[0] != '\0') {
-        std::vector<std::string> additional_libs_vector = base::Split(additional_libs, ":");
-        std::copy(additional_libs_vector.begin(), additional_libs_vector.end(),
-                  std::back_inserter(sonames));
-      }
+  // Remove the public libs in the runtime namespace.
+  // These libs are listed in public.android.txt, but we don't want the rest of android
+  // in default namespace to dlopen the libs.
+  // For example, libicuuc.so is exposed to classloader namespace from runtime namespace.
+  // Unfortunately, it does not have stable C symbols, and default namespace should only use
+  // stable symbols in libandroidicu.so. http://b/120786417
+  for (const std::string& lib_name : kRuntimePublicLibraries) {
+    std::string path(kRuntimeApexLibPath);
+    path.append("/").append(lib_name);
+
+    struct stat s;
+    // Do nothing if the path in /apex does not exist.
+    // Runtime APEX must be mounted since libnativeloader is in the same APEX
+    if (stat(path.c_str(), &s) != 0) {
+      continue;
     }
 
-    // Remove the public libs in the runtime namespace.
-    // These libs are listed in public.android.txt, but we don't want the rest of android
-    // in default namespace to dlopen the libs.
-    // For example, libicuuc.so is exposed to classloader namespace from runtime namespace.
-    // Unfortunately, it does not have stable C symbols, and default namespace should only use
-    // stable symbols in libandroidicu.so. http://b/120786417
-    for (const std::string& lib_name : kRuntimePublicLibraries) {
-      std::string path(kRuntimeApexLibPath);
-      path.append("/").append(lib_name);
-
-      struct stat s;
-      // Do nothing if the path in /apex does not exist.
-      // Runtime APEX must be mounted since libnativeloader is in the same APEX
-      if (stat(path.c_str(), &s) != 0) {
-        continue;
-      }
-
-      auto it = std::find(sonames.begin(), sonames.end(), lib_name);
-      if (it != sonames.end()) {
-        sonames.erase(it);
-      }
+    auto it = std::find(sonames.begin(), sonames.end(), lib_name);
+    if (it != sonames.end()) {
+      sonames.erase(it);
     }
-    list = android::base::Join(sonames, ':');
-    cached = true;
+  }
+  return android::base::Join(sonames, ':');
+}
+
+static std::string InitRuntimePublicLibraries() {
+  CHECK(sizeof(kRuntimePublicLibraries) > 0);
+  std::string list = android::base::Join(kRuntimePublicLibraries, ":");
+
+  std::string additional_libs = additional_public_libraries();
+  if (!additional_libs.empty()) {
+    list = list + ':' + additional_libs;
   }
   return list;
 }
 
-const std::string& runtime_public_libraries() {
-  static bool cached = false;
-  static std::string list;
-  if (!cached) {
-    list = android::base::Join(kRuntimePublicLibraries, ":");
-    // For debuggable platform builds use ANDROID_ADDITIONAL_PUBLIC_LIBRARIES environment
-    // variable to add libraries to the list. This is intended for platform tests only.
-    if (debuggable()) {
-      const char* additional_libs = getenv("ANDROID_ADDITIONAL_PUBLIC_LIBRARIES");
-      if (additional_libs != nullptr && additional_libs[0] != '\0') {
-        list = list + ':' + additional_libs;
-      }
-    }
-  }
-  return list;
-}
-
-const std::string& vendor_public_libraries() {
-  static bool cached = false;
-  static std::string list;
-  if (!cached) {
-    // This file is optional, quietly ignore if the file does not exist.
-    std::vector<std::string> sonames;
-    ReadConfig(kVendorPublicLibrariesFile, &sonames, always_true, nullptr);
-    list = android::base::Join(sonames, ':');
-    cached = true;
-  }
-  return list;
+static std::string InitVendorPublicLibraries() {
+  // This file is optional, quietly ignore if the file does not exist.
+  std::vector<std::string> sonames;
+  ReadConfig(kVendorPublicLibrariesFile, &sonames, always_true, nullptr);
+  return android::base::Join(sonames, ':');
 }
 
 // read /system/etc/public.libraries-<companyname>.txt and
 // /product/etc/public.libraries-<companyname>.txt which contain partner defined
 // system libs that are exposed to apps. The libs in the txt files must be
 // named as lib<name>.<companyname>.so.
+static std::string InitExtendedPublicLibraries() {
+  std::vector<std::string> sonames;
+  ReadExtensionLibraries("/system/etc", &sonames);
+  ReadExtensionLibraries("/product/etc", &sonames);
+  return android::base::Join(sonames, ':');
+}
+
+static std::string InitLlndkLibraries() {
+  std::string config_file = kLlndkLibrariesFile;
+  InsertVndkVersionStr(&config_file);
+  std::vector<std::string> sonames;
+  ReadConfig(config_file, &sonames, always_true, nullptr);
+  return android::base::Join(sonames, ':');
+}
+
+static std::string InitVndkspLibraries() {
+  std::string config_file = kVndkLibrariesFile;
+  InsertVndkVersionStr(&config_file);
+  std::vector<std::string> sonames;
+  ReadConfig(config_file, &sonames, always_true, nullptr);
+  return android::base::Join(sonames, ':');
+}
+
+}  // namespace
+
+const std::string& default_public_libraries() {
+  static std::string list = InitDefaultPublicLibraries();
+  return list;
+}
+
+const std::string& runtime_public_libraries() {
+  static std::string list = InitRuntimePublicLibraries();
+  return list;
+}
+
+const std::string& vendor_public_libraries() {
+  static std::string list = InitVendorPublicLibraries();
+  return list;
+}
+
 const std::string& extended_public_libraries() {
-  static bool cached = false;
-  static std::string list;
-  if (!cached) {
-    std::vector<std::string> sonames;
-    ReadExtensionLibraries("/system/etc", &sonames);
-    ReadExtensionLibraries("/product/etc", &sonames);
-    list = android::base::Join(sonames, ':');
-    cached = true;
-  }
+  static std::string list = InitExtendedPublicLibraries();
   return list;
 }
 
 const std::string& llndk_libraries() {
-  static bool cached = false;
-  static std::string list;
-  if (!cached) {
-    std::string config_file = kLlndkLibrariesFile;
-    InsertVndkVersionStr(&config_file);
-    std::vector<std::string> sonames;
-    ReadConfig(config_file, &sonames, always_true, nullptr);
-    list = android::base::Join(sonames, ':');
-    cached = true;
-  }
+  static std::string list = InitLlndkLibraries();
   return list;
 }
 
 const std::string& vndksp_libraries() {
-  static bool cached = false;
-  static std::string list;
-  if (!cached) {
-    std::string config_file = kVndkLibrariesFile;
-    InsertVndkVersionStr(&config_file);
-    std::vector<std::string> sonames;
-    ReadConfig(config_file, &sonames, always_true, nullptr);
-    list = android::base::Join(sonames, ':');
-    cached = true;
-  }
+  static std::string list = InitVndkspLibraries();
   return list;
 }
 
