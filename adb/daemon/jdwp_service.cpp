@@ -325,12 +325,12 @@ static int jdwp_control_init(JdwpControl* control, const char* sockname, int soc
 
     addrlen = pathlen + sizeof(addr.sun_family);
 
-    if (bind(s, reinterpret_cast<sockaddr*>(&addr), addrlen) < 0) {
+    if (bind(s.get(), reinterpret_cast<sockaddr*>(&addr), addrlen) < 0) {
         D("could not bind vm debug control socket: %d: %s", errno, strerror(errno));
         return -1;
     }
 
-    if (listen(s, 4) < 0) {
+    if (listen(s.get(), 4) < 0) {
         D("listen failed in jdwp control socket: %d: %s", errno, strerror(errno));
         return -1;
     }

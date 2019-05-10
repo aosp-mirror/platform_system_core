@@ -16,12 +16,13 @@
 
 #pragma once
 
-#include "adb.h"
-#include "sysdeps.h"
-#include "transport.h"
-
 #include <optional>
 #include <string>
+
+#include "adb.h"
+#include "adb_unique_fd.h"
+#include "sysdeps.h"
+#include "transport.h"
 
 // Explicitly check the adb server version.
 // All of the commands below do this implicitly.
@@ -64,7 +65,7 @@ int adb_send_emulator_command(int argc, const char* _Nonnull* _Nonnull argv,
 
 // Reads a standard adb status response (OKAY|FAIL) and returns true in the
 // event of OKAY, false in the event of FAIL or protocol error.
-bool adb_status(int fd, std::string* _Nonnull error);
+bool adb_status(borrowed_fd fd, std::string* _Nonnull error);
 
 // Create a host command corresponding to selected transport type/serial.
 std::string format_host_command(const char* _Nonnull command);
