@@ -79,6 +79,38 @@ static bool IsApexUpdatable() {
     return updatable;
 }
 
+static bool ActivateFlattenedApexesIfPossible() {
+    if (IsRecoveryMode() || IsApexUpdatable()) {
+        return true;
+    }
+
+    constexpr const char kSystemApex[] = "/system/apex";
+    constexpr const char kApexTop[] = "/apex";
+    if (mount(kSystemApex, kApexTop, nullptr, MS_BIND, nullptr) != 0) {
+        PLOG(ERROR) << "Could not bind mount " << kSystemApex << " to " << kApexTop;
+        return false;
+    }
+
+    // Special casing for the runtime APEX
+    constexpr const char kRuntimeApexMountPath[] = "/system/apex/com.android.runtime";
+    static const std::vector<std::string> kRuntimeApexDirNames = {"com.android.runtime.release",
+                                                                  "com.android.runtime.debug"};
+    bool success = false;
+    for (const auto& name : kRuntimeApexDirNames) {
+        std::string path = std::string(kSystemApex) + "/" + name;
+        if (access(path.c_str(), F_OK) == 0) {
+            if (mount(path.c_str(), kRuntimeApexMountPath, nullptr, MS_BIND, nullptr) == 0) {
+                success = true;
+                break;
+            }
+        }
+    }
+    if (!success) {
+        PLOG(ERROR) << "Failed to bind mount the runtime APEX to " << kRuntimeApexMountPath;
+    }
+    return success;
+}
+
 static android::base::unique_fd bootstrap_ns_fd;
 static android::base::unique_fd default_ns_fd;
 
@@ -128,6 +160,8 @@ bool SetupMountNamespaces() {
         default_ns_fd.reset(OpenMountNamespace());
         default_ns_id = GetMountNamespaceId();
     }
+
+    success &= ActivateFlattenedApexesIfPossible();
 
     LOG(INFO) << "SetupMountNamespaces done";
     return success;
