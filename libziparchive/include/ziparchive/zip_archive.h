@@ -180,9 +180,6 @@ int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryNa
 int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
                        const std::string_view optional_prefix = "",
                        const std::string_view optional_suffix = "");
-// TODO: remove this.
-int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
-                       const ZipString* optional_prefix, const ZipString* optional_suffix);
 
 /*
  * Advance to the next element in the zipfile in iteration order.
