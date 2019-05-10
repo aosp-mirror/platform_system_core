@@ -463,6 +463,7 @@ int main(int argc, char** argv) {
       ThreadInfo info;
       info.pid = target_process;
       info.tid = thread;
+      info.uid = getuid();
       info.process_name = process_name;
       info.thread_name = get_thread_name(thread);
 
