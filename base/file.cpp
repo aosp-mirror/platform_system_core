@@ -176,20 +176,20 @@ namespace base {
 // Versions of standard library APIs that support UTF-8 strings.
 using namespace android::base::utf8;
 
-bool ReadFdToString(int fd, std::string* content) {
+bool ReadFdToString(borrowed_fd fd, std::string* content) {
   content->clear();
 
   // Although original we had small files in mind, this code gets used for
   // very large files too, where the std::string growth heuristics might not
   // be suitable. https://code.google.com/p/android/issues/detail?id=258500.
   struct stat sb;
-  if (fstat(fd, &sb) != -1 && sb.st_size > 0) {
+  if (fstat(fd.get(), &sb) != -1 && sb.st_size > 0) {
     content->reserve(sb.st_size);
   }
 
   char buf[BUFSIZ];
   ssize_t n;
-  while ((n = TEMP_FAILURE_RETRY(read(fd, &buf[0], sizeof(buf)))) > 0) {
+  while ((n = TEMP_FAILURE_RETRY(read(fd.get(), &buf[0], sizeof(buf)))) > 0) {
     content->append(buf, n);
   }
   return (n == 0) ? true : false;
@@ -206,11 +206,11 @@ bool ReadFileToString(const std::string& path, std::string* content, bool follow
   return ReadFdToString(fd, content);
 }
 
-bool WriteStringToFd(const std::string& content, int fd) {
+bool WriteStringToFd(const std::string& content, borrowed_fd fd) {
   const char* p = content.data();
   size_t left = content.size();
   while (left > 0) {
-    ssize_t n = TEMP_FAILURE_RETRY(write(fd, p, left));
+    ssize_t n = TEMP_FAILURE_RETRY(write(fd.get(), p, left));
     if (n == -1) {
       return false;
     }
@@ -269,11 +269,11 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
   return WriteStringToFd(content, fd) || CleanUpAfterFailedWrite(path);
 }
 
-bool ReadFully(int fd, void* data, size_t byte_count) {
+bool ReadFully(borrowed_fd fd, void* data, size_t byte_count) {
   uint8_t* p = reinterpret_cast<uint8_t*>(data);
   size_t remaining = byte_count;
   while (remaining > 0) {
-    ssize_t n = TEMP_FAILURE_RETRY(read(fd, p, remaining));
+    ssize_t n = TEMP_FAILURE_RETRY(read(fd.get(), p, remaining));
     if (n <= 0) return false;
     p += n;
     remaining -= n;
@@ -284,14 +284,14 @@ bool ReadFully(int fd, void* data, size_t byte_count) {
 #if defined(_WIN32)
 // Windows implementation of pread. Note that this DOES move the file descriptors read position,
 // but it does so atomically.
-static ssize_t pread(int fd, void* data, size_t byte_count, off64_t offset) {
+static ssize_t pread(borrowed_fd fd, void* data, size_t byte_count, off64_t offset) {
   DWORD bytes_read;
   OVERLAPPED overlapped;
   memset(&overlapped, 0, sizeof(OVERLAPPED));
   overlapped.Offset = static_cast<DWORD>(offset);
   overlapped.OffsetHigh = static_cast<DWORD>(offset >> 32);
-  if (!ReadFile(reinterpret_cast<HANDLE>(_get_osfhandle(fd)), data, static_cast<DWORD>(byte_count),
-                &bytes_read, &overlapped)) {
+  if (!ReadFile(reinterpret_cast<HANDLE>(_get_osfhandle(fd.get())), data,
+                static_cast<DWORD>(byte_count), &bytes_read, &overlapped)) {
     // In case someone tries to read errno (since this is masquerading as a POSIX call)
     errno = EIO;
     return -1;
@@ -300,10 +300,10 @@ static ssize_t pread(int fd, void* data, size_t byte_count, off64_t offset) {
 }
 #endif
 
-bool ReadFullyAtOffset(int fd, void* data, size_t byte_count, off64_t offset) {
+bool ReadFullyAtOffset(borrowed_fd fd, void* data, size_t byte_count, off64_t offset) {
   uint8_t* p = reinterpret_cast<uint8_t*>(data);
   while (byte_count > 0) {
-    ssize_t n = TEMP_FAILURE_RETRY(pread(fd, p, byte_count, offset));
+    ssize_t n = TEMP_FAILURE_RETRY(pread(fd.get(), p, byte_count, offset));
     if (n <= 0) return false;
     p += n;
     byte_count -= n;
@@ -312,11 +312,11 @@ bool ReadFullyAtOffset(int fd, void* data, size_t byte_count, off64_t offset) {
   return true;
 }
 
-bool WriteFully(int fd, const void* data, size_t byte_count) {
+bool WriteFully(borrowed_fd fd, const void* data, size_t byte_count) {
   const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
   size_t remaining = byte_count;
   while (remaining > 0) {
-    ssize_t n = TEMP_FAILURE_RETRY(write(fd, p, remaining));
+    ssize_t n = TEMP_FAILURE_RETRY(write(fd.get(), p, remaining));
     if (n == -1) return false;
     p += n;
     remaining -= n;
