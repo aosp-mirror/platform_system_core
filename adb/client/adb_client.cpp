@@ -128,7 +128,7 @@ static std::optional<TransportId> switch_socket_transport(int fd, std::string* e
     return result;
 }
 
-bool adb_status(int fd, std::string* error) {
+bool adb_status(borrowed_fd fd, std::string* error) {
     char buf[5];
     if (!ReadFdExactly(fd, buf, 4)) {
         *error = perror_str("protocol fault (couldn't read status)");
