@@ -170,9 +170,6 @@ static void help() {
         "     remove this app package from the device\n"
         "     '-k': keep the data and cache directories\n"
         "\n"
-        "backup/restore:\n"
-        "   to show usage run \"adb shell bu help\"\n"
-        "\n"
         "debugging:\n"
         " bugreport [PATH]\n"
         "     write bugreport to given PATH [default=bugreport.zip];\n"
@@ -262,7 +259,7 @@ static void stdin_raw_restore() {
 // stdout/stderr are routed independently and the remote exit code will be
 // returned.
 // if |callback| is non-null, stdout/stderr output will be handled by it.
-int read_and_dump(int fd, bool use_shell_protocol = false,
+int read_and_dump(borrowed_fd fd, bool use_shell_protocol = false,
                   StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK) {
     int exit_code = 0;
     if (fd < 0) return exit_code;
@@ -305,9 +302,9 @@ int read_and_dump(int fd, bool use_shell_protocol = false,
             }
             length = protocol->data_length();
         } else {
-            D("read_and_dump(): pre adb_read(fd=%d)", fd);
+            D("read_and_dump(): pre adb_read(fd=%d)", fd.get());
             length = adb_read(fd, raw_buffer, sizeof(raw_buffer));
-            D("read_and_dump(): post adb_read(fd=%d): length=%d", fd, length);
+            D("read_and_dump(): post adb_read(fd=%d): length=%d", fd.get(), length);
             if (length <= 0) {
                 break;
             }
@@ -887,7 +884,7 @@ static int adb_sideload_install(const char* filename, bool rescue_mode) {
             return -1;
         }
         fprintf(stderr, "adb: trying pre-KitKat sideload method...\n");
-        return adb_sideload_legacy(filename, package_fd, static_cast<int>(sb.st_size));
+        return adb_sideload_legacy(filename, package_fd.get(), static_cast<int>(sb.st_size));
     }
 
     int opt = SIDELOAD_HOST_BLOCK_SIZE;
@@ -1207,14 +1204,14 @@ static int logcat(int argc, const char** argv) {
     return send_shell_command(cmd);
 }
 
-static void write_zeros(int bytes, int fd) {
+static void write_zeros(int bytes, borrowed_fd fd) {
     int old_stdin_mode = -1;
     int old_stdout_mode = -1;
     std::vector<char> buf(bytes);
 
-    D("write_zeros(%d) -> %d", bytes, fd);
+    D("write_zeros(%d) -> %d", bytes, fd.get());
 
-    stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
+    stdinout_raw_prologue(-1, fd.get(), old_stdin_mode, old_stdout_mode);
 
     if (fd == STDOUT_FILENO) {
         fwrite(buf.data(), 1, bytes, stdout);
@@ -1223,12 +1220,14 @@ static void write_zeros(int bytes, int fd) {
         adb_write(fd, buf.data(), bytes);
     }
 
-    stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
+    stdinout_raw_prologue(-1, fd.get(), old_stdin_mode, old_stdout_mode);
 
     D("write_zeros() finished");
 }
 
 static int backup(int argc, const char** argv) {
+    fprintf(stdout, "WARNING: adb backup is deprecated and may be removed in a future release\n");
+
     const char* filename = "backup.ab";
 
     /* find, extract, and use any -f argument */
@@ -1278,6 +1277,8 @@ static int backup(int argc, const char** argv) {
 }
 
 static int restore(int argc, const char** argv) {
+    fprintf(stdout, "WARNING: adb restore is deprecated and may be removed in a future release\n");
+
     if (argc != 2) error_exit("restore requires an argument");
 
     const char* filename = argv[1];

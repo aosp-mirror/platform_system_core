@@ -234,15 +234,15 @@ std::string perror_str(const char* msg) {
 
 #if !defined(_WIN32)
 // Windows version provided in sysdeps_win32.cpp
-bool set_file_block_mode(int fd, bool block) {
-    int flags = fcntl(fd, F_GETFL, 0);
+bool set_file_block_mode(borrowed_fd fd, bool block) {
+    int flags = fcntl(fd.get(), F_GETFL, 0);
     if (flags == -1) {
-        PLOG(ERROR) << "failed to fcntl(F_GETFL) for fd " << fd;
+        PLOG(ERROR) << "failed to fcntl(F_GETFL) for fd " << fd.get();
         return false;
     }
     flags = block ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
-    if (fcntl(fd, F_SETFL, flags) != 0) {
-        PLOG(ERROR) << "failed to fcntl(F_SETFL) for fd " << fd << ", flags " << flags;
+    if (fcntl(fd.get(), F_SETFL, flags) != 0) {
+        PLOG(ERROR) << "failed to fcntl(F_SETFL) for fd " << fd.get() << ", flags " << flags;
         return false;
     }
     return true;

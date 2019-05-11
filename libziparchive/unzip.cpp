@@ -249,7 +249,7 @@ static void ProcessAll(ZipArchiveHandle zah) {
   // libziparchive iteration order doesn't match the central directory.
   // We could sort, but that would cost extra and wouldn't match either.
   void* cookie;
-  int err = StartIteration(zah, &cookie, nullptr, nullptr);
+  int err = StartIteration(zah, &cookie);
   if (err != 0) {
     error(1, 0, "couldn't iterate %s: %s", archive_name, ErrorCodeString(err));
   }

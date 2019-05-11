@@ -56,6 +56,7 @@
 #include "action_parser.h"
 #include "boringssl_self_test.h"
 #include "epoll.h"
+#include "first_stage_init.h"
 #include "first_stage_mount.h"
 #include "import_parser.h"
 #include "keychords.h"
@@ -630,20 +631,18 @@ static void UmountDebugRamdisk() {
 
 static void RecordStageBoottimes(const boot_clock::time_point& second_stage_start_time) {
     int64_t first_stage_start_time_ns = -1;
-    static constexpr char first_stage_started_at[] = "FIRST_STAGE_STARTED_AT";
-    if (auto first_stage_start_time_str = getenv(first_stage_started_at);
+    if (auto first_stage_start_time_str = getenv(kEnvFirstStageStartedAt);
         first_stage_start_time_str) {
         property_set("ro.boottime.init", first_stage_start_time_str);
         android::base::ParseInt(first_stage_start_time_str, &first_stage_start_time_ns);
     }
-    unsetenv(first_stage_started_at);
+    unsetenv(kEnvFirstStageStartedAt);
 
     int64_t selinux_start_time_ns = -1;
-    static constexpr char selinux_started_at[] = "SELINUX_STARTED_AT";
-    if (auto selinux_start_time_str = getenv(selinux_started_at); selinux_start_time_str) {
+    if (auto selinux_start_time_str = getenv(kEnvSelinuxStartedAt); selinux_start_time_str) {
         android::base::ParseInt(selinux_start_time_str, &selinux_start_time_ns);
     }
-    unsetenv(selinux_started_at);
+    unsetenv(kEnvSelinuxStartedAt);
 
     if (selinux_start_time_ns == -1) return;
     if (first_stage_start_time_ns == -1) return;
