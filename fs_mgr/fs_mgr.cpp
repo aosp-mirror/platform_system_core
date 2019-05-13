@@ -390,7 +390,7 @@ static void tune_quota(const std::string& blk_device, const FstabEntry& entry,
 // Set the number of reserved filesystem blocks if needed.
 static void tune_reserved_size(const std::string& blk_device, const FstabEntry& entry,
                                const struct ext4_super_block* sb, int* fs_stat) {
-    if (entry.reserved_size != 0) {
+    if (entry.reserved_size == 0) {
         return;
     }
 
