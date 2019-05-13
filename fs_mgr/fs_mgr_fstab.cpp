@@ -700,7 +700,9 @@ bool SkipMountingPartitions(Fstab* fstab) {
     constexpr const char kSkipMountConfig[] = "/system/etc/init/config/skip_mount.cfg";
 
     std::string skip_config;
+    auto save_errno = errno;
     if (!ReadFileToString(kSkipMountConfig, &skip_config)) {
+        errno = save_errno;  // missing file is expected
         return true;
     }
 
