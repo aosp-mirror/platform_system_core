@@ -139,7 +139,11 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
     // If we have access issues to find out space remaining, return true
     // to prevent us trying to override with overlayfs.
     struct statvfs vst;
-    if (statvfs(mount_point.c_str(), &vst)) return true;
+    auto save_errno = errno;
+    if (statvfs(mount_point.c_str(), &vst)) {
+        errno = save_errno;
+        return true;
+    }
 
     static constexpr int kPercentThreshold = 1;  // 1%
 
@@ -265,9 +269,11 @@ bool fs_mgr_rw_access(const std::string& path) {
 
 bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true) {
     Fstab fstab;
+    auto save_errno = errno;
     if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
         return false;
     }
+    errno = save_errno;
     const auto lowerdir = kLowerdirOption + mount_point;
     for (const auto& entry : fstab) {
         if (overlay_only && "overlay" != entry.fs_type && "overlayfs" != entry.fs_type) continue;
