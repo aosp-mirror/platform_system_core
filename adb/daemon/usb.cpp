@@ -295,9 +295,15 @@ struct UsbFfsConnection : public Connection {
                 }
 
                 struct usb_functionfs_event event;
-                if (TEMP_FAILURE_RETRY(adb_read(control_fd_.get(), &event, sizeof(event))) !=
-                    sizeof(event)) {
+                rc = TEMP_FAILURE_RETRY(adb_read(control_fd_.get(), &event, sizeof(event)));
+                if (rc == -1) {
                     PLOG(FATAL) << "failed to read functionfs event";
+                } else if (rc == 0) {
+                    LOG(WARNING) << "hit EOF on functionfs control fd";
+                    break;
+                } else if (rc != sizeof(event)) {
+                    LOG(FATAL) << "read functionfs event of unexpected size, expected "
+                               << sizeof(event) << ", got " << rc;
                 }
 
                 LOG(INFO) << "USB event: "
