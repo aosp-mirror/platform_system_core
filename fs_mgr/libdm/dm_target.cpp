@@ -16,6 +16,9 @@
 
 #include "libdm/dm_target.h"
 
+#include <stdio.h>
+#include <sys/types.h>
+
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
@@ -191,6 +194,31 @@ bool DmTargetSnapshot::ParseStatusText(const std::string& text, Status* status) 
         return false;
     }
     return true;
+}
+
+std::string DmTargetCrypt::GetParameterString() const {
+    std::vector<std::string> argv = {
+            cipher_,
+            key_,
+            std::to_string(iv_sector_offset_),
+            device_,
+            std::to_string(device_sector_),
+    };
+
+    std::vector<std::string> extra_argv;
+    if (allow_discards_) extra_argv.emplace_back("allow_discards");
+    if (allow_encrypt_override_) extra_argv.emplace_back("allow_encrypt_override");
+    if (iv_large_sectors_) extra_argv.emplace_back("iv_large_sectors");
+    if (sector_size_) extra_argv.emplace_back("sector_size:" + std::to_string(sector_size_));
+
+    if (!extra_argv.empty()) argv.emplace_back(std::to_string(extra_argv.size()));
+
+    argv.insert(argv.end(), extra_argv.begin(), extra_argv.end());
+    return android::base::Join(argv, " ");
+}
+
+std::string DmTargetDefaultKey::GetParameterString() const {
+    return cipher_ + " " + key_ + " " + blockdev_ + " " + std::to_string(start_sector_);
 }
 
 }  // namespace dm
