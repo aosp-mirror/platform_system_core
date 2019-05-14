@@ -438,3 +438,26 @@ TEST(libdm, DmSnapshotOverflow) {
         ASSERT_EQ(status.error, "Invalid");
     }
 }
+
+TEST(libdm, CryptArgs) {
+    DmTargetCrypt target1(0, 512, "sha1", "abcdefgh", 50, "/dev/loop0", 100);
+    ASSERT_EQ(target1.name(), "crypt");
+    ASSERT_TRUE(target1.Valid());
+    ASSERT_EQ(target1.GetParameterString(), "sha1 abcdefgh 50 /dev/loop0 100");
+
+    DmTargetCrypt target2(0, 512, "sha1", "abcdefgh", 50, "/dev/loop0", 100);
+    target2.SetSectorSize(64);
+    target2.AllowDiscards();
+    target2.SetIvLargeSectors();
+    target2.AllowEncryptOverride();
+    ASSERT_EQ(target2.GetParameterString(),
+              "sha1 abcdefgh 50 /dev/loop0 100 4 allow_discards allow_encrypt_override "
+              "iv_large_sectors sector_size:64");
+}
+
+TEST(libdm, DefaultKeyArgs) {
+    DmTargetDefaultKey target(0, 4096, "AES-256-XTS", "abcdef0123456789", "/dev/loop0", 0);
+    ASSERT_EQ(target.name(), "default-key");
+    ASSERT_TRUE(target.Valid());
+    ASSERT_EQ(target.GetParameterString(), "AES-256-XTS abcdef0123456789 /dev/loop0 0");
+}
