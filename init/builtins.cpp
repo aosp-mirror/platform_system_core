@@ -104,35 +104,36 @@ static void ForEachServiceInClass(const std::string& classname, F function) {
     }
 }
 
-static Result<Success> class_start(const std::string& class_name, bool post_data_only) {
+static Result<Success> do_class_start(const BuiltinArguments& args) {
     // Do not start a class if it has a property persist.dont_start_class.CLASS set to 1.
-    if (android::base::GetBoolProperty("persist.init.dont_start_class." + class_name, false))
+    if (android::base::GetBoolProperty("persist.init.dont_start_class." + args[1], false))
         return Success();
     // Starting a class does not start services which are explicitly disabled.
     // They must  be started individually.
     for (const auto& service : ServiceList::GetInstance()) {
-        if (service->classnames().count(class_name)) {
-            if (post_data_only && !service->is_post_data()) {
-                continue;
-            }
+        if (service->classnames().count(args[1])) {
             if (auto result = service->StartIfNotDisabled(); !result) {
                 LOG(ERROR) << "Could not start service '" << service->name()
-                           << "' as part of class '" << class_name << "': " << result.error();
+                           << "' as part of class '" << args[1] << "': " << result.error();
             }
         }
     }
     return Success();
 }
 
-static Result<Success> do_class_start(const BuiltinArguments& args) {
-    return class_start(args[1], false /* post_data_only */);
-}
-
 static Result<Success> do_class_start_post_data(const BuiltinArguments& args) {
     if (args.context != kInitContext) {
         return Error() << "command 'class_start_post_data' only available in init context";
     }
-    return class_start(args[1], true /* post_data_only */);
+    for (const auto& service : ServiceList::GetInstance()) {
+        if (service->classnames().count(args[1])) {
+            if (auto result = service->StartIfPostData(); !result) {
+                LOG(ERROR) << "Could not start service '" << service->name()
+                           << "' as part of class '" << args[1] << "': " << result.error();
+            }
+        }
+    }
+    return Success();
 }
 
 static Result<Success> do_class_stop(const BuiltinArguments& args) {
