@@ -117,3 +117,25 @@ Caveats
   be used to clear scratch storage to permit the flash.
   Then reinstate the overrides and continue.
 - File bugs or submit fixes for review.
+- There are other subtle caveats requiring complex logic to solve.
+  Have evaluated them as too complex or not worth the trouble, please
+  File a bug if a use case needs to be covered.
+  - The backing storage is treated fragile, if anything else has
+    issue with the space taken, the backing storage will be cleared
+    out and we reserve the right to not inform, if the layering
+    does not prevent any messaging.
+  - Space remaining threshold is hard coded.  If 1% or more space
+    still remains, overlayfs will not be used, yet that amount of
+    space remaining is problematic.
+  - Flashing a partition via bootloader fastboot, as opposed to user
+    space fastbootd, is not detected, thus a partition may have
+    override content remaining.  adb enable-verity to wipe.
+  - Space is limited, there is near unlimited space on userdata,
+    we have made an architectural decision to not utilize
+    /data/overlay/ at this time.  Acquiring space to use for
+    backing remains an ongoing battle.
+  - First stage init, or ramdisk, can not be overriden.
+  - Backing storage will be discarded or ignored on errors, leading
+    to confusion.  When debugging using **adb remount** it is
+    currently advised to confirm update is present after a reboot
+    to develop confidence.
