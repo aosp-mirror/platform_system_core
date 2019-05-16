@@ -1383,7 +1383,7 @@ void ServiceList::MarkServicesUpdate() {
             continue;
         }
         if (auto result = service->Start(); !result) {
-            LOG(ERROR) << result.error_string();
+            LOG(ERROR) << result.error().as_string;
         }
     }
     delayed_service_names_.clear();
