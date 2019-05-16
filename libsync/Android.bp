@@ -23,6 +23,7 @@ cc_defaults {
 cc_library {
     name: "libsync",
     recovery_available: true,
+    native_bridge_supported: true,
     defaults: ["libsync_defaults"],
 }
 
