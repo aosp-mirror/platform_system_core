@@ -1154,8 +1154,21 @@ void Service::Reset() {
 
 void Service::ResetIfPostData() {
     if (post_data_) {
+        if (flags_ & SVC_RUNNING) {
+            running_at_post_data_reset_ = true;
+        }
         StopOrReset(SVC_RESET);
     }
+}
+
+Result<Success> Service::StartIfPostData() {
+    // Start the service, but only if it was started after /data was mounted,
+    // and it was still running when we reset the post-data services.
+    if (running_at_post_data_reset_) {
+        return Start();
+    }
+
+    return Success();
 }
 
 void Service::Stop() {
