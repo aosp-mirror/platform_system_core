@@ -220,25 +220,12 @@ void NativeLoaderFreeErrorMessage(char* msg) {
 #if defined(__ANDROID__)
 void* OpenNativeLibraryInNamespace(NativeLoaderNamespace* ns, const char* path,
                                    bool* needs_native_bridge, char** error_msg) {
-  if (ns->is_android_namespace()) {
-    android_dlextinfo extinfo;
-    extinfo.flags = ANDROID_DLEXT_USE_NAMESPACE;
-    extinfo.library_namespace = ns->get_android_ns();
-
-    void* handle = android_dlopen_ext(path, RTLD_NOW, &extinfo);
-    if (handle == nullptr) {
-      *error_msg = strdup(dlerror());
-    }
-    *needs_native_bridge = false;
-    return handle;
-  } else {
-    void* handle = NativeBridgeLoadLibraryExt(path, RTLD_NOW, ns->get_native_bridge_ns());
-    if (handle == nullptr) {
-      *error_msg = strdup(NativeBridgeGetError());
-    }
-    *needs_native_bridge = true;
-    return handle;
+  void* handle = ns->Load(path);
+  if (handle == nullptr) {
+    *error_msg = ns->GetError();
   }
+  *needs_native_bridge = ns->IsBridged();
+  return handle;
 }
 
 // native_bridge_namespaces are not supported for callers of this function.
@@ -247,10 +234,9 @@ void* OpenNativeLibraryInNamespace(NativeLoaderNamespace* ns, const char* path,
 android_namespace_t* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader) {
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
   NativeLoaderNamespace* ns = g_namespaces->FindNamespaceByClassLoader(env, class_loader);
-  if (ns != nullptr) {
-    return ns->is_android_namespace() ? ns->get_android_ns() : nullptr;
+  if (ns != nullptr && !ns->IsBridged()) {
+    return ns->ToRawAndroidNamespace();
   }
-
   return nullptr;
 }
 
