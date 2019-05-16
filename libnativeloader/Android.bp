@@ -30,6 +30,7 @@ cc_library {
         android: {
             srcs: [
                 "library_namespaces.cpp",
+                "native_loader_namespace.cpp",
                 "public_libraries.cpp",
             ],
             shared_libs: [
