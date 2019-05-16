@@ -119,7 +119,7 @@ struct TransferId {
 
 struct IoBlock {
     bool pending = false;
-    struct iocb control;
+    struct iocb control = {};
     std::shared_ptr<Block> payload;
 
     TransferId id() const { return TransferId::from_value(control.aio_data); }
