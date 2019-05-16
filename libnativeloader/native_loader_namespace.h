@@ -16,13 +16,14 @@
 #pragma once
 #if defined(__ANDROID__)
 
-#include <dlfcn.h>
+#include <string>
+#include <variant>
+#include <vector>
 
 #include "android-base/logging.h"
 #include "android/dlext.h"
 #include "log/log.h"
 #include "nativebridge/native_bridge.h"
-#include "utils.h"
 
 namespace android {
 
@@ -31,34 +32,40 @@ namespace android {
 // x86). Instances of this class are managed by LibraryNamespaces object.
 struct NativeLoaderNamespace {
  public:
-  NativeLoaderNamespace() : android_ns_(nullptr), native_bridge_ns_(nullptr) {}
-
-  explicit NativeLoaderNamespace(android_namespace_t* ns)
-      : android_ns_(ns), native_bridge_ns_(nullptr) {}
-
-  explicit NativeLoaderNamespace(native_bridge_namespace_t* ns)
-      : android_ns_(nullptr), native_bridge_ns_(ns) {}
+  // TODO(return with errors)
+  static NativeLoaderNamespace Create(const std::string& name, const std::string& search_paths,
+                                      const std::string& permitted_paths,
+                                      const NativeLoaderNamespace* parent, bool is_shared,
+                                      bool is_greylist_enabled);
 
   NativeLoaderNamespace(NativeLoaderNamespace&&) = default;
   NativeLoaderNamespace(const NativeLoaderNamespace&) = default;
   NativeLoaderNamespace& operator=(const NativeLoaderNamespace&) = default;
 
-  android_namespace_t* get_android_ns() const {
-    CHECK(native_bridge_ns_ == nullptr);
-    return android_ns_;
+  android_namespace_t* ToRawAndroidNamespace() const { return std::get<0>(raw_); }
+  native_bridge_namespace_t* ToRawNativeBridgeNamespace() const { return std::get<1>(raw_); }
+
+  std::string name() const { return name_; }
+  bool IsBridged() const { return raw_.index() == 1; }
+  bool IsNil() const {
+    return IsBridged() ? std::get<1>(raw_) == nullptr : std::get<0>(raw_) == nullptr;
   }
 
-  native_bridge_namespace_t* get_native_bridge_ns() const {
-    CHECK(android_ns_ == nullptr);
-    return native_bridge_ns_;
-  }
+  bool Link(const NativeLoaderNamespace& target, const std::string& shared_libs) const;
+  void* Load(const std::string& lib_name) const;
+  char* GetError() const;
 
-  bool is_android_namespace() const { return native_bridge_ns_ == nullptr; }
+  static NativeLoaderNamespace GetExportedNamespace(const std::string& name, bool is_bridged);
+  static NativeLoaderNamespace GetPlatformNamespace(bool is_bridged);
 
  private:
-  // Only one of them can be not null
-  android_namespace_t* android_ns_;
-  native_bridge_namespace_t* native_bridge_ns_;
+  explicit NativeLoaderNamespace(const std::string& name, android_namespace_t* ns)
+      : name_(name), raw_(ns) {}
+  explicit NativeLoaderNamespace(const std::string& name, native_bridge_namespace_t* ns)
+      : name_(name), raw_(ns) {}
+
+  std::string name_;
+  std::variant<android_namespace_t*, native_bridge_namespace_t*> raw_;
 };
 
 }  // namespace android
