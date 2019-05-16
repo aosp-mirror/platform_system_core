@@ -14,19 +14,21 @@
  * limitations under the License.
  */
 
-#include "public_libraries.h"
 #define LOG_TAG "nativeloader"
+
+#include "public_libraries.h"
 
 #include <dirent.h>
 
 #include <algorithm>
 #include <memory>
 
-#include "android-base/file.h"
-#include "android-base/logging.h"
-#include "android-base/properties.h"
-#include "android-base/strings.h"
-#include "log/log.h"
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/properties.h>
+#include <android-base/strings.h>
+#include <log/log.h>
+
 #include "utils.h"
 
 namespace android::nativeloader {

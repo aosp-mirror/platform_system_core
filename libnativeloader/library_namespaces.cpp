@@ -22,12 +22,13 @@
 #include <string>
 #include <vector>
 
-#include "android-base/file.h"
-#include "android-base/logging.h"
-#include "android-base/macros.h"
-#include "android-base/properties.h"
-#include "android-base/strings.h"
-#include "nativehelper/ScopedUtfChars.h"
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/macros.h>
+#include <android-base/properties.h>
+#include <android-base/strings.h>
+#include <nativehelper/ScopedUtfChars.h>
+
 #include "nativeloader/dlext_namespaces.h"
 #include "public_libraries.h"
 #include "utils.h"
