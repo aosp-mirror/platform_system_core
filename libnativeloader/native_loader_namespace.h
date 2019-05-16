@@ -20,10 +20,10 @@
 #include <variant>
 #include <vector>
 
-#include "android-base/logging.h"
-#include "android/dlext.h"
-#include "log/log.h"
-#include "nativebridge/native_bridge.h"
+#include <android-base/logging.h>
+#include <android/dlext.h>
+#include <log/log.h>
+#include <nativebridge/native_bridge.h>
 
 namespace android {
 
