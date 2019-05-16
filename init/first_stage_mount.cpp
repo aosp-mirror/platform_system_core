@@ -276,14 +276,12 @@ bool FirstStageMount::GetDmLinearMetadataDevice() {
 // required_devices_partition_names_. Found partitions will then be removed from it
 // for the subsequent member function to check which devices are NOT created.
 bool FirstStageMount::InitRequiredDevices() {
-    if (required_devices_partition_names_.empty()) {
-        return true;
+    if (!InitDeviceMapper()) {
+        return false;
     }
 
-    if (IsDmLinearEnabled() || need_dm_verity_) {
-        if (!InitDeviceMapper()) {
-            return false;
-        }
+    if (required_devices_partition_names_.empty()) {
+        return true;
     }
 
     auto uevent_callback = [this](const Uevent& uevent) { return UeventCallback(uevent); };
@@ -601,12 +599,6 @@ void FirstStageMount::UseGsiIfPresent() {
     }
 
     if (!InitDmLinearBackingDevices(*metadata.get())) {
-        return;
-    }
-
-    // Device-mapper might not be ready if the device doesn't use DAP or verity
-    // (for example, hikey).
-    if (access("/dev/device-mapper", F_OK) && !InitDeviceMapper()) {
         return;
     }
 
