@@ -584,6 +584,14 @@ char* skip_host_serial(char* service) {
         if (ipv6_end != nullptr) {
             service = ipv6_end;
         }
+    } else if (!strncmp(service, "vsock:", 6)) {
+        // vsock serials are vsock:cid:port, which have an extra colon compared to tcp.
+        char* colon_ptr = strchr(service, ':');
+        if (!colon_ptr) {
+            // Missing CID
+            return nullptr;
+        }
+        service = colon_ptr + 1;
     }
 
     // The next colon we find must either begin the port field or the command field.
