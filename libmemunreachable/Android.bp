@@ -48,10 +48,23 @@ cc_library {
     },
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
+    version_script: "libmemunreachable.map",
+}
+
+// Integration test that runs against the public API of libmemunreachable
+cc_test {
+    name: "memunreachable_test",
+    defaults: ["libmemunreachable_defaults"],
+    srcs: [
+        "tests/MemUnreachable_test.cpp",
+    ],
+    shared_libs: ["libmemunreachable"],
+
+    test_suites: ["device-tests"],
 }
 
 cc_test {
-    name: "memunreachable_test",
+    name: "memunreachable_unit_test",
     defaults: ["libmemunreachable_defaults"],
     host_supported: true,
     srcs: [
@@ -67,8 +80,9 @@ cc_test {
                 "tests/MemUnreachable_test.cpp",
                 "tests/ThreadCapture_test.cpp",
             ],
-            shared_libs: [
+            static_libs: [
                 "libmemunreachable",
+                "libc_malloc_debug_backtrace",
             ],
         },
         host: {
