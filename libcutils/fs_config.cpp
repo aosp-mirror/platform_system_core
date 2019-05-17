@@ -159,8 +159,9 @@ static const struct fs_path_config android_files[] = {
     { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/*" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "default.prop" }, // legacy
     { 00600, AID_ROOT,      AID_ROOT,      0, "system/etc/prop.default" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "odm/build.prop" },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "odm/default.prop" },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "odm/build.prop" }, // legacy; only for P release
+    { 00600, AID_ROOT,      AID_ROOT,      0, "odm/default.prop" }, // legacy; only for P release
+    { 00600, AID_ROOT,      AID_ROOT,      0, "odm/etc/build.prop" },
     { 00444, AID_ROOT,      AID_ROOT,      0, odm_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, odm_conf_file + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, oem_conf_dir + 1 },
