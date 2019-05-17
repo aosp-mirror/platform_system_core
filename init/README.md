@@ -414,7 +414,8 @@ Commands
 
 `class_start_post_data <serviceclass>`
 > Like `class_start`, but only considers services that were started
-  after /data was mounted. Only used for FDE devices.
+  after /data was mounted, and that were running at the time
+ `class_reset_post_data` was called. Only used for FDE devices.
 
 `class_stop <serviceclass>`
 > Stop and disable all services of the specified class if they are
