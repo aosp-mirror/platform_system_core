@@ -172,24 +172,25 @@ void TrustyKeymaster::AbortOperation(const AbortOperationRequest& request,
     ForwardCommand(KM_ABORT_OPERATION, request, response);
 }
 
-/* Methods for Keymaster 4.0 functionality -- not yet implemented */
 GetHmacSharingParametersResponse TrustyKeymaster::GetHmacSharingParameters() {
+    // Dummy empty buffer to allow ForwardCommand to have something to serialize
+    Buffer request;
     GetHmacSharingParametersResponse response;
-    response.error = KM_ERROR_UNIMPLEMENTED;
+    ForwardCommand(KM_GET_HMAC_SHARING_PARAMETERS, request, &response);
     return response;
 }
 
 ComputeSharedHmacResponse TrustyKeymaster::ComputeSharedHmac(
-        const ComputeSharedHmacRequest& /* request */) {
+        const ComputeSharedHmacRequest& request) {
     ComputeSharedHmacResponse response;
-    response.error = KM_ERROR_UNIMPLEMENTED;
+    ForwardCommand(KM_COMPUTE_SHARED_HMAC, request, &response);
     return response;
 }
 
 VerifyAuthorizationResponse TrustyKeymaster::VerifyAuthorization(
-        const VerifyAuthorizationRequest& /* request */) {
+        const VerifyAuthorizationRequest& request) {
     VerifyAuthorizationResponse response;
-    response.error = KM_ERROR_UNIMPLEMENTED;
+    ForwardCommand(KM_VERIFY_AUTHORIZATION, request, &response);
     return response;
 }
 
