@@ -41,8 +41,6 @@ namespace {
 // vendor and system namespaces.
 constexpr const char* kVendorNamespaceName = "sphal";
 constexpr const char* kVndkNamespaceName = "vndk";
-constexpr const char* kDefaultNamespaceName = "default";
-constexpr const char* kPlatformNamespaceName = "platform";
 constexpr const char* kRuntimeNamespaceName = "runtime";
 
 // classloader-namespace is a linker namespace that is created for the loaded
@@ -167,34 +165,13 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
 
   LOG_ALWAYS_FATAL_IF(found, "There is already a namespace associated with this classloader");
 
-  uint64_t namespace_type = ANDROID_NAMESPACE_TYPE_ISOLATED;
-  if (is_shared) {
-    namespace_type |= ANDROID_NAMESPACE_TYPE_SHARED;
-  }
-
-  if (target_sdk_version < 24) {
-    namespace_type |= ANDROID_NAMESPACE_TYPE_GREYLIST_ENABLED;
-  }
-
-  NativeLoaderNamespace* parent_ns = FindParentNamespaceByClassLoader(env, class_loader);
-
-  bool is_native_bridge = false;
-
-  if (parent_ns != nullptr) {
-    is_native_bridge = !parent_ns->is_android_namespace();
-  } else if (!library_path.empty()) {
-    is_native_bridge = NativeBridgeIsPathSupported(library_path.c_str());
-  }
-
   std::string system_exposed_libraries = default_public_libraries();
   const char* namespace_name = kClassloaderNamespaceName;
-  android_namespace_t* vndk_ns = nullptr;
+  bool unbundled_vendor_or_product_app = false;
   if ((apk_origin == APK_ORIGIN_VENDOR ||
        (apk_origin == APK_ORIGIN_PRODUCT && target_sdk_version > 29)) &&
       !is_shared) {
-    LOG_FATAL_IF(is_native_bridge,
-                 "Unbundled vendor / product apk must not use translated architecture");
-
+    unbundled_vendor_or_product_app = true;
     // For vendor / product apks, give access to the vendor / product lib even though
     // they are treated as unbundled; the libs and apks are still bundled
     // together in the vendor / product partition.
@@ -214,21 +191,11 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
         origin_partition = "unknown";
         origin_lib_path = "";
     }
-
-    LOG_FATAL_IF(is_native_bridge, "Unbundled %s apk must not use translated architecture",
-                 origin_partition);
-
     library_path = library_path + ":" + origin_lib_path;
     permitted_path = permitted_path + ":" + origin_lib_path;
 
     // Also give access to LLNDK libraries since they are available to vendors
     system_exposed_libraries = system_exposed_libraries + ":" + llndk_libraries().c_str();
-
-    // Give access to VNDK-SP libraries from the 'vndk' namespace.
-    vndk_ns = android_get_exported_namespace(kVndkNamespaceName);
-    if (vndk_ns == nullptr) {
-      ALOGW("Cannot find \"%s\" namespace for %s apks", kVndkNamespaceName, origin_partition);
-    }
 
     // Different name is useful for debugging
     namespace_name = kVendorClassloaderNamespaceName;
@@ -241,120 +208,56 @@ NativeLoaderNamespace* LibraryNamespaces::Create(JNIEnv* env, uint32_t target_sd
       system_exposed_libraries = system_exposed_libraries + ':' + extended_public_libraries();
     }
   }
-  std::string runtime_exposed_libraries = runtime_public_libraries();
 
-  NativeLoaderNamespace native_loader_ns;
-  if (!is_native_bridge) {
-    // The platform namespace is called "default" for binaries in /system and
-    // "platform" for those in the Runtime APEX. Try "platform" first since
-    // "default" always exists.
-    android_namespace_t* platform_ns = android_get_exported_namespace(kPlatformNamespaceName);
-    if (platform_ns == nullptr) {
-      platform_ns = android_get_exported_namespace(kDefaultNamespaceName);
-    }
-
-    android_namespace_t* android_parent_ns;
-    if (parent_ns != nullptr) {
-      android_parent_ns = parent_ns->get_android_ns();
-    } else {
-      // Fall back to the platform namespace if no parent is found.
-      android_parent_ns = platform_ns;
-    }
-
-    android_namespace_t* ns =
-        android_create_namespace(namespace_name, nullptr, library_path.c_str(), namespace_type,
-                                 permitted_path.c_str(), android_parent_ns);
-    if (ns == nullptr) {
-      *error_msg = dlerror();
-      return nullptr;
-    }
-
-    // Note that when vendor_ns is not configured this function will return nullptr
-    // and it will result in linking vendor_public_libraries_ to the default namespace
-    // which is expected behavior in this case.
-    android_namespace_t* vendor_ns = android_get_exported_namespace(kVendorNamespaceName);
-
-    android_namespace_t* runtime_ns = android_get_exported_namespace(kRuntimeNamespaceName);
-
-    if (!android_link_namespaces(ns, platform_ns, system_exposed_libraries.c_str())) {
-      *error_msg = dlerror();
-      return nullptr;
-    }
-
-    // Runtime apex does not exist in host, and under certain build conditions.
-    if (runtime_ns != nullptr) {
-      if (!android_link_namespaces(ns, runtime_ns, runtime_exposed_libraries.c_str())) {
-        *error_msg = dlerror();
-        return nullptr;
-      }
-    }
-
-    if (vndk_ns != nullptr && !vndksp_libraries().empty()) {
-      // vendor apks are allowed to use VNDK-SP libraries.
-      if (!android_link_namespaces(ns, vndk_ns, vndksp_libraries().c_str())) {
-        *error_msg = dlerror();
-        return nullptr;
-      }
-    }
-
-    if (!vendor_public_libraries().empty()) {
-      if (!android_link_namespaces(ns, vendor_ns, vendor_public_libraries().c_str())) {
-        *error_msg = dlerror();
-        return nullptr;
-      }
-    }
-
-    native_loader_ns = NativeLoaderNamespace(ns);
-  } else {
-    // Same functionality as in the branch above, but calling through native bridge.
-
-    native_bridge_namespace_t* platform_ns =
-        NativeBridgeGetExportedNamespace(kPlatformNamespaceName);
-    if (platform_ns == nullptr) {
-      platform_ns = NativeBridgeGetExportedNamespace(kDefaultNamespaceName);
-    }
-
-    native_bridge_namespace_t* native_bridge_parent_namespace;
-    if (parent_ns != nullptr) {
-      native_bridge_parent_namespace = parent_ns->get_native_bridge_ns();
-    } else {
-      native_bridge_parent_namespace = platform_ns;
-    }
-
-    native_bridge_namespace_t* ns =
-        NativeBridgeCreateNamespace(namespace_name, nullptr, library_path.c_str(), namespace_type,
-                                    permitted_path.c_str(), native_bridge_parent_namespace);
-    if (ns == nullptr) {
-      *error_msg = NativeBridgeGetError();
-      return nullptr;
-    }
-
-    native_bridge_namespace_t* vendor_ns = NativeBridgeGetExportedNamespace(kVendorNamespaceName);
-    native_bridge_namespace_t* runtime_ns = NativeBridgeGetExportedNamespace(kRuntimeNamespaceName);
-
-    if (!NativeBridgeLinkNamespaces(ns, platform_ns, system_exposed_libraries.c_str())) {
-      *error_msg = NativeBridgeGetError();
-      return nullptr;
-    }
-
-    // Runtime apex does not exist in host, and under certain build conditions.
-    if (runtime_ns != nullptr) {
-      if (!NativeBridgeLinkNamespaces(ns, runtime_ns, runtime_exposed_libraries.c_str())) {
-        *error_msg = NativeBridgeGetError();
-        return nullptr;
-      }
-    }
-    if (!vendor_public_libraries().empty()) {
-      if (!NativeBridgeLinkNamespaces(ns, vendor_ns, vendor_public_libraries().c_str())) {
-        *error_msg = NativeBridgeGetError();
-        return nullptr;
-      }
-    }
-
-    native_loader_ns = NativeLoaderNamespace(ns);
+  // Create the app namespace
+  NativeLoaderNamespace* parent_ns = FindParentNamespaceByClassLoader(env, class_loader);
+  auto app_ns =
+      NativeLoaderNamespace::Create(namespace_name, library_path, permitted_path, parent_ns,
+                                    is_shared, target_sdk_version < 24 /* is_greylist_enabled */);
+  if (app_ns.IsNil()) {
+    *error_msg = app_ns.GetError();
+    return nullptr;
   }
 
-  namespaces_.push_back(std::make_pair(env->NewWeakGlobalRef(class_loader), native_loader_ns));
+  // ... and link to other namespaces to allow access to some public libraries
+  bool is_bridged = app_ns.IsBridged();
+
+  auto platform_ns = NativeLoaderNamespace::GetPlatformNamespace(is_bridged);
+  if (!app_ns.Link(platform_ns, system_exposed_libraries)) {
+    *error_msg = app_ns.GetError();
+    return nullptr;
+  }
+
+  auto runtime_ns = NativeLoaderNamespace::GetExportedNamespace(kRuntimeNamespaceName, is_bridged);
+  // Runtime apex does not exist in host, and under certain build conditions.
+  if (!runtime_ns.IsNil()) {
+    if (!app_ns.Link(runtime_ns, runtime_public_libraries())) {
+      *error_msg = app_ns.GetError();
+      return nullptr;
+    }
+  }
+
+  // Give access to VNDK-SP libraries from the 'vndk' namespace.
+  if (unbundled_vendor_or_product_app && !vndksp_libraries().empty()) {
+    auto vndk_ns = NativeLoaderNamespace::GetExportedNamespace(kVndkNamespaceName, is_bridged);
+    if (!vndk_ns.IsNil() && !app_ns.Link(vndk_ns, vndksp_libraries())) {
+      *error_msg = app_ns.GetError();
+      return nullptr;
+    }
+  }
+
+  // Note that when vendor_ns is not configured, vendor_ns.IsNil() will be true
+  // and it will result in linking to the default namespace which is expected
+  // behavior in this case.
+  if (!vendor_public_libraries().empty()) {
+    auto vendor_ns = NativeLoaderNamespace::GetExportedNamespace(kVendorNamespaceName, is_bridged);
+    if (!app_ns.Link(vendor_ns, vendor_public_libraries())) {
+      *error_msg = dlerror();
+      return nullptr;
+    }
+  }
+
+  namespaces_.push_back(std::make_pair(env->NewWeakGlobalRef(class_loader), app_ns));
 
   return &(namespaces_.back().second);
 }
