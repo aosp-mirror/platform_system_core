@@ -15,15 +15,17 @@
  */
 
 #define LOG_TAG "nativeloader"
+
 #include "native_loader_namespace.h"
 
 #include <dlfcn.h>
 
 #include <functional>
 
-#include "android-base/strings.h"
-#include "log/log.h"
-#include "nativebridge/native_bridge.h"
+#include <android-base/strings.h>
+#include <log/log.h>
+#include <nativebridge/native_bridge.h>
+
 #include "nativeloader/dlext_namespaces.h"
 
 namespace android {

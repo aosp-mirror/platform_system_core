@@ -25,8 +25,7 @@
 #include <list>
 #include <string>
 
-#include "jni.h"
-#include "utils.h"
+#include <jni.h>
 
 namespace android::nativeloader {
 
