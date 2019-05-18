@@ -79,6 +79,7 @@ class Service {
     Result<Success> ExecStart();
     Result<Success> Start();
     Result<Success> StartIfNotDisabled();
+    Result<Success> StartIfPostData();
     Result<Success> Enable();
     void Reset();
     void ResetIfPostData();
@@ -248,6 +249,8 @@ class Service {
     bool pre_apexd_ = false;
 
     bool post_data_ = false;
+
+    bool running_at_post_data_reset_ = false;
 };
 
 class ServiceList {
