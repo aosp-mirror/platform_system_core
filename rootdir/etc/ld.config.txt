@@ -135,6 +135,9 @@ namespace.default.links = runtime,resolv
 namespace.default.link.runtime.shared_libs  = libandroidicu.so
 namespace.default.link.runtime.shared_libs += libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libdexfiled_external.so
+# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+namespace.default.link.runtime.shared_libs += libicui18n.so
+namespace.default.link.runtime.shared_libs += libicuuc.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
@@ -513,6 +516,9 @@ namespace.system.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 namespace.system.links = runtime
 namespace.system.link.runtime.shared_libs  = libdexfile_external.so
 namespace.system.link.runtime.shared_libs += libdexfiled_external.so
+# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+namespace.system.link.runtime.shared_libs += libicui18n.so
+namespace.system.link.runtime.shared_libs += libicuuc.so
 namespace.system.link.runtime.shared_libs += libnativebridge.so
 namespace.system.link.runtime.shared_libs += libnativehelper.so
 namespace.system.link.runtime.shared_libs += libnativeloader.so
@@ -593,6 +599,9 @@ namespace.default.links = runtime,resolv
 namespace.default.link.runtime.shared_libs  = libandroidicu.so
 namespace.default.link.runtime.shared_libs += libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libdexfiled_external.so
+# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+namespace.default.link.runtime.shared_libs += libicui18n.so
+namespace.default.link.runtime.shared_libs += libicuuc.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
