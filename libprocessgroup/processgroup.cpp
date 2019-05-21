@@ -106,8 +106,7 @@ bool UsePerAppMemcg() {
 }
 
 static bool isMemoryCgroupSupported() {
-    std::string cgroup_name;
-    static bool memcg_supported = CgroupMap::GetInstance().FindController("memory").HasValue();
+    static bool memcg_supported = CgroupMap::GetInstance().FindController("memory").IsUsable();
 
     return memcg_supported;
 }
