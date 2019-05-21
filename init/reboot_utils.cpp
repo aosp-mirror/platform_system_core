@@ -32,6 +32,27 @@
 namespace android {
 namespace init {
 
+static std::string init_fatal_reboot_target = "bootloader";
+
+void SetFatalRebootTarget() {
+    std::string cmdline;
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+    cmdline = android::base::Trim(cmdline);
+
+    const char kRebootTargetString[] = "androidboot.init_fatal_reboot_target=";
+    auto start_pos = cmdline.find(kRebootTargetString);
+    if (start_pos == std::string::npos) {
+        return;  // We already default to bootloader if no setting is provided.
+    }
+    start_pos += sizeof(kRebootTargetString) - 1;
+
+    auto end_pos = cmdline.find(' ', start_pos);
+    // if end_pos isn't found, then we've run off the end, but this is okay as this is the last
+    // entry, and -1 is a valid size for string::substr();
+    auto size = end_pos == std::string::npos ? -1 : end_pos - start_pos;
+    init_fatal_reboot_target = cmdline.substr(start_pos, size);
+}
+
 bool IsRebootCapable() {
     if (!CAP_IS_SUPPORTED(CAP_SYS_BOOT)) {
         PLOG(WARNING) << "CAP_SYS_BOOT is not supported";
@@ -85,13 +106,13 @@ void __attribute__((noreturn)) InitFatalReboot() {
 
     if (pid == -1) {
         // Couldn't fork, don't even try to backtrace, just reboot.
-        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+        RebootSystem(ANDROID_RB_RESTART2, init_fatal_reboot_target);
     } else if (pid == 0) {
         // Fork a child for safety, since we always want to shut down if something goes wrong, but
         // its worth trying to get the backtrace, even in the signal handler, since typically it
         // does work despite not being async-signal-safe.
         sleep(5);
-        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+        RebootSystem(ANDROID_RB_RESTART2, init_fatal_reboot_target);
     }
 
     // In the parent, let's try to get a backtrace then shutdown.
@@ -103,7 +124,7 @@ void __attribute__((noreturn)) InitFatalReboot() {
     for (size_t i = 0; i < backtrace->NumFrames(); i++) {
         LOG(ERROR) << backtrace->FormatFrameData(i);
     }
-    RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+    RebootSystem(ANDROID_RB_RESTART2, init_fatal_reboot_target);
 }
 
 void InstallRebootSignalHandlers() {

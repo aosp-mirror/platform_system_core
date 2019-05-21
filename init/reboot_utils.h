@@ -21,6 +21,7 @@
 namespace android {
 namespace init {
 
+void SetFatalRebootTarget();
 // Determines whether the system is capable of rebooting. This is conservative,
 // so if any of the attempts to determine this fail, it will still return true.
 bool IsRebootCapable();
