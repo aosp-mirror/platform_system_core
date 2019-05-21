@@ -42,6 +42,7 @@ cc_library_headers {
     name: "libbacktrace_headers",
     vendor_available: true,
     recovery_available: true,
+    native_bridge_supported: true,
     export_include_dirs: ["include"],
 }
 
