@@ -33,7 +33,7 @@ constexpr int kMaxPacketSizeHs = 512;
 constexpr int kMaxPacketsizeSs = 1024;
 
 constexpr size_t kFbFfsNumBufs = 16;
-constexpr size_t kFbFfsBufSize = 32768;
+constexpr size_t kFbFfsBufSize = 16384;
 
 constexpr const char* kUsbFfsFastbootEp0 = "/dev/usb-ffs/fastboot/ep0";
 constexpr const char* kUsbFfsFastbootOut = "/dev/usb-ffs/fastboot/ep1";
