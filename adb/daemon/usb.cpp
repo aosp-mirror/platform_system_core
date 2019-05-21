@@ -58,10 +58,12 @@ using android::base::StringPrintf;
 static std::optional<bool> gFfsAioSupported;
 
 // Not all USB controllers support operations larger than 16k, so don't go above that.
-static constexpr size_t kUsbReadQueueDepth = 32;
+// Also, each submitted operation does an allocation in the kernel of that size, so we want to
+// minimize our queue depth while still maintaining a deep enough queue to keep the USB stack fed.
+static constexpr size_t kUsbReadQueueDepth = 8;
 static constexpr size_t kUsbReadSize = 4 * PAGE_SIZE;
 
-static constexpr size_t kUsbWriteQueueDepth = 32;
+static constexpr size_t kUsbWriteQueueDepth = 8;
 static constexpr size_t kUsbWriteSize = 4 * PAGE_SIZE;
 
 static const char* to_string(enum usb_functionfs_event_type type) {
@@ -314,11 +316,13 @@ struct UsbFfsConnection : public Connection {
                         if (bound) {
                             LOG(WARNING) << "received FUNCTIONFS_BIND while already bound?";
                             running = false;
+                            break;
                         }
 
                         if (enabled) {
                             LOG(WARNING) << "received FUNCTIONFS_BIND while already enabled?";
                             running = false;
+                            break;
                         }
 
                         bound = true;
@@ -328,11 +332,13 @@ struct UsbFfsConnection : public Connection {
                         if (!bound) {
                             LOG(WARNING) << "received FUNCTIONFS_ENABLE while not bound?";
                             running = false;
+                            break;
                         }
 
                         if (enabled) {
                             LOG(WARNING) << "received FUNCTIONFS_ENABLE while already enabled?";
                             running = false;
+                            break;
                         }
 
                         enabled = true;
@@ -364,6 +370,33 @@ struct UsbFfsConnection : public Connection {
                         bound = false;
                         running = false;
                         break;
+
+                    case FUNCTIONFS_SETUP: {
+                        LOG(INFO) << "received FUNCTIONFS_SETUP control transfer: bRequestType = "
+                                  << static_cast<int>(event.u.setup.bRequestType)
+                                  << ", bRequest = " << static_cast<int>(event.u.setup.bRequest)
+                                  << ", wValue = " << static_cast<int>(event.u.setup.wValue)
+                                  << ", wIndex = " << static_cast<int>(event.u.setup.wIndex)
+                                  << ", wLength = " << static_cast<int>(event.u.setup.wLength);
+
+                        if ((event.u.setup.bRequestType & USB_DIR_IN)) {
+                            LOG(WARNING) << "received a device-to-host control transfer, ignoring";
+                        } else {
+                            std::string buf;
+                            buf.resize(event.u.setup.wLength + 1);
+
+                            ssize_t rc = adb_read(control_fd_.get(), buf.data(), buf.size());
+                            if (rc != event.u.setup.wLength) {
+                                LOG(ERROR)
+                                        << "read " << rc
+                                        << " bytes when trying to read control request, expected "
+                                        << event.u.setup.wLength;
+                            }
+
+                            LOG(INFO) << "control request contents: " << buf;
+                            break;
+                        }
+                    }
                 }
             }
 
