@@ -45,6 +45,7 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
                            const std::string& source_context, const ucred& cr, std::string* error);
 
 // reboot_utils.h
+inline void SetFatalRebootTarget() {}
 inline void __attribute__((noreturn)) InitFatalReboot() {
     abort();
 }
