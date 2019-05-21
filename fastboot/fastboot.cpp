@@ -1175,6 +1175,10 @@ static void reboot_to_userspace_fastboot() {
     if (!is_userspace_fastboot()) {
         die("Failed to boot into userspace fastboot; one or more components might be unbootable.");
     }
+
+    // Reset target_sparse_limit after reboot to userspace fastboot. Max
+    // download sizes may differ in bootloader and fastbootd.
+    target_sparse_limit = -1;
 }
 
 class ImageSource {
