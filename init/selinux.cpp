@@ -64,6 +64,7 @@
 #include <fs_avb/fs_avb.h>
 #include <selinux/android.h>
 
+#include "debug_ramdisk.h"
 #include "reboot_utils.h"
 #include "util.h"
 
@@ -271,8 +272,6 @@ bool GetVendorMappingVersion(std::string* plat_vers) {
 }
 
 constexpr const char plat_policy_cil_file[] = "/system/etc/selinux/plat_sepolicy.cil";
-constexpr const char userdebug_plat_policy_cil_file[] =
-        "/system/etc/selinux/userdebug_plat_sepolicy.cil";
 
 bool IsSplitPolicyDevice() {
     return access(plat_policy_cil_file, R_OK) != -1;
@@ -292,7 +291,7 @@ bool LoadSplitPolicy() {
     const char* force_debuggable_env = getenv("INIT_FORCE_DEBUGGABLE");
     bool use_userdebug_policy =
             ((force_debuggable_env && "true"s == force_debuggable_env) &&
-             AvbHandle::IsDeviceUnlocked() && access(userdebug_plat_policy_cil_file, F_OK) == 0);
+             AvbHandle::IsDeviceUnlocked() && access(kDebugRamdiskSEPolicy, F_OK) == 0);
     if (use_userdebug_policy) {
         LOG(WARNING) << "Using userdebug system sepolicy";
     }
@@ -332,6 +331,12 @@ bool LoadSplitPolicy() {
     }
     std::string plat_mapping_file("/system/etc/selinux/mapping/" + vend_plat_vers + ".cil");
 
+    std::string plat_compat_cil_file("/system/etc/selinux/mapping/" + vend_plat_vers +
+                                     ".compat.cil");
+    if (access(plat_compat_cil_file.c_str(), F_OK) == -1) {
+        plat_compat_cil_file.clear();
+    }
+
     std::string product_policy_cil_file("/product/etc/selinux/product_sepolicy.cil");
     if (access(product_policy_cil_file.c_str(), F_OK) == -1) {
         product_policy_cil_file.clear();
@@ -367,7 +372,7 @@ bool LoadSplitPolicy() {
     // clang-format off
     std::vector<const char*> compile_args {
         "/system/bin/secilc",
-        use_userdebug_policy ? userdebug_plat_policy_cil_file : plat_policy_cil_file,
+        use_userdebug_policy ? kDebugRamdiskSEPolicy: plat_policy_cil_file,
         "-m", "-M", "true", "-G", "-N",
         "-c", version_as_string.c_str(),
         plat_mapping_file.c_str(),
@@ -377,6 +382,9 @@ bool LoadSplitPolicy() {
     };
     // clang-format on
 
+    if (!plat_compat_cil_file.empty()) {
+        compile_args.push_back(plat_compat_cil_file.c_str());
+    }
     if (!product_policy_cil_file.empty()) {
         compile_args.push_back(product_policy_cil_file.c_str());
     }
@@ -423,8 +431,6 @@ bool LoadPolicy() {
 }
 
 void SelinuxInitialize() {
-    Timer t;
-
     LOG(INFO) << "Loading SELinux policy";
     if (!LoadPolicy()) {
         LOG(FATAL) << "Unable to load SELinux policy";
@@ -441,9 +447,6 @@ void SelinuxInitialize() {
     if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result) {
         LOG(FATAL) << "Unable to write to /sys/fs/selinux/checkreqprot: " << result.error();
     }
-
-    // init's first stage can't set properties, so pass the time to the second stage.
-    setenv("INIT_SELINUX_TOOK", std::to_string(t.duration().count()).c_str(), 1);
 }
 
 }  // namespace
@@ -527,6 +530,8 @@ int SetupSelinux(char** argv) {
         InstallRebootSignalHandlers();
     }
 
+    boot_clock::time_point start_time = boot_clock::now();
+
     // Set up SELinux, loading the SELinux policy.
     SelinuxSetupKernelLogging();
     SelinuxInitialize();
@@ -538,6 +543,8 @@ int SetupSelinux(char** argv) {
     if (selinux_android_restorecon("/system/bin/init", 0) == -1) {
         PLOG(FATAL) << "restorecon failed of /system/bin/init failed";
     }
+
+    setenv(kEnvSelinuxStartedAt, std::to_string(start_time.time_since_epoch().count()).c_str(), 1);
 
     const char* path = "/system/bin/init";
     const char* args[] = {path, "second_stage", nullptr};

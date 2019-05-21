@@ -24,6 +24,7 @@
 
 #include <chrono>
 #include <ctime>
+#include <iostream>
 #include <map>
 #include <thread>
 
@@ -35,21 +36,15 @@
 #include "test_util.h"
 
 using namespace std;
+using namespace std::chrono_literals;
 using namespace android::dm;
 using unique_fd = android::base::unique_fd;
 
 TEST(libdm, HasMinimumTargets) {
+    DmTargetTypeInfo info;
+
     DeviceMapper& dm = DeviceMapper::Instance();
-    vector<DmTargetTypeInfo> targets;
-    ASSERT_TRUE(dm.GetAvailableTargets(&targets));
-
-    map<string, DmTargetTypeInfo> by_name;
-    for (const auto& target : targets) {
-        by_name[target.name()] = target;
-    }
-
-    auto iter = by_name.find("linear");
-    EXPECT_NE(iter, by_name.end());
+    ASSERT_TRUE(dm.GetTargetByName("linear", &info));
 }
 
 // Helper to ensure that device mapper devices are released.
@@ -200,4 +195,269 @@ TEST(libdm, DmVerityArgsAvb2) {
             "use_fec_from_device /dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a fec_roots "
             "2 fec_blocks 126955 fec_start 126955 restart_on_corruption ignore_zero_blocks";
     EXPECT_EQ(target.GetParameterString(), expected);
+}
+
+TEST(libdm, DmSnapshotArgs) {
+    DmTargetSnapshot target1(0, 512, "base", "cow", SnapshotStorageMode::Persistent, 8);
+    if (DmTargetSnapshot::ReportsOverflow("snapshot")) {
+        EXPECT_EQ(target1.GetParameterString(), "base cow PO 8");
+    } else {
+        EXPECT_EQ(target1.GetParameterString(), "base cow P 8");
+    }
+    EXPECT_EQ(target1.name(), "snapshot");
+
+    DmTargetSnapshot target2(0, 512, "base", "cow", SnapshotStorageMode::Transient, 8);
+    EXPECT_EQ(target2.GetParameterString(), "base cow N 8");
+    EXPECT_EQ(target2.name(), "snapshot");
+
+    DmTargetSnapshot target3(0, 512, "base", "cow", SnapshotStorageMode::Merge, 8);
+    if (DmTargetSnapshot::ReportsOverflow("snapshot-merge")) {
+        EXPECT_EQ(target3.GetParameterString(), "base cow PO 8");
+    } else {
+        EXPECT_EQ(target3.GetParameterString(), "base cow P 8");
+    }
+    EXPECT_EQ(target3.name(), "snapshot-merge");
+}
+
+TEST(libdm, DmSnapshotOriginArgs) {
+    DmTargetSnapshotOrigin target(0, 512, "base");
+    EXPECT_EQ(target.GetParameterString(), "base");
+    EXPECT_EQ(target.name(), "snapshot-origin");
+}
+
+class SnapshotTestHarness final {
+  public:
+    bool Setup();
+    bool Merge();
+
+    std::string origin_dev() const { return origin_dev_->path(); }
+    std::string snapshot_dev() const { return snapshot_dev_->path(); }
+
+    int base_fd() const { return base_fd_; }
+
+    static const uint64_t kBaseDeviceSize = 1024 * 1024;
+    static const uint64_t kCowDeviceSize = 1024 * 64;
+    static const uint64_t kSectorSize = 512;
+
+  private:
+    void SetupImpl();
+    void MergeImpl();
+
+    unique_fd base_fd_;
+    unique_fd cow_fd_;
+    unique_ptr<LoopDevice> base_loop_;
+    unique_ptr<LoopDevice> cow_loop_;
+    unique_ptr<TempDevice> origin_dev_;
+    unique_ptr<TempDevice> snapshot_dev_;
+    bool setup_ok_ = false;
+    bool merge_ok_ = false;
+};
+
+bool SnapshotTestHarness::Setup() {
+    SetupImpl();
+    return setup_ok_;
+}
+
+void SnapshotTestHarness::SetupImpl() {
+    base_fd_ = CreateTempFile("base_device", kBaseDeviceSize);
+    ASSERT_GE(base_fd_, 0);
+    cow_fd_ = CreateTempFile("cow_device", kCowDeviceSize);
+    ASSERT_GE(cow_fd_, 0);
+
+    base_loop_ = std::make_unique<LoopDevice>(base_fd_);
+    ASSERT_TRUE(base_loop_->valid());
+    cow_loop_ = std::make_unique<LoopDevice>(cow_fd_);
+    ASSERT_TRUE(cow_loop_->valid());
+
+    DmTable origin_table;
+    ASSERT_TRUE(origin_table.AddTarget(make_unique<DmTargetSnapshotOrigin>(
+            0, kBaseDeviceSize / kSectorSize, base_loop_->device())));
+    ASSERT_TRUE(origin_table.valid());
+
+    origin_dev_ = std::make_unique<TempDevice>("libdm-test-dm-snapshot-origin", origin_table);
+    ASSERT_TRUE(origin_dev_->valid());
+    ASSERT_FALSE(origin_dev_->path().empty());
+    ASSERT_TRUE(origin_dev_->WaitForUdev());
+
+    // chunk size = 4K blocks.
+    DmTable snap_table;
+    ASSERT_TRUE(snap_table.AddTarget(make_unique<DmTargetSnapshot>(
+            0, kBaseDeviceSize / kSectorSize, base_loop_->device(), cow_loop_->device(),
+            SnapshotStorageMode::Persistent, 8)));
+    ASSERT_TRUE(snap_table.valid());
+
+    snapshot_dev_ = std::make_unique<TempDevice>("libdm-test-dm-snapshot", snap_table);
+    ASSERT_TRUE(snapshot_dev_->valid());
+    ASSERT_FALSE(snapshot_dev_->path().empty());
+    ASSERT_TRUE(snapshot_dev_->WaitForUdev());
+
+    setup_ok_ = true;
+}
+
+bool SnapshotTestHarness::Merge() {
+    MergeImpl();
+    return merge_ok_;
+}
+
+void SnapshotTestHarness::MergeImpl() {
+    DmTable merge_table;
+    ASSERT_TRUE(merge_table.AddTarget(
+            make_unique<DmTargetSnapshot>(0, kBaseDeviceSize / kSectorSize, base_loop_->device(),
+                                          cow_loop_->device(), SnapshotStorageMode::Merge, 8)));
+    ASSERT_TRUE(merge_table.valid());
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    ASSERT_TRUE(dm.LoadTableAndActivate("libdm-test-dm-snapshot", merge_table));
+
+    while (true) {
+        vector<DeviceMapper::TargetInfo> status;
+        ASSERT_TRUE(dm.GetTableStatus("libdm-test-dm-snapshot", &status));
+        ASSERT_EQ(status.size(), 1);
+        ASSERT_EQ(strncmp(status[0].spec.target_type, "snapshot-merge", strlen("snapshot-merge")),
+                  0);
+
+        DmTargetSnapshot::Status merge_status;
+        ASSERT_TRUE(DmTargetSnapshot::ParseStatusText(status[0].data, &merge_status));
+        ASSERT_TRUE(merge_status.error.empty());
+        if (merge_status.sectors_allocated == merge_status.metadata_sectors) {
+            break;
+        }
+
+        std::this_thread::sleep_for(250ms);
+    }
+
+    merge_ok_ = true;
+}
+
+bool CheckSnapshotAvailability() {
+    DmTargetTypeInfo info;
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    if (!dm.GetTargetByName("snapshot", &info)) {
+        cout << "snapshot module not enabled; skipping test" << std::endl;
+        return false;
+    }
+    if (!dm.GetTargetByName("snapshot-merge", &info)) {
+        cout << "snapshot-merge module not enabled; skipping test" << std::endl;
+        return false;
+    }
+    if (!dm.GetTargetByName("snapshot-origin", &info)) {
+        cout << "snapshot-origin module not enabled; skipping test" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+TEST(libdm, DmSnapshot) {
+    if (!CheckSnapshotAvailability()) {
+        return;
+    }
+
+    SnapshotTestHarness harness;
+    ASSERT_TRUE(harness.Setup());
+
+    // Open the dm devices.
+    unique_fd origin_fd(open(harness.origin_dev().c_str(), O_RDONLY | O_CLOEXEC));
+    ASSERT_GE(origin_fd, 0);
+    unique_fd snapshot_fd(open(harness.snapshot_dev().c_str(), O_RDWR | O_CLOEXEC | O_SYNC));
+    ASSERT_GE(snapshot_fd, 0);
+
+    // Write to the first block of the snapshot device.
+    std::string data("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
+    ASSERT_TRUE(android::base::WriteFully(snapshot_fd, data.data(), data.size()));
+    ASSERT_EQ(lseek(snapshot_fd, 0, SEEK_SET), 0);
+
+    // We should get the same data back from the snapshot device.
+    std::string read(data.size(), '\0');
+    ASSERT_TRUE(android::base::ReadFully(snapshot_fd, read.data(), read.size()));
+    ASSERT_EQ(read, data);
+
+    // We should see the original data from the origin device.
+    std::string zeroes(data.size(), '\0');
+    ASSERT_TRUE(android::base::ReadFully(origin_fd, read.data(), read.size()));
+    ASSERT_EQ(lseek(snapshot_fd, 0, SEEK_SET), 0);
+    ASSERT_EQ(read, zeroes);
+
+    // We should also see the original data from the base device.
+    ASSERT_TRUE(android::base::ReadFully(harness.base_fd(), read.data(), read.size()));
+    ASSERT_EQ(lseek(harness.base_fd(), 0, SEEK_SET), 0);
+    ASSERT_EQ(read, zeroes);
+
+    // Now, perform the merge and wait.
+    ASSERT_TRUE(harness.Merge());
+
+    // Reading from the base device should give us the modified data.
+    ASSERT_TRUE(android::base::ReadFully(harness.base_fd(), read.data(), read.size()));
+    ASSERT_EQ(lseek(harness.base_fd(), 0, SEEK_SET), 0);
+    ASSERT_EQ(read, data);
+}
+
+TEST(libdm, DmSnapshotOverflow) {
+    if (!CheckSnapshotAvailability()) {
+        return;
+    }
+
+    SnapshotTestHarness harness;
+    ASSERT_TRUE(harness.Setup());
+
+    // Open the dm devices.
+    unique_fd snapshot_fd(open(harness.snapshot_dev().c_str(), O_RDWR | O_CLOEXEC));
+    ASSERT_GE(snapshot_fd, 0);
+
+    // Fill the copy-on-write device until it overflows.
+    uint64_t bytes_remaining = SnapshotTestHarness::kCowDeviceSize;
+    uint8_t byte = 1;
+    while (bytes_remaining) {
+        std::string data(4096, char(byte));
+        if (!android::base::WriteFully(snapshot_fd, data.data(), data.size())) {
+            ASSERT_EQ(errno, EIO);
+            break;
+        }
+        bytes_remaining -= data.size();
+    }
+
+    // If writes succeed (because they are buffered), then we should expect an
+    // fsync to fail with EIO.
+    if (!bytes_remaining) {
+        ASSERT_EQ(fsync(snapshot_fd), -1);
+        ASSERT_EQ(errno, EIO);
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+
+    vector<DeviceMapper::TargetInfo> target_status;
+    ASSERT_TRUE(dm.GetTableStatus("libdm-test-dm-snapshot", &target_status));
+    ASSERT_EQ(target_status.size(), 1);
+    ASSERT_EQ(strncmp(target_status[0].spec.target_type, "snapshot", strlen("snapshot")), 0);
+
+    DmTargetSnapshot::Status status;
+    ASSERT_TRUE(DmTargetSnapshot::ParseStatusText(target_status[0].data, &status));
+    if (DmTargetSnapshot::ReportsOverflow("snapshot")) {
+        ASSERT_EQ(status.error, "Overflow");
+    } else {
+        ASSERT_EQ(status.error, "Invalid");
+    }
+}
+
+TEST(libdm, CryptArgs) {
+    DmTargetCrypt target1(0, 512, "sha1", "abcdefgh", 50, "/dev/loop0", 100);
+    ASSERT_EQ(target1.name(), "crypt");
+    ASSERT_TRUE(target1.Valid());
+    ASSERT_EQ(target1.GetParameterString(), "sha1 abcdefgh 50 /dev/loop0 100");
+
+    DmTargetCrypt target2(0, 512, "sha1", "abcdefgh", 50, "/dev/loop0", 100);
+    target2.SetSectorSize(64);
+    target2.AllowDiscards();
+    target2.SetIvLargeSectors();
+    target2.AllowEncryptOverride();
+    ASSERT_EQ(target2.GetParameterString(),
+              "sha1 abcdefgh 50 /dev/loop0 100 4 allow_discards allow_encrypt_override "
+              "iv_large_sectors sector_size:64");
+}
+
+TEST(libdm, DefaultKeyArgs) {
+    DmTargetDefaultKey target(0, 4096, "AES-256-XTS", "abcdef0123456789", "/dev/loop0", 0);
+    ASSERT_EQ(target.name(), "default-key");
+    ASSERT_TRUE(target.Valid());
+    ASSERT_EQ(target.GetParameterString(), "AES-256-XTS abcdef0123456789 /dev/loop0 0");
 }

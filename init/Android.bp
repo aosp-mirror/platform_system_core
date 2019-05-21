@@ -61,6 +61,7 @@ cc_defaults {
     static_libs: [
         "libseccomp_policy",
         "libavb",
+        "libc++fs",
         "libcgrouprc_format",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
@@ -170,7 +171,6 @@ cc_binary {
             exclude_shared_libs: ["libbinder", "libutils"],
         },
     },
-    ldflags: ["-Wl,--rpath,/system/${LIB}/bootstrap"],
 }
 
 // Tests

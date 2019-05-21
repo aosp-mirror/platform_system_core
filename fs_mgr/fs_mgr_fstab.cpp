@@ -38,6 +38,7 @@
 
 using android::base::ParseByteCount;
 using android::base::ParseInt;
+using android::base::ReadFileToString;
 using android::base::Split;
 using android::base::StartsWith;
 
@@ -260,10 +261,6 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
                     LWARNING << "Warning: zramsize= flag malformed: " << arg;
                 }
             }
-        } else if (StartsWith(flag, "verify=")) {
-            // If the verify flag is followed by an = and the location for the verity state.
-            entry->fs_mgr_flags.verify = true;
-            entry->verity_loc = arg;
         } else if (StartsWith(flag, "forceencrypt=")) {
             // The forceencrypt flag is followed by an = and the location of the keys.
             entry->fs_mgr_flags.force_crypt = true;
@@ -660,6 +657,8 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
         TransformFstabForGsi(fstab);
     }
 
+    SkipMountingPartitions(fstab);
+
     return true;
 }
 
@@ -685,6 +684,38 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
                    << fstab_buf;
         }
         return false;
+    }
+
+    SkipMountingPartitions(fstab);
+
+    return true;
+}
+
+// For GSI to skip mounting /product and /product_services, until there are
+// well-defined interfaces between them and /system. Otherwise, the GSI flashed
+// on /system might not be able to work with /product and /product_services.
+// When they're skipped here, /system/product and /system/product_services in
+// GSI will be used.
+bool SkipMountingPartitions(Fstab* fstab) {
+    constexpr const char kSkipMountConfig[] = "/system/etc/init/config/skip_mount.cfg";
+
+    std::string skip_config;
+    auto save_errno = errno;
+    if (!ReadFileToString(kSkipMountConfig, &skip_config)) {
+        errno = save_errno;  // missing file is expected
+        return true;
+    }
+
+    for (const auto& skip_mount_point : Split(skip_config, "\n")) {
+        if (skip_mount_point.empty()) {
+            continue;
+        }
+        auto it = std::remove_if(fstab->begin(), fstab->end(),
+                                 [&skip_mount_point](const auto& entry) {
+                                     return entry.mount_point == skip_mount_point;
+                                 });
+        fstab->erase(it, fstab->end());
+        LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
     }
 
     return true;
@@ -772,8 +803,11 @@ FstabEntry BuildGsiSystemFstabEntry() {
 std::string GetVerityDeviceName(const FstabEntry& entry) {
     std::string base_device;
     if (entry.mount_point == "/") {
-        // In AVB, the dm device name is vroot instead of system.
-        base_device = entry.fs_mgr_flags.avb ? "vroot" : "system";
+        // When using system-as-root, the device name is fixed as "vroot".
+        if (entry.fs_mgr_flags.avb) {
+            return "vroot";
+        }
+        base_device = "system";
     } else {
         base_device = android::base::Basename(entry.mount_point);
     }

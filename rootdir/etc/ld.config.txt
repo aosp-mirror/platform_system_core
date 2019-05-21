@@ -43,6 +43,9 @@ additional.namespaces = runtime,conscrypt,media,resolv,sphal,vndk,rs
 # can't be loaded in this namespace.
 ###############################################################################
 namespace.default.isolated = true
+# Visible to allow links to be created at runtime, e.g. through
+# android_link_namespaces in libnativeloader.
+namespace.default.visible = true
 
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
@@ -121,7 +124,7 @@ namespace.default.asan.permitted.paths += /mnt/expand
 namespace.default.asan.permitted.paths += /apex/com.android.runtime/${LIB}/bionic
 namespace.default.asan.permitted.paths += /system/${LIB}/bootstrap
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+# Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
 # If a shared library or an executable requests a shared library that
 # cannot be loaded into the default namespace, the dynamic linker tries
 # to load the shared library from the runtime namespace. And then, if the
@@ -129,17 +132,19 @@ namespace.default.asan.permitted.paths += /system/${LIB}/bootstrap
 # dynamic linker tries to load the shared library from the resolv namespace.
 # Finally, if all attempts fail, the dynamic linker returns an error.
 namespace.default.links = runtime,resolv
-# Visible because some libraries are dlopen'ed, e.g. libopenjdk is dlopen'ed by
-# libart.
-namespace.default.visible = true
-namespace.default.link.runtime.shared_libs  = libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libandroidicu.so
+namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs += libdexfiled_external.so
+# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+namespace.default.link.runtime.shared_libs += libicui18n.so
+namespace.default.link.runtime.shared_libs += libicuuc.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
-namespace.default.link.runtime.shared_libs += libandroidicu.so
 
 # TODO(b/122876336): Remove libpac.so once it's migrated to Webview
 namespace.default.link.runtime.shared_libs += libpac.so
+namespace.default.link.runtime.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 # When libnetd_resolv.so can't be found in the default namespace, search for it
 # in the resolv namespace. Don't allow any other libraries from the resolv namespace
@@ -150,11 +155,13 @@ namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 # "runtime" APEX namespace
 #
 # This namespace exposes externally accessible libraries from the Runtime APEX.
+# Keep in sync with the "runtime" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.runtime.isolated = true
+# Visible to allow links to be created at runtime, e.g. through
+# android_link_namespaces in libnativeloader.
 namespace.runtime.visible = true
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
@@ -179,7 +186,6 @@ namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
 namespace.media.links = default
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
-namespace.media.link.default.shared_libs += libandroid.so
 namespace.media.link.default.shared_libs += libbinder_ndk.so
 namespace.media.link.default.shared_libs += libmediametrics.so
 namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
@@ -188,11 +194,11 @@ namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # "conscrypt" APEX namespace
 #
 # This namespace is for libraries within the conscrypt APEX.
+# Keep in sync with the "conscrypt" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.conscrypt.isolated = true
 namespace.conscrypt.visible = true
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
@@ -235,6 +241,8 @@ namespace.resolv.link.default.shared_libs += libvndksupport.so
 # Note that there is no link from the default namespace to this namespace.
 ###############################################################################
 namespace.sphal.isolated = true
+# Visible to allow links to be created at runtime, e.g. through
+# android_link_namespaces in libnativeloader.
 namespace.sphal.visible = true
 
 namespace.sphal.search.paths  = /odm/${LIB}
@@ -324,6 +332,8 @@ namespace.rs.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
 # This namespace is exclusively for vndk-sp libs.
 ###############################################################################
 namespace.vndk.isolated = true
+# Visible to allow links to be created at runtime, e.g. through
+# android_link_namespaces in libnativeloader.
 namespace.vndk.visible = true
 
 namespace.vndk.search.paths  = /odm/${LIB}/vndk-sp
@@ -361,13 +371,15 @@ namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp%VNDK_VER
 # The "vndk" namespace links to "default" namespace for LLNDK libs and links to
 # "sphal" namespace for vendor libs.  The ordering matters.  The "default"
 # namespace has higher priority than the "sphal" namespace.
-namespace.vndk.links = default,sphal
+namespace.vndk.links = default,sphal,runtime
 
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
 namespace.vndk.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+namespace.vndk.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
 
 # Allow VNDK-SP extensions to use vendor libraries
 namespace.vndk.link.sphal.allow_all_shared_libs = true
@@ -421,8 +433,10 @@ namespace.default.asan.permitted.paths +=           /odm
 namespace.default.asan.permitted.paths += /data/asan/vendor
 namespace.default.asan.permitted.paths +=           /vendor
 
-namespace.default.links = system,vndk%VNDK_IN_SYSTEM_NS%
-namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%
+namespace.default.links = system,vndk%VNDK_IN_SYSTEM_NS%,runtime
+namespace.default.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
+namespace.default.link.system.shared_libs  = %LLNDK_LIBRARIES%
+namespace.default.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 namespace.default.link.vndk_in_system.shared_libs = %VNDK_USING_CORE_VARIANT_LIBRARIES%
 namespace.default.link.vndk.shared_libs  = %VNDK_SAMEPROCESS_LIBRARIES%
 namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
@@ -431,10 +445,10 @@ namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
 # "runtime" APEX namespace
 #
 # This namespace exposes externally accessible libraries from the Runtime APEX.
+# Keep in sync with the "runtime" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.runtime.isolated = true
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = system
@@ -475,12 +489,14 @@ namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 # Android releases.  The links here should be identical to that of the
 # 'vndk_in_system' namespace, except for the link between 'vndk' and
 # 'vndk_in_system'.
-namespace.vndk.links = system,default%VNDK_IN_SYSTEM_NS%
+namespace.vndk.links = system,default%VNDK_IN_SYSTEM_NS%,runtime
 
 namespace.vndk.link.system.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.vndk.link.default.allow_all_shared_libs = true
+
+namespace.vndk.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.vndk.link.vndk_in_system.shared_libs = %VNDK_USING_CORE_VARIANT_LIBRARIES%
 
@@ -505,11 +521,16 @@ namespace.system.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 namespace.system.links = runtime
 namespace.system.link.runtime.shared_libs  = libdexfile_external.so
+namespace.system.link.runtime.shared_libs += libdexfiled_external.so
+# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+namespace.system.link.runtime.shared_libs += libicui18n.so
+namespace.system.link.runtime.shared_libs += libicuuc.so
 namespace.system.link.runtime.shared_libs += libnativebridge.so
 namespace.system.link.runtime.shared_libs += libnativehelper.so
 namespace.system.link.runtime.shared_libs += libnativeloader.so
 # Workaround for b/124772622
 namespace.system.link.runtime.shared_libs += libandroidicu.so
+namespace.system.link.runtime.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # "vndk_in_system" namespace
@@ -548,7 +569,8 @@ namespace.vndk_in_system.whitelisted = %VNDK_USING_CORE_VARIANT_LIBRARIES%
 #   1. 'vndk_in_system' needs to be freely linked back to 'vndk'.
 #   2. 'vndk_in_system' does not need to link to 'default', as any library that
 #      requires anything vendor would not be a vndk_in_system library.
-namespace.vndk_in_system.links = vndk,system
+namespace.vndk_in_system.links = vndk,system,runtime
+namespace.vndk_in_system.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.vndk_in_system.link.system.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk_in_system.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
@@ -565,6 +587,10 @@ namespace.vndk_in_system.link.vndk.allow_all_shared_libs = true
 [unrestricted]
 additional.namespaces = runtime,media,conscrypt,resolv
 
+# Visible to allow links to be created at runtime, e.g. through
+# android_link_namespaces in libnativeloader.
+namespace.default.visible = true
+
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /odm/${LIB}
 namespace.default.search.paths += /vendor/${LIB}
@@ -576,15 +602,17 @@ namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
+# Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
 namespace.default.links = runtime,resolv
-namespace.default.visible = true
-
-namespace.default.link.runtime.shared_libs  = libdexfile_external.so
+namespace.default.link.runtime.shared_libs  = libandroidicu.so
+namespace.default.link.runtime.shared_libs += libdexfile_external.so
+namespace.default.link.runtime.shared_libs += libdexfiled_external.so
+# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+namespace.default.link.runtime.shared_libs += libicui18n.so
+namespace.default.link.runtime.shared_libs += libicuuc.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
 namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
-namespace.default.link.runtime.shared_libs += libandroidicu.so
 
 # TODO(b/122876336): Remove libpac.so once it's migrated to Webview
 namespace.default.link.runtime.shared_libs += libpac.so
@@ -595,11 +623,13 @@ namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 # "runtime" APEX namespace
 #
 # This namespace exposes externally accessible libraries from the Runtime APEX.
+# Keep in sync with the "runtime" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.runtime.isolated = true
+# Visible to allow links to be created at runtime, e.g. through
+# android_link_namespaces in libnativeloader.
 namespace.runtime.visible = true
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
@@ -622,7 +652,6 @@ namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
 namespace.media.links = default
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
-namespace.media.link.default.shared_libs += libandroid.so
 namespace.media.link.default.shared_libs += libbinder_ndk.so
 namespace.media.link.default.shared_libs += libmediametrics.so
 namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
@@ -631,11 +660,11 @@ namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # "conscrypt" APEX namespace
 #
 # This namespace is for libraries within the conscrypt APEX.
+# Keep in sync with the "conscrypt" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
 namespace.conscrypt.isolated = true
 namespace.conscrypt.visible = true
 
-# Keep in sync with ld.config.txt in the com.android.runtime APEX.
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.links = runtime,default
@@ -676,3 +705,5 @@ namespace.default.isolated = false
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
 namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
+
+namespace.default.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%

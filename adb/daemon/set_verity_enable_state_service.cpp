@@ -58,7 +58,7 @@ static bool make_block_device_writable(const std::string& dev) {
     }
 
     int OFF = 0;
-    bool result = (ioctl(fd, BLKROSET, &OFF) != -1);
+    bool result = (ioctl(fd.get(), BLKROSET, &OFF) != -1);
     return result;
 }
 
@@ -111,8 +111,11 @@ static bool set_verity_enabled_state(int fd, const char* block_device, const cha
             WriteFdFmt(fd, "%s overlayfs for %s\n", enable ? "disabling" : "using", mount_point);
         }
     } else if (errno) {
-        WriteFdFmt(fd, "Overlayfs %s for %s failed with error %s\n", enable ? "teardown" : "setup",
-                   mount_point, strerror(errno));
+        int expected_errno = enable ? EBUSY : ENOENT;
+        if (errno != expected_errno) {
+            WriteFdFmt(fd, "Overlayfs %s for %s failed with error %s\n",
+                       enable ? "teardown" : "setup", mount_point, strerror(errno));
+        }
     }
     WriteFdFmt(fd, "Verity %s on %s\n", enable ? "enabled" : "disabled", mount_point);
     return true;
@@ -194,7 +197,7 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
         }
 
         if (!android::base::GetBoolProperty("ro.secure", false)) {
-            overlayfs_setup(fd, enable);
+            overlayfs_setup(fd.get(), enable);
             WriteFdExactly(fd.get(), "verity not enabled - ENG build\n");
             return;
         }
@@ -239,7 +242,7 @@ void set_verity_enabled_state_service(unique_fd fd, bool enable) {
             }
         }
     }
-    if (!any_changed) any_changed = overlayfs_setup(fd, enable);
+    if (!any_changed) any_changed = overlayfs_setup(fd.get(), enable);
 
     if (any_changed) {
         WriteFdExactly(fd.get(), "Now reboot your device for settings to take effect\n");

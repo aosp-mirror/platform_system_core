@@ -338,6 +338,7 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta() {
                                nullptr /* custom_device_path */);
 }
 
+// TODO(b/128807537): removes this function.
 AvbUniquePtr AvbHandle::Open() {
     bool is_device_unlocked = IsDeviceUnlocked();
 
@@ -353,25 +354,28 @@ AvbUniquePtr AvbHandle::Open() {
     AvbSlotVerifyResult verify_result =
             avb_ops.AvbSlotVerify(fs_mgr_get_slot_suffix(), flags, &avb_handle->vbmeta_images_);
 
-    // Only allow two verify results:
+    // Only allow the following verify results:
     //   - AVB_SLOT_VERIFY_RESULT_OK.
-    //   - AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION (for UNLOCKED state).
-    //     If the device is UNLOCKED, i.e., |allow_verification_error| is true for
-    //     AvbSlotVerify(), then the following return values are all non-fatal:
-    //       * AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION
-    //       * AVB_SLOT_VERIFY_RESULT_ERROR_PUBLIC_KEY_REJECTED
-    //       * AVB_SLOT_VERIFY_RESULT_ERROR_ROLLBACK_INDEX
-    //     The latter two results were checked by bootloader prior to start fs_mgr so
-    //     we just need to handle the first result here. See *dummy* operations in
-    //     FsManagerAvbOps and the comments in external/avb/libavb/avb_slot_verify.h
-    //     for more details.
+    //   - AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION (UNLOCKED only).
+    //     Might occur in either the top-level vbmeta or a chained vbmeta.
+    //   - AVB_SLOT_VERIFY_RESULT_ERROR_PUBLIC_KEY_REJECTED (UNLOCKED only).
+    //     Could only occur in a chained vbmeta. Because we have *dummy* operations in
+    //     FsManagerAvbOps such that avb_ops->validate_vbmeta_public_key() used to validate
+    //     the public key of the top-level vbmeta always pass in userspace here.
+    //
+    // The following verify result won't happen, because the *dummy* operation
+    // avb_ops->read_rollback_index() always returns the minimum value zero. So rollbacked
+    // vbmeta images, which should be caught in the bootloader stage, won't be detected here.
+    //   - AVB_SLOT_VERIFY_RESULT_ERROR_ROLLBACK_INDEX
     switch (verify_result) {
         case AVB_SLOT_VERIFY_RESULT_OK:
             avb_handle->status_ = AvbHandleStatus::kSuccess;
             break;
         case AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION:
+        case AVB_SLOT_VERIFY_RESULT_ERROR_PUBLIC_KEY_REJECTED:
             if (!is_device_unlocked) {
-                LERROR << "ERROR_VERIFICATION isn't allowed when the device is LOCKED";
+                LERROR << "ERROR_VERIFICATION / PUBLIC_KEY_REJECTED isn't allowed "
+                       << "if the device is LOCKED";
                 return nullptr;
             }
             avb_handle->status_ = AvbHandleStatus::kVerificationError;
@@ -447,6 +451,29 @@ AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait
     }
 
     return AvbHashtreeResult::kSuccess;
+}
+
+bool AvbHandle::TearDownAvbHashtree(FstabEntry* fstab_entry, bool wait) {
+    if (!fstab_entry) {
+        return false;
+    }
+
+    const std::string device_name(GetVerityDeviceName(*fstab_entry));
+
+    // TODO: remove duplicated code with UnmapDevice()
+    android::dm::DeviceMapper& dm = android::dm::DeviceMapper::Instance();
+    std::string path;
+    if (wait) {
+        dm.GetDmDevicePathByName(device_name, &path);
+    }
+    if (!dm.DeleteDevice(device_name)) {
+        return false;
+    }
+    if (!path.empty() && !WaitForFile(path, 1000ms, FileWaitMode::DoesNotExist)) {
+        return false;
+    }
+
+    return true;
 }
 
 std::string AvbHandle::GetSecurityPatchLevel(const FstabEntry& fstab_entry) const {

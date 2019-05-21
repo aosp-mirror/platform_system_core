@@ -121,6 +121,21 @@ static Result<Success> do_class_start(const BuiltinArguments& args) {
     return Success();
 }
 
+static Result<Success> do_class_start_post_data(const BuiltinArguments& args) {
+    if (args.context != kInitContext) {
+        return Error() << "command 'class_start_post_data' only available in init context";
+    }
+    for (const auto& service : ServiceList::GetInstance()) {
+        if (service->classnames().count(args[1])) {
+            if (auto result = service->StartIfPostData(); !result) {
+                LOG(ERROR) << "Could not start service '" << service->name()
+                           << "' as part of class '" << args[1] << "': " << result.error();
+            }
+        }
+    }
+    return Success();
+}
+
 static Result<Success> do_class_stop(const BuiltinArguments& args) {
     ForEachServiceInClass(args[1], &Service::Stop);
     return Success();
@@ -128,6 +143,14 @@ static Result<Success> do_class_stop(const BuiltinArguments& args) {
 
 static Result<Success> do_class_reset(const BuiltinArguments& args) {
     ForEachServiceInClass(args[1], &Service::Reset);
+    return Success();
+}
+
+static Result<Success> do_class_reset_post_data(const BuiltinArguments& args) {
+    if (args.context != kInitContext) {
+        return Error() << "command 'class_reset_post_data' only available in init context";
+    }
+    ForEachServiceInClass(args[1], &Service::ResetIfPostData);
     return Success();
 }
 
@@ -451,52 +474,6 @@ static void import_late(const std::vector<std::string>& args, size_t start_index
     if (false) DumpState();
 }
 
-/* mount_fstab
- *
- *  Call fs_mgr_mount_all() to mount the given fstab
- */
-static Result<int> mount_fstab(const char* fstabfile, int mount_mode) {
-    /*
-     * Call fs_mgr_mount_all() to mount all filesystems.  We fork(2) and
-     * do the call in the child to provide protection to the main init
-     * process if anything goes wrong (crash or memory leak), and wait for
-     * the child to finish in the parent.
-     */
-    pid_t pid = fork();
-    if (pid > 0) {
-        /* Parent.  Wait for the child to return */
-        int status;
-        int wp_ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
-        if (wp_ret == -1) {
-            // Unexpected error code. We will continue anyway.
-            PLOG(WARNING) << "waitpid failed";
-        }
-
-        if (WIFEXITED(status)) {
-            return WEXITSTATUS(status);
-        } else {
-            return Error() << "child aborted";
-        }
-    } else if (pid == 0) {
-        /* child, call fs_mgr_mount_all() */
-
-        // So we can always see what fs_mgr_mount_all() does.
-        // Only needed if someone explicitly changes the default log level in their init.rc.
-        android::base::ScopedLogSeverity info(android::base::INFO);
-
-        Fstab fstab;
-        ReadFstabFromFile(fstabfile, &fstab);
-
-        int child_ret = fs_mgr_mount_all(&fstab, mount_mode);
-        if (child_ret == -1) {
-            PLOG(ERROR) << "fs_mgr_mount_all returned an error";
-        }
-        _exit(child_ret);
-    } else {
-        return Error() << "fork() failed";
-    }
-}
-
 /* Queue event based on fs_mgr return code.
  *
  * code: return code of fs_mgr_mount_all
@@ -583,7 +560,7 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
     bool import_rc = true;
     bool queue_event = true;
     int mount_mode = MOUNT_MODE_DEFAULT;
-    const char* fstabfile = args[1].c_str();
+    const auto& fstab_file = args[1];
     std::size_t path_arg_end = args.size();
     const char* prop_post_fix = "default";
 
@@ -603,10 +580,12 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
 
     std::string prop_name = "ro.boottime.init.mount_all."s + prop_post_fix;
     android::base::Timer t;
-    auto mount_fstab_return_code = mount_fstab(fstabfile, mount_mode);
-    if (!mount_fstab_return_code) {
-        return Error() << "mount_fstab() failed " << mount_fstab_return_code.error();
+
+    Fstab fstab;
+    if (!ReadFstabFromFile(fstab_file, &fstab)) {
+        return Error() << "Could not read fstab";
     }
+    auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_mode);
     property_set(prop_name, std::to_string(t.duration().count()));
 
     if (import_rc) {
@@ -617,12 +596,25 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
-        auto queue_fs_result = queue_fs_event(*mount_fstab_return_code);
+        auto queue_fs_result = queue_fs_event(mount_fstab_return_code);
         if (!queue_fs_result) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
     }
 
+    return Success();
+}
+
+/* umount_all <fstab> */
+static Result<Success> do_umount_all(const BuiltinArguments& args) {
+    Fstab fstab;
+    if (!ReadFstabFromFile(args[1], &fstab)) {
+        return Error() << "Could not read fstab";
+    }
+
+    if (auto result = fs_mgr_umount_all(&fstab); result != 0) {
+        return Error() << "umount_fstab() failed " << result;
+    }
     return Success();
 }
 
@@ -735,17 +727,6 @@ static Result<Success> do_sysclktz(const BuiltinArguments& args) {
     if (settimeofday(nullptr, &tz) == -1) {
         return ErrnoError() << "settimeofday() failed";
     }
-    return Success();
-}
-
-static Result<Success> do_verity_load_state(const BuiltinArguments& args) {
-    int mode = -1;
-    bool loaded = fs_mgr_load_verity_state(&mode);
-    if (loaded && mode != VERITY_MODE_DEFAULT) {
-        ActionManager::GetInstance().QueueEventTrigger("verity-logging");
-    }
-    if (!loaded) return Error() << "Could not load verity state";
-
     return Success();
 }
 
@@ -1084,6 +1065,12 @@ static Result<Success> do_init_user0(const BuiltinArguments& args) {
         {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"}, args.context});
 }
 
+static Result<Success> do_mark_post_data(const BuiltinArguments& args) {
+    ServiceList::GetInstance().MarkPostData();
+
+    return Success();
+}
+
 static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
     glob_t glob_result;
     // @ is added to filter out the later paths, which are bind mounts of the places
@@ -1135,8 +1122,10 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"chmod",                   {2,     2,    {true,   do_chmod}}},
         {"chown",                   {2,     3,    {true,   do_chown}}},
         {"class_reset",             {1,     1,    {false,  do_class_reset}}},
+        {"class_reset_post_data",   {1,     1,    {false,  do_class_reset_post_data}}},
         {"class_restart",           {1,     1,    {false,  do_class_restart}}},
         {"class_start",             {1,     1,    {false,  do_class_start}}},
+        {"class_start_post_data",   {1,     1,    {false,  do_class_start_post_data}}},
         {"class_stop",              {1,     1,    {false,  do_class_stop}}},
         {"copy",                    {2,     2,    {true,   do_copy}}},
         {"domainname",              {1,     1,    {true,   do_domainname}}},
@@ -1156,6 +1145,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"load_persist_props",      {0,     0,    {false,  do_load_persist_props}}},
         {"load_system_props",       {0,     0,    {false,  do_load_system_props}}},
         {"loglevel",                {1,     1,    {false,  do_loglevel}}},
+        {"mark_post_data",          {0,     0,    {false,  do_mark_post_data}}},
         {"mkdir",                   {1,     4,    {true,   do_mkdir}}},
         // TODO: Do mount operations in vendor_init.
         // mount_all is currently too complex to run in vendor_init as it queues action triggers,
@@ -1165,6 +1155,7 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"mount",                   {3,     kMax, {false,  do_mount}}},
         {"parse_apex_configs",      {0,     0,    {false,  do_parse_apex_configs}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
+        {"umount_all",              {1,     1,    {false,  do_umount_all}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},
         {"restart",                 {1,     1,    {false,  do_restart}}},
         {"restorecon",              {1,     kMax, {true,   do_restorecon}}},
@@ -1180,7 +1171,6 @@ const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
         {"symlink",                 {2,     2,    {true,   do_symlink}}},
         {"sysclktz",                {1,     1,    {false,  do_sysclktz}}},
         {"trigger",                 {1,     1,    {false,  do_trigger}}},
-        {"verity_load_state",       {0,     0,    {false,  do_verity_load_state}}},
         {"verity_update_state",     {0,     0,    {false,  do_verity_update_state}}},
         {"wait",                    {1,     2,    {true,   do_wait}}},
         {"wait_for_prop",           {2,     2,    {false,  do_wait_for_prop}}},

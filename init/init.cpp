@@ -35,6 +35,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -55,6 +56,7 @@
 #include "action_parser.h"
 #include "boringssl_self_test.h"
 #include "epoll.h"
+#include "first_stage_init.h"
 #include "first_stage_mount.h"
 #include "import_parser.h"
 #include "keychords.h"
@@ -621,14 +623,52 @@ static void GlobalSeccomp() {
     });
 }
 
+static void UmountDebugRamdisk() {
+    if (umount("/debug_ramdisk") != 0) {
+        LOG(ERROR) << "Failed to umount /debug_ramdisk";
+    }
+}
+
+static void RecordStageBoottimes(const boot_clock::time_point& second_stage_start_time) {
+    int64_t first_stage_start_time_ns = -1;
+    if (auto first_stage_start_time_str = getenv(kEnvFirstStageStartedAt);
+        first_stage_start_time_str) {
+        property_set("ro.boottime.init", first_stage_start_time_str);
+        android::base::ParseInt(first_stage_start_time_str, &first_stage_start_time_ns);
+    }
+    unsetenv(kEnvFirstStageStartedAt);
+
+    int64_t selinux_start_time_ns = -1;
+    if (auto selinux_start_time_str = getenv(kEnvSelinuxStartedAt); selinux_start_time_str) {
+        android::base::ParseInt(selinux_start_time_str, &selinux_start_time_ns);
+    }
+    unsetenv(kEnvSelinuxStartedAt);
+
+    if (selinux_start_time_ns == -1) return;
+    if (first_stage_start_time_ns == -1) return;
+
+    property_set("ro.boottime.init.first_stage",
+                 std::to_string(selinux_start_time_ns - first_stage_start_time_ns));
+    property_set("ro.boottime.init.selinux",
+                 std::to_string(second_stage_start_time.time_since_epoch().count() -
+                                selinux_start_time_ns));
+}
+
 int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
     }
 
+    boot_clock::time_point start_time = boot_clock::now();
+
     // We need to set up stdin/stdout/stderr again now that we're running in init's context.
     InitKernelLogging(argv, InitAborter);
     LOG(INFO) << "init second stage started!";
+
+    // Set init and its forked children's oom_adj.
+    if (auto result = WriteFile("/proc/1/oom_score_adj", "-1000"); !result) {
+        LOG(ERROR) << "Unable to write -1000 to /proc/1/oom_score_adj: " << result.error();
+    }
 
     // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
     GlobalSeccomp();
@@ -652,9 +692,8 @@ int SecondStageMain(int argc, char** argv) {
     // used by init as well as the current required properties.
     export_kernel_boot_props();
 
-    // Make the time that init started available for bootstat to log.
-    property_set("ro.boottime.init", getenv("INIT_STARTED_AT"));
-    property_set("ro.boottime.init.selinux", getenv("INIT_SELINUX_TOOK"));
+    // Make the time that init stages started available for bootstat to log.
+    RecordStageBoottimes(start_time);
 
     // Set libavb version for Framework-only OTA match in Treble build.
     const char* avb_version = getenv("INIT_AVB_VERSION");
@@ -667,8 +706,6 @@ int SecondStageMain(int argc, char** argv) {
     }
 
     // Clean up our environment.
-    unsetenv("INIT_STARTED_AT");
-    unsetenv("INIT_SELINUX_TOOK");
     unsetenv("INIT_AVB_VERSION");
     unsetenv("INIT_FORCE_DEBUGGABLE");
 
@@ -685,6 +722,7 @@ int SecondStageMain(int argc, char** argv) {
     InstallSignalFdHandler(&epoll);
 
     property_load_boot_defaults(load_debug_prop);
+    UmountDebugRamdisk();
     fs_mgr_vendor_overlay_mount_all();
     export_oem_lock_status();
     StartPropertyService(&epoll);
