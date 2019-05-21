@@ -21,6 +21,7 @@ cc_library {
     // modules should use libprocessgroup which links to the LL-NDK library
     // defined below. The static library is built for tests.
     vendor_available: false,
+    native_bridge_supported: true,
     srcs: [
         "cgroup_controller.cpp",
         "cgroup_file.cpp",
@@ -55,6 +56,7 @@ cc_library {
 llndk_library {
     name: "libcgrouprc",
     symbol_file: "libcgrouprc.map.txt",
+    native_bridge_supported: true,
     export_include_dirs: [
         "include",
     ],
