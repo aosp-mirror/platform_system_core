@@ -191,7 +191,7 @@ runs the service.
 
 `critical`
 > This is a device-critical service. If it exits more than four times in
-  four minutes, the device will reboot into bootloader.
+  four minutes or before boot completes, the device will reboot into bootloader.
 
 `disabled`
 > This service will not automatically start with its class.
@@ -412,6 +412,11 @@ Commands
   not already running.  See the start entry for more information on
   starting services.
 
+`class_start_post_data <serviceclass>`
+> Like `class_start`, but only considers services that were started
+  after /data was mounted, and that were running at the time
+ `class_reset_post_data` was called. Only used for FDE devices.
+
 `class_stop <serviceclass>`
 > Stop and disable all services of the specified class if they are
   currently running.
@@ -420,6 +425,10 @@ Commands
 > Stop all services of the specified class if they are
   currently running, without disabling them. They can be restarted
   later using `class_start`.
+
+`class_reset_post_data <serviceclass>`
+> Like `class_reset`, but only considers services that were started
+  after /data was mounted. Only used for FDE devices.
 
 `class_restart <serviceclass>`
 > Restarts all services of the specified class.
@@ -493,6 +502,10 @@ Commands
   levels, but this command does not affect the kernel log level. Use the
   `write` command to write to `/proc/sys/kernel/printk` to change that.
   Properties are expanded within _level_.
+
+`mark_post_data`
+> Used to mark the point right after /data is mounted. Used to implement the
+  `class_reset_post_data` and `class_start_post_data` commands.
 
 `mkdir <path> [mode] [owner] [group]`
 > Create a directory at _path_, optionally with the given mode, owner, and
@@ -585,9 +598,6 @@ Commands
 
 `umount <path>`
 > Unmount the filesystem mounted at that path.
-
-`verity_load_state`
-> Internal implementation detail used to load dm-verity state.
 
 `verity_update_state <mount-point>`
 > Internal implementation detail used to update dm-verity state and
@@ -686,8 +696,11 @@ Init records some boot timing information in system properties.
 > Time after boot in ns (via the CLOCK\_BOOTTIME clock) at which the first
   stage of init started.
 
+`ro.boottime.init.first_stage`
+> How long in ns it took to run first stage.
+
 `ro.boottime.init.selinux`
-> How long it took the first stage to initialize SELinux.
+> How long in ns it took to run SELinux stage.
 
 `ro.boottime.init.cold_boot_wait`
 > How long init waited for ueventd's coldboot phase to end.

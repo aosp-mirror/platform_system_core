@@ -48,6 +48,8 @@ class ProfileAction {
     // Default implementations will fail
     virtual bool ExecuteForProcess(uid_t, pid_t) const { return false; };
     virtual bool ExecuteForTask(int) const { return false; };
+
+    virtual void EnableResourceCaching() {}
 };
 
 // Profile actions
@@ -110,31 +112,40 @@ class SetCgroupAction : public ProfileAction {
 
     virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
     virtual bool ExecuteForTask(int tid) const;
+    virtual void EnableResourceCaching();
 
     const CgroupController* controller() const { return &controller_; }
     std::string path() const { return path_; }
 
   private:
+    enum FdState {
+        FDS_INACCESSIBLE = -1,
+        FDS_APP_DEPENDENT = -2,
+        FDS_NOT_CACHED = -3,
+    };
+
     CgroupController controller_;
     std::string path_;
-#ifdef CACHE_FILE_DESCRIPTORS
     android::base::unique_fd fd_;
-#endif
 
     static bool IsAppDependentPath(const std::string& path);
     static bool AddTidToCgroup(int tid, int fd);
+
+    bool IsFdValid() const { return fd_ > FDS_INACCESSIBLE; }
 };
 
 class TaskProfile {
   public:
-    TaskProfile() {}
+    TaskProfile() : res_cached_(false) {}
 
     void Add(std::unique_ptr<ProfileAction> e) { elements_.push_back(std::move(e)); }
 
     bool ExecuteForProcess(uid_t uid, pid_t pid) const;
     bool ExecuteForTask(int tid) const;
+    void EnableResourceCaching();
 
   private:
+    bool res_cached_;
     std::vector<std::unique_ptr<ProfileAction>> elements_;
 };
 
@@ -143,7 +154,7 @@ class TaskProfiles {
     // Should be used by all users
     static TaskProfiles& GetInstance();
 
-    const TaskProfile* GetProfile(const std::string& name) const;
+    TaskProfile* GetProfile(const std::string& name) const;
     const ProfileAttribute* GetAttribute(const std::string& name) const;
 
   private:

@@ -46,26 +46,34 @@ int set_cpuset_policy(int tid, SchedPolicy policy) {
 
     switch (policy) {
         case SP_BACKGROUND:
-            return SetTaskProfiles(tid, {"HighEnergySaving", "ProcessCapacityLow", "LowIoPriority",
-                                         "TimerSlackHigh"})
+            return SetTaskProfiles(tid,
+                                   {"HighEnergySaving", "ProcessCapacityLow", "LowIoPriority",
+                                    "TimerSlackHigh"},
+                                   true)
                            ? 0
                            : -1;
         case SP_FOREGROUND:
         case SP_AUDIO_APP:
         case SP_AUDIO_SYS:
-            return SetTaskProfiles(tid, {"HighPerformance", "ProcessCapacityHigh", "HighIoPriority",
-                                         "TimerSlackNormal"})
+            return SetTaskProfiles(tid,
+                                   {"HighPerformance", "ProcessCapacityHigh", "HighIoPriority",
+                                    "TimerSlackNormal"},
+                                   true)
                            ? 0
                            : -1;
         case SP_TOP_APP:
-            return SetTaskProfiles(tid, {"MaxPerformance", "ProcessCapacityMax", "MaxIoPriority",
-                                         "TimerSlackNormal"})
+            return SetTaskProfiles(tid,
+                                   {"MaxPerformance", "ProcessCapacityMax", "MaxIoPriority",
+                                    "TimerSlackNormal"},
+                                   true)
                            ? 0
                            : -1;
         case SP_SYSTEM:
-            return SetTaskProfiles(tid, {"ServiceCapacityLow", "TimerSlackNormal"}) ? 0 : -1;
+            return SetTaskProfiles(tid, {"ServiceCapacityLow", "TimerSlackNormal"}, true) ? 0 : -1;
         case SP_RESTRICTED:
-            return SetTaskProfiles(tid, {"ServiceCapacityRestricted", "TimerSlackNormal"}) ? 0 : -1;
+            return SetTaskProfiles(tid, {"ServiceCapacityRestricted", "TimerSlackNormal"}, true)
+                           ? 0
+                           : -1;
         default:
             break;
     }
@@ -126,45 +134,36 @@ int set_sched_policy(int tid, SchedPolicy policy) {
 
     switch (policy) {
         case SP_BACKGROUND:
-            return SetTaskProfiles(tid, {"HighEnergySaving", "LowIoPriority", "TimerSlackHigh"})
-                           ? 0
-                           : -1;
+            return SetTaskProfiles(tid, {"HighEnergySaving", "TimerSlackHigh"}, true) ? 0 : -1;
         case SP_FOREGROUND:
         case SP_AUDIO_APP:
         case SP_AUDIO_SYS:
-            return SetTaskProfiles(tid, {"HighPerformance", "HighIoPriority", "TimerSlackNormal"})
-                           ? 0
-                           : -1;
+            return SetTaskProfiles(tid, {"HighPerformance", "TimerSlackNormal"}, true) ? 0 : -1;
         case SP_TOP_APP:
-            return SetTaskProfiles(tid, {"MaxPerformance", "MaxIoPriority", "TimerSlackNormal"})
-                           ? 0
-                           : -1;
+            return SetTaskProfiles(tid, {"MaxPerformance", "TimerSlackNormal"}, true) ? 0 : -1;
         case SP_RT_APP:
-            return SetTaskProfiles(tid,
-                                   {"RealtimePerformance", "MaxIoPriority", "TimerSlackNormal"})
-                           ? 0
-                           : -1;
+            return SetTaskProfiles(tid, {"RealtimePerformance", "TimerSlackNormal"}, true) ? 0 : -1;
         default:
-            return SetTaskProfiles(tid, {"TimerSlackNormal"}) ? 0 : -1;
+            return SetTaskProfiles(tid, {"TimerSlackNormal"}, true) ? 0 : -1;
     }
 
     return 0;
 }
 
 bool cpusets_enabled() {
-    static bool enabled = (CgroupMap::GetInstance().FindController("cpuset").HasValue());
+    static bool enabled = (CgroupMap::GetInstance().FindController("cpuset").IsUsable());
     return enabled;
 }
 
 bool schedboost_enabled() {
-    static bool enabled = (CgroupMap::GetInstance().FindController("schedtune").HasValue());
+    static bool enabled = (CgroupMap::GetInstance().FindController("schedtune").IsUsable());
     return enabled;
 }
 
 static int getCGroupSubsys(int tid, const char* subsys, std::string& subgroup) {
     auto controller = CgroupMap::GetInstance().FindController(subsys);
 
-    if (!controller.HasValue()) return -1;
+    if (!controller.IsUsable()) return -1;
 
     if (!controller.GetTaskGroup(tid, &subgroup)) {
         LOG(ERROR) << "Failed to find cgroup for tid " << tid;

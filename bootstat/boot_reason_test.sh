@@ -25,6 +25,8 @@ NORMAL="${ESCAPE}[0m"
 # Best guess to an average device's reboot time, refined as tests return
 DURATION_DEFAULT=45
 STOP_ON_FAILURE=false
+progname="${0##*/}"
+progpath="${0%${progname}}"
 
 # Helper functions
 
@@ -42,11 +44,40 @@ inAdb() {
   adb devices | grep -v 'List of devices attached' | grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
 }
 
+[ "USAGE: adb_sh <commands> </dev/stdin >/dev/stdout 2>/dev/stderr
+
+Returns: true if the command succeeded" ]
+adb_sh() {
+  local args=
+  for i in "${@}"; do
+    [ -z "${args}" ] || args="${args} "
+    if [ X"${i}" != X"${i#\'}" ]; then
+      args="${args}${i}"
+    elif [ X"${i}" != X"${i#*\\}" ]; then
+      args="${args}`echo ${i} | sed 's/\\\\/\\\\\\\\/g'`"
+    elif [ X"${i}" != X"${i#* }" ]; then
+      args="${args}'${i}'"
+    elif [ X"${i}" != X"${i#*${TAB}}" ]; then
+      args="${args}'${i}'"
+    else
+      args="${args}${i}"
+    fi
+  done
+  adb shell "${args}"
+}
+
+[ "USAGE: adb_su <commands> </dev/stdin >/dev/stdout 2>/dev/stderr
+
+Returns: true if the command running as root succeeded" ]
+adb_su() {
+  adb_sh su root "${@}"
+}
+
 [ "USAGE: hasPstore
 
 Returns: true if device (likely) has pstore data" ]
 hasPstore() {
-  if inAdb && [ 0 -eq `adb shell su root ls /sys/fs/pstore | wc -l` ]; then
+  if inAdb && [ 0 -eq `adb_su ls /sys/fs/pstore </dev/null | wc -l` ]; then
     false
   fi
 }
@@ -55,7 +86,7 @@ hasPstore() {
 
 Returns the property value" ]
 get_property() {
-  adb shell getprop ${1} 2>&1 </dev/null
+  adb_sh getprop ${1} 2>&1 </dev/null
 }
 
 [ "USAGE: isDebuggable
@@ -89,18 +120,18 @@ checkDebugBuild() {
 Returns: true if device supports and set boot reason injection" ]
 setBootloaderBootReason() {
   inAdb || ( echo "ERROR: device not in adb mode." >&2 ; false ) || return 1
-  if [ -z "`adb shell ls /etc/init/bootstat-debug.rc 2>/dev/null`" ]; then
+  if [ -z "`adb_sh ls /etc/init/bootstat-debug.rc 2>/dev/null </dev/null`" ]; then
     echo "ERROR: '${TEST}' test requires /etc/init/bootstat-debug.rc" >&2
     return 1
   fi
   checkDebugBuild || return 1
-  if adb shell su root "cat /proc/cmdline | tr '\\0 ' '\\n\\n'" |
+  if adb_su "cat /proc/cmdline | tr '\\0 ' '\\n\\n'" </dev/null |
      grep '^androidboot[.]bootreason=[^ ]' >/dev/null; then
     echo "ERROR: '${TEST}' test requires a device with a bootloader that" >&2
     echo "       does not set androidboot.bootreason kernel parameter." >&2
     return 1
   fi
-  adb shell su root setprop persist.test.boot.reason "'${1}'" 2>/dev/null
+  adb_su setprop persist.test.boot.reason "'${1}'" 2>/dev/null </dev/null
   test_reason="`get_property persist.test.boot.reason`"
   if [ X"${test_reason}" != X"${1}" ]; then
     echo "ERROR: can not set persist.test.boot.reason to '${1}'." >&2
@@ -299,7 +330,14 @@ EXPECT_PROPERTY() {
   return ${save_ret}
 }
 
-[ "USAGE: report_bootstat_logs <expected> ...
+[ "USAGE: adb_date >/dev/stdout
+
+Returns: report device epoch time (suitable for logcat -t)" ]
+adb_date() {
+  adb_sh date +%s.%N </dev/null
+}
+
+[ "USAGE: report_bootstat_logs [-t<timestamp>] <expected> ...
 
 if not prefixed with a minus (-), <expected> will become a series of expected
 matches:
@@ -314,8 +352,11 @@ Report any logs, minus a known blacklist, preserve the current exit status" ]
 report_bootstat_logs() {
   save_ret=${?}
   match=
+  timestamp=-d
   for i in "${@}"; do
-    if [ X"${i}" != X"${i#-}" ] ; then
+    if [ X"${i}" != X"${i#-t}" ]; then
+      timestamp="${i}"
+    elif [ X"${i}" != X"${i#-}" ]; then
       match="${match}
 ${i#-}"
     else
@@ -323,12 +364,13 @@ ${i#-}"
 bootstat: Canonical boot reason: ${i}"
     fi
   done
-  adb logcat -b all -d |
+  adb logcat -b all ${timestamp} |
   grep bootstat[^e] |
   grep -v -F "bootstat: Service started: /system/bin/bootstat --record_boot_complete${match}
 bootstat: Failed to read /data/misc/bootstat/post_decrypt_time_elapsed: No such file or directory
 bootstat: Failed to parse boot time record: /data/misc/bootstat/post_decrypt_time_elapsed
 bootstat: Service started: /system/bin/bootstat --record_boot_reason
+bootstat: Service started: /system/bin/bootstat --set_system_boot_reason
 bootstat: Service started: /system/bin/bootstat --record_time_since_factory_reset
 bootstat: Service started: /system/bin/bootstat -l
 bootstat: Service started: /system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l
@@ -341,6 +383,8 @@ init    : Command 'setprop ro.boot.bootreason \${persist.test.boot.reason}' acti
 init    : processing action (post-fs-data) from (/system/etc/init/bootstat.rc
 init    : processing action (boot) from (/system/etc/init/bootstat.rc
 init    : processing action (ro.boot.bootreason=*) from (/system/etc/init/bootstat.rc
+init    : processing action (ro.boot.bootreason=* && post-fs) from (/system/etc/init/bootstat.rc
+init    : processing action (zygote-start) from (/system/etc/init/bootstat.rc
 init    : processing action (sys.boot_completed=1 && sys.logbootcomplete=1) from (/system/etc/init/bootstat.rc
  (/system/bin/bootstat --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l)'
  (/system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l)'
@@ -355,6 +399,8 @@ init    : Command 'exec_background - system log -- /system/bin/bootstat --set_sy
  (/system/bin/bootstat --record_boot_reason)' (pid${SPACE}
  (/system/bin/bootstat --record_time_since_factory_reset)'...
  (/system/bin/bootstat --record_time_since_factory_reset)' (pid${SPACE}
+ (/system/bin/bootstat --set_system_boot_reason)'...
+ (/system/bin/bootstat --set_system_boot_reason)' (pid${SPACE}
  (/system/bin/bootstat -l)'...
  (/system/bin/bootstat -l)' (pid " |
   grep -v 'bootstat: Unknown boot reason: $' # Hikey Special
@@ -613,7 +659,7 @@ fast and fake (touch build_date on device to make it different)" ]
 test_optional_ota() {
   checkDebugBuild || return
   duration_test
-  adb shell su root touch /data/misc/bootstat/build_date >&2
+  adb_su touch /data/misc/bootstat/build_date >&2 </dev/null
   adb reboot ota
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,ota
@@ -679,7 +725,7 @@ a _real_ factory_reset is too destructive to the device." ]
 test_factory_reset() {
   checkDebugBuild || return
   duration_test
-  adb shell su root rm /data/misc/bootstat/build_date >&2
+  adb_su rm /data/misc/bootstat/build_date >&2 </dev/null
   adb reboot >&2
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,factory_reset
@@ -715,7 +761,7 @@ test_optional_factory_reset() {
   wait_for_screen
   ( exit ${save_ret} )  # because one can not just do ?=${save_ret}
   EXPECT_PROPERTY sys.boot.reason reboot,factory_reset
-  EXPECT_PROPERTY sys.boot.reason.last ""
+  EXPECT_PROPERTY sys.boot.reason.last "\(\|bootloader\)"
   check_boilerplate_properties
   report_bootstat_logs reboot,factory_reset bootloader \
     "-bootstat: Failed to read /data/misc/bootstat/last_boot_time_utc: No such file or directory" \
@@ -766,12 +812,12 @@ test_battery() {
   enterPstore
   # Send it _many_ times to combat devices with flakey pstore
   for i in a b c d e f g h i j k l m n o p q r s t u v w x y z; do
-    echo 'healthd: battery l=2 ' | adb shell su root tee /dev/kmsg >/dev/null
+    echo 'healthd: battery l=2 ' | adb_su tee /dev/kmsg >/dev/null
   done
   adb reboot cold >&2
   adb wait-for-device
   wait_for_screen
-  adb shell su root \
+  adb_su </dev/null \
     cat /proc/fs/pstore/console-ramoops \
         /proc/fs/pstore/console-ramoops-0 2>/dev/null |
     grep 'healthd: battery l=' |
@@ -780,7 +826,7 @@ test_battery() {
       if ! EXPECT_PROPERTY sys.boot.reason reboot,battery >/dev/null 2>/dev/null; then
         # retry
         for i in a b c d e f g h i j k l m n o p q r s t u v w x y z; do
-          echo 'healthd: battery l=2 ' | adb shell su root tee /dev/kmsg >/dev/null
+          echo 'healthd: battery l=2 ' | adb_su tee /dev/kmsg >/dev/null
         done
         adb reboot cold >&2
         adb wait-for-device
@@ -806,7 +852,7 @@ battery shutdown test:
 test_optional_battery() {
   duration_test ">60"
   echo "      power on request" >&2
-  adb shell setprop sys.powerctl shutdown,battery
+  adb_sh setprop sys.powerctl shutdown,battery </dev/null
   sleep 5
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
@@ -827,7 +873,7 @@ battery thermal shutdown test:
 test_optional_battery_thermal() {
   duration_test ">60"
   echo "      power on request" >&2
-  adb shell setprop sys.powerctl shutdown,thermal,battery
+  adb_sh setprop sys.powerctl shutdown,thermal,battery </dev/null
   sleep 5
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
@@ -866,7 +912,7 @@ test_kernel_panic() {
     panic_msg="\(kernel_panic,sysrq\|kernel_panic\)"
     pstore_ok=true
   fi
-  echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
+  echo c | adb_su tee /proc/sysrq-trigger >/dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
   EXPECT_PROPERTY sys.boot.reason.last ${panic_msg}
@@ -893,8 +939,8 @@ test_kernel_panic_subreason() {
     panic_msg="\(kernel_panic,sysrq,test\|kernel_panic\)"
     pstore_ok=true
   fi
-  echo "SysRq : Trigger a crash : 'test'" | adb shell su root tee /dev/kmsg
-  echo c | adb shell su root tee /proc/sysrq-trigger >/dev/null
+  echo "SysRq : Trigger a crash : 'test'" | adb_su tee /dev/kmsg
+  echo c | adb_su tee /proc/sysrq-trigger >/dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
   EXPECT_PROPERTY sys.boot.reason.last ${panic_msg}
@@ -924,7 +970,7 @@ test_kernel_panic_hung() {
     pstore_ok=true
   fi
   echo "Kernel panic - not syncing: hung_task: blocked tasks" |
-    adb shell su root tee /dev/kmsg
+    adb_su tee /dev/kmsg
   adb reboot warm
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason ${panic_msg}
@@ -956,7 +1002,7 @@ thermal shutdown test:
 test_thermal_shutdown() {
   duration_test ">60"
   echo "      power on request" >&2
-  adb shell setprop sys.powerctl shutdown,thermal
+  adb_sh setprop sys.powerctl shutdown,thermal </dev/null
   sleep 5
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
@@ -977,7 +1023,7 @@ userrequested shutdown test:
 test_userrequested_shutdown() {
   duration_test ">60"
   echo "      power on request" >&2
-  adb shell setprop sys.powerctl shutdown,userrequested
+  adb_sh setprop sys.powerctl shutdown,userrequested </dev/null
   sleep 5
   echo -n "WARNING: Please power device back up, waiting ... " >&2
   wait_for_screen -n >&2
@@ -996,7 +1042,7 @@ shell reboot test:
 - NB: should report reboot,shell" ]
 test_shell_reboot() {
   duration_test
-  adb shell reboot
+  adb_sh reboot </dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,shell
   EXPECT_PROPERTY sys.boot.reason.last reboot,shell
@@ -1032,7 +1078,7 @@ rescueparty test
 test_optional_rescueparty() {
   blind_reboot_test
   echo "WARNING: legacy devices are allowed to fail following ro.boot.bootreason result" >&2
-  EXPECT_PROPERTY ro.boot.bootreason reboot,rescueparty
+  EXPECT_PROPERTY ro.boot.bootreason '\(reboot\|reboot,rescueparty\)'
 }
 
 [ "USAGE: test_Its_Just_So_Hard_reboot
@@ -1049,7 +1095,7 @@ test_Its_Just_So_Hard_reboot() {
   else
     duration_test `expr ${DURATION_DEFAULT} + ${DURATION_DEFAULT}`
   fi
-  adb shell 'reboot "Its Just So Hard"'
+  adb_sh 'reboot "Its Just So Hard"' </dev/null
   wait_for_screen
   EXPECT_PROPERTY sys.boot.reason reboot,its_just_so_hard
   EXPECT_PROPERTY sys.boot.reason.last reboot,its_just_so_hard
@@ -1146,7 +1192,121 @@ test_bootloader_recovery() {
   run_bootloader
 }
 
-[ "USAGE: ${0##*/} [-s SERIAL] [tests]
+[ "USAGE: run_kBootReasonMap [--boot_reason_enum] value expected
+
+bootloader boot reason injection tests:
+- if --boot_reason_enum run bootstat executable for result instead.
+- inject boot reason into sys.boot.reason
+- run bootstat --set_system_boot_reason
+- check for expected enum
+- " ]
+run_kBootReasonMap() {
+  if [ X"--boot_reason_enum" = X"${1}" ]; then
+    shift
+    local sys_expected="${1}"
+    shift
+    local enum_expected="${1}"
+    adb_su bootstat --boot_reason_enum="${sys_expected}" |
+      (
+        local retval=-1
+        while read -r id match; do
+          if [ ${retval} = -1 -a ${enum_expected} = ${id} ]; then
+            retval=0
+          fi
+          if [ ${enum_expected} != ${id} ]; then
+            echo "ERROR: ${enum_expected} ${sys_expected} got ${id} ${match}" >&2
+            retval=1
+          fi
+        done
+        exit ${retval}
+      )
+    return
+  fi
+  local sys_expected="${1}"
+  shift
+  local enum_expected="${1}"
+  adb_su setprop sys.boot.reason "${sys_expected}" </dev/null
+  adb_su bootstat --record_boot_reason </dev/null
+  # Check values
+  EXPECT_PROPERTY sys.boot.reason "${sys_expected}"
+  local retval=${?}
+  local result=`adb_su stat -c %Y /data/misc/bootstat/system_boot_reason </dev/null 2>/dev/null`
+  [ "${enum_expected}" = "${result}" ] ||
+    (
+      [ -n "${result}" ] || result="<nothing>"
+      echo "ERROR: ${enum_expected} ${sys_expected} got ${result}" >&2
+      false
+    ) ||
+    retval=${?}
+  return ${retval}
+}
+
+[ "USAGE: filter_kBootReasonMap </dev/stdin >/dev/stdout
+
+convert any regex expressions into a series of non-regex test strings" ]
+filter_kBootReasonMap() {
+  while read -r id match; do
+    case ${match} in
+      'reboot,[empty]')
+        echo ${id}          # matches b/c of special case
+        echo ${id} reboot,y # matches b/c of regex
+        echo 1 reboot,empty # negative test (ID for unknown is 1)
+        ;;
+      reboot)
+        echo 1 reboog       # negative test (ID for unknown is 1)
+        ;;
+      'reboot,pmic_off_fault,.*')
+        echo ${id} reboot,pmic_off_fault,hello,world
+        echo ${id} reboot,pmic_off_fault,
+        echo 1 reboot,pmic_off_fault
+        ;;
+    esac
+    echo ${id} "${match}"   # matches b/c of exact
+  done
+}
+
+[ "USAGE: test_kBootReasonMap
+
+kBootReasonMap test
+- (wait until screen is up, boot has completed)
+- read bootstat for kBootReasonMap entries and test them all" ]
+test_kBootReasonMap() {
+  checkDebugBuild || return
+  duration_test 15
+  local tempfile="`mktemp`"
+  local arg=--boot_reason_enum
+  adb_su bootstat ${arg} </dev/null 2>/dev/null |
+    filter_kBootReasonMap >${tempfile}
+  if [ ! -s "${tempfile}" ]; then
+    wait_for_screen
+    arg=
+    sed -n <${progpath}bootstat.cpp \
+      '/kBootReasonMap = {/,/^};/s/.*{"\([^"]*\)", *\([0-9][0-9]*\)},.*/\2 \1/p' |
+      sed 's/\\\\/\\/g' |
+      filter_kBootReasonMap >${tempfile}
+  fi
+  T=`adb_date`
+  retval=0
+  while read -r enum string; do
+    if [ X"${string}" != X"${string#*[[].[]]}" -o X"${string}" != X"${string#*\\.}" ]; then
+      if [ 'reboot\.empty' != "${string}" ]; then
+        echo "WARNING: regex snuck through filter_kBootReasonMap ${enum} ${string}" >&2
+        enum=1
+      fi
+    fi
+    run_kBootReasonMap ${arg} "${string}" "${enum}" </dev/null || retval=${?}
+  done <${tempfile}
+  rm ${tempfile}
+  ( exit ${retval} )
+  # See filter_kBootReasonMap() for negative tests and add them here too
+  report_bootstat_logs -t${T} \
+    '-bootstat: Service started: bootstat --boot_reason_enum=' \
+    '-bootstat: Unknown boot reason: reboot,empty' \
+    '-bootstat: Unknown boot reason: reboog' \
+    '-bootstat: Unknown boot reason: reboot,pmic_off_fault'
+}
+
+[ "USAGE: ${progname} [-s SERIAL] [tests]...
 
 Mainline executive to run the above tests" ]
 
@@ -1161,7 +1321,7 @@ fi
 if [ X"--macros" != X"${1}" ]; then
 
   if [ X"--help" = X"${1}" -o X"-h" = X"${1}" -o X"-?" = X"${1}" ]; then
-    echo "USAGE: ${0##*/} [-s SERIAL] [tests]"
+    echo "USAGE: ${progname} [-s SERIAL] [tests]..."
     echo tests - `sed -n 's/^test_\([^ ()]*\)() {/\1/p' $0 </dev/null`
     exit 0
   fi
@@ -1210,7 +1370,7 @@ if [ X"--macros" != X"${1}" ]; then
                Its_Just_So_Hard_reboot bootloader_normal bootloader_watchdog \
                bootloader_kernel_panic bootloader_oem_powerkey \
                bootloader_wdog_reset bootloader_cold bootloader_warm \
-               bootloader_hard bootloader_recovery
+               bootloader_hard bootloader_recovery kBootReasonMap
     fi
     if [ X"nothing" = X"${1}" ]; then
       shift 1

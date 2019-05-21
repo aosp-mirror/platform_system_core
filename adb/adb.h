@@ -107,6 +107,7 @@ enum ConnectionState {
     kCsHost,
     kCsRecovery,
     kCsSideload,
+    kCsRescue,
 };
 
 inline bool ConnectionStateIsOnline(ConnectionState state) {
@@ -116,6 +117,7 @@ inline bool ConnectionStateIsOnline(ConnectionState state) {
         case kCsHost:
         case kCsRecovery:
         case kCsSideload:
+        case kCsRescue:
             return true;
         default:
             return false;

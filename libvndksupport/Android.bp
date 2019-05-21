@@ -2,6 +2,7 @@ subdirs = ["tests"]
 
 cc_library {
     name: "libvndksupport",
+    native_bridge_supported: true,
     srcs: ["linker.c"],
     cflags: [
         "-Wall",
@@ -22,6 +23,7 @@ cc_library {
 
 llndk_library {
     name: "libvndksupport",
+    native_bridge_supported: true,
     symbol_file: "libvndksupport.map.txt",
     export_include_dirs: ["include"],
 }

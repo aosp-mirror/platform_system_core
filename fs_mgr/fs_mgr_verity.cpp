@@ -44,6 +44,7 @@
 #include "fec/io.h"
 
 #include "fs_mgr.h"
+#include "fs_mgr_dm_linear.h"
 #include "fs_mgr_priv.h"
 
 // Realistically, this file should be part of the android::fs_mgr namespace;
@@ -274,248 +275,6 @@ static int load_verity_table(android::dm::DeviceMapper& dm, const std::string& n
     return 0;
 }
 
-static int check_verity_restart(const char *fname)
-{
-    char buffer[VERITY_KMSG_BUFSIZE + 1];
-    int fd;
-    int rc = 0;
-    ssize_t size;
-    struct stat s;
-
-    fd = TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_CLOEXEC));
-
-    if (fd == -1) {
-        if (errno != ENOENT) {
-            PERROR << "Failed to open " << fname;
-        }
-        goto out;
-    }
-
-    if (fstat(fd, &s) == -1) {
-        PERROR << "Failed to fstat " << fname;
-        goto out;
-    }
-
-    size = VERITY_KMSG_BUFSIZE;
-
-    if (size > s.st_size) {
-        size = s.st_size;
-    }
-
-    if (lseek(fd, s.st_size - size, SEEK_SET) == -1) {
-        PERROR << "Failed to lseek " << (intmax_t)(s.st_size - size) << " " << fname;
-        goto out;
-    }
-
-    if (!android::base::ReadFully(fd, buffer, size)) {
-        PERROR << "Failed to read " << size << " bytes from " << fname;
-        goto out;
-    }
-
-    buffer[size] = '\0';
-
-    if (strstr(buffer, VERITY_KMSG_RESTART) != NULL) {
-        rc = 1;
-    }
-
-out:
-    if (fd != -1) {
-        close(fd);
-    }
-
-    return rc;
-}
-
-static int was_verity_restart()
-{
-    static const char* files[] = {
-        // clang-format off
-        "/sys/fs/pstore/console-ramoops-0",
-        "/sys/fs/pstore/console-ramoops",
-        "/proc/last_kmsg",
-        NULL
-        // clang-format on
-    };
-    int i;
-
-    for (i = 0; files[i]; ++i) {
-        if (check_verity_restart(files[i])) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-static int metadata_add(FILE *fp, long start, const char *tag,
-        unsigned int length, off64_t *offset)
-{
-    if (fseek(fp, start, SEEK_SET) < 0 ||
-        fprintf(fp, "%s %u\n", tag, length) < 0) {
-        return -1;
-    }
-
-    *offset = ftell(fp);
-
-    if (fseek(fp, length, SEEK_CUR) < 0 ||
-        fprintf(fp, METADATA_EOD " 0\n") < 0) {
-        return -1;
-    }
-
-    return 0;
-}
-
-static int metadata_find(const char *fname, const char *stag,
-        unsigned int slength, off64_t *offset)
-{
-    char tag[METADATA_TAG_MAX_LENGTH + 1];
-    int rc = -1;
-    int n;
-    long start = 0x4000; /* skip cryptfs metadata area */
-    uint32_t magic;
-    unsigned int length = 0;
-
-    if (!fname) {
-        return -1;
-    }
-
-    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(fname, "re+"), fclose};
-
-    if (!fp) {
-        PERROR << "Failed to open " << fname;
-        return -1;
-    }
-
-    /* check magic */
-    if (fseek(fp.get(), start, SEEK_SET) < 0 || fread(&magic, sizeof(magic), 1, fp.get()) != 1) {
-        PERROR << "Failed to read magic from " << fname;
-        return -1;
-    }
-
-    if (magic != METADATA_MAGIC) {
-        magic = METADATA_MAGIC;
-
-        if (fseek(fp.get(), start, SEEK_SET) < 0 ||
-            fwrite(&magic, sizeof(magic), 1, fp.get()) != 1) {
-            PERROR << "Failed to write magic to " << fname;
-            return -1;
-        }
-
-        rc = metadata_add(fp.get(), start + sizeof(magic), stag, slength, offset);
-        if (rc < 0) {
-            PERROR << "Failed to add metadata to " << fname;
-        }
-
-        return rc;
-    }
-
-    start += sizeof(magic);
-
-    while (1) {
-        n = fscanf(fp.get(), "%" STRINGIFY(METADATA_TAG_MAX_LENGTH) "s %u\n", tag, &length);
-
-        if (n == 2 && strcmp(tag, METADATA_EOD)) {
-            /* found a tag */
-            start = ftell(fp.get());
-
-            if (!strcmp(tag, stag) && length == slength) {
-                *offset = start;
-                return 0;
-            }
-
-            start += length;
-
-            if (fseek(fp.get(), length, SEEK_CUR) < 0) {
-                PERROR << "Failed to seek " << fname;
-                return -1;
-            }
-        } else {
-            rc = metadata_add(fp.get(), start, stag, slength, offset);
-            if (rc < 0) {
-                PERROR << "Failed to write metadata to " << fname;
-            }
-            return rc;
-        }
-    }
-}
-
-static int write_verity_state(const char *fname, off64_t offset, int32_t mode)
-{
-    int fd;
-    int rc = -1;
-    struct verity_state s = { VERITY_STATE_HEADER, VERITY_STATE_VERSION, mode };
-
-    fd = TEMP_FAILURE_RETRY(open(fname, O_WRONLY | O_SYNC | O_CLOEXEC));
-
-    if (fd == -1) {
-        PERROR << "Failed to open " << fname;
-        goto out;
-    }
-
-    if (TEMP_FAILURE_RETRY(pwrite64(fd, &s, sizeof(s), offset)) != sizeof(s)) {
-        PERROR << "Failed to write " << sizeof(s) << " bytes to " << fname
-               << " to offset " << offset;
-        goto out;
-    }
-
-    rc = 0;
-
-out:
-    if (fd != -1) {
-        close(fd);
-    }
-
-    return rc;
-}
-
-static int read_verity_state(const char *fname, off64_t offset, int *mode)
-{
-    int fd = -1;
-    int rc = -1;
-    struct verity_state s;
-
-    fd = TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_CLOEXEC));
-
-    if (fd == -1) {
-        PERROR << "Failed to open " << fname;
-        goto out;
-    }
-
-    if (TEMP_FAILURE_RETRY(pread64(fd, &s, sizeof(s), offset)) != sizeof(s)) {
-        PERROR << "Failed to read " <<  sizeof(s) << " bytes from " << fname
-               << " offset " << offset;
-        goto out;
-    }
-
-    if (s.header != VERITY_STATE_HEADER) {
-        /* space allocated, but no state written. write default state */
-        *mode = VERITY_MODE_DEFAULT;
-        rc = write_verity_state(fname, offset, *mode);
-        goto out;
-    }
-
-    if (s.version != VERITY_STATE_VERSION) {
-        LERROR << "Unsupported verity state version (" << s.version << ")";
-        goto out;
-    }
-
-    if (s.mode < VERITY_MODE_EIO ||
-        s.mode > VERITY_MODE_LAST) {
-        LERROR << "Unsupported verity mode (" << s.mode << ")";
-        goto out;
-    }
-
-    *mode = s.mode;
-    rc = 0;
-
-out:
-    if (fd != -1) {
-        close(fd);
-    }
-
-    return rc;
-}
-
 static int read_partition(const char *path, uint64_t size)
 {
     char buf[READ_BUF_SIZE];
@@ -539,119 +298,23 @@ static int read_partition(const char *path, uint64_t size)
     return 0;
 }
 
-static int compare_last_signature(const FstabEntry& entry, int* match) {
-    char tag[METADATA_TAG_MAX_LENGTH + 1];
-    int fd = -1;
-    int rc = -1;
-    off64_t offset = 0;
-    struct fec_handle *f = NULL;
-    struct fec_verity_metadata verity;
-    uint8_t curr[SHA256_DIGEST_LENGTH];
-    uint8_t prev[SHA256_DIGEST_LENGTH];
-
-    *match = 1;
-
-    if (fec_open(&f, entry.blk_device.c_str(), O_RDONLY, FEC_VERITY_DISABLE, FEC_DEFAULT_ROOTS) ==
-        -1) {
-        PERROR << "Failed to open '" << entry.blk_device << "'";
-        return rc;
-    }
-
-    // read verity metadata
-    if (fec_verity_get_metadata(f, &verity) == -1) {
-        PERROR << "Failed to get verity metadata '" << entry.blk_device << "'";
-        goto out;
-    }
-
-    SHA256(verity.signature, sizeof(verity.signature), curr);
-
-    if (snprintf(tag, sizeof(tag), VERITY_LASTSIG_TAG "_%s", basename(entry.mount_point.c_str())) >=
-        (int)sizeof(tag)) {
-        LERROR << "Metadata tag name too long for " << entry.mount_point;
-        goto out;
-    }
-
-    if (metadata_find(entry.verity_loc.c_str(), tag, SHA256_DIGEST_LENGTH, &offset) < 0) {
-        goto out;
-    }
-
-    fd = TEMP_FAILURE_RETRY(open(entry.verity_loc.c_str(), O_RDWR | O_SYNC | O_CLOEXEC));
-
-    if (fd == -1) {
-        PERROR << "Failed to open " << entry.verity_loc;
-        goto out;
-    }
-
-    if (TEMP_FAILURE_RETRY(pread64(fd, prev, sizeof(prev), offset)) != sizeof(prev)) {
-        PERROR << "Failed to read " << sizeof(prev) << " bytes from " << entry.verity_loc
-               << " offset " << offset;
-        goto out;
-    }
-
-    *match = !memcmp(curr, prev, SHA256_DIGEST_LENGTH);
-
-    if (!*match) {
-        /* update current signature hash */
-        if (TEMP_FAILURE_RETRY(pwrite64(fd, curr, sizeof(curr),
-                offset)) != sizeof(curr)) {
-            PERROR << "Failed to write " << sizeof(curr) << " bytes to " << entry.verity_loc
-                   << " offset " << offset;
-            goto out;
-        }
-    }
-
-    rc = 0;
-
-out:
-    fec_close(f);
-    return rc;
-}
-
-static int get_verity_state_offset(const FstabEntry& entry, off64_t* offset) {
-    char tag[METADATA_TAG_MAX_LENGTH + 1];
-
-    if (snprintf(tag, sizeof(tag), VERITY_STATE_TAG "_%s", basename(entry.mount_point.c_str())) >=
-        (int)sizeof(tag)) {
-        LERROR << "Metadata tag name too long for " << entry.mount_point;
-        return -1;
-    }
-
-    return metadata_find(entry.verity_loc.c_str(), tag, sizeof(struct verity_state), offset);
-}
-
-int load_verity_state(const FstabEntry& entry, int* mode) {
+bool fs_mgr_load_verity_state(int* mode) {
     // unless otherwise specified, use EIO mode.
     *mode = VERITY_MODE_EIO;
 
-    // use the kernel parameter if set.
-    std::string veritymode;
-    if (fs_mgr_get_boot_config("veritymode", &veritymode)) {
-        if (veritymode == "enforcing") {
-            *mode = VERITY_MODE_DEFAULT;
-        }
-        return 0;
+    // The bootloader communicates verity mode via the kernel commandline
+    std::string verity_mode;
+    if (!fs_mgr_get_boot_config("veritymode", &verity_mode)) {
+        return false;
     }
 
-    off64_t offset = 0;
-    if (get_verity_state_offset(entry, &offset) < 0) {
-        /* fall back to stateless behavior */
-        return 0;
-    }
-
-    if (was_verity_restart()) {
-        /* device was restarted after dm-verity detected a corrupted
-         * block, so use EIO mode */
-        return write_verity_state(entry.verity_loc.c_str(), offset, *mode);
-    }
-
-    int match = 0;
-    if (!compare_last_signature(entry, &match) && !match) {
-        /* partition has been reflashed, reset dm-verity state */
+    if (verity_mode == "enforcing") {
         *mode = VERITY_MODE_DEFAULT;
-        return write_verity_state(entry.verity_loc.c_str(), offset, *mode);
+    } else if (verity_mode == "logging") {
+        *mode = VERITY_MODE_LOGGING;
     }
 
-    return read_verity_state(entry.verity_loc.c_str(), offset, mode);
+    return true;
 }
 
 // Update the verity table using the actual block device path.
@@ -758,7 +421,7 @@ int fs_mgr_setup_verity(FstabEntry* entry, bool wait_for_verity_dev) {
 
     params.ecc_dev = entry->blk_device.c_str();
 
-    if (load_verity_state(*entry, &params.mode) < 0) {
+    if (!fs_mgr_load_verity_state(&params.mode)) {
         /* if accessing or updating the state failed, switch to the default
          * safe mode. This makes sure the device won't end up in an endless
          * restart loop, and no corrupted data will be exposed to userspace
@@ -881,4 +544,13 @@ out:
     free(params.table);
 
     return retval;
+}
+
+bool fs_mgr_teardown_verity(FstabEntry* entry, bool wait) {
+    const std::string mount_point(basename(entry->mount_point.c_str()));
+    if (!android::fs_mgr::UnmapDevice(mount_point, wait ? 1000ms : 0ms)) {
+        return false;
+    }
+    LINFO << "Unmapped verity device " << mount_point;
+    return true;
 }

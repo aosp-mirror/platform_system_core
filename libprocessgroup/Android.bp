@@ -3,6 +3,7 @@ cc_library_headers {
     vendor_available: true,
     recovery_available: true,
     host_supported: true,
+    native_bridge_supported: true,
     export_include_dirs: ["include"],
     target: {
         linux_bionic: {
@@ -25,6 +26,7 @@ cc_library {
     host_supported: true,
     recovery_available: true,
     vendor_available: true,
+    native_bridge_supported: true,
     vndk: {
         enabled: true,
         support_system_process: true,
@@ -32,6 +34,8 @@ cc_library {
     shared_libs: [
         "libbase",
         "libcgrouprc",
+    ],
+    static_libs: [
         "libjsoncpp",
     ],
     // for cutils/android_filesystem_config.h

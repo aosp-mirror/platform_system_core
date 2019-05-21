@@ -170,9 +170,6 @@ static void help() {
         "     remove this app package from the device\n"
         "     '-k': keep the data and cache directories\n"
         "\n"
-        "backup/restore:\n"
-        "   to show usage run \"adb shell bu help\"\n"
-        "\n"
         "debugging:\n"
         " bugreport [PATH]\n"
         "     write bugreport to given PATH [default=bugreport.zip];\n"
@@ -190,7 +187,7 @@ static void help() {
         "scripting:\n"
         " wait-for[-TRANSPORT]-STATE\n"
         "     wait for device to be in the given state\n"
-        "     STATE: device, recovery, sideload, bootloader, or disconnect\n"
+        "     STATE: device, recovery, rescue, sideload, bootloader, or disconnect\n"
         "     TRANSPORT: usb, local, or any [default=any]\n"
         " get-state                print offline | bootloader | device\n"
         " get-serialno             print <serial-number>\n"
@@ -262,7 +259,7 @@ static void stdin_raw_restore() {
 // stdout/stderr are routed independently and the remote exit code will be
 // returned.
 // if |callback| is non-null, stdout/stderr output will be handled by it.
-int read_and_dump(int fd, bool use_shell_protocol = false,
+int read_and_dump(borrowed_fd fd, bool use_shell_protocol = false,
                   StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK) {
     int exit_code = 0;
     if (fd < 0) return exit_code;
@@ -305,9 +302,9 @@ int read_and_dump(int fd, bool use_shell_protocol = false,
             }
             length = protocol->data_length();
         } else {
-            D("read_and_dump(): pre adb_read(fd=%d)", fd);
+            D("read_and_dump(): pre adb_read(fd=%d)", fd.get());
             length = adb_read(fd, raw_buffer, sizeof(raw_buffer));
-            D("read_and_dump(): post adb_read(fd=%d): length=%d", fd, length);
+            D("read_and_dump(): post adb_read(fd=%d): length=%d", fd.get(), length);
             if (length <= 0) {
                 break;
             }
@@ -838,26 +835,25 @@ static int adb_sideload_legacy(const char* filename, int in_fd, int size) {
 
 #define SIDELOAD_HOST_BLOCK_SIZE (CHUNK_SIZE)
 
-/*
- * The sideload-host protocol serves the data in a file (given on the
- * command line) to the client, using a simple protocol:
- *
- * - The connect message includes the total number of bytes in the
- *   file and a block size chosen by us.
- *
- * - The other side sends the desired block number as eight decimal
- *   digits (eg "00000023" for block 23).  Blocks are numbered from
- *   zero.
- *
- * - We send back the data of the requested block.  The last block is
- *   likely to be partial; when the last block is requested we only
- *   send the part of the block that exists, it's not padded up to the
- *   block size.
- *
- * - When the other side sends "DONEDONE" instead of a block number,
- *   we hang up.
- */
-static int adb_sideload_host(const char* filename) {
+// Connects to the sideload / rescue service on the device (served by minadbd) and sends over the
+// data in an OTA package.
+//
+// It uses a simple protocol as follows.
+//
+// - The connect message includes the total number of bytes in the file and a block size chosen by
+//   us.
+//
+// - The other side sends the desired block number as eight decimal digits (e.g. "00000023" for
+//   block 23). Blocks are numbered from zero.
+//
+// - We send back the data of the requested block. The last block is likely to be partial; when the
+//   last block is requested we only send the part of the block that exists, it's not padded up to
+//   the block size.
+//
+// - When the other side sends "DONEDONE" or "FAILFAIL" instead of a block number, we have done all
+//   the data transfer.
+//
+static int adb_sideload_install(const char* filename, bool rescue_mode) {
     // TODO: use a LinePrinter instead...
     struct stat sb;
     if (stat(filename, &sb) == -1) {
@@ -870,13 +866,17 @@ static int adb_sideload_host(const char* filename) {
         return -1;
     }
 
-    std::string service =
-            android::base::StringPrintf("sideload-host:%" PRId64 ":%d",
-                                        static_cast<int64_t>(sb.st_size), SIDELOAD_HOST_BLOCK_SIZE);
+    std::string service = android::base::StringPrintf(
+            "%s:%" PRId64 ":%d", rescue_mode ? "rescue-install" : "sideload-host",
+            static_cast<int64_t>(sb.st_size), SIDELOAD_HOST_BLOCK_SIZE);
     std::string error;
     unique_fd device_fd(adb_connect(service, &error));
     if (device_fd < 0) {
         fprintf(stderr, "adb: sideload connection failed: %s\n", error.c_str());
+
+        if (rescue_mode) {
+            return -1;
+        }
 
         // If this is a small enough package, maybe this is an older device that doesn't
         // support sideload-host. Try falling back to the older (<= K) sideload method.
@@ -884,7 +884,7 @@ static int adb_sideload_host(const char* filename) {
             return -1;
         }
         fprintf(stderr, "adb: trying pre-KitKat sideload method...\n");
-        return adb_sideload_legacy(filename, package_fd, static_cast<int>(sb.st_size));
+        return adb_sideload_legacy(filename, package_fd.get(), static_cast<int>(sb.st_size));
     }
 
     int opt = SIDELOAD_HOST_BLOCK_SIZE;
@@ -901,10 +901,14 @@ static int adb_sideload_host(const char* filename) {
         }
         buf[8] = '\0';
 
-        if (strcmp("DONEDONE", buf) == 0) {
+        if (strcmp(kMinadbdServicesExitSuccess, buf) == 0 ||
+            strcmp(kMinadbdServicesExitFailure, buf) == 0) {
             printf("\rTotal xfer: %.2fx%*s\n",
                    static_cast<double>(xfer) / (sb.st_size ? sb.st_size : 1),
                    static_cast<int>(strlen(filename) + 10), "");
+            if (strcmp(kMinadbdServicesExitFailure, buf) == 0) {
+                return 1;
+            }
             return 0;
         }
 
@@ -952,6 +956,33 @@ static int adb_sideload_host(const char* filename) {
             last_percent = percent;
         }
     }
+}
+
+static int adb_wipe_devices() {
+    auto wipe_devices_message_size = strlen(kMinadbdServicesExitSuccess);
+    std::string error;
+    unique_fd fd(adb_connect(
+            android::base::StringPrintf("rescue-wipe:userdata:%zu", wipe_devices_message_size),
+            &error));
+    if (fd < 0) {
+        fprintf(stderr, "adb: wipe device connection failed: %s\n", error.c_str());
+        return 1;
+    }
+
+    std::string message(wipe_devices_message_size, '\0');
+    if (!ReadFdExactly(fd, message.data(), wipe_devices_message_size)) {
+        fprintf(stderr, "adb: failed to read wipe result: %s\n", strerror(errno));
+        return 1;
+    }
+
+    if (message == kMinadbdServicesExitSuccess) {
+        return 0;
+    }
+
+    if (message != kMinadbdServicesExitFailure) {
+        fprintf(stderr, "adb: got unexpected message from rescue wipe %s\n", message.c_str());
+    }
+    return 1;
 }
 
 /**
@@ -1037,11 +1068,12 @@ static bool wait_for_device(const char* service,
     }
 
     if (components[3] != "any" && components[3] != "bootloader" && components[3] != "device" &&
-        components[3] != "recovery" && components[3] != "sideload" &&
+        components[3] != "recovery" && components[3] != "rescue" && components[3] != "sideload" &&
         components[3] != "disconnect") {
         fprintf(stderr,
                 "adb: unknown state %s; "
-                "expected 'any', 'bootloader', 'device', 'recovery', 'sideload', or 'disconnect'\n",
+                "expected 'any', 'bootloader', 'device', 'recovery', 'rescue', 'sideload', or "
+                "'disconnect'\n",
                 components[3].c_str());
         return false;
     }
@@ -1107,7 +1139,7 @@ static bool adb_root(const char* command) {
     // If we were using a specific transport ID, there's nothing we can wait for.
     if (previous_id == 0) {
         adb_set_transport(previous_type, previous_serial, 0);
-        wait_for_device("wait-for-device", 3000ms);
+        wait_for_device("wait-for-device", 6000ms);
     }
 
     return true;
@@ -1172,14 +1204,14 @@ static int logcat(int argc, const char** argv) {
     return send_shell_command(cmd);
 }
 
-static void write_zeros(int bytes, int fd) {
+static void write_zeros(int bytes, borrowed_fd fd) {
     int old_stdin_mode = -1;
     int old_stdout_mode = -1;
     std::vector<char> buf(bytes);
 
-    D("write_zeros(%d) -> %d", bytes, fd);
+    D("write_zeros(%d) -> %d", bytes, fd.get());
 
-    stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
+    stdinout_raw_prologue(-1, fd.get(), old_stdin_mode, old_stdout_mode);
 
     if (fd == STDOUT_FILENO) {
         fwrite(buf.data(), 1, bytes, stdout);
@@ -1188,12 +1220,14 @@ static void write_zeros(int bytes, int fd) {
         adb_write(fd, buf.data(), bytes);
     }
 
-    stdinout_raw_prologue(-1, fd, old_stdin_mode, old_stdout_mode);
+    stdinout_raw_prologue(-1, fd.get(), old_stdin_mode, old_stdout_mode);
 
     D("write_zeros() finished");
 }
 
 static int backup(int argc, const char** argv) {
+    fprintf(stdout, "WARNING: adb backup is deprecated and may be removed in a future release\n");
+
     const char* filename = "backup.ab";
 
     /* find, extract, and use any -f argument */
@@ -1243,6 +1277,8 @@ static int backup(int argc, const char** argv) {
 }
 
 static int restore(int argc, const char** argv) {
+    fprintf(stdout, "WARNING: adb restore is deprecated and may be removed in a future release\n");
+
     if (argc != 2) error_exit("restore requires an argument");
 
     const char* filename = argv[1];
@@ -1627,11 +1663,28 @@ int adb_commandline(int argc, const char** argv) {
         return adb_kill_server() ? 0 : 1;
     } else if (!strcmp(argv[0], "sideload")) {
         if (argc != 2) error_exit("sideload requires an argument");
-        if (adb_sideload_host(argv[1])) {
+        if (adb_sideload_install(argv[1], false /* rescue_mode */)) {
             return 1;
         } else {
             return 0;
         }
+    } else if (!strcmp(argv[0], "rescue")) {
+        // adb rescue getprop <prop>
+        // adb rescue install <filename>
+        // adb rescue wipe userdata
+        if (argc != 3) error_exit("rescue requires two arguments");
+        if (!strcmp(argv[1], "getprop")) {
+            return adb_connect_command(android::base::StringPrintf("rescue-getprop:%s", argv[2]));
+        } else if (!strcmp(argv[1], "install")) {
+            if (adb_sideload_install(argv[2], true /* rescue_mode */) != 0) {
+                return 1;
+            }
+        } else if (!strcmp(argv[1], "wipe") && !strcmp(argv[2], "userdata")) {
+            return adb_wipe_devices();
+        } else {
+            error_exit("invalid rescue argument");
+        }
+        return 0;
     } else if (!strcmp(argv[0], "tcpip")) {
         if (argc != 2) error_exit("tcpip requires an argument");
         int port;

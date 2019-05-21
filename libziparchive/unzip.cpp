@@ -85,7 +85,7 @@ static bool MakeDirectoryHierarchy(const std::string& path) {
 
 static int CompressionRatio(int64_t uncompressed, int64_t compressed) {
   if (uncompressed == 0) return 0;
-  return (100LL * (uncompressed - compressed)) / uncompressed;
+  return static_cast<int>((100LL * (uncompressed - compressed)) / uncompressed);
 }
 
 static void MaybeShowHeader() {
@@ -249,7 +249,7 @@ static void ProcessAll(ZipArchiveHandle zah) {
   // libziparchive iteration order doesn't match the central directory.
   // We could sort, but that would cost extra and wouldn't match either.
   void* cookie;
-  int err = StartIteration(zah, &cookie, nullptr, nullptr);
+  int err = StartIteration(zah, &cookie);
   if (err != 0) {
     error(1, 0, "couldn't iterate %s: %s", archive_name, ErrorCodeString(err));
   }

@@ -43,7 +43,6 @@
 #include "uevent_listener.h"
 #include "util.h"
 
-using android::base::ReadFileToString;
 using android::base::Split;
 using android::base::Timer;
 using android::fs_mgr::AvbHandle;
@@ -55,6 +54,7 @@ using android::fs_mgr::Fstab;
 using android::fs_mgr::FstabEntry;
 using android::fs_mgr::ReadDefaultFstab;
 using android::fs_mgr::ReadFstabFromDt;
+using android::fs_mgr::SkipMountingPartitions;
 
 using namespace std::literals;
 
@@ -276,14 +276,12 @@ bool FirstStageMount::GetDmLinearMetadataDevice() {
 // required_devices_partition_names_. Found partitions will then be removed from it
 // for the subsequent member function to check which devices are NOT created.
 bool FirstStageMount::InitRequiredDevices() {
-    if (required_devices_partition_names_.empty()) {
-        return true;
+    if (!InitDeviceMapper()) {
+        return false;
     }
 
-    if (IsDmLinearEnabled() || need_dm_verity_) {
-        if (!InitDeviceMapper()) {
-            return false;
-        }
+    if (required_devices_partition_names_.empty()) {
+        return true;
     }
 
     auto uevent_callback = [this](const Uevent& uevent) { return UeventCallback(uevent); };
@@ -524,38 +522,10 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
     return true;
 }
 
-// For GSI to skip mounting /product and /product_services, until there are
-// well-defined interfaces between them and /system. Otherwise, the GSI flashed
-// on /system might not be able to work with /product and /product_services.
-// When they're skipped here, /system/product and /system/product_services in
-// GSI will be used.
-bool FirstStageMount::TrySkipMountingPartitions() {
-    constexpr const char kSkipMountConfig[] = "/system/etc/init/config/skip_mount.cfg";
-
-    std::string skip_config;
-    if (!ReadFileToString(kSkipMountConfig, &skip_config)) {
-        return true;
-    }
-
-    for (const auto& skip_mount_point : Split(skip_config, "\n")) {
-        if (skip_mount_point.empty()) {
-            continue;
-        }
-        auto it = std::remove_if(fstab_.begin(), fstab_.end(),
-                                 [&skip_mount_point](const auto& entry) {
-                                     return entry.mount_point == skip_mount_point;
-                                 });
-        fstab_.erase(it, fstab_.end());
-        LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
-    }
-
-    return true;
-}
-
 bool FirstStageMount::MountPartitions() {
     if (!TrySwitchSystemAsRoot()) return false;
 
-    if (!TrySkipMountingPartitions()) return false;
+    if (!SkipMountingPartitions(&fstab_)) return false;
 
     for (auto current = fstab_.begin(); current != fstab_.end();) {
         // We've already mounted /system above.
@@ -632,12 +602,6 @@ void FirstStageMount::UseGsiIfPresent() {
         return;
     }
 
-    // Device-mapper might not be ready if the device doesn't use DAP or verity
-    // (for example, hikey).
-    if (access("/dev/device-mapper", F_OK) && !InitDeviceMapper()) {
-        return;
-    }
-
     // Find the name of the super partition for the GSI. It will either be
     // "userdata", or a block device such as an sdcard. There are no by-name
     // partitions other than userdata that we support installing GSIs to.
@@ -672,7 +636,6 @@ void FirstStageMount::UseGsiIfPresent() {
 }
 
 bool FirstStageMountVBootV1::GetDmVerityDevices() {
-    std::string verity_loc_device;
     need_dm_verity_ = false;
 
     for (const auto& fstab_entry : fstab_) {
@@ -685,30 +648,14 @@ bool FirstStageMountVBootV1::GetDmVerityDevices() {
         if (fstab_entry.fs_mgr_flags.verify) {
             need_dm_verity_ = true;
         }
-        // Checks if verity metadata is on a separate partition. Note that it is
-        // not partition specific, so there must be only one additional partition
-        // that carries verity state.
-        if (!fstab_entry.verity_loc.empty()) {
-            if (verity_loc_device.empty()) {
-                verity_loc_device = fstab_entry.verity_loc;
-            } else if (verity_loc_device != fstab_entry.verity_loc) {
-                LOG(ERROR) << "More than one verity_loc found: " << verity_loc_device << ", "
-                           << fstab_entry.verity_loc;
-                return false;
-            }
-        }
     }
 
-    // Includes the partition names of fstab records and verity_loc_device (if any).
+    // Includes the partition names of fstab records.
     // Notes that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used.
     for (const auto& fstab_entry : fstab_) {
         if (!fstab_entry.fs_mgr_flags.logical) {
             required_devices_partition_names_.emplace(basename(fstab_entry.blk_device.c_str()));
         }
-    }
-
-    if (!verity_loc_device.empty()) {
-        required_devices_partition_names_.emplace(basename(verity_loc_device.c_str()));
     }
 
     return true;

@@ -249,20 +249,21 @@ int main(int argc, char* argv[]) {
 
     // Check verity and optionally setup overlayfs backing.
     auto reboot_later = false;
+    auto user_please_reboot_later = false;
     auto uses_overlayfs = fs_mgr_overlayfs_valid() != OverlayfsValidResult::kNotSupported;
     for (auto it = partitions.begin(); it != partitions.end();) {
         auto& entry = *it;
         auto& mount_point = entry.mount_point;
         if (fs_mgr_is_verity_enabled(entry)) {
             retval = VERITY_PARTITION;
-            if (android::base::GetProperty("ro.boot.vbmeta.devices_state", "") != "locked") {
+            if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") != "locked") {
                 if (AvbOps* ops = avb_ops_user_new()) {
                     auto ret = avb_user_verity_set(
                             ops, android::base::GetProperty("ro.boot.slot_suffix", "").c_str(),
                             false);
                     avb_ops_user_free(ops);
                     if (ret) {
-                        LOG(WARNING) << "Disable verity for " << mount_point;
+                        LOG(WARNING) << "Disabling verity for " << mount_point;
                         reboot_later = can_reboot;
                         if (reboot_later) {
                             // w/o overlayfs available, also check for dedupe
@@ -272,20 +273,22 @@ int main(int argc, char* argv[]) {
                             }
                             reboot(false);
                         }
+                        user_please_reboot_later = true;
                     } else if (fs_mgr_set_blk_ro(entry.blk_device, false)) {
                         fec::io fh(entry.blk_device.c_str(), O_RDWR);
                         if (fh && fh.set_verity_status(false)) {
-                            LOG(WARNING) << "Disable verity for " << mount_point;
+                            LOG(WARNING) << "Disabling verity for " << mount_point;
                             reboot_later = can_reboot;
                             if (reboot_later && !uses_overlayfs) {
                                 ++it;
                                 continue;
                             }
+                            user_please_reboot_later = true;
                         }
                     }
                 }
             }
-            LOG(ERROR) << "Skipping " << mount_point;
+            LOG(ERROR) << "Skipping " << mount_point << " for remount";
             it = partitions.erase(it);
             continue;
         }
@@ -307,6 +310,10 @@ int main(int argc, char* argv[]) {
 
     if (partitions.empty()) {
         if (reboot_later) reboot(false);
+        if (user_please_reboot_later) {
+            LOG(INFO) << "Now reboot your device for settings to take effect";
+            return 0;
+        }
         LOG(WARNING) << "No partitions to remount";
         return retval;
     }
@@ -383,6 +390,10 @@ int main(int argc, char* argv[]) {
     }
 
     if (reboot_later) reboot(false);
+    if (user_please_reboot_later) {
+        LOG(INFO) << "Now reboot your device for settings to take effect";
+        return 0;
+    }
 
     return retval;
 }

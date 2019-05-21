@@ -75,6 +75,9 @@ struct MapInfo {
   // make it easier to move to a fine grained lock in the future.
   std::atomic_uintptr_t build_id;
 
+  // Set to true if the elf file data is coming from memory.
+  bool memory_backed_elf = false;
+
   // This function guarantees it will never return nullptr.
   Elf* GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum expected_arch);
 

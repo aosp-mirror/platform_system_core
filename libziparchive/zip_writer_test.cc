@@ -62,7 +62,7 @@ TEST_F(zipwriter, WriteUncompressedZipWithOneFile) {
   ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "file.txt", &data));
   EXPECT_EQ(kCompressStored, data.method);
   EXPECT_EQ(0u, data.has_data_descriptor);
   EXPECT_EQ(strlen(expected), data.compressed_length);
@@ -95,19 +95,19 @@ TEST_F(zipwriter, WriteUncompressedZipWithMultipleFiles) {
 
   ZipEntry data;
 
-  ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "file.txt", &data));
   EXPECT_EQ(kCompressStored, data.method);
   EXPECT_EQ(2u, data.compressed_length);
   ASSERT_EQ(2u, data.uncompressed_length);
   ASSERT_TRUE(AssertFileEntryContentsEq("he", handle, &data));
 
-  ASSERT_EQ(0, FindEntry(handle, ZipString("file/file.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "file/file.txt", &data));
   EXPECT_EQ(kCompressStored, data.method);
   EXPECT_EQ(3u, data.compressed_length);
   ASSERT_EQ(3u, data.uncompressed_length);
   ASSERT_TRUE(AssertFileEntryContentsEq("llo", handle, &data));
 
-  ASSERT_EQ(0, FindEntry(handle, ZipString("file/file2.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "file/file2.txt", &data));
   EXPECT_EQ(kCompressStored, data.method);
   EXPECT_EQ(0u, data.compressed_length);
   EXPECT_EQ(0u, data.uncompressed_length);
@@ -129,7 +129,7 @@ TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedFlag) {
   ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "align.txt", &data));
   EXPECT_EQ(0, data.offset & 0x03);
 
   CloseArchive(handle);
@@ -163,7 +163,7 @@ TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedFlagAndTime) {
   ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "align.txt", &data));
   EXPECT_EQ(0, data.offset & 0x03);
 
   struct tm mod = data.GetModificationTime();
@@ -191,7 +191,7 @@ TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedValue) {
   ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "align.txt", &data));
   EXPECT_EQ(0, data.offset & 0xfff);
 
   CloseArchive(handle);
@@ -213,7 +213,7 @@ TEST_F(zipwriter, WriteUncompressedZipFileWithAlignedValueAndTime) {
   ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, ZipString("align.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "align.txt", &data));
   EXPECT_EQ(0, data.offset & 0xfff);
 
   struct tm mod = data.GetModificationTime();
@@ -241,7 +241,7 @@ TEST_F(zipwriter, WriteCompressedZipWithOneFile) {
   ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "file.txt", &data));
   EXPECT_EQ(kCompressDeflated, data.method);
   ASSERT_EQ(4u, data.uncompressed_length);
   ASSERT_TRUE(AssertFileEntryContentsEq("helo", handle, &data));
@@ -273,13 +273,14 @@ TEST_F(zipwriter, WriteCompressedZipFlushFull) {
   ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, ZipString("file.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "file.txt", &data));
   EXPECT_EQ(kCompressDeflated, data.method);
   EXPECT_EQ(kBufSize, data.uncompressed_length);
 
   std::vector<uint8_t> decompress(kBufSize);
   memset(decompress.data(), 0, kBufSize);
-  ASSERT_EQ(0, ExtractToMemory(handle, &data, decompress.data(), decompress.size()));
+  ASSERT_EQ(0, ExtractToMemory(handle, &data, decompress.data(),
+                               static_cast<uint32_t>(decompress.size())));
   EXPECT_EQ(0, memcmp(decompress.data(), buffer.data(), kBufSize))
       << "Input buffer and output buffer are different.";
 
@@ -339,12 +340,12 @@ TEST_F(zipwriter, BackupRemovesTheLastFile) {
   ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
 
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, ZipString("keep.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "keep.txt", &data));
   ASSERT_TRUE(AssertFileEntryContentsEq(kKeepThis, handle, &data));
 
-  ASSERT_NE(0, FindEntry(handle, ZipString("drop.txt"), &data));
+  ASSERT_NE(0, FindEntry(handle, "drop.txt", &data));
 
-  ASSERT_EQ(0, FindEntry(handle, ZipString("replace.txt"), &data));
+  ASSERT_EQ(0, FindEntry(handle, "replace.txt", &data));
   ASSERT_TRUE(AssertFileEntryContentsEq(kReplaceWithThis, handle, &data));
 
   CloseArchive(handle);
@@ -391,7 +392,7 @@ static ::testing::AssertionResult AssertFileEntryContentsEq(const std::string& e
   actual.resize(expected.size());
 
   uint8_t* buffer = reinterpret_cast<uint8_t*>(&*actual.begin());
-  if (ExtractToMemory(handle, zip_entry, buffer, actual.size()) != 0) {
+  if (ExtractToMemory(handle, zip_entry, buffer, static_cast<uint32_t>(actual.size())) != 0) {
     return ::testing::AssertionFailure() << "failed to extract entry";
   }
 

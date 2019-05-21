@@ -55,7 +55,7 @@ static void FindEntry_no_match(benchmark::State& state) {
 
   // In order to walk through all file names in the archive, look for a name
   // that does not exist in the archive.
-  ZipString name("thisFileNameDoesNotExist");
+  std::string_view name("thisFileNameDoesNotExist");
 
   // Start the benchmark.
   while (state.KeepRunning()) {
@@ -75,7 +75,7 @@ static void Iterate_all_files(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     OpenArchive(temp_file->path, &handle);
-    StartIteration(handle, &iteration_cookie, nullptr, nullptr);
+    StartIteration(handle, &iteration_cookie);
     while (Next(iteration_cookie, &data, &name) == 0) {
     }
     EndIteration(iteration_cookie);

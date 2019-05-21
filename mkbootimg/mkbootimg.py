@@ -113,6 +113,10 @@ def write_header(args):
         args.output.write(pack('I', BOOT_IMAGE_HEADER_V2_SIZE))
 
     if args.header_version > 1:
+
+        if filesize(args.dtb) == 0:
+            raise ValueError("DTB image must not be empty.")
+
         args.output.write(pack('I', filesize(args.dtb)))   # size in bytes
         args.output.write(pack('Q', args.base + args.dtb_offset)) # dtb physical load address
     pad_file(args.output, args.pagesize)

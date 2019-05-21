@@ -264,4 +264,12 @@ TEST_F(MemunreachableTest, leak_lots) {
   ASSERT_TRUE(LogUnreachableMemory(true, 100));
 }
 
+TEST_F(MemunreachableTest, version) {
+  UnreachableMemoryInfo info;
+  info.version = 1;
+
+  ASSERT_FALSE(GetUnreachableMemory(info));
+  ASSERT_EQ(0U, info.leaks.size());
+}
+
 }  // namespace android

@@ -17,7 +17,9 @@ cc_library {
     name: "libnativeloader",
     defaults: ["libnativeloader-defaults"],
     host_supported: true,
-    srcs: ["native_loader.cpp"],
+    srcs: [
+        "native_loader.cpp",
+    ],
     shared_libs: [
         "libnativehelper",
         "liblog",
@@ -26,6 +28,11 @@ cc_library {
     ],
     target: {
         android: {
+            srcs: [
+                "library_namespaces.cpp",
+                "native_loader_namespace.cpp",
+                "public_libraries.cpp",
+            ],
             shared_libs: [
                 "libdl_android",
             ],

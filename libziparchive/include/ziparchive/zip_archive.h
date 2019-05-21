@@ -25,6 +25,8 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
+#include <string_view>
+
 #include "android-base/off64_t.h"
 
 /* Zip compression methods we support */
@@ -39,10 +41,7 @@ struct ZipString {
 
   ZipString() {}
 
-  /*
-   * entry_name has to be an c-style string with only ASCII characters.
-   */
-  explicit ZipString(const char* entry_name);
+  explicit ZipString(std::string_view entry_name);
 
   bool operator==(const ZipString& rhs) const {
     return name && (name_length == rhs.name_length) && (memcmp(name, rhs.name, name_length) == 0);
@@ -149,8 +148,7 @@ int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debugFil
 void CloseArchive(ZipArchiveHandle archive);
 
 /*
- * Find an entry in the Zip archive, by name. |entryName| must be a null
- * terminated string, and |data| must point to a writeable memory location.
+ * Find an entry in the Zip archive, by name. |data| must be non-null.
  *
  * Returns 0 if an entry is found, and populates |data| with information
  * about this entry. Returns negative values otherwise.
@@ -164,7 +162,7 @@ void CloseArchive(ZipArchiveHandle archive);
  * On non-Windows platforms this method does not modify internal state and
  * can be called concurrently.
  */
-int32_t FindEntry(const ZipArchiveHandle archive, const ZipString& entryName, ZipEntry* data);
+int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryName, ZipEntry* data);
 
 /*
  * Start iterating over all entries of a zip file. The order of iteration
@@ -180,7 +178,8 @@ int32_t FindEntry(const ZipArchiveHandle archive, const ZipString& entryName, Zi
  * Returns 0 on success and negative values on failure.
  */
 int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
-                       const ZipString* optional_prefix, const ZipString* optional_suffix);
+                       const std::string_view optional_prefix = "",
+                       const std::string_view optional_suffix = "");
 
 /*
  * Advance to the next element in the zipfile in iteration order.
