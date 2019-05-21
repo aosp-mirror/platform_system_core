@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <android-base/file.h>
+#include <android-base/strings.h>
 
 #include "utility.h"
 
@@ -37,7 +38,7 @@ using android::base::unique_fd;
 namespace {
 
 std::string GetPartitionAbsolutePath(const std::string& path) {
-    if (path[0] == '/') {
+    if (android::base::StartsWith(path, "/")) {
         return path;
     }
     return "/dev/block/by-name/" + path;

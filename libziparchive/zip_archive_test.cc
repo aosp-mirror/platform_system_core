@@ -27,6 +27,7 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/mapped_file.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
@@ -61,11 +62,6 @@ static const std::string kLargeUncompressTxtName("uncompress.txt");
 static int32_t OpenArchiveWrapper(const std::string& name, ZipArchiveHandle* handle) {
   const std::string abs_path = test_data_dir + "/" + name;
   return OpenArchive(abs_path.c_str(), handle);
-}
-
-static void SetZipString(ZipString* zip_str, const std::string& str) {
-  zip_str->name = reinterpret_cast<const uint8_t*>(str.c_str());
-  zip_str->name_length = str.size();
 }
 
 TEST(ziparchive, Open) {
@@ -111,7 +107,7 @@ TEST(ziparchive, OpenDoNotAssumeFdOwnership) {
   close(fd);
 }
 
-static void AssertIterationOrder(const ZipString* prefix, const ZipString* suffix,
+static void AssertIterationOrder(const std::string_view prefix, const std::string_view suffix,
                                  const std::vector<std::string>& expected_names_sorted) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
@@ -141,30 +137,26 @@ TEST(ziparchive, Iteration) {
   static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b.txt", "b/", "b/c.txt",
                                                                   "b/d.txt"};
 
-  AssertIterationOrder(nullptr, nullptr, kExpectedMatchesSorted);
+  AssertIterationOrder("", "", kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithPrefix) {
-  ZipString prefix("b/");
   static const std::vector<std::string> kExpectedMatchesSorted = {"b/", "b/c.txt", "b/d.txt"};
 
-  AssertIterationOrder(&prefix, nullptr, kExpectedMatchesSorted);
+  AssertIterationOrder("b/", "", kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithSuffix) {
-  ZipString suffix(".txt");
   static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b.txt", "b/c.txt",
                                                                   "b/d.txt"};
 
-  AssertIterationOrder(nullptr, &suffix, kExpectedMatchesSorted);
+  AssertIterationOrder("", ".txt", kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithPrefixAndSuffix) {
-  ZipString prefix("b");
-  ZipString suffix(".txt");
   static const std::vector<std::string> kExpectedMatchesSorted = {"b.txt", "b/c.txt", "b/d.txt"};
 
-  AssertIterationOrder(&prefix, &suffix, kExpectedMatchesSorted);
+  AssertIterationOrder("b", ".txt", kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
@@ -172,9 +164,7 @@ TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   void* iteration_cookie;
-  ZipString prefix("x");
-  ZipString suffix("y");
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, &prefix, &suffix));
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, "x", "y"));
 
   ZipEntry data;
   ZipString name;
@@ -190,9 +180,7 @@ TEST(ziparchive, FindEntry) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   ZipEntry data;
-  ZipString name;
-  SetZipString(&name, kATxtName);
-  ASSERT_EQ(0, FindEntry(handle, name, &data));
+  ASSERT_EQ(0, FindEntry(handle, kATxtName, &data));
 
   // Known facts about a.txt, from zipinfo -v.
   ASSERT_EQ(63, data.offset);
@@ -203,9 +191,28 @@ TEST(ziparchive, FindEntry) {
   ASSERT_EQ(static_cast<uint32_t>(0x438a8005), data.mod_time);
 
   // An entry that doesn't exist. Should be a negative return code.
-  ZipString absent_name;
-  SetZipString(&absent_name, kNonexistentTxtName);
-  ASSERT_LT(FindEntry(handle, absent_name, &data), 0);
+  ASSERT_LT(FindEntry(handle, kNonexistentTxtName, &data), 0);
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, FindEntry_empty) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  ZipEntry data;
+  ASSERT_EQ(kInvalidEntryName, FindEntry(handle, "", &data));
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, FindEntry_too_long) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  std::string very_long_name(65536, 'x');
+  ZipEntry data;
+  ASSERT_EQ(kInvalidEntryName, FindEntry(handle, very_long_name, &data));
 
   CloseArchive(handle);
 }
@@ -215,7 +222,7 @@ TEST(ziparchive, TestInvalidDeclaredLength) {
   ASSERT_EQ(0, OpenArchiveWrapper("declaredlength.zip", &handle));
 
   void* iteration_cookie;
-  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, nullptr, nullptr));
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie));
 
   ZipString name;
   ZipEntry data;
@@ -232,9 +239,7 @@ TEST(ziparchive, ExtractToMemory) {
 
   // An entry that's deflated.
   ZipEntry data;
-  ZipString a_name;
-  SetZipString(&a_name, kATxtName);
-  ASSERT_EQ(0, FindEntry(handle, a_name, &data));
+  ASSERT_EQ(0, FindEntry(handle, kATxtName, &data));
   const uint32_t a_size = data.uncompressed_length;
   ASSERT_EQ(a_size, kATxtContents.size());
   uint8_t* buffer = new uint8_t[a_size];
@@ -243,9 +248,7 @@ TEST(ziparchive, ExtractToMemory) {
   delete[] buffer;
 
   // An entry that's stored.
-  ZipString b_name;
-  SetZipString(&b_name, kBTxtName);
-  ASSERT_EQ(0, FindEntry(handle, b_name, &data));
+  ASSERT_EQ(0, FindEntry(handle, kBTxtName, &data));
   const uint32_t b_size = data.uncompressed_length;
   ASSERT_EQ(b_size, kBTxtContents.size());
   buffer = new uint8_t[b_size];
@@ -300,9 +303,7 @@ TEST(ziparchive, EmptyEntries) {
   ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle, false));
 
   ZipEntry entry;
-  ZipString empty_name;
-  SetZipString(&empty_name, kEmptyTxtName);
-  ASSERT_EQ(0, FindEntry(handle, empty_name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, kEmptyTxtName, &entry));
   ASSERT_EQ(static_cast<uint32_t>(0), entry.uncompressed_length);
   uint8_t buffer[1];
   ASSERT_EQ(0, ExtractToMemory(handle, &entry, buffer, 1));
@@ -325,14 +326,12 @@ TEST(ziparchive, EntryLargerThan32K) {
   ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EntryLargerThan32KTest", &handle, false));
 
   ZipEntry entry;
-  ZipString ab_name;
-  SetZipString(&ab_name, kAbTxtName);
-  ASSERT_EQ(0, FindEntry(handle, ab_name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, kAbTxtName, &entry));
   ASSERT_EQ(kAbUncompressedSize, entry.uncompressed_length);
 
   // Extract the entry to memory.
   std::vector<uint8_t> buffer(kAbUncompressedSize);
-  ASSERT_EQ(0, ExtractToMemory(handle, &entry, &buffer[0], buffer.size()));
+  ASSERT_EQ(0, ExtractToMemory(handle, &entry, &buffer[0], static_cast<uint32_t>(buffer.size())));
 
   // Extract the entry to a file.
   TemporaryFile tmp_output_file;
@@ -384,9 +383,7 @@ TEST(ziparchive, ExtractToFile) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   ZipEntry entry;
-  ZipString name;
-  SetZipString(&name, kATxtName);
-  ASSERT_EQ(0, FindEntry(handle, name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, kATxtName, &entry));
   ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, tmp_file.fd));
 
   // Assert that the first 8 bytes of the file haven't been clobbered.
@@ -415,16 +412,15 @@ TEST(ziparchive, OpenFromMemory) {
   ASSERT_EQ(0, fstat(fd, &sb));
 
   // Memory map the file first and open the archive from the memory region.
-  auto file_map{android::base::MappedFile::FromFd(fd, 0, sb.st_size, PROT_READ)};
+  auto file_map{
+      android::base::MappedFile::FromFd(fd, 0, static_cast<size_t>(sb.st_size), PROT_READ)};
   ZipArchiveHandle handle;
   ASSERT_EQ(0,
             OpenArchiveFromMemory(file_map->data(), file_map->size(), zip_path.c_str(), &handle));
 
   // Assert one entry can be found and extracted correctly.
-  std::string BINARY_PATH("META-INF/com/google/android/update-binary");
-  ZipString binary_path(BINARY_PATH.c_str());
   ZipEntry binary_entry;
-  ASSERT_EQ(0, FindEntry(handle, binary_path, &binary_entry));
+  ASSERT_EQ(0, FindEntry(handle, "META-INF/com/google/android/update-binary", &binary_entry));
   TemporaryFile tmp_binary;
   ASSERT_NE(-1, tmp_binary.fd);
   ASSERT_EQ(0, ExtractEntryToFile(handle, &binary_entry, tmp_binary.fd));
@@ -433,9 +429,7 @@ TEST(ziparchive, OpenFromMemory) {
 
 static void ZipArchiveStreamTest(ZipArchiveHandle& handle, const std::string& entry_name, bool raw,
                                  bool verified, ZipEntry* entry, std::vector<uint8_t>* read_data) {
-  ZipString name;
-  SetZipString(&name, entry_name);
-  ASSERT_EQ(0, FindEntry(handle, name, entry));
+  ASSERT_EQ(0, FindEntry(handle, entry_name, entry));
   std::unique_ptr<ZipArchiveStreamEntry> stream;
   if (raw) {
     stream.reset(ZipArchiveStreamEntry::CreateRaw(handle, *entry));
@@ -488,7 +482,8 @@ static void ZipArchiveStreamTestUsingMemory(const std::string& zip_file,
 
   std::vector<uint8_t> cmp_data(entry.uncompressed_length);
   ASSERT_EQ(entry.uncompressed_length, read_data.size());
-  ASSERT_EQ(0, ExtractToMemory(handle, &entry, cmp_data.data(), cmp_data.size()));
+  ASSERT_EQ(
+      0, ExtractToMemory(handle, &entry, cmp_data.data(), static_cast<uint32_t>(cmp_data.size())));
   ASSERT_TRUE(memcmp(read_data.data(), cmp_data.data(), read_data.size()) == 0);
 
   CloseArchive(handle);
@@ -585,11 +580,7 @@ static void ExtractEntryToMemory(const std::vector<uint8_t>& zip_data,
   // an entry whose name is "name" and whose size is 12 (contents =
   // "abdcdefghijk").
   ZipEntry entry;
-  ZipString name;
-  std::string name_str = "name";
-  SetZipString(&name, name_str);
-
-  ASSERT_EQ(0, FindEntry(handle, name, &entry));
+  ASSERT_EQ(0, FindEntry(handle, "name", &entry));
   ASSERT_EQ(static_cast<uint32_t>(12), entry.uncompressed_length);
 
   entry_out->resize(12);
@@ -737,8 +728,8 @@ class BadWriter : public zip_archive::Writer {
 };
 
 TEST(ziparchive, Inflate) {
-  const uint32_t compressed_length = kATxtContentsCompressed.size();
-  const uint32_t uncompressed_length = kATxtContents.size();
+  const uint32_t compressed_length = static_cast<uint32_t>(kATxtContentsCompressed.size());
+  const uint32_t uncompressed_length = static_cast<uint32_t>(kATxtContents.size());
 
   const VectorReader reader(kATxtContentsCompressed);
   {

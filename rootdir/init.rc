@@ -13,9 +13,6 @@ import /init.${ro.zygote}.rc
 
 # Cgroups are mounted right before early-init using list from /etc/cgroups.json
 on early-init
-    # Set init and its forked children's oom_adj.
-    write /proc/1/oom_score_adj -1000
-
     # Disable sysrq from keyboard
     write /proc/sys/kernel/sysrq 0
 
@@ -83,7 +80,9 @@ on init
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
 
-    # Create blkio tuning nodes
+    # Create blkio group and apply initial settings.
+    # This feature needs kernel to support it, and the
+    # device's init.rc must actually set the correct values.
     mkdir /dev/blkio/background
     chown system system /dev/blkio
     chown system system /dev/blkio/background
@@ -91,6 +90,10 @@ on init
     chown system system /dev/blkio/background/tasks
     chmod 0664 /dev/blkio/tasks
     chmod 0664 /dev/blkio/background/tasks
+    write /dev/blkio/blkio.weight 1000
+    write /dev/blkio/background/blkio.weight 500
+    write /dev/blkio/blkio.group_idle 0
+    write /dev/blkio/background/blkio.group_idle 0
 
     restorecon_recursive /mnt
 
@@ -280,6 +283,11 @@ on init
     write /dev/cpu_variant:${ro.bionic.2nd_arch} ${ro.bionic.2nd_cpu_variant}
     chmod 0444 /dev/cpu_variant:${ro.bionic.2nd_arch}
 
+    # Allow system processes to read / write power state.
+    chown system system /sys/power/state
+    chown system system /sys/power/wakeup_count
+    chmod 0660 /sys/power/state
+
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
 
@@ -403,6 +411,8 @@ on late-fs
     class_start early_hal
 
 on post-fs-data
+    mark_post_data
+
     # Start checkpoint before we touch data
     start vold
     exec - system system -- /system/bin/vdc checkpoint prepareCheckpoint
@@ -606,6 +616,10 @@ on post-fs-data
     # IOCTLs on ashmem fds any more.
     setprop sys.use_memfd false
 
+    # Set fscklog permission
+    chown root system /dev/fscklogs/log
+    chmod 0770 /dev/fscklogs/log
+
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted
@@ -665,11 +679,8 @@ on boot
     chown radio system /sys/android_power/acquire_partial_wake_lock
     chown radio system /sys/android_power/release_wake_lock
     chown system system /sys/power/autosleep
-    chown system system /sys/power/state
-    chown system system /sys/power/wakeup_count
     chown radio wakelock /sys/power/wake_lock
     chown radio wakelock /sys/power/wake_unlock
-    chmod 0660 /sys/power/state
     chmod 0660 /sys/power/wake_lock
     chmod 0660 /sys/power/wake_unlock
 
@@ -744,9 +755,6 @@ on property:sys.init_log_level=*
 on charger
     class_start charger
 
-on property:vold.decrypt=trigger_reset_main
-    class_reset main
-
 on property:vold.decrypt=trigger_load_persist_props
     load_persist_props
     start logd
@@ -764,6 +772,8 @@ on property:vold.decrypt=trigger_restart_min_framework
 on property:vold.decrypt=trigger_restart_framework
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier
+    class_start_post_data hal
+    class_start_post_data core
     class_start main
     class_start late_start
     setprop service.bootanim.exit 0
@@ -772,6 +782,8 @@ on property:vold.decrypt=trigger_restart_framework
 on property:vold.decrypt=trigger_shutdown_framework
     class_reset late_start
     class_reset main
+    class_reset_post_data core
+    class_reset_post_data hal
 
 on property:sys.boot_completed=1
     bootchart stop

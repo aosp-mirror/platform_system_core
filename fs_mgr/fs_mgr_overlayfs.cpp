@@ -139,7 +139,11 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
     // If we have access issues to find out space remaining, return true
     // to prevent us trying to override with overlayfs.
     struct statvfs vst;
-    if (statvfs(mount_point.c_str(), &vst)) return true;
+    auto save_errno = errno;
+    if (statvfs(mount_point.c_str(), &vst)) {
+        errno = save_errno;
+        return true;
+    }
 
     static constexpr int kPercentThreshold = 1;  // 1%
 
@@ -159,6 +163,9 @@ bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     auto save_errno = errno;
     errno = 0;
     auto has_shared_blocks = fs_mgr_has_shared_blocks(entry->mount_point, entry->blk_device);
+    if (!has_shared_blocks && (entry->mount_point == "/system")) {
+        has_shared_blocks = fs_mgr_has_shared_blocks("/", entry->blk_device);
+    }
     // special case for first stage init for system as root (taimen)
     if (!has_shared_blocks && (errno == ENOENT) && (entry->blk_device == "/dev/root")) {
         has_shared_blocks = true;
@@ -262,9 +269,11 @@ bool fs_mgr_rw_access(const std::string& path) {
 
 bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true) {
     Fstab fstab;
+    auto save_errno = errno;
     if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
         return false;
     }
+    errno = save_errno;
     const auto lowerdir = kLowerdirOption + mount_point;
     for (const auto& entry : fstab) {
         if (overlay_only && "overlay" != entry.fs_type && "overlayfs" != entry.fs_type) continue;
@@ -612,7 +621,9 @@ std::string fs_mgr_overlayfs_scratch_device() {
         if (!dm.GetDmDevicePathByName(partition_name, &path)) {
             // non-DAP A/B device?
             if (fs_mgr_access(super_device)) return "";
-            path = kPhysicalDevice + "system" + (slot_number ? "_a" : "_b");
+            auto other_slot = fs_mgr_get_other_slot_suffix();
+            if (other_slot.empty()) return "";
+            path = kPhysicalDevice + "system" + other_slot;
         }
     }
     return scratch_device_cache = path;
@@ -631,7 +642,7 @@ bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std:
         LERROR << mnt_type << " has no mkfs cookbook";
         return false;
     }
-    command += " " + scratch_device;
+    command += " " + scratch_device + " >/dev/null 2>/dev/null </dev/null";
     fs_mgr_set_blk_ro(scratch_device, false);
     auto ret = system(command.c_str());
     if (ret) {
@@ -641,6 +652,25 @@ bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std:
     return true;
 }
 
+static void TruncatePartitionsWithSuffix(MetadataBuilder* builder, const std::string& suffix) {
+    auto& dm = DeviceMapper::Instance();
+
+    // Remove <other> partitions
+    for (const auto& group : builder->ListGroups()) {
+        for (const auto& part : builder->ListPartitionsInGroup(group)) {
+            const auto& name = part->name();
+            if (!android::base::EndsWith(name, suffix)) {
+                continue;
+            }
+            if (dm.GetState(name) != DmDeviceState::INVALID && !DestroyLogicalPartition(name, 2s)) {
+                continue;
+            }
+            builder->ResizePartition(builder->FindPartition(name), 0);
+        }
+    }
+}
+
+// This is where we find and steal backing storage from the system.
 bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_device,
                                      bool* partition_exists, bool* change) {
     *scratch_device = fs_mgr_overlayfs_scratch_device();
@@ -687,15 +717,24 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
             // the adb remount overrides :-( .
             auto margin_size = uint64_t(3 * 256 * 1024);
             BlockDeviceInfo info;
-            if (builder->GetBlockDeviceInfo(partition_name, &info)) {
+            if (builder->GetBlockDeviceInfo(fs_mgr_get_super_partition_name(slot_number), &info)) {
                 margin_size = 3 * info.logical_block_size;
             }
             partition_size = std::max(std::min(kMinimumSize, partition_size - margin_size),
                                       partition_size / 2);
             if (partition_size > partition->size()) {
                 if (!builder->ResizePartition(partition, partition_size)) {
-                    LERROR << "resize " << partition_name;
-                    return false;
+                    // Try to free up space by deallocating partitions in the other slot.
+                    TruncatePartitionsWithSuffix(builder.get(), fs_mgr_get_other_slot_suffix());
+
+                    partition_size =
+                            builder->AllocatableSpace() - builder->UsedSpace() + partition->size();
+                    partition_size = std::max(std::min(kMinimumSize, partition_size - margin_size),
+                                              partition_size / 2);
+                    if (!builder->ResizePartition(partition, partition_size)) {
+                        LERROR << "resize " << partition_name;
+                        return false;
+                    }
                 }
                 if (!partition_create) DestroyLogicalPartition(partition_name, 10s);
                 changed = true;
@@ -715,7 +754,7 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
     }
 
     if (changed || partition_create) {
-        if (!CreateLogicalPartition(super_device, slot_number, partition_name, true, 0s,
+        if (!CreateLogicalPartition(super_device, slot_number, partition_name, true, 10s,
                                     scratch_device))
             return false;
 
@@ -940,7 +979,7 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
             auto slot_number = fs_mgr_overlayfs_slot_number();
             auto super_device = fs_mgr_overlayfs_super_device(slot_number);
             const auto partition_name = android::base::Basename(kScratchMountPoint);
-            CreateLogicalPartition(super_device, slot_number, partition_name, true, 0s,
+            CreateLogicalPartition(super_device, slot_number, partition_name, true, 10s,
                                    &scratch_device);
         }
         mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,

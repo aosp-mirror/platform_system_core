@@ -257,7 +257,7 @@ ssize_t ClientUsbTransport::Read(void* data, size_t len) {
         auto bytes_to_read = std::min(len - bytes_read_total, kFbFfsNumBufs * kFbFfsBufSize);
         auto bytes_read_now = handle_->read(handle_.get(), char_data, bytes_to_read);
         if (bytes_read_now < 0) {
-            return bytes_read_total;
+            return bytes_read_total == 0 ? -1 : bytes_read_total;
         }
         bytes_read_total += bytes_read_now;
         char_data += bytes_read_now;
@@ -278,7 +278,7 @@ ssize_t ClientUsbTransport::Write(const void* data, size_t len) {
         auto bytes_to_write = std::min(len - bytes_written_total, kFbFfsNumBufs * kFbFfsBufSize);
         auto bytes_written_now = handle_->write(handle_.get(), data, bytes_to_write);
         if (bytes_written_now < 0) {
-            return bytes_written_total;
+            return bytes_written_total == 0 ? -1 : bytes_written_total;
         }
         bytes_written_total += bytes_written_now;
         char_data += bytes_written_now;

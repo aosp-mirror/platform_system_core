@@ -170,5 +170,7 @@ std::string Backtrace::GetErrorString(BacktraceUnwindError error) {
       return "Failed to unwind due to invalid unwind information";
     case BACKTRACE_UNWIND_ERROR_REPEATED_FRAME:
       return "Failed to unwind due to same sp/pc repeating";
+    case BACKTRACE_UNWIND_ERROR_INVALID_ELF:
+      return "Failed to unwind due to invalid elf";
   }
 }

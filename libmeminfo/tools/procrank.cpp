@@ -14,11 +14,17 @@
  * limitations under the License.
  */
 
+#include <android-base/file.h>
+#include <android-base/parseint.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <linux/kernel-page-flags.h>
 #include <linux/oom.h>
+#include <meminfo/procmeminfo.h>
+#include <meminfo/sysmeminfo.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -29,14 +35,6 @@
 #include <sstream>
 #include <vector>
 
-#include <android-base/file.h>
-#include <android-base/parseint.h>
-#include <android-base/stringprintf.h>
-#include <android-base/strings.h>
-
-#include <meminfo/procmeminfo.h>
-#include <meminfo/sysmeminfo.h>
-
 using ::android::meminfo::MemUsage;
 using ::android::meminfo::ProcMemInfo;
 
@@ -44,7 +42,6 @@ struct ProcessRecord {
   public:
     ProcessRecord(pid_t pid, bool get_wss = false, uint64_t pgflags = 0, uint64_t pgflags_mask = 0)
         : pid_(-1),
-          procmem_(nullptr),
           oomadj_(OOM_SCORE_ADJ_MAX + 1),
           cmdline_(""),
           proportional_swap_(0),
@@ -81,15 +78,15 @@ struct ProcessRecord {
         // The .c_str() assignment below then takes care of trimming the cmdline at the first
         // 0x00. This is how original procrank worked (luckily)
         cmdline_.resize(strlen(cmdline_.c_str()));
-        procmem_ = std::move(procmem);
+        usage_or_wss_ = get_wss ? procmem->Wss() : procmem->Usage();
+        swap_offsets_ = procmem->SwapOffsets();
         pid_ = pid;
     }
 
     bool valid() const { return pid_ != -1; }
 
     void CalculateSwap(const uint16_t* swap_offset_array, float zram_compression_ratio) {
-        const std::vector<uint16_t>& swp_offs = procmem_->SwapOffsets();
-        for (auto& off : swp_offs) {
+        for (auto& off : swap_offsets_) {
             proportional_swap_ += getpagesize() / swap_offset_array[off];
             unique_swap_ += swap_offset_array[off] == 1 ? getpagesize() : 0;
             zswap_ = proportional_swap_ * zram_compression_ratio;
@@ -105,18 +102,19 @@ struct ProcessRecord {
     uint64_t zswap() const { return zswap_; }
 
     // Wrappers to ProcMemInfo
-    const std::vector<uint16_t>& SwapOffsets() const { return procmem_->SwapOffsets(); }
-    const MemUsage& Usage() const { return procmem_->Usage(); }
-    const MemUsage& Wss() const { return procmem_->Wss(); }
+    const std::vector<uint16_t>& SwapOffsets() const { return swap_offsets_; }
+    const MemUsage& Usage() const { return usage_or_wss_; }
+    const MemUsage& Wss() const { return usage_or_wss_; }
 
   private:
     pid_t pid_;
-    std::unique_ptr<ProcMemInfo> procmem_;
     int32_t oomadj_;
     std::string cmdline_;
     uint64_t proportional_swap_;
     uint64_t unique_swap_;
     uint64_t zswap_;
+    MemUsage usage_or_wss_;
+    std::vector<uint16_t> swap_offsets_;
 };
 
 // Show working set instead of memory consumption
@@ -173,7 +171,7 @@ static bool read_all_pids(std::vector<pid_t>* pids, std::function<bool(pid_t pid
     while ((dir = readdir(procdir.get()))) {
         if (!::android::base::ParseInt(dir->d_name, &pid)) continue;
         if (!for_each_pid(pid)) return false;
-        pids->push_back(pid);
+        pids->emplace_back(pid);
     }
 
     return true;
@@ -460,12 +458,20 @@ int main(int argc, char* argv[]) {
     auto mark_swap_usage = [&](pid_t pid) -> bool {
         ProcessRecord proc(pid, show_wss, pgflags, pgflags_mask);
         if (!proc.valid()) {
-            std::cerr << "Failed to create process record for: " << pid << std::endl;
-            return false;
+            // Check to see if the process is still around, skip the process if the proc
+            // directory is inaccessible. It was most likely killed while creating the process
+            // record
+            std::string procdir = ::android::base::StringPrintf("/proc/%d", pid);
+            if (access(procdir.c_str(), F_OK | R_OK)) return true;
+
+            // Warn if we failed to gather process stats even while it is still alive.
+            // Return success here, so we continue to print stats for other processes.
+            std::cerr << "warning: failed to create process record for: " << pid << std::endl;
+            return true;
         }
 
         // Skip processes with no memory mappings
-        uint64_t vss = proc.Usage().vss;
+        uint64_t vss = show_wss ? proc.Wss().vss : proc.Usage().vss;
         if (vss == 0) return true;
 
         // collect swap_offset counts from all processes in 1st pass
@@ -475,13 +481,13 @@ int main(int argc, char* argv[]) {
             return false;
         }
 
-        procs.push_back(std::move(proc));
+        procs.emplace_back(std::move(proc));
         return true;
     };
 
-    // Get a list of all pids currently running in the system in
-    // 1st pass through all processes. Mark each swap offset used by the process as we find them
-    // for calculating proportional swap usage later.
+    // Get a list of all pids currently running in the system in 1st pass through all processes.
+    // Mark each swap offset used by the process as we find them for calculating proportional
+    // swap usage later.
     if (!read_all_pids(&pids, mark_swap_usage)) {
         std::cerr << "Failed to read all pids from the system" << std::endl;
         exit(EXIT_FAILURE);

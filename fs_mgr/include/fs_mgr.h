@@ -93,3 +93,14 @@ int fs_mgr_setup_verity(android::fs_mgr::FstabEntry* fstab, bool wait_for_verity
 // specified, the super partition for the corresponding metadata slot will be
 // returned. Otherwise, it will use the current slot.
 std::string fs_mgr_get_super_partition_name(int slot = -1);
+
+enum FsMgrUmountStatus : int {
+    SUCCESS = 0,
+    ERROR_UNKNOWN = 1 << 0,
+    ERROR_UMOUNT = 1 << 1,
+    ERROR_VERITY = 1 << 2,
+    ERROR_DEVICE_MAPPER = 1 << 3,
+};
+// fs_mgr_umount_all() is the reverse of fs_mgr_mount_all. In particular,
+// it destroys verity devices from device mapper after the device is unmounted.
+int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab);

@@ -79,8 +79,10 @@ class Service {
     Result<Success> ExecStart();
     Result<Success> Start();
     Result<Success> StartIfNotDisabled();
+    Result<Success> StartIfPostData();
     Result<Success> Enable();
     void Reset();
+    void ResetIfPostData();
     void Stop();
     void Terminate();
     void Timeout();
@@ -124,6 +126,7 @@ class Service {
     std::optional<std::chrono::seconds> timeout_period() const { return timeout_period_; }
     const std::vector<std::string>& args() const { return args_; }
     bool is_updatable() const { return updatable_; }
+    bool is_post_data() const { return post_data_; }
 
   private:
     using OptionParser = Result<Success> (Service::*)(std::vector<std::string>&& args);
@@ -244,6 +247,10 @@ class Service {
     std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
 
     bool pre_apexd_ = false;
+
+    bool post_data_ = false;
+
+    bool running_at_post_data_reset_ = false;
 };
 
 class ServiceList {
@@ -285,6 +292,8 @@ class ServiceList {
     const std::vector<std::unique_ptr<Service>>& services() const { return services_; }
     const std::vector<Service*> services_in_shutdown_order() const;
 
+    void MarkPostData();
+    bool IsPostData();
     void MarkServicesUpdate();
     bool IsServicesUpdated() const { return services_update_finished_; }
     void DelayService(const Service& service);
@@ -292,6 +301,7 @@ class ServiceList {
   private:
     std::vector<std::unique_ptr<Service>> services_;
 
+    bool post_data_ = false;
     bool services_update_finished_ = false;
     std::vector<std::string> delayed_service_names_;
 };

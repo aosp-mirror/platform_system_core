@@ -183,6 +183,12 @@ cc_library_static {
             ],
         },
     },
+
+    product_variables: {
+        debuggable: {
+            cflags: ["-DROOT_POSSIBLE"],
+        },
+    },
 }
 
 cc_test {

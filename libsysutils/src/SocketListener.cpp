@@ -95,7 +95,7 @@ int SocketListener::startListener(int backlog) {
     } else if (!mListen)
         mClients[mSock] = new SocketClient(mSock, false, mUseCmdNum);
 
-    if (pipe(mCtrlPipe)) {
+    if (pipe2(mCtrlPipe, O_CLOEXEC)) {
         SLOGE("pipe failed (%s)", strerror(errno));
         return -1;
     }

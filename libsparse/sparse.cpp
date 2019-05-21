@@ -188,7 +188,7 @@ int sparse_file_foreach_chunk(struct sparse_file* s, bool sparse, bool crc,
                               int (*write)(void* priv, const void* data, size_t len,
                                            unsigned int block, unsigned int nr_blocks),
                               void* priv) {
-  int ret;
+  int ret = 0;
   int chunks;
   struct chunk_data chk;
   struct output_file* out;

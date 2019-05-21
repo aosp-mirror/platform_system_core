@@ -38,7 +38,6 @@ struct FstabEntry {
     std::string fs_options;
     std::string key_loc;
     std::string key_dir;
-    std::string verity_loc;
     off64_t length = 0;
     std::string label;
     int partnum = -1;
@@ -99,6 +98,7 @@ using Fstab = std::vector<FstabEntry>;
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
 bool ReadFstabFromDt(Fstab* fstab, bool log = true);
 bool ReadDefaultFstab(Fstab* fstab);
+bool SkipMountingPartitions(Fstab* fstab);
 
 FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
 

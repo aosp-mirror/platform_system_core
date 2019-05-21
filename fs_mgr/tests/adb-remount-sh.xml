@@ -18,6 +18,8 @@
     <!-- This test requires a device, so it's not annotated with a null-device -->
     <test class="com.android.tradefed.testtype.binary.ExecutableHostTest" >
         <option name="binary" value="adb-remount-test.sh" />
+        <!-- Increase default timeout as script is quite long -->
+        <option name="per-binary-timeout" value="1h" />
     </test>
 </configuration>
 

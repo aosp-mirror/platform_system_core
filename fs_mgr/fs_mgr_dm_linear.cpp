@@ -193,7 +193,7 @@ bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_s
                                   timeout_ms, path);
 }
 
-bool DestroyLogicalPartition(const std::string& name, const std::chrono::milliseconds& timeout_ms) {
+bool UnmapDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms) {
     DeviceMapper& dm = DeviceMapper::Instance();
     std::string path;
     if (timeout_ms > std::chrono::milliseconds::zero()) {
@@ -204,6 +204,13 @@ bool DestroyLogicalPartition(const std::string& name, const std::chrono::millise
     }
     if (!path.empty() && !fs_mgr_wait_for_file(path, timeout_ms, FileWaitMode::DoesNotExist)) {
         LERROR << "Timed out waiting for device path to unlink: " << path;
+        return false;
+    }
+    return true;
+}
+
+bool DestroyLogicalPartition(const std::string& name, const std::chrono::milliseconds& timeout_ms) {
+    if (!UnmapDevice(name, timeout_ms)) {
         return false;
     }
     LINFO << "Unmapped logical partition " << name;
