@@ -314,11 +314,13 @@ struct UsbFfsConnection : public Connection {
                         if (bound) {
                             LOG(WARNING) << "received FUNCTIONFS_BIND while already bound?";
                             running = false;
+                            break;
                         }
 
                         if (enabled) {
                             LOG(WARNING) << "received FUNCTIONFS_BIND while already enabled?";
                             running = false;
+                            break;
                         }
 
                         bound = true;
@@ -328,11 +330,13 @@ struct UsbFfsConnection : public Connection {
                         if (!bound) {
                             LOG(WARNING) << "received FUNCTIONFS_ENABLE while not bound?";
                             running = false;
+                            break;
                         }
 
                         if (enabled) {
                             LOG(WARNING) << "received FUNCTIONFS_ENABLE while already enabled?";
                             running = false;
+                            break;
                         }
 
                         enabled = true;
