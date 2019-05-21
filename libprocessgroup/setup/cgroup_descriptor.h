@@ -32,6 +32,8 @@ class CgroupDescriptor {
     std::string uid() const { return uid_; }
     std::string gid() const { return gid_; }
 
+    void set_mounted(bool mounted);
+
   private:
     format::CgroupController controller_;
     mode_t mode_ = 0;
