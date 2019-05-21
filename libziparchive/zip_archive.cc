@@ -726,22 +726,6 @@ int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
   return 0;
 }
 
-// TODO: remove this.
-int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
-                       const ZipString* optional_prefix, const ZipString* optional_suffix) {
-  std::string prefix;
-  if (optional_prefix) {
-    prefix = std::string(reinterpret_cast<const char*>(optional_prefix->name),
-                         optional_prefix->name_length);
-  }
-  std::string suffix;
-  if (optional_suffix) {
-    suffix = std::string(reinterpret_cast<const char*>(optional_suffix->name),
-                         optional_suffix->name_length);
-  }
-  return StartIteration(archive, cookie_ptr, prefix.c_str(), suffix.c_str());
-}
-
 void EndIteration(void* cookie) {
   delete reinterpret_cast<IterationHandle*>(cookie);
 }
