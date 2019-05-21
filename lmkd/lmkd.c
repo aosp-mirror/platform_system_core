@@ -189,8 +189,8 @@ static struct sock_event_handler_info data_sock[MAX_DATA_CONN];
 /* vmpressure event handler data */
 static struct event_handler_info vmpressure_hinfo[VMPRESS_LEVEL_COUNT];
 
-/* 3 memory pressure levels, 1 ctrl listen socket, 2 ctrl data socket */
-#define MAX_EPOLL_EVENTS (1 + MAX_DATA_CONN + VMPRESS_LEVEL_COUNT)
+/* 3 memory pressure levels, 1 ctrl listen socket, 2 ctrl data socket, 1 lmk events */
+#define MAX_EPOLL_EVENTS (2 + MAX_DATA_CONN + VMPRESS_LEVEL_COUNT)
 static int epollfd;
 static int maxevents;
 
@@ -1863,6 +1863,74 @@ err_open_mpfd:
     return false;
 }
 
+#ifdef LMKD_LOG_STATS
+static int kernel_poll_fd = -1;
+
+static void poll_kernel() {
+    if (kernel_poll_fd == -1) {
+        // not waiting
+        return;
+    }
+
+    while (1) {
+        char rd_buf[256];
+        int bytes_read =
+                TEMP_FAILURE_RETRY(pread(kernel_poll_fd, (void*)rd_buf, sizeof(rd_buf), 0));
+        if (bytes_read <= 0) break;
+        rd_buf[bytes_read] = '\0';
+
+        int64_t pid;
+        int64_t uid;
+        int64_t group_leader_pid;
+        int64_t min_flt;
+        int64_t maj_flt;
+        int64_t rss_in_pages;
+        int16_t oom_score_adj;
+        int16_t min_score_adj;
+        int64_t starttime;
+        char* taskname = 0;
+        int fields_read = sscanf(rd_buf,
+                                 "%" SCNd64 " %" SCNd64 " %" SCNd64 " %" SCNd64 " %" SCNd64
+                                 " %" SCNd64 " %" SCNd16 " %" SCNd16 " %" SCNd64 "\n%m[^\n]",
+                                 &pid, &uid, &group_leader_pid, &min_flt, &maj_flt, &rss_in_pages,
+                                 &oom_score_adj, &min_score_adj, &starttime, &taskname);
+
+        /* only the death of the group leader process is logged */
+        if (fields_read == 10 && group_leader_pid == pid) {
+            int64_t process_start_time_ns = starttime * (NS_PER_SEC / sysconf(_SC_CLK_TCK));
+            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, oom_score_adj,
+                                          min_flt, maj_flt, rss_in_pages * PAGE_SIZE, 0, 0,
+                                          process_start_time_ns, min_score_adj);
+        }
+
+        free(taskname);
+    }
+}
+
+static struct event_handler_info kernel_poll_hinfo = {0, poll_kernel};
+
+static void init_poll_kernel() {
+    struct epoll_event epev;
+    kernel_poll_fd =
+            TEMP_FAILURE_RETRY(open("/proc/lowmemorykiller", O_RDONLY | O_NONBLOCK | O_CLOEXEC));
+
+    if (kernel_poll_fd < 0) {
+        ALOGE("kernel lmk event file could not be opened; errno=%d", kernel_poll_fd);
+        return;
+    }
+
+    epev.events = EPOLLIN;
+    epev.data.ptr = (void*)&kernel_poll_hinfo;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, kernel_poll_fd, &epev) != 0) {
+        ALOGE("epoll_ctl for lmk events failed; errno=%d", errno);
+        close(kernel_poll_fd);
+        kernel_poll_fd = -1;
+    } else {
+        maxevents++;
+    }
+}
+#endif
+
 static int init(void) {
     struct epoll_event epev;
     int i;
@@ -1910,6 +1978,11 @@ static int init(void) {
 
     if (use_inkernel_interface) {
         ALOGI("Using in-kernel low memory killer interface");
+#ifdef LMKD_LOG_STATS
+        if (enable_stats_log) {
+            init_poll_kernel();
+        }
+#endif
     } else {
         /* Try to use psi monitor first if kernel has it */
         use_psi_monitors = property_get_bool("ro.lmk.use_psi", true) &&

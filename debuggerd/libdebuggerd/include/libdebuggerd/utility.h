@@ -18,6 +18,7 @@
 #ifndef _DEBUGGERD_UTILITY_H
 #define _DEBUGGERD_UTILITY_H
 
+#include <inttypes.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <sys/types.h>
@@ -25,7 +26,6 @@
 #include <string>
 
 #include <android-base/macros.h>
-#include <backtrace/Backtrace.h>
 
 struct log_t {
   // Tombstone file descriptor.
@@ -61,12 +61,23 @@ enum logtype {
   OPEN_FILES
 };
 
+#if defined(__LP64__)
+#define PRIPTR "016" PRIx64
+typedef uint64_t word_t;
+#else
+#define PRIPTR "08" PRIx64
+typedef uint32_t word_t;
+#endif
+
 // Log information onto the tombstone.
 void _LOG(log_t* log, logtype ltype, const char* fmt, ...) __attribute__((format(printf, 3, 4)));
 
 namespace unwindstack {
+class Unwinder;
 class Memory;
 }
+
+void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix);
 
 void dump_memory(log_t* log, unwindstack::Memory* backtrace, uint64_t addr, const std::string&);
 

@@ -210,6 +210,20 @@ bool DeviceMapper::GetAvailableTargets(std::vector<DmTargetTypeInfo>* targets) {
     return true;
 }
 
+bool DeviceMapper::GetTargetByName(const std::string& name, DmTargetTypeInfo* info) {
+    std::vector<DmTargetTypeInfo> targets;
+    if (!GetAvailableTargets(&targets)) {
+        return false;
+    }
+    for (const auto& target : targets) {
+        if (target.name() == name) {
+            if (info) *info = target;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool DeviceMapper::GetAvailableDevices(std::vector<DmBlockDevice>* devices) {
     devices->clear();
 

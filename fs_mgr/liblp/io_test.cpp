@@ -21,6 +21,8 @@
 
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
+#include <fs_mgr.h>
+#include <fstab/fstab.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
 
@@ -598,7 +600,7 @@ TEST(liblp, FlashSparseImage) {
     ASSERT_NE(exported, nullptr);
 
     // Build the sparse file.
-    SparseBuilder sparse(*exported.get(), 512, {});
+    ImageBuilder sparse(*exported.get(), 512, {}, true /* sparsify */);
     ASSERT_TRUE(sparse.IsValid());
     ASSERT_TRUE(sparse.Build());
 
@@ -701,4 +703,20 @@ TEST(liblp, UpdateNonRetrofit) {
     ASSERT_NE(updated, nullptr);
     ASSERT_EQ(updated->block_devices.size(), static_cast<size_t>(1));
     EXPECT_EQ(GetBlockDevicePartitionName(updated->block_devices[0]), "super");
+}
+
+TEST(liblp, ReadSuperPartition) {
+    auto slot_suffix = fs_mgr_get_slot_suffix();
+    auto slot_number = SlotNumberForSlotSuffix(slot_suffix);
+    auto super_name = fs_mgr_get_super_partition_name(slot_number);
+    auto metadata = ReadMetadata(super_name, slot_number);
+    ASSERT_NE(metadata, nullptr);
+
+    if (!slot_suffix.empty()) {
+        auto other_slot_suffix = fs_mgr_get_other_slot_suffix();
+        auto other_slot_number = SlotNumberForSlotSuffix(other_slot_suffix);
+        auto other_super_name = fs_mgr_get_super_partition_name(other_slot_number);
+        auto other_metadata = ReadMetadata(other_super_name, other_slot_number);
+        ASSERT_NE(other_metadata, nullptr);
+    }
 }

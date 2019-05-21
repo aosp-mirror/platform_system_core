@@ -48,6 +48,7 @@
 #define ATRACE_TAG ATRACE_TAG_BIONIC
 #include <utils/Trace.h>
 
+#include <unwindstack/DexFiles.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
@@ -362,6 +363,12 @@ int main(int argc, char** argv) {
   DefuseSignalHandlers();
   InstallSigPipeHandler();
 
+  // There appears to be a bug in the kernel where our death causes SIGHUP to
+  // be sent to our process group if we exit while it has stopped jobs (e.g.
+  // because of wait_for_gdb). Use setsid to create a new process group to
+  // avoid hitting this.
+  setsid();
+
   atrace_begin(ATRACE_TAG, "before reparent");
   pid_t target_process = getppid();
 
@@ -456,6 +463,7 @@ int main(int argc, char** argv) {
       ThreadInfo info;
       info.pid = target_process;
       info.tid = thread;
+      info.uid = getuid();
       info.process_name = process_name;
       info.thread_name = get_thread_name(thread);
 
@@ -566,7 +574,7 @@ int main(int argc, char** argv) {
 
   // TODO: Use seccomp to lock ourselves down.
   unwindstack::UnwinderFromPid unwinder(256, vm_pid);
-  if (!unwinder.Init()) {
+  if (!unwinder.Init(unwindstack::Regs::CurrentArch())) {
     LOG(FATAL) << "Failed to init unwinder object.";
   }
 

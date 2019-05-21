@@ -57,7 +57,7 @@ modes.  The three default paths should be used for the normal boot process.
 The intention of these directories is:
 
    1. /system/etc/init/ is for core system items such as
-      SurfaceFlinger, MediaService, and logcatd.
+      SurfaceFlinger, MediaService, and logd.
    2. /vendor/etc/init/ is for SoC vendor items such as actions or
       daemons needed for core SoC functionality.
    3. /odm/etc/init/ is for device manufacturer items such as
@@ -72,7 +72,7 @@ system macro, LOCAL\_INIT\_RC, that handles this for developers.  Each
 init .rc file should additionally contain any actions associated with
 its service.
 
-An example is the logcatd.rc and Android.mk files located in the
+An example is the userdebug logcatd.rc and Android.mk files located in the
 system/core/logcat directory.  The LOCAL\_INIT\_RC macro in the
 Android.mk file places logcatd.rc in /system/etc/init/ during the
 build process.  Init loads logcatd.rc during the mount\_all command and
@@ -191,7 +191,7 @@ runs the service.
 
 `critical`
 > This is a device-critical service. If it exits more than four times in
-  four minutes, the device will reboot into bootloader.
+  four minutes or before boot completes, the device will reboot into bootloader.
 
 `disabled`
 > This service will not automatically start with its class.
@@ -317,7 +317,7 @@ runs the service.
   See the below section on debugging for how this can be used.
 
 `socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]`
-> Create a unix domain socket named /dev/socket/_name_ and pass its fd to the
+> Create a UNIX domain socket named /dev/socket/_name_ and pass its fd to the
   launched process.  _type_ must be "dgram", "stream" or "seqpacket".  User and
   group default to 0.  'seclabel' is the SELinux security context for the
   socket.  It defaults to the service security context, as specified by
@@ -412,6 +412,11 @@ Commands
   not already running.  See the start entry for more information on
   starting services.
 
+`class_start_post_data <serviceclass>`
+> Like `class_start`, but only considers services that were started
+  after /data was mounted, and that were running at the time
+ `class_reset_post_data` was called. Only used for FDE devices.
+
 `class_stop <serviceclass>`
 > Stop and disable all services of the specified class if they are
   currently running.
@@ -420,6 +425,10 @@ Commands
 > Stop all services of the specified class if they are
   currently running, without disabling them. They can be restarted
   later using `class_start`.
+
+`class_reset_post_data <serviceclass>`
+> Like `class_reset`, but only considers services that were started
+  after /data was mounted. Only used for FDE devices.
 
 `class_restart <serviceclass>`
 > Restarts all services of the specified class.
@@ -488,7 +497,15 @@ Commands
   This is included in the default init.rc.
 
 `loglevel <level>`
-> Sets the kernel log level to level. Properties are expanded within _level_.
+> Sets init's log level to the integer level, from 7 (all logging) to 0
+  (fatal logging only). The numeric values correspond to the kernel log
+  levels, but this command does not affect the kernel log level. Use the
+  `write` command to write to `/proc/sys/kernel/printk` to change that.
+  Properties are expanded within _level_.
+
+`mark_post_data`
+> Used to mark the point right after /data is mounted. Used to implement the
+  `class_reset_post_data` and `class_start_post_data` commands.
 
 `mkdir <path> [mode] [owner] [group]`
 > Create a directory at _path_, optionally with the given mode, owner, and
@@ -506,10 +523,10 @@ Commands
 > Attempt to mount the named device at the directory _dir_
   _flag_s include "ro", "rw", "remount", "noatime", ...
   _options_ include "barrier=1", "noauto\_da\_alloc", "discard", ... as
-  a comma separated string, eg: barrier=1,noauto\_da\_alloc
+  a comma separated string, e.g. barrier=1,noauto\_da\_alloc
 
 `parse_apex_configs`
-> Parses config file(s) from the mounted APEXes. Intented to be used only once
+> Parses config file(s) from the mounted APEXes. Intended to be used only once
   when apexd notifies the mount event by setting apexd.status to ready.
 
 `restart <service>`
@@ -572,7 +589,7 @@ Commands
 `symlink <target> <path>`
 > Create a symbolic link at _path_ with the value _target_
 
-`sysclktz <mins_west_of_gmt>`
+`sysclktz <minutes_west_of_gmt>`
 > Set the system clock base (0 if system clock ticks in GMT)
 
 `trigger <event>`
@@ -581,9 +598,6 @@ Commands
 
 `umount <path>`
 > Unmount the filesystem mounted at that path.
-
-`verity_load_state`
-> Internal implementation detail used to load dm-verity state.
 
 `verity_update_state <mount-point>`
 > Internal implementation detail used to update dm-verity state and
@@ -635,7 +649,7 @@ different command is to either 1) place it in an Action with an
 earlier executed trigger, or 2) place it in an Action with the same
 trigger within the same file at an earlier line.
 
-Nonetheless, the defacto order for first stage mount devices is:
+Nonetheless, the de facto order for first stage mount devices is:
 1. /init.rc is parsed then recursively each of its imports are
    parsed.
 2. The contents of /system/etc/init/ are alphabetized and parsed
@@ -682,8 +696,11 @@ Init records some boot timing information in system properties.
 > Time after boot in ns (via the CLOCK\_BOOTTIME clock) at which the first
   stage of init started.
 
+`ro.boottime.init.first_stage`
+> How long in ns it took to run first stage.
+
 `ro.boottime.init.selinux`
-> How long it took the first stage to initialize SELinux.
+> How long in ns it took to run SELinux stage.
 
 `ro.boottime.init.cold_boot_wait`
 > How long init waited for ueventd's coldboot phase to end.
@@ -725,7 +742,7 @@ Comparing two bootcharts
 A handy script named compare-bootcharts.py can be used to compare the
 start/end time of selected processes. The aforementioned grab-bootchart.sh
 will leave a bootchart tarball named bootchart.tgz at /tmp/android-bootchart.
-If two such barballs are preserved on the host machine under different
+If two such tarballs are preserved on the host machine under different
 directories, the script can list the timestamps differences. For example:
 
 Usage: system/core/init/compare-bootcharts.py _base-bootchart-dir_ _exp-bootchart-dir_
@@ -773,7 +790,7 @@ If it is required to debug a service from its very start, the `sigstop` service 
 This option will send SIGSTOP to a service immediately before calling exec. This gives a window
 where developers can attach a debugger, strace, etc before continuing the service with SIGCONT.
 
-This flag can also be dynamically controled via the ctl.sigstop_on and ctl.sigstop_off properties.
+This flag can also be dynamically controlled via the ctl.sigstop_on and ctl.sigstop_off properties.
 
 Below is an example of dynamically debugging logd via the above:
 

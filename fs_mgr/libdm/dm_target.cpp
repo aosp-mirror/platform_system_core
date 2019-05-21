@@ -16,8 +16,12 @@
 
 #include "libdm/dm_target.h"
 
+#include <stdio.h>
+#include <sys/types.h>
+
 #include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/parseint.h>
 #include <android-base/strings.h>
 
 #include <libdm/dm.h>
@@ -113,6 +117,108 @@ std::string DmTargetVerity::GetParameterString() const {
 
 std::string DmTargetAndroidVerity::GetParameterString() const {
     return keyid_ + " " + block_device_;
+}
+
+std::string DmTargetSnapshot::name() const {
+    if (mode_ == SnapshotStorageMode::Merge) {
+        return "snapshot-merge";
+    }
+    return "snapshot";
+}
+
+std::string DmTargetSnapshot::GetParameterString() const {
+    std::string mode;
+    switch (mode_) {
+        case SnapshotStorageMode::Persistent:
+        case SnapshotStorageMode::Merge:
+            // Note: "O" lets us query for overflow in the status message. This
+            // is only supported on kernels 4.4+. On earlier kernels, an overflow
+            // will be reported as "Invalid" in the status string.
+            mode = "P";
+            if (ReportsOverflow(name())) {
+                mode += "O";
+            }
+            break;
+        case SnapshotStorageMode::Transient:
+            mode = "N";
+            break;
+        default:
+            LOG(ERROR) << "DmTargetSnapshot unknown mode";
+            break;
+    }
+    return base_device_ + " " + cow_device_ + " " + mode + " " + std::to_string(chunk_size_);
+}
+
+bool DmTargetSnapshot::ReportsOverflow(const std::string& target_type) {
+    DeviceMapper& dm = DeviceMapper::Instance();
+    DmTargetTypeInfo info;
+    if (!dm.GetTargetByName(target_type, &info)) {
+        return false;
+    }
+    if (target_type == "snapshot") {
+        return info.IsAtLeast(1, 15, 0);
+    }
+    if (target_type == "snapshot-merge") {
+        return info.IsAtLeast(1, 4, 0);
+    }
+    return false;
+}
+
+bool DmTargetSnapshot::ParseStatusText(const std::string& text, Status* status) {
+    auto sections = android::base::Split(text, " ");
+    if (sections.size() == 1) {
+        // This is probably an error code, "Invalid" is possible as is "Overflow"
+        // on 4.4+.
+        status->error = text;
+        return true;
+    }
+    if (sections.size() != 2) {
+        LOG(ERROR) << "snapshot status should have two components";
+        return false;
+    }
+    auto sector_info = android::base::Split(sections[0], "/");
+    if (sector_info.size() != 2) {
+        LOG(ERROR) << "snapshot sector info should have two components";
+        return false;
+    }
+    if (!android::base::ParseUint(sections[1], &status->metadata_sectors)) {
+        LOG(ERROR) << "could not parse metadata sectors";
+        return false;
+    }
+    if (!android::base::ParseUint(sector_info[0], &status->sectors_allocated)) {
+        LOG(ERROR) << "could not parse sectors allocated";
+        return false;
+    }
+    if (!android::base::ParseUint(sector_info[1], &status->total_sectors)) {
+        LOG(ERROR) << "could not parse total sectors";
+        return false;
+    }
+    return true;
+}
+
+std::string DmTargetCrypt::GetParameterString() const {
+    std::vector<std::string> argv = {
+            cipher_,
+            key_,
+            std::to_string(iv_sector_offset_),
+            device_,
+            std::to_string(device_sector_),
+    };
+
+    std::vector<std::string> extra_argv;
+    if (allow_discards_) extra_argv.emplace_back("allow_discards");
+    if (allow_encrypt_override_) extra_argv.emplace_back("allow_encrypt_override");
+    if (iv_large_sectors_) extra_argv.emplace_back("iv_large_sectors");
+    if (sector_size_) extra_argv.emplace_back("sector_size:" + std::to_string(sector_size_));
+
+    if (!extra_argv.empty()) argv.emplace_back(std::to_string(extra_argv.size()));
+
+    argv.insert(argv.end(), extra_argv.begin(), extra_argv.end());
+    return android::base::Join(argv, " ");
+}
+
+std::string DmTargetDefaultKey::GetParameterString() const {
+    return cipher_ + " " + key_ + " " + blockdev_ + " " + std::to_string(start_sector_);
 }
 
 }  // namespace dm

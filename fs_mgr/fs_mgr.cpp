@@ -390,7 +390,7 @@ static void tune_quota(const std::string& blk_device, const FstabEntry& entry,
 // Set the number of reserved filesystem blocks if needed.
 static void tune_reserved_size(const std::string& blk_device, const FstabEntry& entry,
                                const struct ext4_super_block* sb, int* fs_stat) {
-    if (entry.reserved_size != 0) {
+    if (entry.reserved_size == 0) {
         return;
     }
 
@@ -1268,6 +1268,46 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
     }
 }
 
+int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
+    AvbUniquePtr avb_handle(nullptr);
+    int ret = FsMgrUmountStatus::SUCCESS;
+    for (auto& current_entry : *fstab) {
+        if (!IsMountPointMounted(current_entry.mount_point)) {
+            continue;
+        }
+
+        if (umount(current_entry.mount_point.c_str()) == -1) {
+            PERROR << "Failed to umount " << current_entry.mount_point;
+            ret |= FsMgrUmountStatus::ERROR_UMOUNT;
+            continue;
+        }
+
+        if (current_entry.fs_mgr_flags.logical) {
+            if (!fs_mgr_update_logical_partition(&current_entry)) {
+                LERROR << "Could not get logical partition blk_device, skipping!";
+                ret |= FsMgrUmountStatus::ERROR_DEVICE_MAPPER;
+                continue;
+            }
+        }
+
+        if (current_entry.fs_mgr_flags.avb || !current_entry.avb_keys.empty()) {
+            if (!AvbHandle::TearDownAvbHashtree(&current_entry, true /* wait */)) {
+                LERROR << "Failed to tear down AVB on mount point: " << current_entry.mount_point;
+                ret |= FsMgrUmountStatus::ERROR_VERITY;
+                continue;
+            }
+        } else if ((current_entry.fs_mgr_flags.verify)) {
+            if (!fs_mgr_teardown_verity(&current_entry, true /* wait */)) {
+                LERROR << "Failed to tear down verified partition on mount point: "
+                       << current_entry.mount_point;
+                ret |= FsMgrUmountStatus::ERROR_VERITY;
+                continue;
+            }
+        }
+    }
+    return ret;
+}
+
 // wrapper to __mount() and expects a fully prepared fstab_rec,
 // unlike fs_mgr_do_mount which does more things with avb / verity etc.
 int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point) {
@@ -1570,38 +1610,6 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
     return ret;
 }
 
-bool fs_mgr_load_verity_state(int* mode) {
-    /* return the default mode, unless any of the verified partitions are in
-     * logging mode, in which case return that */
-    *mode = VERITY_MODE_DEFAULT;
-
-    Fstab fstab;
-    if (!ReadDefaultFstab(&fstab)) {
-        LERROR << "Failed to read default fstab";
-        return false;
-    }
-
-    for (const auto& entry : fstab) {
-        if (entry.fs_mgr_flags.avb) {
-            *mode = VERITY_MODE_RESTART;  // avb only supports restart mode.
-            break;
-        } else if (!entry.fs_mgr_flags.verify) {
-            continue;
-        }
-
-        int current;
-        if (load_verity_state(entry, &current) < 0) {
-            continue;
-        }
-        if (current != VERITY_MODE_DEFAULT) {
-            *mode = current;
-            break;
-        }
-    }
-
-    return true;
-}
-
 bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
     if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
         return false;
@@ -1655,11 +1663,12 @@ bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entr
 
 std::string fs_mgr_get_super_partition_name(int slot) {
     // Devices upgrading to dynamic partitions are allowed to specify a super
-    // partition name, assumed to be A/B (non-A/B retrofit is not supported).
-    // For devices launching with dynamic partition support, the partition
-    // name must be "super".
+    // partition name. This includes cuttlefish, which is a non-A/B device.
     std::string super_partition;
     if (fs_mgr_get_boot_config_from_kernel_cmdline("super_partition", &super_partition)) {
+        if (fs_mgr_get_slot_suffix().empty()) {
+            return super_partition;
+        }
         std::string suffix;
         if (slot == 0) {
             suffix = "_a";

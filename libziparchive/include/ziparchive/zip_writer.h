@@ -76,7 +76,7 @@ class ZipWriter {
     uint32_t uncompressed_size;
     uint16_t last_mod_time;
     uint16_t last_mod_date;
-    uint32_t padding_length;
+    uint16_t padding_length;
     off64_t local_file_header_offset;
   };
 
@@ -161,8 +161,8 @@ class ZipWriter {
 
   int32_t HandleError(int32_t error_code);
   int32_t PrepareDeflate();
-  int32_t StoreBytes(FileEntry* file, const void* data, size_t len);
-  int32_t CompressBytes(FileEntry* file, const void* data, size_t len);
+  int32_t StoreBytes(FileEntry* file, const void* data, uint32_t len);
+  int32_t CompressBytes(FileEntry* file, const void* data, uint32_t len);
   int32_t FlushCompressedBytes(FileEntry* file);
 
   enum class State {

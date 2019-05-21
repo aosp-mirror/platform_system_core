@@ -26,6 +26,7 @@ cc_defaults {
         "-Wvla",
         "-DADB_HOST=1",         // overridden by adbd_defaults
         "-DALLOW_ADBD_ROOT=0",  // overridden by adbd_defaults
+        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION=1",
     ],
     cpp_std: "experimental",
 
@@ -58,6 +59,9 @@ cc_defaults {
 
                 // MinGW hides some things behind _POSIX_SOURCE.
                 "-D_POSIX_SOURCE",
+
+                // libusb uses __stdcall on a variadic function, which gets ignored.
+                "-Wno-ignored-attributes",
 
                 // Not supported yet.
                 "-Wno-thread-safety",
@@ -502,6 +506,52 @@ cc_binary {
         "liblog",
         "libminijail",
         "libselinux",
+    ],
+}
+
+cc_binary {
+    name: "static_adbd",
+    defaults: ["adbd_defaults", "host_adbd_supported"],
+
+    recovery_available: false,
+    static_executable: true,
+    host_supported: false,
+
+    srcs: [
+        "daemon/main.cpp",
+    ],
+
+    cflags: [
+        "-D_GNU_SOURCE",
+        "-Wno-deprecated-declarations",
+    ],
+
+    strip: {
+        keep_symbols: true,
+    },
+
+    static_libs: [
+        "libadbd",
+        "libadbd_services",
+        "libasyncio",
+        "libavb_user",
+        "libbase",
+        "libbootloader_message",
+        "libcap",
+        "libcrypto",
+        "libcrypto_utils",
+        "libcutils",
+        "libdiagnose_usb",
+        "libext4_utils",
+        "libfec",
+        "libfec_rs",
+        "libfs_mgr",
+        "liblog",
+        "liblp",
+        "libmdnssd",
+        "libminijail",
+        "libselinux",
+        "libsquashfs_utils",
     ],
 }
 

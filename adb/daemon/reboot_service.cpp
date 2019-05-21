@@ -58,7 +58,7 @@ void reboot_service(unique_fd fd, const std::string& arg) {
 
         sockaddr_un addr = {.sun_family = AF_UNIX};
         strncpy(addr.sun_path, "/dev/socket/recovery", sizeof(addr.sun_path) - 1);
-        if (connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == -1) {
+        if (connect(sock.get(), reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == -1) {
             WriteFdFmt(fd, "reboot (%s) connect\n", strerror(errno));
             PLOG(ERROR) << "Couldn't connect to recovery socket";
             return;

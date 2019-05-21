@@ -43,12 +43,20 @@ class DmTable {
     // successfully removed.
     bool RemoveTarget(std::unique_ptr<DmTarget>&& target);
 
+    // Adds a target, constructing it in-place for convenience. For example,
+    //
+    //   table.Emplace<DmTargetZero>(0, num_sectors);
+    template <typename T, typename... Args>
+    bool Emplace(Args&&... args) {
+        return AddTarget(std::make_unique<T>(std::forward<Args>(args)...));
+    }
+
     // Checks the table to make sure it is valid. i.e. Checks for range overlaps, range gaps
     // and returns 'true' if the table is ready to be loaded into kernel. Returns 'false' if the
     // table is malformed.
     bool valid() const;
 
-    // Returns the toatl number of targets.
+    // Returns the total number of targets.
     size_t num_targets() const { return targets_.size(); }
 
     // Returns the total size represented by the table in terms of number of 512-byte sectors.

@@ -15,6 +15,7 @@
  */
 
 #include <stdlib.h>
+#include <sys/mman.h>
 #include <time.h>
 
 #include <memory>
@@ -339,6 +340,16 @@ TEST_F(TombstoneTest, dump_header_info) {
       android::base::GetProperty("ro.build.fingerprint", "unknown").c_str(),
       android::base::GetProperty("ro.revision", "unknown").c_str());
   expected += android::base::StringPrintf("ABI: '%s'\n", ABI_STRING);
+  ASSERT_STREQ(expected.c_str(), amfd_data_.c_str());
+}
+
+TEST_F(TombstoneTest, dump_thread_info_uid) {
+  dump_thread_info(&log_, ThreadInfo{.uid = 1,
+                                     .pid = 2,
+                                     .tid = 3,
+                                     .thread_name = "some_thread",
+                                     .process_name = "some_process"});
+  std::string expected = "pid: 2, tid: 3, name: some_thread  >>> some_process <<<\nuid: 1\n";
   ASSERT_STREQ(expected.c_str(), amfd_data_.c_str());
 }
 

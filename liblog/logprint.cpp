@@ -33,6 +33,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/types.h>
+#include <wchar.h>
 
 #include <cutils/list.h>
 #include <log/log.h>
@@ -1134,66 +1135,13 @@ int android_log_processBinaryLogBuffer(
 }
 
 /*
- * One utf8 character at a time
- *
- * Returns the length of the utf8 character in the buffer,
- * or -1 if illegal or truncated
- *
- * Open coded from libutils/Unicode.cpp, borrowed from utf8_length(),
- * can not remove from here because of library circular dependencies.
- * Expect one-day utf8_character_length with the same signature could
- * _also_ be part of libutils/Unicode.cpp if its usefullness needs to
- * propagate globally.
- */
-LIBLOG_WEAK ssize_t utf8_character_length(const char* src, size_t len) {
-  const char* cur = src;
-  const char first_char = *cur++;
-  static const uint32_t kUnicodeMaxCodepoint = 0x0010FFFF;
-  int32_t mask, to_ignore_mask;
-  size_t num_to_read;
-  uint32_t utf32;
-
-  if ((first_char & 0x80) == 0) { /* ASCII */
-    return first_char ? 1 : -1;
-  }
-
-  /*
-   * (UTF-8's character must not be like 10xxxxxx,
-   *  but 110xxxxx, 1110xxxx, ... or 1111110x)
-   */
-  if ((first_char & 0x40) == 0) {
-    return -1;
-  }
-
-  for (utf32 = 1, num_to_read = 1, mask = 0x40, to_ignore_mask = 0x80;
-       num_to_read < 5 && (first_char & mask); num_to_read++, to_ignore_mask |= mask, mask >>= 1) {
-    if (num_to_read > len) {
-      return -1;
-    }
-    if ((*cur & 0xC0) != 0x80) { /* can not be 10xxxxxx? */
-      return -1;
-    }
-    utf32 = (utf32 << 6) + (*cur++ & 0b00111111);
-  }
-  /* "first_char" must be (110xxxxx - 11110xxx) */
-  if (num_to_read >= 5) {
-    return -1;
-  }
-  to_ignore_mask |= mask;
-  utf32 |= ((~to_ignore_mask) & first_char) << (6 * (num_to_read - 1));
-  if (utf32 > kUnicodeMaxCodepoint) {
-    return -1;
-  }
-  return num_to_read;
-}
-
-/*
  * Convert to printable from message to p buffer, return string length. If p is
  * NULL, do not copy, but still return the expected string length.
  */
-static size_t convertPrintable(char* p, const char* message, size_t messageLen) {
+size_t convertPrintable(char* p, const char* message, size_t messageLen) {
   char* begin = p;
   bool print = p != NULL;
+  mbstate_t mb_state = {};
 
   while (messageLen) {
     char buf[6];
@@ -1201,11 +1149,10 @@ static size_t convertPrintable(char* p, const char* message, size_t messageLen) 
     if ((size_t)len > messageLen) {
       len = messageLen;
     }
-    len = utf8_character_length(message, len);
+    len = mbrtowc(nullptr, message, len, &mb_state);
 
     if (len < 0) {
-      snprintf(buf, sizeof(buf), ((messageLen > 1) && isdigit(message[1])) ? "\\%03o" : "\\%o",
-               *message & 0377);
+      snprintf(buf, sizeof(buf), "\\x%02X", static_cast<unsigned char>(*message));
       len = 1;
     } else {
       buf[0] = '\0';
@@ -1225,7 +1172,7 @@ static size_t convertPrintable(char* p, const char* message, size_t messageLen) 
         } else if (*message == '\\') {
           strcpy(buf, "\\\\");
         } else if ((*message < ' ') || (*message & 0x80)) {
-          snprintf(buf, sizeof(buf), "\\%o", *message & 0377);
+          snprintf(buf, sizeof(buf), "\\x%02X", static_cast<unsigned char>(*message));
         }
       }
       if (!buf[0]) {

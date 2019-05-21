@@ -160,7 +160,7 @@ ErrorCode Elf::GetLastErrorCode() {
   if (valid_) {
     return interface_->LastErrorCode();
   }
-  return ERROR_NONE;
+  return ERROR_INVALID_ELF;
 }
 
 uint64_t Elf::GetLastErrorAddress() {
@@ -170,22 +170,23 @@ uint64_t Elf::GetLastErrorAddress() {
   return 0;
 }
 
+// The relative pc expectd by this function is relative to the start of the elf.
+bool Elf::StepIfSignalHandler(uint64_t rel_pc, Regs* regs, Memory* process_memory) {
+  if (!valid_) {
+    return false;
+  }
+  return regs->StepIfSignalHandler(rel_pc, this, process_memory);
+}
+
 // The relative pc is always relative to the start of the map from which it comes.
-bool Elf::Step(uint64_t rel_pc, uint64_t adjusted_rel_pc, Regs* regs, Memory* process_memory,
-               bool* finished) {
+bool Elf::Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished) {
   if (!valid_) {
     return false;
   }
 
-  // The relative pc expectd by StepIfSignalHandler is relative to the start of the elf.
-  if (regs->StepIfSignalHandler(rel_pc, this, process_memory)) {
-    *finished = false;
-    return true;
-  }
-
   // Lock during the step which can update information in the object.
   std::lock_guard<std::mutex> guard(lock_);
-  return interface_->Step(adjusted_rel_pc, regs, process_memory, finished);
+  return interface_->Step(rel_pc, regs, process_memory, finished);
 }
 
 bool Elf::IsValidElf(Memory* memory) {
@@ -237,24 +238,6 @@ bool Elf::IsValidPc(uint64_t pc) {
   }
 
   if (gnu_debugdata_interface_ != nullptr && gnu_debugdata_interface_->IsValidPc(pc)) {
-    return true;
-  }
-
-  return false;
-}
-
-bool Elf::GetTextRange(uint64_t* addr, uint64_t* size) {
-  if (!valid_) {
-    return false;
-  }
-
-  if (interface_->GetTextRange(addr, size)) {
-    *addr += load_bias_;
-    return true;
-  }
-
-  if (gnu_debugdata_interface_ != nullptr && gnu_debugdata_interface_->GetTextRange(addr, size)) {
-    *addr += load_bias_;
     return true;
   }
 

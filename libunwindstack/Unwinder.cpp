@@ -25,6 +25,7 @@
 #include <algorithm>
 
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #include <demangle.h>
 
@@ -36,37 +37,10 @@
 #include <unwindstack/Unwinder.h>
 
 #if !defined(NO_LIBDEXFILE_SUPPORT)
-#include <DexFile.h>
+#include <unwindstack/DexFiles.h>
 #endif
 
 namespace unwindstack {
-
-Unwinder::Unwinder(size_t max_frames, Maps* maps, Regs* regs,
-                   std::shared_ptr<Memory> process_memory)
-    : max_frames_(max_frames), maps_(maps), regs_(regs), process_memory_(process_memory) {
-  frames_.reserve(max_frames);
-  if (regs != nullptr) {
-    ArchEnum arch = regs_->Arch();
-
-    jit_debug_ = JitDebug<Elf>::Create(arch, process_memory_);
-#if !defined(NO_LIBDEXFILE_SUPPORT)
-    dex_files_ = JitDebug<DexFile>::Create(arch, process_memory_);
-#endif
-  }
-}
-
-void Unwinder::SetRegs(Regs* regs) {
-  regs_ = regs;
-
-  if (jit_debug_ == nullptr) {
-    ArchEnum arch = regs_->Arch();
-
-    jit_debug_ = JitDebug<Elf>::Create(arch, process_memory_);
-#if !defined(NO_LIBDEXFILE_SUPPORT)
-    dex_files_ = JitDebug<DexFile>::Create(arch, process_memory_);
-#endif
-  }
-}
 
 // Inject extra 'virtual' frame that represents the dex pc data.
 // The dex pc is a magic register defined in the Mterp interpreter,
@@ -111,12 +85,13 @@ void Unwinder::FillInDexFrame() {
     return;
   }
 
-  dex_files_->GetFunctionName(maps_, dex_pc, &frame->function_name, &frame->function_offset);
+  dex_files_->GetMethodInformation(maps_, info, dex_pc, &frame->function_name,
+                                   &frame->function_offset);
 #endif
 }
 
-void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_t func_pc,
-                           uint64_t pc_adjustment) {
+FrameData* Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc,
+                                 uint64_t pc_adjustment) {
   size_t frame_num = frames_.size();
   frames_.resize(frame_num + 1);
   FrameData* frame = &frames_.at(frame_num);
@@ -126,7 +101,8 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_
   frame->pc = regs_->pc() - pc_adjustment;
 
   if (map_info == nullptr) {
-    return;
+    // Nothing else to update.
+    return nullptr;
   }
 
   if (resolve_names_) {
@@ -144,12 +120,7 @@ void Unwinder::FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_
   frame->map_end = map_info->end;
   frame->map_flags = map_info->flags;
   frame->map_load_bias = elf->GetLoadBias();
-
-  if (!resolve_names_ ||
-      !elf->GetFunctionName(func_pc, &frame->function_name, &frame->function_offset)) {
-    frame->function_name = "";
-    frame->function_offset = 0;
-  }
+  return frame;
 }
 
 static bool ShouldStop(const std::vector<std::string>* map_suffixes_to_ignore,
@@ -171,6 +142,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
   frames_.clear();
   last_error_.code = ERROR_NONE;
   last_error_.address = 0;
+  elf_from_memory_not_file_ = false;
 
   ArchEnum arch = regs_->Arch();
 
@@ -194,6 +166,12 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         break;
       }
       elf = map_info->GetElf(process_memory_, arch);
+      // If this elf is memory backed, and there is a valid file, then set
+      // an indicator that we couldn't open the file.
+      if (!elf_from_memory_not_file_ && map_info->memory_backed_elf && !map_info->name.empty() &&
+          map_info->name[0] != '[' && !android::base::StartsWith(map_info->name, "/memfd:")) {
+        elf_from_memory_not_file_ = true;
+      }
       step_pc = regs_->pc();
       rel_pc = elf->GetRelPc(step_pc, map_info);
       // Everyone except elf data in gdb jit debug maps uses the relative pc.
@@ -211,7 +189,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       // using the jit debug information.
       if (!elf->valid() && jit_debug_ != nullptr) {
         uint64_t adjusted_jit_pc = regs_->pc() - pc_adjustment;
-        Elf* jit_elf = jit_debug_->Get(maps_, adjusted_jit_pc);
+        Elf* jit_elf = jit_debug_->GetElf(maps_, adjusted_jit_pc);
         if (jit_elf != nullptr) {
           // The jit debug information requires a non relative adjusted pc.
           step_pc = adjusted_jit_pc;
@@ -220,6 +198,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       }
     }
 
+    FrameData* frame = nullptr;
     if (map_info == nullptr || initial_map_names_to_skip == nullptr ||
         std::find(initial_map_names_to_skip->begin(), initial_map_names_to_skip->end(),
                   basename(map_info->name.c_str())) == initial_map_names_to_skip->end()) {
@@ -236,23 +215,21 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         }
       }
 
-      FillInFrame(map_info, elf, rel_pc, step_pc, pc_adjustment);
+      frame = FillInFrame(map_info, elf, rel_pc, pc_adjustment);
 
       // Once a frame is added, stop skipping frames.
       initial_map_names_to_skip = nullptr;
     }
     adjust_pc = true;
 
-    bool stepped;
+    bool stepped = false;
     bool in_device_map = false;
-    if (map_info == nullptr) {
-      stepped = false;
-    } else {
+    bool finished = false;
+    if (map_info != nullptr) {
       if (map_info->flags & MAPS_FLAGS_DEVICE_MAP) {
         // Do not stop here, fall through in case we are
         // in the speculative unwind path and need to remove
         // some of the speculative frames.
-        stepped = false;
         in_device_map = true;
       } else {
         MapInfo* sp_info = maps_->Find(regs_->sp());
@@ -260,17 +237,35 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
           // Do not stop here, fall through in case we are
           // in the speculative unwind path and need to remove
           // some of the speculative frames.
-          stepped = false;
           in_device_map = true;
         } else {
-          bool finished;
-          stepped = elf->Step(rel_pc, step_pc, regs_, process_memory_.get(), &finished);
-          elf->GetLastError(&last_error_);
-          if (stepped && finished) {
-            break;
+          if (elf->StepIfSignalHandler(rel_pc, regs_, process_memory_.get())) {
+            stepped = true;
+            if (frame != nullptr) {
+              // Need to adjust the relative pc because the signal handler
+              // pc should not be adjusted.
+              frame->rel_pc = rel_pc;
+              frame->pc += pc_adjustment;
+              step_pc = rel_pc;
+            }
+          } else if (elf->Step(step_pc, regs_, process_memory_.get(), &finished)) {
+            stepped = true;
           }
+          elf->GetLastError(&last_error_);
         }
       }
+    }
+
+    if (frame != nullptr) {
+      if (!resolve_names_ ||
+          !elf->GetFunctionName(step_pc, &frame->function_name, &frame->function_offset)) {
+        frame->function_name = "";
+        frame->function_offset = 0;
+      }
+    }
+
+    if (finished) {
+      break;
     }
 
     if (!stepped) {
@@ -356,7 +351,19 @@ std::string Unwinder::FormatFrame(size_t frame_num) {
   return FormatFrame(frames_[frame_num]);
 }
 
-bool UnwinderFromPid::Init() {
+void Unwinder::SetJitDebug(JitDebug* jit_debug, ArchEnum arch) {
+  jit_debug->SetArch(arch);
+  jit_debug_ = jit_debug;
+}
+
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+void Unwinder::SetDexFiles(DexFiles* dex_files, ArchEnum arch) {
+  dex_files->SetArch(arch);
+  dex_files_ = dex_files;
+}
+#endif
+
+bool UnwinderFromPid::Init(ArchEnum arch) {
   if (pid_ == getpid()) {
     maps_ptr_.reset(new LocalMaps());
   } else {
@@ -368,6 +375,15 @@ bool UnwinderFromPid::Init() {
   maps_ = maps_ptr_.get();
 
   process_memory_ = Memory::CreateProcessMemoryCached(pid_);
+
+  jit_debug_ptr_.reset(new JitDebug(process_memory_));
+  jit_debug_ = jit_debug_ptr_.get();
+  SetJitDebug(jit_debug_, arch);
+#if !defined(NO_LIBDEXFILE_SUPPORT)
+  dex_files_ptr_.reset(new DexFiles(process_memory_));
+  dex_files_ = dex_files_ptr_.get();
+  SetDexFiles(dex_files_, arch);
+#endif
 
   return true;
 }
