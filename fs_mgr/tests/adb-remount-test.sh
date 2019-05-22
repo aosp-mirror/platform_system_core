@@ -51,6 +51,9 @@ print_time=false
 start_time=`date +%s`
 ACTIVE_SLOT=
 
+ADB_WAIT=3m
+FASTBOOT_WAIT=2m
+
 ##
 ##  Helper Functions
 ##
@@ -466,7 +469,7 @@ adb_root() {
   [ root != "`adb_user`" ] || return 0
   adb root >/dev/null </dev/null 2>/dev/null
   sleep 2
-  adb_wait 2m &&
+  adb_wait ${ADB_WAIT} &&
     [ root = "`adb_user`" ]
 }
 
@@ -479,7 +482,7 @@ adb_unroot() {
   [ root = "`adb_user`" ] || return 0
   adb unroot >/dev/null </dev/null 2>/dev/null
   sleep 2
-  adb_wait 2m &&
+  adb_wait ${ADB_WAIT} &&
     [ root != "`adb_user`" ]
 }
 
@@ -736,7 +739,7 @@ inFastboot && die "device in fastboot mode"
 inRecovery && die "device in recovery mode"
 if ! inAdb; then
   echo "${ORANGE}[  WARNING ]${NORMAL} device not in adb mode" >&2
-  adb_wait 2m
+  adb_wait ${ADB_WAIT}
 fi
 inAdb || die "specified device not in adb mode"
 isDebuggable || die "device not a debug build"
@@ -798,19 +801,19 @@ if [ "orange" = "`get_property ro.boot.verifiedbootstate`" -a \
     ${overlayfs_supported} || return 0
     inFastboot &&
       fastboot reboot &&
-      adb_wait 2m
+      adb_wait ${ADB_WAIT}
     inAdb &&
       adb_root &&
       adb enable-verity >/dev/null 2>/dev/null &&
       adb_reboot &&
-      adb_wait 2m
+      adb_wait ${ADB_WAIT}
   }
 
   echo "${GREEN}[ RUN      ]${NORMAL} Testing adb shell su root remount -R command" >&2
 
   adb_su remount -R system </dev/null || true
   sleep 2
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
     die "waiting for device after remount -R `usb_status`"
   if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
        "2" = "`get_property partition.system.verified`" ]; then
@@ -868,7 +871,7 @@ done
 if ${reboot}; then
   echo "${ORANGE}[  WARNING ]${NORMAL} rebooting before test" >&2
   adb_reboot &&
-    adb_wait 2m ||
+    adb_wait ${ADB_WAIT} ||
     die "lost device after reboot after wipe `usb_status`"
   adb_root ||
     die "lost device after elevation to root after wipe `usb_status`"
@@ -933,7 +936,7 @@ if [ X"${D}" != X"${H}" ]; then
   echo "${GREEN}[     INFO ]${NORMAL} rebooting as requested" >&2
   L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
   adb_reboot &&
-    adb_wait 2m ||
+    adb_wait ${ADB_WAIT} ||
     die "lost device after reboot requested `usb_status`"
   adb_root ||
     die "lost device after elevation to root `usb_status`"
@@ -1098,11 +1101,11 @@ fixup_from_recovery() {
   inRecovery || return 1
   echo "${ORANGE}[    ERROR ]${NORMAL} Device in recovery" >&2
   adb reboot </dev/null
-  adb_wait 2m
+  adb_wait ${ADB_WAIT}
 }
 
 adb_reboot &&
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
   fixup_from_recovery ||
   die "reboot after override content added failed `usb_status`"
 
@@ -1175,7 +1178,7 @@ else
   wait_for_screen
   adb reboot fastboot </dev/null ||
     die "fastbootd not supported (wrong adb in path?)"
-  any_wait 2m &&
+  any_wait ${ADB_WAIT} &&
     inFastboot ||
     die "reboot into fastboot to flash vendor `usb_status` (bad bootloader?)"
   fastboot flash vendor ||
@@ -1216,7 +1219,7 @@ else
   fastboot reboot ||
     die "can not reboot out of fastboot"
   echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot"
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
     fixup_from_recovery ||
     die "did not reboot after flash `usb_status`"
   if ${overlayfs_needed}; then
@@ -1263,7 +1266,7 @@ if [ X"${H}" != X"${D}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} adb remount requires a reboot after partial flash (legacy avb)"
   L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
   adb_reboot &&
-    adb_wait 2m &&
+    adb_wait ${ADB_WAIT} &&
     adb_root ||
     die "failed to reboot"
   T=`adb_date`
@@ -1292,7 +1295,7 @@ if [ -n "${scratch_partition}" ]; then
     rm ${img}
   }
   dd if=/dev/zero of=${img} bs=4096 count=16 2>/dev/null &&
-    fastboot_wait 2m ||
+    fastboot_wait ${FASTBOOT_WAIT} ||
     die "reboot into fastboot `usb_status`"
   fastboot flash --force ${scratch_partition} ${img}
   err=${?}
@@ -1304,7 +1307,7 @@ if [ -n "${scratch_partition}" ]; then
     die "can not reboot out of fastboot"
   [ 0 -eq ${err} ] ||
     die "fastboot flash ${scratch_partition}"
-  adb_wait 2m &&
+  adb_wait ${ADB_WAIT} &&
     adb_root ||
     die "did not reboot after flash"
   T=`adb_date`
@@ -1314,7 +1317,7 @@ if [ -n "${scratch_partition}" ]; then
   then
     echo "${ORANGE}[  WARNING ]${NORMAL} adb disable-verity requires a reboot after partial flash"
     adb_reboot &&
-      adb_wait 2m &&
+      adb_wait ${ADB_WAIT} &&
       adb_root ||
       die "failed to reboot"
     T=`adb_date`
@@ -1352,12 +1355,12 @@ fixup_from_fastboot() {
     fastboot --set-active=${ACTIVE_SLOT}
   fi
   fastboot reboot
-  adb_wait 2m
+  adb_wait ${ADB_WAIT}
 }
 
 # Prerequisite is a prepped device from above.
 adb_reboot &&
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
   fixup_from_fastboot ||
   die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
@@ -1370,7 +1373,7 @@ echo "${GREEN}[       OK ]${NORMAL} mount -o rw,remount command works" >&2
 
 # Prerequisite is a prepped device from above.
 adb_reboot &&
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
   fixup_from_fastboot ||
   die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
@@ -1391,7 +1394,7 @@ for d in ${OVERLAYFS_BACKING}; do
     die "/${d}/overlay wipe"
 done
 adb_reboot &&
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
   fixup_from_fastboot ||
   die "lost device after reboot after wipe `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
@@ -1411,7 +1414,7 @@ if [ ${err} = 0 ] && ${overlayfs_supported}; then
   echo "${GREEN}[ RUN      ]${NORMAL} test 'adb remount -R'" >&2
   adb_root &&
     adb remount -R &&
-    adb_wait 2m ||
+    adb_wait ${ADB_WAIT} ||
     die "adb remount -R"
   if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
        "2" = "`get_property partition.system.verified`" ]; then
