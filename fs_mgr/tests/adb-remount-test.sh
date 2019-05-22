@@ -33,6 +33,7 @@ Conditions:
 ##  Helper Variables
 ##
 
+EMPTY=""
 SPACE=" "
 # A _real_ embedded tab character
 TAB="`echo | tr '\n' '\t'`"
@@ -240,10 +241,13 @@ usb_devnum() {
 
 Returns: waits until the device has returned for adb or optional timeout" ]
 adb_wait() {
+  local start=`date +%s`
+  local duration=
   local ret
   if [ -n "${1}" ]; then
     USB_DEVICE=`usb_devnum --next`
-    echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
+    duration=`format_duration ${1}`
+    echo -n ". . . waiting ${duration}" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
     timeout --preserve-status --signal=KILL ${1} adb wait-for-device 2>/dev/null
     ret=${?}
     echo -n "                                                                             ${CR}"
@@ -258,6 +262,35 @@ adb_wait() {
       echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}" >&2
     fi
   fi
+  local end=`date +%s`
+  local diff_time=`expr ${end} - ${start}`
+  local _print_time=${print_time}
+  if [ ${diff_time} -lt 15 ]; then
+    _print_time=false
+  fi
+  diff_time=`format_duration ${diff_time}`
+  if [ "${diff_time}" = "${duration}" ]; then
+    _print_time=false
+  fi
+
+  local reason=
+  if inAdb; then
+    reason=`get_property ro.boot.bootreason`
+  fi
+  case ${reason} in
+    reboot*)
+      reason=
+      ;;
+    ${EMPTY})
+      ;;
+    *)
+      reason=" for boot reason ${reason}"
+      ;;
+  esac
+  if ${_print_time} || [ -n "${reason}" ]; then
+    echo "${BLUE}[     INFO ]${NORMAL} adb wait duration ${diff_time}${reason}"
+  fi >&2
+
   return ${ret}
 }
 
