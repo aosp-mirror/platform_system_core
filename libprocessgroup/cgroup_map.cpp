@@ -67,6 +67,13 @@ bool CgroupController::HasValue() const {
     return controller_ != nullptr;
 }
 
+bool CgroupController::IsUsable() const {
+    if (!HasValue()) return false;
+
+    uint32_t flags = ACgroupController_getFlags(controller_);
+    return (flags & CGROUPRC_CONTROLLER_FLAG_MOUNTED) != 0;
+}
+
 std::string CgroupController::GetTasksFilePath(const std::string& rel_path) const {
     std::string tasks_path = path();
 
@@ -153,6 +160,7 @@ void CgroupMap::Print() const {
         const ACgroupController* controller = ACgroupFile_getController(i);
         LOG(INFO) << "\t" << ACgroupController_getName(controller) << " ver "
                   << ACgroupController_getVersion(controller) << " path "
+                  << ACgroupController_getFlags(controller) << " flags "
                   << ACgroupController_getPath(controller);
     }
 }
