@@ -140,7 +140,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"mba_err", 13},
     {"Watchdog", 14},
     {"Panic", 15},
-    {"power_key", 16},
+    {"power_key", 16},  // Mediatek
     {"power_on", 17},
     {"Reboot", 18},
     {"rtc", 19},
@@ -203,13 +203,13 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"shutdown,hibernate", 74},  // Suspend to DISK
     {"power_on_key", 75},
     {"reboot_by_key", 76},
-    {"wdt_by_pass_pwk", 77},
+    {"wdt_by_pass_pwk", 77},  // Mediatek
     {"reboot_longkey", 78},
     {"powerkey", 79},
-    {"usb", 80},
-    {"wdt", 81},
-    {"tool_by_pass_pwk", 82},
-    {"2sec_reboot", 83},
+    {"usb", 80},               // Mediatek
+    {"wdt", 81},               // Mediatek
+    {"tool_by_pass_pwk", 82},  // Mediatek
+    {"2sec_reboot", 83},       // Mediatek
     {"reboot,by_key", 84},
     {"reboot,longkey", 85},
     {"reboot,2sec", 86},  // Deprecate in two years, replaced with cold,rtc,2sec
@@ -276,10 +276,10 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"software_master", 147},
     {"cold,charger", 148},
     {"cold,rtc", 149},
-    {"cold,rtc,2sec", 150},
-    {"reboot,tool", 151},
-    {"reboot,wdt", 152},
-    {"reboot,unknown", 153},
+    {"cold,rtc,2sec", 150},   // Mediatek
+    {"reboot,tool", 151},     // Mediatek
+    {"reboot,wdt", 152},      // Mediatek
+    {"reboot,unknown", 153},  // Mediatek
     {"kernel_panic,audit", 154},
     {"kernel_panic,atomic", 155},
     {"kernel_panic,hung", 156},
@@ -304,6 +304,12 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,pmic_off_fault,.*", 175},
     {"reboot,pmic_off_s3rst,.*", 176},
     {"reboot,pmic_off_other,.*", 177},
+    {"reboot,fastboot_menu", 178},
+    {"reboot,recovery_menu", 179},
+    {"reboot,recovery_ui", 180},
+    {"shutdown,fastboot", 181},
+    {"shutdown,recovery", 182},
+    {"reboot,unknown[0-9]*", 183},
 };
 
 // Converts a string value representing the reason the system booted to an
