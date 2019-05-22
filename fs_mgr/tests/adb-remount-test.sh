@@ -281,8 +281,8 @@ fastboot_wait() {
   if [ 0 = ${ret} -a -n "${ACTIVE_SLOT}" ]; then
     local active_slot=`get_active_slot`
     if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
-      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}" >&2
-    fi
+      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+    fi >&2
   fi
   return ${ret}
 }
@@ -304,8 +304,8 @@ recovery_wait() {
   if [ 0 = ${ret} -a -n "${ACTIVE_SLOT}" ]; then
     local active_slot=`get_active_slot`
     if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
-      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}" >&2
-    fi
+      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+    fi >&2
   fi
   return ${ret}
 }
@@ -370,10 +370,10 @@ fastboot_getvar() {
     O="${1}: <empty>"
   fi
   if [ -n "${2}" -a "${1}: ${2}" != "${O}" ]; then
-    echo "${2} != ${O}" >&2
+    echo "${2} != ${O}"
     false
     return
-  fi
+  fi >&2
   echo ${O} >&2
 }
 
@@ -430,16 +430,16 @@ If -d, or -t <epoch> argument is supplied, dump logcat.
 Returns: exit failure, report status" ]
 die() {
   if [ X"-d" = X"${1}" ]; then
-    adb_logcat -b all -v nsec -d >&2
+    adb_logcat -b all -v nsec -d
     shift
   elif [ X"-t" = X"${1}" ]; then
     if [ -n "${2}" ]; then
-      adb_logcat -b all -v nsec -t ${2} >&2
+      adb_logcat -b all -v nsec -t ${2}
     else
-      adb_logcat -b all -v nsec -d >&2
+      adb_logcat -b all -v nsec -d
     fi
     shift 2
-  fi
+  fi >&2
   echo "${RED}[  FAILED  ]${NORMAL} ${@}" >&2
   cleanup
   restore
@@ -464,39 +464,39 @@ EXPECT_EQ() {
   if ! ( echo X"${rval}" | grep '^X'"${lval}"'$' >/dev/null 2>/dev/null ); then
     if [ `echo ${lval}${rval}${*} | wc -c` -gt 50 -o "${rval}" != "${rval%
 *}" ]; then
-      echo "${prefix} expected \"${lval}\"" >&2
+      echo "${prefix} expected \"${lval}\""
       echo "${prefix} got \"${rval}\"" |
         sed ': again
              N
              s/\(\n\)\([^ ]\)/\1             \2/
-             t again' >&2
+             t again'
       if [ -n "${*}" ] ; then
-        echo "${prefix} ${*}" >&2
+        echo "${prefix} ${*}"
       fi
     else
-      echo "${prefix} expected \"${lval}\" got \"${rval}\" ${*}" >&2
-    fi
+      echo "${prefix} expected \"${lval}\" got \"${rval}\" ${*}"
+    fi >&2
     return ${error}
   fi
   if [ -n "${*}" ] ; then
     prefix="${GREEN}[     INFO ]${NORMAL}"
     if [ X"${lval}" != X"${rval}" ]; then  # we were supplied a regex?
       if [ `echo ${lval}${rval}${*} | wc -c` -gt 60 -o "${rval}" != "${rval% *}" ]; then
-        echo "${prefix} ok \"${lval}\"" >&2
+        echo "${prefix} ok \"${lval}\""
         echo "       = \"${rval}\"" |
           sed ': again
                N
                s/\(\n\)\([^ ]\)/\1          \2/
-               t again' >&2
+               t again'
         if [ -n "${*}" ] ; then
-          echo "${prefix} ${*}" >&2
+          echo "${prefix} ${*}"
         fi
       else
-        echo "${prefix} ok \"${lval}\" = \"${rval}\" ${*}" >&2
+        echo "${prefix} ok \"${lval}\" = \"${rval}\" ${*}"
       fi
     else
-      echo "${prefix} ok \"${lval}\" ${*}" >&2
-    fi
+      echo "${prefix} ok \"${lval}\" ${*}"
+    fi >&2
   fi
   return 0
 }
