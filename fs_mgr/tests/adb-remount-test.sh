@@ -1133,6 +1133,11 @@ elif [ "${ANDROID_PRODUCT_OUT}" = "${ANDROID_PRODUCT_OUT%*/${H}}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} wrong vendor image, skipping"
 elif [ -z "${ANDROID_HOST_OUT}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} please run lunch, skipping"
+elif ! (
+          adb_cat /vendor/build.prop |
+          cmp -s ${ANDROID_PRODUCT_OUT}/vendor/build.prop
+       ) >/dev/null 2>/dev/null; then
+  echo "${ORANGE}[  WARNING ]${NORMAL} vendor image signature mismatch, skipping"
 else
   wait_for_screen
   adb reboot fastboot </dev/null ||
