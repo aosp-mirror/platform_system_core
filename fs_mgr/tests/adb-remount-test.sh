@@ -655,6 +655,30 @@ EXPECT_EQ() {
   return 0
 }
 
+[ "USAGE: EXPECT_NE <lval> <rval> [--warning [message]]
+
+Returns true if lval matches rval" ]
+EXPECT_NE() {
+  local lval="${1}"
+  local rval="${2}"
+  shift 2
+  local error=1
+  local prefix="${RED}[    ERROR ]${NORMAL}"
+  if [ X"${1}" = X"--warning" ]; then
+      prefix="${RED}[  WARNING ]${NORMAL}"
+      error=0
+      shift 1
+  fi
+  if [ X"${rval}" = X"${lval}" ]; then
+    echo "${prefix} did not expect \"${lval}\" ${*}" >&2
+    return ${error}
+  fi
+  if [ -n "${*}" ] ; then
+    echo "${prefix} ok \"${lval}\" not \"${rval}\" ${*}" >&2
+  fi
+  return 0
+}
+
 [ "USAGE: check_eq <lval> <rval> [--warning [message]]
 
 Exits if (regex) lval mismatches rval" ]
@@ -667,6 +691,21 @@ check_eq() {
       return
   fi
   EXPECT_EQ "${lval}" "${rval}" ||
+    die "${@}"
+}
+
+[ "USAGE: check_ne <lval> <rval> [--warning [message]]
+
+Exits if lval matches rval" ]
+check_ne() {
+  local lval="${1}"
+  local rval="${2}"
+  shift 2
+  if [ X"${1}" = X"--warning" ]; then
+      EXPECT_NE "${lval}" "${rval}" ${*}
+      return
+  fi
+  EXPECT_NE "${lval}" "${rval}" ||
     die "${@}"
 }
 
@@ -1104,6 +1143,26 @@ check_eq "${A}" "${B}" /system before reboot
 B="`adb_cat /vendor/hello`" ||
   die "vendor hello"
 check_eq "${A}" "${B}" /vendor before reboot
+SYSTEM_DEVT=`adb_sh stat --format=%D /system/hello </dev/null`
+VENDOR_DEVT=`adb_sh stat --format=%D /vendor/hello </dev/null`
+SYSTEM_INO=`adb_sh stat --format=%i /system/hello </dev/null`
+VENDOR_INO=`adb_sh stat --format=%i /vendor/hello </dev/null`
+BASE_SYSTEM_DEVT=`adb_sh stat --format=%D /system/bin/stat </dev/null`
+BASE_VENDOR_DEVT=`adb_sh stat --format=%D /vendor/bin/stat </dev/null`
+check_eq "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" vendor and system devt
+check_ne "${SYSTEM_INO}" "${VENDOR_INO}" vendor and system inode
+if ${overlayfs_needed}; then
+  check_ne "${SYSTEM_DEVT}" "${BASE_SYSTEM_DEVT}" system devt
+  check_ne "${VENDOR_DEVT}" "${BASE_VENDOR_DEVT}" vendor devt
+else
+  check_eq "${SYSTEM_DEVT}" "${BASE_SYSTEM_DEVT}" system devt
+  check_eq "${VENDOR_DEVT}" "${BASE_VENDOR_DEVT}" vendor devt
+fi
+check_ne "${BASE_SYSTEM_DEVT}" "${BASE_VENDOR_DEVT}" --warning system/vendor devt
+[ -n "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
+  die "system devt ${SYSTEM_DEVT} is major 0"
+[ -n "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
+  die "vendor devt ${SYSTEM_DEVT} is major 0"
 
 # Download libc.so, append some gargage, push back, and check if the file
 # is updated.
@@ -1169,6 +1228,14 @@ adb_root ||
 B="`adb_cat /vendor/hello`"
 check_eq "${A}" "${B}" vendor after reboot
 echo "${GREEN}[       OK ]${NORMAL} /vendor content remains after reboot" >&2
+
+check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
+check_eq "${VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/hello </dev/null`" vendor devt after reboot
+check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
+check_eq "${VENDOR_INO}" "`adb_sh stat --format=%i /vendor/hello </dev/null`" vendor inode after reboot
+check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" base system devt after reboot
+check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/null`" base system devt after reboot
+check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" devt for su after reboot
 
 # Feed log with selinux denials as a result of overlays
 adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
@@ -1286,6 +1353,12 @@ else
     check_eq "cat: /vendor/hello: No such file or directory" "${B}" \
              --warning vendor content after flash vendor
   fi
+
+  check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
+  check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
+  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" base system devt after reboot
+  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" devt for su after reboot
+
 fi
 
 wait_for_screen
