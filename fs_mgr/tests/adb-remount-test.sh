@@ -135,8 +135,28 @@ Returns: the logcat output" ]
 adb_logcat() {
   echo "${RED}[     INFO ]${NORMAL} logcat ${@}" >&2 &&
   adb logcat "${@}" </dev/null |
+    tr -d '\r' |
     grep -v 'logd    : logdr: UID=' |
     sed -e '${/------- beginning of kernel/d}' -e 's/^[0-1][0-9]-[0-3][0-9] //'
+}
+
+[ "USAGE: avc_check >/dev/stderr
+
+Returns: worrisome avc violations" ]
+avc_check() {
+  if ! ${overlayfs_supported:-false}; then
+    return
+  fi
+  local L=`adb_logcat -b all -v brief -d \
+                      -e 'context=u:object_r:unlabeled:s0' 2>/dev/null |
+             sed -n 's/.*avc: //p' |
+             sort -u`
+  if [ -z "${L}" ]; then
+    return
+  fi
+  echo "${ORANGE}[  WARNING ]${NORMAL} unlabeled sepolicy violations:" >&2
+  echo "${L}" |
+    sed 's/^/             /' >&2
 }
 
 [ "USAGE: get_property <prop>
@@ -177,6 +197,7 @@ adb_cat() {
 
 Returns: true if the reboot command succeeded" ]
 adb_reboot() {
+  avc_check
   adb reboot remount-test </dev/null || true
   sleep 2
 }
@@ -811,6 +832,7 @@ if [ "orange" = "`get_property ro.boot.verifiedbootstate`" -a \
 
   echo "${GREEN}[ RUN      ]${NORMAL} Testing adb shell su root remount -R command" >&2
 
+  avc_check
   adb_su remount -R system </dev/null || true
   sleep 2
   adb_wait ${ADB_WAIT} ||
@@ -977,6 +999,11 @@ fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} remount" >&2
 
+# Feed log with selinux denials as baseline before overlays
+adb_unroot
+adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
+adb_root
+
 D=`adb remount 2>&1`
 ret=${?}
 echo "${D}"
@@ -1129,6 +1156,9 @@ if ${enforcing}; then
   B="`adb_cat /vendor/hello 2>&1`"
   check_eq "cat: /vendor/hello: Permission denied" "${B}" vendor after reboot w/o root
   echo "${GREEN}[       OK ]${NORMAL} /vendor content correct MAC after reboot" >&2
+  # Feed unprivileged log with selinux denials as a result of overlays
+  wait_for_screen
+  adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
 fi
 B="`adb_cat /system/hello`"
 check_eq "${A}" "${B}" /system after reboot
@@ -1139,6 +1169,9 @@ adb_root ||
 B="`adb_cat /vendor/hello`"
 check_eq "${A}" "${B}" vendor after reboot
 echo "${GREEN}[       OK ]${NORMAL} /vendor content remains after reboot" >&2
+
+# Feed log with selinux denials as a result of overlays
+adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
 
 # Check if the updated libc.so is persistent after reboot.
 adb_root &&
@@ -1176,6 +1209,7 @@ elif ! (
   echo "${ORANGE}[  WARNING ]${NORMAL} vendor image signature mismatch, skipping"
 else
   wait_for_screen
+  avc_check
   adb reboot fastboot </dev/null ||
     die "fastbootd not supported (wrong adb in path?)"
   any_wait ${ADB_WAIT} &&
@@ -1288,6 +1322,7 @@ if [ -n "${scratch_partition}" ]; then
 
   echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition} recovery" >&2
 
+  avc_check
   adb reboot fastboot </dev/null ||
     die "Reboot into fastbootd"
   img=${TMPDIR}/adb-remount-test-${$}.img
@@ -1412,6 +1447,7 @@ err=${?}
 
 if [ ${err} = 0 ] && ${overlayfs_supported}; then
   echo "${GREEN}[ RUN      ]${NORMAL} test 'adb remount -R'" >&2
+  avc_check
   adb_root &&
     adb remount -R &&
     adb_wait ${ADB_WAIT} ||
