@@ -16,6 +16,7 @@
 
 #include "builtins.h"
 
+#include <android/api-level.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -62,6 +63,7 @@
 
 #include "action_manager.h"
 #include "bootchart.h"
+#include "host_init_stubs.h"
 #include "init.h"
 #include "mount_namespace.h"
 #include "parser.h"
@@ -588,7 +590,7 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
     auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_mode);
     property_set(prop_name, std::to_string(t.duration().count()));
 
-    if (import_rc) {
+    if (import_rc && SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
         /* Paths of .rc files are specified at the 2nd argument and beyond */
         import_late(args.args, 2, path_arg_end);
     }
