@@ -131,6 +131,7 @@ cc_test {
         "cmsg_test.cpp",
         "endian_test.cpp",
         "errors_test.cpp",
+        "expected_test.cpp",
         "file_test.cpp",
         "logging_test.cpp",
         "macros_test.cpp",
