@@ -244,16 +244,29 @@ TEST_F(LogicalPartitionCompliance, FastbootRebootTest) {
 // Testing creation/resize/delete of logical partitions
 TEST_F(LogicalPartitionCompliance, CreateResizeDeleteLP) {
     ASSERT_TRUE(UserSpaceFastboot());
+    std::string test_partition_name = "test_partition";
+    std::string slot_count;
+    // Add suffix to test_partition_name if device is slotted.
+    EXPECT_EQ(fb->GetVar("slot-count", &slot_count), SUCCESS) << "getvar slot-count failed";
+    int32_t num_slots = strtol(slot_count.c_str(), nullptr, 10);
+    if (num_slots > 0) {
+        std::string current_slot;
+        EXPECT_EQ(fb->GetVar("current-slot", &current_slot), SUCCESS)
+                << "getvar current-slot failed";
+        std::string slot_suffix = "_" + current_slot;
+        test_partition_name += slot_suffix;
+    }
+
     GTEST_LOG_(INFO) << "Testing 'fastboot create-logical-partition' command";
-    EXPECT_EQ(fb->CreatePartition("test_partition_a", "0"), SUCCESS)
+    EXPECT_EQ(fb->CreatePartition(test_partition_name, "0"), SUCCESS)
             << "create-logical-partition failed";
     GTEST_LOG_(INFO) << "Testing 'fastboot resize-logical-partition' command";
-    EXPECT_EQ(fb->ResizePartition("test_partition_a", "4096"), SUCCESS)
+    EXPECT_EQ(fb->ResizePartition(test_partition_name, "4096"), SUCCESS)
             << "resize-logical-partition failed";
     std::vector<char> buf(4096);
 
     GTEST_LOG_(INFO) << "Flashing a logical partition..";
-    EXPECT_EQ(fb->FlashPartition("test_partition_a", buf), SUCCESS)
+    EXPECT_EQ(fb->FlashPartition(test_partition_name, buf), SUCCESS)
             << "flash logical -partition failed";
     GTEST_LOG_(INFO) << "Rebooting to bootloader mode";
     // Reboot to bootloader mode and attempt to flash the logical partitions
@@ -262,7 +275,7 @@ TEST_F(LogicalPartitionCompliance, CreateResizeDeleteLP) {
     ReconnectFastbootDevice();
     ASSERT_FALSE(UserSpaceFastboot());
     GTEST_LOG_(INFO) << "Attempt to flash a logical partition..";
-    EXPECT_EQ(fb->FlashPartition("test_partition", buf), DEVICE_FAIL)
+    EXPECT_EQ(fb->FlashPartition(test_partition_name, buf), DEVICE_FAIL)
             << "flash logical partition must fail in bootloader";
     GTEST_LOG_(INFO) << "Rebooting back to fastbootd mode";
     fb->RebootTo("fastboot");
@@ -270,7 +283,7 @@ TEST_F(LogicalPartitionCompliance, CreateResizeDeleteLP) {
     ReconnectFastbootDevice();
     ASSERT_TRUE(UserSpaceFastboot());
     GTEST_LOG_(INFO) << "Testing 'fastboot delete-logical-partition' command";
-    EXPECT_EQ(fb->DeletePartition("test_partition_a"), SUCCESS)
+    EXPECT_EQ(fb->DeletePartition(test_partition_name), SUCCESS)
             << "delete logical-partition failed";
 }
 
