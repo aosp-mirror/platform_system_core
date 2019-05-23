@@ -171,7 +171,6 @@ cc_binary {
             exclude_shared_libs: ["libbinder", "libutils"],
         },
     },
-    ldflags: ["-Wl,--rpath,/system/${LIB}/bootstrap"],
 }
 
 // Tests
