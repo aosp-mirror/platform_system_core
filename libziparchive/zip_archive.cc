@@ -747,6 +747,15 @@ int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryNa
   return FindEntry(archive, static_cast<uint32_t>(ent), data);
 }
 
+int32_t Next(void* cookie, ZipEntry* data, std::string* name) {
+  ZipString zs;
+  int32_t result = Next(cookie, data, &zs);
+  if (result == 0) {
+    *name = std::string(reinterpret_cast<const char*>(zs.name), zs.name_length);
+  }
+  return result;
+}
+
 int32_t Next(void* cookie, ZipEntry* data, ZipString* name) {
   IterationHandle* handle = reinterpret_cast<IterationHandle*>(cookie);
   if (handle == NULL) {
