@@ -25,6 +25,7 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
+#include <string>
 #include <string_view>
 
 #include "android-base/off64_t.h"
@@ -35,6 +36,7 @@ enum {
   kCompressDeflated = 8,  // standard deflate
 };
 
+// TODO: remove this when everyone's moved over to std::string.
 struct ZipString {
   const uint8_t* name;
   uint16_t name_length;
@@ -187,6 +189,8 @@ int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
  * Returns 0 on success, -1 if there are no more elements in this
  * archive and lower negative values on failure.
  */
+int32_t Next(void* cookie, ZipEntry* data, std::string* name);
+// TODO: remove this when everyone's moved over to std::string.
 int32_t Next(void* cookie, ZipEntry* data, ZipString* name);
 
 /*
