@@ -277,13 +277,13 @@ static const std::map<std::string, ControlMessageFunction>& get_control_message_
     return control_message_functions;
 }
 
-void HandleControlMessage(const std::string& msg, const std::string& name, pid_t pid) {
+bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t pid) {
     const auto& map = get_control_message_map();
     const auto it = map.find(msg);
 
     if (it == map.end()) {
         LOG(ERROR) << "Unknown control msg '" << msg << "'";
-        return;
+        return false;
     }
 
     std::string cmdline_path = StringPrintf("proc/%d/cmdline", pid);
@@ -312,17 +312,19 @@ void HandleControlMessage(const std::string& msg, const std::string& name, pid_t
         default:
             LOG(ERROR) << "Invalid function target from static map key '" << msg << "': "
                        << static_cast<std::underlying_type<ControlTarget>::type>(function.target);
-            return;
+            return false;
     }
 
     if (svc == nullptr) {
         LOG(ERROR) << "Could not find '" << name << "' for ctl." << msg;
-        return;
+        return false;
     }
 
     if (auto result = function.action(svc); !result) {
         LOG(ERROR) << "Could not ctl." << msg << " for '" << name << "': " << result.error();
+        return false;
     }
+    return true;
 }
 
 static Result<Success> wait_for_coldboot_done_action(const BuiltinArguments& args) {
