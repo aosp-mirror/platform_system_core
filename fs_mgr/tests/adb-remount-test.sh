@@ -963,6 +963,15 @@ D=`adb_sh df -k ${D} </dev/null |
 echo "${D}"
 if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
+  # if device does not need overlays, then adb enable-verity will brick device
+  restore() {
+    ${overlayfs_supported} || return 0
+    inFastboot &&
+      fastboot reboot &&
+      adb_wait ${ADB_WAIT}
+    inAdb &&
+      adb_wait ${ADB_WAIT}
+  }
 elif ! ${overlayfs_supported}; then
   die "need overlayfs, but do not have it"
 fi
