@@ -1509,16 +1509,23 @@ adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
 adb_su remount vendor </dev/null ||
   die "remount command"
+adb_su df -k </dev/null | skip_unrelated_mounts
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null ||
   die "/vendor is not read-write"
-adb_sh grep " /system .* rw," /proc/mounts >/dev/null </dev/null &&
+adb_sh grep " \(/system\|/\) .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/system is not read-only"
 echo "${GREEN}[       OK ]${NORMAL} remount command works from scratch" >&2
 
-restore
-err=${?}
+if ! restore; then
+  restore() {
+    true
+  }
+  die "failed to restore verity after remount from scratch test"
+fi
 
-if [ ${err} = 0 ] && ${overlayfs_supported}; then
+err=0
+
+if ${overlayfs_supported}; then
   echo "${GREEN}[ RUN      ]${NORMAL} test 'adb remount -R'" >&2
   avc_check
   adb_root &&
@@ -1541,7 +1548,7 @@ restore() {
 }
 
 [ ${err} = 0 ] ||
-  die "failed to restore verity" >&2
+  die "failed to restore verity"
 
 echo "${GREEN}[  PASSED  ]${NORMAL} adb remount" >&2
 
