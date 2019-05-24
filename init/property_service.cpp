@@ -473,8 +473,9 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
     }
 
     if (StartsWith(name, "ctl.")) {
-        HandleControlMessage(name.c_str() + 4, value, cr.pid);
-        return PROP_SUCCESS;
+        return HandleControlMessage(name.c_str() + 4, value, cr.pid)
+                       ? PROP_SUCCESS
+                       : PROP_ERROR_HANDLE_CONTROL_MESSAGE;
     }
 
     // sys.powerctl is a special property that is used to make the device reboot.  We want to log
