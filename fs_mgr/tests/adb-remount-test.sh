@@ -1001,8 +1001,16 @@ diff ${tempdir}/libc.so ${tempdir}/libc.so.fromdevice > /dev/null ||
 
 echo "${GREEN}[ RUN      ]${NORMAL} reboot to confirm content persistent" >&2
 
+fixup_from_recovery() {
+  inRecovery || return 1
+  echo "${ORANGE}[    ERROR ]${NORMAL} Device in recovery" >&2
+  adb reboot
+  adb_wait 2m
+}
+
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_recovery ||
   die "reboot after override content added failed `usb_status`"
 
 if ${overlayfs_needed}; then
@@ -1110,6 +1118,7 @@ else
     die "can not reboot out of fastboot"
   echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot"
   adb_wait 2m ||
+    fixup_from_recovery ||
     die "did not reboot after flash `usb_status`"
   if ${overlayfs_needed}; then
     adb_root &&
@@ -1231,9 +1240,25 @@ fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} test raw remount commands" >&2
 
+fixup_from_fastboot() {
+  inFastboot || return 1
+  if [ -n "${ACTIVE_SLOT}" ]; then
+    local active_slot=`get_active_slot`
+    if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
+      echo "${ORANGE}[    ERROR ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+    else
+      echo "${ORANGE}[    ERROR ]${NORMAL} Active slot to be set to ${ACTIVE_SLOT}"
+    fi >&2
+    fastboot --set-active=${ACTIVE_SLOT}
+  fi
+  fastboot reboot
+  adb_wait 2m
+}
+
 # Prerequisite is a prepped device from above.
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_fastboot ||
   die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
@@ -1246,6 +1271,7 @@ echo "${GREEN}[       OK ]${NORMAL} mount -o rw,remount command works" >&2
 # Prerequisite is a prepped device from above.
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_fastboot ||
   die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
@@ -1266,6 +1292,7 @@ for d in ${OVERLAYFS_BACKING}; do
 done
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_fastboot ||
   die "lost device after reboot after wipe `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
