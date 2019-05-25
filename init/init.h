@@ -40,7 +40,7 @@ extern std::vector<std::string> late_import_paths;
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
 Parser CreateServiceOnlyParser(ServiceList& service_list);
 
-void HandleControlMessage(const std::string& msg, const std::string& arg, pid_t pid);
+bool HandleControlMessage(const std::string& msg, const std::string& arg, pid_t pid);
 
 void property_changed(const std::string& name, const std::string& value);
 
