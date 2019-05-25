@@ -380,7 +380,12 @@ struct UsbFfsConnection : public Connection {
                                   << ", wLength = " << static_cast<int>(event.u.setup.wLength);
 
                         if ((event.u.setup.bRequestType & USB_DIR_IN)) {
-                            LOG(WARNING) << "received a device-to-host control transfer, ignoring";
+                            LOG(INFO) << "acking device-to-host control transfer";
+                            ssize_t rc = adb_write(control_fd_.get(), "", 0);
+                            if (rc != 0) {
+                                PLOG(ERROR) << "failed to write empty packet to host";
+                                break;
+                            }
                         } else {
                             std::string buf;
                             buf.resize(event.u.setup.wLength + 1);

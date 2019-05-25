@@ -71,7 +71,7 @@ static void Iterate_all_files(benchmark::State& state) {
   ZipArchiveHandle handle;
   void* iteration_cookie;
   ZipEntry data;
-  ZipString name;
+  std::string name;
 
   while (state.KeepRunning()) {
     OpenArchive(temp_file->path, &handle);
