@@ -80,15 +80,26 @@ void FirmwareHandler::ProcessFirmwareEvent(const Uevent& uevent) {
         return;
     }
 
+    std::vector<std::string> attempted_paths_and_errors;
+
 try_loading_again:
+    attempted_paths_and_errors.clear();
     for (const auto& firmware_directory : firmware_directories_) {
         std::string file = firmware_directory + uevent.firmware;
         unique_fd fw_fd(open(file.c_str(), O_RDONLY | O_CLOEXEC));
-        struct stat sb;
-        if (fw_fd != -1 && fstat(fw_fd, &sb) != -1) {
-            LoadFirmware(uevent, root, fw_fd, sb.st_size, loading_fd, data_fd);
-            return;
+        if (fw_fd == -1) {
+            attempted_paths_and_errors.emplace_back("firmware: attempted " + file +
+                                                    ", open failed: " + strerror(errno));
+            continue;
         }
+        struct stat sb;
+        if (fstat(fw_fd, &sb) == -1) {
+            attempted_paths_and_errors.emplace_back("firmware: attempted " + file +
+                                                    ", fstat failed: " + strerror(errno));
+            continue;
+        }
+        LoadFirmware(uevent, root, fw_fd, sb.st_size, loading_fd, data_fd);
+        return;
     }
 
     if (booting) {
@@ -100,6 +111,9 @@ try_loading_again:
     }
 
     LOG(ERROR) << "firmware: could not find firmware for " << uevent.firmware;
+    for (const auto& message : attempted_paths_and_errors) {
+        LOG(ERROR) << message;
+    }
 
     // Write "-1" as our response to the kernel's firmware request, since we have nothing for it.
     write(loading_fd, "-1", 2);
