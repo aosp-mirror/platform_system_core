@@ -74,8 +74,8 @@ TEST(result, result_error) {
     ASSERT_FALSE(result);
     ASSERT_FALSE(result.has_value());
 
-    EXPECT_EQ(0, result.error_errno());
-    EXPECT_EQ("failure1", result.error_string());
+    EXPECT_EQ(0, result.error().as_errno);
+    EXPECT_EQ("failure1", result.error().as_string);
 }
 
 TEST(result, result_error_empty) {
@@ -83,8 +83,8 @@ TEST(result, result_error_empty) {
     ASSERT_FALSE(result);
     ASSERT_FALSE(result.has_value());
 
-    EXPECT_EQ(0, result.error_errno());
-    EXPECT_EQ("", result.error_string());
+    EXPECT_EQ(0, result.error().as_errno);
+    EXPECT_EQ("", result.error().as_string);
 }
 
 TEST(result, result_error_rvalue) {
@@ -98,8 +98,8 @@ TEST(result, result_error_rvalue) {
     ASSERT_FALSE(MakeRvalueErrorResult());
     ASSERT_FALSE(MakeRvalueErrorResult().has_value());
 
-    EXPECT_EQ(0, MakeRvalueErrorResult().error_errno());
-    EXPECT_EQ("failure1", MakeRvalueErrorResult().error_string());
+    EXPECT_EQ(0, MakeRvalueErrorResult().error().as_errno);
+    EXPECT_EQ("failure1", MakeRvalueErrorResult().error().as_string);
 }
 
 TEST(result, result_errno_error) {
@@ -110,8 +110,8 @@ TEST(result, result_errno_error) {
     ASSERT_FALSE(result);
     ASSERT_FALSE(result.has_value());
 
-    EXPECT_EQ(test_errno, result.error_errno());
-    EXPECT_EQ("failure1: "s + strerror(test_errno), result.error_string());
+    EXPECT_EQ(test_errno, result.error().as_errno);
+    EXPECT_EQ("failure1: "s + strerror(test_errno), result.error().as_string);
 }
 
 TEST(result, result_errno_error_no_text) {
@@ -122,8 +122,8 @@ TEST(result, result_errno_error_no_text) {
     ASSERT_FALSE(result);
     ASSERT_FALSE(result.has_value());
 
-    EXPECT_EQ(test_errno, result.error_errno());
-    EXPECT_EQ(strerror(test_errno), result.error_string());
+    EXPECT_EQ(test_errno, result.error().as_errno);
+    EXPECT_EQ(strerror(test_errno), result.error().as_string);
 }
 
 TEST(result, result_error_from_other_result) {
@@ -138,8 +138,8 @@ TEST(result, result_error_from_other_result) {
     ASSERT_FALSE(result2);
     ASSERT_FALSE(result2.has_value());
 
-    EXPECT_EQ(0, result.error_errno());
-    EXPECT_EQ(error_text, result.error_string());
+    EXPECT_EQ(0, result.error().as_errno);
+    EXPECT_EQ(error_text, result.error().as_string);
 }
 
 TEST(result, result_error_through_ostream) {
@@ -154,8 +154,8 @@ TEST(result, result_error_through_ostream) {
     ASSERT_FALSE(result2);
     ASSERT_FALSE(result2.has_value());
 
-    EXPECT_EQ(0, result.error_errno());
-    EXPECT_EQ(error_text, result.error_string());
+    EXPECT_EQ(0, result.error().as_errno);
+    EXPECT_EQ(error_text, result.error().as_string);
 }
 
 TEST(result, result_errno_error_through_ostream) {
@@ -174,12 +174,12 @@ TEST(result, result_errno_error_through_ostream) {
     ASSERT_FALSE(result2);
     ASSERT_FALSE(result2.has_value());
 
-    EXPECT_EQ(test_errno, result.error_errno());
-    EXPECT_EQ(error_text + ": " + strerror(test_errno), result.error_string());
+    EXPECT_EQ(test_errno, result.error().as_errno);
+    EXPECT_EQ(error_text + ": " + strerror(test_errno), result.error().as_string);
 }
 
 TEST(result, constructor_forwarding) {
-    auto result = Result<std::string>(5, 'a');
+    auto result = Result<std::string>(std::in_place, 5, 'a');
 
     ASSERT_TRUE(result);
     ASSERT_TRUE(result.has_value());
@@ -298,8 +298,8 @@ TEST(result, result_result_with_failure) {
     auto result = return_result_result_with_error();
     ASSERT_TRUE(result);
     ASSERT_FALSE(*result);
-    EXPECT_EQ("failure string", result->error_string());
-    EXPECT_EQ(6, result->error_errno());
+    EXPECT_EQ("failure string", (*result).error().as_string);
+    EXPECT_EQ(6, (*result).error().as_errno);
 }
 
 // This test requires that we disable the forwarding reference constructor if Result<T> is the
@@ -312,7 +312,9 @@ TEST(result, result_two_parameter_constructor_same_type) {
         int value_;
     };
 
-    auto return_test_struct = []() -> Result<TestStruct> { return {Result<TestStruct>(6), 6}; };
+    auto return_test_struct = []() -> Result<TestStruct> {
+        return Result<TestStruct>(std::in_place, Result<TestStruct>(std::in_place, 6), 6);
+    };
 
     auto result = return_test_struct();
     ASSERT_TRUE(result);
@@ -326,7 +328,7 @@ TEST(result, die_on_access_failed_result) {
 
 TEST(result, die_on_get_error_succesful_result) {
     Result<std::string> result = "success";
-    ASSERT_DEATH(result.error_string(), "");
+    ASSERT_DEATH(result.error(), "");
 }
 
 }  // namespace init
