@@ -527,13 +527,13 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
 
             // start all animation classes if stopped.
             if (do_shutdown_animation) {
-                service->Start().IgnoreError();
+                service->Start();
             }
             service->SetShutdownCritical();  // will not check animation class separately
         }
 
         if (do_shutdown_animation) {
-            bootAnim->Start().IgnoreError();
+            bootAnim->Start();
             surfaceFlinger->SetShutdownCritical();
             bootAnim->SetShutdownCritical();
         }

@@ -121,7 +121,7 @@ MountHandler::MountHandler(Epoll* epoll) : epoll_(epoll), fp_(fopen("/proc/mount
 }
 
 MountHandler::~MountHandler() {
-    if (fp_) epoll_->UnregisterHandler(fileno(fp_.get())).IgnoreError();
+    if (fp_) epoll_->UnregisterHandler(fileno(fp_.get()));
 }
 
 void MountHandler::MountHandlerFunction() {
