@@ -255,9 +255,8 @@ static void ProcessAll(ZipArchiveHandle zah) {
   }
 
   ZipEntry entry;
-  ZipString string;
-  while ((err = Next(cookie, &entry, &string)) >= 0) {
-    std::string name(string.name, string.name + string.name_length);
+  std::string name;
+  while ((err = Next(cookie, &entry, &name)) >= 0) {
     if (ShouldInclude(name)) ProcessOne(zah, entry, name);
   }
 
