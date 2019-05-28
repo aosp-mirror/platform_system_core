@@ -304,11 +304,11 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,pmic_off_fault,.*", 175},
     {"reboot,pmic_off_s3rst,.*", 176},
     {"reboot,pmic_off_other,.*", 177},
-    {"reboot,fastboot_menu", 178},
-    {"reboot,recovery_menu", 179},
-    {"reboot,recovery_ui", 180},
-    {"shutdown,fastboot", 181},
-    {"shutdown,recovery", 182},
+    {"reboot,userrequested,fastboot", 178},
+    {"reboot,userrequested,recovery", 179},
+    {"reboot,userrequested,recovery,ui", 180},
+    {"shutdown,userrequested,fastboot", 181},
+    {"shutdown,userrequested,recovery", 182},
     {"reboot,unknown[0-9]*", 183},
 };
 
