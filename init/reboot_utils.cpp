@@ -19,8 +19,13 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#include <android-base/logging.h>
-#include <cutils/android_reboot.h>
+#include <string>
+
+#include "android-base/file.h"
+#include "android-base/logging.h"
+#include "android-base/strings.h"
+#include "backtrace/Backtrace.h"
+#include "cutils/android_reboot.h"
 
 #include "capabilities.h"
 
@@ -75,6 +80,32 @@ void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string&
     abort();
 }
 
+void __attribute__((noreturn)) InitFatalReboot() {
+    auto pid = fork();
+
+    if (pid == -1) {
+        // Couldn't fork, don't even try to backtrace, just reboot.
+        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+    } else if (pid == 0) {
+        // Fork a child for safety, since we always want to shut down if something goes wrong, but
+        // its worth trying to get the backtrace, even in the signal handler, since typically it
+        // does work despite not being async-signal-safe.
+        sleep(5);
+        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+    }
+
+    // In the parent, let's try to get a backtrace then shutdown.
+    std::unique_ptr<Backtrace> backtrace(
+            Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
+    if (!backtrace->Unwind(0)) {
+        LOG(ERROR) << __FUNCTION__ << ": Failed to unwind callstack.";
+    }
+    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
+        LOG(ERROR) << backtrace->FormatFrameData(i);
+    }
+    RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+}
+
 void InstallRebootSignalHandlers() {
     // Instead of panic'ing the kernel as is the default behavior when init crashes,
     // we prefer to reboot to bootloader on development builds, as this will prevent
@@ -94,7 +125,7 @@ void InstallRebootSignalHandlers() {
         // RebootSystem uses syscall() which isn't actually async-signal-safe, but our only option
         // and probably good enough given this is already an error case and only enabled for
         // development builds.
-        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+        InitFatalReboot();
     };
     action.sa_flags = SA_RESTART;
     sigaction(SIGABRT, &action, nullptr);

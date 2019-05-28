@@ -38,7 +38,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <cutils/android_reboot.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr_vendor_overlay.h>
 #include <keyutils.h>
@@ -601,17 +600,6 @@ void HandleKeychord(const std::vector<int>& keycodes) {
     }
 }
 
-static void InitAborter(const char* abort_message) {
-    // When init forks, it continues to use this aborter for LOG(FATAL), but we want children to
-    // simply abort instead of trying to reboot the system.
-    if (getpid() != 1) {
-        android::base::DefaultAborter(abort_message);
-        return;
-    }
-
-    RebootSystem(ANDROID_RB_RESTART2, "bootloader");
-}
-
 static void GlobalSeccomp() {
     import_kernel_cmdline(false, [](const std::string& key, const std::string& value,
                                     bool in_qemu) {
@@ -632,8 +620,8 @@ int SecondStageMain(int argc, char** argv) {
         InstallRebootSignalHandlers();
     }
 
-    // We need to set up stdin/stdout/stderr again now that we're running in init's context.
-    InitKernelLogging(argv, InitAborter);
+    SetStdioToDevNull(argv);
+    InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
 
     // Set init and its forked children's oom_adj.
