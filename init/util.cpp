@@ -40,6 +40,7 @@
 #include <selinux/android.h>
 
 #if defined(__ANDROID__)
+#include "reboot_utils.h"
 #include "selinux.h"
 #else
 #include "host_init_stubs.h"
@@ -425,20 +426,49 @@ bool IsLegalPropertyName(const std::string& name) {
     return true;
 }
 
-void InitKernelLogging(char** argv, std::function<void(const char*)> abort_function) {
+static void InitAborter(const char* abort_message) {
+    // When init forks, it continues to use this aborter for LOG(FATAL), but we want children to
+    // simply abort instead of trying to reboot the system.
+    if (getpid() != 1) {
+        android::base::DefaultAborter(abort_message);
+        return;
+    }
+
+    InitFatalReboot();
+}
+
+// The kernel opens /dev/console and uses that fd for stdin/stdout/stderr if there is a serial
+// console enabled and no initramfs, otherwise it does not provide any fds for stdin/stdout/stderr.
+// SetStdioToDevNull() is used to close these existing fds if they exist and replace them with
+// /dev/null regardless.
+//
+// In the case that these fds are provided by the kernel, the exec of second stage init causes an
+// SELinux denial as it does not have access to /dev/console.  In the case that they are not
+// provided, exec of any further process is potentially dangerous as the first fd's opened by that
+// process will take the stdin/stdout/stderr fileno's, which can cause issues if printf(), etc is
+// then used by that process.
+//
+// Lastly, simply calling SetStdioToDevNull() in first stage init is not enough, since first
+// stage init still runs in kernel context, future child processes will not have permissions to
+// access any fds that it opens, including the one opened below for /dev/null.  Therefore,
+// SetStdioToDevNull() must be called again in second stage init.
+void SetStdioToDevNull(char** argv) {
     // Make stdin/stdout/stderr all point to /dev/null.
     int fd = open("/dev/null", O_RDWR);
     if (fd == -1) {
         int saved_errno = errno;
-        android::base::InitLogging(argv, &android::base::KernelLogger, std::move(abort_function));
+        android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
         errno = saved_errno;
         PLOG(FATAL) << "Couldn't open /dev/null";
     }
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
-    if (fd > 2) close(fd);
-    android::base::InitLogging(argv, &android::base::KernelLogger, std::move(abort_function));
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    if (fd > STDERR_FILENO) close(fd);
+}
+
+void InitKernelLogging(char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
 }
 
 bool IsRecoveryMode() {
