@@ -118,10 +118,10 @@ static void AssertIterationOrder(const std::string_view prefix, const std::strin
   ZipEntry data;
   std::vector<std::string> names;
 
-  ZipString name;
+  std::string name;
   for (size_t i = 0; i < expected_names_sorted.size(); ++i) {
     ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-    names.push_back(std::string(reinterpret_cast<const char*>(name.name), name.name_length));
+    names.push_back(name);
   }
 
   // End of iteration.
@@ -167,7 +167,7 @@ TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
   ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, "x", "y"));
 
   ZipEntry data;
-  ZipString name;
+  std::string name;
 
   // End of iteration.
   ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
@@ -224,7 +224,7 @@ TEST(ziparchive, TestInvalidDeclaredLength) {
   void* iteration_cookie;
   ASSERT_EQ(0, StartIteration(handle, &iteration_cookie));
 
-  ZipString name;
+  std::string name;
   ZipEntry data;
 
   ASSERT_EQ(Next(iteration_cookie, &data, &name), 0);

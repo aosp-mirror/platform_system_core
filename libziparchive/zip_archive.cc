@@ -726,22 +726,6 @@ int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
   return 0;
 }
 
-// TODO: remove this.
-int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
-                       const ZipString* optional_prefix, const ZipString* optional_suffix) {
-  std::string prefix;
-  if (optional_prefix) {
-    prefix = std::string(reinterpret_cast<const char*>(optional_prefix->name),
-                         optional_prefix->name_length);
-  }
-  std::string suffix;
-  if (optional_suffix) {
-    suffix = std::string(reinterpret_cast<const char*>(optional_suffix->name),
-                         optional_suffix->name_length);
-  }
-  return StartIteration(archive, cookie_ptr, prefix.c_str(), suffix.c_str());
-}
-
 void EndIteration(void* cookie) {
   delete reinterpret_cast<IterationHandle*>(cookie);
 }
@@ -761,6 +745,15 @@ int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryNa
   }
   // We know there are at most hash_table_size entries, safe to truncate.
   return FindEntry(archive, static_cast<uint32_t>(ent), data);
+}
+
+int32_t Next(void* cookie, ZipEntry* data, std::string* name) {
+  ZipString zs;
+  int32_t result = Next(cookie, data, &zs);
+  if (result == 0) {
+    *name = std::string(reinterpret_cast<const char*>(zs.name), zs.name_length);
+  }
+  return result;
 }
 
 int32_t Next(void* cookie, ZipEntry* data, ZipString* name) {

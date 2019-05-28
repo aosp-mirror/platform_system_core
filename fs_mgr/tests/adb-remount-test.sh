@@ -219,13 +219,31 @@ format_duration() {
   echo ${hours}:`expr ${minutes} / 10``expr ${minutes} % 10`:`expr ${seconds} / 10``expr ${seconds} % 10`
 }
 
+[ "USAGE: USB_DEVICE=\`usb_devnum [--next]\`
+
+USB_DEVICE contains cache. Update if system changes.
+
+Returns: the devnum for the USB_SERIAL device" ]
+usb_devnum() {
+  if [ -n "${USB_SERIAL}" ]; then
+    local usb_device=`cat ${USB_SERIAL%/serial}/devnum 2>/dev/null | tr -d ' \t\r\n'`
+    if [ -n "${usb_device}" ]; then
+      USB_DEVICE=dev${usb_device}
+    elif [ -n "${USB_DEVICE}" -a "${1}" ]; then
+      USB_DEVICE=dev`expr ${USB_DEVICE#dev} + 1`
+    fi
+    echo "${USB_DEVICE}"
+  fi
+}
+
 [ "USAGE: adb_wait [timeout]
 
 Returns: waits until the device has returned for adb or optional timeout" ]
 adb_wait() {
   local ret
   if [ -n "${1}" ]; then
-    echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} "${CR}"
+    USB_DEVICE=`usb_devnum --next`
+    echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
     timeout --preserve-status --signal=KILL ${1} adb wait-for-device 2>/dev/null
     ret=${?}
     echo -n "                                                                             ${CR}"
@@ -233,6 +251,7 @@ adb_wait() {
     adb wait-for-device
     ret=${?}
   fi
+  USB_DEVICE=`usb_devnum`
   if [ 0 = ${ret} -a -n "${ACTIVE_SLOT}" ]; then
     local active_slot=`get_active_slot`
     if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
@@ -242,12 +261,15 @@ adb_wait() {
   return ${ret}
 }
 
-[ "USAGE: usb_status > stdout
+[ "USAGE: usb_status > stdout 2> stderr
 
-If adb_wait failed, check if device is in adb, recovery or fastboot mode
-and report status string.
+Assumes referenced right after adb_wait or fastboot_wait failued.
+If wait failed, check if device is in adb, recovery or fastboot mode
+and report status strings like  \"(USB stack borken?)\",
+\"(In fastboot mode)\", \"(In recovery mode)\" or \"(in adb mode)\".
+Additional diagnostics may be provided to the stderr output.
 
-Returns: \"(USB stack borken?)\", \"(In fastboot mode)\" or \"(in adb mode)\"" ]
+Returns: USB status string" ]
 usb_status() {
   if inFastboot; then
     echo "(In fastboot mode)"
@@ -256,7 +278,20 @@ usb_status() {
   elif inAdb; then
     echo "(In adb mode)"
   else
-    echo "(USB stack borken?)"
+    echo "(USB stack borken for ${USB_ADDRESS})"
+    USB_DEVICE=`usb_devnum`
+    if [ -n "${USB_DEVICE}" ]; then
+      echo "# lsusb -v -s ${USB_DEVICE#dev}"
+      local D=`lsusb -v -s ${USB_DEVICE#dev} 2>&1`
+      if [ -n "${D}" ]; then
+        echo "${D}"
+      else
+        lsusb -v
+      fi
+    else
+      echo "# lsusb -v (expected device missing)"
+      lsusb -v
+    fi >&2
   fi
 }
 
@@ -268,7 +303,8 @@ fastboot_wait() {
   # fastboot has no wait-for-device, but it does an automatic
   # wait and requires (even a nonsensical) command to do so.
   if [ -n "${1}" ]; then
-    echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} "${CR}"
+    USB_DEVICE=`usb_devnum --next`
+    echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
     timeout --preserve-status --signal=KILL ${1} fastboot wait-for-device >/dev/null 2>/dev/null
     ret=${?}
     echo -n "                                                                             ${CR}"
@@ -278,11 +314,12 @@ fastboot_wait() {
   fi ||
     inFastboot
   ret=${?}
+  USB_DEVICE=`usb_devnum`
   if [ 0 = ${ret} -a -n "${ACTIVE_SLOT}" ]; then
     local active_slot=`get_active_slot`
     if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
-      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}" >&2
-    fi
+      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+    fi >&2
   fi
   return ${ret}
 }
@@ -293,7 +330,8 @@ Returns: waits until the device has returned for recovery or optional timeout" ]
 recovery_wait() {
   local ret
   if [ -n "${1}" ]; then
-    echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} "${CR}"
+    USB_DEVICE=`usb_devnum --next`
+    echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
     timeout --preserve-status --signal=KILL ${1} adb wait-for-recovery 2>/dev/null
     ret=${?}
     echo -n "                                                                             ${CR}"
@@ -301,11 +339,12 @@ recovery_wait() {
     adb wait-for-recovery
     ret=${?}
   fi
+  USB_DEVICE=`usb_devnum`
   if [ 0 = ${ret} -a -n "${ACTIVE_SLOT}" ]; then
     local active_slot=`get_active_slot`
     if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
-      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}" >&2
-    fi
+      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+    fi >&2
   fi
   return ${ret}
 }
@@ -370,10 +409,10 @@ fastboot_getvar() {
     O="${1}: <empty>"
   fi
   if [ -n "${2}" -a "${1}: ${2}" != "${O}" ]; then
-    echo "${2} != ${O}" >&2
+    echo "${2} != ${O}"
     false
     return
-  fi
+  fi >&2
   echo ${O} >&2
 }
 
@@ -430,16 +469,16 @@ If -d, or -t <epoch> argument is supplied, dump logcat.
 Returns: exit failure, report status" ]
 die() {
   if [ X"-d" = X"${1}" ]; then
-    adb_logcat -b all -v nsec -d >&2
+    adb_logcat -b all -v nsec -d
     shift
   elif [ X"-t" = X"${1}" ]; then
     if [ -n "${2}" ]; then
-      adb_logcat -b all -v nsec -t ${2} >&2
+      adb_logcat -b all -v nsec -t ${2}
     else
-      adb_logcat -b all -v nsec -d >&2
+      adb_logcat -b all -v nsec -d
     fi
     shift 2
-  fi
+  fi >&2
   echo "${RED}[  FAILED  ]${NORMAL} ${@}" >&2
   cleanup
   restore
@@ -464,39 +503,39 @@ EXPECT_EQ() {
   if ! ( echo X"${rval}" | grep '^X'"${lval}"'$' >/dev/null 2>/dev/null ); then
     if [ `echo ${lval}${rval}${*} | wc -c` -gt 50 -o "${rval}" != "${rval%
 *}" ]; then
-      echo "${prefix} expected \"${lval}\"" >&2
+      echo "${prefix} expected \"${lval}\""
       echo "${prefix} got \"${rval}\"" |
         sed ': again
              N
              s/\(\n\)\([^ ]\)/\1             \2/
-             t again' >&2
+             t again'
       if [ -n "${*}" ] ; then
-        echo "${prefix} ${*}" >&2
+        echo "${prefix} ${*}"
       fi
     else
-      echo "${prefix} expected \"${lval}\" got \"${rval}\" ${*}" >&2
-    fi
+      echo "${prefix} expected \"${lval}\" got \"${rval}\" ${*}"
+    fi >&2
     return ${error}
   fi
   if [ -n "${*}" ] ; then
     prefix="${GREEN}[     INFO ]${NORMAL}"
     if [ X"${lval}" != X"${rval}" ]; then  # we were supplied a regex?
       if [ `echo ${lval}${rval}${*} | wc -c` -gt 60 -o "${rval}" != "${rval% *}" ]; then
-        echo "${prefix} ok \"${lval}\"" >&2
+        echo "${prefix} ok \"${lval}\""
         echo "       = \"${rval}\"" |
           sed ': again
                N
                s/\(\n\)\([^ ]\)/\1          \2/
-               t again' >&2
+               t again'
         if [ -n "${*}" ] ; then
-          echo "${prefix} ${*}" >&2
+          echo "${prefix} ${*}"
         fi
       else
-        echo "${prefix} ok \"${lval}\" = \"${rval}\" ${*}" >&2
+        echo "${prefix} ok \"${lval}\" = \"${rval}\" ${*}"
       fi
     else
-      echo "${prefix} ok \"${lval}\" ${*}" >&2
-    fi
+      echo "${prefix} ok \"${lval}\" ${*}"
+    fi >&2
   fi
   return 0
 }
@@ -631,7 +670,8 @@ if [ -n "${USB_SERIAL}" ]; then
   USB_ADDRESS=usb${USB_ADDRESS##*/}
 fi
 [ -z "${ANDROID_SERIAL}${USB_ADDRESS}" ] ||
-  echo "${BLUE}[     INFO ]${NORMAL}" ${ANDROID_SERIAL} ${USB_ADDRESS} >&2
+  USB_DEVICE=`usb_devnum`
+  echo "${BLUE}[     INFO ]${NORMAL}" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} >&2
 BUILD_DESCRIPTION=`get_property ro.build.description`
 [ -z "${BUILD_DESCRIPTION}" ] ||
   echo "${BLUE}[     INFO ]${NORMAL} ${BUILD_DESCRIPTION}" >&2
@@ -961,8 +1001,16 @@ diff ${tempdir}/libc.so ${tempdir}/libc.so.fromdevice > /dev/null ||
 
 echo "${GREEN}[ RUN      ]${NORMAL} reboot to confirm content persistent" >&2
 
+fixup_from_recovery() {
+  inRecovery || return 1
+  echo "${ORANGE}[    ERROR ]${NORMAL} Device in recovery" >&2
+  adb reboot
+  adb_wait 2m
+}
+
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_recovery ||
   die "reboot after override content added failed `usb_status`"
 
 if ${overlayfs_needed}; then
@@ -1070,6 +1118,7 @@ else
     die "can not reboot out of fastboot"
   echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot"
   adb_wait 2m ||
+    fixup_from_recovery ||
     die "did not reboot after flash `usb_status`"
   if ${overlayfs_needed}; then
     adb_root &&
@@ -1191,9 +1240,25 @@ fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} test raw remount commands" >&2
 
+fixup_from_fastboot() {
+  inFastboot || return 1
+  if [ -n "${ACTIVE_SLOT}" ]; then
+    local active_slot=`get_active_slot`
+    if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
+      echo "${ORANGE}[    ERROR ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+    else
+      echo "${ORANGE}[    ERROR ]${NORMAL} Active slot to be set to ${ACTIVE_SLOT}"
+    fi >&2
+    fastboot --set-active=${ACTIVE_SLOT}
+  fi
+  fastboot reboot
+  adb_wait 2m
+}
+
 # Prerequisite is a prepped device from above.
 adb_reboot &&
   adb_wait 2m ||
+  fixup_from_fastboot ||
   die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
@@ -1206,7 +1271,8 @@ echo "${GREEN}[       OK ]${NORMAL} mount -o rw,remount command works" >&2
 # Prerequisite is a prepped device from above.
 adb_reboot &&
   adb_wait 2m ||
-  die "lost device after reboot to ro state (USB stack broken?)"
+  fixup_from_fastboot ||
+  die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
 adb_su remount vendor </dev/null ||
@@ -1226,7 +1292,8 @@ for d in ${OVERLAYFS_BACKING}; do
 done
 adb_reboot &&
   adb_wait 2m ||
-  die "lost device after reboot after wipe (USB stack broken?)"
+  fixup_from_fastboot ||
+  die "lost device after reboot after wipe `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
 adb_su remount vendor </dev/null ||

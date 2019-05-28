@@ -473,8 +473,9 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
     }
 
     if (StartsWith(name, "ctl.")) {
-        HandleControlMessage(name.c_str() + 4, value, cr.pid);
-        return PROP_SUCCESS;
+        return HandleControlMessage(name.c_str() + 4, value, cr.pid)
+                       ? PROP_SUCCESS
+                       : PROP_ERROR_HANDLE_CONTROL_MESSAGE;
     }
 
     // sys.powerctl is a special property that is used to make the device reboot.  We want to log
@@ -885,8 +886,12 @@ void property_load_boot_defaults(bool load_debug_prop) {
     load_properties_from_file("/system/build.prop", nullptr, &properties);
     load_properties_from_file("/vendor/default.prop", nullptr, &properties);
     load_properties_from_file("/vendor/build.prop", nullptr, &properties);
-    load_properties_from_file("/odm/default.prop", nullptr, &properties);
-    load_properties_from_file("/odm/build.prop", nullptr, &properties);
+    if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_Q__) {
+        load_properties_from_file("/odm/etc/build.prop", nullptr, &properties);
+    } else {
+        load_properties_from_file("/odm/default.prop", nullptr, &properties);
+        load_properties_from_file("/odm/build.prop", nullptr, &properties);
+    }
     load_properties_from_file("/product/build.prop", nullptr, &properties);
     load_properties_from_file("/product_services/build.prop", nullptr, &properties);
     load_properties_from_file("/factory/factory.prop", "ro.*", &properties);

@@ -39,7 +39,7 @@ static void BenchmarkSuccess(benchmark::State& state) {
     free(context);
 
     while (state.KeepRunning()) {
-        subcontext.Execute(std::vector<std::string>{"return_success"}).IgnoreError();
+        subcontext.Execute(std::vector<std::string>{"return_success"});
     }
 
     if (subcontext.pid() > 0) {
