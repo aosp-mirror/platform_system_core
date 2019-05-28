@@ -32,6 +32,7 @@
 #if defined(__ANDROID__)
 #include <android/api-level.h>
 #include "property_service.h"
+#include "selabel.h"
 #include "selinux.h"
 #else
 #include "host_init_stubs.h"

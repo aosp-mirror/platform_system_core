@@ -70,6 +70,7 @@
 #include "property_service.h"
 #include "reboot.h"
 #include "rlimit_parser.h"
+#include "selabel.h"
 #include "selinux.h"
 #include "service.h"
 #include "subcontext.h"
