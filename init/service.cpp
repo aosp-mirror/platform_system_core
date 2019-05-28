@@ -46,6 +46,7 @@
 #include "util.h"
 
 #if defined(__ANDROID__)
+#include <ApexProperties.sysprop.h>
 #include <android/api-level.h>
 #include <sys/system_properties.h>
 
@@ -372,10 +373,17 @@ void Service::Reap(const siginfo_t& siginfo) {
         return;
     }
 
+#if defined(__ANDROID__)
+    static bool is_apex_updatable = android::sysprop::ApexProperties::updatable().value_or(false);
+#else
+    static bool is_apex_updatable = false;
+#endif
+    const bool is_process_updatable = !pre_apexd_ && is_apex_updatable;
+
     // If we crash > 4 times in 4 minutes or before boot_completed,
     // reboot into bootloader or set crashing property
     boot_clock::time_point now = boot_clock::now();
-    if (((flags_ & SVC_CRITICAL) || !pre_apexd_) && !(flags_ & SVC_RESTART)) {
+    if (((flags_ & SVC_CRITICAL) || is_process_updatable) && !(flags_ & SVC_RESTART)) {
         bool boot_completed = android::base::GetBoolProperty("sys.boot_completed", false);
         if (now < time_crashed_ + 4min || !boot_completed) {
             if (++crash_count_ > 4) {
