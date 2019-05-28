@@ -68,14 +68,14 @@
 // if (!output) return Error() << "CalculateResult failed: " << output.error();
 // UseOutput(*output);
 
-#ifndef _INIT_RESULT_H
-#define _INIT_RESULT_H
+#pragma once
 
 #include <errno.h>
 
 #include <sstream>
 #include <string>
-#include <variant>
+
+#include <android-base/expected.h>
 
 namespace android {
 namespace init {
@@ -83,19 +83,24 @@ namespace init {
 struct ResultError {
     template <typename T>
     ResultError(T&& error_string, int error_errno)
-        : error_string(std::forward<T>(error_string)), error_errno(error_errno) {}
+        : as_string(std::forward<T>(error_string)), as_errno(error_errno) {}
 
-    std::string error_string;
-    int error_errno;
+    template <typename T>
+    operator android::base::expected<T, ResultError>() {
+        return android::base::unexpected(ResultError(as_string, as_errno));
+    }
+
+    std::string as_string;
+    int as_errno;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const ResultError& t) {
-    os << t.error_string;
+    os << t.as_string;
     return os;
 }
 
 inline std::ostream& operator<<(std::ostream& os, ResultError&& t) {
-    os << std::move(t.error_string);
+    os << std::move(t.as_string);
     return os;
 }
 
@@ -105,20 +110,25 @@ class Error {
     Error(int errno_to_append) : errno_(errno_to_append), append_errno_(true) {}
 
     template <typename T>
+    operator android::base::expected<T, ResultError>() {
+        return android::base::unexpected(ResultError(str(), errno_));
+    }
+
+    template <typename T>
     Error&& operator<<(T&& t) {
         ss_ << std::forward<T>(t);
         return std::move(*this);
     }
 
     Error&& operator<<(const ResultError& result_error) {
-        ss_ << result_error.error_string;
-        errno_ = result_error.error_errno;
+        ss_ << result_error.as_string;
+        errno_ = result_error.as_errno;
         return std::move(*this);
     }
 
     Error&& operator<<(ResultError&& result_error) {
-        ss_ << std::move(result_error.error_string);
-        errno_ = result_error.error_errno;
+        ss_ << std::move(result_error.as_string);
+        errno_ = result_error.as_errno;
         return std::move(*this);
     }
 
@@ -151,63 +161,10 @@ inline Error ErrnoError() {
 }
 
 template <typename T>
-class [[nodiscard]] Result {
-  public:
-    Result() {}
-
-    template <typename U, typename... V,
-              typename = std::enable_if_t<!(std::is_same_v<std::decay_t<U>, Result<T>> &&
-                                            sizeof...(V) == 0)>>
-    Result(U&& result, V&&... results)
-        : contents_(std::in_place_index_t<0>(), std::forward<U>(result),
-                    std::forward<V>(results)...) {}
-
-    Result(Error&& error) : contents_(std::in_place_index_t<1>(), error.str(), error.get_errno()) {}
-    Result(const ResultError& result_error)
-        : contents_(std::in_place_index_t<1>(), result_error.error_string,
-                    result_error.error_errno) {}
-    Result(ResultError&& result_error)
-        : contents_(std::in_place_index_t<1>(), std::move(result_error.error_string),
-                    result_error.error_errno) {}
-
-    void IgnoreError() const {}
-
-    bool has_value() const { return contents_.index() == 0; }
-
-    T& value() & { return std::get<0>(contents_); }
-    const T& value() const & { return std::get<0>(contents_); }
-    T&& value() && { return std::get<0>(std::move(contents_)); }
-    const T&& value() const && { return std::get<0>(std::move(contents_)); }
-
-    const ResultError& error() const & { return std::get<1>(contents_); }
-    ResultError&& error() && { return std::get<1>(std::move(contents_)); }
-    const ResultError&& error() const && { return std::get<1>(std::move(contents_)); }
-
-    const std::string& error_string() const & { return std::get<1>(contents_).error_string; }
-    std::string&& error_string() && { return std::get<1>(std::move(contents_)).error_string; }
-    const std::string&& error_string() const && {
-        return std::get<1>(std::move(contents_)).error_string;
-    }
-
-    int error_errno() const { return std::get<1>(contents_).error_errno; }
-
-    explicit operator bool() const { return has_value(); }
-
-    T& operator*() & { return value(); }
-    const T& operator*() const & { return value(); }
-    T&& operator*() && { return std::move(value()); }
-    const T&& operator*() const && { return std::move(value()); }
-
-    T* operator->() { return &value(); }
-    const T* operator->() const { return &value(); }
-
-  private:
-    std::variant<T, ResultError> contents_;
-};
+using Result = android::base::expected<T, ResultError>;
 
 using Success = std::monostate;
 
 }  // namespace init
 }  // namespace android
 
-#endif
