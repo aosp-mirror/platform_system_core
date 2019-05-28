@@ -1,0 +1,13 @@
+LIBMEMUNREACHABLE {
+  global:
+    LogUnreachableMemory;
+    NoLeaks;
+    extern "C++" {
+      android::GetUnreachableMemory*;
+      android::GetUnreachableMemoryString*;
+      android::Leak::*;
+      android::UnreachableMemoryInfo::*;
+    };
+  local:
+    *;
+};

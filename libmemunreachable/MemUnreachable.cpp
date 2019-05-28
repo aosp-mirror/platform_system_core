@@ -280,6 +280,12 @@ static inline const char* plural(T val) {
 }
 
 bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
+  if (info.version > 0) {
+    MEM_ALOGE("unsupported UnreachableMemoryInfo.version %zu in GetUnreachableMemory",
+              info.version);
+    return false;
+  }
+
   int parent_pid = getpid();
   int parent_tid = gettid();
 
