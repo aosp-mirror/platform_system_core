@@ -35,24 +35,14 @@ locations on the system, described below.
 at the beginning of its execution.  It is responsible for the initial
 set up of the system.
 
-Devices that mount /system, /vendor through the first stage mount mechanism
-load all of the files contained within the
+Init loads all of the files contained within the
 /{system,vendor,odm}/etc/init/ directories immediately after loading
 the primary /init.rc.  This is explained in more details in the
 Imports section of this file.
 
-Legacy devices without the first stage mount mechanism do the following:
-1. /init.rc imports /init.${ro.hardware}.rc which is the primary
-   vendor supplied .rc file.
-2. During the mount\_all command, the init executable loads all of the
-   files contained within the /{system,vendor,odm}/etc/init/ directories.
-   These directories are intended for all Actions and Services used after
-   file system mounting.
-
-One may specify paths in the mount\_all command line to have it import
-.rc files at the specified paths instead of the default ones listed above.
-This is primarily for supporting factory mode and other non-standard boot
-modes.  The three default paths should be used for the normal boot process.
+Legacy devices without the first stage mount mechanism previously were
+able to import init scripts during mount_all, however that is deprecated
+and not allowed for devices launching after Q.
 
 The intention of these directories is:
 
@@ -87,14 +77,6 @@ fact present on the file system, which was not the case with the
 monolithic init .rc files.  This additionally will aid in merge
 conflict resolution when multiple services are added to the system, as
 each one will go into a separate file.
-
-There are two options "early" and "late" in mount\_all command
-which can be set after optional paths. With "--early" set, the
-init executable will skip mounting entries with "latemount" flag
-and triggering fs encryption state event. With "--late" set,
-init executable will only mount entries with "latemount" flag but skip
-importing rc files. By default, no option is set, and mount\_all will
-process all entries in the given fstab.
 
 Actions
 -------
@@ -514,10 +496,12 @@ Commands
   will be updated if the directory exists already.
 
 `mount_all <fstab> [ <path> ]\* [--<option>]`
-> Calls fs\_mgr\_mount\_all on the given fs\_mgr-format fstab and imports .rc files
-  at the specified paths (e.g., on the partitions just mounted) with optional
+> Calls fs\_mgr\_mount\_all on the given fs\_mgr-format fstab with optional
   options "early" and "late".
-  Refer to the section of "Init .rc Files" for detail.
+  With "--early" set, the init executable will skip mounting entries with
+  "latemount" flag and triggering fs encryption state event. With "--late" set,
+  init executable will only mount entries with "latemount" flag. By default,
+  no option is set, and mount\_all will process all entries in the given fstab.
 
 `mount <type> <device> <dir> [ <flag>\* ] [<options>]`
 > Attempt to mount the named device at the directory _dir_
@@ -638,8 +622,9 @@ There are only three times where the init executable imports .rc files:
       `ro.boot.init_rc` during initial boot.
    2. When it imports /{system,vendor,odm}/etc/init/ for first stage mount
       devices immediately after importing /init.rc.
-   3. When it imports /{system,vendor,odm}/etc/init/ or .rc files at specified
-      paths during mount_all.
+   3. (Deprecated) When it imports /{system,vendor,odm}/etc/init/ or .rc files
+      at specified paths during mount_all, not allowed for devices launching
+      after Q.
 
 The order that files are imported is a bit complex for legacy reasons
 and to keep backwards compatibility.  It is not strictly guaranteed.

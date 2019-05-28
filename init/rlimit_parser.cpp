@@ -77,7 +77,7 @@ Result<std::pair<int, rlimit>> ParseRlimit(const std::vector<std::string>& args)
         return Error() << "Could not parse hard limit '" << args[3] << "'";
     }
 
-    return {resource, limit};
+    return std::pair{resource, limit};
 }
 
 }  // namespace init

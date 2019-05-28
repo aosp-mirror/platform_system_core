@@ -304,11 +304,11 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,pmic_off_fault,.*", 175},
     {"reboot,pmic_off_s3rst,.*", 176},
     {"reboot,pmic_off_other,.*", 177},
-    {"reboot,fastboot_menu", 178},
-    {"reboot,recovery_menu", 179},
-    {"reboot,recovery_ui", 180},
-    {"shutdown,fastboot", 181},
-    {"shutdown,recovery", 182},
+    {"reboot,userrequested,fastboot", 178},
+    {"reboot,userrequested,recovery", 179},
+    {"reboot,userrequested,recovery,ui", 180},
+    {"shutdown,userrequested,fastboot", 181},
+    {"shutdown,userrequested,recovery", 182},
     {"reboot,unknown[0-9]*", 183},
 };
 
@@ -1092,17 +1092,8 @@ void RecordAbsoluteBootTime(BootEventRecordStore* boot_event_store,
 void LogBootInfoToStatsd(std::chrono::milliseconds end_time,
                          std::chrono::milliseconds total_duration, int32_t bootloader_duration_ms,
                          double time_since_last_boot_sec) {
-  const auto reason = android::base::GetProperty(bootloader_reboot_reason_property, "");
-
-  if (reason.empty()) {
-    android::util::stats_write(android::util::BOOT_SEQUENCE_REPORTED, "<EMPTY>", "<EMPTY>",
-                               end_time.count(), total_duration.count(),
-                               (int64_t)bootloader_duration_ms,
-                               (int64_t)time_since_last_boot_sec * 1000);
-    return;
-  }
-
-  const auto system_reason = android::base::GetProperty(system_reboot_reason_property, "");
+  const auto reason = android::base::GetProperty(bootloader_reboot_reason_property, "<EMPTY>");
+  const auto system_reason = android::base::GetProperty(system_reboot_reason_property, "<EMPTY>");
   android::util::stats_write(android::util::BOOT_SEQUENCE_REPORTED, reason.c_str(),
                              system_reason.c_str(), end_time.count(), total_duration.count(),
                              (int64_t)bootloader_duration_ms,
