@@ -79,6 +79,15 @@ inline constexpr unexpect_t unexpect{};
 #define _NODISCARD_
 #endif
 
+namespace {
+template< class T >
+struct remove_cvref {
+  typedef std::remove_cv_t<std::remove_reference_t<T>> type;
+};
+template< class T >
+using remove_cvref_t = typename remove_cvref<T>::type;
+} // namespace
+
 // Class expected
 template<class T, class E>
 class _NODISCARD_ expected {
@@ -93,7 +102,7 @@ class _NODISCARD_ expected {
   // constructors
   constexpr expected() = default;
   constexpr expected(const expected& rhs) = default;
-  constexpr expected(expected&& rhs) noexcept  = default;
+  constexpr expected(expected&& rhs) noexcept = default;
 
   template<class U, class G _ENABLE_IF(
     std::is_constructible_v<T, const U&> &&
@@ -173,6 +182,9 @@ class _NODISCARD_ expected {
 
   template<class U = T _ENABLE_IF(
     std::is_constructible_v<T, U&&> &&
+    !std::is_same_v<remove_cvref_t<U>, std::in_place_t> &&
+    !std::is_same_v<expected<T, E>, remove_cvref_t<U>> &&
+    !std::is_same_v<unexpected<E>, remove_cvref_t<U>> &&
     std::is_convertible_v<U&&,T> /* non-explicit */
   )>
   constexpr expected(U&& v)
@@ -180,6 +192,9 @@ class _NODISCARD_ expected {
 
   template<class U = T _ENABLE_IF(
     std::is_constructible_v<T, U&&> &&
+    !std::is_same_v<remove_cvref_t<U>, std::in_place_t> &&
+    !std::is_same_v<expected<T, E>, remove_cvref_t<U>> &&
+    !std::is_same_v<unexpected<E>, remove_cvref_t<U>> &&
     !std::is_convertible_v<U&&,T> /* explicit */
   )>
   constexpr explicit expected(U&& v)
@@ -241,38 +256,21 @@ class _NODISCARD_ expected {
   ~expected() = default;
 
   // assignment
-// TODO(b/132145659) enable assignment operator only when the condition
-// satisfies. SFNAIE doesn't work here because assignment operator should be
-// non-template. We could workaround this by defining a templated parent class
-// having the assignment operator. This incomplete implementation however
-// doesn't allow us to copy assign expected<T,E> even when T is non-copy
-// assignable. The copy assignment will fail by the underlying std::variant
-// anyway though the error message won't be clear.
-//  std::enable_if_t<(
-//    std::is_copy_assignable_v<T> &&
-//    std::is_copy_constructible_v<T> &&
-//    std::is_copy_assignable_v<E> &&
-//    std::is_copy_constructible_v<E> &&
-//    (std::is_nothrow_move_constructible_v<E> ||
-//     std::is_nothrow_move_constructible_v<T>)
-//  ), expected&>
-  expected& operator=(const expected& rhs) {
-    var_ = rhs.var_;
-    return *this;
-  }
-//  std::enable_if_t<(
-//    std::is_move_constructible_v<T> &&
-//    std::is_move_assignable_v<T> &&
-//    std::is_nothrow_move_constructible_v<E> &&
-//    std::is_nothrow_move_assignable_v<E>
-//  ), expected&>
-  expected& operator=(expected&& rhs) noexcept {
-    var_ = std::move(rhs.var_);
-    return *this;
-  }
+  // Note: SFNAIE doesn't work here because assignment operator should be
+  // non-template. We could workaround this by defining a templated parent class
+  // having the assignment operator. This incomplete implementation however
+  // doesn't allow us to copy assign expected<T,E> even when T is non-copy
+  // assignable. The copy assignment will fail by the underlying std::variant
+  // anyway though the error message won't be clear.
+  expected& operator=(const expected& rhs) = default;
+
+  // Note for SFNAIE above applies to here as well
+  expected& operator=(expected&& rhs) = default;
 
   template<class U = T _ENABLE_IF(
     !std::is_void_v<T> &&
+    !std::is_same_v<expected<T,E>, remove_cvref_t<U>> &&
+    !std::conjunction_v<std::is_scalar<T>, std::is_same<T, std::decay_t<U>>> &&
     std::is_constructible_v<T,U> &&
     std::is_assignable_v<T&,U> &&
     std::is_nothrow_move_constructible_v<E>
@@ -283,7 +281,6 @@ class _NODISCARD_ expected {
   }
 
   template<class G = E>
-  // TODO: std::is_nothrow_copy_constructible_v<E> && std::is_copy_assignable_v<E>
   expected& operator=(const unexpected<G>& rhs) {
     var_ = rhs;
     return *this;
@@ -399,7 +396,7 @@ class _NODISCARD_ expected {
   friend void swap(expected<T1, E1>&, expected<T1, E1>&) noexcept;
 
  private:
-    std::variant<value_type, unexpected_type> var_;
+  std::variant<value_type, unexpected_type> var_;
 };
 
 template<class T1, class E1, class T2, class E2>
@@ -468,7 +465,9 @@ class unexpected {
   constexpr unexpected(unexpected&&) = default;
 
   template<class Err = E _ENABLE_IF(
-    std::is_constructible_v<E, Err>
+    std::is_constructible_v<E, Err> &&
+    !std::is_same_v<remove_cvref_t<E>, std::in_place_t> &&
+    !std::is_same_v<remove_cvref_t<E>, unexpected>
   )>
   constexpr unexpected(Err&& e)
   : val_(std::forward<Err>(e)) {}
@@ -559,7 +558,9 @@ class unexpected {
   constexpr const E&& value() const&& noexcept { return std::move(val_); }
   constexpr E&& value() && noexcept { return std::move(val_); }
 
-  void swap(unexpected& other) noexcept { std::swap(val_, other.val_); }
+  void swap(unexpected& other) noexcept(std::is_nothrow_swappable_v<E>) {
+    std::swap(val_, other.val_);
+  }
 
   template<class E1, class E2>
   friend constexpr bool
@@ -570,8 +571,9 @@ class unexpected {
 
   template<class E1>
   friend void swap(unexpected<E1>& x, unexpected<E1>& y) noexcept(noexcept(x.swap(y)));
+
  private:
-    E val_;
+  E val_;
 };
 
 template<class E1, class E2>
