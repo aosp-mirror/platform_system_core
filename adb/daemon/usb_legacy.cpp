@@ -142,11 +142,12 @@ static int usb_ffs_write(usb_handle* h, const void* data, int len) {
     return orig_len;
 }
 
-static int usb_ffs_read(usb_handle* h, void* data, int len) {
+static int usb_ffs_read(usb_handle* h, void* data, int len, bool allow_partial) {
     D("about to read (fd=%d, len=%d)", h->bulk_out.get(), len);
 
     char* buf = static_cast<char*>(data);
     int orig_len = len;
+    unsigned count = 0;
     while (len > 0) {
         int read_len = std::min(USB_FFS_BULK_SIZE, len);
         int n = adb_read(h->bulk_out, buf, read_len);
@@ -156,6 +157,16 @@ static int usb_ffs_read(usb_handle* h, void* data, int len) {
         }
         buf += n;
         len -= n;
+        count += n;
+
+        // For fastbootd command such as "getvar all", len parameter is always set 64.
+        // But what we read is actually less than 64.
+        // For example, length 10 for "getvar all" command.
+        // If we get less data than expected, this means there should be no more data.
+        if (allow_partial && n < read_len) {
+            orig_len = count;
+            break;
+        }
     }
 
     D("[ done fd=%d ]", h->bulk_out.get());
@@ -221,7 +232,7 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
     }
 }
 
-static int usb_ffs_aio_read(usb_handle* h, void* data, int len) {
+static int usb_ffs_aio_read(usb_handle* h, void* data, int len, bool allow_partial) {
     return usb_ffs_do_aio(h, data, len, true);
 }
 
@@ -299,7 +310,7 @@ int usb_write(usb_handle* h, const void* data, int len) {
 }
 
 int usb_read(usb_handle* h, void* data, int len) {
-    return h->read(h, data, len);
+    return h->read(h, data, len, false /* allow_partial */);
 }
 
 int usb_close(usb_handle* h) {
