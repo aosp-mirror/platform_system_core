@@ -297,8 +297,32 @@ bool open_functionfs(android::base::unique_fd* out_control, android::base::uniqu
             PLOG(ERROR) << "failed to write USB strings";
             return false;
         }
-        // Signal only when writing the descriptors to ffs
+
+        // Signal init after we've wwritten our descriptors.
         android::base::SetProperty("sys.usb.ffs.ready", "1");
+
+        // Read until we get FUNCTIONFS_BIND from the control endpoint.
+        while (true) {
+            struct usb_functionfs_event event;
+            ssize_t rc = TEMP_FAILURE_RETRY(adb_read(control.get(), &event, sizeof(event)));
+
+            if (rc == -1) {
+                PLOG(FATAL) << "failed to read from FFS control fd";
+            } else if (rc == 0) {
+                LOG(WARNING) << "hit EOF on functionfs control fd during initialization";
+            } else if (rc != sizeof(event)) {
+                LOG(FATAL) << "read functionfs event of unexpected size, expected " << sizeof(event)
+                           << ", got " << rc;
+            }
+
+            if (event.type != FUNCTIONFS_BIND) {
+                LOG(FATAL) << "first read on functionfs control fd returned non-bind: "
+                           << event.type;
+            } else {
+                break;
+            }
+        }
+
         *out_control = std::move(control);
     }
 
