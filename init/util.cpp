@@ -41,7 +41,7 @@
 
 #if defined(__ANDROID__)
 #include "reboot_utils.h"
-#include "selinux.h"
+#include "selabel.h"
 #else
 #include "host_init_stubs.h"
 #endif
