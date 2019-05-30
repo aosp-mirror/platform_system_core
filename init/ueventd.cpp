@@ -37,6 +37,7 @@
 #include "devices.h"
 #include "firmware_handler.h"
 #include "modalias_handler.h"
+#include "selabel.h"
 #include "selinux.h"
 #include "uevent_handler.h"
 #include "uevent_listener.h"
