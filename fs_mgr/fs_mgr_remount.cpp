@@ -93,14 +93,14 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
     logd(id, severity, tag, file, line, message);
 }
 
-[[noreturn]] void reboot(bool dedupe) {
-    if (dedupe) {
-        LOG(INFO) << "The device will now reboot to recovery and attempt un-deduplication.";
+[[noreturn]] void reboot(bool overlayfs = false) {
+    if (overlayfs) {
+        LOG(INFO) << "Successfully setup overlayfs\nrebooting device";
     } else {
         LOG(INFO) << "Successfully disabled verity\nrebooting device";
     }
     ::sync();
-    android::base::SetProperty(ANDROID_RB_PROPERTY, dedupe ? "reboot,recovery" : "reboot,remount");
+    android::base::SetProperty(ANDROID_RB_PROPERTY, "reboot,remount");
     ::sleep(60);
     ::exit(0);  // SUCCESS
 }
@@ -251,6 +251,7 @@ int main(int argc, char* argv[]) {
     auto reboot_later = false;
     auto user_please_reboot_later = false;
     auto uses_overlayfs = fs_mgr_overlayfs_valid() != OverlayfsValidResult::kNotSupported;
+    auto setup_overlayfs = false;
     for (auto it = partitions.begin(); it != partitions.end();) {
         auto& entry = *it;
         auto& mount_point = entry.mount_point;
@@ -271,7 +272,7 @@ int main(int argc, char* argv[]) {
                                 ++it;
                                 continue;
                             }
-                            reboot(false);
+                            reboot();
                         }
                         user_please_reboot_later = true;
                     } else if (fs_mgr_set_blk_ro(entry.blk_device, false)) {
@@ -298,6 +299,9 @@ int main(int argc, char* argv[]) {
         if (fs_mgr_overlayfs_setup(nullptr, mount_point.c_str(), &change)) {
             if (change) {
                 LOG(INFO) << "Using overlayfs for " << mount_point;
+                reboot_later = can_reboot;
+                user_please_reboot_later = true;
+                setup_overlayfs = true;
             }
         } else if (errno) {
             PLOG(ERROR) << "Overlayfs setup for " << mount_point << " failed, skipping";
@@ -309,7 +313,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (partitions.empty()) {
-        if (reboot_later) reboot(false);
+        if (reboot_later) reboot(setup_overlayfs);
         if (user_please_reboot_later) {
             LOG(INFO) << "Now reboot your device for settings to take effect";
             return 0;
@@ -389,7 +393,7 @@ int main(int argc, char* argv[]) {
         retval = REMOUNT_FAILED;
     }
 
-    if (reboot_later) reboot(false);
+    if (reboot_later) reboot(setup_overlayfs);
     if (user_please_reboot_later) {
         LOG(INFO) << "Now reboot your device for settings to take effect";
         return 0;
