@@ -124,6 +124,7 @@ cc_library_static {
         "reboot.cpp",
         "reboot_utils.cpp",
         "security.cpp",
+        "selabel.cpp",
         "selinux.cpp",
         "service.cpp",
         "sigchld_handler.cpp",
