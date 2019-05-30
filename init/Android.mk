@@ -52,6 +52,7 @@ LOCAL_SRC_FILES := \
     first_stage_mount.cpp \
     mount_namespace.cpp \
     reboot_utils.cpp \
+    selabel.cpp \
     selinux.cpp \
     switch_root.cpp \
     uevent_listener.cpp \

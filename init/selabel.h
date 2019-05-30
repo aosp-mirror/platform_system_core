@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,17 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 namespace android {
 namespace init {
 
-int SetupSelinux(char** argv);
-void SelinuxRestoreContext();
-
-void SelinuxSetupKernelLogging();
-int SelinuxGetVendorAndroidVersion();
-
-static constexpr char kEnvSelinuxStartedAt[] = "SELINUX_STARTED_AT";
+void SelabelInitialize();
+bool SelabelLookupFileContext(const std::string& key, int type, std::string* result);
+bool SelabelLookupFileContextBestMatch(const std::string& key,
+                                       const std::vector<std::string>& aliases, int type,
+                                       std::string* result);
 
 }  // namespace init
 }  // namespace android

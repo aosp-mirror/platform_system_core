@@ -65,6 +65,7 @@
 #include "reboot.h"
 #include "reboot_utils.h"
 #include "security.h"
+#include "selabel.h"
 #include "selinux.h"
 #include "sigchld_handler.h"
 #include "util.h"
