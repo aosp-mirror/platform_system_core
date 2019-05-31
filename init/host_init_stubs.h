@@ -44,6 +44,11 @@ extern uint32_t (*property_set)(const std::string& name, const std::string& valu
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
                            const std::string& source_context, const ucred& cr, std::string* error);
 
+// reboot_utils.h
+inline void __attribute__((noreturn)) InitFatalReboot() {
+    abort();
+}
+
 // selinux.h
 int SelinuxGetVendorAndroidVersion();
 void SelabelInitialize();
