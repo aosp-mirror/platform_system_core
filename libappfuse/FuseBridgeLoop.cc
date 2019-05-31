@@ -354,8 +354,8 @@ bool FuseBridgeLoop::ProcessEventLocked(const std::unordered_set<FuseBridgeEntry
         }
         if (entry->IsClosing()) {
             const int mount_id = entry->mount_id();
-            callback->OnClosed(mount_id);
             bridges_.erase(mount_id);
+            callback->OnClosed(mount_id);
             if (bridges_.size() == 0) {
                 // All bridges are now closed.
                 return false;
