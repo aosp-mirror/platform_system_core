@@ -26,6 +26,7 @@ namespace init {
 bool IsRebootCapable();
 // This is a wrapper around the actual reboot calls.
 void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& reboot_target);
+void __attribute__((noreturn)) InitFatalReboot();
 void InstallRebootSignalHandlers();
 
 }  // namespace init
