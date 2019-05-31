@@ -468,6 +468,7 @@ void SetStdioToDevNull(char** argv) {
 }
 
 void InitKernelLogging(char** argv) {
+    SetFatalRebootTarget();
     android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
 }
 
