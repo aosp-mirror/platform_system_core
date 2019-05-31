@@ -36,7 +36,7 @@
 #include <selinux/android.h>
 #include <selinux/selinux.h>
 
-#include "selinux.h"
+#include "selabel.h"
 #include "util.h"
 
 #ifdef _INIT_INIT_H
