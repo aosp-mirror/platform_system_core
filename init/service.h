@@ -36,6 +36,7 @@
 #include "descriptors.h"
 #include "keyword_map.h"
 #include "parser.h"
+#include "service_utils.h"
 #include "subcontext.h"
 
 #define SVC_DISABLED 0x001        // do not autostart with class
@@ -107,16 +108,16 @@ class Service {
     pid_t pid() const { return pid_; }
     android::base::boot_clock::time_point time_started() const { return time_started_; }
     int crash_count() const { return crash_count_; }
-    uid_t uid() const { return uid_; }
-    gid_t gid() const { return gid_; }
-    unsigned namespace_flags() const { return namespace_flags_; }
-    const std::vector<gid_t>& supp_gids() const { return supp_gids_; }
+    uid_t uid() const { return proc_attr_.uid; }
+    gid_t gid() const { return proc_attr_.gid; }
+    unsigned namespace_flags() const { return namespaces_.flags; }
+    const std::vector<gid_t>& supp_gids() const { return proc_attr_.supp_gids; }
     const std::string& seclabel() const { return seclabel_; }
     const std::vector<int>& keycodes() const { return keycodes_; }
-    IoSchedClass ioprio_class() const { return ioprio_class_; }
-    int ioprio_pri() const { return ioprio_pri_; }
+    IoSchedClass ioprio_class() const { return proc_attr_.ioprio_class; }
+    int ioprio_pri() const { return proc_attr_.ioprio_pri; }
     const std::set<std::string>& interfaces() const { return interfaces_; }
-    int priority() const { return priority_; }
+    int priority() const { return proc_attr_.priority; }
     int oom_score_adjust() const { return oom_score_adjust_; }
     bool is_override() const { return override_; }
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
@@ -132,15 +133,10 @@ class Service {
     using OptionParser = Result<Success> (Service::*)(std::vector<std::string>&& args);
     class OptionParserMap;
 
-    Result<Success> SetUpMountNamespace() const;
-    Result<Success> SetUpPidNamespace() const;
-    Result<Success> EnterNamespaces() const;
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
-    void ZapStdio() const;
-    void OpenConsole() const;
     void KillProcessGroup(int signal);
-    void SetProcessAttributes();
+    void SetProcessAttributesAndCaps();
 
     Result<Success> ParseCapabilities(std::vector<std::string>&& args);
     Result<Success> ParseClass(std::vector<std::string>&& args);
@@ -184,7 +180,6 @@ class Service {
 
     std::string name_;
     std::set<std::string> classnames_;
-    std::string console_;
 
     unsigned flags_;
     pid_t pid_;
@@ -192,13 +187,9 @@ class Service {
     android::base::boot_clock::time_point time_crashed_;  // first crash within inspection window
     int crash_count_;                     // number of times crashed within window
 
-    uid_t uid_;
-    gid_t gid_;
-    std::vector<gid_t> supp_gids_;
     std::optional<CapSet> capabilities_;
-    unsigned namespace_flags_;
-    // Pair of namespace type, path to namespace.
-    std::vector<std::pair<int, std::string>> namespaces_to_enter_;
+    ProcessAttributes proc_attr_;
+    NamespaceInfo namespaces_;
 
     std::string seclabel_;
 
@@ -214,10 +205,6 @@ class Service {
     // keycodes for triggering this service via /dev/input/input*
     std::vector<int> keycodes_;
 
-    IoSchedClass ioprio_class_;
-    int ioprio_pri_;
-    int priority_;
-
     int oom_score_adjust_;
 
     int swappiness_ = -1;
@@ -232,8 +219,6 @@ class Service {
     bool override_ = false;
 
     unsigned long start_order_;
-
-    std::vector<std::pair<int, rlimit>> rlimits_;
 
     bool sigstop_ = false;
 
