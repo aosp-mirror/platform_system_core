@@ -21,12 +21,10 @@
 #include <linux/input.h>
 #include <linux/securebits.h>
 #include <sched.h>
-#include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -36,7 +34,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <android-base/unique_fd.h>
 #include <hidl-util/FQName.h>
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
@@ -65,7 +62,6 @@ using android::base::ParseInt;
 using android::base::Split;
 using android::base::StartsWith;
 using android::base::StringPrintf;
-using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
 namespace android {
@@ -105,87 +101,6 @@ static Result<std::string> ComputeContextFromExecutable(const std::string& servi
         return Error() << "Could not get process context";
     }
     return computed_context;
-}
-
-Result<Success> Service::SetUpMountNamespace() const {
-    constexpr unsigned int kSafeFlags = MS_NODEV | MS_NOEXEC | MS_NOSUID;
-
-    // Recursively remount / as slave like zygote does so unmounting and mounting /proc
-    // doesn't interfere with the parent namespace's /proc mount. This will also
-    // prevent any other mounts/unmounts initiated by the service from interfering
-    // with the parent namespace but will still allow mount events from the parent
-    // namespace to propagate to the child.
-    if (mount("rootfs", "/", nullptr, (MS_SLAVE | MS_REC), nullptr) == -1) {
-        return ErrnoError() << "Could not remount(/) recursively as slave";
-    }
-
-    // umount() then mount() /proc and/or /sys
-    // Note that it is not sufficient to mount with MS_REMOUNT.
-    if (namespace_flags_ & CLONE_NEWPID) {
-        if (umount("/proc") == -1) {
-            return ErrnoError() << "Could not umount(/proc)";
-        }
-        if (mount("", "/proc", "proc", kSafeFlags, "") == -1) {
-            return ErrnoError() << "Could not mount(/proc)";
-        }
-    }
-    bool remount_sys = std::any_of(namespaces_to_enter_.begin(), namespaces_to_enter_.end(),
-                                   [](const auto& entry) { return entry.first == CLONE_NEWNET; });
-    if (remount_sys) {
-        if (umount2("/sys", MNT_DETACH) == -1) {
-            return ErrnoError() << "Could not umount(/sys)";
-        }
-        if (mount("", "/sys", "sysfs", kSafeFlags, "") == -1) {
-            return ErrnoError() << "Could not mount(/sys)";
-        }
-    }
-    return Success();
-}
-
-Result<Success> Service::SetUpPidNamespace() const {
-    if (prctl(PR_SET_NAME, name_.c_str()) == -1) {
-        return ErrnoError() << "Could not set name";
-    }
-
-    pid_t child_pid = fork();
-    if (child_pid == -1) {
-        return ErrnoError() << "Could not fork init inside the PID namespace";
-    }
-
-    if (child_pid > 0) {
-        // So that we exit with the right status.
-        static int init_exitstatus = 0;
-        signal(SIGTERM, [](int) { _exit(init_exitstatus); });
-
-        pid_t waited_pid;
-        int status;
-        while ((waited_pid = wait(&status)) > 0) {
-             // This loop will end when there are no processes left inside the
-             // PID namespace or when the init process inside the PID namespace
-             // gets a signal.
-            if (waited_pid == child_pid) {
-                init_exitstatus = status;
-            }
-        }
-        if (!WIFEXITED(init_exitstatus)) {
-            _exit(EXIT_FAILURE);
-        }
-        _exit(WEXITSTATUS(init_exitstatus));
-    }
-    return Success();
-}
-
-Result<Success> Service::EnterNamespaces() const {
-    for (const auto& [nstype, path] : namespaces_to_enter_) {
-        auto fd = unique_fd{open(path.c_str(), O_RDONLY | O_CLOEXEC)};
-        if (fd == -1) {
-            return ErrnoError() << "Could not open namespace at " << path;
-        }
-        if (setns(fd, nstype) == -1) {
-            return ErrnoError() << "Could not setns() namespace at " << path;
-        }
-    }
-    return Success();
 }
 
 static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigstop) {
@@ -230,16 +145,16 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       flags_(flags),
       pid_(0),
       crash_count_(0),
-      uid_(uid),
-      gid_(gid),
-      supp_gids_(supp_gids),
-      namespace_flags_(namespace_flags),
+      proc_attr_{.ioprio_class = IoSchedClass_NONE,
+                 .ioprio_pri = 0,
+                 .uid = uid,
+                 .gid = gid,
+                 .supp_gids = supp_gids,
+                 .priority = 0},
+      namespaces_{.flags = namespace_flags},
       seclabel_(seclabel),
       onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0,
                  "onrestart", {}),
-      ioprio_class_(IoSchedClass_NONE),
-      ioprio_pri_(0),
-      priority_(0),
       oom_score_adjust_(-1000),
       start_order_(0),
       args_(args) {}
@@ -272,24 +187,18 @@ void Service::KillProcessGroup(int signal) {
                   << ") process group...";
         int r;
         if (signal == SIGTERM) {
-            r = killProcessGroupOnce(uid_, pid_, signal);
+            r = killProcessGroupOnce(proc_attr_.uid, pid_, signal);
         } else {
-            r = killProcessGroup(uid_, pid_, signal);
+            r = killProcessGroup(proc_attr_.uid, pid_, signal);
         }
 
         if (r == 0) process_cgroup_empty_ = true;
     }
 }
 
-void Service::SetProcessAttributes() {
-    for (const auto& rlimit : rlimits_) {
-        if (setrlimit(rlimit.first, &rlimit.second) == -1) {
-            LOG(FATAL) << StringPrintf("setrlimit(%d, {rlim_cur=%ld, rlim_max=%ld}) failed",
-                                       rlimit.first, rlimit.second.rlim_cur, rlimit.second.rlim_max);
-        }
-    }
+void Service::SetProcessAttributesAndCaps() {
     // Keep capabilites on uid change.
-    if (capabilities_ && uid_) {
+    if (capabilities_ && proc_attr_.uid) {
         // If Android is running in a container, some securebits might already
         // be locked, so don't change those.
         unsigned long securebits = prctl(PR_GET_SECUREBITS);
@@ -302,37 +211,21 @@ void Service::SetProcessAttributes() {
         }
     }
 
-    // TODO: work out why this fails for `console` then upgrade to FATAL.
-    if (setpgid(0, getpid()) == -1) PLOG(ERROR) << "setpgid failed for " << name_;
+    if (auto result = SetProcessAttributes(proc_attr_); !result) {
+        LOG(FATAL) << "cannot set attribute for " << name_ << ": " << result.error();
+    }
 
-    if (gid_) {
-        if (setgid(gid_) != 0) {
-            PLOG(FATAL) << "setgid failed for " << name_;
-        }
-    }
-    if (setgroups(supp_gids_.size(), &supp_gids_[0]) != 0) {
-        PLOG(FATAL) << "setgroups failed for " << name_;
-    }
-    if (uid_) {
-        if (setuid(uid_) != 0) {
-            PLOG(FATAL) << "setuid failed for " << name_;
-        }
-    }
     if (!seclabel_.empty()) {
         if (setexeccon(seclabel_.c_str()) < 0) {
             PLOG(FATAL) << "cannot setexeccon('" << seclabel_ << "') for " << name_;
         }
     }
-    if (priority_ != 0) {
-        if (setpriority(PRIO_PROCESS, 0, priority_) != 0) {
-            PLOG(FATAL) << "setpriority failed for " << name_;
-        }
-    }
+
     if (capabilities_) {
         if (!SetCapsForExec(*capabilities_)) {
             LOG(FATAL) << "cannot set capabilities for " << name_;
         }
-    } else if (uid_) {
+    } else if (proc_attr_.uid) {
         // Inheritable caps can be non-zero when running in a container.
         if (!DropInheritableCaps()) {
             LOG(FATAL) << "cannot drop inheritable caps for " << name_;
@@ -458,7 +351,7 @@ Result<Success> Service::ParseClass(std::vector<std::string>&& args) {
 
 Result<Success> Service::ParseConsole(std::vector<std::string>&& args) {
     flags_ |= SVC_CONSOLE;
-    console_ = args.size() > 1 ? "/dev/" + args[1] : "";
+    proc_attr_.console = args.size() > 1 ? "/dev/" + args[1] : "";
     return Success();
 }
 
@@ -477,13 +370,13 @@ Result<Success> Service::ParseEnterNamespace(std::vector<std::string>&& args) {
     if (args[1] != "net") {
         return Error() << "Init only supports entering network namespaces";
     }
-    if (!namespaces_to_enter_.empty()) {
+    if (!namespaces_.namespaces_to_enter.empty()) {
         return Error() << "Only one network namespace may be entered";
     }
     // Network namespaces require that /sys is remounted, otherwise the old adapters will still be
     // present. Therefore, they also require mount namespaces.
-    namespace_flags_ |= CLONE_NEWNS;
-    namespaces_to_enter_.emplace_back(CLONE_NEWNET, std::move(args[2]));
+    namespaces_.flags |= CLONE_NEWNS;
+    namespaces_.namespaces_to_enter.emplace_back(CLONE_NEWNET, std::move(args[2]));
     return Success();
 }
 
@@ -492,22 +385,22 @@ Result<Success> Service::ParseGroup(std::vector<std::string>&& args) {
     if (!gid) {
         return Error() << "Unable to decode GID for '" << args[1] << "': " << gid.error();
     }
-    gid_ = *gid;
+    proc_attr_.gid = *gid;
 
     for (std::size_t n = 2; n < args.size(); n++) {
         gid = DecodeUid(args[n]);
         if (!gid) {
             return Error() << "Unable to decode GID for '" << args[n] << "': " << gid.error();
         }
-        supp_gids_.emplace_back(*gid);
+        proc_attr_.supp_gids.emplace_back(*gid);
     }
     return Success();
 }
 
 Result<Success> Service::ParsePriority(std::vector<std::string>&& args) {
-    priority_ = 0;
-    if (!ParseInt(args[1], &priority_,
-                  static_cast<int>(ANDROID_PRIORITY_HIGHEST), // highest is negative
+    proc_attr_.priority = 0;
+    if (!ParseInt(args[1], &proc_attr_.priority,
+                  static_cast<int>(ANDROID_PRIORITY_HIGHEST),  // highest is negative
                   static_cast<int>(ANDROID_PRIORITY_LOWEST))) {
         return Error() << StringPrintf("process priority value must be range %d - %d",
                                        ANDROID_PRIORITY_HIGHEST, ANDROID_PRIORITY_LOWEST);
@@ -547,16 +440,16 @@ Result<Success> Service::ParseInterface(std::vector<std::string>&& args) {
 }
 
 Result<Success> Service::ParseIoprio(std::vector<std::string>&& args) {
-    if (!ParseInt(args[2], &ioprio_pri_, 0, 7)) {
+    if (!ParseInt(args[2], &proc_attr_.ioprio_pri, 0, 7)) {
         return Error() << "priority value must be range 0 - 7";
     }
 
     if (args[1] == "rt") {
-        ioprio_class_ = IoSchedClass_RT;
+        proc_attr_.ioprio_class = IoSchedClass_RT;
     } else if (args[1] == "be") {
-        ioprio_class_ = IoSchedClass_BE;
+        proc_attr_.ioprio_class = IoSchedClass_BE;
     } else if (args[1] == "idle") {
-        ioprio_class_ = IoSchedClass_IDLE;
+        proc_attr_.ioprio_class = IoSchedClass_IDLE;
     } else {
         return Error() << "ioprio option usage: ioprio <rt|be|idle> <0-7>";
     }
@@ -613,11 +506,11 @@ Result<Success> Service::ParseOnrestart(std::vector<std::string>&& args) {
 Result<Success> Service::ParseNamespace(std::vector<std::string>&& args) {
     for (size_t i = 1; i < args.size(); i++) {
         if (args[i] == "pid") {
-            namespace_flags_ |= CLONE_NEWPID;
+            namespaces_.flags |= CLONE_NEWPID;
             // PID namespaces require mount namespaces.
-            namespace_flags_ |= CLONE_NEWNS;
+            namespaces_.flags |= CLONE_NEWNS;
         } else if (args[i] == "mnt") {
-            namespace_flags_ |= CLONE_NEWNS;
+            namespaces_.flags |= CLONE_NEWNS;
         } else {
             return Error() << "namespace must be 'pid' or 'mnt'";
         }
@@ -674,7 +567,7 @@ Result<Success> Service::ParseProcessRlimit(std::vector<std::string>&& args) {
     auto rlimit = ParseRlimit(args);
     if (!rlimit) return rlimit.error();
 
-    rlimits_.emplace_back(*rlimit);
+    proc_attr_.rlimits.emplace_back(*rlimit);
     return Success();
 }
 
@@ -784,7 +677,7 @@ Result<Success> Service::ParseUser(std::vector<std::string>&& args) {
     if (!uid) {
         return Error() << "Unable to find UID for '" << args[1] << "': " << uid.error();
     }
-    uid_ = *uid;
+    proc_attr_.uid = *uid;
     return Success();
 }
 
@@ -885,8 +778,8 @@ Result<Success> Service::ExecStart() {
     flags_ |= SVC_EXEC;
     is_exec_service_running_ = true;
 
-    LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << uid_ << " gid "
-              << gid_ << "+" << supp_gids_.size() << " context "
+    LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << proc_attr_.uid
+              << " gid " << proc_attr_.gid << "+" << proc_attr_.supp_gids.size() << " context "
               << (!seclabel_.empty() ? seclabel_ : "default") << ") started; waiting...";
 
     return Success();
@@ -920,16 +813,16 @@ Result<Success> Service::Start() {
 
     bool needs_console = (flags_ & SVC_CONSOLE);
     if (needs_console) {
-        if (console_.empty()) {
-            console_ = default_console;
+        if (proc_attr_.console.empty()) {
+            proc_attr_.console = default_console;
         }
 
         // Make sure that open call succeeds to ensure a console driver is
         // properly registered for the device node
-        int console_fd = open(console_.c_str(), O_RDWR | O_CLOEXEC);
+        int console_fd = open(proc_attr_.console.c_str(), O_RDWR | O_CLOEXEC);
         if (console_fd < 0) {
             flags_ |= SVC_DISABLED;
-            return ErrnoError() << "Couldn't open console '" << console_ << "'";
+            return ErrnoError() << "Couldn't open console '" << proc_attr_.console << "'";
         }
         close(console_fd);
     }
@@ -964,8 +857,8 @@ Result<Success> Service::Start() {
     LOG(INFO) << "starting service '" << name_ << "'...";
 
     pid_t pid = -1;
-    if (namespace_flags_) {
-        pid = clone(nullptr, nullptr, namespace_flags_ | SIGCHLD, nullptr);
+    if (namespaces_.flags) {
+        pid = clone(nullptr, nullptr, namespaces_.flags | SIGCHLD, nullptr);
     } else {
         pid = fork();
     }
@@ -973,33 +866,9 @@ Result<Success> Service::Start() {
     if (pid == 0) {
         umask(077);
 
-        if (auto result = EnterNamespaces(); !result) {
-            LOG(FATAL) << "Service '" << name_ << "' could not enter namespaces: " << result.error();
-        }
-
-#if defined(__ANDROID__)
-        if (pre_apexd_) {
-            if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
-                LOG(FATAL) << "Service '" << name_ << "' could not enter "
-                           << "into the bootstrap mount namespace";
-            }
-        }
-#endif
-
-        if (namespace_flags_ & CLONE_NEWNS) {
-            if (auto result = SetUpMountNamespace(); !result) {
-                LOG(FATAL) << "Service '" << name_
-                           << "' could not set up mount namespace: " << result.error();
-            }
-        }
-
-        if (namespace_flags_ & CLONE_NEWPID) {
-            // This will fork again to run an init process inside the PID
-            // namespace.
-            if (auto result = SetUpPidNamespace(); !result) {
-                LOG(FATAL) << "Service '" << name_
-                           << "' could not set up PID namespace: " << result.error();
-            }
+        if (auto result = EnterNamespaces(namespaces_, name_, pre_apexd_); !result) {
+            LOG(FATAL) << "Service '" << name_
+                       << "' failed to set up namespaces: " << result.error();
         }
 
         for (const auto& [key, value] : environment_vars_) {
@@ -1009,58 +878,13 @@ Result<Success> Service::Start() {
         std::for_each(descriptors_.begin(), descriptors_.end(),
                       std::bind(&DescriptorInfo::CreateAndPublish, std::placeholders::_1, scon));
 
-        // See if there were "writepid" instructions to write to files under cpuset path.
-        std::string cpuset_path;
-        if (CgroupGetControllerPath("cpuset", &cpuset_path)) {
-            auto cpuset_predicate = [&cpuset_path](const std::string& path) {
-                return StartsWith(path, cpuset_path + "/");
-            };
-            auto iter =
-                    std::find_if(writepid_files_.begin(), writepid_files_.end(), cpuset_predicate);
-            if (iter == writepid_files_.end()) {
-                // There were no "writepid" instructions for cpusets, check if the system default
-                // cpuset is specified to be used for the process.
-                std::string default_cpuset = GetProperty("ro.cpuset.default", "");
-                if (!default_cpuset.empty()) {
-                    // Make sure the cpuset name starts and ends with '/'.
-                    // A single '/' means the 'root' cpuset.
-                    if (default_cpuset.front() != '/') {
-                        default_cpuset.insert(0, 1, '/');
-                    }
-                    if (default_cpuset.back() != '/') {
-                        default_cpuset.push_back('/');
-                    }
-                    writepid_files_.push_back(
-                            StringPrintf("%s%stasks", cpuset_path.c_str(), default_cpuset.c_str()));
-                }
-            }
-        } else {
-            LOG(ERROR) << "cpuset cgroup controller is not mounted!";
-        }
-        std::string pid_str = std::to_string(getpid());
-        for (const auto& file : writepid_files_) {
-            if (!WriteStringToFile(pid_str, file)) {
-                PLOG(ERROR) << "couldn't write " << pid_str << " to " << file;
-            }
-        }
-
-        if (ioprio_class_ != IoSchedClass_NONE) {
-            if (android_set_ioprio(getpid(), ioprio_class_, ioprio_pri_)) {
-                PLOG(ERROR) << "failed to set pid " << getpid()
-                            << " ioprio=" << ioprio_class_ << "," << ioprio_pri_;
-            }
-        }
-
-        if (needs_console) {
-            setsid();
-            OpenConsole();
-        } else {
-            ZapStdio();
+        if (auto result = WritePidToFiles(&writepid_files_); !result) {
+            LOG(ERROR) << "failed to write pid to files: " << result.error();
         }
 
         // As requested, set our gid, supplemental gids, uid, context, and
         // priority. Aborts on failure.
-        SetProcessAttributes();
+        SetProcessAttributesAndCaps();
 
         if (!ExpandArgsAndExecv(args_, sigstop_)) {
             PLOG(ERROR) << "cannot execve('" << args_[0] << "')";
@@ -1090,19 +914,19 @@ Result<Success> Service::Start() {
 
     bool use_memcg = swappiness_ != -1 || soft_limit_in_bytes_ != -1 || limit_in_bytes_ != -1 ||
                       limit_percent_ != -1 || !limit_property_.empty();
-    errno = -createProcessGroup(uid_, pid_, use_memcg);
+    errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
     if (errno != 0) {
-        PLOG(ERROR) << "createProcessGroup(" << uid_ << ", " << pid_ << ") failed for service '"
-                    << name_ << "'";
+        PLOG(ERROR) << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
+                    << ") failed for service '" << name_ << "'";
     } else if (use_memcg) {
         if (swappiness_ != -1) {
-            if (!setProcessGroupSwappiness(uid_, pid_, swappiness_)) {
+            if (!setProcessGroupSwappiness(proc_attr_.uid, pid_, swappiness_)) {
                 PLOG(ERROR) << "setProcessGroupSwappiness failed";
             }
         }
 
         if (soft_limit_in_bytes_ != -1) {
-            if (!setProcessGroupSoftLimit(uid_, pid_, soft_limit_in_bytes_)) {
+            if (!setProcessGroupSoftLimit(proc_attr_.uid, pid_, soft_limit_in_bytes_)) {
                 PLOG(ERROR) << "setProcessGroupSoftLimit failed";
             }
         }
@@ -1129,7 +953,7 @@ Result<Success> Service::Start() {
         }
 
         if (computed_limit_in_bytes != size_t(-1)) {
-            if (!setProcessGroupLimit(uid_, pid_, computed_limit_in_bytes)) {
+            if (!setProcessGroupLimit(proc_attr_.uid, pid_, computed_limit_in_bytes)) {
                 PLOG(ERROR) << "setProcessGroupLimit failed";
             }
         }
@@ -1247,25 +1071,6 @@ void Service::StopOrReset(int how) {
     } else {
         NotifyStateChange("stopped");
     }
-}
-
-void Service::ZapStdio() const {
-    int fd;
-    fd = open("/dev/null", O_RDWR);
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
-    close(fd);
-}
-
-void Service::OpenConsole() const {
-    int fd = open(console_.c_str(), O_RDWR);
-    if (fd == -1) fd = open("/dev/null", O_RDWR);
-    ioctl(fd, TIOCSCTTY, 0);
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
-    close(fd);
 }
 
 ServiceList::ServiceList() {}
