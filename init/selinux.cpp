@@ -60,7 +60,6 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/unique_fd.h>
-#include <cutils/android_reboot.h>
 #include <fs_avb/fs_avb.h>
 #include <selinux/android.h>
 
@@ -518,9 +517,7 @@ int SelinuxGetVendorAndroidVersion() {
 
 // This function initializes SELinux then execs init to run in the init SELinux context.
 int SetupSelinux(char** argv) {
-    android::base::InitLogging(argv, &android::base::KernelLogger, [](const char*) {
-        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
-    });
+    InitKernelLogging(argv);
 
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
