@@ -33,7 +33,6 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <cutils/android_reboot.h>
 #include <private/android_filesystem_config.h>
 
 #include "debug_ramdisk.h"
@@ -168,13 +167,10 @@ int FirstStageMain(int argc, char** argv) {
                     "mode=0755,uid=0,gid=0"));
 #undef CHECKCALL
 
+    SetStdioToDevNull(argv);
     // Now that tmpfs is mounted on /dev and we have /dev/kmsg, we can actually
     // talk to the outside world...
-    // We need to set up stdin/stdout/stderr for child processes forked from first
-    // stage init as part of the mount process.  This closes /dev/console if the
-    // kernel had previously opened it.
-    auto reboot_bootloader = [](const char*) { RebootSystem(ANDROID_RB_RESTART2, "bootloader"); };
-    InitKernelLogging(argv, reboot_bootloader);
+    InitKernelLogging(argv);
 
     if (!errors.empty()) {
         for (const auto& [error_string, error_errno] : errors) {
