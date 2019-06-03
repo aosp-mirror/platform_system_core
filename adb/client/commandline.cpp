@@ -1811,7 +1811,7 @@ int adb_commandline(int argc, const char** argv) {
         if (argc < 2) error_exit("install-multiple requires an argument");
         return install_multiple_app(argc, argv);
     } else if (!strcmp(argv[0], "install-multi-package")) {
-        if (argc < 3) error_exit("install-multi-package requires an argument");
+        if (argc < 2) error_exit("install-multi-package requires an argument");
         return install_multi_package(argc, argv);
     } else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) error_exit("uninstall requires an argument");
