@@ -51,7 +51,7 @@ print_time=false
 start_time=`date +%s`
 ACTIVE_SLOT=
 
-ADB_WAIT=3m
+ADB_WAIT=4m
 FASTBOOT_WAIT=2m
 
 ##
@@ -1331,7 +1331,7 @@ else
   echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot"
   adb_wait ${ADB_WAIT} ||
     fixup_from_recovery ||
-    die "did not reboot after flash `usb_status`"
+    die "did not reboot after formatting ${scratch_cpartition} `usb_status`"
   if ${overlayfs_needed}; then
     adb_root &&
       D=`adb_sh df -k </dev/null` &&
@@ -1426,7 +1426,7 @@ if [ -n "${scratch_partition}" ]; then
     die "fastboot flash ${scratch_partition}"
   adb_wait ${ADB_WAIT} &&
     adb_root ||
-    die "did not reboot after flash"
+    die "did not reboot after flashing empty ${scratch_partition} `usb_status`"
   T=`adb_date`
   D=`adb disable-verity 2>&1`
   err=${?}
