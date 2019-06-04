@@ -370,6 +370,38 @@ struct UsbFfsConnection : public Connection {
                         bound = false;
                         running = false;
                         break;
+
+                    case FUNCTIONFS_SETUP: {
+                        LOG(INFO) << "received FUNCTIONFS_SETUP control transfer: bRequestType = "
+                                  << static_cast<int>(event.u.setup.bRequestType)
+                                  << ", bRequest = " << static_cast<int>(event.u.setup.bRequest)
+                                  << ", wValue = " << static_cast<int>(event.u.setup.wValue)
+                                  << ", wIndex = " << static_cast<int>(event.u.setup.wIndex)
+                                  << ", wLength = " << static_cast<int>(event.u.setup.wLength);
+
+                        if ((event.u.setup.bRequestType & USB_DIR_IN)) {
+                            LOG(INFO) << "acking device-to-host control transfer";
+                            ssize_t rc = adb_write(control_fd_.get(), "", 0);
+                            if (rc != 0) {
+                                PLOG(ERROR) << "failed to write empty packet to host";
+                                break;
+                            }
+                        } else {
+                            std::string buf;
+                            buf.resize(event.u.setup.wLength + 1);
+
+                            ssize_t rc = adb_read(control_fd_.get(), buf.data(), buf.size());
+                            if (rc != event.u.setup.wLength) {
+                                LOG(ERROR)
+                                        << "read " << rc
+                                        << " bytes when trying to read control request, expected "
+                                        << event.u.setup.wLength;
+                            }
+
+                            LOG(INFO) << "control request contents: " << buf;
+                            break;
+                        }
+                    }
                 }
             }
 
