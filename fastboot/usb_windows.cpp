@@ -205,7 +205,7 @@ ssize_t WindowsUsbTransport::Read(void* data, size_t len) {
 
             ret = AdbReadEndpointSync(handle_->adb_read_pipe, data, xfer, &read, time_out);
             errno = GetLastError();
-            DBG("usb_read got: %ld, expected: %d, errno: %d\n", read, xfer, errno);
+            DBG("usb_read got: %lu, expected: %zu, errno: %d\n", read, xfer, errno);
             if (ret == 0) {
                 // assume ERROR_INVALID_HANDLE indicates we are disconnected
                 if (errno == ERROR_INVALID_HANDLE)
