@@ -1669,17 +1669,29 @@ int adb_commandline(int argc, const char** argv) {
             return 0;
         }
     } else if (!strcmp(argv[0], "rescue")) {
+        // adb rescue getprop
         // adb rescue getprop <prop>
         // adb rescue install <filename>
         // adb rescue wipe userdata
-        if (argc != 3) error_exit("rescue requires two arguments");
+        if (argc < 2) error_exit("rescue requires at least one argument");
         if (!strcmp(argv[1], "getprop")) {
-            return adb_connect_command(android::base::StringPrintf("rescue-getprop:%s", argv[2]));
+            if (argc == 2) {
+                return adb_connect_command("rescue-getprop:");
+            }
+            if (argc == 3) {
+                return adb_connect_command(
+                        android::base::StringPrintf("rescue-getprop:%s", argv[2]));
+            }
+            error_exit("invalid rescue getprop arguments");
         } else if (!strcmp(argv[1], "install")) {
+            if (argc != 3) error_exit("rescue install requires two arguments");
             if (adb_sideload_install(argv[2], true /* rescue_mode */) != 0) {
                 return 1;
             }
-        } else if (!strcmp(argv[1], "wipe") && !strcmp(argv[2], "userdata")) {
+        } else if (!strcmp(argv[1], "wipe")) {
+            if (argc != 3 || strcmp(argv[2], "userdata") != 0) {
+                error_exit("invalid rescue wipe arguments");
+            }
             return adb_wipe_devices();
         } else {
             error_exit("invalid rescue argument");
