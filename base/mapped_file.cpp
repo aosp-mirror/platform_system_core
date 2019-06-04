@@ -79,7 +79,7 @@ MappedFile::~MappedFile() {
   if (base_ != nullptr) UnmapViewOfFile(base_);
   if (handle_ != nullptr) CloseHandle(handle_);
 #else
-  if (base_ != nullptr) munmap(base_, size_);
+  if (base_ != nullptr) munmap(base_, size_ + offset_);
 #endif
 
   base_ = nullptr;
