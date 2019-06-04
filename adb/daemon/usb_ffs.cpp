@@ -37,9 +37,12 @@
 // Number of buffers needed to fit MAX_PAYLOAD, with an extra for ZLPs.
 #define USB_FFS_NUM_BUFS ((4 * MAX_PAYLOAD / USB_FFS_BULK_SIZE) + 1)
 
+#define USB_EXT_PROP_UNICODE 1
+
 #define cpu_to_le16(x) htole16(x)
 #define cpu_to_le32(x) htole32(x)
 
+// clang-format off
 struct func_desc {
     struct usb_interface_descriptor intf;
     struct usb_endpoint_descriptor_no_audio source;
@@ -64,6 +67,34 @@ struct desc_v1 {
     struct func_desc fs_descs, hs_descs;
 } __attribute__((packed));
 
+template <size_t PropertyNameLength, size_t PropertyDataLength>
+struct usb_os_desc_ext_prop {
+    uint32_t dwSize = sizeof(*this);
+    uint32_t dwPropertyDataType = cpu_to_le32(USB_EXT_PROP_UNICODE);
+
+    // Property name and value are transmitted as UTF-16, but the kernel only
+    // accepts ASCII values and performs the conversion for us.
+    uint16_t wPropertyNameLength = cpu_to_le16(PropertyNameLength);
+    char bPropertyName[PropertyNameLength];
+
+    uint32_t dwPropertyDataLength = cpu_to_le32(PropertyDataLength);
+    char bProperty[PropertyDataLength];
+} __attribute__((packed));
+
+using usb_os_desc_guid_t = usb_os_desc_ext_prop<20, 39>;
+usb_os_desc_guid_t os_desc_guid = {
+    .bPropertyName = "DeviceInterfaceGUID",
+    .bProperty = "{64379D6C-D531-4BED-BBEC-5A16FC07D6BC}",
+};
+
+struct usb_ext_prop_values {
+    usb_os_desc_guid_t guid;
+} __attribute__((packed));
+
+usb_ext_prop_values os_prop_values = {
+    .guid = os_desc_guid,
+};
+
 struct desc_v2 {
     struct usb_functionfs_descs_head_v2 header;
     // The rest of the structure depends on the flags in the header.
@@ -75,9 +106,10 @@ struct desc_v2 {
     struct ss_func_desc ss_descs;
     struct usb_os_desc_header os_header;
     struct usb_ext_compat_desc os_desc;
+    struct usb_os_desc_header os_prop_header;
+    struct usb_ext_prop_values os_prop_values;
 } __attribute__((packed));
 
-// clang-format off
 static struct func_desc fs_descriptors = {
     .intf = {
         .bLength = sizeof(fs_descriptors.intf),
@@ -172,18 +204,26 @@ static struct ss_func_desc ss_descriptors = {
 struct usb_ext_compat_desc os_desc_compat = {
     .bFirstInterfaceNumber = 0,
     .Reserved1 = cpu_to_le32(1),
-    .CompatibleID = {0},
+    .CompatibleID = { 'W', 'I', 'N', 'U', 'S', 'B', '\0', '\0'},
     .SubCompatibleID = {0},
     .Reserved2 = {0},
 };
 
 static struct usb_os_desc_header os_desc_header = {
-    .interface = cpu_to_le32(1),
+    .interface = cpu_to_le32(0),
     .dwLength = cpu_to_le32(sizeof(os_desc_header) + sizeof(os_desc_compat)),
     .bcdVersion = cpu_to_le32(1),
     .wIndex = cpu_to_le32(4),
     .bCount = cpu_to_le32(1),
     .Reserved = cpu_to_le32(0),
+};
+
+static struct usb_os_desc_header os_prop_header = {
+    .interface = cpu_to_le32(0),
+    .dwLength = cpu_to_le32(sizeof(os_desc_header) + sizeof(os_prop_values)),
+    .bcdVersion = cpu_to_le32(1),
+    .wIndex = cpu_to_le32(5),
+    .wCount = cpu_to_le16(1),
 };
 
 #define STR_INTERFACE_ "ADB Interface"
@@ -221,12 +261,14 @@ bool open_functionfs(android::base::unique_fd* out_control, android::base::uniqu
     v2_descriptor.fs_count = 3;
     v2_descriptor.hs_count = 3;
     v2_descriptor.ss_count = 5;
-    v2_descriptor.os_count = 1;
+    v2_descriptor.os_count = 2;
     v2_descriptor.fs_descs = fs_descriptors;
     v2_descriptor.hs_descs = hs_descriptors;
     v2_descriptor.ss_descs = ss_descriptors;
     v2_descriptor.os_header = os_desc_header;
     v2_descriptor.os_desc = os_desc_compat;
+    v2_descriptor.os_prop_header = os_prop_header;
+    v2_descriptor.os_prop_values = os_prop_values;
 
     if (out_control->get() < 0) {  // might have already done this before
         LOG(INFO) << "opening control endpoint " << USB_FFS_ADB_EP0;
