@@ -1,3 +1,6 @@
 TOOL(getevent)
 TOOL(getprop)
+TOOL(setprop)
+TOOL(start)
+TOOL(stop)
 TOOL(toolbox)
