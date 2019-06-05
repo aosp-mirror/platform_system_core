@@ -63,7 +63,10 @@ void Unwinder::FillInDexFrame() {
   if (info != nullptr) {
     frame->map_start = info->start;
     frame->map_end = info->end;
-    frame->map_elf_start_offset = info->elf_start_offset;
+    // Since this is a dex file frame, the elf_start_offset is not set
+    // by any of the normal code paths. Use the offset of the map since
+    // that matches the actual offset.
+    frame->map_elf_start_offset = info->offset;
     frame->map_exact_offset = info->offset;
     frame->map_load_bias = info->load_bias;
     frame->map_flags = info->flags;
