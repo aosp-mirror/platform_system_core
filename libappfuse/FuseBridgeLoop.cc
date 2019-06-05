@@ -86,7 +86,6 @@ class FuseBridgeEntry {
         const bool proxy_read_ready = last_proxy_events_.events & EPOLLIN;
         const bool proxy_write_ready = last_proxy_events_.events & EPOLLOUT;
 
-        last_state_ = state_;
         last_device_events_.events = 0;
         last_proxy_events_.events = 0;
 
@@ -354,8 +353,8 @@ bool FuseBridgeLoop::ProcessEventLocked(const std::unordered_set<FuseBridgeEntry
         }
         if (entry->IsClosing()) {
             const int mount_id = entry->mount_id();
-            bridges_.erase(mount_id);
             callback->OnClosed(mount_id);
+            bridges_.erase(mount_id);
             if (bridges_.size() == 0) {
                 // All bridges are now closed.
                 return false;
