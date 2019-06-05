@@ -1331,7 +1331,7 @@ else
   echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot"
   adb_wait ${ADB_WAIT} ||
     fixup_from_recovery ||
-    die "did not reboot after formatting ${scratch_cpartition} `usb_status`"
+    die "did not reboot after formatting ${scratch_partition} `usb_status`"
   if ${overlayfs_needed}; then
     adb_root &&
       D=`adb_sh df -k </dev/null` &&
