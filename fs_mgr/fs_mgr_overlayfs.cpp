@@ -90,7 +90,7 @@ std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab*) {
     return {};
 }
 
-bool fs_mgr_overlayfs_setup(const char*, const char*, bool* change) {
+bool fs_mgr_overlayfs_setup(const char*, const char*, bool* change, bool) {
     if (change) *change = false;
     return false;
 }
@@ -873,7 +873,8 @@ std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab* fstab) {
 
 // Returns false if setup not permitted, errno set to last error.
 // If something is altered, set *change.
-bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* change) {
+bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* change,
+                            bool force) {
     if (change) *change = false;
     auto ret = false;
     if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return ret;
@@ -897,7 +898,7 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
             continue;
         }
         save_errno = errno;
-        auto verity_enabled = fs_mgr_is_verity_enabled(*it);
+        auto verity_enabled = !force && fs_mgr_is_verity_enabled(*it);
         if (errno == ENOENT || errno == ENXIO) errno = save_errno;
         if (verity_enabled) {
             it = candidates.erase(it);
