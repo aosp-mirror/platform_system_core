@@ -1196,7 +1196,7 @@ void ServiceList::MarkServicesUpdate() {
             continue;
         }
         if (auto result = service->Start(); !result) {
-            LOG(ERROR) << result.error().as_string;
+            LOG(ERROR) << result.error().message();
         }
     }
     delayed_service_names_.clear();
