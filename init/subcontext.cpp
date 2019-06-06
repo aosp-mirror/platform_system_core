@@ -142,8 +142,8 @@ void SubcontextProcess::RunCommand(const SubcontextCommand::ExecuteCommand& exec
         reply->set_success(true);
     } else {
         auto* failure = reply->mutable_failure();
-        failure->set_error_string(result.error().as_string);
-        failure->set_error_errno(result.error().as_errno);
+        failure->set_error_string(result.error().message());
+        failure->set_error_errno(result.error().code());
     }
 }
 
@@ -178,7 +178,7 @@ void SubcontextProcess::MainLoop() {
 
         auto init_message = ReadMessage(init_fd_);
         if (!init_message) {
-            if (init_message.error().as_errno == 0) {
+            if (init_message.error().code() == 0) {
                 // If the init file descriptor was closed, let's exit quietly. If
                 // this was accidental, init will restart us. If init died, this
                 // avoids calling abort(3) unnecessarily.
