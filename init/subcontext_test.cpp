@@ -69,7 +69,7 @@ TEST(subcontext, CheckDifferentPid) {
         auto result = subcontext.Execute(std::vector<std::string>{"return_pids_as_error"});
         ASSERT_FALSE(result);
 
-        auto pids = Split(result.error().as_string, " ");
+        auto pids = Split(result.error().message(), " ");
         ASSERT_EQ(2U, pids.size());
         auto our_pid = std::to_string(getpid());
         EXPECT_NE(our_pid, pids[0]);
@@ -116,7 +116,7 @@ TEST(subcontext, MultipleCommands) {
 
         auto result = subcontext.Execute(std::vector<std::string>{"return_words_as_error"});
         ASSERT_FALSE(result);
-        EXPECT_EQ(Join(expected_words, " "), result.error().as_string);
+        EXPECT_EQ(Join(expected_words, " "), result.error().message());
         EXPECT_EQ(first_pid, subcontext.pid());
     });
 }
@@ -130,7 +130,7 @@ TEST(subcontext, RecoverAfterAbort) {
 
         auto result2 = subcontext.Execute(std::vector<std::string>{"generate_sane_error"});
         ASSERT_FALSE(result2);
-        EXPECT_EQ("Sane error!", result2.error().as_string);
+        EXPECT_EQ("Sane error!", result2.error().message());
         EXPECT_NE(subcontext.pid(), first_pid);
     });
 }
@@ -139,7 +139,7 @@ TEST(subcontext, ContextString) {
     RunTest([](auto& subcontext, auto& context_string) {
         auto result = subcontext.Execute(std::vector<std::string>{"return_context_as_error"});
         ASSERT_FALSE(result);
-        ASSERT_EQ(context_string, result.error().as_string);
+        ASSERT_EQ(context_string, result.error().message());
     });
 }
 
@@ -167,7 +167,7 @@ TEST(subcontext, ExpandArgsFailure) {
         };
         auto result = subcontext.ExpandArgs(args);
         ASSERT_FALSE(result);
-        EXPECT_EQ("Failed to expand '" + args[1] + "'", result.error().as_string);
+        EXPECT_EQ("Failed to expand '" + args[1] + "'", result.error().message());
     });
 }
 

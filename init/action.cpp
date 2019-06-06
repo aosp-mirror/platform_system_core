@@ -127,7 +127,7 @@ void Action::ExecuteCommand(const Command& command) const {
     // report such failures unless we're running at the DEBUG log level.
     bool report_failure = !result.has_value();
     if (report_failure && android::base::GetMinimumLogSeverity() > android::base::DEBUG &&
-        result.error().as_errno == ENOENT) {
+        result.error().code() == ENOENT) {
         report_failure = false;
     }
 
@@ -139,7 +139,7 @@ void Action::ExecuteCommand(const Command& command) const {
 
         LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << " (" << filename_
                   << ":" << command.line() << ") took " << duration.count() << "ms and "
-                  << (result ? "succeeded" : "failed: " + result.error().as_string);
+                  << (result ? "succeeded" : "failed: " + result.error().message());
     }
 }
 
