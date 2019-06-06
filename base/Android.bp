@@ -141,6 +141,7 @@ cc_test {
         "parsenetaddress_test.cpp",
         "properties_test.cpp",
         "quick_exit_test.cpp",
+        "result_test.cpp",
         "scopeguard_test.cpp",
         "stringprintf_test.cpp",
         "strings_test.cpp",
