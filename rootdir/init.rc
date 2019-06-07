@@ -32,6 +32,12 @@ on early-init
     # cgroup for system_server and surfaceflinger
     mkdir /dev/memcg/system 0550 system system
 
+    # set RLIMIT_NICE to allow priorities from 19 to -20
+    setrlimit nice 40 40
+
+    # Allow up to 32K FDs per process
+    setrlimit nofile 32768 32768
+
     start ueventd
 
     # Run apexd-bootstrap so that APEXes that provide critical libraries
@@ -266,12 +272,6 @@ on init
     symlink /proc/self/fd /dev/fd
 
     export DOWNLOAD_CACHE /data/cache
-
-    # set RLIMIT_NICE to allow priorities from 19 to -20
-    setrlimit nice 40 40
-
-    # Allow up to 32K FDs per process
-    setrlimit nofile 32768 32768
 
     # This allows the ledtrig-transient properties to be created here so
     # that they can be chown'd to system:system later on boot
