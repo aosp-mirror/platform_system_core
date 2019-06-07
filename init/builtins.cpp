@@ -1076,10 +1076,7 @@ static Result<Success> do_mark_post_data(const BuiltinArguments& args) {
 
 static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
     glob_t glob_result;
-    // @ is added to filter out the later paths, which are bind mounts of the places
-    // where the APEXes are really mounted at. Otherwise, we will parse the
-    // same file twice.
-    static constexpr char glob_pattern[] = "/apex/*@*/etc/*.rc";
+    static constexpr char glob_pattern[] = "/apex/*/etc/*.rc";
     const int ret = glob(glob_pattern, GLOB_MARK, nullptr, &glob_result);
     if (ret != 0 && ret != GLOB_NOMATCH) {
         globfree(&glob_result);
@@ -1088,7 +1085,15 @@ static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
     std::vector<std::string> configs;
     Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance());
     for (size_t i = 0; i < glob_result.gl_pathc; i++) {
-        configs.emplace_back(glob_result.gl_pathv[i]);
+        std::string path = glob_result.gl_pathv[i];
+        // Filter-out /apex/<name>@<ver> paths. The paths are bind-mounted to
+        // /apex/<name> paths, so unless we filter them out, we will parse the
+        // same file twice.
+        std::vector<std::string> paths = android::base::Split(path, "/");
+        if (paths.size() >= 2 && paths[1].find('@') != std::string::npos) {
+            continue;
+        }
+        configs.push_back(path);
     }
     globfree(&glob_result);
 
