@@ -70,6 +70,31 @@ TEST(result, result_success_rvalue) {
   EXPECT_EQ(Success(), MakeRvalueSuccessResult().value());
 }
 
+TEST(result, result_void) {
+  Result<void> ok = {};
+  EXPECT_TRUE(ok);
+  ok.value();  // should not crash
+  ASSERT_DEATH(ok.error(), "");
+
+  Result<void> fail = Error() << "failure" << 1;
+  EXPECT_FALSE(fail);
+  EXPECT_EQ("failure1", fail.error().message());
+  EXPECT_EQ(0, fail.error().code());
+  EXPECT_TRUE(ok != fail);
+  ASSERT_DEATH(fail.value(), "");
+
+  auto test = [](bool ok) -> Result<void> {
+    if (ok) return {};
+    else return Error() << "failure" << 1;
+  };
+  EXPECT_TRUE(test(true));
+  EXPECT_FALSE(test(false));
+  test(true).value();  // should not crash
+  ASSERT_DEATH(test(true).error(), "");
+  ASSERT_DEATH(test(false).value(), "");
+  EXPECT_EQ("failure1", test(false).error().message());
+}
+
 TEST(result, result_error) {
   Result<Success> result = Error() << "failure" << 1;
   ASSERT_FALSE(result);
