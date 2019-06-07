@@ -714,6 +714,7 @@ bool SkipMountingPartitions(Fstab* fstab) {
                                  [&skip_mount_point](const auto& entry) {
                                      return entry.mount_point == skip_mount_point;
                                  });
+        if (it == fstab->end()) continue;
         fstab->erase(it, fstab->end());
         LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
     }
