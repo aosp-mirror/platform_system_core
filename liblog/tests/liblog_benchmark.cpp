@@ -56,8 +56,8 @@ BENCHMARK_MAIN();
  */
 static void BM_log_maximum_retry(benchmark::State& state) {
   while (state.KeepRunning()) {
-    LOG_FAILURE_RETRY(__android_log_print(
-        ANDROID_LOG_INFO, "BM_log_maximum_retry", "%zu", state.iterations()));
+    LOG_FAILURE_RETRY(__android_log_print(ANDROID_LOG_INFO, "BM_log_maximum_retry", "%" PRIu64,
+                                          state.iterations()));
   }
 }
 BENCHMARK(BM_log_maximum_retry);
@@ -69,8 +69,7 @@ BENCHMARK(BM_log_maximum_retry);
  */
 static void BM_log_maximum(benchmark::State& state) {
   while (state.KeepRunning()) {
-    __android_log_print(ANDROID_LOG_INFO, "BM_log_maximum", "%zu",
-                        state.iterations());
+    __android_log_print(ANDROID_LOG_INFO, "BM_log_maximum", "%" PRIu64, state.iterations());
   }
 }
 BENCHMARK(BM_log_maximum);
@@ -286,7 +285,7 @@ static void BM_pmsg_short_aligned(benchmark::State& state) {
   memset(buf, 0, sizeof(buf));
   struct packet* buffer = (struct packet*)(((uintptr_t)buf + 7) & ~7);
   if (((uintptr_t)&buffer->pmsg_header) & 7) {
-    fprintf(stderr, "&buffer=0x%p iterations=%zu\n", &buffer->pmsg_header,
+    fprintf(stderr, "&buffer=0x%p iterations=%" PRIu64 "\n", &buffer->pmsg_header,
             state.iterations());
   }
 
@@ -361,7 +360,7 @@ static void BM_pmsg_short_unaligned1(benchmark::State& state) {
   memset(buf, 0, sizeof(buf));
   struct packet* buffer = (struct packet*)((((uintptr_t)buf + 7) & ~7) + 1);
   if ((((uintptr_t)&buffer->pmsg_header) & 7) != 1) {
-    fprintf(stderr, "&buffer=0x%p iterations=%zu\n", &buffer->pmsg_header,
+    fprintf(stderr, "&buffer=0x%p iterations=%" PRIu64 "\n", &buffer->pmsg_header,
             state.iterations());
   }
 
@@ -436,7 +435,7 @@ static void BM_pmsg_long_aligned(benchmark::State& state) {
   memset(buf, 0, sizeof(buf));
   struct packet* buffer = (struct packet*)(((uintptr_t)buf + 7) & ~7);
   if (((uintptr_t)&buffer->pmsg_header) & 7) {
-    fprintf(stderr, "&buffer=0x%p iterations=%zu\n", &buffer->pmsg_header,
+    fprintf(stderr, "&buffer=0x%p iterations=%" PRIu64 "\n", &buffer->pmsg_header,
             state.iterations());
   }
 
@@ -509,7 +508,7 @@ static void BM_pmsg_long_unaligned1(benchmark::State& state) {
   memset(buf, 0, sizeof(buf));
   struct packet* buffer = (struct packet*)((((uintptr_t)buf + 7) & ~7) + 1);
   if ((((uintptr_t)&buffer->pmsg_header) & 7) != 1) {
-    fprintf(stderr, "&buffer=0x%p iterations=%zu\n", &buffer->pmsg_header,
+    fprintf(stderr, "&buffer=0x%p iterations=%" PRIu64 "\n", &buffer->pmsg_header,
             state.iterations());
   }
 
@@ -575,8 +574,7 @@ BENCHMARK(BM_sprintf_overhead);
  */
 static void BM_log_print_overhead(benchmark::State& state) {
   while (state.KeepRunning()) {
-    __android_log_print(ANDROID_LOG_INFO, "BM_log_overhead", "%zu",
-                        state.iterations());
+    __android_log_print(ANDROID_LOG_INFO, "BM_log_overhead", "%" PRIu64, state.iterations());
     state.PauseTiming();
     logd_yield();
     state.ResumeTiming();
