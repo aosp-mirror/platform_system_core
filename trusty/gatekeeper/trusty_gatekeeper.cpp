@@ -16,147 +16,131 @@
 
 #define LOG_TAG "TrustyGateKeeper"
 
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-
-#include <type_traits>
-
-#include <log/log.h>
+#include <android-base/logging.h>
+#include <limits>
 
 #include "trusty_gatekeeper.h"
 #include "trusty_gatekeeper_ipc.h"
 #include "gatekeeper_ipc.h"
 
+using ::android::hardware::hidl_vec;
+using ::android::hardware::Return;
+using ::android::hardware::gatekeeper::V1_0::GatekeeperStatusCode;
+using ::gatekeeper::EnrollRequest;
+using ::gatekeeper::EnrollResponse;
+using ::gatekeeper::ERROR_INVALID;
+using ::gatekeeper::ERROR_MEMORY_ALLOCATION_FAILED;
+using ::gatekeeper::ERROR_NONE;
+using ::gatekeeper::ERROR_RETRY;
+using ::gatekeeper::SizedBuffer;
+using ::gatekeeper::VerifyRequest;
+using ::gatekeeper::VerifyResponse;
+
 namespace gatekeeper {
 
-const uint32_t SEND_BUF_SIZE = 8192;
-const uint32_t RECV_BUF_SIZE = 8192;
+constexpr const uint32_t SEND_BUF_SIZE = 8192;
+constexpr const uint32_t RECV_BUF_SIZE = 8192;
 
-TrustyGateKeeperDevice::TrustyGateKeeperDevice(const hw_module_t *module) {
-#if __cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__)
-    static_assert(std::is_standard_layout<TrustyGateKeeperDevice>::value,
-                  "TrustyGateKeeperDevice must be standard layout");
-    static_assert(offsetof(TrustyGateKeeperDevice, device_) == 0,
-                  "device_ must be the first member of TrustyGateKeeperDevice");
-    static_assert(offsetof(TrustyGateKeeperDevice, device_.common) == 0,
-                  "common must be the first member of gatekeeper_device");
-#else
-    assert(reinterpret_cast<gatekeeper_device_t *>(this) == &device_);
-    assert(reinterpret_cast<hw_device_t *>(this) == &(device_.common));
-#endif
-
-    memset(&device_, 0, sizeof(device_));
-    device_.common.tag = HARDWARE_DEVICE_TAG;
-    device_.common.version = 1;
-    device_.common.module = const_cast<hw_module_t *>(module);
-    device_.common.close = close_device;
-
-    device_.enroll = enroll;
-    device_.verify = verify;
-    device_.delete_user = nullptr;
-    device_.delete_all_users = nullptr;
-
+TrustyGateKeeperDevice::TrustyGateKeeperDevice() {
     int rc = trusty_gatekeeper_connect();
     if (rc < 0) {
-        ALOGE("Error initializing trusty session: %d", rc);
+        LOG(ERROR) << "Error initializing trusty session: " << rc;
     }
 
     error_ = rc;
-
-}
-
-hw_device_t* TrustyGateKeeperDevice::hw_device() {
-    return &device_.common;
-}
-
-int TrustyGateKeeperDevice::close_device(hw_device_t* dev) {
-    delete reinterpret_cast<TrustyGateKeeperDevice *>(dev);
-    return 0;
 }
 
 TrustyGateKeeperDevice::~TrustyGateKeeperDevice() {
     trusty_gatekeeper_disconnect();
 }
 
-int TrustyGateKeeperDevice::Enroll(uint32_t uid, const uint8_t *current_password_handle,
-        uint32_t current_password_handle_length, const uint8_t *current_password,
-        uint32_t current_password_length, const uint8_t *desired_password,
-        uint32_t desired_password_length, uint8_t **enrolled_password_handle,
-        uint32_t *enrolled_password_handle_length) {
-
-    if (error_ != 0) {
-        return error_;
-    }
-
-    SizedBuffer desired_password_buffer(desired_password_length);
-    memcpy(desired_password_buffer.buffer.get(), desired_password, desired_password_length);
-
-    SizedBuffer current_password_handle_buffer(current_password_handle_length);
-    if (current_password_handle) {
-        memcpy(current_password_handle_buffer.buffer.get(), current_password_handle,
-                current_password_handle_length);
-    }
-
-    SizedBuffer current_password_buffer(current_password_length);
-    if (current_password) {
-        memcpy(current_password_buffer.buffer.get(), current_password, current_password_length);
-    }
-
-    EnrollRequest request(uid, &current_password_handle_buffer, &desired_password_buffer,
-            &current_password_buffer);
-    EnrollResponse response;
-
-    gatekeeper_error_t error = Send(request, &response);
-
-    if (error == ERROR_RETRY) {
-        return response.retry_timeout;
-    } else if (error != ERROR_NONE) {
-        return -EINVAL;
-    }
-
-    *enrolled_password_handle = response.enrolled_password_handle.buffer.release();
-    *enrolled_password_handle_length = response.enrolled_password_handle.length;
-
-
-    return 0;
+SizedBuffer hidl_vec2sized_buffer(const hidl_vec<uint8_t>& vec) {
+    if (vec.size() == 0 || vec.size() > std::numeric_limits<uint32_t>::max()) return {};
+    auto dummy = new uint8_t[vec.size()];
+    std::copy(vec.begin(), vec.end(), dummy);
+    return {dummy, static_cast<uint32_t>(vec.size())};
 }
 
-int TrustyGateKeeperDevice::Verify(uint32_t uid, uint64_t challenge,
-        const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
-        const uint8_t *provided_password, uint32_t provided_password_length,
-        uint8_t **auth_token, uint32_t *auth_token_length, bool *request_reenroll) {
+Return<void> TrustyGateKeeperDevice::enroll(uint32_t uid,
+                                            const hidl_vec<uint8_t>& currentPasswordHandle,
+                                            const hidl_vec<uint8_t>& currentPassword,
+                                            const hidl_vec<uint8_t>& desiredPassword,
+                                            enroll_cb _hidl_cb) {
     if (error_ != 0) {
-        return error_;
+        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return {};
     }
 
-    SizedBuffer password_handle_buffer(enrolled_password_handle_length);
-    memcpy(password_handle_buffer.buffer.get(), enrolled_password_handle,
-            enrolled_password_handle_length);
-    SizedBuffer provided_password_buffer(provided_password_length);
-    memcpy(provided_password_buffer.buffer.get(), provided_password, provided_password_length);
+    if (desiredPassword.size() == 0) {
+        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return {};
+    }
 
-    VerifyRequest request(uid, challenge, &password_handle_buffer, &provided_password_buffer);
+    EnrollRequest request(uid, hidl_vec2sized_buffer(currentPasswordHandle),
+                          hidl_vec2sized_buffer(desiredPassword),
+                          hidl_vec2sized_buffer(currentPassword));
+    EnrollResponse response;
+    auto error = Send(request, &response);
+    if (error != ERROR_NONE) {
+        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+    } else if (response.error == ERROR_RETRY) {
+        _hidl_cb({GatekeeperStatusCode::ERROR_RETRY_TIMEOUT, response.retry_timeout, {}});
+    } else if (response.error != ERROR_NONE) {
+        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+    } else {
+        hidl_vec<uint8_t> new_handle(response.enrolled_password_handle.Data<uint8_t>(),
+                                     response.enrolled_password_handle.Data<uint8_t>() +
+                                             response.enrolled_password_handle.size());
+        _hidl_cb({GatekeeperStatusCode::STATUS_OK, response.retry_timeout, new_handle});
+    }
+    return {};
+}
+
+Return<void> TrustyGateKeeperDevice::verify(
+        uint32_t uid, uint64_t challenge,
+        const ::android::hardware::hidl_vec<uint8_t>& enrolledPasswordHandle,
+        const ::android::hardware::hidl_vec<uint8_t>& providedPassword, verify_cb _hidl_cb) {
+    if (error_ != 0) {
+        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return {};
+    }
+
+    if (enrolledPasswordHandle.size() == 0) {
+        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return {};
+    }
+
+    VerifyRequest request(uid, challenge, hidl_vec2sized_buffer(enrolledPasswordHandle),
+                          hidl_vec2sized_buffer(providedPassword));
     VerifyResponse response;
 
-    gatekeeper_error_t error = Send(request, &response);
+    auto error = Send(request, &response);
+    if (error != ERROR_NONE) {
+        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+    } else if (response.error == ERROR_RETRY) {
+        _hidl_cb({GatekeeperStatusCode::ERROR_RETRY_TIMEOUT, response.retry_timeout, {}});
+    } else if (response.error != ERROR_NONE) {
+        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+    } else {
+        hidl_vec<uint8_t> auth_token(
+                response.auth_token.Data<uint8_t>(),
+                response.auth_token.Data<uint8_t>() + response.auth_token.size());
 
-    if (error == ERROR_RETRY) {
-        return response.retry_timeout;
-    } else if (error != ERROR_NONE) {
-        return -EINVAL;
+        _hidl_cb({response.request_reenroll ? GatekeeperStatusCode::STATUS_REENROLL
+                                            : GatekeeperStatusCode::STATUS_OK,
+                  response.retry_timeout, auth_token});
     }
+    return {};
+}
 
-    if (auth_token != NULL && auth_token_length != NULL) {
-       *auth_token = response.auth_token.buffer.release();
-       *auth_token_length = response.auth_token.length;
-    }
+Return<void> TrustyGateKeeperDevice::deleteUser(uint32_t /*uid*/, deleteUser_cb _hidl_cb) {
+    _hidl_cb({GatekeeperStatusCode::ERROR_NOT_IMPLEMENTED, 0, {}});
+    return {};
+}
 
-    if (request_reenroll != NULL) {
-        *request_reenroll = response.request_reenroll;
-    }
-
-    return 0;
+Return<void> TrustyGateKeeperDevice::deleteAllUsers(deleteAllUsers_cb _hidl_cb) {
+    _hidl_cb({GatekeeperStatusCode::ERROR_NOT_IMPLEMENTED, 0, {}});
+    return {};
 }
 
 gatekeeper_error_t TrustyGateKeeperDevice::Send(uint32_t command, const GateKeeperMessage& request,
@@ -172,7 +156,7 @@ gatekeeper_error_t TrustyGateKeeperDevice::Send(uint32_t command, const GateKeep
     uint32_t response_size = RECV_BUF_SIZE;
     int rc = trusty_gatekeeper_call(command, send_buf, request_size, recv_buf, &response_size);
     if (rc < 0) {
-        ALOGE("error (%d) calling gatekeeper TA", rc);
+        LOG(ERROR) << "error (" << rc << ") calling gatekeeper TA";
         return ERROR_INVALID;
     }
 
@@ -182,51 +166,4 @@ gatekeeper_error_t TrustyGateKeeperDevice::Send(uint32_t command, const GateKeep
     return response->Deserialize(payload, payload + response_size);
 }
 
-static inline TrustyGateKeeperDevice *convert_device(const gatekeeper_device *dev) {
-    return reinterpret_cast<TrustyGateKeeperDevice *>(const_cast<gatekeeper_device *>(dev));
-}
-
-/* static */
-int TrustyGateKeeperDevice::enroll(const struct gatekeeper_device *dev, uint32_t uid,
-            const uint8_t *current_password_handle, uint32_t current_password_handle_length,
-            const uint8_t *current_password, uint32_t current_password_length,
-            const uint8_t *desired_password, uint32_t desired_password_length,
-            uint8_t **enrolled_password_handle, uint32_t *enrolled_password_handle_length) {
-
-    if (dev == NULL ||
-            enrolled_password_handle == NULL || enrolled_password_handle_length == NULL ||
-            desired_password == NULL || desired_password_length == 0)
-        return -EINVAL;
-
-    // Current password and current password handle go together
-    if (current_password_handle == NULL || current_password_handle_length == 0 ||
-            current_password == NULL || current_password_length == 0) {
-        current_password_handle = NULL;
-        current_password_handle_length = 0;
-        current_password = NULL;
-        current_password_length = 0;
-    }
-
-    return convert_device(dev)->Enroll(uid, current_password_handle, current_password_handle_length,
-            current_password, current_password_length, desired_password, desired_password_length,
-            enrolled_password_handle, enrolled_password_handle_length);
-
-}
-
-/* static */
-int TrustyGateKeeperDevice::verify(const struct gatekeeper_device *dev, uint32_t uid,
-        uint64_t challenge, const uint8_t *enrolled_password_handle,
-        uint32_t enrolled_password_handle_length, const uint8_t *provided_password,
-        uint32_t provided_password_length, uint8_t **auth_token, uint32_t *auth_token_length,
-        bool *request_reenroll) {
-
-    if (dev == NULL || enrolled_password_handle == NULL ||
-            provided_password == NULL) {
-        return -EINVAL;
-    }
-
-    return convert_device(dev)->Verify(uid, challenge, enrolled_password_handle,
-            enrolled_password_handle_length, provided_password, provided_password_length,
-            auth_token, auth_token_length, request_reenroll);
-}
 };
