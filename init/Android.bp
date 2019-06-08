@@ -190,7 +190,6 @@ cc_test {
         "persistent_properties_test.cpp",
         "property_service_test.cpp",
         "property_type_test.cpp",
-        "result_test.cpp",
         "rlimit_parser_test.cpp",
         "service_test.cpp",
         "subcontext_test.cpp",

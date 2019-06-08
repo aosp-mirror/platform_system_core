@@ -412,13 +412,7 @@ constexpr bool operator==(const expected<T1, E1>& x, const expected<T2, E2>& y) 
 
 template<class T1, class E1, class T2, class E2>
 constexpr bool operator!=(const expected<T1, E1>& x, const expected<T2, E2>& y) {
-  if (x.has_value() != y.has_value()) {
-    return true;
-  } else if (!x.has_value()) {
-    return x.error() != y.error();
-  } else {
-    return *x != *y;
-  }
+  return !(x == y);
 }
 
 // comparison with T
@@ -455,6 +449,194 @@ constexpr bool operator!=(const expected<T1, E1>& x, const unexpected<E2>& y) {
 template<class T1, class E1, class E2>
 constexpr bool operator!=(const unexpected<E2>& x, const expected<T1, E1>& y) {
   return y.has_value() || (x.value() != y.error());
+}
+
+template<class E>
+class _NODISCARD_ expected<void, E> {
+ public:
+  using value_type = void;
+  using error_type = E;
+  using unexpected_type = unexpected<E>;
+
+  // constructors
+  constexpr expected() = default;
+  constexpr expected(const expected& rhs) = default;
+  constexpr expected(expected&& rhs) noexcept = default;
+
+  template<class U, class G _ENABLE_IF(
+    std::is_void_v<U> &&
+    std::is_convertible_v<const G&, E> /* non-explicit */
+  )>
+  constexpr expected(const expected<U, G>& rhs) {
+    if (!rhs.has_value()) var_ = unexpected(rhs.error());
+  }
+
+  template<class U, class G _ENABLE_IF(
+    std::is_void_v<U> &&
+    !std::is_convertible_v<const G&, E> /* explicit */
+  )>
+  constexpr explicit expected(const expected<U, G>& rhs) {
+    if (!rhs.has_value()) var_ = unexpected(rhs.error());
+  }
+
+  template<class U, class G _ENABLE_IF(
+    std::is_void_v<U> &&
+    std::is_convertible_v<const G&&, E> /* non-explicit */
+  )>
+  constexpr expected(expected<U, G>&& rhs) {
+    if (!rhs.has_value()) var_ = unexpected(std::move(rhs.error()));
+  }
+
+  template<class U, class G _ENABLE_IF(
+    std::is_void_v<U> &&
+    !std::is_convertible_v<const G&&, E> /* explicit */
+  )>
+  constexpr explicit expected(expected<U, G>&& rhs) {
+    if (!rhs.has_value()) var_ = unexpected(std::move(rhs.error()));
+  }
+
+  template<class G = E _ENABLE_IF(
+    std::is_constructible_v<E, const G&> &&
+    std::is_convertible_v<const G&, E> /* non-explicit */
+  )>
+  constexpr expected(const unexpected<G>& e)
+  : var_(std::in_place_index<1>, e.value()) {}
+
+  template<class G = E _ENABLE_IF(
+    std::is_constructible_v<E, const G&> &&
+    !std::is_convertible_v<const G&, E> /* explicit */
+  )>
+  constexpr explicit expected(const unexpected<G>& e)
+  : var_(std::in_place_index<1>, E(e.value())) {}
+
+  template<class G = E _ENABLE_IF(
+    std::is_constructible_v<E, G&&> &&
+    std::is_convertible_v<G&&, E> /* non-explicit */
+  )>
+  constexpr expected(unexpected<G>&& e)
+  : var_(std::in_place_index<1>, std::move(e.value())) {}
+
+  template<class G = E _ENABLE_IF(
+    std::is_constructible_v<E, G&&> &&
+    !std::is_convertible_v<G&&, E> /* explicit */
+  )>
+  constexpr explicit expected(unexpected<G>&& e)
+  : var_(std::in_place_index<1>, E(std::move(e.value()))) {}
+
+  template<class... Args _ENABLE_IF(
+    sizeof...(Args) == 0
+  )>
+  constexpr explicit expected(std::in_place_t, Args&&...) {}
+
+  template<class... Args _ENABLE_IF(
+    std::is_constructible_v<E, Args...>
+  )>
+  constexpr explicit expected(unexpect_t, Args&&... args)
+  : var_(unexpected_type(std::forward<Args>(args)...)) {}
+
+  template<class U, class... Args _ENABLE_IF(
+    std::is_constructible_v<E, std::initializer_list<U>&, Args...>
+  )>
+  constexpr explicit expected(unexpect_t, std::initializer_list<U> il, Args&&... args)
+  : var_(unexpected_type(il, std::forward<Args>(args)...)) {}
+
+  // destructor
+  ~expected() = default;
+
+  // assignment
+  // Note: SFNAIE doesn't work here because assignment operator should be
+  // non-template. We could workaround this by defining a templated parent class
+  // having the assignment operator. This incomplete implementation however
+  // doesn't allow us to copy assign expected<T,E> even when T is non-copy
+  // assignable. The copy assignment will fail by the underlying std::variant
+  // anyway though the error message won't be clear.
+  expected& operator=(const expected& rhs) = default;
+
+  // Note for SFNAIE above applies to here as well
+  expected& operator=(expected&& rhs) = default;
+
+  template<class G = E>
+  expected& operator=(const unexpected<G>& rhs) {
+    var_ = rhs;
+    return *this;
+  }
+
+  template<class G = E _ENABLE_IF(
+    std::is_nothrow_move_constructible_v<G> &&
+    std::is_move_assignable_v<G>
+  )>
+  expected& operator=(unexpected<G>&& rhs) {
+    var_ = std::move(rhs);
+    return *this;
+  }
+
+  // modifiers
+  void emplace() {
+    var_ = std::monostate();
+  }
+
+  // swap
+  template<typename = std::enable_if_t<
+    std::is_swappable_v<E>>
+  >
+  void swap(expected& rhs) noexcept(std::is_nothrow_move_constructible_v<E>) {
+    var_.swap(rhs.var_);
+  }
+
+  // observers
+  constexpr explicit operator bool() const noexcept { return has_value(); }
+  constexpr bool has_value() const noexcept { return var_.index() == 0; }
+
+  constexpr void value() const& { if (!has_value()) std::get<0>(var_); }
+
+  constexpr const E& error() const& { return std::get<unexpected_type>(var_).value(); }
+  constexpr E& error() & { return std::get<unexpected_type>(var_).value(); }
+  constexpr const E&& error() const&& { return std::move(std::get<unexpected_type>(var_)).value(); }
+  constexpr E&& error() && { return std::move(std::get<unexpected_type>(var_)).value(); }
+
+  // expected equality operators
+  template<class E1, class E2>
+  friend constexpr bool operator==(const expected<void, E1>& x, const expected<void, E2>& y);
+
+  // Specialized algorithms
+  template<class T1, class E1>
+  friend void swap(expected<T1, E1>&, expected<T1, E1>&) noexcept;
+
+ private:
+  std::variant<std::monostate, unexpected_type> var_;
+};
+
+template<class E1, class E2>
+constexpr bool operator==(const expected<void, E1>& x, const expected<void, E2>& y) {
+  if (x.has_value() != y.has_value()) {
+    return false;
+  } else if (!x.has_value()) {
+    return x.error() == y.error();
+  } else {
+    return true;
+  }
+}
+
+template<class T1, class E1, class E2>
+constexpr bool operator==(const expected<T1, E1>& x, const expected<void, E2>& y) {
+  if (x.has_value() != y.has_value()) {
+    return false;
+  } else if (!x.has_value()) {
+    return x.error() == y.error();
+  } else {
+    return false;
+  }
+}
+
+template<class E1, class T2, class E2>
+constexpr bool operator==(const expected<void, E1>& x, const expected<T2, E2>& y) {
+  if (x.has_value() != y.has_value()) {
+    return false;
+  } else if (!x.has_value()) {
+    return x.error() == y.error();
+  } else {
+    return false;
+  }
 }
 
 template<class E>

@@ -29,8 +29,8 @@
 // string value.
 //
 // Success is a typedef that aids in creating Result<T> that do not contain a return value.
-// Result<Nothing> is the correct return type for a function that either returns successfully or
-// returns an error value.  Returning Nothing() from a function that returns Result<Nothing> is the
+// Result<Success> is the correct return type for a function that either returns successfully or
+// returns an error value.  Returning Success() from a function that returns Result<Success> is the
 // correct way to indicate that a function without a return type has completed successfully.
 //
 // A successful Result<T> is constructed implicitly from any type that can be implicitly converted
@@ -70,10 +70,103 @@
 
 #pragma once
 
-#include <android-base/result.h>
+#include <errno.h>
 
-using android::base::ErrnoError;
-using android::base::Error;
-using android::base::Result;
-using android::base::ResultError;
-using android::base::Success;
+#include <sstream>
+#include <string>
+
+#include "android-base/expected.h"
+
+namespace android {
+namespace base {
+
+struct ResultError {
+  template <typename T>
+  ResultError(T&& message, int code)
+      : message_(std::forward<T>(message)), code_(code) {}
+
+  template <typename T>
+  operator android::base::expected<T, ResultError>() {
+    return android::base::unexpected(ResultError(message_, code_));
+  }
+
+  std::string message() const { return message_; }
+  int code() const { return code_; }
+
+ private:
+  std::string message_;
+  int code_;
+};
+
+inline bool operator==(const ResultError& lhs, const ResultError& rhs) {
+  return lhs.message() == rhs.message() && lhs.code() == rhs.code();
+}
+
+inline bool operator!=(const ResultError& lhs, const ResultError& rhs) {
+  return !(lhs == rhs);
+}
+
+inline std::ostream& operator<<(std::ostream& os, const ResultError& t) {
+  os << t.message();
+  return os;
+}
+
+class Error {
+ public:
+  Error() : errno_(0), append_errno_(false) {}
+  Error(int errno_to_append) : errno_(errno_to_append), append_errno_(true) {}
+
+  template <typename T>
+  operator android::base::expected<T, ResultError>() {
+    return android::base::unexpected(ResultError(str(), errno_));
+  }
+
+  template <typename T>
+  Error& operator<<(T&& t) {
+    int saved = errno;
+    ss_ << t;
+    errno = saved;
+    return *this;
+  }
+
+  Error& operator<<(const ResultError& result_error) {
+    (*this) << result_error.message();
+    errno_ = result_error.code();
+    return *this;
+  }
+
+  const std::string str() const {
+    std::string str = ss_.str();
+    if (append_errno_) {
+      if (str.empty()) {
+        return strerror(errno_);
+      }
+      return std::move(str) + ": " + strerror(errno_);
+    }
+    return str;
+  }
+
+  Error(const Error&) = delete;
+  Error(Error&&) = delete;
+  Error& operator=(const Error&) = delete;
+  Error& operator=(Error&&) = delete;
+
+ private:
+  std::stringstream ss_;
+  int errno_;
+  bool append_errno_;
+};
+
+inline Error ErrnoError() {
+  return Error(errno);
+}
+
+template <typename T>
+using Result = android::base::expected<T, ResultError>;
+
+// Usage: `Result<Success>` as a result type that doesn't contain a value.
+// Use `return {}` or `return Success()` to return with success.
+using Success = std::monostate;
+
+}  // namespace base
+}  // namespace android

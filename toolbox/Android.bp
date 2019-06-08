@@ -28,6 +28,8 @@ cc_defaults {
         "toolbox.c",
         "getevent.c",
         "getprop.cpp",
+        "setprop.cpp",
+        "start.cpp",
     ],
     generated_headers: [
         "toolbox_input_labels",
@@ -40,6 +42,9 @@ cc_defaults {
     symlinks: [
         "getevent",
         "getprop",
+        "setprop",
+        "start",
+        "stop",
     ],
 }
 
