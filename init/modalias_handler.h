@@ -35,11 +35,11 @@ class ModaliasHandler : public UeventHandler {
     void HandleUevent(const Uevent& uevent) override;
 
   private:
-    Result<Success> InsmodWithDeps(const std::string& module_name, const std::string& args);
-    Result<Success> Insmod(const std::string& path_name, const std::string& args);
+    Result<void> InsmodWithDeps(const std::string& module_name, const std::string& args);
+    Result<void> Insmod(const std::string& path_name, const std::string& args);
 
-    Result<Success> ParseDepCallback(std::vector<std::string>&& args);
-    Result<Success> ParseAliasCallback(std::vector<std::string>&& args);
+    Result<void> ParseDepCallback(std::vector<std::string>&& args);
+    Result<void> ParseAliasCallback(std::vector<std::string>&& args);
 
     std::vector<std::pair<std::string, std::string>> module_aliases_;
     std::unordered_map<std::string, std::vector<std::string>> module_deps_;

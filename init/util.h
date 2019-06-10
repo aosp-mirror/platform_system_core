@@ -42,7 +42,7 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
                  const char* socketcon);
 
 Result<std::string> ReadFile(const std::string& path);
-Result<Success> WriteFile(const std::string& path, const std::string& content);
+Result<void> WriteFile(const std::string& path, const std::string& content);
 
 Result<uid_t> DecodeUid(const std::string& name);
 
