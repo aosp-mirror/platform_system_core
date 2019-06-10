@@ -36,7 +36,7 @@ namespace android {
 namespace base {
 
 /**
- * A region of a file mapped into memory.
+ * A region of a file mapped into memory, also known as MmapFile.
  */
 class MappedFile {
  public:
