@@ -89,8 +89,8 @@ bool WriteToImageFile(int fd, const LpMetadata& input) {
     return true;
 }
 
-bool WriteToImageFile(const char* file, const LpMetadata& input) {
-    unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
+bool WriteToImageFile(const std::string& file, const LpMetadata& input) {
+    unique_fd fd(open(file.c_str(), O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
     if (fd < 0) {
         PERROR << __PRETTY_FUNCTION__ << " open failed: " << file;
         return false;
@@ -149,8 +149,8 @@ bool ImageBuilder::IsValid() const {
     return device_images_.size() == metadata_.block_devices.size();
 }
 
-bool ImageBuilder::Export(const char* file) {
-    unique_fd fd(open(file, O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
+bool ImageBuilder::Export(const std::string& file) {
+    unique_fd fd(open(file.c_str(), O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0644));
     if (fd < 0) {
         PERROR << "open failed: " << file;
         return false;
@@ -438,7 +438,7 @@ int ImageBuilder::OpenImageFile(const std::string& file) {
     return temp_fds_.back().get();
 }
 
-bool WriteToImageFile(const char* file, const LpMetadata& metadata, uint32_t block_size,
+bool WriteToImageFile(const std::string& file, const LpMetadata& metadata, uint32_t block_size,
                       const std::map<std::string, std::string>& images, bool sparsify) {
     ImageBuilder builder(metadata, block_size, images, sparsify);
     return builder.IsValid() && builder.Build() && builder.Export(file);
