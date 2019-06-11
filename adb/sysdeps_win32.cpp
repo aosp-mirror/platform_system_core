@@ -2606,7 +2606,9 @@ extern "C" int main(int argc, char** argv);
 extern "C" int wmain(int argc, wchar_t **argv) {
     // Convert args from UTF-16 to UTF-8 and pass that to main().
     NarrowArgs narrow_args(argc, argv);
-    return main(argc, narrow_args.data());
+
+    // Avoid destructing NarrowArgs: argv might have been mutated to point to string literals.
+    _exit(main(argc, narrow_args.data()));
 }
 
 // Shadow UTF-8 environment variable name/value pairs that are created from
