@@ -25,7 +25,7 @@
 namespace android {
 namespace init {
 
-Result<Success> StartBoringSslSelfTest(const BuiltinArguments&) {
+Result<void> StartBoringSslSelfTest(const BuiltinArguments&) {
     pid_t id = fork();
 
     if (id == 0) {
@@ -49,7 +49,7 @@ Result<Success> StartBoringSslSelfTest(const BuiltinArguments&) {
         PLOG(FATAL) << "Failed to fork for BoringSSL self test";
     }
 
-    return Success();
+    return {};
 }
 
 }  // namespace init

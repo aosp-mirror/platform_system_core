@@ -29,7 +29,7 @@
 namespace android {
 namespace init {
 
-using BuiltinFunction = std::function<Result<Success>(const BuiltinArguments&)>;
+using BuiltinFunction = std::function<Result<void>(const BuiltinArguments&)>;
 
 using KeywordFunctionMap = KeywordMap<std::pair<bool, BuiltinFunction>>;
 class BuiltinFunctionMap : public KeywordFunctionMap {

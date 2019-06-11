@@ -707,7 +707,7 @@ bool HandlePowerctlMessage(const std::string& command) {
     // Queue built-in shutdown_done
     auto shutdown_handler = [cmd, command, reboot_target, run_fsck](const BuiltinArguments&) {
         DoReboot(cmd, command, reboot_target, run_fsck);
-        return Success();
+        return Result<void>{};
     };
     ActionManager::GetInstance().QueueBuiltinAction(shutdown_handler, "shutdown_done");
 
