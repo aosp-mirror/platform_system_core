@@ -107,6 +107,10 @@ uint32_t SlotNumberForSlotSuffix(const std::string& suffix);
 std::string SlotSuffixForSlotNumber(uint32_t slot_number);
 std::string GetPartitionSlotSuffix(const std::string& partition_name);
 
+// Helpers for common functions.
+const LpMetadataPartition* FindPartition(const LpMetadata& metadata, const std::string& name);
+uint64_t GetPartitionSize(const LpMetadata& metadata, const LpMetadataPartition& partition);
+
 }  // namespace fs_mgr
 }  // namespace android
 
