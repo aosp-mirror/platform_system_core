@@ -118,8 +118,8 @@ passwd* getpwnam(const char* login) {  // NOLINT: implementing bad function.
 namespace android {
 namespace init {
 
-static Result<Success> do_stub(const BuiltinArguments& args) {
-    return Success();
+static Result<void> do_stub(const BuiltinArguments& args) {
+    return {};
 }
 
 #include "generated_stub_builtin_function_map.h"

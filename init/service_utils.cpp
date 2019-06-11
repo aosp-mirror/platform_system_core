@@ -42,7 +42,7 @@ namespace init {
 
 namespace {
 
-Result<Success> EnterNamespace(int nstype, const char* path) {
+Result<void> EnterNamespace(int nstype, const char* path) {
     auto fd = unique_fd{open(path, O_RDONLY | O_CLOEXEC)};
     if (fd == -1) {
         return ErrnoError() << "Could not open namespace at " << path;
@@ -50,10 +50,10 @@ Result<Success> EnterNamespace(int nstype, const char* path) {
     if (setns(fd, nstype) == -1) {
         return ErrnoError() << "Could not setns() namespace at " << path;
     }
-    return Success();
+    return {};
 }
 
-Result<Success> SetUpMountNamespace(bool remount_proc, bool remount_sys) {
+Result<void> SetUpMountNamespace(bool remount_proc, bool remount_sys) {
     constexpr unsigned int kSafeFlags = MS_NODEV | MS_NOEXEC | MS_NOSUID;
 
     // Recursively remount / as slave like zygote does so unmounting and mounting /proc
@@ -83,10 +83,10 @@ Result<Success> SetUpMountNamespace(bool remount_proc, bool remount_sys) {
             return ErrnoError() << "Could not mount(/sys)";
         }
     }
-    return Success();
+    return {};
 }
 
-Result<Success> SetUpPidNamespace(const char* name) {
+Result<void> SetUpPidNamespace(const char* name) {
     if (prctl(PR_SET_NAME, name) == -1) {
         return ErrnoError() << "Could not set name";
     }
@@ -116,7 +116,7 @@ Result<Success> SetUpPidNamespace(const char* name) {
         }
         _exit(WEXITSTATUS(init_exitstatus));
     }
-    return Success();
+    return {};
 }
 
 void ZapStdio() {
@@ -140,8 +140,7 @@ void OpenConsole(const std::string& console) {
 
 }  // namespace
 
-Result<Success> EnterNamespaces(const NamespaceInfo& info, const std::string& name,
-                                bool pre_apexd) {
+Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name, bool pre_apexd) {
     for (const auto& [nstype, path] : info.namespaces_to_enter) {
         if (auto result = EnterNamespace(nstype, path.c_str()); !result) {
             return result;
@@ -173,10 +172,10 @@ Result<Success> EnterNamespaces(const NamespaceInfo& info, const std::string& na
         }
     }
 
-    return Success();
+    return {};
 }
 
-Result<Success> SetProcessAttributes(const ProcessAttributes& attr) {
+Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
     if (attr.ioprio_class != IoSchedClass_NONE) {
         if (android_set_ioprio(getpid(), attr.ioprio_class, attr.ioprio_pri)) {
             PLOG(ERROR) << "failed to set pid " << getpid() << " ioprio=" << attr.ioprio_class
@@ -221,10 +220,10 @@ Result<Success> SetProcessAttributes(const ProcessAttributes& attr) {
             return ErrnoError() << "setpriority failed";
         }
     }
-    return Success();
+    return {};
 }
 
-Result<Success> WritePidToFiles(std::vector<std::string>* files) {
+Result<void> WritePidToFiles(std::vector<std::string>* files) {
     // See if there were "writepid" instructions to write to files under cpuset path.
     std::string cpuset_path;
     if (CgroupGetControllerPath("cpuset", &cpuset_path)) {
@@ -258,7 +257,7 @@ Result<Success> WritePidToFiles(std::vector<std::string>* files) {
             return ErrnoError() << "couldn't write " << pid_str << " to " << file;
         }
     }
-    return Success();
+    return {};
 }
 
 }  // namespace init
