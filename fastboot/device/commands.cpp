@@ -39,14 +39,13 @@
 #include "flashing.h"
 #include "utility.h"
 
+using android::fs_mgr::MetadataBuilder;
 using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::BoolResult;
 using ::android::hardware::boot::V1_0::CommandResult;
 using ::android::hardware::boot::V1_0::Slot;
 using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
-
-using namespace android::fs_mgr;
 
 struct VariableHandlers {
     // Callback to retrieve the value of a single variable.
@@ -94,7 +93,7 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_HAS_SLOT, {GetHasSlot, GetAllPartitionArgsNoSlot}},
             {FB_VAR_SLOT_SUCCESSFUL, {GetSlotSuccessful, nullptr}},
             {FB_VAR_SLOT_UNBOOTABLE, {GetSlotUnbootable, nullptr}},
-            {FB_VAR_PARTITION_SIZE, {::GetPartitionSize, GetAllPartitionArgsWithSlot}},
+            {FB_VAR_PARTITION_SIZE, {GetPartitionSize, GetAllPartitionArgsWithSlot}},
             {FB_VAR_PARTITION_TYPE, {GetPartitionType, GetAllPartitionArgsWithSlot}},
             {FB_VAR_IS_LOGICAL, {GetPartitionIsLogical, GetAllPartitionArgsWithSlot}},
             {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}},
@@ -340,7 +339,7 @@ class PartitionBuilder {
 PartitionBuilder::PartitionBuilder(FastbootDevice* device, const std::string& partition_name)
     : device_(device) {
     std::string slot_suffix = GetSuperSlotSuffix(device, partition_name);
-    slot_number_ = SlotNumberForSlotSuffix(slot_suffix);
+    slot_number_ = android::fs_mgr::SlotNumberForSlotSuffix(slot_suffix);
     auto super_device = FindPhysicalPartition(fs_mgr_get_super_partition_name(slot_number_));
     if (!super_device) {
         return;
@@ -350,7 +349,7 @@ PartitionBuilder::PartitionBuilder(FastbootDevice* device, const std::string& pa
 }
 
 bool PartitionBuilder::Write() {
-    std::unique_ptr<LpMetadata> metadata = builder_->Export();
+    auto metadata = builder_->Export();
     if (!metadata) {
         return false;
     }
@@ -381,7 +380,7 @@ bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Partition already exists");
     }
 
-    Partition* partition = builder->AddPartition(partition_name, 0);
+    auto partition = builder->AddPartition(partition_name, 0);
     if (!partition) {
         return device->WriteFail("Failed to add partition");
     }
@@ -437,7 +436,7 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Could not open super partition");
     }
 
-    Partition* partition = builder->FindPartition(partition_name);
+    auto partition = builder->FindPartition(partition_name);
     if (!partition) {
         return device->WriteFail("Partition does not exist");
     }
@@ -466,7 +465,7 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
 class AutoMountMetadata {
   public:
     AutoMountMetadata() {
-        Fstab proc_mounts;
+        android::fs_mgr::Fstab proc_mounts;
         if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
             LOG(ERROR) << "Could not read /proc/mounts";
             return;
@@ -494,7 +493,7 @@ class AutoMountMetadata {
     explicit operator bool() const { return mounted_; }
 
   private:
-    Fstab fstab_;
+    android::fs_mgr::Fstab fstab_;
     bool mounted_ = false;
     bool should_unmount_ = false;
 };
