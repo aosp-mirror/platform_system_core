@@ -49,27 +49,6 @@ TEST(result, result_accessors_rvalue) {
   EXPECT_EQ('s', Result<std::string>("success")->data()[0]);
 }
 
-TEST(result, result_success) {
-  Result<Success> result = Success();
-  ASSERT_TRUE(result);
-  ASSERT_TRUE(result.has_value());
-
-  EXPECT_EQ(Success(), *result);
-  EXPECT_EQ(Success(), result.value());
-}
-
-TEST(result, result_success_rvalue) {
-  // Success() doesn't actually create a Result<Success> object, but rather an object that can be
-  // implicitly constructed into a Result<Success> object.
-
-  auto MakeRvalueSuccessResult = []() -> Result<Success> { return Success(); };
-  ASSERT_TRUE(MakeRvalueSuccessResult());
-  ASSERT_TRUE(MakeRvalueSuccessResult().has_value());
-
-  EXPECT_EQ(Success(), *MakeRvalueSuccessResult());
-  EXPECT_EQ(Success(), MakeRvalueSuccessResult().value());
-}
-
 TEST(result, result_void) {
   Result<void> ok = {};
   EXPECT_TRUE(ok);
@@ -96,7 +75,7 @@ TEST(result, result_void) {
 }
 
 TEST(result, result_error) {
-  Result<Success> result = Error() << "failure" << 1;
+  Result<void> result = Error() << "failure" << 1;
   ASSERT_FALSE(result);
   ASSERT_FALSE(result.has_value());
 
@@ -105,7 +84,7 @@ TEST(result, result_error) {
 }
 
 TEST(result, result_error_empty) {
-  Result<Success> result = Error();
+  Result<void> result = Error();
   ASSERT_FALSE(result);
   ASSERT_FALSE(result.has_value());
 
@@ -120,7 +99,7 @@ TEST(result, result_error_rvalue) {
   // definition will not know what the type, T, of the underlying Result<T> object that it would
   // create is.
 
-  auto MakeRvalueErrorResult = []() -> Result<Success> { return Error() << "failure" << 1; };
+  auto MakeRvalueErrorResult = []() -> Result<void> { return Error() << "failure" << 1; };
   ASSERT_FALSE(MakeRvalueErrorResult());
   ASSERT_FALSE(MakeRvalueErrorResult().has_value());
 
@@ -131,7 +110,7 @@ TEST(result, result_error_rvalue) {
 TEST(result, result_errno_error) {
   constexpr int test_errno = 6;
   errno = test_errno;
-  Result<Success> result = ErrnoError() << "failure" << 1;
+  Result<void> result = ErrnoError() << "failure" << 1;
 
   ASSERT_FALSE(result);
   ASSERT_FALSE(result.has_value());
@@ -143,7 +122,7 @@ TEST(result, result_errno_error) {
 TEST(result, result_errno_error_no_text) {
   constexpr int test_errno = 6;
   errno = test_errno;
-  Result<Success> result = ErrnoError();
+  Result<void> result = ErrnoError();
 
   ASSERT_FALSE(result);
   ASSERT_FALSE(result.has_value());
@@ -154,7 +133,7 @@ TEST(result, result_errno_error_no_text) {
 
 TEST(result, result_error_from_other_result) {
   auto error_text = "test error"s;
-  Result<Success> result = Error() << error_text;
+  Result<void> result = Error() << error_text;
 
   ASSERT_FALSE(result);
   ASSERT_FALSE(result.has_value());
@@ -170,7 +149,7 @@ TEST(result, result_error_from_other_result) {
 
 TEST(result, result_error_through_ostream) {
   auto error_text = "test error"s;
-  Result<Success> result = Error() << error_text;
+  Result<void> result = Error() << error_text;
 
   ASSERT_FALSE(result);
   ASSERT_FALSE(result.has_value());
@@ -188,7 +167,7 @@ TEST(result, result_errno_error_through_ostream) {
   auto error_text = "test error"s;
   constexpr int test_errno = 6;
   errno = 6;
-  Result<Success> result = ErrnoError() << error_text;
+  Result<void> result = ErrnoError() << error_text;
 
   errno = 0;
 
@@ -306,9 +285,7 @@ TEST(result, no_copy_on_return) {
 // constructor.  This is done with by disabling the forwarding reference constructor if its first
 // and only type is Result<T>.
 TEST(result, result_result_with_success) {
-  auto return_result_result_with_success = []() -> Result<Result<Success>> {
-    return Result<Success>();
-  };
+  auto return_result_result_with_success = []() -> Result<Result<void>> { return Result<void>(); };
   auto result = return_result_result_with_success();
   ASSERT_TRUE(result);
   ASSERT_TRUE(*result);
@@ -318,8 +295,8 @@ TEST(result, result_result_with_success) {
 }
 
 TEST(result, result_result_with_failure) {
-  auto return_result_result_with_error = []() -> Result<Result<Success>> {
-    return Result<Success>(ResultError("failure string", 6));
+  auto return_result_result_with_error = []() -> Result<Result<void>> {
+    return Result<void>(ResultError("failure string", 6));
   };
   auto result = return_result_result_with_error();
   ASSERT_TRUE(result);

@@ -28,9 +28,8 @@
 // from when the error occurred.  ResultError can be used in an ostream directly to print its
 // string value.
 //
-// Success is a typedef that aids in creating Result<T> that do not contain a return value.
-// Result<Success> is the correct return type for a function that either returns successfully or
-// returns an error value.  Returning Success() from a function that returns Result<Success> is the
+// Result<void> is the correct return type for a function that either returns successfully or
+// returns an error value.  Returning {} from a function that returns Result<void> is the
 // correct way to indicate that a function without a return type has completed successfully.
 //
 // A successful Result<T> is constructed implicitly from any type that can be implicitly converted
@@ -163,10 +162,6 @@ inline Error ErrnoError() {
 
 template <typename T>
 using Result = android::base::expected<T, ResultError>;
-
-// Usage: `Result<Success>` as a result type that doesn't contain a value.
-// Use `return {}` or `return Success()` to return with success.
-using Success = std::monostate;
 
 }  // namespace base
 }  // namespace android
