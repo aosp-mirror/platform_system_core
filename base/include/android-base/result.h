@@ -81,8 +81,7 @@ namespace base {
 
 struct ResultError {
   template <typename T>
-  ResultError(T&& message, int code)
-      : message_(std::forward<T>(message)), code_(code) {}
+  ResultError(T&& message, int code) : message_(std::forward<T>(message)), code_(code) {}
 
   template <typename T>
   operator android::base::expected<T, ResultError>() {
@@ -122,15 +121,13 @@ class Error {
 
   template <typename T>
   Error& operator<<(T&& t) {
+    if constexpr (std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, ResultError>) {
+      errno_ = t.code();
+      return (*this) << t.message();
+    }
     int saved = errno;
     ss_ << t;
     errno = saved;
-    return *this;
-  }
-
-  Error& operator<<(const ResultError& result_error) {
-    (*this) << result_error.message();
-    errno_ = result_error.code();
     return *this;
   }
 

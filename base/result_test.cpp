@@ -143,8 +143,8 @@ TEST(result, result_error_from_other_result) {
   ASSERT_FALSE(result2);
   ASSERT_FALSE(result2.has_value());
 
-  EXPECT_EQ(0, result.error().code());
-  EXPECT_EQ(error_text, result.error().message());
+  EXPECT_EQ(0, result2.error().code());
+  EXPECT_EQ(error_text, result2.error().message());
 }
 
 TEST(result, result_error_through_ostream) {
@@ -159,8 +159,8 @@ TEST(result, result_error_through_ostream) {
   ASSERT_FALSE(result2);
   ASSERT_FALSE(result2.has_value());
 
-  EXPECT_EQ(0, result.error().code());
-  EXPECT_EQ(error_text, result.error().message());
+  EXPECT_EQ(0, result2.error().code());
+  EXPECT_EQ(error_text, result2.error().message());
 }
 
 TEST(result, result_errno_error_through_ostream) {
@@ -179,8 +179,8 @@ TEST(result, result_errno_error_through_ostream) {
   ASSERT_FALSE(result2);
   ASSERT_FALSE(result2.has_value());
 
-  EXPECT_EQ(test_errno, result.error().code());
-  EXPECT_EQ(error_text + ": " + strerror(test_errno), result.error().message());
+  EXPECT_EQ(test_errno, result2.error().code());
+  EXPECT_EQ(error_text + ": " + strerror(test_errno), result2.error().message());
 }
 
 TEST(result, constructor_forwarding) {
