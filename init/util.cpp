@@ -197,7 +197,7 @@ static int OpenFile(const std::string& path, int flags, mode_t mode) {
     return rc;
 }
 
-Result<Success> WriteFile(const std::string& path, const std::string& content) {
+Result<void> WriteFile(const std::string& path, const std::string& content) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(
         OpenFile(path, O_WRONLY | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0600)));
     if (fd == -1) {
@@ -206,7 +206,7 @@ Result<Success> WriteFile(const std::string& path, const std::string& content) {
     if (!android::base::WriteStringToFd(content, fd)) {
         return ErrnoError() << "Unable to write file contents";
     }
-    return Success();
+    return {};
 }
 
 bool mkdir_recursive(const std::string& path, mode_t mode) {
