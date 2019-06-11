@@ -72,9 +72,9 @@ std::unique_ptr<LpMetadata> ReadMetadata(const std::string& super_partition, uin
 
 // Read/Write logical partition metadata to an image file, for diagnostics or
 // flashing.
-bool WriteToImageFile(const char* file, const LpMetadata& metadata, uint32_t block_size,
+bool WriteToImageFile(const std::string& file, const LpMetadata& metadata, uint32_t block_size,
                       const std::map<std::string, std::string>& images, bool sparsify);
-bool WriteToImageFile(const char* file, const LpMetadata& metadata);
+bool WriteToImageFile(const std::string& file, const LpMetadata& metadata);
 std::unique_ptr<LpMetadata> ReadFromImageFile(const std::string& image_file);
 std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
 
