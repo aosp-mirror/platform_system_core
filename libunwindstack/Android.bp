@@ -241,6 +241,7 @@ cc_test {
         "tests/files/offline/debug_frame_first_x86/*",
         "tests/files/offline/debug_frame_load_bias_arm/*",
         "tests/files/offline/eh_frame_hdr_begin_x86_64/*",
+        "tests/files/offline/invalid_elf_offset_arm/*",
         "tests/files/offline/jit_debug_arm/*",
         "tests/files/offline/jit_debug_x86/*",
         "tests/files/offline/jit_map_arm/*",
