@@ -27,7 +27,7 @@
 //  SectionParser is an interface that can parse a given 'section' in init.
 //
 //  You can implement up to 4 functions below, with ParseSection being mandatory. The first two
-//  functions return Result<Success> indicating if they have an error. It will be reported along
+//  functions return Result<void> indicating if they have an error. It will be reported along
 //  with the filename and line number of where the error occurred.
 //
 //  1) ParseSection
@@ -51,10 +51,10 @@ namespace init {
 class SectionParser {
   public:
     virtual ~SectionParser() {}
-    virtual Result<Success> ParseSection(std::vector<std::string>&& args,
-                                         const std::string& filename, int line) = 0;
-    virtual Result<Success> ParseLineSection(std::vector<std::string>&&, int) { return Success(); };
-    virtual Result<Success> EndSection() { return Success(); };
+    virtual Result<void> ParseSection(std::vector<std::string>&& args, const std::string& filename,
+                                      int line) = 0;
+    virtual Result<void> ParseLineSection(std::vector<std::string>&&, int) { return {}; };
+    virtual Result<void> EndSection() { return {}; };
     virtual void EndFile(){};
 };
 
@@ -67,7 +67,7 @@ class Parser {
     //  Similar to ParseSection() and ParseLineSection(), this function returns bool with false
     //  indicating a failure and has an std::string* err parameter into which an error string can
     //  be written.
-    using LineCallback = std::function<Result<Success>(std::vector<std::string>&&)>;
+    using LineCallback = std::function<Result<void>(std::vector<std::string>&&)>;
 
     Parser();
 

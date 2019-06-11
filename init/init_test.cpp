@@ -180,7 +180,7 @@ TEST(init, EventTriggerOrderMultipleFiles) {
     auto execute_command = [&num_executed](const BuiltinArguments& args) {
         EXPECT_EQ(2U, args.size());
         EXPECT_EQ(++num_executed, std::stoi(args[1]));
-        return Success();
+        return Result<void>{};
     };
 
     TestFunctionMap test_function_map;

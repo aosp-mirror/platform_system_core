@@ -53,7 +53,7 @@ BENCHMARK(BenchmarkSuccess);
 TestFunctionMap BuildTestFunctionMap() {
     TestFunctionMap test_function_map;
     test_function_map.Add("return_success", 0, 0, true,
-                          [](const BuiltinArguments& args) { return Success(); });
+                          [](const BuiltinArguments& args) { return Result<void>{}; });
 
     return test_function_map;
 }

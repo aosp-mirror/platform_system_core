@@ -23,8 +23,8 @@
 namespace android {
 namespace init {
 
-Result<Success> ImportParser::ParseSection(std::vector<std::string>&& args,
-                                           const std::string& filename, int line) {
+Result<void> ImportParser::ParseSection(std::vector<std::string>&& args,
+                                        const std::string& filename, int line) {
     if (args.size() != 2) {
         return Error() << "single argument needed for import\n";
     }
@@ -38,10 +38,10 @@ Result<Success> ImportParser::ParseSection(std::vector<std::string>&& args,
     LOG(INFO) << "Added '" << conf_file << "' to import list";
     if (filename_.empty()) filename_ = filename;
     imports_.emplace_back(std::move(conf_file), line);
-    return Success();
+    return {};
 }
 
-Result<Success> ImportParser::ParseLineSection(std::vector<std::string>&&, int) {
+Result<void> ImportParser::ParseLineSection(std::vector<std::string>&&, int) {
     return Error() << "Unexpected line found after import statement";
 }
 
