@@ -237,18 +237,18 @@ static std::optional<boot_clock::time_point> HandleProcessActions() {
     return next_process_action_time;
 }
 
-static Result<Success> DoControlStart(Service* service) {
+static Result<void> DoControlStart(Service* service) {
     return service->Start();
 }
 
-static Result<Success> DoControlStop(Service* service) {
+static Result<void> DoControlStop(Service* service) {
     service->Stop();
-    return Success();
+    return {};
 }
 
-static Result<Success> DoControlRestart(Service* service) {
+static Result<void> DoControlRestart(Service* service) {
     service->Restart();
-    return Success();
+    return {};
 }
 
 enum class ControlTarget {
@@ -258,16 +258,16 @@ enum class ControlTarget {
 
 struct ControlMessageFunction {
     ControlTarget target;
-    std::function<Result<Success>(Service*)> action;
+    std::function<Result<void>(Service*)> action;
 };
 
 static const std::map<std::string, ControlMessageFunction>& get_control_message_map() {
     // clang-format off
     static const std::map<std::string, ControlMessageFunction> control_message_functions = {
         {"sigstop_on",        {ControlTarget::SERVICE,
-                               [](auto* service) { service->set_sigstop(true); return Success(); }}},
+                               [](auto* service) { service->set_sigstop(true); return Result<void>{}; }}},
         {"sigstop_off",       {ControlTarget::SERVICE,
-                               [](auto* service) { service->set_sigstop(false); return Success(); }}},
+                               [](auto* service) { service->set_sigstop(false); return Result<void>{}; }}},
         {"start",             {ControlTarget::SERVICE,   DoControlStart}},
         {"stop",              {ControlTarget::SERVICE,   DoControlStop}},
         {"restart",           {ControlTarget::SERVICE,   DoControlRestart}},
@@ -330,7 +330,7 @@ bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t
     return true;
 }
 
-static Result<Success> wait_for_coldboot_done_action(const BuiltinArguments& args) {
+static Result<void> wait_for_coldboot_done_action(const BuiltinArguments& args) {
     Timer t;
 
     LOG(VERBOSE) << "Waiting for " COLDBOOT_DONE "...";
@@ -348,18 +348,18 @@ static Result<Success> wait_for_coldboot_done_action(const BuiltinArguments& arg
     }
 
     property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration().count()));
-    return Success();
+    return {};
 }
 
-static Result<Success> console_init_action(const BuiltinArguments& args) {
+static Result<void> console_init_action(const BuiltinArguments& args) {
     std::string console = GetProperty("ro.boot.console", "");
     if (!console.empty()) {
         default_console = "/dev/" + console;
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> SetupCgroupsAction(const BuiltinArguments&) {
+static Result<void> SetupCgroupsAction(const BuiltinArguments&) {
     // Have to create <CGROUPS_RC_DIR> using make_dir function
     // for appropriate sepolicy to be set for it
     make_dir(android::base::Dirname(CGROUPS_RC_PATH), 0711);
@@ -367,7 +367,7 @@ static Result<Success> SetupCgroupsAction(const BuiltinArguments&) {
         return ErrnoError() << "Failed to setup cgroups";
     }
 
-    return Success();
+    return {};
 }
 
 static void import_kernel_nv(const std::string& key, const std::string& value, bool for_emulator) {
@@ -451,19 +451,19 @@ static void process_kernel_cmdline() {
     if (qemu[0]) import_kernel_cmdline(true, import_kernel_nv);
 }
 
-static Result<Success> property_enable_triggers_action(const BuiltinArguments& args) {
+static Result<void> property_enable_triggers_action(const BuiltinArguments& args) {
     /* Enable property triggers. */
     property_triggers_enabled = 1;
-    return Success();
+    return {};
 }
 
-static Result<Success> queue_property_triggers_action(const BuiltinArguments& args) {
+static Result<void> queue_property_triggers_action(const BuiltinArguments& args) {
     ActionManager::GetInstance().QueueBuiltinAction(property_enable_triggers_action, "enable_property_trigger");
     ActionManager::GetInstance().QueueAllPropertyActions();
-    return Success();
+    return {};
 }
 
-static Result<Success> InitBinder(const BuiltinArguments& args) {
+static Result<void> InitBinder(const BuiltinArguments& args) {
     // init's use of binder is very limited. init cannot:
     //   - have any binder threads
     //   - receive incoming binder calls
@@ -478,7 +478,7 @@ static Result<Success> InitBinder(const BuiltinArguments& args) {
     android::ProcessState::self()->setCallRestriction(
             ProcessState::CallRestriction::ERROR_IF_NOT_ONEWAY);
 #endif
-    return Success();
+    return {};
 }
 
 // Set the UDC controller for the ConfigFS USB Gadgets.
@@ -757,14 +757,14 @@ int SecondStageMain(int argc, char** argv) {
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
     Keychords keychords;
     am.QueueBuiltinAction(
-        [&epoll, &keychords](const BuiltinArguments& args) -> Result<Success> {
-            for (const auto& svc : ServiceList::GetInstance()) {
-                keychords.Register(svc->keycodes());
-            }
-            keychords.Start(&epoll, HandleKeychord);
-            return Success();
-        },
-        "KeychordInit");
+            [&epoll, &keychords](const BuiltinArguments& args) -> Result<void> {
+                for (const auto& svc : ServiceList::GetInstance()) {
+                    keychords.Register(svc->keycodes());
+                }
+                keychords.Start(&epoll, HandleKeychord);
+                return {};
+            },
+            "KeychordInit");
     am.QueueBuiltinAction(console_init_action, "console_init");
 
     // Trigger all the boot actions to get us started.

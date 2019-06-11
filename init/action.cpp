@@ -28,9 +28,8 @@ using android::base::Join;
 namespace android {
 namespace init {
 
-Result<Success> RunBuiltinFunction(const BuiltinFunction& function,
-                                   const std::vector<std::string>& args,
-                                   const std::string& context) {
+Result<void> RunBuiltinFunction(const BuiltinFunction& function,
+                                const std::vector<std::string>& args, const std::string& context) {
     auto builtin_arguments = BuiltinArguments(context);
 
     builtin_arguments.args.resize(args.size());
@@ -51,7 +50,7 @@ Command::Command(BuiltinFunction f, bool execute_in_subcontext, std::vector<std:
       args_(std::move(args)),
       line_(line) {}
 
-Result<Success> Command::InvokeFunc(Subcontext* subcontext) const {
+Result<void> Command::InvokeFunc(Subcontext* subcontext) const {
     if (subcontext) {
         if (execute_in_subcontext_) {
             return subcontext->Execute(args_);
@@ -83,7 +82,7 @@ Action::Action(bool oneshot, Subcontext* subcontext, const std::string& filename
 
 const KeywordFunctionMap* Action::function_map_ = nullptr;
 
-Result<Success> Action::AddCommand(std::vector<std::string>&& args, int line) {
+Result<void> Action::AddCommand(std::vector<std::string>&& args, int line) {
     if (!function_map_) {
         return Error() << "no function map available";
     }
@@ -92,7 +91,7 @@ Result<Success> Action::AddCommand(std::vector<std::string>&& args, int line) {
     if (!function) return Error() << function.error();
 
     commands_.emplace_back(function->second, function->first, std::move(args), line);
-    return Success();
+    return {};
 }
 
 void Action::AddCommand(BuiltinFunction f, std::vector<std::string>&& args, int line) {

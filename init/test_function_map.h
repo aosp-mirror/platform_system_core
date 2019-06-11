@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_TEST_FUNCTION_MAP_H
-#define _INIT_TEST_FUNCTION_MAP_H
+#pragma once
 
 #include <string>
 #include <vector>
 
 #include "builtin_arguments.h"
+#include "builtins.h"
 #include "keyword_map.h"
 
 namespace android {
@@ -33,7 +33,7 @@ class TestFunctionMap : public KeywordFunctionMap {
     void Add(const std::string& name, const BuiltinFunctionNoArgs function) {
         Add(name, 0, 0, false, [function](const BuiltinArguments&) {
             function();
-            return Success();
+            return Result<void>{};
         });
     }
 
@@ -51,5 +51,3 @@ class TestFunctionMap : public KeywordFunctionMap {
 
 }  // namespace init
 }  // namespace android
-
-#endif

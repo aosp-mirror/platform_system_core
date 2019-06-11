@@ -34,7 +34,7 @@ struct NamespaceInfo {
     // Pair of namespace type, path to name.
     std::vector<std::pair<int, std::string>> namespaces_to_enter;
 };
-Result<Success> EnterNamespaces(const NamespaceInfo& info, const std::string& name, bool pre_apexd);
+Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name, bool pre_apexd);
 
 struct ProcessAttributes {
     std::string console;
@@ -46,9 +46,9 @@ struct ProcessAttributes {
     std::vector<gid_t> supp_gids;
     int priority;
 };
-Result<Success> SetProcessAttributes(const ProcessAttributes& attr);
+Result<void> SetProcessAttributes(const ProcessAttributes& attr);
 
-Result<Success> WritePidToFiles(std::vector<std::string>* files);
+Result<void> WritePidToFiles(std::vector<std::string>* files);
 
 }  // namespace init
 }  // namespace android
