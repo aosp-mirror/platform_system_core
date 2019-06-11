@@ -62,7 +62,7 @@ class UnwindOfflineTest : public ::testing::Test {
     free(cwd_);
   }
 
-  void Init(const char* file_dir, ArchEnum arch) {
+  void Init(const char* file_dir, ArchEnum arch, bool add_stack = true) {
     dir_ = TestGetFileDirectory() + "offline/" + file_dir;
 
     std::string data;
@@ -71,23 +71,25 @@ class UnwindOfflineTest : public ::testing::Test {
     maps_.reset(new BufferMaps(data.c_str()));
     ASSERT_TRUE(maps_->Parse());
 
-    std::string stack_name(dir_ + "stack.data");
-    struct stat st;
-    if (stat(stack_name.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
-      std::unique_ptr<MemoryOffline> stack_memory(new MemoryOffline);
-      ASSERT_TRUE(stack_memory->Init((dir_ + "stack.data").c_str(), 0));
-      process_memory_.reset(stack_memory.release());
-    } else {
-      std::unique_ptr<MemoryOfflineParts> stack_memory(new MemoryOfflineParts);
-      for (size_t i = 0;; i++) {
-        stack_name = dir_ + "stack" + std::to_string(i) + ".data";
-        if (stat(stack_name.c_str(), &st) == -1 || !S_ISREG(st.st_mode)) {
-          ASSERT_TRUE(i != 0) << "No stack data files found.";
-          break;
+    if (add_stack) {
+      std::string stack_name(dir_ + "stack.data");
+      struct stat st;
+      if (stat(stack_name.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
+        std::unique_ptr<MemoryOffline> stack_memory(new MemoryOffline);
+        ASSERT_TRUE(stack_memory->Init((dir_ + "stack.data").c_str(), 0));
+        process_memory_.reset(stack_memory.release());
+      } else {
+        std::unique_ptr<MemoryOfflineParts> stack_memory(new MemoryOfflineParts);
+        for (size_t i = 0;; i++) {
+          stack_name = dir_ + "stack" + std::to_string(i) + ".data";
+          if (stat(stack_name.c_str(), &st) == -1 || !S_ISREG(st.st_mode)) {
+            ASSERT_TRUE(i != 0) << "No stack data files found.";
+            break;
+          }
+          AddMemory(stack_name, stack_memory.get());
         }
-        AddMemory(stack_name, stack_memory.get());
+        process_memory_.reset(stack_memory.release());
       }
-      process_memory_.reset(stack_memory.release());
     }
 
     switch (arch) {
@@ -1440,6 +1442,19 @@ TEST_F(UnwindOfflineTest, shared_lib_in_apk_single_map_arm64) {
   EXPECT_EQ(0x7be4f07d00ULL, unwinder.frames()[11].sp);
   EXPECT_EQ(0x7cbe0b5e18ULL, unwinder.frames()[12].pc);
   EXPECT_EQ(0x7be4f07d20ULL, unwinder.frames()[12].sp);
+}
+
+TEST_F(UnwindOfflineTest, invalid_elf_offset_arm) {
+  ASSERT_NO_FATAL_FAILURE(Init("invalid_elf_offset_arm/", ARCH_ARM, false));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(1U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ("  #00 pc 00aa7508  invalid.apk (offset 0x12e4000)\n", frame_info);
+  EXPECT_EQ(0xc898f508, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xc2044218, unwinder.frames()[0].sp);
 }
 
 }  // namespace unwindstack
