@@ -60,10 +60,17 @@ class FiemapWriter final {
     // FiemapWriter::Open).
     static bool HasPinnedExtents(const std::string& file_path);
 
-    // Returns the underlying block device of a file. This will look past device-mapper layers.
-    // If an intermediate device-mapper layer would not maintain a 1:1 mapping (i.e. is a non-
-    // trivial dm-linear), then this will fail. If device-mapper nodes are encountered, then
-    // |uses_dm| will be set to true.
+    // Returns the underlying block device of a file. This will look past device-mapper layers
+    // as long as each layer would not change block mappings (i.e., dm-crypt, dm-bow, and dm-
+    // default-key tables are okay; dm-linear is not). If a mapping such as dm-linear is found,
+    // it will be returned in place of any physical block device.
+    //
+    // It is the caller's responsibility to check whether the returned block device is acceptable.
+    // Gsid, for example, will only accept /dev/block/by-name/userdata as the bottom device.
+    // Callers can check the device name (dm- or loop prefix), inspect sysfs, or compare the major
+    // number against a boot device.
+    //
+    // If device-mapper nodes were encountered, then |uses_dm| will be set to true.
     static bool GetBlockDeviceForFile(const std::string& file_path, std::string* bdev_path,
                                       bool* uses_dm = nullptr);
 

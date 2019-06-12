@@ -30,6 +30,7 @@ cc_library_static {
     ],
 
     static_libs: [
+        "libdm",
         "libext4_utils",
     ],
 
