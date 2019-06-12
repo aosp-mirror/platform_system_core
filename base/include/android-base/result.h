@@ -28,9 +28,8 @@
 // from when the error occurred.  ResultError can be used in an ostream directly to print its
 // string value.
 //
-// Success is a typedef that aids in creating Result<T> that do not contain a return value.
-// Result<Success> is the correct return type for a function that either returns successfully or
-// returns an error value.  Returning Success() from a function that returns Result<Success> is the
+// Result<void> is the correct return type for a function that either returns successfully or
+// returns an error value.  Returning {} from a function that returns Result<void> is the
 // correct way to indicate that a function without a return type has completed successfully.
 //
 // A successful Result<T> is constructed implicitly from any type that can be implicitly converted
@@ -82,8 +81,7 @@ namespace base {
 
 struct ResultError {
   template <typename T>
-  ResultError(T&& message, int code)
-      : message_(std::forward<T>(message)), code_(code) {}
+  ResultError(T&& message, int code) : message_(std::forward<T>(message)), code_(code) {}
 
   template <typename T>
   operator android::base::expected<T, ResultError>() {
@@ -123,15 +121,13 @@ class Error {
 
   template <typename T>
   Error& operator<<(T&& t) {
+    if constexpr (std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, ResultError>) {
+      errno_ = t.code();
+      return (*this) << t.message();
+    }
     int saved = errno;
     ss_ << t;
     errno = saved;
-    return *this;
-  }
-
-  Error& operator<<(const ResultError& result_error) {
-    (*this) << result_error.message();
-    errno_ = result_error.code();
     return *this;
   }
 
@@ -163,10 +159,6 @@ inline Error ErrnoError() {
 
 template <typename T>
 using Result = android::base::expected<T, ResultError>;
-
-// Usage: `Result<Success>` as a result type that doesn't contain a value.
-// Use `return {}` or `return Success()` to return with success.
-using Success = std::monostate;
 
 }  // namespace base
 }  // namespace android

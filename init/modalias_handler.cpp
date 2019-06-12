@@ -33,7 +33,7 @@
 namespace android {
 namespace init {
 
-Result<Success> ModaliasHandler::ParseDepCallback(std::vector<std::string>&& args) {
+Result<void> ModaliasHandler::ParseDepCallback(std::vector<std::string>&& args) {
     std::vector<std::string> deps;
 
     // Set first item as our modules path
@@ -58,10 +58,10 @@ Result<Success> ModaliasHandler::ParseDepCallback(std::vector<std::string>&& arg
     std::replace(mod_name.begin(), mod_name.end(), '-', '_');
     this->module_deps_[mod_name] = deps;
 
-    return Success();
+    return {};
 }
 
-Result<Success> ModaliasHandler::ParseAliasCallback(std::vector<std::string>&& args) {
+Result<void> ModaliasHandler::ParseAliasCallback(std::vector<std::string>&& args) {
     auto it = args.begin();
     const std::string& type = *it++;
 
@@ -77,7 +77,7 @@ Result<Success> ModaliasHandler::ParseAliasCallback(std::vector<std::string>&& a
     std::string& module_name = *it++;
     this->module_aliases_.emplace_back(alias, module_name);
 
-    return Success();
+    return {};
 }
 
 ModaliasHandler::ModaliasHandler() {
@@ -100,7 +100,7 @@ ModaliasHandler::ModaliasHandler() {
     for (const auto& base_path : base_paths) dep_parser.ParseConfig(base_path + "modules.dep");
 }
 
-Result<Success> ModaliasHandler::Insmod(const std::string& path_name, const std::string& args) {
+Result<void> ModaliasHandler::Insmod(const std::string& path_name, const std::string& args) {
     base::unique_fd fd(
             TEMP_FAILURE_RETRY(open(path_name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (fd == -1) return ErrnoError() << "Could not open module '" << path_name << "'";
@@ -109,17 +109,17 @@ Result<Success> ModaliasHandler::Insmod(const std::string& path_name, const std:
     if (ret != 0) {
         if (errno == EEXIST) {
             // Module already loaded
-            return Success();
+            return {};
         }
         return ErrnoError() << "Failed to insmod '" << path_name << "' with args '" << args << "'";
     }
 
     LOG(INFO) << "Loaded kernel module " << path_name;
-    return Success();
+    return {};
 }
 
-Result<Success> ModaliasHandler::InsmodWithDeps(const std::string& module_name,
-                                                const std::string& args) {
+Result<void> ModaliasHandler::InsmodWithDeps(const std::string& module_name,
+                                             const std::string& args) {
     if (module_name.empty()) {
         return Error() << "Need valid module name";
     }

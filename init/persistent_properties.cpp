@@ -169,7 +169,7 @@ Result<PersistentProperties> LoadPersistentPropertyFile() {
     return Error() << "Unable to parse persistent property file: Could not parse protobuf";
 }
 
-Result<Success> WritePersistentPropertyFile(const PersistentProperties& persistent_properties) {
+Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_properties) {
     const std::string temp_filename = persistent_property_filename + ".tmp";
     unique_fd fd(TEMP_FAILURE_RETRY(
         open(temp_filename.c_str(), O_WRONLY | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0600)));
@@ -191,7 +191,7 @@ Result<Success> WritePersistentPropertyFile(const PersistentProperties& persiste
         unlink(temp_filename.c_str());
         return Error(saved_errno) << "Unable to rename persistent property file";
     }
-    return Success();
+    return {};
 }
 
 // Persistent properties are not written often, so we rather not keep any data in memory and read

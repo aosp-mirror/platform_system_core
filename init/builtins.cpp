@@ -90,14 +90,14 @@ namespace init {
 
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
-static Result<Success> reboot_into_recovery(const std::vector<std::string>& options) {
+static Result<void> reboot_into_recovery(const std::vector<std::string>& options) {
     LOG(ERROR) << "Rebooting into recovery";
     std::string err;
     if (!write_bootloader_message(options, &err)) {
         return Error() << "Failed to set bootloader message: " << err;
     }
     property_set("sys.powerctl", "reboot,recovery");
-    return Success();
+    return {};
 }
 
 template <typename F>
@@ -107,10 +107,10 @@ static void ForEachServiceInClass(const std::string& classname, F function) {
     }
 }
 
-static Result<Success> do_class_start(const BuiltinArguments& args) {
+static Result<void> do_class_start(const BuiltinArguments& args) {
     // Do not start a class if it has a property persist.dont_start_class.CLASS set to 1.
     if (android::base::GetBoolProperty("persist.init.dont_start_class." + args[1], false))
-        return Success();
+        return {};
     // Starting a class does not start services which are explicitly disabled.
     // They must  be started individually.
     for (const auto& service : ServiceList::GetInstance()) {
@@ -121,10 +121,10 @@ static Result<Success> do_class_start(const BuiltinArguments& args) {
             }
         }
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_class_start_post_data(const BuiltinArguments& args) {
+static Result<void> do_class_start_post_data(const BuiltinArguments& args) {
     if (args.context != kInitContext) {
         return Error() << "command 'class_start_post_data' only available in init context";
     }
@@ -136,43 +136,43 @@ static Result<Success> do_class_start_post_data(const BuiltinArguments& args) {
             }
         }
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_class_stop(const BuiltinArguments& args) {
+static Result<void> do_class_stop(const BuiltinArguments& args) {
     ForEachServiceInClass(args[1], &Service::Stop);
-    return Success();
+    return {};
 }
 
-static Result<Success> do_class_reset(const BuiltinArguments& args) {
+static Result<void> do_class_reset(const BuiltinArguments& args) {
     ForEachServiceInClass(args[1], &Service::Reset);
-    return Success();
+    return {};
 }
 
-static Result<Success> do_class_reset_post_data(const BuiltinArguments& args) {
+static Result<void> do_class_reset_post_data(const BuiltinArguments& args) {
     if (args.context != kInitContext) {
         return Error() << "command 'class_reset_post_data' only available in init context";
     }
     ForEachServiceInClass(args[1], &Service::ResetIfPostData);
-    return Success();
+    return {};
 }
 
-static Result<Success> do_class_restart(const BuiltinArguments& args) {
+static Result<void> do_class_restart(const BuiltinArguments& args) {
     // Do not restart a class if it has a property persist.dont_start_class.CLASS set to 1.
     if (android::base::GetBoolProperty("persist.init.dont_start_class." + args[1], false))
-        return Success();
+        return {};
     ForEachServiceInClass(args[1], &Service::Restart);
-    return Success();
+    return {};
 }
 
-static Result<Success> do_domainname(const BuiltinArguments& args) {
+static Result<void> do_domainname(const BuiltinArguments& args) {
     if (auto result = WriteFile("/proc/sys/kernel/domainname", args[1]); !result) {
         return Error() << "Unable to write to /proc/sys/kernel/domainname: " << result.error();
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_enable(const BuiltinArguments& args) {
+static Result<void> do_enable(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "Could not find service";
 
@@ -180,10 +180,10 @@ static Result<Success> do_enable(const BuiltinArguments& args) {
         return Error() << "Could not enable service: " << result.error();
     }
 
-    return Success();
+    return {};
 }
 
-static Result<Success> do_exec(const BuiltinArguments& args) {
+static Result<void> do_exec(const BuiltinArguments& args) {
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service) {
         return Error() << "Could not create exec service";
@@ -193,10 +193,10 @@ static Result<Success> do_exec(const BuiltinArguments& args) {
     }
 
     ServiceList::GetInstance().AddService(std::move(service));
-    return Success();
+    return {};
 }
 
-static Result<Success> do_exec_background(const BuiltinArguments& args) {
+static Result<void> do_exec_background(const BuiltinArguments& args) {
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service) {
         return Error() << "Could not create exec background service";
@@ -206,10 +206,10 @@ static Result<Success> do_exec_background(const BuiltinArguments& args) {
     }
 
     ServiceList::GetInstance().AddService(std::move(service));
-    return Success();
+    return {};
 }
 
-static Result<Success> do_exec_start(const BuiltinArguments& args) {
+static Result<void> do_exec_start(const BuiltinArguments& args) {
     Service* service = ServiceList::GetInstance().FindService(args[1]);
     if (!service) {
         return Error() << "Service not found";
@@ -219,24 +219,24 @@ static Result<Success> do_exec_start(const BuiltinArguments& args) {
         return Error() << "Could not start exec service: " << result.error();
     }
 
-    return Success();
+    return {};
 }
 
-static Result<Success> do_export(const BuiltinArguments& args) {
+static Result<void> do_export(const BuiltinArguments& args) {
     if (setenv(args[1].c_str(), args[2].c_str(), 1) == -1) {
         return ErrnoError() << "setenv() failed";
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_hostname(const BuiltinArguments& args) {
+static Result<void> do_hostname(const BuiltinArguments& args) {
     if (auto result = WriteFile("/proc/sys/kernel/hostname", args[1]); !result) {
         return Error() << "Unable to write to /proc/sys/kernel/hostname: " << result.error();
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_ifup(const BuiltinArguments& args) {
+static Result<void> do_ifup(const BuiltinArguments& args) {
     struct ifreq ifr;
 
     strlcpy(ifr.ifr_name, args[1].c_str(), IFNAMSIZ);
@@ -254,10 +254,10 @@ static Result<Success> do_ifup(const BuiltinArguments& args) {
         return ErrnoError() << "ioctl(..., SIOCSIFFLAGS, ...) failed";
     }
 
-    return Success();
+    return {};
 }
 
-static Result<Success> do_insmod(const BuiltinArguments& args) {
+static Result<void> do_insmod(const BuiltinArguments& args) {
     int flags = 0;
     auto it = args.begin() + 1;
 
@@ -275,34 +275,34 @@ static Result<Success> do_insmod(const BuiltinArguments& args) {
     int rc = syscall(__NR_finit_module, fd.get(), options.c_str(), flags);
     if (rc == -1) return ErrnoError() << "finit_module for \"" << filename << "\" failed";
 
-    return Success();
+    return {};
 }
 
-static Result<Success> do_interface_restart(const BuiltinArguments& args) {
+static Result<void> do_interface_restart(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
     if (!svc) return Error() << "interface " << args[1] << " not found";
     svc->Restart();
-    return Success();
+    return {};
 }
 
-static Result<Success> do_interface_start(const BuiltinArguments& args) {
+static Result<void> do_interface_start(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
     if (!svc) return Error() << "interface " << args[1] << " not found";
     if (auto result = svc->Start(); !result) {
         return Error() << "Could not start interface: " << result.error();
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_interface_stop(const BuiltinArguments& args) {
+static Result<void> do_interface_stop(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
     if (!svc) return Error() << "interface " << args[1] << " not found";
     svc->Stop();
-    return Success();
+    return {};
 }
 
 // mkdir <path> [mode] [owner] [group]
-static Result<Success> do_mkdir(const BuiltinArguments& args) {
+static Result<void> do_mkdir(const BuiltinArguments& args) {
     mode_t mode = 0755;
     if (args.size() >= 3) {
         mode = std::strtoul(args[2].c_str(), 0, 8);
@@ -351,15 +351,15 @@ static Result<Success> do_mkdir(const BuiltinArguments& args) {
                 {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + args[1]});
         }
     }
-    return Success();
+    return {};
 }
 
 /* umount <path> */
-static Result<Success> do_umount(const BuiltinArguments& args) {
+static Result<void> do_umount(const BuiltinArguments& args) {
     if (umount(args[1].c_str()) < 0) {
         return ErrnoError() << "umount() failed";
     }
-    return Success();
+    return {};
 }
 
 static struct {
@@ -387,7 +387,7 @@ static struct {
 #define DATA_MNT_POINT "/data"
 
 /* mount <type> <device> <path> <flags ...> <options> */
-static Result<Success> do_mount(const BuiltinArguments& args) {
+static Result<void> do_mount(const BuiltinArguments& args) {
     const char* options = nullptr;
     unsigned flags = 0;
     bool wait = false;
@@ -434,7 +434,7 @@ static Result<Success> do_mount(const BuiltinArguments& args) {
                         ioctl(loop, LOOP_CLR_FD, 0);
                         return ErrnoError() << "mount() failed";
                     }
-                    return Success();
+                    return {};
                 }
             }
         }
@@ -449,7 +449,7 @@ static Result<Success> do_mount(const BuiltinArguments& args) {
 
     }
 
-    return Success();
+    return {};
 }
 
 /* Imports .rc files from the specified paths. Default ones are applied if none is given.
@@ -486,23 +486,23 @@ static void import_late(const std::vector<std::string>& args, size_t start_index
  *
  * return code is processed based on input code
  */
-static Result<Success> queue_fs_event(int code) {
+static Result<void> queue_fs_event(int code) {
     if (code == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
         ActionManager::GetInstance().QueueEventTrigger("encrypt");
-        return Success();
+        return {};
     } else if (code == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "block");
         ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
-        return Success();
+        return {};
     } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
         property_set("ro.crypto.state", "unencrypted");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return Success();
+        return {};
     } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
         property_set("ro.crypto.state", "unsupported");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return Success();
+        return {};
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
         if (android::gsi::IsGsiRunning()) {
@@ -522,7 +522,7 @@ static Result<Success> queue_fs_event(int code) {
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return Success();
+        return {};
     } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
         if (fscrypt_install_keyring()) {
             return Error() << "fscrypt_install_keyring() failed";
@@ -533,7 +533,7 @@ static Result<Success> queue_fs_event(int code) {
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return Success();
+        return {};
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
         if (fscrypt_install_keyring()) {
             return Error() << "fscrypt_install_keyring() failed";
@@ -544,7 +544,7 @@ static Result<Success> queue_fs_event(int code) {
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return Success();
+        return {};
     } else if (code > 0) {
         Error() << "fs_mgr_mount_all() returned unexpected error " << code;
     }
@@ -558,7 +558,7 @@ static Result<Success> queue_fs_event(int code) {
  * This function might request a reboot, in which case it will
  * not return.
  */
-static Result<Success> do_mount_all(const BuiltinArguments& args) {
+static Result<void> do_mount_all(const BuiltinArguments& args) {
     std::size_t na = 0;
     bool import_rc = true;
     bool queue_event = true;
@@ -605,11 +605,11 @@ static Result<Success> do_mount_all(const BuiltinArguments& args) {
         }
     }
 
-    return Success();
+    return {};
 }
 
 /* umount_all <fstab> */
-static Result<Success> do_umount_all(const BuiltinArguments& args) {
+static Result<void> do_umount_all(const BuiltinArguments& args) {
     Fstab fstab;
     if (!ReadFstabFromFile(args[1], &fstab)) {
         return Error() << "Could not read fstab";
@@ -618,10 +618,10 @@ static Result<Success> do_umount_all(const BuiltinArguments& args) {
     if (auto result = fs_mgr_umount_all(&fstab); result != 0) {
         return Error() << "umount_fstab() failed " << result;
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_swapon_all(const BuiltinArguments& args) {
+static Result<void> do_swapon_all(const BuiltinArguments& args) {
     Fstab fstab;
     if (!ReadFstabFromFile(args[1], &fstab)) {
         return Error() << "Could not read fstab '" << args[1] << "'";
@@ -631,50 +631,50 @@ static Result<Success> do_swapon_all(const BuiltinArguments& args) {
         return Error() << "fs_mgr_swapon_all() failed";
     }
 
-    return Success();
+    return {};
 }
 
-static Result<Success> do_setprop(const BuiltinArguments& args) {
+static Result<void> do_setprop(const BuiltinArguments& args) {
     property_set(args[1], args[2]);
-    return Success();
+    return {};
 }
 
-static Result<Success> do_setrlimit(const BuiltinArguments& args) {
+static Result<void> do_setrlimit(const BuiltinArguments& args) {
     auto rlimit = ParseRlimit(args.args);
     if (!rlimit) return rlimit.error();
 
     if (setrlimit(rlimit->first, &rlimit->second) == -1) {
         return ErrnoError() << "setrlimit failed";
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_start(const BuiltinArguments& args) {
+static Result<void> do_start(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
     if (auto result = svc->Start(); !result) {
         return Error() << "Could not start service: " << result.error();
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_stop(const BuiltinArguments& args) {
+static Result<void> do_stop(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
     svc->Stop();
-    return Success();
+    return {};
 }
 
-static Result<Success> do_restart(const BuiltinArguments& args) {
+static Result<void> do_restart(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
     svc->Restart();
-    return Success();
+    return {};
 }
 
-static Result<Success> do_trigger(const BuiltinArguments& args) {
+static Result<void> do_trigger(const BuiltinArguments& args) {
     ActionManager::GetInstance().QueueEventTrigger(args[1]);
-    return Success();
+    return {};
 }
 
 static int MakeSymlink(const std::string& target, const std::string& linkpath) {
@@ -695,33 +695,33 @@ static int MakeSymlink(const std::string& target, const std::string& linkpath) {
     return rc;
 }
 
-static Result<Success> do_symlink(const BuiltinArguments& args) {
+static Result<void> do_symlink(const BuiltinArguments& args) {
     if (MakeSymlink(args[1], args[2]) < 0) {
         // The symlink builtin is often used to create symlinks for older devices to be backwards
         // compatible with new paths, therefore we skip reporting this error.
         if (errno == EEXIST && android::base::GetMinimumLogSeverity() > android::base::DEBUG) {
-            return Success();
+            return {};
         }
         return ErrnoError() << "symlink() failed";
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_rm(const BuiltinArguments& args) {
+static Result<void> do_rm(const BuiltinArguments& args) {
     if (unlink(args[1].c_str()) < 0) {
         return ErrnoError() << "unlink() failed";
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_rmdir(const BuiltinArguments& args) {
+static Result<void> do_rmdir(const BuiltinArguments& args) {
     if (rmdir(args[1].c_str()) < 0) {
         return ErrnoError() << "rmdir() failed";
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_sysclktz(const BuiltinArguments& args) {
+static Result<void> do_sysclktz(const BuiltinArguments& args) {
     struct timezone tz = {};
     if (!android::base::ParseInt(args[1], &tz.tz_minuteswest)) {
         return Error() << "Unable to parse mins_west_of_gmt";
@@ -730,10 +730,10 @@ static Result<Success> do_sysclktz(const BuiltinArguments& args) {
     if (settimeofday(nullptr, &tz) == -1) {
         return ErrnoError() << "settimeofday() failed";
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_verity_update_state(const BuiltinArguments& args) {
+static Result<void> do_verity_update_state(const BuiltinArguments& args) {
     int mode;
     if (!fs_mgr_load_verity_state(&mode)) {
         return Error() << "fs_mgr_load_verity_state() failed";
@@ -755,18 +755,18 @@ static Result<Success> do_verity_update_state(const BuiltinArguments& args) {
         property_set("partition." + partition + ".verified", std::to_string(mode));
     }
 
-    return Success();
+    return {};
 }
 
-static Result<Success> do_write(const BuiltinArguments& args) {
+static Result<void> do_write(const BuiltinArguments& args) {
     if (auto result = WriteFile(args[1], args[2]); !result) {
         return Error() << "Unable to write to file '" << args[1] << "': " << result.error();
     }
 
-    return Success();
+    return {};
 }
 
-static Result<Success> readahead_file(const std::string& filename, bool fully) {
+static Result<void> readahead_file(const std::string& filename, bool fully) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(filename.c_str(), O_RDONLY)));
     if (fd == -1) {
         return ErrnoError() << "Error opening file";
@@ -786,10 +786,10 @@ static Result<Success> readahead_file(const std::string& filename, bool fully) {
             return ErrnoError() << "Error reading file";
         }
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_readahead(const BuiltinArguments& args) {
+static Result<void> do_readahead(const BuiltinArguments& args) {
     struct stat sb;
 
     if (stat(args[1].c_str(), &sb)) {
@@ -845,10 +845,10 @@ static Result<Success> do_readahead(const BuiltinArguments& args) {
     } else if (pid < 0) {
         return ErrnoError() << "Fork failed";
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_copy(const BuiltinArguments& args) {
+static Result<void> do_copy(const BuiltinArguments& args) {
     auto file_contents = ReadFile(args[1]);
     if (!file_contents) {
         return Error() << "Could not read input file '" << args[1] << "': " << file_contents.error();
@@ -857,10 +857,10 @@ static Result<Success> do_copy(const BuiltinArguments& args) {
         return Error() << "Could not write to output file '" << args[2] << "': " << result.error();
     }
 
-    return Success();
+    return {};
 }
 
-static Result<Success> do_chown(const BuiltinArguments& args) {
+static Result<void> do_chown(const BuiltinArguments& args) {
     auto uid = DecodeUid(args[1]);
     if (!uid) {
         return Error() << "Unable to decode UID for '" << args[1] << "': " << uid.error();
@@ -881,7 +881,7 @@ static Result<Success> do_chown(const BuiltinArguments& args) {
         return ErrnoError() << "lchown() failed";
     }
 
-    return Success();
+    return {};
 }
 
 static mode_t get_mode(const char *s) {
@@ -897,15 +897,15 @@ static mode_t get_mode(const char *s) {
     return mode;
 }
 
-static Result<Success> do_chmod(const BuiltinArguments& args) {
+static Result<void> do_chmod(const BuiltinArguments& args) {
     mode_t mode = get_mode(args[1].c_str());
     if (fchmodat(AT_FDCWD, args[2].c_str(), mode, AT_SYMLINK_NOFOLLOW) < 0) {
         return ErrnoError() << "fchmodat() failed";
     }
-    return Success();
+    return {};
 }
 
-static Result<Success> do_restorecon(const BuiltinArguments& args) {
+static Result<void> do_restorecon(const BuiltinArguments& args) {
     int ret = 0;
 
     struct flag_type {const char* name; int value;};
@@ -944,16 +944,16 @@ static Result<Success> do_restorecon(const BuiltinArguments& args) {
     }
 
     if (ret) return ErrnoError() << "selinux_android_restorecon() failed";
-    return Success();
+    return {};
 }
 
-static Result<Success> do_restorecon_recursive(const BuiltinArguments& args) {
+static Result<void> do_restorecon_recursive(const BuiltinArguments& args) {
     std::vector<std::string> non_const_args(args.args);
     non_const_args.insert(std::next(non_const_args.begin()), "--recursive");
     return do_restorecon({std::move(non_const_args), args.context});
 }
 
-static Result<Success> do_loglevel(const BuiltinArguments& args) {
+static Result<void> do_loglevel(const BuiltinArguments& args) {
     // TODO: support names instead/as well?
     int log_level = -1;
     android::base::ParseInt(args[1], &log_level);
@@ -971,20 +971,20 @@ static Result<Success> do_loglevel(const BuiltinArguments& args) {
             return Error() << "invalid log level " << log_level;
     }
     android::base::SetMinimumLogSeverity(severity);
-    return Success();
+    return {};
 }
 
-static Result<Success> do_load_persist_props(const BuiltinArguments& args) {
+static Result<void> do_load_persist_props(const BuiltinArguments& args) {
     load_persist_props();
-    return Success();
+    return {};
 }
 
-static Result<Success> do_load_system_props(const BuiltinArguments& args) {
+static Result<void> do_load_system_props(const BuiltinArguments& args) {
     LOG(INFO) << "deprecated action `load_system_props` called.";
-    return Success();
+    return {};
 }
 
-static Result<Success> do_wait(const BuiltinArguments& args) {
+static Result<void> do_wait(const BuiltinArguments& args) {
     auto timeout = kCommandRetryTimeout;
     if (args.size() == 3) {
         int timeout_int;
@@ -998,10 +998,10 @@ static Result<Success> do_wait(const BuiltinArguments& args) {
         return Error() << "wait_for_file() failed";
     }
 
-    return Success();
+    return {};
 }
 
-static Result<Success> do_wait_for_prop(const BuiltinArguments& args) {
+static Result<void> do_wait_for_prop(const BuiltinArguments& args) {
     const char* name = args[1].c_str();
     const char* value = args[2].c_str();
     size_t value_len = strlen(value);
@@ -1015,15 +1015,15 @@ static Result<Success> do_wait_for_prop(const BuiltinArguments& args) {
     if (!start_waiting_for_property(name, value)) {
         return Error() << "already waiting for a property";
     }
-    return Success();
+    return {};
 }
 
 static bool is_file_crypto() {
     return android::base::GetProperty("ro.crypto.type", "") == "file";
 }
 
-static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
-                                               const BuiltinArguments& args) {
+static Result<void> ExecWithRebootOnFailure(const std::string& reboot_reason,
+                                            const BuiltinArguments& args) {
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service) {
         return Error() << "Could not create exec service";
@@ -1047,11 +1047,11 @@ static Result<Success> ExecWithRebootOnFailure(const std::string& reboot_reason,
         return Error() << "Could not start exec service: " << result.error();
     }
     ServiceList::GetInstance().AddService(std::move(service));
-    return Success();
+    return {};
 }
 
-static Result<Success> do_installkey(const BuiltinArguments& args) {
-    if (!is_file_crypto()) return Success();
+static Result<void> do_installkey(const BuiltinArguments& args) {
+    if (!is_file_crypto()) return {};
 
     auto unencrypted_dir = args[1] + fscrypt_unencrypted_folder;
     if (!make_dir(unencrypted_dir, 0700) && errno != EEXIST) {
@@ -1062,24 +1062,21 @@ static Result<Success> do_installkey(const BuiltinArguments& args) {
         {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "enablefilecrypto"}, args.context});
 }
 
-static Result<Success> do_init_user0(const BuiltinArguments& args) {
+static Result<void> do_init_user0(const BuiltinArguments& args) {
     return ExecWithRebootOnFailure(
         "init_user0_failed",
         {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"}, args.context});
 }
 
-static Result<Success> do_mark_post_data(const BuiltinArguments& args) {
+static Result<void> do_mark_post_data(const BuiltinArguments& args) {
     ServiceList::GetInstance().MarkPostData();
 
-    return Success();
+    return {};
 }
 
-static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
+static Result<void> do_parse_apex_configs(const BuiltinArguments& args) {
     glob_t glob_result;
-    // @ is added to filter out the later paths, which are bind mounts of the places
-    // where the APEXes are really mounted at. Otherwise, we will parse the
-    // same file twice.
-    static constexpr char glob_pattern[] = "/apex/*@*/etc/*.rc";
+    static constexpr char glob_pattern[] = "/apex/*/etc/*.rc";
     const int ret = glob(glob_pattern, GLOB_MARK, nullptr, &glob_result);
     if (ret != 0 && ret != GLOB_NOMATCH) {
         globfree(&glob_result);
@@ -1088,7 +1085,15 @@ static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
     std::vector<std::string> configs;
     Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance());
     for (size_t i = 0; i < glob_result.gl_pathc; i++) {
-        configs.emplace_back(glob_result.gl_pathv[i]);
+        std::string path = glob_result.gl_pathv[i];
+        // Filter-out /apex/<name>@<ver> paths. The paths are bind-mounted to
+        // /apex/<name> paths, so unless we filter them out, we will parse the
+        // same file twice.
+        std::vector<std::string> paths = android::base::Split(path, "/");
+        if (paths.size() >= 2 && paths[1].find('@') != std::string::npos) {
+            continue;
+        }
+        configs.push_back(path);
     }
     globfree(&glob_result);
 
@@ -1102,15 +1107,15 @@ static Result<Success> do_parse_apex_configs(const BuiltinArguments& args) {
     }
     ServiceList::GetInstance().MarkServicesUpdate();
     if (success) {
-        return Success();
+        return {};
     } else {
         return Error() << "Could not parse apex configs";
     }
 }
 
-static Result<Success> do_enter_default_mount_ns(const BuiltinArguments& args) {
+static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
     if (SwitchToDefaultMountNamespace()) {
-        return Success();
+        return {};
     } else {
         return Error() << "Failed to enter into default mount namespace";
     }

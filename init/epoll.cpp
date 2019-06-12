@@ -28,17 +28,17 @@ namespace init {
 
 Epoll::Epoll() {}
 
-Result<Success> Epoll::Open() {
-    if (epoll_fd_ >= 0) return Success();
+Result<void> Epoll::Open() {
+    if (epoll_fd_ >= 0) return {};
     epoll_fd_.reset(epoll_create1(EPOLL_CLOEXEC));
 
     if (epoll_fd_ == -1) {
         return ErrnoError() << "epoll_create1 failed";
     }
-    return Success();
+    return {};
 }
 
-Result<Success> Epoll::RegisterHandler(int fd, std::function<void()> handler, uint32_t events) {
+Result<void> Epoll::RegisterHandler(int fd, std::function<void()> handler, uint32_t events) {
     if (!events) {
         return Error() << "Must specify events";
     }
@@ -52,24 +52,24 @@ Result<Success> Epoll::RegisterHandler(int fd, std::function<void()> handler, ui
     // pointer to the std::function in the map directly for epoll_ctl.
     ev.data.ptr = reinterpret_cast<void*>(&it->second);
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) == -1) {
-        Result<Success> result = ErrnoError() << "epoll_ctl failed to add fd";
+        Result<void> result = ErrnoError() << "epoll_ctl failed to add fd";
         epoll_handlers_.erase(fd);
         return result;
     }
-    return Success();
+    return {};
 }
 
-Result<Success> Epoll::UnregisterHandler(int fd) {
+Result<void> Epoll::UnregisterHandler(int fd) {
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr) == -1) {
         return ErrnoError() << "epoll_ctl failed to remove fd";
     }
     if (epoll_handlers_.erase(fd) != 1) {
         return Error() << "Attempting to remove epoll handler for FD without an existing handler";
     }
-    return Success();
+    return {};
 }
 
-Result<Success> Epoll::Wait(std::optional<std::chrono::milliseconds> timeout) {
+Result<void> Epoll::Wait(std::optional<std::chrono::milliseconds> timeout) {
     int timeout_ms = -1;
     if (timeout && timeout->count() < INT_MAX) {
         timeout_ms = timeout->count();
@@ -81,7 +81,7 @@ Result<Success> Epoll::Wait(std::optional<std::chrono::milliseconds> timeout) {
     } else if (nr == 1) {
         std::invoke(*reinterpret_cast<std::function<void()>*>(ev.data.ptr));
     }
-    return Success();
+    return {};
 }
 
 }  // namespace init
