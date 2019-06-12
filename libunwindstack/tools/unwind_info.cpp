@@ -31,6 +31,7 @@
 #include <unwindstack/Elf.h>
 #include <unwindstack/ElfInterface.h>
 #include <unwindstack/Log.h>
+#include <unwindstack/Memory.h>
 
 #include "ArmExidx.h"
 #include "ElfInterfaceArm.h"
@@ -105,14 +106,7 @@ int GetElfInfo(const char* file, uint64_t offset) {
   // Send all log messages to stdout.
   log_to_stdout(true);
 
-  MemoryFileAtOffset* memory = new MemoryFileAtOffset;
-  if (!memory->Init(file, offset)) {
-    // Initializatation failed.
-    printf("Failed to init\n");
-    return 1;
-  }
-
-  Elf elf(memory);
+  Elf elf(Memory::CreateFileMemory(file, offset).release());
   if (!elf.Init() || !elf.valid()) {
     printf("%s is not a valid elf file.\n", file);
     return 1;

@@ -21,7 +21,7 @@
 #include <android-base/file.h>
 #include <gtest/gtest.h>
 
-#include <unwindstack/Memory.h>
+#include "MemoryFileAtOffset.h"
 
 namespace unwindstack {
 
