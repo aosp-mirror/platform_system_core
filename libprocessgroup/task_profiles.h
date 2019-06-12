@@ -19,6 +19,7 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -127,6 +128,7 @@ class SetCgroupAction : public ProfileAction {
     CgroupController controller_;
     std::string path_;
     android::base::unique_fd fd_;
+    mutable std::mutex fd_mutex_;
 
     static bool IsAppDependentPath(const std::string& path);
     static bool AddTidToCgroup(int tid, int fd);
