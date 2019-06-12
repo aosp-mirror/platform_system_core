@@ -37,9 +37,12 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <libdm/dm.h>
 
 namespace android {
 namespace fiemap_writer {
+
+using namespace android::dm;
 
 // We are expecting no more than 512 extents in a fiemap of the file we create.
 // If we find more, then it is treated as error for now.
@@ -87,14 +90,57 @@ static bool BlockDeviceToName(uint32_t major, uint32_t minor, std::string* bdev_
 }
 
 static bool DeviceMapperStackPop(const std::string& bdev, std::string* bdev_raw) {
-    // TODO: Stop popping the device mapper stack if dm-linear target is found
+    *bdev_raw = bdev;
+
     if (!::android::base::StartsWith(bdev, "dm-")) {
         // We are at the bottom of the device mapper stack.
-        *bdev_raw = bdev;
         return true;
     }
 
-    std::string dm_leaf_dir = ::android::base::StringPrintf("/sys/block/%s/slaves", bdev.c_str());
+    // Get the device name.
+    auto dm_name_file = "/sys/block/" + bdev + "/dm/name";
+    std::string dm_name;
+    if (!android::base::ReadFileToString(dm_name_file, &dm_name)) {
+        PLOG(ERROR) << "Could not read file: " << dm_name_file;
+        return false;
+    }
+    dm_name = android::base::Trim(dm_name);
+
+    auto& dm = DeviceMapper::Instance();
+    std::vector<DeviceMapper::TargetInfo> table;
+    if (!dm.GetTableInfo(dm_name, &table)) {
+        LOG(ERROR) << "Could not read device-mapper table for " << dm_name << " at " << bdev;
+        return false;
+    }
+
+    // The purpose of libfiemap_writer is to provide an extent-based view into
+    // a file. This is difficult if devices are not layered in a 1:1 manner;
+    // we would have to translate and break up extents based on the actual
+    // block mapping. Since this is too complex, we simply stop processing
+    // the device-mapper stack if we encounter a complex case.
+    //
+    // It is up to the caller to decide whether stopping at a virtual block
+    // device is allowable. In most cases it is not, because we want either
+    // "userdata" or an external volume. It is useful for tests however.
+    // Callers can check by comparing the device number to that of userdata,
+    // or by checking whether is a device-mapper node.
+    if (table.size() > 1) {
+        LOG(INFO) << "Stopping at complex table for " << dm_name << " at " << bdev;
+        return true;
+    }
+    const auto& entry = table[0].spec;
+    std::string target_type(std::string(entry.target_type, sizeof(entry.target_type)).c_str());
+    if (target_type != "bow" && target_type != "default-key" && target_type != "crypt") {
+        LOG(INFO) << "Stopping at complex target-type " << target_type << " for " << dm_name
+                  << " at " << bdev;
+        return true;
+    }
+    if (entry.sector_start != 0) {
+        LOG(INFO) << "Stopping at target-type with non-zero starting sector";
+        return true;
+    }
+
+    auto dm_leaf_dir = "/sys/block/" + bdev + "/slaves";
     auto d = std::unique_ptr<DIR, decltype(&closedir)>(opendir(dm_leaf_dir.c_str()), closedir);
     if (d == nullptr) {
         PLOG(ERROR) << "Failed to open: " << dm_leaf_dir;
