@@ -29,12 +29,12 @@
 #include <unwindstack/DwarfSection.h>
 #include <unwindstack/ElfInterface.h>
 #include <unwindstack/Log.h>
-#include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
 
 #include "DwarfDebugFrame.h"
 #include "DwarfEhFrame.h"
 #include "DwarfEhFrameWithHdr.h"
+#include "MemoryBuffer.h"
 #include "Symbols.h"
 
 namespace unwindstack {
