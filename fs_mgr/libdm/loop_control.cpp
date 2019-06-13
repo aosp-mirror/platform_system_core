@@ -91,6 +91,27 @@ bool LoopControl::FindFreeLoopDevice(std::string* loopdev) const {
     return true;
 }
 
+bool LoopControl::EnableDirectIo(int fd) {
+#if !defined(LOOP_SET_BLOCK_SIZE)
+    static constexpr int LOOP_SET_BLOCK_SIZE = 0x4C09;
+#endif
+#if !defined(LOOP_SET_DIRECT_IO)
+    static constexpr int LOOP_SET_DIRECT_IO = 0x4C08;
+#endif
+
+    // Note: the block size has to be >= the logical block size of the underlying
+    // block device, *not* the filesystem block size.
+    if (ioctl(fd, LOOP_SET_BLOCK_SIZE, 4096)) {
+        PLOG(ERROR) << "Could not set loop device block size";
+        return false;
+    }
+    if (ioctl(fd, LOOP_SET_DIRECT_IO, 1)) {
+        PLOG(ERROR) << "Could not set loop direct IO";
+        return false;
+    }
+    return true;
+}
+
 LoopDevice::LoopDevice(int fd, bool auto_close) : fd_(fd), owns_fd_(auto_close) {
     Init();
 }
