@@ -190,7 +190,8 @@ int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
  * archive and lower negative values on failure.
  */
 int32_t Next(void* cookie, ZipEntry* data, std::string* name);
-// TODO: remove this when everyone's moved over to std::string.
+int32_t Next(void* cookie, ZipEntry* data, std::string_view* name);
+// TODO: remove this when everyone's moved over to std::string/std::string_view.
 int32_t Next(void* cookie, ZipEntry* data, ZipString* name);
 
 /*
