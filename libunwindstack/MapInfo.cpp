@@ -27,7 +27,9 @@
 #include <unwindstack/Elf.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Maps.h>
-#include <unwindstack/Memory.h>
+
+#include "MemoryFileAtOffset.h"
+#include "MemoryRange.h"
 
 namespace unwindstack {
 
