@@ -150,6 +150,7 @@ SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p
 }
 
 void SetCgroupAction::EnableResourceCaching() {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
     if (fd_ != FDS_NOT_CACHED) {
         return;
     }
@@ -191,6 +192,7 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
 }
 
 bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
     if (IsFdValid()) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(pid, fd_)) {
@@ -221,6 +223,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
 }
 
 bool SetCgroupAction::ExecuteForTask(int tid) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
     if (IsFdValid()) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(tid, fd_)) {
