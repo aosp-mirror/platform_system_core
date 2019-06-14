@@ -355,5 +355,68 @@ TEST(result, preserve_errno) {
   EXPECT_EQ(old_errno, result2.error().code());
 }
 
+TEST(result, error_with_fmt) {
+  Result<int> result = Errorf("{} {}!", "hello", "world");
+  EXPECT_EQ("hello world!", result.error().message());
+
+  result = Errorf("{} {}!", std::string("hello"), std::string("world"));
+  EXPECT_EQ("hello world!", result.error().message());
+
+  result = Errorf("{h} {w}!", fmt::arg("w", "world"), fmt::arg("h", "hello"));
+  EXPECT_EQ("hello world!", result.error().message());
+
+  result = Errorf("hello world!");
+  EXPECT_EQ("hello world!", result.error().message());
+
+  Result<int> result2 = Errorf("error occurred with {}", result.error());
+  EXPECT_EQ("error occurred with hello world!", result2.error().message());
+
+  constexpr int test_errno = 6;
+  errno = test_errno;
+  result = ErrnoErrorf("{} {}!", "hello", "world");
+  EXPECT_EQ(test_errno, result.error().code());
+  EXPECT_EQ("hello world!: "s + strerror(test_errno), result.error().message());
+}
+
+TEST(result, error_with_fmt_carries_errno) {
+  constexpr int inner_errno = 6;
+  errno = inner_errno;
+  Result<int> inner_result = ErrnoErrorf("inner failure");
+  errno = 0;
+  EXPECT_EQ(inner_errno, inner_result.error().code());
+
+  // outer_result is created with Errorf, but its error code is got from inner_result.
+  Result<int> outer_result = Errorf("outer failure caused by {}", inner_result.error());
+  EXPECT_EQ(inner_errno, outer_result.error().code());
+  EXPECT_EQ("outer failure caused by inner failure: "s + strerror(inner_errno),
+            outer_result.error().message());
+
+  // now both result objects are created with ErrnoErrorf. errno from the inner_result
+  // is not passed to outer_result.
+  constexpr int outer_errno = 10;
+  errno = outer_errno;
+  outer_result = ErrnoErrorf("outer failure caused by {}", inner_result.error());
+  EXPECT_EQ(outer_errno, outer_result.error().code());
+  EXPECT_EQ("outer failure caused by inner failure: "s + strerror(inner_errno) + ": "s +
+                strerror(outer_errno),
+            outer_result.error().message());
+}
+
+TEST(result, errno_chaining_multiple) {
+  constexpr int errno1 = 6;
+  errno = errno1;
+  Result<int> inner1 = ErrnoErrorf("error1");
+
+  constexpr int errno2 = 10;
+  errno = errno2;
+  Result<int> inner2 = ErrnoErrorf("error2");
+
+  // takes the error code of inner2 since its the last one.
+  Result<int> outer = Errorf("two errors: {}, {}", inner1.error(), inner2.error());
+  EXPECT_EQ(errno2, outer.error().code());
+  EXPECT_EQ("two errors: error1: "s + strerror(errno1) + ", error2: "s + strerror(errno2),
+            outer.error().message());
+}
+
 }  // namespace base
 }  // namespace android
