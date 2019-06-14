@@ -645,8 +645,14 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
                 while (isspace(*key)) key++;
             }
 
-            load_properties_from_file(fn, key, properties);
+            std::string raw_filename(fn);
+            std::string expanded_filename;
+            if (!expand_props(raw_filename, &expanded_filename)) {
+                LOG(ERROR) << "Could not expand filename '" << raw_filename << "'";
+                continue;
+            }
 
+            load_properties_from_file(expanded_filename.c_str(), key, properties);
         } else {
             value = strchr(key, '=');
             if (!value) continue;
