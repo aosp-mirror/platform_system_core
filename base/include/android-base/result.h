@@ -42,10 +42,15 @@
 // to the end of the failure string to aid in interacting with C APIs.  Alternatively, an errno
 // value can be directly specified via the Error() constructor.
 //
-// ResultError can be used in the ostream when using Error to construct a Result<T>.  In this case,
-// the string that the ResultError takes is passed through the stream normally, but the errno is
-// passed to the Result<T>.  This can be used to pass errno from a failing C function up multiple
-// callers.
+// Errorf and ErrnoErrorf accept the format string syntax of the fmblib (https://fmt.dev).
+// Errorf("{} errors", num) is equivalent to Error() << num << " errors".
+//
+// ResultError can be used in the ostream and when using Error/Errorf to construct a Result<T>.
+// In this case, the string that the ResultError takes is passed through the stream normally, but
+// the errno is passed to the Result<T>. This can be used to pass errno from a failing C function up
+// multiple callers. Note that when the outer Result<T> is created with ErrnoError/ErrnoErrorf then
+// the errno from the inner ResultError is not passed. Also when multiple ResultError objects are
+// used, the errno of the last one is respected.
 //
 // ResultError can also directly construct a Result<T>.  This is particularly useful if you have a
 // function that return Result<T> but you have a Result<U> and want to return its error.  In this
@@ -55,10 +60,10 @@
 // Result<U> CalculateResult(const T& input) {
 //   U output;
 //   if (!SomeOtherCppFunction(input, &output)) {
-//     return Error() << "SomeOtherCppFunction(" << input << ") failed";
+//     return Errorf("SomeOtherCppFunction {} failed", input);
 //   }
 //   if (!c_api_function(output)) {
-//     return ErrnoError() << "c_api_function(" << output << ") failed";
+//     return ErrnoErrorf("c_api_function {} failed", output);
 //   }
 //   return output;
 // }
@@ -73,6 +78,8 @@
 
 #include <sstream>
 #include <string>
+
+#include <fmt/ostream.h>
 
 #include "android-base/expected.h"
 
@@ -147,14 +154,49 @@ class Error {
   Error& operator=(const Error&) = delete;
   Error& operator=(Error&&) = delete;
 
+  template <typename... Args>
+  friend Error Errorf(const char* fmt, const Args&... args);
+
+  template <typename... Args>
+  friend Error ErrnoErrorf(const char* fmt, const Args&... args);
+
  private:
+  Error(bool append_errno, int errno_to_append, const std::string& message)
+      : errno_(errno_to_append), append_errno_(append_errno) {
+    (*this) << message;
+  }
+
   std::stringstream ss_;
   int errno_;
-  bool append_errno_;
+  const bool append_errno_;
 };
 
 inline Error ErrnoError() {
   return Error(errno);
+}
+
+inline int ErrorCode(int code) {
+  return code;
+}
+
+// Return the error code of the last ResultError object, if any.
+// Otherwise, return `code` as it is.
+template <typename T, typename... Args>
+inline int ErrorCode(int code, T&& t, const Args&... args) {
+  if constexpr (std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, ResultError>) {
+    return ErrorCode(t.code(), args...);
+  }
+  return ErrorCode(code, args...);
+}
+
+template <typename... Args>
+inline Error Errorf(const char* fmt, const Args&... args) {
+  return Error(false, ErrorCode(0, args...), fmt::format(fmt, args...));
+}
+
+template <typename... Args>
+inline Error ErrnoErrorf(const char* fmt, const Args&... args) {
+  return Error(true, errno, fmt::format(fmt, args...));
 }
 
 template <typename T>
