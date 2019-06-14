@@ -22,6 +22,8 @@
 #include <android-base/result.h>
 
 using android::base::ErrnoError;
+using android::base::ErrnoErrorf;
 using android::base::Error;
+using android::base::Errorf;
 using android::base::Result;
 using android::base::ResultError;
