@@ -169,17 +169,22 @@ struct ScopedAioContext {
 };
 
 struct UsbFfsConnection : public Connection {
-    UsbFfsConnection(unique_fd* control, unique_fd read, unique_fd write,
+    UsbFfsConnection(unique_fd control, unique_fd read, unique_fd write,
                      std::promise<void> destruction_notifier)
         : worker_started_(false),
           stopped_(false),
           destruction_notifier_(std::move(destruction_notifier)),
-          control_fd_(control),
+          control_fd_(std::move(control)),
           read_fd_(std::move(read)),
           write_fd_(std::move(write)) {
         LOG(INFO) << "UsbFfsConnection constructed";
         worker_event_fd_.reset(eventfd(0, EFD_CLOEXEC));
         if (worker_event_fd_ == -1) {
+            PLOG(FATAL) << "failed to create eventfd";
+        }
+
+        monitor_event_fd_.reset(eventfd(0, EFD_CLOEXEC));
+        if (monitor_event_fd_ == -1) {
             PLOG(FATAL) << "failed to create eventfd";
         }
 
@@ -194,6 +199,7 @@ struct UsbFfsConnection : public Connection {
         // We need to explicitly close our file descriptors before we notify our destruction,
         // because the thread listening on the future will immediately try to reopen the endpoint.
         aio_context_.reset();
+        control_fd_.reset();
         read_fd_.reset();
         write_fd_.reset();
 
@@ -240,6 +246,13 @@ struct UsbFfsConnection : public Connection {
             PLOG(FATAL) << "failed to notify worker eventfd to stop UsbFfsConnection";
         }
         CHECK_EQ(static_cast<size_t>(rc), sizeof(notify));
+
+        rc = adb_write(monitor_event_fd_.get(), &notify, sizeof(notify));
+        if (rc < 0) {
+            PLOG(FATAL) << "failed to notify monitor eventfd to stop UsbFfsConnection";
+        }
+
+        CHECK_EQ(static_cast<size_t>(rc), sizeof(notify));
     }
 
   private:
@@ -258,24 +271,33 @@ struct UsbFfsConnection : public Connection {
         monitor_thread_ = std::thread([this]() {
             adb_thread_setname("UsbFfs-monitor");
 
+            bool bound = false;
             bool enabled = false;
             bool running = true;
             while (running) {
                 adb_pollfd pfd[2] = {
-                        {.fd = control_fd_->get(), .events = POLLIN, .revents = 0},
+                  { .fd = control_fd_.get(), .events = POLLIN, .revents = 0 },
+                  { .fd = monitor_event_fd_.get(), .events = POLLIN, .revents = 0 },
                 };
 
-                int rc = TEMP_FAILURE_RETRY(adb_poll(pfd, 2, -1));
+                // If we don't see our first bind within a second, try again.
+                int timeout_ms = bound ? -1 : 1000;
+
+                int rc = TEMP_FAILURE_RETRY(adb_poll(pfd, 2, timeout_ms));
                 if (rc == -1) {
                     PLOG(FATAL) << "poll on USB control fd failed";
+                } else if (rc == 0) {
+                    LOG(WARNING) << "timed out while waiting for FUNCTIONFS_BIND, trying again";
+                    break;
                 }
 
                 if (pfd[1].revents) {
-                    // We were told to die, continue reading until FUNCTIONFS_UNBIND.
+                    // We were told to die.
+                    break;
                 }
 
                 struct usb_functionfs_event event;
-                rc = TEMP_FAILURE_RETRY(adb_read(control_fd_->get(), &event, sizeof(event)));
+                rc = TEMP_FAILURE_RETRY(adb_read(control_fd_.get(), &event, sizeof(event)));
                 if (rc == -1) {
                     PLOG(FATAL) << "failed to read functionfs event";
                 } else if (rc == 0) {
@@ -291,10 +313,28 @@ struct UsbFfsConnection : public Connection {
 
                 switch (event.type) {
                     case FUNCTIONFS_BIND:
-                        LOG(FATAL) << "received FUNCTIONFS_BIND after already opened?";
+                        if (bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_BIND while already bound?";
+                            running = false;
+                            break;
+                        }
+
+                        if (enabled) {
+                            LOG(WARNING) << "received FUNCTIONFS_BIND while already enabled?";
+                            running = false;
+                            break;
+                        }
+
+                        bound = true;
                         break;
 
                     case FUNCTIONFS_ENABLE:
+                        if (!bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_ENABLE while not bound?";
+                            running = false;
+                            break;
+                        }
+
                         if (enabled) {
                             LOG(WARNING) << "received FUNCTIONFS_ENABLE while already enabled?";
                             running = false;
@@ -306,6 +346,10 @@ struct UsbFfsConnection : public Connection {
                         break;
 
                     case FUNCTIONFS_DISABLE:
+                        if (!bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_DISABLE while not bound?";
+                        }
+
                         if (!enabled) {
                             LOG(WARNING) << "received FUNCTIONFS_DISABLE while not enabled?";
                         }
@@ -319,6 +363,11 @@ struct UsbFfsConnection : public Connection {
                             LOG(WARNING) << "received FUNCTIONFS_UNBIND while still enabled?";
                         }
 
+                        if (!bound) {
+                            LOG(WARNING) << "received FUNCTIONFS_UNBIND when not bound?";
+                        }
+
+                        bound = false;
                         running = false;
                         break;
 
@@ -332,7 +381,7 @@ struct UsbFfsConnection : public Connection {
 
                         if ((event.u.setup.bRequestType & USB_DIR_IN)) {
                             LOG(INFO) << "acking device-to-host control transfer";
-                            ssize_t rc = adb_write(control_fd_->get(), "", 0);
+                            ssize_t rc = adb_write(control_fd_.get(), "", 0);
                             if (rc != 0) {
                                 PLOG(ERROR) << "failed to write empty packet to host";
                                 break;
@@ -341,7 +390,7 @@ struct UsbFfsConnection : public Connection {
                             std::string buf;
                             buf.resize(event.u.setup.wLength + 1);
 
-                            ssize_t rc = adb_read(control_fd_->get(), buf.data(), buf.size());
+                            ssize_t rc = adb_read(control_fd_.get(), buf.data(), buf.size());
                             if (rc != event.u.setup.wLength) {
                                 LOG(ERROR)
                                         << "read " << rc
@@ -377,12 +426,6 @@ struct UsbFfsConnection : public Connection {
                 uint64_t dummy;
                 ssize_t rc = adb_read(worker_event_fd_.get(), &dummy, sizeof(dummy));
                 if (rc == -1) {
-                    if (errno == EINTR) {
-                        // We were interrupted either to stop, or because of a backtrace.
-                        // Check stopped_ again to see if we need to exit.
-                        continue;
-                    }
-
                     PLOG(FATAL) << "failed to read from eventfd";
                 } else if (rc == 0) {
                     LOG(FATAL) << "hit EOF on eventfd";
@@ -419,7 +462,6 @@ struct UsbFfsConnection : public Connection {
         }
 
         worker_thread_.join();
-        worker_started_ = false;
     }
 
     void PrepareReadBlock(IoBlock* block, uint64_t id) {
@@ -637,13 +679,10 @@ struct UsbFfsConnection : public Connection {
     std::once_flag error_flag_;
 
     unique_fd worker_event_fd_;
+    unique_fd monitor_event_fd_;
 
     ScopedAioContext aio_context_;
-
-    // We keep a pointer to the control fd, so that we can reuse it to avoid USB reconfiguration,
-    // and still be able to reset it to force a reopen after FUNCTIONFS_UNBIND or running into an
-    // unexpected situation.
-    unique_fd* control_fd_;
+    unique_fd control_fd_;
     unique_fd read_fd_;
     unique_fd write_fd_;
 
@@ -672,16 +711,15 @@ void usb_init_legacy();
 static void usb_ffs_open_thread() {
     adb_thread_setname("usb ffs open");
 
-    unique_fd control;
-    unique_fd bulk_out;
-    unique_fd bulk_in;
-
     while (true) {
         if (gFfsAioSupported.has_value() && !gFfsAioSupported.value()) {
             LOG(INFO) << "failed to use nonblocking ffs, falling back to legacy";
             return usb_init_legacy();
         }
 
+        unique_fd control;
+        unique_fd bulk_out;
+        unique_fd bulk_in;
         if (!open_functionfs(&control, &bulk_out, &bulk_in)) {
             std::this_thread::sleep_for(1s);
             continue;
@@ -692,7 +730,7 @@ static void usb_ffs_open_thread() {
         std::promise<void> destruction_notifier;
         std::future<void> future = destruction_notifier.get_future();
         transport->SetConnection(std::make_unique<UsbFfsConnection>(
-                &control, std::move(bulk_out), std::move(bulk_in),
+                std::move(control), std::move(bulk_out), std::move(bulk_in),
                 std::move(destruction_notifier)));
         register_transport(transport);
         future.wait();
