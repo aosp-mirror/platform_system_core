@@ -14,6 +14,16 @@
 // limitations under the License.
 //
 
+liblp_lib_deps = [
+    "libbase",
+    "liblog",
+    "libcrypto",
+    "libcrypto_utils",
+    "libsparse",
+    "libext4_utils",
+    "libz",
+]
+
 cc_library {
     name: "liblp",
     host_supported: true,
@@ -30,15 +40,7 @@ cc_library {
         "utility.cpp",
         "writer.cpp",
     ],
-    shared_libs: [
-        "libbase",
-        "liblog",
-        "libcrypto",
-        "libcrypto_utils",
-        "libsparse",
-        "libext4_utils",
-        "libz",
-    ],
+    shared_libs: liblp_lib_deps,
     target: {
         windows: {
             enabled: true,
@@ -53,24 +55,28 @@ cc_library {
 }
 
 cc_test {
-    name: "liblp_test",
+    name: "liblp_test_static",
     defaults: ["fs_mgr_defaults"],
     cppflags: [
         "-Wno-unused-parameter",
     ],
     static_libs: [
         "libgmock",
-    ],
-    shared_libs: [
-        "liblp",
-        "libbase",
         "libfs_mgr",
-        "libsparse",
-    ],
+        "liblp",
+    ] + liblp_lib_deps,
+    stl: "libc++_static",
     srcs: [
         "builder_test.cpp",
         "io_test.cpp",
         "test_partition_opener.cpp",
         "utility_test.cpp",
     ],
+    target: {
+        android: {
+            static_libs: [
+                "libcutils",
+            ],
+        },
+    },
 }
