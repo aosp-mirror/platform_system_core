@@ -618,6 +618,7 @@ namespace.default.link.runtime.shared_libs += libnativeloader.so
 
 # TODO(b/122876336): Remove libpac.so once it's migrated to Webview
 namespace.default.link.runtime.shared_libs += libpac.so
+namespace.default.link.runtime.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 
