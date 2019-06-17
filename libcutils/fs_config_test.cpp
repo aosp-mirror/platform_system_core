@@ -25,7 +25,8 @@
 #include <android-base/strings.h>
 
 #include <private/android_filesystem_config.h>
-#include <private/fs_config.h>
+
+#include "fs_config.h"
 
 extern const fs_path_config* __for_testing_only__android_dirs;
 extern const fs_path_config* __for_testing_only__android_files;
