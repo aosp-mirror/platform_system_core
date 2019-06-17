@@ -182,3 +182,21 @@ cc_test {
     },
     test_suites: ["device-tests"],
 }
+
+cc_benchmark {
+    name: "libbase_benchmark",
+    defaults: ["libbase_cflags_defaults"],
+
+    srcs: ["format_benchmark.cpp"],
+    shared_libs: ["libbase"],
+
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
+}
