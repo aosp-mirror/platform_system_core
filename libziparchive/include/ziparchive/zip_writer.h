@@ -21,6 +21,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "android-base/macros.h"
@@ -101,7 +102,7 @@ class ZipWriter {
    * Subsequent calls to WriteBytes(const void*, size_t) will add data to this entry.
    * Returns 0 on success, and an error value < 0 on failure.
    */
-  int32_t StartEntry(const char* path, size_t flags);
+  int32_t StartEntry(std::string_view path, size_t flags);
 
   /**
    * Starts a new zip entry with the given path and flags, where the
@@ -111,17 +112,17 @@ class ZipWriter {
    * Subsequent calls to WriteBytes(const void*, size_t) will add data to this entry.
    * Returns 0 on success, and an error value < 0 on failure.
    */
-  int32_t StartAlignedEntry(const char* path, size_t flags, uint32_t alignment);
+  int32_t StartAlignedEntry(std::string_view path, size_t flags, uint32_t alignment);
 
   /**
    * Same as StartEntry(const char*, size_t), but sets a last modified time for the entry.
    */
-  int32_t StartEntryWithTime(const char* path, size_t flags, time_t time);
+  int32_t StartEntryWithTime(std::string_view path, size_t flags, time_t time);
 
   /**
    * Same as StartAlignedEntry(const char*, size_t), but sets a last modified time for the entry.
    */
-  int32_t StartAlignedEntryWithTime(const char* path, size_t flags, time_t time, uint32_t alignment);
+  int32_t StartAlignedEntryWithTime(std::string_view path, size_t flags, time_t time, uint32_t alignment);
 
   /**
    * Writes bytes to the zip file for the previously started zip entry.
