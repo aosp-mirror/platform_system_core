@@ -79,9 +79,8 @@
 #include <sstream>
 #include <string>
 
-#include <fmt/ostream.h>
-
 #include "android-base/expected.h"
+#include "android-base/format.h"
 
 namespace android {
 namespace base {
