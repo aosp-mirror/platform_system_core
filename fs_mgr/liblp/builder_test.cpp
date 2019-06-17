@@ -772,15 +772,6 @@ TEST_F(BuilderTest, ImportPartitionsFail) {
     EXPECT_FALSE(builder->ImportPartitions(*exported.get(), {"system"}));
 }
 
-TEST_F(BuilderTest, UnsuffixedPartitions) {
-    MetadataBuilder::OverrideABForTesting(true);
-    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
-    ASSERT_NE(builder, nullptr);
-
-    ASSERT_EQ(builder->AddPartition("system", 0), nullptr);
-    ASSERT_NE(builder->AddPartition("system_a", 0), nullptr);
-}
-
 TEST_F(BuilderTest, ABExtents) {
     BlockDeviceInfo device_info("super", 10_GiB, 768 * 1024, 0, 4096);
 
