@@ -14,13 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_KEYWORD_MAP_H_
-#define _INIT_KEYWORD_MAP_H_
+#pragma once
 
 #include <map>
 #include <string>
-
-#include <android-base/stringprintf.h>
 
 #include "result.h"
 
@@ -37,8 +34,6 @@ class KeywordMap {
     }
 
     const Result<Function> FindFunction(const std::vector<std::string>& args) const {
-        using android::base::StringPrintf;
-
         if (args.empty()) return Error() << "Keyword needed, but not provided";
 
         auto& keyword = args[0];
@@ -46,7 +41,7 @@ class KeywordMap {
 
         auto function_info_it = map().find(keyword);
         if (function_info_it == map().end()) {
-            return Error() << StringPrintf("Invalid keyword '%s'", keyword.c_str());
+            return Errorf("Invalid keyword '{}'", keyword);
         }
 
         auto function_info = function_info_it->second;
@@ -54,17 +49,17 @@ class KeywordMap {
         auto min_args = std::get<0>(function_info);
         auto max_args = std::get<1>(function_info);
         if (min_args == max_args && num_args != min_args) {
-            return Error() << StringPrintf("%s requires %zu argument%s", keyword.c_str(), min_args,
-                                           (min_args > 1 || min_args == 0) ? "s" : "");
+            return Errorf("{} requires {} argument{}", keyword, min_args,
+                          (min_args > 1 || min_args == 0) ? "s" : "");
         }
 
         if (num_args < min_args || num_args > max_args) {
             if (max_args == std::numeric_limits<decltype(max_args)>::max()) {
-                return Error() << StringPrintf("%s requires at least %zu argument%s",
-                                               keyword.c_str(), min_args, min_args > 1 ? "s" : "");
+                return Errorf("{} requires at least {} argument{}", keyword, min_args,
+                              min_args > 1 ? "s" : "");
             } else {
-                return Error() << StringPrintf("%s requires between %zu and %zu arguments",
-                                               keyword.c_str(), min_args, max_args);
+                return Errorf("{} requires between {} and {} arguments", keyword, min_args,
+                              max_args);
             }
         }
 
@@ -79,5 +74,3 @@ class KeywordMap {
 
 }  // namespace init
 }  // namespace android
-
-#endif
