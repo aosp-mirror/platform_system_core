@@ -29,7 +29,6 @@
 #include <vector>
 
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <gtest/gtest.h>
 
