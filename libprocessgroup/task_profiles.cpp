@@ -173,6 +173,15 @@ void SetCgroupAction::EnableResourceCaching() {
     fd_ = std::move(fd);
 }
 
+void SetCgroupAction::DropResourceCaching() {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    if (fd_ == FDS_NOT_CACHED) {
+        return;
+    }
+
+    fd_.reset(FDS_NOT_CACHED);
+}
+
 bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
     if (tid <= 0) {
         return true;
@@ -290,6 +299,24 @@ void TaskProfile::EnableResourceCaching() {
     }
 
     res_cached_ = true;
+}
+
+void TaskProfile::DropResourceCaching() {
+    if (!res_cached_) {
+        return;
+    }
+
+    for (auto& element : elements_) {
+        element->DropResourceCaching();
+    }
+
+    res_cached_ = false;
+}
+
+void TaskProfiles::DropResourceCaching() const {
+    for (auto& iter : profiles_) {
+        iter.second->DropResourceCaching();
+    }
 }
 
 TaskProfiles& TaskProfiles::GetInstance() {
