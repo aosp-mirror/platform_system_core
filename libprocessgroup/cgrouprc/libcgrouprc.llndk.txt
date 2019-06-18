@@ -4,7 +4,6 @@ LIBCGROUPRC { # introduced=29
     ACgroupFile_getControllerCount;
     ACgroupFile_getController;
     ACgroupController_getVersion;
-    ACgroupController_getFlags;
     ACgroupController_getName;
     ACgroupController_getPath;
   local:
