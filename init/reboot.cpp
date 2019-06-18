@@ -41,7 +41,6 @@
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <bootloader_message/bootloader_message.h>
@@ -62,7 +61,6 @@
 
 using android::base::GetBoolProperty;
 using android::base::Split;
-using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::unique_fd;
 using android::base::WriteStringToFile;

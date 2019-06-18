@@ -332,12 +332,11 @@ Result<void> Service::ParseCapabilities(std::vector<std::string>&& args) {
         const std::string& arg = args[i];
         int res = LookupCap(arg);
         if (res < 0) {
-            return Error() << StringPrintf("invalid capability '%s'", arg.c_str());
+            return Errorf("invalid capability '{}'", arg);
         }
         unsigned int cap = static_cast<unsigned int>(res);  // |res| is >= 0.
         if (cap > last_valid_cap) {
-            return Error() << StringPrintf("capability '%s' not supported by the kernel",
-                                           arg.c_str());
+            return Errorf("capability '{}' not supported by the kernel", arg);
         }
         (*capabilities_)[cap] = true;
     }
@@ -402,8 +401,8 @@ Result<void> Service::ParsePriority(std::vector<std::string>&& args) {
     if (!ParseInt(args[1], &proc_attr_.priority,
                   static_cast<int>(ANDROID_PRIORITY_HIGHEST),  // highest is negative
                   static_cast<int>(ANDROID_PRIORITY_LOWEST))) {
-        return Error() << StringPrintf("process priority value must be range %d - %d",
-                                       ANDROID_PRIORITY_HIGHEST, ANDROID_PRIORITY_LOWEST);
+        return Errorf("process priority value must be range {} - {}", ANDROID_PRIORITY_HIGHEST,
+                      ANDROID_PRIORITY_LOWEST);
     }
     return {};
 }

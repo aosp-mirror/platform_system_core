@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,10 @@
 
 #pragma once
 
-// The implementation of this file has moved to android-base.  This file remains since historically,
-// these classes were a part of init.
-
-#include <android-base/result.h>
-
-using android::base::ErrnoError;
-using android::base::ErrnoErrorf;
-using android::base::Error;
-using android::base::Errorf;
-using android::base::Result;
-using android::base::ResultError;
+// We include fmtlib here as an alias, since libbase will have fmtlib statically linked already.
+// It is accessed through its normal fmt:: namespace.
+#include <fmt/core.h>
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+#include <fmt/printf.h>
+#include <fmt/time.h>
