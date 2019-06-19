@@ -14,13 +14,8 @@ cc_library_headers {
     },
 }
 
+// TODO: remove all usages
 cc_library {
-    srcs: [
-        "cgroup_map.cpp",
-        "processgroup.cpp",
-        "sched_policy.cpp",
-        "task_profiles.cpp",
-    ],
     name: "libprocessgroup",
     host_supported: true,
     recovery_available: true,
@@ -29,13 +24,47 @@ cc_library {
         enabled: true,
         support_system_process: true,
     },
-    shared_libs: [
-        "libbase",
-        "libcgrouprc",
+}
+
+cc_defaults {
+    name: "libprocessgroup_impl_libs",
+    target: {
+        linux: {
+            shared_libs: [
+                "libbase",
+                "libcgrouprc",
+            ],
+            static_libs: [
+                "libjsoncpp",
+            ],
+        },
+    },
+}
+
+cc_defaults {
+    name: "libprocessgroup_impl_provider",
+    defaults: ["libprocessgroup_impl_libs"],
+    target: {
+        linux: {
+            whole_static_libs: [
+                "libprocessgroup_impl",
+            ],
+        },
+    },
+}
+
+cc_library {
+    name: "libprocessgroup_impl",
+    defaults: ["libprocessgroup_impl_libs"],
+    srcs: [
+        "cgroup_map.cpp",
+        "processgroup.cpp",
+        "sched_policy.cpp",
+        "task_profiles.cpp",
     ],
-    static_libs: [
-        "libjsoncpp",
-    ],
+    host_supported: true,
+    recovery_available: true,
+    vendor_available: true,
     // for cutils/android_filesystem_config.h
     header_libs: [
         "libcutils_headers",
