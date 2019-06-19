@@ -130,7 +130,7 @@ int32_t ZipWriter::HandleError(int32_t error_code) {
   return error_code;
 }
 
-int32_t ZipWriter::StartEntry(const char* path, size_t flags) {
+int32_t ZipWriter::StartEntry(std::string_view path, size_t flags) {
   uint32_t alignment = 0;
   if (flags & kAlign32) {
     flags &= ~kAlign32;
@@ -139,11 +139,11 @@ int32_t ZipWriter::StartEntry(const char* path, size_t flags) {
   return StartAlignedEntryWithTime(path, flags, time_t(), alignment);
 }
 
-int32_t ZipWriter::StartAlignedEntry(const char* path, size_t flags, uint32_t alignment) {
+int32_t ZipWriter::StartAlignedEntry(std::string_view path, size_t flags, uint32_t alignment) {
   return StartAlignedEntryWithTime(path, flags, time_t(), alignment);
 }
 
-int32_t ZipWriter::StartEntryWithTime(const char* path, size_t flags, time_t time) {
+int32_t ZipWriter::StartEntryWithTime(std::string_view path, size_t flags, time_t time) {
   uint32_t alignment = 0;
   if (flags & kAlign32) {
     flags &= ~kAlign32;
@@ -198,7 +198,7 @@ static void CopyFromFileEntry(const ZipWriter::FileEntry& src, bool use_data_des
   dst->extra_field_length = src.padding_length;
 }
 
-int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags, time_t time,
+int32_t ZipWriter::StartAlignedEntryWithTime(std::string_view path, size_t flags, time_t time,
                                              uint32_t alignment) {
   if (state_ != State::kWritingZip) {
     return kInvalidState;
@@ -265,7 +265,7 @@ int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags, tim
     return HandleError(kIoError);
   }
 
-  if (fwrite(path, sizeof(*path), file_entry.path.size(), file_) != file_entry.path.size()) {
+  if (fwrite(path.data(), 1, path.size(), file_) != path.size()) {
     return HandleError(kIoError);
   }
 
