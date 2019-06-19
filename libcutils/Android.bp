@@ -171,8 +171,12 @@ cc_library {
                 // releases, exclude qtaguid.cpp from the VNDK-SP variant.
                 "qtaguid.cpp",
             ],
-        }
+        },
     },
+
+    defaults: [
+        "libprocessgroup_impl_provider",
+    ],
 
     shared_libs: [
         "liblog",
@@ -182,11 +186,9 @@ cc_library {
         "libbase_headers",
         "libcutils_headers",
         "libutils_headers",
-        "libprocessgroup_headers",
     ],
     export_header_lib_headers: [
         "libcutils_headers",
-        "libprocessgroup_headers",
     ],
     local_include_dirs: ["include"],
 
