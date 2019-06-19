@@ -345,8 +345,11 @@ on late-init
     trigger early-boot
     trigger boot
 
-on post-fs
+on early-fs
+    # Once metadata has been mounted, we'll need vold to deal with userdata checkpointing
     start vold
+
+on post-fs
     exec - system system -- /system/bin/vdc checkpoint markBootAttempt
 
     # Once everything is setup, no need to modify /.
