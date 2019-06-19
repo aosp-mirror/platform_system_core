@@ -445,6 +445,7 @@ on post-fs-data
     mkdir /data/apex 0750 root system
     mkdir /data/apex/active 0750 root system
     mkdir /data/apex/backup 0700 root system
+    mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
     mkdir /data/app-staging 0750 system system
     start apexd
