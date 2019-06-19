@@ -110,6 +110,7 @@ LOCAL_STATIC_LIBRARIES := \
     libdexfile_support \
     libunwindstack \
     libbacktrace \
+    libmodprobe \
 
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.
