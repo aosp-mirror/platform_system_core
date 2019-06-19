@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,10 @@
  * limitations under the License.
  */
 
-#include "modalias_handler.h"
+#pragma once
 
 #include <string>
 #include <vector>
 
-#include <modprobe/modprobe.h>
-
-namespace android {
-namespace init {
-
-ModaliasHandler::ModaliasHandler(const std::vector<std::string>& base_paths)
-    : modprobe_(base_paths) {}
-
-void ModaliasHandler::HandleUevent(const Uevent& uevent) {
-    if (uevent.modalias.empty()) return;
-    modprobe_.LoadWithAliases(uevent.modalias, true);
-}
-
-}  // namespace init
-}  // namespace android
+extern std::vector<std::string> test_modules;
+extern std::vector<std::string> modules_loaded;
