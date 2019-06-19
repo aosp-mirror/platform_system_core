@@ -30,14 +30,20 @@
 
 #include <list>
 #include <memory>
+#include <thread>
 #include <vector>
 
+#include <adbconnection/server.h>
 #include <android-base/cmsg.h>
+#include <android-base/unique_fd.h>
 
 #include "adb.h"
 #include "adb_io.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
+
+using android::base::borrowed_fd;
+using android::base::unique_fd;
 
 /* here's how these things work.
 
@@ -133,16 +139,16 @@ struct JdwpProcess;
 static auto& _jdwp_list = *new std::list<std::unique_ptr<JdwpProcess>>();
 
 struct JdwpProcess {
-    explicit JdwpProcess(int socket) {
+    JdwpProcess(unique_fd socket, pid_t pid) {
+        CHECK(pid != 0);
+
         this->socket = socket;
-        this->fde = fdevent_create(socket, jdwp_process_event, this);
+        this->pid = pid;
+        this->fde = fdevent_create(socket.release(), jdwp_process_event, this);
 
         if (!this->fde) {
             LOG(FATAL) << "could not create fdevent for new JDWP process";
         }
-
-        /* start by waiting for the PID */
-        fdevent_add(this->fde, FDE_READ);
     }
 
     ~JdwpProcess() {
@@ -160,18 +166,12 @@ struct JdwpProcess {
     }
 
     void RemoveFromList() {
-        if (this->pid >= 0) {
-            D("removing pid %d from jdwp process list", this->pid);
-        } else {
-            D("removing transient JdwpProcess from list");
-        }
-
         auto pred = [this](const auto& proc) { return proc.get() == this; };
         _jdwp_list.remove_if(pred);
     }
 
+    borrowed_fd socket = -1;
     int32_t pid = -1;
-    int socket = -1;
     fdevent* fde = nullptr;
 
     std::vector<unique_fd> out_fds;
@@ -181,11 +181,6 @@ static size_t jdwp_process_list(char* buffer, size_t bufferlen) {
     std::string temp;
 
     for (auto& proc : _jdwp_list) {
-        /* skip transient connections */
-        if (proc->pid < 0) {
-            continue;
-        }
-
         std::string next = std::to_string(proc->pid) + "\n";
         if (temp.length() + next.length() > bufferlen) {
             D("truncating JDWP process list (max len = %zu)", bufferlen);
@@ -214,24 +209,12 @@ static size_t jdwp_process_list_msg(char* buffer, size_t bufferlen) {
 
 static void jdwp_process_event(int socket, unsigned events, void* _proc) {
     JdwpProcess* proc = reinterpret_cast<JdwpProcess*>(_proc);
-    CHECK_EQ(socket, proc->socket);
+    CHECK_EQ(socket, proc->socket.get());
 
     if (events & FDE_READ) {
-        if (proc->pid < 0) {
-            ssize_t rc = TEMP_FAILURE_RETRY(recv(socket, &proc->pid, sizeof(proc->pid), 0));
-            if (rc != sizeof(proc->pid)) {
-                D("failed to read jdwp pid: rc = %zd, errno = %s", rc, strerror(errno));
-                goto CloseProcess;
-            }
-
-            /* all is well, keep reading to detect connection closure */
-            D("Adding pid %d to jdwp process list", proc->pid);
-            jdwp_process_list_updated();
-        } else {
-            // We already have the PID, if we can read from the socket, we've probably hit EOF.
-            D("terminating JDWP connection %d", proc->pid);
-            goto CloseProcess;
-        }
+        // We already have the PID, if we can read from the socket, we've probably hit EOF.
+        D("terminating JDWP connection %d", proc->pid);
+        goto CloseProcess;
     }
 
     if (events & FDE_WRITE) {
@@ -282,98 +265,6 @@ unique_fd create_jdwp_connection_fd(int pid) {
     }
     D("search failed !!");
     return unique_fd{};
-}
-
-/**  VM DEBUG CONTROL SOCKET
- **
- **  we do implement a custom asocket to receive the data
- **/
-
-/* name of the debug control Unix socket */
-#define JDWP_CONTROL_NAME "\0jdwp-control"
-#define JDWP_CONTROL_NAME_LEN (sizeof(JDWP_CONTROL_NAME) - 1)
-
-struct JdwpControl {
-    int listen_socket;
-    fdevent* fde;
-};
-
-static JdwpControl _jdwp_control;
-
-static void jdwp_control_event(int s, unsigned events, void* user);
-
-static int jdwp_control_init(JdwpControl* control, const char* sockname, int socknamelen) {
-    sockaddr_un addr;
-    socklen_t addrlen;
-    int maxpath = sizeof(addr.sun_path);
-    int pathlen = socknamelen;
-
-    if (pathlen >= maxpath) {
-        D("vm debug control socket name too long (%d extra chars)", pathlen + 1 - maxpath);
-        return -1;
-    }
-
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    memcpy(addr.sun_path, sockname, socknamelen);
-
-    unique_fd s(socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0));
-    if (s < 0) {
-        D("could not create vm debug control socket. %d: %s", errno, strerror(errno));
-        return -1;
-    }
-
-    addrlen = pathlen + sizeof(addr.sun_family);
-
-    if (bind(s.get(), reinterpret_cast<sockaddr*>(&addr), addrlen) < 0) {
-        D("could not bind vm debug control socket: %d: %s", errno, strerror(errno));
-        return -1;
-    }
-
-    if (listen(s.get(), 4) < 0) {
-        D("listen failed in jdwp control socket: %d: %s", errno, strerror(errno));
-        return -1;
-    }
-
-    control->listen_socket = s.release();
-    control->fde = fdevent_create(control->listen_socket, jdwp_control_event, control);
-    if (control->fde == nullptr) {
-        D("could not create fdevent for jdwp control socket");
-        return -1;
-    }
-
-    /* only wait for incoming connections */
-    fdevent_add(control->fde, FDE_READ);
-
-    D("jdwp control socket started (%d)", control->listen_socket);
-    return 0;
-}
-
-static void jdwp_control_event(int fd, unsigned events, void* _control) {
-    JdwpControl* control = (JdwpControl*)_control;
-
-    CHECK_EQ(fd, control->listen_socket);
-    if (events & FDE_READ) {
-        int s = adb_socket_accept(control->listen_socket, nullptr, nullptr);
-        if (s < 0) {
-            if (errno == ECONNABORTED) {
-                /* oops, the JDWP process died really quick */
-                D("oops, the JDWP process died really quick");
-                return;
-            } else {
-                /* the socket is probably closed ? */
-                D("weird accept() failed on jdwp control socket: %s", strerror(errno));
-                return;
-            }
-        }
-
-        auto proc = std::make_unique<JdwpProcess>(s);
-        if (!proc) {
-            LOG(FATAL) << "failed to allocate JdwpProcess";
-        }
-
-        _jdwp_list.emplace_back(std::move(proc));
-    }
 }
 
 /** "jdwp" local service implementation
@@ -526,7 +417,22 @@ asocket* create_jdwp_tracker_service_socket(void) {
 }
 
 int init_jdwp(void) {
-    return jdwp_control_init(&_jdwp_control, JDWP_CONTROL_NAME, JDWP_CONTROL_NAME_LEN);
+    std::thread([]() {
+        adb_thread_setname("jdwp control");
+        adbconnection_listen([](int fd, pid_t pid) {
+            LOG(INFO) << "jdwp connection from " << pid;
+            fdevent_run_on_main_thread([fd, pid] {
+                unique_fd ufd(fd);
+                auto proc = std::make_unique<JdwpProcess>(std::move(ufd), pid);
+                if (!proc) {
+                    LOG(FATAL) << "failed to allocate JdwpProcess";
+                }
+                _jdwp_list.emplace_back(std::move(proc));
+                jdwp_process_list_updated();
+            });
+        });
+    }).detach();
+    return 0;
 }
 
 #endif /* !ADB_HOST */
