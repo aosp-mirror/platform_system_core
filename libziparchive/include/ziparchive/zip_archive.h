@@ -36,30 +36,6 @@ enum {
   kCompressDeflated = 8,  // standard deflate
 };
 
-// TODO: remove this when everyone's moved over to std::string.
-struct ZipString {
-  const uint8_t* name;
-  uint16_t name_length;
-
-  ZipString() {}
-
-  explicit ZipString(std::string_view entry_name);
-
-  bool operator==(const ZipString& rhs) const {
-    return name && (name_length == rhs.name_length) && (memcmp(name, rhs.name, name_length) == 0);
-  }
-
-  bool StartsWith(const ZipString& prefix) const {
-    return name && (name_length >= prefix.name_length) &&
-           (memcmp(name, prefix.name, prefix.name_length) == 0);
-  }
-
-  bool EndsWith(const ZipString& suffix) const {
-    return name && (name_length >= suffix.name_length) &&
-           (memcmp(name + name_length - suffix.name_length, suffix.name, suffix.name_length) == 0);
-  }
-};
-
 /*
  * Represents information about a zip entry in a zip file.
  */
@@ -191,8 +167,6 @@ int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
  */
 int32_t Next(void* cookie, ZipEntry* data, std::string* name);
 int32_t Next(void* cookie, ZipEntry* data, std::string_view* name);
-// TODO: remove this when everyone's moved over to std::string/std::string_view.
-int32_t Next(void* cookie, ZipEntry* data, ZipString* name);
 
 /*
  * End iteration over all entries of a zip file and frees the memory allocated
