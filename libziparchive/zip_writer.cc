@@ -247,13 +247,24 @@ int32_t ZipWriter::StartAlignedEntryWithTime(std::string_view path, size_t flags
   ExtractTimeAndDate(time, &file_entry.last_mod_time, &file_entry.last_mod_date);
 
   off_t offset = current_offset_ + sizeof(LocalFileHeader) + file_entry.path.size();
-  std::vector<char> zero_padding;
+  // prepare a pre-zeroed memory page in case when we need to pad some aligned data.
+  static constexpr auto kPageSize = 4096;
+  static constexpr char kSmallZeroPadding[kPageSize] = {};
+  // use this buffer if our preallocated one is too small
+  std::vector<char> zero_padding_big;
+  const char* zero_padding = nullptr;
+
   if (alignment != 0 && (offset & (alignment - 1))) {
     // Pad the extra field so the data will be aligned.
     uint16_t padding = static_cast<uint16_t>(alignment - (offset % alignment));
     file_entry.padding_length = padding;
     offset += padding;
-    zero_padding.resize(padding, 0);
+    if (padding <= std::size(kSmallZeroPadding)) {
+        zero_padding = kSmallZeroPadding;
+    } else {
+        zero_padding_big.resize(padding, 0);
+        zero_padding = zero_padding_big.data();
+    }
   }
 
   LocalFileHeader header = {};
@@ -269,7 +280,7 @@ int32_t ZipWriter::StartAlignedEntryWithTime(std::string_view path, size_t flags
     return HandleError(kIoError);
   }
 
-  if (file_entry.padding_length != 0 && fwrite(zero_padding.data(), 1, file_entry.padding_length,
+  if (file_entry.padding_length != 0 && fwrite(zero_padding, 1, file_entry.padding_length,
                                                file_) != file_entry.padding_length) {
     return HandleError(kIoError);
   }
