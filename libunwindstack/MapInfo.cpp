@@ -300,7 +300,7 @@ MapInfo::~MapInfo() {
 
 std::string MapInfo::GetBuildID() {
   uintptr_t id = build_id.load();
-  if (build_id != 0) {
+  if (id != 0) {
     return *reinterpret_cast<std::string*>(id);
   }
 
