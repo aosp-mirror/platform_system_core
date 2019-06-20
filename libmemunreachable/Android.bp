@@ -111,7 +111,7 @@ cc_test {
     static_libs: ["libmemunreachable"],
     shared_libs: [
         "libbinder",
-        "libhwbinder",
+        "libhidlbase",
         "libutils",
     ],
     test_suites: ["device-tests"],
