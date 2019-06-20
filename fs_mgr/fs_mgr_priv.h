@@ -88,12 +88,6 @@
 
 using namespace std::chrono_literals;
 
-enum class FileWaitMode { Exists, DoesNotExist };
-
-bool fs_mgr_wait_for_file(const std::string& filename,
-                          const std::chrono::milliseconds relative_timeout,
-                          FileWaitMode wait_mode = FileWaitMode::Exists);
-
 bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly = true);
 bool fs_mgr_update_for_slotselect(android::fs_mgr::Fstab* fstab);
 bool fs_mgr_is_device_unlocked();
