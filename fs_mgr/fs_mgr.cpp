@@ -56,6 +56,7 @@
 #include <ext4_utils/ext4_utils.h>
 #include <ext4_utils/wipe.h>
 #include <fs_avb/fs_avb.h>
+#include <fs_mgr/file_wait.h>
 #include <fs_mgr_overlayfs.h>
 #include <libdm/dm.h>
 #include <liblp/metadata_format.h>
@@ -115,28 +116,6 @@ enum FsStatFlags {
     FS_STAT_ENABLE_ENCRYPTION_FAILED = 0x40000,
     FS_STAT_ENABLE_VERITY_FAILED = 0x80000,
 };
-
-// TODO: switch to inotify()
-bool fs_mgr_wait_for_file(const std::string& filename,
-                          const std::chrono::milliseconds relative_timeout,
-                          FileWaitMode file_wait_mode) {
-    auto start_time = std::chrono::steady_clock::now();
-
-    while (true) {
-        int rv = access(filename.c_str(), F_OK);
-        if (file_wait_mode == FileWaitMode::Exists) {
-            if (!rv || errno != ENOENT) return true;
-        } else if (file_wait_mode == FileWaitMode::DoesNotExist) {
-            if (rv && errno == ENOENT) return true;
-        }
-
-        std::this_thread::sleep_for(50ms);
-
-        auto now = std::chrono::steady_clock::now();
-        auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
-        if (time_elapsed > relative_timeout) return false;
-    }
-}
 
 static void log_fs_stat(const std::string& blk_device, int fs_stat) {
     if ((fs_stat & FS_STAT_IS_EXT4) == 0) return; // only log ext4
@@ -1103,8 +1082,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             continue;
         }
 
-        if (current_entry.fs_mgr_flags.wait &&
-            !fs_mgr_wait_for_file(current_entry.blk_device, 20s)) {
+        if (current_entry.fs_mgr_flags.wait && !WaitForFile(current_entry.blk_device, 20s)) {
             LERROR << "Skipping '" << current_entry.blk_device << "' during mount_all";
             continue;
         }
@@ -1373,7 +1351,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
         }
 
         // First check the filesystem if requested.
-        if (fstab_entry.fs_mgr_flags.wait && !fs_mgr_wait_for_file(n_blk_device, 20s)) {
+        if (fstab_entry.fs_mgr_flags.wait && !WaitForFile(n_blk_device, 20s)) {
             LERROR << "Skipping mounting '" << n_blk_device << "'";
             continue;
         }
@@ -1576,7 +1554,7 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
             fprintf(zram_fp.get(), "%" PRId64 "\n", entry.zram_size);
         }
 
-        if (entry.fs_mgr_flags.wait && !fs_mgr_wait_for_file(entry.blk_device, 20s)) {
+        if (entry.fs_mgr_flags.wait && !WaitForFile(entry.blk_device, 20s)) {
             LERROR << "Skipping mkswap for '" << entry.blk_device << "'";
             ret = false;
             continue;
