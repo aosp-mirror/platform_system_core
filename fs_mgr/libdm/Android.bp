@@ -46,6 +46,7 @@ cc_test {
     static_libs: [
         "libdm",
         "libbase",
+        "libfs_mgr",
         "liblog",
     ],
     srcs: [
