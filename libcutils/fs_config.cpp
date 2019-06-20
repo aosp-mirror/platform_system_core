@@ -46,19 +46,6 @@
 using android::base::EndsWith;
 using android::base::StartsWith;
 
-// My kingdom for <endian.h>
-static inline uint16_t get2LE(const uint8_t* src) {
-    return src[0] | (src[1] << 8);
-}
-
-static inline uint64_t get8LE(const uint8_t* src) {
-    uint32_t low, high;
-
-    low = src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-    high = src[4] | (src[5] << 8) | (src[6] << 16) | (src[7] << 24);
-    return ((uint64_t)high << 32) | (uint64_t)low;
-}
-
 #define ALIGN(x, alignment) (((x) + ((alignment)-1)) & ~((alignment)-1))
 
 // Rules for directories.
@@ -333,7 +320,7 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
 
         while (TEMP_FAILURE_RETRY(read(fd, &header, sizeof(header))) == sizeof(header)) {
             char* prefix;
-            uint16_t host_len = get2LE((const uint8_t*)&header.len);
+            uint16_t host_len = header.len;
             ssize_t len, remainder = host_len - sizeof(header);
             if (remainder <= 0) {
                 ALOGE("%s len is corrupted", conf[which][dir]);
@@ -358,10 +345,10 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
             if (fs_config_cmp(dir, prefix, len, path, plen)) {
                 free(prefix);
                 close(fd);
-                *uid = get2LE((const uint8_t*)&(header.uid));
-                *gid = get2LE((const uint8_t*)&(header.gid));
-                *mode = (*mode & (~07777)) | get2LE((const uint8_t*)&(header.mode));
-                *capabilities = get8LE((const uint8_t*)&(header.capabilities));
+                *uid = header.uid;
+                *gid = header.gid;
+                *mode = (*mode & (~07777)) | header.mode;
+                *capabilities = header.capabilities;
                 return;
             }
             free(prefix);
