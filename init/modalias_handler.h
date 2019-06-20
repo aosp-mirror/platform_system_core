@@ -17,10 +17,10 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 #include <vector>
 
-#include "result.h"
+#include <modprobe/modprobe.h>
+
 #include "uevent.h"
 #include "uevent_handler.h"
 
@@ -29,20 +29,13 @@ namespace init {
 
 class ModaliasHandler : public UeventHandler {
   public:
-    ModaliasHandler();
+    ModaliasHandler(const std::vector<std::string>&);
     virtual ~ModaliasHandler() = default;
 
     void HandleUevent(const Uevent& uevent) override;
 
   private:
-    Result<void> InsmodWithDeps(const std::string& module_name, const std::string& args);
-    Result<void> Insmod(const std::string& path_name, const std::string& args);
-
-    Result<void> ParseDepCallback(std::vector<std::string>&& args);
-    Result<void> ParseAliasCallback(std::vector<std::string>&& args);
-
-    std::vector<std::pair<std::string, std::string>> module_aliases_;
-    std::unordered_map<std::string, std::vector<std::string>> module_deps_;
+    Modprobe modprobe_;
 };
 
 }  // namespace init

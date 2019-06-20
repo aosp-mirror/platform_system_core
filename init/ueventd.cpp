@@ -251,7 +251,8 @@ int ueventd_main(int argc, char** argv) {
             std::move(ueventd_configuration.firmware_directories)));
 
     if (ueventd_configuration.enable_modalias_handling) {
-        uevent_handlers.emplace_back(std::make_unique<ModaliasHandler>());
+        std::vector<std::string> base_paths = {"/odm/lib/modules", "/vendor/lib/modules"};
+        uevent_handlers.emplace_back(std::make_unique<ModaliasHandler>(base_paths));
     }
     UeventListener uevent_listener(ueventd_configuration.uevent_socket_rcvbuf_size);
 
