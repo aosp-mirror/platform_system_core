@@ -136,6 +136,8 @@ class DeviceMapper final {
     // mapper device from the kernel.
     bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table);
 
+    static std::string GetTargetType(const struct dm_target_spec& spec);
+
   private:
     // Maximum possible device mapper targets registered in the kernel.
     // This is only used to read the list of targets from kernel so we allocate
