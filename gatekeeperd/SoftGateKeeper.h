@@ -58,23 +58,16 @@ public:
     virtual ~SoftGateKeeper() {
     }
 
-    virtual bool GetAuthTokenKey(const uint8_t **auth_token_key,
-            uint32_t *length) const {
+    virtual bool GetAuthTokenKey(const uint8_t** auth_token_key, uint32_t* length) const {
         if (auth_token_key == NULL || length == NULL) return false;
-        uint8_t *auth_token_key_copy = new uint8_t[SIGNATURE_LENGTH_BYTES];
-        memcpy(auth_token_key_copy, key_.get(), SIGNATURE_LENGTH_BYTES);
-
-        *auth_token_key = auth_token_key_copy;
+        *auth_token_key = key_.get();
         *length = SIGNATURE_LENGTH_BYTES;
         return true;
     }
 
-    virtual void GetPasswordKey(const uint8_t **password_key, uint32_t *length) {
+    virtual void GetPasswordKey(const uint8_t** password_key, uint32_t* length) {
         if (password_key == NULL || length == NULL) return;
-        uint8_t *password_key_copy = new uint8_t[SIGNATURE_LENGTH_BYTES];
-        memcpy(password_key_copy, key_.get(), SIGNATURE_LENGTH_BYTES);
-
-        *password_key = password_key_copy;
+        *password_key = key_.get();
         *length = SIGNATURE_LENGTH_BYTES;
     }
 
