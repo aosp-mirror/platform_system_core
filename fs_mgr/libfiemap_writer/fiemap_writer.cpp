@@ -89,6 +89,31 @@ static bool BlockDeviceToName(uint32_t major, uint32_t minor, std::string* bdev_
     return true;
 }
 
+static bool ValidateDmTarget(const DeviceMapper::TargetInfo& target) {
+    const auto& entry = target.spec;
+    if (entry.sector_start != 0) {
+        LOG(INFO) << "Stopping at target with non-zero starting sector";
+        return false;
+    }
+
+    auto target_type = DeviceMapper::GetTargetType(entry);
+    if (target_type == "bow" || target_type == "default-key" || target_type == "crypt") {
+        return true;
+    }
+    if (target_type == "linear") {
+        auto pieces = android::base::Split(target.data, " ");
+        if (pieces[1] != "0") {
+            LOG(INFO) << "Stopping at complex linear target with non-zero starting sector: "
+                      << pieces[1];
+            return false;
+        }
+        return true;
+    }
+
+    LOG(INFO) << "Stopping at complex target type " << target_type;
+    return false;
+}
+
 static bool DeviceMapperStackPop(const std::string& bdev, std::string* bdev_raw) {
     *bdev_raw = bdev;
 
@@ -128,15 +153,7 @@ static bool DeviceMapperStackPop(const std::string& bdev, std::string* bdev_raw)
         LOG(INFO) << "Stopping at complex table for " << dm_name << " at " << bdev;
         return true;
     }
-    const auto& entry = table[0].spec;
-    std::string target_type(std::string(entry.target_type, sizeof(entry.target_type)).c_str());
-    if (target_type != "bow" && target_type != "default-key" && target_type != "crypt") {
-        LOG(INFO) << "Stopping at complex target-type " << target_type << " for " << dm_name
-                  << " at " << bdev;
-        return true;
-    }
-    if (entry.sector_start != 0) {
-        LOG(INFO) << "Stopping at target-type with non-zero starting sector";
+    if (!ValidateDmTarget(table[0])) {
         return true;
     }
 
