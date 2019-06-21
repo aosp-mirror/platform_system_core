@@ -31,7 +31,7 @@ namespace unwindstack {
 
 class ElfCacheTest : public ::testing::Test {
  protected:
-  static void SetUpTestCase() { memory_.reset(new MemoryFake); }
+  static void SetUpTestSuite() { memory_.reset(new MemoryFake); }
 
   void SetUp() override { Elf::SetCachingEnabled(true); }
 
