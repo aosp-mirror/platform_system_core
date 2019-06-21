@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include <algorithm>
 #include <initializer_list>
 #include <type_traits>
