@@ -379,21 +379,3 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
     *mode = (*mode & (~07777)) | pc->mode;
     *capabilities = pc->capabilities;
 }
-
-ssize_t fs_config_generate(char* buffer, size_t length, const struct fs_path_config* pc) {
-    struct fs_path_config_from_file* p = (struct fs_path_config_from_file*)buffer;
-    size_t len = ALIGN(sizeof(*p) + strlen(pc->prefix) + 1, sizeof(uint64_t));
-
-    if ((length < len) || (len > UINT16_MAX)) {
-        return -ENOSPC;
-    }
-    memset(p, 0, len);
-    uint16_t host_len = len;
-    p->len = get2LE((const uint8_t*)&host_len);
-    p->mode = get2LE((const uint8_t*)&(pc->mode));
-    p->uid = get2LE((const uint8_t*)&(pc->uid));
-    p->gid = get2LE((const uint8_t*)&(pc->gid));
-    p->capabilities = get8LE((const uint8_t*)&(pc->capabilities));
-    strcpy(p->prefix, pc->prefix);
-    return len;
-}
