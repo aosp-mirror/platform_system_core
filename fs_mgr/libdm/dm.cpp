@@ -302,6 +302,26 @@ bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* p
     return true;
 }
 
+bool DeviceMapper::GetDeviceNumber(const std::string& name, dev_t* dev) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(WARNING) << "DM_DEV_STATUS failed for " << name;
+        return false;
+    }
+    *dev = io.dev;
+    return true;
+}
+
+bool DeviceMapper::GetDeviceString(const std::string& name, std::string* dev) {
+    dev_t num;
+    if (!GetDeviceNumber(name, &num)) {
+        return false;
+    }
+    *dev = std::to_string(major(num)) + ":" + std::to_string(minor(num));
+    return true;
+}
+
 bool DeviceMapper::GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) {
     return GetTable(name, 0, table);
 }
