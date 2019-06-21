@@ -39,6 +39,11 @@ static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
 
 bool UsePerAppMemcg();
 
+// Drop the fd cache of cgroup path. It is used for when resource caching is enabled and a process
+// loses the access to the path, the access checking (See SetCgroupAction::EnableResourceCaching)
+// should be active again. E.g. Zygote specialization for child process.
+void DropTaskProfilesResourceCaching();
+
 // Return 0 and removes the cgroup if there are no longer any processes in it.
 // Returns -1 in the case of an error occurring or if there are processes still running
 // even after retrying for up to 200ms.
