@@ -58,7 +58,7 @@ class MapInfoCreateMemoryTest : public ::testing::Test {
     ASSERT_TRUE(android::base::WriteFully(fd, buffer.data(), buffer.size()));
   }
 
-  static void SetUpTestCase() {
+  static void SetUpTestSuite() {
     std::vector<uint8_t> buffer(12288, 0);
     memcpy(buffer.data(), ELFMAG, SELFMAG);
     buffer[EI_CLASS] = ELFCLASS32;

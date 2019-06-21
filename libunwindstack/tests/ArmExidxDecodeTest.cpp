@@ -1662,7 +1662,7 @@ TEST_P(ArmExidxDecodeTest, eval_pc_set) {
   ASSERT_EQ(0x10U, (*exidx_->regs())[15]);
 }
 
-INSTANTIATE_TEST_CASE_P(, ArmExidxDecodeTest,
-                        ::testing::Values("logging", "register_logging", "no_logging"));
+INSTANTIATE_TEST_SUITE_P(, ArmExidxDecodeTest,
+                         ::testing::Values("logging", "register_logging", "no_logging"));
 
 }  // namespace unwindstack
