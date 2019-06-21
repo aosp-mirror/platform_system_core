@@ -44,7 +44,7 @@ class DwarfDebugFrameTest : public ::testing::Test {
   MemoryFake memory_;
   DwarfDebugFrame<TypeParam>* debug_frame_ = nullptr;
 };
-TYPED_TEST_CASE_P(DwarfDebugFrameTest);
+TYPED_TEST_SUITE_P(DwarfDebugFrameTest);
 
 // NOTE: All test class variables need to be referenced as this->.
 
@@ -812,7 +812,7 @@ TYPED_TEST_P(DwarfDebugFrameTest, GetFdeFromPc_interleaved) {
   EXPECT_EQ(0xb50U, fde->pc_end);
 }
 
-REGISTER_TYPED_TEST_CASE_P(
+REGISTER_TYPED_TEST_SUITE_P(
     DwarfDebugFrameTest, GetFdes32, GetFdes32_after_GetFdeFromPc, GetFdes32_not_in_section,
     GetFdeFromPc32, GetFdeFromPc32_reverse, GetFdeFromPc32_not_in_section, GetFdes64,
     GetFdes64_after_GetFdeFromPc, GetFdes64_not_in_section, GetFdeFromPc64, GetFdeFromPc64_reverse,
@@ -825,6 +825,6 @@ REGISTER_TYPED_TEST_CASE_P(
     GetFdeFromOffset64_lsda_address, GetFdeFromPc_interleaved);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfDebugFrameTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(, DwarfDebugFrameTest, DwarfDebugFrameTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfDebugFrameTest, DwarfDebugFrameTestTypes);
 
 }  // namespace unwindstack

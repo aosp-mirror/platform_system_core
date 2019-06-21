@@ -64,7 +64,7 @@ class DwarfCfaTest : public ::testing::Test {
   DwarfCie cie_;
   DwarfFde fde_;
 };
-TYPED_TEST_CASE_P(DwarfCfaTest);
+TYPED_TEST_SUITE_P(DwarfCfaTest);
 
 // NOTE: All test class variables need to be referenced as this->.
 
@@ -952,16 +952,17 @@ TYPED_TEST_P(DwarfCfaTest, cfa_register_override) {
   ASSERT_EQ("", GetFakeLogBuf());
 }
 
-REGISTER_TYPED_TEST_CASE_P(DwarfCfaTest, cfa_illegal, cfa_nop, cfa_offset, cfa_offset_extended,
-                           cfa_offset_extended_sf, cfa_restore, cfa_restore_extended, cfa_set_loc,
-                           cfa_advance_loc1, cfa_advance_loc2, cfa_advance_loc4, cfa_undefined,
-                           cfa_same, cfa_register, cfa_state, cfa_state_cfa_offset_restore,
-                           cfa_def_cfa, cfa_def_cfa_sf, cfa_def_cfa_register, cfa_def_cfa_offset,
-                           cfa_def_cfa_offset_sf, cfa_def_cfa_expression, cfa_expression,
-                           cfa_val_offset, cfa_val_offset_sf, cfa_val_expression, cfa_gnu_args_size,
-                           cfa_gnu_negative_offset_extended, cfa_register_override);
+REGISTER_TYPED_TEST_SUITE_P(DwarfCfaTest, cfa_illegal, cfa_nop, cfa_offset, cfa_offset_extended,
+                            cfa_offset_extended_sf, cfa_restore, cfa_restore_extended, cfa_set_loc,
+                            cfa_advance_loc1, cfa_advance_loc2, cfa_advance_loc4, cfa_undefined,
+                            cfa_same, cfa_register, cfa_state, cfa_state_cfa_offset_restore,
+                            cfa_def_cfa, cfa_def_cfa_sf, cfa_def_cfa_register, cfa_def_cfa_offset,
+                            cfa_def_cfa_offset_sf, cfa_def_cfa_expression, cfa_expression,
+                            cfa_val_offset, cfa_val_offset_sf, cfa_val_expression,
+                            cfa_gnu_args_size, cfa_gnu_negative_offset_extended,
+                            cfa_register_override);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfCfaTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(, DwarfCfaTest, DwarfCfaTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfCfaTest, DwarfCfaTestTypes);
 
 }  // namespace unwindstack

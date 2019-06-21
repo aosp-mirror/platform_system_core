@@ -54,7 +54,7 @@ class UnwinderTest : public ::testing::Test {
     }
   }
 
-  static void SetUpTestCase() {
+  static void SetUpTestSuite() {
     maps_.reset(new Maps);
 
     ElfFake* elf = new ElfFake(new MemoryFake);
