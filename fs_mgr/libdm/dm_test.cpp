@@ -179,6 +179,10 @@ TEST(libdm, DmLinear) {
     EXPECT_EQ(targets[1].spec.sector_start, 1);
     EXPECT_EQ(targets[1].spec.length, 1);
 
+    // Test GetTargetType().
+    EXPECT_EQ(DeviceMapper::GetTargetType(targets[0].spec), std::string{"linear"});
+    EXPECT_EQ(DeviceMapper::GetTargetType(targets[1].spec), std::string{"linear"});
+
     // Normally the TestDevice destructor would delete this, but at least one
     // test should ensure that device deletion works.
     ASSERT_TRUE(dev.Destroy());
