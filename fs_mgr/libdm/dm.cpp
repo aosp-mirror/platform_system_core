@@ -388,5 +388,13 @@ void DeviceMapper::InitIo(struct dm_ioctl* io, const std::string& name) const {
     }
 }
 
+std::string DeviceMapper::GetTargetType(const struct dm_target_spec& spec) {
+    if (const void* p = memchr(spec.target_type, '\0', sizeof(spec.target_type))) {
+        ptrdiff_t length = reinterpret_cast<const char*>(p) - spec.target_type;
+        return std::string{spec.target_type, static_cast<size_t>(length)};
+    }
+    return std::string{spec.target_type, sizeof(spec.target_type)};
+}
+
 }  // namespace dm
 }  // namespace android
