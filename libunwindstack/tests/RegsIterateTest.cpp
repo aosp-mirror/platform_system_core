@@ -236,7 +236,7 @@ std::vector<Register> ExpectedRegisters<RegsMips64>() {
 }
 
 using RegTypes = ::testing::Types<RegsArm, RegsArm64, RegsX86, RegsX86_64, RegsMips, RegsMips64>;
-TYPED_TEST_CASE(RegsIterateTest, RegTypes);
+TYPED_TEST_SUITE(RegsIterateTest, RegTypes);
 
 TYPED_TEST(RegsIterateTest, iterate) {
   std::vector<Register> expected = ExpectedRegisters<TypeParam>();

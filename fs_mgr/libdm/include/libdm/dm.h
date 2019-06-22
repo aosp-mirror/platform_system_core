@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <linux/dm-ioctl.h>
 #include <linux/kdev_t.h>
+#include <linux/types.h>
 #include <stdint.h>
 #include <sys/sysmacros.h>
 #include <unistd.h>
@@ -111,6 +112,13 @@ class DeviceMapper final {
     // parameter is not set.
     bool GetDmDevicePathByName(const std::string& name, std::string* path);
 
+    // Returns the dev_t for the named device-mapper node.
+    bool GetDeviceNumber(const std::string& name, dev_t* dev);
+
+    // Returns a major:minor string for the named device-mapper node, that can
+    // be used as inputs to DmTargets that take a block device.
+    bool GetDeviceString(const std::string& name, std::string* dev);
+
     // The only way to create a DeviceMapper object.
     static DeviceMapper& Instance();
 
@@ -135,6 +143,8 @@ class DeviceMapper final {
     // Identical to GetTableStatus, except also retrives the active table for the device
     // mapper device from the kernel.
     bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table);
+
+    static std::string GetTargetType(const struct dm_target_spec& spec);
 
   private:
     // Maximum possible device mapper targets registered in the kernel.

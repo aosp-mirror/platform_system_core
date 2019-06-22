@@ -132,14 +132,24 @@ TEST(libdm, DmLinear) {
     // Define a 2-sector device, with each sector mapping to the first sector
     // of one of our loop devices.
     DmTable table;
-    ASSERT_TRUE(table.AddTarget(make_unique<DmTargetLinear>(0, 1, loop_a.device(), 0)));
-    ASSERT_TRUE(table.AddTarget(make_unique<DmTargetLinear>(1, 1, loop_b.device(), 0)));
+    ASSERT_TRUE(table.Emplace<DmTargetLinear>(0, 1, loop_a.device(), 0));
+    ASSERT_TRUE(table.Emplace<DmTargetLinear>(1, 1, loop_b.device(), 0));
     ASSERT_TRUE(table.valid());
 
     TempDevice dev("libdm-test-dm-linear", table);
     ASSERT_TRUE(dev.valid());
     ASSERT_FALSE(dev.path().empty());
     ASSERT_TRUE(dev.WaitForUdev());
+
+    auto& dm = DeviceMapper::Instance();
+
+    dev_t dev_number;
+    ASSERT_TRUE(dm.GetDeviceNumber(dev.name(), &dev_number));
+    ASSERT_NE(dev_number, 0);
+
+    std::string dev_string;
+    ASSERT_TRUE(dm.GetDeviceString(dev.name(), &dev_string));
+    ASSERT_FALSE(dev_string.empty());
 
     // Note: a scope is needed to ensure that there are no open descriptors
     // when we go to close the device.
@@ -157,7 +167,6 @@ TEST(libdm, DmLinear) {
     }
 
     // Test GetTableStatus.
-    DeviceMapper& dm = DeviceMapper::Instance();
     vector<DeviceMapper::TargetInfo> targets;
     ASSERT_TRUE(dm.GetTableStatus(dev.name(), &targets));
     ASSERT_EQ(targets.size(), 2);
@@ -169,6 +178,10 @@ TEST(libdm, DmLinear) {
     EXPECT_TRUE(targets[1].data.empty());
     EXPECT_EQ(targets[1].spec.sector_start, 1);
     EXPECT_EQ(targets[1].spec.length, 1);
+
+    // Test GetTargetType().
+    EXPECT_EQ(DeviceMapper::GetTargetType(targets[0].spec), std::string{"linear"});
+    EXPECT_EQ(DeviceMapper::GetTargetType(targets[1].spec), std::string{"linear"});
 
     // Normally the TestDevice destructor would delete this, but at least one
     // test should ensure that device deletion works.

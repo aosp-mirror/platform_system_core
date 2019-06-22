@@ -38,6 +38,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <fs_mgr/file_wait.h>
 #include <liblp/reader.h>
 
 #include "fs_mgr_priv.h"
@@ -128,7 +129,7 @@ static bool CreateLogicalPartition(const LpMetadata& metadata, const LpMetadataP
         return false;
     }
     if (timeout_ms > std::chrono::milliseconds::zero()) {
-        if (!fs_mgr_wait_for_file(*path, timeout_ms, FileWaitMode::Exists)) {
+        if (!WaitForFile(*path, timeout_ms)) {
             DestroyLogicalPartition(name, {});
             LERROR << "Timed out waiting for device path: " << *path;
             return false;
@@ -202,7 +203,7 @@ bool UnmapDevice(const std::string& name, const std::chrono::milliseconds& timeo
     if (!dm.DeleteDevice(name)) {
         return false;
     }
-    if (!path.empty() && !fs_mgr_wait_for_file(path, timeout_ms, FileWaitMode::DoesNotExist)) {
+    if (!path.empty() && !WaitForFileDeleted(path, timeout_ms)) {
         LERROR << "Timed out waiting for device path to unlink: " << path;
         return false;
     }
