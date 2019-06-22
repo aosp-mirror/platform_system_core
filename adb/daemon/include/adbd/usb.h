@@ -16,6 +16,8 @@
  * limitations under the License.
  */
 
+#include <linux/usb/functionfs.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -62,5 +64,9 @@ struct usb_handle {
 };
 
 usb_handle *create_usb_handle(unsigned num_bufs, unsigned io_size);
+
+struct usb_functionfs_event;
+const char* ffs_event_to_string(enum usb_functionfs_event_type type);
+bool read_functionfs_setup(int fd, usb_functionfs_event* event);
 bool open_functionfs(android::base::unique_fd* control, android::base::unique_fd* bulk_out,
                      android::base::unique_fd* bulk_in);
