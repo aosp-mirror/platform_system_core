@@ -621,7 +621,9 @@ std::string fs_mgr_overlayfs_scratch_device() {
         if (!dm.GetDmDevicePathByName(partition_name, &path)) {
             // non-DAP A/B device?
             if (fs_mgr_access(super_device)) return "";
-            path = kPhysicalDevice + "system" + (slot_number ? "_a" : "_b");
+            auto other_slot = fs_mgr_get_other_slot_suffix();
+            if (other_slot.empty()) return "";
+            path = kPhysicalDevice + "system" + other_slot;
         }
     }
     return scratch_device_cache = path;
