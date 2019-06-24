@@ -71,7 +71,6 @@ cc_defaults {
     shared_libs: [
         "libbacktrace",
         "libbase",
-        "libbinder",
         "libbootloader_message",
         "libcutils",
         "libcrypto",
