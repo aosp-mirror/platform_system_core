@@ -19,43 +19,16 @@
 ** by the device side of adb.
 */
 
-#ifndef _LIBS_CUTILS_PRIVATE_FS_CONFIG_H
-#define _LIBS_CUTILS_PRIVATE_FS_CONFIG_H
+#pragma once
 
 #include <stdint.h>
 #include <sys/cdefs.h>
-#include <sys/types.h>
 
 #if defined(__BIONIC__)
 #include <linux/capability.h>
 #else  // defined(__BIONIC__)
-#include "android_filesystem_capability.h"
+#include <private/android_filesystem_capability.h>
 #endif  // defined(__BIONIC__)
-
-#define CAP_MASK_LONG(cap_name) (1ULL << (cap_name))
-
-/*
- * binary format for the runtime <partition>/etc/fs_config_(dirs|files)
- * filesystem override files.
- */
-
-/* The following structure is stored little endian */
-struct fs_path_config_from_file {
-    uint16_t len;
-    uint16_t mode;
-    uint16_t uid;
-    uint16_t gid;
-    uint64_t capabilities;
-    char prefix[];
-} __attribute__((__aligned__(sizeof(uint64_t))));
-
-struct fs_path_config {
-    unsigned mode;
-    unsigned uid;
-    unsigned gid;
-    uint64_t capabilities;
-    const char* prefix;
-};
 
 /* Rules for directories and files has moved to system/code/libcutils/fs_config.c */
 
@@ -75,5 +48,3 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
                unsigned* mode, uint64_t* capabilities);
 
 __END_DECLS
-
-#endif /* _LIBS_CUTILS_PRIVATE_FS_CONFIG_H */
