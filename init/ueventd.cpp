@@ -214,7 +214,7 @@ void ColdBoot::Run() {
 
     WaitForSubProcesses();
 
-    close(open(COLDBOOT_DONE, O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
+    android::base::SetProperty(kColdBootDoneProp, "true");
     LOG(INFO) << "Coldboot took " << cold_boot_timer.duration().count() / 1000.0f << " seconds";
 }
 
@@ -256,7 +256,7 @@ int ueventd_main(int argc, char** argv) {
     }
     UeventListener uevent_listener(ueventd_configuration.uevent_socket_rcvbuf_size);
 
-    if (access(COLDBOOT_DONE, F_OK) != 0) {
+    if (!android::base::GetBoolProperty(kColdBootDoneProp, false)) {
         ColdBoot cold_boot(uevent_listener, uevent_handlers);
         cold_boot.Run();
     }
