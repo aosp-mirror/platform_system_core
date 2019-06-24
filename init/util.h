@@ -30,13 +30,13 @@
 
 #include "result.h"
 
-#define COLDBOOT_DONE "/dev/.coldboot_done"
-
 using android::base::boot_clock;
 using namespace std::chrono_literals;
 
 namespace android {
 namespace init {
+
+static const char kColdBootDoneProp[] = "ro.cold_boot_done";
 
 int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
                  const char* socketcon);
