@@ -198,6 +198,14 @@ void property_changed(const std::string& name, const std::string& value) {
 
     if (property_triggers_enabled) ActionManager::GetInstance().QueuePropertyChange(name, value);
 
+    // We always record how long init waited for ueventd to tell us cold boot finished.
+    // If we aren't waiting on this property, it means that ueventd finished before we even started
+    // to wait.
+    if (name == kColdBootDoneProp) {
+        auto time_waited = waiting_for_prop ? waiting_for_prop->duration().count() : 0;
+        property_set("ro.boottime.init.cold_boot_wait", std::to_string(time_waited));
+    }
+
     if (waiting_for_prop) {
         if (wait_prop_name == name && wait_prop_value == value) {
             LOG(INFO) << "Wait for property '" << wait_prop_name << "=" << wait_prop_value
@@ -331,23 +339,10 @@ bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t
 }
 
 static Result<void> wait_for_coldboot_done_action(const BuiltinArguments& args) {
-    Timer t;
-
-    LOG(VERBOSE) << "Waiting for " COLDBOOT_DONE "...";
-
-    // Historically we had a 1s timeout here because we weren't otherwise
-    // tracking boot time, and many OEMs made their sepolicy regular
-    // expressions too expensive (http://b/19899875).
-
-    // Now we're tracking boot time, just log the time taken to a system
-    // property. We still panic if it takes more than a minute though,
-    // because any build that slow isn't likely to boot at all, and we'd
-    // rather any test lab devices fail back to the bootloader.
-    if (wait_for_file(COLDBOOT_DONE, 60s) < 0) {
-        LOG(FATAL) << "Timed out waiting for " COLDBOOT_DONE;
+    if (!start_waiting_for_property(kColdBootDoneProp, "true")) {
+        LOG(FATAL) << "Could not wait for '" << kColdBootDoneProp << "'";
     }
 
-    property_set("ro.boottime.init.cold_boot_wait", std::to_string(t.duration().count()));
     return {};
 }
 
