@@ -208,56 +208,6 @@ static const struct {
 };
 // clang-format on
 
-const char* ffs_event_to_string(enum usb_functionfs_event_type type) {
-    switch (type) {
-        case FUNCTIONFS_BIND:
-            return "FUNCTIONFS_BIND";
-        case FUNCTIONFS_UNBIND:
-            return "FUNCTIONFS_UNBIND";
-        case FUNCTIONFS_ENABLE:
-            return "FUNCTIONFS_ENABLE";
-        case FUNCTIONFS_DISABLE:
-            return "FUNCTIONFS_DISABLE";
-        case FUNCTIONFS_SETUP:
-            return "FUNCTIONFS_SETUP";
-        case FUNCTIONFS_SUSPEND:
-            return "FUNCTIONFS_SUSPEND";
-        case FUNCTIONFS_RESUME:
-            return "FUNCTIONFS_RESUME";
-    }
-}
-
-bool read_functionfs_setup(int fd, usb_functionfs_event* event) {
-    LOG(INFO) << "received FUNCTIONFS_SETUP control transfer: bRequestType = "
-              << static_cast<int>(event->u.setup.bRequestType)
-              << ", bRequest = " << static_cast<int>(event->u.setup.bRequest)
-              << ", wValue = " << static_cast<int>(event->u.setup.wValue)
-              << ", wIndex = " << static_cast<int>(event->u.setup.wIndex)
-              << ", wLength = " << static_cast<int>(event->u.setup.wLength);
-
-    if ((event->u.setup.bRequestType & USB_DIR_IN)) {
-        LOG(INFO) << "acking device-to-host control transfer";
-        ssize_t rc = adb_write(fd, "", 0);
-        if (rc != 0) {
-            PLOG(ERROR) << "failed to write empty packet to host";
-            return false;
-        }
-    } else {
-        std::string buf;
-        buf.resize(event->u.setup.wLength + 1);
-
-        ssize_t rc = adb_read(fd, buf.data(), buf.size());
-        if (rc != event->u.setup.wLength) {
-            LOG(ERROR) << "read " << rc << " bytes when trying to read control request, expected "
-                       << event->u.setup.wLength;
-        }
-
-        LOG(INFO) << "control request contents: " << buf;
-    }
-
-    return true;
-}
-
 bool open_functionfs(android::base::unique_fd* out_control, android::base::unique_fd* out_bulk_out,
                      android::base::unique_fd* out_bulk_in) {
     unique_fd control, bulk_out, bulk_in;
@@ -305,35 +255,8 @@ bool open_functionfs(android::base::unique_fd* out_control, android::base::uniqu
             PLOG(ERROR) << "failed to write USB strings";
             return false;
         }
-
-        // Signal init after we've written our descriptors.
+        // Signal only when writing the descriptors to ffs
         android::base::SetProperty("sys.usb.ffs.ready", "1");
-        *out_control = std::move(control);
-    }
-
-    // Read until we get FUNCTIONFS_BIND from the control endpoint.
-    while (true) {
-        struct usb_functionfs_event event;
-        ssize_t rc = TEMP_FAILURE_RETRY(adb_read(*out_control, &event, sizeof(event)));
-
-        if (rc == -1) {
-            PLOG(FATAL) << "failed to read from FFS control fd";
-        } else if (rc == 0) {
-            LOG(WARNING) << "hit EOF on functionfs control fd during initialization";
-        } else if (rc != sizeof(event)) {
-            LOG(FATAL) << "read functionfs event of unexpected size, expected " << sizeof(event)
-                       << ", got " << rc;
-        }
-
-        LOG(INFO) << "USB event: "
-                  << ffs_event_to_string(static_cast<usb_functionfs_event_type>(event.type));
-        if (event.type == FUNCTIONFS_BIND) {
-            break;
-        } else if (event.type == FUNCTIONFS_SETUP) {
-            read_functionfs_setup(out_control->get(), &event);
-        } else {
-            continue;
-        }
     }
 
     bulk_out.reset(adb_open(USB_FFS_ADB_OUT, O_RDONLY));
@@ -348,6 +271,7 @@ bool open_functionfs(android::base::unique_fd* out_control, android::base::uniqu
         return false;
     }
 
+    *out_control = std::move(control);
     *out_bulk_in = std::move(bulk_in);
     *out_bulk_out = std::move(bulk_out);
     return true;
