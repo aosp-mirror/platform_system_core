@@ -243,9 +243,10 @@ void CrasherTest::FinishCrasher() {
 
 void CrasherTest::AssertDeath(int signo) {
   int status;
-  pid_t pid = TIMEOUT(5, waitpid(crasher_pid, &status, 0));
+  pid_t pid = TIMEOUT(10, waitpid(crasher_pid, &status, 0));
   if (pid != crasher_pid) {
-    printf("failed to wait for crasher (pid %d)\n", crasher_pid);
+    printf("failed to wait for crasher (expected pid %d, return value %d): %s\n", crasher_pid, pid,
+           strerror(errno));
     sleep(100);
     FAIL() << "failed to wait for crasher: " << strerror(errno);
   }
