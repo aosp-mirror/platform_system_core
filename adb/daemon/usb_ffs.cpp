@@ -299,7 +299,6 @@ bool open_functionfs(android::base::unique_fd* out_control, android::base::uniqu
         }
         // Signal only when writing the descriptors to ffs
         android::base::SetProperty("sys.usb.ffs.ready", "1");
-        *out_control = std::move(control);
     }
 
     bulk_out.reset(adb_open(USB_FFS_ADB_OUT, O_RDONLY));
@@ -314,6 +313,7 @@ bool open_functionfs(android::base::unique_fd* out_control, android::base::uniqu
         return false;
     }
 
+    *out_control = std::move(control);
     *out_bulk_in = std::move(bulk_in);
     *out_bulk_out = std::move(bulk_out);
     return true;
