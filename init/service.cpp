@@ -40,7 +40,6 @@
 #if defined(__ANDROID__)
 #include <ApexProperties.sysprop.h>
 
-#include "init.h"
 #include "mount_namespace.h"
 #include "property_service.h"
 #else
@@ -359,7 +358,7 @@ Result<void> Service::Start() {
     bool needs_console = (flags_ & SVC_CONSOLE);
     if (needs_console) {
         if (proc_attr_.console.empty()) {
-            proc_attr_.console = default_console;
+            proc_attr_.console = "/dev/" + GetProperty("ro.boot.console", "console");
         }
 
         // Make sure that open call succeeds to ensure a console driver is
