@@ -67,6 +67,8 @@
 #include "security.h"
 #include "selabel.h"
 #include "selinux.h"
+#include "service.h"
+#include "service_parser.h"
 #include "sigchld_handler.h"
 #include "util.h"
 

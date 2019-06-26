@@ -40,6 +40,7 @@
 #include <system/thread_defs.h>
 
 #include "rlimit_parser.h"
+#include "service_list.h"
 #include "util.h"
 
 #if defined(__ANDROID__)
@@ -1072,17 +1073,6 @@ void Service::StopOrReset(int how) {
     }
 }
 
-ServiceList::ServiceList() {}
-
-ServiceList& ServiceList::GetInstance() {
-    static ServiceList instance;
-    return instance;
-}
-
-void ServiceList::AddService(std::unique_ptr<Service> service) {
-    services_.emplace_back(std::move(service));
-}
-
 std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<std::string>& args) {
     // Parse the arguments: exec [SECLABEL [UID [GID]*] --] COMMAND ARGS...
     // SECLABEL can be a - to denote default
@@ -1145,140 +1135,6 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
 
     return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, namespace_flags, seclabel,
                                      nullptr, str_args);
-}
-
-// Shutdown services in the opposite order that they were started.
-const std::vector<Service*> ServiceList::services_in_shutdown_order() const {
-    std::vector<Service*> shutdown_services;
-    for (const auto& service : services_) {
-        if (service->start_order() > 0) shutdown_services.emplace_back(service.get());
-    }
-    std::sort(shutdown_services.begin(), shutdown_services.end(),
-              [](const auto& a, const auto& b) { return a->start_order() > b->start_order(); });
-    return shutdown_services;
-}
-
-void ServiceList::RemoveService(const Service& svc) {
-    auto svc_it = std::find_if(services_.begin(), services_.end(),
-                               [&svc] (const std::unique_ptr<Service>& s) {
-                                   return svc.name() == s->name();
-                               });
-    if (svc_it == services_.end()) {
-        return;
-    }
-
-    services_.erase(svc_it);
-}
-
-void ServiceList::DumpState() const {
-    for (const auto& s : services_) {
-        s->DumpState();
-    }
-}
-
-void ServiceList::MarkPostData() {
-    post_data_ = true;
-}
-
-bool ServiceList::IsPostData() {
-    return post_data_;
-}
-
-void ServiceList::MarkServicesUpdate() {
-    services_update_finished_ = true;
-
-    // start the delayed services
-    for (const auto& name : delayed_service_names_) {
-        Service* service = FindService(name);
-        if (service == nullptr) {
-            LOG(ERROR) << "delayed service '" << name << "' could not be found.";
-            continue;
-        }
-        if (auto result = service->Start(); !result) {
-            LOG(ERROR) << result.error().message();
-        }
-    }
-    delayed_service_names_.clear();
-}
-
-void ServiceList::DelayService(const Service& service) {
-    if (services_update_finished_) {
-        LOG(ERROR) << "Cannot delay the start of service '" << service.name()
-                   << "' because all services are already updated. Ignoring.";
-        return;
-    }
-    delayed_service_names_.emplace_back(service.name());
-}
-
-Result<void> ServiceParser::ParseSection(std::vector<std::string>&& args,
-                                         const std::string& filename, int line) {
-    if (args.size() < 3) {
-        return Error() << "services must have a name and a program";
-    }
-
-    const std::string& name = args[1];
-    if (!IsValidName(name)) {
-        return Error() << "invalid service name '" << name << "'";
-    }
-
-    filename_ = filename;
-
-    Subcontext* restart_action_subcontext = nullptr;
-    if (subcontexts_) {
-        for (auto& subcontext : *subcontexts_) {
-            if (StartsWith(filename, subcontext.path_prefix())) {
-                restart_action_subcontext = &subcontext;
-                break;
-            }
-        }
-    }
-
-    std::vector<std::string> str_args(args.begin() + 2, args.end());
-
-    if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_P__) {
-        if (str_args[0] == "/sbin/watchdogd") {
-            str_args[0] = "/system/bin/watchdogd";
-        }
-    }
-
-    service_ = std::make_unique<Service>(name, restart_action_subcontext, str_args);
-    return {};
-}
-
-Result<void> ServiceParser::ParseLineSection(std::vector<std::string>&& args, int line) {
-    return service_ ? service_->ParseLine(std::move(args)) : Result<void>{};
-}
-
-Result<void> ServiceParser::EndSection() {
-    if (service_) {
-        Service* old_service = service_list_->FindService(service_->name());
-        if (old_service) {
-            if (!service_->is_override()) {
-                return Error() << "ignored duplicate definition of service '" << service_->name()
-                               << "'";
-            }
-
-            if (StartsWith(filename_, "/apex/") && !old_service->is_updatable()) {
-                return Error() << "cannot update a non-updatable service '" << service_->name()
-                               << "' with a config in APEX";
-            }
-
-            service_list_->RemoveService(*old_service);
-            old_service = nullptr;
-        }
-
-        service_list_->AddService(std::move(service_));
-    }
-
-    return {};
-}
-
-bool ServiceParser::IsValidName(const std::string& name) const {
-    // Property names can be any length, but may only contain certain characters.
-    // Property values can contain any characters, but may only be a certain length.
-    // (The latter restriction is needed because `start` and `stop` work by writing
-    // the service name to the "ctl.start" and "ctl.stop" properties.)
-    return IsLegalPropertyName("init.svc." + name) && name.size() <= PROP_VALUE_MAX;
 }
 
 }  // namespace init
