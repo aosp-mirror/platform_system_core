@@ -37,6 +37,46 @@ class ServiceParser : public SectionParser {
     void EndFile() override { filename_ = ""; }
 
   private:
+    using OptionParser = Result<void> (ServiceParser::*)(std::vector<std::string>&& args);
+    class OptionParserMap;
+
+    Result<void> ParseCapabilities(std::vector<std::string>&& args);
+    Result<void> ParseClass(std::vector<std::string>&& args);
+    Result<void> ParseConsole(std::vector<std::string>&& args);
+    Result<void> ParseCritical(std::vector<std::string>&& args);
+    Result<void> ParseDisabled(std::vector<std::string>&& args);
+    Result<void> ParseEnterNamespace(std::vector<std::string>&& args);
+    Result<void> ParseGroup(std::vector<std::string>&& args);
+    Result<void> ParsePriority(std::vector<std::string>&& args);
+    Result<void> ParseInterface(std::vector<std::string>&& args);
+    Result<void> ParseIoprio(std::vector<std::string>&& args);
+    Result<void> ParseKeycodes(std::vector<std::string>&& args);
+    Result<void> ParseOneshot(std::vector<std::string>&& args);
+    Result<void> ParseOnrestart(std::vector<std::string>&& args);
+    Result<void> ParseOomScoreAdjust(std::vector<std::string>&& args);
+    Result<void> ParseOverride(std::vector<std::string>&& args);
+    Result<void> ParseMemcgLimitInBytes(std::vector<std::string>&& args);
+    Result<void> ParseMemcgLimitPercent(std::vector<std::string>&& args);
+    Result<void> ParseMemcgLimitProperty(std::vector<std::string>&& args);
+    Result<void> ParseMemcgSoftLimitInBytes(std::vector<std::string>&& args);
+    Result<void> ParseMemcgSwappiness(std::vector<std::string>&& args);
+    Result<void> ParseNamespace(std::vector<std::string>&& args);
+    Result<void> ParseProcessRlimit(std::vector<std::string>&& args);
+    Result<void> ParseRestartPeriod(std::vector<std::string>&& args);
+    Result<void> ParseSeclabel(std::vector<std::string>&& args);
+    Result<void> ParseSetenv(std::vector<std::string>&& args);
+    Result<void> ParseShutdown(std::vector<std::string>&& args);
+    Result<void> ParseSigstop(std::vector<std::string>&& args);
+    Result<void> ParseSocket(std::vector<std::string>&& args);
+    Result<void> ParseTimeoutPeriod(std::vector<std::string>&& args);
+    Result<void> ParseFile(std::vector<std::string>&& args);
+    Result<void> ParseUser(std::vector<std::string>&& args);
+    Result<void> ParseWritepid(std::vector<std::string>&& args);
+    Result<void> ParseUpdatable(std::vector<std::string>&& args);
+
+    template <typename T>
+    Result<void> AddDescriptor(std::vector<std::string>&& args);
+
     bool IsValidName(const std::string& name) const;
 
     ServiceList* service_list_;
