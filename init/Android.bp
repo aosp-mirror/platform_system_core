@@ -257,7 +257,6 @@ cc_binary {
         "import_parser.cpp",
         "host_import_parser.cpp",
         "host_init_verifier.cpp",
-        "host_init_stubs.cpp",
         "parser.cpp",
         "rlimit_parser.cpp",
         "tokenizer.cpp",
