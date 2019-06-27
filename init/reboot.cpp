@@ -55,6 +55,7 @@
 #include "property_service.h"
 #include "reboot_utils.h"
 #include "service.h"
+#include "service_list.h"
 #include "sigchld_handler.h"
 
 #define PROC_SYSRQ "/proc/sysrq-trigger"
