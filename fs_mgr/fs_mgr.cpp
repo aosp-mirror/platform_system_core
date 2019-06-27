@@ -923,7 +923,7 @@ class CheckpointManager {
   public:
     CheckpointManager(int needs_checkpoint = -1) : needs_checkpoint_(needs_checkpoint) {}
 
-    bool Update(FstabEntry* entry) {
+    bool Update(FstabEntry* entry, const std::string& block_device = std::string()) {
         if (!entry->fs_mgr_flags.checkpoint_blk && !entry->fs_mgr_flags.checkpoint_fs) {
             return true;
         }
@@ -942,7 +942,7 @@ class CheckpointManager {
             return true;
         }
 
-        if (!UpdateCheckpointPartition(entry)) {
+        if (!UpdateCheckpointPartition(entry, block_device)) {
             LERROR << "Could not set up checkpoint partition, skipping!";
             return false;
         }
@@ -972,7 +972,7 @@ class CheckpointManager {
     }
 
   private:
-    bool UpdateCheckpointPartition(FstabEntry* entry) {
+    bool UpdateCheckpointPartition(FstabEntry* entry, const std::string& block_device) {
         if (entry->fs_mgr_flags.checkpoint_fs) {
             if (is_f2fs(entry->fs_type)) {
                 entry->fs_options += ",checkpoint=disable";
@@ -980,39 +980,43 @@ class CheckpointManager {
                 LERROR << entry->fs_type << " does not implement checkpoints.";
             }
         } else if (entry->fs_mgr_flags.checkpoint_blk) {
-            unique_fd fd(TEMP_FAILURE_RETRY(open(entry->blk_device.c_str(), O_RDONLY | O_CLOEXEC)));
-            if (fd < 0) {
-                PERROR << "Cannot open device " << entry->blk_device;
-                return false;
-            }
+            auto actual_block_device = block_device.empty() ? entry->blk_device : block_device;
+            if (fs_mgr_find_bow_device(actual_block_device).empty()) {
+                unique_fd fd(
+                        TEMP_FAILURE_RETRY(open(entry->blk_device.c_str(), O_RDONLY | O_CLOEXEC)));
+                if (fd < 0) {
+                    PERROR << "Cannot open device " << entry->blk_device;
+                    return false;
+                }
 
-            uint64_t size = get_block_device_size(fd) / 512;
-            if (!size) {
-                PERROR << "Cannot get device size";
-                return false;
-            }
+                uint64_t size = get_block_device_size(fd) / 512;
+                if (!size) {
+                    PERROR << "Cannot get device size";
+                    return false;
+                }
 
-            android::dm::DmTable table;
-            if (!table.AddTarget(
-                        std::make_unique<android::dm::DmTargetBow>(0, size, entry->blk_device))) {
-                LERROR << "Failed to add bow target";
-                return false;
-            }
+                android::dm::DmTable table;
+                if (!table.AddTarget(std::make_unique<android::dm::DmTargetBow>(
+                            0, size, entry->blk_device))) {
+                    LERROR << "Failed to add bow target";
+                    return false;
+                }
 
-            DeviceMapper& dm = DeviceMapper::Instance();
-            if (!dm.CreateDevice("bow", table)) {
-                PERROR << "Failed to create bow device";
-                return false;
-            }
+                DeviceMapper& dm = DeviceMapper::Instance();
+                if (!dm.CreateDevice("bow", table)) {
+                    PERROR << "Failed to create bow device";
+                    return false;
+                }
 
-            std::string name;
-            if (!dm.GetDmDevicePathByName("bow", &name)) {
-                PERROR << "Failed to get bow device name";
-                return false;
-            }
+                std::string name;
+                if (!dm.GetDmDevicePathByName("bow", &name)) {
+                    PERROR << "Failed to get bow device name";
+                    return false;
+                }
 
-            device_map_[name] = entry->blk_device;
-            entry->blk_device = name;
+                device_map_[name] = entry->blk_device;
+                entry->blk_device = name;
+            }
         }
         return true;
     }
@@ -1021,6 +1025,50 @@ class CheckpointManager {
     int needs_checkpoint_;
     std::map<std::string, std::string> device_map_;
 };
+
+std::string fs_mgr_find_bow_device(const std::string& block_device) {
+    if (block_device.substr(0, 5) != "/dev/") {
+        LOG(ERROR) << "Expected block device, got " << block_device;
+        return std::string();
+    }
+
+    std::string sys_dir = std::string("/sys/") + block_device.substr(5);
+
+    for (;;) {
+        std::string name;
+        if (!android::base::ReadFileToString(sys_dir + "/dm/name", &name)) {
+            PLOG(ERROR) << block_device << " is not dm device";
+            return std::string();
+        }
+
+        if (name == "bow\n") return sys_dir;
+
+        std::string slaves = sys_dir + "/slaves";
+        std::unique_ptr<DIR, decltype(&closedir)> directory(opendir(slaves.c_str()), closedir);
+        if (!directory) {
+            PLOG(ERROR) << "Can't open slave directory " << slaves;
+            return std::string();
+        }
+
+        int count = 0;
+        for (dirent* entry = readdir(directory.get()); entry; entry = readdir(directory.get())) {
+            if (entry->d_type != DT_LNK) continue;
+
+            if (count == 1) {
+                LOG(ERROR) << "Too many slaves in " << slaves;
+                return std::string();
+            }
+
+            ++count;
+            sys_dir = std::string("/sys/block/") + entry->d_name;
+        }
+
+        if (count != 1) {
+            LOG(ERROR) << "No slave in " << slaves;
+            return std::string();
+        }
+    }
+}
 
 static bool IsMountPointMounted(const std::string& mount_point) {
     // Check if this is already mounted.
@@ -1160,7 +1208,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 }
                 encryptable = status;
                 if (status == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
-                    if (!call_vdc({"cryptfs", "encryptFstab", attempted_entry.mount_point})) {
+                    if (!call_vdc({"cryptfs", "encryptFstab", attempted_entry.blk_device,
+                                   attempted_entry.mount_point})) {
                         LERROR << "Encryption failed";
                         return FS_MGR_MNTALL_FAIL;
                     }
@@ -1231,7 +1280,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             encryptable = FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED;
         } else if (mount_errno != EBUSY && mount_errno != EACCES &&
                    should_use_metadata_encryption(attempted_entry)) {
-            if (!call_vdc({"cryptfs", "mountFstab", attempted_entry.mount_point})) {
+            if (!call_vdc({"cryptfs", "mountFstab", attempted_entry.blk_device,
+                           attempted_entry.mount_point})) {
                 ++error_count;
             }
             encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
@@ -1361,7 +1411,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
             }
         }
 
-        if (!checkpoint_manager.Update(&fstab_entry)) {
+        if (!checkpoint_manager.Update(&fstab_entry, n_blk_device)) {
             LERROR << "Could not set up checkpoint partition, skipping!";
             continue;
         }
