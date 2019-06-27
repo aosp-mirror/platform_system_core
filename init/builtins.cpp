@@ -63,7 +63,6 @@
 
 #include "action_manager.h"
 #include "bootchart.h"
-#include "host_init_stubs.h"
 #include "init.h"
 #include "mount_namespace.h"
 #include "parser.h"
