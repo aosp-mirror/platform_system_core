@@ -73,6 +73,7 @@
 #include "selabel.h"
 #include "selinux.h"
 #include "service.h"
+#include "service_list.h"
 #include "subcontext.h"
 #include "util.h"
 

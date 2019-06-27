@@ -30,6 +30,7 @@
 
 #include "init.h"
 #include "service.h"
+#include "service_list.h"
 
 using android::base::StringPrintf;
 using android::base::boot_clock;

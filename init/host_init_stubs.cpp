@@ -26,9 +26,6 @@ int setgroups(size_t __size, const gid_t* __list) {
 namespace android {
 namespace init {
 
-// init.h
-std::string default_console = "/dev/console";
-
 // property_service.h
 bool CanReadProperty(const std::string& source_context, const std::string& name) {
     return true;
