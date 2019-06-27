@@ -84,8 +84,8 @@ static void PrintDmaBufInfo(const std::vector<DmaBuffer>& bufs) {
 
     // Iterate through all dmabufs and collect per-process sizes, refs
     for (auto& buf : bufs) {
-        printf("%16" PRIu64 " |%13" PRIu64 " kB |%16" PRIu64 " |", buf.inode(), buf.size() / 1024,
-               buf.total_refs());
+        printf("%16ju |%13" PRIu64 " kB |%16" PRIu64 " |", static_cast<uintmax_t>(buf.inode()),
+               buf.size() / 1024, buf.total_refs());
         // Iterate through each process to find out per-process references for each buffer,
         // gather total size used by each process etc.
         for (pid_t pid : pid_set) {
