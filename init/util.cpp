@@ -46,10 +46,6 @@
 #include "host_init_stubs.h"
 #endif
 
-#ifdef _INIT_INIT_H
-#error "Do not include init.h in files used by ueventd; it will expose init's globals"
-#endif
-
 using android::base::boot_clock;
 using namespace std::literals::string_literals;
 
