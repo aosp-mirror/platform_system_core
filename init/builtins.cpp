@@ -89,6 +89,8 @@ using android::fs_mgr::ReadFstabFromFile;
 namespace android {
 namespace init {
 
+std::vector<std::string> late_import_paths;
+
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 
 static Result<void> reboot_into_recovery(const std::vector<std::string>& options) {
