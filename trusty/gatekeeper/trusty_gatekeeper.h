@@ -17,84 +17,34 @@
 #ifndef TRUSTY_GATEKEEPER_H
 #define TRUSTY_GATEKEEPER_H
 
-#include <hardware/gatekeeper.h>
+#include <android/hardware/gatekeeper/1.0/IGatekeeper.h>
+#include <hidl/Status.h>
+
+#include <memory>
+
 #include <gatekeeper/gatekeeper_messages.h>
 
 #include "gatekeeper_ipc.h"
 
 namespace gatekeeper {
 
-class TrustyGateKeeperDevice {
-    public:
-
-    explicit TrustyGateKeeperDevice(const hw_module_t* module);
+class TrustyGateKeeperDevice : public ::android::hardware::gatekeeper::V1_0::IGatekeeper {
+  public:
+    explicit TrustyGateKeeperDevice();
     ~TrustyGateKeeperDevice();
-
-    hw_device_t* hw_device();
-
     /**
      * Enrolls password_payload, which should be derived from a user selected pin or password,
      * with the authentication factor private key used only for enrolling authentication
      * factor data.
      *
      * Returns: 0 on success or an error code less than 0 on error.
-     * On error, enrolled_password will not be allocated.
-     */
-    int Enroll(uint32_t uid, const uint8_t *current_password_handle,
-            uint32_t current_password_handle_length, const uint8_t *current_password,
-            uint32_t current_password_length, const uint8_t *desired_password,
-            uint32_t desired_password_length, uint8_t **enrolled_password_handle,
-            uint32_t *enrolled_password_handle_length);
-
-    /**
-     * Verifies provided_password matches expected_password after enrolling
-     * with the authentication factor private key.
-     *
-     * Implementations of this module may retain the result of this call
-     * to attest to the recency of authentication.
-     *
-     * On success, writes the address of a verification token to verification_token,
-     *
-     * Returns: 0 on success or an error code less than 0 on error
-     * On error, verification token will not be allocated
-     */
-    int Verify(uint32_t uid, uint64_t challenge, const uint8_t *enrolled_password_handle,
-            uint32_t enrolled_password_handle_length, const uint8_t *provided_password,
-            uint32_t provided_password_length, uint8_t **auth_token, uint32_t *auth_token_length,
-            bool *request_reenroll);
-
-    private:
-
-    gatekeeper_error_t Send(uint32_t command, const GateKeeperMessage& request,
-                           GateKeeperMessage* response);
-
-    gatekeeper_error_t Send(const EnrollRequest& request, EnrollResponse *response) {
-        return Send(GK_ENROLL, request, response);
-    }
-
-    gatekeeper_error_t Send(const VerifyRequest& request, VerifyResponse *response) {
-        return Send(GK_VERIFY, request, response);
-    }
-
-    // Static methods interfacing the HAL API with the TrustyGateKeeper device
-
-    /**
-     * Enrolls desired_password, which should be derived from a user selected pin or password,
-     * with the authentication factor private key used only for enrolling authentication
-     * factor data.
-     *
-     * If there was already a password enrolled, it should be provided in
-     * current_password_handle, along with the current password in current_password
-     * that should validate against current_password_handle.
-     *
-     * Returns: 0 on success or an error code less than 0 on error.
      * On error, enrolled_password_handle will not be allocated.
      */
-    static int enroll(const struct gatekeeper_device *dev, uint32_t uid,
-            const uint8_t *current_password_handle, uint32_t current_password_handle_length,
-            const uint8_t *current_password, uint32_t current_password_length,
-            const uint8_t *desired_password, uint32_t desired_password_length,
-            uint8_t **enrolled_password_handle, uint32_t *enrolled_password_handle_length);
+    ::android::hardware::Return<void> enroll(
+            uint32_t uid, const ::android::hardware::hidl_vec<uint8_t>& currentPasswordHandle,
+            const ::android::hardware::hidl_vec<uint8_t>& currentPassword,
+            const ::android::hardware::hidl_vec<uint8_t>& desiredPassword,
+            enroll_cb _hidl_cb) override;
 
     /**
      * Verifies provided_password matches enrolled_password_handle.
@@ -109,18 +59,32 @@ class TrustyGateKeeperDevice {
      * Returns: 0 on success or an error code less than 0 on error
      * On error, verification token will not be allocated
      */
-    static int verify(const struct gatekeeper_device *dev, uint32_t uid, uint64_t challenge,
-            const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
-            const uint8_t *provided_password, uint32_t provided_password_length,
-            uint8_t **auth_token, uint32_t *auth_token_length, bool *request_reenroll);
+    ::android::hardware::Return<void> verify(
+            uint32_t uid, uint64_t challenge,
+            const ::android::hardware::hidl_vec<uint8_t>& enrolledPasswordHandle,
+            const ::android::hardware::hidl_vec<uint8_t>& providedPassword,
+            verify_cb _hidl_cb) override;
 
-    static int close_device(hw_device_t* dev);
+    ::android::hardware::Return<void> deleteUser(uint32_t uid, deleteUser_cb _hidl_cb) override;
 
-    gatekeeper_device device_;
+    ::android::hardware::Return<void> deleteAllUsers(deleteAllUsers_cb _hidl_cb) override;
+
+  private:
+    gatekeeper_error_t Send(uint32_t command, const GateKeeperMessage& request,
+                           GateKeeperMessage* response);
+
+    gatekeeper_error_t Send(const EnrollRequest& request, EnrollResponse *response) {
+        return Send(GK_ENROLL, request, response);
+    }
+
+    gatekeeper_error_t Send(const VerifyRequest& request, VerifyResponse *response) {
+        return Send(GK_VERIFY, request, response);
+    }
+
     int error_;
-
 };
-}
+
+}  // namespace gatekeeper
 
 #endif
 
