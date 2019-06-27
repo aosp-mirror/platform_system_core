@@ -104,3 +104,7 @@ enum FsMgrUmountStatus : int {
 // fs_mgr_umount_all() is the reverse of fs_mgr_mount_all. In particular,
 // it destroys verity devices from device mapper after the device is unmounted.
 int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab);
+
+// Finds the dm_bow device on which this block device is stacked, or returns
+// empty string
+std::string fs_mgr_find_bow_device(const std::string& block_device);
