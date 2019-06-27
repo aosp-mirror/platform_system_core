@@ -113,7 +113,8 @@ void DumpState() {
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     Parser parser;
 
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list, subcontexts));
+    parser.AddSectionParser(
+            "service", std::make_unique<ServiceParser>(&service_list, subcontexts, std::nullopt));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, subcontexts));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
@@ -124,7 +125,8 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
 Parser CreateServiceOnlyParser(ServiceList& service_list) {
     Parser parser;
 
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list, subcontexts));
+    parser.AddSectionParser(
+            "service", std::make_unique<ServiceParser>(&service_list, subcontexts, std::nullopt));
     return parser;
 }
 
