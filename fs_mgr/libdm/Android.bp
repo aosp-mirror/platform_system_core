@@ -29,6 +29,9 @@ cc_library_static {
         "loop_control.cpp",
     ],
 
+    static_libs: [
+        "libext2_uuid",
+    ],
     header_libs: [
         "libbase_headers",
         "liblog_headers",
@@ -46,6 +49,7 @@ cc_test {
     static_libs: [
         "libdm",
         "libbase",
+        "libext2_uuid",
         "libfs_mgr",
         "liblog",
     ],
