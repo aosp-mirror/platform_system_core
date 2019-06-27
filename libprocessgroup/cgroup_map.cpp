@@ -67,11 +67,14 @@ bool CgroupController::HasValue() const {
     return controller_ != nullptr;
 }
 
-bool CgroupController::IsUsable() const {
+bool CgroupController::IsUsable() {
     if (!HasValue()) return false;
 
-    static bool enabled = (access(GetProcsFilePath("", 0, 0).c_str(), F_OK) == 0);
-    return enabled;
+    if (state_ == UNKNOWN) {
+        state_ = access(GetProcsFilePath("", 0, 0).c_str(), F_OK) == 0 ? USABLE : MISSING;
+    }
+
+    return state_ == USABLE;
 }
 
 std::string CgroupController::GetTasksFilePath(const std::string& rel_path) const {
