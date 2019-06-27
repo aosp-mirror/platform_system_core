@@ -18,11 +18,9 @@
 
 #include <fcntl.h>
 #include <inttypes.h>
-#include <linux/input.h>
 #include <linux/securebits.h>
 #include <sched.h>
 #include <sys/prctl.h>
-#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <termios.h>
@@ -30,27 +28,20 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <hidl-util/FQName.h>
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
-#include <system/thread_defs.h>
 
-#include "rlimit_parser.h"
+#include "service_list.h"
 #include "util.h"
 
 #if defined(__ANDROID__)
 #include <ApexProperties.sysprop.h>
-#include <android/api-level.h>
-#include <sys/system_properties.h>
 
-#include "init.h"
 #include "mount_namespace.h"
 #include "property_service.h"
-#include "selinux.h"
 #else
 #include "host_init_stubs.h"
 #endif
@@ -58,8 +49,6 @@
 using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
-using android::base::ParseInt;
-using android::base::Split;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
@@ -315,450 +304,6 @@ void Service::DumpState() const {
                   [] (const auto& info) { LOG(INFO) << *info; });
 }
 
-Result<void> Service::ParseCapabilities(std::vector<std::string>&& args) {
-    capabilities_ = 0;
-
-    if (!CapAmbientSupported()) {
-        return Error()
-               << "capabilities requested but the kernel does not support ambient capabilities";
-    }
-
-    unsigned int last_valid_cap = GetLastValidCap();
-    if (last_valid_cap >= capabilities_->size()) {
-        LOG(WARNING) << "last valid run-time capability is larger than CAP_LAST_CAP";
-    }
-
-    for (size_t i = 1; i < args.size(); i++) {
-        const std::string& arg = args[i];
-        int res = LookupCap(arg);
-        if (res < 0) {
-            return Errorf("invalid capability '{}'", arg);
-        }
-        unsigned int cap = static_cast<unsigned int>(res);  // |res| is >= 0.
-        if (cap > last_valid_cap) {
-            return Errorf("capability '{}' not supported by the kernel", arg);
-        }
-        (*capabilities_)[cap] = true;
-    }
-    return {};
-}
-
-Result<void> Service::ParseClass(std::vector<std::string>&& args) {
-    classnames_ = std::set<std::string>(args.begin() + 1, args.end());
-    return {};
-}
-
-Result<void> Service::ParseConsole(std::vector<std::string>&& args) {
-    flags_ |= SVC_CONSOLE;
-    proc_attr_.console = args.size() > 1 ? "/dev/" + args[1] : "";
-    return {};
-}
-
-Result<void> Service::ParseCritical(std::vector<std::string>&& args) {
-    flags_ |= SVC_CRITICAL;
-    return {};
-}
-
-Result<void> Service::ParseDisabled(std::vector<std::string>&& args) {
-    flags_ |= SVC_DISABLED;
-    flags_ |= SVC_RC_DISABLED;
-    return {};
-}
-
-Result<void> Service::ParseEnterNamespace(std::vector<std::string>&& args) {
-    if (args[1] != "net") {
-        return Error() << "Init only supports entering network namespaces";
-    }
-    if (!namespaces_.namespaces_to_enter.empty()) {
-        return Error() << "Only one network namespace may be entered";
-    }
-    // Network namespaces require that /sys is remounted, otherwise the old adapters will still be
-    // present. Therefore, they also require mount namespaces.
-    namespaces_.flags |= CLONE_NEWNS;
-    namespaces_.namespaces_to_enter.emplace_back(CLONE_NEWNET, std::move(args[2]));
-    return {};
-}
-
-Result<void> Service::ParseGroup(std::vector<std::string>&& args) {
-    auto gid = DecodeUid(args[1]);
-    if (!gid) {
-        return Error() << "Unable to decode GID for '" << args[1] << "': " << gid.error();
-    }
-    proc_attr_.gid = *gid;
-
-    for (std::size_t n = 2; n < args.size(); n++) {
-        gid = DecodeUid(args[n]);
-        if (!gid) {
-            return Error() << "Unable to decode GID for '" << args[n] << "': " << gid.error();
-        }
-        proc_attr_.supp_gids.emplace_back(*gid);
-    }
-    return {};
-}
-
-Result<void> Service::ParsePriority(std::vector<std::string>&& args) {
-    proc_attr_.priority = 0;
-    if (!ParseInt(args[1], &proc_attr_.priority,
-                  static_cast<int>(ANDROID_PRIORITY_HIGHEST),  // highest is negative
-                  static_cast<int>(ANDROID_PRIORITY_LOWEST))) {
-        return Errorf("process priority value must be range {} - {}", ANDROID_PRIORITY_HIGHEST,
-                      ANDROID_PRIORITY_LOWEST);
-    }
-    return {};
-}
-
-Result<void> Service::ParseInterface(std::vector<std::string>&& args) {
-    const std::string& interface_name = args[1];
-    const std::string& instance_name = args[2];
-
-    FQName fq_name;
-    if (!FQName::parse(interface_name, &fq_name)) {
-        return Error() << "Invalid fully-qualified name for interface '" << interface_name << "'";
-    }
-
-    if (!fq_name.isFullyQualified()) {
-        return Error() << "Interface name not fully-qualified '" << interface_name << "'";
-    }
-
-    if (fq_name.isValidValueName()) {
-        return Error() << "Interface name must not be a value name '" << interface_name << "'";
-    }
-
-    const std::string fullname = interface_name + "/" + instance_name;
-
-    for (const auto& svc : ServiceList::GetInstance()) {
-        if (svc->interfaces().count(fullname) > 0) {
-            return Error() << "Interface '" << fullname << "' redefined in " << name()
-                           << " but is already defined by " << svc->name();
-        }
-    }
-
-    interfaces_.insert(fullname);
-
-    return {};
-}
-
-Result<void> Service::ParseIoprio(std::vector<std::string>&& args) {
-    if (!ParseInt(args[2], &proc_attr_.ioprio_pri, 0, 7)) {
-        return Error() << "priority value must be range 0 - 7";
-    }
-
-    if (args[1] == "rt") {
-        proc_attr_.ioprio_class = IoSchedClass_RT;
-    } else if (args[1] == "be") {
-        proc_attr_.ioprio_class = IoSchedClass_BE;
-    } else if (args[1] == "idle") {
-        proc_attr_.ioprio_class = IoSchedClass_IDLE;
-    } else {
-        return Error() << "ioprio option usage: ioprio <rt|be|idle> <0-7>";
-    }
-
-    return {};
-}
-
-Result<void> Service::ParseKeycodes(std::vector<std::string>&& args) {
-    auto it = args.begin() + 1;
-    if (args.size() == 2 && StartsWith(args[1], "$")) {
-        std::string expanded;
-        if (!expand_props(args[1], &expanded)) {
-            return Error() << "Could not expand property '" << args[1] << "'";
-        }
-
-        // If the property is not set, it defaults to none, in which case there are no keycodes
-        // for this service.
-        if (expanded == "none") {
-            return {};
-        }
-
-        args = Split(expanded, ",");
-        it = args.begin();
-    }
-
-    for (; it != args.end(); ++it) {
-        int code;
-        if (ParseInt(*it, &code, 0, KEY_MAX)) {
-            for (auto& key : keycodes_) {
-                if (key == code) return Error() << "duplicate keycode: " << *it;
-            }
-            keycodes_.insert(std::upper_bound(keycodes_.begin(), keycodes_.end(), code), code);
-        } else {
-            return Error() << "invalid keycode: " << *it;
-        }
-    }
-    return {};
-}
-
-Result<void> Service::ParseOneshot(std::vector<std::string>&& args) {
-    flags_ |= SVC_ONESHOT;
-    return {};
-}
-
-Result<void> Service::ParseOnrestart(std::vector<std::string>&& args) {
-    args.erase(args.begin());
-    int line = onrestart_.NumCommands() + 1;
-    if (auto result = onrestart_.AddCommand(std::move(args), line); !result) {
-        return Error() << "cannot add Onrestart command: " << result.error();
-    }
-    return {};
-}
-
-Result<void> Service::ParseNamespace(std::vector<std::string>&& args) {
-    for (size_t i = 1; i < args.size(); i++) {
-        if (args[i] == "pid") {
-            namespaces_.flags |= CLONE_NEWPID;
-            // PID namespaces require mount namespaces.
-            namespaces_.flags |= CLONE_NEWNS;
-        } else if (args[i] == "mnt") {
-            namespaces_.flags |= CLONE_NEWNS;
-        } else {
-            return Error() << "namespace must be 'pid' or 'mnt'";
-        }
-    }
-    return {};
-}
-
-Result<void> Service::ParseOomScoreAdjust(std::vector<std::string>&& args) {
-    if (!ParseInt(args[1], &oom_score_adjust_, -1000, 1000)) {
-        return Error() << "oom_score_adjust value must be in range -1000 - +1000";
-    }
-    return {};
-}
-
-Result<void> Service::ParseOverride(std::vector<std::string>&& args) {
-    override_ = true;
-    return {};
-}
-
-Result<void> Service::ParseMemcgSwappiness(std::vector<std::string>&& args) {
-    if (!ParseInt(args[1], &swappiness_, 0)) {
-        return Error() << "swappiness value must be equal or greater than 0";
-    }
-    return {};
-}
-
-Result<void> Service::ParseMemcgLimitInBytes(std::vector<std::string>&& args) {
-    if (!ParseInt(args[1], &limit_in_bytes_, 0)) {
-        return Error() << "limit_in_bytes value must be equal or greater than 0";
-    }
-    return {};
-}
-
-Result<void> Service::ParseMemcgLimitPercent(std::vector<std::string>&& args) {
-    if (!ParseInt(args[1], &limit_percent_, 0)) {
-        return Error() << "limit_percent value must be equal or greater than 0";
-    }
-    return {};
-}
-
-Result<void> Service::ParseMemcgLimitProperty(std::vector<std::string>&& args) {
-    limit_property_ = std::move(args[1]);
-    return {};
-}
-
-Result<void> Service::ParseMemcgSoftLimitInBytes(std::vector<std::string>&& args) {
-    if (!ParseInt(args[1], &soft_limit_in_bytes_, 0)) {
-        return Error() << "soft_limit_in_bytes value must be equal or greater than 0";
-    }
-    return {};
-}
-
-Result<void> Service::ParseProcessRlimit(std::vector<std::string>&& args) {
-    auto rlimit = ParseRlimit(args);
-    if (!rlimit) return rlimit.error();
-
-    proc_attr_.rlimits.emplace_back(*rlimit);
-    return {};
-}
-
-Result<void> Service::ParseRestartPeriod(std::vector<std::string>&& args) {
-    int period;
-    if (!ParseInt(args[1], &period, 5)) {
-        return Error() << "restart_period value must be an integer >= 5";
-    }
-    restart_period_ = std::chrono::seconds(period);
-    return {};
-}
-
-Result<void> Service::ParseSeclabel(std::vector<std::string>&& args) {
-    seclabel_ = std::move(args[1]);
-    return {};
-}
-
-Result<void> Service::ParseSigstop(std::vector<std::string>&& args) {
-    sigstop_ = true;
-    return {};
-}
-
-Result<void> Service::ParseSetenv(std::vector<std::string>&& args) {
-    environment_vars_.emplace_back(std::move(args[1]), std::move(args[2]));
-    return {};
-}
-
-Result<void> Service::ParseShutdown(std::vector<std::string>&& args) {
-    if (args[1] == "critical") {
-        flags_ |= SVC_SHUTDOWN_CRITICAL;
-        return {};
-    }
-    return Error() << "Invalid shutdown option";
-}
-
-Result<void> Service::ParseTimeoutPeriod(std::vector<std::string>&& args) {
-    int period;
-    if (!ParseInt(args[1], &period, 1)) {
-        return Error() << "timeout_period value must be an integer >= 1";
-    }
-    timeout_period_ = std::chrono::seconds(period);
-    return {};
-}
-
-template <typename T>
-Result<void> Service::AddDescriptor(std::vector<std::string>&& args) {
-    int perm = args.size() > 3 ? std::strtoul(args[3].c_str(), 0, 8) : -1;
-    Result<uid_t> uid = 0;
-    Result<gid_t> gid = 0;
-    std::string context = args.size() > 6 ? args[6] : "";
-
-    if (args.size() > 4) {
-        uid = DecodeUid(args[4]);
-        if (!uid) {
-            return Error() << "Unable to find UID for '" << args[4] << "': " << uid.error();
-        }
-    }
-
-    if (args.size() > 5) {
-        gid = DecodeUid(args[5]);
-        if (!gid) {
-            return Error() << "Unable to find GID for '" << args[5] << "': " << gid.error();
-        }
-    }
-
-    auto descriptor = std::make_unique<T>(args[1], args[2], *uid, *gid, perm, context);
-
-    auto old =
-        std::find_if(descriptors_.begin(), descriptors_.end(),
-                     [&descriptor] (const auto& other) { return descriptor.get() == other.get(); });
-
-    if (old != descriptors_.end()) {
-        return Error() << "duplicate descriptor " << args[1] << " " << args[2];
-    }
-
-    descriptors_.emplace_back(std::move(descriptor));
-    return {};
-}
-
-// name type perm [ uid gid context ]
-Result<void> Service::ParseSocket(std::vector<std::string>&& args) {
-    if (!StartsWith(args[2], "dgram") && !StartsWith(args[2], "stream") &&
-        !StartsWith(args[2], "seqpacket")) {
-        return Error() << "socket type must be 'dgram', 'stream' or 'seqpacket'";
-    }
-    return AddDescriptor<SocketInfo>(std::move(args));
-}
-
-// name type perm [ uid gid context ]
-Result<void> Service::ParseFile(std::vector<std::string>&& args) {
-    if (args[2] != "r" && args[2] != "w" && args[2] != "rw") {
-        return Error() << "file type must be 'r', 'w' or 'rw'";
-    }
-    std::string expanded;
-    if (!expand_props(args[1], &expanded)) {
-        return Error() << "Could not expand property in file path '" << args[1] << "'";
-    }
-    args[1] = std::move(expanded);
-    if ((args[1][0] != '/') || (args[1].find("../") != std::string::npos)) {
-        return Error() << "file name must not be relative";
-    }
-    return AddDescriptor<FileInfo>(std::move(args));
-}
-
-Result<void> Service::ParseUser(std::vector<std::string>&& args) {
-    auto uid = DecodeUid(args[1]);
-    if (!uid) {
-        return Error() << "Unable to find UID for '" << args[1] << "': " << uid.error();
-    }
-    proc_attr_.uid = *uid;
-    return {};
-}
-
-Result<void> Service::ParseWritepid(std::vector<std::string>&& args) {
-    args.erase(args.begin());
-    writepid_files_ = std::move(args);
-    return {};
-}
-
-Result<void> Service::ParseUpdatable(std::vector<std::string>&& args) {
-    updatable_ = true;
-    return {};
-}
-
-class Service::OptionParserMap : public KeywordMap<OptionParser> {
-  public:
-    OptionParserMap() {}
-
-  private:
-    const Map& map() const override;
-};
-
-const Service::OptionParserMap::Map& Service::OptionParserMap::map() const {
-    constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
-    // clang-format off
-    static const Map option_parsers = {
-        {"capabilities",
-                        {0,     kMax, &Service::ParseCapabilities}},
-        {"class",       {1,     kMax, &Service::ParseClass}},
-        {"console",     {0,     1,    &Service::ParseConsole}},
-        {"critical",    {0,     0,    &Service::ParseCritical}},
-        {"disabled",    {0,     0,    &Service::ParseDisabled}},
-        {"enter_namespace",
-                        {2,     2,    &Service::ParseEnterNamespace}},
-        {"file",        {2,     2,    &Service::ParseFile}},
-        {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &Service::ParseGroup}},
-        {"interface",   {2,     2,    &Service::ParseInterface}},
-        {"ioprio",      {2,     2,    &Service::ParseIoprio}},
-        {"keycodes",    {1,     kMax, &Service::ParseKeycodes}},
-        {"memcg.limit_in_bytes",
-                        {1,     1,    &Service::ParseMemcgLimitInBytes}},
-        {"memcg.limit_percent",
-                        {1,     1,    &Service::ParseMemcgLimitPercent}},
-        {"memcg.limit_property",
-                        {1,     1,    &Service::ParseMemcgLimitProperty}},
-        {"memcg.soft_limit_in_bytes",
-                        {1,     1,    &Service::ParseMemcgSoftLimitInBytes}},
-        {"memcg.swappiness",
-                        {1,     1,    &Service::ParseMemcgSwappiness}},
-        {"namespace",   {1,     2,    &Service::ParseNamespace}},
-        {"oneshot",     {0,     0,    &Service::ParseOneshot}},
-        {"onrestart",   {1,     kMax, &Service::ParseOnrestart}},
-        {"oom_score_adjust",
-                        {1,     1,    &Service::ParseOomScoreAdjust}},
-        {"override",    {0,     0,    &Service::ParseOverride}},
-        {"priority",    {1,     1,    &Service::ParsePriority}},
-        {"restart_period",
-                        {1,     1,    &Service::ParseRestartPeriod}},
-        {"rlimit",      {3,     3,    &Service::ParseProcessRlimit}},
-        {"seclabel",    {1,     1,    &Service::ParseSeclabel}},
-        {"setenv",      {2,     2,    &Service::ParseSetenv}},
-        {"shutdown",    {1,     1,    &Service::ParseShutdown}},
-        {"sigstop",     {0,     0,    &Service::ParseSigstop}},
-        {"socket",      {3,     6,    &Service::ParseSocket}},
-        {"timeout_period",
-                        {1,     1,    &Service::ParseTimeoutPeriod}},
-        {"updatable",   {0,     0,    &Service::ParseUpdatable}},
-        {"user",        {1,     1,    &Service::ParseUser}},
-        {"writepid",    {1,     kMax, &Service::ParseWritepid}},
-    };
-    // clang-format on
-    return option_parsers;
-}
-
-Result<void> Service::ParseLine(std::vector<std::string>&& args) {
-    static const OptionParserMap parser_map;
-    auto parser = parser_map.FindFunction(args);
-
-    if (!parser) return parser.error();
-
-    return std::invoke(*parser, this, std::move(args));
-}
 
 Result<void> Service::ExecStart() {
     if (is_updatable() && !ServiceList::GetInstance().IsServicesUpdated()) {
@@ -813,7 +358,7 @@ Result<void> Service::Start() {
     bool needs_console = (flags_ & SVC_CONSOLE);
     if (needs_console) {
         if (proc_attr_.console.empty()) {
-            proc_attr_.console = default_console;
+            proc_attr_.console = "/dev/" + GetProperty("ro.boot.console", "console");
         }
 
         // Make sure that open call succeeds to ensure a console driver is
@@ -1072,17 +617,6 @@ void Service::StopOrReset(int how) {
     }
 }
 
-ServiceList::ServiceList() {}
-
-ServiceList& ServiceList::GetInstance() {
-    static ServiceList instance;
-    return instance;
-}
-
-void ServiceList::AddService(std::unique_ptr<Service> service) {
-    services_.emplace_back(std::move(service));
-}
-
 std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<std::string>& args) {
     // Parse the arguments: exec [SECLABEL [UID [GID]*] --] COMMAND ARGS...
     // SECLABEL can be a - to denote default
@@ -1145,140 +679,6 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
 
     return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, namespace_flags, seclabel,
                                      nullptr, str_args);
-}
-
-// Shutdown services in the opposite order that they were started.
-const std::vector<Service*> ServiceList::services_in_shutdown_order() const {
-    std::vector<Service*> shutdown_services;
-    for (const auto& service : services_) {
-        if (service->start_order() > 0) shutdown_services.emplace_back(service.get());
-    }
-    std::sort(shutdown_services.begin(), shutdown_services.end(),
-              [](const auto& a, const auto& b) { return a->start_order() > b->start_order(); });
-    return shutdown_services;
-}
-
-void ServiceList::RemoveService(const Service& svc) {
-    auto svc_it = std::find_if(services_.begin(), services_.end(),
-                               [&svc] (const std::unique_ptr<Service>& s) {
-                                   return svc.name() == s->name();
-                               });
-    if (svc_it == services_.end()) {
-        return;
-    }
-
-    services_.erase(svc_it);
-}
-
-void ServiceList::DumpState() const {
-    for (const auto& s : services_) {
-        s->DumpState();
-    }
-}
-
-void ServiceList::MarkPostData() {
-    post_data_ = true;
-}
-
-bool ServiceList::IsPostData() {
-    return post_data_;
-}
-
-void ServiceList::MarkServicesUpdate() {
-    services_update_finished_ = true;
-
-    // start the delayed services
-    for (const auto& name : delayed_service_names_) {
-        Service* service = FindService(name);
-        if (service == nullptr) {
-            LOG(ERROR) << "delayed service '" << name << "' could not be found.";
-            continue;
-        }
-        if (auto result = service->Start(); !result) {
-            LOG(ERROR) << result.error().message();
-        }
-    }
-    delayed_service_names_.clear();
-}
-
-void ServiceList::DelayService(const Service& service) {
-    if (services_update_finished_) {
-        LOG(ERROR) << "Cannot delay the start of service '" << service.name()
-                   << "' because all services are already updated. Ignoring.";
-        return;
-    }
-    delayed_service_names_.emplace_back(service.name());
-}
-
-Result<void> ServiceParser::ParseSection(std::vector<std::string>&& args,
-                                         const std::string& filename, int line) {
-    if (args.size() < 3) {
-        return Error() << "services must have a name and a program";
-    }
-
-    const std::string& name = args[1];
-    if (!IsValidName(name)) {
-        return Error() << "invalid service name '" << name << "'";
-    }
-
-    filename_ = filename;
-
-    Subcontext* restart_action_subcontext = nullptr;
-    if (subcontexts_) {
-        for (auto& subcontext : *subcontexts_) {
-            if (StartsWith(filename, subcontext.path_prefix())) {
-                restart_action_subcontext = &subcontext;
-                break;
-            }
-        }
-    }
-
-    std::vector<std::string> str_args(args.begin() + 2, args.end());
-
-    if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_P__) {
-        if (str_args[0] == "/sbin/watchdogd") {
-            str_args[0] = "/system/bin/watchdogd";
-        }
-    }
-
-    service_ = std::make_unique<Service>(name, restart_action_subcontext, str_args);
-    return {};
-}
-
-Result<void> ServiceParser::ParseLineSection(std::vector<std::string>&& args, int line) {
-    return service_ ? service_->ParseLine(std::move(args)) : Result<void>{};
-}
-
-Result<void> ServiceParser::EndSection() {
-    if (service_) {
-        Service* old_service = service_list_->FindService(service_->name());
-        if (old_service) {
-            if (!service_->is_override()) {
-                return Error() << "ignored duplicate definition of service '" << service_->name()
-                               << "'";
-            }
-
-            if (StartsWith(filename_, "/apex/") && !old_service->is_updatable()) {
-                return Error() << "cannot update a non-updatable service '" << service_->name()
-                               << "' with a config in APEX";
-            }
-
-            service_list_->RemoveService(*old_service);
-            old_service = nullptr;
-        }
-
-        service_list_->AddService(std::move(service_));
-    }
-
-    return {};
-}
-
-bool ServiceParser::IsValidName(const std::string& name) const {
-    // Property names can be any length, but may only contain certain characters.
-    // Property values can contain any characters, but may only be a certain length.
-    // (The latter restriction is needed because `start` and `stop` work by writing
-    // the service name to the "ctl.start" and "ctl.stop" properties.)
-    return IsLegalPropertyName("init.svc." + name) && name.size() <= PROP_VALUE_MAX;
 }
 
 }  // namespace init

@@ -36,6 +36,8 @@
 #include "parser.h"
 #include "result.h"
 #include "service.h"
+#include "service_list.h"
+#include "service_parser.h"
 
 #define EXCLUDE_FS_CONFIG_STRUCTURES
 #include "generated_android_ids.h"
