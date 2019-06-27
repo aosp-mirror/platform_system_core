@@ -35,9 +35,6 @@ int setgroups(size_t __size, const gid_t* __list);
 namespace android {
 namespace init {
 
-// init.h
-extern std::string default_console;
-
 // property_service.h
 bool CanReadProperty(const std::string& source_context, const std::string& name);
 extern uint32_t (*property_set)(const std::string& name, const std::string& value);
