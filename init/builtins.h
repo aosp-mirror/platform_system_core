@@ -40,6 +40,8 @@ class BuiltinFunctionMap : public KeywordFunctionMap {
     const Map& map() const override;
 };
 
+extern std::vector<std::string> late_import_paths;
+
 }  // namespace init
 }  // namespace android
 

@@ -28,9 +28,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
@@ -54,6 +56,7 @@
 
 #include "action_parser.h"
 #include "boringssl_self_test.h"
+#include "builtins.h"
 #include "epoll.h"
 #include "first_stage_init.h"
 #include "first_stage_mount.h"
@@ -99,8 +102,6 @@ static bool shutting_down;
 static std::string shutdown_command;
 static bool do_shutdown = false;
 static bool load_debug_prop = false;
-
-std::vector<std::string> late_import_paths;
 
 static std::vector<Subcontext>* subcontexts;
 
