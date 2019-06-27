@@ -27,6 +27,8 @@
 #include "keyword_map.h"
 #include "parser.h"
 #include "service.h"
+#include "service_list.h"
+#include "service_parser.h"
 #include "test_function_map.h"
 #include "util.h"
 
