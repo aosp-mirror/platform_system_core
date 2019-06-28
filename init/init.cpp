@@ -28,9 +28,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
@@ -54,6 +56,7 @@
 
 #include "action_parser.h"
 #include "boringssl_self_test.h"
+#include "builtins.h"
 #include "epoll.h"
 #include "first_stage_init.h"
 #include "first_stage_mount.h"
@@ -67,6 +70,8 @@
 #include "security.h"
 #include "selabel.h"
 #include "selinux.h"
+#include "service.h"
+#include "service_parser.h"
 #include "sigchld_handler.h"
 #include "util.h"
 
@@ -88,8 +93,6 @@ static int property_triggers_enabled = 0;
 
 static char qemu[32];
 
-std::string default_console = "/dev/console";
-
 static int signal_fd = -1;
 
 static std::unique_ptr<Timer> waiting_for_prop(nullptr);
@@ -99,8 +102,6 @@ static bool shutting_down;
 static std::string shutdown_command;
 static bool do_shutdown = false;
 static bool load_debug_prop = false;
-
-std::vector<std::string> late_import_paths;
 
 static std::vector<Subcontext>* subcontexts;
 
@@ -343,14 +344,6 @@ static Result<void> wait_for_coldboot_done_action(const BuiltinArguments& args) 
         LOG(FATAL) << "Could not wait for '" << kColdBootDoneProp << "'";
     }
 
-    return {};
-}
-
-static Result<void> console_init_action(const BuiltinArguments& args) {
-    std::string console = GetProperty("ro.boot.console", "");
-    if (!console.empty()) {
-        default_console = "/dev/" + console;
-    }
     return {};
 }
 
@@ -760,7 +753,6 @@ int SecondStageMain(int argc, char** argv) {
                 return {};
             },
             "KeychordInit");
-    am.QueueBuiltinAction(console_init_action, "console_init");
 
     // Trigger all the boot actions to get us started.
     am.QueueEventTrigger("init");

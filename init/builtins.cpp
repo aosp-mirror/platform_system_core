@@ -63,7 +63,6 @@
 
 #include "action_manager.h"
 #include "bootchart.h"
-#include "host_init_stubs.h"
 #include "init.h"
 #include "mount_namespace.h"
 #include "parser.h"
@@ -73,6 +72,7 @@
 #include "selabel.h"
 #include "selinux.h"
 #include "service.h"
+#include "service_list.h"
 #include "subcontext.h"
 #include "util.h"
 
@@ -87,6 +87,8 @@ using android::fs_mgr::ReadFstabFromFile;
 
 namespace android {
 namespace init {
+
+std::vector<std::string> late_import_paths;
 
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
 

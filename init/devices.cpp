@@ -39,10 +39,6 @@
 #include "selabel.h"
 #include "util.h"
 
-#ifdef _INIT_INIT_H
-#error "Do not include init.h in files used by ueventd; it will expose init's globals"
-#endif
-
 using namespace std::chrono_literals;
 
 using android::base::Basename;

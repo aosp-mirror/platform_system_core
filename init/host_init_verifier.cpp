@@ -15,11 +15,13 @@
 //
 
 #include <errno.h>
+#include <getopt.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -36,6 +38,8 @@
 #include "parser.h"
 #include "result.h"
 #include "service.h"
+#include "service_list.h"
+#include "service_parser.h"
 
 #define EXCLUDE_FS_CONFIG_STRUCTURES
 #include "generated_android_ids.h"
@@ -46,9 +50,9 @@ using android::base::ParseInt;
 using android::base::ReadFileToString;
 using android::base::Split;
 
-static std::string passwd_file;
+static std::vector<std::string> passwd_files;
 
-static std::vector<std::pair<std::string, int>> GetVendorPasswd() {
+static std::vector<std::pair<std::string, int>> GetVendorPasswd(const std::string& passwd_file) {
     std::string passwd;
     if (!ReadFileToString(passwd_file, &passwd)) {
         return {};
@@ -66,6 +70,16 @@ static std::vector<std::pair<std::string, int>> GetVendorPasswd() {
             continue;
         }
         result.emplace_back(split_line[0], uid);
+    }
+    return result;
+}
+
+static std::vector<std::pair<std::string, int>> GetVendorPasswd() {
+    std::vector<std::pair<std::string, int>> result;
+    for (const auto& passwd_file : passwd_files) {
+        auto individual_result = GetVendorPasswd(passwd_file);
+        std::move(individual_result.begin(), individual_result.end(),
+                  std::back_insert_iterator(result));
     }
     return result;
 }
@@ -124,17 +138,50 @@ static Result<void> do_stub(const BuiltinArguments& args) {
 
 #include "generated_stub_builtin_function_map.h"
 
+void PrintUsage() {
+    std::cout << "usage: host_init_verifier [-p FILE] <init rc file>\n"
+                 "\n"
+                 "Tests an init script for correctness\n"
+                 "\n"
+                 "-p FILE\tSearch this passwd file for users and groups\n"
+              << std::endl;
+}
+
 int main(int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::StdioLogger);
     android::base::SetMinimumLogSeverity(android::base::ERROR);
 
-    if (argc != 2 && argc != 3) {
-        LOG(ERROR) << "Usage: " << argv[0] << " <init rc file> [passwd file]";
-        return EXIT_FAILURE;
+    while (true) {
+        static const struct option long_options[] = {
+                {"help", no_argument, nullptr, 'h'},
+                {nullptr, 0, nullptr, 0},
+        };
+
+        int arg = getopt_long(argc, argv, "p:", long_options, nullptr);
+
+        if (arg == -1) {
+            break;
+        }
+
+        switch (arg) {
+            case 'h':
+                PrintUsage();
+                return EXIT_FAILURE;
+            case 'p':
+                passwd_files.emplace_back(optarg);
+                break;
+            default:
+                std::cerr << "getprop: getopt returned invalid result: " << arg << std::endl;
+                return EXIT_FAILURE;
+        }
     }
 
-    if (argc == 3) {
-        passwd_file = argv[2];
+    argc -= optind;
+    argv += optind;
+
+    if (argc != 1) {
+        PrintUsage();
+        return EXIT_FAILURE;
     }
 
     const BuiltinFunctionMap function_map;
@@ -146,12 +193,12 @@ int main(int argc, char** argv) {
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
     parser.AddSectionParser("import", std::make_unique<HostImportParser>());
 
-    if (!parser.ParseConfigFileInsecure(argv[1])) {
-        LOG(ERROR) << "Failed to open init rc script '" << argv[1] << "'";
+    if (!parser.ParseConfigFileInsecure(*argv)) {
+        LOG(ERROR) << "Failed to open init rc script '" << *argv << "'";
         return EXIT_FAILURE;
     }
     if (parser.parse_error_count() > 0) {
-        LOG(ERROR) << "Failed to parse init script '" << argv[1] << "' with "
+        LOG(ERROR) << "Failed to parse init script '" << *argv << "' with "
                    << parser.parse_error_count() << " errors";
         return EXIT_FAILURE;
     }

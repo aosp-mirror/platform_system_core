@@ -17,16 +17,17 @@
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <map>
-#include <set>
 
 #include <android-base/stringprintf.h>
 #include <dmabufinfo/dmabufinfo.h>
@@ -43,7 +44,7 @@ using DmaBuffer = ::android::dmabufinfo::DmaBuffer;
     exit(exit_status);
 }
 
-static std::string GetProcessBaseName(pid_t pid) {
+static std::string GetProcessComm(const pid_t pid) {
     std::string pid_path = android::base::StringPrintf("/proc/%d/comm", pid);
     std::ifstream in{pid_path};
     if (!in) return std::string("N/A");
@@ -53,85 +54,76 @@ static std::string GetProcessBaseName(pid_t pid) {
     return line;
 }
 
-static void AddPidsToSet(const std::unordered_map<pid_t, int>& map, std::set<pid_t>* set)
-{
-    for (auto it = map.begin(); it != map.end(); ++it)
-        set->insert(it->first);
+static void AddPidsToSet(const std::unordered_map<pid_t, int>& map, std::set<pid_t>* set) {
+    for (auto it = map.begin(); it != map.end(); ++it) set->insert(it->first);
 }
 
 static void PrintDmaBufInfo(const std::vector<DmaBuffer>& bufs) {
-    std::set<pid_t> pid_set;
-    std::map<pid_t, int> pid_column;
-
     if (bufs.empty()) {
-        std::cout << "dmabuf info not found ¯\\_(ツ)_/¯" << std::endl;
+        printf("dmabuf info not found ¯\\_(ツ)_/¯\n");
         return;
     }
 
     // Find all unique pids in the input vector, create a set
+    std::set<pid_t> pid_set;
     for (int i = 0; i < bufs.size(); i++) {
         AddPidsToSet(bufs[i].fdrefs(), &pid_set);
         AddPidsToSet(bufs[i].maprefs(), &pid_set);
     }
 
-    int pid_count = 0;
-
-    std::cout << "\t\t\t\t\t\t";
-
-    // Create a map to convert each unique pid into a column number
-    for (auto it = pid_set.begin(); it != pid_set.end(); ++it, ++pid_count) {
-        pid_column.insert(std::make_pair(*it, pid_count));
-        std::cout << ::android::base::StringPrintf("[pid: % 4d]\t", *it);
+    // Format the header string spaced and separated with '|'
+    printf("    Dmabuf Inode |            Size |      Ref Counts |");
+    for (auto pid : pid_set) {
+        printf("%16s:%-5d |", GetProcessComm(pid).c_str(), pid);
     }
+    printf("\n");
 
-    std::cout << std::endl << "\t\t\t\t\t\t";
+    // holds per-process dmabuf size in kB
+    std::map<pid_t, uint64_t> per_pid_size = {};
+    uint64_t dmabuf_total_size = 0;
 
-    for (auto it = pid_set.begin(); it != pid_set.end(); ++it) {
-        std::cout << ::android::base::StringPrintf("%16s",
-            GetProcessBaseName(*it).c_str());
-    }
+    // Iterate through all dmabufs and collect per-process sizes, refs
+    for (auto& buf : bufs) {
+        printf("%16ju |%13" PRIu64 " kB |%16" PRIu64 " |", static_cast<uintmax_t>(buf.inode()),
+               buf.size() / 1024, buf.total_refs());
+        // Iterate through each process to find out per-process references for each buffer,
+        // gather total size used by each process etc.
+        for (pid_t pid : pid_set) {
+            int pid_refs = 0;
+            if (buf.fdrefs().count(pid) == 1) {
+                // Get the total number of ref counts the process is holding
+                // on this buffer. We don't differentiate between mmap or fd.
+                pid_refs += buf.fdrefs().at(pid);
+                if (buf.maprefs().count(pid) == 1) {
+                    pid_refs += buf.maprefs().at(pid);
+                }
+            }
 
-    std::cout << std::endl << "\tinode\t\tsize\t\tcount\t";
-    for (int i = 0; i < pid_count; i++) {
-        std::cout << "fd\tmap\t";
-    }
-    std::cout << std::endl;
-
-    auto fds = std::make_unique<int[]>(pid_count);
-    auto maps = std::make_unique<int[]>(pid_count);
-    auto pss = std::make_unique<long[]>(pid_count);
-
-    memset(pss.get(), 0, sizeof(long) * pid_count);
-
-    for (auto buf = bufs.begin(); buf != bufs.end(); ++buf) {
-
-        std::cout << ::android::base::StringPrintf("%16lu\t%10" PRIu64 "\t%" PRIu64 "\t",
-            buf->inode(),buf->size(), buf->count());
-
-        memset(fds.get(), 0, sizeof(int) * pid_count);
-        memset(maps.get(), 0, sizeof(int) * pid_count);
-
-        for (auto it = buf->fdrefs().begin(); it != buf->fdrefs().end(); ++it) {
-            fds[pid_column[it->first]] = it->second;
-            pss[pid_column[it->first]] += buf->size() * it->second / buf->count();
+            if (pid_refs) {
+                // Add up the per-pid total size. Note that if a buffer is mapped
+                // in 2 different processes, the size will be shown as mapped or opened
+                // in both processes. This is intended for visibility.
+                //
+                // If one wants to get the total *unique* dma buffers, they can simply
+                // sum the size of all dma bufs shown by the tool
+                per_pid_size[pid] += buf.size() / 1024;
+                printf("%17d refs |", pid_refs);
+            } else {
+                printf("%22s |", "--");
+            }
         }
-
-        for (auto it = buf->maprefs().begin(); it != buf->maprefs().end(); ++it) {
-            maps[pid_column[it->first]] = it->second;
-            pss[pid_column[it->first]] += buf->size() * it->second / buf->count();
-        }
-
-        for (int i = 0; i < pid_count; i++) {
-            std::cout << ::android::base::StringPrintf("%d\t%d\t", fds[i], maps[i]);
-        }
-        std::cout << std::endl;
+        dmabuf_total_size += buf.size() / 1024;
+        printf("\n");
     }
-    std::cout << "-----------------------------------------" << std::endl;
-    std::cout << "PSS                                      ";
-    for (int i = 0; i < pid_count; i++) {
-        std::cout << ::android::base::StringPrintf("%15ldK", pss[i] / 1024);
+
+    printf("------------------------------------\n");
+    printf("%-16s  %13" PRIu64 " kB |%16s |", "TOTALS", dmabuf_total_size, "n/a");
+    for (auto pid : pid_set) {
+        printf("%19" PRIu64 " kB |", per_pid_size[pid]);
     }
-    std::cout << std::endl;
+    printf("\n");
+
+    return;
 }
 
 int main(int argc, char* argv[]) {
@@ -142,8 +134,7 @@ int main(int argc, char* argv[]) {
     if (argc > 1) {
         if (sscanf(argv[1], "%d", &pid) == 1) {
             show_all = false;
-        }
-        else {
+        } else {
             usage(EXIT_FAILURE);
         }
     }
@@ -178,8 +169,7 @@ int main(int argc, char* argv[]) {
             exit(EXIT_FAILURE);
         }
     }
+
     PrintDmaBufInfo(bufs);
     return 0;
 }
-
-
