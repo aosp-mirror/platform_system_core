@@ -782,10 +782,9 @@ static void property_initialize_ro_product_props() {
             "brand", "device", "manufacturer", "model", "name",
     };
     const char* RO_PRODUCT_PROPS_ALLOWED_SOURCES[] = {
-            "odm", "product", "product_services", "system", "vendor",
+            "odm", "product", "system_ext", "system", "vendor",
     };
-    const char* RO_PRODUCT_PROPS_DEFAULT_SOURCE_ORDER =
-            "product,product_services,odm,vendor,system";
+    const char* RO_PRODUCT_PROPS_DEFAULT_SOURCE_ORDER = "product,odm,vendor,system_ext,system";
     const std::string EMPTY = "";
 
     std::string ro_product_props_source_order =
@@ -892,6 +891,7 @@ void property_load_boot_defaults(bool load_debug_prop) {
         }
     }
     load_properties_from_file("/system/build.prop", nullptr, &properties);
+    load_properties_from_file("/system_ext/build.prop", nullptr, &properties);
     load_properties_from_file("/vendor/default.prop", nullptr, &properties);
     load_properties_from_file("/vendor/build.prop", nullptr, &properties);
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_Q__) {
@@ -901,7 +901,6 @@ void property_load_boot_defaults(bool load_debug_prop) {
         load_properties_from_file("/odm/build.prop", nullptr, &properties);
     }
     load_properties_from_file("/product/build.prop", nullptr, &properties);
-    load_properties_from_file("/product_services/build.prop", nullptr, &properties);
     load_properties_from_file("/factory/factory.prop", "ro.*", &properties);
 
     if (load_debug_prop) {
