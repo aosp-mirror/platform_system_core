@@ -109,6 +109,11 @@ static int statsdOpen() {
         if (sock < 0) {
             ret = -errno;
         } else {
+            int sndbuf = 1 * 1024 * 1024;  // set max send buffer size 1MB
+            socklen_t bufLen = sizeof(sndbuf);
+            // SO_RCVBUF does not have an effect on unix domain socket, but SO_SNDBUF does.
+            // Proceed to connect even setsockopt fails.
+            setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, bufLen);
             struct sockaddr_un un;
             memset(&un, 0, sizeof(struct sockaddr_un));
             un.sun_family = AF_UNIX;

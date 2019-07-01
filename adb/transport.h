@@ -274,6 +274,9 @@ class atransport {
     std::string device;
     std::string devpath;
 
+    // Used to provide the key to the framework.
+    std::string auth_key;
+
     bool IsTcpDevice() const { return type == kTransportLocal; }
 
 #if ADB_HOST

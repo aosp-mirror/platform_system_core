@@ -93,7 +93,6 @@ CHARGER_STATIC_LIBRARIES := \
     libbinderthreadstate \
     libhidltransport \
     libhidlbase \
-    libhwbinder_noltopgo \
     libhealthstoragedefault \
     libvndksupport \
     libhealthd_charger \
@@ -152,7 +151,6 @@ LOCAL_STATIC_LIBRARIES := \
     libbinderthreadstate \
     libhidltransport \
     libhidlbase \
-    libhwbinder_noltopgo \
     libhealthstoragedefault \
     libvndksupport \
     libhealthd_charger_nops \
