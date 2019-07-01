@@ -44,7 +44,8 @@ void TestInit(const std::string& init_script_file, const TestFunctionMap& test_f
     Action::set_function_map(&test_function_map);
 
     Parser parser;
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(service_list, nullptr));
+    parser.AddSectionParser("service",
+                            std::make_unique<ServiceParser>(service_list, nullptr, std::nullopt));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
