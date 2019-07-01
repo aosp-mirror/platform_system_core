@@ -152,6 +152,12 @@ Result<void> ServiceParser::ParseInterface(std::vector<std::string>&& args) {
         return Error() << "Interface name must not be a value name '" << interface_name << "'";
     }
 
+    if (known_interfaces_ && known_interfaces_->count(interface_name) == 0) {
+        return Error() << "Interface is not in the known set of hidl_interfaces: '"
+                       << interface_name << "'. Please ensure the interface is built "
+                       << "by a hidl_interface target.";
+    }
+
     const std::string fullname = interface_name + "/" + instance_name;
 
     for (const auto& svc : *service_list_) {
