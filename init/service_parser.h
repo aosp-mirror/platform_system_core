@@ -28,8 +28,12 @@ namespace init {
 
 class ServiceParser : public SectionParser {
   public:
-    ServiceParser(ServiceList* service_list, std::vector<Subcontext>* subcontexts)
-        : service_list_(service_list), subcontexts_(subcontexts), service_(nullptr) {}
+    ServiceParser(ServiceList* service_list, std::vector<Subcontext>* subcontexts,
+                  const std::optional<std::set<std::string>>& known_interfaces)
+        : service_list_(service_list),
+          subcontexts_(subcontexts),
+          known_interfaces_(known_interfaces),
+          service_(nullptr) {}
     Result<void> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                               int line) override;
     Result<void> ParseLineSection(std::vector<std::string>&& args, int line) override;
@@ -81,6 +85,7 @@ class ServiceParser : public SectionParser {
 
     ServiceList* service_list_;
     std::vector<Subcontext>* subcontexts_;
+    std::optional<std::set<std::string>> known_interfaces_;
     std::unique_ptr<Service> service_;
     std::string filename_;
 };
