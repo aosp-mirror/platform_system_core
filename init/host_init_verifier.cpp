@@ -129,6 +129,23 @@ passwd* getpwnam(const char* login) {  // NOLINT: implementing bad function.
     return nullptr;
 }
 
+static std::optional<std::set<std::string>> ReadKnownInterfaces(
+        const std::string& known_interfaces_file) {
+    if (known_interfaces_file.empty()) {
+        LOG(WARNING) << "Missing a known interfaces file.";
+        return {};
+    }
+
+    std::string known_interfaces;
+    if (!ReadFileToString(known_interfaces_file, &known_interfaces)) {
+        LOG(ERROR) << "Failed to read known interfaces file '" << known_interfaces_file << "'";
+        return {};
+    }
+
+    auto interfaces = Split(known_interfaces, " ");
+    return std::set<std::string>(interfaces.begin(), interfaces.end());
+}
+
 namespace android {
 namespace init {
 
@@ -139,11 +156,12 @@ static Result<void> do_stub(const BuiltinArguments& args) {
 #include "generated_stub_builtin_function_map.h"
 
 void PrintUsage() {
-    std::cout << "usage: host_init_verifier [-p FILE] <init rc file>\n"
+    std::cout << "usage: host_init_verifier [-p FILE] -k FILE <init rc file>\n"
                  "\n"
                  "Tests an init script for correctness\n"
                  "\n"
                  "-p FILE\tSearch this passwd file for users and groups\n"
+                 "-k FILE\tUse this file as a space-separated list of known interfaces\n"
               << std::endl;
 }
 
@@ -151,13 +169,15 @@ int main(int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::StdioLogger);
     android::base::SetMinimumLogSeverity(android::base::ERROR);
 
+    std::string known_interfaces_file;
+
     while (true) {
         static const struct option long_options[] = {
                 {"help", no_argument, nullptr, 'h'},
                 {nullptr, 0, nullptr, 0},
         };
 
-        int arg = getopt_long(argc, argv, "p:", long_options, nullptr);
+        int arg = getopt_long(argc, argv, "p:k:", long_options, nullptr);
 
         if (arg == -1) {
             break;
@@ -169,6 +189,9 @@ int main(int argc, char** argv) {
                 return EXIT_FAILURE;
             case 'p':
                 passwd_files.emplace_back(optarg);
+                break;
+            case 'k':
+                known_interfaces_file = optarg;
                 break;
             default:
                 std::cerr << "getprop: getopt returned invalid result: " << arg << std::endl;
@@ -189,7 +212,9 @@ int main(int argc, char** argv) {
     ActionManager& am = ActionManager::GetInstance();
     ServiceList& sl = ServiceList::GetInstance();
     Parser parser;
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&sl, nullptr));
+    parser.AddSectionParser(
+            "service", std::make_unique<ServiceParser>(&sl, nullptr,
+                                                       ReadKnownInterfaces(known_interfaces_file)));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
     parser.AddSectionParser("import", std::make_unique<HostImportParser>());
 
