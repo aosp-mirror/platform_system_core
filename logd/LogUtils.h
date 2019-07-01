@@ -38,8 +38,6 @@ size_t sizesTotal();
 // Caller must own and free returned value
 char* pidToName(pid_t pid);
 char* tidToName(pid_t tid);
-uid_t pidToUid(pid_t pid);
-pid_t tidToPid(pid_t tid);
 
 // Furnished in LogTags.cpp. Thread safe.
 const char* tagToName(uint32_t tag);
