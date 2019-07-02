@@ -159,12 +159,7 @@ class LogBuffer : public LogBufferInterface {
     const char* pidToName(pid_t pid) {
         return stats.pidToName(pid);
     }
-    virtual uid_t pidToUid(pid_t pid) override {
-        return stats.pidToUid(pid);
-    }
-    virtual pid_t tidToPid(pid_t tid) override {
-        return stats.tidToPid(tid);
-    }
+    uid_t pidToUid(pid_t pid) { return stats.pidToUid(pid); }
     const char* uidToName(uid_t uid) {
         return stats.uidToName(uid);
     }
