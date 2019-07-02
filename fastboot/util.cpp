@@ -53,6 +53,10 @@ void die(const char* fmt, ...) {
     exit(EXIT_FAILURE);
 }
 
+void die(const std::string& str) {
+    die("%s", str.c_str());
+}
+
 void set_verbose() {
     g_verbose = true;
 }
