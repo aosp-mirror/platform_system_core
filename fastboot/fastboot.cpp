@@ -389,6 +389,8 @@ static int show_help() {
             " set_active SLOT            Set the active slot.\n"
             " oem [COMMAND...]           Execute OEM-specific command.\n"
             " gsi wipe|disable           Wipe or disable a GSI installation (fastbootd only).\n"
+            " wipe-super [SUPER_EMPTY]   Wipe the super partition. This will reset it to\n"
+            "                            contain an empty set of default dynamic partitions.\n"
             "\n"
             "boot image:\n"
             " boot KERNEL [RAMDISK [SECOND]]\n"
@@ -1582,6 +1584,76 @@ static bool should_flash_in_userspace(const std::string& partition_name) {
     return false;
 }
 
+static bool wipe_super(const android::fs_mgr::LpMetadata& metadata, const std::string& slot,
+                       std::string* message) {
+    auto super_device = GetMetadataSuperBlockDevice(metadata);
+    auto block_size = metadata.geometry.logical_block_size;
+    auto super_bdev_name = android::fs_mgr::GetBlockDevicePartitionName(*super_device);
+
+    if (super_bdev_name != "super") {
+        // retrofit devices do not allow flashing to the retrofit partitions,
+        // so enable it if we can.
+        fb->RawCommand("oem allow-flash-super");
+    }
+
+    // Note: do not use die() in here, since we want TemporaryDir's destructor
+    // to be called.
+    TemporaryDir temp_dir;
+
+    bool ok;
+    if (metadata.block_devices.size() > 1) {
+        ok = WriteSplitImageFiles(temp_dir.path, metadata, block_size, {}, true);
+    } else {
+        auto image_path = temp_dir.path + "/"s + super_bdev_name + ".img";
+        ok = WriteToImageFile(image_path, metadata, block_size, {}, true);
+    }
+    if (!ok) {
+        *message = "Could not generate a flashable super image file";
+        return false;
+    }
+
+    for (const auto& block_device : metadata.block_devices) {
+        auto partition = android::fs_mgr::GetBlockDevicePartitionName(block_device);
+        bool force_slot = !!(block_device.flags & LP_BLOCK_DEVICE_SLOT_SUFFIXED);
+
+        std::string image_name;
+        if (metadata.block_devices.size() > 1) {
+            image_name = "super_" + partition + ".img";
+        } else {
+            image_name = partition + ".img";
+        }
+
+        auto image_path = temp_dir.path + "/"s + image_name;
+        auto flash = [&](const std::string& partition_name) {
+            do_flash(partition_name.c_str(), image_path.c_str());
+        };
+        do_for_partitions(partition, slot, flash, force_slot);
+
+        unlink(image_path.c_str());
+    }
+    return true;
+}
+
+static void do_wipe_super(const std::string& image, const std::string& slot_override) {
+    if (access(image.c_str(), R_OK) != 0) {
+        die("Could not read image: %s", image.c_str());
+    }
+    auto metadata = android::fs_mgr::ReadFromImageFile(image);
+    if (!metadata) {
+        die("Could not parse image: %s", image.c_str());
+    }
+
+    auto slot = slot_override;
+    if (slot.empty()) {
+        slot = get_current_slot();
+    }
+
+    std::string message;
+    if (!wipe_super(*metadata.get(), slot, &message)) {
+        die(message);
+    }
+}
+
 int FastBootTool::Main(int argc, char* argv[]) {
     bool wants_wipe = false;
     bool wants_reboot = false;
@@ -1958,6 +2030,14 @@ int FastBootTool::Main(int argc, char* argv[]) {
             } else {
                 syntax_error("expected 'wipe' or 'disable'");
             }
+        } else if (command == "wipe-super") {
+            std::string image;
+            if (args.empty()) {
+                image = find_item_given_name("super_empty.img");
+            } else {
+                image = next_arg(&args);
+            }
+            do_wipe_super(image, slot_override);
         } else {
             syntax_error("unknown command %s", command.c_str());
         }
