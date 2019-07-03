@@ -117,3 +117,48 @@ sysprop_library {
     property_owner: "Platform",
     api_packages: ["android.sysprop"],
 }
+
+cc_library_static {
+    name: "libhealthd_draw",
+    export_include_dirs: ["."],
+    static_libs: [
+        "libcharger_sysprop",
+        "libminui",
+    ],
+    shared_libs: [
+        "libbase",
+    ],
+    header_libs: ["libbatteryservice_headers"],
+
+    srcs: ["healthd_draw.cpp"],
+}
+
+cc_library_static {
+    name: "libhealthd_charger",
+    local_include_dirs: ["include"],
+    export_include_dirs: [".", "include"],
+
+    static_libs: [
+        "android.hardware.health@2.0-impl",
+        "android.hardware.health@1.0-convert",
+        "libcharger_sysprop",
+        "libhealthstoragedefault",
+        "libhealthd_draw",
+        "libminui",
+    ],
+
+    shared_libs: [
+        "android.hardware.health@2.0",
+        "libbase",
+        "libcutils",
+        "liblog",
+        "libpng",
+        "libsuspend",
+        "libutils",
+    ],
+
+    srcs: [
+        "healthd_mode_charger.cpp",
+        "AnimationParser.cpp",
+    ],
+}
