@@ -110,3 +110,10 @@ cc_library_static {
         "libutils",
     ],
 }
+
+sysprop_library {
+    name: "charger_sysprop",
+    srcs: ["charger.sysprop"],
+    property_owner: "Platform",
+    api_packages: ["android.sysprop"],
+}
