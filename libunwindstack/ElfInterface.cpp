@@ -197,6 +197,7 @@ uint64_t ElfInterface::GetLoadBias(Memory* memory) {
 template <typename EhdrType, typename PhdrType>
 void ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias) {
   uint64_t offset = ehdr.e_phoff;
+  bool first_exec_load_header = true;
   for (size_t i = 0; i < ehdr.e_phnum; i++, offset += ehdr.e_phentsize) {
     PhdrType phdr;
     if (!memory_->ReadFully(offset, &phdr, sizeof(phdr))) {
@@ -212,9 +213,11 @@ void ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias)
 
       pt_loads_[phdr.p_offset] = LoadInfo{phdr.p_offset, phdr.p_vaddr,
                                           static_cast<size_t>(phdr.p_memsz)};
-      if (phdr.p_offset == 0) {
-        *load_bias = phdr.p_vaddr;
+      // Only set the load bias from the first executable load header.
+      if (first_exec_load_header && phdr.p_vaddr > phdr.p_offset) {
+        *load_bias = phdr.p_vaddr - phdr.p_offset;
       }
+      first_exec_load_header = false;
       break;
     }
 
