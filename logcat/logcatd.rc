@@ -52,7 +52,7 @@ on property:logd.logpersistd.enable=false
     stop logcatd
 
 # logcatd service
-service logcatd /system/bin/logcatd -L -b ${logd.logpersistd.buffer:-all} -v threadtime -v usec -v printable -D -f /data/misc/logd/logcat -r ${logd.logpersistd.rotate_kbytes:-1024} -n ${logd.logpersistd.size:-256} --id=${ro.build.id}
+service logcatd /system/bin/logcatd -L -b ${logd.logpersistd.buffer:-all} -v threadtime -v usec -v printable -D -f /data/misc/logd/logcat -r ${logd.logpersistd.rotate_kbytes:-2048} -n ${logd.logpersistd.size:-256} --id=${ro.build.id}
     class late_start
     disabled
     # logd for write to /data/misc/logd, log group for read from log daemon
