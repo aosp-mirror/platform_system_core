@@ -230,7 +230,7 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 # A symlink can't overwrite a directory and the /system/usr/icu directory once
 # existed so the required structure must be created whatever we find.
 LOCAL_POST_INSTALL_CMD = mkdir -p $(TARGET_OUT)/usr && rm -rf $(TARGET_OUT)/usr/icu
-LOCAL_POST_INSTALL_CMD += && ln -sf /apex/com.android.runtime/etc/icu $(TARGET_OUT)/usr/icu
+LOCAL_POST_INSTALL_CMD += && ln -sf /apex/com.android.i18n/etc/icu $(TARGET_OUT)/usr/icu
 
 # TODO(b/124106384): Clean up compat symlinks for ART binaries.
 ART_BINARIES := \
