@@ -46,6 +46,7 @@ void RunTest(const std::string& data, const std::vector<std::vector<std::string>
                 return;
             case T_NEWLINE:
                 tokens.emplace_back(std::move(current_line));
+                current_line.clear();
                 break;
             case T_TEXT:
                 current_line.emplace_back(state.text);

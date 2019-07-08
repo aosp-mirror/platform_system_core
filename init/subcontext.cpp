@@ -246,7 +246,7 @@ void Subcontext::Fork() {
 
         // We explicitly do not use O_CLOEXEC here, such that we can reference this FD by number
         // in the subcontext process after we exec.
-        int child_fd = dup(subcontext_socket);
+        int child_fd = dup(subcontext_socket);  // NOLINT(android-cloexec-dup)
         if (child_fd < 0) {
             PLOG(FATAL) << "Could not dup child_fd";
         }

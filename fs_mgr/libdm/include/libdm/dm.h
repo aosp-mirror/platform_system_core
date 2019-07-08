@@ -38,7 +38,7 @@
 #define DM_VERSION2 (0)
 
 #define DM_ALIGN_MASK (7)
-#define DM_ALIGN(x) ((x + DM_ALIGN_MASK) & ~DM_ALIGN_MASK)
+#define DM_ALIGN(x) (((x) + DM_ALIGN_MASK) & ~DM_ALIGN_MASK)
 
 namespace android {
 namespace dm {
