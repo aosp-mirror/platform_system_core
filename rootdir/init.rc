@@ -38,6 +38,13 @@ on early-init
     # Allow up to 32K FDs per process
     setrlimit nofile 32768 32768
 
+    # Create directory to keep ld.config.txt
+    mkdir /dev/linkerconfig 0755
+
+    # Generate ld.config.txt for early executed processes
+    exec -- /system/bin/linkerconfig --target /dev/linkerconfig/ld.config.txt
+    chmod 444 /dev/linkerconfig/ld.config.txt
+
     start ueventd
 
     # Run apexd-bootstrap so that APEXes that provide critical libraries
