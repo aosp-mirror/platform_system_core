@@ -125,6 +125,7 @@ libadb_srcs = [
     "adb_unique_fd.cpp",
     "adb_utils.cpp",
     "fdevent/fdevent.cpp",
+    "fdevent/fdevent_poll.cpp",
     "services.cpp",
     "sockets.cpp",
     "socket_spec.cpp",
