@@ -78,7 +78,7 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
 
             if (S_ISDIR(info.st_mode)) {
                 is_dir = true;
-                auto fd = openat(dfd, de->d_name, O_RDONLY | O_DIRECTORY);
+                auto fd = openat(dfd, de->d_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
                 if (fd >= 0) {
                     auto subdir =
                             std::unique_ptr<DIR, decltype(&closedir)>{fdopendir(fd), closedir};
@@ -152,7 +152,7 @@ int FirstStageMain(int argc, char** argv) {
 
     std::vector<std::pair<std::string, int>> errors;
 #define CHECKCALL(x) \
-    if (x != 0) errors.emplace_back(#x " failed", errno);
+    if ((x) != 0) errors.emplace_back(#x " failed", errno);
 
     // Clear the umask.
     umask(0);
