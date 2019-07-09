@@ -33,10 +33,19 @@
 #define FDE_ERROR 0x0004
 #define FDE_TIMEOUT 0x0008
 
+// Internal states.
+#define FDE_EVENTMASK  0x00ff
+#define FDE_STATEMASK  0xff00
+
+#define FDE_ACTIVE     0x0100
+#define FDE_PENDING    0x0200
+#define FDE_CREATED    0x0400
+
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 typedef void (*fd_func2)(struct fdevent* fde, unsigned events, void* userdata);
 
 struct fdevent;
+std::string dump_fde(const fdevent* fde);
 
 struct fdevent_context {
     virtual ~fdevent_context() = default;
