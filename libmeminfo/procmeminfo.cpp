@@ -312,12 +312,12 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_
                                     cur_page * sizeof(uint64_t));
             if (bytes != total_bytes) {
                 if (bytes == -1) {
-                    PLOG(ERROR) << "Failed to read page data at offset "
+                    PLOG(ERROR) << "Failed to read page data at offset 0x" << std::hex
                                 << cur_page * sizeof(uint64_t);
                 } else {
-                    LOG(ERROR) << "Failed to read page data at offset "
-                               << cur_page * sizeof(uint64_t) << " read bytes " << sizeof(uint64_t)
-                               << " expected bytes " << bytes;
+                    LOG(ERROR) << "Failed to read page data at offset 0x" << std::hex
+                               << cur_page * sizeof(uint64_t) << std::dec << " read bytes " << bytes
+                               << " expected bytes " << total_bytes;
                 }
                 return false;
             }
