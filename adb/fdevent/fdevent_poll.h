@@ -52,9 +52,6 @@ struct fdevent_context_poll : public fdevent_context {
     virtual void Unregister(fdevent* fde) final;
 
     virtual void Set(fdevent* fde, unsigned events) final;
-    virtual void Add(fdevent* fde, unsigned events) final;
-    virtual void Del(fdevent* fde, unsigned events) final;
-    virtual void SetTimeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout) final;
 
     virtual void Loop() final;
 
