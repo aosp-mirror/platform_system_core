@@ -360,7 +360,7 @@ void ElfInterfaceTest::NonExecutablePtLoads() {
 
   uint64_t load_bias = 0;
   ASSERT_TRUE(elf->Init(&load_bias));
-  EXPECT_EQ(0U, load_bias);
+  EXPECT_EQ(0x1001U, load_bias);
 
   const std::unordered_map<uint64_t, LoadInfo>& pt_loads = elf->pt_loads();
   ASSERT_EQ(1U, pt_loads.size());
