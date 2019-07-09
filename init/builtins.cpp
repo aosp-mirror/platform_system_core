@@ -1107,7 +1107,7 @@ static Result<void> do_parse_apex_configs(const BuiltinArguments& args) {
         // /apex/<name> paths, so unless we filter them out, we will parse the
         // same file twice.
         std::vector<std::string> paths = android::base::Split(path, "/");
-        if (paths.size() >= 2 && paths[1].find('@') != std::string::npos) {
+        if (paths.size() >= 3 && paths[2].find('@') != std::string::npos) {
             continue;
         }
         configs.push_back(path);
