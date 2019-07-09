@@ -667,9 +667,9 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
 
             if (flen > 0) {
                 if (filter[flen - 1] == '*') {
-                    if (strncmp(key, filter, flen - 1)) continue;
+                    if (strncmp(key, filter, flen - 1) != 0) continue;
                 } else {
-                    if (strcmp(key, filter)) continue;
+                    if (strcmp(key, filter) != 0) continue;
                 }
             }
 

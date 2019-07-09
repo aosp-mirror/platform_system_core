@@ -69,7 +69,7 @@ Result<PersistentProperties> LoadLegacyPersistentProperties() {
             continue;
         }
 
-        unique_fd fd(openat(dirfd(dir.get()), entry->d_name, O_RDONLY | O_NOFOLLOW));
+        unique_fd fd(openat(dirfd(dir.get()), entry->d_name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
         if (fd == -1) {
             PLOG(ERROR) << "Unable to open persistent property file \"" << entry->d_name << "\"";
             continue;
