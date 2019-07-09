@@ -775,17 +775,16 @@ static int adb_abb(int argc, const char** argv) {
         error_exit("abb is not supported by the device");
     }
 
+    optind = 1;  // argv[0] is always "abb", so set `optind` appropriately.
+
     // Defaults.
     constexpr char escape_char = '~';  // -e
     constexpr bool use_shell_protocol = true;
     constexpr auto shell_type_arg = kShellServiceArgRaw;
     constexpr bool empty_command = false;
 
-    std::string service_string("abb:");
-    for (auto i = optind; i < argc; ++i) {
-        service_string.append(argv[i]);
-        service_string.push_back(ABB_ARG_DELIMETER);
-    }
+    std::vector<const char*> args(argv + optind, argv + argc);
+    std::string service_string = "abb:" + android::base::Join(args, ABB_ARG_DELIMETER);
 
     D("abb -e 0x%x [%*.s]\n", escape_char, static_cast<int>(service_string.size()),
       service_string.data());
