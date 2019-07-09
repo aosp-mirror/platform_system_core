@@ -1457,4 +1457,77 @@ TEST_F(UnwindOfflineTest, invalid_elf_offset_arm) {
   EXPECT_EQ(0xc2044218, unwinder.frames()[0].sp);
 }
 
+TEST_F(UnwindOfflineTest, load_bias_ro_rx_x86_64) {
+  ASSERT_NO_FATAL_FAILURE(Init("load_bias_ro_rx_x86_64/", ARCH_X86_64));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(17U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 00000000000e9dd4  libc.so (__write+20)\n"
+      "  #01 pc 000000000007ab9c  libc.so (_IO_file_write+44)\n"
+      "  #02 pc 0000000000079f3e  libc.so\n"
+      "  #03 pc 000000000007bce8  libc.so (_IO_do_write+24)\n"
+      "  #04 pc 000000000007b26e  libc.so (_IO_file_xsputn+270)\n"
+      "  #05 pc 000000000004f7f9  libc.so (_IO_vfprintf+1945)\n"
+      "  #06 pc 0000000000057cb5  libc.so (_IO_printf+165)\n"
+      "  #07 pc 0000000000ed1796  perfetto_unittests "
+      "(testing::internal::PrettyUnitTestResultPrinter::OnTestIterationStart(testing::UnitTest "
+      "const&, int)+374)\n"
+      "  #08 pc 0000000000ed30fd  perfetto_unittests "
+      "(testing::internal::TestEventRepeater::OnTestIterationStart(testing::UnitTest const&, "
+      "int)+125)\n"
+      "  #09 pc 0000000000ed5e25  perfetto_unittests "
+      "(testing::internal::UnitTestImpl::RunAllTests()+581)\n"
+      "  #10 pc 0000000000ef63f3  perfetto_unittests "
+      "(_ZN7testing8internal38HandleSehExceptionsInMethodIfSupportedINS0_12UnitTestImplEbEET0_PT_"
+      "MS4_FS3_vEPKc+131)\n"
+      "  #11 pc 0000000000ee2a21  perfetto_unittests "
+      "(_ZN7testing8internal35HandleExceptionsInMethodIfSupportedINS0_12UnitTestImplEbEET0_PT_MS4_"
+      "FS3_vEPKc+113)\n"
+      "  #12 pc 0000000000ed5bb9  perfetto_unittests (testing::UnitTest::Run()+185)\n"
+      "  #13 pc 0000000000e900f0  perfetto_unittests (RUN_ALL_TESTS()+16)\n"
+      "  #14 pc 0000000000e900d8  perfetto_unittests (main+56)\n"
+      "  #15 pc 000000000002352a  libc.so (__libc_start_main+234)\n"
+      "  #16 pc 0000000000919029  perfetto_unittests (_start+41)\n",
+      frame_info);
+
+  EXPECT_EQ(0x7f9326a57dd4ULL, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x7ffd224153c8ULL, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x7f93269e8b9cULL, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x7ffd224153d0ULL, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x7f93269e7f3eULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7ffd22415400ULL, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x7f93269e9ce8ULL, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x7ffd22415440ULL, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x7f93269e926eULL, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x7ffd22415450ULL, unwinder.frames()[4].sp);
+  EXPECT_EQ(0x7f93269bd7f9ULL, unwinder.frames()[5].pc);
+  EXPECT_EQ(0x7ffd22415490ULL, unwinder.frames()[5].sp);
+  EXPECT_EQ(0x7f93269c5cb5ULL, unwinder.frames()[6].pc);
+  EXPECT_EQ(0x7ffd22415a10ULL, unwinder.frames()[6].sp);
+  EXPECT_EQ(0xed1796ULL, unwinder.frames()[7].pc);
+  EXPECT_EQ(0x7ffd22415af0ULL, unwinder.frames()[7].sp);
+  EXPECT_EQ(0xed30fdULL, unwinder.frames()[8].pc);
+  EXPECT_EQ(0x7ffd22415b70ULL, unwinder.frames()[8].sp);
+  EXPECT_EQ(0xed5e25ULL, unwinder.frames()[9].pc);
+  EXPECT_EQ(0x7ffd22415bb0ULL, unwinder.frames()[9].sp);
+  EXPECT_EQ(0xef63f3ULL, unwinder.frames()[10].pc);
+  EXPECT_EQ(0x7ffd22415c60ULL, unwinder.frames()[10].sp);
+  EXPECT_EQ(0xee2a21ULL, unwinder.frames()[11].pc);
+  EXPECT_EQ(0x7ffd22415cc0ULL, unwinder.frames()[11].sp);
+  EXPECT_EQ(0xed5bb9ULL, unwinder.frames()[12].pc);
+  EXPECT_EQ(0x7ffd22415d40ULL, unwinder.frames()[12].sp);
+  EXPECT_EQ(0xe900f0ULL, unwinder.frames()[13].pc);
+  EXPECT_EQ(0x7ffd22415d90ULL, unwinder.frames()[13].sp);
+  EXPECT_EQ(0xe900d8ULL, unwinder.frames()[14].pc);
+  EXPECT_EQ(0x7ffd22415da0ULL, unwinder.frames()[14].sp);
+  EXPECT_EQ(0x7f932699152aULL, unwinder.frames()[15].pc);
+  EXPECT_EQ(0x7ffd22415dd0ULL, unwinder.frames()[15].sp);
+  EXPECT_EQ(0x919029ULL, unwinder.frames()[16].pc);
+  EXPECT_EQ(0x7ffd22415e90ULL, unwinder.frames()[16].sp);
+}
+
 }  // namespace unwindstack
