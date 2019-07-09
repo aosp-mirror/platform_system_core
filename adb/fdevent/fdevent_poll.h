@@ -48,8 +48,8 @@ struct fdevent_context_poll : public fdevent_context {
     fdevent_context_poll();
     virtual ~fdevent_context_poll();
 
-    virtual fdevent* Create(unique_fd fd, std::variant<fd_func, fd_func2> func, void* arg) final;
-    virtual unique_fd Destroy(fdevent* fde) final;
+    virtual void Register(fdevent* fde) final;
+    virtual void Unregister(fdevent* fde) final;
 
     virtual void Set(fdevent* fde, unsigned events) final;
     virtual void Add(fdevent* fde, unsigned events) final;
@@ -68,7 +68,6 @@ struct fdevent_context_poll : public fdevent_context {
     // That's why we don't need a lock for fdevent.
     std::unordered_map<int, PollNode> poll_node_map_;
     std::list<fdevent*> pending_list_;
-    uint64_t fdevent_id_ = 0;
 
     unique_fd interrupt_fd_;
     fdevent* interrupt_fde_ = nullptr;
