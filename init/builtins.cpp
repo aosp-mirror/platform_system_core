@@ -243,7 +243,7 @@ static Result<void> do_ifup(const BuiltinArguments& args) {
 
     strlcpy(ifr.ifr_name, args[1].c_str(), IFNAMSIZ);
 
-    unique_fd s(TEMP_FAILURE_RETRY(socket(AF_INET, SOCK_DGRAM, 0)));
+    unique_fd s(TEMP_FAILURE_RETRY(socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0)));
     if (s < 0) return ErrnoError() << "opening socket failed";
 
     if (ioctl(s, SIOCGIFFLAGS, &ifr) < 0) {
@@ -784,7 +784,7 @@ static Result<void> do_write(const BuiltinArguments& args) {
 }
 
 static Result<void> readahead_file(const std::string& filename, bool fully) {
-    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(filename.c_str(), O_RDONLY)));
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(filename.c_str(), O_RDONLY | O_CLOEXEC)));
     if (fd == -1) {
         return ErrnoError() << "Error opening file";
     }

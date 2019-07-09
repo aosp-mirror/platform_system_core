@@ -88,7 +88,8 @@ void ActionManager::ExecuteOneCommand() {
         current_command_ = 0;
         if (action->oneshot()) {
             auto eraser = [&action](std::unique_ptr<Action>& a) { return a.get() == action; };
-            actions_.erase(std::remove_if(actions_.begin(), actions_.end(), eraser));
+            actions_.erase(std::remove_if(actions_.begin(), actions_.end(), eraser),
+                           actions_.end());
         }
     }
 }
