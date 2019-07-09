@@ -20,7 +20,9 @@
 
 #include <inttypes.h>
 
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/threads.h>
 
 #include "fdevent.h"
 #include "fdevent_poll.h"
@@ -44,6 +46,12 @@ std::string dump_fde(const fdevent* fde) {
     }
     return android::base::StringPrintf("(fdevent %" PRIu64 ": fd %d %s)", fde->id, fde->fd.get(),
                                        state.c_str());
+}
+
+void fdevent_context::CheckMainThread() {
+    if (main_thread_id_) {
+        CHECK_EQ(*main_thread_id_, android::base::GetThreadId());
+    }
 }
 
 void fdevent_context::Run(std::function<void()> fn) {
