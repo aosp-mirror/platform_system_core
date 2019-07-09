@@ -483,7 +483,8 @@ static void show_help(android_logcat_context_internal* context) {
                     "                  Additionally, 'kernel' for userdebug and eng builds, and\n"
                     "                  'security' for Device Owner installations.\n"
                     "                  Multiple -b parameters or comma separated list of buffers are\n"
-                    "                  allowed. Buffers interleaved. Default -b main,system,crash.\n"
+                    "                  allowed. Buffers interleaved.\n"
+                    "                  Default -b main,system,crash,kernel.\n"
                     "  -B, --binary    Output the log in binary.\n"
                     "  -S, --statistics                       Output statistics.\n"
                     "  -p, --prune     Print prune white and ~black list. Service is specified as\n"
@@ -1310,6 +1311,10 @@ static int __logcat(android_logcat_context_internal* context) {
         }
         if (android_name_to_log_id("crash") == LOG_ID_CRASH) {
             dev = dev->next = new log_device_t("crash", false);
+            context->devCount++;
+        }
+        if (android_name_to_log_id("kernel") == LOG_ID_KERNEL) {
+            dev = dev->next = new log_device_t("kernel", false);
             context->devCount++;
         }
     }
