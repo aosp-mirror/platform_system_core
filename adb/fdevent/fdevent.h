@@ -71,8 +71,9 @@ struct fdevent_context {
     // trigger repeatedly every |timeout| ms.
     virtual void SetTimeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout) = 0;
 
-    // Loop forever, handling events.
-    // Implementations should call FlushRunQueue on every iteration.
+    // Loop until TerminateLoop is called, handling events.
+    // Implementations should call FlushRunQueue on every iteration, and check the value of
+    // terminate_loop_ to determine whether to stop.
     virtual void Loop() = 0;
 
     // Assert that the caller is either running on the context's main thread, or that there is no
@@ -83,7 +84,7 @@ struct fdevent_context {
     void Run(std::function<void()> fn);
 
     // Test-only functionality:
-    virtual void TerminateLoop() = 0;
+    void TerminateLoop();
     virtual size_t InstalledCount() = 0;
 
   protected:
@@ -94,6 +95,7 @@ struct fdevent_context {
     void FlushRunQueue() EXCLUDES(run_queue_mutex_);
 
     std::optional<uint64_t> main_thread_id_ = std::nullopt;
+    std::atomic<bool> terminate_loop_ = false;
 
   private:
     std::mutex run_queue_mutex_;

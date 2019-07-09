@@ -392,11 +392,6 @@ void fdevent_context_poll::Loop() {
     main_thread_id_.reset();
 }
 
-void fdevent_context_poll::TerminateLoop() {
-    terminate_loop_ = true;
-    Interrupt();
-}
-
 size_t fdevent_context_poll::InstalledCount() {
     // We always have an installed fde for interrupt.
     return poll_node_map_.size() - 1;
