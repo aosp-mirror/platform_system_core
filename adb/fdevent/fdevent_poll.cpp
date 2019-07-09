@@ -78,38 +78,14 @@ fdevent_context_poll::~fdevent_context_poll() {
     this->Destroy(this->interrupt_fde_);
 }
 
-fdevent* fdevent_context_poll::Create(unique_fd fd, std::variant<fd_func, fd_func2> func,
-                                      void* arg) {
-    CheckMainThread();
-    CHECK_GE(fd.get(), 0);
-
-    fdevent* fde = new fdevent();
-    fde->id = fdevent_id_++;
-    fde->state = FDE_ACTIVE;
-    fde->fd = std::move(fd);
-    fde->func = func;
-    fde->arg = arg;
-    if (!set_file_block_mode(fde->fd, false)) {
-        // Here is not proper to handle the error. If it fails here, some error is
-        // likely to be detected by poll(), then we can let the callback function
-        // to handle it.
-        LOG(ERROR) << "failed to set non-blocking mode for fd " << fde->fd.get();
-    }
+void fdevent_context_poll::Register(fdevent* fde) {
     auto pair = poll_node_map_.emplace(fde->fd.get(), PollNode(fde));
     CHECK(pair.second) << "install existing fd " << fde->fd.get();
-
-    return fde;
 }
 
-unique_fd fdevent_context_poll::Destroy(fdevent* fde) {
-    CheckMainThread();
-    if (!fde) {
-        return {};
-    }
-
-    unique_fd result = std::move(fde->fd);
+void fdevent_context_poll::Unregister(fdevent* fde) {
     if (fde->state & FDE_ACTIVE) {
-        poll_node_map_.erase(result.get());
+        poll_node_map_.erase(fde->fd.get());
 
         if (fde->state & FDE_PENDING) {
             pending_list_.remove(fde);
@@ -117,9 +93,6 @@ unique_fd fdevent_context_poll::Destroy(fdevent* fde) {
         fde->state = 0;
         fde->events = 0;
     }
-
-    delete fde;
-    return result;
 }
 
 void fdevent_context_poll::Set(fdevent* fde, unsigned events) {
