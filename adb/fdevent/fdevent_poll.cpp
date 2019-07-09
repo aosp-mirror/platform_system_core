@@ -131,22 +131,6 @@ void fdevent_context_poll::Set(fdevent* fde, unsigned events) {
     }
 }
 
-void fdevent_context_poll::Add(fdevent* fde, unsigned events) {
-    Set(fde, (fde->state & FDE_EVENTMASK) | events);
-}
-
-void fdevent_context_poll::Del(fdevent* fde, unsigned events) {
-    CHECK(!(events & FDE_TIMEOUT));
-    Set(fde, (fde->state & FDE_EVENTMASK) & ~events);
-}
-
-void fdevent_context_poll::SetTimeout(fdevent* fde,
-                                      std::optional<std::chrono::milliseconds> timeout) {
-    CheckMainThread();
-    fde->timeout = timeout;
-    fde->last_active = std::chrono::steady_clock::now();
-}
-
 static std::string dump_pollfds(const std::vector<adb_pollfd>& pollfds) {
     std::string result;
     for (const auto& pollfd : pollfds) {
