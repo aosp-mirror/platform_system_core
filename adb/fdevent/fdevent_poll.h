@@ -58,7 +58,6 @@ struct fdevent_context_poll : public fdevent_context {
 
     virtual void Loop() final;
 
-    virtual void TerminateLoop() final;
     virtual size_t InstalledCount() final;
 
   protected:
@@ -73,5 +72,4 @@ struct fdevent_context_poll : public fdevent_context {
 
     unique_fd interrupt_fd_;
     fdevent* interrupt_fde_ = nullptr;
-    std::atomic<bool> terminate_loop_ = false;
 };
