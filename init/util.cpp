@@ -34,6 +34,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
@@ -77,32 +78,28 @@ Result<uid_t> DecodeUid(const std::string& name) {
  * daemon. We communicate the file descriptor's value via the environment
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
-int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
-                 const char* socketcon) {
-    if (socketcon) {
-        if (setsockcreatecon(socketcon) == -1) {
-            PLOG(ERROR) << "setsockcreatecon(\"" << socketcon << "\") failed";
-            return -1;
+Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_t perm, uid_t uid,
+                         gid_t gid, const std::string& socketcon) {
+    if (!socketcon.empty()) {
+        if (setsockcreatecon(socketcon.c_str()) == -1) {
+            return ErrnoError() << "setsockcreatecon(\"" << socketcon << "\") failed";
         }
     }
 
     android::base::unique_fd fd(socket(PF_UNIX, type, 0));
     if (fd < 0) {
-        PLOG(ERROR) << "Failed to open socket '" << name << "'";
-        return -1;
+        return ErrnoError() << "Failed to open socket '" << name << "'";
     }
 
-    if (socketcon) setsockcreatecon(NULL);
+    if (!socketcon.empty()) setsockcreatecon(nullptr);
 
     struct sockaddr_un addr;
     memset(&addr, 0 , sizeof(addr));
     addr.sun_family = AF_UNIX;
-    snprintf(addr.sun_path, sizeof(addr.sun_path), ANDROID_SOCKET_DIR"/%s",
-             name);
+    snprintf(addr.sun_path, sizeof(addr.sun_path), ANDROID_SOCKET_DIR "/%s", name.c_str());
 
     if ((unlink(addr.sun_path) != 0) && (errno != ENOENT)) {
-        PLOG(ERROR) << "Failed to unlink old socket '" << name << "'";
-        return -1;
+        return ErrnoError() << "Failed to unlink old socket '" << name << "'";
     }
 
     std::string secontext;
@@ -113,8 +110,7 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
     if (passcred) {
         int on = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on))) {
-            PLOG(ERROR) << "Failed to set SO_PASSCRED '" << name << "'";
-            return -1;
+            return ErrnoError() << "Failed to set SO_PASSCRED '" << name << "'";
         }
     }
 
@@ -125,19 +121,18 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
         setfscreatecon(nullptr);
     }
 
+    auto guard = android::base::make_scope_guard([&addr] { unlink(addr.sun_path); });
+
     if (ret) {
         errno = savederrno;
-        PLOG(ERROR) << "Failed to bind socket '" << name << "'";
-        goto out_unlink;
+        return ErrnoError() << "Failed to bind socket '" << name << "'";
     }
 
     if (lchown(addr.sun_path, uid, gid)) {
-        PLOG(ERROR) << "Failed to lchown socket '" << addr.sun_path << "'";
-        goto out_unlink;
+        return ErrnoError() << "Failed to lchown socket '" << addr.sun_path << "'";
     }
     if (fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW)) {
-        PLOG(ERROR) << "Failed to fchmodat socket '" << addr.sun_path << "'";
-        goto out_unlink;
+        return ErrnoError() << "Failed to fchmodat socket '" << addr.sun_path << "'";
     }
 
     LOG(INFO) << "Created socket '" << addr.sun_path << "'"
@@ -145,11 +140,8 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
               << ", user " << uid
               << ", group " << gid;
 
+    guard.Disable();
     return fd.release();
-
-out_unlink:
-    unlink(addr.sun_path);
-    return -1;
 }
 
 Result<std::string> ReadFile(const std::string& path) {
