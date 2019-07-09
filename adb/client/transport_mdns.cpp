@@ -31,7 +31,7 @@
 
 #include "adb_mdns.h"
 #include "adb_trace.h"
-#include "fdevent.h"
+#include "fdevent/fdevent.h"
 #include "sysdeps.h"
 
 static DNSServiceRef service_ref;
