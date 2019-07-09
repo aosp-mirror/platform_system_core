@@ -95,8 +95,9 @@ std::unique_ptr<SplitFiemap> SplitFiemap::Create(const std::string& file_path, u
         // To make sure the alignment doesn't create too much inconsistency, we
         // account the *actual* size, not the requested size.
         total_bytes_written += writer->size();
-        remaining_bytes -= writer->size();
-
+        // writer->size() is block size aligned and could be bigger than remaining_bytes
+        // If remaining_bytes is bigger, set remaining_bytes to 0 to avoid underflow error.
+        remaining_bytes = remaining_bytes > writer->size() ? (remaining_bytes - writer->size()) : 0;
         out->AddFile(std::move(writer));
     }
 
