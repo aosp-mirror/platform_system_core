@@ -62,7 +62,6 @@ struct fdevent_context_poll : public fdevent_context {
 
     virtual void TerminateLoop() final;
     virtual size_t InstalledCount() final;
-    virtual void Reset() final;
 
     // All operations to fdevent should happen only in the main thread.
     // That's why we don't need a lock for fdevent.
