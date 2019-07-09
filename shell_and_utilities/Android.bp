@@ -13,7 +13,6 @@ phony {
         "auditctl",
         "awk",
         "bzip2",
-        "grep",
         "logwrapper",
         "mini-keyctl",
         "mkshrc",
@@ -32,7 +31,6 @@ phony {
 phony {
     name: "shell_and_utilities_recovery",
     required: [
-        "grep.recovery",
         "sh.recovery",
         "toolbox.recovery",
         "toybox.recovery",
@@ -44,7 +42,6 @@ phony {
     name: "shell_and_utilities_vendor",
     required: [
         "awk_vendor",
-        "grep_vendor",
         "logwrapper_vendor",
         "mkshrc_vendor",
         "sh_vendor",
