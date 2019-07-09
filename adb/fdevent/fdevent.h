@@ -79,7 +79,6 @@ struct fdevent_context {
     // Test-only functionality:
     virtual void TerminateLoop() = 0;
     virtual size_t InstalledCount() = 0;
-    virtual void Reset() = 0;
 };
 
 struct fdevent {
