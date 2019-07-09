@@ -33,9 +33,6 @@ std::string dump_fde(const fdevent* fde) {
     if (fde->state & FDE_PENDING) {
         state += "P";
     }
-    if (fde->state & FDE_CREATED) {
-        state += "C";
-    }
     if (fde->state & FDE_READ) {
         state += "R";
     }
