@@ -8,6 +8,7 @@ LOCAL_PATH:= $(call my-dir)
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 init_options += \
+    -DALLOW_FIRST_STAGE_CONSOLE=1 \
     -DALLOW_LOCAL_PROP_OVERRIDE=1 \
     -DALLOW_PERMISSIVE_SELINUX=1 \
     -DREBOOT_BOOTLOADER_ON_PANIC=1 \
@@ -15,6 +16,7 @@ init_options += \
     -DDUMP_ON_UMOUNT_FAILURE=1
 else
 init_options += \
+    -DALLOW_FIRST_STAGE_CONSOLE=0 \
     -DALLOW_LOCAL_PROP_OVERRIDE=0 \
     -DALLOW_PERMISSIVE_SELINUX=0 \
     -DREBOOT_BOOTLOADER_ON_PANIC=0 \
