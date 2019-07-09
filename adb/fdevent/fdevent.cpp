@@ -24,6 +24,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/threads.h>
 
+#include "adb_utils.h"
 #include "fdevent.h"
 #include "fdevent_poll.h"
 
@@ -46,6 +47,40 @@ std::string dump_fde(const fdevent* fde) {
     }
     return android::base::StringPrintf("(fdevent %" PRIu64 ": fd %d %s)", fde->id, fde->fd.get(),
                                        state.c_str());
+}
+
+fdevent* fdevent_context::Create(unique_fd fd, std::variant<fd_func, fd_func2> func, void* arg) {
+    CheckMainThread();
+    CHECK_GE(fd.get(), 0);
+
+    fdevent* fde = new fdevent();
+    fde->id = fdevent_id_++;
+    fde->state = FDE_ACTIVE;
+    fde->fd = std::move(fd);
+    fde->func = func;
+    fde->arg = arg;
+    if (!set_file_block_mode(fde->fd, false)) {
+        // Here is not proper to handle the error. If it fails here, some error is
+        // likely to be detected by poll(), then we can let the callback function
+        // to handle it.
+        LOG(ERROR) << "failed to set non-blocking mode for fd " << fde->fd.get();
+    }
+
+    this->Register(fde);
+    return fde;
+}
+
+unique_fd fdevent_context::Destroy(fdevent* fde) {
+    CheckMainThread();
+    if (!fde) {
+        return {};
+    }
+
+    this->Unregister(fde);
+
+    unique_fd result = std::move(fde->fd);
+    delete fde;
+    return result;
 }
 
 void fdevent_context::CheckMainThread() {
