@@ -120,22 +120,19 @@ Result<void> SetUpPidNamespace(const char* name) {
 }
 
 void ZapStdio() {
-    int fd;
-    fd = open("/dev/null", O_RDWR);
+    auto fd = unique_fd{open("/dev/null", O_RDWR | O_CLOEXEC)};
     dup2(fd, 0);
     dup2(fd, 1);
     dup2(fd, 2);
-    close(fd);
 }
 
 void OpenConsole(const std::string& console) {
-    int fd = open(console.c_str(), O_RDWR);
-    if (fd == -1) fd = open("/dev/null", O_RDWR);
+    auto fd = unique_fd{open(console.c_str(), O_RDWR | O_CLOEXEC)};
+    if (fd == -1) fd.reset(open("/dev/null", O_RDWR | O_CLOEXEC));
     ioctl(fd, TIOCSCTTY, 0);
     dup2(fd, 0);
     dup2(fd, 1);
     dup2(fd, 2);
-    close(fd);
 }
 
 }  // namespace
