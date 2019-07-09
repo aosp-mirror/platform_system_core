@@ -81,15 +81,6 @@ inline constexpr unexpect_t unexpect{};
 #define _NODISCARD_
 #endif
 
-namespace {
-template< class T >
-struct remove_cvref {
-  typedef std::remove_cv_t<std::remove_reference_t<T>> type;
-};
-template< class T >
-using remove_cvref_t = typename remove_cvref<T>::type;
-} // namespace
-
 // Class expected
 template<class T, class E>
 class _NODISCARD_ expected {
@@ -182,25 +173,23 @@ class _NODISCARD_ expected {
     else var_ = unexpected(std::move(rhs.error()));
   }
 
-  template<class U = T _ENABLE_IF(
-    std::is_constructible_v<T, U&&> &&
-    !std::is_same_v<remove_cvref_t<U>, std::in_place_t> &&
-    !std::is_same_v<expected<T, E>, remove_cvref_t<U>> &&
-    !std::is_same_v<unexpected<E>, remove_cvref_t<U>> &&
-    std::is_convertible_v<U&&,T> /* non-explicit */
-  )>
-  constexpr expected(U&& v)
-  : var_(std::in_place_index<0>, std::forward<U>(v)) {}
+  template <class U = T _ENABLE_IF(
+                std::is_constructible_v<T, U&&> &&
+                !std::is_same_v<std::remove_cv_t<std::remove_reference_t<U>>, std::in_place_t> &&
+                !std::is_same_v<expected<T, E>, std::remove_cv_t<std::remove_reference_t<U>>> &&
+                !std::is_same_v<unexpected<E>, std::remove_cv_t<std::remove_reference_t<U>>> &&
+                std::is_convertible_v<U&&, T> /* non-explicit */
+                )>
+  constexpr expected(U&& v) : var_(std::in_place_index<0>, std::forward<U>(v)) {}
 
-  template<class U = T _ENABLE_IF(
-    std::is_constructible_v<T, U&&> &&
-    !std::is_same_v<remove_cvref_t<U>, std::in_place_t> &&
-    !std::is_same_v<expected<T, E>, remove_cvref_t<U>> &&
-    !std::is_same_v<unexpected<E>, remove_cvref_t<U>> &&
-    !std::is_convertible_v<U&&,T> /* explicit */
-  )>
-  constexpr explicit expected(U&& v)
-  : var_(std::in_place_index<0>, T(std::forward<U>(v))) {}
+  template <class U = T _ENABLE_IF(
+                std::is_constructible_v<T, U&&> &&
+                !std::is_same_v<std::remove_cv_t<std::remove_reference_t<U>>, std::in_place_t> &&
+                !std::is_same_v<expected<T, E>, std::remove_cv_t<std::remove_reference_t<U>>> &&
+                !std::is_same_v<unexpected<E>, std::remove_cv_t<std::remove_reference_t<U>>> &&
+                !std::is_convertible_v<U&&, T> /* explicit */
+                )>
+  constexpr explicit expected(U&& v) : var_(std::in_place_index<0>, T(std::forward<U>(v))) {}
 
   template<class G = E _ENABLE_IF(
     std::is_constructible_v<E, const G&> &&
@@ -269,14 +258,12 @@ class _NODISCARD_ expected {
   // Note for SFNAIE above applies to here as well
   expected& operator=(expected&& rhs) = default;
 
-  template<class U = T _ENABLE_IF(
-    !std::is_void_v<T> &&
-    !std::is_same_v<expected<T,E>, remove_cvref_t<U>> &&
-    !std::conjunction_v<std::is_scalar<T>, std::is_same<T, std::decay_t<U>>> &&
-    std::is_constructible_v<T,U> &&
-    std::is_assignable_v<T&,U> &&
-    std::is_nothrow_move_constructible_v<E>
-  )>
+  template <class U = T _ENABLE_IF(
+                !std::is_void_v<T> &&
+                !std::is_same_v<expected<T, E>, std::remove_cv_t<std::remove_reference_t<U>>> &&
+                !std::conjunction_v<std::is_scalar<T>, std::is_same<T, std::decay_t<U>>> &&
+                std::is_constructible_v<T, U> && std::is_assignable_v<T&, U> &&
+                std::is_nothrow_move_constructible_v<E>)>
   expected& operator=(U&& rhs) {
     var_ = T(std::forward<U>(rhs));
     return *this;
@@ -648,13 +635,11 @@ class unexpected {
   constexpr unexpected(const unexpected&) = default;
   constexpr unexpected(unexpected&&) = default;
 
-  template<class Err = E _ENABLE_IF(
-    std::is_constructible_v<E, Err> &&
-    !std::is_same_v<remove_cvref_t<E>, std::in_place_t> &&
-    !std::is_same_v<remove_cvref_t<E>, unexpected>
-  )>
-  constexpr unexpected(Err&& e)
-  : val_(std::forward<Err>(e)) {}
+  template <class Err = E _ENABLE_IF(
+                std::is_constructible_v<E, Err> &&
+                !std::is_same_v<std::remove_cv_t<std::remove_reference_t<E>>, std::in_place_t> &&
+                !std::is_same_v<std::remove_cv_t<std::remove_reference_t<E>>, unexpected>)>
+  constexpr unexpected(Err&& e) : val_(std::forward<Err>(e)) {}
 
   template<class U, class... Args _ENABLE_IF(
     std::is_constructible_v<E, std::initializer_list<U>&, Args...>
