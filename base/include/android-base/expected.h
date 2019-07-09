@@ -256,7 +256,8 @@ class _NODISCARD_ expected {
   expected& operator=(const expected& rhs) = default;
 
   // Note for SFNAIE above applies to here as well
-  expected& operator=(expected&& rhs) = default;
+  expected& operator=(expected&& rhs) noexcept(
+      std::is_nothrow_move_assignable_v<T>&& std::is_nothrow_move_assignable_v<E>) = default;
 
   template <class U = T _ENABLE_IF(
                 !std::is_void_v<T> &&
@@ -542,7 +543,7 @@ class _NODISCARD_ expected<void, E> {
   expected& operator=(const expected& rhs) = default;
 
   // Note for SFNAIE above applies to here as well
-  expected& operator=(expected&& rhs) = default;
+  expected& operator=(expected&& rhs) noexcept(std::is_nothrow_move_assignable_v<E>) = default;
 
   template<class G = E>
   expected& operator=(const unexpected<G>& rhs) {
@@ -633,7 +634,7 @@ class unexpected {
  public:
   // constructors
   constexpr unexpected(const unexpected&) = default;
-  constexpr unexpected(unexpected&&) = default;
+  constexpr unexpected(unexpected&&) noexcept(std::is_nothrow_move_constructible_v<E>) = default;
 
   template <class Err = E _ENABLE_IF(
                 std::is_constructible_v<E, Err> &&
@@ -709,7 +710,8 @@ class unexpected {
 
   // assignment
   constexpr unexpected& operator=(const unexpected&) = default;
-  constexpr unexpected& operator=(unexpected&&) = default;
+  constexpr unexpected& operator=(unexpected&&) noexcept(std::is_nothrow_move_assignable_v<E>) =
+      default;
   template<class Err = E>
   constexpr unexpected& operator=(const unexpected<Err>& rhs) {
     val_ = rhs.value();
