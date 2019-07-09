@@ -26,6 +26,7 @@ cc_defaults {
         "-Wextra",
         "-Wno-unused-parameter",
         "-Werror",
+        "-DALLOW_FIRST_STAGE_CONSOLE=0",
         "-DALLOW_LOCAL_PROP_OVERRIDE=0",
         "-DALLOW_PERMISSIVE_SELINUX=0",
         "-DREBOOT_BOOTLOADER_ON_PANIC=0",
@@ -36,6 +37,8 @@ cc_defaults {
     product_variables: {
         debuggable: {
             cppflags: [
+                "-UALLOW_FIRST_STAGE_CONSOLE",
+                "-DALLOW_FIRST_STAGE_CONSOLE=1",
                 "-UALLOW_LOCAL_PROP_OVERRIDE",
                 "-DALLOW_LOCAL_PROP_OVERRIDE=1",
                 "-UALLOW_PERMISSIVE_SELINUX",
