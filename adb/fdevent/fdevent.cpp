@@ -58,48 +58,6 @@
 #define FDE_PENDING    0x0200
 #define FDE_CREATED    0x0400
 
-struct PollNode {
-  fdevent* fde;
-  adb_pollfd pollfd;
-
-  explicit PollNode(fdevent* fde) : fde(fde) {
-      memset(&pollfd, 0, sizeof(pollfd));
-      pollfd.fd = fde->fd.get();
-
-#if defined(__linux__)
-      // Always enable POLLRDHUP, so the host server can take action when some clients disconnect.
-      // Then we can avoid leaving many sockets in CLOSE_WAIT state. See http://b/23314034.
-      pollfd.events = POLLRDHUP;
-#endif
-  }
-};
-
-// All operations to fdevent should happen only in the main thread.
-// That's why we don't need a lock for fdevent.
-static auto& g_poll_node_map = *new std::unordered_map<int, PollNode>();
-static auto& g_pending_list = *new std::list<fdevent*>();
-static std::atomic<bool> terminate_loop(false);
-static bool main_thread_valid;
-static uint64_t main_thread_id;
-
-static uint64_t fdevent_id;
-
-static bool run_needs_flush = false;
-static auto& run_queue_notify_fd = *new unique_fd();
-static auto& run_queue_mutex = *new std::mutex();
-static auto& run_queue GUARDED_BY(run_queue_mutex) = *new std::deque<std::function<void()>>();
-
-void check_main_thread() {
-    if (main_thread_valid) {
-        CHECK_EQ(main_thread_id, android::base::GetThreadId());
-    }
-}
-
-void set_main_thread() {
-    main_thread_valid = true;
-    main_thread_id = android::base::GetThreadId();
-}
-
 static std::string dump_fde(const fdevent* fde) {
     std::string state;
     if (fde->state & FDE_ACTIVE) {
@@ -124,40 +82,97 @@ static std::string dump_fde(const fdevent* fde) {
                                        state.c_str());
 }
 
-template <typename F>
-static fdevent* fdevent_create_impl(int fd, F func, void* arg) {
-    check_main_thread();
-    CHECK_GE(fd, 0);
+struct PollNode {
+  fdevent* fde;
+  adb_pollfd pollfd;
+
+  explicit PollNode(fdevent* fde) : fde(fde) {
+      memset(&pollfd, 0, sizeof(pollfd));
+      pollfd.fd = fde->fd.get();
+
+#if defined(__linux__)
+      // Always enable POLLRDHUP, so the host server can take action when some clients disconnect.
+      // Then we can avoid leaving many sockets in CLOSE_WAIT state. See http://b/23314034.
+      pollfd.events = POLLRDHUP;
+#endif
+  }
+};
+
+struct fdevent_context_poll : public fdevent_context {
+    virtual ~fdevent_context_poll() = default;
+
+    virtual fdevent* Create(unique_fd fd, std::variant<fd_func, fd_func2> func, void* arg) final;
+    virtual unique_fd Destroy(fdevent* fde) final;
+
+    virtual void Set(fdevent* fde, unsigned events) final;
+    virtual void Add(fdevent* fde, unsigned events) final;
+    virtual void Del(fdevent* fde, unsigned events) final;
+    virtual void SetTimeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout) final;
+
+    virtual void Loop() final;
+
+    virtual void CheckMainThread() final;
+
+    virtual void Run(std::function<void()> fn) final;
+
+    virtual void TerminateLoop() final;
+    virtual size_t InstalledCount() final;
+    virtual void Reset() final;
+
+    // All operations to fdevent should happen only in the main thread.
+    // That's why we don't need a lock for fdevent.
+    std::unordered_map<int, PollNode> poll_node_map_;
+    std::list<fdevent*> pending_list_;
+    bool main_thread_valid_ = false;
+    uint64_t main_thread_id_ = 0;
+    uint64_t fdevent_id_ = 0;
+
+    bool run_needs_flush_ = false;
+    unique_fd run_queue_notify_fd_;
+    std::mutex run_queue_mutex_;
+    std::deque<std::function<void()>> run_queue_ GUARDED_BY(run_queue_mutex_);
+
+    std::atomic<bool> terminate_loop_ = false;
+};
+
+static fdevent_context* g_ambient_fdevent_context = new fdevent_context_poll();
+
+static fdevent_context* fdevent_get_ambient() {
+    return g_ambient_fdevent_context;
+}
+
+void fdevent_context_poll::CheckMainThread() {
+    if (main_thread_valid_) {
+        CHECK_EQ(main_thread_id_, android::base::GetThreadId());
+    }
+}
+
+fdevent* fdevent_context_poll::Create(unique_fd fd, std::variant<fd_func, fd_func2> func,
+                                      void* arg) {
+    CheckMainThread();
+    CHECK_GE(fd.get(), 0);
 
     fdevent* fde = new fdevent();
-    fde->id = fdevent_id++;
+    fde->id = fdevent_id_++;
     fde->state = FDE_ACTIVE;
-    fde->fd.reset(fd);
+    fde->fd = std::move(fd);
     fde->func = func;
     fde->arg = arg;
-    if (!set_file_block_mode(fd, false)) {
+    if (!set_file_block_mode(fde->fd, false)) {
         // Here is not proper to handle the error. If it fails here, some error is
         // likely to be detected by poll(), then we can let the callback function
         // to handle it.
-        LOG(ERROR) << "failed to set non-blocking mode for fd " << fd;
+        LOG(ERROR) << "failed to set non-blocking mode for fd " << fde->fd.get();
     }
-    auto pair = g_poll_node_map.emplace(fde->fd.get(), PollNode(fde));
-    CHECK(pair.second) << "install existing fd " << fd;
+    auto pair = poll_node_map_.emplace(fde->fd.get(), PollNode(fde));
+    CHECK(pair.second) << "install existing fd " << fde->fd.get();
 
     fde->state |= FDE_CREATED;
     return fde;
 }
 
-fdevent* fdevent_create(int fd, fd_func func, void* arg) {
-    return fdevent_create_impl(fd, func, arg);
-}
-
-fdevent* fdevent_create(int fd, fd_func2 func, void* arg) {
-    return fdevent_create_impl(fd, func, arg);
-}
-
-unique_fd fdevent_release(fdevent* fde) {
-    check_main_thread();
+unique_fd fdevent_context_poll::Destroy(fdevent* fde) {
+    CheckMainThread();
     if (!fde) {
         return {};
     }
@@ -168,10 +183,10 @@ unique_fd fdevent_release(fdevent* fde) {
 
     unique_fd result = std::move(fde->fd);
     if (fde->state & FDE_ACTIVE) {
-        g_poll_node_map.erase(result.get());
+        poll_node_map_.erase(result.get());
 
         if (fde->state & FDE_PENDING) {
-            g_pending_list.remove(fde);
+            pending_list_.remove(fde);
         }
         fde->state = 0;
         fde->events = 0;
@@ -181,14 +196,16 @@ unique_fd fdevent_release(fdevent* fde) {
     return result;
 }
 
-void fdevent_destroy(fdevent* fde) {
-    // Release, and then let unique_fd's destructor cleanup.
-    fdevent_release(fde);
-}
+void fdevent_context_poll::Set(fdevent* fde, unsigned events) {
+    CheckMainThread();
+    events &= FDE_EVENTMASK;
+    if ((fde->state & FDE_EVENTMASK) == events) {
+        return;
+    }
+    CHECK(fde->state & FDE_ACTIVE);
 
-static void fdevent_update(fdevent* fde, unsigned events) {
-    auto it = g_poll_node_map.find(fde->fd.get());
-    CHECK(it != g_poll_node_map.end());
+    auto it = poll_node_map_.find(fde->fd.get());
+    CHECK(it != poll_node_map_.end());
     PollNode& node = it->second;
     if (events & FDE_READ) {
         node.pollfd.events |= POLLIN;
@@ -202,42 +219,31 @@ static void fdevent_update(fdevent* fde, unsigned events) {
         node.pollfd.events &= ~POLLOUT;
     }
     fde->state = (fde->state & FDE_STATEMASK) | events;
-}
 
-void fdevent_set(fdevent* fde, unsigned events) {
-    check_main_thread();
-    events &= FDE_EVENTMASK;
-    if ((fde->state & FDE_EVENTMASK) == events) {
-        return;
-    }
-    CHECK(fde->state & FDE_ACTIVE);
-    fdevent_update(fde, events);
     D("fdevent_set: %s, events = %u", dump_fde(fde).c_str(), events);
 
     if (fde->state & FDE_PENDING) {
         // If we are pending, make sure we don't signal an event that is no longer wanted.
         fde->events &= events;
         if (fde->events == 0) {
-            g_pending_list.remove(fde);
+            pending_list_.remove(fde);
             fde->state &= ~FDE_PENDING;
         }
     }
 }
 
-void fdevent_add(fdevent* fde, unsigned events) {
-    check_main_thread();
-    CHECK(!(events & FDE_TIMEOUT));
-    fdevent_set(fde, (fde->state & FDE_EVENTMASK) | events);
+void fdevent_context_poll::Add(fdevent* fde, unsigned events) {
+    Set(fde, (fde->state & FDE_EVENTMASK) | events);
 }
 
-void fdevent_del(fdevent* fde, unsigned events) {
-    check_main_thread();
+void fdevent_context_poll::Del(fdevent* fde, unsigned events) {
     CHECK(!(events & FDE_TIMEOUT));
-    fdevent_set(fde, (fde->state & FDE_EVENTMASK) & ~events);
+    Set(fde, (fde->state & FDE_EVENTMASK) & ~events);
 }
 
-void fdevent_set_timeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout) {
-    check_main_thread();
+void fdevent_context_poll::SetTimeout(fdevent* fde,
+                                      std::optional<std::chrono::milliseconds> timeout) {
+    CheckMainThread();
     fde->timeout = timeout;
     fde->last_active = std::chrono::steady_clock::now();
 }
@@ -257,12 +263,12 @@ static std::string dump_pollfds(const std::vector<adb_pollfd>& pollfds) {
     return result;
 }
 
-static std::optional<std::chrono::milliseconds> calculate_timeout() {
+static std::optional<std::chrono::milliseconds> calculate_timeout(fdevent_context_poll* ctx) {
     std::optional<std::chrono::milliseconds> result = std::nullopt;
     auto now = std::chrono::steady_clock::now();
-    check_main_thread();
+    ctx->CheckMainThread();
 
-    for (const auto& [fd, pollnode] : g_poll_node_map) {
+    for (const auto& [fd, pollnode] : ctx->poll_node_map_) {
         UNUSED(fd);
         auto timeout_opt = pollnode.fde->timeout;
         if (timeout_opt) {
@@ -283,15 +289,15 @@ static std::optional<std::chrono::milliseconds> calculate_timeout() {
     return result;
 }
 
-static void fdevent_process() {
+static void fdevent_process(fdevent_context_poll* ctx) {
     std::vector<adb_pollfd> pollfds;
-    for (const auto& pair : g_poll_node_map) {
+    for (const auto& pair : ctx->poll_node_map_) {
         pollfds.push_back(pair.second.pollfd);
     }
     CHECK_GT(pollfds.size(), 0u);
     D("poll(), pollfds = %s", dump_pollfds(pollfds).c_str());
 
-    auto timeout = calculate_timeout();
+    auto timeout = calculate_timeout(ctx);
     int timeout_ms;
     if (!timeout) {
         timeout_ms = -1;
@@ -328,8 +334,8 @@ static void fdevent_process() {
             events |= FDE_READ | FDE_ERROR;
         }
 #endif
-        auto it = g_poll_node_map.find(pollfd.fd);
-        CHECK(it != g_poll_node_map.end());
+        auto it = ctx->poll_node_map_.find(pollfd.fd);
+        CHECK(it != ctx->poll_node_map_.end());
         fdevent* fde = it->second.fde;
 
         if (events == 0) {
@@ -348,7 +354,7 @@ static void fdevent_process() {
             fde->last_active = post_poll;
             D("%s got events %x", dump_fde(fde).c_str(), events);
             fde->state |= FDE_PENDING;
-            g_pending_list.push_back(fde);
+            ctx->pending_list_.push_back(fde);
         }
     }
 }
@@ -376,27 +382,28 @@ static void fdevent_call_fdfunc(fdevent* fde) {
             fde->func);
 }
 
-static void fdevent_run_flush() EXCLUDES(run_queue_mutex) {
+static void fdevent_run_flush(fdevent_context_poll* ctx) EXCLUDES(ctx->run_queue_mutex_) {
     // We need to be careful around reentrancy here, since a function we call can queue up another
     // function.
     while (true) {
         std::function<void()> fn;
         {
-            std::lock_guard<std::mutex> lock(run_queue_mutex);
-            if (run_queue.empty()) {
+            std::lock_guard<std::mutex> lock(ctx->run_queue_mutex_);
+            if (ctx->run_queue_.empty()) {
                 break;
             }
-            fn = run_queue.front();
-            run_queue.pop_front();
+            fn = ctx->run_queue_.front();
+            ctx->run_queue_.pop_front();
         }
         fn();
     }
 }
 
-static void fdevent_run_func(int fd, unsigned ev, void* /* userdata */) {
+static void fdevent_run_func(int fd, unsigned ev, void* data) {
     CHECK_GE(fd, 0);
     CHECK(ev & FDE_READ);
 
+    bool* run_needs_flush = static_cast<bool*>(data);
     char buf[1024];
 
     // Empty the fd.
@@ -405,13 +412,13 @@ static void fdevent_run_func(int fd, unsigned ev, void* /* userdata */) {
     }
 
     // Mark that we need to flush, and then run it at the end of fdevent_loop.
-    run_needs_flush = true;
+    *run_needs_flush = true;
 }
 
-static void fdevent_run_setup() {
+static void fdevent_run_setup(fdevent_context_poll* ctx) {
     {
-        std::lock_guard<std::mutex> lock(run_queue_mutex);
-        CHECK(run_queue_notify_fd.get() == -1);
+        std::lock_guard<std::mutex> lock(ctx->run_queue_mutex_);
+        CHECK(ctx->run_queue_notify_fd_.get() == -1);
         int s[2];
         if (adb_socketpair(s) != 0) {
             PLOG(FATAL) << "failed to create run queue notify socketpair";
@@ -421,23 +428,23 @@ static void fdevent_run_setup() {
             PLOG(FATAL) << "failed to make run queue notify socket nonblocking";
         }
 
-        run_queue_notify_fd.reset(s[0]);
-        fdevent* fde = fdevent_create(s[1], fdevent_run_func, nullptr);
+        ctx->run_queue_notify_fd_.reset(s[0]);
+        fdevent* fde = ctx->Create(unique_fd(s[1]), fdevent_run_func, &ctx->run_needs_flush_);
         CHECK(fde != nullptr);
-        fdevent_add(fde, FDE_READ);
+        ctx->Add(fde, FDE_READ);
     }
 
-    fdevent_run_flush();
+    fdevent_run_flush(ctx);
 }
 
-void fdevent_run_on_main_thread(std::function<void()> fn) {
-    std::lock_guard<std::mutex> lock(run_queue_mutex);
-    run_queue.push_back(std::move(fn));
+void fdevent_context_poll::Run(std::function<void()> fn) {
+    std::lock_guard<std::mutex> lock(run_queue_mutex_);
+    run_queue_.push_back(std::move(fn));
 
     // run_queue_notify_fd could still be -1 if we're called before fdevent has finished setting up.
     // In that case, rely on the setup code to flush the queue without a notification being needed.
-    if (run_queue_notify_fd != -1) {
-        int rc = adb_write(run_queue_notify_fd.get(), "", 1);
+    if (run_queue_notify_fd_ != -1) {
+        int rc = adb_write(run_queue_notify_fd_.get(), "", 1);
 
         // It's possible that we get EAGAIN here, if lots of notifications came in while handling.
         if (rc == 0) {
@@ -448,7 +455,7 @@ void fdevent_run_on_main_thread(std::function<void()> fn) {
     }
 }
 
-static void fdevent_check_spin(uint64_t cycle) {
+static void fdevent_check_spin(fdevent_context_poll* ctx, uint64_t cycle) {
     // Check to see if we're spinning because we forgot about an fdevent
     // by keeping track of how long fdevents have been continuously pending.
     struct SpinCheck {
@@ -456,6 +463,8 @@ static void fdevent_check_spin(uint64_t cycle) {
         android::base::boot_clock::time_point timestamp;
         uint64_t cycle;
     };
+
+    // TODO: Move this into the base fdevent_context.
     static auto& g_continuously_pending = *new std::unordered_map<uint64_t, SpinCheck>();
     static auto last_cycle = android::base::boot_clock::now();
 
@@ -468,7 +477,7 @@ static void fdevent_check_spin(uint64_t cycle) {
     }
     last_cycle = now;
 
-    for (auto* fde : g_pending_list) {
+    for (auto* fde : ctx->pending_list_) {
         auto it = g_continuously_pending.find(fde->id);
         if (it == g_continuously_pending.end()) {
             g_continuously_pending[fde->id] =
@@ -503,51 +512,110 @@ static void fdevent_check_spin(uint64_t cycle) {
     }
 }
 
-void fdevent_loop() {
-    set_main_thread();
-    fdevent_run_setup();
+void fdevent_context_poll::Loop() {
+    this->main_thread_id_ = android::base::GetThreadId();
+    this->main_thread_valid_ = true;
+    fdevent_run_setup(this);
 
     uint64_t cycle = 0;
     while (true) {
-        if (terminate_loop) {
+        if (terminate_loop_) {
             return;
         }
 
         D("--- --- waiting for events");
 
-        fdevent_process();
+        fdevent_process(this);
 
-        fdevent_check_spin(cycle++);
+        fdevent_check_spin(this, cycle++);
 
-        while (!g_pending_list.empty()) {
-            fdevent* fde = g_pending_list.front();
-            g_pending_list.pop_front();
+        while (!pending_list_.empty()) {
+            fdevent* fde = pending_list_.front();
+            pending_list_.pop_front();
             fdevent_call_fdfunc(fde);
         }
 
-        if (run_needs_flush) {
-            fdevent_run_flush();
-            run_needs_flush = false;
+        if (run_needs_flush_) {
+            fdevent_run_flush(this);
+            run_needs_flush_ = false;
         }
     }
 }
 
+void fdevent_context_poll::TerminateLoop() {
+    terminate_loop_ = true;
+}
+
+size_t fdevent_context_poll::InstalledCount() {
+    return poll_node_map_.size();
+}
+
+void fdevent_context_poll::Reset() {
+    poll_node_map_.clear();
+    pending_list_.clear();
+
+    std::lock_guard<std::mutex> lock(run_queue_mutex_);
+    run_queue_notify_fd_.reset();
+    run_queue_.clear();
+
+    main_thread_valid_ = false;
+    terminate_loop_ = false;
+}
+
+fdevent* fdevent_create(int fd, fd_func func, void* arg) {
+    unique_fd ufd(fd);
+    return fdevent_get_ambient()->Create(std::move(ufd), func, arg);
+}
+
+fdevent* fdevent_create(int fd, fd_func2 func, void* arg) {
+    unique_fd ufd(fd);
+    return fdevent_get_ambient()->Create(std::move(ufd), func, arg);
+}
+
+unique_fd fdevent_release(fdevent* fde) {
+    return fdevent_get_ambient()->Destroy(fde);
+}
+
+void fdevent_destroy(fdevent* fde) {
+    fdevent_get_ambient()->Destroy(fde);
+}
+
+void fdevent_set(fdevent* fde, unsigned events) {
+    fdevent_get_ambient()->Set(fde, events);
+}
+
+void fdevent_add(fdevent* fde, unsigned events) {
+    fdevent_get_ambient()->Add(fde, events);
+}
+
+void fdevent_del(fdevent* fde, unsigned events) {
+    fdevent_get_ambient()->Del(fde, events);
+}
+
+void fdevent_set_timeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout) {
+    fdevent_get_ambient()->SetTimeout(fde, timeout);
+}
+
+void fdevent_run_on_main_thread(std::function<void()> fn) {
+    fdevent_get_ambient()->Run(std::move(fn));
+}
+
+void fdevent_loop() {
+    fdevent_get_ambient()->Loop();
+}
+
+void check_main_thread() {
+    fdevent_get_ambient()->CheckMainThread();
+}
+
 void fdevent_terminate_loop() {
-    terminate_loop = true;
+    fdevent_get_ambient()->TerminateLoop();
 }
 
 size_t fdevent_installed_count() {
-    return g_poll_node_map.size();
+    return fdevent_get_ambient()->InstalledCount();
 }
 
 void fdevent_reset() {
-    g_poll_node_map.clear();
-    g_pending_list.clear();
-
-    std::lock_guard<std::mutex> lock(run_queue_mutex);
-    run_queue_notify_fd.reset();
-    run_queue.clear();
-
-    main_thread_valid = false;
-    terminate_loop = false;
+    return fdevent_get_ambient()->Reset();
 }
