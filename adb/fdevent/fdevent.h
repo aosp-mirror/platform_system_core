@@ -43,7 +43,6 @@
 
 #define FDE_ACTIVE     0x0100
 #define FDE_PENDING    0x0200
-#define FDE_CREATED    0x0400
 
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 typedef void (*fd_func2)(struct fdevent* fde, unsigned events, void* userdata);
