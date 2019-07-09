@@ -450,7 +450,7 @@ static void InitAborter(const char* abort_message) {
 // SetStdioToDevNull() must be called again in second stage init.
 void SetStdioToDevNull(char** argv) {
     // Make stdin/stdout/stderr all point to /dev/null.
-    int fd = open("/dev/null", O_RDWR);
+    int fd = open("/dev/null", O_RDWR);  // NOLINT(android-cloexec-open)
     if (fd == -1) {
         int saved_errno = errno;
         android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
