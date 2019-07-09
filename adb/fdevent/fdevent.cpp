@@ -49,6 +49,32 @@ std::string dump_fde(const fdevent* fde) {
                                        state.c_str());
 }
 
+void fdevent_context::Run(std::function<void()> fn) {
+    {
+        std::lock_guard<std::mutex> lock(run_queue_mutex_);
+        run_queue_.push_back(std::move(fn));
+    }
+
+    Interrupt();
+}
+
+void fdevent_context::FlushRunQueue() {
+    // We need to be careful around reentrancy here, since a function we call can queue up another
+    // function.
+    while (true) {
+        std::function<void()> fn;
+        {
+            std::lock_guard<std::mutex> lock(this->run_queue_mutex_);
+            if (this->run_queue_.empty()) {
+                break;
+            }
+            fn = this->run_queue_.front();
+            this->run_queue_.pop_front();
+        }
+        fn();
+    }
+}
+
 static auto& g_ambient_fdevent_context =
         *new std::unique_ptr<fdevent_context>(new fdevent_context_poll());
 
