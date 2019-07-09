@@ -55,11 +55,19 @@ struct fdevent_context {
     virtual ~fdevent_context() = default;
 
     // Allocate and initialize a new fdevent object.
-    virtual fdevent* Create(unique_fd fd, std::variant<fd_func, fd_func2> func, void* arg) = 0;
+    fdevent* Create(unique_fd fd, std::variant<fd_func, fd_func2> func, void* arg);
 
     // Deallocate an fdevent object, returning the file descriptor that was owned by it.
-    virtual unique_fd Destroy(fdevent* fde) = 0;
+    unique_fd Destroy(fdevent* fde);
 
+  protected:
+    // Register an fdevent that is being created by Create with the fdevent_context.
+    virtual void Register(fdevent* fde) = 0;
+
+    // Unregister an fdevent that is being destroyed by Destroy with the fdevent_context.
+    virtual void Unregister(fdevent* fde) = 0;
+
+  public:
     // Change which events should cause notifications.
     virtual void Set(fdevent* fde, unsigned events) = 0;
     virtual void Add(fdevent* fde, unsigned events) = 0;
@@ -98,6 +106,7 @@ struct fdevent_context {
     std::atomic<bool> terminate_loop_ = false;
 
   private:
+    uint64_t fdevent_id_ = 0;
     std::mutex run_queue_mutex_;
     std::deque<std::function<void()>> run_queue_ GUARDED_BY(run_queue_mutex_);
 };
