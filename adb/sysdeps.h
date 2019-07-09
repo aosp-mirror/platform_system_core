@@ -64,8 +64,6 @@
 #include <memory>   // unique_ptr
 #include <string>
 
-#include "fdevent.h"
-
 #define OS_PATH_SEPARATORS "\\/"
 #define OS_PATH_SEPARATOR '\\'
 #define OS_PATH_SEPARATOR_STR "\\"
