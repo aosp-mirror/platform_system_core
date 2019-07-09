@@ -78,8 +78,8 @@ class FdeventTest : public ::testing::Test {
     }
 
     size_t GetAdditionalLocalSocketCount() {
-        // dummy socket installed in PrepareThread() + fdevent_run_on_main_thread socket
-        return 2;
+        // dummy socket installed in PrepareThread()
+        return 1;
     }
 
     void TerminateThread() {
