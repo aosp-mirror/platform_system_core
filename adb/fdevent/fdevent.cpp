@@ -63,6 +63,11 @@ void fdevent_context::Run(std::function<void()> fn) {
     Interrupt();
 }
 
+void fdevent_context::TerminateLoop() {
+    terminate_loop_ = true;
+    Interrupt();
+}
+
 void fdevent_context::FlushRunQueue() {
     // We need to be careful around reentrancy here, since a function we call can queue up another
     // function.
