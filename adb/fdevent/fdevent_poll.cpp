@@ -458,15 +458,3 @@ void fdevent_context_poll::TerminateLoop() {
 size_t fdevent_context_poll::InstalledCount() {
     return poll_node_map_.size();
 }
-
-void fdevent_context_poll::Reset() {
-    poll_node_map_.clear();
-    pending_list_.clear();
-
-    std::lock_guard<std::mutex> lock(run_queue_mutex_);
-    run_queue_notify_fd_.reset();
-    run_queue_.clear();
-
-    main_thread_valid_ = false;
-    terminate_loop_ = false;
-}

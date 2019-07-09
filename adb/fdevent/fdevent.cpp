@@ -49,10 +49,11 @@ std::string dump_fde(const fdevent* fde) {
                                        state.c_str());
 }
 
-static fdevent_context* g_ambient_fdevent_context = new fdevent_context_poll();
+static auto& g_ambient_fdevent_context =
+        *new std::unique_ptr<fdevent_context>(new fdevent_context_poll());
 
 static fdevent_context* fdevent_get_ambient() {
-    return g_ambient_fdevent_context;
+    return g_ambient_fdevent_context.get();
 }
 
 fdevent* fdevent_create(int fd, fd_func func, void* arg) {
@@ -110,5 +111,5 @@ size_t fdevent_installed_count() {
 }
 
 void fdevent_reset() {
-    return fdevent_get_ambient()->Reset();
+    g_ambient_fdevent_context.reset(new fdevent_context_poll());
 }
