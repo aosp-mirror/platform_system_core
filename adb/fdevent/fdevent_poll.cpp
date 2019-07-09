@@ -105,7 +105,6 @@ fdevent* fdevent_context_poll::Create(unique_fd fd, std::variant<fd_func, fd_fun
     auto pair = poll_node_map_.emplace(fde->fd.get(), PollNode(fde));
     CHECK(pair.second) << "install existing fd " << fde->fd.get();
 
-    fde->state |= FDE_CREATED;
     return fde;
 }
 
@@ -113,10 +112,6 @@ unique_fd fdevent_context_poll::Destroy(fdevent* fde) {
     CheckMainThread();
     if (!fde) {
         return {};
-    }
-
-    if (!(fde->state & FDE_CREATED)) {
-        LOG(FATAL) << "destroying fde not created by fdevent_create(): " << dump_fde(fde);
     }
 
     unique_fd result = std::move(fde->fd);
