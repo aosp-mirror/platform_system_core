@@ -58,8 +58,6 @@ struct fdevent_context_poll : public fdevent_context {
 
     virtual void Loop() final;
 
-    virtual void CheckMainThread() final;
-
     virtual void TerminateLoop() final;
     virtual size_t InstalledCount() final;
 
@@ -71,8 +69,6 @@ struct fdevent_context_poll : public fdevent_context {
     // That's why we don't need a lock for fdevent.
     std::unordered_map<int, PollNode> poll_node_map_;
     std::list<fdevent*> pending_list_;
-    bool main_thread_valid_ = false;
-    uint64_t main_thread_id_ = 0;
     uint64_t fdevent_id_ = 0;
 
     unique_fd interrupt_fd_;

@@ -75,8 +75,9 @@ struct fdevent_context {
     // Implementations should call FlushRunQueue on every iteration.
     virtual void Loop() = 0;
 
-    // Assert that the caller is running on the context's main thread.
-    virtual void CheckMainThread() = 0;
+    // Assert that the caller is either running on the context's main thread, or that there is no
+    // active main thread.
+    void CheckMainThread();
 
     // Queue an operation to be run on the main thread.
     void Run(std::function<void()> fn);
@@ -91,6 +92,8 @@ struct fdevent_context {
 
     // Run all pending functions enqueued via Run().
     void FlushRunQueue() EXCLUDES(run_queue_mutex_);
+
+    std::optional<uint64_t> main_thread_id_ = std::nullopt;
 
   private:
     std::mutex run_queue_mutex_;
