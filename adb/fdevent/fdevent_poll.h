@@ -25,6 +25,7 @@
 
 #include <android-base/thread_annotations.h>
 
+#include "adb_unique_fd.h"
 #include "fdevent.h"
 
 struct PollNode {
@@ -44,7 +45,8 @@ struct PollNode {
 };
 
 struct fdevent_context_poll : public fdevent_context {
-    virtual ~fdevent_context_poll() = default;
+    fdevent_context_poll();
+    virtual ~fdevent_context_poll();
 
     virtual fdevent* Create(unique_fd fd, std::variant<fd_func, fd_func2> func, void* arg) final;
     virtual unique_fd Destroy(fdevent* fde) final;
@@ -58,11 +60,13 @@ struct fdevent_context_poll : public fdevent_context {
 
     virtual void CheckMainThread() final;
 
-    virtual void Run(std::function<void()> fn) final;
-
     virtual void TerminateLoop() final;
     virtual size_t InstalledCount() final;
 
+  protected:
+    virtual void Interrupt() final;
+
+  public:
     // All operations to fdevent should happen only in the main thread.
     // That's why we don't need a lock for fdevent.
     std::unordered_map<int, PollNode> poll_node_map_;
@@ -71,10 +75,7 @@ struct fdevent_context_poll : public fdevent_context {
     uint64_t main_thread_id_ = 0;
     uint64_t fdevent_id_ = 0;
 
-    bool run_needs_flush_ = false;
-    unique_fd run_queue_notify_fd_;
-    std::mutex run_queue_mutex_;
-    std::deque<std::function<void()>> run_queue_ GUARDED_BY(run_queue_mutex_);
-
+    unique_fd interrupt_fd_;
+    fdevent* interrupt_fde_ = nullptr;
     std::atomic<bool> terminate_loop_ = false;
 };

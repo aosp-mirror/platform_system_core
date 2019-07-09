@@ -50,6 +50,35 @@
 #include "fdevent.h"
 #include "sysdeps/chrono.h"
 
+static void fdevent_interrupt(int fd, unsigned, void*) {
+    char buf[BUFSIZ];
+    ssize_t rc = TEMP_FAILURE_RETRY(adb_read(fd, buf, sizeof(buf)));
+    if (rc == -1) {
+        PLOG(FATAL) << "failed to read from fdevent interrupt fd";
+    }
+}
+
+fdevent_context_poll::fdevent_context_poll() {
+    int s[2];
+    if (adb_socketpair(s) != 0) {
+        PLOG(FATAL) << "failed to create fdevent interrupt socketpair";
+    }
+
+    if (!set_file_block_mode(s[0], false) || !set_file_block_mode(s[1], false)) {
+        PLOG(FATAL) << "failed to make fdevent interrupt socket nonblocking";
+    }
+
+    this->interrupt_fd_.reset(s[0]);
+    fdevent* fde = this->Create(unique_fd(s[1]), fdevent_interrupt, nullptr);
+    CHECK(fde != nullptr);
+    this->Add(fde, FDE_READ);
+}
+
+fdevent_context_poll::~fdevent_context_poll() {
+    main_thread_valid_ = false;
+    this->Destroy(this->interrupt_fde_);
+}
+
 void fdevent_context_poll::CheckMainThread() {
     if (main_thread_valid_) {
         CHECK_EQ(main_thread_id_, android::base::GetThreadId());
@@ -291,79 +320,6 @@ static void fdevent_call_fdfunc(fdevent* fde) {
             fde->func);
 }
 
-static void fdevent_run_flush(fdevent_context_poll* ctx) EXCLUDES(ctx->run_queue_mutex_) {
-    // We need to be careful around reentrancy here, since a function we call can queue up another
-    // function.
-    while (true) {
-        std::function<void()> fn;
-        {
-            std::lock_guard<std::mutex> lock(ctx->run_queue_mutex_);
-            if (ctx->run_queue_.empty()) {
-                break;
-            }
-            fn = ctx->run_queue_.front();
-            ctx->run_queue_.pop_front();
-        }
-        fn();
-    }
-}
-
-static void fdevent_run_func(int fd, unsigned ev, void* data) {
-    CHECK_GE(fd, 0);
-    CHECK(ev & FDE_READ);
-
-    bool* run_needs_flush = static_cast<bool*>(data);
-    char buf[1024];
-
-    // Empty the fd.
-    if (adb_read(fd, buf, sizeof(buf)) == -1) {
-        PLOG(FATAL) << "failed to empty run queue notify fd";
-    }
-
-    // Mark that we need to flush, and then run it at the end of fdevent_loop.
-    *run_needs_flush = true;
-}
-
-static void fdevent_run_setup(fdevent_context_poll* ctx) {
-    {
-        std::lock_guard<std::mutex> lock(ctx->run_queue_mutex_);
-        CHECK(ctx->run_queue_notify_fd_.get() == -1);
-        int s[2];
-        if (adb_socketpair(s) != 0) {
-            PLOG(FATAL) << "failed to create run queue notify socketpair";
-        }
-
-        if (!set_file_block_mode(s[0], false) || !set_file_block_mode(s[1], false)) {
-            PLOG(FATAL) << "failed to make run queue notify socket nonblocking";
-        }
-
-        ctx->run_queue_notify_fd_.reset(s[0]);
-        fdevent* fde = ctx->Create(unique_fd(s[1]), fdevent_run_func, &ctx->run_needs_flush_);
-        CHECK(fde != nullptr);
-        ctx->Add(fde, FDE_READ);
-    }
-
-    fdevent_run_flush(ctx);
-}
-
-void fdevent_context_poll::Run(std::function<void()> fn) {
-    std::lock_guard<std::mutex> lock(run_queue_mutex_);
-    run_queue_.push_back(std::move(fn));
-
-    // run_queue_notify_fd could still be -1 if we're called before fdevent has finished setting up.
-    // In that case, rely on the setup code to flush the queue without a notification being needed.
-    if (run_queue_notify_fd_ != -1) {
-        int rc = adb_write(run_queue_notify_fd_.get(), "", 1);
-
-        // It's possible that we get EAGAIN here, if lots of notifications came in while handling.
-        if (rc == 0) {
-            PLOG(FATAL) << "run queue notify fd was closed?";
-        } else if (rc == -1 && errno != EAGAIN) {
-            PLOG(FATAL) << "failed to write to run queue notify fd";
-        }
-    }
-}
-
 static void fdevent_check_spin(fdevent_context_poll* ctx, uint64_t cycle) {
     // Check to see if we're spinning because we forgot about an fdevent
     // by keeping track of how long fdevents have been continuously pending.
@@ -424,7 +380,6 @@ static void fdevent_check_spin(fdevent_context_poll* ctx, uint64_t cycle) {
 void fdevent_context_poll::Loop() {
     this->main_thread_id_ = android::base::GetThreadId();
     this->main_thread_valid_ = true;
-    fdevent_run_setup(this);
 
     uint64_t cycle = 0;
     while (true) {
@@ -444,17 +399,27 @@ void fdevent_context_poll::Loop() {
             fdevent_call_fdfunc(fde);
         }
 
-        if (run_needs_flush_) {
-            fdevent_run_flush(this);
-            run_needs_flush_ = false;
-        }
+        this->FlushRunQueue();
     }
 }
 
 void fdevent_context_poll::TerminateLoop() {
     terminate_loop_ = true;
+    Interrupt();
 }
 
 size_t fdevent_context_poll::InstalledCount() {
-    return poll_node_map_.size();
+    // We always have an installed fde for interrupt.
+    return poll_node_map_.size() - 1;
+}
+
+void fdevent_context_poll::Interrupt() {
+    int rc = adb_write(this->interrupt_fd_, "", 1);
+
+    // It's possible that we get EAGAIN here, if lots of notifications came in while handling.
+    if (rc == 0) {
+        PLOG(FATAL) << "fdevent interrupt fd was closed?";
+    } else if (rc == -1 && errno != EAGAIN) {
+        PLOG(FATAL) << "failed to write to fdevent interrupt fd";
+    }
 }

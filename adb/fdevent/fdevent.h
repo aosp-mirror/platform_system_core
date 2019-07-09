@@ -21,9 +21,13 @@
 #include <stdint.h>
 
 #include <chrono>
+#include <deque>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <variant>
+
+#include <android-base/thread_annotations.h>
 
 #include "adb_unique_fd.h"
 
@@ -48,6 +52,7 @@ struct fdevent;
 std::string dump_fde(const fdevent* fde);
 
 struct fdevent_context {
+  public:
     virtual ~fdevent_context() = default;
 
     // Allocate and initialize a new fdevent object.
@@ -68,17 +73,29 @@ struct fdevent_context {
     virtual void SetTimeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout) = 0;
 
     // Loop forever, handling events.
+    // Implementations should call FlushRunQueue on every iteration.
     virtual void Loop() = 0;
 
     // Assert that the caller is running on the context's main thread.
     virtual void CheckMainThread() = 0;
 
     // Queue an operation to be run on the main thread.
-    virtual void Run(std::function<void()> fn) = 0;
+    void Run(std::function<void()> fn);
 
     // Test-only functionality:
     virtual void TerminateLoop() = 0;
     virtual size_t InstalledCount() = 0;
+
+  protected:
+    // Interrupt the run loop.
+    virtual void Interrupt() = 0;
+
+    // Run all pending functions enqueued via Run().
+    void FlushRunQueue() EXCLUDES(run_queue_mutex_);
+
+  private:
+    std::mutex run_queue_mutex_;
+    std::deque<std::function<void()>> run_queue_ GUARDED_BY(run_queue_mutex_);
 };
 
 struct fdevent {
