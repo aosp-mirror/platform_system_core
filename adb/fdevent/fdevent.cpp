@@ -83,6 +83,21 @@ unique_fd fdevent_context::Destroy(fdevent* fde) {
     return result;
 }
 
+void fdevent_context::Add(fdevent* fde, unsigned events) {
+    Set(fde, (fde->state & FDE_EVENTMASK) | events);
+}
+
+void fdevent_context::Del(fdevent* fde, unsigned events) {
+    CHECK(!(events & FDE_TIMEOUT));
+    Set(fde, (fde->state & FDE_EVENTMASK) & ~events);
+}
+
+void fdevent_context::SetTimeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout) {
+    CheckMainThread();
+    fde->timeout = timeout;
+    fde->last_active = std::chrono::steady_clock::now();
+}
+
 void fdevent_context::CheckMainThread() {
     if (main_thread_id_) {
         CHECK_EQ(*main_thread_id_, android::base::GetThreadId());

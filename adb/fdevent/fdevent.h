@@ -70,14 +70,14 @@ struct fdevent_context {
   public:
     // Change which events should cause notifications.
     virtual void Set(fdevent* fde, unsigned events) = 0;
-    virtual void Add(fdevent* fde, unsigned events) = 0;
-    virtual void Del(fdevent* fde, unsigned events) = 0;
+    void Add(fdevent* fde, unsigned events);
+    void Del(fdevent* fde, unsigned events);
 
     // Set a timeout on an fdevent.
     // If no events are triggered by the timeout, an FDE_TIMEOUT will be generated.
     // Note timeouts are not defused automatically; if a timeout is set on an fdevent, it will
     // trigger repeatedly every |timeout| ms.
-    virtual void SetTimeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout) = 0;
+    void SetTimeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout);
 
     // Loop until TerminateLoop is called, handling events.
     // Implementations should call FlushRunQueue on every iteration, and check the value of
