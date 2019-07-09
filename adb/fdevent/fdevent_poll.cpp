@@ -75,14 +75,7 @@ fdevent_context_poll::fdevent_context_poll() {
 }
 
 fdevent_context_poll::~fdevent_context_poll() {
-    main_thread_valid_ = false;
     this->Destroy(this->interrupt_fde_);
-}
-
-void fdevent_context_poll::CheckMainThread() {
-    if (main_thread_valid_) {
-        CHECK_EQ(main_thread_id_, android::base::GetThreadId());
-    }
 }
 
 fdevent* fdevent_context_poll::Create(unique_fd fd, std::variant<fd_func, fd_func2> func,
@@ -373,13 +366,12 @@ static void fdevent_check_spin(fdevent_context_poll* ctx, uint64_t cycle) {
 }
 
 void fdevent_context_poll::Loop() {
-    this->main_thread_id_ = android::base::GetThreadId();
-    this->main_thread_valid_ = true;
+    main_thread_id_ = android::base::GetThreadId();
 
     uint64_t cycle = 0;
     while (true) {
         if (terminate_loop_) {
-            return;
+            break;
         }
 
         D("--- --- waiting for events");
@@ -396,6 +388,8 @@ void fdevent_context_poll::Loop() {
 
         this->FlushRunQueue();
     }
+
+    main_thread_id_.reset();
 }
 
 void fdevent_context_poll::TerminateLoop() {
