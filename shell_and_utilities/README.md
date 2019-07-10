@@ -214,7 +214,7 @@ wc which whoami xargs xxd yes zcat
 
 ## Android R
 
-BSD: grep fsck\_msdos newfs\_msdos
+BSD: fsck\_msdos newfs\_msdos
 
 bzip2: bzcat bzip2 bunzip2
 
