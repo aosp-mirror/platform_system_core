@@ -40,6 +40,7 @@ llndk_libraries_file := $(library_lists_dir)/llndk.libraries.$(vndk_version).txt
 vndksp_libraries_file := $(library_lists_dir)/vndksp.libraries.$(vndk_version).txt
 vndkcore_libraries_file := $(library_lists_dir)/vndkcore.libraries.txt
 vndkprivate_libraries_file := $(library_lists_dir)/vndkprivate.libraries.txt
+llndk_moved_to_apex_libraries_file := $(library_lists_dir)/llndkinapex.libraries.txt
 ifeq ($(my_vndk_use_core_variant),true)
 vndk_using_core_variant_libraries_file := $(library_lists_dir)/vndk_using_core_variant.libraries.$(vndk_version).txt
 endif
@@ -64,6 +65,10 @@ else
   llndk_libraries_list := $(LLNDK_LIBRARIES)
   vndksp_libraries_list := $(VNDK_SAMEPROCESS_LIBRARIES)
 endif
+
+# LLNDK libraries that has been moved to an apex package and no longer are present on
+# /system image.
+llndk_libraries_moved_to_apex_list:=$(LLNDK_MOVED_TO_APEX_LIBRARIES)
 
 # $(1): list of libraries
 # $(2): output file to write the list of libraries to
@@ -91,6 +96,14 @@ $(LOCAL_BUILT_MODULE): private-filter-out-private-libs = \
   cat $(PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE) | xargs -n 1 -I privatelib bash -c "sed -i.bak 's/privatelib//' $(2)" && \
   sed -i.bak -e 's/::\+/:/g ; s/^:\+// ; s/:\+$$//' $(2) && \
   rm -f $(2).bak
+
+# # Given a file with a list of libs in "a:b:c" format, filter-out the LLNDK libraries migrated into apex file
+# # and write resulting list to a new file in "a:b:c" format
+ $(LOCAL_BUILT_MODULE): private-filter-out-llndk-in-apex-libs = \
+   for lib in $(PRIVATE_LLNDK_LIBRARIES_MOVED_TO_APEX_LIST); do sed -i.bak s/$$lib.so// $(1); done && \
+   sed -i.bak -e 's/::\+/:/g ; s/^:\+// ; s/:\+$$//' $(1) && \
+   rm -f $(1).bak
+
 $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES_FILE := $(llndk_libraries_file)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SP_LIBRARIES_FILE := $(vndksp_libraries_file)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES_FILE := $(vndkcore_libraries_file)
@@ -100,6 +113,7 @@ $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_VERSION_SUFFIX := $(vndk_version_suffix)
 $(LOCAL_BUILT_MODULE): PRIVATE_INTERMEDIATES_DIR := $(intermediates_dir)
 $(LOCAL_BUILT_MODULE): PRIVATE_COMP_CHECK_SCRIPT := $(compatibility_check_script)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_VERSION_TAG := \#VNDK$(vndk_version)\#
+$(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES_MOVED_TO_APEX_LIST := $(llndk_libraries_moved_to_apex_list)
 deps := $(llndk_libraries_file) $(vndksp_libraries_file) $(vndkcore_libraries_file) \
   $(vndkprivate_libraries_file)
 ifeq ($(check_backward_compatibility),true)
@@ -118,6 +132,7 @@ ifeq ($(check_backward_compatibility),true)
 endif
 	@mkdir -p $(dir $@)
 	$(call private-filter-out-private-libs,$(PRIVATE_LLNDK_LIBRARIES_FILE),$(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)
+	$(call private-filter-out-llndk-in-apex-libs,$(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)
 	$(hide) sed -e "s?%LLNDK_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)?g" $< >$@
 	$(call private-filter-out-private-libs,$(PRIVATE_VNDK_SP_LIBRARIES_FILE),$(PRIVATE_INTERMEDIATES_DIR)/vndksp_filtered)
 	$(hide) sed -i.bak -e "s?%VNDK_SAMEPROCESS_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/vndksp_filtered)?g" $@
@@ -161,6 +176,7 @@ compatibility_check_script :=
 intermediates_dir :=
 library_lists_dir :=
 llndk_libraries_file :=
+llndk_moved_to_apex_libraries_file :=
 vndksp_libraries_file :=
 vndkcore_libraries_file :=
 vndkprivate_libraries_file :=
