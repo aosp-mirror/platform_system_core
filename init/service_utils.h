@@ -30,7 +30,7 @@ namespace android {
 namespace init {
 
 struct NamespaceInfo {
-    unsigned flags;
+    int flags;
     // Pair of namespace type, path to name.
     std::vector<std::pair<int, std::string>> namespaces_to_enter;
 };

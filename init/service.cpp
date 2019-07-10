@@ -126,7 +126,7 @@ Service::Service(const std::string& name, Subcontext* subcontext_for_restart_com
     : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, args) {}
 
 Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
-                 const std::vector<gid_t>& supp_gids, unsigned namespace_flags,
+                 const std::vector<gid_t>& supp_gids, int namespace_flags,
                  const std::string& seclabel, Subcontext* subcontext_for_restart_commands,
                  const std::vector<std::string>& args)
     : name_(name),
