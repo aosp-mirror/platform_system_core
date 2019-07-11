@@ -60,6 +60,8 @@ struct fdevent_context {
     fdevent* Create(unique_fd fd, std::variant<fd_func, fd_func2> func, void* arg);
 
     // Deallocate an fdevent object, returning the file descriptor that was owned by it.
+    // Note that this calls Set, which is a virtual method, so destructors that call this must be
+    // final.
     unique_fd Destroy(fdevent* fde);
 
   protected:

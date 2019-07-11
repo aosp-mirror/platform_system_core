@@ -26,6 +26,7 @@
 
 #include "adb_utils.h"
 #include "fdevent.h"
+#include "fdevent_epoll.h"
 #include "fdevent_poll.h"
 
 using namespace std::chrono_literals;
@@ -185,8 +186,16 @@ void fdevent_context::TerminateLoop() {
     Interrupt();
 }
 
+static std::unique_ptr<fdevent_context> fdevent_create_context() {
+#if defined(__linux__)
+    return std::make_unique<fdevent_context_epoll>();
+#else
+    return std::make_unique<fdevent_context_poll>();
+#endif
+}
+
 static auto& g_ambient_fdevent_context =
-        *new std::unique_ptr<fdevent_context>(new fdevent_context_poll());
+        *new std::unique_ptr<fdevent_context>(fdevent_create_context());
 
 static fdevent_context* fdevent_get_ambient() {
     return g_ambient_fdevent_context.get();
@@ -247,5 +256,5 @@ size_t fdevent_installed_count() {
 }
 
 void fdevent_reset() {
-    g_ambient_fdevent_context.reset(new fdevent_context_poll());
+    g_ambient_fdevent_context = fdevent_create_context();
 }
