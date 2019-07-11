@@ -445,7 +445,7 @@ bool fs_mgr_overlayfs_teardown_scratch(const std::string& overlay, bool* change)
     auto metadata = builder->Export();
     if (metadata && UpdatePartitionTable(super_device, *metadata.get(), slot_number)) {
         if (change) *change = true;
-        if (!DestroyLogicalPartition(partition_name, 0s)) return false;
+        if (!DestroyLogicalPartition(partition_name)) return false;
     } else {
         LERROR << "delete partition " << overlay;
         return false;
@@ -663,7 +663,7 @@ static void TruncatePartitionsWithSuffix(MetadataBuilder* builder, const std::st
             if (!android::base::EndsWith(name, suffix)) {
                 continue;
             }
-            if (dm.GetState(name) != DmDeviceState::INVALID && !DestroyLogicalPartition(name, 2s)) {
+            if (dm.GetState(name) != DmDeviceState::INVALID && !DestroyLogicalPartition(name)) {
                 continue;
             }
             builder->ResizePartition(builder->FindPartition(name), 0);
@@ -737,7 +737,7 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
                         return false;
                     }
                 }
-                if (!partition_create) DestroyLogicalPartition(partition_name, 10s);
+                if (!partition_create) DestroyLogicalPartition(partition_name);
                 changed = true;
                 *partition_exists = false;
             }
