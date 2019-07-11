@@ -7,6 +7,7 @@
 # absolute path of an executable is selected.
 dir.system = /system/bin/
 dir.system = /system/xbin/
+dir.system = /%SYSTEM_EXT%/bin/
 dir.system = /%PRODUCT%/bin/
 
 dir.vendor = /odm/bin/
@@ -48,21 +49,21 @@ namespace.default.isolated = false
 namespace.default.visible = true
 
 namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths += /%SYSTEM_EXT%/${LIB}
+namespace.default.search.paths += /%PRODUCT%/${LIB}
 namespace.default.search.paths += /odm/${LIB}
 namespace.default.search.paths += /vendor/${LIB}
-namespace.default.search.paths += /%PRODUCT%/${LIB}
-namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
+namespace.default.asan.search.paths += /data/asan/%SYSTEM_EXT%/${LIB}
+namespace.default.asan.search.paths +=           /%SYSTEM_EXT%/${LIB}
+namespace.default.asan.search.paths += /data/asan/%PRODUCT%/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
 namespace.default.asan.search.paths += /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
-namespace.default.asan.search.paths += /data/asan/%PRODUCT%/${LIB}
-namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
-namespace.default.asan.search.paths += /data/asan/%PRODUCT_SERVICES%/${LIB}
-namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 # Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
 # If a shared library or an executable requests a shared library that
@@ -336,8 +337,9 @@ namespace.default.search.paths += /vendor/${LIB}/vndk-sp
 # Access to system libraries is allowed
 namespace.default.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.search.paths += /system/${LIB}
+namespace.default.search.paths += /%SYSTEM_EXT%/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
-namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
+# Put /system/lib/vndk at the last search order in vndk_lite for GSI
 namespace.default.search.paths += /system/${LIB}/vndk%VNDK_VER%
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
@@ -356,10 +358,10 @@ namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER
 namespace.default.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.asan.search.paths += /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
-namespace.default.asan.search.paths += /data/asan/product/${LIB}
+namespace.default.asan.search.paths += /data/asan/%SYSTEM_EXT%/${LIB}
+namespace.default.asan.search.paths +=           /%SYSTEM_EXT%/${LIB}
+namespace.default.asan.search.paths += /data/asan/%PRODUCT%/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
-namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
-namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk%VNDK_VER%
 namespace.default.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 
@@ -514,5 +516,5 @@ namespace.resolv.link.default.shared_libs += libbinder_ndk.so
 [postinstall]
 namespace.default.isolated = false
 namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths += /%SYSTEM_EXT%/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
-namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}

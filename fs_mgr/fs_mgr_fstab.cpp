@@ -704,10 +704,9 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
     return true;
 }
 
-// For GSI to skip mounting /product and /product_services, until there are
-// well-defined interfaces between them and /system. Otherwise, the GSI flashed
-// on /system might not be able to work with /product and /product_services.
-// When they're skipped here, /system/product and /system/product_services in
+// For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
+// between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
+// /product and /system_ext. When they're skipped here, /system/product and /system/system_ext in
 // GSI will be used.
 bool SkipMountingPartitions(Fstab* fstab) {
     constexpr const char kSkipMountConfig[] = "/system/etc/init/config/skip_mount.cfg";
