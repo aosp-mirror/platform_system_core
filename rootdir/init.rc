@@ -413,6 +413,10 @@ on late-fs
     # HALs required before storage encryption can get unlocked (FBE/FDE)
     class_start early_hal
 
+    # Check and mark a successful boot, before mounting userdata with mount_all.
+    # No-op for non-A/B device.
+    exec_start update_verifier_nonencrypted
+
 on post-fs-data
     mark_post_data
 
@@ -628,22 +632,16 @@ on post-fs-data
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
     start netd
     start zygote
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=unsupported
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
     start netd
     start zygote
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
     start netd
     start zygote
     start zygote_secondary
@@ -770,8 +768,6 @@ on property:vold.decrypt=trigger_post_fs_data
     trigger zygote-start
 
 on property:vold.decrypt=trigger_restart_min_framework
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier
     class_start main
 
 on property:vold.decrypt=trigger_restart_framework
