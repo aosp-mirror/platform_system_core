@@ -26,6 +26,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <unordered_map>
 #include <variant>
 
 #include <android-base/thread_annotations.h>
@@ -38,18 +39,18 @@
 #define FDE_ERROR 0x0004
 #define FDE_TIMEOUT 0x0008
 
-// Internal states.
-#define FDE_EVENTMASK  0x00ff
-#define FDE_STATEMASK  0xff00
-
-#define FDE_ACTIVE     0x0100
-#define FDE_PENDING    0x0200
+struct fdevent;
 
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 typedef void (*fd_func2)(struct fdevent* fde, unsigned events, void* userdata);
 
-struct fdevent;
+void invoke_fde(struct fdevent* fde, unsigned events);
 std::string dump_fde(const fdevent* fde);
+
+struct fdevent_event {
+    fdevent* fde;
+    unsigned events;
+};
 
 struct fdevent_context {
   public:
@@ -62,11 +63,8 @@ struct fdevent_context {
     unique_fd Destroy(fdevent* fde);
 
   protected:
-    // Register an fdevent that is being created by Create with the fdevent_context.
-    virtual void Register(fdevent* fde) = 0;
-
-    // Unregister an fdevent that is being destroyed by Destroy with the fdevent_context.
-    virtual void Unregister(fdevent* fde) = 0;
+    virtual void Register(fdevent*) {}
+    virtual void Unregister(fdevent*) {}
 
   public:
     // Change which events should cause notifications.
@@ -80,6 +78,15 @@ struct fdevent_context {
     // trigger repeatedly every |timeout| ms.
     void SetTimeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout);
 
+  protected:
+    std::optional<std::chrono::milliseconds> CalculatePollDuration();
+    void HandleEvents(const std::vector<fdevent_event>& events);
+
+  private:
+    // Run all pending functions enqueued via Run().
+    void FlushRunQueue() EXCLUDES(run_queue_mutex_);
+
+  public:
     // Loop until TerminateLoop is called, handling events.
     // Implementations should call FlushRunQueue on every iteration, and check the value of
     // terminate_loop_ to determine whether to stop.
@@ -100,11 +107,11 @@ struct fdevent_context {
     // Interrupt the run loop.
     virtual void Interrupt() = 0;
 
-    // Run all pending functions enqueued via Run().
-    void FlushRunQueue() EXCLUDES(run_queue_mutex_);
-
     std::optional<uint64_t> main_thread_id_ = std::nullopt;
     std::atomic<bool> terminate_loop_ = false;
+
+  protected:
+    std::unordered_map<int, fdevent*> installed_fdevents_;
 
   private:
     uint64_t fdevent_id_ = 0;
@@ -119,7 +126,6 @@ struct fdevent {
     int force_eof = 0;
 
     uint16_t state = 0;
-    uint16_t events = 0;
     std::optional<std::chrono::milliseconds> timeout;
     std::chrono::steady_clock::time_point last_active;
 

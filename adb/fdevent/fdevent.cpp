@@ -28,14 +28,21 @@
 #include "fdevent.h"
 #include "fdevent_poll.h"
 
+using namespace std::chrono_literals;
+using std::chrono::duration_cast;
+
+void invoke_fde(struct fdevent* fde, unsigned events) {
+    if (auto f = std::get_if<fd_func>(&fde->func)) {
+        (*f)(fde->fd.get(), events, fde->arg);
+    } else if (auto f = std::get_if<fd_func2>(&fde->func)) {
+        (*f)(fde, events, fde->arg);
+    } else {
+        __builtin_unreachable();
+    }
+}
+
 std::string dump_fde(const fdevent* fde) {
     std::string state;
-    if (fde->state & FDE_ACTIVE) {
-        state += "A";
-    }
-    if (fde->state & FDE_PENDING) {
-        state += "P";
-    }
     if (fde->state & FDE_READ) {
         state += "R";
     }
@@ -53,9 +60,11 @@ fdevent* fdevent_context::Create(unique_fd fd, std::variant<fd_func, fd_func2> f
     CheckMainThread();
     CHECK_GE(fd.get(), 0);
 
+    int fd_num = fd.get();
+
     fdevent* fde = new fdevent();
     fde->id = fdevent_id_++;
-    fde->state = FDE_ACTIVE;
+    fde->state = 0;
     fde->fd = std::move(fd);
     fde->func = func;
     fde->arg = arg;
@@ -65,6 +74,10 @@ fdevent* fdevent_context::Create(unique_fd fd, std::variant<fd_func, fd_func2> f
         // to handle it.
         LOG(ERROR) << "failed to set non-blocking mode for fd " << fde->fd.get();
     }
+
+    auto [it, inserted] = this->installed_fdevents_.emplace(fd_num, fde);
+    CHECK(inserted);
+    UNUSED(it);
 
     this->Register(fde);
     return fde;
@@ -78,24 +91,78 @@ unique_fd fdevent_context::Destroy(fdevent* fde) {
 
     this->Unregister(fde);
 
+    auto erased = this->installed_fdevents_.erase(fde->fd.get());
+    CHECK_EQ(1UL, erased);
+
     unique_fd result = std::move(fde->fd);
     delete fde;
     return result;
 }
 
 void fdevent_context::Add(fdevent* fde, unsigned events) {
-    Set(fde, (fde->state & FDE_EVENTMASK) | events);
+    CHECK(!(events & FDE_TIMEOUT));
+    Set(fde, fde->state | events);
 }
 
 void fdevent_context::Del(fdevent* fde, unsigned events) {
     CHECK(!(events & FDE_TIMEOUT));
-    Set(fde, (fde->state & FDE_EVENTMASK) & ~events);
+    Set(fde, fde->state & ~events);
 }
 
 void fdevent_context::SetTimeout(fdevent* fde, std::optional<std::chrono::milliseconds> timeout) {
     CheckMainThread();
     fde->timeout = timeout;
     fde->last_active = std::chrono::steady_clock::now();
+}
+
+std::optional<std::chrono::milliseconds> fdevent_context::CalculatePollDuration() {
+    std::optional<std::chrono::milliseconds> result = std::nullopt;
+    auto now = std::chrono::steady_clock::now();
+    CheckMainThread();
+
+    for (const auto& [fd, fde] : this->installed_fdevents_) {
+        UNUSED(fd);
+        auto timeout_opt = fde->timeout;
+        if (timeout_opt) {
+            auto deadline = fde->last_active + *timeout_opt;
+            auto time_left = duration_cast<std::chrono::milliseconds>(deadline - now);
+            if (time_left < 0ms) {
+                time_left = 0ms;
+            }
+
+            if (!result) {
+                result = time_left;
+            } else {
+                result = std::min(*result, time_left);
+            }
+        }
+    }
+
+    return result;
+}
+
+void fdevent_context::HandleEvents(const std::vector<fdevent_event>& events) {
+    for (const auto& event : events) {
+        invoke_fde(event.fde, event.events);
+    }
+    FlushRunQueue();
+}
+
+void fdevent_context::FlushRunQueue() {
+    // We need to be careful around reentrancy here, since a function we call can queue up another
+    // function.
+    while (true) {
+        std::function<void()> fn;
+        {
+            std::lock_guard<std::mutex> lock(this->run_queue_mutex_);
+            if (this->run_queue_.empty()) {
+                break;
+            }
+            fn = std::move(this->run_queue_.front());
+            this->run_queue_.pop_front();
+        }
+        fn();
+    }
 }
 
 void fdevent_context::CheckMainThread() {
@@ -116,23 +183,6 @@ void fdevent_context::Run(std::function<void()> fn) {
 void fdevent_context::TerminateLoop() {
     terminate_loop_ = true;
     Interrupt();
-}
-
-void fdevent_context::FlushRunQueue() {
-    // We need to be careful around reentrancy here, since a function we call can queue up another
-    // function.
-    while (true) {
-        std::function<void()> fn;
-        {
-            std::lock_guard<std::mutex> lock(this->run_queue_mutex_);
-            if (this->run_queue_.empty()) {
-                break;
-            }
-            fn = this->run_queue_.front();
-            this->run_queue_.pop_front();
-        }
-        fn();
-    }
 }
 
 static auto& g_ambient_fdevent_context =
