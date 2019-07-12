@@ -95,7 +95,7 @@ Result<void> Action::AddCommand(std::vector<std::string>&& args, int line) {
 }
 
 void Action::AddCommand(BuiltinFunction f, std::vector<std::string>&& args, int line) {
-    commands_.emplace_back(f, false, std::move(args), line);
+    commands_.emplace_back(std::move(f), false, std::move(args), line);
 }
 
 std::size_t Action::NumCommands() const {
