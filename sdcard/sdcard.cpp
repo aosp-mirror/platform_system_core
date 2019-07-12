@@ -214,14 +214,7 @@ static void run_sdcardfs(const std::string& source_path, const std::string& labe
 
     if (multi_user) {
         std::string obb_path = source_path + "/obb";
-        // Only attempt to prepare the /obb dir if it already exists. We want
-        // the legacy obb path "/data/media/obb" to be fixed up so that we can
-        // migrate it to its new location, but we don't want the directory to be
-        // created if it doesn't already exist.
-        struct stat sb;
-        if (TEMP_FAILURE_RETRY(lstat(obb_path.c_str(), &sb)) == 0) {
-            fs_prepare_dir(obb_path.c_str(), 0775, uid, gid);
-        }
+        fs_prepare_dir(obb_path.c_str(), 0775, uid, gid);
     }
 
     exit(0);
