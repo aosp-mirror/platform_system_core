@@ -122,18 +122,8 @@ static bool CreateLogicalPartition(const LpMetadata& metadata, const LpMetadataP
         table.set_readonly(false);
     }
     std::string name = GetPartitionName(partition);
-    if (!dm.CreateDevice(name, table)) {
+    if (!dm.CreateDevice(name, table, path, timeout_ms)) {
         return false;
-    }
-    if (!dm.GetDmDevicePathByName(name, path)) {
-        return false;
-    }
-    if (timeout_ms > std::chrono::milliseconds::zero()) {
-        if (!WaitForFile(*path, timeout_ms)) {
-            DestroyLogicalPartition(name, {});
-            LERROR << "Timed out waiting for device path: " << *path;
-            return false;
-        }
     }
     LINFO << "Created logical partition " << name << " on device " << *path;
     return true;
