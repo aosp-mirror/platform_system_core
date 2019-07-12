@@ -20,11 +20,19 @@
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 
+#include <functional>
+#include <thread>
+
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/strings.h>
+#include <uuid/uuid.h>
 
 namespace android {
 namespace dm {
+
+using namespace std::literals;
 
 DeviceMapper::DeviceMapper() : fd_(-1) {
     fd_ = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
@@ -37,13 +45,13 @@ DeviceMapper& DeviceMapper::Instance() {
     static DeviceMapper instance;
     return instance;
 }
+
 // Creates a new device mapper device
-bool DeviceMapper::CreateDevice(const std::string& name) {
+bool DeviceMapper::CreateDevice(const std::string& name, const std::string& uuid) {
     if (name.empty()) {
         LOG(ERROR) << "Unnamed device mapper device creation is not supported";
         return false;
     }
-
     if (name.size() >= DM_NAME_LEN) {
         LOG(ERROR) << "[" << name << "] is too long to be device mapper name";
         return false;
@@ -51,6 +59,9 @@ bool DeviceMapper::CreateDevice(const std::string& name) {
 
     struct dm_ioctl io;
     InitIo(&io, name);
+    if (!uuid.empty()) {
+        snprintf(io.uuid, sizeof(io.uuid), "%s", uuid.c_str());
+    }
 
     if (ioctl(fd_, DM_DEV_CREATE, &io)) {
         PLOG(ERROR) << "DM_DEV_CREATE failed for [" << name << "]";
@@ -67,16 +78,6 @@ bool DeviceMapper::CreateDevice(const std::string& name) {
 }
 
 bool DeviceMapper::DeleteDevice(const std::string& name) {
-    if (name.empty()) {
-        LOG(ERROR) << "Unnamed device mapper device creation is not supported";
-        return false;
-    }
-
-    if (name.size() >= DM_NAME_LEN) {
-        LOG(ERROR) << "[" << name << "] is too long to be device mapper name";
-        return false;
-    }
-
     struct dm_ioctl io;
     InitIo(&io, name);
 
@@ -93,9 +94,81 @@ bool DeviceMapper::DeleteDevice(const std::string& name) {
     return true;
 }
 
-const std::unique_ptr<DmTable> DeviceMapper::table(const std::string& /* name */) const {
-    // TODO(b/110035986): Return the table, as read from the kernel instead
-    return nullptr;
+bool WaitForCondition(const std::function<bool()>& condition,
+                      const std::chrono::milliseconds& timeout_ms) {
+    auto start_time = std::chrono::steady_clock::now();
+    while (true) {
+        if (condition()) return true;
+
+        std::this_thread::sleep_for(20ms);
+
+        auto now = std::chrono::steady_clock::now();
+        auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
+        if (time_elapsed > timeout_ms) return false;
+    }
+}
+
+static std::string GenerateUuid() {
+    uuid_t uuid_bytes;
+    uuid_generate(uuid_bytes);
+
+    char uuid_chars[37] = {};
+    uuid_unparse_lower(uuid_bytes, uuid_chars);
+
+    return std::string{uuid_chars};
+}
+
+bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, std::string* path,
+                                const std::chrono::milliseconds& timeout_ms) {
+    std::string uuid = GenerateUuid();
+    if (!CreateDevice(name, uuid)) {
+        return false;
+    }
+
+    // We use the unique path for testing whether the device is ready. After
+    // that, it's safe to use the dm-N path which is compatible with callers
+    // that expect it to be formatted as such.
+    std::string unique_path;
+    if (!LoadTableAndActivate(name, table) || !GetDeviceUniquePath(name, &unique_path) ||
+        !GetDmDevicePathByName(name, path)) {
+        DeleteDevice(name);
+        return false;
+    }
+
+    if (timeout_ms <= std::chrono::milliseconds::zero()) {
+        return true;
+    }
+
+    auto condition = [&]() -> bool {
+        // If the file exists but returns EPERM or something, we consider the
+        // condition met.
+        if (access(unique_path.c_str(), F_OK) != 0) {
+            if (errno == ENOENT) return false;
+        }
+        return true;
+    };
+    if (!WaitForCondition(condition, timeout_ms)) {
+        LOG(ERROR) << "Timed out waiting for device path: " << unique_path;
+        DeleteDevice(name);
+        return false;
+    }
+    return true;
+}
+
+bool DeviceMapper::GetDeviceUniquePath(const std::string& name, std::string* path) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(ERROR) << "Failed to get device path: " << name;
+        return false;
+    }
+
+    if (io.uuid[0] == '\0') {
+        LOG(ERROR) << "Device does not have a unique path: " << name;
+        return false;
+    }
+    *path = "/dev/block/mapper/by-uuid/"s + io.uuid;
+    return true;
 }
 
 DmDeviceState DeviceMapper::GetState(const std::string& name) const {
@@ -111,11 +184,8 @@ DmDeviceState DeviceMapper::GetState(const std::string& name) const {
 }
 
 bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table) {
-    if (!CreateDevice(name)) {
-        return false;
-    }
-    if (!LoadTableAndActivate(name, table)) {
-        DeleteDevice(name);
+    std::string ignore_path;
+    if (!CreateDevice(name, table, &ignore_path, 0ms)) {
         return false;
     }
     return true;
