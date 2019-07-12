@@ -84,9 +84,9 @@ class Subsystem {
     };
 
     Subsystem() {}
-    Subsystem(const std::string& name) : name_(name) {}
-    Subsystem(const std::string& name, DevnameSource source, const std::string& dir_name)
-        : name_(name), devname_source_(source), dir_name_(dir_name) {}
+    Subsystem(std::string name) : name_(std::move(name)) {}
+    Subsystem(std::string name, DevnameSource source, std::string dir_name)
+        : name_(std::move(name)), devname_source_(source), dir_name_(std::move(dir_name)) {}
 
     // Returns the full path for a uevent of a device that is a member of this subsystem,
     // according to the rules parsed from ueventd.rc
