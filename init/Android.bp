@@ -242,11 +242,12 @@ cc_binary {
     ],
     whole_static_libs: ["libcap"],
     shared_libs: [
-        "libprotobuf-cpp-lite",
-        "libhidl-gen-utils",
-        "libprocessgroup",
-        "liblog",
         "libcutils",
+        "libhidl-gen-utils",
+        "libjsoncpp",
+        "liblog",
+        "libprocessgroup",
+        "libprotobuf-cpp-lite",
     ],
     srcs: [
         "action.cpp",
