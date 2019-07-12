@@ -83,7 +83,7 @@ Result<void> MixHwrngIntoLinuxRngAction(const BuiltinArguments&) {
     return {};
 }
 
-static bool SetHighestAvailableOptionValue(std::string path, int min, int max) {
+static bool SetHighestAvailableOptionValue(const std::string& path, int min, int max) {
     std::ifstream inf(path, std::fstream::in);
     if (!inf) {
         LOG(ERROR) << "Cannot open for reading: " << path;
