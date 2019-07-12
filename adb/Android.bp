@@ -436,7 +436,6 @@ cc_library {
             shared_libs: [
                 "libbootloader_message",
                 "libmdnssd",
-                "libext4_utils",
                 "libfec",
                 "libfs_mgr",
                 "libselinux",
