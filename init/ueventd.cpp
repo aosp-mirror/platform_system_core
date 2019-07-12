@@ -146,7 +146,7 @@ void ColdBoot::UeventHandlerMain(unsigned int process_num, unsigned int total_pr
 
 void ColdBoot::RegenerateUevents() {
     uevent_listener_.RegenerateUevents([this](const Uevent& uevent) {
-        uevent_queue_.emplace_back(std::move(uevent));
+        uevent_queue_.emplace_back(uevent);
         return ListenerAction::kContinue;
     });
 }
