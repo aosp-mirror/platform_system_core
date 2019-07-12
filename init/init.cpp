@@ -50,10 +50,6 @@
 #include <processgroup/setup.h>
 #include <selinux/android.h>
 
-#ifndef RECOVERY
-#include <binder/ProcessState.h>
-#endif
-
 #include "action_parser.h"
 #include "boringssl_self_test.h"
 #include "builtins.h"
@@ -453,24 +449,6 @@ static Result<void> queue_property_triggers_action(const BuiltinArguments& args)
     return {};
 }
 
-static Result<void> InitBinder(const BuiltinArguments& args) {
-    // init's use of binder is very limited. init cannot:
-    //   - have any binder threads
-    //   - receive incoming binder calls
-    //   - pass local binder services to remote processes
-    //   - use death recipients
-    // The main supported usecases are:
-    //   - notifying other daemons (oneway calls only)
-    //   - retrieving data that is necessary to boot
-    // Also, binder can't be used by recovery.
-#ifndef RECOVERY
-    android::ProcessState::self()->setThreadPoolMaxThreadCount(0);
-    android::ProcessState::self()->setCallRestriction(
-            ProcessState::CallRestriction::ERROR_IF_NOT_ONEWAY);
-#endif
-    return {};
-}
-
 // Set the UDC controller for the ConfigFS USB Gadgets.
 // Read the UDC controller in use from "/sys/class/udc".
 // In case of multiple UDC controllers select the first one.
@@ -765,9 +743,6 @@ int SecondStageMain(int argc, char** argv) {
     // Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
     // wasn't ready immediately after wait_for_coldboot_done
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
-
-    // Initialize binder before bringing up other system services
-    am.QueueBuiltinAction(InitBinder, "InitBinder");
 
     // Don't mount filesystems or start core system services in charger mode.
     std::string bootmode = GetProperty("ro.bootmode", "");
