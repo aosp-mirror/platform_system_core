@@ -18,6 +18,9 @@
 
 #include <linux/input.h>
 
+#include <algorithm>
+#include <sstream>
+
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
@@ -150,12 +153,6 @@ Result<void> ServiceParser::ParseInterface(std::vector<std::string>&& args) {
 
     if (fq_name.isValidValueName()) {
         return Error() << "Interface name must not be a value name '" << interface_name << "'";
-    }
-
-    if (known_interfaces_ && known_interfaces_->count(interface_name) == 0) {
-        return Error() << "Interface is not in the known set of hidl_interfaces: '"
-                       << interface_name << "'. Please ensure the interface is built "
-                       << "by a hidl_interface target.";
     }
 
     const std::string fullname = interface_name + "/" + instance_name;
@@ -538,6 +535,37 @@ Result<void> ServiceParser::ParseLineSection(std::vector<std::string>&& args, in
 Result<void> ServiceParser::EndSection() {
     if (!service_) {
         return {};
+    }
+
+    if (interface_inheritance_hierarchy_) {
+        std::set<std::string> interface_names;
+        for (const std::string& intf : service_->interfaces()) {
+            interface_names.insert(Split(intf, "/")[0]);
+        }
+        std::ostringstream error_stream;
+        for (const std::string& intf : interface_names) {
+            if (interface_inheritance_hierarchy_->count(intf) == 0) {
+                error_stream << "\nInterface is not in the known set of hidl_interfaces: '" << intf
+                             << "'. Please ensure the interface is spelled correctly and built "
+                             << "by a hidl_interface target.";
+                continue;
+            }
+            const std::set<std::string>& required_interfaces =
+                    (*interface_inheritance_hierarchy_)[intf];
+            std::set<std::string> diff;
+            std::set_difference(required_interfaces.begin(), required_interfaces.end(),
+                                interface_names.begin(), interface_names.end(),
+                                std::inserter(diff, diff.begin()));
+            if (!diff.empty()) {
+                error_stream << "\nInterface '" << intf << "' requires its full inheritance "
+                             << "hierarchy to be listed in this init_rc file. Missing "
+                             << "interfaces: [" << base::Join(diff, " ") << "]";
+            }
+        }
+        const std::string& errors = error_stream.str();
+        if (!errors.empty()) {
+            return Error() << errors;
+        }
     }
 
     Service* old_service = service_list_->FindService(service_->name());
