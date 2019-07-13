@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <fstream>
 #include <iostream>
 #include <iterator>
 #include <string>
@@ -29,6 +30,7 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
+#include <json/json.h>
 
 #include "action.h"
 #include "action_manager.h"
@@ -129,21 +131,33 @@ passwd* getpwnam(const char* login) {  // NOLINT: implementing bad function.
     return nullptr;
 }
 
-static std::optional<std::set<std::string>> ReadKnownInterfaces(
-        const std::string& known_interfaces_file) {
-    if (known_interfaces_file.empty()) {
-        LOG(WARNING) << "Missing a known interfaces file.";
+static std::optional<android::init::InterfaceInheritanceHierarchyMap>
+ReadInterfaceInheritanceHierarchy(const std::string& interface_inheritance_hierarchy_file) {
+    if (interface_inheritance_hierarchy_file.empty()) {
+        LOG(WARNING) << "Missing an interface inheritance hierarchy file.";
         return {};
     }
 
-    std::string known_interfaces;
-    if (!ReadFileToString(known_interfaces_file, &known_interfaces)) {
-        LOG(ERROR) << "Failed to read known interfaces file '" << known_interfaces_file << "'";
+    Json::Value root;
+    Json::Reader reader;
+    std::ifstream stream(interface_inheritance_hierarchy_file);
+    if (!reader.parse(stream, root)) {
+        LOG(ERROR) << "Failed to read interface inheritance hierarchy file: "
+                   << interface_inheritance_hierarchy_file << "\n"
+                   << reader.getFormattedErrorMessages();
         return {};
     }
 
-    auto interfaces = Split(known_interfaces, " ");
-    return std::set<std::string>(interfaces.begin(), interfaces.end());
+    android::init::InterfaceInheritanceHierarchyMap result;
+    for (const Json::Value& entry : root) {
+        std::set<std::string> inherited_interfaces;
+        for (const Json::Value& intf : entry["inheritedInterfaces"]) {
+            inherited_interfaces.insert(intf.asString());
+        }
+        result[entry["interface"].asString()] = inherited_interfaces;
+    }
+
+    return result;
 }
 
 namespace android {
@@ -169,7 +183,7 @@ int main(int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::StdioLogger);
     android::base::SetMinimumLogSeverity(android::base::ERROR);
 
-    std::string known_interfaces_file;
+    std::string interface_inheritance_hierarchy_file;
 
     while (true) {
         static const struct option long_options[] = {
@@ -177,7 +191,7 @@ int main(int argc, char** argv) {
                 {nullptr, 0, nullptr, 0},
         };
 
-        int arg = getopt_long(argc, argv, "p:k:", long_options, nullptr);
+        int arg = getopt_long(argc, argv, "p:i:", long_options, nullptr);
 
         if (arg == -1) {
             break;
@@ -190,8 +204,8 @@ int main(int argc, char** argv) {
             case 'p':
                 passwd_files.emplace_back(optarg);
                 break;
-            case 'k':
-                known_interfaces_file = optarg;
+            case 'i':
+                interface_inheritance_hierarchy_file = optarg;
                 break;
             default:
                 std::cerr << "getprop: getopt returned invalid result: " << arg << std::endl;
@@ -213,8 +227,10 @@ int main(int argc, char** argv) {
     ServiceList& sl = ServiceList::GetInstance();
     Parser parser;
     parser.AddSectionParser(
-            "service", std::make_unique<ServiceParser>(&sl, nullptr,
-                                                       ReadKnownInterfaces(known_interfaces_file)));
+            "service",
+            std::make_unique<ServiceParser>(
+                    &sl, nullptr,
+                    ReadInterfaceInheritanceHierarchy(interface_inheritance_hierarchy_file)));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
     parser.AddSectionParser("import", std::make_unique<HostImportParser>());
 

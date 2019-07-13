@@ -636,11 +636,9 @@ bool HandlePowerctlMessage(const std::string& command) {
     bool run_fsck = false;
     bool command_invalid = false;
 
-    if (cmd_params.size() > 3) {
-        command_invalid = true;
-    } else if (cmd_params[0] == "shutdown") {
+    if (cmd_params[0] == "shutdown") {
         cmd = ANDROID_RB_POWEROFF;
-        if (cmd_params.size() == 2) {
+        if (cmd_params.size() >= 2) {
             if (cmd_params[1] == "userrequested") {
                 // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
                 // Run fsck once the file system is remounted in read-only mode.
@@ -671,6 +669,13 @@ bool HandlePowerctlMessage(const std::string& command) {
                                   "bootloader_message: "
                                << err;
                 }
+            } else if (reboot_target == "recovery") {
+                const std::vector<std::string> options = {};
+                std::string err;
+                if (!write_bootloader_message(options, &err)) {
+                    LOG(ERROR) << "Failed to set bootloader message: " << err;
+                    return false;
+                }
             } else if (reboot_target == "sideload" || reboot_target == "sideload-auto-reboot" ||
                        reboot_target == "fastboot") {
                 std::string arg = reboot_target == "sideload-auto-reboot" ? "sideload_auto_reboot"
@@ -686,9 +691,9 @@ bool HandlePowerctlMessage(const std::string& command) {
                 reboot_target = "recovery";
             }
 
-            // If there is an additional parameter, pass it along
-            if ((cmd_params.size() == 3) && cmd_params[2].size()) {
-                reboot_target += "," + cmd_params[2];
+            // If there are additional parameter, pass them along
+            for (size_t i = 2; (cmd_params.size() > i) && cmd_params[i].size(); ++i) {
+                reboot_target += "," + cmd_params[i];
             }
         }
     } else {

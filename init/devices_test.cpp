@@ -30,7 +30,7 @@ namespace init {
 class DeviceHandlerTester {
   public:
     void TestGetSymlinks(const std::string& platform_device, const Uevent& uevent,
-                         const std::vector<std::string> expected_links) {
+                         const std::vector<std::string>& expected_links) {
         TemporaryDir fake_sys_root;
         device_handler_.sysfs_mount_point_ = fake_sys_root.path;
 

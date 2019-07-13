@@ -26,13 +26,16 @@
 namespace android {
 namespace init {
 
+using InterfaceInheritanceHierarchyMap = std::map<std::string, std::set<std::string>>;
+
 class ServiceParser : public SectionParser {
   public:
-    ServiceParser(ServiceList* service_list, std::vector<Subcontext>* subcontexts,
-                  const std::optional<std::set<std::string>>& known_interfaces)
+    ServiceParser(
+            ServiceList* service_list, std::vector<Subcontext>* subcontexts,
+            const std::optional<InterfaceInheritanceHierarchyMap>& interface_inheritance_hierarchy)
         : service_list_(service_list),
           subcontexts_(subcontexts),
-          known_interfaces_(known_interfaces),
+          interface_inheritance_hierarchy_(interface_inheritance_hierarchy),
           service_(nullptr) {}
     Result<void> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                               int line) override;
@@ -85,7 +88,7 @@ class ServiceParser : public SectionParser {
 
     ServiceList* service_list_;
     std::vector<Subcontext>* subcontexts_;
-    std::optional<std::set<std::string>> known_interfaces_;
+    std::optional<InterfaceInheritanceHierarchyMap> interface_inheritance_hierarchy_;
     std::unique_ptr<Service> service_;
     std::string filename_;
 };

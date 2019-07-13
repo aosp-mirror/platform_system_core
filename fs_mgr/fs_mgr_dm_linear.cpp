@@ -122,18 +122,8 @@ static bool CreateLogicalPartition(const LpMetadata& metadata, const LpMetadataP
         table.set_readonly(false);
     }
     std::string name = GetPartitionName(partition);
-    if (!dm.CreateDevice(name, table)) {
+    if (!dm.CreateDevice(name, table, path, timeout_ms)) {
         return false;
-    }
-    if (!dm.GetDmDevicePathByName(name, path)) {
-        return false;
-    }
-    if (timeout_ms > std::chrono::milliseconds::zero()) {
-        if (!WaitForFile(*path, timeout_ms)) {
-            DestroyLogicalPartition(name, {});
-            LERROR << "Timed out waiting for device path: " << *path;
-            return false;
-        }
     }
     LINFO << "Created logical partition " << name << " on device " << *path;
     return true;
@@ -194,24 +184,16 @@ bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_s
                                   timeout_ms, path);
 }
 
-bool UnmapDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms) {
+bool UnmapDevice(const std::string& name) {
     DeviceMapper& dm = DeviceMapper::Instance();
-    std::string path;
-    if (timeout_ms > std::chrono::milliseconds::zero()) {
-        dm.GetDmDevicePathByName(name, &path);
-    }
     if (!dm.DeleteDevice(name)) {
-        return false;
-    }
-    if (!path.empty() && !WaitForFileDeleted(path, timeout_ms)) {
-        LERROR << "Timed out waiting for device path to unlink: " << path;
         return false;
     }
     return true;
 }
 
-bool DestroyLogicalPartition(const std::string& name, const std::chrono::milliseconds& timeout_ms) {
-    if (!UnmapDevice(name, timeout_ms)) {
+bool DestroyLogicalPartition(const std::string& name) {
+    if (!UnmapDevice(name)) {
         return false;
     }
     LINFO << "Unmapped logical partition " << name;
