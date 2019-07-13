@@ -79,6 +79,7 @@
 #define MEMCG_MEMORYSW_USAGE "/dev/memcg/memory.memsw.usage_in_bytes"
 #define ZONEINFO_PATH "/proc/zoneinfo"
 #define MEMINFO_PATH "/proc/meminfo"
+#define PROC_STATUS_TGID_FIELD "Tgid:"
 #define LINE_MAX 128
 
 /* Android Logger event logtags (see event.logtags) */
@@ -551,6 +552,49 @@ static inline long get_time_diff_ms(struct timespec *from,
            (to->tv_nsec - from->tv_nsec) / (long)NS_PER_MS;
 }
 
+static int proc_get_tgid(int pid) {
+    char path[PATH_MAX];
+    char buf[PAGE_SIZE];
+    int fd;
+    ssize_t size;
+    char *pos;
+    int64_t tgid = -1;
+
+    snprintf(path, PATH_MAX, "/proc/%d/status", pid);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        return -1;
+    }
+
+    size = read_all(fd, buf, sizeof(buf) - 1);
+    if (size < 0) {
+        goto out;
+    }
+    buf[size] = 0;
+
+    pos = buf;
+    while (true) {
+        pos = strstr(pos, PROC_STATUS_TGID_FIELD);
+        /* Stop if TGID tag not found or found at the line beginning */
+        if (pos == NULL || pos == buf || pos[-1] == '\n') {
+            break;
+        }
+        pos++;
+    }
+
+    if (pos == NULL) {
+        goto out;
+    }
+
+    pos += strlen(PROC_STATUS_TGID_FIELD);
+    while (*pos == ' ') pos++;
+    parse_int64(pos, &tgid);
+
+out:
+    close(fd);
+    return (int)tgid;
+}
+
 static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     struct proc *procp;
     char path[80];
@@ -559,12 +603,21 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     struct lmk_procprio params;
     bool is_system_server;
     struct passwd *pwdrec;
+    int tgid;
 
     lmkd_pack_get_procprio(packet, &params);
 
     if (params.oomadj < OOM_SCORE_ADJ_MIN ||
         params.oomadj > OOM_SCORE_ADJ_MAX) {
         ALOGE("Invalid PROCPRIO oomadj argument %d", params.oomadj);
+        return;
+    }
+
+    /* Check if registered process is a thread group leader */
+    tgid = proc_get_tgid(params.pid);
+    if (tgid >= 0 && tgid != params.pid) {
+        ALOGE("Attempt to register a task that is not a thread group leader (tid %d, tgid %d)",
+            params.pid, tgid);
         return;
     }
 
@@ -1332,6 +1385,7 @@ static int last_killed_pid = -1;
 static int kill_one_process(struct proc* procp, int min_oom_score) {
     int pid = procp->pid;
     uid_t uid = procp->uid;
+    int tgid;
     char *taskname;
     int tasksize;
     int r;
@@ -1344,6 +1398,12 @@ static int kill_one_process(struct proc* procp, int min_oom_score) {
     /* To prevent unused parameter warning */
     (void)(min_oom_score);
 #endif
+
+    tgid = proc_get_tgid(pid);
+    if (tgid >= 0 && tgid != pid) {
+        ALOGE("Possible pid reuse detected (pid %d, tgid %d)!", pid, tgid);
+        goto out;
+    }
 
     taskname = proc_get_name(pid);
     if (!taskname) {
