@@ -52,10 +52,10 @@ class TempDevice {
   public:
     TempDevice(const std::string& name, const DmTable& table)
         : dm_(DeviceMapper::Instance()), name_(name), valid_(false) {
-        valid_ = dm_.CreateDevice(name, table);
+        valid_ = dm_.CreateDevice(name, table, &path_, 5s);
     }
     TempDevice(TempDevice&& other) noexcept
-        : dm_(other.dm_), name_(other.name_), valid_(other.valid_) {
+        : dm_(other.dm_), name_(other.name_), path_(other.path_), valid_(other.valid_) {
         other.valid_ = false;
     }
     ~TempDevice() {
@@ -70,29 +70,7 @@ class TempDevice {
         valid_ = false;
         return dm_.DeleteDevice(name_);
     }
-    bool WaitForUdev() const {
-        auto start_time = std::chrono::steady_clock::now();
-        while (true) {
-            if (!access(path().c_str(), F_OK)) {
-                return true;
-            }
-            if (errno != ENOENT) {
-                return false;
-            }
-            std::this_thread::sleep_for(50ms);
-            std::chrono::duration elapsed = std::chrono::steady_clock::now() - start_time;
-            if (elapsed >= 5s) {
-                return false;
-            }
-        }
-    }
-    std::string path() const {
-        std::string device_path;
-        if (!dm_.GetDmDevicePathByName(name_, &device_path)) {
-            return "";
-        }
-        return device_path;
-    }
+    std::string path() const { return path_; }
     const std::string& name() const { return name_; }
     bool valid() const { return valid_; }
 
@@ -109,6 +87,7 @@ class TempDevice {
   private:
     DeviceMapper& dm_;
     std::string name_;
+    std::string path_;
     bool valid_;
 };
 
@@ -139,7 +118,6 @@ TEST(libdm, DmLinear) {
     TempDevice dev("libdm-test-dm-linear", table);
     ASSERT_TRUE(dev.valid());
     ASSERT_FALSE(dev.path().empty());
-    ASSERT_TRUE(dev.WaitForUdev());
 
     auto& dm = DeviceMapper::Instance();
 
@@ -290,7 +268,6 @@ void SnapshotTestHarness::SetupImpl() {
     origin_dev_ = std::make_unique<TempDevice>("libdm-test-dm-snapshot-origin", origin_table);
     ASSERT_TRUE(origin_dev_->valid());
     ASSERT_FALSE(origin_dev_->path().empty());
-    ASSERT_TRUE(origin_dev_->WaitForUdev());
 
     // chunk size = 4K blocks.
     DmTable snap_table;
@@ -302,7 +279,6 @@ void SnapshotTestHarness::SetupImpl() {
     snapshot_dev_ = std::make_unique<TempDevice>("libdm-test-dm-snapshot", snap_table);
     ASSERT_TRUE(snapshot_dev_->valid());
     ASSERT_FALSE(snapshot_dev_->path().empty());
-    ASSERT_TRUE(snapshot_dev_->WaitForUdev());
 
     setup_ok_ = true;
 }
