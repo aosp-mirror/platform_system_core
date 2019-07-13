@@ -1331,7 +1331,7 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
                 continue;
             }
         } else if ((current_entry.fs_mgr_flags.verify)) {
-            if (!fs_mgr_teardown_verity(&current_entry, true /* wait */)) {
+            if (!fs_mgr_teardown_verity(&current_entry)) {
                 LERROR << "Failed to tear down verified partition on mount point: "
                        << current_entry.mount_point;
                 ret |= FsMgrUmountStatus::ERROR_VERITY;
