@@ -994,10 +994,11 @@ void CreateSerializedPropertyInfo() {
 void StartPropertyService(Epoll* epoll) {
     property_set("ro.property_service.version", "2");
 
-    property_set_fd = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-                                   false, 0666, 0, 0, nullptr);
-    if (property_set_fd == -1) {
-        PLOG(FATAL) << "start_property_service socket creation failed";
+    if (auto result = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+                                   false, 0666, 0, 0, {})) {
+        property_set_fd = *result;
+    } else {
+        PLOG(FATAL) << "start_property_service socket creation failed: " << result.error();
     }
 
     listen(property_set_fd, 8);

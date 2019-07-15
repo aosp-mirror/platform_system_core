@@ -29,6 +29,25 @@
 namespace android {
 namespace init {
 
+struct SocketDescriptor {
+    std::string name;
+    int type = 0;
+    uid_t uid = 0;
+    gid_t gid = 0;
+    int perm = 0;
+    std::string context;
+    bool passcred = false;
+
+    Result<void> CreateAndPublish(const std::string& global_context) const;
+};
+
+struct FileDescriptor {
+    std::string name;
+    std::string type;
+
+    Result<void> CreateAndPublish() const;
+};
+
 struct NamespaceInfo {
     int flags;
     // Pair of namespace type, path to name.
