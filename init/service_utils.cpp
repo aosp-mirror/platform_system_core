@@ -27,9 +27,12 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <cutils/android_get_control_file.h>
+#include <cutils/sockets.h>
 #include <processgroup/processgroup.h>
 
 #include "mount_namespace.h"
+#include "util.h"
 
 using android::base::GetProperty;
 using android::base::StartsWith;
@@ -135,7 +138,51 @@ void OpenConsole(const std::string& console) {
     dup2(fd, 2);
 }
 
+void PublishDescriptor(const std::string& key, const std::string& name, int fd) {
+    std::string published_name = key + name;
+    for (auto& c : published_name) {
+        c = isalnum(c) ? c : '_';
+    }
+
+    std::string val = std::to_string(fd);
+    setenv(published_name.c_str(), val.c_str(), 1);
+}
+
 }  // namespace
+
+Result<void> SocketDescriptor::CreateAndPublish(const std::string& global_context) const {
+    const auto& socket_context = context.empty() ? global_context : context;
+    auto result = CreateSocket(name, type, passcred, perm, uid, gid, socket_context);
+    if (!result) {
+        return result.error();
+    }
+
+    PublishDescriptor(ANDROID_SOCKET_ENV_PREFIX, name, *result);
+
+    return {};
+}
+
+Result<void> FileDescriptor::CreateAndPublish() const {
+    int flags = (type == "r") ? O_RDONLY : (type == "w") ? O_WRONLY : O_RDWR;
+
+    // Make sure we do not block on open (eg: devices can chose to block on carrier detect).  Our
+    // intention is never to delay launch of a service for such a condition.  The service can
+    // perform its own blocking on carrier detect.
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(name.c_str(), flags | O_NONBLOCK)));
+
+    if (fd < 0) {
+        return ErrnoError() << "Failed to open file '" << name << "'";
+    }
+
+    // Fixup as we set O_NONBLOCK for open, the intent for fd is to block reads.
+    fcntl(fd, F_SETFL, flags);
+
+    LOG(INFO) << "Opened file '" << name << "', flags " << flags;
+
+    PublishDescriptor(ANDROID_FILE_ENV_PREFIX, name, fd.release());
+
+    return {};
+}
 
 Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name, bool pre_apexd) {
     for (const auto& [nstype, path] : info.namespaces_to_enter) {
