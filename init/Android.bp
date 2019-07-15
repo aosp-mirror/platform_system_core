@@ -287,5 +287,3 @@ cc_binary {
         },
     },
 }
-
-subdirs = ["*"]
