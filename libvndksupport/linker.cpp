@@ -23,8 +23,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-__attribute__((weak)) extern struct android_namespace_t* android_get_exported_namespace(const char*);
-__attribute__((weak)) extern void* android_dlopen_ext(const char*, int, const android_dlextinfo*);
+__attribute__((weak)) extern "C" struct android_namespace_t* android_get_exported_namespace(
+        const char*);
+__attribute__((weak)) extern "C" void* android_dlopen_ext(const char*, int,
+                                                          const android_dlextinfo*);
 
 static const char* namespace_name = NULL;
 
@@ -67,7 +69,8 @@ void* android_load_sphal_library(const char* name, int flag) {
     struct android_namespace_t* vendor_namespace = get_vendor_namespace();
     if (vendor_namespace != NULL) {
         const android_dlextinfo dlextinfo = {
-            .flags = ANDROID_DLEXT_USE_NAMESPACE, .library_namespace = vendor_namespace,
+                .flags = ANDROID_DLEXT_USE_NAMESPACE,
+                .library_namespace = vendor_namespace,
         };
         void* handle = NULL;
         if (android_dlopen_ext != NULL) {

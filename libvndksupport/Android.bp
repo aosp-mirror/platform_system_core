@@ -3,7 +3,7 @@ subdirs = ["tests"]
 cc_library {
     name: "libvndksupport",
     native_bridge_supported: true,
-    srcs: ["linker.c"],
+    srcs: ["linker.cpp"],
     cflags: [
         "-Wall",
         "-Werror",
