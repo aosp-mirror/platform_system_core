@@ -204,37 +204,99 @@ static int lowmem_minfree[MAX_TARGETS];
 static int lowmem_targets_size;
 
 /* Fields to parse in /proc/zoneinfo */
-enum zoneinfo_field {
-    ZI_NR_FREE_PAGES = 0,
-    ZI_NR_FILE_PAGES,
-    ZI_NR_SHMEM,
-    ZI_NR_UNEVICTABLE,
-    ZI_WORKINGSET_REFAULT,
-    ZI_HIGH,
-    ZI_FIELD_COUNT
+/* zoneinfo per-zone fields */
+enum zoneinfo_zone_field {
+    ZI_ZONE_NR_FREE_PAGES = 0,
+    ZI_ZONE_MIN,
+    ZI_ZONE_LOW,
+    ZI_ZONE_HIGH,
+    ZI_ZONE_PRESENT,
+    ZI_ZONE_NR_FREE_CMA,
+    ZI_ZONE_FIELD_COUNT
 };
 
-static const char* const zoneinfo_field_names[ZI_FIELD_COUNT] = {
+static const char* const zoneinfo_zone_field_names[ZI_ZONE_FIELD_COUNT] = {
     "nr_free_pages",
-    "nr_file_pages",
-    "nr_shmem",
-    "nr_unevictable",
-    "workingset_refault",
+    "min",
+    "low",
     "high",
+    "present",
+    "nr_free_cma",
 };
 
-union zoneinfo {
+/* zoneinfo per-zone special fields */
+enum zoneinfo_zone_spec_field {
+    ZI_ZONE_SPEC_PROTECTION = 0,
+    ZI_ZONE_SPEC_PAGESETS,
+    ZI_ZONE_SPEC_FIELD_COUNT,
+};
+
+static const char* const zoneinfo_zone_spec_field_names[ZI_ZONE_SPEC_FIELD_COUNT] = {
+    "protection:",
+    "pagesets",
+};
+
+/* see __MAX_NR_ZONES definition in kernel mmzone.h */
+#define MAX_NR_ZONES 6
+
+union zoneinfo_zone_fields {
     struct {
         int64_t nr_free_pages;
-        int64_t nr_file_pages;
-        int64_t nr_shmem;
-        int64_t nr_unevictable;
-        int64_t workingset_refault;
+        int64_t min;
+        int64_t low;
         int64_t high;
-        /* fields below are calculated rather than read from the file */
-        int64_t totalreserve_pages;
+        int64_t present;
+        int64_t nr_free_cma;
     } field;
-    int64_t arr[ZI_FIELD_COUNT];
+    int64_t arr[ZI_ZONE_FIELD_COUNT];
+};
+
+struct zoneinfo_zone {
+    union zoneinfo_zone_fields fields;
+    int64_t protection[MAX_NR_ZONES];
+    int64_t max_protection;
+};
+
+/* zoneinfo per-node fields */
+enum zoneinfo_node_field {
+    ZI_NODE_NR_INACTIVE_FILE = 0,
+    ZI_NODE_NR_ACTIVE_FILE,
+    ZI_NODE_WORKINGSET_REFAULT,
+    ZI_NODE_FIELD_COUNT
+};
+
+static const char* const zoneinfo_node_field_names[ZI_NODE_FIELD_COUNT] = {
+    "nr_inactive_file",
+    "nr_active_file",
+    "workingset_refault",
+};
+
+union zoneinfo_node_fields {
+    struct {
+        int64_t nr_inactive_file;
+        int64_t nr_active_file;
+        int64_t workingset_refault;
+    } field;
+    int64_t arr[ZI_NODE_FIELD_COUNT];
+};
+
+struct zoneinfo_node {
+    int id;
+    int zone_count;
+    struct zoneinfo_zone zones[MAX_NR_ZONES];
+    union zoneinfo_node_fields fields;
+};
+
+/* for now two memory nodes is more than enough */
+#define MAX_NR_NODES 2
+
+struct zoneinfo {
+    int node_count;
+    struct zoneinfo_node nodes[MAX_NR_NODES];
+    int64_t totalreserve_pages;
+    int64_t total_inactive_file;
+    int64_t total_active_file;
+    int64_t total_workingset_refault;
 };
 
 /* Fields to parse in /proc/meminfo */
@@ -375,20 +437,25 @@ static bool parse_int64(const char* str, int64_t* ret) {
     return true;
 }
 
+static int find_field(const char* name, const char* const field_names[], int field_count) {
+    for (int i = 0; i < field_count; i++) {
+        if (!strcmp(name, field_names[i])) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 static enum field_match_result match_field(const char* cp, const char* ap,
                                    const char* const field_names[],
                                    int field_count, int64_t* field,
                                    int *field_idx) {
-    int64_t val;
-    int i;
-
-    for (i = 0; i < field_count; i++) {
-        if (!strcmp(cp, field_names[i])) {
-            *field_idx = i;
-            return parse_int64(ap, field) ? PARSE_SUCCESS : PARSE_FAIL;
-        }
+    int i = find_field(cp, field_names, field_count);
+    if (i < 0) {
+        return NO_MATCH;
     }
-    return NO_MATCH;
+    *field_idx = i;
+    return parse_int64(ap, field) ? PARSE_SUCCESS : PARSE_FAIL;
 }
 
 /*
@@ -1160,64 +1227,130 @@ static int memory_stat_from_procfs(struct memory_stat* mem_st, int pid) {
 }
 #endif
 
-/* /prop/zoneinfo parsing routines */
-static int64_t zoneinfo_parse_protection(char *cp) {
+/*
+ * /prop/zoneinfo parsing routines
+ * Expected file format is:
+ *
+ *   Node <node_id>, zone   <zone_name>
+ *   (
+ *    per-node stats
+ *       (<per-node field name> <value>)+
+ *   )?
+ *   (pages free     <value>
+ *       (<per-zone field name> <value>)+
+ *    pagesets
+ *       (<unused fields>)*
+ *   )+
+ *   ...
+ */
+static void zoneinfo_parse_protection(char *buf, struct zoneinfo_zone *zone) {
+    int zone_idx;
     int64_t max = 0;
-    long long zoneval;
     char *save_ptr;
 
-    for (cp = strtok_r(cp, "(), ", &save_ptr); cp;
-         cp = strtok_r(NULL, "), ", &save_ptr)) {
-        zoneval = strtoll(cp, &cp, 0);
+    for (buf = strtok_r(buf, "(), ", &save_ptr), zone_idx = 0;
+         buf && zone_idx < MAX_NR_ZONES;
+         buf = strtok_r(NULL, "), ", &save_ptr), zone_idx++) {
+        long long zoneval = strtoll(buf, &buf, 0);
         if (zoneval > max) {
             max = (zoneval > INT64_MAX) ? INT64_MAX : zoneval;
         }
+        zone->protection[zone_idx] = zoneval;
     }
-
-    return max;
+    zone->max_protection = max;
 }
 
-static bool zoneinfo_parse_line(char *line, union zoneinfo *zi) {
-    char *cp = line;
-    char *ap;
-    char *save_ptr;
-    int64_t val;
-    int field_idx;
+static int zoneinfo_parse_zone(char **buf, struct zoneinfo_zone *zone) {
+    for (char *line = strtok_r(NULL, "\n", buf); line;
+         line = strtok_r(NULL, "\n", buf)) {
+        char *cp;
+        char *ap;
+        char *save_ptr;
+        int64_t val;
+        int field_idx;
+        enum field_match_result match_res;
 
-    cp = strtok_r(line, " ", &save_ptr);
-    if (!cp) {
-        return true;
-    }
-
-    if (!strcmp(cp, "protection:")) {
-        ap = strtok_r(NULL, ")", &save_ptr);
-    } else {
-        ap = strtok_r(NULL, " ", &save_ptr);
-    }
-
-    if (!ap) {
-        return true;
-    }
-
-    switch (match_field(cp, ap, zoneinfo_field_names,
-                        ZI_FIELD_COUNT, &val, &field_idx)) {
-    case (PARSE_SUCCESS):
-        zi->arr[field_idx] += val;
-        break;
-    case (NO_MATCH):
-        if (!strcmp(cp, "protection:")) {
-            zi->field.totalreserve_pages +=
-                zoneinfo_parse_protection(ap);
+        cp = strtok_r(line, " ", &save_ptr);
+        if (!cp) {
+            return false;
         }
-        break;
-    case (PARSE_FAIL):
-    default:
-        return false;
+
+        field_idx = find_field(cp, zoneinfo_zone_spec_field_names, ZI_ZONE_SPEC_FIELD_COUNT);
+        if (field_idx >= 0) {
+            /* special field */
+            if (field_idx == ZI_ZONE_SPEC_PAGESETS) {
+                /* no mode fields we are interested in */
+                return true;
+            }
+
+            /* protection field */
+            ap = strtok_r(NULL, ")", &save_ptr);
+            if (ap) {
+                zoneinfo_parse_protection(ap, zone);
+            }
+            continue;
+        }
+
+        ap = strtok_r(NULL, " ", &save_ptr);
+        if (!ap) {
+            continue;
+        }
+
+        match_res = match_field(cp, ap, zoneinfo_zone_field_names, ZI_ZONE_FIELD_COUNT,
+            &val, &field_idx);
+        if (match_res == PARSE_FAIL) {
+            return false;
+        }
+        if (match_res == PARSE_SUCCESS) {
+            zone->fields.arr[field_idx] = val;
+        }
+        if (field_idx == ZI_ZONE_PRESENT && val == 0) {
+            /* zone is not populated, stop parsing it */
+            return true;
+        }
     }
-    return true;
+    return false;
 }
 
-static int zoneinfo_parse(union zoneinfo *zi) {
+static int zoneinfo_parse_node(char **buf, struct zoneinfo_node *node) {
+    int fields_to_match = ZI_NODE_FIELD_COUNT;
+
+    for (char *line = strtok_r(NULL, "\n", buf); line;
+         line = strtok_r(NULL, "\n", buf)) {
+        char *cp;
+        char *ap;
+        char *save_ptr;
+        int64_t val;
+        int field_idx;
+        enum field_match_result match_res;
+
+        cp = strtok_r(line, " ", &save_ptr);
+        if (!cp) {
+            return false;
+        }
+
+        ap = strtok_r(NULL, " ", &save_ptr);
+        if (!ap) {
+            return false;
+        }
+
+        match_res = match_field(cp, ap, zoneinfo_node_field_names, ZI_NODE_FIELD_COUNT,
+            &val, &field_idx);
+        if (match_res == PARSE_FAIL) {
+            return false;
+        }
+        if (match_res == PARSE_SUCCESS) {
+            node->fields.arr[field_idx] = val;
+            fields_to_match--;
+            if (!fields_to_match) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static int zoneinfo_parse(struct zoneinfo *zi) {
     static struct reread_data file_data = {
         .filename = ZONEINFO_PATH,
         .fd = -1,
@@ -1225,8 +1358,12 @@ static int zoneinfo_parse(union zoneinfo *zi) {
     char *buf;
     char *save_ptr;
     char *line;
+    char zone_name[LINE_MAX];
+    struct zoneinfo_node *node = NULL;
+    int node_idx = 0;
+    int zone_idx = 0;
 
-    memset(zi, 0, sizeof(union zoneinfo));
+    memset(zi, 0, sizeof(struct zoneinfo));
 
     if ((buf = reread_file(&file_data)) == NULL) {
         return -1;
@@ -1234,13 +1371,54 @@ static int zoneinfo_parse(union zoneinfo *zi) {
 
     for (line = strtok_r(buf, "\n", &save_ptr); line;
          line = strtok_r(NULL, "\n", &save_ptr)) {
-        if (!zoneinfo_parse_line(line, zi)) {
-            ALOGE("%s parse error", file_data.filename);
-            return -1;
+        int node_id;
+        if (sscanf(line, "Node %d, zone %" STRINGIFY(LINE_MAX) "s", &node_id, zone_name) == 2) {
+            if (!node || node->id != node_id) {
+                /* new node is found */
+                if (node) {
+                    node->zone_count = zone_idx + 1;
+                    node_idx++;
+                    if (node_idx == MAX_NR_NODES) {
+                        /* max node count exceeded */
+                        ALOGE("%s parse error", file_data.filename);
+                        return -1;
+                    }
+                }
+                node = &zi->nodes[node_idx];
+                node->id = node_id;
+                zone_idx = 0;
+                if (!zoneinfo_parse_node(&save_ptr, node)) {
+                    ALOGE("%s parse error", file_data.filename);
+                    return -1;
+                }
+            } else {
+                /* new zone is found */
+                zone_idx++;
+            }
+            if (!zoneinfo_parse_zone(&save_ptr, &node->zones[zone_idx])) {
+                ALOGE("%s parse error", file_data.filename);
+                return -1;
+            }
         }
     }
-    zi->field.totalreserve_pages += zi->field.high;
+    if (!node) {
+        ALOGE("%s parse error", file_data.filename);
+        return -1;
+    }
+    node->zone_count = zone_idx + 1;
+    zi->node_count = node_idx + 1;
 
+    /* calculate totals fields */
+    for (node_idx = 0; node_idx < zi->node_count; node_idx++) {
+        node = &zi->nodes[node_idx];
+        for (zone_idx = 0; zone_idx < node->zone_count; zone_idx++) {
+            struct zoneinfo_zone *zone = &zi->nodes[node_idx].zones[zone_idx];
+            zi->totalreserve_pages += zone->max_protection + zone->fields.field.high;
+        }
+        zi->total_inactive_file += node->fields.field.nr_inactive_file;
+        zi->total_active_file += node->fields.field.nr_active_file;
+        zi->total_workingset_refault += node->fields.field.workingset_refault;
+    }
     return 0;
 }
 
@@ -1642,7 +1820,7 @@ static void mp_event_common(int data, uint32_t events __unused) {
     int64_t mem_pressure;
     enum vmpressure_level lvl;
     union meminfo mi;
-    union zoneinfo zi;
+    struct zoneinfo zi;
     struct timespec curr_tm;
     static struct timespec last_kill_tm;
     static unsigned long kill_skip_count = 0;
@@ -1709,7 +1887,7 @@ static void mp_event_common(int data, uint32_t events __unused) {
     if (use_minfree_levels) {
         int i;
 
-        other_free = mi.field.nr_free_pages - zi.field.totalreserve_pages;
+        other_free = mi.field.nr_free_pages - zi.totalreserve_pages;
         if (mi.field.nr_file_pages > (mi.field.shmem + mi.field.unevictable + mi.field.swap_cached)) {
             other_file = (mi.field.nr_file_pages - mi.field.shmem -
                           mi.field.unevictable - mi.field.swap_cached);
@@ -1837,7 +2015,7 @@ do_kill:
                 "free(%" PRId64 "kB)-reserved(%" PRId64 "kB) below min(%ldkB) for oom_adj %d",
                 pages_freed * page_k,
                 other_file * page_k, mi.field.nr_free_pages * page_k,
-                zi.field.totalreserve_pages * page_k,
+                zi.totalreserve_pages * page_k,
                 minfree * page_k, min_score_adj);
         } else {
             ALOGI("Reclaimed %ldkB at oom_adj %d",
