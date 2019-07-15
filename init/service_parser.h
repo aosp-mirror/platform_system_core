@@ -81,9 +81,6 @@ class ServiceParser : public SectionParser {
     Result<void> ParseWritepid(std::vector<std::string>&& args);
     Result<void> ParseUpdatable(std::vector<std::string>&& args);
 
-    template <typename T>
-    Result<void> AddDescriptor(std::vector<std::string>&& args);
-
     bool IsValidName(const std::string& name) const;
 
     ServiceList* service_list_;

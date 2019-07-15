@@ -17,6 +17,8 @@
 #include "service_parser.h"
 
 #include <linux/input.h>
+#include <stdlib.h>
+#include <sys/socket.h>
 
 #include <algorithm>
 #include <sstream>
@@ -28,6 +30,7 @@
 #include <system/thread_defs.h>
 
 #include "rlimit_parser.h"
+#include "service_utils.h"
 #include "util.h"
 
 #if defined(__ANDROID__)
@@ -344,64 +347,98 @@ Result<void> ServiceParser::ParseTimeoutPeriod(std::vector<std::string>&& args) 
     return {};
 }
 
-template <typename T>
-Result<void> ServiceParser::AddDescriptor(std::vector<std::string>&& args) {
-    int perm = args.size() > 3 ? std::strtoul(args[3].c_str(), 0, 8) : -1;
-    Result<uid_t> uid = 0;
-    Result<gid_t> gid = 0;
-    std::string context = args.size() > 6 ? args[6] : "";
+// name type perm [ uid gid context ]
+Result<void> ServiceParser::ParseSocket(std::vector<std::string>&& args) {
+    SocketDescriptor socket;
+    socket.name = std::move(args[1]);
+
+    auto types = Split(args[2], "+");
+    if (types[0] == "stream") {
+        socket.type = SOCK_STREAM;
+    } else if (types[0] == "dgram") {
+        socket.type = SOCK_DGRAM;
+    } else if (types[0] == "seqpacket") {
+        socket.type = SOCK_SEQPACKET;
+    } else {
+        return Error() << "socket type must be 'dgram', 'stream' or 'seqpacket', got '" << types[0]
+                       << "' instead.";
+    }
+
+    if (types.size() > 1) {
+        if (types.size() == 2 && types[1] == "passcred") {
+            socket.passcred = true;
+        } else {
+            return Error() << "Only 'passcred' may be used to modify the socket type";
+        }
+    }
+
+    errno = 0;
+    char* end = nullptr;
+    socket.perm = strtol(args[3].c_str(), &end, 8);
+    if (errno != 0) {
+        return ErrnoError() << "Unable to parse permissions '" << args[3] << "'";
+    }
+    if (end == args[3].c_str() || *end != '\0') {
+        errno = EINVAL;
+        return ErrnoError() << "Unable to parse permissions '" << args[3] << "'";
+    }
 
     if (args.size() > 4) {
-        uid = DecodeUid(args[4]);
+        auto uid = DecodeUid(args[4]);
         if (!uid) {
             return Error() << "Unable to find UID for '" << args[4] << "': " << uid.error();
         }
+        socket.uid = *uid;
     }
 
     if (args.size() > 5) {
-        gid = DecodeUid(args[5]);
+        auto gid = DecodeUid(args[5]);
         if (!gid) {
             return Error() << "Unable to find GID for '" << args[5] << "': " << gid.error();
         }
+        socket.gid = *gid;
     }
 
-    auto descriptor = std::make_unique<T>(args[1], args[2], *uid, *gid, perm, context);
+    socket.context = args.size() > 6 ? args[6] : "";
 
-    auto old = std::find_if(
-            service_->descriptors_.begin(), service_->descriptors_.end(),
-            [&descriptor](const auto& other) { return descriptor.get() == other.get(); });
+    auto old = std::find_if(service_->sockets_.begin(), service_->sockets_.end(),
+                            [&socket](const auto& other) { return socket.name == other.name; });
 
-    if (old != service_->descriptors_.end()) {
-        return Error() << "duplicate descriptor " << args[1] << " " << args[2];
+    if (old != service_->sockets_.end()) {
+        return Error() << "duplicate socket descriptor '" << socket.name << "'";
     }
 
-    service_->descriptors_.emplace_back(std::move(descriptor));
+    service_->sockets_.emplace_back(std::move(socket));
+
     return {};
 }
 
-// name type perm [ uid gid context ]
-Result<void> ServiceParser::ParseSocket(std::vector<std::string>&& args) {
-    if (!StartsWith(args[2], "dgram") && !StartsWith(args[2], "stream") &&
-        !StartsWith(args[2], "seqpacket")) {
-        return Error() << "socket type must be 'dgram', 'stream' or 'seqpacket'";
-    }
-    return AddDescriptor<SocketInfo>(std::move(args));
-}
-
-// name type perm [ uid gid context ]
+// name type
 Result<void> ServiceParser::ParseFile(std::vector<std::string>&& args) {
     if (args[2] != "r" && args[2] != "w" && args[2] != "rw") {
         return Error() << "file type must be 'r', 'w' or 'rw'";
     }
-    std::string expanded;
-    if (!expand_props(args[1], &expanded)) {
+
+    FileDescriptor file;
+    file.type = args[2];
+
+    if (!expand_props(args[1], &file.name)) {
         return Error() << "Could not expand property in file path '" << args[1] << "'";
     }
-    args[1] = std::move(expanded);
-    if ((args[1][0] != '/') || (args[1].find("../") != std::string::npos)) {
+    if (file.name[0] != '/' || file.name.find("../") != std::string::npos) {
         return Error() << "file name must not be relative";
     }
-    return AddDescriptor<FileInfo>(std::move(args));
+
+    auto old = std::find_if(service_->files_.begin(), service_->files_.end(),
+                            [&file](const auto& other) { return other.name == file.name; });
+
+    if (old != service_->files_.end()) {
+        return Error() << "duplicate file descriptor '" << file.name << "'";
+    }
+
+    service_->files_.emplace_back(std::move(file));
+
+    return {};
 }
 
 Result<void> ServiceParser::ParseUser(std::vector<std::string>&& args) {
