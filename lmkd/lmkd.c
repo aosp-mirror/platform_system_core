@@ -424,28 +424,50 @@ static ssize_t read_all(int fd, char *buf, size_t max_len)
  * memory pressure to minimize file opening which by itself requires kernel
  * memory allocation and might result in a stall on memory stressed system.
  */
-static int reread_file(struct reread_data *data, char *buf, size_t buf_size) {
+static char *reread_file(struct reread_data *data) {
+    /* start with page-size buffer and increase if needed */
+    static ssize_t buf_size = PAGE_SIZE;
+    static char *new_buf, *buf = NULL;
     ssize_t size;
 
     if (data->fd == -1) {
-        data->fd = open(data->filename, O_RDONLY | O_CLOEXEC);
-        if (data->fd == -1) {
+        /* First-time buffer initialization */
+        if (!buf && (buf = malloc(buf_size)) == NULL) {
+            return NULL;
+        }
+
+        data->fd = TEMP_FAILURE_RETRY(open(data->filename, O_RDONLY | O_CLOEXEC));
+        if (data->fd < 0) {
             ALOGE("%s open: %s", data->filename, strerror(errno));
-            return -1;
+            return NULL;
         }
     }
 
-    size = read_all(data->fd, buf, buf_size - 1);
-    if (size < 0) {
-        ALOGE("%s read: %s", data->filename, strerror(errno));
-        close(data->fd);
-        data->fd = -1;
-        return -1;
+    while (true) {
+        size = read_all(data->fd, buf, buf_size - 1);
+        if (size < 0) {
+            ALOGE("%s read: %s", data->filename, strerror(errno));
+            close(data->fd);
+            data->fd = -1;
+            return NULL;
+        }
+        if (size < buf_size - 1) {
+            break;
+        }
+        /*
+         * Since we are reading /proc files we can't use fstat to find out
+         * the real size of the file. Double the buffer size and keep retrying.
+         */
+        if ((new_buf = realloc(buf, buf_size * 2)) == NULL) {
+            errno = ENOMEM;
+            return NULL;
+        }
+        buf = new_buf;
+        buf_size *= 2;
     }
-    ALOG_ASSERT((size_t)size < buf_size - 1, "%s too large", data->filename);
     buf[size] = 0;
 
-    return 0;
+    return buf;
 }
 
 static struct proc *pid_lookup(int pid) {
@@ -1200,13 +1222,13 @@ static int zoneinfo_parse(union zoneinfo *zi) {
         .filename = ZONEINFO_PATH,
         .fd = -1,
     };
-    char buf[PAGE_SIZE];
+    char *buf;
     char *save_ptr;
     char *line;
 
     memset(zi, 0, sizeof(union zoneinfo));
 
-    if (reread_file(&file_data, buf, sizeof(buf)) < 0) {
+    if ((buf = reread_file(&file_data)) == NULL) {
         return -1;
     }
 
@@ -1254,13 +1276,13 @@ static int meminfo_parse(union meminfo *mi) {
         .filename = MEMINFO_PATH,
         .fd = -1,
     };
-    char buf[PAGE_SIZE];
+    char *buf;
     char *save_ptr;
     char *line;
 
     memset(mi, 0, sizeof(union meminfo));
 
-    if (reread_file(&file_data, buf, sizeof(buf)) < 0) {
+    if ((buf = reread_file(&file_data)) == NULL) {
         return -1;
     }
 
@@ -1542,9 +1564,9 @@ static int find_and_kill_process(int min_score_adj) {
 static int64_t get_memory_usage(struct reread_data *file_data) {
     int ret;
     int64_t mem_usage;
-    char buf[32];
+    char *buf;
 
-    if (reread_file(file_data, buf, sizeof(buf)) < 0) {
+    if ((buf = reread_file(file_data)) == NULL) {
         return -1;
     }
 
@@ -2014,6 +2036,10 @@ static void init_poll_kernel() {
 #endif
 
 static int init(void) {
+    struct reread_data file_data = {
+        .filename = ZONEINFO_PATH,
+        .fd = -1,
+    };
     struct epoll_event epev;
     int i;
     int ret;
@@ -2090,6 +2116,14 @@ static int init(void) {
     }
 
     memset(killcnt_idx, KILLCNT_INVALID_IDX, sizeof(killcnt_idx));
+
+    /*
+     * Read zoneinfo as the biggest file we read to create and size the initial
+     * read buffer and avoid memory re-allocations during memory pressure
+     */
+    if (reread_file(&file_data) == NULL) {
+        ALOGE("Failed to read %s: %s", file_data.filename, strerror(errno));
+    }
 
     return 0;
 }
