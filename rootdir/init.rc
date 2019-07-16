@@ -286,6 +286,9 @@ on init
     write /proc/sys/fs/protected_hardlinks 1
     write /proc/sys/fs/protected_symlinks 1
 
+    write /proc/sys/fs/protected_fifos 2
+    write /proc/sys/fs/protected_regular 2
+
     # scheduler tunables
     # Disable auto-scaling of scheduler tunables with hotplug. The tunables
     # will vary across devices in unpredictable ways if allowed to scale with
