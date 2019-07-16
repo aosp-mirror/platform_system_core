@@ -27,6 +27,8 @@
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 
+#include "utility.h"
+
 namespace android {
 namespace dm {
 
@@ -37,21 +39,40 @@ LoopControl::LoopControl() : control_fd_(-1) {
     }
 }
 
-bool LoopControl::Attach(int file_fd, std::string* loopdev) const {
-    if (!FindFreeLoopDevice(loopdev)) {
-        LOG(ERROR) << "Failed to attach, no free loop devices";
-        return false;
-    }
+bool LoopControl::Attach(int file_fd, const std::chrono::milliseconds& timeout_ms,
+                         std::string* loopdev) const {
+    auto start_time = std::chrono::steady_clock::now();
+    auto condition = [&]() -> WaitResult {
+        if (!FindFreeLoopDevice(loopdev)) {
+            LOG(ERROR) << "Failed to attach, no free loop devices";
+            return WaitResult::Fail;
+        }
 
-    android::base::unique_fd loop_fd(TEMP_FAILURE_RETRY(open(loopdev->c_str(), O_RDWR | O_CLOEXEC)));
-    if (loop_fd < 0) {
-        PLOG(ERROR) << "Failed to open: " << *loopdev;
-        return false;
-    }
+        auto now = std::chrono::steady_clock::now();
+        auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
+        if (!WaitForFile(*loopdev, timeout_ms - time_elapsed)) {
+            LOG(ERROR) << "Timed out waiting for path: " << *loopdev;
+            return WaitResult::Fail;
+        }
 
-    int rc = ioctl(loop_fd, LOOP_SET_FD, file_fd);
-    if (rc < 0) {
-        PLOG(ERROR) << "Failed LOOP_SET_FD";
+        android::base::unique_fd loop_fd(
+                TEMP_FAILURE_RETRY(open(loopdev->c_str(), O_RDWR | O_CLOEXEC)));
+        if (loop_fd < 0) {
+            PLOG(ERROR) << "Failed to open: " << *loopdev;
+            return WaitResult::Fail;
+        }
+
+        if (int rc = ioctl(loop_fd, LOOP_SET_FD, file_fd); rc == 0) {
+            return WaitResult::Done;
+        }
+        if (errno != EBUSY) {
+            PLOG(ERROR) << "Failed LOOP_SET_FD";
+            return WaitResult::Fail;
+        }
+        return WaitResult::Wait;
+    };
+    if (!WaitForCondition(condition, timeout_ms)) {
+        LOG(ERROR) << "Timed out trying to acquire a loop device";
         return false;
     }
     return true;
@@ -112,17 +133,19 @@ bool LoopControl::EnableDirectIo(int fd) {
     return true;
 }
 
-LoopDevice::LoopDevice(int fd, bool auto_close) : fd_(fd), owns_fd_(auto_close) {
-    Init();
+LoopDevice::LoopDevice(int fd, const std::chrono::milliseconds& timeout_ms, bool auto_close)
+    : fd_(fd), owns_fd_(auto_close) {
+    Init(timeout_ms);
 }
 
-LoopDevice::LoopDevice(const std::string& path) : fd_(-1), owns_fd_(true) {
+LoopDevice::LoopDevice(const std::string& path, const std::chrono::milliseconds& timeout_ms)
+    : fd_(-1), owns_fd_(true) {
     fd_.reset(open(path.c_str(), O_RDWR | O_CLOEXEC));
     if (fd_ < -1) {
         PLOG(ERROR) << "open failed for " << path;
         return;
     }
-    Init();
+    Init(timeout_ms);
 }
 
 LoopDevice::~LoopDevice() {
@@ -134,8 +157,8 @@ LoopDevice::~LoopDevice() {
     }
 }
 
-void LoopDevice::Init() {
-    control_.Attach(fd_, &device_);
+void LoopDevice::Init(const std::chrono::milliseconds& timeout_ms) {
+    valid_ = control_.Attach(fd_, timeout_ms, &device_);
 }
 
 }  // namespace dm
