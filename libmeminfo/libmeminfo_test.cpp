@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -58,6 +59,103 @@ TEST(ProcMemInfo, MapsNotEmpty) {
     ProcMemInfo proc_mem(pid);
     const std::vector<Vma>& maps = proc_mem.Maps();
     EXPECT_FALSE(maps.empty());
+}
+
+TEST(ProcMemInfo, MapsUsageNotEmpty) {
+    ProcMemInfo proc_mem(pid);
+    const std::vector<Vma>& maps = proc_mem.Maps();
+    EXPECT_FALSE(maps.empty());
+    uint64_t total_pss = 0;
+    uint64_t total_rss = 0;
+    uint64_t total_uss = 0;
+    for (auto& map : maps) {
+        ASSERT_NE(0, map.usage.vss);
+        total_rss += map.usage.rss;
+        total_pss += map.usage.pss;
+        total_uss += map.usage.uss;
+    }
+
+    // Crude check that stats are actually being read.
+    EXPECT_NE(0, total_rss) << "RSS zero for all maps, that is not possible.";
+    EXPECT_NE(0, total_pss) << "PSS zero for all maps, that is not possible.";
+    EXPECT_NE(0, total_uss) << "USS zero for all maps, that is not possible.";
+}
+
+TEST(ProcMemInfo, MapsUsageEmpty) {
+    ProcMemInfo proc_mem(pid);
+    const std::vector<Vma>& maps = proc_mem.MapsWithoutUsageStats();
+    EXPECT_FALSE(maps.empty());
+    // Verify that all usage stats are zero in every map.
+    for (auto& map : maps) {
+        ASSERT_EQ(0, map.usage.vss);
+        ASSERT_EQ(0, map.usage.rss);
+        ASSERT_EQ(0, map.usage.pss);
+        ASSERT_EQ(0, map.usage.uss);
+        ASSERT_EQ(0, map.usage.swap);
+        ASSERT_EQ(0, map.usage.swap_pss);
+        ASSERT_EQ(0, map.usage.private_clean);
+        ASSERT_EQ(0, map.usage.private_dirty);
+        ASSERT_EQ(0, map.usage.shared_clean);
+        ASSERT_EQ(0, map.usage.shared_dirty);
+    }
+}
+
+TEST(ProcMemInfo, PageMapPresent) {
+    static constexpr size_t kNumPages = 20;
+    size_t pagesize = getpagesize();
+    void* ptr = mmap(nullptr, pagesize * (kNumPages + 2), PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_NE(MAP_FAILED, ptr);
+
+    // Unmap the first page and the last page so that we guarantee this
+    // map is in a map by itself.
+    ASSERT_EQ(0, munmap(ptr, pagesize));
+    uintptr_t addr = reinterpret_cast<uintptr_t>(ptr) + pagesize;
+    ASSERT_EQ(0, munmap(reinterpret_cast<void*>(addr + kNumPages * pagesize), pagesize));
+
+    ProcMemInfo proc_mem(getpid());
+    const std::vector<Vma>& maps = proc_mem.MapsWithoutUsageStats();
+    ASSERT_FALSE(maps.empty());
+
+    // Find the vma associated with our previously created map.
+    const Vma* test_vma = nullptr;
+    for (const Vma& vma : maps) {
+        if (vma.start == addr) {
+            test_vma = &vma;
+            break;
+        }
+    }
+    ASSERT_TRUE(test_vma != nullptr) << "Cannot find test map.";
+
+    // Verify that none of the pages are listed as present.
+    std::vector<uint64_t> pagemap;
+    ASSERT_TRUE(proc_mem.PageMap(*test_vma, &pagemap));
+    ASSERT_EQ(kNumPages, pagemap.size());
+    for (size_t i = 0; i < pagemap.size(); i++) {
+        EXPECT_FALSE(android::meminfo::page_present(pagemap[i]))
+                << "Page " << i << " is present and it should not be.";
+    }
+
+    // Make some of the pages present and verify that we see them
+    // as present.
+    uint8_t* data = reinterpret_cast<uint8_t*>(addr);
+    data[0] = 1;
+    data[pagesize * 5] = 1;
+    data[pagesize * 11] = 1;
+
+    ASSERT_TRUE(proc_mem.PageMap(*test_vma, &pagemap));
+    ASSERT_EQ(kNumPages, pagemap.size());
+    for (size_t i = 0; i < pagemap.size(); i++) {
+        if (i == 0 || i == 5 || i == 11) {
+            EXPECT_TRUE(android::meminfo::page_present(pagemap[i]))
+                    << "Page " << i << " is not present and it should be.";
+        } else {
+            EXPECT_FALSE(android::meminfo::page_present(pagemap[i]))
+                    << "Page " << i << " is present and it should not be.";
+        }
+    }
+
+    ASSERT_EQ(0, munmap(reinterpret_cast<void*>(addr), kNumPages * pagesize));
 }
 
 TEST(ProcMemInfo, WssEmpty) {
