@@ -45,6 +45,9 @@ class ProcMemInfo final {
     // vector.
     const std::vector<Vma>& MapsWithPageIdle();
 
+    // Same as Maps() except, do not read the usage stats for each map.
+    const std::vector<Vma>& MapsWithoutUsageStats();
+
     // Collect all 'vma' or 'maps' from /proc/<pid>/smaps and store them in 'maps_'. Returns a
     // constant reference to the vma vector after the collection is done.
     //
@@ -88,7 +91,7 @@ class ProcMemInfo final {
     ~ProcMemInfo() = default;
 
   private:
-    bool ReadMaps(bool get_wss, bool use_pageidle = false);
+    bool ReadMaps(bool get_wss, bool use_pageidle = false, bool get_usage_stats = true);
     bool ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_pageidle);
 
     pid_t pid_;
