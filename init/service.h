@@ -31,7 +31,6 @@
 
 #include "action.h"
 #include "capabilities.h"
-#include "descriptors.h"
 #include "keyword_map.h"
 #include "parser.h"
 #include "service_utils.h"
@@ -151,7 +150,8 @@ class Service {
 
     std::string seclabel_;
 
-    std::vector<std::unique_ptr<DescriptorInfo>> descriptors_;
+    std::vector<SocketDescriptor> sockets_;
+    std::vector<FileDescriptor> files_;
     std::vector<std::pair<std::string, std::string>> environment_vars_;
 
     Action onrestart_;  // Commands to execute on restart.
