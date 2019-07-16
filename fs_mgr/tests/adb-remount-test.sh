@@ -15,10 +15,13 @@ USAGE="USAGE: `basename ${0}` [--help] [--serial <SerialNumber>] [options]
 
 adb remount tests
 
---help        This help
---serial      Specify device (must if multiple are present)
---color       Dress output with highlighting colors
---print-time  Report the test duration
+--color                     Dress output with highlighting colors
+--help                      This help
+--no-wait-screen            Do not wait for display screen to settle
+--print-time                Report the test duration
+--serial                    Specify device (must if multiple are present)
+--wait-adb <duration>       adb wait timeout
+--wait-fastboot <duration>  fastboot wait timeout
 
 Conditions:
  - Must be a userdebug build.
@@ -53,6 +56,7 @@ ACTIVE_SLOT=
 
 ADB_WAIT=4m
 FASTBOOT_WAIT=2m
+screen_wait=true
 
 ##
 ##  Helper Functions
@@ -436,6 +440,10 @@ wait_for_screen_timeout=900
 -n - echo newline at exit
 TIMEOUT - default `format_duration ${wait_for_screen_timeout}`" ]
 wait_for_screen() {
+  if ! ${screen_wait}; then
+    adb_wait
+    return
+  fi
   exit_function=true
   if [ X"-n" = X"${1}" ]; then
     exit_function=echo
@@ -743,6 +751,9 @@ skip_unrelated_mounts() {
 
 OPTIONS=`getopt --alternative --unquoted \
                 --longoptions help,serial:,colour,color,no-colour,no-color \
+                --longoptions wait-adb:,wait-fastboot: \
+                --longoptions wait-screen,wait-display \
+                --longoptions no-wait-screen,no-wait-display \
                 --longoptions gtest_print_time,print-time \
                 -- "?hs:" ${*}` ||
   ( echo "${USAGE}" >&2 ; false ) ||
@@ -766,8 +777,22 @@ while [ ${#} -gt 0 ]; do
     --no-color | --no-colour)
       color=false
       ;;
+    --no-wait-display | --no-wait-screen)
+      screen_wait=false
+      ;;
+    --wait-display | --wait-screen)
+      screen_wait=true
+      ;;
     --print-time | --gtest_print_time)
       print_time=true
+      ;;
+    --wait-adb)
+      ADB_WAIT=${2}
+      shift
+      ;;
+    --wait-fastboot)
+      FASTBOOT_WAIT=${2}
+      shift
       ;;
     --)
       shift
