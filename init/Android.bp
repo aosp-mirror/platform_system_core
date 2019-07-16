@@ -158,6 +158,13 @@ cc_library_static {
     },
 }
 
+phony {
+    name: "init",
+    required: [
+        "init_second_stage",
+    ],
+}
+
 cc_binary {
     name: "init_second_stage",
     recovery_available: true,
