@@ -13,38 +13,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#define LOG_TAG "vndksupport"
+
 #include "linker.h"
 
 #include <android/dlext.h>
 #include <dlfcn.h>
-
-#define LOG_TAG "vndksupport"
 #include <log/log.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-__attribute__((weak)) extern struct android_namespace_t* android_get_exported_namespace(const char*);
-__attribute__((weak)) extern void* android_dlopen_ext(const char*, int, const android_dlextinfo*);
+#include <initializer_list>
 
-static const char* namespace_name = NULL;
+__attribute__((weak)) extern "C" android_namespace_t* android_get_exported_namespace(const char*);
+__attribute__((weak)) extern "C" void* android_dlopen_ext(const char*, int,
+                                                          const android_dlextinfo*);
 
-static struct android_namespace_t* get_vendor_namespace() {
-    const char* namespace_names[] = {"sphal", "default", NULL};
-    static struct android_namespace_t* vendor_namespace = NULL;
-    if (vendor_namespace == NULL) {
-        int name_idx = 0;
-        while (namespace_names[name_idx] != NULL) {
-            if (android_get_exported_namespace != NULL) {
-                vendor_namespace = android_get_exported_namespace(namespace_names[name_idx]);
+namespace {
+
+struct VendorNamespace {
+    android_namespace_t* ptr = nullptr;
+    const char* name = nullptr;
+};
+
+}  // anonymous namespace
+
+static VendorNamespace get_vendor_namespace() {
+    static VendorNamespace result = ([] {
+        for (const char* name : {"sphal", "default"}) {
+            if (android_get_exported_namespace != nullptr) {
+                if (android_namespace_t* ns = android_get_exported_namespace(name)) {
+                    return VendorNamespace{ns, name};
+                }
             }
-            if (vendor_namespace != NULL) {
-                namespace_name = namespace_names[name_idx];
-                break;
-            }
-            name_idx++;
         }
-    }
-    return vendor_namespace;
+        return VendorNamespace{};
+    })();
+    return result;
 }
 
 int android_is_in_vendor_process() {
@@ -53,28 +59,30 @@ int android_is_in_vendor_process() {
     if (getpid() == 1) {
         return 0;
     }
-    if (android_get_exported_namespace == NULL) {
+    if (android_get_exported_namespace == nullptr) {
         ALOGD("android_get_exported_namespace() not available. Assuming system process.");
         return 0;
     }
 
     // In vendor process, 'vndk' namespace is not visible, whereas in system
     // process, it is.
-    return android_get_exported_namespace("vndk") == NULL;
+    return android_get_exported_namespace("vndk") == nullptr;
 }
 
 void* android_load_sphal_library(const char* name, int flag) {
-    struct android_namespace_t* vendor_namespace = get_vendor_namespace();
-    if (vendor_namespace != NULL) {
+    VendorNamespace vendor_namespace = get_vendor_namespace();
+    if (vendor_namespace.ptr != nullptr) {
         const android_dlextinfo dlextinfo = {
-            .flags = ANDROID_DLEXT_USE_NAMESPACE, .library_namespace = vendor_namespace,
+                .flags = ANDROID_DLEXT_USE_NAMESPACE,
+                .library_namespace = vendor_namespace.ptr,
         };
-        void* handle = NULL;
-        if (android_dlopen_ext != NULL) {
+        void* handle = nullptr;
+        if (android_dlopen_ext != nullptr) {
             handle = android_dlopen_ext(name, flag, &dlextinfo);
         }
         if (!handle) {
-            ALOGE("Could not load %s from %s namespace: %s.", name, namespace_name, dlerror());
+            ALOGE("Could not load %s from %s namespace: %s.", name, vendor_namespace.name,
+                  dlerror());
         }
         return handle;
     } else {
