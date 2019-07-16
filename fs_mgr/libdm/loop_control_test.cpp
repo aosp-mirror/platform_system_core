@@ -53,7 +53,7 @@ TEST(libdm, LoopControl) {
     unique_fd fd = TempFile();
     ASSERT_GE(fd, 0);
 
-    LoopDevice loop(fd);
+    LoopDevice loop(fd, 10s);
     ASSERT_TRUE(loop.valid());
 
     char buffer[6];

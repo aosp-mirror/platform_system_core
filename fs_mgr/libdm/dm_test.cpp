@@ -103,9 +103,9 @@ TEST(libdm, DmLinear) {
     ASSERT_TRUE(android::base::WriteFully(tmp1, message1, sizeof(message1)));
     ASSERT_TRUE(android::base::WriteFully(tmp2, message2, sizeof(message2)));
 
-    LoopDevice loop_a(tmp1);
+    LoopDevice loop_a(tmp1, 10s);
     ASSERT_TRUE(loop_a.valid());
-    LoopDevice loop_b(tmp2);
+    LoopDevice loop_b(tmp2, 10s);
     ASSERT_TRUE(loop_b.valid());
 
     // Define a 2-sector device, with each sector mapping to the first sector
@@ -255,9 +255,9 @@ void SnapshotTestHarness::SetupImpl() {
     cow_fd_ = CreateTempFile("cow_device", kCowDeviceSize);
     ASSERT_GE(cow_fd_, 0);
 
-    base_loop_ = std::make_unique<LoopDevice>(base_fd_);
+    base_loop_ = std::make_unique<LoopDevice>(base_fd_, 10s);
     ASSERT_TRUE(base_loop_->valid());
-    cow_loop_ = std::make_unique<LoopDevice>(cow_fd_);
+    cow_loop_ = std::make_unique<LoopDevice>(cow_fd_, 10s);
     ASSERT_TRUE(cow_loop_->valid());
 
     DmTable origin_table;
