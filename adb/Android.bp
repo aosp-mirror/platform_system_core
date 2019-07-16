@@ -221,6 +221,7 @@ cc_test_host {
     target: {
         windows: {
             enabled: true,
+            ldflags: ["-municode"],
             shared_libs: ["AdbWinApi"],
         },
     },
