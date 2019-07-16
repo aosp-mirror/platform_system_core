@@ -283,6 +283,9 @@ on init
     write /proc/sys/kernel/hung_task_timeout_secs 0
     write /proc/cpu/alignment 4
 
+    write /proc/sys/fs/protected_hardlinks 1
+    write /proc/sys/fs/protected_symlinks 1
+
     # scheduler tunables
     # Disable auto-scaling of scheduler tunables with hotplug. The tunables
     # will vary across devices in unpredictable ways if allowed to scale with
