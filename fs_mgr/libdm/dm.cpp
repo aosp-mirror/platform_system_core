@@ -29,6 +29,8 @@
 #include <android-base/strings.h>
 #include <uuid/uuid.h>
 
+#include "utility.h"
+
 namespace android {
 namespace dm {
 
@@ -94,20 +96,6 @@ bool DeviceMapper::DeleteDevice(const std::string& name) {
     return true;
 }
 
-bool WaitForCondition(const std::function<bool()>& condition,
-                      const std::chrono::milliseconds& timeout_ms) {
-    auto start_time = std::chrono::steady_clock::now();
-    while (true) {
-        if (condition()) return true;
-
-        std::this_thread::sleep_for(20ms);
-
-        auto now = std::chrono::steady_clock::now();
-        auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
-        if (time_elapsed > timeout_ms) return false;
-    }
-}
-
 static std::string GenerateUuid() {
     uuid_t uuid_bytes;
     uuid_generate(uuid_bytes);
@@ -138,16 +126,7 @@ bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, s
     if (timeout_ms <= std::chrono::milliseconds::zero()) {
         return true;
     }
-
-    auto condition = [&]() -> bool {
-        // If the file exists but returns EPERM or something, we consider the
-        // condition met.
-        if (access(unique_path.c_str(), F_OK) != 0) {
-            if (errno == ENOENT) return false;
-        }
-        return true;
-    };
-    if (!WaitForCondition(condition, timeout_ms)) {
+    if (!WaitForFile(unique_path, timeout_ms)) {
         LOG(ERROR) << "Timed out waiting for device path: " << unique_path;
         DeleteDevice(name);
         return false;

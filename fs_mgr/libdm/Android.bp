@@ -27,6 +27,7 @@ cc_library_static {
         "dm_target.cpp",
         "dm.cpp",
         "loop_control.cpp",
+        "utility.cpp",
     ],
 
     static_libs: [

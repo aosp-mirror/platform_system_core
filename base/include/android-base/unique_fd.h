@@ -258,9 +258,9 @@ inline DIR* Fdopendir(unique_fd&& ufd) {
 
 // A wrapper type that can be implicitly constructed from either int or unique_fd.
 struct borrowed_fd {
-  /* implicit */ borrowed_fd(int fd) : fd_(fd) {}
+  /* implicit */ borrowed_fd(int fd) : fd_(fd) {}  // NOLINT
   template <typename T>
-  /* implicit */ borrowed_fd(const unique_fd_impl<T>& ufd) : fd_(ufd.get()) {}
+  /* implicit */ borrowed_fd(const unique_fd_impl<T>& ufd) : fd_(ufd.get()) {}  // NOLINT
 
   int get() const { return fd_; }
 
