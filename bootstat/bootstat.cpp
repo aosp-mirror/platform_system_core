@@ -140,13 +140,13 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"mba_err", 13},
     {"Watchdog", 14},
     {"Panic", 15},
-    {"power_key", 16},  // Mediatek
-    {"power_on", 17},
+    {"power_key", 16},  // aliasReasons to cold,powerkey (Mediatek)
+    {"power_on", 17},   // aliasReasons to cold,powerkey
     {"Reboot", 18},
     {"rtc", 19},
     {"edl", 20},
     {"oem_pon1", 21},
-    {"oem_powerkey", 22},
+    {"oem_powerkey", 22},  // aliasReasons to cold,powerkey
     {"oem_unknown_reset", 23},
     {"srto: HWWDT reset SC", 24},
     {"srto: HWWDT reset platform", 25},
@@ -201,15 +201,15 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"hard,hw_reset", 72},
     {"shutdown,suspend", 73},    // Suspend to RAM
     {"shutdown,hibernate", 74},  // Suspend to DISK
-    {"power_on_key", 75},
-    {"reboot_by_key", 76},
-    {"wdt_by_pass_pwk", 77},  // Mediatek
-    {"reboot_longkey", 78},
-    {"powerkey", 79},
-    {"usb", 80},               // Mediatek
-    {"wdt", 81},               // Mediatek
-    {"tool_by_pass_pwk", 82},  // Mediatek
-    {"2sec_reboot", 83},       // Mediatek
+    {"power_on_key", 75},        // aliasReasons to cold,powerkey
+    {"reboot_by_key", 76},       // translated to reboot,by_key
+    {"wdt_by_pass_pwk", 77},     // Mediatek
+    {"reboot_longkey", 78},      // translated to reboot,longkey
+    {"powerkey", 79},            // aliasReasons to cold,powerkey
+    {"usb", 80},                 // aliasReasons to cold,charger (Mediatek)
+    {"wdt", 81},                 // Mediatek
+    {"tool_by_pass_pwk", 82},    // aliasReasons to reboot,tool (Mediatek)
+    {"2sec_reboot", 83},         // aliasReasons to cold,rtc,2sec (Mediatek)
     {"reboot,by_key", 84},
     {"reboot,longkey", 85},
     {"reboot,2sec", 86},  // Deprecate in two years, replaced with cold,rtc,2sec
@@ -219,28 +219,28 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,rescueparty", 90},
     {"charge", 91},
     {"oem_tz_crash", 92},
-    {"uvlo", 93},  // aliasReasons converts to reboot,undervoltage
+    {"uvlo", 93},  // aliasReasons to reboot,undervoltage
     {"oem_ps_hold", 94},
     {"abnormal_reset", 95},
     {"oemerr_unknown", 96},
     {"reboot_fastboot_mode", 97},
     {"watchdog_apps_bite", 98},
     {"xpu_err", 99},
-    {"power_on_usb", 100},
+    {"power_on_usb", 100},  // aliasReasons to cold,charger
     {"watchdog_rpm", 101},
     {"watchdog_nonsec", 102},
     {"watchdog_apps_bark", 103},
     {"reboot_dmverity_corrupted", 104},
-    {"reboot_smpl", 105},  // aliasReasons converts to reboot,powerloss
+    {"reboot_smpl", 105},  // aliasReasons to reboot,powerloss
     {"watchdog_sdi_apps_reset", 106},
-    {"smpl", 107},  // aliasReasons converts to reboot,powerloss
+    {"smpl", 107},  // aliasReasons to reboot,powerloss
     {"oem_modem_failed_to_powerup", 108},
     {"reboot_normal", 109},
     {"oem_lpass_cfg", 110},
     {"oem_xpu_ns_error", 111},
-    {"power_key_press", 112},
+    {"power_key_press", 112},  // aliasReasons to cold,powerkey
     {"hardware_reset", 113},
-    {"reboot_by_powerkey", 114},
+    {"reboot_by_powerkey", 114},  // aliasReasons to cold,powerkey (is this correct?)
     {"reboot_verity", 115},
     {"oem_rpm_undef_error", 116},
     {"oem_crash_on_the_lk", 117},
@@ -250,7 +250,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"factory_cable", 121},
     {"oem_ar6320_failed_to_powerup", 122},
     {"watchdog_rpm_bite", 123},
-    {"power_on_cable", 124},
+    {"power_on_cable", 124},  // aliasReasons to cold,charger
     {"reboot_unknown", 125},
     {"wireless_charger", 126},
     {"0x776655ff", 127},
@@ -310,6 +310,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"shutdown,userrequested,fastboot", 181},
     {"shutdown,userrequested,recovery", 182},
     {"reboot,unknown[0-9]*", 183},
+    {"reboot,longkey,.*", 184},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -838,12 +839,12 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     // following table smaller.
     static const std::vector<std::pair<const std::string, const std::string>> aliasReasons = {
         {"watchdog", "wdog"},
-        {"cold,powerkey", "powerkey|power_key|PowerKey"},
         {"kernel_panic", "panic"},
         {"shutdown,thermal", "thermal"},
         {"warm,s3_wakeup", "s3_wakeup"},
         {"hard,hw_reset", "hw_reset"},
-        {"cold,charger", "usb"},
+        {"cold,charger", "usb|power_on_cable"},
+        {"cold,powerkey", "powerkey|power_key|PowerKey|power_on"},
         {"cold,rtc", "rtc"},
         {"cold,rtc,2sec", "2sec_reboot"},
         {"!warm", "wdt_by_pass_pwk"},  // change flavour of blunt

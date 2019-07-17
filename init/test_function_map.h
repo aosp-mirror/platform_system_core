@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_TEST_FUNCTION_MAP_H
-#define _INIT_TEST_FUNCTION_MAP_H
+#pragma once
 
 #include <string>
 #include <vector>
 
 #include "builtin_arguments.h"
+#include "builtins.h"
 #include "keyword_map.h"
 
 namespace android {
@@ -30,17 +30,17 @@ class TestFunctionMap : public KeywordFunctionMap {
   public:
     // Helper for argument-less functions
     using BuiltinFunctionNoArgs = std::function<void(void)>;
-    void Add(const std::string& name, const BuiltinFunctionNoArgs function) {
-        Add(name, 0, 0, false, [function](const BuiltinArguments&) {
-            function();
-            return Success();
+    void Add(const std::string& name, BuiltinFunctionNoArgs function) {
+        Add(name, 0, 0, false, [f = std::move(function)](const BuiltinArguments&) {
+            f();
+            return Result<void>{};
         });
     }
 
     void Add(const std::string& name, std::size_t min_parameters, std::size_t max_parameters,
-             bool run_in_subcontext, const BuiltinFunction function) {
-        builtin_functions_[name] =
-            make_tuple(min_parameters, max_parameters, make_pair(run_in_subcontext, function));
+             bool run_in_subcontext, BuiltinFunction function) {
+        builtin_functions_[name] = make_tuple(min_parameters, max_parameters,
+                                              make_pair(run_in_subcontext, std::move(function)));
     }
 
   private:
@@ -51,5 +51,3 @@ class TestFunctionMap : public KeywordFunctionMap {
 
 }  // namespace init
 }  // namespace android
-
-#endif

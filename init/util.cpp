@@ -34,19 +34,17 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <selinux/android.h>
 
 #if defined(__ANDROID__)
-#include "selinux.h"
+#include "reboot_utils.h"
+#include "selabel.h"
 #else
 #include "host_init_stubs.h"
-#endif
-
-#ifdef _INIT_INIT_H
-#error "Do not include init.h in files used by ueventd; it will expose init's globals"
 #endif
 
 using android::base::boot_clock;
@@ -80,32 +78,28 @@ Result<uid_t> DecodeUid(const std::string& name) {
  * daemon. We communicate the file descriptor's value via the environment
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
-int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
-                 const char* socketcon) {
-    if (socketcon) {
-        if (setsockcreatecon(socketcon) == -1) {
-            PLOG(ERROR) << "setsockcreatecon(\"" << socketcon << "\") failed";
-            return -1;
+Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_t perm, uid_t uid,
+                         gid_t gid, const std::string& socketcon) {
+    if (!socketcon.empty()) {
+        if (setsockcreatecon(socketcon.c_str()) == -1) {
+            return ErrnoError() << "setsockcreatecon(\"" << socketcon << "\") failed";
         }
     }
 
     android::base::unique_fd fd(socket(PF_UNIX, type, 0));
     if (fd < 0) {
-        PLOG(ERROR) << "Failed to open socket '" << name << "'";
-        return -1;
+        return ErrnoError() << "Failed to open socket '" << name << "'";
     }
 
-    if (socketcon) setsockcreatecon(NULL);
+    if (!socketcon.empty()) setsockcreatecon(nullptr);
 
     struct sockaddr_un addr;
     memset(&addr, 0 , sizeof(addr));
     addr.sun_family = AF_UNIX;
-    snprintf(addr.sun_path, sizeof(addr.sun_path), ANDROID_SOCKET_DIR"/%s",
-             name);
+    snprintf(addr.sun_path, sizeof(addr.sun_path), ANDROID_SOCKET_DIR "/%s", name.c_str());
 
     if ((unlink(addr.sun_path) != 0) && (errno != ENOENT)) {
-        PLOG(ERROR) << "Failed to unlink old socket '" << name << "'";
-        return -1;
+        return ErrnoError() << "Failed to unlink old socket '" << name << "'";
     }
 
     std::string secontext;
@@ -116,8 +110,7 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
     if (passcred) {
         int on = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on))) {
-            PLOG(ERROR) << "Failed to set SO_PASSCRED '" << name << "'";
-            return -1;
+            return ErrnoError() << "Failed to set SO_PASSCRED '" << name << "'";
         }
     }
 
@@ -128,19 +121,18 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
         setfscreatecon(nullptr);
     }
 
+    auto guard = android::base::make_scope_guard([&addr] { unlink(addr.sun_path); });
+
     if (ret) {
         errno = savederrno;
-        PLOG(ERROR) << "Failed to bind socket '" << name << "'";
-        goto out_unlink;
+        return ErrnoError() << "Failed to bind socket '" << name << "'";
     }
 
     if (lchown(addr.sun_path, uid, gid)) {
-        PLOG(ERROR) << "Failed to lchown socket '" << addr.sun_path << "'";
-        goto out_unlink;
+        return ErrnoError() << "Failed to lchown socket '" << addr.sun_path << "'";
     }
     if (fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW)) {
-        PLOG(ERROR) << "Failed to fchmodat socket '" << addr.sun_path << "'";
-        goto out_unlink;
+        return ErrnoError() << "Failed to fchmodat socket '" << addr.sun_path << "'";
     }
 
     LOG(INFO) << "Created socket '" << addr.sun_path << "'"
@@ -148,11 +140,8 @@ int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t u
               << ", user " << uid
               << ", group " << gid;
 
+    guard.Disable();
     return fd.release();
-
-out_unlink:
-    unlink(addr.sun_path);
-    return -1;
 }
 
 Result<std::string> ReadFile(const std::string& path) {
@@ -196,7 +185,7 @@ static int OpenFile(const std::string& path, int flags, mode_t mode) {
     return rc;
 }
 
-Result<Success> WriteFile(const std::string& path, const std::string& content) {
+Result<void> WriteFile(const std::string& path, const std::string& content) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(
         OpenFile(path, O_WRONLY | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0600)));
     if (fd == -1) {
@@ -205,7 +194,7 @@ Result<Success> WriteFile(const std::string& path, const std::string& content) {
     if (!android::base::WriteStringToFd(content, fd)) {
         return ErrnoError() << "Unable to write file contents";
     }
-    return Success();
+    return {};
 }
 
 bool mkdir_recursive(const std::string& path, mode_t mode) {
@@ -425,20 +414,50 @@ bool IsLegalPropertyName(const std::string& name) {
     return true;
 }
 
-void InitKernelLogging(char** argv, std::function<void(const char*)> abort_function) {
+static void InitAborter(const char* abort_message) {
+    // When init forks, it continues to use this aborter for LOG(FATAL), but we want children to
+    // simply abort instead of trying to reboot the system.
+    if (getpid() != 1) {
+        android::base::DefaultAborter(abort_message);
+        return;
+    }
+
+    InitFatalReboot();
+}
+
+// The kernel opens /dev/console and uses that fd for stdin/stdout/stderr if there is a serial
+// console enabled and no initramfs, otherwise it does not provide any fds for stdin/stdout/stderr.
+// SetStdioToDevNull() is used to close these existing fds if they exist and replace them with
+// /dev/null regardless.
+//
+// In the case that these fds are provided by the kernel, the exec of second stage init causes an
+// SELinux denial as it does not have access to /dev/console.  In the case that they are not
+// provided, exec of any further process is potentially dangerous as the first fd's opened by that
+// process will take the stdin/stdout/stderr fileno's, which can cause issues if printf(), etc is
+// then used by that process.
+//
+// Lastly, simply calling SetStdioToDevNull() in first stage init is not enough, since first
+// stage init still runs in kernel context, future child processes will not have permissions to
+// access any fds that it opens, including the one opened below for /dev/null.  Therefore,
+// SetStdioToDevNull() must be called again in second stage init.
+void SetStdioToDevNull(char** argv) {
     // Make stdin/stdout/stderr all point to /dev/null.
-    int fd = open("/dev/null", O_RDWR);
+    int fd = open("/dev/null", O_RDWR);  // NOLINT(android-cloexec-open)
     if (fd == -1) {
         int saved_errno = errno;
-        android::base::InitLogging(argv, &android::base::KernelLogger, std::move(abort_function));
+        android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
         errno = saved_errno;
         PLOG(FATAL) << "Couldn't open /dev/null";
     }
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
-    if (fd > 2) close(fd);
-    android::base::InitLogging(argv, &android::base::KernelLogger, std::move(abort_function));
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    if (fd > STDERR_FILENO) close(fd);
+}
+
+void InitKernelLogging(char** argv) {
+    SetFatalRebootTarget();
+    android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);
 }
 
 bool IsRecoveryMode() {

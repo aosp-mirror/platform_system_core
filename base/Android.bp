@@ -53,6 +53,7 @@ cc_defaults {
         "logging.cpp",
         "mapped_file.cpp",
         "parsenetaddress.cpp",
+        "process.cpp",
         "properties.cpp",
         "quick_exit.cpp",
         "stringprintf.cpp",
@@ -111,6 +112,9 @@ cc_library {
         "libbase_headers",
     ],
     export_header_lib_headers: ["libbase_headers"],
+    static_libs: ["fmtlib"],
+    whole_static_libs: ["fmtlib"],
+    export_static_lib_headers: ["fmtlib"],
 }
 
 cc_library_static {
@@ -119,6 +123,9 @@ cc_library_static {
     sdk_version: "current",
     stl: "c++_static",
     export_include_dirs: ["include"],
+    static_libs: ["fmtlib_ndk"],
+    whole_static_libs: ["fmtlib_ndk"],
+    export_static_lib_headers: ["fmtlib_ndk"],
 }
 
 // Tests
@@ -139,8 +146,10 @@ cc_test {
         "parsedouble_test.cpp",
         "parseint_test.cpp",
         "parsenetaddress_test.cpp",
+        "process_test.cpp",
         "properties_test.cpp",
         "quick_exit_test.cpp",
+        "result_test.cpp",
         "scopeguard_test.cpp",
         "stringprintf_test.cpp",
         "strings_test.cpp",
@@ -174,4 +183,22 @@ cc_test {
         },
     },
     test_suites: ["device-tests"],
+}
+
+cc_benchmark {
+    name: "libbase_benchmark",
+    defaults: ["libbase_cflags_defaults"],
+
+    srcs: ["format_benchmark.cpp"],
+    shared_libs: ["libbase"],
+
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
 }

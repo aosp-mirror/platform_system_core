@@ -27,7 +27,6 @@
 #include <sysutils/SocketClient.h>
 
 #include "LogBufferElement.h"
-#include "LogBufferInterface.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogTimes.h"
@@ -75,7 +74,7 @@ static bool isMonotonic(const log_time& mono) {
 
 typedef std::list<LogBufferElement*> LogBufferElementCollection;
 
-class LogBuffer : public LogBufferInterface {
+class LogBuffer {
     LogBufferElementCollection mLogElements;
     pthread_rwlock_t mLogElementsLock;
 
@@ -108,14 +107,14 @@ class LogBuffer : public LogBufferInterface {
     LastLogTimes& mTimes;
 
     explicit LogBuffer(LastLogTimes* times);
-    ~LogBuffer() override;
+    ~LogBuffer();
     void init();
     bool isMonotonic() {
         return monotonic;
     }
 
-    int log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
-            const char* msg, uint16_t len) override;
+    int log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
+            uint16_t len);
     // lastTid is an optional context to help detect if the last previous
     // valid message was from the same source so we can differentiate chatty
     // filter types (identical or expired)
@@ -159,12 +158,7 @@ class LogBuffer : public LogBufferInterface {
     const char* pidToName(pid_t pid) {
         return stats.pidToName(pid);
     }
-    virtual uid_t pidToUid(pid_t pid) override {
-        return stats.pidToUid(pid);
-    }
-    virtual pid_t tidToPid(pid_t tid) override {
-        return stats.tidToPid(tid);
-    }
+    uid_t pidToUid(pid_t pid) { return stats.pidToUid(pid); }
     const char* uidToName(uid_t uid) {
         return stats.uidToName(uid);
     }

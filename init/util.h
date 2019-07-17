@@ -30,19 +30,19 @@
 
 #include "result.h"
 
-#define COLDBOOT_DONE "/dev/.coldboot_done"
-
 using android::base::boot_clock;
 using namespace std::chrono_literals;
 
 namespace android {
 namespace init {
 
-int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
-                 const char* socketcon);
+static const char kColdBootDoneProp[] = "ro.cold_boot_done";
+
+Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_t perm, uid_t uid,
+                         gid_t gid, const std::string& socketcon);
 
 Result<std::string> ReadFile(const std::string& path);
-Result<Success> WriteFile(const std::string& path, const std::string& content);
+Result<void> WriteFile(const std::string& path, const std::string& content);
 
 Result<uid_t> DecodeUid(const std::string& name);
 
@@ -63,7 +63,8 @@ bool is_android_dt_value_expected(const std::string& sub_path, const std::string
 
 bool IsLegalPropertyName(const std::string& name);
 
-void InitKernelLogging(char** argv, std::function<void(const char*)> abort_function);
+void SetStdioToDevNull(char** argv);
+void InitKernelLogging(char** argv);
 bool IsRecoveryMode();
 }  // namespace init
 }  // namespace android

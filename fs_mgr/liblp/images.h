@@ -41,7 +41,7 @@ class ImageBuilder {
                  const std::map<std::string, std::string>& images, bool sparsify);
 
     bool Build();
-    bool Export(const char* file);
+    bool Export(const std::string& file);
     bool ExportFiles(const std::string& dir);
     bool IsValid() const;
 

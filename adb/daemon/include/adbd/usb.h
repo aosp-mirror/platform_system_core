@@ -16,6 +16,8 @@
  * limitations under the License.
  */
 
+#include <linux/usb/functionfs.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -43,7 +45,7 @@ struct usb_handle {
     bool open_new_connection = true;
 
     int (*write)(usb_handle* h, const void* data, int len);
-    int (*read)(usb_handle* h, void* data, int len);
+    int (*read)(usb_handle* h, void* data, int len, bool allow_partial);
     void (*kick)(usb_handle* h);
     void (*close)(usb_handle* h);
 

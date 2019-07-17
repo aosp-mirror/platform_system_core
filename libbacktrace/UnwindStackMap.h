@@ -33,6 +33,7 @@
 #include <unwindstack/Elf.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
+#include <unwindstack/Memory.h>
 
 // Forward declarations.
 class UnwindDexFile;
@@ -72,21 +73,6 @@ class UnwindStackMap : public BacktraceMap {
 #endif
 
   unwindstack::ArchEnum arch_ = unwindstack::ARCH_UNKNOWN;
-};
-
-class UnwindStackOfflineMap : public UnwindStackMap {
- public:
-  UnwindStackOfflineMap(pid_t pid);
-  ~UnwindStackOfflineMap() = default;
-
-  bool Build() override;
-
-  bool Build(const std::vector<backtrace_map_t>& maps);
-
-  bool CreateProcessMemory(const backtrace_stackinfo_t& stack);
-
- private:
-  unwindstack::MemoryOfflineBuffer* memory_ = nullptr;
 };
 
 #endif  // _LIBBACKTRACE_UNWINDSTACK_MAP_H

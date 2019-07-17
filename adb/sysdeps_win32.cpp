@@ -610,15 +610,6 @@ static void _fh_socket_init(FH f) {
 
 static int _fh_socket_close(FH f) {
     if (f->fh_socket != INVALID_SOCKET) {
-        /* gently tell any peer that we're closing the socket */
-        if (shutdown(f->fh_socket, SD_BOTH) == SOCKET_ERROR) {
-            // If the socket is not connected, this returns an error. We want to
-            // minimize logging spam, so don't log these errors for now.
-#if 0
-            D("socket shutdown failed: %s",
-              android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
-#endif
-        }
         if (closesocket(f->fh_socket) == SOCKET_ERROR) {
             // Don't set errno here, since adb_close will ignore it.
             const DWORD err = WSAGetLastError();
@@ -2606,7 +2597,9 @@ extern "C" int main(int argc, char** argv);
 extern "C" int wmain(int argc, wchar_t **argv) {
     // Convert args from UTF-16 to UTF-8 and pass that to main().
     NarrowArgs narrow_args(argc, argv);
-    return main(argc, narrow_args.data());
+
+    // Avoid destructing NarrowArgs: argv might have been mutated to point to string literals.
+    _exit(main(argc, narrow_args.data()));
 }
 
 // Shadow UTF-8 environment variable name/value pairs that are created from

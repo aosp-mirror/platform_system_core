@@ -39,6 +39,7 @@
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -52,6 +53,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <property_info_parser/property_info_parser.h>
 #include <property_info_serializer/property_info_serializer.h>
 #include <selinux/android.h>
@@ -59,7 +61,6 @@
 #include <selinux/selinux.h>
 
 #include "debug_ramdisk.h"
-#include "epoll.h"
 #include "init.h"
 #include "persistent_properties.h"
 #include "property_type.h"
@@ -76,6 +77,7 @@ using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::Trim;
+using android::base::unique_fd;
 using android::base::WriteStringToFile;
 using android::properties::BuildTrie;
 using android::properties::ParsePropertyInfoFile;
@@ -645,8 +647,14 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
                 while (isspace(*key)) key++;
             }
 
-            load_properties_from_file(fn, key, properties);
+            std::string raw_filename(fn);
+            std::string expanded_filename;
+            if (!expand_props(raw_filename, &expanded_filename)) {
+                LOG(ERROR) << "Could not expand filename '" << raw_filename << "'";
+                continue;
+            }
 
+            load_properties_from_file(expanded_filename.c_str(), key, properties);
         } else {
             value = strchr(key, '=');
             if (!value) continue;
@@ -659,9 +667,9 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
 
             if (flen > 0) {
                 if (filter[flen - 1] == '*') {
-                    if (strncmp(key, filter, flen - 1)) continue;
+                    if (strncmp(key, filter, flen - 1) != 0) continue;
                 } else {
-                    if (strcmp(key, filter)) continue;
+                    if (strcmp(key, filter) != 0) continue;
                 }
             }
 
@@ -774,10 +782,9 @@ static void property_initialize_ro_product_props() {
             "brand", "device", "manufacturer", "model", "name",
     };
     const char* RO_PRODUCT_PROPS_ALLOWED_SOURCES[] = {
-            "odm", "product", "product_services", "system", "vendor",
+            "odm", "product", "system_ext", "system", "vendor",
     };
-    const char* RO_PRODUCT_PROPS_DEFAULT_SOURCE_ORDER =
-            "product,product_services,odm,vendor,system";
+    const char* RO_PRODUCT_PROPS_DEFAULT_SOURCE_ORDER = "product,odm,vendor,system_ext,system";
     const std::string EMPTY = "";
 
     std::string ro_product_props_source_order =
@@ -884,6 +891,7 @@ void property_load_boot_defaults(bool load_debug_prop) {
         }
     }
     load_properties_from_file("/system/build.prop", nullptr, &properties);
+    load_properties_from_file("/system_ext/build.prop", nullptr, &properties);
     load_properties_from_file("/vendor/default.prop", nullptr, &properties);
     load_properties_from_file("/vendor/build.prop", nullptr, &properties);
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_Q__) {
@@ -893,7 +901,6 @@ void property_load_boot_defaults(bool load_debug_prop) {
         load_properties_from_file("/odm/build.prop", nullptr, &properties);
     }
     load_properties_from_file("/product/build.prop", nullptr, &properties);
-    load_properties_from_file("/product_services/build.prop", nullptr, &properties);
     load_properties_from_file("/factory/factory.prop", "ro.*", &properties);
 
     if (load_debug_prop) {
@@ -987,10 +994,11 @@ void CreateSerializedPropertyInfo() {
 void StartPropertyService(Epoll* epoll) {
     property_set("ro.property_service.version", "2");
 
-    property_set_fd = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-                                   false, 0666, 0, 0, nullptr);
-    if (property_set_fd == -1) {
-        PLOG(FATAL) << "start_property_service socket creation failed";
+    if (auto result = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+                                   false, 0666, 0, 0, {})) {
+        property_set_fd = *result;
+    } else {
+        PLOG(FATAL) << "start_property_service socket creation failed: " << result.error();
     }
 
     listen(property_set_fd, 8);
@@ -998,6 +1006,43 @@ void StartPropertyService(Epoll* epoll) {
     if (auto result = epoll->RegisterHandler(property_set_fd, handle_property_set_fd); !result) {
         PLOG(FATAL) << result.error();
     }
+}
+
+Result<int> CallFunctionAndHandlePropertiesImpl(const std::function<int()>& f) {
+    unique_fd reader;
+    unique_fd writer;
+    if (!Socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, &reader, &writer)) {
+        return ErrnoError() << "Could not create socket pair";
+    }
+
+    int result = 0;
+    std::atomic<bool> end = false;
+    auto thread = std::thread{[&f, &result, &end, &writer] {
+        result = f();
+        end = true;
+        send(writer, "1", 1, 0);
+    }};
+
+    Epoll epoll;
+    if (auto result = epoll.Open(); !result) {
+        return Error() << "Could not create epoll: " << result.error();
+    }
+    if (auto result = epoll.RegisterHandler(property_set_fd, handle_property_set_fd); !result) {
+        return Error() << "Could not register epoll handler for property fd: " << result.error();
+    }
+
+    // No-op function, just used to break from loop.
+    if (auto result = epoll.RegisterHandler(reader, [] {}); !result) {
+        return Error() << "Could not register epoll handler for ending thread:" << result.error();
+    }
+
+    while (!end) {
+        epoll.Wait({});
+    }
+
+    thread.join();
+
+    return result;
 }
 
 }  // namespace init

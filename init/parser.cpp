@@ -37,7 +37,7 @@ void Parser::AddSectionParser(const std::string& name, std::unique_ptr<SectionPa
 }
 
 void Parser::AddSingleLineParser(const std::string& prefix, LineCallback callback) {
-    line_callbacks_.emplace_back(prefix, callback);
+    line_callbacks_.emplace_back(prefix, std::move(callback));
 }
 
 void Parser::ParseData(const std::string& filename, std::string* data) {

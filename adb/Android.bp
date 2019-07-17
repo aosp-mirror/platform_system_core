@@ -124,7 +124,8 @@ libadb_srcs = [
     "adb_trace.cpp",
     "adb_unique_fd.cpp",
     "adb_utils.cpp",
-    "fdevent.cpp",
+    "fdevent/fdevent.cpp",
+    "fdevent/fdevent_poll.cpp",
     "services.cpp",
     "sockets.cpp",
     "socket_spec.cpp",
@@ -144,7 +145,7 @@ libadb_test_srcs = [
     "adb_io_test.cpp",
     "adb_listeners_test.cpp",
     "adb_utils_test.cpp",
-    "fdevent_test.cpp",
+    "fdevent/fdevent_test.cpp",
     "socket_spec_test.cpp",
     "socket_test.cpp",
     "sysdeps_test.cpp",
@@ -220,6 +221,7 @@ cc_test_host {
     target: {
         windows: {
             enabled: true,
+            ldflags: ["-municode"],
             shared_libs: ["AdbWinApi"],
         },
     },
@@ -344,6 +346,7 @@ cc_library_static {
     generated_headers: ["platform_tools_version"],
 
     static_libs: [
+        "libadbconnection_server",
         "libdiagnose_usb",
     ],
 
@@ -395,6 +398,7 @@ cc_library {
     ],
 
     static_libs: [
+        "libadbconnection_server",
         "libadbd_core",
         "libdiagnose_usb",
     ],
@@ -433,7 +437,6 @@ cc_library {
             shared_libs: [
                 "libbootloader_message",
                 "libmdnssd",
-                "libext4_utils",
                 "libfec",
                 "libfs_mgr",
                 "libselinux",
@@ -531,6 +534,7 @@ cc_binary {
     },
 
     static_libs: [
+        "libadbconnection_server",
         "libadbd",
         "libadbd_services",
         "libasyncio",

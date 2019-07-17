@@ -35,6 +35,7 @@ cc_library {
     export_include_dirs: ["include"],
     include_dirs: ["system/vold"],
     srcs: [
+        "file_wait.cpp",
         "fs_mgr.cpp",
         "fs_mgr_format.cpp",
         "fs_mgr_verity.cpp",
@@ -72,6 +73,7 @@ cc_library {
     whole_static_libs: [
         "liblogwrap",
         "libdm",
+        "libext2_uuid",
         "libfstab",
     ],
     cppflags: [

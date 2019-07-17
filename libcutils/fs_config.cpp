@@ -39,6 +39,8 @@
 #include <private/android_filesystem_config.h>
 #include <utils/Compat.h>
 
+#include "fs_config.h"
+
 #ifndef O_BINARY
 #define O_BINARY 0
 #endif
@@ -46,20 +48,8 @@
 using android::base::EndsWith;
 using android::base::StartsWith;
 
-// My kingdom for <endian.h>
-static inline uint16_t get2LE(const uint8_t* src) {
-    return src[0] | (src[1] << 8);
-}
-
-static inline uint64_t get8LE(const uint8_t* src) {
-    uint32_t low, high;
-
-    low = src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-    high = src[4] | (src[5] << 8) | (src[6] << 16) | (src[7] << 24);
-    return ((uint64_t)high << 32) | (uint64_t)low;
-}
-
 #define ALIGN(x, alignment) (((x) + ((alignment)-1)) & ~((alignment)-1))
+#define CAP_MASK_LONG(cap_name) (1ULL << (cap_name))
 
 // Rules for directories.
 // These rules are applied based on "first match", so they
@@ -116,7 +106,7 @@ static const char sys_conf_file[] = "/system/etc/fs_config_files";
 // oem/ file-system since the intent is to provide support for customized
 // portions of a separate vendor.img or oem.img.  Has to remain open so that
 // customization can also land on /system/vendor, /system/oem, /system/odm,
-// /system/product or /system/product_services.
+// /system/product or /system/system_ext.
 //
 // We expect build-time checking or filtering when constructing the associated
 // fs_config_* files (see build/tools/fs_config/fs_config_generate.c)
@@ -128,15 +118,12 @@ static const char odm_conf_dir[] = "/odm/etc/fs_config_dirs";
 static const char odm_conf_file[] = "/odm/etc/fs_config_files";
 static const char product_conf_dir[] = "/product/etc/fs_config_dirs";
 static const char product_conf_file[] = "/product/etc/fs_config_files";
-static const char product_services_conf_dir[] = "/product_services/etc/fs_config_dirs";
-static const char product_services_conf_file[] = "/product_services/etc/fs_config_files";
+static const char system_ext_conf_dir[] = "/system_ext/etc/fs_config_dirs";
+static const char system_ext_conf_file[] = "/system_ext/etc/fs_config_files";
 static const char* conf[][2] = {
-        {sys_conf_file, sys_conf_dir},
-        {ven_conf_file, ven_conf_dir},
-        {oem_conf_file, oem_conf_dir},
-        {odm_conf_file, odm_conf_dir},
-        {product_conf_file, product_conf_dir},
-        {product_services_conf_file, product_services_conf_dir},
+        {sys_conf_file, sys_conf_dir},         {ven_conf_file, ven_conf_dir},
+        {oem_conf_file, oem_conf_dir},         {odm_conf_file, odm_conf_dir},
+        {product_conf_file, product_conf_dir}, {system_ext_conf_file, system_ext_conf_dir},
 };
 
 // Do not use android_files to grant Linux capabilities.  Use ambient capabilities in their
@@ -168,9 +155,9 @@ static const struct fs_path_config android_files[] = {
     { 00600, AID_ROOT,      AID_ROOT,      0, "product/build.prop" },
     { 00444, AID_ROOT,      AID_ROOT,      0, product_conf_dir + 1 },
     { 00444, AID_ROOT,      AID_ROOT,      0, product_conf_file + 1 },
-    { 00600, AID_ROOT,      AID_ROOT,      0, "product_services/build.prop" },
-    { 00444, AID_ROOT,      AID_ROOT,      0, product_services_conf_dir + 1 },
-    { 00444, AID_ROOT,      AID_ROOT,      0, product_services_conf_file + 1 },
+    { 00600, AID_ROOT,      AID_ROOT,      0, "system_ext/build.prop" },
+    { 00444, AID_ROOT,      AID_ROOT,      0, system_ext_conf_dir + 1 },
+    { 00444, AID_ROOT,      AID_ROOT,      0, system_ext_conf_file + 1 },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump32" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/crash_dump64" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/debuggerd" },
@@ -258,9 +245,9 @@ static int fs_config_open(int dir, int which, const char* target_out_path) {
 }
 
 // if path is "odm/<stuff>", "oem/<stuff>", "product/<stuff>",
-// "product_services/<stuff>" or "vendor/<stuff>"
+// "system_ext/<stuff>" or "vendor/<stuff>"
 static bool is_partition(const std::string& path) {
-    static const char* partitions[] = {"odm/", "oem/", "product/", "product_services/", "vendor/"};
+    static const char* partitions[] = {"odm/", "oem/", "product/", "system_ext/", "vendor/"};
     for (size_t i = 0; i < (sizeof(partitions) / sizeof(partitions[0])); ++i) {
         if (StartsWith(path, partitions[i])) return true;
     }
@@ -295,10 +282,8 @@ static bool fs_config_cmp(bool dir, const char* prefix, size_t len, const char* 
     if (fnmatch(pattern.c_str(), input.c_str(), fnm_flags) == 0) return true;
 
     // Check match between logical partition's files and patterns.
-    static constexpr const char* kLogicalPartitions[] = {"system/product/",
-                                                         "system/product_services/",
-                                                         "system/vendor/",
-                                                         "vendor/odm/"};
+    static constexpr const char* kLogicalPartitions[] = {"system/product/", "system/system_ext/",
+                                                         "system/vendor/", "vendor/odm/"};
     for (auto& logical_partition : kLogicalPartitions) {
         if (StartsWith(input, logical_partition)) {
             std::string input_in_partition = input.substr(input.find('/') + 1);
@@ -333,7 +318,7 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
 
         while (TEMP_FAILURE_RETRY(read(fd, &header, sizeof(header))) == sizeof(header)) {
             char* prefix;
-            uint16_t host_len = get2LE((const uint8_t*)&header.len);
+            uint16_t host_len = header.len;
             ssize_t len, remainder = host_len - sizeof(header);
             if (remainder <= 0) {
                 ALOGE("%s len is corrupted", conf[which][dir]);
@@ -358,10 +343,10 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
             if (fs_config_cmp(dir, prefix, len, path, plen)) {
                 free(prefix);
                 close(fd);
-                *uid = get2LE((const uint8_t*)&(header.uid));
-                *gid = get2LE((const uint8_t*)&(header.gid));
-                *mode = (*mode & (~07777)) | get2LE((const uint8_t*)&(header.mode));
-                *capabilities = get8LE((const uint8_t*)&(header.capabilities));
+                *uid = header.uid;
+                *gid = header.gid;
+                *mode = (*mode & (~07777)) | header.mode;
+                *capabilities = header.capabilities;
                 return;
             }
             free(prefix);
@@ -378,22 +363,4 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
     *gid = pc->gid;
     *mode = (*mode & (~07777)) | pc->mode;
     *capabilities = pc->capabilities;
-}
-
-ssize_t fs_config_generate(char* buffer, size_t length, const struct fs_path_config* pc) {
-    struct fs_path_config_from_file* p = (struct fs_path_config_from_file*)buffer;
-    size_t len = ALIGN(sizeof(*p) + strlen(pc->prefix) + 1, sizeof(uint64_t));
-
-    if ((length < len) || (len > UINT16_MAX)) {
-        return -ENOSPC;
-    }
-    memset(p, 0, len);
-    uint16_t host_len = len;
-    p->len = get2LE((const uint8_t*)&host_len);
-    p->mode = get2LE((const uint8_t*)&(pc->mode));
-    p->uid = get2LE((const uint8_t*)&(pc->uid));
-    p->gid = get2LE((const uint8_t*)&(pc->gid));
-    p->capabilities = get8LE((const uint8_t*)&(pc->capabilities));
-    strcpy(p->prefix, pc->prefix);
-    return len;
 }
