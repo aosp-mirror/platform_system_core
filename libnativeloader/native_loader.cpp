@@ -63,6 +63,10 @@ android_namespace_t* FindExportedNamespace(const char* caller_location) {
     LOG_ALWAYS_FATAL_IF((dot_index == std::string::npos),
                         "Error finding namespace of apex: no dot in apex name %s", caller_location);
     std::string name = location.substr(dot_index + 1, slash_index - dot_index - 1);
+    // TODO(b/139408016): Rename the runtime namespace to "art".
+    if (name == "art") {
+      name = "runtime";
+    }
     android_namespace_t* boot_namespace = android_get_exported_namespace(name.c_str());
     LOG_ALWAYS_FATAL_IF((boot_namespace == nullptr),
                         "Error finding namespace of apex: no namespace called %s", name.c_str());

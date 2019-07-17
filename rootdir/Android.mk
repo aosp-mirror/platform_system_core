@@ -214,7 +214,7 @@ LOCAL_MODULE := ld.config.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 
-# Start of runtime APEX compatibility.
+# Start of i18n and ART APEX compatibility.
 #
 # Meta-comment:
 # The placing of this section is somewhat arbitrary. The LOCAL_POST_INSTALL_CMD
@@ -226,7 +226,7 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 # come to rely on them.
 
 # http://b/121248172 - create a link from /system/usr/icu to
-# /apex/com.android.runtime/etc/icu so that apps can find the ICU .dat file.
+# /apex/com.android.i18n/etc/icu so that apps can find the ICU .dat file.
 # A symlink can't overwrite a directory and the /system/usr/icu directory once
 # existed so the required structure must be created whatever we find.
 LOCAL_POST_INSTALL_CMD = mkdir -p $(TARGET_OUT)/usr && rm -rf $(TARGET_OUT)/usr/icu
@@ -248,10 +248,10 @@ ART_BINARIES := \
 LOCAL_POST_INSTALL_CMD += && mkdir -p $(TARGET_OUT)/bin
 $(foreach b,$(ART_BINARIES), \
   $(eval LOCAL_POST_INSTALL_CMD += \
-    && ln -sf /apex/com.android.runtime/bin/$(b) $(TARGET_OUT)/bin/$(b)) \
+    && ln -sf /apex/com.android.art/bin/$(b) $(TARGET_OUT)/bin/$(b)) \
 )
 
-# End of runtime APEX compatibilty.
+# End of i18n and ART APEX compatibilty.
 
 ifeq ($(_enforce_vndk_at_runtime),true)
 
