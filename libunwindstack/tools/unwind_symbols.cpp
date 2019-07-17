@@ -59,13 +59,7 @@ int main(int argc, char** argv) {
   // Send all log messages to stdout.
   unwindstack::log_to_stdout(true);
 
-  unwindstack::MemoryFileAtOffset* memory = new unwindstack::MemoryFileAtOffset;
-  if (!memory->Init(argv[1], 0)) {
-    printf("Failed to init\n");
-    return 1;
-  }
-
-  unwindstack::Elf elf(memory);
+  unwindstack::Elf elf(unwindstack::Memory::CreateFileMemory(argv[1], 0).release());
   if (!elf.Init() || !elf.valid()) {
     printf("%s is not a valid elf file.\n", argv[1]);
     return 1;

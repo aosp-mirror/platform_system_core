@@ -35,6 +35,7 @@
 #include <android-base/unique_fd.h>
 #include <crypto_utils/android_pubkey.h>
 #include <cutils/properties.h>
+#include <fs_mgr/file_wait.h>
 #include <libdm/dm.h>
 #include <logwrap/logwrap.h>
 #include <openssl/obj_mac.h>
@@ -529,7 +530,7 @@ loaded:
     }
 
     // make sure we've set everything up properly
-    if (wait_for_verity_dev && !fs_mgr_wait_for_file(entry->blk_device, 1s)) {
+    if (wait_for_verity_dev && !WaitForFile(entry->blk_device, 1s)) {
         goto out;
     }
 
@@ -546,9 +547,9 @@ out:
     return retval;
 }
 
-bool fs_mgr_teardown_verity(FstabEntry* entry, bool wait) {
+bool fs_mgr_teardown_verity(FstabEntry* entry) {
     const std::string mount_point(basename(entry->mount_point.c_str()));
-    if (!android::fs_mgr::UnmapDevice(mount_point, wait ? 1000ms : 0ms)) {
+    if (!android::fs_mgr::UnmapDevice(mount_point)) {
         return false;
     }
     LINFO << "Unmapped verity device " << mount_point;

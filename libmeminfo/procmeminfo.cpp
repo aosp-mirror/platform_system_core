@@ -27,6 +27,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -129,6 +130,14 @@ const std::vector<Vma>& ProcMemInfo::MapsWithPageIdle() {
     return maps_;
 }
 
+const std::vector<Vma>& ProcMemInfo::MapsWithoutUsageStats() {
+    if (maps_.empty() && !ReadMaps(get_wss_, false, false)) {
+        LOG(ERROR) << "Failed to read maps for Process " << pid_;
+    }
+
+    return maps_;
+}
+
 const std::vector<Vma>& ProcMemInfo::Smaps(const std::string& path) {
     if (!maps_.empty()) {
         return maps_;
@@ -212,29 +221,30 @@ bool ProcMemInfo::PageMap(const Vma& vma, std::vector<uint64_t>* pagemap) {
     std::string pagemap_file = ::android::base::StringPrintf("/proc/%d/pagemap", pid_);
     ::android::base::unique_fd pagemap_fd(
             TEMP_FAILURE_RETRY(open(pagemap_file.c_str(), O_RDONLY | O_CLOEXEC)));
-    if (pagemap_fd < 0) {
+    if (pagemap_fd == -1) {
         PLOG(ERROR) << "Failed to open " << pagemap_file;
         return false;
     }
 
     uint64_t nr_pages = (vma.end - vma.start) / getpagesize();
-    pagemap->reserve(nr_pages);
+    pagemap->resize(nr_pages);
 
-    uint64_t idx = vma.start / getpagesize();
-    uint64_t last = idx + nr_pages;
-    uint64_t val;
-    for (; idx < last; idx++) {
-        if (pread64(pagemap_fd, &val, sizeof(uint64_t), idx * sizeof(uint64_t)) < 0) {
-            PLOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_;
-            return false;
-        }
-        pagemap->emplace_back(val);
+    size_t bytes_to_read = sizeof(uint64_t) * nr_pages;
+    off64_t start_addr = (vma.start / getpagesize()) * sizeof(uint64_t);
+    ssize_t bytes_read = pread64(pagemap_fd, pagemap->data(), bytes_to_read, start_addr);
+    if (bytes_read == -1) {
+        PLOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_;
+        return false;
+    } else if (static_cast<size_t>(bytes_read) != bytes_to_read) {
+        LOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_
+                   << ": read bytes " << bytes_read << " expected bytes " << bytes_to_read;
+        return false;
     }
 
     return true;
 }
 
-bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle) {
+bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle, bool get_usage_stats) {
     // Each object reads /proc/<pid>/maps only once. This is done to make sure programs that are
     // running for the lifetime of the system can recycle the objects and don't have to
     // unnecessarily retain and update this object in memory (which can get significantly large).
@@ -253,6 +263,10 @@ bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle) {
         LOG(ERROR) << "Failed to parse " << maps_file;
         maps_.clear();
         return false;
+    }
+
+    if (!get_usage_stats) {
+        return true;
     }
 
     std::string pagemap_file = ::android::base::StringPrintf("/proc/%d/pagemap", pid_);
@@ -278,68 +292,89 @@ bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle) {
 
 bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_pageidle) {
     PageAcct& pinfo = PageAcct::Instance();
-    uint64_t pagesz = getpagesize();
-    uint64_t num_pages = (vma.end - vma.start) / pagesz;
-
-    std::unique_ptr<uint64_t[]> pg_frames(new uint64_t[num_pages]);
-    uint64_t first = vma.start / pagesz;
-    if (pread64(pagemap_fd, pg_frames.get(), num_pages * sizeof(uint64_t),
-                first * sizeof(uint64_t)) < 0) {
-        PLOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_;
+    if (get_wss && use_pageidle && !pinfo.InitPageAcct(true)) {
+        LOG(ERROR) << "Failed to init idle page accounting";
         return false;
     }
 
-    if (get_wss && use_pageidle) {
-        if (!pinfo.InitPageAcct(true)) {
-            LOG(ERROR) << "Failed to init idle page accounting";
-            return false;
-        }
-    }
+    uint64_t pagesz = getpagesize();
+    size_t num_pages = (vma.end - vma.start) / pagesz;
+    size_t first_page = vma.start / pagesz;
 
-    std::unique_ptr<uint64_t[]> pg_flags(new uint64_t[num_pages]);
-    std::unique_ptr<uint64_t[]> pg_counts(new uint64_t[num_pages]);
-    for (uint64_t i = 0; i < num_pages; ++i) {
+    std::vector<uint64_t> page_cache;
+    size_t cur_page_cache_index = 0;
+    size_t num_in_page_cache = 0;
+    size_t num_leftover_pages = num_pages;
+    for (size_t cur_page = first_page; cur_page < first_page + num_pages; ++cur_page) {
         if (!get_wss) {
             vma.usage.vss += pagesz;
         }
-        uint64_t p = pg_frames[i];
-        if (!PAGE_PRESENT(p) && !PAGE_SWAPPED(p)) continue;
 
-        if (PAGE_SWAPPED(p)) {
+        // Cache page map data.
+        if (cur_page_cache_index == num_in_page_cache) {
+            static constexpr size_t kMaxPages = 2048;
+            num_leftover_pages -= num_in_page_cache;
+            if (num_leftover_pages > kMaxPages) {
+                num_in_page_cache = kMaxPages;
+            } else {
+                num_in_page_cache = num_leftover_pages;
+            }
+            page_cache.resize(num_in_page_cache);
+            size_t total_bytes = page_cache.size() * sizeof(uint64_t);
+            ssize_t bytes = pread64(pagemap_fd, page_cache.data(), total_bytes,
+                                    cur_page * sizeof(uint64_t));
+            if (bytes != total_bytes) {
+                if (bytes == -1) {
+                    PLOG(ERROR) << "Failed to read page data at offset 0x" << std::hex
+                                << cur_page * sizeof(uint64_t);
+                } else {
+                    LOG(ERROR) << "Failed to read page data at offset 0x" << std::hex
+                               << cur_page * sizeof(uint64_t) << std::dec << " read bytes " << bytes
+                               << " expected bytes " << total_bytes;
+                }
+                return false;
+            }
+            cur_page_cache_index = 0;
+        }
+
+        uint64_t page_info = page_cache[cur_page_cache_index++];
+        if (!PAGE_PRESENT(page_info) && !PAGE_SWAPPED(page_info)) continue;
+
+        if (PAGE_SWAPPED(page_info)) {
             vma.usage.swap += pagesz;
-            swap_offsets_.emplace_back(PAGE_SWAP_OFFSET(p));
+            swap_offsets_.emplace_back(PAGE_SWAP_OFFSET(page_info));
             continue;
         }
 
-        uint64_t page_frame = PAGE_PFN(p);
-        if (!pinfo.PageFlags(page_frame, &pg_flags[i])) {
+        uint64_t page_frame = PAGE_PFN(page_info);
+        uint64_t cur_page_flags;
+        if (!pinfo.PageFlags(page_frame, &cur_page_flags)) {
             LOG(ERROR) << "Failed to get page flags for " << page_frame << " in process " << pid_;
             swap_offsets_.clear();
             return false;
         }
 
         // skip unwanted pages from the count
-        if ((pg_flags[i] & pgflags_mask_) != pgflags_) continue;
+        if ((cur_page_flags & pgflags_mask_) != pgflags_) continue;
 
-        if (!pinfo.PageMapCount(page_frame, &pg_counts[i])) {
+        uint64_t cur_page_counts;
+        if (!pinfo.PageMapCount(page_frame, &cur_page_counts)) {
             LOG(ERROR) << "Failed to get page count for " << page_frame << " in process " << pid_;
             swap_offsets_.clear();
             return false;
         }
 
         // Page was unmapped between the presence check at the beginning of the loop and here.
-        if (pg_counts[i] == 0) {
-            pg_frames[i] = 0;
-            pg_flags[i] = 0;
+        if (cur_page_counts == 0) {
             continue;
         }
 
-        bool is_dirty = !!(pg_flags[i] & (1 << KPF_DIRTY));
-        bool is_private = (pg_counts[i] == 1);
+        bool is_dirty = !!(cur_page_flags & (1 << KPF_DIRTY));
+        bool is_private = (cur_page_counts == 1);
         // Working set
         if (get_wss) {
             bool is_referenced = use_pageidle ? (pinfo.IsPageIdle(page_frame) == 1)
-                                              : !!(pg_flags[i] & (1 << KPF_REFERENCED));
+                                              : !!(cur_page_flags & (1 << KPF_REFERENCED));
             if (!is_referenced) {
                 continue;
             }
@@ -351,7 +386,7 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_
 
         vma.usage.rss += pagesz;
         vma.usage.uss += is_private ? pagesz : 0;
-        vma.usage.pss += pagesz / pg_counts[i];
+        vma.usage.pss += pagesz / cur_page_counts;
         if (is_private) {
             vma.usage.private_dirty += is_dirty ? pagesz : 0;
             vma.usage.private_clean += is_dirty ? 0 : pagesz;

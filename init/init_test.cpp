@@ -27,6 +27,8 @@
 #include "keyword_map.h"
 #include "parser.h"
 #include "service.h"
+#include "service_list.h"
+#include "service_parser.h"
 #include "test_function_map.h"
 #include "util.h"
 
@@ -42,7 +44,8 @@ void TestInit(const std::string& init_script_file, const TestFunctionMap& test_f
     Action::set_function_map(&test_function_map);
 
     Parser parser;
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(service_list, nullptr));
+    parser.AddSectionParser("service",
+                            std::make_unique<ServiceParser>(service_list, nullptr, std::nullopt));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
@@ -180,7 +183,7 @@ TEST(init, EventTriggerOrderMultipleFiles) {
     auto execute_command = [&num_executed](const BuiltinArguments& args) {
         EXPECT_EQ(2U, args.size());
         EXPECT_EQ(++num_executed, std::stoi(args[1]));
-        return Success();
+        return Result<void>{};
     };
 
     TestFunctionMap test_function_map;

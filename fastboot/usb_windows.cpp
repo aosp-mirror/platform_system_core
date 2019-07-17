@@ -195,25 +195,28 @@ ssize_t WindowsUsbTransport::Write(const void* data, size_t len) {
 ssize_t WindowsUsbTransport::Read(void* data, size_t len) {
     unsigned long time_out = 0;
     unsigned long read = 0;
+    size_t count = 0;
     int ret;
 
     DBG("usb_read %zu\n", len);
     if (nullptr != handle_) {
-        while (1) {
-            int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
+        while (len > 0) {
+            size_t xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
 
             ret = AdbReadEndpointSync(handle_->adb_read_pipe, data, xfer, &read, time_out);
             errno = GetLastError();
-            DBG("usb_read got: %ld, expected: %d, errno: %d\n", read, xfer, errno);
-            if (ret) {
-                return read;
-            } else {
+            DBG("usb_read got: %lu, expected: %zu, errno: %d\n", read, xfer, errno);
+            if (ret == 0) {
                 // assume ERROR_INVALID_HANDLE indicates we are disconnected
                 if (errno == ERROR_INVALID_HANDLE)
                     usb_kick(handle_.get());
                 break;
             }
-            // else we timed out - try again
+            count += read;
+            len -= read;
+            data = (char*)data + read;
+
+            if (xfer != read || len == 0) return count;
         }
     } else {
         DBG("usb_read NULL handle\n");

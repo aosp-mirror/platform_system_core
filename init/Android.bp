@@ -26,6 +26,7 @@ cc_defaults {
         "-Wextra",
         "-Wno-unused-parameter",
         "-Werror",
+        "-DALLOW_FIRST_STAGE_CONSOLE=0",
         "-DALLOW_LOCAL_PROP_OVERRIDE=0",
         "-DALLOW_PERMISSIVE_SELINUX=0",
         "-DREBOOT_BOOTLOADER_ON_PANIC=0",
@@ -36,6 +37,8 @@ cc_defaults {
     product_variables: {
         debuggable: {
             cppflags: [
+                "-UALLOW_FIRST_STAGE_CONSOLE",
+                "-DALLOW_FIRST_STAGE_CONSOLE=1",
                 "-UALLOW_LOCAL_PROP_OVERRIDE",
                 "-DALLOW_LOCAL_PROP_OVERRIDE=1",
                 "-UALLOW_PERMISSIVE_SELINUX",
@@ -63,13 +66,14 @@ cc_defaults {
         "libavb",
         "libc++fs",
         "libcgrouprc_format",
+        "libmodprobe",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
     ],
     shared_libs: [
+        "libbacktrace",
         "libbase",
-        "libbinder",
         "libbootloader_message",
         "libcutils",
         "libcrypto",
@@ -103,7 +107,6 @@ cc_library_static {
         "bootchart.cpp",
         "builtins.cpp",
         "capabilities.cpp",
-        "descriptors.cpp",
         "devices.cpp",
         "epoll.cpp",
         "firmware_handler.cpp",
@@ -123,8 +126,12 @@ cc_library_static {
         "reboot.cpp",
         "reboot_utils.cpp",
         "security.cpp",
+        "selabel.cpp",
         "selinux.cpp",
         "service.cpp",
+        "service_list.cpp",
+        "service_parser.cpp",
+        "service_utils.cpp",
         "sigchld_handler.cpp",
         "subcontext.cpp",
         "subcontext.proto",
@@ -149,6 +156,13 @@ cc_library_static {
             exclude_shared_libs: ["libbinder", "libutils"],
         },
     },
+}
+
+phony {
+    name: "init",
+    required: [
+        "init_second_stage",
+    ],
 }
 
 cc_binary {
@@ -187,7 +201,6 @@ cc_test {
         "persistent_properties_test.cpp",
         "property_service_test.cpp",
         "property_type_test.cpp",
-        "result_test.cpp",
         "rlimit_parser_test.cpp",
         "service_test.cpp",
         "subcontext_test.cpp",
@@ -235,28 +248,30 @@ cc_binary {
     ],
     whole_static_libs: ["libcap"],
     shared_libs: [
-        "libprotobuf-cpp-lite",
-        "libhidl-gen-utils",
-        "libprocessgroup",
-        "liblog",
         "libcutils",
+        "libhidl-gen-utils",
+        "libjsoncpp",
+        "liblog",
+        "libprocessgroup",
+        "libprotobuf-cpp-lite",
     ],
     srcs: [
         "action.cpp",
         "action_manager.cpp",
         "action_parser.cpp",
         "capabilities.cpp",
-        "descriptors.cpp",
         "epoll.cpp",
         "keychords.cpp",
         "import_parser.cpp",
         "host_import_parser.cpp",
         "host_init_verifier.cpp",
-        "host_init_stubs.cpp",
         "parser.cpp",
         "rlimit_parser.cpp",
         "tokenizer.cpp",
         "service.cpp",
+        "service_list.cpp",
+        "service_parser.cpp",
+        "service_utils.cpp",
         "subcontext.cpp",
         "subcontext.proto",
         "util.cpp",
@@ -277,5 +292,3 @@ cc_binary {
         },
     },
 }
-
-subdirs = ["*"]

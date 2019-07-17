@@ -29,6 +29,7 @@ typedef expected<int, int> exp_int;
 typedef expected<double, double> exp_double;
 typedef expected<std::string, std::string> exp_string;
 typedef expected<std::pair<std::string, int>, int> exp_pair;
+typedef expected<void, int> exp_void;
 
 struct T {
   int a;
@@ -59,6 +60,9 @@ TEST(Expected, testDefaultConstructible) {
   exp_complex e2;
   EXPECT_TRUE(e2.has_value());
   EXPECT_EQ(T(0,0), e2.value());
+
+  exp_void e3;
+  EXPECT_TRUE(e3.has_value());
 }
 
 TEST(Expected, testCopyConstructible) {
@@ -69,6 +73,11 @@ TEST(Expected, testCopyConstructible) {
   EXPECT_TRUE(e2.has_value());
   EXPECT_EQ(0, e.value());
   EXPECT_EQ(0, e2.value());
+
+  exp_void e3;
+  exp_void e4 = e3;
+  EXPECT_TRUE(e3.has_value());
+  EXPECT_TRUE(e4.has_value());
 }
 
 TEST(Expected, testMoveConstructible) {
@@ -87,6 +96,11 @@ TEST(Expected, testMoveConstructible) {
   EXPECT_TRUE(e4.has_value());
   EXPECT_EQ("", e3.value()); // e3 is moved
   EXPECT_EQ("hello", e4.value());
+
+  exp_void e5;
+  exp_void e6 = std::move(e5);
+  EXPECT_TRUE(e5.has_value());
+  EXPECT_TRUE(e6.has_value());
 }
 
 TEST(Expected, testCopyConstructibleFromConvertibleType) {
@@ -114,11 +128,13 @@ TEST(Expected, testConstructibleFromValue) {
   exp_double e2 = 5.5f;
   exp_string e3 = std::string("hello");
   exp_complex e4 = T(10, 20);
+  exp_void e5 = {};
 
   EXPECT_TRUE(e.has_value());
   EXPECT_TRUE(e2.has_value());
   EXPECT_TRUE(e3.has_value());
   EXPECT_TRUE(e4.has_value());
+  EXPECT_TRUE(e5.has_value());
   EXPECT_EQ(3, e.value());
   EXPECT_EQ(5.5f, e2.value());
   EXPECT_EQ("hello", e3.value());
@@ -154,25 +170,33 @@ TEST(Expected, testConstructibleFromUnexpected) {
   exp_string::unexpected_type unexp3 = unexpected(std::string("error"));
   exp_string e3 = unexp3;
 
+  exp_void::unexpected_type unexp4 = unexpected(10);
+  exp_void e4 = unexp4;
+
   EXPECT_FALSE(e.has_value());
   EXPECT_FALSE(e2.has_value());
   EXPECT_FALSE(e3.has_value());
+  EXPECT_FALSE(e4.has_value());
   EXPECT_EQ(10, e.error());
   EXPECT_EQ(10.5f, e2.error());
   EXPECT_EQ("error", e3.error());
+  EXPECT_EQ(10, e4.error());
 }
 
 TEST(Expected, testMoveConstructibleFromUnexpected) {
   exp_int e = unexpected(10);
   exp_double e2 = unexpected(10.5f);
   exp_string e3 = unexpected(std::string("error"));
+  exp_void e4 = unexpected(10);
 
   EXPECT_FALSE(e.has_value());
   EXPECT_FALSE(e2.has_value());
   EXPECT_FALSE(e3.has_value());
+  EXPECT_FALSE(e4.has_value());
   EXPECT_EQ(10, e.error());
   EXPECT_EQ(10.5f, e2.error());
   EXPECT_EQ("error", e3.error());
+  EXPECT_EQ(10, e4.error());
 }
 
 TEST(Expected, testConstructibleByForwarding) {
@@ -188,6 +212,9 @@ TEST(Expected, testConstructibleByForwarding) {
   EXPECT_TRUE(e3.has_value());
   EXPECT_EQ("hello",e3->first);
   EXPECT_EQ(30,e3->second);
+
+  exp_void e4({});
+  EXPECT_TRUE(e4.has_value());
 }
 
 TEST(Expected, testDestructible) {
@@ -217,6 +244,14 @@ TEST(Expected, testAssignable) {
 
   EXPECT_EQ(20, e3.value());
   EXPECT_EQ(20, e4.value());
+
+  exp_void e5 = unexpected(10);
+  ASSERT_FALSE(e5.has_value());
+  exp_void e6;
+  e5 = e6;
+
+  EXPECT_TRUE(e5.has_value());
+  EXPECT_TRUE(e6.has_value());
 }
 
 TEST(Expected, testAssignableFromValue) {
@@ -231,6 +266,11 @@ TEST(Expected, testAssignableFromValue) {
   exp_string e3 = "hello";
   e3 = "world";
   EXPECT_EQ("world", e3.value());
+
+  exp_void e4 = unexpected(10);
+  ASSERT_FALSE(e4.has_value());
+  e4 = {};
+  EXPECT_TRUE(e4.has_value());
 }
 
 TEST(Expected, testAssignableFromUnexpected) {
@@ -248,6 +288,11 @@ TEST(Expected, testAssignableFromUnexpected) {
   e3 = unexpected("world");
   EXPECT_FALSE(e3.has_value());
   EXPECT_EQ("world", e3.error());
+
+  exp_void e4 = {};
+  e4 = unexpected(10);
+  EXPECT_FALSE(e4.has_value());
+  EXPECT_EQ(10, e4.error());
 }
 
 TEST(Expected, testAssignableFromMovedValue) {
@@ -285,6 +330,11 @@ TEST(Expected, testEmplace) {
   EXPECT_EQ(10.5f, t.b);
   EXPECT_EQ(3, exp.value().a);
   EXPECT_EQ(10.5, exp.value().b);
+
+  exp_void e = unexpected(10);
+  ASSERT_FALSE(e.has_value());
+  e.emplace();
+  EXPECT_TRUE(e.has_value());
 }
 
 TEST(Expected, testSwapExpectedExpected) {
@@ -296,6 +346,13 @@ TEST(Expected, testSwapExpectedExpected) {
   EXPECT_TRUE(e2.has_value());
   EXPECT_EQ(20, e.value());
   EXPECT_EQ(10, e2.value());
+
+  exp_void e3;
+  exp_void e4;
+  e3.swap(e4);
+
+  EXPECT_TRUE(e3.has_value());
+  EXPECT_TRUE(e4.has_value());
 }
 
 TEST(Expected, testSwapUnexpectedUnexpected) {
@@ -306,6 +363,14 @@ TEST(Expected, testSwapUnexpectedUnexpected) {
   EXPECT_FALSE(e2.has_value());
   EXPECT_EQ(20, e.error());
   EXPECT_EQ(10, e2.error());
+
+  exp_void e3 = unexpected(10);
+  exp_void e4 = unexpected(20);
+  e3.swap(e4);
+  EXPECT_FALSE(e3.has_value());
+  EXPECT_FALSE(e4.has_value());
+  EXPECT_EQ(20, e3.error());
+  EXPECT_EQ(10, e4.error());
 }
 
 TEST(Expected, testSwapExpectedUnepected) {
@@ -316,6 +381,13 @@ TEST(Expected, testSwapExpectedUnepected) {
   EXPECT_TRUE(e2.has_value());
   EXPECT_EQ(30, e.error());
   EXPECT_EQ(10, e2.value());
+
+  exp_void e3;
+  exp_void e4 = unexpected(10);
+  e3.swap(e4);
+  EXPECT_FALSE(e3.has_value());
+  EXPECT_TRUE(e4.has_value());
+  EXPECT_EQ(10, e3.error());
 }
 
 TEST(Expected, testDereference) {
@@ -361,6 +433,13 @@ TEST(Expected, testSameValues) {
   EXPECT_TRUE(e2 == e);
   EXPECT_FALSE(e != e2);
   EXPECT_FALSE(e2 != e);
+
+  exp_void e3;
+  exp_void e4;
+  EXPECT_TRUE(e3 == e4);
+  EXPECT_TRUE(e4 == e3);
+  EXPECT_FALSE(e3 != e4);
+  EXPECT_FALSE(e4 != e3);
 }
 
 TEST(Expected, testDifferentValues) {
@@ -379,6 +458,13 @@ TEST(Expected, testValueWithError) {
   EXPECT_FALSE(e2 == e);
   EXPECT_TRUE(e != e2);
   EXPECT_TRUE(e2 != e);
+
+  exp_void e3;
+  exp_void e4 = unexpected(10);
+  EXPECT_FALSE(e3 == e4);
+  EXPECT_FALSE(e4 == e3);
+  EXPECT_TRUE(e3 != e4);
+  EXPECT_TRUE(e4 != e3);
 }
 
 TEST(Expected, testSameErrors) {
@@ -388,6 +474,13 @@ TEST(Expected, testSameErrors) {
   EXPECT_TRUE(e2 == e);
   EXPECT_FALSE(e != e2);
   EXPECT_FALSE(e2 != e);
+
+  exp_void e3 = unexpected(10);
+  exp_void e4 = unexpected(10);
+  EXPECT_TRUE(e3 == e4);
+  EXPECT_TRUE(e4 == e3);
+  EXPECT_FALSE(e3 != e4);
+  EXPECT_FALSE(e4 != e3);
 }
 
 TEST(Expected, testDifferentErrors) {
@@ -397,6 +490,13 @@ TEST(Expected, testDifferentErrors) {
   EXPECT_FALSE(e2 == e);
   EXPECT_TRUE(e != e2);
   EXPECT_TRUE(e2 != e);
+
+  exp_void e3 = unexpected(10);
+  exp_void e4 = unexpected(20);
+  EXPECT_FALSE(e3 == e4);
+  EXPECT_FALSE(e4 == e3);
+  EXPECT_TRUE(e3 != e4);
+  EXPECT_TRUE(e4 != e3);
 }
 
 TEST(Expected, testCompareWithSameValue) {
@@ -424,6 +524,13 @@ TEST(Expected, testCompareWithSameError) {
   EXPECT_TRUE(error == e);
   EXPECT_FALSE(e != error);
   EXPECT_FALSE(error != e);
+
+  exp_void e2 = unexpected(10);
+  exp_void::unexpected_type error2 = 10;
+  EXPECT_TRUE(e2 == error2);
+  EXPECT_TRUE(error2 == e2);
+  EXPECT_FALSE(e2 != error2);
+  EXPECT_FALSE(error2 != e2);
 }
 
 TEST(Expected, testCompareWithDifferentError) {
@@ -433,6 +540,32 @@ TEST(Expected, testCompareWithDifferentError) {
   EXPECT_FALSE(error == e);
   EXPECT_TRUE(e != error);
   EXPECT_TRUE(error != e);
+
+  exp_void e2 = unexpected(10);
+  exp_void::unexpected_type error2 = 20;
+  EXPECT_FALSE(e2 == error2);
+  EXPECT_FALSE(error2 == e2);
+  EXPECT_TRUE(e2 != error2);
+  EXPECT_TRUE(error2 != e2);
+}
+
+TEST(Expected, testCompareDifferentType) {
+  expected<int,int> e = 10;
+  expected<int32_t, int> e2 = 10;
+  EXPECT_TRUE(e == e2);
+  e2 = 20;
+  EXPECT_FALSE(e == e2);
+
+  expected<std::string_view,int> e3 = "hello";
+  expected<std::string,int> e4 = "hello";
+  EXPECT_TRUE(e3 == e4);
+  e4 = "world";
+  EXPECT_FALSE(e3 == e4);
+
+  expected<void,int> e5;
+  expected<int,int> e6 = 10;
+  EXPECT_FALSE(e5 == e6);
+  EXPECT_FALSE(e6 == e5);
 }
 
 TEST(Expected, testDivideExample) {
@@ -476,6 +609,22 @@ TEST(Expected, testPair) {
   auto r = test(true);
   EXPECT_TRUE(r);
   EXPECT_EQ("yes", r->first);
+}
+
+TEST(Expected, testVoid) {
+  auto test = [](bool ok) -> exp_void {
+    if (ok) {
+      return {};
+    } else {
+      return unexpected(10);
+    }
+  };
+
+  auto r = test(true);
+  EXPECT_TRUE(r);
+  r = test(false);
+  EXPECT_FALSE(r);
+  EXPECT_EQ(10, r.error());
 }
 
 // copied from result_test.cpp

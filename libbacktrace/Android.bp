@@ -135,7 +135,6 @@ cc_test {
     defaults: ["libbacktrace_common"],
     host_supported: true,
     srcs: [
-        "backtrace_offline_test.cpp",
         "backtrace_test.cpp",
     ],
 

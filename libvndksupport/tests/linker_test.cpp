@@ -21,11 +21,6 @@
 #include <vndksupport/linker.h>
 #include <string>
 
-// Since the test executable will be in /data and ld.config.txt does not
-// configure sphal namespace for executables in /data, the call to
-// android_load_sphal_library will always fallback to the plain dlopen from the
-// default namespace.
-
 // Let's use libEGL_<chipset>.so as a SP-HAL in test
 static std::string find_sphal_lib() {
     const char* path =

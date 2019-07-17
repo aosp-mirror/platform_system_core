@@ -8,6 +8,7 @@ LOCAL_PATH:= $(call my-dir)
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 init_options += \
+    -DALLOW_FIRST_STAGE_CONSOLE=1 \
     -DALLOW_LOCAL_PROP_OVERRIDE=1 \
     -DALLOW_PERMISSIVE_SELINUX=1 \
     -DREBOOT_BOOTLOADER_ON_PANIC=1 \
@@ -15,6 +16,7 @@ init_options += \
     -DDUMP_ON_UMOUNT_FAILURE=1
 else
 init_options += \
+    -DALLOW_FIRST_STAGE_CONSOLE=0 \
     -DALLOW_LOCAL_PROP_OVERRIDE=0 \
     -DALLOW_PERMISSIVE_SELINUX=0 \
     -DREBOOT_BOOTLOADER_ON_PANIC=0 \
@@ -52,6 +54,7 @@ LOCAL_SRC_FILES := \
     first_stage_mount.cpp \
     mount_namespace.cpp \
     reboot_utils.cpp \
+    selabel.cpp \
     selinux.cpp \
     switch_root.cpp \
     uevent_listener.cpp \
@@ -105,6 +108,12 @@ LOCAL_STATIC_LIBRARIES := \
     libcap \
     libgsi \
     libcom.android.sysprop.apex \
+    liblzma \
+    libdexfile_support \
+    libunwindstack \
+    libbacktrace \
+    libmodprobe \
+    libext2_uuid \
 
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.

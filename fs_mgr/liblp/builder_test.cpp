@@ -106,6 +106,13 @@ TEST_F(BuilderTest, ResizePartition) {
     EXPECT_EQ(extent->num_sectors(), 32768 / LP_SECTOR_SIZE);
     EXPECT_EQ(extent->physical_sector(), 32);
 
+    auto exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    ASSERT_EQ(FindPartition(*exported.get(), "not found"), nullptr);
+    auto entry = FindPartition(*exported.get(), "system");
+    ASSERT_NE(entry, nullptr);
+    ASSERT_EQ(GetPartitionSize(*exported.get(), *entry), 32768);
+
     // Test shrinking to 0.
     builder->ResizePartition(system, 0);
     EXPECT_EQ(system->size(), 0);
@@ -763,15 +770,6 @@ TEST_F(BuilderTest, ImportPartitionsFail) {
     builder = MetadataBuilder::New(1024 * 2048, 1024, 2);
     ASSERT_NE(builder, nullptr);
     EXPECT_FALSE(builder->ImportPartitions(*exported.get(), {"system"}));
-}
-
-TEST_F(BuilderTest, UnsuffixedPartitions) {
-    MetadataBuilder::OverrideABForTesting(true);
-    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
-    ASSERT_NE(builder, nullptr);
-
-    ASSERT_EQ(builder->AddPartition("system", 0), nullptr);
-    ASSERT_NE(builder->AddPartition("system_a", 0), nullptr);
 }
 
 TEST_F(BuilderTest, ABExtents) {

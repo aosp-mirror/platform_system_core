@@ -56,7 +56,7 @@ namespace.default.asan.links = runtime,resolv
 namespace.default.link.runtime.shared_libs  = libandroidicu.so
 namespace.default.link.runtime.shared_libs += libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libdexfiled_external.so
-# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+# TODO(b/120786417 or b/134659294): libicuuc.so and libicui18n.so are kept for app compat.
 namespace.default.link.runtime.shared_libs += libicui18n.so
 namespace.default.link.runtime.shared_libs += libicuuc.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so

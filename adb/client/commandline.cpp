@@ -128,7 +128,7 @@ static void help() {
         " pull [-a] REMOTE... LOCAL\n"
         "     copy files/dirs from device\n"
         "     -a: preserve file timestamp and mode\n"
-        " sync [all|data|odm|oem|product_services|product|system|vendor]\n"
+        " sync [all|data|odm|oem|product|system|system_ext|vendor]\n"
         "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
         "     -l: list but don't copy\n"
         "\n"
@@ -775,17 +775,16 @@ static int adb_abb(int argc, const char** argv) {
         error_exit("abb is not supported by the device");
     }
 
+    optind = 1;  // argv[0] is always "abb", so set `optind` appropriately.
+
     // Defaults.
     constexpr char escape_char = '~';  // -e
     constexpr bool use_shell_protocol = true;
     constexpr auto shell_type_arg = kShellServiceArgRaw;
     constexpr bool empty_command = false;
 
-    std::string service_string("abb:");
-    for (auto i = optind; i < argc; ++i) {
-        service_string.append(argv[i]);
-        service_string.push_back(ABB_ARG_DELIMETER);
-    }
+    std::vector<const char*> args(argv + optind, argv + argc);
+    std::string service_string = "abb:" + android::base::Join(args, ABB_ARG_DELIMETER);
 
     D("abb -e 0x%x [%*.s]\n", escape_char, static_cast<int>(service_string.size()),
       service_string.data());
@@ -1669,17 +1668,29 @@ int adb_commandline(int argc, const char** argv) {
             return 0;
         }
     } else if (!strcmp(argv[0], "rescue")) {
+        // adb rescue getprop
         // adb rescue getprop <prop>
         // adb rescue install <filename>
         // adb rescue wipe userdata
-        if (argc != 3) error_exit("rescue requires two arguments");
+        if (argc < 2) error_exit("rescue requires at least one argument");
         if (!strcmp(argv[1], "getprop")) {
-            return adb_connect_command(android::base::StringPrintf("rescue-getprop:%s", argv[2]));
+            if (argc == 2) {
+                return adb_connect_command("rescue-getprop:");
+            }
+            if (argc == 3) {
+                return adb_connect_command(
+                        android::base::StringPrintf("rescue-getprop:%s", argv[2]));
+            }
+            error_exit("invalid rescue getprop arguments");
         } else if (!strcmp(argv[1], "install")) {
+            if (argc != 3) error_exit("rescue install requires two arguments");
             if (adb_sideload_install(argv[2], true /* rescue_mode */) != 0) {
                 return 1;
             }
-        } else if (!strcmp(argv[1], "wipe") && !strcmp(argv[2], "userdata")) {
+        } else if (!strcmp(argv[1], "wipe")) {
+            if (argc != 3 || strcmp(argv[2], "userdata") != 0) {
+                error_exit("invalid rescue wipe arguments");
+            }
             return adb_wipe_devices();
         } else {
             error_exit("invalid rescue argument");
@@ -1811,7 +1822,7 @@ int adb_commandline(int argc, const char** argv) {
         if (argc < 2) error_exit("install-multiple requires an argument");
         return install_multiple_app(argc, argv);
     } else if (!strcmp(argv[0], "install-multi-package")) {
-        if (argc < 3) error_exit("install-multi-package requires an argument");
+        if (argc < 2) error_exit("install-multi-package requires an argument");
         return install_multi_package(argc, argv);
     } else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) error_exit("uninstall requires an argument");
@@ -1831,8 +1842,8 @@ int adb_commandline(int argc, const char** argv) {
         }
 
         if (src.empty()) src = "all";
-        std::vector<std::string> partitions{"data",   "odm",   "oem", "product", "product_services",
-                                            "system", "vendor"};
+        std::vector<std::string> partitions{"data",   "odm",        "oem",   "product",
+                                            "system", "system_ext", "vendor"};
         bool found = false;
         for (const auto& partition : partitions) {
             if (src == "all" || src == partition) {

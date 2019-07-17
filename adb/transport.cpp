@@ -49,7 +49,7 @@
 #include "adb_io.h"
 #include "adb_trace.h"
 #include "adb_utils.h"
-#include "fdevent.h"
+#include "fdevent/fdevent.h"
 #include "sysdeps/chrono.h"
 
 using android::base::ScopedLockAssertion;

@@ -21,9 +21,8 @@
 
 #include <gtest/gtest.h>
 
-#include <unwindstack/Memory.h>
-
 #include "MemoryFake.h"
+#include "MemoryRange.h"
 
 namespace unwindstack {
 

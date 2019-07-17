@@ -43,14 +43,14 @@ namespace init {
 // devices/configurations where these I/O operations are blocking for a long
 // time. We do not reboot or halt on failures, as this is a best-effort
 // attempt.
-Result<Success> MixHwrngIntoLinuxRngAction(const BuiltinArguments&) {
+Result<void> MixHwrngIntoLinuxRngAction(const BuiltinArguments&) {
     unique_fd hwrandom_fd(
         TEMP_FAILURE_RETRY(open("/dev/hw_random", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (hwrandom_fd == -1) {
         if (errno == ENOENT) {
             LOG(INFO) << "/dev/hw_random not found";
             // It's not an error to not have a Hardware RNG.
-            return Success();
+            return {};
         }
         return ErrnoError() << "Failed to open /dev/hw_random";
     }
@@ -80,10 +80,10 @@ Result<Success> MixHwrngIntoLinuxRngAction(const BuiltinArguments&) {
     }
 
     LOG(INFO) << "Mixed " << total_bytes_written << " bytes from /dev/hw_random into /dev/urandom";
-    return Success();
+    return {};
 }
 
-static bool SetHighestAvailableOptionValue(std::string path, int min, int max) {
+static bool SetHighestAvailableOptionValue(const std::string& path, int min, int max) {
     std::ifstream inf(path, std::fstream::in);
     if (!inf) {
         LOG(ERROR) << "Cannot open for reading: " << path;
@@ -147,31 +147,31 @@ static bool __attribute__((unused)) SetMmapRndBitsMin(int start, int min, bool c
 // 9e08f57d684a x86: mm: support ARCH_MMAP_RND_BITS
 // ec9ee4acd97c drivers: char: random: add get_random_long()
 // 5ef11c35ce86 mm: ASLR: use get_random_long()
-Result<Success> SetMmapRndBitsAction(const BuiltinArguments&) {
+Result<void> SetMmapRndBitsAction(const BuiltinArguments&) {
 // values are arch-dependent
 #if defined(USER_MODE_LINUX)
     // uml does not support mmap_rnd_bits
-    return Success();
+    return {};
 #elif defined(__aarch64__)
     // arm64 supports 18 - 33 bits depending on pagesize and VA_SIZE
     if (SetMmapRndBitsMin(33, 24, false) && SetMmapRndBitsMin(16, 16, true)) {
-        return Success();
+        return {};
     }
 #elif defined(__x86_64__)
     // x86_64 supports 28 - 32 bits
     if (SetMmapRndBitsMin(32, 32, false) && SetMmapRndBitsMin(16, 16, true)) {
-        return Success();
+        return {};
     }
 #elif defined(__arm__) || defined(__i386__)
     // check to see if we're running on 64-bit kernel
     bool h64 = !access(MMAP_RND_COMPAT_PATH, F_OK);
     // supported 32-bit architecture must have 16 bits set
     if (SetMmapRndBitsMin(16, 16, h64)) {
-        return Success();
+        return {};
     }
 #elif defined(__mips__) || defined(__mips64__)
     // TODO: add mips support b/27788820
-    return Success();
+    return {};
 #else
     LOG(ERROR) << "Unknown architecture";
 #endif
@@ -187,14 +187,14 @@ Result<Success> SetMmapRndBitsAction(const BuiltinArguments&) {
 // Set kptr_restrict to the highest available level.
 //
 // Aborts if unable to set this to an acceptable value.
-Result<Success> SetKptrRestrictAction(const BuiltinArguments&) {
+Result<void> SetKptrRestrictAction(const BuiltinArguments&) {
     std::string path = KPTR_RESTRICT_PATH;
 
     if (!SetHighestAvailableOptionValue(path, KPTR_RESTRICT_MINVALUE, KPTR_RESTRICT_MAXVALUE)) {
         LOG(FATAL) << "Unable to set adequate kptr_restrict value!";
         return Error();
     }
-    return Success();
+    return {};
 }
 
 }  // namespace init
