@@ -67,6 +67,12 @@ cc_binary {
         "libbase",
         "libmeminfo",
     ],
+
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
 }
 
 cc_binary {
