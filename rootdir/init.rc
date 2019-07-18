@@ -295,6 +295,11 @@ on init
     chown system system /sys/power/wakeup_count
     chmod 0660 /sys/power/state
 
+    chown radio wakelock /sys/power/wake_lock
+    chown radio wakelock /sys/power/wake_unlock
+    chmod 0660 /sys/power/wake_lock
+    chmod 0660 /sys/power/wake_unlock
+
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
 
@@ -502,7 +507,6 @@ on post-fs-data
     mkdir /data/misc/ethernet 0770 system system
     mkdir /data/misc/dhcp 0770 dhcp dhcp
     mkdir /data/misc/user 0771 root root
-    mkdir /data/misc/perfprofd 0775 root root
     # give system access to wpa_supplicant.conf for backup and restore
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
     mkdir /data/local 0751 root root
@@ -698,10 +702,6 @@ on boot
     chown radio system /sys/android_power/acquire_partial_wake_lock
     chown radio system /sys/android_power/release_wake_lock
     chown system system /sys/power/autosleep
-    chown radio wakelock /sys/power/wake_lock
-    chown radio wakelock /sys/power/wake_unlock
-    chmod 0660 /sys/power/wake_lock
-    chmod 0660 /sys/power/wake_unlock
 
     chown system system /sys/devices/system/cpu/cpufreq/interactive/timer_rate
     chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/timer_rate
