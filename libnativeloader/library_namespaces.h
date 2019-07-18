@@ -42,7 +42,10 @@ class LibraryNamespaces {
   LibraryNamespaces& operator=(const LibraryNamespaces&) = delete;
 
   void Initialize();
-  void Reset() { namespaces_.clear(); }
+  void Reset() {
+    namespaces_.clear();
+    initialized_ = false;
+  }
   NativeLoaderNamespace* Create(JNIEnv* env, uint32_t target_sdk_version, jobject class_loader,
                                 bool is_shared, jstring dex_path, jstring java_library_path,
                                 jstring java_permitted_path, std::string* error_msg);
