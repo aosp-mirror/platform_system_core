@@ -125,10 +125,6 @@ cc_library {
         },
     },
 
-    whole_static_libs: [
-        "libdemangle"
-    ],
-
     static_libs: [
         "libprocinfo",
     ],
