@@ -70,3 +70,26 @@ cc_library_headers {
     host_supported: true,
     export_include_dirs: ["include"],
 }
+
+cc_test {
+    name: "libnativeloader_test",
+    srcs: [
+        "native_loader_test.cpp",
+        "native_loader.cpp",
+        "library_namespaces.cpp",
+        "native_loader_namespace.cpp",
+        "public_libraries.cpp",
+    ],
+    cflags: ["-DANDROID"],
+    static_libs: [
+        "libbase",
+        "liblog",
+        "libnativehelper",
+        "libgmock",
+    ],
+    header_libs: [
+        "libnativebridge-headers",
+        "libnativeloader-headers",
+    ],
+    system_shared_libs: ["libc"],
+}
