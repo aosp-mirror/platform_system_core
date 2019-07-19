@@ -26,6 +26,12 @@ cc_defaults {
         "liblog",
         "libprocinfo",
     ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+
+    },
 }
 
 cc_library {
