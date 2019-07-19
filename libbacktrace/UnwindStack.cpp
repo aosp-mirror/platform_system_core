@@ -24,7 +24,6 @@
 #include <string>
 
 #include <backtrace/Backtrace.h>
-#include <demangle.h>
 #include <unwindstack/Elf.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Maps.h>
@@ -40,6 +39,8 @@
 #include "BacktraceLog.h"
 #include "UnwindStack.h"
 #include "UnwindStackMap.h"
+
+extern "C" char* __cxa_demangle(const char*, char*, size_t*, int*);
 
 bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
                        std::vector<backtrace_frame_data_t>* frames, size_t num_ignore_frames,
@@ -115,7 +116,13 @@ bool Backtrace::Unwind(unwindstack::Regs* regs, BacktraceMap* back_map,
     back_frame->pc = frame->pc;
     back_frame->sp = frame->sp;
 
-    back_frame->func_name = demangle(frame->function_name.c_str());
+    char* demangled_name = __cxa_demangle(frame->function_name.c_str(), nullptr, nullptr, nullptr);
+    if (demangled_name != nullptr) {
+      back_frame->func_name = demangled_name;
+      free(demangled_name);
+    } else {
+      back_frame->func_name = frame->function_name;
+    }
     back_frame->func_offset = frame->function_offset;
 
     back_frame->map.name = frame->map_name;
