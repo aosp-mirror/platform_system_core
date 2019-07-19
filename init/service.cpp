@@ -165,6 +165,15 @@ void Service::NotifyStateChange(const std::string& new_state) const {
             property_set(boottime_property, std::to_string(start_ns));
         }
     }
+
+    // init.svc_debug_pid.* properties are only for tests, and should not be used
+    // on device for security checks.
+    std::string pid_property = "init.svc_debug_pid." + name_;
+    if (new_state == "running") {
+        property_set(pid_property, std::to_string(pid_));
+    } else if (new_state == "stopped") {
+        property_set(pid_property, "");
+    }
 }
 
 void Service::KillProcessGroup(int signal) {
