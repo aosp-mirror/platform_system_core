@@ -119,6 +119,41 @@ bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* po
     return true;
 }
 
+int get_host_socket_spec_port(std::string_view spec, std::string* error) {
+    int port;
+    if (spec.starts_with("tcp:")) {
+        if (!parse_tcp_socket_spec(spec, nullptr, &port, nullptr, error)) {
+            return -1;
+        }
+    } else if (spec.starts_with("vsock:")) {
+#if ADB_LINUX
+        std::string spec_str(spec);
+        std::vector<std::string> fragments = android::base::Split(spec_str, ":");
+        if (fragments.size() != 2) {
+            *error = "given vsock server socket string was invalid";
+            return -1;
+        }
+        if (!android::base::ParseInt(fragments[1], &port)) {
+            *error = "could not parse vsock port";
+            errno = EINVAL;
+            return -1;
+        }
+        if (port < 0) {
+            *error = "vsock port was negative.";
+            errno = EINVAL;
+            return -1;
+        }
+#else   // ADB_LINUX
+        *error = "vsock is only supported on linux";
+        return -1;
+#endif  // ADB_LINUX
+    } else {
+        *error = "given socket spec string was invalid";
+        return -1;
+    }
+    return port;
+}
+
 static bool tcp_host_is_local(std::string_view hostname) {
     // FIXME
     return hostname.empty() || hostname == "localhost";
@@ -248,6 +283,14 @@ bool socket_spec_connect(unique_fd* fd, std::string_view address, int* port, std
 
             fd->reset(network_local_client(&address[prefix.length()], it.second.socket_namespace,
                                            SOCK_STREAM, error));
+
+            if (fd->get() < 0) {
+                *error =
+                        android::base::StringPrintf("could not connect to %s address '%s'",
+                                                    it.first.c_str(), std::string(address).c_str());
+                return false;
+            }
+
             if (serial) {
                 *serial = address;
             }
@@ -269,7 +312,11 @@ int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_
         }
 
         int result;
+#if ADB_HOST
         if (hostname.empty() && gListenAll) {
+#else
+        if (hostname.empty()) {
+#endif
             result = network_inaddr_any_server(port, SOCK_STREAM, error);
         } else if (tcp_host_is_local(hostname)) {
             result = network_loopback_server(port, SOCK_STREAM, error, true);
