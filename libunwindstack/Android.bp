@@ -125,10 +125,6 @@ cc_library {
         },
     },
 
-    whole_static_libs: [
-        "libdemangle"
-    ],
-
     static_libs: [
         "libprocinfo",
     ],
@@ -162,6 +158,7 @@ cc_test_library {
 cc_test {
     name: "libunwindstack_test",
     defaults: ["libunwindstack_flags"],
+    isolated: true,
 
     srcs: [
         "tests/ArmExidxDecodeTest.cpp",
@@ -184,6 +181,7 @@ cc_test {
         "tests/ElfInterfaceTest.cpp",
         "tests/ElfTest.cpp",
         "tests/ElfTestUtils.cpp",
+        "tests/IsolatedSettings.cpp",
         "tests/JitDebugTest.cpp",
         "tests/LocalUnwinderTest.cpp",
         "tests/LogFake.cpp",
