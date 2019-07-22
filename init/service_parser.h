@@ -45,7 +45,7 @@ class ServiceParser : public SectionParser {
 
   private:
     using OptionParser = Result<void> (ServiceParser::*)(std::vector<std::string>&& args);
-    class OptionParserMap;
+    const KeywordMap<ServiceParser::OptionParser>& GetParserMap() const;
 
     Result<void> ParseCapabilities(std::vector<std::string>&& args);
     Result<void> ParseClass(std::vector<std::string>&& args);

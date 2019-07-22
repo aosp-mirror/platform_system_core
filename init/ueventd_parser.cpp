@@ -176,21 +176,14 @@ Result<void> SubsystemParser::ParseDirName(std::vector<std::string>&& args) {
 
 Result<void> SubsystemParser::ParseLineSection(std::vector<std::string>&& args, int line) {
     using OptionParser = Result<void> (SubsystemParser::*)(std::vector<std::string> && args);
+    // clang-format off
+    static const KeywordMap<OptionParser> parser_map = {
+        {"devname",     {1,     1,      &SubsystemParser::ParseDevName}},
+        {"dirname",     {1,     1,      &SubsystemParser::ParseDirName}},
+    };
+    // clang-format on
 
-    static class OptionParserMap : public KeywordMap<OptionParser> {
-      private:
-        const Map& map() const override {
-            // clang-format off
-            static const Map option_parsers = {
-                {"devname",     {1,     1,      &SubsystemParser::ParseDevName}},
-                {"dirname",     {1,     1,      &SubsystemParser::ParseDirName}},
-            };
-            // clang-format on
-            return option_parsers;
-        }
-    } parser_map;
-
-    auto parser = parser_map.FindFunction(args);
+    auto parser = parser_map.Find(args);
 
     if (!parser) return Error() << parser.error();
 
