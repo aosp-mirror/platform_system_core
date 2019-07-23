@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <ctime>
 
+#include <gtest/gtest_prod.h>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -165,6 +166,7 @@ class ZipWriter {
   int32_t StoreBytes(FileEntry* file, const void* data, uint32_t len);
   int32_t CompressBytes(FileEntry* file, const void* data, uint32_t len);
   int32_t FlushCompressedBytes(FileEntry* file);
+  bool ShouldUseDataDescriptor() const;
 
   enum class State {
     kWritingZip,
@@ -182,4 +184,6 @@ class ZipWriter {
 
   std::unique_ptr<z_stream, void (*)(z_stream*)> z_stream_;
   std::vector<uint8_t> buffer_;
+
+  FRIEND_TEST(zipwriter, WriteToUnseekableFile);
 };
