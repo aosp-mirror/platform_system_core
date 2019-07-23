@@ -92,4 +92,5 @@ cc_test {
         "libnativeloader-headers",
     ],
     system_shared_libs: ["libc", "libm"],
+    test_suites: ["device-tests"],
 }

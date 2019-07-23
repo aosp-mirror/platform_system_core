@@ -336,7 +336,7 @@ class NativeLoaderTest_Create : public NativeLoaderTest {
   std::string expected_parent_namespace = "platform";
   bool expected_link_with_platform_ns = true;
   bool expected_link_with_runtime_ns = true;
-  bool expected_link_with_sphal_ns = true;
+  bool expected_link_with_sphal_ns = !vendor_public_libraries().empty();
   bool expected_link_with_vndk_ns = false;
   bool expected_link_with_default_ns = false;
   std::string expected_shared_libs_to_platform_ns = default_public_libraries();
