@@ -27,7 +27,10 @@ using ::testing::ElementsAre;
 
 class Environment : public ::testing::Environment {
   public:
-    void SetUp() override { MetadataBuilder::OverrideABForTesting(false); }
+    void SetUp() override {
+        MetadataBuilder::OverrideABForTesting(false);
+        MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(false);
+    }
 };
 
 int main(int argc, char** argv) {
@@ -39,8 +42,14 @@ int main(int argc, char** argv) {
 
 class BuilderTest : public ::testing::Test {
   public:
-    void SetUp() override { MetadataBuilder::OverrideABForTesting(false); }
-    void TearDown() override { MetadataBuilder::OverrideABForTesting(false); }
+    void SetUp() override {
+        MetadataBuilder::OverrideABForTesting(false);
+        MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(false);
+    }
+    void TearDown() override {
+        MetadataBuilder::OverrideABForTesting(false);
+        MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(false);
+    }
 };
 
 TEST_F(BuilderTest, BuildBasic) {

@@ -32,6 +32,7 @@ namespace fs_mgr {
 
 bool MetadataBuilder::sABOverrideSet;
 bool MetadataBuilder::sABOverrideValue;
+std::optional<bool> MetadataBuilder::sRetrofitDap;
 
 static const std::string kDefaultGroup = "default";
 
@@ -169,7 +170,8 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionO
     // needed. On the other hand, for retrofit devices, we'll need to
     // translate block device and group names to update their slot suffixes.
     auto super_device = GetMetadataSuperBlockDevice(*metadata.get());
-    if (GetBlockDevicePartitionName(*super_device) == "super") {
+    if (GetBlockDevicePartitionName(*super_device) == "super" ||
+        !IsRetrofitDynamicPartitionsDevice()) {
         return New(*metadata.get(), &opener);
     }
 
@@ -212,6 +214,10 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionO
 void MetadataBuilder::OverrideABForTesting(bool ab_device) {
     sABOverrideSet = true;
     sABOverrideValue = ab_device;
+}
+
+void MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(bool retrofit) {
+    sRetrofitDap = retrofit;
 }
 
 MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
@@ -580,7 +586,8 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
     CHECK_NE(sectors_per_block, 0);
     CHECK(sectors_needed % sectors_per_block == 0);
 
-    if (IsABDevice() && !IsRetrofitDevice() && GetPartitionSlotSuffix(partition->name()) == "_b") {
+    if (IsABDevice() && !IsRetrofitMetadata() &&
+        GetPartitionSlotSuffix(partition->name()) == "_b") {
         // Allocate "a" partitions top-down and "b" partitions bottom-up, to
         // minimize fragmentation during OTA.
         free_regions = PrioritizeSecondHalfOfSuper(free_regions);
@@ -1051,7 +1058,14 @@ bool MetadataBuilder::IsABDevice() const {
     return !android::base::GetProperty("ro.boot.slot_suffix", "").empty();
 }
 
-bool MetadataBuilder::IsRetrofitDevice() const {
+bool MetadataBuilder::IsRetrofitDynamicPartitionsDevice() {
+    if (sRetrofitDap.has_value()) {
+        return *sRetrofitDap;
+    }
+    return !android::base::GetBoolProperty("ro.boot.dynamic_partitions_retrofit", false);
+}
+
+bool MetadataBuilder::IsRetrofitMetadata() const {
     return GetBlockDevicePartitionName(block_devices_[0]) != LP_METADATA_DEFAULT_PARTITION_NAME;
 }
 
