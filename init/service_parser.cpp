@@ -461,18 +461,10 @@ Result<void> ServiceParser::ParseUpdatable(std::vector<std::string>&& args) {
     return {};
 }
 
-class ServiceParser::OptionParserMap : public KeywordMap<OptionParser> {
-  public:
-    OptionParserMap() {}
-
-  private:
-    const Map& map() const override;
-};
-
-const ServiceParser::OptionParserMap::Map& ServiceParser::OptionParserMap::map() const {
+const KeywordMap<ServiceParser::OptionParser>& ServiceParser::GetParserMap() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
-    static const Map option_parsers = {
+    static const KeywordMap<ServiceParser::OptionParser> parser_map = {
         {"capabilities",
                         {0,     kMax, &ServiceParser::ParseCapabilities}},
         {"class",       {1,     kMax, &ServiceParser::ParseClass}},
@@ -518,7 +510,7 @@ const ServiceParser::OptionParserMap::Map& ServiceParser::OptionParserMap::map()
         {"writepid",    {1,     kMax, &ServiceParser::ParseWritepid}},
     };
     // clang-format on
-    return option_parsers;
+    return parser_map;
 }
 
 Result<void> ServiceParser::ParseSection(std::vector<std::string>&& args,
@@ -561,8 +553,7 @@ Result<void> ServiceParser::ParseLineSection(std::vector<std::string>&& args, in
         return {};
     }
 
-    static const OptionParserMap parser_map;
-    auto parser = parser_map.FindFunction(args);
+    auto parser = GetParserMap().Find(args);
 
     if (!parser) return parser.error();
 
