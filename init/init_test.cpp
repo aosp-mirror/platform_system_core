@@ -22,6 +22,7 @@
 #include "action.h"
 #include "action_manager.h"
 #include "action_parser.h"
+#include "builtin_arguments.h"
 #include "builtins.h"
 #include "import_parser.h"
 #include "keyword_map.h"
@@ -29,7 +30,6 @@
 #include "service.h"
 #include "service_list.h"
 #include "service_parser.h"
-#include "test_function_map.h"
 #include "util.h"
 
 namespace android {
@@ -37,7 +37,7 @@ namespace init {
 
 using ActionManagerCommand = std::function<void(ActionManager&)>;
 
-void TestInit(const std::string& init_script_file, const TestFunctionMap& test_function_map,
+void TestInit(const std::string& init_script_file, const BuiltinFunctionMap& test_function_map,
               const std::vector<ActionManagerCommand>& commands, ServiceList* service_list) {
     ActionManager am;
 
@@ -60,7 +60,7 @@ void TestInit(const std::string& init_script_file, const TestFunctionMap& test_f
     }
 }
 
-void TestInitText(const std::string& init_script, const TestFunctionMap& test_function_map,
+void TestInitText(const std::string& init_script, const BuiltinFunctionMap& test_function_map,
                   const std::vector<ActionManagerCommand>& commands, ServiceList* service_list) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
@@ -76,8 +76,13 @@ on boot
 pass_test
 )init";
 
-    TestFunctionMap test_function_map;
-    test_function_map.Add("pass_test", [&expect_true]() { expect_true = true; });
+    auto do_pass_test = [&expect_true](const BuiltinArguments&) {
+        expect_true = true;
+        return Result<void>{};
+    };
+    BuiltinFunctionMap test_function_map = {
+            {"pass_test", {0, 0, {false, do_pass_test}}},
+    };
 
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};
@@ -103,10 +108,24 @@ execute_third
 )init";
 
     int num_executed = 0;
-    TestFunctionMap test_function_map;
-    test_function_map.Add("execute_first", [&num_executed]() { EXPECT_EQ(0, num_executed++); });
-    test_function_map.Add("execute_second", [&num_executed]() { EXPECT_EQ(1, num_executed++); });
-    test_function_map.Add("execute_third", [&num_executed]() { EXPECT_EQ(2, num_executed++); });
+    auto do_execute_first = [&num_executed](const BuiltinArguments&) {
+        EXPECT_EQ(0, num_executed++);
+        return Result<void>{};
+    };
+    auto do_execute_second = [&num_executed](const BuiltinArguments&) {
+        EXPECT_EQ(1, num_executed++);
+        return Result<void>{};
+    };
+    auto do_execute_third = [&num_executed](const BuiltinArguments&) {
+        EXPECT_EQ(2, num_executed++);
+        return Result<void>{};
+    };
+
+    BuiltinFunctionMap test_function_map = {
+            {"execute_first", {0, 0, {false, do_execute_first}}},
+            {"execute_second", {0, 0, {false, do_execute_second}}},
+            {"execute_third", {0, 0, {false, do_execute_third}}},
+    };
 
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};
@@ -127,7 +146,7 @@ service A something
 )init";
 
     ServiceList service_list;
-    TestInitText(init_script, TestFunctionMap(), {}, &service_list);
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &service_list);
     ASSERT_EQ(1, std::distance(service_list.begin(), service_list.end()));
 
     auto service = service_list.begin()->get();
@@ -186,8 +205,9 @@ TEST(init, EventTriggerOrderMultipleFiles) {
         return Result<void>{};
     };
 
-    TestFunctionMap test_function_map;
-    test_function_map.Add("execute", 1, 1, false, execute_command);
+    BuiltinFunctionMap test_function_map = {
+            {"execute", {1, 1, {false, execute_command}}},
+    };
 
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};

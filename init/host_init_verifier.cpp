@@ -221,7 +221,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    const BuiltinFunctionMap function_map;
+    const BuiltinFunctionMap& function_map = GetBuiltinFunctionMap();
     Action::set_function_map(&function_map);
     ActionManager& am = ActionManager::GetInstance();
     ServiceList& sl = ServiceList::GetInstance();

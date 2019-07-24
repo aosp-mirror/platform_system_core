@@ -60,7 +60,7 @@ class Subcontext {
     android::base::unique_fd socket_;
 };
 
-int SubcontextMain(int argc, char** argv, const KeywordFunctionMap* function_map);
+int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map);
 std::vector<Subcontext>* InitializeSubcontexts();
 bool SubcontextChildReap(pid_t pid);
 void SubcontextTerminate();
