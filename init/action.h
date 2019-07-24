@@ -75,7 +75,7 @@ class Action {
     bool oneshot() const { return oneshot_; }
     const std::string& filename() const { return filename_; }
     int line() const { return line_; }
-    static void set_function_map(const KeywordFunctionMap* function_map) {
+    static void set_function_map(const BuiltinFunctionMap* function_map) {
         function_map_ = function_map;
     }
 
@@ -91,7 +91,7 @@ class Action {
     Subcontext* subcontext_;
     std::string filename_;
     int line_;
-    static const KeywordFunctionMap* function_map_;
+    static const BuiltinFunctionMap* function_map_;
 };
 
 }  // namespace init
