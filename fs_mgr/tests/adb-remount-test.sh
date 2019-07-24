@@ -189,9 +189,20 @@ adb_su() {
 [ "USAGE: adb_cat <file> >stdout
 
 Returns: content of file to stdout with carriage returns skipped,
-         true of the file exists" ]
+         true if the file exists" ]
 adb_cat() {
     local OUTPUT="`adb_sh cat ${1} </dev/null 2>&1`"
+    local ret=${?}
+    echo "${OUTPUT}" | tr -d '\r'
+    return ${ret}
+}
+
+[ "USAGE: adb_ls <dirfile> >stdout
+
+Returns: filename or directoru content to stdout with carriage returns skipped,
+         true if the ls had no errors" ]
+adb_ls() {
+    local OUTPUT="`adb_sh ls ${1} </dev/null 2>/dev/null`"
     local ret=${?}
     echo "${OUTPUT}" | tr -d '\r'
     return ${ret}
@@ -1170,10 +1181,14 @@ echo "${GREEN}[ RUN      ]${NORMAL} push content to /system and /vendor" >&2
 
 A="Hello World! $(date)"
 echo "${A}" | adb_sh cat - ">/system/hello"
+echo "${A}" | adb_sh cat - ">/system/priv-app/hello"
 echo "${A}" | adb_sh cat - ">/vendor/hello"
 B="`adb_cat /system/hello`" ||
-  die "sytem hello"
+  die "system hello"
 check_eq "${A}" "${B}" /system before reboot
+B="`adb_cat /system/priv-app/hello`" ||
+  die "system priv-app hello"
+check_eq "${A}" "${B}" /system/priv-app before reboot
 B="`adb_cat /vendor/hello`" ||
   die "vendor hello"
 check_eq "${A}" "${B}" /vendor before reboot
@@ -1255,6 +1270,13 @@ if ${enforcing}; then
 fi
 B="`adb_cat /system/hello`"
 check_eq "${A}" "${B}" /system after reboot
+# If overlayfs has a nested security problem, this will fail.
+B="`adb_ls /system/`" ||
+  dir "adb ls /system"
+[ X"${B}" != X"${B#*priv-app}" ] ||
+  dir "adb ls /system/priv-app"
+B="`adb_cat /system/priv-app/hello`"
+check_eq "${A}" "${B}" /system/priv-app after reboot
 echo "${GREEN}[       OK ]${NORMAL} /system content remains after reboot" >&2
 # Only root can read vendor if sepolicy permissions are as expected.
 adb_root ||
@@ -1376,6 +1398,12 @@ else
   fi
   B="`adb_cat /system/hello`"
   check_eq "${A}" "${B}" system after flash vendor
+  B="`adb_ls /system/`" ||
+    dir "adb ls /system"
+  [ X"${B}" != X"${B#*priv-app}" ] ||
+    dir "adb ls /system/priv-app"
+  B="`adb_cat /system/priv-app/hello`"
+  check_eq "${A}" "${B}" system/priv-app after flash vendor
   adb_root ||
     die "adb root"
   B="`adb_cat /vendor/hello`"
@@ -1417,11 +1445,13 @@ fi
 echo "${H}"
 [ ${err} = 0 ] &&
   ( adb_sh rm /vendor/hello </dev/null 2>/dev/null || true ) &&
-  adb_sh rm /system/hello </dev/null ||
+  adb_sh rm /system/hello /system/priv-app/hello </dev/null ||
   ( [ -n "${L}" ] && echo "${L}" && false ) ||
   die -t ${T} "cleanup hello"
 B="`adb_cat /system/hello`"
 check_eq "cat: /system/hello: No such file or directory" "${B}" after rm
+B="`adb_cat /system/priv-app/hello`"
+check_eq "cat: /system/priv-app/hello: No such file or directory" "${B}" after rm
 B="`adb_cat /vendor/hello`"
 check_eq "cat: /vendor/hello: No such file or directory" "${B}" after rm
 
