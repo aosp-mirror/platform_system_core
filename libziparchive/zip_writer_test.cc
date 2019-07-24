@@ -243,6 +243,7 @@ TEST_F(zipwriter, WriteCompressedZipWithOneFile) {
   ZipEntry data;
   ASSERT_EQ(0, FindEntry(handle, "file.txt", &data));
   EXPECT_EQ(kCompressDeflated, data.method);
+  EXPECT_EQ(0u, data.has_data_descriptor);
   ASSERT_EQ(4u, data.uncompressed_length);
   ASSERT_TRUE(AssertFileEntryContentsEq("helo", handle, &data));
 
@@ -348,6 +349,29 @@ TEST_F(zipwriter, BackupRemovesTheLastFile) {
   ASSERT_EQ(0, FindEntry(handle, "replace.txt", &data));
   ASSERT_TRUE(AssertFileEntryContentsEq(kReplaceWithThis, handle, &data));
 
+  CloseArchive(handle);
+}
+
+TEST_F(zipwriter, WriteToUnseekableFile) {
+  const char* expected = "hello";
+  ZipWriter writer(file_);
+  writer.seekable_ = false;
+
+  ASSERT_EQ(0, writer.StartEntry("file.txt", 0));
+  ASSERT_EQ(0, writer.WriteBytes(expected, strlen(expected)));
+  ASSERT_EQ(0, writer.FinishEntry());
+  ASSERT_EQ(0, writer.Finish());
+  ASSERT_GE(0, lseek(fd_, 0, SEEK_SET));
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd_, "temp", &handle, false));
+  ZipEntry data;
+  ASSERT_EQ(0, FindEntry(handle, "file.txt", &data));
+  EXPECT_EQ(kCompressStored, data.method);
+  EXPECT_EQ(1u, data.has_data_descriptor);
+  EXPECT_EQ(strlen(expected), data.compressed_length);
+  ASSERT_EQ(strlen(expected), data.uncompressed_length);
+  ASSERT_TRUE(AssertFileEntryContentsEq(expected, handle, &data));
   CloseArchive(handle);
 }
 
