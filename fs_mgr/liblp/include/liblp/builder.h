@@ -309,7 +309,9 @@ class MetadataBuilder {
     void ImportExtents(Partition* dest, const LpMetadata& metadata,
                        const LpMetadataPartition& source);
     bool ImportPartition(const LpMetadata& metadata, const LpMetadataPartition& source);
-    bool IsABDevice() const;
+
+    // Return true if the device is an AB device.
+    static bool IsABDevice();
 
     // Return true if the device is retrofitting dynamic partitions.
     static bool IsRetrofitDynamicPartitionsDevice();
@@ -345,8 +347,7 @@ class MetadataBuilder {
                                                     const std::vector<Interval>& free_list,
                                                     uint64_t sectors_needed) const;
 
-    static bool sABOverrideValue;
-    static bool sABOverrideSet;
+    static std::optional<bool> sABOverride;
     static std::optional<bool> sRetrofitDap;
 
     LpMetadataGeometry geometry_;

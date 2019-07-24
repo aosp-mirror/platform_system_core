@@ -30,8 +30,7 @@
 namespace android {
 namespace fs_mgr {
 
-bool MetadataBuilder::sABOverrideSet;
-bool MetadataBuilder::sABOverrideValue;
+std::optional<bool> MetadataBuilder::sABOverride;
 std::optional<bool> MetadataBuilder::sRetrofitDap;
 
 static const std::string kDefaultGroup = "default";
@@ -212,8 +211,7 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionO
 }
 
 void MetadataBuilder::OverrideABForTesting(bool ab_device) {
-    sABOverrideSet = true;
-    sABOverrideValue = ab_device;
+    sABOverride = ab_device;
 }
 
 void MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(bool retrofit) {
@@ -1051,9 +1049,9 @@ void MetadataBuilder::SetAutoSlotSuffixing() {
     auto_slot_suffixing_ = true;
 }
 
-bool MetadataBuilder::IsABDevice() const {
-    if (sABOverrideSet) {
-        return sABOverrideValue;
+bool MetadataBuilder::IsABDevice() {
+    if (sABOverride.has_value()) {
+        return *sABOverride;
     }
     return !android::base::GetProperty("ro.boot.slot_suffix", "").empty();
 }
