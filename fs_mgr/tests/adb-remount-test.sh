@@ -1425,7 +1425,7 @@ check_eq "cat: /system/hello: No such file or directory" "${B}" after rm
 B="`adb_cat /vendor/hello`"
 check_eq "cat: /vendor/hello: No such file or directory" "${B}" after rm
 
-if [ -n "${scratch_partition}" ]; then
+if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
 
   echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition} recovery" >&2
 
@@ -1567,7 +1567,9 @@ if ${overlayfs_supported}; then
     adb_wait ${ADB_WAIT} ||
     die "adb remount -R"
   if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
-       "2" = "`get_property partition.system.verified`" ]; then
+       "2" = "`get_property partition.system.verified`" ] &&
+     [ -n "`get_property ro.boot.verifiedbootstate`" -o \
+       -n "`get_property partition.system.verified`" ]; then
     die "remount -R command failed to disable verity"
   fi
 
