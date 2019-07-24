@@ -1152,10 +1152,10 @@ static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
 }
 
 // Builtin-function-map start
-const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
+const BuiltinFunctionMap& GetBuiltinFunctionMap() {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
-    static const Map builtin_functions = {
+    static const BuiltinFunctionMap builtin_functions = {
         {"bootchart",               {1,     1,    {false,  do_bootchart}}},
         {"chmod",                   {2,     2,    {true,   do_chmod}}},
         {"chown",                   {2,     3,    {true,   do_chown}}},
