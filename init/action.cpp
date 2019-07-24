@@ -80,17 +80,20 @@ Action::Action(bool oneshot, Subcontext* subcontext, const std::string& filename
       filename_(filename),
       line_(line) {}
 
-const KeywordFunctionMap* Action::function_map_ = nullptr;
+const BuiltinFunctionMap* Action::function_map_ = nullptr;
 
 Result<void> Action::AddCommand(std::vector<std::string>&& args, int line) {
     if (!function_map_) {
         return Error() << "no function map available";
     }
 
-    auto function = function_map_->FindFunction(args);
-    if (!function) return Error() << function.error();
+    auto map_result = function_map_->Find(args);
+    if (!map_result) {
+        return Error() << map_result.error();
+    }
 
-    commands_.emplace_back(function->second, function->first, std::move(args), line);
+    commands_.emplace_back(map_result->function, map_result->run_in_subcontext, std::move(args),
+                           line);
     return {};
 }
 
