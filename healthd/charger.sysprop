@@ -1,0 +1,38 @@
+owner: Platform
+module: "android.sysprop.ChargerProperties"
+
+prop {
+    api_name: "draw_split_screen"
+    type: Boolean
+    prop_name: "ro.charger.draw_split_screen"
+    scope: Internal
+    access: Readonly
+}
+prop {
+    api_name: "draw_split_offset"
+    type: Long
+    prop_name: "ro.charger.draw_split_offset"
+    scope: Internal
+    access: Readonly
+}
+prop {
+    api_name: "disable_init_blank"
+    type: Boolean
+    prop_name: "ro.charger.disable_init_blank"
+    scope: Internal
+    access: Readonly
+}
+prop {
+    api_name: "enable_suspend"
+    type: Boolean
+    prop_name: "ro.charger.enable_suspend"
+    scope: Internal
+    access: Readonly
+}
+prop {
+    api_name: "no_ui"
+    type: Boolean
+    prop_name: "ro.charger.no_ui"
+    scope: Internal
+    access: Readonly
+}
