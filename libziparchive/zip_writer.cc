@@ -455,6 +455,11 @@ int32_t ZipWriter::FlushCompressedBytes(FileEntry* file) {
   return kNoError;
 }
 
+bool ZipWriter::ShouldUseDataDescriptor() const {
+  // Only use a trailing "data descriptor" if the output isn't seekable.
+  return !seekable_;
+}
+
 int32_t ZipWriter::FinishEntry() {
   if (state_ != State::kWritingEntry) {
     return kInvalidState;
@@ -467,7 +472,7 @@ int32_t ZipWriter::FinishEntry() {
     }
   }
 
-  if ((current_file_entry_.compression_method & kCompressDeflated) || !seekable_) {
+  if (ShouldUseDataDescriptor()) {
     // Some versions of ZIP don't allow STORED data to have a trailing DataDescriptor.
     // If this file is not seekable, or if the data is compressed, write a DataDescriptor.
     const uint32_t sig = DataDescriptor::kOptSignature;
@@ -515,7 +520,7 @@ int32_t ZipWriter::Finish() {
   for (FileEntry& file : files_) {
     CentralDirectoryRecord cdr = {};
     cdr.record_signature = CentralDirectoryRecord::kSignature;
-    if ((file.compression_method & kCompressDeflated) || !seekable_) {
+    if (ShouldUseDataDescriptor()) {
       cdr.gpb_flags |= kGPBDDFlagMask;
     }
     cdr.compression_method = file.compression_method;

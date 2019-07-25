@@ -26,7 +26,6 @@
 #include <selinux/selinux.h>
 
 #include "builtin_arguments.h"
-#include "test_function_map.h"
 
 using namespace std::literals;
 
@@ -171,46 +170,53 @@ TEST(subcontext, ExpandArgsFailure) {
     });
 }
 
-TestFunctionMap BuildTestFunctionMap() {
-    TestFunctionMap test_function_map;
+BuiltinFunctionMap BuildTestFunctionMap() {
     // For CheckDifferentPid
-    test_function_map.Add("return_pids_as_error", 0, 0, true,
-                          [](const BuiltinArguments& args) -> Result<void> {
-                              return Error() << getpid() << " " << getppid();
-                          });
+    auto do_return_pids_as_error = [](const BuiltinArguments& args) -> Result<void> {
+        return Error() << getpid() << " " << getppid();
+    };
 
     // For SetProp
-    test_function_map.Add("setprop", 2, 2, true, [](const BuiltinArguments& args) {
+    auto do_setprop = [](const BuiltinArguments& args) {
         android::base::SetProperty(args[1], args[2]);
         return Result<void>{};
-    });
+    };
 
     // For MultipleCommands
     // Using a shared_ptr to extend lifetime of words to both lambdas
     auto words = std::make_shared<std::vector<std::string>>();
-    test_function_map.Add("add_word", 1, 1, true, [words](const BuiltinArguments& args) {
+    auto do_add_word = [words](const BuiltinArguments& args) {
         words->emplace_back(args[1]);
         return Result<void>{};
-    });
-    test_function_map.Add("return_words_as_error", 0, 0, true,
-                          [words](const BuiltinArguments& args) -> Result<void> {
-                              return Error() << Join(*words, " ");
-                          });
+    };
+    auto do_return_words_as_error = [words](const BuiltinArguments& args) -> Result<void> {
+        return Error() << Join(*words, " ");
+    };
 
     // For RecoverAfterAbort
-    test_function_map.Add("cause_log_fatal", 0, 0, true,
-                          [](const BuiltinArguments& args) -> Result<void> {
-                              return Error() << std::string(4097, 'f');
-                          });
-    test_function_map.Add(
-            "generate_sane_error", 0, 0, true,
-            [](const BuiltinArguments& args) -> Result<void> { return Error() << "Sane error!"; });
+    auto do_cause_log_fatal = [](const BuiltinArguments& args) -> Result<void> {
+        return Error() << std::string(4097, 'f');
+    };
+    auto do_generate_sane_error = [](const BuiltinArguments& args) -> Result<void> {
+        return Error() << "Sane error!";
+    };
 
     // For ContextString
-    test_function_map.Add(
-            "return_context_as_error", 0, 0, true,
-            [](const BuiltinArguments& args) -> Result<void> { return Error() << args.context; });
+    auto do_return_context_as_error = [](const BuiltinArguments& args) -> Result<void> {
+        return Error() << args.context;
+    };
 
+    // clang-format off
+    BuiltinFunctionMap test_function_map = {
+        {"return_pids_as_error",        {0,     0,      {true,  do_return_pids_as_error}}},
+        {"setprop",                     {2,     2,      {true,  do_setprop}}},
+        {"add_word",                    {1,     1,      {true,  do_add_word}}},
+        {"return_words_as_error",       {0,     0,      {true,  do_return_words_as_error}}},
+        {"cause_log_fatal",             {0,     0,      {true,  do_cause_log_fatal}}},
+        {"generate_sane_error",         {0,     0,      {true,  do_generate_sane_error}}},
+        {"return_context_as_error",     {0,     0,      {true,  do_return_context_as_error}}},
+    };
+    // clang-format on
     return test_function_map;
 }
 
