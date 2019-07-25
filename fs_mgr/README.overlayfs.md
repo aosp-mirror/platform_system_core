@@ -95,8 +95,8 @@ Caveats
 - Kernel must have CONFIG_OVERLAY_FS=y and will need to be patched
   with "*overlayfs: override_creds=off option bypass creator_cred*"
   if kernel is 4.4 or higher.
-  The patch is available on the upstream mailing list and the latest as of
-  Feb 8 2019 is https://lore.kernel.org/patchwork/patch/1009299/.
+  The patch series is available on the upstream mailing list and the latest as
+  of Jul 24 2019 is https://lore.kernel.org/patchwork/patch/1104577/.
   This patch adds an override_creds _mount_ option to overlayfs that
   permits legacy behavior for systems that do not have overlapping
   sepolicy rules, principals of least privilege, which is how Android behaves.
