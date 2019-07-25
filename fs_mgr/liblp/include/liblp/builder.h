@@ -199,6 +199,9 @@ class MetadataBuilder {
     // Used by the test harness to override whether the device is "A/B".
     static void OverrideABForTesting(bool ab_device);
 
+    // Used by the test harness to override whether the device is "retrofitting dynamic partitions".
+    static void OverrideRetrofitDynamicParititonsForTesting(bool retrofit);
+
     // Define a new partition group. By default there is one group called
     // "default", with an unrestricted size. A non-zero size will restrict the
     // total space used by all partitions in the group.
@@ -306,8 +309,16 @@ class MetadataBuilder {
     void ImportExtents(Partition* dest, const LpMetadata& metadata,
                        const LpMetadataPartition& source);
     bool ImportPartition(const LpMetadata& metadata, const LpMetadataPartition& source);
-    bool IsABDevice() const;
-    bool IsRetrofitDevice() const;
+
+    // Return true if the device is an AB device.
+    static bool IsABDevice();
+
+    // Return true if the device is retrofitting dynamic partitions.
+    static bool IsRetrofitDynamicPartitionsDevice();
+
+    // Return true if "this" metadata represents a metadata on a retrofit device.
+    bool IsRetrofitMetadata() const;
+
     bool ValidatePartitionGroups() const;
 
     struct Interval {
@@ -336,8 +347,8 @@ class MetadataBuilder {
                                                     const std::vector<Interval>& free_list,
                                                     uint64_t sectors_needed) const;
 
-    static bool sABOverrideValue;
-    static bool sABOverrideSet;
+    static std::optional<bool> sABOverride;
+    static std::optional<bool> sRetrofitDap;
 
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;
