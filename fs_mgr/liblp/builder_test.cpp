@@ -31,8 +31,7 @@ class Environment : public ::testing::Environment {
 };
 
 int main(int argc, char** argv) {
-    std::unique_ptr<Environment> env(new Environment);
-    ::testing::AddGlobalTestEnvironment(env.get());
+    ::testing::AddGlobalTestEnvironment(new Environment);
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
