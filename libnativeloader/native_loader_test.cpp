@@ -98,7 +98,7 @@ class MockPlatform : public Platform {
           if (namespaces.find(name) != namespaces.end()) {
             return namespaces[name];
           }
-          return nullptr;
+          return TO_MOCK_NAMESPACE(TO_ANDROID_NAMESPACE("(namespace not found"));
         }));
   }
 
