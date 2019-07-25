@@ -664,6 +664,8 @@ TEST(liblp, AutoSlotSuffixing) {
 }
 
 TEST(liblp, UpdateRetrofit) {
+    MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(true);
+
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
     ASSERT_NE(builder, nullptr);
     ASSERT_TRUE(AddDefaultPartitions(builder.get()));
@@ -693,6 +695,8 @@ TEST(liblp, UpdateRetrofit) {
 }
 
 TEST(liblp, UpdateNonRetrofit) {
+    MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(false);
+
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
