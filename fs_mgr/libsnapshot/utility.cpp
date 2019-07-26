@@ -17,6 +17,9 @@
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 
+using android::fs_mgr::MetadataBuilder;
+using android::fs_mgr::Partition;
+
 namespace android {
 namespace snapshot {
 
@@ -49,6 +52,26 @@ AutoUnmapImage::~AutoUnmapImage() {
     if (name_.empty()) return;
     if (!images_->UnmapImageIfExists(name_)) {
         LOG(ERROR) << "Failed to auto unmap cow image " << name_;
+    }
+}
+
+std::vector<Partition*> ListPartitionsWithSuffix(MetadataBuilder* builder,
+                                                 const std::string& suffix) {
+    std::vector<Partition*> ret;
+    for (const auto& group : builder->ListGroups()) {
+        for (auto* partition : builder->ListPartitionsInGroup(group)) {
+            if (!base::EndsWith(partition->name(), suffix)) {
+                continue;
+            }
+            ret.push_back(partition);
+        }
+    }
+    return ret;
+}
+
+AutoDeleteSnapshot::~AutoDeleteSnapshot() {
+    if (!name_.empty() && !manager_->DeleteSnapshot(lock_, name_)) {
+        LOG(ERROR) << "Failed to auto delete snapshot " << name_;
     }
 }
 

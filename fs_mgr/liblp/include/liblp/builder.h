@@ -33,10 +33,11 @@ namespace android {
 namespace fs_mgr {
 
 class LinearExtent;
+struct Interval;
 
 // By default, partitions are aligned on a 1MiB boundary.
-static const uint32_t kDefaultPartitionAlignment = 1024 * 1024;
-static const uint32_t kDefaultBlockSize = 4096;
+static constexpr uint32_t kDefaultPartitionAlignment = 1024 * 1024;
+static constexpr uint32_t kDefaultBlockSize = 4096;
 
 // Name of the default group in a metadata.
 static constexpr std::string_view kDefaultGroup = "default";
@@ -73,6 +74,8 @@ class LinearExtent final : public Extent {
     bool OwnsSector(uint64_t sector) const {
         return sector >= physical_sector_ && sector < end_sector();
     }
+
+    Interval AsInterval() const;
 
   private:
     uint32_t device_index_;
@@ -127,6 +130,12 @@ class Partition final {
     const std::vector<std::unique_ptr<Extent>>& extents() const { return extents_; }
     uint64_t size() const { return size_; }
 
+    // Return a copy of *this, but with extents that includes only the first
+    // |aligned_size| bytes. |aligned_size| should be aligned to
+    // logical_block_size() of the MetadataBuilder that this partition belongs
+    // to.
+    Partition GetBeginningExtents(uint64_t aligned_size) const;
+
   private:
     void ShrinkTo(uint64_t aligned_size);
     void set_group_name(std::string_view group_name) { group_name_ = group_name; }
@@ -155,6 +164,8 @@ struct Interval {
     bool operator<(const Interval& other) const {
         return (start == other.start) ? end < other.end : start < other.start;
     }
+
+    std::unique_ptr<Extent> AsExtent() const;
 
     // Intersect |a| with |b|.
     // If no intersection, result has 0 length().
@@ -324,6 +335,8 @@ class MetadataBuilder {
 
     // Return the list of free regions not occupied by extents in the metadata.
     std::vector<Interval> GetFreeRegions() const;
+
+    uint64_t logical_block_size() const;
 
   private:
     MetadataBuilder();

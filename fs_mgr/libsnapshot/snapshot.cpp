@@ -15,6 +15,7 @@
 #include <libsnapshot/snapshot.h>
 
 #include <dirent.h>
+#include <math.h>
 #include <sys/file.h>
 #include <sys/types.h>
 #include <sys/unistd.h>
@@ -36,6 +37,7 @@
 #include <libfiemap/image_manager.h>
 #include <liblp/liblp.h>
 
+#include "partition_cow_creator.h"
 #include "utility.h"
 
 namespace android {
@@ -55,6 +57,7 @@ using android::fs_mgr::CreateLogicalPartition;
 using android::fs_mgr::CreateLogicalPartitionParams;
 using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::LpMetadata;
+using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::SlotNumberForSlotSuffix;
 using std::chrono::duration_cast;
 using namespace std::chrono_literals;
@@ -413,22 +416,15 @@ bool SnapshotManager::MapCowImage(const std::string& name,
 bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
     CHECK(lock);
 
-    SnapshotStatus status;
-    if (!ReadSnapshotStatus(lock, name, &status)) {
-        return false;
-    }
-
     auto& dm = DeviceMapper::Instance();
     if (!dm.DeleteDeviceIfExists(name)) {
         LOG(ERROR) << "Could not delete snapshot device: " << name;
         return false;
     }
 
-    // There may be an extra device, since the kernel doesn't let us have a
-    // snapshot and linear target in the same table.
-    auto dm_name = GetSnapshotDeviceName(name, status);
-    if (name != dm_name && !dm.DeleteDeviceIfExists(dm_name)) {
-        LOG(ERROR) << "Could not delete inner snapshot device: " << dm_name;
+    auto snapshot_extra_device = GetSnapshotExtraDeviceName(name);
+    if (!dm.DeleteDeviceIfExists(snapshot_extra_device)) {
+        LOG(ERROR) << "Could not delete snapshot inner device: " << snapshot_extra_device;
         return false;
     }
 
@@ -1078,7 +1074,7 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
 
     bool ok = true;
     for (const auto& name : snapshots) {
-        ok &= DeleteSnapshot(lock, name);
+        ok &= (UnmapPartitionWithSnapshot(lock, name) && DeleteSnapshot(lock, name));
     }
     return ok;
 }
@@ -1221,6 +1217,12 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     CHECK(lock);
     path->clear();
 
+    if (params.GetPartitionName() != params.GetDeviceName()) {
+        LOG(ERROR) << "Mapping snapshot with a different name is unsupported: partition_name = "
+                   << params.GetPartitionName() << ", device_name = " << params.GetDeviceName();
+        return false;
+    }
+
     // Fill out fields in CreateLogicalPartitionParams so that we have more information (e.g. by
     // reading super partition metadata).
     CreateLogicalPartitionParams::OwnedData params_owned_data;
@@ -1326,6 +1328,31 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     created_devices.Release();
 
     LOG(INFO) << "Mapped " << params.GetPartitionName() << " as snapshot device at " << *path;
+
+    return true;
+}
+
+bool SnapshotManager::UnmapPartitionWithSnapshot(LockedFile* lock,
+                                                 const std::string& target_partition_name) {
+    CHECK(lock);
+
+    if (!UnmapSnapshot(lock, target_partition_name)) {
+        return false;
+    }
+
+    if (!UnmapCowImage(target_partition_name)) {
+        return false;
+    }
+
+    auto& dm = DeviceMapper::Instance();
+
+    std::string base_name = GetBaseDeviceName(target_partition_name);
+    if (!dm.DeleteDeviceIfExists(base_name)) {
+        LOG(ERROR) << "Cannot delete base device: " << base_name;
+        return false;
+    }
+
+    LOG(INFO) << "Successfully unmapped snapshot " << target_partition_name;
 
     return true;
 }
@@ -1595,6 +1622,110 @@ bool SnapshotManager::ForceLocalImageManager() {
     }
     has_local_image_manager_ = true;
     return true;
+}
+
+bool SnapshotManager::CreateUpdateSnapshots(MetadataBuilder* target_metadata,
+                                            const std::string& target_suffix,
+                                            MetadataBuilder* current_metadata,
+                                            const std::string& current_suffix,
+                                            const std::map<std::string, uint64_t>& cow_sizes) {
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    // Add _{target_suffix} to COW size map.
+    std::map<std::string, uint64_t> suffixed_cow_sizes;
+    for (const auto& [name, size] : cow_sizes) {
+        suffixed_cow_sizes[name + target_suffix] = size;
+    }
+
+    // In case of error, automatically delete devices that are created along the way.
+    // Note that "lock" is destroyed after "created_devices", so it is safe to use |lock| for
+    // these devices.
+    AutoDeviceList created_devices;
+
+    for (auto* target_partition : ListPartitionsWithSuffix(target_metadata, target_suffix)) {
+        std::optional<uint64_t> cow_size = std::nullopt;
+        auto it = suffixed_cow_sizes.find(target_partition->name());
+        if (it != suffixed_cow_sizes.end()) {
+            cow_size = it->second;
+            LOG(INFO) << "Using provided COW size " << cow_size << " for partition "
+                      << target_partition->name();
+        }
+
+        // Compute the device sizes for the partition.
+        PartitionCowCreator cow_creator{target_metadata,  target_suffix,  target_partition,
+                                        current_metadata, current_suffix, cow_size};
+        auto cow_creator_ret = cow_creator.Run();
+        if (!cow_creator_ret.has_value()) {
+            return false;
+        }
+
+        LOG(INFO) << "For partition " << target_partition->name()
+                  << ", device size = " << cow_creator_ret->snapshot_status.device_size
+                  << ", snapshot size = " << cow_creator_ret->snapshot_status.snapshot_size
+                  << ", cow partition size = "
+                  << cow_creator_ret->snapshot_status.cow_partition_size
+                  << ", cow file size = " << cow_creator_ret->snapshot_status.cow_file_size;
+
+        // Delete any existing snapshot before re-creating one.
+        if (!DeleteSnapshot(lock.get(), target_partition->name())) {
+            LOG(ERROR) << "Cannot delete existing snapshot before creating a new one for partition "
+                       << target_partition->name();
+            return false;
+        }
+
+        // It is possible that the whole partition uses free space in super, and snapshot / COW
+        // would not be needed. In this case, skip the partition.
+        bool needs_snapshot = cow_creator_ret->snapshot_status.snapshot_size > 0;
+        bool needs_cow = (cow_creator_ret->snapshot_status.cow_partition_size +
+                          cow_creator_ret->snapshot_status.cow_file_size) > 0;
+        CHECK(needs_snapshot == needs_cow);
+
+        if (!needs_snapshot) {
+            LOG(INFO) << "Skip creating snapshot for partition " << target_partition->name()
+                      << "because nothing needs to be snapshotted.";
+            continue;
+        }
+
+        // Store these device sizes to snapshot status file.
+        if (!CreateSnapshot(lock.get(), target_partition->name(),
+                            cow_creator_ret->snapshot_status)) {
+            return false;
+        }
+        created_devices.EmplaceBack<AutoDeleteSnapshot>(this, lock.get(), target_partition->name());
+
+        // Create the backing COW image if necessary.
+        if (cow_creator_ret->snapshot_status.cow_file_size > 0) {
+            if (!CreateCowImage(lock.get(), target_partition->name())) {
+                return false;
+            }
+        }
+
+        LOG(INFO) << "Successfully created snapshot for " << target_partition->name();
+    }
+
+    created_devices.Release();
+    LOG(INFO) << "Successfully created all snapshots for target slot " << target_suffix;
+
+    return res;
+}
+
+bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
+                                        std::string* snapshot_path) {
+    auto lock = LockShared();
+    if (!lock) return false;
+    if (!UnmapPartitionWithSnapshot(lock.get(), params.GetPartitionName())) {
+        LOG(ERROR) << "Cannot unmap existing snapshot before re-mapping it: "
+                   << params.GetPartitionName();
+        return false;
+    }
+    return MapPartitionWithSnapshot(lock.get(), params, snapshot_path);
+}
+
+bool SnapshotManager::UnmapUpdateSnapshot(const std::string& target_partition_name) {
+    auto lock = LockShared();
+    if (!lock) return false;
+    return UnmapPartitionWithSnapshot(lock.get(), target_partition_name);
 }
 
 }  // namespace snapshot

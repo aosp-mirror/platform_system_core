@@ -25,10 +25,12 @@ cc_defaults {
     shared_libs: [
         "libbase",
         "liblog",
+        "liblp",
     ],
     static_libs: [
         "libdm",
         "libfs_mgr",
+        "libfstab",
         "liblp",
     ],
     whole_static_libs: [
@@ -49,6 +51,7 @@ filegroup {
     name: "libsnapshot_sources",
     srcs: [
         "snapshot.cpp",
+        "partition_cow_creator.cpp",
         "utility.cpp",
     ],
 }
@@ -77,6 +80,7 @@ cc_test {
     defaults: ["libsnapshot_defaults"],
     srcs: [
         "snapshot_test.cpp",
+        "partition_cow_creator_test.cpp",
         "test_helpers.cpp",
     ],
     shared_libs: [
@@ -90,5 +94,7 @@ cc_test {
         "libgmock",
         "liblp",
         "libsnapshot",
+        "libsparse",
+        "libz",
     ],
 }
