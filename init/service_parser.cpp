@@ -145,17 +145,21 @@ Result<void> ServiceParser::ParseInterface(std::vector<std::string>&& args) {
     const std::string& interface_name = args[1];
     const std::string& instance_name = args[2];
 
-    FQName fq_name;
-    if (!FQName::parse(interface_name, &fq_name)) {
-        return Error() << "Invalid fully-qualified name for interface '" << interface_name << "'";
-    }
+    // AIDL services don't use fully qualified names and instead just use "interface aidl <name>"
+    if (interface_name != "aidl") {
+        FQName fq_name;
+        if (!FQName::parse(interface_name, &fq_name)) {
+            return Error() << "Invalid fully-qualified name for interface '" << interface_name
+                           << "'";
+        }
 
-    if (!fq_name.isFullyQualified()) {
-        return Error() << "Interface name not fully-qualified '" << interface_name << "'";
-    }
+        if (!fq_name.isFullyQualified()) {
+            return Error() << "Interface name not fully-qualified '" << interface_name << "'";
+        }
 
-    if (fq_name.isValidValueName()) {
-        return Error() << "Interface name must not be a value name '" << interface_name << "'";
+        if (fq_name.isValidValueName()) {
+            return Error() << "Interface name must not be a value name '" << interface_name << "'";
+        }
     }
 
     const std::string fullname = interface_name + "/" + instance_name;
