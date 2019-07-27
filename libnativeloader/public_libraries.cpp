@@ -26,6 +26,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/result.h>
 #include <android-base/strings.h>
 #include <log/log.h>
 
@@ -34,6 +35,9 @@
 namespace android::nativeloader {
 
 using namespace std::string_literals;
+using android::base::ErrnoError;
+using android::base::Errorf;
+using android::base::Result;
 
 namespace {
 
@@ -91,22 +95,21 @@ void InsertVndkVersionStr(std::string* file_name) {
   file_name->insert(insert_pos, vndk_version_str());
 }
 
-const std::function<bool(const std::string&, std::string*)> always_true =
-    [](const std::string&, std::string*) { return true; };
+const std::function<Result<void>(const std::string&)> always_true =
+    [](const std::string&) -> Result<void> { return {}; };
 
-bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames,
-                const std::function<bool(const std::string& /* soname */,
-                                         std::string* /* error_msg */)>& check_soname,
-                std::string* error_msg = nullptr) {
+Result<std::vector<std::string>> ReadConfig(
+    const std::string& configFile,
+    const std::function<Result<void>(const std::string& /* soname */)>& check_soname) {
   // Read list of public native libraries from the config file.
   std::string file_content;
   if (!base::ReadFileToString(configFile, &file_content)) {
-    if (error_msg) *error_msg = strerror(errno);
-    return false;
+    return ErrnoError();
   }
 
   std::vector<std::string> lines = base::Split(file_content, "\n");
 
+  std::vector<std::string> sonames;
   for (auto& line : lines) {
     auto trimmed_line = base::Trim(line);
     if (trimmed_line[0] == '#' || trimmed_line.empty()) {
@@ -116,8 +119,7 @@ bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames
     if (space_pos != std::string::npos) {
       std::string type = trimmed_line.substr(space_pos + 1);
       if (type != "32" && type != "64") {
-        if (error_msg) *error_msg = "Malformed line: " + line;
-        return false;
+        return Errorf("Malformed line: {}", line);
       }
 #if defined(__LP64__)
       // Skip 32 bit public library.
@@ -133,13 +135,13 @@ bool ReadConfig(const std::string& configFile, std::vector<std::string>* sonames
       trimmed_line.resize(space_pos);
     }
 
-    if (check_soname(trimmed_line, error_msg)) {
-      sonames->push_back(trimmed_line);
-    } else {
-      return false;
+    auto ret = check_soname(trimmed_line);
+    if (!ret) {
+      return ret.error();
     }
+    sonames.push_back(trimmed_line);
   }
-  return true;
+  return sonames;
 }
 
 void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonames) {
@@ -162,24 +164,22 @@ void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonam
             "Error extracting company name from public native library list file path \"%s\"",
             config_file_path.c_str());
 
-        std::string error_msg;
-
-        LOG_ALWAYS_FATAL_IF(
-            !ReadConfig(config_file_path, sonames,
-                        [&company_name](const std::string& soname, std::string* error_msg) {
-                          if (android::base::StartsWith(soname, "lib") &&
-                              android::base::EndsWith(soname, "." + company_name + ".so")) {
-                            return true;
-                          } else {
-                            *error_msg = "Library name \"" + soname +
-                                         "\" does not end with the company name: " + company_name +
-                                         ".";
-                            return false;
-                          }
-                        },
-                        &error_msg),
-            "Error reading public native library list from \"%s\": %s", config_file_path.c_str(),
-            error_msg.c_str());
+        auto ret = ReadConfig(
+            config_file_path, [&company_name](const std::string& soname) -> Result<void> {
+              if (android::base::StartsWith(soname, "lib") &&
+                  android::base::EndsWith(soname, "." + company_name + ".so")) {
+                return {};
+              } else {
+                return Errorf("Library name \"{}\" does not end with the company name {}.", soname,
+                              company_name);
+              }
+            });
+        if (ret) {
+          sonames->insert(sonames->end(), ret->begin(), ret->end());
+        } else {
+          LOG_ALWAYS_FATAL("Error reading public native library list from \"%s\": %s",
+                           config_file_path.c_str(), ret.error().message().c_str());
+        }
       }
     }
   }
@@ -187,16 +187,17 @@ void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonam
 
 static std::string InitDefaultPublicLibraries() {
   std::string config_file = root_dir() + kDefaultPublicLibrariesFile;
-  std::vector<std::string> sonames;
-  std::string error_msg;
-  LOG_ALWAYS_FATAL_IF(!ReadConfig(config_file, &sonames, always_true, &error_msg),
-                      "Error reading public native library list from \"%s\": %s",
-                      config_file.c_str(), error_msg.c_str());
+  auto sonames = ReadConfig(config_file, always_true);
+  if (!sonames) {
+    LOG_ALWAYS_FATAL("Error reading public native library list from \"%s\": %s",
+                     config_file.c_str(), sonames.error().message().c_str());
+    return "";
+  }
 
   std::string additional_libs = additional_public_libraries();
   if (!additional_libs.empty()) {
     auto vec = base::Split(additional_libs, ":");
-    std::copy(vec.begin(), vec.end(), std::back_inserter(sonames));
+    std::copy(vec.begin(), vec.end(), std::back_inserter(*sonames));
   }
 
   // Remove the public libs in the runtime namespace.
@@ -216,18 +217,18 @@ static std::string InitDefaultPublicLibraries() {
       continue;
     }
 
-    auto it = std::find(sonames.begin(), sonames.end(), lib_name);
-    if (it != sonames.end()) {
-      sonames.erase(it);
+    auto it = std::find(sonames->begin(), sonames->end(), lib_name);
+    if (it != sonames->end()) {
+      sonames->erase(it);
     }
   }
 
   // Remove the public libs in the nnapi namespace.
-  auto it = std::find(sonames.begin(), sonames.end(), kNeuralNetworksApexPublicLibrary);
-  if (it != sonames.end()) {
-    sonames.erase(it);
+  auto it = std::find(sonames->begin(), sonames->end(), kNeuralNetworksApexPublicLibrary);
+  if (it != sonames->end()) {
+    sonames->erase(it);
   }
-  return android::base::Join(sonames, ':');
+  return android::base::Join(*sonames, ':');
 }
 
 static std::string InitRuntimePublicLibraries() {
@@ -243,9 +244,11 @@ static std::string InitRuntimePublicLibraries() {
 
 static std::string InitVendorPublicLibraries() {
   // This file is optional, quietly ignore if the file does not exist.
-  std::vector<std::string> sonames;
-  ReadConfig(kVendorPublicLibrariesFile, &sonames, always_true, nullptr);
-  return android::base::Join(sonames, ':');
+  auto sonames = ReadConfig(kVendorPublicLibrariesFile, always_true);
+  if (!sonames) {
+    return "";
+  }
+  return android::base::Join(*sonames, ':');
 }
 
 // read /system/etc/public.libraries-<companyname>.txt and
@@ -262,17 +265,23 @@ static std::string InitExtendedPublicLibraries() {
 static std::string InitLlndkLibraries() {
   std::string config_file = kLlndkLibrariesFile;
   InsertVndkVersionStr(&config_file);
-  std::vector<std::string> sonames;
-  ReadConfig(config_file, &sonames, always_true, nullptr);
-  return android::base::Join(sonames, ':');
+  auto sonames = ReadConfig(config_file, always_true);
+  if (!sonames) {
+    LOG_ALWAYS_FATAL("%s", sonames.error().message().c_str());
+    return "";
+  }
+  return android::base::Join(*sonames, ':');
 }
 
 static std::string InitVndkspLibraries() {
   std::string config_file = kVndkLibrariesFile;
   InsertVndkVersionStr(&config_file);
-  std::vector<std::string> sonames;
-  ReadConfig(config_file, &sonames, always_true, nullptr);
-  return android::base::Join(sonames, ':');
+  auto sonames = ReadConfig(config_file, always_true);
+  if (!sonames) {
+    LOG_ALWAYS_FATAL("%s", sonames.error().message().c_str());
+    return "";
+  }
+  return android::base::Join(*sonames, ':');
 }
 
 static std::string InitNeuralNetworksPublicLibraries() {
