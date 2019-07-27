@@ -92,12 +92,10 @@ jstring CreateClassLoaderNamespace(JNIEnv* env, int32_t target_sdk_version, jobj
                                    jstring permitted_path) {
 #if defined(__ANDROID__)
   std::lock_guard<std::mutex> guard(g_namespaces_mutex);
-
-  std::string error_msg;
-  bool success = g_namespaces->Create(env, target_sdk_version, class_loader, is_shared, dex_path,
-                                      library_path, permitted_path, &error_msg) != nullptr;
-  if (!success) {
-    return env->NewStringUTF(error_msg.c_str());
+  auto ns = g_namespaces->Create(env, target_sdk_version, class_loader, is_shared, dex_path,
+                                 library_path, permitted_path);
+  if (!ns) {
+    return env->NewStringUTF(ns.error().message().c_str());
   }
 #else
   UNUSED(env, target_sdk_version, class_loader, is_shared, dex_path, library_path, permitted_path);
@@ -139,11 +137,14 @@ void* OpenNativeLibrary(JNIEnv* env, int32_t target_sdk_version, const char* pat
   if ((ns = g_namespaces->FindNamespaceByClassLoader(env, class_loader)) == nullptr) {
     // This is the case where the classloader was not created by ApplicationLoaders
     // In this case we create an isolated not-shared namespace for it.
-    std::string create_error_msg;
-    if ((ns = g_namespaces->Create(env, target_sdk_version, class_loader, false /* is_shared */,
-                                   nullptr, library_path, nullptr, &create_error_msg)) == nullptr) {
-      *error_msg = strdup(create_error_msg.c_str());
+    Result<NativeLoaderNamespace*> isolated_ns =
+        g_namespaces->Create(env, target_sdk_version, class_loader, false /* is_shared */, nullptr,
+                             library_path, nullptr);
+    if (!isolated_ns) {
+      *error_msg = strdup(isolated_ns.error().message().c_str());
       return nullptr;
+    } else {
+      ns = *isolated_ns;
     }
   }
 
@@ -222,12 +223,14 @@ void NativeLoaderFreeErrorMessage(char* msg) {
 #if defined(__ANDROID__)
 void* OpenNativeLibraryInNamespace(NativeLoaderNamespace* ns, const char* path,
                                    bool* needs_native_bridge, char** error_msg) {
-  void* handle = ns->Load(path);
-  if (handle == nullptr) {
-    *error_msg = ns->GetError();
+  auto handle = ns->Load(path);
+  if (!handle && error_msg != nullptr) {
+    *error_msg = strdup(handle.error().message().c_str());
   }
-  *needs_native_bridge = ns->IsBridged();
-  return handle;
+  if (needs_native_bridge != nullptr) {
+    *needs_native_bridge = ns->IsBridged();
+  }
+  return handle ? *handle : nullptr;
 }
 
 // native_bridge_namespaces are not supported for callers of this function.
