@@ -27,20 +27,28 @@ using ::testing::ElementsAre;
 
 class Environment : public ::testing::Environment {
   public:
-    void SetUp() override { MetadataBuilder::OverrideABForTesting(false); }
+    void SetUp() override {
+        MetadataBuilder::OverrideABForTesting(false);
+        MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(false);
+    }
 };
 
 int main(int argc, char** argv) {
-    std::unique_ptr<Environment> env(new Environment);
-    ::testing::AddGlobalTestEnvironment(env.get());
+    ::testing::AddGlobalTestEnvironment(new Environment);
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
 
 class BuilderTest : public ::testing::Test {
   public:
-    void SetUp() override { MetadataBuilder::OverrideABForTesting(false); }
-    void TearDown() override { MetadataBuilder::OverrideABForTesting(false); }
+    void SetUp() override {
+        MetadataBuilder::OverrideABForTesting(false);
+        MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(false);
+    }
+    void TearDown() override {
+        MetadataBuilder::OverrideABForTesting(false);
+        MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(false);
+    }
 };
 
 TEST_F(BuilderTest, BuildBasic) {
