@@ -21,22 +21,25 @@
 #include <vector>
 
 #include <android-base/logging.h>
+#include <android-base/result.h>
 #include <android/dlext.h>
 #include <log/log.h>
 #include <nativebridge/native_bridge.h>
 
 namespace android {
 
+using android::base::Result;
+
 // NativeLoaderNamespace abstracts a linker namespace for the native
 // architecture (ex: arm on arm) or the translated architecture (ex: arm on
 // x86). Instances of this class are managed by LibraryNamespaces object.
 struct NativeLoaderNamespace {
  public:
-  // TODO(return with errors)
-  static NativeLoaderNamespace Create(const std::string& name, const std::string& search_paths,
-                                      const std::string& permitted_paths,
-                                      const NativeLoaderNamespace* parent, bool is_shared,
-                                      bool is_greylist_enabled);
+  static Result<NativeLoaderNamespace> Create(const std::string& name,
+                                              const std::string& search_paths,
+                                              const std::string& permitted_paths,
+                                              const NativeLoaderNamespace* parent, bool is_shared,
+                                              bool is_greylist_enabled);
 
   NativeLoaderNamespace(NativeLoaderNamespace&&) = default;
   NativeLoaderNamespace(const NativeLoaderNamespace&) = default;
@@ -47,16 +50,13 @@ struct NativeLoaderNamespace {
 
   std::string name() const { return name_; }
   bool IsBridged() const { return raw_.index() == 1; }
-  bool IsNil() const {
-    return IsBridged() ? std::get<1>(raw_) == nullptr : std::get<0>(raw_) == nullptr;
-  }
 
-  bool Link(const NativeLoaderNamespace& target, const std::string& shared_libs) const;
-  void* Load(const char* lib_name) const;
-  char* GetError() const;
+  Result<void> Link(const NativeLoaderNamespace& target, const std::string& shared_libs) const;
+  Result<void*> Load(const char* lib_name) const;
 
-  static NativeLoaderNamespace GetExportedNamespace(const std::string& name, bool is_bridged);
-  static NativeLoaderNamespace GetPlatformNamespace(bool is_bridged);
+  static Result<NativeLoaderNamespace> GetExportedNamespace(const std::string& name,
+                                                            bool is_bridged);
+  static Result<NativeLoaderNamespace> GetPlatformNamespace(bool is_bridged);
 
  private:
   explicit NativeLoaderNamespace(const std::string& name, android_namespace_t* ns)
