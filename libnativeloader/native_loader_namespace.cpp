@@ -28,6 +28,9 @@
 
 #include "nativeloader/dlext_namespaces.h"
 
+using android::base::Error;
+using android::base::Errorf;
+
 namespace android {
 
 namespace {
@@ -35,41 +38,46 @@ namespace {
 constexpr const char* kDefaultNamespaceName = "default";
 constexpr const char* kPlatformNamespaceName = "platform";
 
-}  // namespace
-
-NativeLoaderNamespace NativeLoaderNamespace::GetExportedNamespace(const std::string& name,
-                                                                  bool is_bridged) {
-  if (!is_bridged) {
-    return NativeLoaderNamespace(name, android_get_exported_namespace(name.c_str()));
-  } else {
-    return NativeLoaderNamespace(name, NativeBridgeGetExportedNamespace(name.c_str()));
+std::string GetLinkerError(bool is_bridged) {
+  const char* msg = is_bridged ? NativeBridgeGetError() : dlerror();
+  if (msg == nullptr) {
+    return "no error";
   }
+  return std::string(msg);
 }
 
-char* NativeLoaderNamespace::GetError() const {
-  if (!IsBridged()) {
-    return strdup(dlerror());
+}  // namespace
+
+Result<NativeLoaderNamespace> NativeLoaderNamespace::GetExportedNamespace(const std::string& name,
+                                                                          bool is_bridged) {
+  if (!is_bridged) {
+    auto raw = android_get_exported_namespace(name.c_str());
+    if (raw != nullptr) {
+      return NativeLoaderNamespace(name, raw);
+    }
   } else {
-    return strdup(NativeBridgeGetError());
+    auto raw = NativeBridgeGetExportedNamespace(name.c_str());
+    if (raw != nullptr) {
+      return NativeLoaderNamespace(name, raw);
+    }
   }
+  return Errorf("namespace {} does not exist or exported", name);
 }
 
 // The platform namespace is called "default" for binaries in /system and
 // "platform" for those in the Runtime APEX. Try "platform" first since
 // "default" always exists.
-NativeLoaderNamespace NativeLoaderNamespace::GetPlatformNamespace(bool is_bridged) {
-  NativeLoaderNamespace ns = GetExportedNamespace(kPlatformNamespaceName, is_bridged);
-  if (ns.IsNil()) {
+Result<NativeLoaderNamespace> NativeLoaderNamespace::GetPlatformNamespace(bool is_bridged) {
+  auto ns = GetExportedNamespace(kPlatformNamespaceName, is_bridged);
+  if (!ns) {
     ns = GetExportedNamespace(kDefaultNamespaceName, is_bridged);
   }
   return ns;
 }
 
-NativeLoaderNamespace NativeLoaderNamespace::Create(const std::string& name,
-                                                    const std::string& search_paths,
-                                                    const std::string& permitted_paths,
-                                                    const NativeLoaderNamespace* parent,
-                                                    bool is_shared, bool is_greylist_enabled) {
+Result<NativeLoaderNamespace> NativeLoaderNamespace::Create(
+    const std::string& name, const std::string& search_paths, const std::string& permitted_paths,
+    const NativeLoaderNamespace* parent, bool is_shared, bool is_greylist_enabled) {
   bool is_bridged = false;
   if (parent != nullptr) {
     is_bridged = parent->IsBridged();
@@ -78,8 +86,11 @@ NativeLoaderNamespace NativeLoaderNamespace::Create(const std::string& name,
   }
 
   // Fall back to the platform namespace if no parent is set.
-  const NativeLoaderNamespace& effective_parent =
-      parent != nullptr ? *parent : GetPlatformNamespace(is_bridged);
+  auto platform_ns = GetPlatformNamespace(is_bridged);
+  if (!platform_ns) {
+    return platform_ns.error();
+  }
+  const NativeLoaderNamespace& effective_parent = parent != nullptr ? *parent : *platform_ns;
 
   uint64_t type = ANDROID_NAMESPACE_TYPE_ISOLATED;
   if (is_shared) {
@@ -93,37 +104,56 @@ NativeLoaderNamespace NativeLoaderNamespace::Create(const std::string& name,
     android_namespace_t* raw =
         android_create_namespace(name.c_str(), nullptr, search_paths.c_str(), type,
                                  permitted_paths.c_str(), effective_parent.ToRawAndroidNamespace());
-    return NativeLoaderNamespace(name, raw);
+    if (raw != nullptr) {
+      return NativeLoaderNamespace(name, raw);
+    }
   } else {
     native_bridge_namespace_t* raw = NativeBridgeCreateNamespace(
         name.c_str(), nullptr, search_paths.c_str(), type, permitted_paths.c_str(),
         effective_parent.ToRawNativeBridgeNamespace());
-    return NativeLoaderNamespace(name, raw);
+    if (raw != nullptr) {
+      return NativeLoaderNamespace(name, raw);
+    }
   }
+  return Errorf("failed to create {} namespace name:{}, search_paths:{}, permitted_paths:{}",
+                is_bridged ? "bridged" : "native", name, search_paths, permitted_paths);
 }
 
-bool NativeLoaderNamespace::Link(const NativeLoaderNamespace& target,
-                                 const std::string& shared_libs) const {
+Result<void> NativeLoaderNamespace::Link(const NativeLoaderNamespace& target,
+                                         const std::string& shared_libs) const {
   LOG_ALWAYS_FATAL_IF(shared_libs.empty(), "empty share lib when linking %s to %s",
                       this->name().c_str(), target.name().c_str());
   if (!IsBridged()) {
-    return android_link_namespaces(this->ToRawAndroidNamespace(), target.ToRawAndroidNamespace(),
-                                   shared_libs.c_str());
+    if (android_link_namespaces(this->ToRawAndroidNamespace(), target.ToRawAndroidNamespace(),
+                                shared_libs.c_str())) {
+      return {};
+    }
   } else {
-    return NativeBridgeLinkNamespaces(this->ToRawNativeBridgeNamespace(),
-                                      target.ToRawNativeBridgeNamespace(), shared_libs.c_str());
+    if (NativeBridgeLinkNamespaces(this->ToRawNativeBridgeNamespace(),
+                                   target.ToRawNativeBridgeNamespace(), shared_libs.c_str())) {
+      return {};
+    }
   }
+  return Error() << GetLinkerError(IsBridged());
 }
 
-void* NativeLoaderNamespace::Load(const char* lib_name) const {
+Result<void*> NativeLoaderNamespace::Load(const char* lib_name) const {
   if (!IsBridged()) {
     android_dlextinfo extinfo;
     extinfo.flags = ANDROID_DLEXT_USE_NAMESPACE;
     extinfo.library_namespace = this->ToRawAndroidNamespace();
-    return android_dlopen_ext(lib_name, RTLD_NOW, &extinfo);
+    void* handle = android_dlopen_ext(lib_name, RTLD_NOW, &extinfo);
+    if (handle != nullptr) {
+      return handle;
+    }
   } else {
-    return NativeBridgeLoadLibraryExt(lib_name, RTLD_NOW, this->ToRawNativeBridgeNamespace());
+    void* handle =
+        NativeBridgeLoadLibraryExt(lib_name, RTLD_NOW, this->ToRawNativeBridgeNamespace());
+    if (handle != nullptr) {
+      return handle;
+    }
   }
+  return Error() << GetLinkerError(IsBridged());
 }
 
 }  // namespace android
