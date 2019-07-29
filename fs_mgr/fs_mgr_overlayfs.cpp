@@ -1009,7 +1009,7 @@ Fstab fs_mgr_overlayfs_candidate_list(const Fstab& fstab) {
     Fstab candidates;
     for (const auto& entry : fstab) {
         FstabEntry new_entry = entry;
-        if (!fs_mgr_overlayfs_already_mounted(entry.mount_point) &&
+        if (!fs_mgr_overlayfs_already_mounted(entry.mount_point) ||
             !fs_mgr_wants_overlayfs(&new_entry)) {
             continue;
         }
