@@ -42,6 +42,7 @@
 
 #if defined(__ANDROID__)
 #include <android/api-level.h>
+#include <sys/system_properties.h>
 
 #include "reboot_utils.h"
 #include "selabel.h"
@@ -51,6 +52,7 @@
 #endif
 
 using android::base::boot_clock;
+using android::base::StartsWith;
 using namespace std::literals::string_literals;
 
 namespace android {
@@ -417,6 +419,58 @@ bool IsLegalPropertyName(const std::string& name) {
     }
 
     return true;
+}
+
+Result<void> IsLegalPropertyValue(const std::string& name, const std::string& value) {
+    if (value.size() >= PROP_VALUE_MAX && !StartsWith(name, "ro.")) {
+        return Error() << "Property value too long";
+    }
+
+    if (mbstowcs(nullptr, value.data(), 0) == static_cast<std::size_t>(-1)) {
+        return Error() << "Value is not a UTF8 encoded string";
+    }
+
+    return {};
+}
+
+Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
+        const std::vector<std::string>& args) {
+    struct flag_type {
+        const char* name;
+        int value;
+    };
+    static const flag_type flags[] = {
+            {"--recursive", SELINUX_ANDROID_RESTORECON_RECURSE},
+            {"--skip-ce", SELINUX_ANDROID_RESTORECON_SKIPCE},
+            {"--cross-filesystems", SELINUX_ANDROID_RESTORECON_CROSS_FILESYSTEMS},
+            {0, 0}};
+
+    int flag = 0;
+    std::vector<std::string> paths;
+
+    bool in_flags = true;
+    for (size_t i = 1; i < args.size(); ++i) {
+        if (android::base::StartsWith(args[i], "--")) {
+            if (!in_flags) {
+                return Error() << "flags must precede paths";
+            }
+            bool found = false;
+            for (size_t j = 0; flags[j].name; ++j) {
+                if (args[i] == flags[j].name) {
+                    flag |= flags[j].value;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return Error() << "bad flag " << args[i];
+            }
+        } else {
+            in_flags = false;
+            paths.emplace_back(args[i]);
+        }
+    }
+    return std::pair(flag, paths);
 }
 
 static void InitAborter(const char* abort_message) {

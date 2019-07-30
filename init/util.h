@@ -14,24 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_UTIL_H_
-#define _INIT_UTIL_H_
+#pragma once
 
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include <chrono>
 #include <functional>
-#include <ostream>
 #include <string>
 
 #include <android-base/chrono_utils.h>
-#include <selinux/label.h>
 
 #include "result.h"
 
 using android::base::boot_clock;
-using namespace std::chrono_literals;
 
 namespace android {
 namespace init {
@@ -62,11 +58,13 @@ bool read_android_dt_file(const std::string& sub_path, std::string* dt_content);
 bool is_android_dt_value_expected(const std::string& sub_path, const std::string& expected_content);
 
 bool IsLegalPropertyName(const std::string& name);
+Result<void> IsLegalPropertyValue(const std::string& name, const std::string& value);
+
+Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
+        const std::vector<std::string>& args);
 
 void SetStdioToDevNull(char** argv);
 void InitKernelLogging(char** argv);
 bool IsRecoveryMode();
 }  // namespace init
 }  // namespace android
-
-#endif

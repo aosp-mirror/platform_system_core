@@ -174,13 +174,8 @@ static uint32_t PropertySet(const std::string& name, const std::string& value, s
         return PROP_ERROR_INVALID_NAME;
     }
 
-    if (valuelen >= PROP_VALUE_MAX && !StartsWith(name, "ro.")) {
-        *error = "Property value too long";
-        return PROP_ERROR_INVALID_VALUE;
-    }
-
-    if (mbstowcs(nullptr, value.data(), 0) == static_cast<std::size_t>(-1)) {
-        *error = "Value is not a UTF8 encoded string";
+    if (auto result = IsLegalPropertyValue(name, value); !result) {
+        *error = result.error().message();
         return PROP_ERROR_INVALID_VALUE;
     }
 

@@ -71,7 +71,8 @@ class Service {
             const std::vector<gid_t>& supp_gids, int namespace_flags, const std::string& seclabel,
             Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args);
 
-    static std::unique_ptr<Service> MakeTemporaryOneshotService(const std::vector<std::string>& args);
+    static Result<std::unique_ptr<Service>> MakeTemporaryOneshotService(
+            const std::vector<std::string>& args);
 
     bool IsRunning() { return (flags_ & SVC_RUNNING) != 0; }
     Result<void> ExecStart();

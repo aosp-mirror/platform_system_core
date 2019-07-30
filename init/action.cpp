@@ -68,6 +68,30 @@ Result<void> Command::InvokeFunc(Subcontext* subcontext) const {
     return RunBuiltinFunction(func_, args_, kInitContext);
 }
 
+Result<void> Command::CheckCommand() const {
+    auto builtin_arguments = BuiltinArguments("host_init_verifier");
+
+    builtin_arguments.args.resize(args_.size());
+    builtin_arguments.args[0] = args_[0];
+    for (size_t i = 1; i < args_.size(); ++i) {
+        auto expanded_arg = ExpandProps(args_[i]);
+        if (!expanded_arg) {
+            if (expanded_arg.error().message().find("doesn't exist while expanding") !=
+                std::string::npos) {
+                // If we failed because we won't have a property, use an empty string, which is
+                // never returned from the parser, to indicate that this field cannot be checked.
+                builtin_arguments.args[i] = "";
+            } else {
+                return expanded_arg.error();
+            }
+        } else {
+            builtin_arguments.args[i] = std::move(*expanded_arg);
+        }
+    }
+
+    return func_(builtin_arguments);
+}
+
 std::string Command::BuildCommandString() const {
     return Join(args_, ' ');
 }
@@ -105,6 +129,18 @@ void Action::AddCommand(BuiltinFunction f, std::vector<std::string>&& args, int 
 
 std::size_t Action::NumCommands() const {
     return commands_.size();
+}
+
+size_t Action::CheckAllCommands() const {
+    size_t failures = 0;
+    for (const auto& command : commands_) {
+        if (auto result = command.CheckCommand(); !result) {
+            LOG(ERROR) << "Command '" << command.BuildCommandString() << "' (" << filename_ << ":"
+                       << command.line() << ") failed: " << result.error();
+            ++failures;
+        }
+    }
+    return failures;
 }
 
 void Action::ExecuteOneCommand(std::size_t command) const {
