@@ -1060,7 +1060,7 @@ bool MetadataBuilder::IsRetrofitDynamicPartitionsDevice() {
     if (sRetrofitDap.has_value()) {
         return *sRetrofitDap;
     }
-    return !android::base::GetBoolProperty("ro.boot.dynamic_partitions_retrofit", false);
+    return android::base::GetBoolProperty("ro.boot.dynamic_partitions_retrofit", false);
 }
 
 bool MetadataBuilder::IsRetrofitMetadata() const {
