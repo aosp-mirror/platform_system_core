@@ -27,6 +27,9 @@
 #include "androidfw/ZipFileRO.h"
 #include "client/file_sync_client.h"
 #include "commandline.h"
+#include "deployagent.inc"        // Generated include via build rule.
+#include "deployagentscript.inc"  // Generated include via build rule.
+#include "fastdeploy/deploypatchgenerator/deploy_patch_generator.h"
 #include "fastdeploycallbacks.h"
 #include "sysdeps.h"
 
@@ -35,6 +38,8 @@
 static constexpr long kRequiredAgentVersion = 0x00000002;
 
 static constexpr const char* kDeviceAgentPath = "/data/local/tmp/";
+static constexpr const char* kDeviceAgentFile = "/data/local/tmp/deployagent.jar";
+static constexpr const char* kDeviceAgentScript = "/data/local/tmp/deployagent";
 
 static bool g_use_localagent = false;
 
@@ -71,46 +76,32 @@ void fastdeploy_set_local_agent(bool use_localagent) {
     g_use_localagent = use_localagent;
 }
 
-// local_path - must start with a '/' and be relative to $ANDROID_PRODUCT_OUT
-static std::string get_agent_component_host_path(const char* local_path, const char* sdk_path) {
-    std::string adb_dir = android::base::GetExecutableDirectory();
-    if (adb_dir.empty()) {
-        error_exit("Could not determine location of adb!");
-    }
-
-    if (g_use_localagent) {
-        const char* product_out = getenv("ANDROID_PRODUCT_OUT");
-        if (product_out == nullptr) {
-            error_exit("Could not locate %s because $ANDROID_PRODUCT_OUT is not defined",
-                       local_path);
-        }
-        return android::base::StringPrintf("%s%s", product_out, local_path);
-    } else {
-        return adb_dir + sdk_path;
-    }
-}
-
 static bool deploy_agent(bool checkTimeStamps) {
     std::vector<const char*> srcs;
-    std::string jar_path =
-            get_agent_component_host_path("/system/framework/deployagent.jar", "/deployagent.jar");
-    std::string script_path =
-            get_agent_component_host_path("/system/bin/deployagent", "/deployagent");
-    srcs.push_back(jar_path.c_str());
-    srcs.push_back(script_path.c_str());
-
-    if (do_sync_push(srcs, kDeviceAgentPath, checkTimeStamps)) {
-        // on windows the shell script might have lost execute permission
-        // so need to set this explicitly
-        const char* kChmodCommandPattern = "chmod 777 %sdeployagent";
-        std::string chmodCommand =
-                android::base::StringPrintf(kChmodCommandPattern, kDeviceAgentPath);
-        int ret = send_shell_command(chmodCommand);
-        if (ret != 0) {
-            error_exit("Error executing %s returncode: %d", chmodCommand.c_str(), ret);
-        }
-    } else {
-        error_exit("Error pushing agent files to device");
+    // TODO: Deploy agent from bin2c directly instead of writing to disk first.
+    TemporaryFile tempAgent;
+    android::base::WriteFully(tempAgent.fd, kDeployAgent, sizeof(kDeployAgent));
+    srcs.push_back(tempAgent.path);
+    if (!do_sync_push(srcs, kDeviceAgentFile, checkTimeStamps)) {
+        error_exit("Failed to push fastdeploy agent to device.");
+    }
+    srcs.clear();
+    // TODO: Deploy agent from bin2c directly instead of writing to disk first.
+    TemporaryFile tempAgentScript;
+    android::base::WriteFully(tempAgentScript.fd, kDeployAgentScript, sizeof(kDeployAgentScript));
+    srcs.push_back(tempAgentScript.path);
+    if (!do_sync_push(srcs, kDeviceAgentScript, checkTimeStamps)) {
+        error_exit("Failed to push fastdeploy agent script to device.");
+    }
+    srcs.clear();
+    // on windows the shell script might have lost execute permission
+    // so need to set this explicitly
+    const char* kChmodCommandPattern = "chmod 777 %s";
+    std::string chmodCommand =
+            android::base::StringPrintf(kChmodCommandPattern, kDeviceAgentScript);
+    int ret = send_shell_command(chmodCommand);
+    if (ret != 0) {
+        error_exit("Error executing %s returncode: %d", chmodCommand.c_str(), ret);
     }
 
     return true;
@@ -238,34 +229,15 @@ void extract_metadata(const char* apkPath, FILE* outputFp) {
     }
 }
 
-static std::string get_patch_generator_command() {
-    if (g_use_localagent) {
-        // This should never happen on a Windows machine
-        const char* host_out = getenv("ANDROID_HOST_OUT");
-        if (host_out == nullptr) {
-            error_exit(
-                    "Could not locate deploypatchgenerator.jar because $ANDROID_HOST_OUT "
-                    "is not defined");
-        }
-        return android::base::StringPrintf("java -jar %s/framework/deploypatchgenerator.jar",
-                                           host_out);
-    }
-
-    std::string adb_dir = android::base::GetExecutableDirectory();
-    if (adb_dir.empty()) {
-        error_exit("Could not locate deploypatchgenerator.jar");
-    }
-    return android::base::StringPrintf(R"(java -jar "%s/deploypatchgenerator.jar")",
-                                       adb_dir.c_str());
-}
-
 void create_patch(const char* apkPath, const char* metadataPath, const char* patchPath) {
-    std::string generatePatchCommand = android::base::StringPrintf(
-            R"(%s "%s" "%s" > "%s")", get_patch_generator_command().c_str(), apkPath, metadataPath,
-            patchPath);
-    int returnCode = system(generatePatchCommand.c_str());
-    if (returnCode != 0) {
-        error_exit("Executing %s returned %d", generatePatchCommand.c_str(), returnCode);
+    DeployPatchGenerator generator(false);
+    unique_fd patchFd(adb_open(patchPath, O_WRONLY | O_CREAT | O_CLOEXEC));
+    if (patchFd < 0) {
+        perror_exit("adb: failed to create %s", patchPath);
+    }
+    bool success = generator.CreatePatch(apkPath, metadataPath, patchFd);
+    if (!success) {
+        error_exit("Failed to create patch for %s", apkPath);
     }
 }
 
