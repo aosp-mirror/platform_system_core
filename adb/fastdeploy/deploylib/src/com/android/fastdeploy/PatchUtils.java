@@ -39,7 +39,7 @@ import com.android.fastdeploy.APKEntry;
 class PatchUtils {
     private static final long NEGATIVE_MASK = 1L << 63;
     private static final long NEGATIVE_LONG_SIGN_MASK = 1L << 63;
-    public static final String SIGNATURE = "HAMADI/IHD";
+    public static final String SIGNATURE = "FASTDEPLOY";
 
     private static long getOffsetFromEntry(StoredEntry entry) {
         return entry.getCentralDirectoryHeader().getOffset() + entry.getLocalHeaderSize();
