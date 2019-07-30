@@ -93,7 +93,7 @@ bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* po
         }
     } else {
         std::string addr(spec.substr(4));
-        port_value = -1;
+        port_value = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
 
         // FIXME: ParseNetAddress rejects port 0. This currently doesn't hurt, because listening
         //        on an address that isn't 'localhost' is unsupported.

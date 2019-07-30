@@ -96,9 +96,8 @@ static void help() {
         " version                  show version num\n"
         "\n"
         "networking:\n"
-        " connect HOST[:PORT]      connect to a device via TCP/IP [default port=5555]\n"
-        " disconnect [HOST[:PORT]]\n"
-        "     disconnect from given TCP/IP device [default port=5555], or all\n"
+        " connect HOST[:PORT]      connect to a device via TCP/IP\n"
+        " disconnect [[HOST]:PORT] disconnect from given TCP/IP device, or all\n"
         " forward --list           list all forward socket connections\n"
         " forward [--no-rebind] LOCAL REMOTE\n"
         "     forward socket connection using:\n"
@@ -1615,13 +1614,13 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "connect")) {
-        if (argc != 2) error_exit("usage: adb connect <host>[:<port>]");
+        if (argc != 2) error_exit("usage: adb connect HOST[:PORT>]");
 
         std::string query = android::base::StringPrintf("host:connect:%s", argv[1]);
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "disconnect")) {
-        if (argc > 2) error_exit("usage: adb disconnect [<host>[:<port>]]");
+        if (argc > 2) error_exit("usage: adb disconnect [HOST[:PORT]]");
 
         std::string query = android::base::StringPrintf("host:disconnect:%s",
                                                         (argc == 2) ? argv[1] : "");
