@@ -320,6 +320,10 @@ std::string adb_get_android_dir_path() {
 }
 
 std::string GetLogFilePath() {
+    // https://issuetracker.google.com/112588493
+    const char* path = getenv("ANDROID_ADB_LOG_PATH");
+    if (path) return path;
+
 #if defined(_WIN32)
     const char log_name[] = "adb.log";
     WCHAR temp_path[MAX_PATH];
