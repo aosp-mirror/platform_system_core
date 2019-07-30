@@ -130,7 +130,7 @@ static void help() {
         "     -a: preserve file timestamp and mode\n"
         " sync [all|data|odm|oem|product|system|system_ext|vendor]\n"
         "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
-        "     -l: list but don't copy\n"
+        "     -l: list files that would be copied, but don't copy them\n"
         "\n"
         "shell:\n"
         " shell [-e ESCAPE] [-n] [-Tt] [-x] [COMMAND...]\n"
