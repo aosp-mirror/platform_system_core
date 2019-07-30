@@ -51,6 +51,16 @@ bool Modprobe::Insmod(const std::string& path_name) {
     return true;
 }
 
+bool Modprobe::Rmmod(const std::string& module_name) {
+    for (auto it = modules_loaded.begin(); it != modules_loaded.end(); it++) {
+        if (*it == module_name) {
+            modules_loaded.erase(it);
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Modprobe::ModuleExists(const std::string& module_name) {
     auto deps = GetDependencies(module_name);
     if (deps.empty()) {
