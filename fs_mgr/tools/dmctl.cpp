@@ -50,6 +50,8 @@ static int Usage(void) {
     std::cerr << "  list <devices | targets> [-v]" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
     std::cerr << "  status <dm-name>" << std::endl;
+    std::cerr << "  resume <dm-name>" << std::endl;
+    std::cerr << "  suspend <dm-name>" << std::endl;
     std::cerr << "  table <dm-name>" << std::endl;
     std::cerr << "  help" << std::endl;
     std::cerr << std::endl;
@@ -399,6 +401,34 @@ static int StatusCmdHandler(int argc, char** argv) {
     return DumpTable("status", argc, argv);
 }
 
+static int ResumeCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    if (!dm.ChangeState(argv[0], DmDeviceState::ACTIVE)) {
+        std::cerr << "Could not resume device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+    return 0;
+}
+
+static int SuspendCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    if (!dm.ChangeState(argv[0], DmDeviceState::SUSPENDED)) {
+        std::cerr << "Could not suspend device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+    return 0;
+}
+
 static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         // clang-format off
         {"create", DmCreateCmdHandler},
@@ -408,6 +438,8 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         {"getpath", GetPathCmdHandler},
         {"table", TableCmdHandler},
         {"status", StatusCmdHandler},
+        {"resume", ResumeCmdHandler},
+        {"suspend", SuspendCmdHandler},
         // clang-format on
 };
 
