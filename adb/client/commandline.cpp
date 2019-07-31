@@ -1890,7 +1890,10 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "track-jdwp")) {
         return adb_connect_command("track-jdwp");
     } else if (!strcmp(argv[0], "track-devices")) {
-        return adb_connect_command("host:track-devices");
+        if (argc > 2 || (argc == 2 && strcmp(argv[1], "-l"))) {
+            error_exit("usage: adb track-devices [-l]");
+        }
+        return adb_connect_command(argc == 2 ? "host:track-devices-l" : "host:track-devices");
     } else if (!strcmp(argv[0], "raw")) {
         if (argc != 2) {
             error_exit("usage: adb raw SERVICE");
