@@ -14,95 +14,106 @@
  * limitations under the License.
  */
 
-#include <memory>
 #include <sys/mman.h>
+#include <memory>
 
 #include <gtest/gtest.h>
 
 #include <ion/ion.h>
 #include "ion_test_fixture.h"
 
-class Allocate : public IonAllHeapsTest {
-};
+class Allocate : public IonTest {};
 
-TEST_F(Allocate, Allocate)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Allocate, Allocate) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
-            ion_user_handle_t handle = 0;
-            ASSERT_EQ(0, ion_alloc(m_ionFd, size, 0, heapMask, 0, &handle));
-            ASSERT_TRUE(handle != 0);
-            ASSERT_EQ(0, ion_free(m_ionFd, handle));
+            int fd;
+            ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), 0, &fd));
+            ASSERT_TRUE(fd != 0);
+            ASSERT_EQ(close(fd), 0);  // free the buffer
         }
     }
 }
 
-TEST_F(Allocate, AllocateCached)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Allocate, AllocateCached) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
-            ion_user_handle_t handle = 0;
-            ASSERT_EQ(0, ion_alloc(m_ionFd, size, 0, heapMask, ION_FLAG_CACHED, &handle));
-            ASSERT_TRUE(handle != 0);
-            ASSERT_EQ(0, ion_free(m_ionFd, handle));
+            int fd;
+            ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), ION_FLAG_CACHED, &fd));
+            ASSERT_TRUE(fd != 0);
+            ASSERT_EQ(close(fd), 0);  // free the buffer
         }
     }
 }
 
-TEST_F(Allocate, AllocateCachedNeedsSync)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Allocate, AllocateCachedNeedsSync) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
-            ion_user_handle_t handle = 0;
-            ASSERT_EQ(0, ion_alloc(m_ionFd, size, 0, heapMask, ION_FLAG_CACHED_NEEDS_SYNC, &handle));
-            ASSERT_TRUE(handle != 0);
-            ASSERT_EQ(0, ion_free(m_ionFd, handle));
+            int fd;
+            ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id),
+                                      ION_FLAG_CACHED_NEEDS_SYNC, &fd));
+            ASSERT_TRUE(fd != 0);
+            ASSERT_EQ(close(fd), 0);  // free the buffer
         }
     }
 }
 
-TEST_F(Allocate, RepeatedAllocate)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Allocate, RepeatedAllocate) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
-            ion_user_handle_t handle = 0;
+            int fd;
 
             for (unsigned int i = 0; i < 1024; i++) {
                 SCOPED_TRACE(::testing::Message() << "iteration " << i);
-                ASSERT_EQ(0, ion_alloc(m_ionFd, size, 0, heapMask, 0, &handle));
-                ASSERT_TRUE(handle != 0);
-                ASSERT_EQ(0, ion_free(m_ionFd, handle));
+                ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), 0, &fd));
+                ASSERT_TRUE(fd != 0);
+                ASSERT_EQ(close(fd), 0);  // free the buffer
             }
         }
     }
 }
 
-TEST_F(Allocate, Zeroed)
-{
+TEST_F(Allocate, Large) {
+    for (const auto& heap : ion_heaps) {
+        SCOPED_TRACE(::testing::Message()
+                     << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
+        int fd;
+        ASSERT_EQ(-ENOMEM,
+                  ion_alloc_fd(ionfd, 3UL * 1024 * 1024 * 1024, 0, (1 << heap.heap_id), 0, &fd));
+    }
+}
+
+// Make sure all heaps always return zeroed pages
+TEST_F(Allocate, Zeroed) {
     auto zeroes_ptr = std::make_unique<char[]>(4096);
 
-    for (unsigned int heapMask : m_allHeaps) {
-        SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+    for (const auto& heap : ion_heaps) {
+        SCOPED_TRACE(::testing::Message()
+                     << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
         int fds[16];
         for (unsigned int i = 0; i < 16; i++) {
             int map_fd = -1;
 
-            ASSERT_EQ(0, ion_alloc_fd(m_ionFd, 4096, 0, heapMask, 0, &map_fd));
+            ASSERT_EQ(0, ion_alloc_fd(ionfd, 4096, 0, (1 << heap.heap_id), 0, &map_fd));
             ASSERT_GE(map_fd, 0);
 
-            void *ptr = NULL;
+            void* ptr = NULL;
             ptr = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED, map_fd, 0);
             ASSERT_TRUE(ptr != NULL);
 
@@ -116,13 +127,13 @@ TEST_F(Allocate, Zeroed)
             ASSERT_EQ(0, close(fds[i]));
         }
 
-        int newIonFd = ion_open();
+        int new_ionfd = ion_open();
         int map_fd = -1;
 
-        ASSERT_EQ(0, ion_alloc_fd(newIonFd, 4096, 0, heapMask, 0, &map_fd));
+        ASSERT_EQ(0, ion_alloc_fd(new_ionfd, 4096, 0, (1 << heap.heap_id), 0, &map_fd));
         ASSERT_GE(map_fd, 0);
 
-        void *ptr = NULL;
+        void* ptr = NULL;
         ptr = mmap(NULL, 4096, PROT_READ, MAP_SHARED, map_fd, 0);
         ASSERT_TRUE(ptr != NULL);
 
@@ -130,14 +141,6 @@ TEST_F(Allocate, Zeroed)
 
         ASSERT_EQ(0, munmap(ptr, 4096));
         ASSERT_EQ(0, close(map_fd));
-    }
-}
-
-TEST_F(Allocate, Large)
-{
-    for (unsigned int heapMask : m_allHeaps) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
-        ion_user_handle_t handle = 0;
-        ASSERT_EQ(-ENOMEM, ion_alloc(m_ionFd, 3UL*1024*1024*1024, 0, heapMask, 0, &handle));
+        ASSERT_EQ(0, ion_close(new_ionfd));
     }
 }
