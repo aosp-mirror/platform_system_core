@@ -15,10 +15,13 @@ USAGE="USAGE: `basename ${0}` [--help] [--serial <SerialNumber>] [options]
 
 adb remount tests
 
---help        This help
---serial      Specify device (must if multiple are present)
---color       Dress output with highlighting colors
---print-time  Report the test duration
+--color                     Dress output with highlighting colors
+--help                      This help
+--no-wait-screen            Do not wait for display screen to settle
+--print-time                Report the test duration
+--serial                    Specify device (must if multiple are present)
+--wait-adb <duration>       adb wait timeout
+--wait-fastboot <duration>  fastboot wait timeout
 
 Conditions:
  - Must be a userdebug build.
@@ -53,6 +56,7 @@ ACTIVE_SLOT=
 
 ADB_WAIT=4m
 FASTBOOT_WAIT=2m
+screen_wait=true
 
 ##
 ##  Helper Functions
@@ -185,9 +189,20 @@ adb_su() {
 [ "USAGE: adb_cat <file> >stdout
 
 Returns: content of file to stdout with carriage returns skipped,
-         true of the file exists" ]
+         true if the file exists" ]
 adb_cat() {
     local OUTPUT="`adb_sh cat ${1} </dev/null 2>&1`"
+    local ret=${?}
+    echo "${OUTPUT}" | tr -d '\r'
+    return ${ret}
+}
+
+[ "USAGE: adb_ls <dirfile> >stdout
+
+Returns: filename or directoru content to stdout with carriage returns skipped,
+         true if the ls had no errors" ]
+adb_ls() {
+    local OUTPUT="`adb_sh ls ${1} </dev/null 2>/dev/null`"
     local ret=${?}
     echo "${OUTPUT}" | tr -d '\r'
     return ${ret}
@@ -436,6 +451,10 @@ wait_for_screen_timeout=900
 -n - echo newline at exit
 TIMEOUT - default `format_duration ${wait_for_screen_timeout}`" ]
 wait_for_screen() {
+  if ! ${screen_wait}; then
+    adb_wait
+    return
+  fi
   exit_function=true
   if [ X"-n" = X"${1}" ]; then
     exit_function=echo
@@ -743,6 +762,9 @@ skip_unrelated_mounts() {
 
 OPTIONS=`getopt --alternative --unquoted \
                 --longoptions help,serial:,colour,color,no-colour,no-color \
+                --longoptions wait-adb:,wait-fastboot: \
+                --longoptions wait-screen,wait-display \
+                --longoptions no-wait-screen,no-wait-display \
                 --longoptions gtest_print_time,print-time \
                 -- "?hs:" ${*}` ||
   ( echo "${USAGE}" >&2 ; false ) ||
@@ -766,8 +788,22 @@ while [ ${#} -gt 0 ]; do
     --no-color | --no-colour)
       color=false
       ;;
+    --no-wait-display | --no-wait-screen)
+      screen_wait=false
+      ;;
+    --wait-display | --wait-screen)
+      screen_wait=true
+      ;;
     --print-time | --gtest_print_time)
       print_time=true
+      ;;
+    --wait-adb)
+      ADB_WAIT=${2}
+      shift
+      ;;
+    --wait-fastboot)
+      FASTBOOT_WAIT=${2}
+      shift
       ;;
     --)
       shift
@@ -1145,10 +1181,14 @@ echo "${GREEN}[ RUN      ]${NORMAL} push content to /system and /vendor" >&2
 
 A="Hello World! $(date)"
 echo "${A}" | adb_sh cat - ">/system/hello"
+echo "${A}" | adb_sh cat - ">/system/priv-app/hello"
 echo "${A}" | adb_sh cat - ">/vendor/hello"
 B="`adb_cat /system/hello`" ||
-  die "sytem hello"
+  die "system hello"
 check_eq "${A}" "${B}" /system before reboot
+B="`adb_cat /system/priv-app/hello`" ||
+  die "system priv-app hello"
+check_eq "${A}" "${B}" /system/priv-app before reboot
 B="`adb_cat /vendor/hello`" ||
   die "vendor hello"
 check_eq "${A}" "${B}" /vendor before reboot
@@ -1230,6 +1270,13 @@ if ${enforcing}; then
 fi
 B="`adb_cat /system/hello`"
 check_eq "${A}" "${B}" /system after reboot
+# If overlayfs has a nested security problem, this will fail.
+B="`adb_ls /system/`" ||
+  dir "adb ls /system"
+[ X"${B}" != X"${B#*priv-app}" ] ||
+  dir "adb ls /system/priv-app"
+B="`adb_cat /system/priv-app/hello`"
+check_eq "${A}" "${B}" /system/priv-app after reboot
 echo "${GREEN}[       OK ]${NORMAL} /system content remains after reboot" >&2
 # Only root can read vendor if sepolicy permissions are as expected.
 adb_root ||
@@ -1351,6 +1398,12 @@ else
   fi
   B="`adb_cat /system/hello`"
   check_eq "${A}" "${B}" system after flash vendor
+  B="`adb_ls /system/`" ||
+    dir "adb ls /system"
+  [ X"${B}" != X"${B#*priv-app}" ] ||
+    dir "adb ls /system/priv-app"
+  B="`adb_cat /system/priv-app/hello`"
+  check_eq "${A}" "${B}" system/priv-app after flash vendor
   adb_root ||
     die "adb root"
   B="`adb_cat /vendor/hello`"
@@ -1392,15 +1445,17 @@ fi
 echo "${H}"
 [ ${err} = 0 ] &&
   ( adb_sh rm /vendor/hello </dev/null 2>/dev/null || true ) &&
-  adb_sh rm /system/hello </dev/null ||
+  adb_sh rm /system/hello /system/priv-app/hello </dev/null ||
   ( [ -n "${L}" ] && echo "${L}" && false ) ||
   die -t ${T} "cleanup hello"
 B="`adb_cat /system/hello`"
 check_eq "cat: /system/hello: No such file or directory" "${B}" after rm
+B="`adb_cat /system/priv-app/hello`"
+check_eq "cat: /system/priv-app/hello: No such file or directory" "${B}" after rm
 B="`adb_cat /vendor/hello`"
 check_eq "cat: /vendor/hello: No such file or directory" "${B}" after rm
 
-if [ -n "${scratch_partition}" ]; then
+if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
 
   echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition} recovery" >&2
 
@@ -1542,7 +1597,9 @@ if ${overlayfs_supported}; then
     adb_wait ${ADB_WAIT} ||
     die "adb remount -R"
   if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
-       "2" = "`get_property partition.system.verified`" ]; then
+       "2" = "`get_property partition.system.verified`" ] &&
+     [ -n "`get_property ro.boot.verifiedbootstate`" -o \
+       -n "`get_property partition.system.verified`" ]; then
     die "remount -R command failed to disable verity"
   fi
 
