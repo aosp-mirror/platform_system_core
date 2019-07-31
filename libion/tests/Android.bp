@@ -18,18 +18,15 @@ cc_test {
     name: "ion-unit-tests",
     cflags: [
         "-g",
-        "-Wall",
-        "-Werror",
         "-Wno-missing-field-initializers",
     ],
     shared_libs: ["libion"],
     srcs: [
-        "ion_test_fixture.cpp",
         "allocate_test.cpp",
-        "formerly_valid_handle_test.cpp",
-        "invalid_values_test.cpp",
-        "map_test.cpp",
-        "device_test.cpp",
         "exit_test.cpp",
+    	"heap_query.cpp",
+        "invalid_values_test.cpp",
+        "ion_test_fixture.cpp",
+        "map_test.cpp",
     ],
 }
