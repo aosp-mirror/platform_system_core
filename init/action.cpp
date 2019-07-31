@@ -35,9 +35,11 @@ Result<void> RunBuiltinFunction(const BuiltinFunction& function,
     builtin_arguments.args.resize(args.size());
     builtin_arguments.args[0] = args[0];
     for (std::size_t i = 1; i < args.size(); ++i) {
-        if (!expand_props(args[i], &builtin_arguments.args[i])) {
-            return Error() << "cannot expand '" << args[i] << "'";
+        auto expanded_arg = ExpandProps(args[i]);
+        if (!expanded_arg) {
+            return expanded_arg.error();
         }
+        builtin_arguments.args[i] = std::move(*expanded_arg);
     }
 
     return function(builtin_arguments);

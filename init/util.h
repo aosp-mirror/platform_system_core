@@ -52,7 +52,7 @@ void import_kernel_cmdline(bool in_qemu,
                            const std::function<void(const std::string&, const std::string&, bool)>&);
 bool make_dir(const std::string& path, mode_t mode);
 bool is_dir(const char* pathname);
-bool expand_props(const std::string& src, std::string* dst);
+Result<std::string> ExpandProps(const std::string& src);
 
 // Returns the platform's Android DT directory as specified in the kernel cmdline.
 // If the platform does not configure a custom DT path, returns the standard one (based in procfs).

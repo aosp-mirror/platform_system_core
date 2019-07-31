@@ -41,8 +41,11 @@
 #include <selinux/android.h>
 
 #if defined(__ANDROID__)
+#include <android/api-level.h>
+
 #include "reboot_utils.h"
 #include "selabel.h"
+#include "selinux.h"
 #else
 #include "host_init_stubs.h"
 #endif
@@ -267,12 +270,10 @@ bool is_dir(const char* pathname) {
     return S_ISDIR(info.st_mode);
 }
 
-bool expand_props(const std::string& src, std::string* dst) {
+Result<std::string> ExpandProps(const std::string& src) {
     const char* src_ptr = src.c_str();
 
-    if (!dst) {
-        return false;
-    }
+    std::string dst;
 
     /* - variables can either be $x.y or ${x.y}, in case they are only part
      *   of the string.
@@ -286,19 +287,19 @@ bool expand_props(const std::string& src, std::string* dst) {
 
         c = strchr(src_ptr, '$');
         if (!c) {
-            dst->append(src_ptr);
-            return true;
+            dst.append(src_ptr);
+            return dst;
         }
 
-        dst->append(src_ptr, c);
+        dst.append(src_ptr, c);
         c++;
 
         if (*c == '$') {
-            dst->push_back(*(c++));
+            dst.push_back(*(c++));
             src_ptr = c;
             continue;
         } else if (*c == '\0') {
-            return true;
+            return dst;
         }
 
         std::string prop_name;
@@ -308,8 +309,7 @@ bool expand_props(const std::string& src, std::string* dst) {
             const char* end = strchr(c, '}');
             if (!end) {
                 // failed to find closing brace, abort.
-                LOG(ERROR) << "unexpected end of string in '" << src << "', looking for }";
-                return false;
+                return Error() << "unexpected end of string in '" << src << "', looking for }";
             }
             prop_name = std::string(c, end);
             c = end + 1;
@@ -320,29 +320,34 @@ bool expand_props(const std::string& src, std::string* dst) {
             }
         } else {
             prop_name = c;
-            LOG(ERROR) << "using deprecated syntax for specifying property '" << c << "', use ${name} instead";
+            if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_R__) {
+                return Error() << "using deprecated syntax for specifying property '" << c
+                               << "', use ${name} instead";
+            } else {
+                LOG(ERROR) << "using deprecated syntax for specifying property '" << c
+                           << "', use ${name} instead";
+            }
             c += prop_name.size();
         }
 
         if (prop_name.empty()) {
-            LOG(ERROR) << "invalid zero-length property name in '" << src << "'";
-            return false;
+            return Error() << "invalid zero-length property name in '" << src << "'";
         }
 
         std::string prop_val = android::base::GetProperty(prop_name, "");
         if (prop_val.empty()) {
             if (def_val.empty()) {
-                LOG(ERROR) << "property '" << prop_name << "' doesn't exist while expanding '" << src << "'";
-                return false;
+                return Error() << "property '" << prop_name << "' doesn't exist while expanding '"
+                               << src << "'";
             }
             prop_val = def_val;
         }
 
-        dst->append(prop_val);
+        dst.append(prop_val);
         src_ptr = c;
     }
 
-    return true;
+    return dst;
 }
 
 static std::string init_android_dt_dir() {

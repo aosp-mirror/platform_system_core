@@ -100,9 +100,11 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
     expanded_args.resize(args.size());
     c_strings.push_back(const_cast<char*>(args[0].data()));
     for (std::size_t i = 1; i < args.size(); ++i) {
-        if (!expand_props(args[i], &expanded_args[i])) {
-            LOG(FATAL) << args[0] << ": cannot expand '" << args[i] << "'";
+        auto expanded_arg = ExpandProps(args[i]);
+        if (!expanded_arg) {
+            LOG(FATAL) << args[0] << ": cannot expand arguments': " << expanded_arg.error();
         }
+        expanded_args[i] = *expanded_arg;
         c_strings.push_back(expanded_args[i].data());
     }
     c_strings.push_back(nullptr);
