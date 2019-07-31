@@ -242,7 +242,7 @@ std::vector<std::string> Modprobe::GetDependencies(const std::string& module) {
     return it->second;
 }
 
-bool Modprobe::InsmodWithDeps(const std::string& module_name) {
+bool Modprobe::InsmodWithDeps(const std::string& module_name, const std::string& parameters) {
     if (module_name.empty()) {
         LOG(ERROR) << "Need valid module name, given: " << module_name;
         return false;
@@ -269,7 +269,7 @@ bool Modprobe::InsmodWithDeps(const std::string& module_name) {
     }
 
     // load target module itself with args
-    if (!Insmod(dependencies[0])) {
+    if (!Insmod(dependencies[0], parameters)) {
         return false;
     }
 
@@ -283,7 +283,8 @@ bool Modprobe::InsmodWithDeps(const std::string& module_name) {
     return true;
 }
 
-bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict) {
+bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict,
+                               const std::string& parameters) {
     std::set<std::string> modules_to_load = {MakeCanonical(module_name)};
     bool module_loaded = false;
 
@@ -297,7 +298,7 @@ bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict) {
     // attempt to load all modules aliased to this name
     for (const auto& module : modules_to_load) {
         if (!ModuleExists(module)) continue;
-        if (InsmodWithDeps(module)) module_loaded = true;
+        if (InsmodWithDeps(module, parameters)) module_loaded = true;
     }
 
     if (strict && !module_loaded) {
