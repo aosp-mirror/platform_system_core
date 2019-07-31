@@ -29,6 +29,7 @@ class Modprobe {
     bool LoadWithAliases(const std::string& module_name, bool strict,
                          const std::string& parameters = "");
     bool Remove(const std::string& module_name);
+    std::vector<std::string> ListModules(const std::string& pattern);
     void EnableBlacklist(bool enable);
 
   private:
