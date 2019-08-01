@@ -49,6 +49,7 @@ static int Usage(void) {
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets> [-v]" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
+    std::cerr << "  info <dm-name>" << std::endl;
     std::cerr << "  status <dm-name>" << std::endl;
     std::cerr << "  resume <dm-name>" << std::endl;
     std::cerr << "  suspend <dm-name>" << std::endl;
@@ -359,6 +360,41 @@ static int GetPathCmdHandler(int argc, char** argv) {
     return 0;
 }
 
+static int InfoCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    auto info = dm.GetDetailedInfo(argv[0]);
+    if (!info) {
+        std::cerr << "Invalid device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+
+    constexpr int spacing = 14;
+    std::cout << std::left << std::setw(spacing) << "device"
+              << ": " << argv[0] << std::endl;
+    std::cout << std::left << std::setw(spacing) << "active"
+              << ": " << std::boolalpha << !info->IsSuspended() << std::endl;
+    std::cout << std::left << std::setw(spacing) << "access"
+              << ": ";
+    if (info->IsReadOnly()) {
+        std::cout << "ro ";
+    } else {
+        std::cout << "rw ";
+    }
+    std::cout << std::endl;
+    std::cout << std::left << std::setw(spacing) << "activeTable"
+              << ": " << std::boolalpha << info->IsActiveTablePresent() << std::endl;
+    std::cout << std::left << std::setw(spacing) << "inactiveTable"
+              << ": " << std::boolalpha << info->IsInactiveTablePresent() << std::endl;
+    std::cout << std::left << std::setw(spacing) << "bufferFull"
+              << ": " << std::boolalpha << info->IsBufferFull() << std::endl;
+    return 0;
+}
+
 static int DumpTable(const std::string& mode, int argc, char** argv) {
     if (argc != 1) {
         std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
@@ -436,6 +472,7 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         {"list", DmListCmdHandler},
         {"help", HelpCmdHandler},
         {"getpath", GetPathCmdHandler},
+        {"info", InfoCmdHandler},
         {"table", TableCmdHandler},
         {"status", StatusCmdHandler},
         {"resume", ResumeCmdHandler},

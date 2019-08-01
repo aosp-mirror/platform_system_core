@@ -150,6 +150,15 @@ bool DeviceMapper::GetDeviceUniquePath(const std::string& name, std::string* pat
     return true;
 }
 
+std::optional<DeviceMapper::Info> DeviceMapper::GetDetailedInfo(const std::string& name) const {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        return std::nullopt;
+    }
+    return Info(io.flags);
+}
+
 DmDeviceState DeviceMapper::GetState(const std::string& name) const {
     struct dm_ioctl io;
     InitIo(&io, name);
