@@ -201,26 +201,26 @@ static Result<void> do_enable(const BuiltinArguments& args) {
 static Result<void> do_exec(const BuiltinArguments& args) {
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service) {
-        return Error() << "Could not create exec service";
+        return Error() << "Could not create exec service: " << service.error();
     }
-    if (auto result = service->ExecStart(); !result) {
+    if (auto result = (*service)->ExecStart(); !result) {
         return Error() << "Could not start exec service: " << result.error();
     }
 
-    ServiceList::GetInstance().AddService(std::move(service));
+    ServiceList::GetInstance().AddService(std::move(*service));
     return {};
 }
 
 static Result<void> do_exec_background(const BuiltinArguments& args) {
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service) {
-        return Error() << "Could not create exec background service";
+        return Error() << "Could not create exec background service: " << service.error();
     }
-    if (auto result = service->Start(); !result) {
+    if (auto result = (*service)->Start(); !result) {
         return Error() << "Could not start exec background service: " << result.error();
     }
 
-    ServiceList::GetInstance().AddService(std::move(service));
+    ServiceList::GetInstance().AddService(std::move(*service));
     return {};
 }
 
@@ -344,7 +344,7 @@ static Result<void> do_mkdir(const BuiltinArguments& args) {
         if (args.size() == 5) {
             gid = DecodeUid(args[4]);
             if (!gid) {
-                return Error() << "Unable to decode GID for '" << args[3] << "': " << gid.error();
+                return Error() << "Unable to decode GID for '" << args[4] << "': " << gid.error();
             }
         }
 
@@ -936,40 +936,17 @@ static Result<void> do_chmod(const BuiltinArguments& args) {
 }
 
 static Result<void> do_restorecon(const BuiltinArguments& args) {
+    auto restorecon_info = ParseRestorecon(args.args);
+    if (!restorecon_info) {
+        return restorecon_info.error();
+    }
+
+    const auto& [flag, paths] = *restorecon_info;
+
     int ret = 0;
-
-    struct flag_type {const char* name; int value;};
-    static const flag_type flags[] = {
-        {"--recursive", SELINUX_ANDROID_RESTORECON_RECURSE},
-        {"--skip-ce", SELINUX_ANDROID_RESTORECON_SKIPCE},
-        {"--cross-filesystems", SELINUX_ANDROID_RESTORECON_CROSS_FILESYSTEMS},
-        {0, 0}
-    };
-
-    int flag = 0;
-
-    bool in_flags = true;
-    for (size_t i = 1; i < args.size(); ++i) {
-        if (android::base::StartsWith(args[i], "--")) {
-            if (!in_flags) {
-                return Error() << "flags must precede paths";
-            }
-            bool found = false;
-            for (size_t j = 0; flags[j].name; ++j) {
-                if (args[i] == flags[j].name) {
-                    flag |= flags[j].value;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return Error() << "bad flag " << args[i];
-            }
-        } else {
-            in_flags = false;
-            if (selinux_android_restorecon(args[i].c_str(), flag) < 0) {
-                ret = errno;
-            }
+    for (const auto& path : paths) {
+        if (selinux_android_restorecon(path.c_str(), flag) < 0) {
+            ret = errno;
         }
     }
 
@@ -1056,9 +1033,9 @@ static Result<void> ExecWithRebootOnFailure(const std::string& reboot_reason,
                                             const BuiltinArguments& args) {
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service) {
-        return Error() << "Could not create exec service";
+        return Error() << "Could not create exec service: " << service.error();
     }
-    service->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
+    (*service)->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
         if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
             // TODO (b/122850122): support this in gsi
             if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
@@ -1073,10 +1050,10 @@ static Result<void> ExecWithRebootOnFailure(const std::string& reboot_reason,
             }
         }
     });
-    if (auto result = service->ExecStart(); !result) {
+    if (auto result = (*service)->ExecStart(); !result) {
         return Error() << "Could not start exec service: " << result.error();
     }
-    ServiceList::GetInstance().AddService(std::move(service));
+    ServiceList::GetInstance().AddService(std::move(*service));
     return {};
 }
 
