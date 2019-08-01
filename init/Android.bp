@@ -227,9 +227,10 @@ cc_benchmark {
 
 genrule {
     name: "generated_stub_builtin_function_map",
+    tool_files: ["host_builtin_map.py"],
     out: ["generated_stub_builtin_function_map.h"],
-    srcs: ["builtins.cpp"],
-    cmd: "sed -n '/Builtin-function-map start/{:a;n;/Builtin-function-map end/q;p;ba}' $(in) | sed -e 's/do_[^}]*/do_stub/g' > $(out)",
+    srcs: ["builtins.cpp", "check_builtins.cpp"],
+    cmd: "$(location host_builtin_map.py) --builtins $(location builtins.cpp) --check_builtins $(location check_builtins.cpp) > $(out)",
 }
 
 cc_binary {
@@ -260,6 +261,7 @@ cc_binary {
         "action_manager.cpp",
         "action_parser.cpp",
         "capabilities.cpp",
+        "check_builtins.cpp",
         "epoll.cpp",
         "keychords.cpp",
         "import_parser.cpp",

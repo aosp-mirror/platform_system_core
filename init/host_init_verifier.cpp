@@ -35,6 +35,7 @@
 #include "action.h"
 #include "action_manager.h"
 #include "action_parser.h"
+#include "check_builtins.h"
 #include "host_import_parser.h"
 #include "host_init_stubs.h"
 #include "parser.h"
@@ -163,7 +164,7 @@ ReadInterfaceInheritanceHierarchy(const std::string& interface_inheritance_hiera
 namespace android {
 namespace init {
 
-static Result<void> do_stub(const BuiltinArguments& args) {
+static Result<void> check_stub(const BuiltinArguments& args) {
     return {};
 }
 
@@ -238,9 +239,10 @@ int main(int argc, char** argv) {
         LOG(ERROR) << "Failed to open init rc script '" << *argv << "'";
         return EXIT_FAILURE;
     }
-    if (parser.parse_error_count() > 0) {
-        LOG(ERROR) << "Failed to parse init script '" << *argv << "' with "
-                   << parser.parse_error_count() << " errors";
+    size_t failures = parser.parse_error_count() + am.CheckAllCommands();
+    if (failures > 0) {
+        LOG(ERROR) << "Failed to parse init script '" << *argv << "' with " << failures
+                   << " errors";
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

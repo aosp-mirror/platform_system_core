@@ -151,15 +151,15 @@ void SubcontextProcess::RunCommand(const SubcontextCommand::ExecuteCommand& exec
 void SubcontextProcess::ExpandArgs(const SubcontextCommand::ExpandArgsCommand& expand_args_command,
                                    SubcontextReply* reply) const {
     for (const auto& arg : expand_args_command.args()) {
-        auto expanded_prop = std::string{};
-        if (!expand_props(arg, &expanded_prop)) {
+        auto expanded_arg = ExpandProps(arg);
+        if (!expanded_arg) {
             auto* failure = reply->mutable_failure();
-            failure->set_error_string("Failed to expand '" + arg + "'");
+            failure->set_error_string(expanded_arg.error().message());
             failure->set_error_errno(0);
             return;
         } else {
             auto* expand_args_reply = reply->mutable_expand_args_reply();
-            expand_args_reply->add_expanded_args(expanded_prop);
+            expand_args_reply->add_expanded_args(*expanded_arg);
         }
     }
 }

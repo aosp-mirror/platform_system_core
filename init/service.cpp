@@ -100,9 +100,11 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
     expanded_args.resize(args.size());
     c_strings.push_back(const_cast<char*>(args[0].data()));
     for (std::size_t i = 1; i < args.size(); ++i) {
-        if (!expand_props(args[i], &expanded_args[i])) {
-            LOG(FATAL) << args[0] << ": cannot expand '" << args[i] << "'";
+        auto expanded_arg = ExpandProps(args[i]);
+        if (!expanded_arg) {
+            LOG(FATAL) << args[0] << ": cannot expand arguments': " << expanded_arg.error();
         }
+        expanded_args[i] = *expanded_arg;
         c_strings.push_back(expanded_args[i].data());
     }
     c_strings.push_back(nullptr);
@@ -633,7 +635,8 @@ void Service::StopOrReset(int how) {
     }
 }
 
-std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<std::string>& args) {
+Result<std::unique_ptr<Service>> Service::MakeTemporaryOneshotService(
+        const std::vector<std::string>& args) {
     // Parse the arguments: exec [SECLABEL [UID [GID]*] --] COMMAND ARGS...
     // SECLABEL can be a - to denote default
     std::size_t command_arg = 1;
@@ -644,13 +647,11 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
         }
     }
     if (command_arg > 4 + NR_SVC_SUPP_GIDS) {
-        LOG(ERROR) << "exec called with too many supplementary group ids";
-        return nullptr;
+        return Error() << "exec called with too many supplementary group ids";
     }
 
     if (command_arg >= args.size()) {
-        LOG(ERROR) << "exec called without command";
-        return nullptr;
+        return Error() << "exec called without command";
     }
     std::vector<std::string> str_args(args.begin() + command_arg, args.end());
 
@@ -669,8 +670,7 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
     if (command_arg > 3) {
         uid = DecodeUid(args[2]);
         if (!uid) {
-            LOG(ERROR) << "Unable to decode UID for '" << args[2] << "': " << uid.error();
-            return nullptr;
+            return Error() << "Unable to decode UID for '" << args[2] << "': " << uid.error();
         }
     }
     Result<gid_t> gid = 0;
@@ -678,16 +678,14 @@ std::unique_ptr<Service> Service::MakeTemporaryOneshotService(const std::vector<
     if (command_arg > 4) {
         gid = DecodeUid(args[3]);
         if (!gid) {
-            LOG(ERROR) << "Unable to decode GID for '" << args[3] << "': " << gid.error();
-            return nullptr;
+            return Error() << "Unable to decode GID for '" << args[3] << "': " << gid.error();
         }
         std::size_t nr_supp_gids = command_arg - 1 /* -- */ - 4 /* exec SECLABEL UID GID */;
         for (size_t i = 0; i < nr_supp_gids; ++i) {
             auto supp_gid = DecodeUid(args[4 + i]);
             if (!supp_gid) {
-                LOG(ERROR) << "Unable to decode GID for '" << args[4 + i]
-                           << "': " << supp_gid.error();
-                return nullptr;
+                return Error() << "Unable to decode GID for '" << args[4 + i]
+                               << "': " << supp_gid.error();
             }
             supp_gids.push_back(*supp_gid);
         }

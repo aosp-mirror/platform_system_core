@@ -193,9 +193,9 @@ Result<void> ServiceParser::ParseIoprio(std::vector<std::string>&& args) {
 Result<void> ServiceParser::ParseKeycodes(std::vector<std::string>&& args) {
     auto it = args.begin() + 1;
     if (args.size() == 2 && StartsWith(args[1], "$")) {
-        std::string expanded;
-        if (!expand_props(args[1], &expanded)) {
-            return Error() << "Could not expand property '" << args[1] << "'";
+        auto expanded = ExpandProps(args[1]);
+        if (!expanded) {
+            return expanded.error();
         }
 
         // If the property is not set, it defaults to none, in which case there are no keycodes
@@ -204,7 +204,7 @@ Result<void> ServiceParser::ParseKeycodes(std::vector<std::string>&& args) {
             return {};
         }
 
-        args = Split(expanded, ",");
+        args = Split(*expanded, ",");
         it = args.begin();
     }
 
@@ -422,9 +422,11 @@ Result<void> ServiceParser::ParseFile(std::vector<std::string>&& args) {
     FileDescriptor file;
     file.type = args[2];
 
-    if (!expand_props(args[1], &file.name)) {
-        return Error() << "Could not expand property in file path '" << args[1] << "'";
+    auto file_name = ExpandProps(args[1]);
+    if (!file_name) {
+        return Error() << "Could not expand file path ': " << file_name.error();
     }
+    file.name = *file_name;
     if (file.name[0] != '/' || file.name.find("../") != std::string::npos) {
         return Error() << "file name must not be relative";
     }
