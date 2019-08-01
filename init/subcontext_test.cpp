@@ -166,7 +166,8 @@ TEST(subcontext, ExpandArgsFailure) {
         };
         auto result = subcontext.ExpandArgs(args);
         ASSERT_FALSE(result);
-        EXPECT_EQ("Failed to expand '" + args[1] + "'", result.error().message());
+        EXPECT_EQ("unexpected end of string in '" + args[1] + "', looking for }",
+                  result.error().message());
     });
 }
 
