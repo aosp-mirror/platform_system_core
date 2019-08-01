@@ -456,6 +456,33 @@ TEST(libdm, DmSnapshotOverflow) {
     }
 }
 
+TEST(libdm, ParseStatusText) {
+    DmTargetSnapshot::Status status;
+
+    // Bad inputs
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("X", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123/456", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456 789", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456/789", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123/456/789", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 / 456 789", &status));
+
+    // Good input
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("123/456 789", &status));
+    EXPECT_EQ(status.sectors_allocated, 123);
+    EXPECT_EQ(status.total_sectors, 456);
+    EXPECT_EQ(status.metadata_sectors, 789);
+
+    // Known error codes
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Invalid", &status));
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Merge failed", &status));
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Overflow", &status));
+}
+
 TEST(libdm, CryptArgs) {
     DmTargetCrypt target1(0, 512, "sha1", "abcdefgh", 50, "/dev/loop0", 100);
     ASSERT_EQ(target1.name(), "crypt");
