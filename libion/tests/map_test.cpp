@@ -15,61 +15,30 @@
  */
 
 #include <sys/mman.h>
+#include <unistd.h>
 
 #include <gtest/gtest.h>
 
 #include <ion/ion.h>
-
 #include "ion_test_fixture.h"
 
-class Map : public IonAllHeapsTest {
-};
+class Map : public IonTest {};
 
-TEST_F(Map, MapHandle)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Map, MapFd) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
-            SCOPED_TRACE(::testing::Message() << "size " << size);
-            ion_user_handle_t handle = 0;
-
-            ASSERT_EQ(0, ion_alloc(m_ionFd, size, 0, heapMask, 0, &handle));
-            ASSERT_TRUE(handle != 0);
-
-            int map_fd = -1;
-            unsigned char *ptr = NULL;
-            ASSERT_EQ(0, ion_map(m_ionFd, handle, size, PROT_READ | PROT_WRITE, MAP_SHARED, 0, &ptr, &map_fd));
-            ASSERT_TRUE(ptr != NULL);
-            ASSERT_GE(map_fd, 0);
-
-            ASSERT_EQ(0, close(map_fd));
-
-            ASSERT_EQ(0, ion_free(m_ionFd, handle));
-
-            memset(ptr, 0xaa, size);
-
-            ASSERT_EQ(0, munmap(ptr, size));
-        }
-    }
-}
-
-TEST_F(Map, MapFd)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
-        for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
             int map_fd = -1;
 
-            ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, 0, &map_fd));
+            ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), 0, &map_fd));
             ASSERT_GE(map_fd, 0);
 
-            void *ptr;
+            void* ptr;
             ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
             ASSERT_TRUE(ptr != NULL);
-
             ASSERT_EQ(0, close(map_fd));
 
             memset(ptr, 0xaa, size);
@@ -79,53 +48,51 @@ TEST_F(Map, MapFd)
     }
 }
 
-TEST_F(Map, MapOffset)
-{
-    for (unsigned int heapMask : m_allHeaps) {
-        SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+TEST_F(Map, MapOffset) {
+    for (const auto& heap : ion_heaps) {
+        SCOPED_TRACE(::testing::Message()
+                     << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
         int map_fd = -1;
 
-        ASSERT_EQ(0, ion_alloc_fd(m_ionFd, PAGE_SIZE * 2, 0, heapMask, 0, &map_fd));
+        ASSERT_EQ(0, ion_alloc_fd(ionfd, getpagesize() * 2, 0, (1 << heap.heap_id), 0, &map_fd));
         ASSERT_GE(map_fd, 0);
 
-        unsigned char *ptr;
-        ptr = (unsigned char *)mmap(NULL, PAGE_SIZE * 2, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
+        unsigned char* ptr;
+        ptr = (unsigned char*)mmap(NULL, getpagesize() * 2, PROT_READ | PROT_WRITE, MAP_SHARED,
+                                   map_fd, 0);
         ASSERT_TRUE(ptr != NULL);
 
-        memset(ptr, 0, PAGE_SIZE);
-        memset(ptr + PAGE_SIZE, 0xaa, PAGE_SIZE);
+        memset(ptr, 0, getpagesize());
+        memset(ptr + getpagesize(), 0xaa, getpagesize());
 
-        ASSERT_EQ(0, munmap(ptr, PAGE_SIZE * 2));
+        ASSERT_EQ(0, munmap(ptr, getpagesize() * 2));
 
-        ptr = (unsigned char *)mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, PAGE_SIZE);
+        ptr = (unsigned char*)mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, map_fd,
+                                   getpagesize());
         ASSERT_TRUE(ptr != NULL);
-
         ASSERT_EQ(ptr[0], 0xaa);
-        ASSERT_EQ(ptr[PAGE_SIZE - 1], 0xaa);
-
-        ASSERT_EQ(0, munmap(ptr, PAGE_SIZE));
-
+        ASSERT_EQ(ptr[getpagesize() - 1], 0xaa);
+        ASSERT_EQ(0, munmap(ptr, getpagesize()));
         ASSERT_EQ(0, close(map_fd));
     }
 }
 
-TEST_F(Map, MapCached)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Map, MapCached) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
             int map_fd = -1;
             unsigned int flags = ION_FLAG_CACHED;
 
-            ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, flags, &map_fd));
+            ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), flags, &map_fd));
             ASSERT_GE(map_fd, 0);
 
-            void *ptr;
+            void* ptr;
             ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
             ASSERT_TRUE(ptr != NULL);
-
             ASSERT_EQ(0, close(map_fd));
 
             memset(ptr, 0xaa, size);
@@ -135,23 +102,22 @@ TEST_F(Map, MapCached)
     }
 }
 
-TEST_F(Map, MapCachedNeedsSync)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Map, MapCachedNeedsSync) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
             int map_fd = -1;
             unsigned int flags = ION_FLAG_CACHED | ION_FLAG_CACHED_NEEDS_SYNC;
 
-            ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, flags, &map_fd));
+            ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), flags, &map_fd));
             ASSERT_GE(map_fd, 0);
 
-            void *ptr;
+            void* ptr;
             ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
             ASSERT_TRUE(ptr != NULL);
-
             ASSERT_EQ(0, close(map_fd));
 
             memset(ptr, 0xaa, size);

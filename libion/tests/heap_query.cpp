@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef ION_TEST_FIXTURE_H_
-#define ION_TEST_FIXTURE_H_
-
 #include <gtest/gtest.h>
-#include <vector>
-#include "ion_4.12.h"
+#include "ion_test_fixture.h"
 
-using ::testing::Test;
+class HeapQuery : public IonTest {};
 
-class IonTest : public virtual Test {
-  public:
-    IonTest();
-    virtual ~IonTest(){};
-    virtual void SetUp();
-    virtual void TearDown();
-    int ionfd;
-    std::vector<struct ion_heap_data> ion_heaps;
-};
+TEST_F(HeapQuery, AtleastOneHeap) {
+    ASSERT_GT(ion_heaps.size(), 0);
+}
 
-#endif /* ION_TEST_FIXTURE_H_ */
+// TODO: Check if we expect some of the default
+// heap types to be present on all devices.
