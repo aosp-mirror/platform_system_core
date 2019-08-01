@@ -16,6 +16,7 @@
 
 #include "libdm/dm_target.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -165,35 +166,29 @@ bool DmTargetSnapshot::ReportsOverflow(const std::string& target_type) {
 }
 
 bool DmTargetSnapshot::ParseStatusText(const std::string& text, Status* status) {
+    // Try to parse the line as it should be
+    int args = sscanf(text.c_str(), "%" PRIu64 "/%" PRIu64 " %" PRIu64, &status->sectors_allocated,
+                      &status->total_sectors, &status->metadata_sectors);
+    if (args == 3) {
+        return true;
+    }
     auto sections = android::base::Split(text, " ");
+    if (sections.size() == 0) {
+        LOG(ERROR) << "could not parse empty status";
+        return false;
+    }
+    // Error codes are: "Invalid", "Overflow" and "Merge failed"
     if (sections.size() == 1) {
-        // This is probably an error code, "Invalid" is possible as is "Overflow"
-        // on 4.4+.
+        if (text == "Invalid" || text == "Overflow") {
+            status->error = text;
+            return true;
+        }
+    } else if (sections.size() == 2 && text == "Merge failed") {
         status->error = text;
         return true;
     }
-    if (sections.size() != 2) {
-        LOG(ERROR) << "snapshot status should have two components";
-        return false;
-    }
-    auto sector_info = android::base::Split(sections[0], "/");
-    if (sector_info.size() != 2) {
-        LOG(ERROR) << "snapshot sector info should have two components";
-        return false;
-    }
-    if (!android::base::ParseUint(sections[1], &status->metadata_sectors)) {
-        LOG(ERROR) << "could not parse metadata sectors";
-        return false;
-    }
-    if (!android::base::ParseUint(sector_info[0], &status->sectors_allocated)) {
-        LOG(ERROR) << "could not parse sectors allocated";
-        return false;
-    }
-    if (!android::base::ParseUint(sector_info[1], &status->total_sectors)) {
-        LOG(ERROR) << "could not parse total sectors";
-        return false;
-    }
-    return true;
+    LOG(ERROR) << "could not parse snapshot status: wrong format";
+    return false;
 }
 
 std::string DmTargetCrypt::GetParameterString() const {
