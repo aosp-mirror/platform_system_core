@@ -30,6 +30,9 @@ class Modprobe {
                          const std::string& parameters = "");
     bool Remove(const std::string& module_name);
     std::vector<std::string> ListModules(const std::string& pattern);
+    bool GetAllDependencies(const std::string& module, std::vector<std::string>* pre_dependencies,
+                            std::vector<std::string>* dependencies,
+                            std::vector<std::string>* post_dependencies);
     void EnableBlacklist(bool enable);
 
   private:
