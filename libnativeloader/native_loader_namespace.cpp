@@ -69,10 +69,18 @@ Result<NativeLoaderNamespace> NativeLoaderNamespace::GetExportedNamespace(const 
 // "default" always exists.
 Result<NativeLoaderNamespace> NativeLoaderNamespace::GetPlatformNamespace(bool is_bridged) {
   auto ns = GetExportedNamespace(kPlatformNamespaceName, is_bridged);
-  if (!ns) {
-    ns = GetExportedNamespace(kDefaultNamespaceName, is_bridged);
+  if (ns) return ns;
+  ns = GetExportedNamespace(kDefaultNamespaceName, is_bridged);
+  if (ns) return ns;
+
+  // If nothing is found, return NativeLoaderNamespace constructed from nullptr.
+  // nullptr also means default namespace to the linker.
+  if (!is_bridged) {
+    return NativeLoaderNamespace(kDefaultNamespaceName, static_cast<android_namespace_t*>(nullptr));
+  } else {
+    return NativeLoaderNamespace(kDefaultNamespaceName,
+                                 static_cast<native_bridge_namespace_t*>(nullptr));
   }
-  return ns;
 }
 
 Result<NativeLoaderNamespace> NativeLoaderNamespace::Create(
