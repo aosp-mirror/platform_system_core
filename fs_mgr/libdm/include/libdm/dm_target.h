@@ -218,6 +218,8 @@ class DmTargetSnapshot final : public DmTarget {
 
     static bool ParseStatusText(const std::string& text, Status* status);
     static bool ReportsOverflow(const std::string& target_type);
+    static bool GetDevicesFromParams(const std::string& params, std::string* base_device,
+                                     std::string* cow_device);
 
   private:
     std::string base_device_;

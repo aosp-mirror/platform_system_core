@@ -191,6 +191,18 @@ bool DmTargetSnapshot::ParseStatusText(const std::string& text, Status* status) 
     return false;
 }
 
+bool DmTargetSnapshot::GetDevicesFromParams(const std::string& params, std::string* base_device,
+                                            std::string* cow_device) {
+    auto pieces = android::base::Split(params, " ");
+    if (pieces.size() < 2) {
+        LOG(ERROR) << "Parameter string is invalid: " << params;
+        return false;
+    }
+    *base_device = pieces[0];
+    *cow_device = pieces[1];
+    return true;
+}
+
 std::string DmTargetCrypt::GetParameterString() const {
     std::vector<std::string> argv = {
             cipher_,
