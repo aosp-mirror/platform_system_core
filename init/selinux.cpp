@@ -497,24 +497,28 @@ void SelinuxSetupKernelLogging() {
 // This function returns the Android version with which the vendor SEPolicy was compiled.
 // It is used for version checks such as whether or not vendor_init should be used
 int SelinuxGetVendorAndroidVersion() {
-    if (!IsSplitPolicyDevice()) {
-        // If this device does not split sepolicy files, it's not a Treble device and therefore,
-        // we assume it's always on the latest platform.
-        return __ANDROID_API_FUTURE__;
-    }
+    static int vendor_android_version = [] {
+        if (!IsSplitPolicyDevice()) {
+            // If this device does not split sepolicy files, it's not a Treble device and therefore,
+            // we assume it's always on the latest platform.
+            return __ANDROID_API_FUTURE__;
+        }
 
-    std::string version;
-    if (!GetVendorMappingVersion(&version)) {
-        LOG(FATAL) << "Could not read vendor SELinux version";
-    }
+        std::string version;
+        if (!GetVendorMappingVersion(&version)) {
+            LOG(FATAL) << "Could not read vendor SELinux version";
+        }
 
-    int major_version;
-    std::string major_version_str(version, 0, version.find('.'));
-    if (!ParseInt(major_version_str, &major_version)) {
-        PLOG(FATAL) << "Failed to parse the vendor sepolicy major version " << major_version_str;
-    }
+        int major_version;
+        std::string major_version_str(version, 0, version.find('.'));
+        if (!ParseInt(major_version_str, &major_version)) {
+            PLOG(FATAL) << "Failed to parse the vendor sepolicy major version "
+                        << major_version_str;
+        }
 
-    return major_version;
+        return major_version;
+    }();
+    return vendor_android_version;
 }
 
 // This function initializes SELinux then execs init to run in the init SELinux context.

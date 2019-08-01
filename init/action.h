@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_ACTION_H
-#define _INIT_ACTION_H
+#pragma once
 
 #include <map>
 #include <queue>
@@ -41,6 +40,7 @@ class Command {
 
     Result<void> InvokeFunc(Subcontext* subcontext) const;
     std::string BuildCommandString() const;
+    Result<void> CheckCommand() const;
 
     int line() const { return line_; }
 
@@ -63,7 +63,7 @@ class Action {
 
     Result<void> AddCommand(std::vector<std::string>&& args, int line);
     void AddCommand(BuiltinFunction f, std::vector<std::string>&& args, int line);
-    std::size_t NumCommands() const;
+    size_t NumCommands() const;
     void ExecuteOneCommand(std::size_t command) const;
     void ExecuteAllCommands() const;
     bool CheckEvent(const EventTrigger& event_trigger) const;
@@ -71,6 +71,7 @@ class Action {
     bool CheckEvent(const BuiltinAction& builtin_action) const;
     std::string BuildTriggersString() const;
     void DumpState() const;
+    size_t CheckAllCommands() const;
 
     bool oneshot() const { return oneshot_; }
     const std::string& filename() const { return filename_; }
@@ -96,5 +97,3 @@ class Action {
 
 }  // namespace init
 }  // namespace android
-
-#endif
