@@ -150,6 +150,25 @@ std::string DmTargetSnapshot::GetParameterString() const {
     return base_device_ + " " + cow_device_ + " " + mode + " " + std::to_string(chunk_size_);
 }
 
+// Computes the percentage of complition for snapshot status.
+// @sectors_initial is the number of sectors_allocated stored right before
+// starting the merge.
+double DmTargetSnapshot::MergePercent(const DmTargetSnapshot::Status& status,
+                                      uint64_t sectors_initial) {
+    uint64_t s = status.sectors_allocated;
+    uint64_t t = status.total_sectors;
+    uint64_t m = status.metadata_sectors;
+    uint64_t i = sectors_initial == 0 ? t : sectors_initial;
+
+    if (t <= s || i <= s) {
+        return 0.0;
+    }
+    if (s == 0 || t == 0 || s <= m) {
+        return 100.0;
+    }
+    return 100.0 / (i - m) * (i - s);
+}
+
 bool DmTargetSnapshot::ReportsOverflow(const std::string& target_type) {
     DeviceMapper& dm = DeviceMapper::Instance();
     DmTargetTypeInfo info;

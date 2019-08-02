@@ -483,6 +483,60 @@ TEST(libdm, ParseStatusText) {
     EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Overflow", &status));
 }
 
+TEST(libdm, DmSnapshotMergePercent) {
+    DmTargetSnapshot::Status status;
+
+    // Correct input
+    status.sectors_allocated = 1000;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 1.0);
+
+    status.sectors_allocated = 500;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status), 49.0);
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 51.0);
+
+    status.sectors_allocated = 0;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status), 99.0);
+
+    status.sectors_allocated = 500;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 500;
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status), 99.0);
+
+    status.sectors_allocated = 500;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status, 500), 1.0);
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status, 1000), 51.0);
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status, 1000), 49.0);
+
+    // Robustness
+    status.sectors_allocated = 2000;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 0.0);
+
+    status.sectors_allocated = 2000;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 2000;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 0.0);
+
+    status.sectors_allocated = 2000;
+    status.total_sectors = 0;
+    status.metadata_sectors = 2000;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 0.0);
+
+    status.sectors_allocated = 1000;
+    status.total_sectors = 0;
+    status.metadata_sectors = 1000;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status, 0), 0.0);
+}
+
 TEST(libdm, CryptArgs) {
     DmTargetCrypt target1(0, 512, "sha1", "abcdefgh", 50, "/dev/loop0", 100);
     ASSERT_EQ(target1.name(), "crypt");
