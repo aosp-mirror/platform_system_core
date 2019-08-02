@@ -93,12 +93,16 @@ cc_defaults {
         "libutils",
     ],
     bootstrap: true,
+    visibility: [":__subpackages__"],
 }
 
 cc_library_static {
     name: "libinit",
     recovery_available: true,
-    defaults: ["init_defaults", "selinux_policy_version"],
+    defaults: [
+        "init_defaults",
+        "selinux_policy_version",
+    ],
     srcs: [
         "action.cpp",
         "action_manager.cpp",
@@ -143,7 +147,10 @@ cc_library_static {
         "ueventd_parser.cpp",
         "util.cpp",
     ],
-    whole_static_libs: ["libcap", "com.android.sysprop.apex"],
+    whole_static_libs: [
+        "libcap",
+        "com.android.sysprop.apex",
+    ],
     header_libs: ["bootimg_headers"],
     proto: {
         type: "lite",
@@ -153,7 +160,10 @@ cc_library_static {
     target: {
         recovery: {
             cflags: ["-DRECOVERY"],
-            exclude_shared_libs: ["libbinder", "libutils"],
+            exclude_shared_libs: [
+                "libbinder",
+                "libutils",
+            ],
         },
     },
 }
@@ -182,7 +192,10 @@ cc_binary {
     target: {
         recovery: {
             cflags: ["-DRECOVERY"],
-            exclude_shared_libs: ["libbinder", "libutils"],
+            exclude_shared_libs: [
+                "libbinder",
+                "libutils",
+            ],
         },
     },
 }
@@ -283,7 +296,7 @@ cc_binary {
     },
     generated_headers: [
         "generated_stub_builtin_function_map",
-        "generated_android_ids"
+        "generated_android_ids",
     ],
     target: {
         android: {
