@@ -24,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <string_view>
 
 #include "liblp.h"
 #include "partition_opener.h"
@@ -36,6 +37,9 @@ class LinearExtent;
 // By default, partitions are aligned on a 1MiB boundary.
 static const uint32_t kDefaultPartitionAlignment = 1024 * 1024;
 static const uint32_t kDefaultBlockSize = 4096;
+
+// Name of the default group in a metadata.
+static constexpr std::string_view kDefaultGroup = "default";
 
 // Abstraction around dm-targets that can be encoded into logical partition tables.
 class Extent {

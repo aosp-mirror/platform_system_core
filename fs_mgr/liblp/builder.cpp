@@ -19,7 +19,6 @@
 #include <string.h>
 
 #include <algorithm>
-#include <string_view>
 
 #include <android-base/unique_fd.h>
 
@@ -30,8 +29,6 @@
 
 namespace android {
 namespace fs_mgr {
-
-static constexpr std::string_view kDefaultGroup = "default";
 
 bool LinearExtent::AddTo(LpMetadata* out) const {
     if (device_index_ >= out->block_devices.size()) {
