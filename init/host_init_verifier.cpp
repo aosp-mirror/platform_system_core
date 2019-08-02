@@ -171,12 +171,12 @@ static Result<void> check_stub(const BuiltinArguments& args) {
 #include "generated_stub_builtin_function_map.h"
 
 void PrintUsage() {
-    std::cout << "usage: host_init_verifier [-p FILE] -k FILE <init rc file>\n"
+    std::cout << "usage: host_init_verifier [-p FILE] -i FILE <init rc file>\n"
                  "\n"
                  "Tests an init script for correctness\n"
                  "\n"
                  "-p FILE\tSearch this passwd file for users and groups\n"
-                 "-k FILE\tUse this file as a space-separated list of known interfaces\n"
+                 "-i FILE\tParse this JSON file for the HIDL interface inheritance hierarchy\n"
               << std::endl;
 }
 
@@ -217,7 +217,7 @@ int main(int argc, char** argv) {
     argc -= optind;
     argv += optind;
 
-    if (argc != 1) {
+    if (argc != 1 || interface_inheritance_hierarchy_file.empty()) {
         PrintUsage();
         return EXIT_FAILURE;
     }
