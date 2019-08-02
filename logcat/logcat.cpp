@@ -899,6 +899,11 @@ static int __logcat(android_logcat_context_internal* context) {
             case 0:
                 // only long options
                 if (long_options[option_index].name == pid_str) {
+                    if (pid != 0) {
+                        logcat_panic(context, HELP_TRUE, "Only supports one PID argument.\n");
+                        goto exit;
+                    }
+
                     // ToDo: determine runtime PID_MAX?
                     if (!getSizeTArg(optarg, &pid, 1)) {
                         logcat_panic(context, HELP_TRUE, "%s %s out of range\n",
