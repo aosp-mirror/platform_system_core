@@ -18,6 +18,7 @@
 
 #include <vector>
 
+#include "interface_utils.h"
 #include "parser.h"
 #include "service.h"
 #include "service_list.h"
@@ -25,8 +26,6 @@
 
 namespace android {
 namespace init {
-
-using InterfaceInheritanceHierarchyMap = std::map<std::string, std::set<std::string>>;
 
 class ServiceParser : public SectionParser {
   public:

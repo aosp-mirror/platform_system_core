@@ -83,6 +83,7 @@ cc_defaults {
         "libfscrypt",
         "libgsi",
         "libhidl-gen-utils",
+        "libjsoncpp",
         "libkeyutils",
         "liblog",
         "liblogwrap",
@@ -118,6 +119,7 @@ cc_library_static {
         "first_stage_mount.cpp",
         "import_parser.cpp",
         "init.cpp",
+        "interface_utils.cpp",
         "keychords.cpp",
         "modalias_handler.cpp",
         "mount_handler.cpp",
@@ -242,7 +244,10 @@ genrule {
     name: "generated_stub_builtin_function_map",
     tool_files: ["host_builtin_map.py"],
     out: ["generated_stub_builtin_function_map.h"],
-    srcs: ["builtins.cpp", "check_builtins.cpp"],
+    srcs: [
+        "builtins.cpp",
+        "check_builtins.cpp",
+    ],
     cmd: "$(location host_builtin_map.py) --builtins $(location builtins.cpp) --check_builtins $(location check_builtins.cpp) > $(out)",
 }
 
@@ -278,6 +283,7 @@ cc_binary {
         "epoll.cpp",
         "keychords.cpp",
         "import_parser.cpp",
+        "interface_utils.cpp",
         "host_import_parser.cpp",
         "host_init_verifier.cpp",
         "parser.cpp",

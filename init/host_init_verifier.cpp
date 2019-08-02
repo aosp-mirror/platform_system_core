@@ -30,7 +30,6 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
-#include <json/json.h>
 
 #include "action.h"
 #include "action_manager.h"
@@ -38,6 +37,7 @@
 #include "check_builtins.h"
 #include "host_import_parser.h"
 #include "host_init_stubs.h"
+#include "interface_utils.h"
 #include "parser.h"
 #include "result.h"
 #include "service.h"
@@ -132,35 +132,6 @@ passwd* getpwnam(const char* login) {  // NOLINT: implementing bad function.
     return nullptr;
 }
 
-static std::optional<android::init::InterfaceInheritanceHierarchyMap>
-ReadInterfaceInheritanceHierarchy(const std::string& interface_inheritance_hierarchy_file) {
-    if (interface_inheritance_hierarchy_file.empty()) {
-        LOG(WARNING) << "Missing an interface inheritance hierarchy file.";
-        return {};
-    }
-
-    Json::Value root;
-    Json::Reader reader;
-    std::ifstream stream(interface_inheritance_hierarchy_file);
-    if (!reader.parse(stream, root)) {
-        LOG(ERROR) << "Failed to read interface inheritance hierarchy file: "
-                   << interface_inheritance_hierarchy_file << "\n"
-                   << reader.getFormattedErrorMessages();
-        return {};
-    }
-
-    android::init::InterfaceInheritanceHierarchyMap result;
-    for (const Json::Value& entry : root) {
-        std::set<std::string> inherited_interfaces;
-        for (const Json::Value& intf : entry["inheritedInterfaces"]) {
-            inherited_interfaces.insert(intf.asString());
-        }
-        result[entry["interface"].asString()] = inherited_interfaces;
-    }
-
-    return result;
-}
-
 namespace android {
 namespace init {
 
@@ -222,16 +193,21 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    auto interface_inheritance_hierarchy_map =
+            ReadInterfaceInheritanceHierarchy(interface_inheritance_hierarchy_file);
+    if (!interface_inheritance_hierarchy_map) {
+        LOG(ERROR) << interface_inheritance_hierarchy_map.error();
+        return EXIT_FAILURE;
+    }
+    SetKnownInterfaces(*interface_inheritance_hierarchy_map);
+
     const BuiltinFunctionMap& function_map = GetBuiltinFunctionMap();
     Action::set_function_map(&function_map);
     ActionManager& am = ActionManager::GetInstance();
     ServiceList& sl = ServiceList::GetInstance();
     Parser parser;
-    parser.AddSectionParser(
-            "service",
-            std::make_unique<ServiceParser>(
-                    &sl, nullptr,
-                    ReadInterfaceInheritanceHierarchy(interface_inheritance_hierarchy_file)));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(
+                                               &sl, nullptr, *interface_inheritance_hierarchy_map));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
     parser.AddSectionParser("import", std::make_unique<HostImportParser>());
 
