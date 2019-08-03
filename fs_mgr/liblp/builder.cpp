@@ -171,6 +171,13 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionO
         }
     }
 
+    if (IPropertyFetcher::GetInstance()->GetBoolProperty("ro.virtual_ab.enabled", false)) {
+        if (!UpdateMetadataForInPlaceSnapshot(metadata.get(), source_slot_number,
+                                              target_slot_number)) {
+            return nullptr;
+        }
+    }
+
     return New(*metadata.get(), &opener);
 }
 
