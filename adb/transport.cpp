@@ -542,9 +542,7 @@ static void device_tracker_ready(asocket* socket) {
     // for the first time, even if no update occurred.
     if (tracker->update_needed) {
         tracker->update_needed = false;
-
-        std::string transports = list_transports(tracker->long_output);
-        device_tracker_send(tracker, transports);
+        device_tracker_send(tracker, list_transports(tracker->long_output));
     }
 }
 
@@ -587,13 +585,11 @@ void update_transports() {
     update_transport_status();
 
     // Notify `adb track-devices` clients.
-    std::string transports = list_transports(false);
-
     device_tracker* tracker = device_tracker_list;
     while (tracker != nullptr) {
         device_tracker* next = tracker->next;
         // This may destroy the tracker if the connection is closed.
-        device_tracker_send(tracker, transports);
+        device_tracker_send(tracker, list_transports(tracker->long_output));
         tracker = next;
     }
 }

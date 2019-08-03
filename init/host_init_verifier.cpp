@@ -35,6 +35,7 @@
 #include "action.h"
 #include "action_manager.h"
 #include "action_parser.h"
+#include "check_builtins.h"
 #include "host_import_parser.h"
 #include "host_init_stubs.h"
 #include "parser.h"
@@ -163,19 +164,19 @@ ReadInterfaceInheritanceHierarchy(const std::string& interface_inheritance_hiera
 namespace android {
 namespace init {
 
-static Result<void> do_stub(const BuiltinArguments& args) {
+static Result<void> check_stub(const BuiltinArguments& args) {
     return {};
 }
 
 #include "generated_stub_builtin_function_map.h"
 
 void PrintUsage() {
-    std::cout << "usage: host_init_verifier [-p FILE] -k FILE <init rc file>\n"
+    std::cout << "usage: host_init_verifier [-p FILE] -i FILE <init rc file>\n"
                  "\n"
                  "Tests an init script for correctness\n"
                  "\n"
                  "-p FILE\tSearch this passwd file for users and groups\n"
-                 "-k FILE\tUse this file as a space-separated list of known interfaces\n"
+                 "-i FILE\tParse this JSON file for the HIDL interface inheritance hierarchy\n"
               << std::endl;
 }
 
@@ -216,7 +217,7 @@ int main(int argc, char** argv) {
     argc -= optind;
     argv += optind;
 
-    if (argc != 1) {
+    if (argc != 1 || interface_inheritance_hierarchy_file.empty()) {
         PrintUsage();
         return EXIT_FAILURE;
     }
@@ -238,9 +239,10 @@ int main(int argc, char** argv) {
         LOG(ERROR) << "Failed to open init rc script '" << *argv << "'";
         return EXIT_FAILURE;
     }
-    if (parser.parse_error_count() > 0) {
-        LOG(ERROR) << "Failed to parse init script '" << *argv << "' with "
-                   << parser.parse_error_count() << " errors";
+    size_t failures = parser.parse_error_count() + am.CheckAllCommands();
+    if (failures > 0) {
+        LOG(ERROR) << "Failed to parse init script '" << *argv << "' with " << failures
+                   << " errors";
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
