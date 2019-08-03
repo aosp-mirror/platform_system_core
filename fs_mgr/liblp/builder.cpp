@@ -21,18 +21,15 @@
 #include <algorithm>
 #include <string_view>
 
-#include <android-base/properties.h>
 #include <android-base/unique_fd.h>
 
 #include "liblp/liblp.h"
+#include "liblp/property_fetcher.h"
 #include "reader.h"
 #include "utility.h"
 
 namespace android {
 namespace fs_mgr {
-
-std::optional<bool> MetadataBuilder::sABOverride;
-std::optional<bool> MetadataBuilder::sRetrofitDap;
 
 static constexpr std::string_view kDefaultGroup = "default";
 
@@ -209,14 +206,6 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionO
     }
 
     return New(*metadata.get(), &opener);
-}
-
-void MetadataBuilder::OverrideABForTesting(bool ab_device) {
-    sABOverride = ab_device;
-}
-
-void MetadataBuilder::OverrideRetrofitDynamicParititonsForTesting(bool retrofit) {
-    sRetrofitDap = retrofit;
 }
 
 MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
@@ -1051,17 +1040,12 @@ void MetadataBuilder::SetAutoSlotSuffixing() {
 }
 
 bool MetadataBuilder::IsABDevice() {
-    if (sABOverride.has_value()) {
-        return *sABOverride;
-    }
-    return !android::base::GetProperty("ro.boot.slot_suffix", "").empty();
+    return !IPropertyFetcher::GetInstance()->GetProperty("ro.boot.slot_suffix", "").empty();
 }
 
 bool MetadataBuilder::IsRetrofitDynamicPartitionsDevice() {
-    if (sRetrofitDap.has_value()) {
-        return *sRetrofitDap;
-    }
-    return android::base::GetBoolProperty("ro.boot.dynamic_partitions_retrofit", false);
+    return IPropertyFetcher::GetInstance()->GetBoolProperty("ro.boot.dynamic_partitions_retrofit",
+                                                            false);
 }
 
 bool MetadataBuilder::IsRetrofitMetadata() const {
