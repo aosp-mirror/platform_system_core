@@ -47,6 +47,8 @@ namespace dm {
 
 enum class DmDeviceState { INVALID, SUSPENDED, ACTIVE };
 
+static constexpr uint64_t kSectorSize = 512;
+
 class DeviceMapper final {
   public:
     class DmBlockDevice final {
