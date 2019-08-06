@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <string_view>
 
 #include <android-base/properties.h>
 #include <android-base/unique_fd.h>
@@ -33,7 +34,7 @@ namespace fs_mgr {
 std::optional<bool> MetadataBuilder::sABOverride;
 std::optional<bool> MetadataBuilder::sRetrofitDap;
 
-static const std::string kDefaultGroup = "default";
+static constexpr std::string_view kDefaultGroup = "default";
 
 bool LinearExtent::AddTo(LpMetadata* out) const {
     if (device_index_ >= out->block_devices.size()) {
@@ -414,7 +415,7 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
     geometry_.metadata_slot_count = metadata_slot_count;
     geometry_.logical_block_size = logical_block_size;
 
-    if (!AddGroup(kDefaultGroup, 0)) {
+    if (!AddGroup(std::string(kDefaultGroup), 0)) {
         return false;
     }
     return true;
@@ -430,7 +431,7 @@ bool MetadataBuilder::AddGroup(const std::string& group_name, uint64_t maximum_s
 }
 
 Partition* MetadataBuilder::AddPartition(const std::string& name, uint32_t attributes) {
-    return AddPartition(name, kDefaultGroup, attributes);
+    return AddPartition(name, std::string(kDefaultGroup), attributes);
 }
 
 Partition* MetadataBuilder::AddPartition(const std::string& name, const std::string& group_name,
