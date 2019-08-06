@@ -104,7 +104,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
     ASSERT_EQ(snapshots.size(), 1);
     ASSERT_EQ(snapshots[0], "test-snapshot");
 
-    // Scope so delete can re-acquire the status file lock.
+    // Scope so delete can re-acquire the snapshot file lock.
     {
         auto file = sm->OpenSnapshotStatusFile("test-snapshot", O_RDONLY, LOCK_SH);
         ASSERT_NE(file, nullptr);
@@ -116,6 +116,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
         ASSERT_EQ(status.snapshot_size, kDeviceSize);
     }
 
+    ASSERT_TRUE(sm->UnmapSnapshot(lock_.get(), "test-snapshot"));
     ASSERT_TRUE(sm->DeleteSnapshot(lock_.get(), "test-snapshot"));
 }
 
