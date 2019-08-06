@@ -409,7 +409,8 @@ int install_multiple_app(int argc, const char** argv) {
             android::base::EndsWithIgnoreCase(file, ".dm") ||
             android::base::EndsWithIgnoreCase(file, ".fsv_sig")) {
             struct stat sb;
-            if (stat(file, &sb) != -1) total_size += sb.st_size;
+            if (stat(file, &sb) == -1) perror_exit("failed to stat \"%s\"", file);
+            total_size += sb.st_size;
             first_apk = i;
         } else {
             break;
@@ -459,13 +460,13 @@ int install_multiple_app(int argc, const char** argv) {
     }
 
     // Valid session, now stream the APKs
-    int success = 1;
+    bool success = true;
     for (int i = first_apk; i < argc; i++) {
         const char* file = argv[i];
         struct stat sb;
         if (stat(file, &sb) == -1) {
-            fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
-            success = 0;
+            fprintf(stderr, "adb: failed to stat \"%s\": %s\n", file, strerror(errno));
+            success = false;
             goto finalize_session;
         }
 
@@ -476,8 +477,8 @@ int install_multiple_app(int argc, const char** argv) {
 
         unique_fd local_fd(adb_open(file, O_RDONLY | O_CLOEXEC));
         if (local_fd < 0) {
-            fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
-            success = 0;
+            fprintf(stderr, "adb: failed to open \"%s\": %s\n", file, strerror(errno));
+            success = false;
             goto finalize_session;
         }
 
@@ -485,7 +486,7 @@ int install_multiple_app(int argc, const char** argv) {
         unique_fd remote_fd(adb_connect(cmd, &error));
         if (remote_fd < 0) {
             fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
-            success = 0;
+            success = false;
             goto finalize_session;
         }
 
@@ -493,15 +494,15 @@ int install_multiple_app(int argc, const char** argv) {
         read_status_line(remote_fd.get(), buf, sizeof(buf));
 
         if (strncmp("Success", buf, 7)) {
-            fprintf(stderr, "adb: failed to write %s\n", file);
+            fprintf(stderr, "adb: failed to write \"%s\"\n", file);
             fputs(buf, stderr);
-            success = 0;
+            success = false;
             goto finalize_session;
         }
     }
 
 finalize_session:
-    // Commit session if we streamed everything okay; otherwise abandon
+    // Commit session if we streamed everything okay; otherwise abandon.
     std::string service = android::base::StringPrintf("%s install-%s %d", install_cmd.c_str(),
                                                       success ? "commit" : "abandon", session_id);
     {
@@ -512,14 +513,16 @@ finalize_session:
         }
         read_status_line(fd.get(), buf, sizeof(buf));
     }
+    if (!success) return EXIT_FAILURE;
 
-    if (!strncmp("Success", buf, 7)) {
-        fputs(buf, stdout);
-        return 0;
+    if (strncmp("Success", buf, 7)) {
+        fprintf(stderr, "adb: failed to finalize session\n");
+        fputs(buf, stderr);
+        return EXIT_FAILURE;
     }
-    fprintf(stderr, "adb: failed to finalize session\n");
-    fputs(buf, stderr);
-    return EXIT_FAILURE;
+
+    fputs(buf, stdout);
+    return EXIT_SUCCESS;
 }
 
 int install_multi_package(int argc, const char** argv) {
