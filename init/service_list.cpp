@@ -28,6 +28,14 @@ ServiceList& ServiceList::GetInstance() {
     return instance;
 }
 
+size_t ServiceList::CheckAllCommands() {
+    size_t failures = 0;
+    for (const auto& service : services_) {
+        failures += service->CheckAllCommands();
+    }
+    return failures;
+}
+
 void ServiceList::AddService(std::unique_ptr<Service> service) {
     services_.emplace_back(std::move(service));
 }
