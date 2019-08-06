@@ -24,6 +24,7 @@
 
 #include <android-base/strings.h>
 #include <gtest/gtest.h>
+#include <libfiemap/image_manager.h>
 
 namespace android {
 namespace snapshot {
