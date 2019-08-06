@@ -739,6 +739,20 @@ finalize_multi_package_session:
 }
 
 int delete_device_file(const std::string& filename) {
-    std::string cmd = "rm -f " + escape_arg(filename);
-    return send_shell_command(cmd);
+    // http://b/17339227 "Sideloading a Readonly File Results in a Prompt to
+    // Delete" caused us to add `-f` here, to avoid the equivalent of the `-i`
+    // prompt that you get from BSD rm (used in Android 5) if you have a
+    // non-writable file and stdin is a tty (which is true for old versions of
+    // adbd).
+    //
+    // Unfortunately, `rm -f` requires Android 4.3, so that workaround broke
+    // earlier Android releases. This was reported as http://b/37704384 "adb
+    // install -r passes invalid argument to rm on Android 4.1" and
+    // http://b/37035817 "ADB Fails: rm failed for -f, No such file or
+    // directory".
+    //
+    // Testing on a variety of devices and emulators shows that redirecting
+    // stdin is sufficient to avoid the pseudo-`-i`, and works on toolbox,
+    // BSD, and toybox versions of rm.
+    return send_shell_command("rm " + escape_arg(filename) + " </dev/null");
 }
