@@ -189,6 +189,7 @@ class SnapshotManager final {
     std::unique_ptr<LockedFile> LockExclusive();
     UpdateState ReadUpdateState(LockedFile* file);
     bool WriteUpdateState(LockedFile* file, UpdateState state);
+    std::string GetStateFilePath() const;
 
     // This state is persisted per-snapshot in /metadata/ota/snapshots/.
     struct SnapshotStatus {
@@ -205,6 +206,7 @@ class SnapshotManager final {
                                                        int lock_flags);
     bool WriteSnapshotStatus(LockedFile* file, const SnapshotStatus& status);
     bool ReadSnapshotStatus(LockedFile* file, SnapshotStatus* status);
+    std::string GetSnapshotStatusFilePath(const std::string& name);
 
     // Return the name of the device holding the "snapshot" or "snapshot-merge"
     // target. This may not be the final device presented via MapSnapshot(), if

@@ -342,6 +342,12 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
 }
 
 UpdateState SnapshotManager::GetUpdateState(double* progress) {
+    // If we've never started an update, the state file won't exist.
+    auto state_file = GetStateFilePath();
+    if (access(state_file.c_str(), F_OK) != 0 && errno == ENOENT) {
+        return UpdateState::None;
+    }
+
     auto file = LockShared();
     if (!file) {
         return UpdateState::None;
@@ -397,9 +403,13 @@ SnapshotManager::LockedFile::~LockedFile() {
     }
 }
 
+std::string SnapshotManager::GetStateFilePath() const {
+    return metadata_dir_ + "/state"s;
+}
+
 std::unique_ptr<SnapshotManager::LockedFile> SnapshotManager::OpenStateFile(int open_flags,
                                                                             int lock_flags) {
-    auto state_file = metadata_dir_ + "/state"s;
+    auto state_file = GetStateFilePath();
     return OpenFile(state_file, open_flags, lock_flags);
 }
 
@@ -471,9 +481,14 @@ bool SnapshotManager::WriteUpdateState(LockedFile* file, UpdateState state) {
     return true;
 }
 
+std::string SnapshotManager::GetSnapshotStatusFilePath(const std::string& name) {
+    auto file = metadata_dir_ + "/snapshots/"s + name;
+    return file;
+}
+
 auto SnapshotManager::OpenSnapshotStatusFile(const std::string& name, int open_flags,
                                              int lock_flags) -> std::unique_ptr<LockedFile> {
-    auto file = metadata_dir_ + "/snapshots/"s + name;
+    auto file = GetSnapshotStatusFilePath(name);
     return OpenFile(file, open_flags, lock_flags);
 }
 
