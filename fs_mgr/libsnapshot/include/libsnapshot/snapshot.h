@@ -23,7 +23,6 @@
 
 #include <android-base/unique_fd.h>
 #include <libdm/dm_target.h>
-#include <libfiemap/image_manager.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -32,6 +31,11 @@
 #endif
 
 namespace android {
+
+namespace fiemap {
+class IImageManager;
+}  // namespace fiemap
+
 namespace snapshot {
 
 enum class UpdateState {
@@ -68,6 +72,8 @@ class SnapshotManager final {
         // OTA.
         virtual bool IsRunningSnapshot() const = 0;
     };
+
+    ~SnapshotManager();
 
     // Return a new SnapshotManager instance, or null on error. The device
     // pointer is owned for the lifetime of SnapshotManager. If null, a default
