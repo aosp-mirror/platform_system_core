@@ -239,7 +239,7 @@ int main(int argc, char** argv) {
         LOG(ERROR) << "Failed to open init rc script '" << *argv << "'";
         return EXIT_FAILURE;
     }
-    size_t failures = parser.parse_error_count() + am.CheckAllCommands();
+    size_t failures = parser.parse_error_count() + am.CheckAllCommands() + sl.CheckAllCommands();
     if (failures > 0) {
         LOG(ERROR) << "Failed to parse init script '" << *argv << "' with " << failures
                    << " errors";
