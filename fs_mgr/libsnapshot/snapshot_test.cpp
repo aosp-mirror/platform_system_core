@@ -140,11 +140,8 @@ TEST_F(SnapshotTest, CreateSnapshot) {
 
     // Scope so delete can re-acquire the snapshot file lock.
     {
-        auto file = sm->OpenSnapshotStatusFile("test-snapshot", O_RDONLY, LOCK_SH);
-        ASSERT_NE(file, nullptr);
-
         SnapshotManager::SnapshotStatus status;
-        ASSERT_TRUE(sm->ReadSnapshotStatus(file.get(), &status));
+        ASSERT_TRUE(sm->ReadSnapshotStatus(lock_.get(), "test-snapshot", &status));
         ASSERT_EQ(status.state, "created");
         ASSERT_EQ(status.device_size, kDeviceSize);
         ASSERT_EQ(status.snapshot_size, kDeviceSize);

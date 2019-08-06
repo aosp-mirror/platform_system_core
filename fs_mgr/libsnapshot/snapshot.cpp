@@ -140,9 +140,6 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, const std::string& name,
 
     LOG(INFO) << "Snapshot " << name << " will have COW size " << cow_size;
 
-    auto status_file = OpenSnapshotStatusFile(name, O_RDWR | O_CREAT, LOCK_EX);
-    if (!status_file) return false;
-
     // Note, we leave the status file hanging around if we fail to create the
     // actual backing image. This is harmless, since it'll get removed when
     // CancelUpdate is called.
@@ -151,7 +148,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, const std::string& name,
             .device_size = device_size,
             .snapshot_size = snapshot_size,
     };
-    if (!WriteSnapshotStatus(status_file.get(), status)) {
+    if (!WriteSnapshotStatus(lock, name, status)) {
         PLOG(ERROR) << "Could not write snapshot status: " << name;
         return false;
     }
@@ -168,11 +165,8 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     CHECK(lock);
     if (!EnsureImageManager()) return false;
 
-    auto status_file = OpenSnapshotStatusFile(name, O_RDWR, LOCK_EX);
-    if (!status_file) return false;
-
     SnapshotStatus status;
-    if (!ReadSnapshotStatus(status_file.get(), &status)) {
+    if (!ReadSnapshotStatus(lock, name, &status)) {
         return false;
     }
 
@@ -267,11 +261,8 @@ bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
     CHECK(lock);
     if (!EnsureImageManager()) return false;
 
-    auto status_file = OpenSnapshotStatusFile(name, O_RDWR, LOCK_EX);
-    if (!status_file) return false;
-
     SnapshotStatus status;
-    if (!ReadSnapshotStatus(status_file.get(), &status)) {
+    if (!ReadSnapshotStatus(lock, name, &status)) {
         return false;
     }
 
@@ -300,10 +291,6 @@ bool SnapshotManager::DeleteSnapshot(LockedFile* lock, const std::string& name) 
     CHECK(lock);
     if (!EnsureImageManager()) return false;
 
-    // Take the snapshot's lock after Unmap, since it will also try to lock.
-    auto status_file = OpenSnapshotStatusFile(name, O_RDONLY, LOCK_EX);
-    if (!status_file) return false;
-
     auto cow_name = GetCowName(name);
     if (!images_->BackingImageExists(cow_name)) {
         return true;
@@ -312,8 +299,10 @@ bool SnapshotManager::DeleteSnapshot(LockedFile* lock, const std::string& name) 
         return false;
     }
 
-    if (!android::base::RemoveFileIfExists(status_file->path())) {
-        LOG(ERROR) << "Failed to remove status file: " << status_file->path();
+    std::string error;
+    auto file_path = GetSnapshotStatusFilePath(name);
+    if (!android::base::RemoveFileIfExists(file_path, &error)) {
+        LOG(ERROR) << "Failed to remove status file " << file_path << ": " << error;
         return false;
     }
     return true;
@@ -394,7 +383,10 @@ auto SnapshotManager::OpenFile(const std::string& file, int open_flags, int lock
         PLOG(ERROR) << "Acquire flock failed: " << file;
         return nullptr;
     }
-    return std::make_unique<LockedFile>(file, std::move(fd));
+    // For simplicity, we want to CHECK that lock_mode == LOCK_EX, in some
+    // calls, so strip extra flags.
+    int lock_mode = lock_flags & (LOCK_EX | LOCK_SH);
+    return std::make_unique<LockedFile>(file, std::move(fd), lock_mode);
 }
 
 SnapshotManager::LockedFile::~LockedFile() {
@@ -486,51 +478,61 @@ std::string SnapshotManager::GetSnapshotStatusFilePath(const std::string& name) 
     return file;
 }
 
-auto SnapshotManager::OpenSnapshotStatusFile(const std::string& name, int open_flags,
-                                             int lock_flags) -> std::unique_ptr<LockedFile> {
-    auto file = GetSnapshotStatusFilePath(name);
-    return OpenFile(file, open_flags, lock_flags);
-}
+bool SnapshotManager::ReadSnapshotStatus(LockedFile* lock, const std::string& name,
+                                         SnapshotStatus* status) {
+    CHECK(lock);
+    auto path = GetSnapshotStatusFilePath(name);
 
-bool SnapshotManager::ReadSnapshotStatus(LockedFile* file, SnapshotStatus* status) {
-    // Reset position since some calls read+write.
-    if (lseek(file->fd(), 0, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek status file failed";
+    unique_fd fd(open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
+    if (fd < 0) {
+        PLOG(ERROR) << "Open failed: " << path;
         return false;
     }
 
     std::string contents;
-    if (!android::base::ReadFdToString(file->fd(), &contents)) {
-        PLOG(ERROR) << "read status file failed";
+    if (!android::base::ReadFdToString(fd, &contents)) {
+        PLOG(ERROR) << "read failed: " << path;
         return false;
     }
     auto pieces = android::base::Split(contents, " ");
     if (pieces.size() != 5) {
-        LOG(ERROR) << "Invalid status line for snapshot: " << file->path();
+        LOG(ERROR) << "Invalid status line for snapshot: " << path;
         return false;
     }
 
     status->state = pieces[0];
     if (!android::base::ParseUint(pieces[1], &status->device_size)) {
-        LOG(ERROR) << "Invalid device size in status line for: " << file->path();
+        LOG(ERROR) << "Invalid device size in status line for: " << path;
         return false;
     }
     if (!android::base::ParseUint(pieces[2], &status->snapshot_size)) {
-        LOG(ERROR) << "Invalid snapshot size in status line for: " << file->path();
+        LOG(ERROR) << "Invalid snapshot size in status line for: " << path;
         return false;
     }
     if (!android::base::ParseUint(pieces[3], &status->sectors_allocated)) {
-        LOG(ERROR) << "Invalid snapshot size in status line for: " << file->path();
+        LOG(ERROR) << "Invalid snapshot size in status line for: " << path;
         return false;
     }
     if (!android::base::ParseUint(pieces[4], &status->metadata_sectors)) {
-        LOG(ERROR) << "Invalid snapshot size in status line for: " << file->path();
+        LOG(ERROR) << "Invalid snapshot size in status line for: " << path;
         return false;
     }
     return true;
 }
 
-bool SnapshotManager::WriteSnapshotStatus(LockedFile* file, const SnapshotStatus& status) {
+bool SnapshotManager::WriteSnapshotStatus(LockedFile* lock, const std::string& name,
+                                          const SnapshotStatus& status) {
+    // The caller must take an exclusive lock to modify snapshots.
+    CHECK(lock);
+    CHECK(lock->lock_mode() == LOCK_EX);
+
+    auto path = GetSnapshotStatusFilePath(name);
+    unique_fd fd(open(path.c_str(), O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_CREAT | O_SYNC, 0660));
+    if (fd < 0) {
+        PLOG(ERROR) << "Open failed: " << path;
+        return false;
+    }
+
     std::vector<std::string> pieces = {
             status.state,
             std::to_string(status.device_size),
@@ -540,9 +542,8 @@ bool SnapshotManager::WriteSnapshotStatus(LockedFile* file, const SnapshotStatus
     };
     auto contents = android::base::Join(pieces, " ");
 
-    if (!Truncate(file)) return false;
-    if (!android::base::WriteStringToFd(contents, file->fd())) {
-        PLOG(ERROR) << "write to status file failed: " << file->path();
+    if (!android::base::WriteStringToFd(contents, fd)) {
+        PLOG(ERROR) << "write failed: " << path;
         return false;
     }
     return true;

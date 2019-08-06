@@ -126,16 +126,18 @@ class SnapshotManager final {
     // this. It also serves as a proof-of-lock for some functions.
     class LockedFile final {
       public:
-        LockedFile(const std::string& path, android::base::unique_fd&& fd)
-            : path_(path), fd_(std::move(fd)) {}
+        LockedFile(const std::string& path, android::base::unique_fd&& fd, int lock_mode)
+            : path_(path), fd_(std::move(fd)), lock_mode_(lock_mode) {}
         ~LockedFile();
 
         const std::string& path() const { return path_; }
         int fd() const { return fd_; }
+        int lock_mode() const { return lock_mode_; }
 
       private:
         std::string path_;
         android::base::unique_fd fd_;
+        int lock_mode_;
     };
     std::unique_ptr<LockedFile> OpenFile(const std::string& file, int open_flags, int lock_flags);
     bool Truncate(LockedFile* file);
@@ -202,10 +204,9 @@ class SnapshotManager final {
     };
 
     // Interact with status files under /metadata/ota/snapshots.
-    std::unique_ptr<LockedFile> OpenSnapshotStatusFile(const std::string& name, int open_flags,
-                                                       int lock_flags);
-    bool WriteSnapshotStatus(LockedFile* file, const SnapshotStatus& status);
-    bool ReadSnapshotStatus(LockedFile* file, SnapshotStatus* status);
+    bool WriteSnapshotStatus(LockedFile* lock, const std::string& name,
+                             const SnapshotStatus& status);
+    bool ReadSnapshotStatus(LockedFile* lock, const std::string& name, SnapshotStatus* status);
     std::string GetSnapshotStatusFilePath(const std::string& name);
 
     // Return the name of the device holding the "snapshot" or "snapshot-merge"
