@@ -26,6 +26,7 @@
 #include <android-base/unique_fd.h>
 #include <ext4_utils/ext4_utils.h>
 #include <libdm/dm.h>
+#include <libfiemap/image_manager.h>
 
 namespace android {
 namespace snapshot {
@@ -56,6 +57,10 @@ bool DeviceInfo::IsRunningSnapshot() const {
     // :TODO: implement this check.
     return true;
 }
+
+// Note: IIMageManager is an incomplete type in the header, so the default
+// destructor doesn't work.
+SnapshotManager::~SnapshotManager() {}
 
 std::unique_ptr<SnapshotManager> SnapshotManager::New(IDeviceInfo* info) {
     if (!info) {
