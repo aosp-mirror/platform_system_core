@@ -56,6 +56,14 @@ TEST(libmodprobe, Test) {
             "/test13.ko",
     };
 
+    std::vector<std::string> expected_after_remove = {
+            "/test14.ko", "/test15.ko",         "/test1.ko",
+            "/test6.ko",  "/test2.ko",          "/test5.ko",
+            "/test8.ko",  "/test7.ko param1=4", "/test9.ko param_x=1 param_y=2 param_z=3",
+            "/test10.ko", "/test12.ko",         "/test11.ko",
+            "/test13.ko",
+    };
+
     const std::string modules_dep =
             "test1.ko:\n"
             "test2.ko:\n"
@@ -131,4 +139,18 @@ TEST(libmodprobe, Test) {
     }
 
     EXPECT_TRUE(modules_loaded == expected_modules_loaded);
+
+    EXPECT_TRUE(m.Remove("test4"));
+
+    GTEST_LOG_(INFO) << "Expected modules loaded after removing test4 (in order):";
+    for (auto i = expected_after_remove.begin(); i != expected_after_remove.end(); ++i) {
+        *i = dir.path + *i;
+        GTEST_LOG_(INFO) << "\"" << *i << "\"";
+    }
+    GTEST_LOG_(INFO) << "Actual modules loaded after removing test4 (in order):";
+    for (auto i = modules_loaded.begin(); i != modules_loaded.end(); ++i) {
+        GTEST_LOG_(INFO) << "\"" << *i << "\"";
+    }
+
+    EXPECT_TRUE(modules_loaded == expected_after_remove);
 }
