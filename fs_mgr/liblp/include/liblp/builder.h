@@ -24,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <string_view>
 
 #include "liblp.h"
 #include "partition_opener.h"
@@ -36,6 +37,9 @@ class LinearExtent;
 // By default, partitions are aligned on a 1MiB boundary.
 static const uint32_t kDefaultPartitionAlignment = 1024 * 1024;
 static const uint32_t kDefaultBlockSize = 4096;
+
+// Name of the default group in a metadata.
+static constexpr std::string_view kDefaultGroup = "default";
 
 // Abstraction around dm-targets that can be encoded into logical partition tables.
 class Extent {
@@ -196,12 +200,6 @@ class MetadataBuilder {
         return New(device_info, metadata_max_size, metadata_slot_count);
     }
 
-    // Used by the test harness to override whether the device is "A/B".
-    static void OverrideABForTesting(bool ab_device);
-
-    // Used by the test harness to override whether the device is "retrofitting dynamic partitions".
-    static void OverrideRetrofitDynamicParititonsForTesting(bool retrofit);
-
     // Define a new partition group. By default there is one group called
     // "default", with an unrestricted size. A non-zero size will restrict the
     // total space used by all partitions in the group.
@@ -346,9 +344,6 @@ class MetadataBuilder {
     std::unique_ptr<LinearExtent> ExtendFinalExtent(Partition* partition,
                                                     const std::vector<Interval>& free_list,
                                                     uint64_t sectors_needed) const;
-
-    static std::optional<bool> sABOverride;
-    static std::optional<bool> sRetrofitDap;
 
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;
