@@ -256,11 +256,7 @@ bool Modprobe::InsmodWithDeps(const std::string& module_name) {
 
     // load module dependencies in reverse order
     for (auto dep = dependencies.rbegin(); dep != dependencies.rend() - 1; ++dep) {
-        const std::string& canonical_name = MakeCanonical(*dep);
-        if (canonical_name.empty()) {
-            return false;
-        }
-        if (!LoadWithAliases(canonical_name, true)) {
+        if (!LoadWithAliases(*dep, true)) {
             return false;
         }
     }
@@ -288,7 +284,7 @@ bool Modprobe::InsmodWithDeps(const std::string& module_name) {
 }
 
 bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict) {
-    std::set<std::string> modules_to_load = {module_name};
+    std::set<std::string> modules_to_load = {MakeCanonical(module_name)};
     bool module_loaded = false;
 
     // use aliases to expand list of modules to load (multiple modules
