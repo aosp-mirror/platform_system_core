@@ -22,7 +22,7 @@
 
 #include <modprobe/modprobe.h>
 
-bool Modprobe::Insmod(const std::string& path_name) {
+bool Modprobe::Insmod(const std::string& path_name, const std::string& parameters) {
     android::base::unique_fd fd(
             TEMP_FAILURE_RETRY(open(path_name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (fd == -1) {
@@ -34,6 +34,9 @@ bool Modprobe::Insmod(const std::string& path_name) {
     auto options_iter = module_options_.find(MakeCanonical(path_name));
     if (options_iter != module_options_.end()) {
         options = options_iter->second;
+    }
+    if (!parameters.empty()) {
+        options = options + " " + parameters;
     }
 
     LOG(INFO) << "Loading module " << path_name << " with args \"" << options << "\"";
