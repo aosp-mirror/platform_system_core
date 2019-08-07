@@ -376,3 +376,36 @@ std::vector<std::string> Modprobe::ListModules(const std::string& pattern) {
     }
     return rv;
 }
+
+bool Modprobe::GetAllDependencies(const std::string& module,
+                                  std::vector<std::string>* pre_dependencies,
+                                  std::vector<std::string>* dependencies,
+                                  std::vector<std::string>* post_dependencies) {
+    std::string canonical_name = MakeCanonical(module);
+    if (pre_dependencies) {
+        pre_dependencies->clear();
+        for (const auto& [it_module, it_softdep] : module_pre_softdep_) {
+            if (canonical_name == it_module) {
+                pre_dependencies->emplace_back(it_softdep);
+            }
+        }
+    }
+    if (dependencies) {
+        dependencies->clear();
+        auto hard_deps = GetDependencies(canonical_name);
+        if (hard_deps.empty()) {
+            return false;
+        }
+        for (auto dep = hard_deps.rbegin(); dep != hard_deps.rend(); dep++) {
+            dependencies->emplace_back(*dep);
+        }
+    }
+    if (post_dependencies) {
+        for (const auto& [it_module, it_softdep] : module_post_softdep_) {
+            if (canonical_name == it_module) {
+                post_dependencies->emplace_back(it_softdep);
+            }
+        }
+    }
+    return true;
+}
