@@ -194,6 +194,31 @@ bool Modprobe::ParseOptionsCallback(const std::vector<std::string>& args) {
     return true;
 }
 
+bool Modprobe::ParseBlacklistCallback(const std::vector<std::string>& args) {
+    auto it = args.begin();
+    const std::string& type = *it++;
+
+    if (type != "blacklist") {
+        LOG(ERROR) << "non-blacklist line encountered in modules.blacklist";
+        return false;
+    }
+
+    if (args.size() != 2) {
+        LOG(ERROR) << "lines in modules.blacklist must have exactly 2 entries, not " << args.size();
+        return false;
+    }
+
+    const std::string& module = *it++;
+
+    const std::string& canonical_name = MakeCanonical(module);
+    if (canonical_name.empty()) {
+        return false;
+    }
+    this->module_blacklist_.emplace(canonical_name);
+
+    return true;
+}
+
 void Modprobe::ParseCfg(const std::string& cfg,
                         std::function<bool(const std::vector<std::string>&)> f) {
     std::string cfg_contents;
@@ -231,7 +256,14 @@ Modprobe::Modprobe(const std::vector<std::string>& base_paths) {
 
         auto options_callback = std::bind(&Modprobe::ParseOptionsCallback, this, _1);
         ParseCfg(base_path + "/modules.options", options_callback);
+
+        auto blacklist_callback = std::bind(&Modprobe::ParseBlacklistCallback, this, _1);
+        ParseCfg(base_path + "/modules.blacklist", blacklist_callback);
     }
+}
+
+void Modprobe::EnableBlacklist(bool enable) {
+    blacklist_enabled = enable;
 }
 
 std::vector<std::string> Modprobe::GetDependencies(const std::string& module) {

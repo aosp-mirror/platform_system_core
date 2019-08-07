@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -28,6 +29,7 @@ class Modprobe {
     bool LoadWithAliases(const std::string& module_name, bool strict,
                          const std::string& parameters = "");
     bool Remove(const std::string& module_name);
+    void EnableBlacklist(bool enable);
 
   private:
     std::string MakeCanonical(const std::string& module_path);
@@ -42,6 +44,7 @@ class Modprobe {
     bool ParseSoftdepCallback(const std::vector<std::string>& args);
     bool ParseLoadCallback(const std::vector<std::string>& args);
     bool ParseOptionsCallback(const std::vector<std::string>& args);
+    bool ParseBlacklistCallback(const std::vector<std::string>& args);
     void ParseCfg(const std::string& cfg, std::function<bool(const std::vector<std::string>&)> f);
 
     std::vector<std::pair<std::string, std::string>> module_aliases_;
@@ -50,4 +53,6 @@ class Modprobe {
     std::vector<std::pair<std::string, std::string>> module_post_softdep_;
     std::vector<std::string> module_load_;
     std::unordered_map<std::string, std::string> module_options_;
+    std::set<std::string> module_blacklist_;
+    bool blacklist_enabled = false;
 };
