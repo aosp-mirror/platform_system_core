@@ -295,6 +295,9 @@ bool SnapshotManager::DeleteSnapshot(LockedFile* lock, const std::string& name) 
     if (!images_->BackingImageExists(cow_name)) {
         return true;
     }
+    if (images_->IsImageMapped(cow_name) && !images_->UnmapImageDevice(cow_name)) {
+        return false;
+    }
     if (!images_->DeleteBackingImage(cow_name)) {
         return false;
     }
