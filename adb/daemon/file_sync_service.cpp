@@ -139,7 +139,7 @@ static bool do_lstat_v1(int s, const char* path) {
     lstat(path, &st);
     msg.stat_v1.mode = st.st_mode;
     msg.stat_v1.size = st.st_size;
-    msg.stat_v1.time = st.st_mtime;
+    msg.stat_v1.mtime = st.st_mtime;
     return WriteFdExactly(s, &msg.stat_v1, sizeof(msg.stat_v1));
 }
 
@@ -191,7 +191,7 @@ static bool do_list(int s, const char* path) {
             size_t d_name_length = strlen(de->d_name);
             msg.dent.mode = st.st_mode;
             msg.dent.size = st.st_size;
-            msg.dent.time = st.st_mtime;
+            msg.dent.mtime = st.st_mtime;
             msg.dent.namelen = d_name_length;
 
             if (!WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ||
@@ -205,7 +205,7 @@ done:
     msg.dent.id = ID_DONE;
     msg.dent.mode = 0;
     msg.dent.size = 0;
-    msg.dent.time = 0;
+    msg.dent.mtime = 0;
     msg.dent.namelen = 0;
     return WriteFdExactly(s, &msg.dent, sizeof(msg.dent));
 }

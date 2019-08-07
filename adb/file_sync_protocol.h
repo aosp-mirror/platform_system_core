@@ -42,7 +42,7 @@ union syncmsg {
         uint32_t id;
         uint32_t mode;
         uint32_t size;
-        uint32_t time;
+        uint32_t mtime;
     } stat_v1;
     struct __attribute__((packed)) {
         uint32_t id;
@@ -62,7 +62,7 @@ union syncmsg {
         uint32_t id;
         uint32_t mode;
         uint32_t size;
-        uint32_t time;
+        uint32_t mtime;
         uint32_t namelen;
     } dent;
     struct __attribute__((packed)) {

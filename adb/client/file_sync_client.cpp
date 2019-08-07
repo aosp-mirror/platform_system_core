@@ -357,7 +357,7 @@ class SyncConnection {
                             << msg.stat_v1.id;
             }
 
-            if (msg.stat_v1.mode == 0 && msg.stat_v1.size == 0 && msg.stat_v1.time == 0) {
+            if (msg.stat_v1.mode == 0 && msg.stat_v1.size == 0 && msg.stat_v1.mtime == 0) {
                 // There's no way for us to know what the error was.
                 errno = ENOPROTOOPT;
                 return false;
@@ -365,8 +365,8 @@ class SyncConnection {
 
             st->st_mode = msg.stat_v1.mode;
             st->st_size = msg.stat_v1.size;
-            st->st_ctime = msg.stat_v1.time;
-            st->st_mtime = msg.stat_v1.time;
+            st->st_ctime = msg.stat_v1.mtime;
+            st->st_mtime = msg.stat_v1.mtime;
         }
 
         return true;
@@ -629,7 +629,7 @@ static bool sync_ls(SyncConnection& sc, const char* path,
         if (!ReadFdExactly(sc.fd, buf, len)) return false;
         buf[len] = 0;
 
-        func(msg.dent.mode, msg.dent.size, msg.dent.time, buf);
+        func(msg.dent.mode, msg.dent.size, msg.dent.mtime, buf);
     }
 }
 
