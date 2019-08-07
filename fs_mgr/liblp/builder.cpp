@@ -458,7 +458,7 @@ Partition* MetadataBuilder::FindPartition(const std::string& name) {
     return nullptr;
 }
 
-PartitionGroup* MetadataBuilder::FindGroup(const std::string& group_name) {
+PartitionGroup* MetadataBuilder::FindGroup(std::string_view group_name) {
     for (const auto& group : groups_) {
         if (group->name() == group_name) {
             return group.get();
@@ -1083,7 +1083,7 @@ std::vector<Partition*> MetadataBuilder::ListPartitionsInGroup(const std::string
     return partitions;
 }
 
-bool MetadataBuilder::ChangePartitionGroup(Partition* partition, const std::string& group_name) {
+bool MetadataBuilder::ChangePartitionGroup(Partition* partition, std::string_view group_name) {
     if (!FindGroup(group_name)) {
         LERROR << "Partition cannot change to unknown group: " << group_name;
         return false;
