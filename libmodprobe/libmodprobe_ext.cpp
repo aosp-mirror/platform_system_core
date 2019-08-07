@@ -65,6 +65,9 @@ bool Modprobe::Rmmod(const std::string& module_name) {
 
 bool Modprobe::ModuleExists(const std::string& module_name) {
     struct stat fileStat;
+    if (blacklist_enabled && module_blacklist_.count(module_name)) {
+        return false;
+    }
     auto deps = GetDependencies(module_name);
     if (deps.empty()) {
         // missing deps can happen in the case of an alias
