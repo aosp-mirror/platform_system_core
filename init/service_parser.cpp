@@ -568,33 +568,10 @@ Result<void> ServiceParser::EndSection() {
     }
 
     if (interface_inheritance_hierarchy_) {
-        std::set<std::string> interface_names;
-        for (const std::string& intf : service_->interfaces()) {
-            interface_names.insert(Split(intf, "/")[0]);
-        }
-        std::ostringstream error_stream;
-        for (const std::string& intf : interface_names) {
-            if (interface_inheritance_hierarchy_->count(intf) == 0) {
-                error_stream << "\nInterface is not in the known set of hidl_interfaces: '" << intf
-                             << "'. Please ensure the interface is spelled correctly and built "
-                             << "by a hidl_interface target.";
-                continue;
-            }
-            const std::set<std::string>& required_interfaces =
-                    (*interface_inheritance_hierarchy_)[intf];
-            std::set<std::string> diff;
-            std::set_difference(required_interfaces.begin(), required_interfaces.end(),
-                                interface_names.begin(), interface_names.end(),
-                                std::inserter(diff, diff.begin()));
-            if (!diff.empty()) {
-                error_stream << "\nInterface '" << intf << "' requires its full inheritance "
-                             << "hierarchy to be listed in this init_rc file. Missing "
-                             << "interfaces: [" << base::Join(diff, " ") << "]";
-            }
-        }
-        const std::string& errors = error_stream.str();
-        if (!errors.empty()) {
-            return Error() << errors;
+        if (const auto& check_hierarchy_result = CheckInterfaceInheritanceHierarchy(
+                    service_->interfaces(), *interface_inheritance_hierarchy_);
+            !check_hierarchy_result) {
+            return Error() << check_hierarchy_result.error();
         }
     }
 
