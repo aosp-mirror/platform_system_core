@@ -51,6 +51,15 @@ bool Modprobe::Insmod(const std::string& path_name) {
     return true;
 }
 
+bool Modprobe::Rmmod(const std::string& module_name) {
+    int ret = syscall(__NR_delete_module, MakeCanonical(module_name).c_str(), O_NONBLOCK);
+    if (ret != 0) {
+        PLOG(ERROR) << "Failed to remove module '" << module_name << "'";
+        return false;
+    }
+    return true;
+}
+
 bool Modprobe::ModuleExists(const std::string& module_name) {
     struct stat fileStat;
     auto deps = GetDependencies(module_name);
