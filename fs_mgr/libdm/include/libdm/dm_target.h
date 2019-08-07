@@ -277,12 +277,14 @@ class DmTargetCrypt final : public DmTarget {
 class DmTargetDefaultKey final : public DmTarget {
   public:
     DmTargetDefaultKey(uint64_t start, uint64_t length, const std::string& cipher,
-                       const std::string& key, const std::string& blockdev, uint64_t start_sector)
+                       const std::string& key, const std::string& blockdev, uint64_t start_sector,
+                       bool set_dun = false)
         : DmTarget(start, length),
           cipher_(cipher),
           key_(key),
           blockdev_(blockdev),
-          start_sector_(start_sector) {}
+          start_sector_(start_sector),
+          set_dun_(set_dun) {}
 
     std::string name() const override { return "default-key"; }
     bool Valid() const override { return true; }
@@ -293,6 +295,7 @@ class DmTargetDefaultKey final : public DmTarget {
     std::string key_;
     std::string blockdev_;
     uint64_t start_sector_;
+    bool set_dun_;
 };
 
 }  // namespace dm
