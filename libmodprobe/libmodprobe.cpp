@@ -315,3 +315,18 @@ bool Modprobe::LoadListedModules() {
     }
     return true;
 }
+
+bool Modprobe::Remove(const std::string& module_name) {
+    auto dependencies = GetDependencies(MakeCanonical(module_name));
+    if (dependencies.empty()) {
+        LOG(ERROR) << "Empty dependencies for module " << module_name;
+        return false;
+    }
+    if (!Rmmod(dependencies[0])) {
+        return false;
+    }
+    for (auto dep = dependencies.begin() + 1; dep != dependencies.end(); ++dep) {
+        Rmmod(*dep);
+    }
+    return true;
+}
