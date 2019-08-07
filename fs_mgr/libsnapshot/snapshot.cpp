@@ -49,7 +49,7 @@ static constexpr uint32_t kSnapshotChunkSize = 8;
 class DeviceInfo final : public SnapshotManager::IDeviceInfo {
   public:
     std::string GetGsidDir() const override { return "ota"s; }
-    std::string GetMetadataDir() const override { return "/metadata/ota/test"s; }
+    std::string GetMetadataDir() const override { return "/metadata/ota"s; }
     bool IsRunningSnapshot() const override;
 };
 
