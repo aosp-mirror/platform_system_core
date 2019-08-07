@@ -170,9 +170,8 @@ class SnapshotManager final {
     bool MapSnapshot(LockedFile* lock, const std::string& name, const std::string& base_device,
                      const std::chrono::milliseconds& timeout_ms, std::string* dev_path);
 
-    // Remove the backing copy-on-write image for the named snapshot. If the
-    // device is still mapped, this will attempt an Unmap, and fail if the
-    // unmap fails.
+    // Remove the backing copy-on-write image for the named snapshot. The
+    // caller is responsible for ensuring that the snapshot is unmapped.
     bool DeleteSnapshot(LockedFile* lock, const std::string& name);
 
     // Unmap a snapshot device previously mapped with MapSnapshotDevice().
