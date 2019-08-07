@@ -34,6 +34,7 @@ class Modprobe {
                             std::vector<std::string>* dependencies,
                             std::vector<std::string>* post_dependencies);
     void EnableBlacklist(bool enable);
+    void EnableVerbose(bool enable);
 
   private:
     std::string MakeCanonical(const std::string& module_path);
