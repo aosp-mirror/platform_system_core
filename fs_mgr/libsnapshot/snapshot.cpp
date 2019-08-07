@@ -300,11 +300,6 @@ bool SnapshotManager::DeleteSnapshot(LockedFile* lock, const std::string& name) 
     CHECK(lock);
     if (!EnsureImageManager()) return false;
 
-    if (!UnmapSnapshot(lock, name)) {
-        LOG(ERROR) << "Snapshot could not be unmapped for deletion: " << name;
-        return false;
-    }
-
     // Take the snapshot's lock after Unmap, since it will also try to lock.
     auto status_file = OpenSnapshotStatusFile(name, O_RDONLY, LOCK_EX);
     if (!status_file) return false;
