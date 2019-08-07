@@ -25,13 +25,14 @@ class Modprobe {
     Modprobe(const std::vector<std::string>&);
 
     bool LoadListedModules();
-    bool LoadWithAliases(const std::string& module_name, bool strict);
+    bool LoadWithAliases(const std::string& module_name, bool strict,
+                         const std::string& parameters = "");
     bool Remove(const std::string& module_name);
 
   private:
     std::string MakeCanonical(const std::string& module_path);
-    bool InsmodWithDeps(const std::string& module_name);
-    bool Insmod(const std::string& path_name);
+    bool InsmodWithDeps(const std::string& module_name, const std::string& parameters);
+    bool Insmod(const std::string& path_name, const std::string& parameters);
     bool Rmmod(const std::string& module_name);
     std::vector<std::string> GetDependencies(const std::string& module);
     bool ModuleExists(const std::string& module_name);
