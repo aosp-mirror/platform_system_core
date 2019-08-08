@@ -34,7 +34,11 @@ bool adb_check_server_version(std::string* _Nonnull error);
 int adb_connect(std::string_view service, std::string* _Nonnull error);
 
 // Same as above, except returning the TransportId for the service that we've connected to.
-int adb_connect(TransportId* _Nullable id, std::string_view service, std::string* _Nonnull error);
+// force_switch_device forces the function to attempt to select a device, even if the service
+// string appears to be a host: service (for use with host services that are device specific, like
+// forward).
+int adb_connect(TransportId* _Nullable id, std::string_view service, std::string* _Nonnull error,
+                bool force_switch_device = false);
 
 // Kill the currently running adb server, if it exists.
 bool adb_kill_server();
