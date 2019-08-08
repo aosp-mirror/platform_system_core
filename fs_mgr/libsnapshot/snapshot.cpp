@@ -49,7 +49,7 @@ static constexpr uint32_t kSnapshotChunkSize = 8;
 class DeviceInfo final : public SnapshotManager::IDeviceInfo {
   public:
     std::string GetGsidDir() const override { return "ota"s; }
-    std::string GetMetadataDir() const override { return "/metadata/ota/test"s; }
+    std::string GetMetadataDir() const override { return "/metadata/ota"s; }
     bool IsRunningSnapshot() const override;
 };
 
@@ -299,11 +299,6 @@ bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
 bool SnapshotManager::DeleteSnapshot(LockedFile* lock, const std::string& name) {
     CHECK(lock);
     if (!EnsureImageManager()) return false;
-
-    if (!UnmapSnapshot(lock, name)) {
-        LOG(ERROR) << "Snapshot could not be unmapped for deletion: " << name;
-        return false;
-    }
 
     // Take the snapshot's lock after Unmap, since it will also try to lock.
     auto status_file = OpenSnapshotStatusFile(name, O_RDONLY, LOCK_EX);
