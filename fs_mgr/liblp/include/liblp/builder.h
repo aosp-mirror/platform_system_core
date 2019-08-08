@@ -345,6 +345,9 @@ class MetadataBuilder {
                                                     const std::vector<Interval>& free_list,
                                                     uint64_t sectors_needed) const;
 
+    static bool UpdateMetadataForOtherSuper(LpMetadata* metadata, uint32_t source_slot_number,
+                                            uint32_t target_slot_number);
+
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;
     std::vector<std::unique_ptr<Partition>> partitions_;
