@@ -688,7 +688,7 @@ static int _fh_socket_writev(FH f, const adb_iovec* iov, int iovcnt) {
               android::base::SystemErrorCodeToString(err).c_str());
         }
         _socket_set_errno(err);
-        result = -1;
+        return -1;
     }
     CHECK_GE(static_cast<DWORD>(std::numeric_limits<int>::max()), bytes_written);
     return static_cast<int>(bytes_written);
