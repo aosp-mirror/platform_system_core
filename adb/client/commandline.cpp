@@ -1739,41 +1739,33 @@ int adb_commandline(int argc, const char** argv) {
         // Determine the <host-prefix> for this command.
         std::string host_prefix;
         if (reverse) {
-            host_prefix = "reverse";
+            host_prefix = "reverse:";
         } else {
-            if (serial) {
-                host_prefix = android::base::StringPrintf("host-serial:%s", serial);
-            } else if (transport_type == kTransportUsb) {
-                host_prefix = "host-usb";
-            } else if (transport_type == kTransportLocal) {
-                host_prefix = "host-local";
-            } else {
-                host_prefix = "host";
-            }
+            host_prefix = "host:";
         }
 
         std::string cmd, error_message;
         if (strcmp(argv[0], "--list") == 0) {
             if (argc != 1) error_exit("--list doesn't take any arguments");
-            return adb_query_command(host_prefix + ":list-forward");
+            return adb_query_command(host_prefix + "list-forward");
         } else if (strcmp(argv[0], "--remove-all") == 0) {
             if (argc != 1) error_exit("--remove-all doesn't take any arguments");
-            cmd = host_prefix + ":killforward-all";
+            cmd = "killforward-all";
         } else if (strcmp(argv[0], "--remove") == 0) {
             // forward --remove <local>
             if (argc != 2) error_exit("--remove requires an argument");
-            cmd = host_prefix + ":killforward:" + argv[1];
+            cmd = std::string("killforward:") + argv[1];
         } else if (strcmp(argv[0], "--no-rebind") == 0) {
             // forward --no-rebind <local> <remote>
             if (argc != 3) error_exit("--no-rebind takes two arguments");
             if (forward_targets_are_valid(argv[1], argv[2], &error_message)) {
-                cmd = host_prefix + ":forward:norebind:" + argv[1] + ";" + argv[2];
+                cmd = std::string("forward:norebind:") + argv[1] + ";" + argv[2];
             }
         } else {
             // forward <local> <remote>
             if (argc != 2) error_exit("forward takes two arguments");
             if (forward_targets_are_valid(argv[0], argv[1], &error_message)) {
-                cmd = host_prefix + ":forward:" + argv[0] + ";" + argv[1];
+                cmd = std::string("forward:") + argv[0] + ";" + argv[1];
             }
         }
 
@@ -1781,7 +1773,7 @@ int adb_commandline(int argc, const char** argv) {
             error_exit("error: %s", error_message.c_str());
         }
 
-        unique_fd fd(adb_connect(cmd, &error_message));
+        unique_fd fd(adb_connect(nullptr, host_prefix + cmd, &error_message, true));
         if (fd < 0 || !adb_status(fd.get(), &error_message)) {
             error_exit("error: %s", error_message.c_str());
         }
