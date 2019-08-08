@@ -19,6 +19,9 @@
       "name": "libbase_test"
     },
     {
+      "name": "libpackagelistparser_test"
+    },
+    {
       "name": "libprocinfo_test"
     },
     {
