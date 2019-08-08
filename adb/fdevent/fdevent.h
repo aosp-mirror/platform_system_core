@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <atomic>
 #include <chrono>
 #include <deque>
 #include <functional>
