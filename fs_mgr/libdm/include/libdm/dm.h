@@ -197,6 +197,7 @@ class DeviceMapper final {
     struct TargetInfo {
         struct dm_target_spec spec;
         std::string data;
+        TargetInfo() {}
         TargetInfo(const struct dm_target_spec& spec, const std::string& data)
             : spec(spec), data(data) {}
     };

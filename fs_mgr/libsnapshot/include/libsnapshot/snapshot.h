@@ -22,7 +22,8 @@
 #include <vector>
 
 #include <android-base/unique_fd.h>
-#include <libdm/dm_target.h>
+#include <libdm/dm.h>
+#include <libfiemap/image_manager.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -38,7 +39,7 @@ class IImageManager;
 
 namespace snapshot {
 
-enum class UpdateState {
+enum class UpdateState : unsigned int {
     // No update or merge is in progress.
     None,
 
@@ -50,6 +51,10 @@ enum class UpdateState {
 
     // The kernel is merging in the background.
     Merging,
+
+    // Post-merge cleanup steps could not be completed due to a transient
+    // error, but the next reboot will finish any pending operations.
+    MergeNeedsReboot,
 
     // Merging is complete, and needs to be acknowledged.
     MergeCompleted,
@@ -94,8 +99,23 @@ class SnapshotManager final {
 
     // Wait for the current merge to finish, then perform cleanup when it
     // completes. It is necessary to call this after InitiateMerge(), or when
-    // a merge is detected for the first time after boot.
-    bool WaitForMerge();
+    // a merge state is detected during boot.
+    //
+    // Note that after calling WaitForMerge(), GetUpdateState() may still return
+    // that a merge is in progress:
+    //   MergeFailed indicates that a fatal error occurred. WaitForMerge() may
+    //   called any number of times again to attempt to make more progress, but
+    //   we do not expect it to succeed if a catastrophic error occurred.
+    //
+    //   MergeNeedsReboot indicates that the merge has completed, but cleanup
+    //   failed. This can happen if for some reason resources were not closed
+    //   properly. In this case another reboot is needed before we can take
+    //   another OTA. However, WaitForMerge() can be called again without
+    //   rebooting, to attempt to finish cleanup anyway.
+    //
+    //   MergeCompleted indicates that the update has fully completed.
+    //   GetUpdateState will return None, and a new update can begin.
+    UpdateState WaitForMerge();
 
     // Find the status of the current update, if any.
     //
@@ -109,9 +129,14 @@ class SnapshotManager final {
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
     FRIEND_TEST(SnapshotTest, MapSnapshot);
     FRIEND_TEST(SnapshotTest, MapPartialSnapshot);
+    FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
+    FRIEND_TEST(SnapshotTest, Merge);
+    FRIEND_TEST(SnapshotTest, MergeCannotRemoveCow);
     friend class SnapshotTest;
 
+    using DmTargetSnapshot = android::dm::DmTargetSnapshot;
     using IImageManager = android::fiemap::IImageManager;
+    using TargetInfo = android::dm::DeviceMapper::TargetInfo;
 
     explicit SnapshotManager(IDeviceInfo* info);
 
@@ -126,16 +151,18 @@ class SnapshotManager final {
     // this. It also serves as a proof-of-lock for some functions.
     class LockedFile final {
       public:
-        LockedFile(const std::string& path, android::base::unique_fd&& fd)
-            : path_(path), fd_(std::move(fd)) {}
+        LockedFile(const std::string& path, android::base::unique_fd&& fd, int lock_mode)
+            : path_(path), fd_(std::move(fd)), lock_mode_(lock_mode) {}
         ~LockedFile();
 
         const std::string& path() const { return path_; }
         int fd() const { return fd_; }
+        int lock_mode() const { return lock_mode_; }
 
       private:
         std::string path_;
         android::base::unique_fd fd_;
+        int lock_mode_;
     };
     std::unique_ptr<LockedFile> OpenFile(const std::string& file, int open_flags, int lock_flags);
     bool Truncate(LockedFile* file);
@@ -189,6 +216,7 @@ class SnapshotManager final {
     std::unique_ptr<LockedFile> LockExclusive();
     UpdateState ReadUpdateState(LockedFile* file);
     bool WriteUpdateState(LockedFile* file, UpdateState state);
+    std::string GetStateFilePath() const;
 
     // This state is persisted per-snapshot in /metadata/ota/snapshots/.
     struct SnapshotStatus {
@@ -200,11 +228,38 @@ class SnapshotManager final {
         uint64_t metadata_sectors = 0;
     };
 
+    // Helpers for merging.
+    bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
+    bool RewriteSnapshotDeviceTable(const std::string& dm_name);
+    bool MarkSnapshotMergeCompleted(LockedFile* snapshot_lock, const std::string& snapshot_name);
+    void AcknowledgeMergeSuccess(LockedFile* lock);
+    void AcknowledgeMergeFailure();
+
+    // Note that these require the name of the device containing the snapshot,
+    // which may be the "inner" device. Use GetsnapshotDeviecName().
+    bool QuerySnapshotStatus(const std::string& dm_name, std::string* target_type,
+                             DmTargetSnapshot::Status* status);
+    bool IsSnapshotDevice(const std::string& dm_name, TargetInfo* target = nullptr);
+
+    // Internal callback for when merging is complete.
+    bool OnSnapshotMergeComplete(LockedFile* lock, const std::string& name,
+                                 const SnapshotStatus& status);
+    bool CollapseSnapshotDevice(const std::string& name, const SnapshotStatus& status);
+
+    // Only the following UpdateStates are used here:
+    //   UpdateState::Merging
+    //   UpdateState::MergeCompleted
+    //   UpdateState::MergeFailed
+    //   UpdateState::MergeNeedsReboot
+    UpdateState CheckMergeState();
+    UpdateState CheckMergeState(LockedFile* lock);
+    UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name);
+
     // Interact with status files under /metadata/ota/snapshots.
-    std::unique_ptr<LockedFile> OpenSnapshotStatusFile(const std::string& name, int open_flags,
-                                                       int lock_flags);
-    bool WriteSnapshotStatus(LockedFile* file, const SnapshotStatus& status);
-    bool ReadSnapshotStatus(LockedFile* file, SnapshotStatus* status);
+    bool WriteSnapshotStatus(LockedFile* lock, const std::string& name,
+                             const SnapshotStatus& status);
+    bool ReadSnapshotStatus(LockedFile* lock, const std::string& name, SnapshotStatus* status);
+    std::string GetSnapshotStatusFilePath(const std::string& name);
 
     // Return the name of the device holding the "snapshot" or "snapshot-merge"
     // target. This may not be the final device presented via MapSnapshot(), if
