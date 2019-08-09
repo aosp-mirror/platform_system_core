@@ -609,6 +609,9 @@ on post-fs-data
     mkdir /data/cache/backup_stage 0700 system system
     mkdir /data/cache/backup 0700 system system
 
+    mkdir /data/rollback 0700 system system
+    mkdir /data/rollback-observer 0700 system system
+
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready
     parse_apex_configs
