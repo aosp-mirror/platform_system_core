@@ -357,7 +357,7 @@ static void stdinout_raw_epilogue(int inFd, int outFd, int old_stdin_mode, int o
 }
 
 void copy_to_file(int inFd, int outFd) {
-    std::vector<char> buf(32 * 1024);
+    std::vector<char> buf(64 * 1024);
     int len;
     long total = 0;
     int old_stdin_mode = -1;
