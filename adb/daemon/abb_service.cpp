@@ -53,14 +53,13 @@ unique_fd AbbProcess::sendCommand(std::string_view command) {
             return error_fd;
         }
 
-        if (!SendProtocolString(socket_fd_, std::string(command))) {
+        if (!SendProtocolString(socket_fd_, command)) {
             PLOG(ERROR) << "failed to send command to abb";
             socket_fd_.reset();
             continue;
         }
 
         unique_fd fd;
-        std::string error;
         char buf;
         if (android::base::ReceiveFileDescriptors(socket_fd_, &buf, 1, &fd) != 1) {
             PLOG(ERROR) << "failed to receive FD from abb";
