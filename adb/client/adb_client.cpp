@@ -400,9 +400,15 @@ std::string format_host_command(const char* command) {
 }
 
 bool adb_get_feature_set(FeatureSet* feature_set, std::string* error) {
-    std::string result;
-    if (adb_query(format_host_command("features"), &result, error)) {
-        *feature_set = StringToFeatureSet(result);
+    static FeatureSet* features = nullptr;
+    if (!features) {
+        std::string result;
+        if (adb_query(format_host_command("features"), &result, error)) {
+            features = new FeatureSet(StringToFeatureSet(result));
+        }
+    }
+    if (features) {
+        *feature_set = *features;
         return true;
     }
     feature_set->clear();
