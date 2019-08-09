@@ -150,6 +150,31 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
     return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100));
 }
 
+const auto kPhysicalDevice = "/dev/block/by-name/"s;
+
+bool fs_mgr_update_blk_device(FstabEntry* entry) {
+    if (entry->fs_mgr_flags.logical) {
+        fs_mgr_update_logical_partition(entry);
+    }
+    if (fs_mgr_access(entry->blk_device)) {
+        return true;
+    }
+    if (entry->blk_device != "/dev/root") {
+        return false;
+    }
+
+    // special case for system-as-root (taimen and others)
+    auto blk_device = kPhysicalDevice + "system";
+    if (!fs_mgr_access(blk_device)) {
+        blk_device += fs_mgr_get_slot_suffix();
+        if (!fs_mgr_access(blk_device)) {
+            return false;
+        }
+    }
+    entry->blk_device = blk_device;
+    return true;
+}
+
 bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     // readonly filesystem, can not be mount -o remount,rw
     // for squashfs, erofs or if free space is (near) zero making such a remount
@@ -157,18 +182,18 @@ bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     if (!fs_mgr_filesystem_has_space(entry->mount_point)) {
         return true;
     }
-    if (entry->fs_mgr_flags.logical) {
-        fs_mgr_update_logical_partition(entry);
+
+    // blk_device needs to be setup so we can check superblock.
+    // If we fail here, because during init first stage and have doubts.
+    if (!fs_mgr_update_blk_device(entry)) {
+        return true;
     }
+
+    // check if ext4 de-dupe
     auto save_errno = errno;
-    errno = 0;
     auto has_shared_blocks = fs_mgr_has_shared_blocks(entry->mount_point, entry->blk_device);
     if (!has_shared_blocks && (entry->mount_point == "/system")) {
         has_shared_blocks = fs_mgr_has_shared_blocks("/", entry->blk_device);
-    }
-    // special case for first stage init for system as root (taimen)
-    if (!has_shared_blocks && (errno == ENOENT) && (entry->blk_device == "/dev/root")) {
-        has_shared_blocks = true;
     }
     errno = save_errno;
     return has_shared_blocks;
@@ -387,8 +412,6 @@ bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& m
 uint32_t fs_mgr_overlayfs_slot_number() {
     return SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix());
 }
-
-const auto kPhysicalDevice = "/dev/block/by-name/"s;
 
 std::string fs_mgr_overlayfs_super_device(uint32_t slot_number) {
     return kPhysicalDevice + fs_mgr_get_super_partition_name(slot_number);
