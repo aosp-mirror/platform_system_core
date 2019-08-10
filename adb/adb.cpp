@@ -1247,11 +1247,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
     // TODO: Switch handle_forward_request to string_view.
     std::string service_str(service);
     if (handle_forward_request(
-                service_str.c_str(),
-                [=](std::string* error) {
-                    return acquire_one_transport(type, serial, transport_id, nullptr, error);
-                },
-                reply_fd)) {
+                service_str.c_str(), [=](std::string* error) { return s->transport; }, reply_fd)) {
         return HostRequestResult::Handled;
     }
 
