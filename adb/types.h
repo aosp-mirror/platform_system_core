@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <string.h>
+
 #include <algorithm>
 #include <deque>
 #include <memory>
