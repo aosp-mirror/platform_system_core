@@ -17,6 +17,7 @@
 #include "android-base/errors.h"
 
 #include <errno.h>
+#include <string.h>
 
 namespace android {
 namespace base {
