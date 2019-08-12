@@ -195,10 +195,11 @@ bool Action::CheckPropertyTriggers(const std::string& name,
                 found = true;
             }
         } else {
-            std::string prop_val = android::base::GetProperty(trigger_name, "");
-            if (prop_val.empty() || (trigger_value != "*" && trigger_value != prop_val)) {
-                return false;
+            std::string prop_value = android::base::GetProperty(trigger_name, "");
+            if (trigger_value == "*" && !prop_value.empty()) {
+                continue;
             }
+            if (trigger_value != prop_value) return false;
         }
     }
     return found;
