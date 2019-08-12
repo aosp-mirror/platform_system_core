@@ -41,23 +41,28 @@
 
 #else
 
-/* Mac OS and Windows have nothing. */
-
-#define __LITTLE_ENDIAN 1234
+#if defined(__APPLE__)
+/* macOS has some of the basics. */
+#include <sys/_endian.h>
+#else
+/* Windows really has nothing. */
 #define LITTLE_ENDIAN __LITTLE_ENDIAN
-
-#define __BIG_ENDIAN 4321
 #define BIG_ENDIAN __BIG_ENDIAN
-
-#define __BYTE_ORDER __LITTLE_ENDIAN
 #define BYTE_ORDER __BYTE_ORDER
-
 #define htons(x) __builtin_bswap16(x)
 #define htonl(x) __builtin_bswap32(x)
-#define htonq(x) __builtin_bswap64(x)
-
 #define ntohs(x) __builtin_bswap16(x)
 #define ntohl(x) __builtin_bswap32(x)
+#endif
+
+/* Neither macOS nor Windows have the rest. */
+
+#define __LITTLE_ENDIAN 1234
+#define __BIG_ENDIAN 4321
+#define __BYTE_ORDER __LITTLE_ENDIAN
+
+#define htonq(x) __builtin_bswap64(x)
+
 #define ntohq(x) __builtin_bswap64(x)
 
 #define htobe16(x) __builtin_bswap16(x)
