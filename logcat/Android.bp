@@ -24,7 +24,6 @@ cc_defaults {
     ],
     shared_libs: [
         "libbase",
-        "libpcrecpp",
         "libprocessgroup",
     ],
     static_libs: ["liblog"],
