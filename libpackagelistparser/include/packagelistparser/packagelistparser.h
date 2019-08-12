@@ -1,94 +1,81 @@
 /*
- * Copyright 2015, Intel Corporation
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Written by William Roberts <william.c.roberts@intel.com>
- *
- * This is a parser library for parsing the packages.list file generated
- * by PackageManager service.
- *
- * This simple parser is sensitive to format changes in
- * frameworks/base/services/core/java/com/android/server/pm/Settings.java
- * A dependency note has been added to that file to correct
- * this parser.
  */
 
-#ifndef PACKAGELISTPARSER_H_
-#define PACKAGELISTPARSER_H_
+#pragma once
 
 #include <stdbool.h>
-#include <sys/cdefs.h>
 #include <sys/types.h>
 
 __BEGIN_DECLS
 
-/** The file containing the list of installed packages on the system */
-#define PACKAGES_LIST_FILE  "/data/system/packages.list"
+typedef struct gid_list {
+  /** Number of gids. */
+  size_t cnt;
 
-typedef struct pkg_info pkg_info;
-typedef struct gid_list gid_list;
+  /** Array of gids. */
+  gid_t* gids;
+} gid_list;
 
-struct gid_list {
-    size_t cnt;
-    gid_t *gids;
-};
+typedef struct pkg_info {
+  /** Package name like "com.android.blah". */
+  char* name;
 
-struct pkg_info {
-    char *name;
-    uid_t uid;
-    bool debuggable;
-    char *data_dir;
-    char *seinfo;
-    gid_list gids;
-    void *private_data;
-    bool profileable_from_shell;
-    long version_code;
-};
+  /** Package uid like 10014. */
+  uid_t uid;
 
-/**
- * Callback function to be used by packagelist_parse() routine.
- * @param info
- *  The parsed package information
- * @param userdata
- *  The supplied userdata pointer to packagelist_parse()
- * @return
- *  true to keep processing, false to stop.
- */
-typedef bool (*pfn_on_package)(pkg_info *info, void *userdata);
+  /** Package's AndroidManifest.xml debuggable flag. */
+  bool debuggable;
 
-/**
- * Parses the file specified by PACKAGES_LIST_FILE and invokes the callback on
- * each entry found. Once the callback is invoked, ownership of the pkg_info pointer
- * is passed to the callback routine, thus they are required to perform any cleanup
- * desired.
- * @param callback
- *  The callback function called on each parsed line of the packages list.
- * @param userdata
- *  An optional userdata supplied pointer to pass to the callback function.
- * @return
- *  true on success false on failure.
- */
-extern bool packagelist_parse(pfn_on_package callback, void *userdata);
+  /** Package data directory like "/data/user/0/com.android.blah" */
+  char* data_dir;
+
+  /** Package SELinux info. */
+  char* seinfo;
+
+  /** Package's list of gids. */
+  gid_list gids;
+
+  /** Spare pointer for the caller to stash extra data off. */
+  void* private_data;
+
+  /** Package's AndroidManifest.xml profileable flag. */
+  bool profileable_from_shell;
+
+  /** Package's AndroidManifest.xml version code. */
+  long version_code;
+} pkg_info;
 
 /**
- * Frees a pkg_info structure.
- * @param info
- *  The struct to free
+ * Parses the system's default package list.
+ * Invokes `callback` once for each package.
+ * The callback owns the `pkg_info*` and should call packagelist_free().
+ * The callback should return `false` to exit early or `true` to continue.
  */
-extern void packagelist_free(pkg_info *info);
+bool packagelist_parse(bool (*callback)(pkg_info* info, void* user_data), void* user_data);
+
+/**
+ * Parses the given package list.
+ * Invokes `callback` once for each package.
+ * The callback owns the `pkg_info*` and should call packagelist_free().
+ * The callback should return `false` to exit early or `true` to continue.
+ */
+bool packagelist_parse_file(const char* path, bool (*callback)(pkg_info* info, void* user_data),
+                            void* user_data);
+
+/** Frees the given `pkg_info`. */
+void packagelist_free(pkg_info* info);
 
 __END_DECLS
-
-#endif /* PACKAGELISTPARSER_H_ */
