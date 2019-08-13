@@ -222,7 +222,7 @@ static std::string GetHostName() {
 bool Subprocess::ForkAndExec(std::string* error) {
     unique_fd child_stdinout_sfd, child_stderr_sfd;
     unique_fd parent_error_sfd, child_error_sfd;
-    char pts_name[PATH_MAX];
+    const char* pts_name = nullptr;
 
     if (command_.empty()) {
         __android_log_security_bswrite(SEC_TAG_ADB_SHELL_INTERACTIVE, "");
@@ -283,10 +283,22 @@ bool Subprocess::ForkAndExec(std::string* error) {
     cenv.push_back(nullptr);
 
     if (type_ == SubprocessType::kPty) {
-        int fd;
-        pid_ = forkpty(&fd, pts_name, nullptr, nullptr);
+        unique_fd pty_master(posix_openpt(O_RDWR | O_NOCTTY | O_CLOEXEC));
+        if (pty_master == -1) {
+            *error =
+                    android::base::StringPrintf("failed to create pty master: %s", strerror(errno));
+            return false;
+        }
+        if (unlockpt(pty_master.get()) != 0) {
+            *error = android::base::StringPrintf("failed to unlockpt pty master: %s",
+                                                 strerror(errno));
+            return false;
+        }
+
+        pid_ = fork();
+        pts_name = ptsname(pty_master.get());
         if (pid_ > 0) {
-          stdinout_sfd_.reset(fd);
+            stdinout_sfd_ = std::move(pty_master);
         }
     } else {
         if (!CreateSocketpair(&stdinout_sfd_, &child_stdinout_sfd)) {

@@ -24,6 +24,7 @@ cc_defaults {
         "toolbox.c",
         "getevent.c",
         "getprop.cpp",
+        "modprobe.cpp",
         "setprop.cpp",
         "start.cpp",
     ],
@@ -33,11 +34,15 @@ cc_defaults {
     shared_libs: [
         "libbase",
     ],
-    static_libs: ["libpropertyinfoparser"],
+    static_libs: [
+        "libmodprobe",
+        "libpropertyinfoparser",
+    ],
 
     symlinks: [
         "getevent",
         "getprop",
+        "modprobe",
         "setprop",
         "start",
         "stop",

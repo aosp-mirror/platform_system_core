@@ -193,9 +193,9 @@ Result<void> ServiceParser::ParseIoprio(std::vector<std::string>&& args) {
 Result<void> ServiceParser::ParseKeycodes(std::vector<std::string>&& args) {
     auto it = args.begin() + 1;
     if (args.size() == 2 && StartsWith(args[1], "$")) {
-        std::string expanded;
-        if (!expand_props(args[1], &expanded)) {
-            return Error() << "Could not expand property '" << args[1] << "'";
+        auto expanded = ExpandProps(args[1]);
+        if (!expanded) {
+            return expanded.error();
         }
 
         // If the property is not set, it defaults to none, in which case there are no keycodes
@@ -204,7 +204,7 @@ Result<void> ServiceParser::ParseKeycodes(std::vector<std::string>&& args) {
             return {};
         }
 
-        args = Split(expanded, ",");
+        args = Split(*expanded, ",");
         it = args.begin();
     }
 
@@ -422,9 +422,11 @@ Result<void> ServiceParser::ParseFile(std::vector<std::string>&& args) {
     FileDescriptor file;
     file.type = args[2];
 
-    if (!expand_props(args[1], &file.name)) {
-        return Error() << "Could not expand property in file path '" << args[1] << "'";
+    auto file_name = ExpandProps(args[1]);
+    if (!file_name) {
+        return Error() << "Could not expand file path ': " << file_name.error();
     }
+    file.name = *file_name;
     if (file.name[0] != '/' || file.name.find("../") != std::string::npos) {
         return Error() << "file name must not be relative";
     }
@@ -461,18 +463,10 @@ Result<void> ServiceParser::ParseUpdatable(std::vector<std::string>&& args) {
     return {};
 }
 
-class ServiceParser::OptionParserMap : public KeywordMap<OptionParser> {
-  public:
-    OptionParserMap() {}
-
-  private:
-    const Map& map() const override;
-};
-
-const ServiceParser::OptionParserMap::Map& ServiceParser::OptionParserMap::map() const {
+const KeywordMap<ServiceParser::OptionParser>& ServiceParser::GetParserMap() const {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
-    static const Map option_parsers = {
+    static const KeywordMap<ServiceParser::OptionParser> parser_map = {
         {"capabilities",
                         {0,     kMax, &ServiceParser::ParseCapabilities}},
         {"class",       {1,     kMax, &ServiceParser::ParseClass}},
@@ -518,7 +512,7 @@ const ServiceParser::OptionParserMap::Map& ServiceParser::OptionParserMap::map()
         {"writepid",    {1,     kMax, &ServiceParser::ParseWritepid}},
     };
     // clang-format on
-    return option_parsers;
+    return parser_map;
 }
 
 Result<void> ServiceParser::ParseSection(std::vector<std::string>&& args,
@@ -561,8 +555,7 @@ Result<void> ServiceParser::ParseLineSection(std::vector<std::string>&& args, in
         return {};
     }
 
-    static const OptionParserMap parser_map;
-    auto parser = parser_map.FindFunction(args);
+    auto parser = GetParserMap().Find(args);
 
     if (!parser) return parser.error();
 
@@ -575,33 +568,10 @@ Result<void> ServiceParser::EndSection() {
     }
 
     if (interface_inheritance_hierarchy_) {
-        std::set<std::string> interface_names;
-        for (const std::string& intf : service_->interfaces()) {
-            interface_names.insert(Split(intf, "/")[0]);
-        }
-        std::ostringstream error_stream;
-        for (const std::string& intf : interface_names) {
-            if (interface_inheritance_hierarchy_->count(intf) == 0) {
-                error_stream << "\nInterface is not in the known set of hidl_interfaces: '" << intf
-                             << "'. Please ensure the interface is spelled correctly and built "
-                             << "by a hidl_interface target.";
-                continue;
-            }
-            const std::set<std::string>& required_interfaces =
-                    (*interface_inheritance_hierarchy_)[intf];
-            std::set<std::string> diff;
-            std::set_difference(required_interfaces.begin(), required_interfaces.end(),
-                                interface_names.begin(), interface_names.end(),
-                                std::inserter(diff, diff.begin()));
-            if (!diff.empty()) {
-                error_stream << "\nInterface '" << intf << "' requires its full inheritance "
-                             << "hierarchy to be listed in this init_rc file. Missing "
-                             << "interfaces: [" << base::Join(diff, " ") << "]";
-            }
-        }
-        const std::string& errors = error_stream.str();
-        if (!errors.empty()) {
-            return Error() << errors;
+        if (const auto& check_hierarchy_result = CheckInterfaceInheritanceHierarchy(
+                    service_->interfaces(), *interface_inheritance_hierarchy_);
+            !check_hierarchy_result) {
+            return Error() << check_hierarchy_result.error();
         }
     }
 

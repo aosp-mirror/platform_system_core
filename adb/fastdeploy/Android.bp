@@ -13,27 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-
 java_binary {
     name: "deployagent",
     sdk_version: "24",
     srcs: ["deployagent/src/**/*.java", "deploylib/src/**/*.java", "proto/**/*.proto"],
     static_libs: ["apkzlib_zip"],
-    wrapper: "deployagent/deployagent.sh",
     proto: {
         type: "lite",
     },
     dex_preopt: {
         enabled: false,
-    }
-}
-
-java_binary_host {
-    name: "deploypatchgenerator",
-    srcs: ["deploypatchgenerator/src/**/*.java", "deploylib/src/**/*.java", "proto/**/*.proto"],
-    static_libs: ["apkzlib"],
-    manifest: "deploypatchgenerator/manifest.txt",
-    proto: {
-        type: "full",
     }
 }

@@ -27,6 +27,7 @@
 #include <selinux/android.h>
 
 #include "action.h"
+#include "builtins.h"
 #include "util.h"
 
 #if defined(__ANDROID__)
@@ -99,7 +100,7 @@ uint32_t SubcontextPropertySet(const std::string& name, const std::string& value
 
 class SubcontextProcess {
   public:
-    SubcontextProcess(const KeywordFunctionMap* function_map, std::string context, int init_fd)
+    SubcontextProcess(const BuiltinFunctionMap* function_map, std::string context, int init_fd)
         : function_map_(function_map), context_(std::move(context)), init_fd_(init_fd){};
     void MainLoop();
 
@@ -109,7 +110,7 @@ class SubcontextProcess {
     void ExpandArgs(const SubcontextCommand::ExpandArgsCommand& expand_args_command,
                     SubcontextReply* reply) const;
 
-    const KeywordFunctionMap* function_map_;
+    const BuiltinFunctionMap* function_map_;
     const std::string context_;
     const int init_fd_;
 };
@@ -122,12 +123,12 @@ void SubcontextProcess::RunCommand(const SubcontextCommand::ExecuteCommand& exec
         args.emplace_back(string);
     }
 
-    auto map_result = function_map_->FindFunction(args);
+    auto map_result = function_map_->Find(args);
     Result<void> result;
     if (!map_result) {
         result = Error() << "Cannot find command: " << map_result.error();
     } else {
-        result = RunBuiltinFunction(map_result->second, args, context_);
+        result = RunBuiltinFunction(map_result->function, args, context_);
     }
 
     for (const auto& [name, value] : properties_to_set) {
@@ -150,15 +151,15 @@ void SubcontextProcess::RunCommand(const SubcontextCommand::ExecuteCommand& exec
 void SubcontextProcess::ExpandArgs(const SubcontextCommand::ExpandArgsCommand& expand_args_command,
                                    SubcontextReply* reply) const {
     for (const auto& arg : expand_args_command.args()) {
-        auto expanded_prop = std::string{};
-        if (!expand_props(arg, &expanded_prop)) {
+        auto expanded_arg = ExpandProps(arg);
+        if (!expanded_arg) {
             auto* failure = reply->mutable_failure();
-            failure->set_error_string("Failed to expand '" + arg + "'");
+            failure->set_error_string(expanded_arg.error().message());
             failure->set_error_errno(0);
             return;
         } else {
             auto* expand_args_reply = reply->mutable_expand_args_reply();
-            expand_args_reply->add_expanded_args(expanded_prop);
+            expand_args_reply->add_expanded_args(*expanded_arg);
         }
     }
 }
@@ -215,7 +216,7 @@ void SubcontextProcess::MainLoop() {
 
 }  // namespace
 
-int SubcontextMain(int argc, char** argv, const KeywordFunctionMap* function_map) {
+int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map) {
     if (argc < 4) LOG(FATAL) << "Fewer than 4 args specified to subcontext (" << argc << ")";
 
     auto context = std::string(argv[2]);

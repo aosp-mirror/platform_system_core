@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -25,12 +26,21 @@ class Modprobe {
     Modprobe(const std::vector<std::string>&);
 
     bool LoadListedModules();
-    bool LoadWithAliases(const std::string& module_name, bool strict);
+    bool LoadWithAliases(const std::string& module_name, bool strict,
+                         const std::string& parameters = "");
+    bool Remove(const std::string& module_name);
+    std::vector<std::string> ListModules(const std::string& pattern);
+    bool GetAllDependencies(const std::string& module, std::vector<std::string>* pre_dependencies,
+                            std::vector<std::string>* dependencies,
+                            std::vector<std::string>* post_dependencies);
+    void EnableBlacklist(bool enable);
+    void EnableVerbose(bool enable);
 
   private:
     std::string MakeCanonical(const std::string& module_path);
-    bool InsmodWithDeps(const std::string& module_name);
-    bool Insmod(const std::string& path_name);
+    bool InsmodWithDeps(const std::string& module_name, const std::string& parameters);
+    bool Insmod(const std::string& path_name, const std::string& parameters);
+    bool Rmmod(const std::string& module_name);
     std::vector<std::string> GetDependencies(const std::string& module);
     bool ModuleExists(const std::string& module_name);
 
@@ -39,6 +49,7 @@ class Modprobe {
     bool ParseSoftdepCallback(const std::vector<std::string>& args);
     bool ParseLoadCallback(const std::vector<std::string>& args);
     bool ParseOptionsCallback(const std::vector<std::string>& args);
+    bool ParseBlacklistCallback(const std::vector<std::string>& args);
     void ParseCfg(const std::string& cfg, std::function<bool(const std::vector<std::string>&)> f);
 
     std::vector<std::pair<std::string, std::string>> module_aliases_;
@@ -47,4 +58,6 @@ class Modprobe {
     std::vector<std::pair<std::string, std::string>> module_post_softdep_;
     std::vector<std::string> module_load_;
     std::unordered_map<std::string, std::string> module_options_;
+    std::set<std::string> module_blacklist_;
+    bool blacklist_enabled = false;
 };

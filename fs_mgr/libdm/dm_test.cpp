@@ -166,6 +166,34 @@ TEST(libdm, DmLinear) {
     ASSERT_TRUE(dev.Destroy());
 }
 
+TEST(libdm, DmSuspendResume) {
+    unique_fd tmp1(CreateTempFile("file_suspend_resume", 512));
+    ASSERT_GE(tmp1, 0);
+
+    LoopDevice loop_a(tmp1, 10s);
+    ASSERT_TRUE(loop_a.valid());
+
+    DmTable table;
+    ASSERT_TRUE(table.Emplace<DmTargetLinear>(0, 1, loop_a.device(), 0));
+    ASSERT_TRUE(table.valid());
+
+    TempDevice dev("libdm-test-dm-suspend-resume", table);
+    ASSERT_TRUE(dev.valid());
+    ASSERT_FALSE(dev.path().empty());
+
+    auto& dm = DeviceMapper::Instance();
+
+    // Test Set and Get status of device.
+    vector<DeviceMapper::TargetInfo> targets;
+    ASSERT_EQ(dm.GetState(dev.name()), DmDeviceState::ACTIVE);
+
+    ASSERT_TRUE(dm.ChangeState(dev.name(), DmDeviceState::SUSPENDED));
+    ASSERT_EQ(dm.GetState(dev.name()), DmDeviceState::SUSPENDED);
+
+    ASSERT_TRUE(dm.ChangeState(dev.name(), DmDeviceState::ACTIVE));
+    ASSERT_EQ(dm.GetState(dev.name()), DmDeviceState::ACTIVE);
+}
+
 TEST(libdm, DmVerityArgsAvb2) {
     std::string device = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a";
     std::string algorithm = "sha1";
@@ -426,6 +454,87 @@ TEST(libdm, DmSnapshotOverflow) {
     } else {
         ASSERT_EQ(status.error, "Invalid");
     }
+}
+
+TEST(libdm, ParseStatusText) {
+    DmTargetSnapshot::Status status;
+
+    // Bad inputs
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("X", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123/456", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456 789", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456/789", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123/456/789", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 / 456 789", &status));
+
+    // Good input
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("123/456 789", &status));
+    EXPECT_EQ(status.sectors_allocated, 123);
+    EXPECT_EQ(status.total_sectors, 456);
+    EXPECT_EQ(status.metadata_sectors, 789);
+
+    // Known error codes
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Invalid", &status));
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Merge failed", &status));
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Overflow", &status));
+}
+
+TEST(libdm, DmSnapshotMergePercent) {
+    DmTargetSnapshot::Status status;
+
+    // Correct input
+    status.sectors_allocated = 1000;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 1.0);
+
+    status.sectors_allocated = 500;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status), 49.0);
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 51.0);
+
+    status.sectors_allocated = 0;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status), 99.0);
+
+    status.sectors_allocated = 500;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 500;
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status), 99.0);
+
+    status.sectors_allocated = 500;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status, 500), 1.0);
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status, 1000), 51.0);
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status, 1000), 49.0);
+
+    // Robustness
+    status.sectors_allocated = 2000;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 0.0);
+
+    status.sectors_allocated = 2000;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 2000;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 0.0);
+
+    status.sectors_allocated = 2000;
+    status.total_sectors = 0;
+    status.metadata_sectors = 2000;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 0.0);
+
+    status.sectors_allocated = 1000;
+    status.total_sectors = 0;
+    status.metadata_sectors = 1000;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status, 0), 0.0);
 }
 
 TEST(libdm, CryptArgs) {

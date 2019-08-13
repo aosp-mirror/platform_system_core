@@ -27,6 +27,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -45,6 +46,8 @@ namespace android {
 namespace dm {
 
 enum class DmDeviceState { INVALID, SUSPENDED, ACTIVE };
+
+static constexpr uint64_t kSectorSize = 512;
 
 class DeviceMapper final {
   public:
@@ -70,14 +73,36 @@ class DeviceMapper final {
         uint64_t dev_;
     };
 
+    class Info {
+        uint32_t flags_;
+
+      public:
+        explicit Info(uint32_t flags) : flags_(flags) {}
+
+        bool IsActiveTablePresent() const { return flags_ & DM_ACTIVE_PRESENT_FLAG; }
+        bool IsBufferFull() const { return flags_ & DM_BUFFER_FULL_FLAG; }
+        bool IsInactiveTablePresent() const { return flags_ & DM_INACTIVE_PRESENT_FLAG; }
+        bool IsReadOnly() const { return flags_ & DM_READONLY_FLAG; }
+        bool IsSuspended() const { return flags_ & DM_SUSPEND_FLAG; }
+    };
+
     // Removes a device mapper device with the given name.
     // Returns 'true' on success, false otherwise.
     bool DeleteDevice(const std::string& name);
+
+    // Fetches and returns the complete state of the underlying device mapper
+    // device with given name.
+    std::optional<Info> GetDetailedInfo(const std::string& name) const;
 
     // Returns the current state of the underlying device mapper device
     // with given name.
     // One of INVALID, SUSPENDED or ACTIVE.
     DmDeviceState GetState(const std::string& name) const;
+
+    // Puts the given device to the specified status, which must be either:
+    // - SUSPENDED: suspend the device, or
+    // - ACTIVE: resumes the device.
+    bool ChangeState(const std::string& name, DmDeviceState state);
 
     // Creates a device, loads the given table, and activates it. If the device
     // is not able to be activated, it is destroyed, and false is returned.
@@ -172,6 +197,7 @@ class DeviceMapper final {
     struct TargetInfo {
         struct dm_target_spec spec;
         std::string data;
+        TargetInfo() {}
         TargetInfo(const struct dm_target_spec& spec, const std::string& data)
             : spec(spec), data(data) {}
     };

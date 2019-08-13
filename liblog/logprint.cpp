@@ -26,7 +26,6 @@
 #ifndef __MINGW32__
 #include <pwd.h>
 #endif
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

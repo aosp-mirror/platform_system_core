@@ -60,7 +60,7 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         if (!strcmp(argv[1], "subcontext")) {
             android::base::InitLogging(argv, &android::base::KernelLogger);
-            const BuiltinFunctionMap function_map;
+            const BuiltinFunctionMap& function_map = GetBuiltinFunctionMap();
 
             return SubcontextMain(argc, argv, &function_map);
         }

@@ -149,7 +149,8 @@ bool adb_status(borrowed_fd fd, std::string* error) {
     return false;
 }
 
-static int _adb_connect(std::string_view service, TransportId* transport, std::string* error) {
+static int _adb_connect(std::string_view service, TransportId* transport, std::string* error,
+                        bool force_switch = false) {
     LOG(DEBUG) << "_adb_connect: " << service;
     if (service.empty() || service.size() > MAX_PAYLOAD) {
         *error = android::base::StringPrintf("bad service name length (%zd)", service.size());
@@ -164,7 +165,7 @@ static int _adb_connect(std::string_view service, TransportId* transport, std::s
         return -2;
     }
 
-    if (!service.starts_with("host")) {
+    if (!service.starts_with("host") || force_switch) {
         std::optional<TransportId> transport_result = switch_socket_transport(fd.get(), error);
         if (!transport_result) {
             return -1;
@@ -323,7 +324,8 @@ bool adb_check_server_version(std::string* error) {
     return result;
 }
 
-int adb_connect(TransportId* transport, std::string_view service, std::string* error) {
+int adb_connect(TransportId* transport, std::string_view service, std::string* error,
+                bool force_switch_device) {
     LOG(DEBUG) << "adb_connect: service: " << service;
 
     // Query the adb server's version.
@@ -336,7 +338,7 @@ int adb_connect(TransportId* transport, std::string_view service, std::string* e
         return 0;
     }
 
-    unique_fd fd(_adb_connect(service, transport, error));
+    unique_fd fd(_adb_connect(service, transport, error, force_switch_device));
     if (fd == -1) {
         D("_adb_connect error: %s", error->c_str());
     } else if(fd == -2) {
@@ -398,9 +400,15 @@ std::string format_host_command(const char* command) {
 }
 
 bool adb_get_feature_set(FeatureSet* feature_set, std::string* error) {
-    std::string result;
-    if (adb_query(format_host_command("features"), &result, error)) {
-        *feature_set = StringToFeatureSet(result);
+    static FeatureSet* features = nullptr;
+    if (!features) {
+        std::string result;
+        if (adb_query(format_host_command("features"), &result, error)) {
+            features = new FeatureSet(StringToFeatureSet(result));
+        }
+    }
+    if (features) {
+        *feature_set = *features;
         return true;
     }
     feature_set->clear();

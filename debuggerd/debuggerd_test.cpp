@@ -1099,3 +1099,30 @@ TEST(tombstoned, interceptless_backtrace) {
   // This should be good enough, though...
   ASSERT_LT(diff, 10) << "too many new tombstones; is something crashing in the background?";
 }
+
+static __attribute__((__noinline__)) void overflow_stack(void* p) {
+  void* buf[1];
+  buf[0] = p;
+  static volatile void* global = buf;
+  if (global) {
+    global = buf;
+    overflow_stack(&buf);
+  }
+}
+
+TEST_F(CrasherTest, stack_overflow) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() { overflow_stack(nullptr); });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(Cause: stack pointer[^\n]*stack overflow.\n)");
+}

@@ -41,6 +41,7 @@
 
 #include <atomic>
 #include <memory>
+#include <regex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -55,8 +56,6 @@
 #include <private/android_logger.h>
 #include <processgroup/sched_policy.h>
 #include <system/thread_defs.h>
-
-#include <pcrecpp.h>
 
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
@@ -113,7 +112,7 @@ struct android_logcat_context_internal {
     size_t outByteCount;
     int printBinary;
     int devCount;  // >1 means multiple
-    pcrecpp::RE* regex;
+    std::unique_ptr<std::regex> regex;
     log_device_t* devices;
     EventTagMap* eventTagMap;
     // 0 means "infinite"
@@ -307,9 +306,7 @@ static bool regexOk(android_logcat_context_internal* context,
                     const AndroidLogEntry& entry) {
     if (!context->regex) return true;
 
-    std::string messageString(entry.message, entry.messageLen);
-
-    return context->regex->PartialMatch(messageString);
+    return std::regex_search(entry.message, entry.message + entry.messageLen, *context->regex);
 }
 
 static void processBuffer(android_logcat_context_internal* context,
@@ -460,7 +457,7 @@ static void show_help(android_logcat_context_internal* context) {
                     "  -d              Dump the log and then exit (don't block)\n"
                     "  -e <expr>, --regex=<expr>\n"
                     "                  Only print lines where the log message matches <expr>\n"
-                    "                  where <expr> is a Perl-compatible regular expression\n"
+                    "                  where <expr> is a regular expression\n"
                     // Leave --head undocumented as alias for -m
                     "  -m <count>, --max-count=<count>\n"
                     "                  Quit after printing <count> lines. This is meant to be\n"
@@ -899,6 +896,11 @@ static int __logcat(android_logcat_context_internal* context) {
             case 0:
                 // only long options
                 if (long_options[option_index].name == pid_str) {
+                    if (pid != 0) {
+                        logcat_panic(context, HELP_TRUE, "Only supports one PID argument.\n");
+                        goto exit;
+                    }
+
                     // ToDo: determine runtime PID_MAX?
                     if (!getSizeTArg(optarg, &pid, 1)) {
                         logcat_panic(context, HELP_TRUE, "%s %s out of range\n",
@@ -995,7 +997,7 @@ static int __logcat(android_logcat_context_internal* context) {
                 break;
 
             case 'e':
-                context->regex = new pcrecpp::RE(optarg);
+                context->regex.reset(new std::regex(optarg));
                 break;
 
             case 'm': {
@@ -1696,7 +1698,6 @@ int android_logcat_destroy(android_logcat_context* ctx) {
         sched_yield();
     }
 
-    delete context->regex;
     context->argv_hold.clear();
     context->args.clear();
     context->envp_hold.clear();

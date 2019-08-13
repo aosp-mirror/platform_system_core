@@ -174,13 +174,8 @@ static uint32_t PropertySet(const std::string& name, const std::string& value, s
         return PROP_ERROR_INVALID_NAME;
     }
 
-    if (valuelen >= PROP_VALUE_MAX && !StartsWith(name, "ro.")) {
-        *error = "Property value too long";
-        return PROP_ERROR_INVALID_VALUE;
-    }
-
-    if (mbstowcs(nullptr, value.data(), 0) == static_cast<std::size_t>(-1)) {
-        *error = "Value is not a UTF8 encoded string";
+    if (auto result = IsLegalPropertyValue(name, value); !result) {
+        *error = result.error().message();
         return PROP_ERROR_INVALID_VALUE;
     }
 
@@ -648,13 +643,14 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
             }
 
             std::string raw_filename(fn);
-            std::string expanded_filename;
-            if (!expand_props(raw_filename, &expanded_filename)) {
-                LOG(ERROR) << "Could not expand filename '" << raw_filename << "'";
+            auto expanded_filename = ExpandProps(raw_filename);
+
+            if (!expanded_filename) {
+                LOG(ERROR) << "Could not expand filename ': " << expanded_filename.error();
                 continue;
             }
 
-            load_properties_from_file(expanded_filename.c_str(), key, properties);
+            load_properties_from_file(expanded_filename->c_str(), key, properties);
         } else {
             value = strchr(key, '=');
             if (!value) continue;

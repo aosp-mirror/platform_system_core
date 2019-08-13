@@ -83,6 +83,7 @@ cc_defaults {
         "libfscrypt",
         "libgsi",
         "libhidl-gen-utils",
+        "libjsoncpp",
         "libkeyutils",
         "liblog",
         "liblogwrap",
@@ -93,12 +94,16 @@ cc_defaults {
         "libutils",
     ],
     bootstrap: true,
+    visibility: [":__subpackages__"],
 }
 
 cc_library_static {
     name: "libinit",
     recovery_available: true,
-    defaults: ["init_defaults", "selinux_policy_version"],
+    defaults: [
+        "init_defaults",
+        "selinux_policy_version",
+    ],
     srcs: [
         "action.cpp",
         "action_manager.cpp",
@@ -114,6 +119,7 @@ cc_library_static {
         "first_stage_mount.cpp",
         "import_parser.cpp",
         "init.cpp",
+        "interface_utils.cpp",
         "keychords.cpp",
         "modalias_handler.cpp",
         "mount_handler.cpp",
@@ -143,7 +149,10 @@ cc_library_static {
         "ueventd_parser.cpp",
         "util.cpp",
     ],
-    whole_static_libs: ["libcap", "com.android.sysprop.apex"],
+    whole_static_libs: [
+        "libcap",
+        "com.android.sysprop.apex",
+    ],
     header_libs: ["bootimg_headers"],
     proto: {
         type: "lite",
@@ -153,7 +162,10 @@ cc_library_static {
     target: {
         recovery: {
             cflags: ["-DRECOVERY"],
-            exclude_shared_libs: ["libbinder", "libutils"],
+            exclude_shared_libs: [
+                "libbinder",
+                "libutils",
+            ],
         },
     },
 }
@@ -182,7 +194,10 @@ cc_binary {
     target: {
         recovery: {
             cflags: ["-DRECOVERY"],
-            exclude_shared_libs: ["libbinder", "libutils"],
+            exclude_shared_libs: [
+                "libbinder",
+                "libutils",
+            ],
         },
     },
 }
@@ -227,9 +242,13 @@ cc_benchmark {
 
 genrule {
     name: "generated_stub_builtin_function_map",
+    tool_files: ["host_builtin_map.py"],
     out: ["generated_stub_builtin_function_map.h"],
-    srcs: ["builtins.cpp"],
-    cmd: "sed -n '/Builtin-function-map start/{:a;n;/Builtin-function-map end/q;p;ba}' $(in) | sed -e 's/do_[^}]*/do_stub/g' > $(out)",
+    srcs: [
+        "builtins.cpp",
+        "check_builtins.cpp",
+    ],
+    cmd: "$(location host_builtin_map.py) --builtins $(location builtins.cpp) --check_builtins $(location check_builtins.cpp) > $(out)",
 }
 
 cc_binary {
@@ -260,9 +279,11 @@ cc_binary {
         "action_manager.cpp",
         "action_parser.cpp",
         "capabilities.cpp",
+        "check_builtins.cpp",
         "epoll.cpp",
         "keychords.cpp",
         "import_parser.cpp",
+        "interface_utils.cpp",
         "host_import_parser.cpp",
         "host_init_verifier.cpp",
         "parser.cpp",
@@ -281,7 +302,7 @@ cc_binary {
     },
     generated_headers: [
         "generated_stub_builtin_function_map",
-        "generated_android_ids"
+        "generated_android_ids",
     ],
     target: {
         android: {

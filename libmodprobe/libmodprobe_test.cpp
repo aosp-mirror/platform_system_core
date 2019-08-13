@@ -56,6 +56,14 @@ TEST(libmodprobe, Test) {
             "/test13.ko",
     };
 
+    std::vector<std::string> expected_after_remove = {
+            "/test14.ko", "/test15.ko",         "/test1.ko",
+            "/test6.ko",  "/test2.ko",          "/test5.ko",
+            "/test8.ko",  "/test7.ko param1=4", "/test9.ko param_x=1 param_y=2 param_z=3",
+            "/test10.ko", "/test12.ko",         "/test11.ko",
+            "/test13.ko",
+    };
+
     const std::string modules_dep =
             "test1.ko:\n"
             "test2.ko:\n"
@@ -91,6 +99,10 @@ TEST(libmodprobe, Test) {
             "options test9.ko param_x=1 param_y=2 param_z=3\n"
             "options test100.ko param_1=1\n";
 
+    const std::string modules_blacklist =
+            "blacklist test9.ko\n"
+            "blacklist test3.ko\n";
+
     const std::string modules_load =
             "test4.ko\n"
             "test1.ko\n"
@@ -101,17 +113,20 @@ TEST(libmodprobe, Test) {
             "test11.ko\n";
 
     TemporaryDir dir;
-    ASSERT_TRUE(android::base::WriteStringToFile(
-            modules_alias, std::string(dir.path) + "/modules.alias", 0600, getuid(), getgid()));
+    auto dir_path = std::string(dir.path);
+    ASSERT_TRUE(android::base::WriteStringToFile(modules_alias, dir_path + "/modules.alias", 0600,
+                                                 getuid(), getgid()));
 
-    ASSERT_TRUE(android::base::WriteStringToFile(
-            modules_dep, std::string(dir.path) + "/modules.dep", 0600, getuid(), getgid()));
-    ASSERT_TRUE(android::base::WriteStringToFile(
-            modules_softdep, std::string(dir.path) + "/modules.softdep", 0600, getuid(), getgid()));
-    ASSERT_TRUE(android::base::WriteStringToFile(
-            modules_options, std::string(dir.path) + "/modules.options", 0600, getuid(), getgid()));
-    ASSERT_TRUE(android::base::WriteStringToFile(
-            modules_load, std::string(dir.path) + "/modules.load", 0600, getuid(), getgid()));
+    ASSERT_TRUE(android::base::WriteStringToFile(modules_dep, dir_path + "/modules.dep", 0600,
+                                                 getuid(), getgid()));
+    ASSERT_TRUE(android::base::WriteStringToFile(modules_softdep, dir_path + "/modules.softdep",
+                                                 0600, getuid(), getgid()));
+    ASSERT_TRUE(android::base::WriteStringToFile(modules_options, dir_path + "/modules.options",
+                                                 0600, getuid(), getgid()));
+    ASSERT_TRUE(android::base::WriteStringToFile(modules_load, dir_path + "/modules.load", 0600,
+                                                 getuid(), getgid()));
+    ASSERT_TRUE(android::base::WriteStringToFile(modules_blacklist, dir_path + "/modules.blacklist",
+                                                 0600, getuid(), getgid()));
 
     for (auto i = test_modules.begin(); i != test_modules.end(); ++i) {
         *i = dir.path + *i;
@@ -131,4 +146,21 @@ TEST(libmodprobe, Test) {
     }
 
     EXPECT_TRUE(modules_loaded == expected_modules_loaded);
+
+    EXPECT_TRUE(m.Remove("test4"));
+
+    GTEST_LOG_(INFO) << "Expected modules loaded after removing test4 (in order):";
+    for (auto i = expected_after_remove.begin(); i != expected_after_remove.end(); ++i) {
+        *i = dir.path + *i;
+        GTEST_LOG_(INFO) << "\"" << *i << "\"";
+    }
+    GTEST_LOG_(INFO) << "Actual modules loaded after removing test4 (in order):";
+    for (auto i = modules_loaded.begin(); i != modules_loaded.end(); ++i) {
+        GTEST_LOG_(INFO) << "\"" << *i << "\"";
+    }
+
+    EXPECT_TRUE(modules_loaded == expected_after_remove);
+
+    m.EnableBlacklist(true);
+    EXPECT_FALSE(m.LoadWithAliases("test4", true));
 }

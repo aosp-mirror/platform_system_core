@@ -194,6 +194,31 @@ bool Modprobe::ParseOptionsCallback(const std::vector<std::string>& args) {
     return true;
 }
 
+bool Modprobe::ParseBlacklistCallback(const std::vector<std::string>& args) {
+    auto it = args.begin();
+    const std::string& type = *it++;
+
+    if (type != "blacklist") {
+        LOG(ERROR) << "non-blacklist line encountered in modules.blacklist";
+        return false;
+    }
+
+    if (args.size() != 2) {
+        LOG(ERROR) << "lines in modules.blacklist must have exactly 2 entries, not " << args.size();
+        return false;
+    }
+
+    const std::string& module = *it++;
+
+    const std::string& canonical_name = MakeCanonical(module);
+    if (canonical_name.empty()) {
+        return false;
+    }
+    this->module_blacklist_.emplace(canonical_name);
+
+    return true;
+}
+
 void Modprobe::ParseCfg(const std::string& cfg,
                         std::function<bool(const std::vector<std::string>&)> f) {
     std::string cfg_contents;
@@ -231,6 +256,23 @@ Modprobe::Modprobe(const std::vector<std::string>& base_paths) {
 
         auto options_callback = std::bind(&Modprobe::ParseOptionsCallback, this, _1);
         ParseCfg(base_path + "/modules.options", options_callback);
+
+        auto blacklist_callback = std::bind(&Modprobe::ParseBlacklistCallback, this, _1);
+        ParseCfg(base_path + "/modules.blacklist", blacklist_callback);
+    }
+
+    android::base::SetMinimumLogSeverity(android::base::INFO);
+}
+
+void Modprobe::EnableBlacklist(bool enable) {
+    blacklist_enabled = enable;
+}
+
+void Modprobe::EnableVerbose(bool enable) {
+    if (enable) {
+        android::base::SetMinimumLogSeverity(android::base::VERBOSE);
+    } else {
+        android::base::SetMinimumLogSeverity(android::base::INFO);
     }
 }
 
@@ -242,7 +284,7 @@ std::vector<std::string> Modprobe::GetDependencies(const std::string& module) {
     return it->second;
 }
 
-bool Modprobe::InsmodWithDeps(const std::string& module_name) {
+bool Modprobe::InsmodWithDeps(const std::string& module_name, const std::string& parameters) {
     if (module_name.empty()) {
         LOG(ERROR) << "Need valid module name, given: " << module_name;
         return false;
@@ -256,11 +298,8 @@ bool Modprobe::InsmodWithDeps(const std::string& module_name) {
 
     // load module dependencies in reverse order
     for (auto dep = dependencies.rbegin(); dep != dependencies.rend() - 1; ++dep) {
-        const std::string& canonical_name = MakeCanonical(*dep);
-        if (canonical_name.empty()) {
-            return false;
-        }
-        if (!LoadWithAliases(canonical_name, true)) {
+        LOG(VERBOSE) << "Loading hard dep for '" << module_name << "': " << *dep;
+        if (!LoadWithAliases(*dep, true)) {
             return false;
         }
     }
@@ -268,18 +307,20 @@ bool Modprobe::InsmodWithDeps(const std::string& module_name) {
     // try to load soft pre-dependencies
     for (const auto& [module, softdep] : module_pre_softdep_) {
         if (module_name == module) {
+            LOG(VERBOSE) << "Loading soft pre-dep for '" << module << "': " << softdep;
             LoadWithAliases(softdep, false);
         }
     }
 
     // load target module itself with args
-    if (!Insmod(dependencies[0])) {
+    if (!Insmod(dependencies[0], parameters)) {
         return false;
     }
 
     // try to load soft post-dependencies
     for (const auto& [module, softdep] : module_post_softdep_) {
         if (module_name == module) {
+            LOG(VERBOSE) << "Loading soft post-dep for '" << module << "': " << softdep;
             LoadWithAliases(softdep, false);
         }
     }
@@ -287,25 +328,27 @@ bool Modprobe::InsmodWithDeps(const std::string& module_name) {
     return true;
 }
 
-bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict) {
-    std::set<std::string> modules_to_load = {module_name};
+bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict,
+                               const std::string& parameters) {
+    std::set<std::string> modules_to_load = {MakeCanonical(module_name)};
     bool module_loaded = false;
 
     // use aliases to expand list of modules to load (multiple modules
     // may alias themselves to the requested name)
     for (const auto& [alias, aliased_module] : module_aliases_) {
         if (fnmatch(alias.c_str(), module_name.c_str(), 0) != 0) continue;
+        LOG(VERBOSE) << "Found alias for '" << module_name << "': '" << aliased_module;
         modules_to_load.emplace(aliased_module);
     }
 
     // attempt to load all modules aliased to this name
     for (const auto& module : modules_to_load) {
         if (!ModuleExists(module)) continue;
-        if (InsmodWithDeps(module)) module_loaded = true;
+        if (InsmodWithDeps(module, parameters)) module_loaded = true;
     }
 
     if (strict && !module_loaded) {
-        LOG(ERROR) << "LoadWithAliases did not find a module for " << module_name;
+        LOG(ERROR) << "LoadWithAliases was unable to load " << module_name;
         return false;
     }
     return true;
@@ -315,6 +358,67 @@ bool Modprobe::LoadListedModules() {
     for (const auto& module : module_load_) {
         if (!LoadWithAliases(module, true)) {
             return false;
+        }
+    }
+    return true;
+}
+
+bool Modprobe::Remove(const std::string& module_name) {
+    auto dependencies = GetDependencies(MakeCanonical(module_name));
+    if (dependencies.empty()) {
+        LOG(ERROR) << "Empty dependencies for module " << module_name;
+        return false;
+    }
+    if (!Rmmod(dependencies[0])) {
+        return false;
+    }
+    for (auto dep = dependencies.begin() + 1; dep != dependencies.end(); ++dep) {
+        Rmmod(*dep);
+    }
+    return true;
+}
+
+std::vector<std::string> Modprobe::ListModules(const std::string& pattern) {
+    std::vector<std::string> rv;
+    for (const auto& [module, deps] : module_deps_) {
+        // Attempt to match both the canonical module name and the module filename.
+        if (!fnmatch(pattern.c_str(), module.c_str(), 0)) {
+            rv.emplace_back(module);
+        } else if (!fnmatch(pattern.c_str(), basename(deps[0].c_str()), 0)) {
+            rv.emplace_back(deps[0]);
+        }
+    }
+    return rv;
+}
+
+bool Modprobe::GetAllDependencies(const std::string& module,
+                                  std::vector<std::string>* pre_dependencies,
+                                  std::vector<std::string>* dependencies,
+                                  std::vector<std::string>* post_dependencies) {
+    std::string canonical_name = MakeCanonical(module);
+    if (pre_dependencies) {
+        pre_dependencies->clear();
+        for (const auto& [it_module, it_softdep] : module_pre_softdep_) {
+            if (canonical_name == it_module) {
+                pre_dependencies->emplace_back(it_softdep);
+            }
+        }
+    }
+    if (dependencies) {
+        dependencies->clear();
+        auto hard_deps = GetDependencies(canonical_name);
+        if (hard_deps.empty()) {
+            return false;
+        }
+        for (auto dep = hard_deps.rbegin(); dep != hard_deps.rend(); dep++) {
+            dependencies->emplace_back(*dep);
+        }
+    }
+    if (post_dependencies) {
+        for (const auto& [it_module, it_softdep] : module_post_softdep_) {
+            if (canonical_name == it_module) {
+                post_dependencies->emplace_back(it_softdep);
+            }
         }
     }
     return true;

@@ -15,59 +15,26 @@
  */
 
 #include <gtest/gtest.h>
-
 #include <ion/ion.h>
 
 #include "ion_test_fixture.h"
 
-IonTest::IonTest() : m_ionFd(-1)
-{
-}
+IonTest::IonTest() : ionfd(-1), ion_heaps() {}
 
 void IonTest::SetUp() {
-    m_ionFd = ion_open();
-    ASSERT_GE(m_ionFd, 0);
+    ionfd = ion_open();
+    ASSERT_GE(ionfd, 0);
+
+    int heap_count;
+    int ret = ion_query_heap_cnt(ionfd, &heap_count);
+    ASSERT_EQ(ret, 0);
+    ASSERT_GT(heap_count, 0);
+
+    ion_heaps.resize(heap_count, {});
+    ret = ion_query_get_heaps(ionfd, heap_count, ion_heaps.data());
+    ASSERT_EQ(ret, 0);
 }
 
 void IonTest::TearDown() {
-    ion_close(m_ionFd);
-}
-
-IonAllHeapsTest::IonAllHeapsTest() :
-        m_firstHeap(0),
-        m_lastHeap(0),
-        m_allHeaps()
-{
-}
-
-void IonAllHeapsTest::SetUp() {
-    int fd = ion_open();
-    ASSERT_GE(fd, 0);
-
-    for (int i = 1; i != 0; i <<= 1) {
-        ion_user_handle_t handle = 0;
-        int ret;
-        ret = ion_alloc(fd, 4096, 0, i, 0, &handle);
-        if (ret == 0 && handle != 0) {
-            ion_free(fd, handle);
-            if (!m_firstHeap) {
-                m_firstHeap = i;
-            }
-            m_lastHeap = i;
-            m_allHeaps.push_back(i);
-        } else {
-            ASSERT_EQ(-ENODEV, ret);
-        }
-    }
-    ion_close(fd);
-
-    EXPECT_NE(0U, m_firstHeap);
-    EXPECT_NE(0U, m_lastHeap);
-
-    RecordProperty("Heaps", m_allHeaps.size());
-    IonTest::SetUp();
-}
-
-void IonAllHeapsTest::TearDown() {
-    IonTest::TearDown();
+    ion_close(ionfd);
 }

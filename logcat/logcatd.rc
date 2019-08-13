@@ -13,28 +13,13 @@ on property:persist.logd.logpersistd.count=*
     # expect /init to report failure if property empty (default)
     setprop persist.logd.logpersistd.size ${persist.logd.logpersistd.count}
 
-on property:persist.logd.logpersistd.size=256
-    setprop persist.logd.logpersistd.size ""
-    setprop logd.logpersistd.size ""
-
 on property:persist.logd.logpersistd.size=*
-    # expect /init to report failure if property empty (default)
     setprop logd.logpersistd.size ${persist.logd.logpersistd.size}
 
-on property:persist.logd.logpersistd.rotate_kbytes=1024
-    setprop persist.logd.logpersistd.rotate_kbytes ""
-    setprop logd.logpersistd.rotate_kbytes ""
-
 on property:persist.logd.logpersistd.rotate_kbytes=*
-   # expect /init to report failure if property empty (default)
-   setprop logd.logpersistd.rotate_kbytes ${persist.logd.logpersistd.rotate_kbytes}
-
-on property:persist.logd.logpersistd.buffer=all
-    setprop persist.logd.logpersistd.buffer ""
-    setprop logd.logpersistd.buffer ""
+    setprop logd.logpersistd.rotate_kbytes ${persist.logd.logpersistd.rotate_kbytes}
 
 on property:persist.logd.logpersistd.buffer=*
-    # expect /init to report failure if property empty (default)
     setprop logd.logpersistd.buffer ${persist.logd.logpersistd.buffer}
 
 on property:persist.logd.logpersistd=logcatd
