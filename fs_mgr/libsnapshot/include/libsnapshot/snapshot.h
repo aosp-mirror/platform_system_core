@@ -219,9 +219,12 @@ class SnapshotManager final {
     bool WriteUpdateState(LockedFile* file, UpdateState state);
     std::string GetStateFilePath() const;
 
+    enum class SnapshotState : int { Created, Merging, MergeCompleted };
+    static std::string to_string(SnapshotState state);
+
     // This state is persisted per-snapshot in /metadata/ota/snapshots/.
     struct SnapshotStatus {
-        std::string state;
+        SnapshotState state;
         uint64_t device_size;
         uint64_t snapshot_size;
         // These are non-zero when merging.
