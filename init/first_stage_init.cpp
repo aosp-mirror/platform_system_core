@@ -121,9 +121,9 @@ void StartConsole() {
         _exit(127);
     }
     ioctl(fd, TIOCSCTTY, 0);
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
     close(fd);
 
     const char* path = "/system/bin/sh";
@@ -291,6 +291,10 @@ int FirstStageMain(int argc, char** argv) {
 
     const char* path = "/system/bin/init";
     const char* args[] = {path, "selinux_setup", nullptr};
+    auto fd = open("/dev/kmsg", O_WRONLY | O_CLOEXEC);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    close(fd);
     execv(path, const_cast<char**>(args));
 
     // execv() only returns if an error happened, in which case we
