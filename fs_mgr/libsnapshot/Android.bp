@@ -33,6 +33,7 @@ cc_defaults {
         "libext2_uuid",
         "libext4_utils",
         "libfiemap",
+        "libfstab",
     ],
     export_include_dirs: ["include"],
 }
