@@ -43,12 +43,12 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
   public:
     std::string GetGsidDir() const override { return "ota/test"s; }
     std::string GetMetadataDir() const override { return "/metadata/ota/test"s; }
-    bool IsRunningSnapshot() const override { return is_running_snapshot_; }
+    std::string GetSlotSuffix() const override { return slot_suffix_; }
 
-    void set_is_running_snapshot(bool value) { is_running_snapshot_ = value; }
+    void set_slot_suffix(const std::string& suffix) { slot_suffix_ = suffix; }
 
   private:
-    bool is_running_snapshot_;
+    std::string slot_suffix_;
 };
 
 std::unique_ptr<SnapshotManager> sm;
@@ -60,7 +60,7 @@ class SnapshotTest : public ::testing::Test {
 
   protected:
     void SetUp() override {
-        test_device->set_is_running_snapshot(false);
+        test_device->set_slot_suffix("_a");
 
         if (sm->GetUpdateState() != UpdateState::None) {
             CleanupTestArtifacts();
@@ -189,15 +189,9 @@ TEST_F(SnapshotTest, MapPartialSnapshot) {
 }
 
 TEST_F(SnapshotTest, NoMergeBeforeReboot) {
-    ASSERT_TRUE(AcquireLock());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
 
-    // Set the state to Unverified, as if we finished an update.
-    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Unverified));
-
-    // Release the lock.
-    lock_ = nullptr;
-
-    // Merge should fail, since we didn't mark the device as rebooted.
+    // Merge should fail, since the slot hasn't changed.
     ASSERT_FALSE(sm->InitiateMerge());
 }
 
@@ -231,7 +225,7 @@ TEST_F(SnapshotTest, Merge) {
     // Release the lock.
     lock_ = nullptr;
 
-    test_device->set_is_running_snapshot(true);
+    test_device->set_slot_suffix("_b");
     ASSERT_TRUE(sm->InitiateMerge());
 
     // The device should have been switched to a snapshot-merge target.
@@ -273,13 +267,12 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
     unique_fd fd(open(cow_path.c_str(), O_RDONLY | O_CLOEXEC));
     ASSERT_GE(fd, 0);
 
-    // Set the state to Unverified, as if we finished an update.
-    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Unverified));
-
     // Release the lock.
     lock_ = nullptr;
 
-    test_device->set_is_running_snapshot(true);
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    test_device->set_slot_suffix("_b");
     ASSERT_TRUE(sm->InitiateMerge());
 
     // COW cannot be removed due to open fd, so expect a soft failure.
