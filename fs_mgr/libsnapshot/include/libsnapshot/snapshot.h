@@ -71,11 +71,7 @@ class SnapshotManager final {
         virtual ~IDeviceInfo() {}
         virtual std::string GetGsidDir() const = 0;
         virtual std::string GetMetadataDir() const = 0;
-
-        // Return true if the device is currently running off snapshot devices,
-        // indicating that we have booted after applying (but not merging) an
-        // OTA.
-        virtual bool IsRunningSnapshot() const = 0;
+        virtual std::string GetSlotSuffix() const = 0;
     };
 
     ~SnapshotManager();
@@ -92,6 +88,11 @@ class SnapshotManager final {
     // Cancel an update; any snapshots will be deleted. This will fail if the
     // state != Initiated or None.
     bool CancelUpdate();
+
+    // Mark snapshot writes as having completed. After this, new snapshots cannot
+    // be created, and the device must either cancel the OTA (either before
+    // rebooting or after rolling back), or merge the OTA.
+    bool FinishedSnapshotWrites();
 
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
@@ -260,6 +261,9 @@ class SnapshotManager final {
                              const SnapshotStatus& status);
     bool ReadSnapshotStatus(LockedFile* lock, const std::string& name, SnapshotStatus* status);
     std::string GetSnapshotStatusFilePath(const std::string& name);
+
+    std::string GetSnapshotBootIndicatorPath();
+    void RemoveSnapshotBootIndicator();
 
     // Return the name of the device holding the "snapshot" or "snapshot-merge"
     // target. This may not be the final device presented via MapSnapshot(), if
