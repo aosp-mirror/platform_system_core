@@ -287,6 +287,9 @@ class MetadataBuilder {
     // Return true if a block device is found, else false.
     bool HasBlockDevice(const std::string& partition_name) const;
 
+    // Return the name of the block device at |index|.
+    std::string GetBlockDevicePartitionName(uint64_t index) const;
+
   private:
     MetadataBuilder();
     MetadataBuilder(const MetadataBuilder&) = delete;
