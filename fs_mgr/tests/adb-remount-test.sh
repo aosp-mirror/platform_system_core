@@ -890,14 +890,37 @@ adb_sh ls -l /dev/block/by-name/ </dev/null 2>/dev/null |
 # If reboot too soon after fresh flash, could trip device update failure logic
 wait_for_screen
 # Can we test remount -R command?
+OVERLAYFS_BACKING="cache mnt/scratch"
 overlayfs_supported=true
-if [ "orange" = "`get_property ro.boot.verifiedbootstate`" -a \
-     "2" = "`get_property partition.system.verified`" ]; then
+if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
+     "2" != "`get_property partition.system.verified`" ]; then
   restore() {
     ${overlayfs_supported} || return 0
     inFastboot &&
       fastboot reboot &&
-      adb_wait ${ADB_WAIT}
+      adb_wait ${ADB_WAIT} ||
+      true
+    if inAdb; then
+      reboot=false
+      for d in ${OVERLAYFS_BACKING}; do
+        if adb_su ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
+          adb_su rm -rf /${d}/overlay </dev/null
+          reboot=true
+        fi
+      done
+      if ${reboot}; then
+        adb_reboot &&
+        adb_wait ${ADB_WAIT}
+      fi
+    fi
+  }
+else
+  restore() {
+    ${overlayfs_supported} || return 0
+    inFastboot &&
+      fastboot reboot &&
+      adb_wait ${ADB_WAIT} ||
+      true
     inAdb &&
       adb_root &&
       adb enable-verity >/dev/null 2>/dev/null &&
@@ -956,7 +979,6 @@ echo "${GREEN}[ RUN      ]${NORMAL} Checking current overlayfs status" >&2
 # So lets do our best to surgically wipe the overlayfs state without
 # having to go through enable-verity transition.
 reboot=false
-OVERLAYFS_BACKING="cache mnt/scratch"
 for d in ${OVERLAYFS_BACKING}; do
   if adb_sh ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
     echo "${ORANGE}[  WARNING ]${NORMAL} /${d}/overlay is setup, surgically wiping" >&2
@@ -1468,7 +1490,7 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
   }
   dd if=/dev/zero of=${img} bs=4096 count=16 2>/dev/null &&
     fastboot_wait ${FASTBOOT_WAIT} ||
-    die "reboot into fastboot `usb_status`"
+    die "reboot into fastboot to flash scratch `usb_status`"
   fastboot flash --force ${scratch_partition} ${img}
   err=${?}
   cleanup
