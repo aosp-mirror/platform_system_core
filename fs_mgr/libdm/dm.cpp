@@ -150,6 +150,15 @@ bool DeviceMapper::GetDeviceUniquePath(const std::string& name, std::string* pat
     return true;
 }
 
+std::optional<DeviceMapper::Info> DeviceMapper::GetDetailedInfo(const std::string& name) const {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        return std::nullopt;
+    }
+    return Info(io.flags);
+}
+
 DmDeviceState DeviceMapper::GetState(const std::string& name) const {
     struct dm_ioctl io;
     InitIo(&io, name);
@@ -160,6 +169,24 @@ DmDeviceState DeviceMapper::GetState(const std::string& name) const {
         return DmDeviceState::ACTIVE;
     }
     return DmDeviceState::SUSPENDED;
+}
+
+bool DeviceMapper::ChangeState(const std::string& name, DmDeviceState state) {
+    if (state != DmDeviceState::SUSPENDED && state != DmDeviceState::ACTIVE) {
+        return false;
+    }
+
+    struct dm_ioctl io;
+    InitIo(&io, name);
+
+    if (state == DmDeviceState::SUSPENDED) io.flags = DM_SUSPEND_FLAG;
+
+    if (ioctl(fd_, DM_DEV_SUSPEND, &io) < 0) {
+        PLOG(ERROR) << "DM_DEV_SUSPEND "
+                    << (state == DmDeviceState::SUSPENDED ? "suspend" : "resume") << " failed";
+        return false;
+    }
+    return true;
 }
 
 bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table) {

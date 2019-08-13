@@ -75,15 +75,15 @@ TEST(service, pod_initialized) {
 TEST(service, make_temporary_oneshot_service_invalid_syntax) {
     std::vector<std::string> args;
     // Nothing.
-    ASSERT_EQ(nullptr, Service::MakeTemporaryOneshotService(args));
+    ASSERT_FALSE(Service::MakeTemporaryOneshotService(args));
 
     // No arguments to 'exec'.
     args.push_back("exec");
-    ASSERT_EQ(nullptr, Service::MakeTemporaryOneshotService(args));
+    ASSERT_FALSE(Service::MakeTemporaryOneshotService(args));
 
     // No command in "exec --".
     args.push_back("--");
-    ASSERT_EQ(nullptr, Service::MakeTemporaryOneshotService(args));
+    ASSERT_FALSE(Service::MakeTemporaryOneshotService(args));
 }
 
 TEST(service, make_temporary_oneshot_service_too_many_supplementary_gids) {
@@ -97,7 +97,7 @@ TEST(service, make_temporary_oneshot_service_too_many_supplementary_gids) {
     }
     args.push_back("--");
     args.push_back("/system/bin/id");
-    ASSERT_EQ(nullptr, Service::MakeTemporaryOneshotService(args));
+    ASSERT_FALSE(Service::MakeTemporaryOneshotService(args));
 }
 
 static void Test_make_temporary_oneshot_service(bool dash_dash, bool seclabel, bool uid, bool gid,
@@ -122,8 +122,9 @@ static void Test_make_temporary_oneshot_service(bool dash_dash, bool seclabel, b
     }
     args.push_back("/system/bin/toybox");
     args.push_back("id");
-    auto svc = Service::MakeTemporaryOneshotService(args);
-    ASSERT_NE(nullptr, svc);
+    auto service_ret = Service::MakeTemporaryOneshotService(args);
+    ASSERT_TRUE(service_ret);
+    auto svc = std::move(*service_ret);
 
     if (seclabel) {
         ASSERT_EQ("u:r:su:s0", svc->seclabel());

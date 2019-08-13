@@ -18,29 +18,19 @@
 #define ION_TEST_FIXTURE_H_
 
 #include <gtest/gtest.h>
+#include <vector>
+#include "ion_4.12.h"
 
 using ::testing::Test;
 
 class IonTest : public virtual Test {
- public:
+  public:
     IonTest();
-	virtual ~IonTest() {};
-	virtual void SetUp();
-	virtual void TearDown();
-	int m_ionFd;
-};
-
-class IonAllHeapsTest : public IonTest {
- public:
-    IonAllHeapsTest();
-    virtual ~IonAllHeapsTest() {};
+    virtual ~IonTest(){};
     virtual void SetUp();
     virtual void TearDown();
-
-    unsigned int m_firstHeap;
-    unsigned int m_lastHeap;
-
-    std::vector<unsigned int> m_allHeaps;
+    int ionfd;
+    std::vector<struct ion_heap_data> ion_heaps;
 };
 
 #endif /* ION_TEST_FIXTURE_H_ */

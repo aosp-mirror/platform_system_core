@@ -30,6 +30,7 @@ class ServiceList {
 
     // Exposed for testing
     ServiceList();
+    size_t CheckAllCommands();
 
     void AddService(std::unique_ptr<Service> service);
     void RemoveService(const Service& svc);

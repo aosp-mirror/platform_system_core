@@ -46,7 +46,7 @@ namespace android {
 namespace fs_mgr {
 namespace {
 
-const std::string kDefaultAndroidDtDir("/proc/device-tree/firmware/android");
+constexpr char kDefaultAndroidDtDir[] = "/proc/device-tree/firmware/android";
 
 struct FlagList {
     const char *name;

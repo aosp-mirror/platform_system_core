@@ -42,6 +42,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <ApexProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -88,6 +89,43 @@ using android::fs_mgr::ReadFstabFromFile;
 namespace android {
 namespace init {
 
+// There are many legacy paths in rootdir/init.rc that will virtually never exist on a new
+// device, such as '/sys/class/leds/jogball-backlight/brightness'.  As of this writing, there
+// are 81 such failures on cuttlefish.  Instead of spamming the log reporting them, we do not
+// report such failures unless we're running at the DEBUG log level.
+class ErrorIgnoreEnoent {
+  public:
+    ErrorIgnoreEnoent()
+        : ignore_error_(errno == ENOENT &&
+                        android::base::GetMinimumLogSeverity() > android::base::DEBUG) {}
+    explicit ErrorIgnoreEnoent(int errno_to_append)
+        : error_(errno_to_append),
+          ignore_error_(errno_to_append == ENOENT &&
+                        android::base::GetMinimumLogSeverity() > android::base::DEBUG) {}
+
+    template <typename T>
+    operator android::base::expected<T, ResultError>() {
+        if (ignore_error_) {
+            return {};
+        }
+        return error_;
+    }
+
+    template <typename T>
+    ErrorIgnoreEnoent& operator<<(T&& t) {
+        error_ << t;
+        return *this;
+    }
+
+  private:
+    Error error_;
+    bool ignore_error_;
+};
+
+inline ErrorIgnoreEnoent ErrnoErrorIgnoreEnoent() {
+    return ErrorIgnoreEnoent(errno);
+}
+
 std::vector<std::string> late_import_paths;
 
 static constexpr std::chrono::nanoseconds kCommandRetryTimeout = 5s;
@@ -130,6 +168,13 @@ static Result<void> do_class_start_post_data(const BuiltinArguments& args) {
     if (args.context != kInitContext) {
         return Error() << "command 'class_start_post_data' only available in init context";
     }
+    static bool is_apex_updatable = android::sysprop::ApexProperties::updatable().value_or(false);
+
+    if (!is_apex_updatable) {
+        // No need to start these on devices that don't support APEX, since they're not
+        // stopped either.
+        return {};
+    }
     for (const auto& service : ServiceList::GetInstance()) {
         if (service->classnames().count(args[1])) {
             if (auto result = service->StartIfPostData(); !result) {
@@ -154,6 +199,11 @@ static Result<void> do_class_reset(const BuiltinArguments& args) {
 static Result<void> do_class_reset_post_data(const BuiltinArguments& args) {
     if (args.context != kInitContext) {
         return Error() << "command 'class_reset_post_data' only available in init context";
+    }
+    static bool is_apex_updatable = android::sysprop::ApexProperties::updatable().value_or(false);
+    if (!is_apex_updatable) {
+        // No need to stop these on devices that don't support APEX.
+        return {};
     }
     ForEachServiceInClass(args[1], &Service::ResetIfPostData);
     return {};
@@ -188,26 +238,26 @@ static Result<void> do_enable(const BuiltinArguments& args) {
 static Result<void> do_exec(const BuiltinArguments& args) {
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service) {
-        return Error() << "Could not create exec service";
+        return Error() << "Could not create exec service: " << service.error();
     }
-    if (auto result = service->ExecStart(); !result) {
+    if (auto result = (*service)->ExecStart(); !result) {
         return Error() << "Could not start exec service: " << result.error();
     }
 
-    ServiceList::GetInstance().AddService(std::move(service));
+    ServiceList::GetInstance().AddService(std::move(*service));
     return {};
 }
 
 static Result<void> do_exec_background(const BuiltinArguments& args) {
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service) {
-        return Error() << "Could not create exec background service";
+        return Error() << "Could not create exec background service: " << service.error();
     }
-    if (auto result = service->Start(); !result) {
+    if (auto result = (*service)->Start(); !result) {
         return Error() << "Could not start exec background service: " << result.error();
     }
 
-    ServiceList::GetInstance().AddService(std::move(service));
+    ServiceList::GetInstance().AddService(std::move(*service));
     return {};
 }
 
@@ -317,7 +367,7 @@ static Result<void> do_mkdir(const BuiltinArguments& args) {
                 return ErrnoError() << "fchmodat() failed";
             }
         } else {
-            return ErrnoError() << "mkdir() failed";
+            return ErrnoErrorIgnoreEnoent() << "mkdir() failed";
         }
     }
 
@@ -331,7 +381,7 @@ static Result<void> do_mkdir(const BuiltinArguments& args) {
         if (args.size() == 5) {
             gid = DecodeUid(args[4]);
             if (!gid) {
-                return Error() << "Unable to decode GID for '" << args[3] << "': " << gid.error();
+                return Error() << "Unable to decode GID for '" << args[4] << "': " << gid.error();
             }
         }
 
@@ -446,7 +496,7 @@ static Result<void> do_mount(const BuiltinArguments& args) {
         if (wait)
             wait_for_file(source, kCommandRetryTimeout);
         if (mount(source, target, system, flags, options) < 0) {
-            return ErrnoError() << "mount() failed";
+            return ErrnoErrorIgnoreEnoent() << "mount() failed";
         }
 
     }
@@ -670,7 +720,7 @@ static Result<void> do_start(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
     if (auto result = svc->Start(); !result) {
-        return Error() << "Could not start service: " << result.error();
+        return ErrorIgnoreEnoent() << "Could not start service: " << result.error();
     }
     return {};
 }
@@ -716,10 +766,7 @@ static Result<void> do_symlink(const BuiltinArguments& args) {
     if (MakeSymlink(args[1], args[2]) < 0) {
         // The symlink builtin is often used to create symlinks for older devices to be backwards
         // compatible with new paths, therefore we skip reporting this error.
-        if (errno == EEXIST && android::base::GetMinimumLogSeverity() > android::base::DEBUG) {
-            return {};
-        }
-        return ErrnoError() << "symlink() failed";
+        return ErrnoErrorIgnoreEnoent() << "symlink() failed";
     }
     return {};
 }
@@ -777,7 +824,8 @@ static Result<void> do_verity_update_state(const BuiltinArguments& args) {
 
 static Result<void> do_write(const BuiltinArguments& args) {
     if (auto result = WriteFile(args[1], args[2]); !result) {
-        return Error() << "Unable to write to file '" << args[1] << "': " << result.error();
+        return ErrorIgnoreEnoent()
+               << "Unable to write to file '" << args[1] << "': " << result.error();
     }
 
     return {};
@@ -895,7 +943,7 @@ static Result<void> do_chown(const BuiltinArguments& args) {
     }
 
     if (lchown(path.c_str(), *uid, *gid) == -1) {
-        return ErrnoError() << "lchown() failed";
+        return ErrnoErrorIgnoreEnoent() << "lchown() failed";
     }
 
     return {};
@@ -917,50 +965,27 @@ static mode_t get_mode(const char *s) {
 static Result<void> do_chmod(const BuiltinArguments& args) {
     mode_t mode = get_mode(args[1].c_str());
     if (fchmodat(AT_FDCWD, args[2].c_str(), mode, AT_SYMLINK_NOFOLLOW) < 0) {
-        return ErrnoError() << "fchmodat() failed";
+        return ErrnoErrorIgnoreEnoent() << "fchmodat() failed";
     }
     return {};
 }
 
 static Result<void> do_restorecon(const BuiltinArguments& args) {
+    auto restorecon_info = ParseRestorecon(args.args);
+    if (!restorecon_info) {
+        return restorecon_info.error();
+    }
+
+    const auto& [flag, paths] = *restorecon_info;
+
     int ret = 0;
-
-    struct flag_type {const char* name; int value;};
-    static const flag_type flags[] = {
-        {"--recursive", SELINUX_ANDROID_RESTORECON_RECURSE},
-        {"--skip-ce", SELINUX_ANDROID_RESTORECON_SKIPCE},
-        {"--cross-filesystems", SELINUX_ANDROID_RESTORECON_CROSS_FILESYSTEMS},
-        {0, 0}
-    };
-
-    int flag = 0;
-
-    bool in_flags = true;
-    for (size_t i = 1; i < args.size(); ++i) {
-        if (android::base::StartsWith(args[i], "--")) {
-            if (!in_flags) {
-                return Error() << "flags must precede paths";
-            }
-            bool found = false;
-            for (size_t j = 0; flags[j].name; ++j) {
-                if (args[i] == flags[j].name) {
-                    flag |= flags[j].value;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return Error() << "bad flag " << args[i];
-            }
-        } else {
-            in_flags = false;
-            if (selinux_android_restorecon(args[i].c_str(), flag) < 0) {
-                ret = errno;
-            }
+    for (const auto& path : paths) {
+        if (selinux_android_restorecon(path.c_str(), flag) < 0) {
+            ret = errno;
         }
     }
 
-    if (ret) return ErrnoError() << "selinux_android_restorecon() failed";
+    if (ret) return ErrnoErrorIgnoreEnoent() << "selinux_android_restorecon() failed";
     return {};
 }
 
@@ -1043,9 +1068,9 @@ static Result<void> ExecWithRebootOnFailure(const std::string& reboot_reason,
                                             const BuiltinArguments& args) {
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service) {
-        return Error() << "Could not create exec service";
+        return Error() << "Could not create exec service: " << service.error();
     }
-    service->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
+    (*service)->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
         if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
             // TODO (b/122850122): support this in gsi
             if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
@@ -1060,10 +1085,10 @@ static Result<void> ExecWithRebootOnFailure(const std::string& reboot_reason,
             }
         }
     });
-    if (auto result = service->ExecStart(); !result) {
+    if (auto result = (*service)->ExecStart(); !result) {
         return Error() << "Could not start exec service: " << result.error();
     }
-    ServiceList::GetInstance().AddService(std::move(service));
+    ServiceList::GetInstance().AddService(std::move(*service));
     return {};
 }
 
@@ -1139,10 +1164,10 @@ static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
 }
 
 // Builtin-function-map start
-const BuiltinFunctionMap::Map& BuiltinFunctionMap::map() const {
+const BuiltinFunctionMap& GetBuiltinFunctionMap() {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
-    static const Map builtin_functions = {
+    static const BuiltinFunctionMap builtin_functions = {
         {"bootchart",               {1,     1,    {false,  do_bootchart}}},
         {"chmod",                   {2,     2,    {true,   do_chmod}}},
         {"chown",                   {2,     3,    {true,   do_chown}}},

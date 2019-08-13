@@ -3,6 +3,7 @@ cc_library_static {
     cflags: [
         "-Werror",
     ],
+    vendor_available: true,
     recovery_available: true,
     srcs: [
         "libmodprobe.cpp",

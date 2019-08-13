@@ -324,7 +324,7 @@ static int usb_bulk_write(usb_handle* h, const void* data, int len) {
 
     h->urb_out_busy = true;
     while (true) {
-        auto now = std::chrono::system_clock::now();
+        auto now = std::chrono::steady_clock::now();
         if (h->cv.wait_until(lock, now + 5s) == std::cv_status::timeout || h->dead) {
             // TODO: call USBDEVFS_DISCARDURB?
             errno = ETIMEDOUT;

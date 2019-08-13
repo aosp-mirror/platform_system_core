@@ -49,7 +49,10 @@ static int Usage(void) {
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets> [-v]" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
+    std::cerr << "  info <dm-name>" << std::endl;
     std::cerr << "  status <dm-name>" << std::endl;
+    std::cerr << "  resume <dm-name>" << std::endl;
+    std::cerr << "  suspend <dm-name>" << std::endl;
     std::cerr << "  table <dm-name>" << std::endl;
     std::cerr << "  help" << std::endl;
     std::cerr << std::endl;
@@ -194,19 +197,12 @@ class TargetParser final {
     char** argv_;
 };
 
-static int DmCreateCmdHandler(int argc, char** argv) {
-    if (argc < 1) {
-        std::cerr << "Usage: dmctl create <dm-name> [-ro] <targets...>" << std::endl;
-        return -EINVAL;
-    }
-    std::string name = argv[0];
-
+static bool parse_table_args(DmTable* table, int argc, char** argv) {
     // Parse extended options first.
-    DmTable table;
     int arg_index = 1;
     while (arg_index < argc && argv[arg_index][0] == '-') {
         if (strcmp(argv[arg_index], "-ro") == 0) {
-            table.set_readonly(true);
+            table->set_readonly(true);
             arg_index++;
         } else {
             std::cerr << "Unrecognized option: " << argv[arg_index] << std::endl;
@@ -218,14 +214,29 @@ static int DmCreateCmdHandler(int argc, char** argv) {
     TargetParser parser(argc - arg_index, argv + arg_index);
     while (parser.More()) {
         std::unique_ptr<DmTarget> target = parser.Next();
-        if (!target || !table.AddTarget(std::move(target))) {
+        if (!target || !table->AddTarget(std::move(target))) {
             return -EINVAL;
         }
     }
 
-    if (table.num_targets() == 0) {
+    if (table->num_targets() == 0) {
         std::cerr << "Must define at least one target." << std::endl;
         return -EINVAL;
+    }
+    return 0;
+}
+
+static int DmCreateCmdHandler(int argc, char** argv) {
+    if (argc < 1) {
+        std::cerr << "Usage: dmctl create <dm-name> [-ro] <targets...>" << std::endl;
+        return -EINVAL;
+    }
+    std::string name = argv[0];
+
+    DmTable table;
+    int ret = parse_table_args(&table, argc, argv);
+    if (ret) {
+        return ret;
     }
 
     DeviceMapper& dm = DeviceMapper::Instance();
@@ -249,6 +260,27 @@ static int DmDeleteCmdHandler(int argc, char** argv) {
         return -EIO;
     }
 
+    return 0;
+}
+
+static int DmReplaceCmdHandler(int argc, char** argv) {
+    if (argc < 1) {
+        std::cerr << "Usage: dmctl replace <dm-name> <targets...>" << std::endl;
+        return -EINVAL;
+    }
+    std::string name = argv[0];
+
+    DmTable table;
+    int ret = parse_table_args(&table, argc, argv);
+    if (ret) {
+        return ret;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    if (!dm.LoadTableAndActivate(name, table)) {
+        std::cerr << "Failed to replace device-mapper table to: " << name << std::endl;
+        return -EIO;
+    }
     return 0;
 }
 
@@ -357,6 +389,41 @@ static int GetPathCmdHandler(int argc, char** argv) {
     return 0;
 }
 
+static int InfoCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    auto info = dm.GetDetailedInfo(argv[0]);
+    if (!info) {
+        std::cerr << "Invalid device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+
+    constexpr int spacing = 14;
+    std::cout << std::left << std::setw(spacing) << "device"
+              << ": " << argv[0] << std::endl;
+    std::cout << std::left << std::setw(spacing) << "active"
+              << ": " << std::boolalpha << !info->IsSuspended() << std::endl;
+    std::cout << std::left << std::setw(spacing) << "access"
+              << ": ";
+    if (info->IsReadOnly()) {
+        std::cout << "ro ";
+    } else {
+        std::cout << "rw ";
+    }
+    std::cout << std::endl;
+    std::cout << std::left << std::setw(spacing) << "activeTable"
+              << ": " << std::boolalpha << info->IsActiveTablePresent() << std::endl;
+    std::cout << std::left << std::setw(spacing) << "inactiveTable"
+              << ": " << std::boolalpha << info->IsInactiveTablePresent() << std::endl;
+    std::cout << std::left << std::setw(spacing) << "bufferFull"
+              << ": " << std::boolalpha << info->IsBufferFull() << std::endl;
+    return 0;
+}
+
 static int DumpTable(const std::string& mode, int argc, char** argv) {
     if (argc != 1) {
         std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
@@ -399,15 +466,47 @@ static int StatusCmdHandler(int argc, char** argv) {
     return DumpTable("status", argc, argv);
 }
 
+static int ResumeCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    if (!dm.ChangeState(argv[0], DmDeviceState::ACTIVE)) {
+        std::cerr << "Could not resume device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+    return 0;
+}
+
+static int SuspendCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    if (!dm.ChangeState(argv[0], DmDeviceState::SUSPENDED)) {
+        std::cerr << "Could not suspend device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+    return 0;
+}
+
 static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         // clang-format off
         {"create", DmCreateCmdHandler},
         {"delete", DmDeleteCmdHandler},
+        {"replace", DmReplaceCmdHandler},
         {"list", DmListCmdHandler},
         {"help", HelpCmdHandler},
         {"getpath", GetPathCmdHandler},
+        {"info", InfoCmdHandler},
         {"table", TableCmdHandler},
         {"status", StatusCmdHandler},
+        {"resume", ResumeCmdHandler},
+        {"suspend", SuspendCmdHandler},
         // clang-format on
 };
 

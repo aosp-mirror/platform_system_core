@@ -96,9 +96,8 @@ static void help() {
         " version                  show version num\n"
         "\n"
         "networking:\n"
-        " connect HOST[:PORT]      connect to a device via TCP/IP [default port=5555]\n"
-        " disconnect [HOST[:PORT]]\n"
-        "     disconnect from given TCP/IP device [default port=5555], or all\n"
+        " connect HOST[:PORT]      connect to a device via TCP/IP\n"
+        " disconnect [[HOST]:PORT] disconnect from given TCP/IP device, or all\n"
         " forward --list           list all forward socket connections\n"
         " forward [--no-rebind] LOCAL REMOTE\n"
         "     forward socket connection using:\n"
@@ -130,7 +129,7 @@ static void help() {
         "     -a: preserve file timestamp and mode\n"
         " sync [all|data|odm|oem|product|system|system_ext|vendor]\n"
         "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
-        "     -l: list but don't copy\n"
+        "     -l: list files that would be copied, but don't copy them\n"
         "\n"
         "shell:\n"
         " shell [-e ESCAPE] [-n] [-Tt] [-x] [COMMAND...]\n"
@@ -154,6 +153,7 @@ static void help() {
         "     -d: allow version code downgrade (debuggable packages only)\n"
         "     -p: partial application install (install-multiple only)\n"
         "     -g: grant all runtime permissions\n"
+        "     --abi ABI: override platform's default ABI\n"
         "     --instant: cause the app to be installed as an ephemeral install app\n"
         "     --no-streaming: always push APK to device and invoke Package Manager as separate steps\n"
         "     --streaming: force streaming APK directly into Package Manager\n"
@@ -165,6 +165,7 @@ static void help() {
 #ifndef _WIN32
         "     --local-agent: locate agent files from local source build (instead of SDK location)\n"
 #endif
+        "     (See also `adb shell pm help` for more options.)\n"
         //TODO--installlog <filename>
         " uninstall [-k] PACKAGE\n"
         "     remove this app package from the device\n"
@@ -356,7 +357,7 @@ static void stdinout_raw_epilogue(int inFd, int outFd, int old_stdin_mode, int o
 }
 
 void copy_to_file(int inFd, int outFd) {
-    std::vector<char> buf(32 * 1024);
+    std::vector<char> buf(64 * 1024);
     int len;
     long total = 0;
     int old_stdin_mode = -1;
@@ -1615,13 +1616,13 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "connect")) {
-        if (argc != 2) error_exit("usage: adb connect <host>[:<port>]");
+        if (argc != 2) error_exit("usage: adb connect HOST[:PORT>]");
 
         std::string query = android::base::StringPrintf("host:connect:%s", argv[1]);
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "disconnect")) {
-        if (argc > 2) error_exit("usage: adb disconnect [<host>[:<port>]]");
+        if (argc > 2) error_exit("usage: adb disconnect [HOST[:PORT]]");
 
         std::string query = android::base::StringPrintf("host:disconnect:%s",
                                                         (argc == 2) ? argv[1] : "");
@@ -1738,41 +1739,33 @@ int adb_commandline(int argc, const char** argv) {
         // Determine the <host-prefix> for this command.
         std::string host_prefix;
         if (reverse) {
-            host_prefix = "reverse";
+            host_prefix = "reverse:";
         } else {
-            if (serial) {
-                host_prefix = android::base::StringPrintf("host-serial:%s", serial);
-            } else if (transport_type == kTransportUsb) {
-                host_prefix = "host-usb";
-            } else if (transport_type == kTransportLocal) {
-                host_prefix = "host-local";
-            } else {
-                host_prefix = "host";
-            }
+            host_prefix = "host:";
         }
 
         std::string cmd, error_message;
         if (strcmp(argv[0], "--list") == 0) {
             if (argc != 1) error_exit("--list doesn't take any arguments");
-            return adb_query_command(host_prefix + ":list-forward");
+            return adb_query_command(host_prefix + "list-forward");
         } else if (strcmp(argv[0], "--remove-all") == 0) {
             if (argc != 1) error_exit("--remove-all doesn't take any arguments");
-            cmd = host_prefix + ":killforward-all";
+            cmd = "killforward-all";
         } else if (strcmp(argv[0], "--remove") == 0) {
             // forward --remove <local>
             if (argc != 2) error_exit("--remove requires an argument");
-            cmd = host_prefix + ":killforward:" + argv[1];
+            cmd = std::string("killforward:") + argv[1];
         } else if (strcmp(argv[0], "--no-rebind") == 0) {
             // forward --no-rebind <local> <remote>
             if (argc != 3) error_exit("--no-rebind takes two arguments");
             if (forward_targets_are_valid(argv[1], argv[2], &error_message)) {
-                cmd = host_prefix + ":forward:norebind:" + argv[1] + ";" + argv[2];
+                cmd = std::string("forward:norebind:") + argv[1] + ";" + argv[2];
             }
         } else {
             // forward <local> <remote>
             if (argc != 2) error_exit("forward takes two arguments");
             if (forward_targets_are_valid(argv[0], argv[1], &error_message)) {
-                cmd = host_prefix + ":forward:" + argv[0] + ";" + argv[1];
+                cmd = std::string("forward:") + argv[0] + ";" + argv[1];
             }
         }
 
@@ -1780,7 +1773,7 @@ int adb_commandline(int argc, const char** argv) {
             error_exit("error: %s", error_message.c_str());
         }
 
-        unique_fd fd(adb_connect(cmd, &error_message));
+        unique_fd fd(adb_connect(nullptr, host_prefix + cmd, &error_message, true));
         if (fd < 0 || !adb_status(fd.get(), &error_message)) {
             error_exit("error: %s", error_message.c_str());
         }
@@ -1891,7 +1884,10 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "track-jdwp")) {
         return adb_connect_command("track-jdwp");
     } else if (!strcmp(argv[0], "track-devices")) {
-        return adb_connect_command("host:track-devices");
+        if (argc > 2 || (argc == 2 && strcmp(argv[1], "-l"))) {
+            error_exit("usage: adb track-devices [-l]");
+        }
+        return adb_connect_command(argc == 2 ? "host:track-devices-l" : "host:track-devices");
     } else if (!strcmp(argv[0], "raw")) {
         if (argc != 2) {
             error_exit("usage: adb raw SERVICE");

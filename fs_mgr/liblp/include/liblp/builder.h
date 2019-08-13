@@ -24,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <string_view>
 
 #include "liblp.h"
 #include "partition_opener.h"
@@ -36,6 +37,9 @@ class LinearExtent;
 // By default, partitions are aligned on a 1MiB boundary.
 static const uint32_t kDefaultPartitionAlignment = 1024 * 1024;
 static const uint32_t kDefaultBlockSize = 4096;
+
+// Name of the default group in a metadata.
+static constexpr std::string_view kDefaultGroup = "default";
 
 // Abstraction around dm-targets that can be encoded into logical partition tables.
 class Extent {
@@ -196,9 +200,6 @@ class MetadataBuilder {
         return New(device_info, metadata_max_size, metadata_slot_count);
     }
 
-    // Used by the test harness to override whether the device is "A/B".
-    static void OverrideABForTesting(bool ab_device);
-
     // Define a new partition group. By default there is one group called
     // "default", with an unrestricted size. A non-zero size will restrict the
     // total space used by all partitions in the group.
@@ -306,8 +307,16 @@ class MetadataBuilder {
     void ImportExtents(Partition* dest, const LpMetadata& metadata,
                        const LpMetadataPartition& source);
     bool ImportPartition(const LpMetadata& metadata, const LpMetadataPartition& source);
-    bool IsABDevice() const;
-    bool IsRetrofitDevice() const;
+
+    // Return true if the device is an AB device.
+    static bool IsABDevice();
+
+    // Return true if the device is retrofitting dynamic partitions.
+    static bool IsRetrofitDynamicPartitionsDevice();
+
+    // Return true if "this" metadata represents a metadata on a retrofit device.
+    bool IsRetrofitMetadata() const;
+
     bool ValidatePartitionGroups() const;
 
     struct Interval {
@@ -336,8 +345,8 @@ class MetadataBuilder {
                                                     const std::vector<Interval>& free_list,
                                                     uint64_t sectors_needed) const;
 
-    static bool sABOverrideValue;
-    static bool sABOverrideSet;
+    static bool UpdateMetadataForOtherSuper(LpMetadata* metadata, uint32_t source_slot_number,
+                                            uint32_t target_slot_number);
 
     LpMetadataGeometry geometry_;
     LpMetadataHeader header_;

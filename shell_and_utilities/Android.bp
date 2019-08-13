@@ -13,6 +13,7 @@ phony {
         "auditctl",
         "awk",
         "bzip2",
+        "ldd",
         "logwrapper",
         "mini-keyctl",
         "mkshrc",

@@ -129,18 +129,6 @@ void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst, size_t dst_le
 ssize_t utf8_length(const char *src);
 
 /**
- * Measure the length of a UTF-32 string.
- */
-size_t utf8_to_utf32_length(const char *src, size_t src_len);
-
-/**
- * Stores a UTF-32 string converted from "src" in "dst". "dst" must be large
- * enough to store the entire converted string as measured by
- * utf8_to_utf32_length plus space for a NUL terminator.
- */
-void utf8_to_utf32(const char* src, size_t src_len, char32_t* dst);
-
-/**
  * Returns the UTF-16 length of UTF-8 string "src". Returns -1 in case
  * it's invalid utf8. No buffer over-read occurs because of bound checks. Using overreadIsFatal you
  * can ask to log a message and fail in case the invalid utf8 could have caused an override if no

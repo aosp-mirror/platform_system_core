@@ -43,11 +43,10 @@
 #include <cutils/uevent.h>
 #include <sys/reboot.h>
 
-#ifdef CHARGER_ENABLE_SUSPEND
 #include <suspend/autosuspend.h>
-#endif
 
 #include "AnimationParser.h"
+#include "charger.sysprop.h"
 #include "healthd_draw.h"
 
 #include <health2/Health.h>
@@ -264,18 +263,16 @@ out:
     LOGW("\n");
 }
 
-#ifdef CHARGER_ENABLE_SUSPEND
 static int request_suspend(bool enable) {
+    if (!android::sysprop::ChargerProperties::enable_suspend().value_or(false)) {
+        return 0;
+    }
+
     if (enable)
         return autosuspend_enable();
     else
         return autosuspend_disable();
 }
-#else
-static int request_suspend(bool /*enable*/) {
-    return 0;
-}
-#endif
 
 static void kick_animation(animation* anim) {
     anim->run = true;
@@ -321,10 +318,10 @@ static void update_screen_state(charger* charger, int64_t now) {
 
         healthd_draw.reset(new HealthdDraw(batt_anim));
 
-#ifndef CHARGER_DISABLE_INIT_BLANK
-        healthd_draw->blank_screen(true);
-        charger->screen_blanked = true;
-#endif
+        if (android::sysprop::ChargerProperties::disable_init_blank().value_or(false)) {
+            healthd_draw->blank_screen(true);
+            charger->screen_blanked = true;
+        }
     }
 
     /* animation is over, blank screen and leave */

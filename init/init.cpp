@@ -688,7 +688,7 @@ int SecondStageMain(int argc, char** argv) {
     MountHandler mount_handler(&epoll);
     set_usb_controller();
 
-    const BuiltinFunctionMap function_map;
+    const BuiltinFunctionMap& function_map = GetBuiltinFunctionMap();
     Action::set_function_map(&function_map);
 
     if (!SetupMountNamespaces()) {

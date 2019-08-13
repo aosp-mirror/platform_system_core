@@ -36,6 +36,7 @@ cc_library {
         "builder.cpp",
         "images.cpp",
         "partition_opener.cpp",
+        "property_fetcher.cpp",
         "reader.cpp",
         "utility.cpp",
         "writer.cpp",

@@ -73,6 +73,13 @@ static bool ReapOneProcess() {
                 auto exec_duration_ms =
                     std::chrono::duration_cast<std::chrono::milliseconds>(exec_duration).count();
                 wait_string = StringPrintf(" waiting took %f seconds", exec_duration_ms / 1000.0f);
+            } else if (service->flags() & SVC_ONESHOT) {
+                auto exec_duration = boot_clock::now() - service->time_started();
+                auto exec_duration_ms =
+                        std::chrono::duration_cast<std::chrono::milliseconds>(exec_duration)
+                                .count();
+                wait_string = StringPrintf(" oneshot service took %f seconds in background",
+                                           exec_duration_ms / 1000.0f);
             }
         } else {
             name = StringPrintf("Untracked pid %d", pid);

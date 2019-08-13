@@ -97,7 +97,6 @@ cc_library {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
         },
     },
-    whole_static_libs: ["libdemangle"],
 }
 
 cc_test_library {

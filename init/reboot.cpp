@@ -670,11 +670,18 @@ bool HandlePowerctlMessage(const std::string& command) {
                                << err;
                 }
             } else if (reboot_target == "recovery") {
-                const std::vector<std::string> options = {};
-                std::string err;
-                if (!write_bootloader_message(options, &err)) {
-                    LOG(ERROR) << "Failed to set bootloader message: " << err;
-                    return false;
+                bootloader_message boot = {};
+                if (std::string err; !read_bootloader_message(&boot, &err)) {
+                    LOG(ERROR) << "Failed to read bootloader message: " << err;
+                }
+                // Update the boot command field if it's empty, and preserve
+                // the other arguments in the bootloader message.
+                if (boot.command[0] == '\0') {
+                    strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
+                    if (std::string err; !write_bootloader_message(boot, &err)) {
+                        LOG(ERROR) << "Failed to set bootloader message: " << err;
+                        return false;
+                    }
                 }
             } else if (reboot_target == "sideload" || reboot_target == "sideload-auto-reboot" ||
                        reboot_target == "fastboot") {

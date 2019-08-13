@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_STATS_LOG_STATS_EVENT_LIST_H
-#define ANDROID_STATS_LOG_STATS_EVENT_LIST_H
+#pragma once
 
 #include <log/log_event_list.h>
 #include <sys/uio.h>
@@ -133,7 +132,6 @@ class stats_event_list {
         return *this;
     }
 
-#if defined(_USING_LIBCXX)
     stats_event_list& operator<<(const std::string& value) {
         int retval = android_log_write_string8_len(ctx, value.data(), value.length());
         if (retval < 0) {
@@ -141,7 +139,6 @@ class stats_event_list {
         }
         return *this;
     }
-#endif
 
     stats_event_list& operator<<(float value) {
         int retval = android_log_write_float32(ctx, value);
@@ -203,7 +200,6 @@ class stats_event_list {
         return ret >= 0;
     }
 
-#if defined(_USING_LIBCXX)
     bool AppendString(const std::string& value) {
         int retval = android_log_write_string8_len(ctx, value.data(), value.length());
         if (retval < 0) {
@@ -219,7 +215,6 @@ class stats_event_list {
         }
         return ret;
     }
-#endif
 
     bool AppendFloat(float value) {
         int retval = android_log_write_float32(ctx, value);
@@ -253,4 +248,3 @@ class stats_event_list {
 };
 
 #endif
-#endif  // ANDROID_STATS_LOG_STATS_EVENT_LIST_H
