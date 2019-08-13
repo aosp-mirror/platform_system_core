@@ -92,10 +92,7 @@ static bool parse_line(const char* path, size_t line_number, const char* line, p
   info->uid = uid;
 
   // Integer to bool conversions.
-  if (debuggable != 0 && debuggable != 1) return false;
   info->debuggable = debuggable;
-
-  if (profileable_from_shell != 0 && profileable_from_shell != 1) return false;
   info->profileable_from_shell = profileable_from_shell;
 
   return true;
