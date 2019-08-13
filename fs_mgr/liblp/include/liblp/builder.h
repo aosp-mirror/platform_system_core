@@ -317,8 +317,8 @@ class MetadataBuilder {
     // Return true if the device is retrofitting dynamic partitions.
     static bool IsRetrofitDynamicPartitionsDevice();
 
-    // Return true if "this" metadata represents a metadata on a retrofit device.
-    bool IsRetrofitMetadata() const;
+    // Return true if _b partitions should be prioritized at the second half of the device.
+    bool ShouldHalveSuper() const;
 
     bool ValidatePartitionGroups() const;
 

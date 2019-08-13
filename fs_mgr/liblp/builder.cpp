@@ -583,8 +583,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
     CHECK_NE(sectors_per_block, 0);
     CHECK(sectors_needed % sectors_per_block == 0);
 
-    if (IsABDevice() && !IsRetrofitMetadata() &&
-        GetPartitionSlotSuffix(partition->name()) == "_b") {
+    if (IsABDevice() && ShouldHalveSuper() && GetPartitionSlotSuffix(partition->name()) == "_b") {
         // Allocate "a" partitions top-down and "b" partitions bottom-up, to
         // minimize fragmentation during OTA.
         free_regions = PrioritizeSecondHalfOfSuper(free_regions);
@@ -1058,8 +1057,9 @@ bool MetadataBuilder::IsRetrofitDynamicPartitionsDevice() {
                                                             false);
 }
 
-bool MetadataBuilder::IsRetrofitMetadata() const {
-    return GetBlockDevicePartitionName(0) != LP_METADATA_DEFAULT_PARTITION_NAME;
+bool MetadataBuilder::ShouldHalveSuper() const {
+    return GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME &&
+           !IPropertyFetcher::GetInstance()->GetBoolProperty("ro.virtual_ab.enabled", false);
 }
 
 bool MetadataBuilder::AddLinearExtent(Partition* partition, const std::string& block_device,
