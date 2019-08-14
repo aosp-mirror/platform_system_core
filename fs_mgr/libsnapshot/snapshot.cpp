@@ -27,6 +27,7 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <ext4_utils/ext4_utils.h>
+#include <fstab/fstab.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 
@@ -48,17 +49,14 @@ using namespace std::string_literals;
 // Unit is sectors, this is a 4K chunk.
 static constexpr uint32_t kSnapshotChunkSize = 8;
 
+static constexpr char kSnapshotBootIndicatorFile[] = "snapshot-boot";
+
 class DeviceInfo final : public SnapshotManager::IDeviceInfo {
   public:
     std::string GetGsidDir() const override { return "ota"s; }
     std::string GetMetadataDir() const override { return "/metadata/ota"s; }
-    bool IsRunningSnapshot() const override;
+    std::string GetSlotSuffix() const override { return fs_mgr_get_slot_suffix(); }
 };
-
-bool DeviceInfo::IsRunningSnapshot() const {
-    // :TODO: implement this check.
-    return true;
-}
 
 // Note: IIMageManager is an incomplete type in the header, so the default
 // destructor doesn't work.
@@ -113,6 +111,27 @@ bool SnapshotManager::CancelUpdate() {
         return false;
     }
     return true;
+}
+
+bool SnapshotManager::FinishedSnapshotWrites() {
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    if (ReadUpdateState(lock.get()) != UpdateState::Initiated) {
+        LOG(ERROR) << "Can only transition to the Unverified state from the Initiated state.";
+        return false;
+    }
+
+    // This file acts as both a quick indicator for init (it can use access(2)
+    // to decide how to do first-stage mounts), and it stores the old slot, so
+    // we can tell whether or not we performed a rollback.
+    auto contents = device_->GetSlotSuffix();
+    auto boot_file = GetSnapshotBootIndicatorPath();
+    if (!android::base::WriteStringToFile(contents, boot_file)) {
+        PLOG(ERROR) << "write failed: " << boot_file;
+        return false;
+    }
+    return WriteUpdateState(lock.get(), UpdateState::Unverified);
 }
 
 bool SnapshotManager::CreateSnapshot(LockedFile* lock, const std::string& name,
@@ -339,8 +358,16 @@ bool SnapshotManager::InitiateMerge() {
         LOG(ERROR) << "Cannot begin a merge if an update has not been verified";
         return false;
     }
-    if (!device_->IsRunningSnapshot()) {
-        LOG(ERROR) << "Cannot begin a merge if the device is not booted off a snapshot";
+
+    std::string old_slot;
+    auto boot_file = GetSnapshotBootIndicatorPath();
+    if (!android::base::ReadFileToString(boot_file, &old_slot)) {
+        LOG(ERROR) << "Could not determine the previous slot; aborting merge";
+        return false;
+    }
+    auto new_slot = device_->GetSlotSuffix();
+    if (new_slot == old_slot) {
+        LOG(ERROR) << "Device cannot merge while booting off old slot " << old_slot;
         return false;
     }
 
@@ -676,7 +703,23 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
     return UpdateState::MergeCompleted;
 }
 
+std::string SnapshotManager::GetSnapshotBootIndicatorPath() {
+    return metadata_dir_ + "/" + kSnapshotBootIndicatorFile;
+}
+
+void SnapshotManager::RemoveSnapshotBootIndicator() {
+    // It's okay if this fails - first-stage init performs a deeper check after
+    // reading the indicator file, so it's not a problem if it still exists
+    // after the update completes.
+    auto boot_file = GetSnapshotBootIndicatorPath();
+    if (unlink(boot_file.c_str()) == -1 && errno != ENOENT) {
+        PLOG(ERROR) << "unlink " << boot_file;
+    }
+}
+
 void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
+    RemoveSnapshotBootIndicator();
+
     if (!WriteUpdateState(lock, UpdateState::None)) {
         // We'll try again next reboot, ad infinitum.
         return;
