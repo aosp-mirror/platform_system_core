@@ -39,7 +39,8 @@ struct NativeLoaderNamespace {
                                               const std::string& search_paths,
                                               const std::string& permitted_paths,
                                               const NativeLoaderNamespace* parent, bool is_shared,
-                                              bool is_greylist_enabled);
+                                              bool is_greylist_enabled,
+                                              bool also_used_as_anonymous);
 
   NativeLoaderNamespace(NativeLoaderNamespace&&) = default;
   NativeLoaderNamespace(const NativeLoaderNamespace&) = default;

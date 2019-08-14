@@ -48,6 +48,7 @@ class LibraryNamespaces {
   void Reset() {
     namespaces_.clear();
     initialized_ = false;
+    app_main_namespace_ = nullptr;
   }
   Result<NativeLoaderNamespace*> Create(JNIEnv* env, uint32_t target_sdk_version,
                                         jobject class_loader, bool is_shared, jstring dex_path,
@@ -59,6 +60,7 @@ class LibraryNamespaces {
   NativeLoaderNamespace* FindParentNamespaceByClassLoader(JNIEnv* env, jobject class_loader);
 
   bool initialized_;
+  NativeLoaderNamespace* app_main_namespace_;
   std::list<std::pair<jweak, NativeLoaderNamespace>> namespaces_;
 };
 
