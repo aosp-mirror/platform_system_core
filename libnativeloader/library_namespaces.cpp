@@ -159,13 +159,6 @@ Result<NativeLoaderNamespace*> LibraryNamespaces::Create(JNIEnv* env, uint32_t t
     }
   }
 
-  // Initialize the anonymous namespace with the first non-empty library path.
-  Result<void> ret;
-  if (!library_path.empty() && !initialized_ &&
-      !(ret = InitPublicNamespace(library_path.c_str()))) {
-    return ret.error();
-  }
-
   LOG_ALWAYS_FATAL_IF(FindNamespaceByClassLoader(env, class_loader) != nullptr,
                       "There is already a namespace associated with this classloader");
 
@@ -215,13 +208,22 @@ Result<NativeLoaderNamespace*> LibraryNamespaces::Create(JNIEnv* env, uint32_t t
 
   // Create the app namespace
   NativeLoaderNamespace* parent_ns = FindParentNamespaceByClassLoader(env, class_loader);
-  auto app_ns =
-      NativeLoaderNamespace::Create(namespace_name, library_path, permitted_path, parent_ns,
-                                    is_shared, target_sdk_version < 24 /* is_greylist_enabled */);
+  // Heuristic: the first classloader with non-empty library_path is assumed to
+  // be the main classloader for app
+  // TODO(b/139178525) remove this heuristic by determining this in LoadedApk (or its
+  // friends) and then passing it down to here.
+  bool is_main_classloader = app_main_namespace_ == nullptr && !library_path.empty();
+  // Policy: the namespace for the main classloader is also used as the
+  // anonymous namespace.
+  bool also_used_as_anonymous = is_main_classloader;
+  // Note: this function is executed with g_namespaces_mutex held, thus no
+  // racing here.
+  auto app_ns = NativeLoaderNamespace::Create(
+      namespace_name, library_path, permitted_path, parent_ns, is_shared,
+      target_sdk_version < 24 /* is_greylist_enabled */, also_used_as_anonymous);
   if (!app_ns) {
     return app_ns.error();
   }
-
   // ... and link to other namespaces to allow access to some public libraries
   bool is_bridged = app_ns->IsBridged();
 
@@ -278,6 +280,9 @@ Result<NativeLoaderNamespace*> LibraryNamespaces::Create(JNIEnv* env, uint32_t t
   }
 
   namespaces_.push_back(std::make_pair(env->NewWeakGlobalRef(class_loader), *app_ns));
+  if (is_main_classloader) {
+    app_main_namespace_ = &(*app_ns);
+  }
 
   return &(namespaces_.back().second);
 }
@@ -293,32 +298,6 @@ NativeLoaderNamespace* LibraryNamespaces::FindNamespaceByClassLoader(JNIEnv* env
   }
 
   return nullptr;
-}
-
-Result<void> LibraryNamespaces::InitPublicNamespace(const char* library_path) {
-  // Ask native bride if this apps library path should be handled by it
-  bool is_native_bridge = NativeBridgeIsPathSupported(library_path);
-
-  // (http://b/25844435) - Some apps call dlopen from generated code (mono jited
-  // code is one example) unknown to linker in which  case linker uses anonymous
-  // namespace. The second argument specifies the search path for the anonymous
-  // namespace which is the library_path of the classloader.
-  initialized_ = android_init_anonymous_namespace(default_public_libraries().c_str(),
-                                                  is_native_bridge ? nullptr : library_path);
-  if (!initialized_) {
-    return Error() << dlerror();
-  }
-
-  // and now initialize native bridge namespaces if necessary.
-  if (NativeBridgeInitialized()) {
-    initialized_ = NativeBridgeInitAnonymousNamespace(default_public_libraries().c_str(),
-                                                      is_native_bridge ? library_path : nullptr);
-    if (!initialized_) {
-      return Error() << NativeBridgeGetError();
-    }
-  }
-
-  return {};
 }
 
 NativeLoaderNamespace* LibraryNamespaces::FindParentNamespaceByClassLoader(JNIEnv* env,
