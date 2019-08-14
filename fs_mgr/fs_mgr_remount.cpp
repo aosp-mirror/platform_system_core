@@ -82,13 +82,7 @@ const android::fs_mgr::FstabEntry* is_wrapped(const android::fs_mgr::Fstab& over
 
 void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
               const char* file, unsigned int line, const char* message) {
-    static const char log_characters[] = "VD\0WEFF";
-    if (severity < sizeof(log_characters)) {
-        auto severity_char = log_characters[severity];
-        if (severity_char) fprintf(stderr, "%c ", severity_char);
-    }
     fprintf(stderr, "%s\n", message);
-
     static auto logd = android::base::LogdLogger();
     logd(id, severity, tag, file, line, message);
 }
@@ -107,11 +101,9 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
 
 }  // namespace
 
-int main(int argc, char* argv[]) {
-    android::base::InitLogging(argv, MyLogger);
-
+static int do_remount(int argc, char* argv[]) {
     enum {
-        SUCCESS,
+        SUCCESS = 0,
         NOT_USERDEBUG,
         BADARG,
         NOT_ROOT,
@@ -165,7 +157,7 @@ int main(int argc, char* argv[]) {
 
     // Make sure we are root.
     if (::getuid() != 0) {
-        LOG(ERROR) << "must be run as root";
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
         return NOT_ROOT;
     }
 
@@ -389,4 +381,11 @@ int main(int argc, char* argv[]) {
     }
 
     return retval;
+}
+
+int main(int argc, char* argv[]) {
+    android::base::InitLogging(argv, MyLogger);
+    int result = do_remount(argc, argv);
+    printf("remount %s\n", result ? "failed" : "succeeded");
+    return result;
 }
