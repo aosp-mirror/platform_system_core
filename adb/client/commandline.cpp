@@ -1704,10 +1704,23 @@ int adb_commandline(int argc, const char** argv) {
             error_exit("tcpip: invalid port: %s", argv[1]);
         }
         return adb_connect_command(android::base::StringPrintf("tcpip:%d", port));
+    } else if (!strcmp(argv[0], "remount")) {
+        FeatureSet features;
+        std::string error;
+        if (!adb_get_feature_set(&features, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
+            return 1;
+        }
+
+        if (CanUseFeature(features, kFeatureRemountShell)) {
+            const char* arg[2] = {"shell", "remount"};
+            return adb_shell(2, arg);
+        } else {
+            return adb_connect_command("remount:");
+        }
     }
     // clang-format off
-    else if (!strcmp(argv[0], "remount") ||
-             !strcmp(argv[0], "reboot") ||
+    else if (!strcmp(argv[0], "reboot") ||
              !strcmp(argv[0], "reboot-bootloader") ||
              !strcmp(argv[0], "reboot-fastboot") ||
              !strcmp(argv[0], "usb") ||
