@@ -46,10 +46,10 @@ void DeployPatchGenerator::Log(const char* fmt, ...) {
 
 void DeployPatchGenerator::APKEntryToLog(const APKEntry& entry) {
     Log("Filename: %s", entry.filename().c_str());
-    Log("CRC32: 0x%08llX", entry.crc32());
-    Log("Data Offset: %lld", entry.dataoffset());
-    Log("Compressed Size: %lld", entry.compressedsize());
-    Log("Uncompressed Size: %lld", entry.uncompressedsize());
+    Log("CRC32: 0x%08" PRIX64, entry.crc32());
+    Log("Data Offset: %" PRId64, entry.dataoffset());
+    Log("Compressed Size: %" PRId64, entry.compressedsize());
+    Log("Uncompressed Size: %" PRId64, entry.uncompressedsize());
 }
 
 void DeployPatchGenerator::APKMetaDataToLog(const char* file, const APKMetaData& metadata) {
