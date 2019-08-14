@@ -22,18 +22,6 @@
 
 __BEGIN_DECLS
 
-/*
- * Initializes anonymous namespaces. The shared_libs_sonames is the list of sonames
- * to be shared by default namespace separated by colon. Example: "libc.so:libm.so:libdl.so".
- *
- * The library_search_path is the search path for anonymous namespace. The anonymous namespace
- * is used in the case when linker cannot identify the caller of dlopen/dlsym. This happens
- * for the code not loaded by dynamic linker; for example calls from the mono-compiled code.
- */
-extern bool android_init_anonymous_namespace(const char* shared_libs_sonames,
-                                             const char* library_search_path);
-
-
 enum {
   /* A regular namespace is the namespace with a custom search path that does
    * not impose any restrictions on the location of native libraries.
@@ -62,8 +50,18 @@ enum {
    */
   ANDROID_NAMESPACE_TYPE_GREYLIST_ENABLED = 0x08000000,
 
-  ANDROID_NAMESPACE_TYPE_SHARED_ISOLATED = ANDROID_NAMESPACE_TYPE_SHARED |
-                                           ANDROID_NAMESPACE_TYPE_ISOLATED,
+  /* This flag instructs linker to use this namespace as the anonymous
+   * namespace. The anonymous namespace is used in the case when linker cannot
+   * identify the caller of dlopen/dlsym. This happens for the code not loaded
+   * by dynamic linker; for example calls from the mono-compiled code. There can
+   * be only one anonymous namespace in a process. If there already is an
+   * anonymous namespace in the process, using this flag when creating a new
+   * namespace causes an error.
+   */
+  ANDROID_NAMESPACE_TYPE_ALSO_USED_AS_ANONYMOUS = 0x10000000,
+
+  ANDROID_NAMESPACE_TYPE_SHARED_ISOLATED =
+      ANDROID_NAMESPACE_TYPE_SHARED | ANDROID_NAMESPACE_TYPE_ISOLATED,
 };
 
 /*

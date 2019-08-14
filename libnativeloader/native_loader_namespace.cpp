@@ -85,7 +85,8 @@ Result<NativeLoaderNamespace> NativeLoaderNamespace::GetPlatformNamespace(bool i
 
 Result<NativeLoaderNamespace> NativeLoaderNamespace::Create(
     const std::string& name, const std::string& search_paths, const std::string& permitted_paths,
-    const NativeLoaderNamespace* parent, bool is_shared, bool is_greylist_enabled) {
+    const NativeLoaderNamespace* parent, bool is_shared, bool is_greylist_enabled,
+    bool also_used_as_anonymous) {
   bool is_bridged = false;
   if (parent != nullptr) {
     is_bridged = parent->IsBridged();
@@ -100,7 +101,17 @@ Result<NativeLoaderNamespace> NativeLoaderNamespace::Create(
   }
   const NativeLoaderNamespace& effective_parent = parent != nullptr ? *parent : *platform_ns;
 
+  // All namespaces for apps are isolated
   uint64_t type = ANDROID_NAMESPACE_TYPE_ISOLATED;
+
+  // The namespace is also used as the anonymous namespace
+  // which is used when the linker fails to determine the caller address
+  if (also_used_as_anonymous) {
+    type |= ANDROID_NAMESPACE_TYPE_ALSO_USED_AS_ANONYMOUS;
+  }
+
+  // Bundled apps have access to all system libraries that are currently loaded
+  // in the default namespace
   if (is_shared) {
     type |= ANDROID_NAMESPACE_TYPE_SHARED;
   }
