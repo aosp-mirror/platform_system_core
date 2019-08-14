@@ -795,5 +795,3 @@ namespace.default.isolated = false
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /%SYSTEM_EXT%/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
-
-namespace.default.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
