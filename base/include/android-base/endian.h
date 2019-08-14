@@ -18,6 +18,9 @@
 
 /* A cross-platform equivalent of bionic's <sys/endian.h>. */
 
+/* For __BIONIC__ and __GLIBC__ */
+#include <sys/cdefs.h>
+
 #if defined(__BIONIC__)
 
 #include <sys/endian.h>
@@ -38,6 +41,9 @@
 #define betoh16(x) be16toh(x)
 #define betoh32(x) be32toh(x)
 #define betoh64(x) be64toh(x)
+#define letoh16(x) le16toh(x)
+#define letoh32(x) le32toh(x)
+#define letoh64(x) le64toh(x)
 
 #else
 
@@ -45,10 +51,8 @@
 /* macOS has some of the basics. */
 #include <sys/_endian.h>
 #else
-/* Windows really has nothing. */
-#define LITTLE_ENDIAN __LITTLE_ENDIAN
-#define BIG_ENDIAN __BIG_ENDIAN
-#define BYTE_ORDER __BYTE_ORDER
+/* Windows has even less. */
+#include <sys/param.h>
 #define htons(x) __builtin_bswap16(x)
 #define htonl(x) __builtin_bswap32(x)
 #define ntohs(x) __builtin_bswap16(x)
