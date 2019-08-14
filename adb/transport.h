@@ -69,6 +69,7 @@ extern const char* const kFeatureFixedPushMkdir;
 extern const char* const kFeatureAbb;
 // adbd properly updates symlink timestamps on push.
 extern const char* const kFeatureFixedPushSymlinkTimestamp;
+extern const char* const kFeatureRemountShell;
 
 TransportId NextTransportId();
 

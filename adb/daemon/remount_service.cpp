@@ -48,6 +48,8 @@ static bool do_remount(int fd, const std::string& cmd) {
         dup2(fd, STDERR_FILENO);
 
         execl(kRemountCmd, kRemountCmd, cmd.empty() ? nullptr : cmd.c_str(), nullptr);
+        const char* msg = "failed to exec remount\n";
+        write(STDERR_FILENO, msg, strlen(msg));
         _exit(errno);
     }
 
@@ -83,6 +85,6 @@ static bool do_remount(int fd, const std::string& cmd) {
 }
 
 void remount_service(unique_fd fd, const std::string& cmd) {
-    const char* success = do_remount(fd.get(), cmd) ? "succeeded" : "failed";
-    WriteFdFmt(fd.get(), "remount %s\n", success);
+    do_remount(fd.get(), cmd);
+    // The remount command will print success or failure for us.
 }
