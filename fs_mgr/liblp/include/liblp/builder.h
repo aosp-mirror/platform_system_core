@@ -128,7 +128,7 @@ class Partition final {
 
   private:
     void ShrinkTo(uint64_t aligned_size);
-    void set_group_name(const std::string& group_name) { group_name_ = group_name; }
+    void set_group_name(std::string_view group_name) { group_name_ = group_name; }
 
     std::string name_;
     std::string group_name_;
@@ -227,7 +227,7 @@ class MetadataBuilder {
     Partition* FindPartition(const std::string& name);
 
     // Find a group by name. If no group is found, nullptr is returned.
-    PartitionGroup* FindGroup(const std::string& name);
+    PartitionGroup* FindGroup(std::string_view name);
 
     // Add a predetermined extent to a partition.
     bool AddLinearExtent(Partition* partition, const std::string& block_device,
@@ -252,7 +252,7 @@ class MetadataBuilder {
     // the metadata is exported, to avoid errors during potential group and
     // size shuffling operations. This will return false if the new group does
     // not exist.
-    bool ChangePartitionGroup(Partition* partition, const std::string& group_name);
+    bool ChangePartitionGroup(Partition* partition, std::string_view group_name);
 
     // Changes the size of a partition group. Size constraints will not be
     // checked until metadata is exported, to avoid errors during group
@@ -287,6 +287,9 @@ class MetadataBuilder {
     // Return true if a block device is found, else false.
     bool HasBlockDevice(const std::string& partition_name) const;
 
+    // Return the name of the block device at |index|.
+    std::string GetBlockDevicePartitionName(uint64_t index) const;
+
   private:
     MetadataBuilder();
     MetadataBuilder(const MetadataBuilder&) = delete;
@@ -314,8 +317,8 @@ class MetadataBuilder {
     // Return true if the device is retrofitting dynamic partitions.
     static bool IsRetrofitDynamicPartitionsDevice();
 
-    // Return true if "this" metadata represents a metadata on a retrofit device.
-    bool IsRetrofitMetadata() const;
+    // Return true if _b partitions should be prioritized at the second half of the device.
+    bool ShouldHalveSuper() const;
 
     bool ValidatePartitionGroups() const;
 
