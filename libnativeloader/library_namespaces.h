@@ -25,9 +25,12 @@
 #include <list>
 #include <string>
 
+#include <android-base/result.h>
 #include <jni.h>
 
 namespace android::nativeloader {
+
+using android::base::Result;
 
 // LibraryNamespaces is a singleton object that manages NativeLoaderNamespace
 // objects for an app process. Its main job is to create (and configure) a new
@@ -35,24 +38,29 @@ namespace android::nativeloader {
 // object for a given ClassLoader.
 class LibraryNamespaces {
  public:
-  LibraryNamespaces() : initialized_(false) {}
+  LibraryNamespaces() : initialized_(false), app_main_namespace_(nullptr) {}
 
   LibraryNamespaces(LibraryNamespaces&&) = default;
   LibraryNamespaces(const LibraryNamespaces&) = delete;
   LibraryNamespaces& operator=(const LibraryNamespaces&) = delete;
 
   void Initialize();
-  void Reset() { namespaces_.clear(); }
-  NativeLoaderNamespace* Create(JNIEnv* env, uint32_t target_sdk_version, jobject class_loader,
-                                bool is_shared, jstring dex_path, jstring java_library_path,
-                                jstring java_permitted_path, std::string* error_msg);
+  void Reset() {
+    namespaces_.clear();
+    initialized_ = false;
+    app_main_namespace_ = nullptr;
+  }
+  Result<NativeLoaderNamespace*> Create(JNIEnv* env, uint32_t target_sdk_version,
+                                        jobject class_loader, bool is_shared, jstring dex_path,
+                                        jstring java_library_path, jstring java_permitted_path);
   NativeLoaderNamespace* FindNamespaceByClassLoader(JNIEnv* env, jobject class_loader);
 
  private:
-  bool InitPublicNamespace(const char* library_path, std::string* error_msg);
+  Result<void> InitPublicNamespace(const char* library_path);
   NativeLoaderNamespace* FindParentNamespaceByClassLoader(JNIEnv* env, jobject class_loader);
 
   bool initialized_;
+  NativeLoaderNamespace* app_main_namespace_;
   std::list<std::pair<jweak, NativeLoaderNamespace>> namespaces_;
 };
 

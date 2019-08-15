@@ -20,11 +20,21 @@
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 
+#include <functional>
+#include <thread>
+
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/strings.h>
+#include <uuid/uuid.h>
+
+#include "utility.h"
 
 namespace android {
 namespace dm {
+
+using namespace std::literals;
 
 DeviceMapper::DeviceMapper() : fd_(-1) {
     fd_ = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
@@ -37,13 +47,13 @@ DeviceMapper& DeviceMapper::Instance() {
     static DeviceMapper instance;
     return instance;
 }
+
 // Creates a new device mapper device
-bool DeviceMapper::CreateDevice(const std::string& name) {
+bool DeviceMapper::CreateDevice(const std::string& name, const std::string& uuid) {
     if (name.empty()) {
         LOG(ERROR) << "Unnamed device mapper device creation is not supported";
         return false;
     }
-
     if (name.size() >= DM_NAME_LEN) {
         LOG(ERROR) << "[" << name << "] is too long to be device mapper name";
         return false;
@@ -51,6 +61,9 @@ bool DeviceMapper::CreateDevice(const std::string& name) {
 
     struct dm_ioctl io;
     InitIo(&io, name);
+    if (!uuid.empty()) {
+        snprintf(io.uuid, sizeof(io.uuid), "%s", uuid.c_str());
+    }
 
     if (ioctl(fd_, DM_DEV_CREATE, &io)) {
         PLOG(ERROR) << "DM_DEV_CREATE failed for [" << name << "]";
@@ -67,16 +80,6 @@ bool DeviceMapper::CreateDevice(const std::string& name) {
 }
 
 bool DeviceMapper::DeleteDevice(const std::string& name) {
-    if (name.empty()) {
-        LOG(ERROR) << "Unnamed device mapper device creation is not supported";
-        return false;
-    }
-
-    if (name.size() >= DM_NAME_LEN) {
-        LOG(ERROR) << "[" << name << "] is too long to be device mapper name";
-        return false;
-    }
-
     struct dm_ioctl io;
     InitIo(&io, name);
 
@@ -93,9 +96,67 @@ bool DeviceMapper::DeleteDevice(const std::string& name) {
     return true;
 }
 
-const std::unique_ptr<DmTable> DeviceMapper::table(const std::string& /* name */) const {
-    // TODO(b/110035986): Return the table, as read from the kernel instead
-    return nullptr;
+static std::string GenerateUuid() {
+    uuid_t uuid_bytes;
+    uuid_generate(uuid_bytes);
+
+    char uuid_chars[37] = {};
+    uuid_unparse_lower(uuid_bytes, uuid_chars);
+
+    return std::string{uuid_chars};
+}
+
+bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, std::string* path,
+                                const std::chrono::milliseconds& timeout_ms) {
+    std::string uuid = GenerateUuid();
+    if (!CreateDevice(name, uuid)) {
+        return false;
+    }
+
+    // We use the unique path for testing whether the device is ready. After
+    // that, it's safe to use the dm-N path which is compatible with callers
+    // that expect it to be formatted as such.
+    std::string unique_path;
+    if (!LoadTableAndActivate(name, table) || !GetDeviceUniquePath(name, &unique_path) ||
+        !GetDmDevicePathByName(name, path)) {
+        DeleteDevice(name);
+        return false;
+    }
+
+    if (timeout_ms <= std::chrono::milliseconds::zero()) {
+        return true;
+    }
+    if (!WaitForFile(unique_path, timeout_ms)) {
+        LOG(ERROR) << "Timed out waiting for device path: " << unique_path;
+        DeleteDevice(name);
+        return false;
+    }
+    return true;
+}
+
+bool DeviceMapper::GetDeviceUniquePath(const std::string& name, std::string* path) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(ERROR) << "Failed to get device path: " << name;
+        return false;
+    }
+
+    if (io.uuid[0] == '\0') {
+        LOG(ERROR) << "Device does not have a unique path: " << name;
+        return false;
+    }
+    *path = "/dev/block/mapper/by-uuid/"s + io.uuid;
+    return true;
+}
+
+std::optional<DeviceMapper::Info> DeviceMapper::GetDetailedInfo(const std::string& name) const {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        return std::nullopt;
+    }
+    return Info(io.flags);
 }
 
 DmDeviceState DeviceMapper::GetState(const std::string& name) const {
@@ -110,12 +171,27 @@ DmDeviceState DeviceMapper::GetState(const std::string& name) const {
     return DmDeviceState::SUSPENDED;
 }
 
-bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table) {
-    if (!CreateDevice(name)) {
+bool DeviceMapper::ChangeState(const std::string& name, DmDeviceState state) {
+    if (state != DmDeviceState::SUSPENDED && state != DmDeviceState::ACTIVE) {
         return false;
     }
-    if (!LoadTableAndActivate(name, table)) {
-        DeleteDevice(name);
+
+    struct dm_ioctl io;
+    InitIo(&io, name);
+
+    if (state == DmDeviceState::SUSPENDED) io.flags = DM_SUSPEND_FLAG;
+
+    if (ioctl(fd_, DM_DEV_SUSPEND, &io) < 0) {
+        PLOG(ERROR) << "DM_DEV_SUSPEND "
+                    << (state == DmDeviceState::SUSPENDED ? "suspend" : "resume") << " failed";
+        return false;
+    }
+    return true;
+}
+
+bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table) {
+    std::string ignore_path;
+    if (!CreateDevice(name, table, &ignore_path, 0ms)) {
         return false;
     }
     return true;
@@ -302,6 +378,26 @@ bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* p
     return true;
 }
 
+bool DeviceMapper::GetDeviceNumber(const std::string& name, dev_t* dev) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(WARNING) << "DM_DEV_STATUS failed for " << name;
+        return false;
+    }
+    *dev = io.dev;
+    return true;
+}
+
+bool DeviceMapper::GetDeviceString(const std::string& name, std::string* dev) {
+    dev_t num;
+    if (!GetDeviceNumber(name, &num)) {
+        return false;
+    }
+    *dev = std::to_string(major(num)) + ":" + std::to_string(minor(num));
+    return true;
+}
+
 bool DeviceMapper::GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) {
     return GetTable(name, 0, table);
 }
@@ -366,6 +462,14 @@ void DeviceMapper::InitIo(struct dm_ioctl* io, const std::string& name) const {
     if (!name.empty()) {
         snprintf(io->name, sizeof(io->name), "%s", name.c_str());
     }
+}
+
+std::string DeviceMapper::GetTargetType(const struct dm_target_spec& spec) {
+    if (const void* p = memchr(spec.target_type, '\0', sizeof(spec.target_type))) {
+        ptrdiff_t length = reinterpret_cast<const char*>(p) - spec.target_type;
+        return std::string{spec.target_type, static_cast<size_t>(length)};
+    }
+    return std::string{spec.target_type, sizeof(spec.target_type)};
 }
 
 }  // namespace dm

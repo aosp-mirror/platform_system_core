@@ -60,7 +60,6 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/unique_fd.h>
-#include <cutils/android_reboot.h>
 #include <fs_avb/fs_avb.h>
 #include <selinux/android.h>
 
@@ -79,8 +78,6 @@ namespace android {
 namespace init {
 
 namespace {
-
-selabel_handle* sehandle = nullptr;
 
 enum EnforcingStatus { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
 
@@ -500,31 +497,34 @@ void SelinuxSetupKernelLogging() {
 // This function returns the Android version with which the vendor SEPolicy was compiled.
 // It is used for version checks such as whether or not vendor_init should be used
 int SelinuxGetVendorAndroidVersion() {
-    if (!IsSplitPolicyDevice()) {
-        // If this device does not split sepolicy files, it's not a Treble device and therefore,
-        // we assume it's always on the latest platform.
-        return __ANDROID_API_FUTURE__;
-    }
+    static int vendor_android_version = [] {
+        if (!IsSplitPolicyDevice()) {
+            // If this device does not split sepolicy files, it's not a Treble device and therefore,
+            // we assume it's always on the latest platform.
+            return __ANDROID_API_FUTURE__;
+        }
 
-    std::string version;
-    if (!GetVendorMappingVersion(&version)) {
-        LOG(FATAL) << "Could not read vendor SELinux version";
-    }
+        std::string version;
+        if (!GetVendorMappingVersion(&version)) {
+            LOG(FATAL) << "Could not read vendor SELinux version";
+        }
 
-    int major_version;
-    std::string major_version_str(version, 0, version.find('.'));
-    if (!ParseInt(major_version_str, &major_version)) {
-        PLOG(FATAL) << "Failed to parse the vendor sepolicy major version " << major_version_str;
-    }
+        int major_version;
+        std::string major_version_str(version, 0, version.find('.'));
+        if (!ParseInt(major_version_str, &major_version)) {
+            PLOG(FATAL) << "Failed to parse the vendor sepolicy major version "
+                        << major_version_str;
+        }
 
-    return major_version;
+        return major_version;
+    }();
+    return vendor_android_version;
 }
 
 // This function initializes SELinux then execs init to run in the init SELinux context.
 int SetupSelinux(char** argv) {
-    android::base::InitLogging(argv, &android::base::KernelLogger, [](const char*) {
-        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
-    });
+    SetStdioToDevNull(argv);
+    InitKernelLogging(argv);
 
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
@@ -555,55 +555,6 @@ int SetupSelinux(char** argv) {
     PLOG(FATAL) << "execv(\"" << path << "\") failed";
 
     return 1;
-}
-
-// selinux_android_file_context_handle() takes on the order of 10+ms to run, so we want to cache
-// its value.  selinux_android_restorecon() also needs an sehandle for file context look up.  It
-// will create and store its own copy, but selinux_android_set_sehandle() can be used to provide
-// one, thus eliminating an extra call to selinux_android_file_context_handle().
-void SelabelInitialize() {
-    sehandle = selinux_android_file_context_handle();
-    selinux_android_set_sehandle(sehandle);
-}
-
-// A C++ wrapper around selabel_lookup() using the cached sehandle.
-// If sehandle is null, this returns success with an empty context.
-bool SelabelLookupFileContext(const std::string& key, int type, std::string* result) {
-    result->clear();
-
-    if (!sehandle) return true;
-
-    char* context;
-    if (selabel_lookup(sehandle, &context, key.c_str(), type) != 0) {
-        return false;
-    }
-    *result = context;
-    free(context);
-    return true;
-}
-
-// A C++ wrapper around selabel_lookup_best_match() using the cached sehandle.
-// If sehandle is null, this returns success with an empty context.
-bool SelabelLookupFileContextBestMatch(const std::string& key,
-                                       const std::vector<std::string>& aliases, int type,
-                                       std::string* result) {
-    result->clear();
-
-    if (!sehandle) return true;
-
-    std::vector<const char*> c_aliases;
-    for (const auto& alias : aliases) {
-        c_aliases.emplace_back(alias.c_str());
-    }
-    c_aliases.emplace_back(nullptr);
-
-    char* context;
-    if (selabel_lookup_best_match(sehandle, &context, key.c_str(), &c_aliases[0], type) != 0) {
-        return false;
-    }
-    *result = context;
-    free(context);
-    return true;
 }
 
 }  // namespace init

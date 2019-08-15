@@ -150,6 +150,7 @@ SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p
 }
 
 void SetCgroupAction::EnableResourceCaching() {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
     if (fd_ != FDS_NOT_CACHED) {
         return;
     }
@@ -172,6 +173,15 @@ void SetCgroupAction::EnableResourceCaching() {
     fd_ = std::move(fd);
 }
 
+void SetCgroupAction::DropResourceCaching() {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    if (fd_ == FDS_NOT_CACHED) {
+        return;
+    }
+
+    fd_.reset(FDS_NOT_CACHED);
+}
+
 bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
     if (tid <= 0) {
         return true;
@@ -191,6 +201,7 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
 }
 
 bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
     if (IsFdValid()) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(pid, fd_)) {
@@ -221,6 +232,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
 }
 
 bool SetCgroupAction::ExecuteForTask(int tid) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
     if (IsFdValid()) {
         // fd is cached, reuse it
         if (!AddTidToCgroup(tid, fd_)) {
@@ -287,6 +299,24 @@ void TaskProfile::EnableResourceCaching() {
     }
 
     res_cached_ = true;
+}
+
+void TaskProfile::DropResourceCaching() {
+    if (!res_cached_) {
+        return;
+    }
+
+    for (auto& element : elements_) {
+        element->DropResourceCaching();
+    }
+
+    res_cached_ = false;
+}
+
+void TaskProfiles::DropResourceCaching() const {
+    for (auto& iter : profiles_) {
+        iter.second->DropResourceCaching();
+    }
 }
 
 TaskProfiles& TaskProfiles::GetInstance() {

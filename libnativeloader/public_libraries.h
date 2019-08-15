@@ -26,6 +26,7 @@ const std::string& default_public_libraries();
 const std::string& runtime_public_libraries();
 const std::string& vendor_public_libraries();
 const std::string& extended_public_libraries();
+const std::string& neuralnetworks_public_libraries();
 const std::string& llndk_libraries();
 const std::string& vndksp_libraries();
 

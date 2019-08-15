@@ -140,11 +140,11 @@ void MountHandler::MountHandlerFunction() {
         }
     }
     free(buf);
-    for (auto entry : untouched) {
+    for (auto& entry : untouched) {
         SetMountProperty(entry, false);
         mounts_.erase(entry);
     }
-    for (auto entry : touched) {
+    for (auto& entry : touched) {
         SetMountProperty(entry, true);
         mounts_.emplace(std::move(entry));
     }

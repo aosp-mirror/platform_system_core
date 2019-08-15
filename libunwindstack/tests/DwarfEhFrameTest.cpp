@@ -42,7 +42,7 @@ class DwarfEhFrameTest : public ::testing::Test {
   MemoryFake memory_;
   DwarfEhFrame<TypeParam>* eh_frame_ = nullptr;
 };
-TYPED_TEST_CASE_P(DwarfEhFrameTest);
+TYPED_TEST_SUITE_P(DwarfEhFrameTest);
 
 // NOTE: All test class variables need to be referenced as this->.
 
@@ -125,9 +125,9 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeCieFromOffset64) {
   EXPECT_EQ(1U, cie->return_address_register);
 }
 
-REGISTER_TYPED_TEST_CASE_P(DwarfEhFrameTest, GetFdeCieFromOffset32, GetFdeCieFromOffset64);
+REGISTER_TYPED_TEST_SUITE_P(DwarfEhFrameTest, GetFdeCieFromOffset32, GetFdeCieFromOffset64);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfEhFrameTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(, DwarfEhFrameTest, DwarfEhFrameTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfEhFrameTest, DwarfEhFrameTestTypes);
 
 }  // namespace unwindstack

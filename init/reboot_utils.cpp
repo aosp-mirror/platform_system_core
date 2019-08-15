@@ -19,13 +19,39 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#include <android-base/logging.h>
-#include <cutils/android_reboot.h>
+#include <string>
+
+#include "android-base/file.h"
+#include "android-base/logging.h"
+#include "android-base/strings.h"
+#include "backtrace/Backtrace.h"
+#include "cutils/android_reboot.h"
 
 #include "capabilities.h"
 
 namespace android {
 namespace init {
+
+static std::string init_fatal_reboot_target = "bootloader";
+
+void SetFatalRebootTarget() {
+    std::string cmdline;
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+    cmdline = android::base::Trim(cmdline);
+
+    const char kRebootTargetString[] = "androidboot.init_fatal_reboot_target=";
+    auto start_pos = cmdline.find(kRebootTargetString);
+    if (start_pos == std::string::npos) {
+        return;  // We already default to bootloader if no setting is provided.
+    }
+    start_pos += sizeof(kRebootTargetString) - 1;
+
+    auto end_pos = cmdline.find(' ', start_pos);
+    // if end_pos isn't found, then we've run off the end, but this is okay as this is the last
+    // entry, and -1 is a valid size for string::substr();
+    auto size = end_pos == std::string::npos ? -1 : end_pos - start_pos;
+    init_fatal_reboot_target = cmdline.substr(start_pos, size);
+}
 
 bool IsRebootCapable() {
     if (!CAP_IS_SUPPORTED(CAP_SYS_BOOT)) {
@@ -75,6 +101,32 @@ void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string&
     abort();
 }
 
+void __attribute__((noreturn)) InitFatalReboot() {
+    auto pid = fork();
+
+    if (pid == -1) {
+        // Couldn't fork, don't even try to backtrace, just reboot.
+        RebootSystem(ANDROID_RB_RESTART2, init_fatal_reboot_target);
+    } else if (pid == 0) {
+        // Fork a child for safety, since we always want to shut down if something goes wrong, but
+        // its worth trying to get the backtrace, even in the signal handler, since typically it
+        // does work despite not being async-signal-safe.
+        sleep(5);
+        RebootSystem(ANDROID_RB_RESTART2, init_fatal_reboot_target);
+    }
+
+    // In the parent, let's try to get a backtrace then shutdown.
+    std::unique_ptr<Backtrace> backtrace(
+            Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
+    if (!backtrace->Unwind(0)) {
+        LOG(ERROR) << __FUNCTION__ << ": Failed to unwind callstack.";
+    }
+    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
+        LOG(ERROR) << backtrace->FormatFrameData(i);
+    }
+    RebootSystem(ANDROID_RB_RESTART2, init_fatal_reboot_target);
+}
+
 void InstallRebootSignalHandlers() {
     // Instead of panic'ing the kernel as is the default behavior when init crashes,
     // we prefer to reboot to bootloader on development builds, as this will prevent
@@ -94,7 +146,7 @@ void InstallRebootSignalHandlers() {
         // RebootSystem uses syscall() which isn't actually async-signal-safe, but our only option
         // and probably good enough given this is already an error case and only enabled for
         // development builds.
-        RebootSystem(ANDROID_RB_RESTART2, "bootloader");
+        InitFatalReboot();
     };
     action.sa_flags = SA_RESTART;
     sigaction(SIGABRT, &action, nullptr);

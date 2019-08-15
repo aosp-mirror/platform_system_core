@@ -22,206 +22,206 @@
 
 #include "ion_test_fixture.h"
 
-class Exit : public IonAllHeapsTest {
-};
+class Exit : public IonTest {};
 
-TEST_F(Exit, WithAlloc)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Exit, WithAllocFd) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
-            EXPECT_EXIT({
-                ion_user_handle_t handle = 0;
+            EXPECT_EXIT(
+                    {
+                        int handle_fd = -1;
 
-                ASSERT_EQ(0, ion_alloc(m_ionFd, size, 0, heapMask, 0, &handle));
-                ASSERT_TRUE(handle != 0);
-                exit(0);
-            }, ::testing::ExitedWithCode(0), "");
+                        ASSERT_EQ(0,
+                                  ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), 0, &handle_fd));
+                        ASSERT_NE(-1, handle_fd);
+                        exit(0);
+                    },
+                    ::testing::ExitedWithCode(0), "");
         }
     }
 }
 
-TEST_F(Exit, WithAllocFd)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
-        for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
-            SCOPED_TRACE(::testing::Message() << "size " << size);
-            EXPECT_EXIT({
-                int handle_fd = -1;
-
-                ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, 0, &handle_fd));
-                ASSERT_NE(-1, handle_fd);
-                exit(0);
-            }, ::testing::ExitedWithCode(0), "");
-        }
-    }
-}
-
-TEST_F(Exit, WithRepeatedAllocFd)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Exit, WithRepeatedAllocFd) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
             for (unsigned int i = 0; i < 1024; i++) {
-                SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+                SCOPED_TRACE(::testing::Message()
+                             << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
                 SCOPED_TRACE(::testing::Message() << "size " << size);
-                ASSERT_EXIT({
-                    int handle_fd = -1;
+                ASSERT_EXIT(
+                        {
+                            int handle_fd = -1;
 
-                    ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, 0, &handle_fd));
-                    ASSERT_NE(-1, handle_fd);
-                    exit(0);
-                }, ::testing::ExitedWithCode(0), "")
-                        << "failed on heap " << heapMask
-                        << " and size " << size
-                        << " on iteration " << i;
+                            ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), 0,
+                                                      &handle_fd));
+                            ASSERT_NE(-1, handle_fd);
+                            exit(0);
+                        },
+                        ::testing::ExitedWithCode(0), "")
+                        << "failed on heap " << heap.name << ":" << heap.type << ":" << heap.heap_id
+                        << " and size " << size << " on iteration " << i;
             }
         }
     }
 }
 
-
-TEST_F(Exit, WithMapping)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Exit, WithMapping) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
-            EXPECT_EXIT({
-                int map_fd = -1;
+            EXPECT_EXIT(
+                    {
+                        int map_fd = -1;
 
-                ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, 0, &map_fd));
-                ASSERT_GE(map_fd, 0);
+                        ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), 0, &map_fd));
+                        ASSERT_GE(map_fd, 0);
 
-                void *ptr;
-                ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
-                ASSERT_TRUE(ptr != NULL);
-                exit(0);
-            }, ::testing::ExitedWithCode(0), "");
-        }
-    }
-
-}
-
-TEST_F(Exit, WithPartialMapping)
-{
-    static const size_t allocationSizes[] = {64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
-        for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
-            SCOPED_TRACE(::testing::Message() << "size " << size);
-            EXPECT_EXIT({
-                int map_fd = -1;
-
-                ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, 0, &map_fd));
-                ASSERT_GE(map_fd, 0);
-
-                void *ptr;
-                ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
-                ASSERT_TRUE(ptr != NULL);
-
-                ASSERT_EQ(0, munmap(ptr, size / 2));
-                exit(0);
-            }, ::testing::ExitedWithCode(0), "");
+                        void* ptr;
+                        ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
+                        ASSERT_TRUE(ptr != NULL);
+                        exit(0);
+                    },
+                    ::testing::ExitedWithCode(0), "");
         }
     }
 }
 
-TEST_F(Exit, WithMappingCached)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Exit, WithPartialMapping) {
+    static const size_t allocationSizes[] = {64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
-            EXPECT_EXIT({
-                int map_fd = -1;
+            EXPECT_EXIT(
+                    {
+                        int map_fd = -1;
 
-                ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, ION_FLAG_CACHED, &map_fd));
-                ASSERT_GE(map_fd, 0);
+                        ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id), 0, &map_fd));
+                        ASSERT_GE(map_fd, 0);
 
-                void *ptr;
-                ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
-                ASSERT_TRUE(ptr != NULL);
-                exit(0);
-            }, ::testing::ExitedWithCode(0), "");
-        }
-    }
+                        void* ptr;
+                        ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
+                        ASSERT_TRUE(ptr != NULL);
 
-}
-
-TEST_F(Exit, WithPartialMappingCached)
-{
-    static const size_t allocationSizes[] = {64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
-        for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
-            SCOPED_TRACE(::testing::Message() << "size " << size);
-            EXPECT_EXIT({
-                int map_fd = -1;
-
-                ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, ION_FLAG_CACHED, &map_fd));
-                ASSERT_GE(map_fd, 0);
-
-                void *ptr;
-                ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
-                ASSERT_TRUE(ptr != NULL);
-
-                ASSERT_EQ(0, munmap(ptr, size / 2));
-                exit(0);
-            }, ::testing::ExitedWithCode(0), "");
+                        ASSERT_EQ(0, munmap(ptr, size / 2));
+                        exit(0);
+                    },
+                    ::testing::ExitedWithCode(0), "");
         }
     }
 }
 
-TEST_F(Exit, WithMappingNeedsSync)
-{
-    static const size_t allocationSizes[] = {4*1024, 64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Exit, WithMappingCached) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
-            EXPECT_EXIT({
-                int map_fd = -1;
+            EXPECT_EXIT(
+                    {
+                        int map_fd = -1;
 
-                ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, ION_FLAG_CACHED | ION_FLAG_CACHED_NEEDS_SYNC, &map_fd));
-                ASSERT_GE(map_fd, 0);
+                        ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id),
+                                                  ION_FLAG_CACHED, &map_fd));
+                        ASSERT_GE(map_fd, 0);
 
-                void *ptr;
-                ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
-                ASSERT_TRUE(ptr != NULL);
-                exit(0);
-            }, ::testing::ExitedWithCode(0), "");
+                        void* ptr;
+                        ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
+                        ASSERT_TRUE(ptr != NULL);
+                        exit(0);
+                    },
+                    ::testing::ExitedWithCode(0), "");
         }
     }
-
 }
 
-TEST_F(Exit, WithPartialMappingNeedsSync)
-{
-    static const size_t allocationSizes[] = {64*1024, 1024*1024, 2*1024*1024};
-    for (unsigned int heapMask : m_allHeaps) {
+TEST_F(Exit, WithPartialMappingCached) {
+    static const size_t allocationSizes[] = {64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
         for (size_t size : allocationSizes) {
-            SCOPED_TRACE(::testing::Message() << "heap " << heapMask);
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
             SCOPED_TRACE(::testing::Message() << "size " << size);
-            EXPECT_EXIT({
-                int map_fd = -1;
+            EXPECT_EXIT(
+                    {
+                        int map_fd = -1;
 
-                ASSERT_EQ(0, ion_alloc_fd(m_ionFd, size, 0, heapMask, ION_FLAG_CACHED | ION_FLAG_CACHED_NEEDS_SYNC, &map_fd));
-                ASSERT_GE(map_fd, 0);
+                        ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id),
+                                                  ION_FLAG_CACHED, &map_fd));
+                        ASSERT_GE(map_fd, 0);
 
-                void *ptr;
-                ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
-                ASSERT_TRUE(ptr != NULL);
+                        void* ptr;
+                        ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
+                        ASSERT_TRUE(ptr != NULL);
 
-                ASSERT_EQ(0, munmap(ptr, size / 2));
-                exit(0);
-            }, ::testing::ExitedWithCode(0), "");
+                        ASSERT_EQ(0, munmap(ptr, size / 2));
+                        exit(0);
+                    },
+                    ::testing::ExitedWithCode(0), "");
+        }
+    }
+}
+
+TEST_F(Exit, WithMappingNeedsSync) {
+    static const size_t allocationSizes[] = {4 * 1024, 64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
+        for (size_t size : allocationSizes) {
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
+            SCOPED_TRACE(::testing::Message() << "size " << size);
+            EXPECT_EXIT(
+                    {
+                        int map_fd = -1;
+
+                        ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id),
+                                                  ION_FLAG_CACHED | ION_FLAG_CACHED_NEEDS_SYNC,
+                                                  &map_fd));
+                        ASSERT_GE(map_fd, 0);
+
+                        void* ptr;
+                        ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
+                        ASSERT_TRUE(ptr != NULL);
+                        exit(0);
+                    },
+                    ::testing::ExitedWithCode(0), "");
+        }
+    }
+}
+
+TEST_F(Exit, WithPartialMappingNeedsSync) {
+    static const size_t allocationSizes[] = {64 * 1024, 1024 * 1024, 2 * 1024 * 1024};
+    for (const auto& heap : ion_heaps) {
+        for (size_t size : allocationSizes) {
+            SCOPED_TRACE(::testing::Message()
+                         << "heap:" << heap.name << ":" << heap.type << ":" << heap.heap_id);
+            SCOPED_TRACE(::testing::Message() << "size " << size);
+            EXPECT_EXIT(
+                    {
+                        int map_fd = -1;
+
+                        ASSERT_EQ(0, ion_alloc_fd(ionfd, size, 0, (1 << heap.heap_id),
+                                                  ION_FLAG_CACHED | ION_FLAG_CACHED_NEEDS_SYNC,
+                                                  &map_fd));
+                        ASSERT_GE(map_fd, 0);
+
+                        void* ptr;
+                        ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, map_fd, 0);
+                        ASSERT_TRUE(ptr != NULL);
+
+                        ASSERT_EQ(0, munmap(ptr, size / 2));
+                        exit(0);
+                    },
+                    ::testing::ExitedWithCode(0), "");
         }
     }
 }

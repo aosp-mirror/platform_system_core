@@ -216,8 +216,11 @@ class DmTargetSnapshot final : public DmTarget {
         std::string error;
     };
 
+    static double MergePercent(const Status& status, uint64_t sectors_initial = 0);
     static bool ParseStatusText(const std::string& text, Status* status);
     static bool ReportsOverflow(const std::string& target_type);
+    static bool GetDevicesFromParams(const std::string& params, std::string* base_device,
+                                     std::string* cow_device);
 
   private:
     std::string base_device_;

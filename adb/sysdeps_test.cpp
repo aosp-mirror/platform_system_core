@@ -25,6 +25,21 @@
 #include "sysdeps.h"
 #include "sysdeps/chrono.h"
 
+#if defined(_WIN32)
+#include <windows.h>
+static bool IsWine() {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) {
+        return false;
+    }
+    return GetProcAddress(ntdll, "wine_get_version") != nullptr;
+}
+#else
+static bool IsWine() {
+    return false;
+}
+#endif
+
 TEST(sysdeps_socketpair, smoke) {
     int fds[2];
     ASSERT_EQ(0, adb_socketpair(fds)) << strerror(errno);
@@ -182,8 +197,10 @@ TEST_F(sysdeps_poll, disconnect) {
 
     EXPECT_EQ(1, adb_poll(&pfd, 1, 100));
 
-    // Linux returns POLLIN | POLLHUP, Windows returns just POLLHUP.
-    EXPECT_EQ(POLLHUP, pfd.revents & POLLHUP);
+    if (!IsWine()) {
+        // Linux returns POLLIN | POLLHUP, Windows returns just POLLHUP.
+        EXPECT_EQ(POLLHUP, pfd.revents & POLLHUP);
+    }
 }
 
 TEST_F(sysdeps_poll, fd_count) {

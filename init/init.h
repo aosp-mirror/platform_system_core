@@ -14,28 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_INIT_H
-#define _INIT_INIT_H
+#pragma once
 
 #include <sys/types.h>
 
-#include <functional>
 #include <string>
-#include <vector>
 
 #include "action.h"
 #include "action_manager.h"
 #include "parser.h"
-#include "service.h"
+#include "service_list.h"
 
 namespace android {
 namespace init {
-
-// Note: These globals are *only* valid in init, so they should not be used in ueventd
-// or any files that may be included in ueventd, such as devices.cpp and util.cpp.
-// TODO: Have an Init class and remove all globals.
-extern std::string default_console;
-extern std::vector<std::string> late_import_paths;
 
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
 Parser CreateServiceOnlyParser(ServiceList& service_list);
@@ -54,5 +45,3 @@ int SecondStageMain(int argc, char** argv);
 
 }  // namespace init
 }  // namespace android
-
-#endif  /* _INIT_INIT_H */

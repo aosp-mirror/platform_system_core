@@ -55,7 +55,7 @@ class SymbolsTest : public ::testing::Test {
 
   MemoryFake memory_;
 };
-TYPED_TEST_CASE_P(SymbolsTest);
+TYPED_TEST_SUITE_P(SymbolsTest);
 
 TYPED_TEST_P(SymbolsTest, function_bounds_check) {
   Symbols symbols(0x1000, sizeof(TypeParam), sizeof(TypeParam), 0x2000, 0x100);
@@ -362,11 +362,11 @@ TYPED_TEST_P(SymbolsTest, get_global) {
   EXPECT_EQ(4U, offset);
 }
 
-REGISTER_TYPED_TEST_CASE_P(SymbolsTest, function_bounds_check, no_symbol, multiple_entries,
-                           multiple_entries_nonstandard_size, symtab_value_out_of_bounds,
-                           symtab_read_cached, get_global);
+REGISTER_TYPED_TEST_SUITE_P(SymbolsTest, function_bounds_check, no_symbol, multiple_entries,
+                            multiple_entries_nonstandard_size, symtab_value_out_of_bounds,
+                            symtab_read_cached, get_global);
 
 typedef ::testing::Types<Elf32_Sym, Elf64_Sym> SymbolsTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(, SymbolsTest, SymbolsTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(, SymbolsTest, SymbolsTestTypes);
 
 }  // namespace unwindstack

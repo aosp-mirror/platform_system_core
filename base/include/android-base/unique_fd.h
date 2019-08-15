@@ -92,6 +92,8 @@ class unique_fd_impl final {
   explicit unique_fd_impl(int fd) { reset(fd); }
   ~unique_fd_impl() { reset(); }
 
+  unique_fd_impl(const unique_fd_impl&) = delete;
+  void operator=(const unique_fd_impl&) = delete;
   unique_fd_impl(unique_fd_impl&& other) noexcept { reset(other.release()); }
   unique_fd_impl& operator=(unique_fd_impl&& s) noexcept {
     int fd = s.fd_;
@@ -117,6 +119,8 @@ class unique_fd_impl final {
 
   // Catch bogus error checks (i.e.: "!fd" instead of "fd != -1").
   bool operator!() const = delete;
+
+  bool ok() const { return get() != -1; }
 
   int release() __attribute__((warn_unused_result)) {
     tag(fd_, this, nullptr);
@@ -167,9 +171,6 @@ class unique_fd_impl final {
   static auto close(int fd, void*) -> decltype(T::Close(fd), void()) {
     T::Close(fd);
   }
-
-  unique_fd_impl(const unique_fd_impl&);
-  void operator=(const unique_fd_impl&);
 };
 
 using unique_fd = unique_fd_impl<DefaultCloser>;
@@ -258,9 +259,9 @@ inline DIR* Fdopendir(unique_fd&& ufd) {
 
 // A wrapper type that can be implicitly constructed from either int or unique_fd.
 struct borrowed_fd {
-  /* implicit */ borrowed_fd(int fd) : fd_(fd) {}
+  /* implicit */ borrowed_fd(int fd) : fd_(fd) {}  // NOLINT
   template <typename T>
-  /* implicit */ borrowed_fd(const unique_fd_impl<T>& ufd) : fd_(ufd.get()) {}
+  /* implicit */ borrowed_fd(const unique_fd_impl<T>& ufd) : fd_(ufd.get()) {}  // NOLINT
 
   int get() const { return fd_; }
 

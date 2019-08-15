@@ -132,43 +132,6 @@ std::shared_ptr<unwindstack::Memory> UnwindStackMap::GetProcessMemory() {
   return process_memory_;
 }
 
-UnwindStackOfflineMap::UnwindStackOfflineMap(pid_t pid) : UnwindStackMap(pid) {}
-
-bool UnwindStackOfflineMap::Build() {
-  return false;
-}
-
-bool UnwindStackOfflineMap::Build(const std::vector<backtrace_map_t>& backtrace_maps) {
-  for (const backtrace_map_t& map : backtrace_maps) {
-    maps_.push_back(map);
-  }
-
-  std::sort(maps_.begin(), maps_.end(),
-            [](const backtrace_map_t& a, const backtrace_map_t& b) { return a.start < b.start; });
-
-  unwindstack::Maps* maps = new unwindstack::Maps;
-  stack_maps_.reset(maps);
-  for (const backtrace_map_t& map : maps_) {
-    maps->Add(map.start, map.end, map.offset, map.flags, map.name, map.load_bias);
-  }
-  return true;
-}
-
-bool UnwindStackOfflineMap::CreateProcessMemory(const backtrace_stackinfo_t& stack) {
-  if (stack.start >= stack.end) {
-    return false;
-  }
-
-  // Create the process memory from the stack data.
-  if (memory_ == nullptr) {
-    memory_ = new unwindstack::MemoryOfflineBuffer(stack.data, stack.start, stack.end);
-    process_memory_.reset(memory_);
-  } else {
-    memory_->Reset(stack.data, stack.start, stack.end);
-  }
-  return true;
-}
-
 //-------------------------------------------------------------------------
 // BacktraceMap create function.
 //-------------------------------------------------------------------------
@@ -184,18 +147,6 @@ BacktraceMap* BacktraceMap::Create(pid_t pid, bool uncached) {
     map = new UnwindStackMap(pid);
   }
   if (!map->Build()) {
-    delete map;
-    return nullptr;
-  }
-  return map;
-}
-
-//-------------------------------------------------------------------------
-// BacktraceMap create offline function.
-//-------------------------------------------------------------------------
-BacktraceMap* BacktraceMap::CreateOffline(pid_t pid, const std::vector<backtrace_map_t>& maps) {
-  UnwindStackOfflineMap* map = new UnwindStackOfflineMap(pid);
-  if (!map->Build(maps)) {
     delete map;
     return nullptr;
   }

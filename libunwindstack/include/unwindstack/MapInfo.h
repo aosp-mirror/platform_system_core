@@ -25,9 +25,10 @@
 #include <string>
 
 #include <unwindstack/Elf.h>
-#include <unwindstack/Memory.h>
 
 namespace unwindstack {
+
+class MemoryFileAtOffset;
 
 struct MapInfo {
   MapInfo(MapInfo* map_info, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,

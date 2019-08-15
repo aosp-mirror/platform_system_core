@@ -35,11 +35,11 @@
 #include <android-base/threads.h>
 
 #include <unwindstack/Maps.h>
-#include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
 #include <unwindstack/RegsGetLocal.h>
 #include <unwindstack/Unwinder.h>
 
+#include "MemoryRemote.h"
 #include "TestUtils.h"
 
 namespace unwindstack {

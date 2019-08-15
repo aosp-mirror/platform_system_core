@@ -28,12 +28,12 @@
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 
-#include <demangle.h>
-
 #include "BacktraceLog.h"
 #include "UnwindStack.h"
 
 using android::base::StringPrintf;
+
+extern "C" char* __cxa_demangle(const char*, char*, size_t*, int*);
 
 //-------------------------------------------------------------------------
 // Backtrace functions.
@@ -63,7 +63,14 @@ std::string Backtrace::GetFunctionName(uint64_t pc, uint64_t* offset, const back
   if (map->start == 0 || (map->flags & PROT_DEVICE_MAP)) {
     return "";
   }
-  return demangle(GetFunctionNameRaw(pc, offset).c_str());
+  std::string name(GetFunctionNameRaw(pc, offset));
+  char* demangled_name = __cxa_demangle(name.c_str(), nullptr, nullptr, nullptr);
+  if (demangled_name != nullptr) {
+    name = demangled_name;
+    free(demangled_name);
+    return name;
+  }
+  return name;
 }
 
 bool Backtrace::VerifyReadWordArgs(uint64_t ptr, word_t* out_value) {

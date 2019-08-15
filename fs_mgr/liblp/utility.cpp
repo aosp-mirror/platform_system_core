@@ -135,6 +135,24 @@ std::vector<std::string> GetBlockDevicePartitionNames(const LpMetadata& metadata
     return list;
 }
 
+const LpMetadataPartition* FindPartition(const LpMetadata& metadata, const std::string& name) {
+    for (const auto& partition : metadata.partitions) {
+        if (GetPartitionName(partition) == name) {
+            return &partition;
+        }
+    }
+    return nullptr;
+}
+
+uint64_t GetPartitionSize(const LpMetadata& metadata, const LpMetadataPartition& partition) {
+    uint64_t total_size = 0;
+    for (uint32_t i = 0; i < partition.num_extents; i++) {
+        const auto& extent = metadata.extents[partition.first_extent_index + i];
+        total_size += extent.num_sectors * LP_SECTOR_SIZE;
+    }
+    return total_size;
+}
+
 std::string GetPartitionSlotSuffix(const std::string& partition_name) {
     if (partition_name.size() <= 2) {
         return "";

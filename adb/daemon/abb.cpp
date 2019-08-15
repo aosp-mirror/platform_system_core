@@ -24,6 +24,7 @@
 #include "adb_io.h"
 #include "adb_utils.h"
 #include "shell_service.h"
+#include "sysdeps.h"
 
 namespace {
 
@@ -69,6 +70,11 @@ std::vector<std::string_view> parseCmdArgs(std::string_view args) {
 }  // namespace
 
 static int execCmd(std::string_view args, borrowed_fd in, borrowed_fd out, borrowed_fd err) {
+    int max_buf = LINUX_MAX_SOCKET_SIZE;
+    adb_setsockopt(in, SOL_SOCKET, SO_SNDBUF, &max_buf, sizeof(max_buf));
+    adb_setsockopt(out, SOL_SOCKET, SO_SNDBUF, &max_buf, sizeof(max_buf));
+    adb_setsockopt(err, SOL_SOCKET, SO_SNDBUF, &max_buf, sizeof(max_buf));
+
     AdbFdTextOutput oin(out);
     AdbFdTextOutput oerr(err);
     return cmdMain(parseCmdArgs(args), oin, oerr, in.get(), out.get(), err.get(),
@@ -98,6 +104,8 @@ int main(int argc, char* const argv[]) {
         }
 
         unique_fd result = StartCommandInProcess(std::string(name), &execCmd, protocol);
+        int max_buf = LINUX_MAX_SOCKET_SIZE;
+        adb_setsockopt(result, SOL_SOCKET, SO_SNDBUF, &max_buf, sizeof(max_buf));
         if (android::base::SendFileDescriptors(fd, "", 1, result.get()) != 1) {
             PLOG(ERROR) << "Failed to send an inprocess fd for command: " << data;
             break;

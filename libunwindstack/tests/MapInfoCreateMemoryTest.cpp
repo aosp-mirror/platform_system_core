@@ -58,7 +58,7 @@ class MapInfoCreateMemoryTest : public ::testing::Test {
     ASSERT_TRUE(android::base::WriteFully(fd, buffer.data(), buffer.size()));
   }
 
-  static void SetUpTestCase() {
+  void SetUp() override {
     std::vector<uint8_t> buffer(12288, 0);
     memcpy(buffer.data(), ELFMAG, SELFMAG);
     buffer[EI_CLASS] = ELFCLASS32;
@@ -72,9 +72,7 @@ class MapInfoCreateMemoryTest : public ::testing::Test {
 
     InitElf<Elf32_Ehdr, Elf32_Shdr>(elf32_at_map_.fd, 0x1000, 0x2000, ELFCLASS32);
     InitElf<Elf64_Ehdr, Elf64_Shdr>(elf64_at_map_.fd, 0x2000, 0x3000, ELFCLASS64);
-  }
 
-  void SetUp() override {
     memory_ = new MemoryFake;
     process_memory_.reset(memory_);
   }
@@ -82,17 +80,13 @@ class MapInfoCreateMemoryTest : public ::testing::Test {
   MemoryFake* memory_;
   std::shared_ptr<Memory> process_memory_;
 
-  static TemporaryFile elf_;
+  TemporaryFile elf_;
 
-  static TemporaryFile elf_at_1000_;
+  TemporaryFile elf_at_1000_;
 
-  static TemporaryFile elf32_at_map_;
-  static TemporaryFile elf64_at_map_;
+  TemporaryFile elf32_at_map_;
+  TemporaryFile elf64_at_map_;
 };
-TemporaryFile MapInfoCreateMemoryTest::elf_;
-TemporaryFile MapInfoCreateMemoryTest::elf_at_1000_;
-TemporaryFile MapInfoCreateMemoryTest::elf32_at_map_;
-TemporaryFile MapInfoCreateMemoryTest::elf64_at_map_;
 
 TEST_F(MapInfoCreateMemoryTest, end_le_start) {
   MapInfo info(nullptr, 0x100, 0x100, 0, 0, elf_.path);

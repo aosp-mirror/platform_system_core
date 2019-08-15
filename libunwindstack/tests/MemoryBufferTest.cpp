@@ -18,9 +18,8 @@
 
 #include <gtest/gtest.h>
 
-#include <unwindstack/Memory.h>
-
 #include "LogFake.h"
+#include "MemoryBuffer.h"
 
 namespace unwindstack {
 

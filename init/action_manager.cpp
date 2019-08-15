@@ -23,6 +23,14 @@ namespace init {
 
 ActionManager::ActionManager() : current_command_(0) {}
 
+size_t ActionManager::CheckAllCommands() {
+    size_t failures = 0;
+    for (const auto& action : actions_) {
+        failures += action->CheckAllCommands();
+    }
+    return failures;
+}
+
 ActionManager& ActionManager::GetInstance() {
     static ActionManager instance;
     return instance;
@@ -47,7 +55,7 @@ void ActionManager::QueueAllPropertyActions() {
 void ActionManager::QueueBuiltinAction(BuiltinFunction func, const std::string& name) {
     auto action = std::make_unique<Action>(true, nullptr, "<Builtin Action>", 0, name,
                                            std::map<std::string, std::string>{});
-    action->AddCommand(func, {name}, 0);
+    action->AddCommand(std::move(func), {name}, 0);
 
     event_queue_.emplace(action.get());
     actions_.emplace_back(std::move(action));
@@ -88,7 +96,8 @@ void ActionManager::ExecuteOneCommand() {
         current_command_ = 0;
         if (action->oneshot()) {
             auto eraser = [&action](std::unique_ptr<Action>& a) { return a.get() == action; };
-            actions_.erase(std::remove_if(actions_.begin(), actions_.end(), eraser));
+            actions_.erase(std::remove_if(actions_.begin(), actions_.end(), eraser),
+                           actions_.end());
         }
     }
 }

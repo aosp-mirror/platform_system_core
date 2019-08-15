@@ -196,9 +196,9 @@ runs the service.
 
 `interface <interface name> <instance name>`
 > Associates this service with a list of the HIDL services that it provides. The interface name
-  must be a fully-qualified name and not a value name. This is used to allow hwservicemanager to
-  lazily start services. When multiple interfaces are served, this tag should be used multiple
-  times.
+  must be a fully-qualified name and not a value name. For instance, this is used to allow
+  hwservicemanager to lazily start services. When multiple interfaces are served, this tag should
+  be used multiple times.
   For example: interface vendor.foo.bar@1.0::IBaz default
 
 `ioprio <class> <priority>`
@@ -300,7 +300,8 @@ runs the service.
 
 `socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]`
 > Create a UNIX domain socket named /dev/socket/_name_ and pass its fd to the
-  launched process.  _type_ must be "dgram", "stream" or "seqpacket".  User and
+  launched process.  _type_ must be "dgram", "stream" or "seqpacket".  _type_
+  may end with "+passcred" to enable SO_PASSCRED on the socket. User and
   group default to 0.  'seclabel' is the SELinux security context for the
   socket.  It defaults to the service security context, as specified by
   seclabel or computed based on the service executable file security context.

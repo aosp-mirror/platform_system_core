@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "fdevent.h"
+#include "fdevent/fdevent.h"
 
 #include <gtest/gtest.h>
 
@@ -29,7 +29,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
-#include "fdevent_test.h"
+#include "fdevent/fdevent_test.h"
 #include "socket.h"
 #include "sysdeps.h"
 #include "sysdeps/chrono.h"

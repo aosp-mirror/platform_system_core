@@ -97,7 +97,6 @@ cc_library {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
         },
     },
-    whole_static_libs: ["libdemangle"],
 }
 
 cc_test_library {
@@ -135,7 +134,6 @@ cc_test {
     defaults: ["libbacktrace_common"],
     host_supported: true,
     srcs: [
-        "backtrace_offline_test.cpp",
         "backtrace_test.cpp",
     ],
 

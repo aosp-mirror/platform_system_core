@@ -68,7 +68,7 @@ class DwarfSectionImplTest : public ::testing::Test {
   MemoryFake memory_;
   TestDwarfSectionImpl<TypeParam>* section_ = nullptr;
 };
-TYPED_TEST_CASE_P(DwarfSectionImplTest);
+TYPED_TEST_SUITE_P(DwarfSectionImplTest);
 
 // NOTE: All test class variables need to be referenced as this->.
 
@@ -571,18 +571,18 @@ TYPED_TEST_P(DwarfSectionImplTest, Log) {
   ASSERT_EQ("", GetFakeLogBuf());
 }
 
-REGISTER_TYPED_TEST_CASE_P(DwarfSectionImplTest, GetCieFromOffset_fail_should_not_cache,
-                           GetFdeFromOffset_fail_should_not_cache, Eval_cfa_expr_eval_fail,
-                           Eval_cfa_expr_no_stack, Eval_cfa_expr_is_register, Eval_cfa_expr,
-                           Eval_cfa_val_expr, Eval_bad_regs, Eval_no_cfa, Eval_cfa_bad,
-                           Eval_cfa_register_prev, Eval_cfa_register_from_value,
-                           Eval_double_indirection, Eval_register_reference_chain, Eval_dex_pc,
-                           Eval_invalid_register, Eval_different_reg_locations,
-                           Eval_return_address_undefined, Eval_pc_zero, Eval_return_address,
-                           Eval_ignore_large_reg_loc, Eval_reg_expr, Eval_reg_val_expr,
-                           GetCfaLocationInfo_cie_not_cached, GetCfaLocationInfo_cie_cached, Log);
+REGISTER_TYPED_TEST_SUITE_P(DwarfSectionImplTest, GetCieFromOffset_fail_should_not_cache,
+                            GetFdeFromOffset_fail_should_not_cache, Eval_cfa_expr_eval_fail,
+                            Eval_cfa_expr_no_stack, Eval_cfa_expr_is_register, Eval_cfa_expr,
+                            Eval_cfa_val_expr, Eval_bad_regs, Eval_no_cfa, Eval_cfa_bad,
+                            Eval_cfa_register_prev, Eval_cfa_register_from_value,
+                            Eval_double_indirection, Eval_register_reference_chain, Eval_dex_pc,
+                            Eval_invalid_register, Eval_different_reg_locations,
+                            Eval_return_address_undefined, Eval_pc_zero, Eval_return_address,
+                            Eval_ignore_large_reg_loc, Eval_reg_expr, Eval_reg_val_expr,
+                            GetCfaLocationInfo_cie_not_cached, GetCfaLocationInfo_cie_cached, Log);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfSectionImplTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(, DwarfSectionImplTest, DwarfSectionImplTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfSectionImplTest, DwarfSectionImplTestTypes);
 
 }  // namespace unwindstack

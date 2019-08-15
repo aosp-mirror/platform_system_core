@@ -81,7 +81,8 @@ bool PageAcct::PageFlags(uint64_t pfn, uint64_t* flags) {
         if (!InitPageAcct()) return false;
     }
 
-    if (pread64(kpageflags_fd_, flags, sizeof(uint64_t), pfn * sizeof(uint64_t)) < 0) {
+    if (pread64(kpageflags_fd_, flags, sizeof(uint64_t), pfn * sizeof(uint64_t)) !=
+        sizeof(uint64_t)) {
         PLOG(ERROR) << "Failed to read page flags for page " << pfn;
         return false;
     }
@@ -95,7 +96,8 @@ bool PageAcct::PageMapCount(uint64_t pfn, uint64_t* mapcount) {
         if (!InitPageAcct()) return false;
     }
 
-    if (pread64(kpagecount_fd_, mapcount, sizeof(uint64_t), pfn * sizeof(uint64_t)) < 0) {
+    if (pread64(kpagecount_fd_, mapcount, sizeof(uint64_t), pfn * sizeof(uint64_t)) !=
+        sizeof(uint64_t)) {
         PLOG(ERROR) << "Failed to read map count for page " << pfn;
         return false;
     }
@@ -130,7 +132,7 @@ int PageAcct::GetPageIdle(uint64_t pfn) const {
     off64_t offset = pfn_to_idle_bitmap_offset(pfn);
     uint64_t idle_bits;
 
-    if (pread64(pageidle_fd_, &idle_bits, sizeof(uint64_t), offset) < 0) {
+    if (pread64(pageidle_fd_, &idle_bits, sizeof(uint64_t), offset) != sizeof(uint64_t)) {
         PLOG(ERROR) << "Failed to read page idle bitmap for page " << pfn;
         return -errno;
     }

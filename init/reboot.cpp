@@ -41,7 +41,6 @@
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <bootloader_message/bootloader_message.h>
@@ -56,13 +55,13 @@
 #include "property_service.h"
 #include "reboot_utils.h"
 #include "service.h"
+#include "service_list.h"
 #include "sigchld_handler.h"
 
 #define PROC_SYSRQ "/proc/sysrq-trigger"
 
 using android::base::GetBoolProperty;
 using android::base::Split;
-using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::unique_fd;
 using android::base::WriteStringToFile;
@@ -637,11 +636,9 @@ bool HandlePowerctlMessage(const std::string& command) {
     bool run_fsck = false;
     bool command_invalid = false;
 
-    if (cmd_params.size() > 3) {
-        command_invalid = true;
-    } else if (cmd_params[0] == "shutdown") {
+    if (cmd_params[0] == "shutdown") {
         cmd = ANDROID_RB_POWEROFF;
-        if (cmd_params.size() == 2) {
+        if (cmd_params.size() >= 2) {
             if (cmd_params[1] == "userrequested") {
                 // The shutdown reason is PowerManager.SHUTDOWN_USER_REQUESTED.
                 // Run fsck once the file system is remounted in read-only mode.
@@ -672,6 +669,20 @@ bool HandlePowerctlMessage(const std::string& command) {
                                   "bootloader_message: "
                                << err;
                 }
+            } else if (reboot_target == "recovery") {
+                bootloader_message boot = {};
+                if (std::string err; !read_bootloader_message(&boot, &err)) {
+                    LOG(ERROR) << "Failed to read bootloader message: " << err;
+                }
+                // Update the boot command field if it's empty, and preserve
+                // the other arguments in the bootloader message.
+                if (boot.command[0] == '\0') {
+                    strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
+                    if (std::string err; !write_bootloader_message(boot, &err)) {
+                        LOG(ERROR) << "Failed to set bootloader message: " << err;
+                        return false;
+                    }
+                }
             } else if (reboot_target == "sideload" || reboot_target == "sideload-auto-reboot" ||
                        reboot_target == "fastboot") {
                 std::string arg = reboot_target == "sideload-auto-reboot" ? "sideload_auto_reboot"
@@ -687,9 +698,9 @@ bool HandlePowerctlMessage(const std::string& command) {
                 reboot_target = "recovery";
             }
 
-            // If there is an additional parameter, pass it along
-            if ((cmd_params.size() == 3) && cmd_params[2].size()) {
-                reboot_target += "," + cmd_params[2];
+            // If there are additional parameter, pass them along
+            for (size_t i = 2; (cmd_params.size() > i) && cmd_params[i].size(); ++i) {
+                reboot_target += "," + cmd_params[i];
             }
         }
     } else {
@@ -707,7 +718,7 @@ bool HandlePowerctlMessage(const std::string& command) {
     // Queue built-in shutdown_done
     auto shutdown_handler = [cmd, command, reboot_target, run_fsck](const BuiltinArguments&) {
         DoReboot(cmd, command, reboot_target, run_fsck);
-        return Success();
+        return Result<void>{};
     };
     ActionManager::GetInstance().QueueBuiltinAction(shutdown_handler, "shutdown_done");
 

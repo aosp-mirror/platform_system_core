@@ -21,11 +21,13 @@
 namespace android {
 namespace init {
 
+void SetFatalRebootTarget();
 // Determines whether the system is capable of rebooting. This is conservative,
 // so if any of the attempts to determine this fail, it will still return true.
 bool IsRebootCapable();
 // This is a wrapper around the actual reboot calls.
 void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& reboot_target);
+void __attribute__((noreturn)) InitFatalReboot();
 void InstallRebootSignalHandlers();
 
 }  // namespace init

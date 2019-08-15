@@ -18,15 +18,34 @@
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
 
+#include "charger.sysprop.h"
 #include "healthd_draw.h"
 
 #define LOGE(x...) KLOG_ERROR("charger", x);
 #define LOGW(x...) KLOG_WARNING("charger", x);
 #define LOGV(x...) KLOG_DEBUG("charger", x);
 
+static bool get_split_screen() {
+    return android::sysprop::ChargerProperties::draw_split_screen().value_or(false);
+}
+
+static int get_split_offset() {
+    int64_t value = android::sysprop::ChargerProperties::draw_split_offset().value_or(0);
+    if (value < static_cast<int64_t>(std::numeric_limits<int>::min())) {
+        LOGW("draw_split_offset = %" PRId64 " overflow for an int; resetting to %d.\n", value,
+             std::numeric_limits<int>::min());
+        value = std::numeric_limits<int>::min();
+    }
+    if (value > static_cast<int64_t>(std::numeric_limits<int>::max())) {
+        LOGW("draw_split_offset = %" PRId64 " overflow for an int; resetting to %d.\n", value,
+             std::numeric_limits<int>::max());
+        value = std::numeric_limits<int>::max();
+    }
+    return static_cast<int>(value);
+}
+
 HealthdDraw::HealthdDraw(animation* anim)
-  : kSplitScreen(HEALTHD_DRAW_SPLIT_SCREEN),
-    kSplitOffset(HEALTHD_DRAW_SPLIT_OFFSET) {
+    : kSplitScreen(get_split_screen()), kSplitOffset(get_split_offset()) {
     int ret = gr_init();
 
     if (ret < 0) {

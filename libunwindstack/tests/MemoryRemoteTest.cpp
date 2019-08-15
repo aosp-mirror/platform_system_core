@@ -30,7 +30,7 @@
 #include <android-base/file.h>
 #include <gtest/gtest.h>
 
-#include <unwindstack/Memory.h>
+#include "MemoryRemote.h"
 
 #include "MemoryFake.h"
 #include "TestUtils.h"

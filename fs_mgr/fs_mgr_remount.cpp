@@ -82,36 +82,28 @@ const android::fs_mgr::FstabEntry* is_wrapped(const android::fs_mgr::Fstab& over
 
 void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
               const char* file, unsigned int line, const char* message) {
-    static const char log_characters[] = "VD\0WEFF";
-    if (severity < sizeof(log_characters)) {
-        auto severity_char = log_characters[severity];
-        if (severity_char) fprintf(stderr, "%c ", severity_char);
-    }
     fprintf(stderr, "%s\n", message);
-
     static auto logd = android::base::LogdLogger();
     logd(id, severity, tag, file, line, message);
 }
 
-[[noreturn]] void reboot(bool dedupe) {
-    if (dedupe) {
-        LOG(INFO) << "The device will now reboot to recovery and attempt un-deduplication.";
+[[noreturn]] void reboot(bool overlayfs = false) {
+    if (overlayfs) {
+        LOG(INFO) << "Successfully setup overlayfs\nrebooting device";
     } else {
         LOG(INFO) << "Successfully disabled verity\nrebooting device";
     }
     ::sync();
-    android::base::SetProperty(ANDROID_RB_PROPERTY, dedupe ? "reboot,recovery" : "reboot,remount");
+    android::base::SetProperty(ANDROID_RB_PROPERTY, "reboot,remount");
     ::sleep(60);
     ::exit(0);  // SUCCESS
 }
 
 }  // namespace
 
-int main(int argc, char* argv[]) {
-    android::base::InitLogging(argv, MyLogger);
-
+static int do_remount(int argc, char* argv[]) {
     enum {
-        SUCCESS,
+        SUCCESS = 0,
         NOT_USERDEBUG,
         BADARG,
         NOT_ROOT,
@@ -165,7 +157,7 @@ int main(int argc, char* argv[]) {
 
     // Make sure we are root.
     if (::getuid() != 0) {
-        LOG(ERROR) << "must be run as root";
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
         return NOT_ROOT;
     }
 
@@ -250,54 +242,47 @@ int main(int argc, char* argv[]) {
     // Check verity and optionally setup overlayfs backing.
     auto reboot_later = false;
     auto user_please_reboot_later = false;
-    auto uses_overlayfs = fs_mgr_overlayfs_valid() != OverlayfsValidResult::kNotSupported;
+    auto setup_overlayfs = false;
+    auto just_disabled_verity = false;
     for (auto it = partitions.begin(); it != partitions.end();) {
         auto& entry = *it;
         auto& mount_point = entry.mount_point;
         if (fs_mgr_is_verity_enabled(entry)) {
             retval = VERITY_PARTITION;
+            auto ret = false;
             if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") != "locked") {
                 if (AvbOps* ops = avb_ops_user_new()) {
-                    auto ret = avb_user_verity_set(
+                    ret = avb_user_verity_set(
                             ops, android::base::GetProperty("ro.boot.slot_suffix", "").c_str(),
                             false);
                     avb_ops_user_free(ops);
-                    if (ret) {
-                        LOG(WARNING) << "Disabling verity for " << mount_point;
-                        reboot_later = can_reboot;
-                        if (reboot_later) {
-                            // w/o overlayfs available, also check for dedupe
-                            if (!uses_overlayfs) {
-                                ++it;
-                                continue;
-                            }
-                            reboot(false);
-                        }
-                        user_please_reboot_later = true;
-                    } else if (fs_mgr_set_blk_ro(entry.blk_device, false)) {
-                        fec::io fh(entry.blk_device.c_str(), O_RDWR);
-                        if (fh && fh.set_verity_status(false)) {
-                            LOG(WARNING) << "Disabling verity for " << mount_point;
-                            reboot_later = can_reboot;
-                            if (reboot_later && !uses_overlayfs) {
-                                ++it;
-                                continue;
-                            }
-                            user_please_reboot_later = true;
-                        }
-                    }
+                }
+                if (!ret && fs_mgr_set_blk_ro(entry.blk_device, false)) {
+                    fec::io fh(entry.blk_device.c_str(), O_RDWR);
+                    ret = fh && fh.set_verity_status(false);
+                }
+                if (ret) {
+                    LOG(WARNING) << "Disabling verity for " << mount_point;
+                    just_disabled_verity = true;
+                    reboot_later = can_reboot;
+                    user_please_reboot_later = true;
                 }
             }
-            LOG(ERROR) << "Skipping " << mount_point << " for remount";
-            it = partitions.erase(it);
-            continue;
+            if (!ret) {
+                LOG(ERROR) << "Skipping " << mount_point << " for remount";
+                it = partitions.erase(it);
+                continue;
+            }
         }
 
         auto change = false;
         errno = 0;
-        if (fs_mgr_overlayfs_setup(nullptr, mount_point.c_str(), &change)) {
+        if (fs_mgr_overlayfs_setup(nullptr, mount_point.c_str(), &change, just_disabled_verity)) {
             if (change) {
                 LOG(INFO) << "Using overlayfs for " << mount_point;
+                reboot_later = can_reboot;
+                user_please_reboot_later = true;
+                setup_overlayfs = true;
             }
         } else if (errno) {
             PLOG(ERROR) << "Overlayfs setup for " << mount_point << " failed, skipping";
@@ -308,8 +293,8 @@ int main(int argc, char* argv[]) {
         ++it;
     }
 
-    if (partitions.empty()) {
-        if (reboot_later) reboot(false);
+    if (partitions.empty() || just_disabled_verity) {
+        if (reboot_later) reboot(setup_overlayfs);
         if (user_please_reboot_later) {
             LOG(INFO) << "Now reboot your device for settings to take effect";
             return 0;
@@ -389,11 +374,18 @@ int main(int argc, char* argv[]) {
         retval = REMOUNT_FAILED;
     }
 
-    if (reboot_later) reboot(false);
+    if (reboot_later) reboot(setup_overlayfs);
     if (user_please_reboot_later) {
         LOG(INFO) << "Now reboot your device for settings to take effect";
         return 0;
     }
 
     return retval;
+}
+
+int main(int argc, char* argv[]) {
+    android::base::InitLogging(argv, MyLogger);
+    int result = do_remount(argc, argv);
+    printf("remount %s\n", result ? "failed" : "succeeded");
+    return result;
 }

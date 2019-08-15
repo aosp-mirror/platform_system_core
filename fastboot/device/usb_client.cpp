@@ -255,7 +255,8 @@ ssize_t ClientUsbTransport::Read(void* data, size_t len) {
     size_t bytes_read_total = 0;
     while (bytes_read_total < len) {
         auto bytes_to_read = std::min(len - bytes_read_total, kFbFfsNumBufs * kFbFfsBufSize);
-        auto bytes_read_now = handle_->read(handle_.get(), char_data, bytes_to_read);
+        auto bytes_read_now =
+                handle_->read(handle_.get(), char_data, bytes_to_read, true /* allow_partial */);
         if (bytes_read_now < 0) {
             return bytes_read_total == 0 ? -1 : bytes_read_total;
         }

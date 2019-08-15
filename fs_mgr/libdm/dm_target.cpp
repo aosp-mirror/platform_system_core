@@ -16,6 +16,7 @@
 
 #include "libdm/dm_target.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -149,6 +150,25 @@ std::string DmTargetSnapshot::GetParameterString() const {
     return base_device_ + " " + cow_device_ + " " + mode + " " + std::to_string(chunk_size_);
 }
 
+// Computes the percentage of complition for snapshot status.
+// @sectors_initial is the number of sectors_allocated stored right before
+// starting the merge.
+double DmTargetSnapshot::MergePercent(const DmTargetSnapshot::Status& status,
+                                      uint64_t sectors_initial) {
+    uint64_t s = status.sectors_allocated;
+    uint64_t t = status.total_sectors;
+    uint64_t m = status.metadata_sectors;
+    uint64_t i = sectors_initial == 0 ? t : sectors_initial;
+
+    if (t <= s || i <= s) {
+        return 0.0;
+    }
+    if (s == 0 || t == 0 || s <= m) {
+        return 100.0;
+    }
+    return 100.0 / (i - m) * (i - s);
+}
+
 bool DmTargetSnapshot::ReportsOverflow(const std::string& target_type) {
     DeviceMapper& dm = DeviceMapper::Instance();
     DmTargetTypeInfo info;
@@ -165,34 +185,40 @@ bool DmTargetSnapshot::ReportsOverflow(const std::string& target_type) {
 }
 
 bool DmTargetSnapshot::ParseStatusText(const std::string& text, Status* status) {
+    // Try to parse the line as it should be
+    int args = sscanf(text.c_str(), "%" PRIu64 "/%" PRIu64 " %" PRIu64, &status->sectors_allocated,
+                      &status->total_sectors, &status->metadata_sectors);
+    if (args == 3) {
+        return true;
+    }
     auto sections = android::base::Split(text, " ");
+    if (sections.size() == 0) {
+        LOG(ERROR) << "could not parse empty status";
+        return false;
+    }
+    // Error codes are: "Invalid", "Overflow" and "Merge failed"
     if (sections.size() == 1) {
-        // This is probably an error code, "Invalid" is possible as is "Overflow"
-        // on 4.4+.
+        if (text == "Invalid" || text == "Overflow") {
+            status->error = text;
+            return true;
+        }
+    } else if (sections.size() == 2 && text == "Merge failed") {
         status->error = text;
         return true;
     }
-    if (sections.size() != 2) {
-        LOG(ERROR) << "snapshot status should have two components";
+    LOG(ERROR) << "could not parse snapshot status: wrong format";
+    return false;
+}
+
+bool DmTargetSnapshot::GetDevicesFromParams(const std::string& params, std::string* base_device,
+                                            std::string* cow_device) {
+    auto pieces = android::base::Split(params, " ");
+    if (pieces.size() < 2) {
+        LOG(ERROR) << "Parameter string is invalid: " << params;
         return false;
     }
-    auto sector_info = android::base::Split(sections[0], "/");
-    if (sector_info.size() != 2) {
-        LOG(ERROR) << "snapshot sector info should have two components";
-        return false;
-    }
-    if (!android::base::ParseUint(sections[1], &status->metadata_sectors)) {
-        LOG(ERROR) << "could not parse metadata sectors";
-        return false;
-    }
-    if (!android::base::ParseUint(sector_info[0], &status->sectors_allocated)) {
-        LOG(ERROR) << "could not parse sectors allocated";
-        return false;
-    }
-    if (!android::base::ParseUint(sector_info[1], &status->total_sectors)) {
-        LOG(ERROR) << "could not parse total sectors";
-        return false;
-    }
+    *base_device = pieces[0];
+    *cow_device = pieces[1];
     return true;
 }
 

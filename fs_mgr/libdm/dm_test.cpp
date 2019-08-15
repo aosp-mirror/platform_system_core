@@ -52,10 +52,10 @@ class TempDevice {
   public:
     TempDevice(const std::string& name, const DmTable& table)
         : dm_(DeviceMapper::Instance()), name_(name), valid_(false) {
-        valid_ = dm_.CreateDevice(name, table);
+        valid_ = dm_.CreateDevice(name, table, &path_, 5s);
     }
     TempDevice(TempDevice&& other) noexcept
-        : dm_(other.dm_), name_(other.name_), valid_(other.valid_) {
+        : dm_(other.dm_), name_(other.name_), path_(other.path_), valid_(other.valid_) {
         other.valid_ = false;
     }
     ~TempDevice() {
@@ -70,29 +70,7 @@ class TempDevice {
         valid_ = false;
         return dm_.DeleteDevice(name_);
     }
-    bool WaitForUdev() const {
-        auto start_time = std::chrono::steady_clock::now();
-        while (true) {
-            if (!access(path().c_str(), F_OK)) {
-                return true;
-            }
-            if (errno != ENOENT) {
-                return false;
-            }
-            std::this_thread::sleep_for(50ms);
-            std::chrono::duration elapsed = std::chrono::steady_clock::now() - start_time;
-            if (elapsed >= 5s) {
-                return false;
-            }
-        }
-    }
-    std::string path() const {
-        std::string device_path;
-        if (!dm_.GetDmDevicePathByName(name_, &device_path)) {
-            return "";
-        }
-        return device_path;
-    }
+    std::string path() const { return path_; }
     const std::string& name() const { return name_; }
     bool valid() const { return valid_; }
 
@@ -109,6 +87,7 @@ class TempDevice {
   private:
     DeviceMapper& dm_;
     std::string name_;
+    std::string path_;
     bool valid_;
 };
 
@@ -124,22 +103,31 @@ TEST(libdm, DmLinear) {
     ASSERT_TRUE(android::base::WriteFully(tmp1, message1, sizeof(message1)));
     ASSERT_TRUE(android::base::WriteFully(tmp2, message2, sizeof(message2)));
 
-    LoopDevice loop_a(tmp1);
+    LoopDevice loop_a(tmp1, 10s);
     ASSERT_TRUE(loop_a.valid());
-    LoopDevice loop_b(tmp2);
+    LoopDevice loop_b(tmp2, 10s);
     ASSERT_TRUE(loop_b.valid());
 
     // Define a 2-sector device, with each sector mapping to the first sector
     // of one of our loop devices.
     DmTable table;
-    ASSERT_TRUE(table.AddTarget(make_unique<DmTargetLinear>(0, 1, loop_a.device(), 0)));
-    ASSERT_TRUE(table.AddTarget(make_unique<DmTargetLinear>(1, 1, loop_b.device(), 0)));
+    ASSERT_TRUE(table.Emplace<DmTargetLinear>(0, 1, loop_a.device(), 0));
+    ASSERT_TRUE(table.Emplace<DmTargetLinear>(1, 1, loop_b.device(), 0));
     ASSERT_TRUE(table.valid());
 
     TempDevice dev("libdm-test-dm-linear", table);
     ASSERT_TRUE(dev.valid());
     ASSERT_FALSE(dev.path().empty());
-    ASSERT_TRUE(dev.WaitForUdev());
+
+    auto& dm = DeviceMapper::Instance();
+
+    dev_t dev_number;
+    ASSERT_TRUE(dm.GetDeviceNumber(dev.name(), &dev_number));
+    ASSERT_NE(dev_number, 0);
+
+    std::string dev_string;
+    ASSERT_TRUE(dm.GetDeviceString(dev.name(), &dev_string));
+    ASSERT_FALSE(dev_string.empty());
 
     // Note: a scope is needed to ensure that there are no open descriptors
     // when we go to close the device.
@@ -157,7 +145,6 @@ TEST(libdm, DmLinear) {
     }
 
     // Test GetTableStatus.
-    DeviceMapper& dm = DeviceMapper::Instance();
     vector<DeviceMapper::TargetInfo> targets;
     ASSERT_TRUE(dm.GetTableStatus(dev.name(), &targets));
     ASSERT_EQ(targets.size(), 2);
@@ -170,9 +157,41 @@ TEST(libdm, DmLinear) {
     EXPECT_EQ(targets[1].spec.sector_start, 1);
     EXPECT_EQ(targets[1].spec.length, 1);
 
+    // Test GetTargetType().
+    EXPECT_EQ(DeviceMapper::GetTargetType(targets[0].spec), std::string{"linear"});
+    EXPECT_EQ(DeviceMapper::GetTargetType(targets[1].spec), std::string{"linear"});
+
     // Normally the TestDevice destructor would delete this, but at least one
     // test should ensure that device deletion works.
     ASSERT_TRUE(dev.Destroy());
+}
+
+TEST(libdm, DmSuspendResume) {
+    unique_fd tmp1(CreateTempFile("file_suspend_resume", 512));
+    ASSERT_GE(tmp1, 0);
+
+    LoopDevice loop_a(tmp1, 10s);
+    ASSERT_TRUE(loop_a.valid());
+
+    DmTable table;
+    ASSERT_TRUE(table.Emplace<DmTargetLinear>(0, 1, loop_a.device(), 0));
+    ASSERT_TRUE(table.valid());
+
+    TempDevice dev("libdm-test-dm-suspend-resume", table);
+    ASSERT_TRUE(dev.valid());
+    ASSERT_FALSE(dev.path().empty());
+
+    auto& dm = DeviceMapper::Instance();
+
+    // Test Set and Get status of device.
+    vector<DeviceMapper::TargetInfo> targets;
+    ASSERT_EQ(dm.GetState(dev.name()), DmDeviceState::ACTIVE);
+
+    ASSERT_TRUE(dm.ChangeState(dev.name(), DmDeviceState::SUSPENDED));
+    ASSERT_EQ(dm.GetState(dev.name()), DmDeviceState::SUSPENDED);
+
+    ASSERT_TRUE(dm.ChangeState(dev.name(), DmDeviceState::ACTIVE));
+    ASSERT_EQ(dm.GetState(dev.name()), DmDeviceState::ACTIVE);
 }
 
 TEST(libdm, DmVerityArgsAvb2) {
@@ -264,9 +283,9 @@ void SnapshotTestHarness::SetupImpl() {
     cow_fd_ = CreateTempFile("cow_device", kCowDeviceSize);
     ASSERT_GE(cow_fd_, 0);
 
-    base_loop_ = std::make_unique<LoopDevice>(base_fd_);
+    base_loop_ = std::make_unique<LoopDevice>(base_fd_, 10s);
     ASSERT_TRUE(base_loop_->valid());
-    cow_loop_ = std::make_unique<LoopDevice>(cow_fd_);
+    cow_loop_ = std::make_unique<LoopDevice>(cow_fd_, 10s);
     ASSERT_TRUE(cow_loop_->valid());
 
     DmTable origin_table;
@@ -277,7 +296,6 @@ void SnapshotTestHarness::SetupImpl() {
     origin_dev_ = std::make_unique<TempDevice>("libdm-test-dm-snapshot-origin", origin_table);
     ASSERT_TRUE(origin_dev_->valid());
     ASSERT_FALSE(origin_dev_->path().empty());
-    ASSERT_TRUE(origin_dev_->WaitForUdev());
 
     // chunk size = 4K blocks.
     DmTable snap_table;
@@ -289,7 +307,6 @@ void SnapshotTestHarness::SetupImpl() {
     snapshot_dev_ = std::make_unique<TempDevice>("libdm-test-dm-snapshot", snap_table);
     ASSERT_TRUE(snapshot_dev_->valid());
     ASSERT_FALSE(snapshot_dev_->path().empty());
-    ASSERT_TRUE(snapshot_dev_->WaitForUdev());
 
     setup_ok_ = true;
 }
@@ -437,6 +454,87 @@ TEST(libdm, DmSnapshotOverflow) {
     } else {
         ASSERT_EQ(status.error, "Invalid");
     }
+}
+
+TEST(libdm, ParseStatusText) {
+    DmTargetSnapshot::Status status;
+
+    // Bad inputs
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("X", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123/456", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456 789", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 456/789", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123/456/789", &status));
+    EXPECT_FALSE(DmTargetSnapshot::ParseStatusText("123 / 456 789", &status));
+
+    // Good input
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("123/456 789", &status));
+    EXPECT_EQ(status.sectors_allocated, 123);
+    EXPECT_EQ(status.total_sectors, 456);
+    EXPECT_EQ(status.metadata_sectors, 789);
+
+    // Known error codes
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Invalid", &status));
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Merge failed", &status));
+    EXPECT_TRUE(DmTargetSnapshot::ParseStatusText("Overflow", &status));
+}
+
+TEST(libdm, DmSnapshotMergePercent) {
+    DmTargetSnapshot::Status status;
+
+    // Correct input
+    status.sectors_allocated = 1000;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 1.0);
+
+    status.sectors_allocated = 500;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status), 49.0);
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 51.0);
+
+    status.sectors_allocated = 0;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status), 99.0);
+
+    status.sectors_allocated = 500;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 500;
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status), 99.0);
+
+    status.sectors_allocated = 500;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status, 500), 1.0);
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status, 1000), 51.0);
+    EXPECT_GE(DmTargetSnapshot::MergePercent(status, 1000), 49.0);
+
+    // Robustness
+    status.sectors_allocated = 2000;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 0;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 0.0);
+
+    status.sectors_allocated = 2000;
+    status.total_sectors = 1000;
+    status.metadata_sectors = 2000;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 0.0);
+
+    status.sectors_allocated = 2000;
+    status.total_sectors = 0;
+    status.metadata_sectors = 2000;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status), 0.0);
+
+    status.sectors_allocated = 1000;
+    status.total_sectors = 0;
+    status.metadata_sectors = 1000;
+    EXPECT_LE(DmTargetSnapshot::MergePercent(status, 0), 0.0);
 }
 
 TEST(libdm, CryptArgs) {

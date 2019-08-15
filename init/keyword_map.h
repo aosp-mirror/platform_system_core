@@ -14,70 +14,74 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_KEYWORD_MAP_H_
-#define _INIT_KEYWORD_MAP_H_
+#pragma once
 
 #include <map>
 #include <string>
-
-#include <android-base/stringprintf.h>
+#include <vector>
 
 #include "result.h"
 
 namespace android {
 namespace init {
 
-template <typename Function>
+// Every init builtin, init service option, and ueventd option has a minimum and maximum number of
+// arguments.  These must be checked both at run time for safety and also at build time for
+// correctness in host_init_verifier.  Instead of copying and pasting the boiler plate code that
+// does this check into each function, it is abstracted in KeywordMap<>.  This class maps keywords
+// to functions and checks that the number of arguments provided falls in the correct range or
+// returns an error otherwise.
+
+// Value is the return value of Find(), which is typically either a single function or a struct with
+// additional information.
+template <typename Value>
 class KeywordMap {
   public:
-    using FunctionInfo = std::tuple<std::size_t, std::size_t, Function>;
-    using Map = std::map<std::string, FunctionInfo>;
+    struct MapValue {
+        size_t min_args;
+        size_t max_args;
+        Value value;
+    };
 
-    virtual ~KeywordMap() {
-    }
+    KeywordMap() {}
+    KeywordMap(std::initializer_list<std::pair<const std::string, MapValue>> init) : map_(init) {}
 
-    const Result<Function> FindFunction(const std::vector<std::string>& args) const {
-        using android::base::StringPrintf;
-
+    Result<Value> Find(const std::vector<std::string>& args) const {
         if (args.empty()) return Error() << "Keyword needed, but not provided";
 
         auto& keyword = args[0];
         auto num_args = args.size() - 1;
 
-        auto function_info_it = map().find(keyword);
-        if (function_info_it == map().end()) {
-            return Error() << StringPrintf("Invalid keyword '%s'", keyword.c_str());
+        auto result_it = map_.find(keyword);
+        if (result_it == map_.end()) {
+            return Errorf("Invalid keyword '{}'", keyword);
         }
 
-        auto function_info = function_info_it->second;
+        auto result = result_it->second;
 
-        auto min_args = std::get<0>(function_info);
-        auto max_args = std::get<1>(function_info);
+        auto min_args = result.min_args;
+        auto max_args = result.max_args;
         if (min_args == max_args && num_args != min_args) {
-            return Error() << StringPrintf("%s requires %zu argument%s", keyword.c_str(), min_args,
-                                           (min_args > 1 || min_args == 0) ? "s" : "");
+            return Errorf("{} requires {} argument{}", keyword, min_args,
+                          (min_args > 1 || min_args == 0) ? "s" : "");
         }
 
         if (num_args < min_args || num_args > max_args) {
             if (max_args == std::numeric_limits<decltype(max_args)>::max()) {
-                return Error() << StringPrintf("%s requires at least %zu argument%s",
-                                               keyword.c_str(), min_args, min_args > 1 ? "s" : "");
+                return Errorf("{} requires at least {} argument{}", keyword, min_args,
+                              min_args > 1 ? "s" : "");
             } else {
-                return Error() << StringPrintf("%s requires between %zu and %zu arguments",
-                                               keyword.c_str(), min_args, max_args);
+                return Errorf("{} requires between {} and {} arguments", keyword, min_args,
+                              max_args);
             }
         }
 
-        return std::get<Function>(function_info);
+        return result.value;
     }
 
   private:
-    // Map of keyword ->
-    // (minimum number of arguments, maximum number of arguments, function pointer)
-    virtual const Map& map() const = 0;
+    std::map<std::string, MapValue> map_;
 };
 
 }  // namespace init
 }  // namespace android
-
-#endif

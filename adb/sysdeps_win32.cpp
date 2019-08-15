@@ -60,6 +60,7 @@ typedef struct FHClassRec_ {
     int (*_fh_read)(FH, void*, int);
     int (*_fh_write)(FH, const void*, int);
     int (*_fh_writev)(FH, const adb_iovec*, int);
+    intptr_t (*_fh_get_os_handle)(FH);
 } FHClassRec;
 
 static void _fh_file_init(FH);
@@ -68,14 +69,11 @@ static int64_t _fh_file_lseek(FH, int64_t, int);
 static int _fh_file_read(FH, void*, int);
 static int _fh_file_write(FH, const void*, int);
 static int _fh_file_writev(FH, const adb_iovec*, int);
+static intptr_t _fh_file_get_os_handle(FH f);
 
 static const FHClassRec _fh_file_class = {
-    _fh_file_init,
-    _fh_file_close,
-    _fh_file_lseek,
-    _fh_file_read,
-    _fh_file_write,
-    _fh_file_writev,
+        _fh_file_init,  _fh_file_close,  _fh_file_lseek,         _fh_file_read,
+        _fh_file_write, _fh_file_writev, _fh_file_get_os_handle,
 };
 
 static void _fh_socket_init(FH);
@@ -84,14 +82,11 @@ static int64_t _fh_socket_lseek(FH, int64_t, int);
 static int _fh_socket_read(FH, void*, int);
 static int _fh_socket_write(FH, const void*, int);
 static int _fh_socket_writev(FH, const adb_iovec*, int);
+static intptr_t _fh_socket_get_os_handle(FH f);
 
 static const FHClassRec _fh_socket_class = {
-    _fh_socket_init,
-    _fh_socket_close,
-    _fh_socket_lseek,
-    _fh_socket_read,
-    _fh_socket_write,
-    _fh_socket_writev,
+        _fh_socket_init,  _fh_socket_close,  _fh_socket_lseek,         _fh_socket_read,
+        _fh_socket_write, _fh_socket_writev, _fh_socket_get_os_handle,
 };
 
 #if defined(assert)
@@ -331,6 +326,10 @@ static int64_t _fh_file_lseek(FH f, int64_t pos, int origin) {
     return li.QuadPart;
 }
 
+static intptr_t _fh_file_get_os_handle(FH f) {
+    return reinterpret_cast<intptr_t>(f->u.handle);
+}
+
 /**************************************************************************/
 /**************************************************************************/
 /*****                                                                *****/
@@ -456,6 +455,26 @@ int adb_read(borrowed_fd fd, void* buf, int len) {
     return f->clazz->_fh_read(f, buf, len);
 }
 
+int adb_pread(borrowed_fd fd, void* buf, int len, off64_t offset) {
+    OVERLAPPED overlapped = {};
+    overlapped.Offset = static_cast<DWORD>(offset);
+    overlapped.OffsetHigh = static_cast<DWORD>(offset >> 32);
+    DWORD bytes_read;
+    if (!::ReadFile(adb_get_os_handle(fd), buf, static_cast<DWORD>(len), &bytes_read,
+                    &overlapped)) {
+        D("adb_pread: could not read %d bytes from FD %d", len, fd.get());
+        switch (::GetLastError()) {
+            case ERROR_IO_PENDING:
+                errno = EAGAIN;
+                return -1;
+            default:
+                errno = EINVAL;
+                return -1;
+        }
+    }
+    return static_cast<int>(bytes_read);
+}
+
 int adb_write(borrowed_fd fd, const void* buf, int len) {
     FH f = _fh_from_int(fd, __func__);
 
@@ -478,6 +497,25 @@ ssize_t adb_writev(borrowed_fd fd, const adb_iovec* iov, int iovcnt) {
     return f->clazz->_fh_writev(f, iov, iovcnt);
 }
 
+int adb_pwrite(borrowed_fd fd, const void* buf, int len, off64_t offset) {
+    OVERLAPPED params = {};
+    params.Offset = static_cast<DWORD>(offset);
+    params.OffsetHigh = static_cast<DWORD>(offset >> 32);
+    DWORD bytes_written = 0;
+    if (!::WriteFile(adb_get_os_handle(fd), buf, len, &bytes_written, &params)) {
+        D("adb_pwrite: could not write %d bytes to FD %d", len, fd.get());
+        switch (::GetLastError()) {
+            case ERROR_IO_PENDING:
+                errno = EAGAIN;
+                return -1;
+            default:
+                errno = EINVAL;
+                return -1;
+        }
+    }
+    return static_cast<int>(bytes_written);
+}
+
 int64_t adb_lseek(borrowed_fd fd, int64_t pos, int where) {
     FH f = _fh_from_int(fd, __func__);
     if (!f) {
@@ -498,6 +536,20 @@ int adb_close(int fd) {
     D("adb_close: %s", f->name);
     _fh_close(f);
     return 0;
+}
+
+HANDLE adb_get_os_handle(borrowed_fd fd) {
+    FH f = _fh_from_int(fd, __func__);
+
+    if (!f) {
+        errno = EBADF;
+        return nullptr;
+    }
+
+    D("adb_get_os_handle: %s", f->name);
+    const intptr_t intptr_handle = f->clazz->_fh_get_os_handle(f);
+    const HANDLE handle = reinterpret_cast<const HANDLE>(intptr_handle);
+    return handle;
 }
 
 /**************************************************************************/
@@ -610,15 +662,6 @@ static void _fh_socket_init(FH f) {
 
 static int _fh_socket_close(FH f) {
     if (f->fh_socket != INVALID_SOCKET) {
-        /* gently tell any peer that we're closing the socket */
-        if (shutdown(f->fh_socket, SD_BOTH) == SOCKET_ERROR) {
-            // If the socket is not connected, this returns an error. We want to
-            // minimize logging spam, so don't log these errors for now.
-#if 0
-            D("socket shutdown failed: %s",
-              android::base::SystemErrorCodeToString(WSAGetLastError()).c_str());
-#endif
-        }
         if (closesocket(f->fh_socket) == SOCKET_ERROR) {
             // Don't set errno here, since adb_close will ignore it.
             const DWORD err = WSAGetLastError();
@@ -697,10 +740,14 @@ static int _fh_socket_writev(FH f, const adb_iovec* iov, int iovcnt) {
               android::base::SystemErrorCodeToString(err).c_str());
         }
         _socket_set_errno(err);
-        result = -1;
+        return -1;
     }
     CHECK_GE(static_cast<DWORD>(std::numeric_limits<int>::max()), bytes_written);
     return static_cast<int>(bytes_written);
+}
+
+static intptr_t _fh_socket_get_os_handle(FH f) {
+    return f->u.socket;
 }
 
 /**************************************************************************/
@@ -2606,7 +2653,9 @@ extern "C" int main(int argc, char** argv);
 extern "C" int wmain(int argc, wchar_t **argv) {
     // Convert args from UTF-16 to UTF-8 and pass that to main().
     NarrowArgs narrow_args(argc, argv);
-    return main(argc, narrow_args.data());
+
+    // Avoid destructing NarrowArgs: argv might have been mutated to point to string literals.
+    _exit(main(argc, narrow_args.data()));
 }
 
 // Shadow UTF-8 environment variable name/value pairs that are created from
