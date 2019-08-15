@@ -634,15 +634,15 @@ namespace.neuralnetworks.visible = true
 
 namespace.neuralnetworks.search.paths = /apex/com.android.neuralnetworks/${LIB}
 namespace.neuralnetworks.asan.search.paths = /apex/com.android.neuralnetworks/${LIB}
-namespace.neuralnetworks.links = default
-namespace.neuralnetworks.link.default.shared_libs  = libc.so
-namespace.neuralnetworks.link.default.shared_libs += libcgrouprc.so
-namespace.neuralnetworks.link.default.shared_libs += libdl.so
-namespace.neuralnetworks.link.default.shared_libs += liblog.so
-namespace.neuralnetworks.link.default.shared_libs += libm.so
-namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
-namespace.neuralnetworks.link.default.shared_libs += libsync.so
-namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
+namespace.neuralnetworks.links = system
+namespace.neuralnetworks.link.system.shared_libs  = libc.so
+namespace.neuralnetworks.link.system.shared_libs += libcgrouprc.so
+namespace.neuralnetworks.link.system.shared_libs += libdl.so
+namespace.neuralnetworks.link.system.shared_libs += liblog.so
+namespace.neuralnetworks.link.system.shared_libs += libm.so
+namespace.neuralnetworks.link.system.shared_libs += libnativewindow.so
+namespace.neuralnetworks.link.system.shared_libs += libsync.so
+namespace.neuralnetworks.link.system.shared_libs += libvndksupport.so
 
 ###############################################################################
 # Namespace config for native tests that need access to both system and vendor
