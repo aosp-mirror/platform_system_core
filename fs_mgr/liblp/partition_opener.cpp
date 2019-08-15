@@ -100,5 +100,9 @@ bool PartitionOpener::GetInfo(const std::string& partition_name, BlockDeviceInfo
     return GetBlockDeviceInfo(path, info);
 }
 
+std::string PartitionOpener::GetDeviceString(const std::string& partition_name) const {
+    return GetPartitionAbsolutePath(partition_name);
+}
+
 }  // namespace fs_mgr
 }  // namespace android

@@ -73,6 +73,10 @@ struct CreateLogicalPartitionParams {
     // If this is non-empty, it will override the device mapper name (by
     // default the partition name will be used).
     std::string device_name;
+
+    // If non-null, this will use the specified IPartitionOpener rather than
+    // the default one.
+    const IPartitionOpener* partition_opener = nullptr;
 };
 
 bool CreateLogicalPartition(const CreateLogicalPartitionParams& params, std::string* path);
