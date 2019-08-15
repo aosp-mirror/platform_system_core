@@ -27,7 +27,9 @@
 #include <unwindstack/Elf.h>
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Maps.h>
-#include <unwindstack/Memory.h>
+
+#include "MemoryFileAtOffset.h"
+#include "MemoryRange.h"
 
 namespace unwindstack {
 
@@ -231,11 +233,13 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum exp
     }
   }
 
-  // If there is a read-only map then a read-execute map that represents the
-  // same elf object, make sure the previous map is using the same elf
-  // object if it hasn't already been set.
-  if (prev_map != nullptr && elf_start_offset != offset && prev_map->offset == elf_start_offset &&
-      prev_map->name == name) {
+  if (!elf->valid()) {
+    elf_start_offset = offset;
+  } else if (prev_map != nullptr && elf_start_offset != offset &&
+             prev_map->offset == elf_start_offset && prev_map->name == name) {
+    // If there is a read-only map then a read-execute map that represents the
+    // same elf object, make sure the previous map is using the same elf
+    // object if it hasn't already been set.
     std::lock_guard<std::mutex> guard(prev_map->mutex_);
     if (prev_map->elf.get() == nullptr) {
       prev_map->elf = elf;
@@ -296,7 +300,7 @@ MapInfo::~MapInfo() {
 
 std::string MapInfo::GetBuildID() {
   uintptr_t id = build_id.load();
-  if (build_id != 0) {
+  if (id != 0) {
     return *reinterpret_cast<std::string*>(id);
   }
 

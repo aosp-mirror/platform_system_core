@@ -285,7 +285,7 @@ void Keychords::Register(const std::vector<int>& keycodes) {
 
 void Keychords::Start(Epoll* epoll, std::function<void(const std::vector<int>&)> handler) {
     epoll_ = epoll;
-    handler_ = handler;
+    handler_ = std::move(handler);
     if (entries_.size()) GeteventOpenDevice();
 }
 

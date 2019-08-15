@@ -32,7 +32,6 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -44,6 +43,7 @@
 #include <android-base/unique_fd.h>
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr.h>
+#include <fs_mgr/file_wait.h>
 #include <fs_mgr_dm_linear.h>
 #include <fs_mgr_overlayfs.h>
 #include <fstab/fstab.h>
@@ -90,7 +90,7 @@ std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab*) {
     return {};
 }
 
-bool fs_mgr_overlayfs_setup(const char*, const char*, bool* change) {
+bool fs_mgr_overlayfs_setup(const char*, const char*, bool* change, bool) {
     if (change) *change = false;
     return false;
 }
@@ -150,6 +150,31 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
     return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100));
 }
 
+const auto kPhysicalDevice = "/dev/block/by-name/"s;
+
+bool fs_mgr_update_blk_device(FstabEntry* entry) {
+    if (entry->fs_mgr_flags.logical) {
+        fs_mgr_update_logical_partition(entry);
+    }
+    if (fs_mgr_access(entry->blk_device)) {
+        return true;
+    }
+    if (entry->blk_device != "/dev/root") {
+        return false;
+    }
+
+    // special case for system-as-root (taimen and others)
+    auto blk_device = kPhysicalDevice + "system";
+    if (!fs_mgr_access(blk_device)) {
+        blk_device += fs_mgr_get_slot_suffix();
+        if (!fs_mgr_access(blk_device)) {
+            return false;
+        }
+    }
+    entry->blk_device = blk_device;
+    return true;
+}
+
 bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     // readonly filesystem, can not be mount -o remount,rw
     // for squashfs, erofs or if free space is (near) zero making such a remount
@@ -157,18 +182,18 @@ bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     if (!fs_mgr_filesystem_has_space(entry->mount_point)) {
         return true;
     }
-    if (entry->fs_mgr_flags.logical) {
-        fs_mgr_update_logical_partition(entry);
+
+    // blk_device needs to be setup so we can check superblock.
+    // If we fail here, because during init first stage and have doubts.
+    if (!fs_mgr_update_blk_device(entry)) {
+        return true;
     }
+
+    // check if ext4 de-dupe
     auto save_errno = errno;
-    errno = 0;
     auto has_shared_blocks = fs_mgr_has_shared_blocks(entry->mount_point, entry->blk_device);
     if (!has_shared_blocks && (entry->mount_point == "/system")) {
         has_shared_blocks = fs_mgr_has_shared_blocks("/", entry->blk_device);
-    }
-    // special case for first stage init for system as root (taimen)
-    if (!has_shared_blocks && (errno == ENOENT) && (entry->blk_device == "/dev/root")) {
-        has_shared_blocks = true;
     }
     errno = save_errno;
     return has_shared_blocks;
@@ -388,8 +413,6 @@ uint32_t fs_mgr_overlayfs_slot_number() {
     return SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix());
 }
 
-const auto kPhysicalDevice = "/dev/block/by-name/"s;
-
 std::string fs_mgr_overlayfs_super_device(uint32_t slot_number) {
     return kPhysicalDevice + fs_mgr_get_super_partition_name(slot_number);
 }
@@ -444,7 +467,7 @@ bool fs_mgr_overlayfs_teardown_scratch(const std::string& overlay, bool* change)
     auto metadata = builder->Export();
     if (metadata && UpdatePartitionTable(super_device, *metadata.get(), slot_number)) {
         if (change) *change = true;
-        if (!DestroyLogicalPartition(partition_name, 0s)) return false;
+        if (!DestroyLogicalPartition(partition_name)) return false;
     } else {
         LERROR << "delete partition " << overlay;
         return false;
@@ -517,9 +540,165 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
     return ret;
 }
 
+bool fs_mgr_overlayfs_set_shared_mount(const std::string& mount_point, bool shared_flag) {
+    auto ret = mount(nullptr, mount_point.c_str(), nullptr, shared_flag ? MS_SHARED : MS_PRIVATE,
+                     nullptr);
+    if (ret) {
+        PERROR << "__mount(target=" << mount_point
+               << ",flag=" << (shared_flag ? "MS_SHARED" : "MS_PRIVATE") << ")=" << ret;
+        return false;
+    }
+    return true;
+}
+
+bool fs_mgr_overlayfs_move_mount(const std::string& source, const std::string& target) {
+    auto ret = mount(source.c_str(), target.c_str(), nullptr, MS_MOVE, nullptr);
+    if (ret) {
+        PERROR << "__mount(source=" << source << ",target=" << target << ",flag=MS_MOVE)=" << ret;
+        return false;
+    }
+    return true;
+}
+
+struct mount_info {
+    std::string mount_point;
+    bool shared_flag;
+};
+
+std::vector<mount_info> ReadMountinfoFromFile(const std::string& path) {
+    std::vector<mount_info> info;
+
+    auto file = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
+    if (!file) {
+        PERROR << __FUNCTION__ << "(): cannot open file: '" << path << "'";
+        return info;
+    }
+
+    ssize_t len;
+    size_t alloc_len = 0;
+    char* line = nullptr;
+    while ((len = getline(&line, &alloc_len, file.get())) != -1) {
+        /* if the last character is a newline, shorten the string by 1 byte */
+        if (line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+        }
+
+        static constexpr char delim[] = " \t";
+        char* save_ptr;
+        if (!strtok_r(line, delim, &save_ptr)) {
+            LERROR << "Error parsing mount ID";
+            break;
+        }
+        if (!strtok_r(nullptr, delim, &save_ptr)) {
+            LERROR << "Error parsing parent ID";
+            break;
+        }
+        if (!strtok_r(nullptr, delim, &save_ptr)) {
+            LERROR << "Error parsing mount source";
+            break;
+        }
+        if (!strtok_r(nullptr, delim, &save_ptr)) {
+            LERROR << "Error parsing root";
+            break;
+        }
+
+        char* p;
+        if (!(p = strtok_r(nullptr, delim, &save_ptr))) {
+            LERROR << "Error parsing mount_point";
+            break;
+        }
+        mount_info entry = {p, false};
+
+        if (!strtok_r(nullptr, delim, &save_ptr)) {
+            LERROR << "Error parsing mount_flags";
+            break;
+        }
+
+        while ((p = strtok_r(nullptr, delim, &save_ptr))) {
+            if ((p[0] == '-') && (p[1] == '\0')) break;
+            if (android::base::StartsWith(p, "shared:")) entry.shared_flag = true;
+        }
+        if (!p) {
+            LERROR << "Error parsing fields";
+            break;
+        }
+        info.emplace_back(std::move(entry));
+    }
+
+    free(line);
+    if (info.empty()) {
+        LERROR << __FUNCTION__ << "(): failed to load mountinfo from : '" << path << "'";
+    }
+    return info;
+}
+
 bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
     auto options = fs_mgr_get_overlayfs_options(mount_point);
     if (options.empty()) return false;
+
+    auto retval = true;
+    auto save_errno = errno;
+
+    struct move_entry {
+        std::string mount_point;
+        std::string dir;
+        bool shared_flag;
+    };
+    std::vector<move_entry> move;
+    auto parent_private = false;
+    auto parent_made_private = false;
+    auto dev_private = false;
+    auto dev_made_private = false;
+    for (auto& entry : ReadMountinfoFromFile("/proc/self/mountinfo")) {
+        if ((entry.mount_point == mount_point) && !entry.shared_flag) {
+            parent_private = true;
+        }
+        if ((entry.mount_point == "/dev") && !entry.shared_flag) {
+            dev_private = true;
+        }
+
+        if (!android::base::StartsWith(entry.mount_point, mount_point + "/")) {
+            continue;
+        }
+        if (std::find_if(move.begin(), move.end(), [&entry](const auto& it) {
+                return android::base::StartsWith(entry.mount_point, it.mount_point + "/");
+            }) != move.end()) {
+            continue;
+        }
+
+        // use as the bound directory in /dev.
+        auto new_context = fs_mgr_get_context(entry.mount_point);
+        if (!new_context.empty() && setfscreatecon(new_context.c_str())) {
+            PERROR << "setfscreatecon " << new_context;
+        }
+        move_entry new_entry = {std::move(entry.mount_point), "/dev/TemporaryDir-XXXXXX",
+                                entry.shared_flag};
+        const auto target = mkdtemp(new_entry.dir.data());
+        if (!target) {
+            retval = false;
+            save_errno = errno;
+            PERROR << "temporary directory for MS_BIND";
+            setfscreatecon(nullptr);
+            continue;
+        }
+        setfscreatecon(nullptr);
+
+        if (!parent_private && !parent_made_private) {
+            parent_made_private = fs_mgr_overlayfs_set_shared_mount(mount_point, false);
+        }
+        if (new_entry.shared_flag) {
+            new_entry.shared_flag = fs_mgr_overlayfs_set_shared_mount(new_entry.mount_point, false);
+        }
+        if (!fs_mgr_overlayfs_move_mount(new_entry.mount_point, new_entry.dir)) {
+            retval = false;
+            save_errno = errno;
+            if (new_entry.shared_flag) {
+                fs_mgr_overlayfs_set_shared_mount(new_entry.mount_point, true);
+            }
+            continue;
+        }
+        move.emplace_back(std::move(new_entry));
+    }
 
     // hijack __mount() report format to help triage
     auto report = "__mount(source=overlay,target="s + mount_point + ",type=overlay";
@@ -535,12 +714,38 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
     auto ret = mount("overlay", mount_point.c_str(), "overlay", MS_RDONLY | MS_RELATIME,
                      options.c_str());
     if (ret) {
+        retval = false;
+        save_errno = errno;
         PERROR << report << ret;
-        return false;
     } else {
         LINFO << report << ret;
-        return true;
     }
+
+    // Move submounts back.
+    for (const auto& entry : move) {
+        if (!dev_private && !dev_made_private) {
+            dev_made_private = fs_mgr_overlayfs_set_shared_mount("/dev", false);
+        }
+
+        if (!fs_mgr_overlayfs_move_mount(entry.dir, entry.mount_point)) {
+            retval = false;
+            save_errno = errno;
+        } else if (entry.shared_flag &&
+                   !fs_mgr_overlayfs_set_shared_mount(entry.mount_point, true)) {
+            retval = false;
+            save_errno = errno;
+        }
+        rmdir(entry.dir.c_str());
+    }
+    if (dev_made_private) {
+        fs_mgr_overlayfs_set_shared_mount("/dev", true);
+    }
+    if (parent_made_private) {
+        fs_mgr_overlayfs_set_shared_mount(mount_point, true);
+    }
+
+    errno = save_errno;
+    return retval;
 }
 
 // Mount kScratchMountPoint
@@ -662,7 +867,7 @@ static void TruncatePartitionsWithSuffix(MetadataBuilder* builder, const std::st
             if (!android::base::EndsWith(name, suffix)) {
                 continue;
             }
-            if (dm.GetState(name) != DmDeviceState::INVALID && !DestroyLogicalPartition(name, 2s)) {
+            if (dm.GetState(name) != DmDeviceState::INVALID && !DestroyLogicalPartition(name)) {
                 continue;
             }
             builder->ResizePartition(builder->FindPartition(name), 0);
@@ -736,7 +941,7 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
                         return false;
                     }
                 }
-                if (!partition_create) DestroyLogicalPartition(partition_name, 10s);
+                if (!partition_create) DestroyLogicalPartition(partition_name);
                 changed = true;
                 *partition_exists = false;
             }
@@ -867,7 +1072,7 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
             scratch_can_be_mounted = false;
             auto scratch_device = fs_mgr_overlayfs_scratch_device();
             if (fs_mgr_overlayfs_scratch_can_be_mounted(scratch_device) &&
-                fs_mgr_wait_for_file(scratch_device, 10s)) {
+                WaitForFile(scratch_device, 10s)) {
                 const auto mount_type = fs_mgr_overlayfs_scratch_mount_type();
                 if (fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type,
                                                    true /* readonly */)) {
@@ -903,7 +1108,8 @@ std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab* fstab) {
 
 // Returns false if setup not permitted, errno set to last error.
 // If something is altered, set *change.
-bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* change) {
+bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* change,
+                            bool force) {
     if (change) *change = false;
     auto ret = false;
     if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return ret;
@@ -927,7 +1133,7 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
             continue;
         }
         save_errno = errno;
-        auto verity_enabled = fs_mgr_is_verity_enabled(*it);
+        auto verity_enabled = !force && fs_mgr_is_verity_enabled(*it);
         if (errno == ENOENT || errno == ENXIO) errno = save_errno;
         if (verity_enabled) {
             it = candidates.erase(it);

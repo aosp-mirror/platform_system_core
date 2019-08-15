@@ -125,10 +125,6 @@ cc_library {
         },
     },
 
-    whole_static_libs: [
-        "libdemangle"
-    ],
-
     static_libs: [
         "libprocinfo",
     ],
@@ -162,6 +158,7 @@ cc_test_library {
 cc_test {
     name: "libunwindstack_test",
     defaults: ["libunwindstack_flags"],
+    isolated: true,
 
     srcs: [
         "tests/ArmExidxDecodeTest.cpp",
@@ -184,6 +181,7 @@ cc_test {
         "tests/ElfInterfaceTest.cpp",
         "tests/ElfTest.cpp",
         "tests/ElfTestUtils.cpp",
+        "tests/IsolatedSettings.cpp",
         "tests/JitDebugTest.cpp",
         "tests/LocalUnwinderTest.cpp",
         "tests/LogFake.cpp",
@@ -241,10 +239,12 @@ cc_test {
         "tests/files/offline/debug_frame_first_x86/*",
         "tests/files/offline/debug_frame_load_bias_arm/*",
         "tests/files/offline/eh_frame_hdr_begin_x86_64/*",
+        "tests/files/offline/invalid_elf_offset_arm/*",
         "tests/files/offline/jit_debug_arm/*",
         "tests/files/offline/jit_debug_x86/*",
         "tests/files/offline/jit_map_arm/*",
         "tests/files/offline/gnu_debugdata_arm/*",
+        "tests/files/offline/load_bias_ro_rx_x86_64/*",
         "tests/files/offline/offset_arm/*",
         "tests/files/offline/shared_lib_in_apk_arm64/*",
         "tests/files/offline/shared_lib_in_apk_memory_only_arm64/*",

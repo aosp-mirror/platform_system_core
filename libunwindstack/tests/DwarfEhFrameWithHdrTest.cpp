@@ -73,7 +73,7 @@ class DwarfEhFrameWithHdrTest : public ::testing::Test {
   MemoryFake memory_;
   TestDwarfEhFrameWithHdr<TypeParam>* eh_frame_ = nullptr;
 };
-TYPED_TEST_CASE_P(DwarfEhFrameWithHdrTest);
+TYPED_TEST_SUITE_P(DwarfEhFrameWithHdrTest);
 
 // NOTE: All test class variables need to be referenced as this->.
 
@@ -446,14 +446,14 @@ TYPED_TEST_P(DwarfEhFrameWithHdrTest, GetFdeFromPc_fde_not_found) {
   ASSERT_EQ(nullptr, this->eh_frame_->GetFdeFromPc(0x800));
 }
 
-REGISTER_TYPED_TEST_CASE_P(DwarfEhFrameWithHdrTest, Init, Init_non_zero_load_bias, GetFdes,
-                           GetFdeInfoFromIndex_expect_cache_fail, GetFdeInfoFromIndex_read_pcrel,
-                           GetFdeInfoFromIndex_read_datarel, GetFdeInfoFromIndex_cached,
-                           GetFdeOffsetFromPc_verify, GetFdeOffsetFromPc_index_fail,
-                           GetFdeOffsetFromPc_fail_fde_count, GetFdeOffsetFromPc_search,
-                           GetCieFde32, GetCieFde64, GetFdeFromPc_fde_not_found);
+REGISTER_TYPED_TEST_SUITE_P(DwarfEhFrameWithHdrTest, Init, Init_non_zero_load_bias, GetFdes,
+                            GetFdeInfoFromIndex_expect_cache_fail, GetFdeInfoFromIndex_read_pcrel,
+                            GetFdeInfoFromIndex_read_datarel, GetFdeInfoFromIndex_cached,
+                            GetFdeOffsetFromPc_verify, GetFdeOffsetFromPc_index_fail,
+                            GetFdeOffsetFromPc_fail_fde_count, GetFdeOffsetFromPc_search,
+                            GetCieFde32, GetCieFde64, GetFdeFromPc_fde_not_found);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfEhFrameWithHdrTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(, DwarfEhFrameWithHdrTest, DwarfEhFrameWithHdrTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfEhFrameWithHdrTest, DwarfEhFrameWithHdrTestTypes);
 
 }  // namespace unwindstack

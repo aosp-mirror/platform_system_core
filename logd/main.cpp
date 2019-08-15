@@ -17,6 +17,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/capability.h>
 #include <poll.h>
 #include <sched.h>
 #include <semaphore.h>
@@ -57,35 +58,10 @@
     '<', '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) / 10, \
         '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) % 10, '>'
 
-//
-// The service is designed to be run by init, it does not respond well
-// to starting up manually. When starting up manually the sockets will
-// fail to open typically for one of the following reasons:
-//     EADDRINUSE if logger is running.
-//     EACCESS if started without precautions (below)
-//
-// Here is a cookbook procedure for starting up logd manually assuming
-// init is out of the way, pedantically all permissions and SELinux
-// security is put back in place:
-//
-//    setenforce 0
-//    rm /dev/socket/logd*
-//    chmod 777 /dev/socket
-//        # here is where you would attach the debugger or valgrind for example
-//    runcon u:r:logd:s0 /system/bin/logd </dev/null >/dev/null 2>&1 &
-//    sleep 1
-//    chmod 755 /dev/socket
-//    chown logd.logd /dev/socket/logd*
-//    restorecon /dev/socket/logd*
-//    setenforce 1
-//
-// If minimalism prevails, typical for debugging and security is not a concern:
-//
-//    setenforce 0
-//    chmod 777 /dev/socket
-//    logd
-//
-
+// The service is designed to be run by init, it does not respond well to starting up manually. Init
+// has a 'sigstop' feature that sends SIGSTOP to a service immediately before calling exec().  This
+// allows debuggers, etc to be attached to logd at the very beginning, while still having init
+// handle the user, groups, capabilities, files, etc setup.
 static int drop_privs(bool klogd, bool auditd) {
     sched_param param = {};
 
@@ -99,11 +75,6 @@ static int drop_privs(bool klogd, bool auditd) {
         return -1;
     }
 
-    if (setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND) < 0) {
-        android::prdebug("failed to set background cgroup");
-        return -1;
-    }
-
     if (!__android_logger_property_get_bool("ro.debuggable",
                                             BOOL_DEFAULT_FALSE) &&
         prctl(PR_SET_DUMPABLE, 0) == -1) {
@@ -111,52 +82,26 @@ static int drop_privs(bool klogd, bool auditd) {
         return -1;
     }
 
-    std::unique_ptr<struct _cap_struct, int (*)(void*)> caps(cap_init(),
-                                                             cap_free);
-    if (cap_clear(caps.get()) < 0) return -1;
-    cap_value_t cap_value[] = { CAP_SETGID,  // must be first for below
-                                klogd ? CAP_SYSLOG : CAP_SETGID,
-                                auditd ? CAP_AUDIT_CONTROL : CAP_SETGID };
-    if (cap_set_flag(caps.get(), CAP_PERMITTED, arraysize(cap_value), cap_value,
-                     CAP_SET) < 0) {
+    std::unique_ptr<struct _cap_struct, int (*)(void*)> caps(cap_init(), cap_free);
+    if (cap_clear(caps.get()) < 0) {
         return -1;
     }
-    if (cap_set_flag(caps.get(), CAP_EFFECTIVE, arraysize(cap_value), cap_value,
-                     CAP_SET) < 0) {
+    std::vector<cap_value_t> cap_value;
+    if (klogd) {
+        cap_value.emplace_back(CAP_SYSLOG);
+    }
+    if (auditd) {
+        cap_value.emplace_back(CAP_AUDIT_CONTROL);
+    }
+
+    if (cap_set_flag(caps.get(), CAP_PERMITTED, cap_value.size(), cap_value.data(), CAP_SET) < 0) {
+        return -1;
+    }
+    if (cap_set_flag(caps.get(), CAP_EFFECTIVE, cap_value.size(), cap_value.data(), CAP_SET) < 0) {
         return -1;
     }
     if (cap_set_proc(caps.get()) < 0) {
-        android::prdebug(
-            "failed to set CAP_SETGID, CAP_SYSLOG or CAP_AUDIT_CONTROL (%d)",
-            errno);
-        return -1;
-    }
-
-    gid_t groups[] = { AID_READPROC };
-
-    if (setgroups(arraysize(groups), groups) == -1) {
-        android::prdebug("failed to set AID_READPROC groups");
-        return -1;
-    }
-
-    if (setgid(AID_LOGD) != 0) {
-        android::prdebug("failed to set AID_LOGD gid");
-        return -1;
-    }
-
-    if (setuid(AID_LOGD) != 0) {
-        android::prdebug("failed to set AID_LOGD uid");
-        return -1;
-    }
-
-    if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, cap_value, CAP_CLEAR) < 0) {
-        return -1;
-    }
-    if (cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, cap_value, CAP_CLEAR) < 0) {
-        return -1;
-    }
-    if (cap_set_proc(caps.get()) < 0) {
-        android::prdebug("failed to clear CAP_SETGID (%d)", errno);
+        android::prdebug("failed to set CAP_SYSLOG or CAP_AUDIT_CONTROL (%d)", errno);
         return -1;
     }
 
@@ -205,67 +150,14 @@ void android::prdebug(const char* fmt, ...) {
     }
 }
 
-static sem_t uidName;
-static uid_t uid;
-static char* name;
-
 static sem_t reinit;
 static bool reinit_running = false;
 static LogBuffer* logBuf = nullptr;
 
-static bool package_list_parser_cb(pkg_info* info, void* /* userdata */) {
-    bool rc = true;
-    if (info->uid == uid) {
-        name = strdup(info->name);
-        // false to stop processing
-        rc = false;
-    }
-
-    packagelist_free(info);
-    return rc;
-}
-
 static void* reinit_thread_start(void* /*obj*/) {
     prctl(PR_SET_NAME, "logd.daemon");
-    set_sched_policy(0, SP_BACKGROUND);
-    setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_BACKGROUND);
-
-    // We should drop to AID_LOGD, if we are anything else, we have
-    // even lesser privileges and accept our fate.
-    gid_t groups[] = {
-        AID_SYSTEM,        // search access to /data/system path
-        AID_PACKAGE_INFO,  // readonly access to /data/system/packages.list
-    };
-    if (setgroups(arraysize(groups), groups) == -1) {
-        android::prdebug(
-            "logd.daemon: failed to set AID_SYSTEM AID_PACKAGE_INFO groups");
-    }
-    if (setgid(AID_LOGD) != 0) {
-        android::prdebug("logd.daemon: failed to set AID_LOGD gid");
-    }
-    if (setuid(AID_LOGD) != 0) {
-        android::prdebug("logd.daemon: failed to set AID_LOGD uid");
-    }
-
-    cap_t caps = cap_init();
-    (void)cap_clear(caps);
-    (void)cap_set_proc(caps);
-    (void)cap_free(caps);
 
     while (reinit_running && !sem_wait(&reinit) && reinit_running) {
-        // uidToName Privileged Worker
-        if (uid) {
-            name = nullptr;
-
-            // if we got the perms wrong above, this would spam if we reported
-            // problems with acquisition of an uid name from the packages.
-            (void)packagelist_parse(package_list_parser_cb, nullptr);
-
-            uid = 0;
-            sem_post(&uidName);
-            continue;
-        }
-
         if (fdDmesg >= 0) {
             static const char reinit_message[] = { KMSG_PRIORITY(LOG_INFO),
                                                    'l',
@@ -302,26 +194,30 @@ static void* reinit_thread_start(void* /*obj*/) {
     return nullptr;
 }
 
-static sem_t sem_name;
-
 char* android::uidToName(uid_t u) {
-    if (!u || !reinit_running) {
-        return nullptr;
-    }
+    struct Userdata {
+        uid_t uid;
+        char* name;
+    } userdata = {
+            .uid = u,
+            .name = nullptr,
+    };
 
-    sem_wait(&sem_name);
+    packagelist_parse(
+            [](pkg_info* info, void* callback_parameter) {
+                auto userdata = reinterpret_cast<Userdata*>(callback_parameter);
+                bool result = true;
+                if (info->uid == userdata->uid) {
+                    userdata->name = strdup(info->name);
+                    // false to stop processing
+                    result = false;
+                }
+                packagelist_free(info);
+                return result;
+            },
+            &userdata);
 
-    // Not multi-thread safe, we use sem_name to protect
-    uid = u;
-
-    name = nullptr;
-    sem_post(&reinit);
-    sem_wait(&uidName);
-    char* ret = name;
-
-    sem_post(&sem_name);
-
-    return ret;
+    return userdata.name;
 }
 
 // Serves as a global method to trigger reinitialization
@@ -373,11 +269,6 @@ static void readDmesg(LogAudit* al, LogKlog* kl) {
 }
 
 static int issueReinit() {
-    cap_t caps = cap_init();
-    (void)cap_clear(caps);
-    (void)cap_set_proc(caps);
-    (void)cap_free(caps);
-
     int sock = TEMP_FAILURE_RETRY(socket_local_client(
         "logd", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM));
     if (sock < 0) return -errno;
@@ -440,10 +331,13 @@ int main(int argc, char* argv[]) {
         if (fdPmesg < 0) android::prdebug("Failed to open %s\n", proc_kmsg);
     }
 
+    bool auditd = __android_logger_property_get_bool("ro.logd.auditd", BOOL_DEFAULT_TRUE);
+    if (drop_privs(klogd, auditd) != 0) {
+        return EXIT_FAILURE;
+    }
+
     // Reinit Thread
     sem_init(&reinit, 0, 0);
-    sem_init(&uidName, 0, 0);
-    sem_init(&sem_name, 0, 1);
     pthread_attr_t attr;
     if (!pthread_attr_init(&attr)) {
         struct sched_param param;
@@ -459,12 +353,6 @@ int main(int argc, char* argv[]) {
             }
         }
         pthread_attr_destroy(&attr);
-    }
-
-    bool auditd =
-        __android_logger_property_get_bool("ro.logd.auditd", BOOL_DEFAULT_TRUE);
-    if (drop_privs(klogd, auditd) != 0) {
-        return EXIT_FAILURE;
     }
 
     // Serves the purpose of managing the last logs times read on a

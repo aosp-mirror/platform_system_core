@@ -49,9 +49,6 @@ template <typename T> T GetUintProperty(const std::string& key,
                                         T max = std::numeric_limits<T>::max());
 
 // Sets the system property `key` to `value`.
-// Note that system property setting is inherently asynchronous so a return value of `true`
-// isn't particularly meaningful, and immediately reading back the value won't necessarily
-// tell you whether or not your call succeeded. A `false` return value definitely means failure.
 bool SetProperty(const std::string& key, const std::string& value);
 
 // Waits for the system property `key` to have the value `expected_value`.

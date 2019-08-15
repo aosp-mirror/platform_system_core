@@ -137,22 +137,22 @@ class CentralDirectory {
 };
 
 /**
- * More space efficient string representation of strings in an mmaped zipped file than
- * std::string_view or ZipString. Using ZipString as an entry in the ZipArchive hashtable wastes
- * space. ZipString stores a pointer to a string (on 64 bit, 8 bytes) and the length to read from
- * that pointer, 2 bytes. Because of alignment, the structure consumes 16 bytes, wasting 6 bytes.
- * ZipStringOffset stores a 4 byte offset from a fixed location in the memory mapped file instead
- * of the entire address, consuming 8 bytes with alignment.
+ * More space efficient string representation of strings in an mmaped zipped
+ * file than std::string_view. Using std::string_view as an entry in the
+ * ZipArchive hash table wastes space. std::string_view stores a pointer to a
+ * string (on 64 bit, 8 bytes) and the length to read from that pointer,
+ * 2 bytes. Because of alignment, the structure consumes 16 bytes, wasting
+ * 6 bytes.
+ *
+ * ZipStringOffset stores a 4 byte offset from a fixed location in the memory
+ * mapped file instead of the entire address, consuming 8 bytes with alignment.
  */
 struct ZipStringOffset {
   uint32_t name_offset;
   uint16_t name_length;
 
-  const ZipString GetZipString(const uint8_t* start) const {
-    ZipString zip_string;
-    zip_string.name = start + name_offset;
-    zip_string.name_length = name_length;
-    return zip_string;
+  const std::string_view ToStringView(const uint8_t* start) const {
+    return std::string_view{reinterpret_cast<const char*>(start + name_offset), name_length};
   }
 };
 

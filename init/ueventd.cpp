@@ -37,6 +37,7 @@
 #include "devices.h"
 #include "firmware_handler.h"
 #include "modalias_handler.h"
+#include "selabel.h"
 #include "selinux.h"
 #include "uevent_handler.h"
 #include "uevent_listener.h"
@@ -145,7 +146,7 @@ void ColdBoot::UeventHandlerMain(unsigned int process_num, unsigned int total_pr
 
 void ColdBoot::RegenerateUevents() {
     uevent_listener_.RegenerateUevents([this](const Uevent& uevent) {
-        uevent_queue_.emplace_back(std::move(uevent));
+        uevent_queue_.emplace_back(uevent);
         return ListenerAction::kContinue;
     });
 }
@@ -213,7 +214,7 @@ void ColdBoot::Run() {
 
     WaitForSubProcesses();
 
-    close(open(COLDBOOT_DONE, O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
+    android::base::SetProperty(kColdBootDoneProp, "true");
     LOG(INFO) << "Coldboot took " << cold_boot_timer.duration().count() / 1000.0f << " seconds";
 }
 
@@ -250,11 +251,12 @@ int ueventd_main(int argc, char** argv) {
             std::move(ueventd_configuration.firmware_directories)));
 
     if (ueventd_configuration.enable_modalias_handling) {
-        uevent_handlers.emplace_back(std::make_unique<ModaliasHandler>());
+        std::vector<std::string> base_paths = {"/odm/lib/modules", "/vendor/lib/modules"};
+        uevent_handlers.emplace_back(std::make_unique<ModaliasHandler>(base_paths));
     }
     UeventListener uevent_listener(ueventd_configuration.uevent_socket_rcvbuf_size);
 
-    if (access(COLDBOOT_DONE, F_OK) != 0) {
+    if (!android::base::GetBoolProperty(kColdBootDoneProp, false)) {
         ColdBoot cold_boot(uevent_listener, uevent_handlers);
         cold_boot.Run();
     }

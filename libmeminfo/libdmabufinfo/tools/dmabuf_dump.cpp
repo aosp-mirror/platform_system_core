@@ -16,17 +16,19 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <getopt.h>
 #include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <map>
-#include <set>
 
 #include <android-base/stringprintf.h>
 #include <dmabufinfo/dmabufinfo.h>
@@ -35,15 +37,16 @@ using DmaBuffer = ::android::dmabufinfo::DmaBuffer;
 
 [[noreturn]] static void usage(int exit_status) {
     fprintf(stderr,
-            "Usage: %s [PID] \n"
-            "\t If PID is supplied, the dmabuf information for this process is shown.\n"
-            "\t Otherwise, shows the information for all processes.\n",
+            "Usage: %s [-ah] [PID] \n"
+            "-a\t show all dma buffers (ion) in big table, [buffer x process] grid \n"
+            "-h\t show this help\n"
+            "  \t If PID is supplied, the dmabuf information for that process is shown.\n",
             getprogname());
 
     exit(exit_status);
 }
 
-static std::string GetProcessBaseName(pid_t pid) {
+static std::string GetProcessComm(const pid_t pid) {
     std::string pid_path = android::base::StringPrintf("/proc/%d/comm", pid);
     std::ifstream in{pid_path};
     if (!in) return std::string("N/A");
@@ -53,133 +56,211 @@ static std::string GetProcessBaseName(pid_t pid) {
     return line;
 }
 
-static void AddPidsToSet(const std::unordered_map<pid_t, int>& map, std::set<pid_t>* set)
-{
-    for (auto it = map.begin(); it != map.end(); ++it)
-        set->insert(it->first);
-}
-
-static void PrintDmaBufInfo(const std::vector<DmaBuffer>& bufs) {
-    std::set<pid_t> pid_set;
-    std::map<pid_t, int> pid_column;
-
+static void PrintDmaBufTable(const std::vector<DmaBuffer>& bufs) {
     if (bufs.empty()) {
-        std::cout << "dmabuf info not found ¯\\_(ツ)_/¯" << std::endl;
+        printf("dmabuf info not found ¯\\_(ツ)_/¯\n");
         return;
     }
 
     // Find all unique pids in the input vector, create a set
-    for (int i = 0; i < bufs.size(); i++) {
-        AddPidsToSet(bufs[i].fdrefs(), &pid_set);
-        AddPidsToSet(bufs[i].maprefs(), &pid_set);
+    std::set<pid_t> pid_set;
+    for (auto& buf : bufs) {
+        pid_set.insert(buf.pids().begin(), buf.pids().end());
     }
 
-    int pid_count = 0;
+    // Format the header string spaced and separated with '|'
+    printf("    Dmabuf Inode |            Size |      Ref Counts |");
+    for (auto pid : pid_set) {
+        printf("%16s:%-5d |", GetProcessComm(pid).c_str(), pid);
+    }
+    printf("\n");
 
-    std::cout << "\t\t\t\t\t\t";
+    // holds per-process dmabuf size in kB
+    std::map<pid_t, uint64_t> per_pid_size = {};
+    uint64_t dmabuf_total_size = 0;
 
-    // Create a map to convert each unique pid into a column number
-    for (auto it = pid_set.begin(); it != pid_set.end(); ++it, ++pid_count) {
-        pid_column.insert(std::make_pair(*it, pid_count));
-        std::cout << ::android::base::StringPrintf("[pid: % 4d]\t", *it);
+    // Iterate through all dmabufs and collect per-process sizes, refs
+    for (auto& buf : bufs) {
+        printf("%16ju |%13" PRIu64 " kB |%16" PRIu64 " |", static_cast<uintmax_t>(buf.inode()),
+               buf.size() / 1024, buf.total_refs());
+        // Iterate through each process to find out per-process references for each buffer,
+        // gather total size used by each process etc.
+        for (pid_t pid : pid_set) {
+            int pid_refs = 0;
+            if (buf.fdrefs().count(pid) == 1) {
+                // Get the total number of ref counts the process is holding
+                // on this buffer. We don't differentiate between mmap or fd.
+                pid_refs += buf.fdrefs().at(pid);
+                if (buf.maprefs().count(pid) == 1) {
+                    pid_refs += buf.maprefs().at(pid);
+                }
+            }
+
+            if (pid_refs) {
+                // Add up the per-pid total size. Note that if a buffer is mapped
+                // in 2 different processes, the size will be shown as mapped or opened
+                // in both processes. This is intended for visibility.
+                //
+                // If one wants to get the total *unique* dma buffers, they can simply
+                // sum the size of all dma bufs shown by the tool
+                per_pid_size[pid] += buf.size() / 1024;
+                printf("%17d refs |", pid_refs);
+            } else {
+                printf("%22s |", "--");
+            }
+        }
+        dmabuf_total_size += buf.size() / 1024;
+        printf("\n");
     }
 
-    std::cout << std::endl << "\t\t\t\t\t\t";
+    printf("------------------------------------\n");
+    printf("%-16s  %13" PRIu64 " kB |%16s |", "TOTALS", dmabuf_total_size, "n/a");
+    for (auto pid : pid_set) {
+        printf("%19" PRIu64 " kB |", per_pid_size[pid]);
+    }
+    printf("\n");
 
-    for (auto it = pid_set.begin(); it != pid_set.end(); ++it) {
-        std::cout << ::android::base::StringPrintf("%16s",
-            GetProcessBaseName(*it).c_str());
+    return;
+}
+
+static void PrintDmaBufPerProcess(const std::vector<DmaBuffer>& bufs) {
+    if (bufs.empty()) {
+        printf("dmabuf info not found ¯\\_(ツ)_/¯\n");
+        return;
     }
 
-    std::cout << std::endl << "\tinode\t\tsize\t\tcount\t";
-    for (int i = 0; i < pid_count; i++) {
-        std::cout << "fd\tmap\t";
+    // Create a reverse map from pid to dmabufs
+    std::unordered_map<pid_t, std::set<ino_t>> pid_to_inodes = {};
+    uint64_t total_size = 0;  // Total size of dmabufs in the system
+    uint64_t kernel_rss = 0;  // Total size of dmabufs NOT mapped or opened by a process
+    for (auto& buf : bufs) {
+        for (auto pid : buf.pids()) {
+            pid_to_inodes[pid].insert(buf.inode());
+        }
+        total_size += buf.size();
+        if (buf.fdrefs().empty() && buf.maprefs().empty()) {
+            kernel_rss += buf.size();
+        }
     }
-    std::cout << std::endl;
+    // Create an inode to dmabuf map. We know inodes are unique..
+    std::unordered_map<ino_t, DmaBuffer> inode_to_dmabuf;
+    for (auto buf : bufs) {
+        inode_to_dmabuf[buf.inode()] = buf;
+    }
 
-    auto fds = std::make_unique<int[]>(pid_count);
-    auto maps = std::make_unique<int[]>(pid_count);
-    auto pss = std::make_unique<long[]>(pid_count);
+    uint64_t total_rss = 0, total_pss = 0;
+    for (auto& [pid, inodes] : pid_to_inodes) {
+        uint64_t pss = 0;
+        uint64_t rss = 0;
 
-    memset(pss.get(), 0, sizeof(long) * pid_count);
+        printf("%16s:%-5d\n", GetProcessComm(pid).c_str(), pid);
+        printf("%22s %16s %16s %16s %16s\n", "Name", "Rss", "Pss", "nr_procs", "Inode");
+        for (auto& inode : inodes) {
+            DmaBuffer& buf = inode_to_dmabuf[inode];
+            printf("%22s %13" PRIu64 " kB %13" PRIu64 " kB %16zu %16" PRIuMAX "\n",
+                   buf.name().empty() ? "<unknown>" : buf.name().c_str(), buf.size() / 1024,
+                   buf.Pss() / 1024, buf.pids().size(), static_cast<uintmax_t>(buf.inode()));
+            rss += buf.size();
+            pss += buf.Pss();
+        }
+        printf("%22s %13" PRIu64 " kB %13" PRIu64 " kB %16s\n", "PROCESS TOTAL", rss / 1024,
+               pss / 1024, "");
+        printf("----------------------\n");
+        total_rss += rss;
+        total_pss += pss;
+    }
+    printf("dmabuf total: %" PRIu64 " kB kernel_rss: %" PRIu64 " kB userspace_rss: %" PRIu64
+           " kB userspace_pss: %" PRIu64 " kB\n ",
+           total_size / 1024, kernel_rss / 1024, total_rss / 1024, total_pss / 1024);
+}
 
-    for (auto buf = bufs.begin(); buf != bufs.end(); ++buf) {
+static bool ReadDmaBufs(std::vector<DmaBuffer>* bufs) {
+    bufs->clear();
 
-        std::cout << ::android::base::StringPrintf("%16lu\t%10" PRIu64 "\t%" PRIu64 "\t",
-            buf->inode(),buf->size(), buf->count());
+    if (!ReadDmaBufInfo(bufs)) {
+        fprintf(stderr, "debugfs entry for dmabuf not available, skipping\n");
+        return false;
+    }
 
-        memset(fds.get(), 0, sizeof(int) * pid_count);
-        memset(maps.get(), 0, sizeof(int) * pid_count);
+    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir("/proc"), closedir);
+    if (!dir) {
+        fprintf(stderr, "Failed to open /proc directory\n");
+        bufs->clear();
+        return false;
+    }
 
-        for (auto it = buf->fdrefs().begin(); it != buf->fdrefs().end(); ++it) {
-            fds[pid_column[it->first]] = it->second;
-            pss[pid_column[it->first]] += buf->size() * it->second / buf->count();
+    struct dirent* dent;
+    while ((dent = readdir(dir.get()))) {
+        if (dent->d_type != DT_DIR) continue;
+
+        int pid = atoi(dent->d_name);
+        if (pid == 0) {
+            continue;
         }
 
-        for (auto it = buf->maprefs().begin(); it != buf->maprefs().end(); ++it) {
-            maps[pid_column[it->first]] = it->second;
-            pss[pid_column[it->first]] += buf->size() * it->second / buf->count();
+        if (!AppendDmaBufInfo(pid, bufs)) {
+            fprintf(stderr, "Unable to read dmabuf info for pid %d\n", pid);
+            bufs->clear();
+            return false;
         }
+    }
 
-        for (int i = 0; i < pid_count; i++) {
-            std::cout << ::android::base::StringPrintf("%d\t%d\t", fds[i], maps[i]);
-        }
-        std::cout << std::endl;
-    }
-    std::cout << "-----------------------------------------" << std::endl;
-    std::cout << "PSS                                      ";
-    for (int i = 0; i < pid_count; i++) {
-        std::cout << ::android::base::StringPrintf("%15ldK", pss[i] / 1024);
-    }
-    std::cout << std::endl;
+    return true;
 }
 
 int main(int argc, char* argv[]) {
-    pid_t pid = -1;
-    std::vector<DmaBuffer> bufs;
-    bool show_all = true;
+    struct option longopts[] = {{"all", no_argument, nullptr, 'a'},
+                                {"help", no_argument, nullptr, 'h'},
+                                {0, 0, nullptr, 0}};
 
-    if (argc > 1) {
-        if (sscanf(argv[1], "%d", &pid) == 1) {
-            show_all = false;
+    int opt;
+    bool show_table = false;
+    while ((opt = getopt_long(argc, argv, "ah", longopts, nullptr)) != -1) {
+        switch (opt) {
+            case 'a':
+                show_table = true;
+                break;
+            case 'h':
+                usage(EXIT_SUCCESS);
+            default:
+                usage(EXIT_FAILURE);
         }
-        else {
+    }
+
+    pid_t pid = -1;
+    if (optind < argc) {
+        if (show_table) {
+            fprintf(stderr, "Invalid arguments: -a does not need arguments\n");
+            usage(EXIT_FAILURE);
+        }
+        if (optind != (argc - 1)) {
+            fprintf(stderr, "Invalid arguments - only one [PID] argument is allowed\n");
+            usage(EXIT_FAILURE);
+        }
+        pid = atoi(argv[optind]);
+        if (pid == 0) {
+            fprintf(stderr, "Invalid process id %s\n", argv[optind]);
             usage(EXIT_FAILURE);
         }
     }
 
-    if (show_all) {
-        if (!ReadDmaBufInfo(&bufs)) {
-            std::cerr << "debugfs entry for dmabuf not available, skipping" << std::endl;
-            bufs.clear();
-        }
-        std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir("/proc"), closedir);
-        if (!dir) {
-            std::cerr << "Failed to open /proc directory" << std::endl;
+    std::vector<DmaBuffer> bufs;
+    if (pid != -1) {
+        if (!ReadDmaBufInfo(pid, &bufs)) {
+            fprintf(stderr, "Unable to read dmabuf info for %d\n", pid);
             exit(EXIT_FAILURE);
-        }
-        struct dirent* dent;
-        while ((dent = readdir(dir.get()))) {
-            if (dent->d_type != DT_DIR) continue;
-
-            int matched = sscanf(dent->d_name, "%d", &pid);
-            if (matched != 1) {
-                continue;
-            }
-
-            if (!AppendDmaBufInfo(pid, &bufs)) {
-                std::cerr << "Unable to read dmabuf info for pid " << pid << std::endl;
-                exit(EXIT_FAILURE);
-            }
         }
     } else {
-        if (!ReadDmaBufInfo(pid, &bufs)) {
-            std::cerr << "Unable to read dmabuf info" << std::endl;
-            exit(EXIT_FAILURE);
-        }
+        if (!ReadDmaBufs(&bufs)) exit(EXIT_FAILURE);
     }
-    PrintDmaBufInfo(bufs);
+
+    // Show the old dmabuf table, inode x process
+    if (show_table) {
+        PrintDmaBufTable(bufs);
+        return 0;
+    }
+
+    PrintDmaBufPerProcess(bufs);
+
     return 0;
 }
-
-

@@ -61,6 +61,7 @@ cc_defaults {
         "libavb",
         "libavb_host_sysdeps",
         "libdm",
+        "libext2_uuid",
         "libfs_avb",
         "libfstab",
         "libgtest_host",

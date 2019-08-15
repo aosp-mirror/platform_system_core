@@ -42,7 +42,7 @@ class Subcontext {
         Fork();
     }
 
-    Result<Success> Execute(const std::vector<std::string>& args);
+    Result<void> Execute(const std::vector<std::string>& args);
     Result<std::vector<std::string>> ExpandArgs(const std::vector<std::string>& args);
     void Restart();
 
@@ -60,7 +60,7 @@ class Subcontext {
     android::base::unique_fd socket_;
 };
 
-int SubcontextMain(int argc, char** argv, const KeywordFunctionMap* function_map);
+int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map);
 std::vector<Subcontext>* InitializeSubcontexts();
 bool SubcontextChildReap(pid_t pid);
 void SubcontextTerminate();

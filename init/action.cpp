@@ -28,17 +28,18 @@ using android::base::Join;
 namespace android {
 namespace init {
 
-Result<Success> RunBuiltinFunction(const BuiltinFunction& function,
-                                   const std::vector<std::string>& args,
-                                   const std::string& context) {
+Result<void> RunBuiltinFunction(const BuiltinFunction& function,
+                                const std::vector<std::string>& args, const std::string& context) {
     auto builtin_arguments = BuiltinArguments(context);
 
     builtin_arguments.args.resize(args.size());
     builtin_arguments.args[0] = args[0];
     for (std::size_t i = 1; i < args.size(); ++i) {
-        if (!expand_props(args[i], &builtin_arguments.args[i])) {
-            return Error() << "cannot expand '" << args[i] << "'";
+        auto expanded_arg = ExpandProps(args[i]);
+        if (!expanded_arg) {
+            return expanded_arg.error();
         }
+        builtin_arguments.args[i] = std::move(*expanded_arg);
     }
 
     return function(builtin_arguments);
@@ -51,7 +52,7 @@ Command::Command(BuiltinFunction f, bool execute_in_subcontext, std::vector<std:
       args_(std::move(args)),
       line_(line) {}
 
-Result<Success> Command::InvokeFunc(Subcontext* subcontext) const {
+Result<void> Command::InvokeFunc(Subcontext* subcontext) const {
     if (subcontext) {
         if (execute_in_subcontext_) {
             return subcontext->Execute(args_);
@@ -65,6 +66,30 @@ Result<Success> Command::InvokeFunc(Subcontext* subcontext) const {
     }
 
     return RunBuiltinFunction(func_, args_, kInitContext);
+}
+
+Result<void> Command::CheckCommand() const {
+    auto builtin_arguments = BuiltinArguments("host_init_verifier");
+
+    builtin_arguments.args.resize(args_.size());
+    builtin_arguments.args[0] = args_[0];
+    for (size_t i = 1; i < args_.size(); ++i) {
+        auto expanded_arg = ExpandProps(args_[i]);
+        if (!expanded_arg) {
+            if (expanded_arg.error().message().find("doesn't exist while expanding") !=
+                std::string::npos) {
+                // If we failed because we won't have a property, use an empty string, which is
+                // never returned from the parser, to indicate that this field cannot be checked.
+                builtin_arguments.args[i] = "";
+            } else {
+                return expanded_arg.error();
+            }
+        } else {
+            builtin_arguments.args[i] = std::move(*expanded_arg);
+        }
+    }
+
+    return func_(builtin_arguments);
 }
 
 std::string Command::BuildCommandString() const {
@@ -81,26 +106,41 @@ Action::Action(bool oneshot, Subcontext* subcontext, const std::string& filename
       filename_(filename),
       line_(line) {}
 
-const KeywordFunctionMap* Action::function_map_ = nullptr;
+const BuiltinFunctionMap* Action::function_map_ = nullptr;
 
-Result<Success> Action::AddCommand(std::vector<std::string>&& args, int line) {
+Result<void> Action::AddCommand(std::vector<std::string>&& args, int line) {
     if (!function_map_) {
         return Error() << "no function map available";
     }
 
-    auto function = function_map_->FindFunction(args);
-    if (!function) return Error() << function.error();
+    auto map_result = function_map_->Find(args);
+    if (!map_result) {
+        return Error() << map_result.error();
+    }
 
-    commands_.emplace_back(function->second, function->first, std::move(args), line);
-    return Success();
+    commands_.emplace_back(map_result->function, map_result->run_in_subcontext, std::move(args),
+                           line);
+    return {};
 }
 
 void Action::AddCommand(BuiltinFunction f, std::vector<std::string>&& args, int line) {
-    commands_.emplace_back(f, false, std::move(args), line);
+    commands_.emplace_back(std::move(f), false, std::move(args), line);
 }
 
 std::size_t Action::NumCommands() const {
     return commands_.size();
+}
+
+size_t Action::CheckAllCommands() const {
+    size_t failures = 0;
+    for (const auto& command : commands_) {
+        if (auto result = command.CheckCommand(); !result) {
+            LOG(ERROR) << "Command '" << command.BuildCommandString() << "' (" << filename_ << ":"
+                       << command.line() << ") failed: " << result.error();
+            ++failures;
+        }
+    }
+    return failures;
 }
 
 void Action::ExecuteOneCommand(std::size_t command) const {
@@ -121,25 +161,15 @@ void Action::ExecuteCommand(const Command& command) const {
     auto result = command.InvokeFunc(subcontext_);
     auto duration = t.duration();
 
-    // There are many legacy paths in rootdir/init.rc that will virtually never exist on a new
-    // device, such as '/sys/class/leds/jogball-backlight/brightness'.  As of this writing, there
-    // are 198 such failures on bullhead.  Instead of spamming the log reporting them, we do not
-    // report such failures unless we're running at the DEBUG log level.
-    bool report_failure = !result.has_value();
-    if (report_failure && android::base::GetMinimumLogSeverity() > android::base::DEBUG &&
-        result.error().as_errno == ENOENT) {
-        report_failure = false;
-    }
-
     // Any action longer than 50ms will be warned to user as slow operation
-    if (report_failure || duration > 50ms ||
+    if (!result.has_value() || duration > 50ms ||
         android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
         std::string trigger_name = BuildTriggersString();
         std::string cmd_str = command.BuildCommandString();
 
         LOG(INFO) << "Command '" << cmd_str << "' action=" << trigger_name << " (" << filename_
                   << ":" << command.line() << ") took " << duration.count() << "ms and "
-                  << (result ? "succeeded" : "failed: " + result.error().as_string);
+                  << (result ? "succeeded" : "failed: " + result.error().message());
     }
 }
 
@@ -165,10 +195,11 @@ bool Action::CheckPropertyTriggers(const std::string& name,
                 found = true;
             }
         } else {
-            std::string prop_val = android::base::GetProperty(trigger_name, "");
-            if (prop_val.empty() || (trigger_value != "*" && trigger_value != prop_val)) {
-                return false;
+            std::string prop_value = android::base::GetProperty(trigger_name, "");
+            if (trigger_value == "*" && !prop_value.empty()) {
+                continue;
             }
+            if (trigger_value != prop_value) return false;
         }
     }
     return found;

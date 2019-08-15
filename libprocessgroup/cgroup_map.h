@@ -31,20 +31,28 @@
 class CgroupController {
   public:
     // Does not own controller
-    explicit CgroupController(const ACgroupController* controller) : controller_(controller) {}
+    explicit CgroupController(const ACgroupController* controller)
+        : controller_(controller), state_(UNKNOWN) {}
 
     uint32_t version() const;
     const char* name() const;
     const char* path() const;
 
     bool HasValue() const;
-    bool IsUsable() const;
+    bool IsUsable();
 
     std::string GetTasksFilePath(const std::string& path) const;
     std::string GetProcsFilePath(const std::string& path, uid_t uid, pid_t pid) const;
     bool GetTaskGroup(int tid, std::string* group) const;
   private:
+    enum ControllerState {
+        UNKNOWN = 0,
+        USABLE = 1,
+        MISSING = 2,
+    };
+
     const ACgroupController* controller_ = nullptr;
+    ControllerState state_;
 };
 
 class CgroupMap {

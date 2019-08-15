@@ -55,8 +55,8 @@ bool IsActionableProperty(Subcontext* subcontext, const std::string& prop_name) 
     return CanReadProperty(subcontext->context(), prop_name);
 }
 
-Result<Success> ParsePropertyTrigger(const std::string& trigger, Subcontext* subcontext,
-                                     std::map<std::string, std::string>* property_triggers) {
+Result<void> ParsePropertyTrigger(const std::string& trigger, Subcontext* subcontext,
+                                  std::map<std::string, std::string>* property_triggers) {
     const static std::string prop_str("property:");
     std::string prop_name(trigger.substr(prop_str.length()));
     size_t equal_pos = prop_name.find('=');
@@ -74,12 +74,12 @@ Result<Success> ParsePropertyTrigger(const std::string& trigger, Subcontext* sub
     if (auto [it, inserted] = property_triggers->emplace(prop_name, prop_value); !inserted) {
         return Error() << "multiple property triggers found for same property";
     }
-    return Success();
+    return {};
 }
 
-Result<Success> ParseTriggers(const std::vector<std::string>& args, Subcontext* subcontext,
-                              std::string* event_trigger,
-                              std::map<std::string, std::string>* property_triggers) {
+Result<void> ParseTriggers(const std::vector<std::string>& args, Subcontext* subcontext,
+                           std::string* event_trigger,
+                           std::map<std::string, std::string>* property_triggers) {
     const static std::string prop_str("property:");
     for (std::size_t i = 0; i < args.size(); ++i) {
         if (args[i].empty()) {
@@ -108,13 +108,13 @@ Result<Success> ParseTriggers(const std::vector<std::string>& args, Subcontext* 
         }
     }
 
-    return Success();
+    return {};
 }
 
 }  // namespace
 
-Result<Success> ActionParser::ParseSection(std::vector<std::string>&& args,
-                                           const std::string& filename, int line) {
+Result<void> ActionParser::ParseSection(std::vector<std::string>&& args,
+                                        const std::string& filename, int line) {
     std::vector<std::string> triggers(args.begin() + 1, args.end());
     if (triggers.size() < 1) {
         return Error() << "Actions must have a trigger";
@@ -142,19 +142,19 @@ Result<Success> ActionParser::ParseSection(std::vector<std::string>&& args,
                                            property_triggers);
 
     action_ = std::move(action);
-    return Success();
+    return {};
 }
 
-Result<Success> ActionParser::ParseLineSection(std::vector<std::string>&& args, int line) {
-    return action_ ? action_->AddCommand(std::move(args), line) : Success();
+Result<void> ActionParser::ParseLineSection(std::vector<std::string>&& args, int line) {
+    return action_ ? action_->AddCommand(std::move(args), line) : Result<void>{};
 }
 
-Result<Success> ActionParser::EndSection() {
+Result<void> ActionParser::EndSection() {
     if (action_ && action_->NumCommands() > 0) {
         action_manager_->AddAction(std::move(action_));
     }
 
-    return Success();
+    return {};
 }
 
 }  // namespace init

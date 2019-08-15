@@ -469,7 +469,7 @@ class ScopedLogSeverity {
 }  // namespace base
 }  // namespace android
 
-namespace std {
+namespace std {  // NOLINT(cert-dcl58-cpp)
 
 // Emit a warning of ostream<< with std::string*. The intention was most likely to print *string.
 //

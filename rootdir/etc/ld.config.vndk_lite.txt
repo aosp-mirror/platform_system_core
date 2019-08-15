@@ -7,6 +7,7 @@
 # absolute path of an executable is selected.
 dir.system = /system/bin/
 dir.system = /system/xbin/
+dir.system = /%SYSTEM_EXT%/bin/
 dir.system = /%PRODUCT%/bin/
 
 dir.vendor = /odm/bin/
@@ -34,7 +35,7 @@ dir.postinstall = /postinstall
 dir.system = /data
 
 [system]
-additional.namespaces = runtime,conscrypt,media,resolv,sphal,vndk,rs
+additional.namespaces = runtime,conscrypt,media,neuralnetworks,resolv,sphal,vndk,rs
 
 ###############################################################################
 # "default" namespace
@@ -48,21 +49,21 @@ namespace.default.isolated = false
 namespace.default.visible = true
 
 namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths += /%SYSTEM_EXT%/${LIB}
+namespace.default.search.paths += /%PRODUCT%/${LIB}
 namespace.default.search.paths += /odm/${LIB}
 namespace.default.search.paths += /vendor/${LIB}
-namespace.default.search.paths += /%PRODUCT%/${LIB}
-namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
 
 namespace.default.asan.search.paths  = /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
+namespace.default.asan.search.paths += /data/asan/%SYSTEM_EXT%/${LIB}
+namespace.default.asan.search.paths +=           /%SYSTEM_EXT%/${LIB}
+namespace.default.asan.search.paths += /data/asan/%PRODUCT%/${LIB}
+namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
 namespace.default.asan.search.paths += /data/asan/odm/${LIB}
 namespace.default.asan.search.paths +=           /odm/${LIB}
 namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
-namespace.default.asan.search.paths += /data/asan/%PRODUCT%/${LIB}
-namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
-namespace.default.asan.search.paths += /data/asan/%PRODUCT_SERVICES%/${LIB}
-namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 
 # Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
 # If a shared library or an executable requests a shared library that
@@ -71,11 +72,11 @@ namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 # shared library cannot be loaded from the runtime namespace either, the
 # dynamic linker tries to load the shared library from the resolv namespace.
 # Finally, if all attempts fail, the dynamic linker returns an error.
-namespace.default.links = runtime,resolv
+namespace.default.links = runtime,resolv,neuralnetworks
 namespace.default.link.runtime.shared_libs  = libandroidicu.so
 namespace.default.link.runtime.shared_libs += libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libdexfiled_external.so
-# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+# TODO(b/120786417 or b/134659294): libicuuc.so and libicui18n.so are kept for app compat.
 namespace.default.link.runtime.shared_libs += libicui18n.so
 namespace.default.link.runtime.shared_libs += libicuuc.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
@@ -89,6 +90,9 @@ namespace.default.link.runtime.shared_libs += libpac.so
 # in the resolv namespace. Don't allow any other libraries from the resolv namespace
 # to be loaded in the default namespace.
 namespace.default.link.resolv.shared_libs = libnetd_resolv.so
+
+# LLNDK library moved into apex
+namespace.default.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
 # "runtime" APEX namespace
@@ -123,11 +127,14 @@ namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 
 namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
-namespace.media.links = default
+namespace.media.links = default,neuralnetworks
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.media.link.default.shared_libs += libbinder_ndk.so
 namespace.media.link.default.shared_libs += libmediametrics.so
 namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+# LLNDK library moved into apex
+namespace.media.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
 # "conscrypt" APEX namespace
@@ -206,7 +213,7 @@ namespace.sphal.asan.permitted.paths +=           /vendor/${LIB}
 # libs listed here can be used. Order is important here as the namespaces are
 # tried in this order. rs should be before vndk because both are capable
 # of loading libRS_internal.so
-namespace.sphal.links = rs,default,vndk
+namespace.sphal.links = rs,default,vndk,neuralnetworks
 
 # Renderscript gets separate namespace
 namespace.sphal.link.rs.shared_libs = libRS_internal.so
@@ -215,6 +222,9 @@ namespace.sphal.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.sphal.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.sphal.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
+
+# LLNDK library moved into apex
+namespace.sphal.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
 # "rs" namespace
@@ -255,7 +265,7 @@ namespace.rs.asan.permitted.paths += /data/asan/vendor/${LIB}
 namespace.rs.asan.permitted.paths +=           /vendor/${LIB}
 namespace.rs.asan.permitted.paths += /data
 
-namespace.rs.links = default,vndk
+namespace.rs.links = default,vndk,neuralnetworks
 
 namespace.rs.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.rs.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
@@ -264,6 +274,9 @@ namespace.rs.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 namespace.rs.link.default.shared_libs += %PRIVATE_LLNDK_LIBRARIES%
 
 namespace.rs.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
+
+# LLNDK library moved into apex
+namespace.rs.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
 # "vndk" namespace
@@ -309,10 +322,31 @@ namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp%VNDK_VER
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
-namespace.vndk.links = default
+namespace.vndk.links = default,neuralnetworks
 
 namespace.vndk.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+namespace.vndk.link.neuralnetworks.shared_libs = libneuralnetworks.so
+
+###############################################################################
+# "neuralnetworks" APEX namespace
+#
+# This namespace is for libraries within the NNAPI APEX.
+###############################################################################
+namespace.neuralnetworks.isolated = true
+namespace.neuralnetworks.visible = true
+
+namespace.neuralnetworks.search.paths = /apex/com.android.neuralnetworks/${LIB}
+namespace.neuralnetworks.asan.search.paths = /apex/com.android.neuralnetworks/${LIB}
+namespace.neuralnetworks.links = default
+namespace.neuralnetworks.link.default.shared_libs  = libc.so
+namespace.neuralnetworks.link.default.shared_libs += libcgrouprc.so
+namespace.neuralnetworks.link.default.shared_libs += libdl.so
+namespace.neuralnetworks.link.default.shared_libs += liblog.so
+namespace.neuralnetworks.link.default.shared_libs += libm.so
+namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
+namespace.neuralnetworks.link.default.shared_libs += libsync.so
+namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
 
 
 ###############################################################################
@@ -322,7 +356,7 @@ namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # (LL-NDK only) access.
 ###############################################################################
 [vendor]
-additional.namespaces = runtime
+additional.namespaces = runtime,neuralnetworks
 
 namespace.default.isolated = false
 
@@ -336,8 +370,9 @@ namespace.default.search.paths += /vendor/${LIB}/vndk-sp
 # Access to system libraries is allowed
 namespace.default.search.paths += /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.search.paths += /system/${LIB}
+namespace.default.search.paths += /%SYSTEM_EXT%/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
-namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
+# Put /system/lib/vndk at the last search order in vndk_lite for GSI
 namespace.default.search.paths += /system/${LIB}/vndk%VNDK_VER%
 
 namespace.default.asan.search.paths  = /data/asan/odm/${LIB}
@@ -356,17 +391,17 @@ namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk-sp%VNDK_VER
 namespace.default.asan.search.paths +=           /system/${LIB}/vndk-sp%VNDK_VER%
 namespace.default.asan.search.paths += /data/asan/system/${LIB}
 namespace.default.asan.search.paths +=           /system/${LIB}
-namespace.default.asan.search.paths += /data/asan/product/${LIB}
+namespace.default.asan.search.paths += /data/asan/%SYSTEM_EXT%/${LIB}
+namespace.default.asan.search.paths +=           /%SYSTEM_EXT%/${LIB}
+namespace.default.asan.search.paths += /data/asan/%PRODUCT%/${LIB}
 namespace.default.asan.search.paths +=           /%PRODUCT%/${LIB}
-namespace.default.asan.search.paths += /data/asan/product_services/${LIB}
-namespace.default.asan.search.paths +=           /%PRODUCT_SERVICES%/${LIB}
 namespace.default.asan.search.paths += /data/asan/system/${LIB}/vndk%VNDK_VER%
 namespace.default.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 
-namespace.default.links = runtime
+namespace.default.links = runtime,neuralnetworks
 namespace.default.link.runtime.shared_libs  = libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libdexfiled_external.so
-# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+# TODO(b/120786417 or b/134659294): libicuuc.so and libicui18n.so are kept for app compat.
 namespace.default.link.runtime.shared_libs += libicui18n.so
 namespace.default.link.runtime.shared_libs += libicuuc.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
@@ -374,6 +409,9 @@ namespace.default.link.runtime.shared_libs += libnativehelper.so
 namespace.default.link.runtime.shared_libs += libnativeloader.so
 # Workaround for b/124772622
 namespace.default.link.runtime.shared_libs += libandroidicu.so
+
+# LLNDK library moved into apex
+namespace.default.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
 # "runtime" APEX namespace
@@ -391,13 +429,34 @@ namespace.runtime.links = default
 namespace.runtime.link.default.allow_all_shared_libs = true
 
 ###############################################################################
+# "neuralnetworks" APEX namespace
+#
+# This namespace is for libraries within the NNAPI APEX.
+###############################################################################
+namespace.neuralnetworks.isolated = true
+namespace.neuralnetworks.visible = true
+
+namespace.neuralnetworks.search.paths = /apex/com.android.neuralnetworks/${LIB}
+namespace.neuralnetworks.asan.search.paths = /apex/com.android.neuralnetworks/${LIB}
+namespace.neuralnetworks.links = default
+namespace.neuralnetworks.link.default.shared_libs  = libc.so
+namespace.neuralnetworks.link.default.shared_libs += libcgrouprc.so
+namespace.neuralnetworks.link.default.shared_libs += libdl.so
+namespace.neuralnetworks.link.default.shared_libs += liblog.so
+namespace.neuralnetworks.link.default.shared_libs += libm.so
+namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
+namespace.neuralnetworks.link.default.shared_libs += libsync.so
+namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
+
+
+###############################################################################
 # Namespace config for native tests that need access to both system and vendor
 # libraries. This replicates the default linker config (done by
 # init_default_namespace_no_config in bionic/linker/linker.cpp), except that it
 # includes the requisite namespace setup for APEXes.
 ###############################################################################
 [unrestricted]
-additional.namespaces = runtime,media,conscrypt,resolv
+additional.namespaces = runtime,media,conscrypt,resolv,neuralnetworks
 
 # Visible to allow links to be created at runtime, e.g. through
 # android_link_namespaces in libnativeloader.
@@ -415,11 +474,11 @@ namespace.default.asan.search.paths += /data/asan/vendor/${LIB}
 namespace.default.asan.search.paths +=           /vendor/${LIB}
 
 # Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
-namespace.default.links = runtime,resolv
+namespace.default.links = runtime,resolv,neuralnetworks
 namespace.default.link.runtime.shared_libs  = libandroidicu.so
 namespace.default.link.runtime.shared_libs += libdexfile_external.so
 namespace.default.link.runtime.shared_libs += libdexfiled_external.so
-# libicuuc.so and libicui18n.so are kept for app compat reason. http://b/130788466
+# TODO(b/120786417 or b/134659294): libicuuc.so and libicui18n.so are kept for app compat.
 namespace.default.link.runtime.shared_libs += libicui18n.so
 namespace.default.link.runtime.shared_libs += libicuuc.so
 namespace.default.link.runtime.shared_libs += libnativebridge.so
@@ -428,8 +487,12 @@ namespace.default.link.runtime.shared_libs += libnativeloader.so
 
 # TODO(b/122876336): Remove libpac.so once it's migrated to Webview
 namespace.default.link.runtime.shared_libs += libpac.so
+namespace.default.link.runtime.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.default.link.resolv.shared_libs = libnetd_resolv.so
+
+# LLNDK library moved into apex
+namespace.default.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
 # "runtime" APEX namespace
@@ -447,7 +510,6 @@ namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
 namespace.runtime.links = default
 # TODO(b/130340935): Use a dynamically created linker namespace similar to
 # classloader-namespace for oat files, and tighten this up.
-namespace.runtime.link.default.allow_all_shared_libs = true
 
 ###############################################################################
 # "media" APEX namespace
@@ -462,11 +524,14 @@ namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 
 namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
-namespace.media.links = default
+namespace.media.links = default,neuralnetworks
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.media.link.default.shared_libs += libbinder_ndk.so
 namespace.media.link.default.shared_libs += libmediametrics.so
 namespace.media.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+# LLNDK library moved into apex
+namespace.media.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
 # "conscrypt" APEX namespace
@@ -503,6 +568,27 @@ namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so
 
 ###############################################################################
+# "neuralnetworks" APEX namespace
+#
+# This namespace is for libraries within the NNAPI APEX.
+###############################################################################
+namespace.neuralnetworks.isolated = true
+namespace.neuralnetworks.visible = true
+
+namespace.neuralnetworks.search.paths = /apex/com.android.neuralnetworks/${LIB}
+namespace.neuralnetworks.asan.search.paths = /apex/com.android.neuralnetworks/${LIB}
+namespace.neuralnetworks.links = default
+namespace.neuralnetworks.link.default.shared_libs  = libc.so
+namespace.neuralnetworks.link.default.shared_libs += libcgrouprc.so
+namespace.neuralnetworks.link.default.shared_libs += libdl.so
+namespace.neuralnetworks.link.default.shared_libs += liblog.so
+namespace.neuralnetworks.link.default.shared_libs += libm.so
+namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
+namespace.neuralnetworks.link.default.shared_libs += libsync.so
+namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
+
+
+###############################################################################
 # Namespace config for binaries under /postinstall.
 # Only default namespace is defined and default has no directories
 # other than /system/lib in the search paths. This is because linker calls
@@ -513,5 +599,5 @@ namespace.resolv.link.default.shared_libs += libbinder_ndk.so
 [postinstall]
 namespace.default.isolated = false
 namespace.default.search.paths  = /system/${LIB}
+namespace.default.search.paths += /%SYSTEM_EXT%/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
-namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}

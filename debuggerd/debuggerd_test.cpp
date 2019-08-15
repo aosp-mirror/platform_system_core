@@ -243,9 +243,10 @@ void CrasherTest::FinishCrasher() {
 
 void CrasherTest::AssertDeath(int signo) {
   int status;
-  pid_t pid = TIMEOUT(5, waitpid(crasher_pid, &status, 0));
+  pid_t pid = TIMEOUT(10, waitpid(crasher_pid, &status, 0));
   if (pid != crasher_pid) {
-    printf("failed to wait for crasher (pid %d)\n", crasher_pid);
+    printf("failed to wait for crasher (expected pid %d, return value %d): %s\n", crasher_pid, pid,
+           strerror(errno));
     sleep(100);
     FAIL() << "failed to wait for crasher: " << strerror(errno);
   }
@@ -1097,4 +1098,31 @@ TEST(tombstoned, interceptless_backtrace) {
   // We can't be sure that nothing's crash looping in the background.
   // This should be good enough, though...
   ASSERT_LT(diff, 10) << "too many new tombstones; is something crashing in the background?";
+}
+
+static __attribute__((__noinline__)) void overflow_stack(void* p) {
+  void* buf[1];
+  buf[0] = p;
+  static volatile void* global = buf;
+  if (global) {
+    global = buf;
+    overflow_stack(&buf);
+  }
+}
+
+TEST_F(CrasherTest, stack_overflow) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() { overflow_stack(nullptr); });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(Cause: stack pointer[^\n]*stack overflow.\n)");
 }

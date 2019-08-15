@@ -44,5 +44,8 @@ TEST(mapped_file, zero_length_mapping) {
   ASSERT_TRUE(tf.fd != -1);
 
   auto m = android::base::MappedFile::FromFd(tf.fd, 4096, 0, PROT_READ);
-  ASSERT_EQ(0u, m->size());
+  ASSERT_NE(nullptr, m);
+  EXPECT_TRUE((bool)*m);
+  EXPECT_EQ(0u, m->size());
+  EXPECT_NE(nullptr, m->data());
 }

@@ -181,7 +181,7 @@ public final class DeployAgent {
     private static void extractMetaData(String packageName) throws IOException {
         File apkFile = getFileFromPackageName(packageName);
         APKMetaData apkMetaData = PatchUtils.getAPKMetaData(apkFile);
-        apkMetaData.writeDelimitedTo(System.out);
+        apkMetaData.writeTo(System.out);
     }
 
     private static int createInstallSession(String[] args) throws IOException {
@@ -223,7 +223,6 @@ public final class DeployAgent {
         }
 
         int writeExitCode = writePatchedDataToSession(new RandomAccessFile(deviceFile, "r"), deltaStream, sessionId);
-
         if (writeExitCode == 0) {
             return commitInstallSession(sessionId);
         } else {
@@ -285,7 +284,6 @@ public final class DeployAgent {
             if (oldDataLen > 0) {
                 PatchUtils.pipe(oldData, outputStream, buffer, (int) oldDataLen);
             }
-
             newDataBytesWritten += copyLen + oldDataLen;
         }
 

@@ -952,7 +952,7 @@ static inline uint32_t get4LE(const char* src) {
 void __android_log_btwrite_multiple__helper(int count) {
 #ifdef __ANDROID__
     log_time ts(CLOCK_MONOTONIC);
-
+    usleep(100);
     log_time ts1(CLOCK_MONOTONIC);
 
     // We fork to create a unique pid for the submitted log messages

@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-#include <ctype.h>
 #include <limits.h>
-#include <stdio.h>
 #include <sys/cdefs.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
@@ -32,9 +30,8 @@
 #include "LogListener.h"
 #include "LogUtils.h"
 
-LogListener::LogListener(LogBufferInterface* buf, LogReader* reader)
-    : SocketListener(getLogSocket(), false), logbuf(buf), reader(reader) {
-}
+LogListener::LogListener(LogBuffer* buf, LogReader* reader)
+    : SocketListener(getLogSocket(), false), logbuf(buf), reader(reader) {}
 
 bool LogListener::onDataAvailable(SocketClient* cli) {
     static bool name_set;
@@ -78,11 +75,8 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
         cmsg = CMSG_NXTHDR(&hdr, cmsg);
     }
 
-    struct ucred fake_cred;
     if (cred == nullptr) {
-        cred = &fake_cred;
-        cred->pid = 0;
-        cred->uid = DEFAULT_OVERFLOWUID;
+        return false;
     }
 
     if (cred->uid == AID_LOGD) {
@@ -106,40 +100,16 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
         return false;
     }
 
-    // Check credential validity, acquire corrected details if not supplied.
-    if (cred->pid == 0) {
-        cred->pid = logbuf ? logbuf->tidToPid(header->tid)
-                           : android::tidToPid(header->tid);
-        if (cred->pid == getpid()) {
-            // We expect that /proc/<tid>/ is accessible to self even without
-            // readproc group, so that we will always drop messages that come
-            // from any of our logd threads and their library calls.
-            return false;  // ignore self
-        }
-    }
-    if (cred->uid == DEFAULT_OVERFLOWUID) {
-        uid_t uid =
-            logbuf ? logbuf->pidToUid(cred->pid) : android::pidToUid(cred->pid);
-        if (uid == AID_LOGD) {
-            uid = logbuf ? logbuf->pidToUid(header->tid)
-                         : android::pidToUid(cred->pid);
-        }
-        if (uid != AID_LOGD) cred->uid = uid;
-    }
-
     char* msg = ((char*)buffer) + sizeof(android_log_header_t);
     n -= sizeof(android_log_header_t);
 
     // NB: hdr.msg_flags & MSG_TRUNC is not tested, silently passing a
     // truncated message to the logs.
 
-    if (logbuf != nullptr) {
-        int res = logbuf->log(
-            logId, header->realtime, cred->uid, cred->pid, header->tid, msg,
-            ((size_t)n <= UINT16_MAX) ? (uint16_t)n : UINT16_MAX);
-        if (res > 0 && reader != nullptr) {
-            reader->notifyNewLog(static_cast<log_mask_t>(1 << logId));
-        }
+    int res = logbuf->log(logId, header->realtime, cred->uid, cred->pid, header->tid, msg,
+                          ((size_t)n <= UINT16_MAX) ? (uint16_t)n : UINT16_MAX);
+    if (res > 0) {
+        reader->notifyNewLog(static_cast<log_mask_t>(1 << logId));
     }
 
     return true;

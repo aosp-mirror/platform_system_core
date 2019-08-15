@@ -27,11 +27,6 @@ uint32_t ACgroupController_getVersion(const ACgroupController* controller) {
     return controller->version();
 }
 
-uint32_t ACgroupController_getFlags(const ACgroupController* controller) {
-    CHECK(controller != nullptr);
-    return controller->flags();
-}
-
 const char* ACgroupController_getName(const ACgroupController* controller) {
     CHECK(controller != nullptr);
     return controller->name();

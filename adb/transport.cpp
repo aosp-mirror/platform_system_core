@@ -49,7 +49,7 @@
 #include "adb_io.h"
 #include "adb_trace.h"
 #include "adb_utils.h"
-#include "fdevent.h"
+#include "fdevent/fdevent.h"
 #include "sysdeps/chrono.h"
 
 using android::base::ScopedLockAssertion;
@@ -73,6 +73,7 @@ const char* const kFeatureFixedPushMkdir = "fixed_push_mkdir";
 const char* const kFeatureAbb = "abb";
 const char* const kFeatureFixedPushSymlinkTimestamp = "fixed_push_symlink_timestamp";
 const char* const kFeatureAbbExec = "abb_exec";
+const char* const kFeatureRemountShell = "remount_shell";
 
 namespace {
 
@@ -542,9 +543,7 @@ static void device_tracker_ready(asocket* socket) {
     // for the first time, even if no update occurred.
     if (tracker->update_needed) {
         tracker->update_needed = false;
-
-        std::string transports = list_transports(tracker->long_output);
-        device_tracker_send(tracker, transports);
+        device_tracker_send(tracker, list_transports(tracker->long_output));
     }
 }
 
@@ -587,13 +586,11 @@ void update_transports() {
     update_transport_status();
 
     // Notify `adb track-devices` clients.
-    std::string transports = list_transports(false);
-
     device_tracker* tracker = device_tracker_list;
     while (tracker != nullptr) {
         device_tracker* next = tracker->next;
         // This may destroy the tracker if the connection is closed.
-        device_tracker_send(tracker, transports);
+        device_tracker_send(tracker, list_transports(tracker->long_output));
         tracker = next;
     }
 }
@@ -1053,6 +1050,7 @@ const FeatureSet& supported_features() {
             kFeatureAbb,
             kFeatureFixedPushSymlinkTimestamp,
             kFeatureAbbExec,
+            kFeatureRemountShell,
             // Increment ADB_SERVER_VERSION when adding a feature that adbd needs
             // to know about. Otherwise, the client can be stuck running an old
             // version of the server even after upgrading their copy of adb.

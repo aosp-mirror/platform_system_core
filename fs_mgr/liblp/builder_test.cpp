@@ -19,28 +19,40 @@
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
 
+#include "mock_property_fetcher.h"
 #include "utility.h"
 
 using namespace std;
 using namespace android::fs_mgr;
+using ::android::fs_mgr::MockPropertyFetcher;
+using ::testing::_;
+using ::testing::AnyNumber;
 using ::testing::ElementsAre;
+using ::testing::NiceMock;
+using ::testing::Return;
+
+static void ResetPropertyFetcher() {
+    IPropertyFetcher::OverrideForTesting(std::make_unique<NiceMock<MockPropertyFetcher>>());
+}
+
+MockPropertyFetcher* GetMockedInstance() {
+    return static_cast<MockPropertyFetcher*>(IPropertyFetcher::GetInstance());
+}
 
 class Environment : public ::testing::Environment {
   public:
-    void SetUp() override { MetadataBuilder::OverrideABForTesting(false); }
+    void SetUp() override { ResetPropertyFetcher(); }
 };
 
 int main(int argc, char** argv) {
-    std::unique_ptr<Environment> env(new Environment);
-    ::testing::AddGlobalTestEnvironment(env.get());
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
 
 class BuilderTest : public ::testing::Test {
   public:
-    void SetUp() override { MetadataBuilder::OverrideABForTesting(false); }
-    void TearDown() override { MetadataBuilder::OverrideABForTesting(false); }
+    void SetUp() override { ResetPropertyFetcher(); }
+    void TearDown() override { ResetPropertyFetcher(); }
 };
 
 TEST_F(BuilderTest, BuildBasic) {
@@ -105,6 +117,13 @@ TEST_F(BuilderTest, ResizePartition) {
     ASSERT_NE(extent, nullptr);
     EXPECT_EQ(extent->num_sectors(), 32768 / LP_SECTOR_SIZE);
     EXPECT_EQ(extent->physical_sector(), 32);
+
+    auto exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    ASSERT_EQ(FindPartition(*exported.get(), "not found"), nullptr);
+    auto entry = FindPartition(*exported.get(), "system");
+    ASSERT_NE(entry, nullptr);
+    ASSERT_EQ(GetPartitionSize(*exported.get(), *entry), 32768);
 
     // Test shrinking to 0.
     builder->ResizePartition(system, 0);
@@ -765,21 +784,14 @@ TEST_F(BuilderTest, ImportPartitionsFail) {
     EXPECT_FALSE(builder->ImportPartitions(*exported.get(), {"system"}));
 }
 
-TEST_F(BuilderTest, UnsuffixedPartitions) {
-    MetadataBuilder::OverrideABForTesting(true);
-    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
-    ASSERT_NE(builder, nullptr);
-
-    ASSERT_EQ(builder->AddPartition("system", 0), nullptr);
-    ASSERT_NE(builder->AddPartition("system_a", 0), nullptr);
-}
-
 TEST_F(BuilderTest, ABExtents) {
     BlockDeviceInfo device_info("super", 10_GiB, 768 * 1024, 0, 4096);
 
     // A and B slots should be allocated from separate halves of the partition,
     // to mitigate allocating too many extents. (b/120433288)
-    MetadataBuilder::OverrideABForTesting(true);
+    ON_CALL(*GetMockedInstance(), GetProperty("ro.boot.slot_suffix", _))
+            .WillByDefault(Return("_a"));
+
     auto builder = MetadataBuilder::New(device_info, 65536, 2);
     ASSERT_NE(builder, nullptr);
     Partition* system_a = builder->AddPartition("system_a", 0);

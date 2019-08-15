@@ -25,6 +25,7 @@ cc_test {
         "libfstab",
     ],
     srcs: [
+        "file_wait_test.cpp",
         "fs_mgr_test.cpp",
     ],
 

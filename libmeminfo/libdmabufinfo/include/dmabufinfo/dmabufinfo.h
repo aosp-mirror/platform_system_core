@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <set>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -33,6 +34,7 @@ struct DmaBuffer {
         : inode_(inode), size_(size), count_(count), exporter_(exporter), name_(name) {
         total_refs_ = 0;
     }
+    DmaBuffer() = default;
     ~DmaBuffer() = default;
 
     // Adds one file descriptor reference for the given pid
@@ -54,11 +56,13 @@ struct DmaBuffer {
     ino_t inode() const { return inode_; }
     uint64_t total_refs() const { return total_refs_; }
     uint64_t count() const { return count_; };
+    const std::set<pid_t>& pids() const { return pids_; }
     const std::string& name() const { return name_; }
     const std::string& exporter() const { return exporter_; }
     void SetName(const std::string& name) { name_ = name; }
     void SetExporter(const std::string& exporter) { exporter_ = exporter; }
     void SetCount(uint64_t count) { count_ = count; }
+    uint64_t Pss() const { return size_ / pids_.size(); }
 
     bool operator==(const DmaBuffer& rhs) {
         return (inode_ == rhs.inode()) && (size_ == rhs.size()) && (name_ == rhs.name()) &&
@@ -70,6 +74,7 @@ struct DmaBuffer {
     uint64_t size_;
     uint64_t count_;
     uint64_t total_refs_;
+    std::set<pid_t> pids_;
     std::string exporter_;
     std::string name_;
     std::unordered_map<pid_t, int> fdrefs_;
@@ -80,6 +85,7 @@ struct DmaBuffer {
         auto [it, inserted] = map->insert(std::make_pair(pid, 1));
         if (!inserted)
             it->second++;
+        pids_.insert(pid);
     }
 };
 

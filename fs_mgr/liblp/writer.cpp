@@ -17,6 +17,7 @@
 #include "writer.h"
 
 #include <inttypes.h>
+#include <string.h>
 #include <unistd.h>
 
 #include <string>

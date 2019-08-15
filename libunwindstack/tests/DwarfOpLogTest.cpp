@@ -48,7 +48,7 @@ class DwarfOpLogTest : public ::testing::Test {
   std::unique_ptr<DwarfMemory> mem_;
   std::unique_ptr<DwarfOp<TypeParam>> op_;
 };
-TYPED_TEST_CASE_P(DwarfOpLogTest);
+TYPED_TEST_SUITE_P(DwarfOpLogTest);
 
 TYPED_TEST_P(DwarfOpLogTest, multiple_ops) {
   // Multi operation opcodes.
@@ -65,9 +65,9 @@ TYPED_TEST_P(DwarfOpLogTest, multiple_ops) {
   ASSERT_EQ(expected, lines);
 }
 
-REGISTER_TYPED_TEST_CASE_P(DwarfOpLogTest, multiple_ops);
+REGISTER_TYPED_TEST_SUITE_P(DwarfOpLogTest, multiple_ops);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfOpLogTestTypes;
-INSTANTIATE_TYPED_TEST_CASE_P(, DwarfOpLogTest, DwarfOpLogTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfOpLogTest, DwarfOpLogTestTypes);
 
 }  // namespace unwindstack

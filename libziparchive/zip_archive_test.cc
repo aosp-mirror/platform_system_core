@@ -107,6 +107,26 @@ TEST(ziparchive, OpenDoNotAssumeFdOwnership) {
   close(fd);
 }
 
+TEST(ziparchive, Iteration_std_string_view) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  void* iteration_cookie;
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie));
+
+  ZipEntry data;
+  std::vector<std::string_view> names;
+  std::string_view name;
+  while (Next(iteration_cookie, &data, &name) == 0) names.push_back(name);
+
+  // Assert that the names are as expected.
+  std::vector<std::string_view> expected_names{"a.txt", "b.txt", "b/", "b/c.txt", "b/d.txt"};
+  std::sort(names.begin(), names.end());
+  ASSERT_EQ(expected_names, names);
+
+  CloseArchive(handle);
+}
+
 static void AssertIterationOrder(const std::string_view prefix, const std::string_view suffix,
                                  const std::vector<std::string>& expected_names_sorted) {
   ZipArchiveHandle handle;

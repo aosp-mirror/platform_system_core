@@ -19,7 +19,7 @@
 #include <gtest/gtest.h>
 
 #include "adb.h"
-#include "fdevent_test.h"
+#include "fdevent/fdevent_test.h"
 
 struct TransportTest : public FdeventTest {};
 

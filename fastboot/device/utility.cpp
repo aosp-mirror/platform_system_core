@@ -61,7 +61,7 @@ bool OpenLogicalPartition(FastbootDevice* device, const std::string& partition_n
         LOG(ERROR) << "Could not map partition: " << partition_name;
         return false;
     }
-    auto closer = [partition_name]() -> void { DestroyLogicalPartition(partition_name, 5s); };
+    auto closer = [partition_name]() -> void { DestroyLogicalPartition(partition_name); };
     *handle = PartitionHandle(dm_path, std::move(closer));
     return true;
 }

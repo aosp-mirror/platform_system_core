@@ -18,7 +18,8 @@
 
 #include "adb.h"
 #include "adb_auth.h"
-#include "fdevent.h"
+#include "adb_io.h"
+#include "fdevent/fdevent.h"
 #include "sysdeps.h"
 #include "transport.h"
 

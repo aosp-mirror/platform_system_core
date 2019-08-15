@@ -43,8 +43,8 @@ void TestRlimitFailure(std::vector<std::string> input, const std::string& expect
     auto result = ParseRlimit(input);
 
     ASSERT_FALSE(result) << "input: " << input[1];
-    EXPECT_EQ(expected_result, result.error().as_string);
-    EXPECT_EQ(0, result.error().as_errno);
+    EXPECT_EQ(expected_result, result.error().message());
+    EXPECT_EQ(0, result.error().code());
 }
 
 TEST(rlimit, RlimitSuccess) {

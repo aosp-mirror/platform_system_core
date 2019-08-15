@@ -152,6 +152,8 @@ int ion_alloc_fd(int fd, size_t len, size_t align, unsigned int heap_mask, unsig
     ion_user_handle_t handle;
     int ret;
 
+    if (!handle_fd) return -EINVAL;
+
     if (!ion_is_legacy(fd)) {
         struct ion_new_allocation_data data = {
             .len = len,
@@ -201,6 +203,7 @@ int ion_query_heap_cnt(int fd, int* cnt) {
     int ret;
     struct ion_heap_query query;
 
+    if (!cnt) return -EINVAL;
     memset(&query, 0, sizeof(query));
 
     ret = ion_ioctl(fd, ION_IOC_HEAP_QUERY, &query);

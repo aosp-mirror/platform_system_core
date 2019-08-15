@@ -46,7 +46,7 @@ namespace android {
 namespace fs_mgr {
 namespace {
 
-const std::string kDefaultAndroidDtDir("/proc/device-tree/firmware/android");
+constexpr char kDefaultAndroidDtDir[] = "/proc/device-tree/firmware/android";
 
 struct FlagList {
     const char *name;
@@ -61,6 +61,7 @@ FlagList kMountFlagsList[] = {
         {"nodiratime", MS_NODIRATIME},
         {"ro", MS_RDONLY},
         {"rw", 0},
+        {"sync", MS_SYNCHRONOUS},
         {"remount", MS_REMOUNT},
         {"bind", MS_BIND},
         {"rec", MS_REC},
@@ -170,6 +171,18 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
                 fs_options.append(",");  // appends a comma if not the first
             }
             fs_options.append(flag);
+
+            if (entry->fs_type == "f2fs" && StartsWith(flag, "reserve_root=")) {
+                std::string arg;
+                if (auto equal_sign = flag.find('='); equal_sign != std::string::npos) {
+                    arg = flag.substr(equal_sign + 1);
+                }
+                if (!ParseInt(arg, &entry->reserved_size)) {
+                    LWARNING << "Warning: reserve_root= flag malformed: " << arg;
+                } else {
+                    entry->reserved_size <<= 12;
+                }
+            }
         }
     }
     entry->fs_options = std::move(fs_options);
@@ -691,10 +704,9 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
     return true;
 }
 
-// For GSI to skip mounting /product and /product_services, until there are
-// well-defined interfaces between them and /system. Otherwise, the GSI flashed
-// on /system might not be able to work with /product and /product_services.
-// When they're skipped here, /system/product and /system/product_services in
+// For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
+// between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
+// /product and /system_ext. When they're skipped here, /system/product and /system/system_ext in
 // GSI will be used.
 bool SkipMountingPartitions(Fstab* fstab) {
     constexpr const char kSkipMountConfig[] = "/system/etc/init/config/skip_mount.cfg";
@@ -714,6 +726,7 @@ bool SkipMountingPartitions(Fstab* fstab) {
                                  [&skip_mount_point](const auto& entry) {
                                      return entry.mount_point == skip_mount_point;
                                  });
+        if (it == fstab->end()) continue;
         fstab->erase(it, fstab->end());
         LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
     }

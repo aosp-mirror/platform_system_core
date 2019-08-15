@@ -18,6 +18,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/signal.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -56,7 +57,7 @@ static pid_t g_pid = -1;
 static VmaInfo g_total;
 static std::vector<VmaInfo> g_vmas;
 
-[[noreturn]] static void usage(int exit_status) {
+[[noreturn]] static void usage(const char* progname, int exit_status) {
     fprintf(stderr,
             "%s [-aqtv] [-f FILE] PID\n"
             "-a\taddresses (show virtual memory map)\n"
@@ -64,7 +65,7 @@ static std::vector<VmaInfo> g_vmas;
             "-t\tterse (show only items with private pages)\n"
             "-v\tverbose (don't coalesce maps with the same name)\n"
             "-f\tFILE (read from input from FILE instead of PID)\n",
-            getprogname());
+            progname);
 
     exit(exit_status);
 }
@@ -239,22 +240,22 @@ int main(int argc, char* argv[]) {
                 g_filename = optarg;
                 break;
             case 'h':
-                usage(EXIT_SUCCESS);
+                usage(argv[0], EXIT_SUCCESS);
             default:
-                usage(EXIT_FAILURE);
+                usage(argv[0], EXIT_FAILURE);
         }
     }
 
     if (g_filename.empty()) {
         if ((argc - 1) < optind) {
             fprintf(stderr, "Invalid arguments: Must provide <pid> at the end\n");
-            usage(EXIT_FAILURE);
+            usage(argv[0], EXIT_FAILURE);
         }
 
         g_pid = atoi(argv[optind]);
         if (g_pid <= 0) {
             fprintf(stderr, "Invalid process id %s\n", argv[optind]);
-            usage(EXIT_FAILURE);
+            usage(argv[0], EXIT_FAILURE);
         }
 
         g_filename = ::android::base::StringPrintf("/proc/%d/smaps", g_pid);

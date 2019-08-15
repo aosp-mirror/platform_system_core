@@ -32,6 +32,19 @@ on early-init
     # cgroup for system_server and surfaceflinger
     mkdir /dev/memcg/system 0550 system system
 
+    # set RLIMIT_NICE to allow priorities from 19 to -20
+    setrlimit nice 40 40
+
+    # Allow up to 32K FDs per process
+    setrlimit nofile 32768 32768
+
+    # Create directory to keep ld.config.txt
+    mkdir /dev/linkerconfig 0755
+
+    # Generate ld.config.txt for early executed processes
+    exec -- /system/bin/linkerconfig --target /dev/linkerconfig/ld.config.txt
+    chmod 444 /dev/linkerconfig/ld.config.txt
+
     start ueventd
 
     # Run apexd-bootstrap so that APEXes that provide critical libraries
@@ -108,6 +121,9 @@ on init
     mkdir /mnt/media_rw 0750 root media_rw
     mkdir /mnt/user 0755 root root
     mkdir /mnt/user/0 0755 root root
+    mkdir /mnt/user/0/self 0755 root root
+    mkdir /mnt/user/0/emulated 0755 root root
+    mkdir /mnt/user/0/emulated/0 0755 root root
     mkdir /mnt/expand 0771 system system
     mkdir /mnt/appfuse 0711 root root
 
@@ -267,12 +283,6 @@ on init
 
     export DOWNLOAD_CACHE /data/cache
 
-    # set RLIMIT_NICE to allow priorities from 19 to -20
-    setrlimit nice 40 40
-
-    # Allow up to 32K FDs per process
-    setrlimit nofile 32768 32768
-
     # This allows the ledtrig-transient properties to be created here so
     # that they can be chown'd to system:system later on boot
     write /sys/class/leds/vibrator/trigger "transient"
@@ -287,6 +297,11 @@ on init
     chown system system /sys/power/state
     chown system system /sys/power/wakeup_count
     chmod 0660 /sys/power/state
+
+    chown radio wakelock /sys/power/wake_lock
+    chown radio wakelock /sys/power/wake_unlock
+    chmod 0660 /sys/power/wake_lock
+    chmod 0660 /sys/power/wake_unlock
 
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
@@ -345,16 +360,16 @@ on late-init
     trigger early-boot
     trigger boot
 
-on post-fs
+on early-fs
+    # Once metadata has been mounted, we'll need vold to deal with userdata checkpointing
     start vold
+
+on post-fs
     exec - system system -- /system/bin/vdc checkpoint markBootAttempt
 
     # Once everything is setup, no need to modify /.
     # The bind+remount combination allows this to work in containers.
     mount rootfs rootfs / remount bind ro nodev
-    # Mount default storage into root namespace
-    mount none /mnt/runtime/default /storage bind rec
-    mount none none /storage slave rec
 
     # Make sure /sys/kernel/debug (if present) is labeled properly
     # Note that tracefs may be mounted under debug, so we need to cross filesystems
@@ -399,6 +414,8 @@ on post-fs
     mkdir /metadata/vold
     chmod 0700 /metadata/vold
     mkdir /metadata/password_slots 0771 root system
+    mkdir /metadata/ota 0700 root system
+    mkdir /metadata/ota/snapshots 0700 root system
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
@@ -409,6 +426,10 @@ on late-fs
 
     # HALs required before storage encryption can get unlocked (FBE/FDE)
     class_start early_hal
+
+    # Check and mark a successful boot, before mounting userdata with mount_all.
+    # No-op for non-A/B device.
+    exec_start update_verifier_nonencrypted
 
 on post-fs-data
     mark_post_data
@@ -442,6 +463,7 @@ on post-fs-data
     mkdir /data/apex 0750 root system
     mkdir /data/apex/active 0750 root system
     mkdir /data/apex/backup 0700 root system
+    mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
     mkdir /data/app-staging 0750 system system
     start apexd
@@ -491,7 +513,6 @@ on post-fs-data
     mkdir /data/misc/ethernet 0770 system system
     mkdir /data/misc/dhcp 0770 dhcp dhcp
     mkdir /data/misc/user 0771 root root
-    mkdir /data/misc/perfprofd 0775 root root
     # give system access to wpa_supplicant.conf for backup and restore
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
     mkdir /data/local 0751 root root
@@ -602,8 +623,9 @@ on post-fs-data
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
 
-    # Check any timezone data in /data is newer than the copy in the runtime module, delete if not.
-    exec - system system -- /system/bin/tzdatacheck /apex/com.android.runtime/etc/tz /data/misc/zoneinfo
+    # Check any timezone data in /data is newer than the copy in the time zone data
+    # module, delete if not.
+    exec - system system -- /system/bin/tzdatacheck /apex/com.android.tzdata/etc/tz /data/misc/zoneinfo
 
     # If there is no post-fs-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
@@ -620,25 +642,35 @@ on post-fs-data
     chown root system /dev/fscklogs/log
     chmod 0770 /dev/fscklogs/log
 
+# Switch between sdcardfs and FUSE depending on persist property
+# TODO: Move this to ro property before launch because FDE devices
+# interact with persistent properties differently during boot
+on zygote-start && property:persist.sys.fuse=true
+  # Mount default storage into root namespace
+  mount none /mnt/user/0 /storage bind rec
+  mount none none /storage slave rec
+on zygote-start && property:persist.sys.fuse=false
+  # Mount default storage into root namespace
+  mount none /mnt/runtime/default /storage bind rec
+  mount none none /storage slave rec
+on zygote-start && property:persist.sys.fuse=""
+  # Mount default storage into root namespace
+  mount none /mnt/runtime/default /storage bind rec
+  mount none none /storage slave rec
+
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
     start netd
     start zygote
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=unsupported
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
     start netd
     start zygote
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
     start netd
     start zygote
     start zygote_secondary
@@ -679,10 +711,6 @@ on boot
     chown radio system /sys/android_power/acquire_partial_wake_lock
     chown radio system /sys/android_power/release_wake_lock
     chown system system /sys/power/autosleep
-    chown radio wakelock /sys/power/wake_lock
-    chown radio wakelock /sys/power/wake_unlock
-    chmod 0660 /sys/power/wake_lock
-    chmod 0660 /sys/power/wake_unlock
 
     chown system system /sys/devices/system/cpu/cpufreq/interactive/timer_rate
     chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/timer_rate
@@ -765,8 +793,6 @@ on property:vold.decrypt=trigger_post_fs_data
     trigger zygote-start
 
 on property:vold.decrypt=trigger_restart_min_framework
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier
     class_start main
 
 on property:vold.decrypt=trigger_restart_framework

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_BUILTINS_H
-#define _INIT_BUILTINS_H
+#pragma once
 
 #include <functional>
 #include <map>
@@ -29,18 +28,18 @@
 namespace android {
 namespace init {
 
-using BuiltinFunction = std::function<Result<Success>(const BuiltinArguments&)>;
+using BuiltinFunction = std::function<Result<void>(const BuiltinArguments&)>;
 
-using KeywordFunctionMap = KeywordMap<std::pair<bool, BuiltinFunction>>;
-class BuiltinFunctionMap : public KeywordFunctionMap {
-  public:
-    BuiltinFunctionMap() {}
-
-  private:
-    const Map& map() const override;
+struct BuiltinFunctionMapValue {
+    bool run_in_subcontext;
+    BuiltinFunction function;
 };
+
+using BuiltinFunctionMap = KeywordMap<BuiltinFunctionMapValue>;
+
+const BuiltinFunctionMap& GetBuiltinFunctionMap();
+
+extern std::vector<std::string> late_import_paths;
 
 }  // namespace init
 }  // namespace android
-
-#endif

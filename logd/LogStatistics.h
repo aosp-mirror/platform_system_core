@@ -306,6 +306,10 @@ struct UidEntry : public EntryBaseDropped {
     std::string format(const LogStatistics& stat, log_id_t id) const;
 };
 
+namespace android {
+uid_t pidToUid(pid_t pid);
+}
+
 struct PidEntry : public EntryBaseDropped {
     const pid_t pid;
     uid_t uid;
@@ -382,13 +386,6 @@ struct TidEntry : public EntryBaseDropped {
         : EntryBaseDropped(),
           tid(tid),
           pid(pid),
-          uid(android::pidToUid(tid)),
-          name(android::tidToName(tid)) {
-    }
-    TidEntry(pid_t tid)
-        : EntryBaseDropped(),
-          tid(tid),
-          pid(android::tidToPid(tid)),
           uid(android::pidToUid(tid)),
           name(android::tidToName(tid)) {
     }
@@ -787,7 +784,6 @@ class LogStatistics {
     // helper (must be locked directly or implicitly by mLogElementsLock)
     const char* pidToName(pid_t pid) const;
     uid_t pidToUid(pid_t pid);
-    pid_t tidToPid(pid_t tid);
     const char* uidToName(uid_t uid) const;
 };
 

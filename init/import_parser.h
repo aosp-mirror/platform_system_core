@@ -28,9 +28,9 @@ namespace init {
 class ImportParser : public SectionParser {
   public:
     ImportParser(Parser* parser) : parser_(parser) {}
-    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                 int line) override;
-    Result<Success> ParseLineSection(std::vector<std::string>&&, int) override;
+    Result<void> ParseSection(std::vector<std::string>&& args, const std::string& filename,
+                              int line) override;
+    Result<void> ParseLineSection(std::vector<std::string>&&, int) override;
     void EndFile() override;
 
   private:

@@ -837,33 +837,10 @@ uid_t pidToUid(pid_t pid) {
     }
     return AID_LOGD;  // associate this with the logger
 }
-
-pid_t tidToPid(pid_t tid) {
-    char buffer[512];
-    snprintf(buffer, sizeof(buffer), "/proc/%u/status", tid);
-    FILE* fp = fopen(buffer, "r");
-    if (fp) {
-        while (fgets(buffer, sizeof(buffer), fp)) {
-            int pid = tid;
-            char space = 0;
-            if ((sscanf(buffer, "Tgid: %d%c", &pid, &space) == 2) &&
-                isspace(space)) {
-                fclose(fp);
-                return pid;
-            }
-        }
-        fclose(fp);
-    }
-    return tid;
-}
 }
 
 uid_t LogStatistics::pidToUid(pid_t pid) {
     return pidTable.add(pid)->second.getUid();
-}
-
-pid_t LogStatistics::tidToPid(pid_t tid) {
-    return tidTable.add(tid)->second.getPid();
 }
 
 // caller must free character string

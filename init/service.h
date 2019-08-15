@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_SERVICE_H
-#define _INIT_SERVICE_H
+#pragma once
 
 #include <signal.h>
-#include <sys/resource.h>
 #include <sys/types.h>
 
 #include <chrono>
@@ -33,9 +31,9 @@
 
 #include "action.h"
 #include "capabilities.h"
-#include "descriptors.h"
 #include "keyword_map.h"
 #include "parser.h"
+#include "service_utils.h"
 #include "subcontext.h"
 
 #define SVC_DISABLED 0x001        // do not autostart with class
@@ -63,24 +61,25 @@ namespace android {
 namespace init {
 
 class Service {
+    friend class ServiceParser;
+
   public:
     Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
             const std::vector<std::string>& args);
 
     Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
-            const std::vector<gid_t>& supp_gids, unsigned namespace_flags,
-            const std::string& seclabel, Subcontext* subcontext_for_restart_commands,
+            const std::vector<gid_t>& supp_gids, int namespace_flags, const std::string& seclabel,
+            Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args);
+
+    static Result<std::unique_ptr<Service>> MakeTemporaryOneshotService(
             const std::vector<std::string>& args);
 
-    static std::unique_ptr<Service> MakeTemporaryOneshotService(const std::vector<std::string>& args);
-
     bool IsRunning() { return (flags_ & SVC_RUNNING) != 0; }
-    Result<Success> ParseLine(std::vector<std::string>&& args);
-    Result<Success> ExecStart();
-    Result<Success> Start();
-    Result<Success> StartIfNotDisabled();
-    Result<Success> StartIfPostData();
-    Result<Success> Enable();
+    Result<void> ExecStart();
+    Result<void> Start();
+    Result<void> StartIfNotDisabled();
+    Result<void> StartIfPostData();
+    Result<void> Enable();
     void Reset();
     void ResetIfPostData();
     void Stop();
@@ -98,6 +97,7 @@ class Service {
     void AddReapCallback(std::function<void(const siginfo_t& siginfo)> callback) {
         reap_callbacks_.emplace_back(std::move(callback));
     }
+    size_t CheckAllCommands() const { return onrestart_.CheckAllCommands(); }
 
     static bool is_exec_service_running() { return is_exec_service_running_; }
 
@@ -107,16 +107,16 @@ class Service {
     pid_t pid() const { return pid_; }
     android::base::boot_clock::time_point time_started() const { return time_started_; }
     int crash_count() const { return crash_count_; }
-    uid_t uid() const { return uid_; }
-    gid_t gid() const { return gid_; }
-    unsigned namespace_flags() const { return namespace_flags_; }
-    const std::vector<gid_t>& supp_gids() const { return supp_gids_; }
+    uid_t uid() const { return proc_attr_.uid; }
+    gid_t gid() const { return proc_attr_.gid; }
+    int namespace_flags() const { return namespaces_.flags; }
+    const std::vector<gid_t>& supp_gids() const { return proc_attr_.supp_gids; }
     const std::string& seclabel() const { return seclabel_; }
     const std::vector<int>& keycodes() const { return keycodes_; }
-    IoSchedClass ioprio_class() const { return ioprio_class_; }
-    int ioprio_pri() const { return ioprio_pri_; }
+    IoSchedClass ioprio_class() const { return proc_attr_.ioprio_class; }
+    int ioprio_pri() const { return proc_attr_.ioprio_pri; }
     const std::set<std::string>& interfaces() const { return interfaces_; }
-    int priority() const { return priority_; }
+    int priority() const { return proc_attr_.priority; }
     int oom_score_adjust() const { return oom_score_adjust_; }
     bool is_override() const { return override_; }
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
@@ -129,62 +129,16 @@ class Service {
     bool is_post_data() const { return post_data_; }
 
   private:
-    using OptionParser = Result<Success> (Service::*)(std::vector<std::string>&& args);
-    class OptionParserMap;
-
-    Result<Success> SetUpMountNamespace() const;
-    Result<Success> SetUpPidNamespace() const;
-    Result<Success> EnterNamespaces() const;
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
-    void ZapStdio() const;
-    void OpenConsole() const;
     void KillProcessGroup(int signal);
-    void SetProcessAttributes();
-
-    Result<Success> ParseCapabilities(std::vector<std::string>&& args);
-    Result<Success> ParseClass(std::vector<std::string>&& args);
-    Result<Success> ParseConsole(std::vector<std::string>&& args);
-    Result<Success> ParseCritical(std::vector<std::string>&& args);
-    Result<Success> ParseDisabled(std::vector<std::string>&& args);
-    Result<Success> ParseEnterNamespace(std::vector<std::string>&& args);
-    Result<Success> ParseGroup(std::vector<std::string>&& args);
-    Result<Success> ParsePriority(std::vector<std::string>&& args);
-    Result<Success> ParseInterface(std::vector<std::string>&& args);
-    Result<Success> ParseIoprio(std::vector<std::string>&& args);
-    Result<Success> ParseKeycodes(std::vector<std::string>&& args);
-    Result<Success> ParseOneshot(std::vector<std::string>&& args);
-    Result<Success> ParseOnrestart(std::vector<std::string>&& args);
-    Result<Success> ParseOomScoreAdjust(std::vector<std::string>&& args);
-    Result<Success> ParseOverride(std::vector<std::string>&& args);
-    Result<Success> ParseMemcgLimitInBytes(std::vector<std::string>&& args);
-    Result<Success> ParseMemcgLimitPercent(std::vector<std::string>&& args);
-    Result<Success> ParseMemcgLimitProperty(std::vector<std::string>&& args);
-    Result<Success> ParseMemcgSoftLimitInBytes(std::vector<std::string>&& args);
-    Result<Success> ParseMemcgSwappiness(std::vector<std::string>&& args);
-    Result<Success> ParseNamespace(std::vector<std::string>&& args);
-    Result<Success> ParseProcessRlimit(std::vector<std::string>&& args);
-    Result<Success> ParseRestartPeriod(std::vector<std::string>&& args);
-    Result<Success> ParseSeclabel(std::vector<std::string>&& args);
-    Result<Success> ParseSetenv(std::vector<std::string>&& args);
-    Result<Success> ParseShutdown(std::vector<std::string>&& args);
-    Result<Success> ParseSigstop(std::vector<std::string>&& args);
-    Result<Success> ParseSocket(std::vector<std::string>&& args);
-    Result<Success> ParseTimeoutPeriod(std::vector<std::string>&& args);
-    Result<Success> ParseFile(std::vector<std::string>&& args);
-    Result<Success> ParseUser(std::vector<std::string>&& args);
-    Result<Success> ParseWritepid(std::vector<std::string>&& args);
-    Result<Success> ParseUpdatable(std::vector<std::string>&& args);
-
-    template <typename T>
-    Result<Success> AddDescriptor(std::vector<std::string>&& args);
+    void SetProcessAttributesAndCaps();
 
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
 
     std::string name_;
     std::set<std::string> classnames_;
-    std::string console_;
 
     unsigned flags_;
     pid_t pid_;
@@ -192,17 +146,14 @@ class Service {
     android::base::boot_clock::time_point time_crashed_;  // first crash within inspection window
     int crash_count_;                     // number of times crashed within window
 
-    uid_t uid_;
-    gid_t gid_;
-    std::vector<gid_t> supp_gids_;
     std::optional<CapSet> capabilities_;
-    unsigned namespace_flags_;
-    // Pair of namespace type, path to namespace.
-    std::vector<std::pair<int, std::string>> namespaces_to_enter_;
+    ProcessAttributes proc_attr_;
+    NamespaceInfo namespaces_;
 
     std::string seclabel_;
 
-    std::vector<std::unique_ptr<DescriptorInfo>> descriptors_;
+    std::vector<SocketDescriptor> sockets_;
+    std::vector<FileDescriptor> files_;
     std::vector<std::pair<std::string, std::string>> environment_vars_;
 
     Action onrestart_;  // Commands to execute on restart.
@@ -213,10 +164,6 @@ class Service {
 
     // keycodes for triggering this service via /dev/input/input*
     std::vector<int> keycodes_;
-
-    IoSchedClass ioprio_class_;
-    int ioprio_pri_;
-    int priority_;
 
     int oom_score_adjust_;
 
@@ -232,8 +179,6 @@ class Service {
     bool override_ = false;
 
     unsigned long start_order_;
-
-    std::vector<std::pair<int, rlimit>> rlimits_;
 
     bool sigstop_ = false;
 
@@ -253,79 +198,5 @@ class Service {
     bool running_at_post_data_reset_ = false;
 };
 
-class ServiceList {
-  public:
-    static ServiceList& GetInstance();
-
-    // Exposed for testing
-    ServiceList();
-
-    void AddService(std::unique_ptr<Service> service);
-    void RemoveService(const Service& svc);
-
-    template <typename T, typename F = decltype(&Service::name)>
-    Service* FindService(T value, F function = &Service::name) const {
-        auto svc = std::find_if(services_.begin(), services_.end(),
-                                [&function, &value](const std::unique_ptr<Service>& s) {
-                                    return std::invoke(function, s) == value;
-                                });
-        if (svc != services_.end()) {
-            return svc->get();
-        }
-        return nullptr;
-    }
-
-    Service* FindInterface(const std::string& interface_name) {
-        for (const auto& svc : services_) {
-            if (svc->interfaces().count(interface_name) > 0) {
-                return svc.get();
-            }
-        }
-
-        return nullptr;
-    }
-
-    void DumpState() const;
-
-    auto begin() const { return services_.begin(); }
-    auto end() const { return services_.end(); }
-    const std::vector<std::unique_ptr<Service>>& services() const { return services_; }
-    const std::vector<Service*> services_in_shutdown_order() const;
-
-    void MarkPostData();
-    bool IsPostData();
-    void MarkServicesUpdate();
-    bool IsServicesUpdated() const { return services_update_finished_; }
-    void DelayService(const Service& service);
-
-  private:
-    std::vector<std::unique_ptr<Service>> services_;
-
-    bool post_data_ = false;
-    bool services_update_finished_ = false;
-    std::vector<std::string> delayed_service_names_;
-};
-
-class ServiceParser : public SectionParser {
-  public:
-    ServiceParser(ServiceList* service_list, std::vector<Subcontext>* subcontexts)
-        : service_list_(service_list), subcontexts_(subcontexts), service_(nullptr) {}
-    Result<Success> ParseSection(std::vector<std::string>&& args, const std::string& filename,
-                                 int line) override;
-    Result<Success> ParseLineSection(std::vector<std::string>&& args, int line) override;
-    Result<Success> EndSection() override;
-    void EndFile() override { filename_ = ""; }
-
-  private:
-    bool IsValidName(const std::string& name) const;
-
-    ServiceList* service_list_;
-    std::vector<Subcontext>* subcontexts_;
-    std::unique_ptr<Service> service_;
-    std::string filename_;
-};
-
 }  // namespace init
 }  // namespace android
-
-#endif

@@ -15,10 +15,13 @@ USAGE="USAGE: `basename ${0}` [--help] [--serial <SerialNumber>] [options]
 
 adb remount tests
 
---help        This help
---serial      Specify device (must if multiple are present)
---color       Dress output with highlighting colors
---print-time  Report the test duration
+--color                     Dress output with highlighting colors
+--help                      This help
+--no-wait-screen            Do not wait for display screen to settle
+--print-time                Report the test duration
+--serial                    Specify device (must if multiple are present)
+--wait-adb <duration>       adb wait timeout
+--wait-fastboot <duration>  fastboot wait timeout
 
 Conditions:
  - Must be a userdebug build.
@@ -33,6 +36,7 @@ Conditions:
 ##  Helper Variables
 ##
 
+EMPTY=""
 SPACE=" "
 # A _real_ embedded tab character
 TAB="`echo | tr '\n' '\t'`"
@@ -49,6 +53,10 @@ TMPDIR=${TMPDIR:-/tmp}
 print_time=false
 start_time=`date +%s`
 ACTIVE_SLOT=
+
+ADB_WAIT=4m
+FASTBOOT_WAIT=2m
+screen_wait=true
 
 ##
 ##  Helper Functions
@@ -131,8 +139,28 @@ Returns: the logcat output" ]
 adb_logcat() {
   echo "${RED}[     INFO ]${NORMAL} logcat ${@}" >&2 &&
   adb logcat "${@}" </dev/null |
+    tr -d '\r' |
     grep -v 'logd    : logdr: UID=' |
     sed -e '${/------- beginning of kernel/d}' -e 's/^[0-1][0-9]-[0-3][0-9] //'
+}
+
+[ "USAGE: avc_check >/dev/stderr
+
+Returns: worrisome avc violations" ]
+avc_check() {
+  if ! ${overlayfs_supported:-false}; then
+    return
+  fi
+  local L=`adb_logcat -b all -v brief -d \
+                      -e 'context=u:object_r:unlabeled:s0' 2>/dev/null |
+             sed -n 's/.*avc: //p' |
+             sort -u`
+  if [ -z "${L}" ]; then
+    return
+  fi
+  echo "${ORANGE}[  WARNING ]${NORMAL} unlabeled sepolicy violations:" >&2
+  echo "${L}" |
+    sed 's/^/             /' >&2
 }
 
 [ "USAGE: get_property <prop>
@@ -161,9 +189,20 @@ adb_su() {
 [ "USAGE: adb_cat <file> >stdout
 
 Returns: content of file to stdout with carriage returns skipped,
-         true of the file exists" ]
+         true if the file exists" ]
 adb_cat() {
     local OUTPUT="`adb_sh cat ${1} </dev/null 2>&1`"
+    local ret=${?}
+    echo "${OUTPUT}" | tr -d '\r'
+    return ${ret}
+}
+
+[ "USAGE: adb_ls <dirfile> >stdout
+
+Returns: filename or directoru content to stdout with carriage returns skipped,
+         true if the ls had no errors" ]
+adb_ls() {
+    local OUTPUT="`adb_sh ls ${1} </dev/null 2>/dev/null`"
     local ret=${?}
     echo "${OUTPUT}" | tr -d '\r'
     return ${ret}
@@ -173,7 +212,8 @@ adb_cat() {
 
 Returns: true if the reboot command succeeded" ]
 adb_reboot() {
-  adb reboot remount-test || true
+  avc_check
+  adb reboot remount-test </dev/null || true
   sleep 2
 }
 
@@ -240,10 +280,13 @@ usb_devnum() {
 
 Returns: waits until the device has returned for adb or optional timeout" ]
 adb_wait() {
+  local start=`date +%s`
+  local duration=
   local ret
   if [ -n "${1}" ]; then
     USB_DEVICE=`usb_devnum --next`
-    echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
+    duration=`format_duration ${1}`
+    echo -n ". . . waiting ${duration}" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
     timeout --preserve-status --signal=KILL ${1} adb wait-for-device 2>/dev/null
     ret=${?}
     echo -n "                                                                             ${CR}"
@@ -258,7 +301,43 @@ adb_wait() {
       echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}" >&2
     fi
   fi
+  local end=`date +%s`
+  local diff_time=`expr ${end} - ${start}`
+  local _print_time=${print_time}
+  if [ ${diff_time} -lt 15 ]; then
+    _print_time=false
+  fi
+  diff_time=`format_duration ${diff_time}`
+  if [ "${diff_time}" = "${duration}" ]; then
+    _print_time=false
+  fi
+
+  local reason=
+  if inAdb; then
+    reason=`get_property ro.boot.bootreason`
+  fi
+  case ${reason} in
+    reboot*)
+      reason=
+      ;;
+    ${EMPTY})
+      ;;
+    *)
+      reason=" for boot reason ${reason}"
+      ;;
+  esac
+  if ${_print_time} || [ -n "${reason}" ]; then
+    echo "${BLUE}[     INFO ]${NORMAL} adb wait duration ${diff_time}${reason}"
+  fi >&2
+
   return ${ret}
+}
+
+[ "USAGE: adb_user > /dev/stdout
+
+Returns: the adb daemon user" ]
+adb_user() {
+  adb_sh echo '${USER}' </dev/null
 }
 
 [ "USAGE: usb_status > stdout 2> stderr
@@ -276,7 +355,7 @@ usb_status() {
   elif inRecovery; then
     echo "(In recovery mode)"
   elif inAdb; then
-    echo "(In adb mode)"
+    echo "(In adb mode `adb_user`)"
   else
     echo "(USB stack borken for ${USB_ADDRESS})"
     USB_DEVICE=`usb_devnum`
@@ -366,17 +445,72 @@ any_wait() {
   inFastboot || inAdb || inRecovery
 }
 
+wait_for_screen_timeout=900
+[ "USAGE: wait_for_screen [-n] [TIMEOUT]
+
+-n - echo newline at exit
+TIMEOUT - default `format_duration ${wait_for_screen_timeout}`" ]
+wait_for_screen() {
+  if ! ${screen_wait}; then
+    adb_wait
+    return
+  fi
+  exit_function=true
+  if [ X"-n" = X"${1}" ]; then
+    exit_function=echo
+    shift
+  fi
+  timeout=${wait_for_screen_timeout}
+  if [ ${#} -gt 0 ]; then
+    timeout=${1}
+    shift
+  fi
+  counter=0
+  while true; do
+    if inFastboot; then
+      fastboot reboot
+    elif inAdb; then
+      if [ 0 != ${counter} ]; then
+        adb_wait
+      fi
+      if [ -n "`get_property sys.boot.reason`" ]
+      then
+        vals=`get_property |
+              sed -n 's/[[]sys[.]\(boot_completed\|logbootcomplete\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
+        if [ "${vals}" = "`echo boot_completed=1 ; echo logbootcomplete=1`" ]
+        then
+          sleep 1
+          break
+        fi
+        if [ "${vals}" = "`echo logbootcomplete=1 ; echo boot_completed=1`" ]
+        then
+          sleep 1
+          break
+        fi
+      fi
+    fi
+    counter=`expr ${counter} + 1`
+    if [ ${counter} -gt ${timeout} ]; then
+      ${exit_function}
+      echo "ERROR: wait_for_screen() timed out (`format_duration ${timeout}`)" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  ${exit_function}
+}
+
 [ "USAGE: adb_root
 
 NB: This can be flakey on devices due to USB state
 
 Returns: true if device in root state" ]
 adb_root() {
-  [ root != "`adb_sh echo '${USER}' </dev/null`" ] || return 0
+  [ root != "`adb_user`" ] || return 0
   adb root >/dev/null </dev/null 2>/dev/null
   sleep 2
-  adb_wait 2m &&
-    [ root = "`adb_sh echo '${USER}' </dev/null`" ]
+  adb_wait ${ADB_WAIT} &&
+    [ root = "`adb_user`" ]
 }
 
 [ "USAGE: adb_unroot
@@ -385,11 +519,11 @@ NB: This can be flakey on devices due to USB state
 
 Returns: true if device in un root state" ]
 adb_unroot() {
-  [ root = "`adb_sh echo '${USER}' </dev/null`" ] || return 0
+  [ root = "`adb_user`" ] || return 0
   adb unroot >/dev/null </dev/null 2>/dev/null
   sleep 2
-  adb_wait 2m &&
-    [ root != "`adb_sh echo '${USER}' </dev/null`" ]
+  adb_wait ${ADB_WAIT} &&
+    [ root != "`adb_user`" ]
 }
 
 [ "USAGE: fastboot_getvar var expected >/dev/stderr
@@ -540,6 +674,30 @@ EXPECT_EQ() {
   return 0
 }
 
+[ "USAGE: EXPECT_NE <lval> <rval> [--warning [message]]
+
+Returns true if lval matches rval" ]
+EXPECT_NE() {
+  local lval="${1}"
+  local rval="${2}"
+  shift 2
+  local error=1
+  local prefix="${RED}[    ERROR ]${NORMAL}"
+  if [ X"${1}" = X"--warning" ]; then
+      prefix="${RED}[  WARNING ]${NORMAL}"
+      error=0
+      shift 1
+  fi
+  if [ X"${rval}" = X"${lval}" ]; then
+    echo "${prefix} did not expect \"${lval}\" ${*}" >&2
+    return ${error}
+  fi
+  if [ -n "${*}" ] ; then
+    echo "${prefix} ok \"${lval}\" not \"${rval}\" ${*}" >&2
+  fi
+  return 0
+}
+
 [ "USAGE: check_eq <lval> <rval> [--warning [message]]
 
 Exits if (regex) lval mismatches rval" ]
@@ -552,6 +710,21 @@ check_eq() {
       return
   fi
   EXPECT_EQ "${lval}" "${rval}" ||
+    die "${@}"
+}
+
+[ "USAGE: check_ne <lval> <rval> [--warning [message]]
+
+Exits if lval matches rval" ]
+check_ne() {
+  local lval="${1}"
+  local rval="${2}"
+  shift 2
+  if [ X"${1}" = X"--warning" ]; then
+      EXPECT_NE "${lval}" "${rval}" ${*}
+      return
+  fi
+  EXPECT_NE "${lval}" "${rval}" ||
     die "${@}"
 }
 
@@ -589,6 +762,9 @@ skip_unrelated_mounts() {
 
 OPTIONS=`getopt --alternative --unquoted \
                 --longoptions help,serial:,colour,color,no-colour,no-color \
+                --longoptions wait-adb:,wait-fastboot: \
+                --longoptions wait-screen,wait-display \
+                --longoptions no-wait-screen,no-wait-display \
                 --longoptions gtest_print_time,print-time \
                 -- "?hs:" ${*}` ||
   ( echo "${USAGE}" >&2 ; false ) ||
@@ -612,8 +788,22 @@ while [ ${#} -gt 0 ]; do
     --no-color | --no-colour)
       color=false
       ;;
+    --no-wait-display | --no-wait-screen)
+      screen_wait=false
+      ;;
+    --wait-display | --wait-screen)
+      screen_wait=true
+      ;;
     --print-time | --gtest_print_time)
       print_time=true
+      ;;
+    --wait-adb)
+      ADB_WAIT=${2}
+      shift
+      ;;
+    --wait-fastboot)
+      FASTBOOT_WAIT=${2}
+      shift
       ;;
     --)
       shift
@@ -645,7 +835,7 @@ inFastboot && die "device in fastboot mode"
 inRecovery && die "device in recovery mode"
 if ! inAdb; then
   echo "${ORANGE}[  WARNING ]${NORMAL} device not in adb mode" >&2
-  adb_wait 2m
+  adb_wait ${ADB_WAIT}
 fi
 inAdb || die "specified device not in adb mode"
 isDebuggable || die "device not a debug build"
@@ -697,27 +887,53 @@ adb_sh ls -l /dev/block/by-name/ </dev/null 2>/dev/null |
     esac
   done
 
+# If reboot too soon after fresh flash, could trip device update failure logic
+wait_for_screen
 # Can we test remount -R command?
+OVERLAYFS_BACKING="cache mnt/scratch"
 overlayfs_supported=true
-if [ "orange" = "`get_property ro.boot.verifiedbootstate`" -a \
-     "2" = "`get_property partition.system.verified`" ]; then
+if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
+     "2" != "`get_property partition.system.verified`" ]; then
   restore() {
     ${overlayfs_supported} || return 0
     inFastboot &&
       fastboot reboot &&
-      adb_wait 2m
+      adb_wait ${ADB_WAIT} ||
+      true
+    if inAdb; then
+      reboot=false
+      for d in ${OVERLAYFS_BACKING}; do
+        if adb_su ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
+          adb_su rm -rf /${d}/overlay </dev/null
+          reboot=true
+        fi
+      done
+      if ${reboot}; then
+        adb_reboot &&
+        adb_wait ${ADB_WAIT}
+      fi
+    fi
+  }
+else
+  restore() {
+    ${overlayfs_supported} || return 0
+    inFastboot &&
+      fastboot reboot &&
+      adb_wait ${ADB_WAIT} ||
+      true
     inAdb &&
       adb_root &&
       adb enable-verity >/dev/null 2>/dev/null &&
       adb_reboot &&
-      adb_wait 2m
+      adb_wait ${ADB_WAIT}
   }
 
   echo "${GREEN}[ RUN      ]${NORMAL} Testing adb shell su root remount -R command" >&2
 
+  avc_check
   adb_su remount -R system </dev/null || true
   sleep 2
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
     die "waiting for device after remount -R `usb_status`"
   if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
        "2" = "`get_property partition.system.verified`" ]; then
@@ -763,7 +979,6 @@ echo "${GREEN}[ RUN      ]${NORMAL} Checking current overlayfs status" >&2
 # So lets do our best to surgically wipe the overlayfs state without
 # having to go through enable-verity transition.
 reboot=false
-OVERLAYFS_BACKING="cache mnt/scratch"
 for d in ${OVERLAYFS_BACKING}; do
   if adb_sh ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
     echo "${ORANGE}[  WARNING ]${NORMAL} /${d}/overlay is setup, surgically wiping" >&2
@@ -775,7 +990,7 @@ done
 if ${reboot}; then
   echo "${ORANGE}[  WARNING ]${NORMAL} rebooting before test" >&2
   adb_reboot &&
-    adb_wait 2m ||
+    adb_wait ${ADB_WAIT} ||
     die "lost device after reboot after wipe `usb_status`"
   adb_root ||
     die "lost device after elevation to root after wipe `usb_status`"
@@ -806,6 +1021,15 @@ D=`adb_sh df -k ${D} </dev/null |
 echo "${D}"
 if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
+  # if device does not need overlays, then adb enable-verity will brick device
+  restore() {
+    ${overlayfs_supported} || return 0
+    inFastboot &&
+      fastboot reboot &&
+      adb_wait ${ADB_WAIT}
+    inAdb &&
+      adb_wait ${ADB_WAIT}
+  }
 elif ! ${overlayfs_supported}; then
   die "need overlayfs, but do not have it"
 fi
@@ -840,7 +1064,7 @@ if [ X"${D}" != X"${H}" ]; then
   echo "${GREEN}[     INFO ]${NORMAL} rebooting as requested" >&2
   L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
   adb_reboot &&
-    adb_wait 2m ||
+    adb_wait ${ADB_WAIT} ||
     die "lost device after reboot requested `usb_status`"
   adb_root ||
     die "lost device after elevation to root `usb_status`"
@@ -880,6 +1104,11 @@ else
 fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} remount" >&2
+
+# Feed log with selinux denials as baseline before overlays
+adb_unroot
+adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
+adb_root
 
 D=`adb remount 2>&1`
 ret=${?}
@@ -974,13 +1203,37 @@ echo "${GREEN}[ RUN      ]${NORMAL} push content to /system and /vendor" >&2
 
 A="Hello World! $(date)"
 echo "${A}" | adb_sh cat - ">/system/hello"
+echo "${A}" | adb_sh cat - ">/system/priv-app/hello"
 echo "${A}" | adb_sh cat - ">/vendor/hello"
 B="`adb_cat /system/hello`" ||
-  die "sytem hello"
+  die "system hello"
 check_eq "${A}" "${B}" /system before reboot
+B="`adb_cat /system/priv-app/hello`" ||
+  die "system priv-app hello"
+check_eq "${A}" "${B}" /system/priv-app before reboot
 B="`adb_cat /vendor/hello`" ||
   die "vendor hello"
 check_eq "${A}" "${B}" /vendor before reboot
+SYSTEM_DEVT=`adb_sh stat --format=%D /system/hello </dev/null`
+VENDOR_DEVT=`adb_sh stat --format=%D /vendor/hello </dev/null`
+SYSTEM_INO=`adb_sh stat --format=%i /system/hello </dev/null`
+VENDOR_INO=`adb_sh stat --format=%i /vendor/hello </dev/null`
+BASE_SYSTEM_DEVT=`adb_sh stat --format=%D /system/bin/stat </dev/null`
+BASE_VENDOR_DEVT=`adb_sh stat --format=%D /vendor/bin/stat </dev/null`
+check_eq "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" vendor and system devt
+check_ne "${SYSTEM_INO}" "${VENDOR_INO}" vendor and system inode
+if ${overlayfs_needed}; then
+  check_ne "${SYSTEM_DEVT}" "${BASE_SYSTEM_DEVT}" system devt
+  check_ne "${VENDOR_DEVT}" "${BASE_VENDOR_DEVT}" vendor devt
+else
+  check_eq "${SYSTEM_DEVT}" "${BASE_SYSTEM_DEVT}" system devt
+  check_eq "${VENDOR_DEVT}" "${BASE_VENDOR_DEVT}" vendor devt
+fi
+check_ne "${BASE_SYSTEM_DEVT}" "${BASE_VENDOR_DEVT}" --warning system/vendor devt
+[ -n "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
+  die "system devt ${SYSTEM_DEVT} is major 0"
+[ -n "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
+  die "vendor devt ${SYSTEM_DEVT} is major 0"
 
 # Download libc.so, append some gargage, push back, and check if the file
 # is updated.
@@ -1004,12 +1257,12 @@ echo "${GREEN}[ RUN      ]${NORMAL} reboot to confirm content persistent" >&2
 fixup_from_recovery() {
   inRecovery || return 1
   echo "${ORANGE}[    ERROR ]${NORMAL} Device in recovery" >&2
-  adb reboot
-  adb_wait 2m
+  adb reboot </dev/null
+  adb_wait ${ADB_WAIT}
 }
 
 adb_reboot &&
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
   fixup_from_recovery ||
   die "reboot after override content added failed `usb_status`"
 
@@ -1033,9 +1286,19 @@ if ${enforcing}; then
   B="`adb_cat /vendor/hello 2>&1`"
   check_eq "cat: /vendor/hello: Permission denied" "${B}" vendor after reboot w/o root
   echo "${GREEN}[       OK ]${NORMAL} /vendor content correct MAC after reboot" >&2
+  # Feed unprivileged log with selinux denials as a result of overlays
+  wait_for_screen
+  adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
 fi
 B="`adb_cat /system/hello`"
 check_eq "${A}" "${B}" /system after reboot
+# If overlayfs has a nested security problem, this will fail.
+B="`adb_ls /system/`" ||
+  dir "adb ls /system"
+[ X"${B}" != X"${B#*priv-app}" ] ||
+  dir "adb ls /system/priv-app"
+B="`adb_cat /system/priv-app/hello`"
+check_eq "${A}" "${B}" /system/priv-app after reboot
 echo "${GREEN}[       OK ]${NORMAL} /system content remains after reboot" >&2
 # Only root can read vendor if sepolicy permissions are as expected.
 adb_root ||
@@ -1043,6 +1306,17 @@ adb_root ||
 B="`adb_cat /vendor/hello`"
 check_eq "${A}" "${B}" vendor after reboot
 echo "${GREEN}[       OK ]${NORMAL} /vendor content remains after reboot" >&2
+
+check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
+check_eq "${VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/hello </dev/null`" vendor devt after reboot
+check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
+check_eq "${VENDOR_INO}" "`adb_sh stat --format=%i /vendor/hello </dev/null`" vendor inode after reboot
+check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" base system devt after reboot
+check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/null`" base system devt after reboot
+check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" devt for su after reboot
+
+# Feed log with selinux denials as a result of overlays
+adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
 
 # Check if the updated libc.so is persistent after reboot.
 adb_root &&
@@ -1073,10 +1347,17 @@ elif [ "${ANDROID_PRODUCT_OUT}" = "${ANDROID_PRODUCT_OUT%*/${H}}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} wrong vendor image, skipping"
 elif [ -z "${ANDROID_HOST_OUT}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} please run lunch, skipping"
+elif ! (
+          adb_cat /vendor/build.prop |
+          cmp -s ${ANDROID_PRODUCT_OUT}/vendor/build.prop
+       ) >/dev/null 2>/dev/null; then
+  echo "${ORANGE}[  WARNING ]${NORMAL} vendor image signature mismatch, skipping"
 else
-  adb reboot fastboot ||
+  wait_for_screen
+  avc_check
+  adb reboot fastboot </dev/null ||
     die "fastbootd not supported (wrong adb in path?)"
-  any_wait 2m &&
+  any_wait ${ADB_WAIT} &&
     inFastboot ||
     die "reboot into fastboot to flash vendor `usb_status` (bad bootloader?)"
   fastboot flash vendor ||
@@ -1117,9 +1398,9 @@ else
   fastboot reboot ||
     die "can not reboot out of fastboot"
   echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot"
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
     fixup_from_recovery ||
-    die "did not reboot after flash `usb_status`"
+    die "did not reboot after formatting ${scratch_partition} `usb_status`"
   if ${overlayfs_needed}; then
     adb_root &&
       D=`adb_sh df -k </dev/null` &&
@@ -1139,6 +1420,12 @@ else
   fi
   B="`adb_cat /system/hello`"
   check_eq "${A}" "${B}" system after flash vendor
+  B="`adb_ls /system/`" ||
+    dir "adb ls /system"
+  [ X"${B}" != X"${B#*priv-app}" ] ||
+    dir "adb ls /system/priv-app"
+  B="`adb_cat /system/priv-app/hello`"
+  check_eq "${A}" "${B}" system/priv-app after flash vendor
   adb_root ||
     die "adb root"
   B="`adb_cat /vendor/hello`"
@@ -1150,8 +1437,15 @@ else
     check_eq "cat: /vendor/hello: No such file or directory" "${B}" \
              --warning vendor content after flash vendor
   fi
+
+  check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
+  check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
+  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" base system devt after reboot
+  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" devt for su after reboot
+
 fi
 
+wait_for_screen
 echo "${GREEN}[ RUN      ]${NORMAL} remove test content (cleanup)" >&2
 
 T=`adb_date`
@@ -1163,7 +1457,7 @@ if [ X"${H}" != X"${D}" ]; then
   echo "${ORANGE}[  WARNING ]${NORMAL} adb remount requires a reboot after partial flash (legacy avb)"
   L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
   adb_reboot &&
-    adb_wait 2m &&
+    adb_wait ${ADB_WAIT} &&
     adb_root ||
     die "failed to reboot"
   T=`adb_date`
@@ -1173,27 +1467,30 @@ fi
 echo "${H}"
 [ ${err} = 0 ] &&
   ( adb_sh rm /vendor/hello </dev/null 2>/dev/null || true ) &&
-  adb_sh rm /system/hello </dev/null ||
+  adb_sh rm /system/hello /system/priv-app/hello </dev/null ||
   ( [ -n "${L}" ] && echo "${L}" && false ) ||
   die -t ${T} "cleanup hello"
 B="`adb_cat /system/hello`"
 check_eq "cat: /system/hello: No such file or directory" "${B}" after rm
+B="`adb_cat /system/priv-app/hello`"
+check_eq "cat: /system/priv-app/hello: No such file or directory" "${B}" after rm
 B="`adb_cat /vendor/hello`"
 check_eq "cat: /vendor/hello: No such file or directory" "${B}" after rm
 
-if [ -n "${scratch_partition}" ]; then
+if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
 
   echo "${GREEN}[ RUN      ]${NORMAL} test fastboot flash to ${scratch_partition} recovery" >&2
 
-  adb reboot fastboot ||
+  avc_check
+  adb reboot fastboot </dev/null ||
     die "Reboot into fastbootd"
   img=${TMPDIR}/adb-remount-test-${$}.img
   cleanup() {
     rm ${img}
   }
   dd if=/dev/zero of=${img} bs=4096 count=16 2>/dev/null &&
-    fastboot_wait 2m ||
-    die "reboot into fastboot `usb_status`"
+    fastboot_wait ${FASTBOOT_WAIT} ||
+    die "reboot into fastboot to flash scratch `usb_status`"
   fastboot flash --force ${scratch_partition} ${img}
   err=${?}
   cleanup
@@ -1204,9 +1501,9 @@ if [ -n "${scratch_partition}" ]; then
     die "can not reboot out of fastboot"
   [ 0 -eq ${err} ] ||
     die "fastboot flash ${scratch_partition}"
-  adb_wait 2m &&
+  adb_wait ${ADB_WAIT} &&
     adb_root ||
-    die "did not reboot after flash"
+    die "did not reboot after flashing empty ${scratch_partition} `usb_status`"
   T=`adb_date`
   D=`adb disable-verity 2>&1`
   err=${?}
@@ -1214,7 +1511,7 @@ if [ -n "${scratch_partition}" ]; then
   then
     echo "${ORANGE}[  WARNING ]${NORMAL} adb disable-verity requires a reboot after partial flash"
     adb_reboot &&
-      adb_wait 2m &&
+      adb_wait ${ADB_WAIT} &&
       adb_root ||
       die "failed to reboot"
     T=`adb_date`
@@ -1252,12 +1549,12 @@ fixup_from_fastboot() {
     fastboot --set-active=${ACTIVE_SLOT}
   fi
   fastboot reboot
-  adb_wait 2m
+  adb_wait ${ADB_WAIT}
 }
 
 # Prerequisite is a prepped device from above.
 adb_reboot &&
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
   fixup_from_fastboot ||
   die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
@@ -1270,7 +1567,7 @@ echo "${GREEN}[       OK ]${NORMAL} mount -o rw,remount command works" >&2
 
 # Prerequisite is a prepped device from above.
 adb_reboot &&
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
   fixup_from_fastboot ||
   die "lost device after reboot to ro state `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
@@ -1291,30 +1588,40 @@ for d in ${OVERLAYFS_BACKING}; do
     die "/${d}/overlay wipe"
 done
 adb_reboot &&
-  adb_wait 2m ||
+  adb_wait ${ADB_WAIT} ||
   fixup_from_fastboot ||
   die "lost device after reboot after wipe `usb_status`"
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
 adb_su remount vendor </dev/null ||
   die "remount command"
+adb_su df -k </dev/null | skip_unrelated_mounts
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null ||
   die "/vendor is not read-write"
-adb_sh grep " /system .* rw," /proc/mounts >/dev/null </dev/null &&
+adb_sh grep " \(/system\|/\) .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/system is not read-only"
 echo "${GREEN}[       OK ]${NORMAL} remount command works from scratch" >&2
 
-restore
-err=${?}
+if ! restore; then
+  restore() {
+    true
+  }
+  die "failed to restore verity after remount from scratch test"
+fi
 
-if [ ${err} = 0 ] && ${overlayfs_supported}; then
+err=0
+
+if ${overlayfs_supported}; then
   echo "${GREEN}[ RUN      ]${NORMAL} test 'adb remount -R'" >&2
+  avc_check
   adb_root &&
     adb remount -R &&
-    adb_wait 2m ||
+    adb_wait ${ADB_WAIT} ||
     die "adb remount -R"
   if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
-       "2" = "`get_property partition.system.verified`" ]; then
+       "2" = "`get_property partition.system.verified`" ] &&
+     [ -n "`get_property ro.boot.verifiedbootstate`" -o \
+       -n "`get_property partition.system.verified`" ]; then
     die "remount -R command failed to disable verity"
   fi
 
@@ -1329,7 +1636,7 @@ restore() {
 }
 
 [ ${err} = 0 ] ||
-  die "failed to restore verity" >&2
+  die "failed to restore verity"
 
 echo "${GREEN}[  PASSED  ]${NORMAL} adb remount" >&2
 
