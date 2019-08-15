@@ -28,15 +28,17 @@
 #include <windows.h>
 #define PROT_READ 1
 #define PROT_WRITE 2
+using os_handle = HANDLE;
 #else
 #include <sys/mman.h>
+using os_handle = int;
 #endif
 
 namespace android {
 namespace base {
 
 /**
- * A region of a file mapped into memory, also known as MmapFile.
+ * A region of a file mapped into memory (for grepping: also known as MmapFile or file mapping).
  */
 class MappedFile {
  public:
@@ -49,15 +51,32 @@ class MappedFile {
                                             int prot);
 
   /**
+   * Same thing, but using the raw OS file handle instead of a CRT wrapper.
+   */
+  static MappedFile FromOsHandle(os_handle h, off64_t offset, size_t length, int prot);
+
+  /**
    * Removes the mapping.
    */
   ~MappedFile();
 
-  char* data() { return base_ + offset_; }
-  size_t size() { return size_; }
+  /**
+   * Not copyable but movable.
+   */
+  MappedFile(MappedFile&& other);
+  MappedFile& operator=(MappedFile&& other);
+
+  char* data() const { return base_ + offset_; }
+  size_t size() const { return size_; }
+
+  bool isValid() const { return base_ != nullptr; }
+
+  explicit operator bool() const { return isValid(); }
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(MappedFile);
+
+  void Close();
 
   char* base_;
   size_t size_;
