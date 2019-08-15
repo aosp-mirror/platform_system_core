@@ -44,4 +44,4 @@ class MockPropertyFetcher : public IPropertyFetcher {
 }  // namespace fs_mgr
 }  // namespace android
 
-android::fs_mgr::MockPropertyFetcher* GetMockedInstance();
+android::fs_mgr::MockPropertyFetcher* GetMockedPropertyFetcher();

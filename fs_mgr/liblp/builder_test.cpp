@@ -35,7 +35,7 @@ static void ResetPropertyFetcher() {
     IPropertyFetcher::OverrideForTesting(std::make_unique<NiceMock<MockPropertyFetcher>>());
 }
 
-MockPropertyFetcher* GetMockedInstance() {
+MockPropertyFetcher* GetMockedPropertyFetcher() {
     return static_cast<MockPropertyFetcher*>(IPropertyFetcher::GetInstance());
 }
 
@@ -789,7 +789,7 @@ TEST_F(BuilderTest, ABExtents) {
 
     // A and B slots should be allocated from separate halves of the partition,
     // to mitigate allocating too many extents. (b/120433288)
-    ON_CALL(*GetMockedInstance(), GetProperty("ro.boot.slot_suffix", _))
+    ON_CALL(*GetMockedPropertyFetcher(), GetProperty("ro.boot.slot_suffix", _))
             .WillByDefault(Return("_a"));
 
     auto builder = MetadataBuilder::New(device_info, 65536, 2);
