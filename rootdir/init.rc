@@ -589,6 +589,7 @@ on post-fs-data
     symlink /data/data /data/user/0
 
     mkdir /data/media 0770 media_rw media_rw
+    mkdir /data/media/obb 0770 media_rw media_rw
 
     mkdir /data/cache 0770 system cache
     mkdir /data/cache/recovery 0770 system cache
