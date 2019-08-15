@@ -313,7 +313,8 @@ bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
     // There may be an extra device, since the kernel doesn't let us have a
     // snapshot and linear target in the same table.
     auto dm_name = GetSnapshotDeviceName(name, status);
-    if (name != dm_name && !dm.DeleteDevice(dm_name)) {
+    if (name != dm_name && dm.GetState(dm_name) != DmDeviceState::INVALID &&
+        !dm.DeleteDevice(dm_name)) {
         LOG(ERROR) << "Could not delete inner snapshot device: " << dm_name;
         return false;
     }
