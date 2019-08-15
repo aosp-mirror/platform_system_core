@@ -668,7 +668,7 @@ TEST(liblp, AutoSlotSuffixing) {
 }
 
 TEST(liblp, UpdateRetrofit) {
-    ON_CALL(*GetMockedInstance(), GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
+    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
             .WillByDefault(Return(true));
 
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
@@ -700,7 +700,7 @@ TEST(liblp, UpdateRetrofit) {
 }
 
 TEST(liblp, UpdateNonRetrofit) {
-    ON_CALL(*GetMockedInstance(), GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
+    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
             .WillByDefault(Return(false));
 
     unique_fd fd = CreateFlashedDisk();
