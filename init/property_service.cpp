@@ -39,7 +39,6 @@
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
-#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -53,7 +52,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <android-base/unique_fd.h>
 #include <property_info_parser/property_info_parser.h>
 #include <property_info_serializer/property_info_serializer.h>
 #include <selinux/android.h>
@@ -61,6 +59,7 @@
 #include <selinux/selinux.h>
 
 #include "debug_ramdisk.h"
+#include "epoll.h"
 #include "init.h"
 #include "persistent_properties.h"
 #include "property_type.h"
@@ -77,7 +76,6 @@ using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::Trim;
-using android::base::unique_fd;
 using android::base::WriteStringToFile;
 using android::properties::BuildTrie;
 using android::properties::ParsePropertyInfoFile;
@@ -1002,43 +1000,6 @@ void StartPropertyService(Epoll* epoll) {
     if (auto result = epoll->RegisterHandler(property_set_fd, handle_property_set_fd); !result) {
         PLOG(FATAL) << result.error();
     }
-}
-
-Result<int> CallFunctionAndHandlePropertiesImpl(const std::function<int()>& f) {
-    unique_fd reader;
-    unique_fd writer;
-    if (!Socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, &reader, &writer)) {
-        return ErrnoError() << "Could not create socket pair";
-    }
-
-    int result = 0;
-    std::atomic<bool> end = false;
-    auto thread = std::thread{[&f, &result, &end, &writer] {
-        result = f();
-        end = true;
-        send(writer, "1", 1, 0);
-    }};
-
-    Epoll epoll;
-    if (auto result = epoll.Open(); !result) {
-        return Error() << "Could not create epoll: " << result.error();
-    }
-    if (auto result = epoll.RegisterHandler(property_set_fd, handle_property_set_fd); !result) {
-        return Error() << "Could not register epoll handler for property fd: " << result.error();
-    }
-
-    // No-op function, just used to break from loop.
-    if (auto result = epoll.RegisterHandler(reader, [] {}); !result) {
-        return Error() << "Could not register epoll handler for ending thread:" << result.error();
-    }
-
-    while (!end) {
-        epoll.Wait({});
-    }
-
-    thread.join();
-
-    return result;
 }
 
 }  // namespace init

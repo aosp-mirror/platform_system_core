@@ -640,12 +640,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     if (!ReadFstabFromFile(fstab_file, &fstab)) {
         return Error() << "Could not read fstab";
     }
-
-    auto mount_fstab_return_code =
-            CallFunctionAndHandleProperties(fs_mgr_mount_all, &fstab, mount_mode);
-    if (!mount_fstab_return_code) {
-        return Error() << "Could not call fs_mgr_mount_all(): " << mount_fstab_return_code.error();
-    }
+    auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_mode);
     property_set(prop_name, std::to_string(t.duration().count()));
 
     if (import_rc && SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
@@ -656,7 +651,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
-        auto queue_fs_result = queue_fs_event(*mount_fstab_return_code);
+        auto queue_fs_result = queue_fs_event(mount_fstab_return_code);
         if (!queue_fs_result) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
@@ -672,13 +667,8 @@ static Result<void> do_umount_all(const BuiltinArguments& args) {
         return Error() << "Could not read fstab";
     }
 
-    auto result = CallFunctionAndHandleProperties(fs_mgr_umount_all, &fstab);
-    if (!result) {
-        return Error() << "Could not call fs_mgr_mount_all() " << result.error();
-    }
-
-    if (*result != 0) {
-        return Error() << "fs_mgr_mount_all() failed: " << *result;
+    if (auto result = fs_mgr_umount_all(&fstab); result != 0) {
+        return Error() << "umount_fstab() failed " << result;
     }
     return {};
 }
@@ -689,13 +679,8 @@ static Result<void> do_swapon_all(const BuiltinArguments& args) {
         return Error() << "Could not read fstab '" << args[1] << "'";
     }
 
-    auto result = CallFunctionAndHandleProperties(fs_mgr_swapon_all, fstab);
-    if (!result) {
-        return Error() << "Could not call fs_mgr_swapon_all() " << result.error();
-    }
-
-    if (*result == 0) {
-        return Error() << "fs_mgr_swapon_all() failed.";
+    if (!fs_mgr_swapon_all(fstab)) {
+        return Error() << "fs_mgr_swapon_all() failed";
     }
 
     return {};
