@@ -38,7 +38,7 @@ using android::base::Result;
 // object for a given ClassLoader.
 class LibraryNamespaces {
  public:
-  LibraryNamespaces() : initialized_(false) {}
+  LibraryNamespaces() : initialized_(false), app_main_namespace_(nullptr) {}
 
   LibraryNamespaces(LibraryNamespaces&&) = default;
   LibraryNamespaces(const LibraryNamespaces&) = delete;
