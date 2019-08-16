@@ -148,7 +148,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
     {
         SnapshotManager::SnapshotStatus status;
         ASSERT_TRUE(sm->ReadSnapshotStatus(lock_.get(), "test-snapshot", &status));
-        ASSERT_EQ(status.state, "created");
+        ASSERT_EQ(status.state, SnapshotManager::SnapshotState::Created);
         ASSERT_EQ(status.device_size, kDeviceSize);
         ASSERT_EQ(status.snapshot_size, kDeviceSize);
     }
