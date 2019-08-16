@@ -165,7 +165,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, const std::string& name,
     // actual backing image. This is harmless, since it'll get removed when
     // CancelUpdate is called.
     SnapshotStatus status = {
-            .state = "created",
+            .state = SnapshotState::Created,
             .device_size = device_size,
             .snapshot_size = snapshot_size,
     };
@@ -190,7 +190,7 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     if (!ReadSnapshotStatus(lock, name, &status)) {
         return false;
     }
-    if (status.state == "merge-completed") {
+    if (status.state == SnapshotState::MergeCompleted) {
         LOG(ERROR) << "Should not create a snapshot device for " << name
                    << " after merging has completed.";
         return false;
@@ -423,8 +423,8 @@ bool SnapshotManager::SwitchSnapshotToMerge(LockedFile* lock, const std::string&
     if (!ReadSnapshotStatus(lock, name, &status)) {
         return false;
     }
-    if (status.state != "created") {
-        LOG(WARNING) << "Snapshot " << name << " has unexpected state: " << status.state;
+    if (status.state != SnapshotState::Created) {
+        LOG(WARNING) << "Snapshot " << name << " has unexpected state: " << to_string(status.state);
     }
 
     // After this, we return true because we technically did switch to a merge
@@ -434,7 +434,7 @@ bool SnapshotManager::SwitchSnapshotToMerge(LockedFile* lock, const std::string&
         return false;
     }
 
-    status.state = "merging";
+    status.state = SnapshotState::Merging;
 
     DmTargetSnapshot::Status dm_status;
     if (!QuerySnapshotStatus(dm_name, nullptr, &dm_status)) {
@@ -658,7 +658,7 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
     // rebooted after this check, the device will still be a snapshot-merge
     // target. If the have rebooted, the device will now be a linear target,
     // and we can try cleanup again.
-    if (snapshot_status.state == "merge-complete" && !IsSnapshotDevice(dm_name)) {
+    if (snapshot_status.state == SnapshotState::MergeCompleted && !IsSnapshotDevice(dm_name)) {
         // NB: It's okay if this fails now, we gave cleanup our best effort.
         OnSnapshotMergeComplete(lock, name, snapshot_status);
         return UpdateState::MergeCompleted;
@@ -679,7 +679,7 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
 
     // These two values are equal when merging is complete.
     if (status.sectors_allocated != status.metadata_sectors) {
-        if (snapshot_status.state == "merge-complete") {
+        if (snapshot_status.state == SnapshotState::MergeCompleted) {
             LOG(ERROR) << "Snapshot " << name << " is merging after being marked merge-complete.";
             return UpdateState::MergeFailed;
         }
@@ -694,7 +694,7 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
     // This makes it simpler to reason about the next reboot: no matter what
     // part of cleanup failed, first-stage init won't try to create another
     // snapshot device for this partition.
-    snapshot_status.state = "merge-complete";
+    snapshot_status.state = SnapshotState::MergeCompleted;
     if (!WriteSnapshotStatus(lock, name, snapshot_status)) {
         return UpdateState::MergeFailed;
     }
@@ -1069,7 +1069,16 @@ bool SnapshotManager::ReadSnapshotStatus(LockedFile* lock, const std::string& na
         return false;
     }
 
-    status->state = pieces[0];
+    if (pieces[0] == "created") {
+        status->state = SnapshotState::Created;
+    } else if (pieces[0] == "merging") {
+        status->state = SnapshotState::Merging;
+    } else if (pieces[0] == "merge-completed") {
+        status->state = SnapshotState::MergeCompleted;
+    } else {
+        LOG(ERROR) << "Unrecognized state " << pieces[0] << " for snapshot: " << name;
+    }
+
     if (!android::base::ParseUint(pieces[1], &status->device_size)) {
         LOG(ERROR) << "Invalid device size in status line for: " << path;
         return false;
@@ -1089,6 +1098,20 @@ bool SnapshotManager::ReadSnapshotStatus(LockedFile* lock, const std::string& na
     return true;
 }
 
+std::string SnapshotManager::to_string(SnapshotState state) {
+    switch (state) {
+        case SnapshotState::Created:
+            return "created";
+        case SnapshotState::Merging:
+            return "merging";
+        case SnapshotState::MergeCompleted:
+            return "merge-completed";
+        default:
+            LOG(ERROR) << "Unknown snapshot state: " << (int)state;
+            return "unknown";
+    }
+}
+
 bool SnapshotManager::WriteSnapshotStatus(LockedFile* lock, const std::string& name,
                                           const SnapshotStatus& status) {
     // The caller must take an exclusive lock to modify snapshots.
@@ -1103,7 +1126,7 @@ bool SnapshotManager::WriteSnapshotStatus(LockedFile* lock, const std::string& n
     }
 
     std::vector<std::string> pieces = {
-            status.state,
+            to_string(status.state),
             std::to_string(status.device_size),
             std::to_string(status.snapshot_size),
             std::to_string(status.sectors_allocated),
