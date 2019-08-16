@@ -315,7 +315,8 @@ int main(int argc, char **argv) {
         PLOG(ERROR) << "setting RLIMIT_NOFILE failed";
     }
 
-    while ((fs_read_atomic_int("/data/.layout_version", &fs_version) == -1) || (fs_version < 3)) {
+    while ((fs_read_atomic_int("/data/misc/installd/layout_version", &fs_version) == -1) ||
+           (fs_version < 3)) {
         LOG(ERROR) << "installd fs upgrade not yet complete; waiting...";
         sleep(1);
     }
