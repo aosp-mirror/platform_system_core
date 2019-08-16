@@ -959,9 +959,16 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
     }
 
     if (changed || partition_create) {
-        if (!CreateLogicalPartition(super_device, slot_number, partition_name, true, 10s,
-                                    scratch_device))
+        CreateLogicalPartitionParams params = {
+                .block_device = super_device,
+                .metadata_slot = slot_number,
+                .partition_name = partition_name,
+                .force_writable = true,
+                .timeout_ms = 10s,
+        };
+        if (!CreateLogicalPartition(params, scratch_device)) {
             return false;
+        }
 
         if (change) *change = true;
     }
@@ -1182,11 +1189,15 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if ((mount_point != nullptr) && !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
         auto scratch_device = fs_mgr_overlayfs_scratch_device();
         if (scratch_device.empty()) {
-            auto slot_number = fs_mgr_overlayfs_slot_number();
-            auto super_device = fs_mgr_overlayfs_super_device(slot_number);
-            const auto partition_name = android::base::Basename(kScratchMountPoint);
-            CreateLogicalPartition(super_device, slot_number, partition_name, true, 10s,
-                                   &scratch_device);
+            auto metadata_slot = fs_mgr_overlayfs_slot_number();
+            CreateLogicalPartitionParams params = {
+                    .block_device = fs_mgr_overlayfs_super_device(metadata_slot),
+                    .metadata_slot = metadata_slot,
+                    .partition_name = android::base::Basename(kScratchMountPoint),
+                    .force_writable = true,
+                    .timeout_ms = 10s,
+            };
+            CreateLogicalPartition(params, &scratch_device);
         }
         mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,
                                                        fs_mgr_overlayfs_scratch_mount_type());

@@ -56,8 +56,16 @@ bool OpenLogicalPartition(FastbootDevice* device, const std::string& partition_n
     if (!path) {
         return false;
     }
+
+    CreateLogicalPartitionParams params = {
+            .block_device = *path,
+            .metadata_slot = slot_number,
+            .partition_name = partition_name,
+            .force_writable = true,
+            .timeout_ms = 5s,
+    };
     std::string dm_path;
-    if (!CreateLogicalPartition(path->c_str(), slot_number, partition_name, true, 5s, &dm_path)) {
+    if (!CreateLogicalPartition(params, &dm_path)) {
         LOG(ERROR) << "Could not map partition: " << partition_name;
         return false;
     }
