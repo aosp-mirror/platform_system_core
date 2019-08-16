@@ -133,7 +133,7 @@ bool fs_mgr_dir_is_writable(const std::string& path) {
     return ret | !rmdir(test_directory.c_str());
 }
 
-// At less than 1% free space return value of false,
+// At less than 1% or 8MB of free space return value of false,
 // means we will try to wrap with overlayfs.
 bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
     // If we have access issues to find out space remaining, return true
@@ -145,9 +145,11 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
         return true;
     }
 
-    static constexpr int kPercentThreshold = 1;  // 1%
+    static constexpr int kPercentThreshold = 1;                       // 1%
+    static constexpr unsigned long kSizeThreshold = 8 * 1024 * 1024;  // 8MB
 
-    return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100));
+    return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100)) &&
+           (vst.f_bfree * vst.f_bsize) >= kSizeThreshold;
 }
 
 const auto kPhysicalDevice = "/dev/block/by-name/"s;
