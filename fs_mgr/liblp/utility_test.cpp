@@ -15,6 +15,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <liblp/builder.h>
 #include <liblp/liblp.h>
 
 #include "utility.h"
@@ -74,4 +75,82 @@ TEST(liblp, GetPartitionSlotSuffix) {
     EXPECT_EQ(GetPartitionSlotSuffix("_a"), "");
     EXPECT_EQ(GetPartitionSlotSuffix("system_a"), "_a");
     EXPECT_EQ(GetPartitionSlotSuffix("system_b"), "_b");
+}
+
+namespace android {
+namespace fs_mgr {
+// Equality comparison for testing. In reality, equality of device_index doesn't
+// necessary mean equality of the block device.
+bool operator==(const LinearExtent& l, const LinearExtent& r) {
+    return l.device_index() == r.device_index() && l.physical_sector() == r.physical_sector() &&
+           l.end_sector() == r.end_sector();
+}
+}  // namespace fs_mgr
+}  // namespace android
+
+static std::vector<LinearExtent> GetPartitionExtents(Partition* p) {
+    std::vector<LinearExtent> extents;
+    for (auto&& extent : p->extents()) {
+        auto linear_extent = extent->AsLinearExtent();
+        if (!linear_extent) return {};
+        extents.push_back(*linear_extent);
+    }
+    return extents;
+}
+
+TEST(liblp, UpdateMetadataForInPlaceSnapshot) {
+    using std::unique_ptr;
+
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    ASSERT_NE(builder, nullptr);
+
+    ASSERT_TRUE(builder->AddGroup("group_a", 256 * 1024));
+    Partition* system_a = builder->AddPartition("system_a", "group_a", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(system_a, nullptr);
+    ASSERT_TRUE(builder->ResizePartition(system_a, 40 * 1024));
+    Partition* vendor_a = builder->AddPartition("vendor_a", "group_a", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(vendor_a, nullptr);
+    ASSERT_TRUE(builder->ResizePartition(vendor_a, 20 * 1024));
+
+    ASSERT_TRUE(builder->AddGroup("group_b", 258 * 1024));
+    Partition* system_b = builder->AddPartition("system_b", "group_b", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(system_b, nullptr);
+    ASSERT_TRUE(builder->ResizePartition(system_b, 36 * 1024));
+    Partition* vendor_b = builder->AddPartition("vendor_b", "group_b", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(vendor_b, nullptr);
+    ASSERT_TRUE(builder->ResizePartition(vendor_b, 32 * 1024));
+
+    auto system_a_extents = GetPartitionExtents(system_a);
+    ASSERT_FALSE(system_a_extents.empty());
+
+    auto vendor_a_extents = GetPartitionExtents(vendor_a);
+    ASSERT_FALSE(vendor_a_extents.empty());
+
+    auto metadata = builder->Export();
+    ASSERT_NE(nullptr, metadata);
+
+    ASSERT_TRUE(UpdateMetadataForInPlaceSnapshot(metadata.get(), 0, 1));
+
+    auto new_builder = MetadataBuilder::New(*metadata);
+    ASSERT_NE(nullptr, new_builder);
+
+    EXPECT_EQ(nullptr, new_builder->FindGroup("group_a"));
+    EXPECT_EQ(nullptr, new_builder->FindPartition("system_a"));
+    EXPECT_EQ(nullptr, new_builder->FindPartition("vendor_a"));
+
+    auto group_b = new_builder->FindGroup("group_b");
+    ASSERT_NE(nullptr, group_b);
+    ASSERT_EQ(256 * 1024, group_b->maximum_size());
+
+    auto new_system_b = new_builder->FindPartition("system_b");
+    ASSERT_NE(nullptr, new_system_b);
+    EXPECT_EQ(40 * 1024, new_system_b->size());
+    auto new_system_b_extents = GetPartitionExtents(new_system_b);
+    EXPECT_EQ(system_a_extents, new_system_b_extents);
+
+    auto new_vendor_b = new_builder->FindPartition("vendor_b");
+    ASSERT_NE(nullptr, new_vendor_b);
+    EXPECT_EQ(20 * 1024, new_vendor_b->size());
+    auto new_vendor_b_extents = GetPartitionExtents(new_vendor_b);
+    EXPECT_EQ(vendor_a_extents, new_vendor_b_extents);
 }
