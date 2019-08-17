@@ -709,8 +709,9 @@ check_eq() {
       EXPECT_EQ "${lval}" "${rval}" ${*}
       return
   fi
-  EXPECT_EQ "${lval}" "${rval}" ||
+  if ! EXPECT_EQ "${lval}" "${rval}"; then
     die "${@}"
+  fi
 }
 
 [ "USAGE: check_ne <lval> <rval> [--warning [message]]
@@ -724,8 +725,9 @@ check_ne() {
       EXPECT_NE "${lval}" "${rval}" ${*}
       return
   fi
-  EXPECT_NE "${lval}" "${rval}" ||
+  if ! EXPECT_NE "${lval}" "${rval}"; then
     die "${@}"
+  fi
 }
 
 [ "USAGE: skip_administrative_mounts [data] < /proc/mounts
@@ -847,6 +849,8 @@ fi
 
 # Do something.
 
+# Collect characteristics of the device and report.
+
 D=`get_property ro.serialno`
 [ -n "${D}" ] || D=`get_property ro.boot.serialno`
 [ -z "${D}" -o -n "${ANDROID_SERIAL}" ] || ANDROID_SERIAL=${D}
@@ -869,22 +873,42 @@ ACTIVE_SLOT=`get_active_slot`
 [ -z "${ACTIVE_SLOT}" ] ||
   echo "${BLUE}[     INFO ]${NORMAL} active slot is ${ACTIVE_SLOT}" >&2
 
+# Acquire list of system partitions
+
+PARTITIONS=`adb_su cat /vendor/etc/fstab* |
+              skip_administrative_mounts |
+              sed -n "s@^\([^ ${TAB}/][^ ${TAB}/]*\)[ ${TAB}].*[, ${TAB}]ro[, ${TAB}].*@\1@p" |
+              sort -u |
+              tr '\n' ' '`
+PARTITIONS="${PARTITIONS:-system vendor}"
+# KISS (we do not support sub-mounts for system partitions currently)
+MOUNTS="`for i in ${PARTITIONS}; do
+           echo /${i}
+         done |
+         tr '\n' ' '`"
+echo "${BLUE}[     INFO ]${NORMAL} System Partitions list: ${PARTITIONS}" >&2
+
 # Report existing partition sizes
-adb_sh ls -l /dev/block/by-name/ </dev/null 2>/dev/null |
+adb_sh ls -l /dev/block/by-name/ /dev/block/mapper/ </dev/null 2>/dev/null |
   sed -n 's@.* \([^ ]*\) -> /dev/block/\([^ ]*\)$@\1 \2@p' |
   while read name device; do
-    case ${name} in
-      system_[ab] | system | vendor_[ab] | vendor | super | cache)
-        case ${device} in
-          sd*)
-            device=${device%%[0-9]*}/${device}
-            ;;
-        esac
-        size=`adb_su cat /sys/block/${device}/size 2>/dev/null </dev/null` &&
-          size=`expr ${size} / 2` &&
-          echo "${BLUE}[     INFO ]${NORMAL} partition ${name} device ${device} size ${size}K" >&2
+    [ super = ${name} -o cache = ${name} ] ||
+      (
+        for i in ${PARTITIONS}; do
+          [ ${i} = ${name} -o ${i} = ${name%_[ab]} ] && exit
+        done
+        exit 1
+      ) ||
+      continue
+
+    case ${device} in
+      sd*)
+        device=${device%%[0-9]*}/${device}
         ;;
     esac
+    size=`adb_su cat /sys/block/${device}/size 2>/dev/null </dev/null` &&
+      size=`expr ${size} / 2` &&
+      echo "${BLUE}[     INFO ]${NORMAL} partition ${name} device ${device} size ${size}K" >&2
   done
 
 # If reboot too soon after fresh flash, could trip device update failure logic
@@ -1107,7 +1131,7 @@ echo "${GREEN}[ RUN      ]${NORMAL} remount" >&2
 
 # Feed log with selinux denials as baseline before overlays
 adb_unroot
-adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
+adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
 adb_root
 
 D=`adb remount 2>&1`
@@ -1199,21 +1223,19 @@ fi
 
 # Check something.
 
-echo "${GREEN}[ RUN      ]${NORMAL} push content to /system and /vendor" >&2
+echo "${GREEN}[ RUN      ]${NORMAL} push content to ${MOUNTS}" >&2
 
 A="Hello World! $(date)"
-echo "${A}" | adb_sh cat - ">/system/hello"
+for i in ${MOUNTS}; do
+  echo "${A}" | adb_sh cat - ">${i}/hello"
+  B="`adb_cat ${i}/hello`" ||
+    die "${i#/} hello"
+  check_eq "${A}" "${B}" ${i} before reboot
+done
 echo "${A}" | adb_sh cat - ">/system/priv-app/hello"
-echo "${A}" | adb_sh cat - ">/vendor/hello"
-B="`adb_cat /system/hello`" ||
-  die "system hello"
-check_eq "${A}" "${B}" /system before reboot
 B="`adb_cat /system/priv-app/hello`" ||
   die "system priv-app hello"
 check_eq "${A}" "${B}" /system/priv-app before reboot
-B="`adb_cat /vendor/hello`" ||
-  die "vendor hello"
-check_eq "${A}" "${B}" /vendor before reboot
 SYSTEM_DEVT=`adb_sh stat --format=%D /system/hello </dev/null`
 VENDOR_DEVT=`adb_sh stat --format=%D /vendor/hello </dev/null`
 SYSTEM_INO=`adb_sh stat --format=%i /system/hello </dev/null`
@@ -1288,24 +1310,23 @@ if ${enforcing}; then
   echo "${GREEN}[       OK ]${NORMAL} /vendor content correct MAC after reboot" >&2
   # Feed unprivileged log with selinux denials as a result of overlays
   wait_for_screen
-  adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
+  adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
 fi
-B="`adb_cat /system/hello`"
-check_eq "${A}" "${B}" /system after reboot
 # If overlayfs has a nested security problem, this will fail.
 B="`adb_ls /system/`" ||
-  dir "adb ls /system"
+  die "adb ls /system"
 [ X"${B}" != X"${B#*priv-app}" ] ||
-  dir "adb ls /system/priv-app"
+  die "adb ls /system/priv-app"
 B="`adb_cat /system/priv-app/hello`"
 check_eq "${A}" "${B}" /system/priv-app after reboot
-echo "${GREEN}[       OK ]${NORMAL} /system content remains after reboot" >&2
 # Only root can read vendor if sepolicy permissions are as expected.
 adb_root ||
   die "adb root"
-B="`adb_cat /vendor/hello`"
-check_eq "${A}" "${B}" vendor after reboot
-echo "${GREEN}[       OK ]${NORMAL} /vendor content remains after reboot" >&2
+for i in ${MOUNTS}; do
+  B="`adb_cat ${i}/hello`"
+  check_eq "${A}" "${B}" ${i#/} after reboot
+  echo "${GREEN}[       OK ]${NORMAL} ${i} content remains after reboot" >&2
+done
 
 check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
 check_eq "${VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/hello </dev/null`" vendor devt after reboot
@@ -1316,7 +1337,7 @@ check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/
 check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" devt for su after reboot
 
 # Feed log with selinux denials as a result of overlays
-adb_sh find /system /vendor </dev/null >/dev/null 2>/dev/null
+adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
 
 # Check if the updated libc.so is persistent after reboot.
 adb_root &&
@@ -1421,9 +1442,9 @@ else
   B="`adb_cat /system/hello`"
   check_eq "${A}" "${B}" system after flash vendor
   B="`adb_ls /system/`" ||
-    dir "adb ls /system"
+    die "adb ls /system"
   [ X"${B}" != X"${B#*priv-app}" ] ||
-    dir "adb ls /system/priv-app"
+    die "adb ls /system/priv-app"
   B="`adb_cat /system/priv-app/hello`"
   check_eq "${A}" "${B}" system/priv-app after flash vendor
   adb_root ||
@@ -1476,6 +1497,9 @@ B="`adb_cat /system/priv-app/hello`"
 check_eq "cat: /system/priv-app/hello: No such file or directory" "${B}" after rm
 B="`adb_cat /vendor/hello`"
 check_eq "cat: /vendor/hello: No such file or directory" "${B}" after rm
+for i in ${MOUNTS}; do
+  adb_sh rm ${i}/hello </dev/null 2>/dev/null || true
+done
 
 if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
 

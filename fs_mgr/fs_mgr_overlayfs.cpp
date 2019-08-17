@@ -133,7 +133,7 @@ bool fs_mgr_dir_is_writable(const std::string& path) {
     return ret | !rmdir(test_directory.c_str());
 }
 
-// At less than 1% free space return value of false,
+// At less than 1% or 8MB of free space return value of false,
 // means we will try to wrap with overlayfs.
 bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
     // If we have access issues to find out space remaining, return true
@@ -145,9 +145,11 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
         return true;
     }
 
-    static constexpr int kPercentThreshold = 1;  // 1%
+    static constexpr int kPercentThreshold = 1;                       // 1%
+    static constexpr unsigned long kSizeThreshold = 8 * 1024 * 1024;  // 8MB
 
-    return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100));
+    return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100)) &&
+           (vst.f_bfree * vst.f_bsize) >= kSizeThreshold;
 }
 
 const auto kPhysicalDevice = "/dev/block/by-name/"s;
@@ -959,9 +961,16 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
     }
 
     if (changed || partition_create) {
-        if (!CreateLogicalPartition(super_device, slot_number, partition_name, true, 10s,
-                                    scratch_device))
+        CreateLogicalPartitionParams params = {
+                .block_device = super_device,
+                .metadata_slot = slot_number,
+                .partition_name = partition_name,
+                .force_writable = true,
+                .timeout_ms = 10s,
+        };
+        if (!CreateLogicalPartition(params, scratch_device)) {
             return false;
+        }
 
         if (change) *change = true;
     }
@@ -1182,11 +1191,15 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if ((mount_point != nullptr) && !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
         auto scratch_device = fs_mgr_overlayfs_scratch_device();
         if (scratch_device.empty()) {
-            auto slot_number = fs_mgr_overlayfs_slot_number();
-            auto super_device = fs_mgr_overlayfs_super_device(slot_number);
-            const auto partition_name = android::base::Basename(kScratchMountPoint);
-            CreateLogicalPartition(super_device, slot_number, partition_name, true, 10s,
-                                   &scratch_device);
+            auto metadata_slot = fs_mgr_overlayfs_slot_number();
+            CreateLogicalPartitionParams params = {
+                    .block_device = fs_mgr_overlayfs_super_device(metadata_slot),
+                    .metadata_slot = metadata_slot,
+                    .partition_name = android::base::Basename(kScratchMountPoint),
+                    .force_writable = true,
+                    .timeout_ms = 10s,
+            };
+            CreateLogicalPartition(params, &scratch_device);
         }
         mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,
                                                        fs_mgr_overlayfs_scratch_mount_type());

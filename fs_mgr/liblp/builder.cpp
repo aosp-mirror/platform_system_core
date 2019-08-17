@@ -140,7 +140,7 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::New(const LpMetadata& metadata
     }
     if (opener) {
         for (size_t i = 0; i < builder->block_devices_.size(); i++) {
-            std::string partition_name = GetBlockDevicePartitionName(builder->block_devices_[i]);
+            std::string partition_name = builder->GetBlockDevicePartitionName(i);
             BlockDeviceInfo device_info;
             if (opener->GetInfo(partition_name, &device_info)) {
                 builder->UpdateBlockDeviceInfo(i, device_info);
@@ -164,9 +164,16 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionO
     // name and system properties.
     // See comments for UpdateMetadataForOtherSuper.
     auto super_device = GetMetadataSuperBlockDevice(*metadata.get());
-    if (GetBlockDevicePartitionName(*super_device) != "super" &&
+    if (android::fs_mgr::GetBlockDevicePartitionName(*super_device) != "super" &&
         IsRetrofitDynamicPartitionsDevice()) {
         if (!UpdateMetadataForOtherSuper(metadata.get(), source_slot_number, target_slot_number)) {
+            return nullptr;
+        }
+    }
+
+    if (IPropertyFetcher::GetInstance()->GetBoolProperty("ro.virtual_ab.enabled", false)) {
+        if (!UpdateMetadataForInPlaceSnapshot(metadata.get(), source_slot_number,
+                                              target_slot_number)) {
             return nullptr;
         }
     }
@@ -192,7 +199,8 @@ bool MetadataBuilder::UpdateMetadataForOtherSuper(LpMetadata* metadata, uint32_t
     // Translate block devices.
     auto source_block_devices = std::move(metadata->block_devices);
     for (const auto& source_block_device : source_block_devices) {
-        std::string partition_name = GetBlockDevicePartitionName(source_block_device);
+        std::string partition_name =
+                android::fs_mgr::GetBlockDevicePartitionName(source_block_device);
         std::string slot_suffix = GetPartitionSlotSuffix(partition_name);
         if (slot_suffix.empty() || slot_suffix != source_slot_suffix) {
             // This should never happen. It means that the source metadata
@@ -375,7 +383,7 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
             block_devices_.emplace_back(out);
         }
     }
-    if (GetBlockDevicePartitionName(block_devices_[0]) != super_partition) {
+    if (GetBlockDevicePartitionName(0) != super_partition) {
         LERROR << "No super partition was specified.";
         return false;
     }
@@ -458,7 +466,7 @@ Partition* MetadataBuilder::FindPartition(const std::string& name) {
     return nullptr;
 }
 
-PartitionGroup* MetadataBuilder::FindGroup(const std::string& group_name) {
+PartitionGroup* MetadataBuilder::FindGroup(std::string_view group_name) {
     for (const auto& group : groups_) {
         if (group->name() == group_name) {
             return group.get();
@@ -582,8 +590,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
     CHECK_NE(sectors_per_block, 0);
     CHECK(sectors_needed % sectors_per_block == 0);
 
-    if (IsABDevice() && !IsRetrofitMetadata() &&
-        GetPartitionSlotSuffix(partition->name()) == "_b") {
+    if (IsABDevice() && ShouldHalveSuper() && GetPartitionSlotSuffix(partition->name()) == "_b") {
         // Allocate "a" partitions top-down and "b" partitions bottom-up, to
         // minimize fragmentation during OTA.
         free_regions = PrioritizeSecondHalfOfSuper(free_regions);
@@ -849,7 +856,7 @@ uint64_t MetadataBuilder::AlignSector(const LpMetadataBlockDevice& block_device,
 bool MetadataBuilder::FindBlockDeviceByName(const std::string& partition_name,
                                             uint32_t* index) const {
     for (size_t i = 0; i < block_devices_.size(); i++) {
-        if (GetBlockDevicePartitionName(block_devices_[i]) == partition_name) {
+        if (GetBlockDevicePartitionName(i) == partition_name) {
             *index = i;
             return true;
         }
@@ -974,7 +981,8 @@ static bool CompareBlockDevices(const LpMetadataBlockDevice& first,
     // Note: we don't compare alignment, since it's a performance thing and
     // won't affect whether old extents continue to work.
     return first.first_logical_sector == second.first_logical_sector && first.size == second.size &&
-           GetBlockDevicePartitionName(first) == GetBlockDevicePartitionName(second);
+           android::fs_mgr::GetBlockDevicePartitionName(first) ==
+                   android::fs_mgr::GetBlockDevicePartitionName(second);
 }
 
 bool MetadataBuilder::ImportPartitions(const LpMetadata& metadata,
@@ -1056,8 +1064,9 @@ bool MetadataBuilder::IsRetrofitDynamicPartitionsDevice() {
                                                             false);
 }
 
-bool MetadataBuilder::IsRetrofitMetadata() const {
-    return GetBlockDevicePartitionName(block_devices_[0]) != LP_METADATA_DEFAULT_PARTITION_NAME;
+bool MetadataBuilder::ShouldHalveSuper() const {
+    return GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME &&
+           !IPropertyFetcher::GetInstance()->GetBoolProperty("ro.virtual_ab.enabled", false);
 }
 
 bool MetadataBuilder::AddLinearExtent(Partition* partition, const std::string& block_device,
@@ -1083,7 +1092,7 @@ std::vector<Partition*> MetadataBuilder::ListPartitionsInGroup(const std::string
     return partitions;
 }
 
-bool MetadataBuilder::ChangePartitionGroup(Partition* partition, const std::string& group_name) {
+bool MetadataBuilder::ChangePartitionGroup(Partition* partition, std::string_view group_name) {
     if (!FindGroup(group_name)) {
         LERROR << "Partition cannot change to unknown group: " << group_name;
         return false;
@@ -1119,6 +1128,12 @@ bool MetadataBuilder::ChangeGroupSize(const std::string& group_name, uint64_t ma
     }
     group->set_maximum_size(maximum_size);
     return true;
+}
+
+std::string MetadataBuilder::GetBlockDevicePartitionName(uint64_t index) const {
+    return index < block_devices_.size()
+                   ? android::fs_mgr::GetBlockDevicePartitionName(block_devices_[index])
+                   : "";
 }
 
 }  // namespace fs_mgr
