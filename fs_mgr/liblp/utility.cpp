@@ -24,6 +24,10 @@
 #include <sys/ioctl.h>
 #endif
 
+#include <map>
+#include <string>
+#include <vector>
+
 #include <android-base/file.h>
 #include <ext4_utils/ext4_utils.h>
 #include <openssl/sha.h>
@@ -182,6 +186,14 @@ bool UpdatePartitionGroupName(LpMetadataPartitionGroup* group, const std::string
     return true;
 }
 
+bool UpdatePartitionName(LpMetadataPartition* partition, const std::string& name) {
+    if (name.size() > sizeof(partition->name)) {
+        return false;
+    }
+    strncpy(partition->name, name.c_str(), sizeof(partition->name));
+    return true;
+}
+
 bool SetBlockReadonly(int fd, bool readonly) {
 #if defined(__linux__)
     int val = readonly;
@@ -205,6 +217,71 @@ base::unique_fd GetControlFileOrOpen(const char* path, int flags) {
     }
 #endif
     return base::unique_fd(open(path, flags));
+}
+
+bool UpdateMetadataForInPlaceSnapshot(LpMetadata* metadata, uint32_t source_slot_number,
+                                      uint32_t target_slot_number) {
+    std::string source_slot_suffix = SlotSuffixForSlotNumber(source_slot_number);
+    std::string target_slot_suffix = SlotSuffixForSlotNumber(target_slot_number);
+
+    // There can be leftover groups with target suffix on retrofit devices.
+    // They are useless now, so delete.
+    std::vector<LpMetadataPartitionGroup*> new_group_ptrs;
+    for (auto& group : metadata->groups) {
+        std::string group_name = GetPartitionGroupName(group);
+        std::string slot_suffix = GetPartitionSlotSuffix(group_name);
+        // Don't add groups with target slot suffix.
+        if (slot_suffix == target_slot_suffix) continue;
+        // Replace source slot suffix with target slot suffix.
+        if (slot_suffix == source_slot_suffix) {
+            std::string new_name = group_name.substr(0, group_name.size() - slot_suffix.size()) +
+                                   target_slot_suffix;
+            if (!UpdatePartitionGroupName(&group, new_name)) {
+                LERROR << "Group name too long: " << new_name;
+                return false;
+            }
+        }
+        new_group_ptrs.push_back(&group);
+    }
+
+    std::vector<LpMetadataPartition*> new_partition_ptrs;
+    for (auto& partition : metadata->partitions) {
+        std::string partition_name = GetPartitionName(partition);
+        std::string slot_suffix = GetPartitionSlotSuffix(partition_name);
+        // Don't add partitions with target slot suffix.
+        if (slot_suffix == target_slot_suffix) continue;
+        // Replace source slot suffix with target slot suffix.
+        if (slot_suffix == source_slot_suffix) {
+            std::string new_name =
+                    partition_name.substr(0, partition_name.size() - slot_suffix.size()) +
+                    target_slot_suffix;
+            if (!UpdatePartitionName(&partition, new_name)) {
+                LERROR << "Partition name too long: " << new_name;
+                return false;
+            }
+        }
+        // Update group index.
+        auto it = std::find(new_group_ptrs.begin(), new_group_ptrs.end(),
+                            &metadata->groups[partition.group_index]);
+        if (it == new_group_ptrs.end()) {
+            LWARN << "Removing partition " << partition_name << " from group "
+                  << GetPartitionGroupName(metadata->groups[partition.group_index])
+                  << "; this partition should not belong to this group!";
+            continue;  // not adding to new_partition_ptrs
+        }
+        partition.group_index = std::distance(new_group_ptrs.begin(), it);
+        new_partition_ptrs.push_back(&partition);
+    }
+
+    std::vector<LpMetadataPartition> new_partitions;
+    for (auto* p : new_partition_ptrs) new_partitions.emplace_back(std::move(*p));
+    metadata->partitions = std::move(new_partitions);
+
+    std::vector<LpMetadataPartitionGroup> new_groups;
+    for (auto* g : new_group_ptrs) new_groups.emplace_back(std::move(*g));
+    metadata->groups = std::move(new_groups);
+
+    return true;
 }
 
 }  // namespace fs_mgr
