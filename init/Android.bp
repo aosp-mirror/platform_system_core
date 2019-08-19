@@ -269,10 +269,12 @@ cc_binary {
     shared_libs: [
         "libcutils",
         "libhidl-gen-utils",
-        "libjsoncpp",
         "liblog",
         "libprocessgroup",
         "libprotobuf-cpp-lite",
+    ],
+    header_libs: [
+        "libjsoncpp_headers",
     ],
     srcs: [
         "action.cpp",
