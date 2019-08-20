@@ -206,9 +206,18 @@ cc_binary {
 // ------------------------------------------------------------------------------
 
 cc_test {
-    name: "init_tests",
+    name: "CtsInitTestCases",
     defaults: ["init_defaults"],
-    compile_multilib: "first",
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
+
     srcs: [
         "devices_test.cpp",
         "init_test.cpp",
@@ -225,7 +234,12 @@ cc_test {
         "util_test.cpp",
     ],
     static_libs: ["libinit"],
-    test_suites: ["device-tests"],
+
+    test_suites: [
+        "cts",
+        "device-tests",
+        "vts",
+    ],
 }
 
 cc_benchmark {
