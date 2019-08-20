@@ -328,15 +328,13 @@ namespace.rs.asan.permitted.paths += /data/asan/vendor/${LIB}
 namespace.rs.asan.permitted.paths +=           /vendor/${LIB}
 namespace.rs.asan.permitted.paths += /data
 
-namespace.rs.links = default,vndk,neuralnetworks
+namespace.rs.links = default,neuralnetworks
 
 namespace.rs.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.rs.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 # Private LLNDK libs (e.g. libft2.so) are exceptionally allowed to this
 # namespace because RS framework libs are using them.
 namespace.rs.link.default.shared_libs += %PRIVATE_LLNDK_LIBRARIES%
-
-namespace.rs.link.vndk.shared_libs = %VNDK_SAMEPROCESS_LIBRARIES%
 
 # LLNDK library moved into apex
 namespace.rs.link.neuralnetworks.shared_libs = libneuralnetworks.so
