@@ -36,6 +36,7 @@ namespace snapshot {
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
+using android::fiemap::IImageManager;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
@@ -48,9 +49,11 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     void set_slot_suffix(const std::string& suffix) { slot_suffix_ = suffix; }
 
   private:
-    std::string slot_suffix_;
+    std::string slot_suffix_ = "_a";
 };
 
+// These are not reset between each test because it's expensive to reconnect
+// to gsid each time.
 std::unique_ptr<SnapshotManager> sm;
 TestDeviceInfo* test_device = nullptr;
 
@@ -60,16 +63,14 @@ class SnapshotTest : public ::testing::Test {
 
   protected:
     void SetUp() override {
+        ASSERT_TRUE(sm->EnsureImageManager());
+        image_manager_ = sm->image_manager();
+
         test_device->set_slot_suffix("_a");
 
-        if (sm->GetUpdateState() != UpdateState::None) {
-            CleanupTestArtifacts();
-        }
-        ASSERT_TRUE(sm->BeginUpdate());
-        ASSERT_TRUE(sm->EnsureImageManager());
+        CleanupTestArtifacts();
 
-        image_manager_ = sm->image_manager();
-        ASSERT_NE(image_manager_, nullptr);
+        ASSERT_TRUE(sm->BeginUpdate());
     }
 
     void TearDown() override {
@@ -81,20 +82,25 @@ class SnapshotTest : public ::testing::Test {
     void CleanupTestArtifacts() {
         // Normally cancelling inside a merge is not allowed. Since these
         // are tests, we don't care, destroy everything that might exist.
+        // Note we hardcode this list because of an annoying quirk: when
+        // completing a merge, the snapshot stops existing, so we can't
+        // get an accurate list to remove.
+        lock_ = nullptr;
+
         std::vector<std::string> snapshots = {"test-snapshot"};
         for (const auto& snapshot : snapshots) {
             DeleteSnapshotDevice(snapshot);
-            temp_images_.emplace_back(snapshot + "-cow");
+            DeleteBackingImage(image_manager_, snapshot + "-cow");
 
             auto status_file = sm->GetSnapshotStatusFilePath(snapshot);
             android::base::RemoveFileIfExists(status_file);
         }
 
-        // Remove all images.
-        temp_images_.emplace_back("test-snapshot-cow");
-        for (const auto& temp_image : temp_images_) {
-            image_manager_->UnmapImageDevice(temp_image);
-            image_manager_->DeleteBackingImage(temp_image);
+        // Remove all images. We hardcode the list of names since this can run
+        // before the test (when cleaning up from a crash).
+        std::vector<std::string> temp_partitions = {"base-device"};
+        for (const auto& partition : temp_partitions) {
+            DeleteBackingImage(image_manager_, partition);
         }
 
         if (sm->GetUpdateState() != UpdateState::None) {
@@ -112,23 +118,29 @@ class SnapshotTest : public ::testing::Test {
         if (!image_manager_->CreateBackingImage(name, size, false)) {
             return false;
         }
-        temp_images_.emplace_back(name);
         return image_manager_->MapImageDevice(name, 10s, path);
     }
 
-    bool DeleteSnapshotDevice(const std::string& snapshot) {
+    void DeleteSnapshotDevice(const std::string& snapshot) {
         if (dm_.GetState(snapshot) != DmDeviceState::INVALID) {
-            if (!dm_.DeleteDevice(snapshot)) return false;
+            ASSERT_TRUE(dm_.DeleteDevice(snapshot));
         }
         if (dm_.GetState(snapshot + "-inner") != DmDeviceState::INVALID) {
-            if (!dm_.DeleteDevice(snapshot + "-inner")) return false;
+            ASSERT_TRUE(dm_.DeleteDevice(snapshot + "-inner"));
         }
-        return true;
+    }
+
+    void DeleteBackingImage(IImageManager* manager, const std::string& name) {
+        if (manager->IsImageMapped(name)) {
+            ASSERT_TRUE(manager->UnmapImageDevice(name));
+        }
+        if (manager->BackingImageExists(name)) {
+            ASSERT_TRUE(manager->DeleteBackingImage(name));
+        }
     }
 
     DeviceMapper& dm_;
     std::unique_ptr<SnapshotManager::LockedFile> lock_;
-    std::vector<std::string> temp_images_;
     android::fiemap::IImageManager* image_manager_ = nullptr;
 };
 
@@ -148,7 +160,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
     {
         SnapshotManager::SnapshotStatus status;
         ASSERT_TRUE(sm->ReadSnapshotStatus(lock_.get(), "test-snapshot", &status));
-        ASSERT_EQ(status.state, "created");
+        ASSERT_EQ(status.state, SnapshotManager::SnapshotState::Created);
         ASSERT_EQ(status.device_size, kDeviceSize);
         ASSERT_EQ(status.snapshot_size, kDeviceSize);
     }
@@ -279,7 +291,7 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
     ASSERT_EQ(sm->WaitForMerge(), UpdateState::MergeNeedsReboot);
 
     // Forcefully delete the snapshot device, so it looks like we just rebooted.
-    ASSERT_TRUE(DeleteSnapshotDevice("test-snapshot"));
+    DeleteSnapshotDevice("test-snapshot");
 
     // Map snapshot should fail now, because we're in a merge-complete state.
     ASSERT_TRUE(AcquireLock());

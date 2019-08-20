@@ -52,29 +52,36 @@ using DmTarget = android::dm::DmTarget;
 using DmTargetZero = android::dm::DmTargetZero;
 using DmTargetLinear = android::dm::DmTargetLinear;
 
-static bool GetPhysicalPartitionDevicePath(const LpMetadata& metadata,
+static bool GetPhysicalPartitionDevicePath(const IPartitionOpener& opener,
+                                           const LpMetadata& metadata,
                                            const LpMetadataBlockDevice& block_device,
-                                           const std::string& super_device,
-                                           std::string* result) {
-    // Note: device-mapper will not accept symlinks, so we must use realpath
-    // here.
-    std::string name = GetBlockDevicePartitionName(block_device);
-    std::string path = "/dev/block/by-name/" + name;
+                                           const std::string& super_device, std::string* result) {
     // If the super device is the source of this block device's metadata,
     // make sure we use the correct super device (and not just "super",
     // which might not exist.)
+    std::string name = GetBlockDevicePartitionName(block_device);
+    std::string dev_string = opener.GetDeviceString(name);
     if (GetMetadataSuperBlockDevice(metadata) == &block_device) {
-        path = super_device;
+        dev_string = opener.GetDeviceString(super_device);
     }
-    if (!android::base::Realpath(path, result)) {
-        PERROR << "realpath: " << path;
-        return false;
+
+    // Note: device-mapper will not accept symlinks, so we must use realpath
+    // here. If the device string is a major:minor sequence, we don't need to
+    // to call Realpath (it would not work anyway).
+    if (android::base::StartsWith(dev_string, "/")) {
+        if (!android::base::Realpath(dev_string, result)) {
+            PERROR << "realpath: " << dev_string;
+            return false;
+        }
+    } else {
+        *result = dev_string;
     }
     return true;
 }
 
-static bool CreateDmTable(const LpMetadata& metadata, const LpMetadataPartition& partition,
-                          const std::string& super_device, DmTable* table) {
+static bool CreateDmTable(const IPartitionOpener& opener, const LpMetadata& metadata,
+                          const LpMetadataPartition& partition, const std::string& super_device,
+                          DmTable* table) {
     uint64_t sector = 0;
     for (size_t i = 0; i < partition.num_extents; i++) {
         const auto& extent = metadata.extents[partition.first_extent_index + i];
@@ -85,12 +92,13 @@ static bool CreateDmTable(const LpMetadata& metadata, const LpMetadataPartition&
                 break;
             case LP_TARGET_TYPE_LINEAR: {
                 const auto& block_device = metadata.block_devices[extent.target_source];
-                std::string path;
-                if (!GetPhysicalPartitionDevicePath(metadata, block_device, super_device, &path)) {
+                std::string dev_string;
+                if (!GetPhysicalPartitionDevicePath(opener, metadata, block_device, super_device,
+                                                    &dev_string)) {
                     LOG(ERROR) << "Unable to complete device-mapper table, unknown block device";
                     return false;
                 }
-                target = std::make_unique<DmTargetLinear>(sector, extent.num_sectors, path,
+                target = std::make_unique<DmTargetLinear>(sector, extent.num_sectors, dev_string,
                                                           extent.target_data);
                 break;
             }
@@ -106,26 +114,6 @@ static bool CreateDmTable(const LpMetadata& metadata, const LpMetadataPartition&
     if (partition.attributes & LP_PARTITION_ATTR_READONLY) {
         table->set_readonly(true);
     }
-    return true;
-}
-
-static bool CreateLogicalPartition(const LpMetadata& metadata, const LpMetadataPartition& partition,
-                                   bool force_writable, const std::chrono::milliseconds& timeout_ms,
-                                   const std::string& super_device, std::string* path) {
-    DeviceMapper& dm = DeviceMapper::Instance();
-
-    DmTable table;
-    if (!CreateDmTable(metadata, partition, super_device, &table)) {
-        return false;
-    }
-    if (force_writable) {
-        table.set_readonly(false);
-    }
-    std::string name = GetPartitionName(partition);
-    if (!dm.CreateDevice(name, table, path, timeout_ms)) {
-        return false;
-    }
-    LINFO << "Created logical partition " << name << " on device " << *path;
     return true;
 }
 
@@ -145,13 +133,20 @@ std::unique_ptr<LpMetadata> ReadCurrentMetadata(const std::string& block_device)
 }
 
 bool CreateLogicalPartitions(const LpMetadata& metadata, const std::string& super_device) {
+    CreateLogicalPartitionParams params = {
+            .block_device = super_device,
+            .metadata = &metadata,
+    };
     for (const auto& partition : metadata.partitions) {
         if (!partition.num_extents) {
             LINFO << "Skipping zero-length logical partition: " << GetPartitionName(partition);
             continue;
         }
-        std::string path;
-        if (!CreateLogicalPartition(metadata, partition, false, {}, super_device, &path)) {
+
+        params.partition = &partition;
+
+        std::string ignore_path;
+        if (!CreateLogicalPartition(params, &ignore_path)) {
             LERROR << "Could not create logical partition: " << GetPartitionName(partition);
             return false;
         }
@@ -159,29 +154,62 @@ bool CreateLogicalPartitions(const LpMetadata& metadata, const std::string& supe
     return true;
 }
 
-bool CreateLogicalPartition(const std::string& block_device, const LpMetadata& metadata,
-                            const std::string& partition_name, bool force_writable,
-                            const std::chrono::milliseconds& timeout_ms, std::string* path) {
-    for (const auto& partition : metadata.partitions) {
-        if (GetPartitionName(partition) == partition_name) {
-            return CreateLogicalPartition(metadata, partition, force_writable, timeout_ms,
-                                          block_device, path);
+bool CreateLogicalPartition(const CreateLogicalPartitionParams& params, std::string* path) {
+    const LpMetadata* metadata = params.metadata;
+
+    // Read metadata if needed.
+    std::unique_ptr<LpMetadata> local_metadata;
+    if (!metadata) {
+        if (!params.metadata_slot) {
+            LOG(ERROR) << "Either metadata or a metadata slot must be specified.";
+            return false;
+        }
+        auto slot = *params.metadata_slot;
+        if (local_metadata = ReadMetadata(params.block_device, slot); !local_metadata) {
+            LOG(ERROR) << "Could not read partition table for: " << params.block_device;
+            return false;
+        }
+        metadata = local_metadata.get();
+    }
+
+    // Find the partition by name if needed.
+    const LpMetadataPartition* partition = params.partition;
+    if (!partition) {
+        for (const auto& iter : metadata->partitions) {
+            if (GetPartitionName(iter) == params.partition_name) {
+                partition = &iter;
+                break;
+            }
+        }
+        if (!partition) {
+            LERROR << "Could not find any partition with name: " << params.partition_name;
+            return false;
         }
     }
-    LERROR << "Could not find any partition with name: " << partition_name;
-    return false;
-}
 
-bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_slot,
-                            const std::string& partition_name, bool force_writable,
-                            const std::chrono::milliseconds& timeout_ms, std::string* path) {
-    auto metadata = ReadMetadata(block_device.c_str(), metadata_slot);
-    if (!metadata) {
-        LOG(ERROR) << "Could not read partition table.";
-        return true;
+    PartitionOpener default_opener;
+    const IPartitionOpener* opener =
+            params.partition_opener ? params.partition_opener : &default_opener;
+
+    DmTable table;
+    if (!CreateDmTable(*opener, *metadata, *partition, params.block_device, &table)) {
+        return false;
     }
-    return CreateLogicalPartition(block_device, *metadata.get(), partition_name, force_writable,
-                                  timeout_ms, path);
+    if (params.force_writable) {
+        table.set_readonly(false);
+    }
+
+    std::string device_name = params.device_name;
+    if (device_name.empty()) {
+        device_name = GetPartitionName(*partition);
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    if (!dm.CreateDevice(device_name, table, path, params.timeout_ms)) {
+        return false;
+    }
+    LINFO << "Created logical partition " << device_name << " on device " << *path;
+    return true;
 }
 
 bool UnmapDevice(const std::string& name) {
