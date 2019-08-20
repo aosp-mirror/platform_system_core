@@ -33,6 +33,7 @@
 // Include this before open/close/unlink are defined as macros below.
 #include <android-base/errors.h>
 #include <android-base/macros.h>
+#include <android-base/off64_t.h>
 #include <android-base/unique_fd.h>
 #include <android-base/utf8.h>
 
