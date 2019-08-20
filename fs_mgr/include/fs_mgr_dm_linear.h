@@ -29,6 +29,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -49,22 +50,36 @@ bool CreateLogicalPartitions(const LpMetadata& metadata, const std::string& bloc
 // method for ReadMetadata and CreateLogicalPartitions.
 bool CreateLogicalPartitions(const std::string& block_device);
 
-// Create a block device for a single logical partition, given metadata and
-// the partition name. On success, a path to the partition's block device is
-// returned. If |force_writable| is true, the "readonly" flag will be ignored
-// so the partition can be flashed.
-//
-// If |timeout_ms| is non-zero, then CreateLogicalPartition will block for the
-// given amount of time until the path returned in |path| is available.
-bool CreateLogicalPartition(const std::string& block_device, uint32_t metadata_slot,
-                            const std::string& partition_name, bool force_writable,
-                            const std::chrono::milliseconds& timeout_ms, std::string* path);
+struct CreateLogicalPartitionParams {
+    // Block device of the super partition.
+    std::string block_device;
 
-// Same as above, but with a given metadata object. Care should be taken that
-// the metadata represents a valid partition layout.
-bool CreateLogicalPartition(const std::string& block_device, const LpMetadata& metadata,
-                            const std::string& partition_name, bool force_writable,
-                            const std::chrono::milliseconds& timeout_ms, std::string* path);
+    // If |metadata| is null, the slot will be read using |metadata_slot|.
+    const LpMetadata* metadata = nullptr;
+    std::optional<uint32_t> metadata_slot;
+
+    // If |partition| is not set, it will be found via |partition_name|.
+    const LpMetadataPartition* partition = nullptr;
+    std::string partition_name;
+
+    // Force the device to be read-write even if it was specified as readonly
+    // in the metadata.
+    bool force_writable = false;
+
+    // If |timeout_ms| is non-zero, then CreateLogicalPartition will block for
+    // the given amount of time until the path returned in |path| is available.
+    std::chrono::milliseconds timeout_ms = {};
+
+    // If this is non-empty, it will override the device mapper name (by
+    // default the partition name will be used).
+    std::string device_name;
+
+    // If non-null, this will use the specified IPartitionOpener rather than
+    // the default one.
+    const IPartitionOpener* partition_opener = nullptr;
+};
+
+bool CreateLogicalPartition(const CreateLogicalPartitionParams& params, std::string* path);
 
 // Destroy the block device for a logical partition, by name. If |timeout_ms|
 // is non-zero, then this will block until the device path has been unlinked.

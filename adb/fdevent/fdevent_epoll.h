@@ -16,7 +16,11 @@
  * limitations under the License.
  */
 
+#if defined(__linux__)
+
 #include "sysdeps.h"
+
+#include <sys/epoll.h>
 
 #include <deque>
 #include <list>
@@ -28,36 +32,30 @@
 #include "adb_unique_fd.h"
 #include "fdevent.h"
 
-struct PollNode {
-  fdevent* fde;
-  adb_pollfd pollfd;
+struct fdevent_context_epoll final : public fdevent_context {
+    fdevent_context_epoll();
+    virtual ~fdevent_context_epoll();
 
-  explicit PollNode(fdevent* fde) : fde(fde) {
-      memset(&pollfd, 0, sizeof(pollfd));
-      pollfd.fd = fde->fd.get();
-
-#if defined(__linux__)
-      // Always enable POLLRDHUP, so the host server can take action when some clients disconnect.
-      // Then we can avoid leaving many sockets in CLOSE_WAIT state. See http://b/23314034.
-      pollfd.events = POLLRDHUP;
-#endif
-  }
-};
-
-struct fdevent_context_poll final : public fdevent_context {
-    fdevent_context_poll();
-    virtual ~fdevent_context_poll();
+    virtual void Register(fdevent* fde) final;
+    virtual void Unregister(fdevent* fde) final;
 
     virtual void Set(fdevent* fde, unsigned events) final;
 
     virtual void Loop() final;
-
-    virtual size_t InstalledCount() final;
+    size_t InstalledCount() final;
 
   protected:
     virtual void Interrupt() final;
 
   public:
+    // All operations to fdevent should happen only in the main thread.
+    // That's why we don't need a lock for fdevent.
+    std::unordered_map<int, fdevent*> epoll_node_map_;
+    std::list<fdevent*> pending_list_;
+
+    unique_fd epoll_fd_;
     unique_fd interrupt_fd_;
     fdevent* interrupt_fde_ = nullptr;
 };
+
+#endif  // defined(__linux__)
