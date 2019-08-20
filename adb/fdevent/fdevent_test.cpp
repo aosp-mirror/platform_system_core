@@ -118,8 +118,8 @@ TEST_F(FdeventTest, fdevent_terminate) {
 TEST_F(FdeventTest, smoke) {
     for (bool use_new_callback : {true, false}) {
         fdevent_reset();
-        const size_t PIPE_COUNT = 10;
-        const size_t MESSAGE_LOOP_COUNT = 100;
+        const size_t PIPE_COUNT = 512;
+        const size_t MESSAGE_LOOP_COUNT = 10;
         const std::string MESSAGE = "fdevent_test";
         int fd_pair1[2];
         int fd_pair2[2];
@@ -170,44 +170,6 @@ TEST_F(FdeventTest, smoke) {
         ASSERT_EQ(0, adb_close(writer));
         ASSERT_EQ(0, adb_close(reader));
     }
-}
-
-struct InvalidFdArg {
-    fdevent* fde;
-    unsigned expected_events;
-    size_t* happened_event_count;
-};
-
-static void InvalidFdEventCallback(int, unsigned events, void* userdata) {
-    InvalidFdArg* arg = reinterpret_cast<InvalidFdArg*>(userdata);
-    ASSERT_EQ(arg->expected_events, events);
-    fdevent_destroy(arg->fde);
-    if (++*(arg->happened_event_count) == 2) {
-        fdevent_terminate_loop();
-    }
-}
-
-static void InvalidFdThreadFunc() {
-    const int INVALID_READ_FD = std::numeric_limits<int>::max() - 1;
-    size_t happened_event_count = 0;
-    InvalidFdArg read_arg;
-    read_arg.expected_events = FDE_READ | FDE_ERROR;
-    read_arg.happened_event_count = &happened_event_count;
-    read_arg.fde = fdevent_create(INVALID_READ_FD, InvalidFdEventCallback, &read_arg);
-    fdevent_add(read_arg.fde, FDE_READ);
-
-    const int INVALID_WRITE_FD = std::numeric_limits<int>::max();
-    InvalidFdArg write_arg;
-    write_arg.expected_events = FDE_READ | FDE_ERROR;
-    write_arg.happened_event_count = &happened_event_count;
-    write_arg.fde = fdevent_create(INVALID_WRITE_FD, InvalidFdEventCallback, &write_arg);
-    fdevent_add(write_arg.fde, FDE_WRITE);
-    fdevent_loop();
-}
-
-TEST_F(FdeventTest, invalid_fd) {
-    std::thread thread(InvalidFdThreadFunc);
-    thread.join();
 }
 
 TEST_F(FdeventTest, run_on_main_thread) {
