@@ -390,59 +390,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
 
 // assumes LogBuffer::wrlock() held, owns elem, look after garbage collection
 void LogBuffer::log(LogBufferElement* elem) {
-    // cap on how far back we will sort in-place, otherwise append
-    static uint32_t too_far_back = 5;  // five seconds
-    // Insert elements in time sorted order if possible
-    //  NB: if end is region locked, place element at end of list
-    LogBufferElementCollection::iterator it = mLogElements.end();
-    LogBufferElementCollection::iterator last = it;
-    if (__predict_true(it != mLogElements.begin())) --it;
-    if (__predict_false(it == mLogElements.begin()) ||
-        __predict_true((*it)->getRealTime() <= elem->getRealTime()) ||
-        __predict_false((((*it)->getRealTime().tv_sec - too_far_back) >
-                         elem->getRealTime().tv_sec) &&
-                        (elem->getLogId() != LOG_ID_KERNEL) &&
-                        ((*it)->getLogId() != LOG_ID_KERNEL))) {
-        mLogElements.push_back(elem);
-    } else {
-        log_time end(log_time::EPOCH);
-        bool end_set = false;
-        bool end_always = false;
-
-        LogTimeEntry::rdlock();
-
-        LastLogTimes::iterator times = mTimes.begin();
-        while (times != mTimes.end()) {
-            LogTimeEntry* entry = times->get();
-            if (!entry->mNonBlock) {
-                end_always = true;
-                break;
-            }
-            // it passing mEnd is blocked by the following checks.
-            if (!end_set || (end <= entry->mEnd)) {
-                end = entry->mEnd;
-                end_set = true;
-            }
-            times++;
-        }
-
-        if (end_always || (end_set && (end > (*it)->getRealTime()))) {
-            mLogElements.push_back(elem);
-        } else {
-            // should be short as timestamps are localized near end()
-            do {
-                last = it;
-                if (__predict_false(it == mLogElements.begin())) {
-                    break;
-                }
-                --it;
-            } while (((*it)->getRealTime() > elem->getRealTime()) &&
-                     (!end_set || (end <= (*it)->getRealTime())));
-            mLogElements.insert(last, elem);
-        }
-        LogTimeEntry::unlock();
-    }
-
+    mLogElements.push_back(elem);
     stats.add(elem);
     maybePrune(elem->getLogId());
 }
