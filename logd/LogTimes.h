@@ -49,13 +49,12 @@ class LogTimeEntry {
     unsigned long mTail;
     unsigned long mIndex;
 
-   public:
-    LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock,
-                 unsigned long tail, log_mask_t logMask, pid_t pid,
-                 log_time start, uint64_t timeout);
+  public:
+    LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock, unsigned long tail,
+                 log_mask_t logMask, pid_t pid, uint64_t start, uint64_t timeout);
 
     SocketClient* mClient;
-    log_time mStart;
+    uint64_t mStart;
     struct timespec mTimeout;  // CLOCK_MONOTONIC based timeout used for log wrapping.
     const bool mNonBlock;
 

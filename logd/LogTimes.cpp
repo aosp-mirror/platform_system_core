@@ -18,8 +18,6 @@
 #include <string.h>
 #include <sys/prctl.h>
 
-#include <private/android_logger.h>
-
 #include "FlushCommand.h"
 #include "LogBuffer.h"
 #include "LogReader.h"
@@ -28,7 +26,7 @@
 pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
 LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock,
-                           unsigned long tail, log_mask_t logMask, pid_t pid, log_time start,
+                           unsigned long tail, log_mask_t logMask, pid_t pid, uint64_t start,
                            uint64_t timeout)
     : leadingDropped(false),
       mReader(reader),
@@ -80,7 +78,7 @@ void* LogTimeEntry::threadStart(void* obj) {
 
     wrlock();
 
-    log_time start = me->mStart;
+    uint64_t start = me->mStart;
 
     while (!me->mRelease) {
         if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
@@ -110,7 +108,7 @@ void* LogTimeEntry::threadStart(void* obj) {
             break;
         }
 
-        me->mStart = start + log_time(0, 1);
+        me->mStart = start + 1;
 
         if (me->mNonBlock || me->mRelease) {
             break;
@@ -157,7 +155,7 @@ int LogTimeEntry::FilterFirstPass(const LogBufferElement* element, void* obj) {
     }
 
     if (me->mCount == 0) {
-        me->mStart = element->getRealTime();
+        me->mStart = element->getSequence();
     }
 
     if ((!me->mPid || (me->mPid == element->getPid())) &&
@@ -176,7 +174,7 @@ int LogTimeEntry::FilterSecondPass(const LogBufferElement* element, void* obj) {
 
     LogTimeEntry::wrlock();
 
-    me->mStart = element->getRealTime();
+    me->mStart = element->getSequence();
 
     if (me->skipAhead[element->getLogId()]) {
         me->skipAhead[element->getLogId()]--;
