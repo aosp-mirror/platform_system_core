@@ -80,6 +80,7 @@
 using namespace std::literals::string_literals;
 
 using android::base::Basename;
+using android::base::StartsWith;
 using android::base::unique_fd;
 using android::fs_mgr::Fstab;
 using android::fs_mgr::ReadFstabFromFile;
@@ -640,12 +641,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     if (!ReadFstabFromFile(fstab_file, &fstab)) {
         return Error() << "Could not read fstab";
     }
-
-    auto mount_fstab_return_code =
-            CallFunctionAndHandleProperties(fs_mgr_mount_all, &fstab, mount_mode);
-    if (!mount_fstab_return_code) {
-        return Error() << "Could not call fs_mgr_mount_all(): " << mount_fstab_return_code.error();
-    }
+    auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_mode);
     property_set(prop_name, std::to_string(t.duration().count()));
 
     if (import_rc && SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
@@ -656,7 +652,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
-        auto queue_fs_result = queue_fs_event(*mount_fstab_return_code);
+        auto queue_fs_result = queue_fs_event(mount_fstab_return_code);
         if (!queue_fs_result) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
@@ -672,13 +668,8 @@ static Result<void> do_umount_all(const BuiltinArguments& args) {
         return Error() << "Could not read fstab";
     }
 
-    auto result = CallFunctionAndHandleProperties(fs_mgr_umount_all, &fstab);
-    if (!result) {
-        return Error() << "Could not call fs_mgr_mount_all() " << result.error();
-    }
-
-    if (*result != 0) {
-        return Error() << "fs_mgr_mount_all() failed: " << *result;
+    if (auto result = fs_mgr_umount_all(&fstab); result != 0) {
+        return Error() << "umount_fstab() failed " << result;
     }
     return {};
 }
@@ -689,19 +680,23 @@ static Result<void> do_swapon_all(const BuiltinArguments& args) {
         return Error() << "Could not read fstab '" << args[1] << "'";
     }
 
-    auto result = CallFunctionAndHandleProperties(fs_mgr_swapon_all, fstab);
-    if (!result) {
-        return Error() << "Could not call fs_mgr_swapon_all() " << result.error();
-    }
-
-    if (*result == 0) {
-        return Error() << "fs_mgr_swapon_all() failed.";
+    if (!fs_mgr_swapon_all(fstab)) {
+        return Error() << "fs_mgr_swapon_all() failed";
     }
 
     return {};
 }
 
 static Result<void> do_setprop(const BuiltinArguments& args) {
+    if (StartsWith(args[1], "ctl.")) {
+        return Error()
+               << "Cannot set ctl. properties from init; call the Service functions directly";
+    }
+    if (args[1] == kRestoreconProperty) {
+        return Error() << "Cannot set '" << kRestoreconProperty
+                       << "' from init; use the restorecon builtin directly";
+    }
+
     property_set(args[1], args[2]);
     return {};
 }
@@ -1017,7 +1012,20 @@ static Result<void> do_loglevel(const BuiltinArguments& args) {
 }
 
 static Result<void> do_load_persist_props(const BuiltinArguments& args) {
-    load_persist_props();
+    // Devices with FDE have load_persist_props called twice; the first time when the temporary
+    // /data partition is mounted and then again once /data is truly mounted.  We do not want to
+    // read persistent properties from the temporary /data partition or mark persistent properties
+    // as having been loaded during the first call, so we return in that case.
+    std::string crypto_state = android::base::GetProperty("ro.crypto.state", "");
+    std::string crypto_type = android::base::GetProperty("ro.crypto.type", "");
+    if (crypto_state == "encrypted" && crypto_type == "block") {
+        static size_t num_calls = 0;
+        if (++num_calls == 1) return {};
+    }
+
+    SendLoadPersistentPropertiesMessage();
+
+    start_waiting_for_property("ro.persistent_properties.ready", "true");
     return {};
 }
 
