@@ -34,7 +34,8 @@
 
 namespace android::nativeloader {
 
-using namespace std::string_literals;
+using namespace internal;
+using namespace ::std::string_literals;
 using android::base::ErrnoError;
 using android::base::Errorf;
 using android::base::Result;
@@ -95,53 +96,21 @@ void InsertVndkVersionStr(std::string* file_name) {
   file_name->insert(insert_pos, vndk_version_str());
 }
 
-const std::function<Result<void>(const std::string&)> always_true =
-    [](const std::string&) -> Result<void> { return {}; };
+const std::function<Result<bool>(const struct ConfigEntry&)> always_true =
+    [](const struct ConfigEntry&) -> Result<bool> { return true; };
 
 Result<std::vector<std::string>> ReadConfig(
     const std::string& configFile,
-    const std::function<Result<void>(const std::string& /* soname */)>& check_soname) {
-  // Read list of public native libraries from the config file.
+    const std::function<Result<bool>(const ConfigEntry& /* entry */)>& filter_fn) {
   std::string file_content;
   if (!base::ReadFileToString(configFile, &file_content)) {
     return ErrnoError();
   }
-
-  std::vector<std::string> lines = base::Split(file_content, "\n");
-
-  std::vector<std::string> sonames;
-  for (auto& line : lines) {
-    auto trimmed_line = base::Trim(line);
-    if (trimmed_line[0] == '#' || trimmed_line.empty()) {
-      continue;
-    }
-    size_t space_pos = trimmed_line.rfind(' ');
-    if (space_pos != std::string::npos) {
-      std::string type = trimmed_line.substr(space_pos + 1);
-      if (type != "32" && type != "64") {
-        return Errorf("Malformed line: {}", line);
-      }
-#if defined(__LP64__)
-      // Skip 32 bit public library.
-      if (type == "32") {
-        continue;
-      }
-#else
-      // Skip 64 bit public library.
-      if (type == "64") {
-        continue;
-      }
-#endif
-      trimmed_line.resize(space_pos);
-    }
-
-    auto ret = check_soname(trimmed_line);
-    if (!ret) {
-      return ret.error();
-    }
-    sonames.push_back(trimmed_line);
+  Result<std::vector<std::string>> result = ParseConfig(file_content, filter_fn);
+  if (!result) {
+    return Errorf("Cannot parse {}: {}", configFile, result.error().message());
   }
-  return sonames;
+  return result;
 }
 
 void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonames) {
@@ -165,13 +134,13 @@ void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonam
             config_file_path.c_str());
 
         auto ret = ReadConfig(
-            config_file_path, [&company_name](const std::string& soname) -> Result<void> {
-              if (android::base::StartsWith(soname, "lib") &&
-                  android::base::EndsWith(soname, "." + company_name + ".so")) {
-                return {};
+            config_file_path, [&company_name](const struct ConfigEntry& entry) -> Result<bool> {
+              if (android::base::StartsWith(entry.soname, "lib") &&
+                  android::base::EndsWith(entry.soname, "." + company_name + ".so")) {
+                return true;
               } else {
-                return Errorf("Library name \"{}\" does not end with the company name {}.", soname,
-                              company_name);
+                return Errorf("Library name \"{}\" does not end with the company name {}.",
+                              entry.soname, company_name);
               }
             });
         if (ret) {
@@ -185,9 +154,16 @@ void ReadExtensionLibraries(const char* dirname, std::vector<std::string>* sonam
   }
 }
 
-static std::string InitDefaultPublicLibraries() {
+static std::string InitDefaultPublicLibraries(bool for_preload) {
   std::string config_file = root_dir() + kDefaultPublicLibrariesFile;
-  auto sonames = ReadConfig(config_file, always_true);
+  auto sonames =
+      ReadConfig(config_file, [&for_preload](const struct ConfigEntry& entry) -> Result<bool> {
+        if (for_preload) {
+          return !entry.nopreload;
+        } else {
+          return true;
+        }
+      });
   if (!sonames) {
     LOG_ALWAYS_FATAL("Error reading public native library list from \"%s\": %s",
                      config_file.c_str(), sonames.error().message().c_str());
@@ -290,8 +266,13 @@ static std::string InitNeuralNetworksPublicLibraries() {
 
 }  // namespace
 
+const std::string& preloadable_public_libraries() {
+  static std::string list = InitDefaultPublicLibraries(/*for_preload*/ true);
+  return list;
+}
+
 const std::string& default_public_libraries() {
-  static std::string list = InitDefaultPublicLibraries();
+  static std::string list = InitDefaultPublicLibraries(/*for_preload*/ false);
   return list;
 }
 
@@ -324,5 +305,62 @@ const std::string& vndksp_libraries() {
   static std::string list = InitVndkspLibraries();
   return list;
 }
+
+namespace internal {
+// Exported for testing
+Result<std::vector<std::string>> ParseConfig(
+    const std::string& file_content,
+    const std::function<Result<bool>(const ConfigEntry& /* entry */)>& filter_fn) {
+  std::vector<std::string> lines = base::Split(file_content, "\n");
+
+  std::vector<std::string> sonames;
+  for (auto& line : lines) {
+    auto trimmed_line = base::Trim(line);
+    if (trimmed_line[0] == '#' || trimmed_line.empty()) {
+      continue;
+    }
+
+    std::vector<std::string> tokens = android::base::Split(trimmed_line, " ");
+    if (tokens.size() < 1 || tokens.size() > 3) {
+      return Errorf("Malformed line \"{}\"", line);
+    }
+    struct ConfigEntry entry = {.soname = "", .nopreload = false, .bitness = ALL};
+    size_t i = tokens.size();
+    while (i-- > 0) {
+      if (tokens[i] == "nopreload") {
+        entry.nopreload = true;
+      } else if (tokens[i] == "32" || tokens[i] == "64") {
+        if (entry.bitness != ALL) {
+          return Errorf("Malformed line \"{}\": bitness can be specified only once", line);
+        }
+        entry.bitness = tokens[i] == "32" ? ONLY_32 : ONLY_64;
+      } else {
+        if (i != 0) {
+          return Errorf("Malformed line \"{}\"", line);
+        }
+        entry.soname = tokens[i];
+      }
+    }
+
+    // skip 32-bit lib on 64-bit process and vice versa
+#if defined(__LP64__)
+    if (entry.bitness == ONLY_32) continue;
+#else
+    if (entry.bitness == ONLY_64) continue;
+#endif
+
+    Result<bool> ret = filter_fn(entry);
+    if (!ret) {
+      return ret.error();
+    }
+    if (*ret) {
+      // filter_fn has returned true.
+      sonames.push_back(entry.soname);
+    }
+  }
+  return sonames;
+}
+
+}  // namespace internal
 
 }  // namespace android::nativeloader
