@@ -269,6 +269,7 @@ bool UpdateMetadataForInPlaceSnapshot(LpMetadata* metadata, uint32_t source_slot
                   << "; this partition should not belong to this group!";
             continue;  // not adding to new_partition_ptrs
         }
+        partition.attributes |= LP_PARTITION_ATTR_UPDATED;
         partition.group_index = std::distance(new_group_ptrs.begin(), it);
         new_partition_ptrs.push_back(&partition);
     }
