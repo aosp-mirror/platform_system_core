@@ -15,13 +15,19 @@
  */
 #pragma once
 
+#include <algorithm>
 #include <string>
 
+#include <android-base/result.h>
+
 namespace android::nativeloader {
+
+using android::base::Result;
 
 // These provide the list of libraries that are available to the namespace for apps.
 // Not all of the libraries are available to apps. Depending on the context,
 // e.g., if it is a vendor app or not, different set of libraries are made available.
+const std::string& preloadable_public_libraries();
 const std::string& default_public_libraries();
 const std::string& runtime_public_libraries();
 const std::string& vendor_public_libraries();
@@ -30,4 +36,21 @@ const std::string& neuralnetworks_public_libraries();
 const std::string& llndk_libraries();
 const std::string& vndksp_libraries();
 
-};  // namespace android::nativeloader
+// These are exported for testing
+namespace internal {
+
+enum Bitness { ALL = 0, ONLY_32, ONLY_64 };
+
+struct ConfigEntry {
+  std::string soname;
+  bool nopreload;
+  Bitness bitness;
+};
+
+Result<std::vector<std::string>> ParseConfig(
+    const std::string& file_content,
+    const std::function<Result<bool>(const ConfigEntry& /* entry */)>& filter_fn);
+
+}  // namespace internal
+
+}  // namespace android::nativeloader
