@@ -29,6 +29,7 @@
 #include "public_libraries.h"
 
 using namespace ::testing;
+using namespace ::android::nativeloader::internal;
 
 namespace android {
 namespace nativeloader {
@@ -289,7 +290,7 @@ class NativeLoaderTest : public ::testing::TestWithParam<bool> {
 
   void SetExpectations() {
     std::vector<std::string> default_public_libs =
-        android::base::Split(default_public_libraries(), ":");
+        android::base::Split(preloadable_public_libraries(), ":");
     for (auto l : default_public_libs) {
       EXPECT_CALL(*mock, dlopen(StrEq(l.c_str()), RTLD_NOW | RTLD_NODELETE))
           .WillOnce(Return(any_nonnull));
@@ -575,6 +576,88 @@ TEST_P(NativeLoaderTest_Create, TwoApks) {
 }
 
 INSTANTIATE_TEST_SUITE_P(NativeLoaderTests_Create, NativeLoaderTest_Create, testing::Bool());
+
+const std::function<Result<bool>(const struct ConfigEntry&)> always_true =
+    [](const struct ConfigEntry&) -> Result<bool> { return true; };
+
+TEST(NativeLoaderConfigParser, NamesAndComments) {
+  const char file_content[] = R"(
+######
+
+libA.so
+#libB.so
+
+
+      libC.so
+libD.so
+    #### libE.so
+)";
+  const std::vector<std::string> expected_result = {"libA.so", "libC.so", "libD.so"};
+  Result<std::vector<std::string>> result = ParseConfig(file_content, always_true);
+  ASSERT_TRUE(result) << result.error().message();
+  ASSERT_EQ(expected_result, *result);
+}
+
+TEST(NativeLoaderConfigParser, WithBitness) {
+  const char file_content[] = R"(
+libA.so 32
+libB.so 64
+libC.so
+)";
+#if defined(__LP64__)
+  const std::vector<std::string> expected_result = {"libB.so", "libC.so"};
+#else
+  const std::vector<std::string> expected_result = {"libA.so", "libC.so"};
+#endif
+  Result<std::vector<std::string>> result = ParseConfig(file_content, always_true);
+  ASSERT_TRUE(result) << result.error().message();
+  ASSERT_EQ(expected_result, *result);
+}
+
+TEST(NativeLoaderConfigParser, WithNoPreload) {
+  const char file_content[] = R"(
+libA.so nopreload
+libB.so nopreload
+libC.so
+)";
+
+  const std::vector<std::string> expected_result = {"libC.so"};
+  Result<std::vector<std::string>> result =
+      ParseConfig(file_content,
+                  [](const struct ConfigEntry& entry) -> Result<bool> { return !entry.nopreload; });
+  ASSERT_TRUE(result) << result.error().message();
+  ASSERT_EQ(expected_result, *result);
+}
+
+TEST(NativeLoaderConfigParser, WithNoPreloadAndBitness) {
+  const char file_content[] = R"(
+libA.so nopreload 32
+libB.so 64 nopreload
+libC.so 32
+libD.so 64
+libE.so nopreload
+)";
+
+#if defined(__LP64__)
+  const std::vector<std::string> expected_result = {"libD.so"};
+#else
+  const std::vector<std::string> expected_result = {"libC.so"};
+#endif
+  Result<std::vector<std::string>> result =
+      ParseConfig(file_content,
+                  [](const struct ConfigEntry& entry) -> Result<bool> { return !entry.nopreload; });
+  ASSERT_TRUE(result) << result.error().message();
+  ASSERT_EQ(expected_result, *result);
+}
+
+TEST(NativeLoaderConfigParser, RejectMalformed) {
+  ASSERT_FALSE(ParseConfig("libA.so 32 64", always_true));
+  ASSERT_FALSE(ParseConfig("libA.so 32 32", always_true));
+  ASSERT_FALSE(ParseConfig("libA.so 32 nopreload 64", always_true));
+  ASSERT_FALSE(ParseConfig("32 libA.so nopreload", always_true));
+  ASSERT_FALSE(ParseConfig("nopreload libA.so 32", always_true));
+  ASSERT_FALSE(ParseConfig("libA.so nopreload # comment", always_true));
+}
 
 }  // namespace nativeloader
 }  // namespace android
