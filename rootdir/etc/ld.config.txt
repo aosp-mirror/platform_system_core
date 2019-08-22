@@ -166,8 +166,8 @@ namespace.runtime.isolated = true
 # android_link_namespaces in libnativeloader.
 namespace.runtime.visible = true
 
-namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.search.paths = /apex/com.android.art/${LIB}
+namespace.runtime.asan.search.paths = /apex/com.android.art/${LIB}
 namespace.runtime.links = default
 # Need allow_all_shared_libs because libart.so can dlopen oat files in
 # /system/framework and /data.
@@ -491,8 +491,8 @@ namespace.default.link.neuralnetworks.shared_libs = libneuralnetworks.so
 ###############################################################################
 namespace.runtime.isolated = true
 
-namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.search.paths = /apex/com.android.art/${LIB}
+namespace.runtime.asan.search.paths = /apex/com.android.art/${LIB}
 namespace.runtime.links = system
 # TODO(b/130340935): Use a dynamically created linker namespace similar to
 # classloader-namespace for oat files, and tighten this up.
@@ -698,8 +698,8 @@ namespace.runtime.isolated = true
 # android_link_namespaces in libnativeloader.
 namespace.runtime.visible = true
 
-namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.search.paths = /apex/com.android.art/${LIB}
+namespace.runtime.asan.search.paths = /apex/com.android.art/${LIB}
 namespace.runtime.links = default
 # TODO(b/130340935): Use a dynamically created linker namespace similar to
 # classloader-namespace for oat files, and tighten this up.
