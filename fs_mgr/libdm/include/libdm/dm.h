@@ -89,6 +89,7 @@ class DeviceMapper final {
     // Removes a device mapper device with the given name.
     // Returns 'true' on success, false otherwise.
     bool DeleteDevice(const std::string& name);
+    bool DeleteDeviceIfExists(const std::string& name);
 
     // Fetches and returns the complete state of the underlying device mapper
     // device with given name.
