@@ -43,7 +43,7 @@ namespace init {
 template <typename F>
 void RunTest(F&& test_function) {
     if (getuid() != 0) {
-        GTEST_LOG_(INFO) << "Skipping test, must be run as root.";
+        GTEST_SKIP() << "Skipping test, must be run as root.";
         return;
     }
 
