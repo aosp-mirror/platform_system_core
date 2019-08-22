@@ -305,7 +305,7 @@ bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
     }
 
     auto& dm = DeviceMapper::Instance();
-    if (dm.GetState(name) != DmDeviceState::INVALID && !dm.DeleteDevice(name)) {
+    if (!dm.DeleteDeviceIfExists(name)) {
         LOG(ERROR) << "Could not delete snapshot device: " << name;
         return false;
     }
@@ -313,8 +313,7 @@ bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
     // There may be an extra device, since the kernel doesn't let us have a
     // snapshot and linear target in the same table.
     auto dm_name = GetSnapshotDeviceName(name, status);
-    if (name != dm_name && dm.GetState(dm_name) != DmDeviceState::INVALID &&
-        !dm.DeleteDevice(dm_name)) {
+    if (name != dm_name && !dm.DeleteDeviceIfExists(dm_name)) {
         LOG(ERROR) << "Could not delete inner snapshot device: " << dm_name;
         return false;
     }
@@ -866,7 +865,7 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         // the device, and device-mapper should have flushed remaining I/O. We
         // could in theory replace with dm-zero (or re-use the table above), but
         // for now it's better to know why this would fail.
-        if (!dm.DeleteDevice(dm_name)) {
+        if (!dm.DeleteDeviceIfExists(dm_name)) {
             LOG(ERROR) << "Unable to delete snapshot device " << dm_name << ", COW cannot be "
                        << "reclaimed until after reboot.";
             return false;
