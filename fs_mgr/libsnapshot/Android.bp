@@ -74,6 +74,7 @@ cc_test {
     defaults: ["libsnapshot_defaults"],
     srcs: [
         "snapshot_test.cpp",
+        "test_helpers.cpp",
     ],
     shared_libs: [
         "libbinder",
