@@ -88,7 +88,7 @@ cc_test {
 }
 
 cc_test {
-    name: "liblp_test_static",
+    name: "vts_kernel_liblp_test",
     defaults: ["liblp_test_defaults"],
 }
 
