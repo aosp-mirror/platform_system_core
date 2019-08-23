@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#include <fs_mgr.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
 
+#include "liblp_test.h"
 #include "mock_property_fetcher.h"
 #include "utility.h"
 
@@ -31,7 +31,7 @@ using ::testing::ElementsAre;
 using ::testing::NiceMock;
 using ::testing::Return;
 
-static void ResetPropertyFetcher() {
+void ResetPropertyFetcher() {
     IPropertyFetcher::OverrideForTesting(std::make_unique<NiceMock<MockPropertyFetcher>>());
 }
 
@@ -49,11 +49,7 @@ int main(int argc, char** argv) {
     return RUN_ALL_TESTS();
 }
 
-class BuilderTest : public ::testing::Test {
-  public:
-    void SetUp() override { ResetPropertyFetcher(); }
-    void TearDown() override { ResetPropertyFetcher(); }
-};
+class BuilderTest : public LiblpTest {};
 
 TEST_F(BuilderTest, BuildBasic) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
@@ -458,23 +454,6 @@ TEST_F(BuilderTest, MetadataTooLarge) {
     device_info.alignment_offset = 32768 - LP_SECTOR_SIZE;
     builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
     EXPECT_EQ(builder, nullptr);
-}
-
-TEST_F(BuilderTest, block_device_info) {
-    PartitionOpener opener;
-
-    BlockDeviceInfo device_info;
-    ASSERT_TRUE(opener.GetInfo(fs_mgr_get_super_partition_name(), &device_info));
-
-    // Sanity check that the device doesn't give us some weird inefficient
-    // alignment.
-    ASSERT_EQ(device_info.alignment % LP_SECTOR_SIZE, 0);
-    ASSERT_EQ(device_info.alignment_offset % LP_SECTOR_SIZE, 0);
-    ASSERT_LE(device_info.alignment_offset, INT_MAX);
-    ASSERT_EQ(device_info.logical_block_size % LP_SECTOR_SIZE, 0);
-
-    // Having an alignment offset > alignment doesn't really make sense.
-    ASSERT_LT(device_info.alignment_offset, device_info.alignment);
 }
 
 TEST_F(BuilderTest, UpdateBlockDeviceInfo) {
