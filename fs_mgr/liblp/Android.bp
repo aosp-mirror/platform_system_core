@@ -69,6 +69,7 @@ cc_test {
     stl: "libc++_static",
     srcs: [
         "builder_test.cpp",
+        "device_test.cpp",
         "io_test.cpp",
         "test_partition_opener.cpp",
         "utility_test.cpp",

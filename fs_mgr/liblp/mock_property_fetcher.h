@@ -45,3 +45,4 @@ class MockPropertyFetcher : public IPropertyFetcher {
 }  // namespace android
 
 android::fs_mgr::MockPropertyFetcher* GetMockedPropertyFetcher();
+void ResetPropertyFetcher();
