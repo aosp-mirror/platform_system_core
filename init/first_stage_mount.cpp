@@ -602,19 +602,11 @@ void FirstStageMount::UseGsiIfPresent() {
         return;
     }
 
-    // Find the name of the super partition for the GSI. It will either be
-    // "userdata", or a block device such as an sdcard. There are no by-name
-    // partitions other than userdata that we support installing GSIs to.
+    // Find the super name. PartitionOpener will ensure this translates to the
+    // correct block device path.
     auto super = GetMetadataSuperBlockDevice(*metadata.get());
-    std::string super_name = android::fs_mgr::GetBlockDevicePartitionName(*super);
-    std::string super_path;
-    if (super_name == "userdata") {
-        super_path = "/dev/block/by-name/" + super_name;
-    } else {
-        super_path = "/dev/block/" + super_name;
-    }
-
-    if (!android::fs_mgr::CreateLogicalPartitions(*metadata.get(), super_path)) {
+    auto super_name = android::fs_mgr::GetBlockDevicePartitionName(*super);
+    if (!android::fs_mgr::CreateLogicalPartitions(*metadata.get(), super_name)) {
         LOG(ERROR) << "GSI partition layout could not be instantiated";
         return;
     }
