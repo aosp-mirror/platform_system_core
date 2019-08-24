@@ -26,9 +26,13 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <fs_mgr_dm_linear.h>
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
+#include <liblp/builder.h>
+
+#include "test_helpers.h"
 
 namespace android {
 namespace snapshot {
@@ -37,25 +41,35 @@ using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
 using android::fiemap::IImageManager;
+using android::fs_mgr::BlockDeviceInfo;
+using android::fs_mgr::CreateLogicalPartitionParams;
+using android::fs_mgr::MetadataBuilder;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
-class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
-  public:
-    std::string GetGsidDir() const override { return "ota/test"s; }
-    std::string GetMetadataDir() const override { return "/metadata/ota/test"s; }
-    std::string GetSlotSuffix() const override { return slot_suffix_; }
-
-    void set_slot_suffix(const std::string& suffix) { slot_suffix_ = suffix; }
-
-  private:
-    std::string slot_suffix_ = "_a";
-};
-
-// These are not reset between each test because it's expensive to reconnect
-// to gsid each time.
+// These are not reset between each test because it's expensive to create
+// these resources (starting+connecting to gsid, zero-filling images).
 std::unique_ptr<SnapshotManager> sm;
 TestDeviceInfo* test_device = nullptr;
+std::string fake_super;
+
+static constexpr uint64_t kSuperSize = 16 * 1024 * 1024;
+
+// Helper to remove stale partitions in fake super.
+void CleanupPartitions() {
+    // These are hardcoded since we might abort in the middle of a test, and
+    // can't recover the in-use list.
+    static std::vector<std::string> kPartitionNames = {
+            "base-device",
+    };
+
+    auto& dm = DeviceMapper::Instance();
+    for (const auto& partition : kPartitionNames) {
+        if (dm.GetState(partition) != DmDeviceState::INVALID) {
+            dm.DeleteDevice(partition);
+        }
+    }
+}
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -69,6 +83,7 @@ class SnapshotTest : public ::testing::Test {
         test_device->set_slot_suffix("_a");
 
         CleanupTestArtifacts();
+        FormatFakeSuper();
 
         ASSERT_TRUE(sm->BeginUpdate());
     }
@@ -96,12 +111,7 @@ class SnapshotTest : public ::testing::Test {
             android::base::RemoveFileIfExists(status_file);
         }
 
-        // Remove all images. We hardcode the list of names since this can run
-        // before the test (when cleaning up from a crash).
-        std::vector<std::string> temp_partitions = {"base-device"};
-        for (const auto& partition : temp_partitions) {
-            DeleteBackingImage(image_manager_, partition);
-        }
+        CleanupPartitions();
 
         if (sm->GetUpdateState() != UpdateState::None) {
             auto state_file = sm->GetStateFilePath();
@@ -114,11 +124,48 @@ class SnapshotTest : public ::testing::Test {
         return !!lock_;
     }
 
-    bool CreateTempDevice(const std::string& name, uint64_t size, std::string* path) {
-        if (!image_manager_->CreateBackingImage(name, size, false)) {
+    void FormatFakeSuper() {
+        BlockDeviceInfo super_device("super", kSuperSize, 0, 0, 4096);
+        std::vector<BlockDeviceInfo> devices = {super_device};
+
+        auto builder = MetadataBuilder::New(devices, "super", 65536, 2);
+        ASSERT_NE(builder, nullptr);
+
+        auto metadata = builder->Export();
+        ASSERT_NE(metadata, nullptr);
+
+        TestPartitionOpener opener(fake_super);
+        ASSERT_TRUE(FlashPartitionTable(opener, fake_super, *metadata.get()));
+    }
+
+    // If |path| is non-null, the partition will be mapped after creation.
+    bool CreatePartition(const std::string& name, uint64_t size, std::string* path = nullptr) {
+        TestPartitionOpener opener(fake_super);
+        auto builder = MetadataBuilder::New(opener, "super", 0);
+        if (!builder) return false;
+
+        auto partition = builder->AddPartition(name, 0);
+        if (!partition) return false;
+        if (!builder->ResizePartition(partition, size)) {
             return false;
         }
-        return image_manager_->MapImageDevice(name, 10s, path);
+
+        auto metadata = builder->Export();
+        if (!metadata) return false;
+        if (!UpdatePartitionTable(opener, "super", *metadata.get(), 0)) {
+            return false;
+        }
+
+        if (!path) return true;
+
+        CreateLogicalPartitionParams params = {
+                .block_device = fake_super,
+                .metadata = metadata.get(),
+                .partition_name = name,
+                .force_writable = true,
+                .timeout_ms = 10s,
+        };
+        return CreateLogicalPartition(params, path);
     }
 
     void DeleteSnapshotDevice(const std::string& snapshot) {
@@ -130,18 +177,10 @@ class SnapshotTest : public ::testing::Test {
         }
     }
 
-    void DeleteBackingImage(IImageManager* manager, const std::string& name) {
-        if (manager->IsImageMapped(name)) {
-            ASSERT_TRUE(manager->UnmapImageDevice(name));
-        }
-        if (manager->BackingImageExists(name)) {
-            ASSERT_TRUE(manager->DeleteBackingImage(name));
-        }
-    }
-
     DeviceMapper& dm_;
     std::unique_ptr<SnapshotManager::LockedFile> lock_;
     android::fiemap::IImageManager* image_manager_ = nullptr;
+    std::string fake_super_;
 };
 
 TEST_F(SnapshotTest, CreateSnapshot) {
@@ -177,7 +216,7 @@ TEST_F(SnapshotTest, MapSnapshot) {
                                    kDeviceSize));
 
     std::string base_device;
-    ASSERT_TRUE(CreateTempDevice("base-device", kDeviceSize, &base_device));
+    ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
 
     std::string snap_device;
     ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, 10s, &snap_device));
@@ -193,7 +232,7 @@ TEST_F(SnapshotTest, MapPartialSnapshot) {
                                    kSnapshotSize));
 
     std::string base_device;
-    ASSERT_TRUE(CreateTempDevice("base-device", kDeviceSize, &base_device));
+    ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
 
     std::string snap_device;
     ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, 10s, &snap_device));
@@ -215,7 +254,7 @@ TEST_F(SnapshotTest, Merge) {
                                    kDeviceSize));
 
     std::string base_device, snap_device;
-    ASSERT_TRUE(CreateTempDevice("base-device", kDeviceSize, &base_device));
+    ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
     ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, 10s, &snap_device));
 
     std::string test_string = "This is a test string.";
@@ -270,7 +309,7 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
                                    kDeviceSize));
 
     std::string base_device, snap_device;
-    ASSERT_TRUE(CreateTempDevice("base-device", kDeviceSize, &base_device));
+    ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
     ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, 10s, &snap_device));
 
     // Keep an open handle to the cow device. This should cause the merge to
@@ -321,10 +360,14 @@ int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
 
     std::vector<std::string> paths = {
+            // clang-format off
             "/data/gsi/ota/test",
+            "/data/gsi/ota/test/super",
             "/metadata/gsi/ota/test",
+            "/metadata/gsi/ota/test/super",
             "/metadata/ota/test",
             "/metadata/ota/test/snapshots",
+            // clang-format on
     };
     for (const auto& path : paths) {
         if (!Mkdir(path)) {
@@ -336,9 +379,38 @@ int main(int argc, char** argv) {
     test_device = new TestDeviceInfo();
     sm = SnapshotManager::New(test_device);
     if (!sm) {
-        std::cerr << "Could not create snapshot manager";
+        std::cerr << "Could not create snapshot manager\n";
         return 1;
     }
 
-    return RUN_ALL_TESTS();
+    // Use a separate image manager for our fake super partition.
+    auto super_images = IImageManager::Open("ota/test/super", 10s);
+    if (!super_images) {
+        std::cerr << "Could not create image manager\n";
+        return 1;
+    }
+
+    // Clean up previous run.
+    CleanupPartitions();
+    DeleteBackingImage(super_images.get(), "fake-super");
+
+    // Create and map the fake super partition.
+    static constexpr int kImageFlags =
+            IImageManager::CREATE_IMAGE_DEFAULT | IImageManager::CREATE_IMAGE_ZERO_FILL;
+    if (!super_images->CreateBackingImage("fake-super", kSuperSize, kImageFlags)) {
+        std::cerr << "Could not create fake super partition\n";
+        return 1;
+    }
+    if (!super_images->MapImageDevice("fake-super", 10s, &fake_super)) {
+        std::cerr << "Could not map fake super partition\n";
+        return 1;
+    }
+
+    auto result = RUN_ALL_TESTS();
+
+    // Clean up again.
+    CleanupPartitions();
+    DeleteBackingImage(super_images.get(), "fake-super");
+
+    return result;
 }
