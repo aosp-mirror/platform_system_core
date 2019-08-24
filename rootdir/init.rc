@@ -127,6 +127,10 @@ on init
     mkdir /mnt/expand 0771 system system
     mkdir /mnt/appfuse 0711 root root
 
+    # tmpfs place for BORINGSSL_self_test() to remember whether it has run
+    mkdir /dev/boringssl 0755 root root
+    mkdir /dev/boringssl/selftest 0755 root root
+
     # Storage views to support runtime permissions
     mkdir /mnt/runtime 0700 root root
     mkdir /mnt/runtime/default 0755 root root
