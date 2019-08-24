@@ -176,5 +176,9 @@ inline bool ReadProcessMaps(pid_t pid, std::vector<MapInfo>* maps) {
                const char* name) { maps->emplace_back(start, end, flags, pgoff, inode, name); });
 }
 
+bool ReadMapFileAsyncSafe(const char* map_file, void* buffer, size_t buffer_size,
+                          const std::function<void(uint64_t, uint64_t, uint16_t, uint64_t, ino_t,
+                                                   const char*)>& callback);
+
 } /* namespace procinfo */
 } /* namespace android */
