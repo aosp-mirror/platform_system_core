@@ -124,7 +124,7 @@ void LibraryNamespaces::Initialize() {
   // we might as well end up loading them from /system/lib or /product/lib
   // For now we rely on CTS test to catch things like this but
   // it should probably be addressed in the future.
-  for (const auto& soname : android::base::Split(default_public_libraries(), ":")) {
+  for (const auto& soname : android::base::Split(preloadable_public_libraries(), ":")) {
     LOG_ALWAYS_FATAL_IF(dlopen(soname.c_str(), RTLD_NOW | RTLD_NODELETE) == nullptr,
                         "Error preloading public library %s: %s", soname.c_str(), dlerror());
   }
