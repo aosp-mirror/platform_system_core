@@ -68,7 +68,7 @@ void WriteFromMultipleThreads(std::vector<std::pair<std::string, T>>& files_and_
 
 TEST(ueventd, setegid_IsPerThread) {
     if (getuid() != 0) {
-        GTEST_LOG_(INFO) << "Skipping test, must be run as root.";
+        GTEST_SKIP() << "Skipping test, must be run as root.";
         return;
     }
 
@@ -92,11 +92,11 @@ TEST(ueventd, setegid_IsPerThread) {
 
 TEST(ueventd, setfscreatecon_IsPerThread) {
     if (getuid() != 0) {
-        GTEST_LOG_(INFO) << "Skipping test, must be run as root.";
+        GTEST_SKIP() << "Skipping test, must be run as root.";
         return;
     }
     if (!is_selinux_enabled() || security_getenforce() == 1) {
-        GTEST_LOG_(INFO) << "Skipping test, SELinux must be enabled and in permissive mode.";
+        GTEST_SKIP() << "Skipping test, SELinux must be enabled and in permissive mode.";
         return;
     }
 
@@ -127,7 +127,7 @@ TEST(ueventd, setfscreatecon_IsPerThread) {
 
 TEST(ueventd, selabel_lookup_MultiThreaded) {
     if (getuid() != 0) {
-        GTEST_LOG_(INFO) << "Skipping test, must be run as root.";
+        GTEST_SKIP() << "Skipping test, must be run as root.";
         return;
     }
 
