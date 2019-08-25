@@ -357,51 +357,64 @@ static Result<void> do_interface_stop(const BuiltinArguments& args) {
 // mkdir <path> [mode] [owner] [group]
 static Result<void> do_mkdir(const BuiltinArguments& args) {
     mode_t mode = 0755;
-    if (args.size() >= 3) {
-        mode = std::strtoul(args[2].c_str(), 0, 8);
-    }
+    Result<uid_t> uid = -1;
+    Result<gid_t> gid = -1;
 
-    if (!make_dir(args[1], mode)) {
-        /* chmod in case the directory already exists */
-        if (errno == EEXIST) {
-            if (fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
-                return ErrnoError() << "fchmodat() failed";
-            }
-        } else {
-            return ErrnoErrorIgnoreEnoent() << "mkdir() failed";
-        }
-    }
-
-    if (args.size() >= 4) {
-        auto uid = DecodeUid(args[3]);
-        if (!uid) {
-            return Error() << "Unable to decode UID for '" << args[3] << "': " << uid.error();
-        }
-        Result<gid_t> gid = -1;
-
-        if (args.size() == 5) {
+    switch (args.size()) {
+        case 5:
             gid = DecodeUid(args[4]);
             if (!gid) {
                 return Error() << "Unable to decode GID for '" << args[4] << "': " << gid.error();
             }
-        }
-
-        if (lchown(args[1].c_str(), *uid, *gid) == -1) {
-            return ErrnoError() << "lchown failed";
-        }
-
-        /* chown may have cleared S_ISUID and S_ISGID, chmod again */
-        if (mode & (S_ISUID | S_ISGID)) {
-            if (fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
-                return ErrnoError() << "fchmodat failed";
+            FALLTHROUGH_INTENDED;
+        case 4:
+            uid = DecodeUid(args[3]);
+            if (!uid) {
+                return Error() << "Unable to decode UID for '" << args[3] << "': " << uid.error();
             }
+            FALLTHROUGH_INTENDED;
+        case 3:
+            mode = std::strtoul(args[2].c_str(), 0, 8);
+            FALLTHROUGH_INTENDED;
+        case 2:
+            break;
+        default:
+            return Error() << "Unexpected argument count: " << args.size();
+    }
+    std::string target = args[1];
+    struct stat mstat;
+    if (lstat(target.c_str(), &mstat) != 0) {
+        if (errno != ENOENT) {
+            return ErrnoError() << "lstat() failed on " << target;
+        }
+        if (!make_dir(target, mode)) {
+            return ErrnoErrorIgnoreEnoent() << "mkdir() failed on " << target;
+        }
+        if (lstat(target.c_str(), &mstat) != 0) {
+            return ErrnoError() << "lstat() failed on new " << target;
         }
     }
-
+    if (!S_ISDIR(mstat.st_mode)) {
+        return Error() << "Not a directory on " << target;
+    }
+    bool needs_chmod = (mstat.st_mode & ~S_IFMT) != mode;
+    if ((*uid != static_cast<uid_t>(-1) && *uid != mstat.st_uid) ||
+        (*gid != static_cast<gid_t>(-1) && *gid != mstat.st_gid)) {
+        if (lchown(target.c_str(), *uid, *gid) == -1) {
+            return ErrnoError() << "lchown failed on " << target;
+        }
+        // chown may have cleared S_ISUID and S_ISGID, chmod again
+        needs_chmod = true;
+    }
+    if (needs_chmod) {
+        if (fchmodat(AT_FDCWD, target.c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
+            return ErrnoError() << "fchmodat() failed on " << target;
+        }
+    }
     if (fscrypt_is_native()) {
-        if (fscrypt_set_directory_policy(args[1])) {
+        if (fscrypt_set_directory_policy(target)) {
             return reboot_into_recovery(
-                {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + args[1]});
+                    {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + target});
         }
     }
     return {};
