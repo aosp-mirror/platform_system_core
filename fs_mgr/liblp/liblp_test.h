@@ -18,10 +18,18 @@
 
 #include <gtest/gtest.h>
 
-#include "mock_property_fetcher.h"
+#include <liblp/mock_property_fetcher.h>
+
+namespace android {
+namespace fs_mgr {
+namespace testing {
 
 class LiblpTest : public ::testing::Test {
   public:
-    void SetUp() override { ResetPropertyFetcher(); }
-    void TearDown() override { ResetPropertyFetcher(); }
+    void SetUp() override { ResetMockPropertyFetcher(); }
+    void TearDown() override { ResetMockPropertyFetcher(); }
 };
+
+}  // namespace testing
+}  // namespace fs_mgr
+}  // namespace android
