@@ -41,7 +41,10 @@ class __attribute__((packed)) LogBufferElement {
     const uint32_t mPid;
     const uint32_t mTid;
     log_time mRealTime;
-    char* mMsg;
+    union {
+        char* mMsg;    // mDropped == false
+        int32_t mTag;  // mDropped == true
+    };
     union {
         const uint16_t mMsgLen;  // mDropped == false
         uint16_t mDroppedCount;  // mDropped == true
