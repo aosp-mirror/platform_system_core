@@ -55,13 +55,14 @@ cc_library {
     export_include_dirs: ["include"],
 }
 
-cc_test {
-    name: "liblp_test_static",
+cc_defaults {
+    name: "liblp_test_defaults",
     defaults: ["fs_mgr_defaults"],
     cppflags: [
         "-Wno-unused-parameter",
     ],
     static_libs: [
+        "libcutils",
         "libgmock",
         "libfs_mgr",
         "liblp",
@@ -74,11 +75,20 @@ cc_test {
         "test_partition_opener.cpp",
         "utility_test.cpp",
     ],
-    target: {
-        android: {
-            static_libs: [
-                "libcutils",
-            ],
-        },
-    },
 }
+
+cc_test {
+    name: "liblp_test",
+    defaults: ["liblp_test_defaults"],
+    test_config: "liblp_test.xml",
+    test_suites: [
+        "device-tests",
+        "vts-core",
+    ],
+}
+
+cc_test {
+    name: "vts_kernel_liblp_test",
+    defaults: ["liblp_test_defaults"],
+}
+
