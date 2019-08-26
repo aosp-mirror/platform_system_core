@@ -1,0 +1,7 @@
+{
+  "presubmit": [
+    {
+      "name": "liblp_test"
+    }
+  ]
+}
