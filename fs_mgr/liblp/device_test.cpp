@@ -24,9 +24,9 @@
 #include <liblp/property_fetcher.h>
 
 #include "liblp_test.h"
-#include "mock_property_fetcher.h"
 
 using namespace android::fs_mgr;
+using namespace android::fs_mgr::testing;
 using ::testing::Return;
 
 // Compliance test on the actual device with dynamic partitions.
