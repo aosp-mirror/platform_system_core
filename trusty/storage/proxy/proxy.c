@@ -46,6 +46,8 @@ static enum dev_type parse_dev_type(const char* dev_type_name) {
         return MMC_RPMB;
     } else if (!strcmp(dev_type_name, "virt")) {
         return VIRT_RPMB;
+    } else if (!strcmp(dev_type_name, "sock")) {
+        return SOCK_RPMB;
     } else {
         return UNKNOWN_RPMB;
     }

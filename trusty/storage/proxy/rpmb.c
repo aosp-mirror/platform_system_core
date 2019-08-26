@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #include <linux/major.h>
@@ -192,7 +194,7 @@ int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len) {
             msg->result = STORAGE_ERR_GENERIC;
             goto err_response;
         }
-    } else if (dev_type == VIRT_RPMB) {
+    } else if ((dev_type == VIRT_RPMB) || (dev_type == SOCK_RPMB)) {
         size_t payload_size = req->reliable_write_size + req->write_size;
         rc = send_virt_rpmb_req(rpmb_fd, read_buf, req->read_size, req->payload, payload_size);
         if (rc < 0) {
@@ -234,12 +236,33 @@ int rpmb_open(const char* rpmb_devname, enum dev_type open_dev_type) {
     int rc;
     dev_type = open_dev_type;
 
-    rc = open(rpmb_devname, O_RDWR, 0);
-    if (rc < 0) {
-        ALOGE("unable (%d) to open rpmb device '%s': %s\n", errno, rpmb_devname, strerror(errno));
-        return rc;
+    if (dev_type != SOCK_RPMB) {
+        rc = open(rpmb_devname, O_RDWR, 0);
+        if (rc < 0) {
+            ALOGE("unable (%d) to open rpmb device '%s': %s\n", errno, rpmb_devname, strerror(errno));
+            return rc;
+        }
+        rpmb_fd = rc;
+    } else {
+        struct sockaddr_un unaddr;
+        struct sockaddr *addr = (struct sockaddr *)&unaddr;
+        rc = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (rc < 0) {
+            ALOGE("unable (%d) to create socket: %s\n", errno, strerror(errno));
+            return rc;
+        }
+        rpmb_fd = rc;
+
+        memset(&unaddr, 0, sizeof(unaddr));
+        unaddr.sun_family = AF_UNIX;
+        // TODO if it overflowed, bail rather than connecting?
+        strncpy(unaddr.sun_path, rpmb_devname, sizeof(unaddr.sun_path)-1);
+        rc = connect(rpmb_fd, addr, sizeof(unaddr));
+        if (rc < 0) {
+            ALOGE("unable (%d) to connect to rpmb socket '%s': %s\n", errno, rpmb_devname, strerror(errno));
+            return rc;
+        }
     }
-    rpmb_fd = rc;
     return 0;
 }
 
