@@ -58,15 +58,6 @@ endif
 endif
 
 #######################################
-# fsverity_init
-
-include $(CLEAR_VARS)
-LOCAL_MODULE:= fsverity_init
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_SRC_FILES := fsverity_init.sh
-include $(BUILD_PREBUILT)
-
-#######################################
 # init.environ.rc
 
 include $(CLEAR_VARS)
