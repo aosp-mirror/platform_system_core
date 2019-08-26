@@ -21,8 +21,8 @@
     </target_preparer>
     <test class="com.android.tradefed.testtype.VtsMultiDeviceTest">
       <option name="test-module-name" value="VtsKernelLiblpTest"/>
-        <option name="binary-test-source" value="_32bit::DATA/nativetest/liblp_test_static/liblp_test_static" />
-        <option name="binary-test-source" value="_64bit::DATA/nativetest64/liblp_test_static/liblp_test_static" />
+        <option name="binary-test-source" value="_32bit::DATA/nativetest/vts_kernel_liblp_test/vts_kernel_liblp_test" />
+        <option name="binary-test-source" value="_64bit::DATA/nativetest64/vts_kernel_liblp_test/vts_kernel_liblp_test" />
         <option name="binary-test-type" value="gtest"/>
         <option name="test-timeout" value="1m"/>
         <option name="precondition-first-api-level" value="29" />
