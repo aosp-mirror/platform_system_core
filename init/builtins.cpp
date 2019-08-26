@@ -55,7 +55,6 @@
 #include <cutils/android_reboot.h>
 #include <fs_mgr.h>
 #include <fscrypt/fscrypt.h>
-#include <fscrypt/fscrypt_init_extensions.h>
 #include <libgsi/libgsi.h>
 #include <selinux/android.h>
 #include <selinux/label.h>
@@ -64,6 +63,7 @@
 
 #include "action_manager.h"
 #include "bootchart.h"
+#include "fscrypt_init_extensions.h"
 #include "init.h"
 #include "mount_namespace.h"
 #include "parser.h"
