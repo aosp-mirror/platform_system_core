@@ -14,20 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef _FSCRYPT_INIT_EXTENSIONS_H_
-#define _FSCRYPT_INIT_EXTENSIONS_H_
+#pragma once
 
-#include <sys/cdefs.h>
-#include <stdbool.h>
-#include <cutils/multiuser.h>
+#include <string>
 
-__BEGIN_DECLS
-
-// These functions assume they are being called from init
-// They will not operate properly outside of init
 int fscrypt_install_keyring();
-int fscrypt_set_directory_policy(const char* path);
-
-__END_DECLS
-
-#endif // _FSCRYPT_INIT_EXTENSIONS_H_
+int fscrypt_set_directory_policy(const std::string& dir);
