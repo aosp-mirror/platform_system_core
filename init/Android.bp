@@ -117,6 +117,7 @@ cc_library_static {
         "firmware_handler.cpp",
         "first_stage_init.cpp",
         "first_stage_mount.cpp",
+        "fscrypt_init_extensions.cpp",
         "import_parser.cpp",
         "init.cpp",
         "interface_utils.cpp",
