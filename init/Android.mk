@@ -114,6 +114,7 @@ LOCAL_STATIC_LIBRARIES := \
     libbacktrace \
     libmodprobe \
     libext2_uuid \
+    libsnapshot_nobinder \
 
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.
