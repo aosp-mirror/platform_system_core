@@ -34,6 +34,7 @@
 #include <liblp/mock_property_fetcher.h>
 
 #include "test_helpers.h"
+#include "utility.h"
 
 namespace android {
 namespace snapshot {
@@ -214,12 +215,43 @@ class SnapshotTest : public ::testing::Test {
     void DeleteSnapshotDevice(const std::string& snapshot) {
         DeleteDevice(snapshot);
         DeleteDevice(snapshot + "-inner");
+        DeleteDevice(snapshot + "-cow");
         ASSERT_TRUE(image_manager_->UnmapImageIfExists(snapshot + "-cow-img"));
+        DeleteDevice(snapshot + "-base");
     }
     void DeleteDevice(const std::string& device) {
         if (dm_.GetState(device) != DmDeviceState::INVALID) {
             ASSERT_TRUE(dm_.DeleteDevice(device));
         }
+    }
+
+    AssertionResult CreateCowImage(const std::string& name) {
+        if (!sm->CreateCowImage(lock_.get(), name)) {
+            return AssertionFailure() << "Cannot create COW image " << name;
+        }
+        std::string cow_device;
+        auto map_res = MapCowImage(name, 10s, &cow_device);
+        if (!map_res) {
+            return map_res;
+        }
+        if (!InitializeCow(cow_device)) {
+            return AssertionFailure() << "Cannot zero fill " << cow_device;
+        }
+        if (!sm->UnmapCowImage(name)) {
+            return AssertionFailure() << "Cannot unmap " << name << " after zero filling it";
+        }
+        return AssertionSuccess();
+    }
+
+    AssertionResult MapCowImage(const std::string& name,
+                                const std::chrono::milliseconds& timeout_ms, std::string* path) {
+        if (!sm->MapCowImage(name, timeout_ms)) {
+            return AssertionFailure() << "Cannot map cow image " << name;
+        }
+        if (!dm_.GetDmDevicePathByName(name + "-cow-img"s, path)) {
+            return AssertionFailure() << "No path for " << name << "-cow-img";
+        }
+        return AssertionSuccess();
     }
 
     DeviceMapper& dm_;
@@ -236,7 +268,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
                                    {.device_size = kDeviceSize,
                                     .snapshot_size = kDeviceSize,
                                     .cow_file_size = kDeviceSize}));
-    ASSERT_TRUE(sm->CreateCowImage(lock_.get(), "test-snapshot"));
+    ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::vector<std::string> snapshots;
     ASSERT_TRUE(sm->ListSnapshots(lock_.get(), &snapshots));
@@ -265,13 +297,13 @@ TEST_F(SnapshotTest, MapSnapshot) {
                                    {.device_size = kDeviceSize,
                                     .snapshot_size = kDeviceSize,
                                     .cow_file_size = kDeviceSize}));
-    ASSERT_TRUE(sm->CreateCowImage(lock_.get(), "test-snapshot"));
+    ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::string base_device;
     ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
 
     std::string cow_device;
-    ASSERT_TRUE(sm->MapCowImage("test-snapshot", 10s, &cow_device));
+    ASSERT_TRUE(MapCowImage("test-snapshot", 10s, &cow_device));
 
     std::string snap_device;
     ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, cow_device, 10s,
@@ -288,13 +320,13 @@ TEST_F(SnapshotTest, MapPartialSnapshot) {
                                    {.device_size = kDeviceSize,
                                     .snapshot_size = kSnapshotSize,
                                     .cow_file_size = kSnapshotSize}));
-    ASSERT_TRUE(sm->CreateCowImage(lock_.get(), "test-snapshot"));
+    ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::string base_device;
     ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
 
     std::string cow_device;
-    ASSERT_TRUE(sm->MapCowImage("test-snapshot", 10s, &cow_device));
+    ASSERT_TRUE(MapCowImage("test-snapshot", 10s, &cow_device));
 
     std::string snap_device;
     ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, cow_device, 10s,
@@ -344,8 +376,8 @@ TEST_F(SnapshotTest, Merge) {
                                    {.device_size = kDeviceSize,
                                     .snapshot_size = kDeviceSize,
                                     .cow_file_size = kDeviceSize}));
-    ASSERT_TRUE(sm->CreateCowImage(lock_.get(), "test_partition_b"));
-    ASSERT_TRUE(sm->MapCowImage("test_partition_b", 10s, &cow_device));
+    ASSERT_TRUE(CreateCowImage("test_partition_b"));
+    ASSERT_TRUE(MapCowImage("test_partition_b", 10s, &cow_device));
     ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test_partition_b", base_device, cow_device, 10s,
                                 &snap_device));
 
@@ -403,11 +435,11 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
                                    {.device_size = kDeviceSize,
                                     .snapshot_size = kDeviceSize,
                                     .cow_file_size = kDeviceSize}));
-    ASSERT_TRUE(sm->CreateCowImage(lock_.get(), "test-snapshot"));
+    ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::string base_device, cow_device, snap_device;
     ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
-    ASSERT_TRUE(sm->MapCowImage("test-snapshot", 10s, &cow_device));
+    ASSERT_TRUE(MapCowImage("test-snapshot", 10s, &cow_device));
     ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, cow_device, 10s,
                                 &snap_device));
 
@@ -437,7 +469,7 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
 
     // Map snapshot should fail now, because we're in a merge-complete state.
     ASSERT_TRUE(AcquireLock());
-    ASSERT_TRUE(sm->MapCowImage("test-snapshot", 10s, &cow_device));
+    ASSERT_TRUE(MapCowImage("test-snapshot", 10s, &cow_device));
     ASSERT_FALSE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, cow_device, 10s,
                                  &snap_device));
 
@@ -462,7 +494,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
                                    {.device_size = kDeviceSize,
                                     .snapshot_size = kDeviceSize,
                                     .cow_file_size = kDeviceSize}));
-    ASSERT_TRUE(sm->CreateCowImage(lock_.get(), "test_partition_b"));
+    ASSERT_TRUE(CreateCowImage("test_partition_b"));
 
     // Simulate a reboot into the new slot.
     lock_ = nullptr;
@@ -504,7 +536,7 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
                                    {.device_size = kDeviceSize,
                                     .snapshot_size = kDeviceSize,
                                     .cow_file_size = kDeviceSize}));
-    ASSERT_TRUE(sm->CreateCowImage(lock_.get(), "test_partition_b"));
+    ASSERT_TRUE(CreateCowImage("test_partition_b"));
 
     // Simulate a reboot into the new slot.
     lock_ = nullptr;
@@ -552,7 +584,7 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
                                    {.device_size = kDeviceSize,
                                     .snapshot_size = kDeviceSize,
                                     .cow_file_size = kDeviceSize}));
-    ASSERT_TRUE(sm->CreateCowImage(lock_.get(), "test_partition_b"));
+    ASSERT_TRUE(CreateCowImage("test_partition_b"));
 
     // Simulate a reboot into the new slot.
     lock_ = nullptr;

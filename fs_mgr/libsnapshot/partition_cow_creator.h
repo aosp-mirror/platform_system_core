@@ -29,6 +29,7 @@ namespace snapshot {
 // Helper class that creates COW for a partition.
 struct PartitionCowCreator {
     using Extent = android::fs_mgr::Extent;
+    using Interval = android::fs_mgr::Interval;
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
     using Partition = android::fs_mgr::Partition;
 
@@ -48,6 +49,7 @@ struct PartitionCowCreator {
 
     struct Return {
         SnapshotManager::SnapshotStatus snapshot_status;
+        std::vector<Interval> cow_partition_usable_regions;
     };
 
     std::optional<Return> Run();

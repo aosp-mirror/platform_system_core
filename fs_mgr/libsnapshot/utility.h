@@ -103,5 +103,8 @@ struct AutoDeleteSnapshot : AutoDevice {
 std::vector<android::fs_mgr::Partition*> ListPartitionsWithSuffix(
         android::fs_mgr::MetadataBuilder* builder, const std::string& suffix);
 
+// Initialize a device before using it as the COW device for a dm-snapshot device.
+bool InitializeCow(const std::string& device);
+
 }  // namespace snapshot
 }  // namespace android

@@ -20,7 +20,9 @@
 
 #include "utility.h"
 
+using android::dm::kSectorSize;
 using android::fs_mgr::Extent;
+using android::fs_mgr::Interval;
 using android::fs_mgr::kDefaultBlockSize;
 using android::fs_mgr::Partition;
 
@@ -44,8 +46,8 @@ static std::unique_ptr<Extent> Intersect(Extent* target_extent, Extent* existing
     auto target_linear_extent = target_extent->AsLinearExtent();
     if (!target_linear_extent) return nullptr;
 
-    return android::fs_mgr::Interval::Intersect(target_linear_extent->AsInterval(),
-                                                existing_linear_extent->AsInterval())
+    return Interval::Intersect(target_linear_extent->AsInterval(),
+                               existing_linear_extent->AsInterval())
             .AsExtent();
 }
 
@@ -121,6 +123,10 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     CHECK(current_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME &&
           target_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME);
 
+    uint64_t logical_block_size = current_metadata->logical_block_size();
+    CHECK(logical_block_size != 0 && !(logical_block_size & (logical_block_size - 1)))
+            << "logical_block_size is not power of 2";
+
     Return ret;
     ret.snapshot_status.device_size = target_partition->size();
 
@@ -137,9 +143,31 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
                 RoundUp(ret.snapshot_status.snapshot_size * kCowEstimateFactor, kDefaultBlockSize);
     }
 
-    // TODO: create COW partition in target_metadata to save space.
-    ret.snapshot_status.cow_partition_size = 0;
+    // Compute regions that are free in both current and target metadata. These are the regions
+    // we can use for COW partition.
+    auto target_free_regions = target_metadata->GetFreeRegions();
+    auto current_free_regions = current_metadata->GetFreeRegions();
+    auto free_regions = Interval::Intersect(target_free_regions, current_free_regions);
+    uint64_t free_region_length = 0;
+    for (const auto& interval : free_regions) {
+        free_region_length += interval.length() * kSectorSize;
+    }
+
+    LOG(INFO) << "Remaining free space for COW: " << free_region_length << " bytes";
+
+    // Compute the COW partition size.
+    ret.snapshot_status.cow_partition_size = std::min(*cow_size, free_region_length);
+    // Round it down to the nearest logical block. Logical partitions must be a multiple
+    // of logical blocks.
+    ret.snapshot_status.cow_partition_size &= ~(logical_block_size - 1);
+    // Assign cow_partition_usable_regions to indicate what regions should the COW partition uses.
+    ret.cow_partition_usable_regions = std::move(free_regions);
+
+    // The rest of the COW space is allocated on ImageManager.
     ret.snapshot_status.cow_file_size = (*cow_size) - ret.snapshot_status.cow_partition_size;
+    // Round it up to the nearest sector.
+    ret.snapshot_status.cow_file_size += kSectorSize - 1;
+    ret.snapshot_status.cow_file_size &= ~(kSectorSize - 1);
 
     return ret;
 }
