@@ -36,6 +36,7 @@
 #include <fs_mgr_overlayfs.h>
 #include <libgsi/libgsi.h>
 #include <liblp/liblp.h>
+#include <libsnapshot/snapshot.h>
 
 #include "devices.h"
 #include "switch_root.h"
@@ -55,6 +56,7 @@ using android::fs_mgr::FstabEntry;
 using android::fs_mgr::ReadDefaultFstab;
 using android::fs_mgr::ReadFstabFromDt;
 using android::fs_mgr::SkipMountingPartitions;
+using android::snapshot::SnapshotManager;
 
 using namespace std::literals;
 
@@ -244,8 +246,6 @@ bool FirstStageMount::DoFirstStageMount() {
 
     if (!InitDevices()) return false;
 
-    if (!CreateLogicalPartitions()) return false;
-
     if (!MountPartitions()) return false;
 
     return true;
@@ -364,6 +364,16 @@ bool FirstStageMount::CreateLogicalPartitions() {
         LOG(ERROR) << "Could not locate logical partition tables in partition "
                    << super_partition_name_;
         return false;
+    }
+
+    if (SnapshotManager::IsSnapshotManagerNeeded()) {
+        auto sm = SnapshotManager::NewForFirstStageMount();
+        if (!sm) {
+            return false;
+        }
+        if (sm->NeedSnapshotsInFirstStageMount()) {
+            return sm->CreateLogicalAndSnapshotPartitions(lp_metadata_partition_);
+        }
     }
 
     auto metadata = android::fs_mgr::ReadCurrentMetadata(lp_metadata_partition_);
@@ -493,14 +503,7 @@ bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_sa
 // this case, we mount system first then pivot to it.  From that point on,
 // we are effectively identical to a system-as-root device.
 bool FirstStageMount::TrySwitchSystemAsRoot() {
-    auto metadata_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
-        return entry.mount_point == "/metadata";
-    });
-    if (metadata_partition != fstab_.end()) {
-        if (MountPartition(metadata_partition, true /* erase_same_mounts */)) {
-            UseGsiIfPresent();
-        }
-    }
+    UseGsiIfPresent();
 
     auto system_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
         return entry.mount_point == "/system";
@@ -523,6 +526,17 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
 }
 
 bool FirstStageMount::MountPartitions() {
+    // Mount /metadata before creating logical partitions, since we need to
+    // know whether a snapshot merge is in progress.
+    auto metadata_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
+        return entry.mount_point == "/metadata";
+    });
+    if (metadata_partition != fstab_.end()) {
+        MountPartition(metadata_partition, true /* erase_same_mounts */);
+    }
+
+    if (!CreateLogicalPartitions()) return false;
+
     if (!TrySwitchSystemAsRoot()) return false;
 
     if (!SkipMountingPartitions(&fstab_)) return false;
