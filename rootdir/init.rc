@@ -127,6 +127,10 @@ on init
     mkdir /mnt/expand 0771 system system
     mkdir /mnt/appfuse 0711 root root
 
+    # tmpfs place for BORINGSSL_self_test() to remember whether it has run
+    mkdir /dev/boringssl 0755 root root
+    mkdir /dev/boringssl/selftest 0755 root root
+
     # Storage views to support runtime permissions
     mkdir /mnt/runtime 0700 root root
     mkdir /mnt/runtime/default 0755 root root
@@ -609,6 +613,9 @@ on post-fs-data
     mkdir /data/cache/recovery 0770 system cache
     mkdir /data/cache/backup_stage 0700 system system
     mkdir /data/cache/backup 0700 system system
+
+    mkdir /data/rollback 0700 system system
+    mkdir /data/rollback-observer 0700 system system
 
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready

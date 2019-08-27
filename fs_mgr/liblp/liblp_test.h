@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,24 +16,12 @@
 
 #pragma once
 
-#include <sys/socket.h>
+#include <gtest/gtest.h>
 
-#include <string>
+#include "mock_property_fetcher.h"
 
-#include "epoll.h"
-
-namespace android {
-namespace init {
-
-static constexpr const char kRestoreconProperty[] = "selinux.restorecon_recursive";
-
-bool CanReadProperty(const std::string& source_context, const std::string& name);
-
-extern uint32_t (*property_set)(const std::string& name, const std::string& value);
-
-void property_init();
-void property_load_boot_defaults(bool load_debug_prop);
-void StartPropertyService(int* epoll_socket);
-
-}  // namespace init
-}  // namespace android
+class LiblpTest : public ::testing::Test {
+  public:
+    void SetUp() override { ResetPropertyFetcher(); }
+    void TearDown() override { ResetPropertyFetcher(); }
+};
