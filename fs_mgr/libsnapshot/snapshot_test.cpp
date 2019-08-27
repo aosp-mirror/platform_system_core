@@ -55,33 +55,19 @@ std::string fake_super;
 
 static constexpr uint64_t kSuperSize = 16 * 1024 * 1024;
 
-// Helper to remove stale partitions in fake super.
-void CleanupPartitions() {
-    // These are hardcoded since we might abort in the middle of a test, and
-    // can't recover the in-use list.
-    static std::vector<std::string> kPartitionNames = {
-            "base-device",
-    };
-
-    auto& dm = DeviceMapper::Instance();
-    for (const auto& partition : kPartitionNames) {
-        if (dm.GetState(partition) != DmDeviceState::INVALID) {
-            dm.DeleteDevice(partition);
-        }
-    }
-}
-
 class SnapshotTest : public ::testing::Test {
   public:
     SnapshotTest() : dm_(DeviceMapper::Instance()) {}
 
+    // This is exposed for main.
+    void Cleanup() {
+        InitializeState();
+        CleanupTestArtifacts();
+    }
+
   protected:
     void SetUp() override {
-        ASSERT_TRUE(sm->EnsureImageManager());
-        image_manager_ = sm->image_manager();
-
-        test_device->set_slot_suffix("_a");
-
+        InitializeState();
         CleanupTestArtifacts();
         FormatFakeSuper();
 
@@ -94,6 +80,13 @@ class SnapshotTest : public ::testing::Test {
         CleanupTestArtifacts();
     }
 
+    void InitializeState() {
+        ASSERT_TRUE(sm->EnsureImageManager());
+        image_manager_ = sm->image_manager();
+
+        test_device->set_slot_suffix("_a");
+    }
+
     void CleanupTestArtifacts() {
         // Normally cancelling inside a merge is not allowed. Since these
         // are tests, we don't care, destroy everything that might exist.
@@ -102,7 +95,7 @@ class SnapshotTest : public ::testing::Test {
         // get an accurate list to remove.
         lock_ = nullptr;
 
-        std::vector<std::string> snapshots = {"test-snapshot"};
+        std::vector<std::string> snapshots = {"test-snapshot", "test_partition_b"};
         for (const auto& snapshot : snapshots) {
             DeleteSnapshotDevice(snapshot);
             DeleteBackingImage(image_manager_, snapshot + "-cow");
@@ -111,7 +104,15 @@ class SnapshotTest : public ::testing::Test {
             android::base::RemoveFileIfExists(status_file);
         }
 
-        CleanupPartitions();
+        // Remove stale partitions in fake super.
+        std::vector<std::string> partitions = {
+                "base-device",
+                "test_partition_b",
+                "test_partition_b-base",
+        };
+        for (const auto& partition : partitions) {
+            DeleteDevice(partition);
+        }
 
         if (sm->GetUpdateState() != UpdateState::None) {
             auto state_file = sm->GetStateFilePath();
@@ -123,6 +124,9 @@ class SnapshotTest : public ::testing::Test {
         lock_ = sm->OpenStateFile(O_RDWR, LOCK_EX);
         return !!lock_;
     }
+
+    // This is so main() can instantiate this to invoke Cleanup.
+    virtual void TestBody() override {}
 
     void FormatFakeSuper() {
         BlockDeviceInfo super_device("super", kSuperSize, 0, 0, 4096);
@@ -150,9 +154,11 @@ class SnapshotTest : public ::testing::Test {
             return false;
         }
 
+        // Update both slots for convenience.
         auto metadata = builder->Export();
         if (!metadata) return false;
-        if (!UpdatePartitionTable(opener, "super", *metadata.get(), 0)) {
+        if (!UpdatePartitionTable(opener, "super", *metadata.get(), 0) ||
+            !UpdatePartitionTable(opener, "super", *metadata.get(), 1)) {
             return false;
         }
 
@@ -169,11 +175,12 @@ class SnapshotTest : public ::testing::Test {
     }
 
     void DeleteSnapshotDevice(const std::string& snapshot) {
-        if (dm_.GetState(snapshot) != DmDeviceState::INVALID) {
-            ASSERT_TRUE(dm_.DeleteDevice(snapshot));
-        }
-        if (dm_.GetState(snapshot + "-inner") != DmDeviceState::INVALID) {
-            ASSERT_TRUE(dm_.DeleteDevice(snapshot + "-inner"));
+        DeleteDevice(snapshot);
+        DeleteDevice(snapshot + "-inner");
+    }
+    void DeleteDevice(const std::string& device) {
+        if (dm_.GetState(device) != DmDeviceState::INVALID) {
+            ASSERT_TRUE(dm_.DeleteDevice(device));
         }
     }
 
@@ -246,6 +253,25 @@ TEST_F(SnapshotTest, NoMergeBeforeReboot) {
     ASSERT_FALSE(sm->InitiateMerge());
 }
 
+TEST_F(SnapshotTest, CleanFirstStageMount) {
+    // If there's no update in progress, there should be no first-stage mount
+    // needed.
+    TestDeviceInfo* info = new TestDeviceInfo(fake_super);
+    auto sm = SnapshotManager::NewForFirstStageMount(info);
+    ASSERT_NE(sm, nullptr);
+    ASSERT_FALSE(sm->NeedSnapshotsInFirstStageMount());
+}
+
+TEST_F(SnapshotTest, FirstStageMountAfterRollback) {
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // We didn't change the slot, so we shouldn't need snapshots.
+    TestDeviceInfo* info = new TestDeviceInfo(fake_super);
+    auto sm = SnapshotManager::NewForFirstStageMount(info);
+    ASSERT_NE(sm, nullptr);
+    ASSERT_FALSE(sm->NeedSnapshotsInFirstStageMount());
+}
+
 TEST_F(SnapshotTest, Merge) {
     ASSERT_TRUE(AcquireLock());
 
@@ -270,11 +296,11 @@ TEST_F(SnapshotTest, Merge) {
     ASSERT_TRUE(sm->IsSnapshotDevice("test-snapshot", &target));
     ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
 
-    // Set the state to Unverified, as if we finished an update.
-    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Unverified));
-
     // Release the lock.
     lock_ = nullptr;
+
+    // Done updating.
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
 
     test_device->set_slot_suffix("_b");
     ASSERT_TRUE(sm->InitiateMerge());
@@ -343,6 +369,40 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
     ASSERT_EQ(sm->WaitForMerge(), UpdateState::MergeCompleted);
 }
 
+TEST_F(SnapshotTest, FirstStageMountAndMerge) {
+    ASSERT_TRUE(AcquireLock());
+
+    static const uint64_t kDeviceSize = 1024 * 1024;
+
+    ASSERT_TRUE(CreatePartition("test_partition_b", kDeviceSize));
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test_partition_b", kDeviceSize, kDeviceSize,
+                                   kDeviceSize));
+
+    // Simulate a reboot into the new slot.
+    lock_ = nullptr;
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    auto rebooted = new TestDeviceInfo(fake_super);
+    rebooted->set_slot_suffix("_b");
+
+    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+
+    ASSERT_TRUE(AcquireLock());
+
+    // Validate that we have a snapshot device.
+    SnapshotManager::SnapshotStatus status;
+    ASSERT_TRUE(init->ReadSnapshotStatus(lock_.get(), "test_partition_b", &status));
+    ASSERT_EQ(status.state, SnapshotManager::SnapshotState::Created);
+
+    DeviceMapper::TargetInfo target;
+    auto dm_name = init->GetSnapshotDeviceName("test_partition_b", status);
+    ASSERT_TRUE(init->IsSnapshotDevice(dm_name, &target));
+    ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
+}
+
 }  // namespace snapshot
 }  // namespace android
 
@@ -383,6 +443,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Clean up previous run.
+    SnapshotTest().Cleanup();
+
     // Use a separate image manager for our fake super partition.
     auto super_images = IImageManager::Open("ota/test/super", 10s);
     if (!super_images) {
@@ -390,8 +453,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Clean up previous run.
-    CleanupPartitions();
+    // Clean up any old copy.
     DeleteBackingImage(super_images.get(), "fake-super");
 
     // Create and map the fake super partition.
@@ -405,11 +467,10 @@ int main(int argc, char** argv) {
         std::cerr << "Could not map fake super partition\n";
         return 1;
     }
+    test_device->set_fake_super(fake_super);
 
     auto result = RUN_ALL_TESTS();
 
-    // Clean up again.
-    CleanupPartitions();
     DeleteBackingImage(super_images.get(), "fake-super");
 
     return result;

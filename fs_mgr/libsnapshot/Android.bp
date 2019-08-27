@@ -28,6 +28,8 @@ cc_defaults {
     ],
     static_libs: [
         "libdm",
+        "libfs_mgr",
+        "liblp",
     ],
     whole_static_libs: [
         "libext2_uuid",
