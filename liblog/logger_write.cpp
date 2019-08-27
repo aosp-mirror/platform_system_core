@@ -29,7 +29,6 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "config_read.h" /* __android_log_config_read_close() definition */
 #include "config_write.h"
 #include "log_portability.h"
 #include "logger.h"
@@ -624,7 +623,6 @@ int android_set_log_transport(int transport_flag) {
   if (__android_log_transport != transport_flag) {
     __android_log_transport = transport_flag;
     __android_log_config_write_close();
-    __android_log_config_read_close();
 
     write_to_log = __write_to_log_init;
     /* generically we only expect these two values for write_to_log */
