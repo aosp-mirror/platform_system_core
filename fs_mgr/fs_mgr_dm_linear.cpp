@@ -212,6 +212,17 @@ bool CreateLogicalPartition(const CreateLogicalPartitionParams& params, std::str
     return true;
 }
 
+std::string CreateLogicalPartitionParams::GetDeviceName() const {
+    if (!device_name.empty()) return device_name;
+    return GetPartitionName();
+}
+
+std::string CreateLogicalPartitionParams::GetPartitionName() const {
+    if (!partition_name.empty()) return partition_name;
+    if (partition) return android::fs_mgr::GetPartitionName(*partition);
+    return "<unknown partition>";
+}
+
 bool UnmapDevice(const std::string& name) {
     DeviceMapper& dm = DeviceMapper::Instance();
     if (!dm.DeleteDevice(name)) {
