@@ -46,5 +46,12 @@ bool TestPartitionOpener::GetInfo(const std::string& partition_name,
     return PartitionOpener::GetInfo(partition_name, info);
 }
 
+std::string TestPartitionOpener::GetDeviceString(const std::string& partition_name) const {
+    if (partition_name == "super") {
+        return fake_super_path_;
+    }
+    return PartitionOpener::GetDeviceString(partition_name);
+}
+
 }  // namespace snapshot
 }  // namespace android
