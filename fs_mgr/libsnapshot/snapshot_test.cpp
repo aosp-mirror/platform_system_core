@@ -45,6 +45,7 @@ using android::fiemap::IImageManager;
 using android::fs_mgr::BlockDeviceInfo;
 using android::fs_mgr::CreateLogicalPartitionParams;
 using android::fs_mgr::DestroyLogicalPartition;
+using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::MetadataBuilder;
 using namespace ::testing;
 using namespace android::fs_mgr::testing;
@@ -198,6 +199,7 @@ class SnapshotTest : public ::testing::Test {
                     .block_device = fake_super,
                     .metadata = metadata.get(),
                     .partition = &partition,
+                    .device_name = GetPartitionName(partition) + "-base",
                     .force_writable = true,
                     .timeout_ms = 10s,
             };
@@ -308,15 +310,20 @@ TEST_F(SnapshotTest, FirstStageMountAfterRollback) {
 }
 
 TEST_F(SnapshotTest, Merge) {
+    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
+            .WillByDefault(Return(true));
+
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test-snapshot", kDeviceSize, kDeviceSize,
-                                   kDeviceSize));
 
     std::string base_device, snap_device;
-    ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
-    ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, 10s, &snap_device));
+    ASSERT_TRUE(CreatePartition("test_partition_a", kDeviceSize));
+    ASSERT_TRUE(MapUpdatePartitions());
+    ASSERT_TRUE(dm_.GetDmDevicePathByName("test_partition_b-base", &base_device));
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test_partition_b", kDeviceSize, kDeviceSize,
+                                   kDeviceSize));
+    ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test_partition_b", base_device, 10s, &snap_device));
 
     std::string test_string = "This is a test string.";
     {
@@ -325,10 +332,10 @@ TEST_F(SnapshotTest, Merge) {
         ASSERT_TRUE(android::base::WriteFully(fd, test_string.data(), test_string.size()));
     }
 
-    // Note: we know the name of the device is test-snapshot because we didn't
-    // request a linear segment.
+    // Note: we know there is no inner/outer dm device since we didn't request
+    // a linear segment.
     DeviceMapper::TargetInfo target;
-    ASSERT_TRUE(sm->IsSnapshotDevice("test-snapshot", &target));
+    ASSERT_TRUE(sm->IsSnapshotDevice("test_partition_b", &target));
     ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
 
     // Release the lock.
@@ -341,7 +348,7 @@ TEST_F(SnapshotTest, Merge) {
     ASSERT_TRUE(sm->InitiateMerge());
 
     // The device should have been switched to a snapshot-merge target.
-    ASSERT_TRUE(sm->IsSnapshotDevice("test-snapshot", &target));
+    ASSERT_TRUE(sm->IsSnapshotDevice("test_partition_b", &target));
     ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot-merge");
 
     // We should not be able to cancel an update now.
@@ -351,10 +358,12 @@ TEST_F(SnapshotTest, Merge) {
     ASSERT_EQ(sm->GetUpdateState(), UpdateState::None);
 
     // The device should no longer be a snapshot or snapshot-merge.
-    ASSERT_FALSE(sm->IsSnapshotDevice("test-snapshot"));
+    ASSERT_FALSE(sm->IsSnapshotDevice("test_partition_b"));
 
-    // Test that we can read back the string we wrote to the snapshot.
-    unique_fd fd(open(base_device.c_str(), O_RDONLY | O_CLOEXEC));
+    // Test that we can read back the string we wrote to the snapshot. Note
+    // that the base device is gone now. |snap_device| contains the correct
+    // partition.
+    unique_fd fd(open(snap_device.c_str(), O_RDONLY | O_CLOEXEC));
     ASSERT_GE(fd, 0);
 
     std::string buffer(test_string.size(), '\0');
@@ -420,7 +429,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     // Simulate a reboot into the new slot.
     lock_ = nullptr;
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
-    ASSERT_TRUE(DestroyLogicalPartition("test_partition_b"));
+    ASSERT_TRUE(DestroyLogicalPartition("test_partition_b-base"));
 
     auto rebooted = new TestDeviceInfo(fake_super);
     rebooted->set_slot_suffix("_b");
@@ -459,7 +468,7 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
     // Simulate a reboot into the new slot.
     lock_ = nullptr;
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
-    ASSERT_TRUE(DestroyLogicalPartition("test_partition_b"));
+    ASSERT_TRUE(DestroyLogicalPartition("test_partition_b-base"));
 
     // Reflash the super partition.
     FormatFakeSuper();
@@ -504,7 +513,7 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     // Simulate a reboot into the new slot.
     lock_ = nullptr;
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
-    ASSERT_TRUE(DestroyLogicalPartition("test_partition_b"));
+    ASSERT_TRUE(DestroyLogicalPartition("test_partition_b-base"));
 
     auto rebooted = new TestDeviceInfo(fake_super);
     rebooted->set_slot_suffix("_b");

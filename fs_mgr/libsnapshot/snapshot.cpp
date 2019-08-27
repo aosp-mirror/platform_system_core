@@ -47,6 +47,7 @@ using android::dm::DmTargetSnapshot;
 using android::dm::kSectorSize;
 using android::dm::SnapshotStorageMode;
 using android::fiemap::IImageManager;
+using android::fs_mgr::CreateDmTable;
 using android::fs_mgr::CreateLogicalPartition;
 using android::fs_mgr::CreateLogicalPartitionParams;
 using android::fs_mgr::GetPartitionName;
@@ -851,25 +852,16 @@ bool SnapshotManager::OnSnapshotMergeComplete(LockedFile* lock, const std::strin
 
 bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
                                              const SnapshotStatus& status) {
-    // Ideally, we would complete the following steps to collapse the device:
-    //  (1) Rewrite the snapshot table to be identical to the base device table.
-    //  (2) Rewrite the verity table to use the "snapshot" (now linear) device.
-    //  (3) Delete the base device.
-    //
-    // This should be possible once libsnapshot understands LpMetadata. In the
-    // meantime, we implement a simpler solution: rewriting the snapshot table
-    // to be a single dm-linear segment against the base device. While not as
-    // ideal, it still lets us remove the COW device. We can remove this
-    // implementation once the new method has been tested.
     auto& dm = DeviceMapper::Instance();
     auto dm_name = GetSnapshotDeviceName(name, status);
 
+    // Verify we have a snapshot-merge device.
     DeviceMapper::TargetInfo target;
     if (!GetSingleTarget(dm_name, TableQuery::Table, &target)) {
         return false;
     }
     if (DeviceMapper::GetTargetType(target.spec) != "snapshot-merge") {
-        // This should be impossible, it was checked above.
+        // This should be impossible, it was checked earlier.
         LOG(ERROR) << "Snapshot device has invalid target type: " << dm_name;
         return false;
     }
@@ -898,7 +890,7 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
             return false;
         }
         if (outer_table.size() != 2) {
-            LOG(ERROR) << "Expected 2 dm-linear targets for tabble " << name
+            LOG(ERROR) << "Expected 2 dm-linear targets for table " << name
                        << ", got: " << outer_table.size();
             return false;
         }
@@ -918,27 +910,49 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         }
     }
 
-    // Note: we are replacing the OUTER table here, so we do not use dm_name.
-    DmTargetLinear new_target(0, num_sectors, base_device, 0);
-    LOG(INFO) << "Replacing snapshot device " << name
-              << " table with: " << new_target.GetParameterString();
+    // Grab the partition metadata for the snapshot.
+    uint32_t slot = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+    auto super_device = device_->GetSuperDevice(slot);
+    const auto& opener = device_->GetPartitionOpener();
+    auto metadata = android::fs_mgr::ReadMetadata(opener, super_device, slot);
+    if (!metadata) {
+        LOG(ERROR) << "Could not read super partition metadata.";
+        return false;
+    }
+    auto partition = android::fs_mgr::FindPartition(*metadata.get(), name);
+    if (!partition) {
+        LOG(ERROR) << "Snapshot does not have a partition in super: " << name;
+        return false;
+    }
 
+    // Create a DmTable that is identical to the base device.
     DmTable table;
-    table.Emplace<DmTargetLinear>(new_target);
+    if (!CreateDmTable(opener, *metadata.get(), *partition, super_device, &table)) {
+        LOG(ERROR) << "Could not create a DmTable for partition: " << name;
+        return false;
+    }
+
+    // Note: we are replacing the *outer* table here, so we do not use dm_name.
     if (!dm.LoadTableAndActivate(name, table)) {
         return false;
     }
 
-    if (dm_name != name) {
-        // Attempt to delete the snapshot device. Nothing should be depending on
-        // the device, and device-mapper should have flushed remaining I/O. We
-        // could in theory replace with dm-zero (or re-use the table above), but
-        // for now it's better to know why this would fail.
-        if (!dm.DeleteDeviceIfExists(dm_name)) {
-            LOG(ERROR) << "Unable to delete snapshot device " << dm_name << ", COW cannot be "
-                       << "reclaimed until after reboot.";
-            return false;
-        }
+    // Attempt to delete the snapshot device if one still exists. Nothing
+    // should be depending on the device, and device-mapper should have
+    // flushed remaining I/O. We could in theory replace with dm-zero (or
+    // re-use the table above), but for now it's better to know why this
+    // would fail.
+    if (!dm.DeleteDeviceIfExists(dm_name)) {
+        LOG(ERROR) << "Unable to delete snapshot device " << dm_name << ", COW cannot be "
+                   << "reclaimed until after reboot.";
+        return false;
+    }
+
+    // Cleanup the base device as well, since it is no longer used. This does
+    // not block cleanup.
+    auto base_name = GetBaseDeviceName(name);
+    if (!dm.DeleteDeviceIfExists(base_name)) {
+        LOG(ERROR) << "Unable to delete base device for snapshot: " << base_name;
     }
     return true;
 }
