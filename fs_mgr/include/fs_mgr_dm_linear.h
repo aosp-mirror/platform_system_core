@@ -77,6 +77,10 @@ struct CreateLogicalPartitionParams {
     // If non-null, this will use the specified IPartitionOpener rather than
     // the default one.
     const IPartitionOpener* partition_opener = nullptr;
+
+    // Helpers for determining the effective partition and device name.
+    std::string GetPartitionName() const;
+    std::string GetDeviceName() const;
 };
 
 bool CreateLogicalPartition(const CreateLogicalPartitionParams& params, std::string* path);
