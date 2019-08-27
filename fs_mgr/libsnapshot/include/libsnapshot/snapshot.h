@@ -211,25 +211,44 @@ class SnapshotManager final {
     std::unique_ptr<LockedFile> OpenFile(const std::string& file, int open_flags, int lock_flags);
     bool Truncate(LockedFile* file);
 
+    enum class SnapshotState : int { None, Created, Merging, MergeCompleted };
+    static std::string to_string(SnapshotState state);
+
+    // This state is persisted per-snapshot in /metadata/ota/snapshots/.
+    struct SnapshotStatus {
+        SnapshotState state = SnapshotState::None;
+        uint64_t device_size = 0;
+        uint64_t snapshot_size = 0;
+        uint64_t cow_partition_size = 0;
+        uint64_t cow_file_size = 0;
+
+        // These are non-zero when merging.
+        uint64_t sectors_allocated = 0;
+        uint64_t metadata_sectors = 0;
+    };
+
     // Create a new snapshot record. This creates the backing COW store and
     // persists information needed to map the device. The device can be mapped
     // with MapSnapshot().
     //
-    // |device_size| should be the size of the base_device that will be passed
-    // via MapDevice(). |snapshot_size| should be the number of bytes in the
-    // base device, starting from 0, that will be snapshotted. The cow_size
+    // |status|.device_size should be the size of the base_device that will be passed
+    // via MapDevice(). |status|.snapshot_size should be the number of bytes in the
+    // base device, starting from 0, that will be snapshotted. |status|.cow_file_size
     // should be the amount of space that will be allocated to store snapshot
     // deltas.
     //
-    // If |snapshot_size| < device_size, then the device will always
+    // If |status|.snapshot_size < |status|.device_size, then the device will always
     // be mapped with two table entries: a dm-snapshot range covering
     // snapshot_size, and a dm-linear range covering the remainder.
     //
-    // All sizes are specified in bytes, and the device and snapshot sizes
-    // must be a multiple of the sector size (512 bytes). |cow_size| will
-    // be rounded up to the nearest sector.
-    bool CreateSnapshot(LockedFile* lock, const std::string& name, uint64_t device_size,
-                        uint64_t snapshot_size, uint64_t cow_size);
+    // All sizes are specified in bytes, and the device, snapshot and COW partition sizes
+    // must be a multiple of the sector size (512 bytes). COW file size will be rounded up
+    // to the nearest sector.
+    bool CreateSnapshot(LockedFile* lock, const std::string& name, SnapshotStatus status);
+
+    // |name| should be the base partition name (e.g. "system_a"). Create the
+    // backing COW image using the size previously passed to CreateSnapshot().
+    bool CreateCowImage(LockedFile* lock, const std::string& name);
 
     // Map a snapshot device that was previously created with CreateSnapshot.
     // If a merge was previously initiated, the device-mapper table will have a
@@ -239,14 +258,22 @@ class SnapshotManager final {
     // timeout_ms is 0, then no wait will occur and |dev_path| may not yet
     // exist on return.
     bool MapSnapshot(LockedFile* lock, const std::string& name, const std::string& base_device,
-                     const std::chrono::milliseconds& timeout_ms, std::string* dev_path);
+                     const std::string& cow_device, const std::chrono::milliseconds& timeout_ms,
+                     std::string* dev_path);
 
-    // Remove the backing copy-on-write image for the named snapshot. The
+    // Map a COW image that was previous created with CreateCowImage.
+    bool MapCowImage(const std::string& name, const std::chrono::milliseconds& timeout_ms,
+                     std::string* cow_image_device);
+
+    // Remove the backing copy-on-write image and snapshot states for the named snapshot. The
     // caller is responsible for ensuring that the snapshot is unmapped.
     bool DeleteSnapshot(LockedFile* lock, const std::string& name);
 
     // Unmap a snapshot device previously mapped with MapSnapshotDevice().
     bool UnmapSnapshot(LockedFile* lock, const std::string& name);
+
+    // Unmap a COW image device previously mapped with MapCowImage().
+    bool UnmapCowImage(const std::string& name);
 
     // Unmap and remove all known snapshots.
     bool RemoveAllSnapshots(LockedFile* lock);
@@ -269,22 +296,6 @@ class SnapshotManager final {
     UpdateState ReadUpdateState(LockedFile* file);
     bool WriteUpdateState(LockedFile* file, UpdateState state);
     std::string GetStateFilePath() const;
-
-    enum class SnapshotState : int { Created, Merging, MergeCompleted };
-    static std::string to_string(SnapshotState state);
-
-    // This state is persisted per-snapshot in /metadata/ota/snapshots/.
-    struct SnapshotStatus {
-        SnapshotState state;
-        uint64_t device_size;
-        uint64_t snapshot_size;
-        uint64_t cow_partition_size;
-        uint64_t cow_file_size;
-
-        // These are non-zero when merging.
-        uint64_t sectors_allocated = 0;
-        uint64_t metadata_sectors = 0;
-    };
 
     // Helpers for merging.
     bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
