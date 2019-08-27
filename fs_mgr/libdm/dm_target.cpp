@@ -244,7 +244,8 @@ std::string DmTargetCrypt::GetParameterString() const {
 }
 
 std::string DmTargetDefaultKey::GetParameterString() const {
-    return cipher_ + " " + key_ + " " + blockdev_ + " " + std::to_string(start_sector_);
+    return cipher_ + " " + key_ + " " + blockdev_ + " " + std::to_string(start_sector_) +
+           (set_dun_ ? " 1 set_dun" : "");
 }
 
 }  // namespace dm
