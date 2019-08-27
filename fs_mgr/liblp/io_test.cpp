@@ -27,7 +27,6 @@
 
 #include "images.h"
 #include "liblp_test.h"
-#include "mock_property_fetcher.h"
 #include "reader.h"
 #include "test_partition_opener.h"
 #include "utility.h"
@@ -35,6 +34,7 @@
 
 using namespace std;
 using namespace android::fs_mgr;
+using namespace android::fs_mgr::testing;
 using ::testing::_;
 using ::testing::Return;
 using unique_fd = android::base::unique_fd;

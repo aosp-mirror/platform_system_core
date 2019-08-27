@@ -22,6 +22,7 @@
 
 namespace android {
 namespace fs_mgr {
+namespace testing {
 
 class MockPropertyFetcher : public IPropertyFetcher {
   public:
@@ -41,8 +42,15 @@ class MockPropertyFetcher : public IPropertyFetcher {
     }
 };
 
+static inline void ResetMockPropertyFetcher() {
+    IPropertyFetcher::OverrideForTesting(
+            std::make_unique<::testing::NiceMock<MockPropertyFetcher>>());
+}
+
+static inline MockPropertyFetcher* GetMockedPropertyFetcher() {
+    return static_cast<MockPropertyFetcher*>(IPropertyFetcher::GetInstance());
+}
+
+}  // namespace testing
 }  // namespace fs_mgr
 }  // namespace android
-
-android::fs_mgr::MockPropertyFetcher* GetMockedPropertyFetcher();
-void ResetPropertyFetcher();
