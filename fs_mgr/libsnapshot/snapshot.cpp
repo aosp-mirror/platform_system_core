@@ -210,8 +210,27 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, const std::string& name,
     }
 
     auto cow_name = GetCowName(name);
-    int cow_flags = IImageManager::CREATE_IMAGE_ZERO_FILL;
-    return images_->CreateBackingImage(cow_name, cow_size, cow_flags);
+    int cow_flags = IImageManager::CREATE_IMAGE_DEFAULT;
+    if (!images_->CreateBackingImage(cow_name, cow_size, cow_flags)) {
+        return false;
+    }
+
+    // when the kernel creates a persistent dm-snapshot, it requires a CoW file
+    // to store the modifications. The kernel interface does not specify how
+    // the CoW is used, and there is no standard associated.
+    // By looking at the current implementation, the CoW file is treated as:
+    // - a _NEW_ snapshot if its first 32 bits are zero, so the newly created
+    // dm-snapshot device will look like a perfect copy of the origin device;
+    // - an _EXISTING_ snapshot if the first 32 bits are equal to a
+    // kernel-specified magic number and the CoW file metadata is set as valid,
+    // so it can be used to resume the last state of a snapshot device;
+    // - an _INVALID_ snapshot otherwise.
+    // To avoid zero-filling the whole CoW file when a new dm-snapshot is
+    // created, here we zero-fill only the first 32 bits. This is a temporary
+    // workaround that will be discussed again when the kernel API gets
+    // consolidated.
+    ssize_t dm_snap_magic_size = 4;  // 32 bit
+    return images_->ZeroFillNewImage(cow_name, dm_snap_magic_size);
 }
 
 bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
