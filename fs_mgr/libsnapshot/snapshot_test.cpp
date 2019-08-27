@@ -347,7 +347,7 @@ TEST_F(SnapshotTest, Merge) {
     // We should not be able to cancel an update now.
     ASSERT_FALSE(sm->CancelUpdate());
 
-    ASSERT_EQ(sm->WaitForMerge(), UpdateState::MergeCompleted);
+    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeCompleted);
     ASSERT_EQ(sm->GetUpdateState(), UpdateState::None);
 
     // The device should no longer be a snapshot or snapshot-merge.
@@ -388,7 +388,7 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
     ASSERT_TRUE(sm->InitiateMerge());
 
     // COW cannot be removed due to open fd, so expect a soft failure.
-    ASSERT_EQ(sm->WaitForMerge(), UpdateState::MergeNeedsReboot);
+    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeNeedsReboot);
 
     // Forcefully delete the snapshot device, so it looks like we just rebooted.
     DeleteSnapshotDevice("test-snapshot");
@@ -401,7 +401,7 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
     fd = {};
     lock_ = nullptr;
 
-    ASSERT_EQ(sm->WaitForMerge(), UpdateState::MergeCompleted);
+    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeCompleted);
 }
 
 TEST_F(SnapshotTest, FirstStageMountAndMerge) {
@@ -482,6 +482,52 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
     DeviceMapper::TargetInfo target;
     auto dm_name = init->GetSnapshotDeviceName("test_partition_b", status);
     ASSERT_FALSE(init->IsSnapshotDevice(dm_name, &target));
+
+    // We should see a cancelled update as well.
+    lock_ = nullptr;
+    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::Cancelled);
+}
+
+TEST_F(SnapshotTest, FlashSuperDuringMerge) {
+    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
+            .WillByDefault(Return(true));
+
+    ASSERT_TRUE(AcquireLock());
+
+    static const uint64_t kDeviceSize = 1024 * 1024;
+
+    ASSERT_TRUE(CreatePartition("test_partition_a", kDeviceSize));
+    ASSERT_TRUE(MapUpdatePartitions());
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test_partition_b", kDeviceSize, kDeviceSize,
+                                   kDeviceSize));
+
+    // Simulate a reboot into the new slot.
+    lock_ = nullptr;
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(DestroyLogicalPartition("test_partition_b"));
+
+    auto rebooted = new TestDeviceInfo(fake_super);
+    rebooted->set_slot_suffix("_b");
+
+    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->InitiateMerge());
+
+    // Now, reflash super. Note that we haven't called ProcessUpdateState, so the
+    // status is still Merging.
+    DeleteSnapshotDevice("test_partition_b");
+    ASSERT_TRUE(init->image_manager()->UnmapImageDevice("test_partition_b-cow"));
+    FormatFakeSuper();
+    ASSERT_TRUE(CreatePartition("test_partition_b", kDeviceSize));
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+
+    // Because the status is Merging, we must call ProcessUpdateState, which should
+    // detect a cancelled update.
+    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::Cancelled);
+    ASSERT_EQ(sm->GetUpdateState(), UpdateState::None);
 }
 
 }  // namespace snapshot
