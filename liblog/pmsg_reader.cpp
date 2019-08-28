@@ -24,7 +24,6 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "config_read.h"
 #include "logger.h"
 
 static int pmsgAvailable(log_id_t logId);
