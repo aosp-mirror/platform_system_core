@@ -51,6 +51,8 @@
 
 #include <android/api-level.h>
 #include <fcntl.h>
+#include <linux/audit.h>
+#include <linux/netlink.h>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -446,6 +448,35 @@ void SelinuxInitialize() {
     }
 }
 
+constexpr size_t kKlogMessageSize = 1024;
+
+void SelinuxAvcLog(char* buf, size_t buf_len) {
+    CHECK_GT(buf_len, 0u);
+
+    size_t str_len = strnlen(buf, buf_len);
+    // trim newline at end of string
+    if (buf[str_len - 1] == '\n') {
+        buf[str_len - 1] = '\0';
+    }
+
+    struct NetlinkMessage {
+        nlmsghdr hdr;
+        char buf[kKlogMessageSize];
+    } request = {};
+
+    request.hdr.nlmsg_flags = NLM_F_REQUEST;
+    request.hdr.nlmsg_type = AUDIT_USER_AVC;
+    request.hdr.nlmsg_len = sizeof(request);
+    strlcpy(request.buf, buf, sizeof(request.buf));
+
+    auto fd = unique_fd{socket(PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_AUDIT)};
+    if (!fd.ok()) {
+        return;
+    }
+
+    TEMP_FAILURE_RETRY(send(fd, &request, sizeof(request), 0));
+}
+
 }  // namespace
 
 // The files and directories that were created before initial sepolicy load or
@@ -478,12 +509,19 @@ int SelinuxKlogCallback(int type, const char* fmt, ...) {
     } else if (type == SELINUX_INFO) {
         severity = android::base::INFO;
     }
-    char buf[1024];
+    char buf[kKlogMessageSize];
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
+    int length_written = vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    android::base::KernelLogger(android::base::MAIN, severity, "selinux", nullptr, 0, buf);
+    if (length_written <= 0) {
+        return 0;
+    }
+    if (type == SELINUX_AVC) {
+        SelinuxAvcLog(buf, sizeof(buf));
+    } else {
+        android::base::KernelLogger(android::base::MAIN, severity, "selinux", nullptr, 0, buf);
+    }
     return 0;
 }
 
