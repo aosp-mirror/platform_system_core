@@ -36,6 +36,8 @@
 #include <libfiemap/image_manager.h>
 #include <liblp/liblp.h>
 
+#include "utility.h"
+
 namespace android {
 namespace snapshot {
 
@@ -1247,6 +1249,11 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         params.device_name = GetBaseDeviceName(params.GetPartitionName());
     }
 
+    AutoDeviceList created_devices;
+
+    // Create the base device for the snapshot, or if there is no snapshot, the
+    // device itself. This device consists of the real blocks in the super
+    // partition that this logical partition occupies.
     auto& dm = DeviceMapper::Instance();
     std::string ignore_path;
     if (!CreateLogicalPartition(params, &ignore_path)) {
@@ -1254,7 +1261,10 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
                    << " as device " << params.GetDeviceName();
         return false;
     }
+    created_devices.EmplaceBack<AutoUnmapDevice>(&dm, params.GetDeviceName());
+
     if (!live_snapshot_status.has_value()) {
+        created_devices.Release();
         return true;
     }
 
@@ -1277,6 +1287,9 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         LOG(ERROR) << "Could not map cow image for partition: " << params.GetPartitionName();
         return false;
     }
+    created_devices.EmplaceBack<AutoUnmapImage>(images_.get(),
+                                                GetCowImageDeviceName(params.partition_name));
+
     // TODO: map cow linear device here
     std::string cow_device = cow_image_device;
 
@@ -1288,6 +1301,9 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         LOG(ERROR) << "Could not map snapshot for partition: " << params.GetPartitionName();
         return false;
     }
+    // No need to add params.GetPartitionName() to created_devices since it is immediately released.
+
+    created_devices.Release();
 
     LOG(INFO) << "Mapped " << params.GetPartitionName() << " as snapshot device at " << *path;
 
