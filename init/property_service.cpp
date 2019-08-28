@@ -42,7 +42,6 @@
 #include <map>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <queue>
 #include <thread>
 #include <vector>
@@ -64,10 +63,8 @@
 #include "init.h"
 #include "persistent_properties.h"
 #include "property_type.h"
-#include "proto_utils.h"
 #include "selinux.h"
 #include "subcontext.h"
-#include "system/core/init/property_service.pb.h"
 #include "util.h"
 
 using namespace std::literals;
@@ -79,7 +76,6 @@ using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::Trim;
-using android::base::unique_fd;
 using android::base::WriteStringToFile;
 using android::properties::BuildTrie;
 using android::properties::ParsePropertyInfoFile;
@@ -89,12 +85,17 @@ using android::properties::PropertyInfoEntry;
 namespace android {
 namespace init {
 
+static constexpr const char kRestoreconProperty[] = "selinux.restorecon_recursive";
+
 static bool persistent_properties_loaded = false;
 
 static int property_set_fd = -1;
-static int init_socket = -1;
 
 static PropertyInfoAreaFile property_info_area;
+
+uint32_t InitPropertySet(const std::string& name, const std::string& value);
+
+uint32_t (*property_set)(const std::string& name, const std::string& value) = InitPropertySet;
 
 void CreateSerializedPropertyInfo();
 
@@ -163,17 +164,6 @@ static bool CheckMacPerms(const std::string& name, const char* target_context,
     return has_access;
 }
 
-static void SendPropertyChanged(const std::string& name, const std::string& value) {
-    auto property_msg = PropertyMessage{};
-    auto* changed_message = property_msg.mutable_changed_message();
-    changed_message->set_name(name);
-    changed_message->set_value(value);
-
-    if (auto result = SendMessage(init_socket, property_msg); !result) {
-        LOG(ERROR) << "Failed to send property changed message: " << result.error();
-    }
-}
-
 static uint32_t PropertySet(const std::string& name, const std::string& value, std::string* error) {
     size_t valuelen = value.size();
 
@@ -209,16 +199,7 @@ static uint32_t PropertySet(const std::string& name, const std::string& value, s
     if (persistent_properties_loaded && StartsWith(name, "persist.")) {
         WritePersistentProperty(name, value);
     }
-    // If init sets ro.persistent_properties.ready to true, then it has finished writing persistent
-    // properties, and we should write future persistent properties to disk.
-    if (name == "ro.persistent_properties.ready" && value == "true") {
-        persistent_properties_loaded = true;
-    }
-    // If init hasn't started its main loop, then it won't be handling property changed messages
-    // anyway, so there's no need to try to send them.
-    if (init_socket != -1) {
-        SendPropertyChanged(name, value);
-    }
+    property_changed(name, value);
     return PROP_SUCCESS;
 }
 
@@ -258,9 +239,34 @@ class AsyncRestorecon {
     bool thread_started_ = false;
 };
 
+uint32_t InitPropertySet(const std::string& name, const std::string& value) {
+    if (StartsWith(name, "ctl.")) {
+        LOG(ERROR) << "InitPropertySet: Do not set ctl. properties from init; call the Service "
+                      "functions directly";
+        return PROP_ERROR_INVALID_NAME;
+    }
+    if (name == kRestoreconProperty) {
+        LOG(ERROR) << "InitPropertySet: Do not set '" << kRestoreconProperty
+                   << "' from init; use the restorecon builtin directly";
+        return PROP_ERROR_INVALID_NAME;
+    }
+
+    uint32_t result = 0;
+    ucred cr = {.pid = 1, .uid = 0, .gid = 0};
+    std::string error;
+    result = HandlePropertySet(name, value, kInitContext.c_str(), cr, &error);
+    if (result != PROP_SUCCESS) {
+        LOG(ERROR) << "Init cannot set '" << name << "' to '" << value << "': " << error;
+    }
+
+    return result;
+}
+
 class SocketConnection {
   public:
     SocketConnection(int socket, const ucred& cred) : socket_(socket), cred_(cred) {}
+
+    ~SocketConnection() { close(socket_); }
 
     bool RecvUint32(uint32_t* value, uint32_t* timeout_ms) {
         return RecvFully(value, sizeof(*value), timeout_ms);
@@ -298,9 +304,6 @@ class SocketConnection {
     }
 
     bool SendUint32(uint32_t value) {
-        if (!socket_.ok()) {
-            return false;
-        }
         int result = TEMP_FAILURE_RETRY(send(socket_, &value, sizeof(value), 0));
         return result == sizeof(value);
     }
@@ -315,9 +318,7 @@ class SocketConnection {
         return true;
     }
 
-    int Release() { return socket_.release(); }
-
-    int socket() { return socket_.get(); }
+    int socket() { return socket_; }
 
     const ucred& cred() { return cred_; }
 
@@ -388,33 +389,11 @@ class SocketConnection {
         return bytes_left == 0;
     }
 
-    unique_fd socket_;
+    int socket_;
     ucred cred_;
+
+    DISALLOW_IMPLICIT_CONSTRUCTORS(SocketConnection);
 };
-
-static uint32_t SendControlMessage(const std::string& msg, const std::string& name, pid_t pid,
-                                   SocketConnection* socket, std::string* error) {
-    auto property_msg = PropertyMessage{};
-    auto* control_message = property_msg.mutable_control_message();
-    control_message->set_msg(msg);
-    control_message->set_name(name);
-    control_message->set_pid(pid);
-    if (socket != nullptr) {
-        control_message->set_fd(socket->socket());
-    }
-
-    if (auto result = SendMessage(init_socket, property_msg); !result) {
-        *error = "Failed to send control message: " + result.error().message();
-        return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
-    }
-
-    if (socket != nullptr) {
-        // We've successfully sent the fd to init, so release it here.
-        socket->Release();
-    }
-
-    return PROP_SUCCESS;
-}
 
 bool CheckControlPropertyPerms(const std::string& name, const std::string& value,
                                const std::string& source_context, const ucred& cr) {
@@ -483,14 +462,15 @@ uint32_t CheckPermissions(const std::string& name, const std::string& value,
 
 // This returns one of the enum of PROP_SUCCESS or PROP_ERROR*.
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
-                           const std::string& source_context, const ucred& cr,
-                           SocketConnection* socket, std::string* error) {
+                           const std::string& source_context, const ucred& cr, std::string* error) {
     if (auto ret = CheckPermissions(name, value, source_context, cr, error); ret != PROP_SUCCESS) {
         return ret;
     }
 
     if (StartsWith(name, "ctl.")) {
-        return SendControlMessage(name.c_str() + 4, value, cr.pid, socket, error);
+        return HandleControlMessage(name.c_str() + 4, value, cr.pid)
+                       ? PROP_SUCCESS
+                       : PROP_ERROR_HANDLE_CONTROL_MESSAGE;
     }
 
     // sys.powerctl is a special property that is used to make the device reboot.  We want to log
@@ -520,20 +500,6 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
 
     return PropertySet(name, value, error);
 }
-
-uint32_t InitPropertySet(const std::string& name, const std::string& value) {
-    uint32_t result = 0;
-    ucred cr = {.pid = 1, .uid = 0, .gid = 0};
-    std::string error;
-    result = HandlePropertySet(name, value, kInitContext.c_str(), cr, nullptr, &error);
-    if (result != PROP_SUCCESS) {
-        LOG(ERROR) << "Init cannot set '" << name << "' to '" << value << "': " << error;
-    }
-
-    return result;
-}
-
-uint32_t (*property_set)(const std::string& name, const std::string& value) = InitPropertySet;
 
 static void handle_property_set_fd() {
     static constexpr uint32_t kDefaultSocketTimeout = 2000; /* ms */
@@ -583,8 +549,7 @@ static void handle_property_set_fd() {
 
         const auto& cr = socket.cred();
         std::string error;
-        uint32_t result =
-                HandlePropertySet(prop_name, prop_value, source_context, cr, nullptr, &error);
+        uint32_t result = HandlePropertySet(prop_name, prop_value, source_context, cr, &error);
         if (result != PROP_SUCCESS) {
             LOG(ERROR) << "Unable to set property '" << prop_name << "' from uid:" << cr.uid
                        << " gid:" << cr.gid << " pid:" << cr.pid << ": " << error;
@@ -612,12 +577,11 @@ static void handle_property_set_fd() {
 
         const auto& cr = socket.cred();
         std::string error;
-        uint32_t result = HandlePropertySet(name, value, source_context, cr, &socket, &error);
+        uint32_t result = HandlePropertySet(name, value, source_context, cr, &error);
         if (result != PROP_SUCCESS) {
             LOG(ERROR) << "Unable to set property '" << name << "' from uid:" << cr.uid
                        << " gid:" << cr.gid << " pid:" << cr.pid << ": " << error;
         }
-
         socket.SendUint32(result);
         break;
       }
@@ -800,6 +764,7 @@ void load_persist_props(void) {
     for (const auto& persistent_property_record : persistent_properties.properties()) {
         property_set(persistent_property_record.name(), persistent_property_record.value());
     }
+    persistent_properties_loaded = true;
     property_set("ro.persistent_properties.ready", "true");
 }
 
@@ -1020,37 +985,21 @@ void CreateSerializedPropertyInfo() {
     selinux_android_restorecon(kPropertyInfosPath, 0);
 }
 
-static void PropertyServiceThread() {
-    while (true) {
-        handle_property_set_fd();
-    }
-}
-
-void StartPropertyService(int* epoll_socket) {
+void StartPropertyService(Epoll* epoll) {
     property_set("ro.property_service.version", "2");
 
-    int sockets[2];
-    if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, sockets) != 0) {
-        PLOG(FATAL) << "Failed to socketpair() between property_service and init";
-    }
-    *epoll_socket = sockets[0];
-    init_socket = sockets[1];
-
-    if (auto result = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC, false, 0666, 0, 0,
-                                   {})) {
+    if (auto result = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+                                   false, 0666, 0, 0, {})) {
         property_set_fd = *result;
     } else {
-        LOG(FATAL) << "start_property_service socket creation failed: " << result.error();
+        PLOG(FATAL) << "start_property_service socket creation failed: " << result.error();
     }
 
     listen(property_set_fd, 8);
 
-    std::thread{PropertyServiceThread}.detach();
-
-    property_set = [](const std::string& key, const std::string& value) -> uint32_t {
-        android::base::SetProperty(key, value);
-        return 0;
-    };
+    if (auto result = epoll->RegisterHandler(property_set_fd, handle_property_set_fd); !result) {
+        PLOG(FATAL) << result.error();
+    }
 }
 
 }  // namespace init
