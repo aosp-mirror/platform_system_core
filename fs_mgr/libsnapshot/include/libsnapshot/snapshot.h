@@ -24,6 +24,7 @@
 #include <android-base/unique_fd.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
+#include <liblp/liblp.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -36,6 +37,11 @@ namespace android {
 namespace fiemap {
 class IImageManager;
 }  // namespace fiemap
+
+namespace fs_mgr {
+struct CreateLogicalPartitionParams;
+class IPartitionOpener;
+}  // namespace fs_mgr
 
 namespace snapshot {
 
@@ -64,6 +70,10 @@ enum class UpdateState : unsigned int {
 };
 
 class SnapshotManager final {
+    using CreateLogicalPartitionParams = android::fs_mgr::CreateLogicalPartitionParams;
+    using LpMetadata = android::fs_mgr::LpMetadata;
+    using IPartitionOpener = android::fs_mgr::IPartitionOpener;
+
   public:
     // Dependency injection for testing.
     class IDeviceInfo {
@@ -72,6 +82,7 @@ class SnapshotManager final {
         virtual std::string GetGsidDir() const = 0;
         virtual std::string GetMetadataDir() const = 0;
         virtual std::string GetSlotSuffix() const = 0;
+        virtual const IPartitionOpener& GetPartitionOpener() const = 0;
     };
 
     ~SnapshotManager();
@@ -80,6 +91,14 @@ class SnapshotManager final {
     // pointer is owned for the lifetime of SnapshotManager. If null, a default
     // instance will be created.
     static std::unique_ptr<SnapshotManager> New(IDeviceInfo* device = nullptr);
+
+    // This is similar to New(), except designed specifically for first-stage
+    // init.
+    static std::unique_ptr<SnapshotManager> NewForFirstStageMount(IDeviceInfo* device = nullptr);
+
+    // Helper function for first-stage init to check whether a SnapshotManager
+    // might be needed to perform first-stage mounts.
+    static bool IsSnapshotManagerNeeded();
 
     // Begin an update. This must be called before creating any snapshots. It
     // will fail if GetUpdateState() != None.
@@ -126,13 +145,24 @@ class SnapshotManager final {
     //   Other: 0
     UpdateState GetUpdateState(double* progress = nullptr);
 
+    // If this returns true, first-stage mount must call
+    // CreateLogicalAndSnapshotPartitions rather than CreateLogicalPartitions.
+    bool NeedSnapshotsInFirstStageMount();
+
+    // Perform first-stage mapping of snapshot targets. This replaces init's
+    // call to CreateLogicalPartitions when snapshots are present.
+    bool CreateLogicalAndSnapshotPartitions(const std::string& super_device);
+
   private:
+    FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
-    FRIEND_TEST(SnapshotTest, MapSnapshot);
+    FRIEND_TEST(SnapshotTest, FirstStageMountAfterRollback);
+    FRIEND_TEST(SnapshotTest, FirstStageMountAndMerge);
     FRIEND_TEST(SnapshotTest, MapPartialSnapshot);
-    FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
+    FRIEND_TEST(SnapshotTest, MapSnapshot);
     FRIEND_TEST(SnapshotTest, Merge);
     FRIEND_TEST(SnapshotTest, MergeCannotRemoveCow);
+    FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
     friend class SnapshotTest;
 
     using DmTargetSnapshot = android::dm::DmTargetSnapshot;
@@ -141,8 +171,11 @@ class SnapshotManager final {
 
     explicit SnapshotManager(IDeviceInfo* info);
 
-    // This is created lazily since it connects via binder.
+    // This is created lazily since it can connect via binder.
     bool EnsureImageManager();
+
+    // Helper for first-stage init.
+    bool ForceLocalImageManager();
 
     // Helper function for tests.
     IImageManager* image_manager() const { return images_.get(); }
@@ -278,6 +311,7 @@ class SnapshotManager final {
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;
     std::unique_ptr<IImageManager> images_;
+    bool has_local_image_manager_ = false;
 };
 
 }  // namespace snapshot

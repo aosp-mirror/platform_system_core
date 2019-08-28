@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,7 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <string>
 
-#include <liblp/mock_property_fetcher.h>
-
-namespace android {
-namespace fs_mgr {
-namespace testing {
-
-class LiblpTest : public ::testing::Test {
-  public:
-    void SetUp() override { ResetMockPropertyFetcher(); }
-    void TearDown() override { ResetMockPropertyFetcher(); }
-};
-
-}  // namespace testing
-}  // namespace fs_mgr
-}  // namespace android
+int fscrypt_install_keyring();
+int fscrypt_set_directory_policy(const std::string& dir);

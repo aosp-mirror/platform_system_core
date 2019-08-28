@@ -20,6 +20,7 @@
 #include <sys/unistd.h>
 
 #include <thread>
+#include <unordered_set>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -27,9 +28,11 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <ext4_utils/ext4_utils.h>
+#include <fs_mgr_dm_linear.h>
 #include <fstab/fstab.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
+#include <liblp/liblp.h>
 
 namespace android {
 namespace snapshot {
@@ -43,22 +46,30 @@ using android::dm::DmTargetSnapshot;
 using android::dm::kSectorSize;
 using android::dm::SnapshotStorageMode;
 using android::fiemap::IImageManager;
+using android::fs_mgr::CreateLogicalPartition;
+using android::fs_mgr::CreateLogicalPartitionParams;
+using android::fs_mgr::GetPartitionName;
+using android::fs_mgr::LpMetadata;
+using android::fs_mgr::SlotNumberForSlotSuffix;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
 // Unit is sectors, this is a 4K chunk.
 static constexpr uint32_t kSnapshotChunkSize = 8;
-
-static constexpr char kSnapshotBootIndicatorFile[] = "snapshot-boot";
+static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 
 class DeviceInfo final : public SnapshotManager::IDeviceInfo {
   public:
     std::string GetGsidDir() const override { return "ota"s; }
     std::string GetMetadataDir() const override { return "/metadata/ota"s; }
     std::string GetSlotSuffix() const override { return fs_mgr_get_slot_suffix(); }
+    const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const { return opener_; }
+
+  private:
+    android::fs_mgr::PartitionOpener opener_;
 };
 
-// Note: IIMageManager is an incomplete type in the header, so the default
+// Note: IImageManager is an incomplete type in the header, so the default
 // destructor doesn't work.
 SnapshotManager::~SnapshotManager() {}
 
@@ -69,6 +80,14 @@ std::unique_ptr<SnapshotManager> SnapshotManager::New(IDeviceInfo* info) {
     return std::unique_ptr<SnapshotManager>(new SnapshotManager(info));
 }
 
+std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceInfo* info) {
+    auto sm = New(info);
+    if (!sm || !sm->ForceLocalImageManager()) {
+        return nullptr;
+    }
+    return sm;
+}
+
 SnapshotManager::SnapshotManager(IDeviceInfo* device) : device_(device) {
     gsid_dir_ = device_->GetGsidDir();
     metadata_dir_ = device_->GetMetadataDir();
@@ -76,6 +95,10 @@ SnapshotManager::SnapshotManager(IDeviceInfo* device) : device_(device) {
 
 static std::string GetCowName(const std::string& snapshot_name) {
     return snapshot_name + "-cow";
+}
+
+static std::string GetBaseDeviceName(const std::string& partition_name) {
+    return partition_name + "-base";
 }
 
 bool SnapshotManager::BeginUpdate() {
@@ -197,8 +220,8 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     }
 
     // Validate the block device size, as well as the requested snapshot size.
-    // During this we also compute the linear sector region if any.
-    {
+    // Note that during first-stage init, we don't have the device paths.
+    if (android::base::StartsWith(base_device, "/")) {
         unique_fd fd(open(base_device.c_str(), O_RDONLY | O_CLOEXEC));
         if (fd < 0) {
             PLOG(ERROR) << "open failed: " << base_device;
@@ -228,8 +251,17 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
 
     auto cow_name = GetCowName(name);
 
+    bool ok;
     std::string cow_dev;
-    if (!images_->MapImageDevice(cow_name, timeout_ms, &cow_dev)) {
+    if (has_local_image_manager_) {
+        // If we forced a local image manager, it means we don't have binder,
+        // which means first-stage init. We must use device-mapper.
+        const auto& opener = device_->GetPartitionOpener();
+        ok = images_->MapImageWithDeviceMapper(opener, cow_name, &cow_dev);
+    } else {
+        ok = images_->MapImageDevice(cow_name, timeout_ms, &cow_dev);
+    }
+    if (!ok) {
         LOG(ERROR) << "Could not map image device: " << cow_name;
         return false;
     }
@@ -305,7 +337,7 @@ bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
     }
 
     auto& dm = DeviceMapper::Instance();
-    if (dm.GetState(name) != DmDeviceState::INVALID && !dm.DeleteDevice(name)) {
+    if (!dm.DeleteDeviceIfExists(name)) {
         LOG(ERROR) << "Could not delete snapshot device: " << name;
         return false;
     }
@@ -313,8 +345,7 @@ bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
     // There may be an extra device, since the kernel doesn't let us have a
     // snapshot and linear target in the same table.
     auto dm_name = GetSnapshotDeviceName(name, status);
-    if (name != dm_name && dm.GetState(dm_name) != DmDeviceState::INVALID &&
-        !dm.DeleteDevice(dm_name)) {
+    if (name != dm_name && !dm.DeleteDeviceIfExists(dm_name)) {
         LOG(ERROR) << "Could not delete inner snapshot device: " << dm_name;
         return false;
     }
@@ -705,7 +736,7 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
 }
 
 std::string SnapshotManager::GetSnapshotBootIndicatorPath() {
-    return metadata_dir_ + "/" + kSnapshotBootIndicatorFile;
+    return metadata_dir_ + "/" + android::base::Basename(kBootIndicatorPath);
 }
 
 void SnapshotManager::RemoveSnapshotBootIndicator() {
@@ -866,7 +897,7 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         // the device, and device-mapper should have flushed remaining I/O. We
         // could in theory replace with dm-zero (or re-use the table above), but
         // for now it's better to know why this would fail.
-        if (!dm.DeleteDevice(dm_name)) {
+        if (!dm.DeleteDeviceIfExists(dm_name)) {
             LOG(ERROR) << "Unable to delete snapshot device " << dm_name << ", COW cannot be "
                        << "reclaimed until after reboot.";
             return false;
@@ -927,6 +958,126 @@ bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* 
     while ((dp = readdir(dir.get())) != nullptr) {
         if (dp->d_type != DT_REG) continue;
         snapshots->emplace_back(dp->d_name);
+    }
+    return true;
+}
+
+bool SnapshotManager::IsSnapshotManagerNeeded() {
+    return access(kBootIndicatorPath, F_OK) == 0;
+}
+
+bool SnapshotManager::NeedSnapshotsInFirstStageMount() {
+    // If we fail to read, we'll wind up using CreateLogicalPartitions, which
+    // will create devices that look like the old slot, except with extra
+    // content at the end of each device. This will confuse dm-verity, and
+    // ultimately we'll fail to boot. Why not make it a fatal error and have
+    // the reason be clearer? Because the indicator file still exists, and
+    // if this was FATAL, reverting to the old slot would be broken.
+    std::string old_slot;
+    auto boot_file = GetSnapshotBootIndicatorPath();
+    if (!android::base::ReadFileToString(boot_file, &old_slot)) {
+        PLOG(ERROR) << "Unable to read the snapshot indicator file: " << boot_file;
+        return false;
+    }
+    if (device_->GetSlotSuffix() == old_slot) {
+        LOG(INFO) << "Detected slot rollback, will not mount snapshots.";
+        return false;
+    }
+
+    // If we can't read the update state, it's unlikely anything else will
+    // succeed, so this is a fatal error. We'll eventually exhaust boot
+    // attempts and revert to the old slot.
+    auto lock = LockShared();
+    if (!lock) {
+        LOG(FATAL) << "Could not read update state to determine snapshot status";
+        return false;
+    }
+    switch (ReadUpdateState(lock.get())) {
+        case UpdateState::Unverified:
+        case UpdateState::Merging:
+        case UpdateState::MergeFailed:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool SnapshotManager::CreateLogicalAndSnapshotPartitions(const std::string& super_device) {
+    LOG(INFO) << "Creating logical partitions with snapshots as needed";
+
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    std::vector<std::string> snapshot_list;
+    if (!ListSnapshots(lock.get(), &snapshot_list)) {
+        return false;
+    }
+
+    std::unordered_set<std::string> live_snapshots;
+    for (const auto& snapshot : snapshot_list) {
+        SnapshotStatus status;
+        if (!ReadSnapshotStatus(lock.get(), snapshot, &status)) {
+            return false;
+        }
+        if (status.state != SnapshotState::MergeCompleted) {
+            live_snapshots.emplace(snapshot);
+        }
+    }
+
+    const auto& opener = device_->GetPartitionOpener();
+    uint32_t slot = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+    auto metadata = android::fs_mgr::ReadMetadata(opener, super_device, slot);
+    if (!metadata) {
+        LOG(ERROR) << "Could not read dynamic partition metadata for device: " << super_device;
+        return false;
+    }
+
+    // Map logical partitions.
+    auto& dm = DeviceMapper::Instance();
+    for (const auto& partition : metadata->partitions) {
+        auto partition_name = GetPartitionName(partition);
+        if (!partition.num_extents) {
+            LOG(INFO) << "Skipping zero-length logical partition: " << partition_name;
+            continue;
+        }
+
+        CreateLogicalPartitionParams params = {
+                .block_device = super_device,
+                .metadata = metadata.get(),
+                .partition = &partition,
+                .partition_opener = &opener,
+        };
+
+        if (auto iter = live_snapshots.find(partition_name); iter != live_snapshots.end()) {
+            // If the device has a snapshot, it'll need to be writable, and
+            // we'll need to create the logical partition with a marked-up name
+            // (since the snapshot will use the partition name).
+            params.force_writable = true;
+            params.device_name = GetBaseDeviceName(partition_name);
+        }
+
+        std::string ignore_path;
+        if (!CreateLogicalPartition(params, &ignore_path)) {
+            LOG(ERROR) << "Could not create logical partition " << partition_name << " as device "
+                       << params.GetDeviceName();
+            return false;
+        }
+        if (!params.force_writable) {
+            // No snapshot.
+            continue;
+        }
+
+        // We don't have ueventd in first-stage init, so use device major:minor
+        // strings instead.
+        std::string base_device;
+        if (!dm.GetDeviceString(params.GetDeviceName(), &base_device)) {
+            LOG(ERROR) << "Could not determine major/minor for: " << params.GetDeviceName();
+            return false;
+        }
+        if (!MapSnapshot(lock.get(), partition_name, base_device, {}, &ignore_path)) {
+            LOG(ERROR) << "Could not map snapshot for partition: " << partition_name;
+            return false;
+        }
     }
     return true;
 }
@@ -1170,6 +1321,16 @@ bool SnapshotManager::EnsureImageManager() {
         LOG(ERROR) << "Could not open ImageManager";
         return false;
     }
+    return true;
+}
+
+bool SnapshotManager::ForceLocalImageManager() {
+    images_ = android::fiemap::ImageManager::Open(gsid_dir_);
+    if (!images_) {
+        LOG(ERROR) << "Could not open ImageManager";
+        return false;
+    }
+    has_local_image_manager_ = true;
     return true;
 }
 

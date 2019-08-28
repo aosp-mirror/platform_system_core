@@ -19,29 +19,20 @@
 #include <liblp/builder.h>
 
 #include "liblp_test.h"
-#include "mock_property_fetcher.h"
 #include "utility.h"
 
 using namespace std;
 using namespace android::fs_mgr;
-using ::android::fs_mgr::MockPropertyFetcher;
+using namespace android::fs_mgr::testing;
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::ElementsAre;
 using ::testing::NiceMock;
 using ::testing::Return;
 
-void ResetPropertyFetcher() {
-    IPropertyFetcher::OverrideForTesting(std::make_unique<NiceMock<MockPropertyFetcher>>());
-}
-
-MockPropertyFetcher* GetMockedPropertyFetcher() {
-    return static_cast<MockPropertyFetcher*>(IPropertyFetcher::GetInstance());
-}
-
 class Environment : public ::testing::Environment {
   public:
-    void SetUp() override { ResetPropertyFetcher(); }
+    void SetUp() override { ResetMockPropertyFetcher(); }
 };
 
 int main(int argc, char** argv) {
