@@ -713,3 +713,32 @@ TEST_F(LiblpTest, UpdateNonRetrofit) {
     ASSERT_EQ(updated->block_devices.size(), static_cast<size_t>(1));
     EXPECT_EQ(GetBlockDevicePartitionName(updated->block_devices[0]), "super");
 }
+
+TEST_F(LiblpTest, UpdateVirtualAB) {
+    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
+            .WillByDefault(Return(true));
+
+    unique_fd fd = CreateFlashedDisk();
+    ASSERT_GE(fd, 0);
+
+    DefaultPartitionOpener opener(fd);
+    auto builder = MetadataBuilder::NewForUpdate(opener, "super", 0, 1);
+    ASSERT_NE(builder, nullptr);
+    auto updated = builder->Export();
+    ASSERT_NE(updated, nullptr);
+    ASSERT_TRUE(UpdatePartitionTable(opener, "super", *updated.get(), 1));
+
+    // Validate old slot.
+    auto metadata = ReadMetadata(opener, "super", 0);
+    ASSERT_NE(metadata, nullptr);
+    ASSERT_EQ(metadata->header.minor_version, 0);
+    ASSERT_GE(metadata->partitions.size(), 1);
+    ASSERT_EQ(metadata->partitions[0].attributes & LP_PARTITION_ATTR_UPDATED, 0);
+
+    // Validate new slot.
+    metadata = ReadMetadata(opener, "super", 1);
+    ASSERT_NE(metadata, nullptr);
+    ASSERT_EQ(metadata->header.minor_version, 1);
+    ASSERT_GE(metadata->partitions.size(), 1);
+    ASSERT_NE(metadata->partitions[0].attributes & LP_PARTITION_ATTR_UPDATED, 0);
+}
