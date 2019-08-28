@@ -232,7 +232,7 @@ MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
     memset(&header_, 0, sizeof(header_));
     header_.magic = LP_METADATA_HEADER_MAGIC;
     header_.major_version = LP_METADATA_MAJOR_VERSION;
-    header_.minor_version = LP_METADATA_MINOR_VERSION;
+    header_.minor_version = LP_METADATA_MINOR_VERSION_MIN;
     header_.header_size = sizeof(header_);
     header_.partitions.entry_size = sizeof(LpMetadataPartition);
     header_.extents.entry_size = sizeof(LpMetadataExtent);
@@ -794,6 +794,11 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
         if (partition->attributes() & ~(LP_PARTITION_ATTRIBUTE_MASK)) {
             LERROR << "Partition " << partition->name() << " has unsupported attribute.";
             return nullptr;
+        }
+
+        if (partition->attributes() & LP_PARTITION_ATTR_UPDATED) {
+            static const uint16_t kMinVersion = LP_METADATA_VERSION_FOR_UPDATED_ATTR;
+            metadata->header.minor_version = std::max(metadata->header.minor_version, kMinVersion);
         }
 
         strncpy(part.name, partition->name().c_str(), sizeof(part.name));
