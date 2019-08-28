@@ -130,7 +130,6 @@ cc_library_static {
         "persistent_properties.cpp",
         "persistent_properties.proto",
         "property_service.cpp",
-        "property_service.proto",
         "property_type.cpp",
         "reboot.cpp",
         "reboot_utils.cpp",
