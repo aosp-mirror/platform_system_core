@@ -105,6 +105,8 @@ cc_test {
 cc_test {
     name: "memunreachable_binder_test",
     defaults: ["libmemunreachable_defaults"],
+    require_root: true,
+
     srcs: [
         "tests/Binder_test.cpp",
     ],
