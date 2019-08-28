@@ -79,9 +79,9 @@ static bool GetPhysicalPartitionDevicePath(const IPartitionOpener& opener,
     return true;
 }
 
-static bool CreateDmTable(const IPartitionOpener& opener, const LpMetadata& metadata,
-                          const LpMetadataPartition& partition, const std::string& super_device,
-                          DmTable* table) {
+bool CreateDmTable(const IPartitionOpener& opener, const LpMetadata& metadata,
+                   const LpMetadataPartition& partition, const std::string& super_device,
+                   DmTable* table) {
     uint64_t sector = 0;
     for (size_t i = 0; i < partition.num_extents; i++) {
         const auto& extent = metadata.extents[partition.first_extent_index + i];
