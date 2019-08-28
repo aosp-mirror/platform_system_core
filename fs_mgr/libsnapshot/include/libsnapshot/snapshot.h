@@ -158,6 +158,7 @@ class SnapshotManager final {
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
     FRIEND_TEST(SnapshotTest, FirstStageMountAfterRollback);
     FRIEND_TEST(SnapshotTest, FirstStageMountAndMerge);
+    FRIEND_TEST(SnapshotTest, FlashSuperDuringUpdate);
     FRIEND_TEST(SnapshotTest, MapPartialSnapshot);
     FRIEND_TEST(SnapshotTest, MapSnapshot);
     FRIEND_TEST(SnapshotTest, Merge);

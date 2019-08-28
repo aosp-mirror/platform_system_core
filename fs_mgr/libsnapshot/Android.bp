@@ -86,6 +86,7 @@ cc_test {
         "libcutils",
         "libcrypto",
         "libfs_mgr",
+        "libgmock",
         "liblp",
         "libsnapshot",
     ],
