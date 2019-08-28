@@ -194,23 +194,6 @@ bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& arg
     return device->WriteStatus(FastbootResult::FAIL, "Couldn't download data");
 }
 
-bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) {
-    if (args.size() < 2) {
-        return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
-    }
-
-    if (GetDeviceLockStatus()) {
-        return device->WriteStatus(FastbootResult::FAIL,
-                                   "Flashing is not allowed on locked devices");
-    }
-
-    int ret = Flash(device, args[1]);
-    if (ret < 0) {
-        return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
-    }
-    return device->WriteStatus(FastbootResult::OKAY, "Flashing succeeded");
-}
-
 bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 2) {
         return device->WriteStatus(FastbootResult::FAIL, "Missing slot argument");
@@ -440,6 +423,11 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
     if (!partition) {
         return device->WriteFail("Partition does not exist");
     }
+
+    // Remove the updated flag to cancel any snapshots.
+    uint32_t attrs = partition->attributes();
+    partition->set_attributes(attrs & ~LP_PARTITION_ATTR_UPDATED);
+
     if (!builder->ResizePartition(partition, partition_size)) {
         return device->WriteFail("Not enough space to resize partition");
     }
@@ -447,6 +435,42 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Failed to write partition table");
     }
     return device->WriteOkay("Partition resized");
+}
+
+void CancelPartitionSnapshot(FastbootDevice* device, const std::string& partition_name) {
+    PartitionBuilder builder(device, partition_name);
+    if (!builder.Valid()) return;
+
+    auto partition = builder->FindPartition(partition_name);
+    if (!partition) return;
+
+    // Remove the updated flag to cancel any snapshots.
+    uint32_t attrs = partition->attributes();
+    partition->set_attributes(attrs & ~LP_PARTITION_ATTR_UPDATED);
+
+    builder.Write();
+}
+
+bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
+    }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "Flashing is not allowed on locked devices");
+    }
+
+    const auto& partition_name = args[1];
+    if (LogicalPartitionExists(device, partition_name)) {
+        CancelPartitionSnapshot(device, partition_name);
+    }
+
+    int ret = Flash(device, partition_name);
+    if (ret < 0) {
+        return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
+    }
+    return device->WriteStatus(FastbootResult::OKAY, "Flashing succeeded");
 }
 
 bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& args) {
