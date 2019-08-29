@@ -41,6 +41,7 @@ SharedBuffer* SharedBuffer::alloc(size_t size)
         // The following is OK on Android-supported platforms.
         sb->mRefs.store(1, std::memory_order_relaxed);
         sb->mSize = size;
+        sb->mClientMetadata = 0;
     }
     return sb;
 }
