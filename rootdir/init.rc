@@ -868,6 +868,8 @@ on property:ro.debuggable=1
     chmod 0773 /data/misc/trace
     # Give reads to anyone for the window trace folder on debug builds.
     chmod 0775 /data/misc/wmtrace
+
+on init && property:ro.debuggable=1
     start console
 
 service flash_recovery /system/bin/install-recovery.sh
