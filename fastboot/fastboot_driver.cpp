@@ -291,7 +291,7 @@ RetCode FastBootDriver::Upload(const std::string& outfile, std::string* response
 RetCode FastBootDriver::UploadInner(const std::string& outfile, std::string* response,
                                     std::vector<std::string>* info) {
     RetCode ret;
-    int dsize;
+    int dsize = 0;
     if ((ret = RawCommand(FB_CMD_UPLOAD, response, info, &dsize))) {
         error_ = "Upload request failed: " + error_;
         return ret;
