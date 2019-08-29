@@ -89,6 +89,11 @@ bool CreateLogicalPartition(const CreateLogicalPartitionParams& params, std::str
 // is non-zero, then this will block until the device path has been unlinked.
 bool DestroyLogicalPartition(const std::string& name);
 
+// Helper for populating a DmTable for a logical partition.
+bool CreateDmTable(const IPartitionOpener& opener, const LpMetadata& metadata,
+                   const LpMetadataPartition& partition, const std::string& super_device,
+                   android::dm::DmTable* table);
+
 }  // namespace fs_mgr
 }  // namespace android
 

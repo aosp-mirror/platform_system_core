@@ -123,6 +123,7 @@ class Partition final {
     const std::string& name() const { return name_; }
     const std::string& group_name() const { return group_name_; }
     uint32_t attributes() const { return attributes_; }
+    void set_attributes(uint32_t attributes) { attributes_ = attributes; }
     const std::vector<std::unique_ptr<Extent>>& extents() const { return extents_; }
     uint64_t size() const { return size_; }
 
