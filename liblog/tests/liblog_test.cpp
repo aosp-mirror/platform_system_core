@@ -1062,6 +1062,7 @@ for trouble being gone, comfort should remain, but\n\
 when you depart from me, sorrow abides and happiness\n\
 takes his leave.";
 
+#ifdef USING_LOGGER_DEFAULT
 TEST(liblog, max_payload) {
 #ifdef TEST_PREFIX
   TEST_PREFIX
@@ -1130,6 +1131,7 @@ TEST(liblog, max_payload) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif
 
 TEST(liblog, __android_log_buf_print__maxtag) {
 #ifdef TEST_PREFIX
@@ -1271,6 +1273,7 @@ TEST(liblog, too_big_payload) {
 #endif
 }
 
+#ifdef USING_LOGGER_DEFAULT
 TEST(liblog, dual_reader) {
 #ifdef TEST_PREFIX
   TEST_PREFIX
@@ -1334,6 +1337,7 @@ TEST(liblog, dual_reader) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif
 
 #ifdef USING_LOGGER_DEFAULT  // Do not retest logprint
 static bool checkPriForTag(AndroidLogFormat* p_format, const char* tag,

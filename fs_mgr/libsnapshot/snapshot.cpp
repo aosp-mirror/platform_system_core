@@ -1041,6 +1041,12 @@ bool SnapshotManager::CreateLogicalAndSnapshotPartitions(const std::string& supe
             continue;
         }
 
+        if (!(partition.attributes & LP_PARTITION_ATTR_UPDATED)) {
+            LOG(INFO) << "Detected re-flashing of partition, will skip snapshot: "
+                      << partition_name;
+            live_snapshots.erase(partition_name);
+        }
+
         CreateLogicalPartitionParams params = {
                 .block_device = super_device,
                 .metadata = metadata.get(),

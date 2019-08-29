@@ -210,6 +210,8 @@ cc_binary {
 cc_test {
     name: "CtsInitTestCases",
     defaults: ["init_defaults"],
+    require_root: true,
+
     compile_multilib: "both",
     multilib: {
         lib32: {

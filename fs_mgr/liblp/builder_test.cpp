@@ -349,7 +349,7 @@ TEST_F(BuilderTest, BuilderExport) {
     const LpMetadataHeader& header = exported->header;
     EXPECT_EQ(header.magic, LP_METADATA_HEADER_MAGIC);
     EXPECT_EQ(header.major_version, LP_METADATA_MAJOR_VERSION);
-    EXPECT_EQ(header.minor_version, LP_METADATA_MINOR_VERSION);
+    EXPECT_EQ(header.minor_version, LP_METADATA_MINOR_VERSION_MIN);
 
     ASSERT_EQ(exported->partitions.size(), 2);
     ASSERT_EQ(exported->extents.size(), 3);
