@@ -143,6 +143,10 @@ cc_binary {
     static_libs: [
         "libhealthhalutils",
     ],
+
+    header_libs: [
+        "libsnapshot_headers",
+    ]
 }
 
 cc_defaults {

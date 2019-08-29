@@ -56,6 +56,12 @@ filegroup {
     ],
 }
 
+cc_library_headers {
+    name: "libsnapshot_headers",
+    recovery_available: true,
+    defaults: ["libsnapshot_defaults"],
+}
+
 cc_library_static {
     name: "libsnapshot",
     defaults: ["libsnapshot_defaults"],
