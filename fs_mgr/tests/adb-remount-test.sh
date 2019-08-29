@@ -1193,7 +1193,7 @@ if ${overlayfs_needed}; then
   !(adb_sh grep -v noatime /proc/mounts </dev/null |
     skip_administrative_mounts data |
     skip_unrelated_mounts |
-    grep '.') ||
+    grep -v ' ro,') ||
     die "mounts are not noatime"
   D=`adb_sh grep " rw," /proc/mounts </dev/null |
      skip_administrative_mounts data`
