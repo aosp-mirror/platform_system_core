@@ -108,7 +108,7 @@ class Partition final {
     friend class MetadataBuilder;
 
   public:
-    Partition(const std::string& name, const std::string& group_name, uint32_t attributes);
+    Partition(std::string_view name, std::string_view group_name, uint32_t attributes);
 
     // Add a raw extent.
     void AddExtent(std::unique_ptr<Extent>&& extent);
@@ -214,7 +214,7 @@ class MetadataBuilder {
 
     // Add a partition, returning a handle so it can be sized as needed. If a
     // partition with the given name already exists, nullptr is returned.
-    Partition* AddPartition(const std::string& name, const std::string& group_name,
+    Partition* AddPartition(std::string_view name, std::string_view group_name,
                             uint32_t attributes);
 
     // Same as AddPartition above, but uses the default partition group which
@@ -225,7 +225,7 @@ class MetadataBuilder {
     void RemovePartition(const std::string& name);
 
     // Find a partition by name. If no partition is found, nullptr is returned.
-    Partition* FindPartition(const std::string& name);
+    Partition* FindPartition(std::string_view name);
 
     // Find a group by name. If no group is found, nullptr is returned.
     PartitionGroup* FindGroup(std::string_view name);
@@ -269,7 +269,7 @@ class MetadataBuilder {
     std::vector<std::string> ListGroups() const;
 
     // Remove all partitions belonging to a group, then remove the group.
-    void RemoveGroupAndPartitions(const std::string& group_name);
+    void RemoveGroupAndPartitions(std::string_view group_name);
 
     // Set the LP_METADATA_AUTO_SLOT_SUFFIXING flag.
     void SetAutoSlotSuffixing();
