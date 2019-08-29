@@ -24,21 +24,21 @@
 
 namespace android {
 
+static const StaticString16 emptyString(u"");
 static inline char16_t* getEmptyString() {
-    static SharedBuffer* gEmptyStringBuf = [] {
-        SharedBuffer* buf = SharedBuffer::alloc(sizeof(char16_t));
-        char16_t* str = static_cast<char16_t*>(buf->data());
-        *str = 0;
-        return buf;
-    }();
-
-    gEmptyStringBuf->acquire();
-    return static_cast<char16_t*>(gEmptyStringBuf->data());
+    return const_cast<char16_t*>(emptyString.string());
 }
 
 // ---------------------------------------------------------------------------
 
-static char16_t* allocFromUTF8(const char* u8str, size_t u8len)
+void* String16::alloc(size_t size)
+{
+    SharedBuffer* buf = SharedBuffer::alloc(size);
+    buf->mClientMetadata = kIsSharedBufferAllocated;
+    return buf;
+}
+
+char16_t* String16::allocFromUTF8(const char* u8str, size_t u8len)
 {
     if (u8len == 0) return getEmptyString();
 
@@ -49,7 +49,7 @@ static char16_t* allocFromUTF8(const char* u8str, size_t u8len)
         return getEmptyString();
     }
 
-    SharedBuffer* buf = SharedBuffer::alloc(sizeof(char16_t)*(u16len+1));
+    SharedBuffer* buf = static_cast<SharedBuffer*>(alloc(sizeof(char16_t) * (u16len + 1)));
     if (buf) {
         u8cur = (const uint8_t*) u8str;
         char16_t* u16str = (char16_t*)buf->data();
@@ -66,13 +66,13 @@ static char16_t* allocFromUTF8(const char* u8str, size_t u8len)
     return getEmptyString();
 }
 
-static char16_t* allocFromUTF16(const char16_t* u16str, size_t u16len) {
+char16_t* String16::allocFromUTF16(const char16_t* u16str, size_t u16len) {
     if (u16len >= SIZE_MAX / sizeof(char16_t)) {
         android_errorWriteLog(0x534e4554, "73826242");
         abort();
     }
 
-    SharedBuffer* buf = SharedBuffer::alloc((u16len + 1) * sizeof(char16_t));
+    SharedBuffer* buf = static_cast<SharedBuffer*>(alloc((u16len + 1) * sizeof(char16_t)));
     ALOG_ASSERT(buf, "Unable to allocate shared buffer");
     if (buf) {
         char16_t* str = (char16_t*)buf->data();
@@ -97,8 +97,8 @@ String16::String16(StaticLinkage)
     // having run. In this case we always allocate an empty string. It's less
     // efficient than using getEmptyString(), but we assume it's uncommon.
 
-    char16_t* data = static_cast<char16_t*>(
-            SharedBuffer::alloc(sizeof(char16_t))->data());
+    SharedBuffer* buf = static_cast<SharedBuffer*>(alloc(sizeof(char16_t)));
+    char16_t* data = static_cast<char16_t*>(buf->data());
     data[0] = 0;
     mString = data;
 }
@@ -106,7 +106,7 @@ String16::String16(StaticLinkage)
 String16::String16(const String16& o)
     : mString(o.mString)
 {
-    SharedBuffer::bufferFromData(mString)->acquire();
+    acquire();
 }
 
 String16::String16(const String16& o, size_t len, size_t begin)
@@ -136,26 +136,30 @@ String16::String16(const char* o, size_t len)
 
 String16::~String16()
 {
-    SharedBuffer::bufferFromData(mString)->release();
+    release();
 }
 
 size_t String16::size() const
 {
-    return SharedBuffer::sizeFromData(mString)/sizeof(char16_t)-1;
+    if (isStaticString()) {
+        return staticStringSize();
+    } else {
+        return SharedBuffer::sizeFromData(mString) / sizeof(char16_t) - 1;
+    }
 }
 
 void String16::setTo(const String16& other)
 {
-    SharedBuffer::bufferFromData(other.mString)->acquire();
-    SharedBuffer::bufferFromData(mString)->release();
+    release();
     mString = other.mString;
+    acquire();
 }
 
 status_t String16::setTo(const String16& other, size_t len, size_t begin)
 {
     const size_t N = other.size();
     if (begin >= N) {
-        SharedBuffer::bufferFromData(mString)->release();
+        release();
         mString = getEmptyString();
         return OK;
     }
@@ -184,8 +188,7 @@ status_t String16::setTo(const char16_t* other, size_t len)
         abort();
     }
 
-    SharedBuffer* buf = SharedBuffer::bufferFromData(mString)
-        ->editResize((len+1)*sizeof(char16_t));
+    SharedBuffer* buf = static_cast<SharedBuffer*>(editResize((len + 1) * sizeof(char16_t)));
     if (buf) {
         char16_t* str = (char16_t*)buf->data();
         memmove(str, other, len*sizeof(char16_t));
@@ -212,8 +215,8 @@ status_t String16::append(const String16& other)
         abort();
     }
 
-    SharedBuffer* buf = SharedBuffer::bufferFromData(mString)
-        ->editResize((myLen+otherLen+1)*sizeof(char16_t));
+    SharedBuffer* buf =
+            static_cast<SharedBuffer*>(editResize((myLen + otherLen + 1) * sizeof(char16_t)));
     if (buf) {
         char16_t* str = (char16_t*)buf->data();
         memcpy(str+myLen, other, (otherLen+1)*sizeof(char16_t));
@@ -238,8 +241,8 @@ status_t String16::append(const char16_t* chrs, size_t otherLen)
         abort();
     }
 
-    SharedBuffer* buf = SharedBuffer::bufferFromData(mString)
-        ->editResize((myLen+otherLen+1)*sizeof(char16_t));
+    SharedBuffer* buf =
+            static_cast<SharedBuffer*>(editResize((myLen + otherLen + 1) * sizeof(char16_t)));
     if (buf) {
         char16_t* str = (char16_t*)buf->data();
         memcpy(str+myLen, chrs, otherLen*sizeof(char16_t));
@@ -273,8 +276,8 @@ status_t String16::insert(size_t pos, const char16_t* chrs, size_t len)
            len, myLen, String8(chrs, len).string());
     #endif
 
-    SharedBuffer* buf = SharedBuffer::bufferFromData(mString)
-        ->editResize((myLen+len+1)*sizeof(char16_t));
+    SharedBuffer* buf =
+            static_cast<SharedBuffer*>(editResize((myLen + len + 1) * sizeof(char16_t)));
     if (buf) {
         char16_t* str = (char16_t*)buf->data();
         if (pos < myLen) {
@@ -338,23 +341,87 @@ bool String16::contains(const char16_t* chrs) const
     return strstr16(mString, chrs) != nullptr;
 }
 
+void* String16::edit() {
+    SharedBuffer* buf;
+    if (isStaticString()) {
+        buf = static_cast<SharedBuffer*>(alloc((size() + 1) * sizeof(char16_t)));
+        if (buf) {
+            buf->acquire();
+            memcpy(buf->data(), mString, (size() + 1) * sizeof(char16_t));
+        }
+    } else {
+        buf = SharedBuffer::bufferFromData(mString)->edit();
+        buf->mClientMetadata = kIsSharedBufferAllocated;
+    }
+    return buf;
+}
+
+void* String16::editResize(size_t newSize) {
+    SharedBuffer* buf;
+    if (isStaticString()) {
+        size_t copySize = (size() + 1) * sizeof(char16_t);
+        if (newSize < copySize) {
+            copySize = newSize;
+        }
+        buf = static_cast<SharedBuffer*>(alloc(newSize));
+        if (buf) {
+            buf->acquire();
+            memcpy(buf->data(), mString, copySize);
+        }
+    } else {
+        buf = SharedBuffer::bufferFromData(mString)->editResize(newSize);
+        buf->mClientMetadata = kIsSharedBufferAllocated;
+    }
+    return buf;
+}
+
+void String16::acquire()
+{
+    if (!isStaticString()) {
+        SharedBuffer::bufferFromData(mString)->acquire();
+    }
+}
+
+void String16::release()
+{
+    if (!isStaticString()) {
+        SharedBuffer::bufferFromData(mString)->release();
+    }
+}
+
+bool String16::isStaticString() const {
+    // See String16.h for notes on the memory layout of String16::StaticData and
+    // SharedBuffer.
+    static_assert(sizeof(SharedBuffer) - offsetof(SharedBuffer, mClientMetadata) == 4);
+    const uint32_t* p = reinterpret_cast<const uint32_t*>(mString);
+    return (*(p - 1) & kIsSharedBufferAllocated) == 0;
+}
+
+size_t String16::staticStringSize() const {
+    // See String16.h for notes on the memory layout of String16::StaticData and
+    // SharedBuffer.
+    static_assert(sizeof(SharedBuffer) - offsetof(SharedBuffer, mClientMetadata) == 4);
+    const uint32_t* p = reinterpret_cast<const uint32_t*>(mString);
+    return static_cast<size_t>(*(p - 1));
+}
+
 status_t String16::makeLower()
 {
     const size_t N = size();
     const char16_t* str = string();
-    char16_t* edit = nullptr;
+    char16_t* edited = nullptr;
     for (size_t i=0; i<N; i++) {
         const char16_t v = str[i];
         if (v >= 'A' && v <= 'Z') {
-            if (!edit) {
-                SharedBuffer* buf = SharedBuffer::bufferFromData(mString)->edit();
+            if (!edited) {
+                SharedBuffer* buf = static_cast<SharedBuffer*>(edit());
                 if (!buf) {
                     return NO_MEMORY;
                 }
-                edit = (char16_t*)buf->data();
-                mString = str = edit;
+                edited = (char16_t*)buf->data();
+                mString = str = edited;
             }
-            edit[i] = tolower((char)v);
+            edited[i] = tolower((char)v);
         }
     }
     return OK;
@@ -364,18 +431,18 @@ status_t String16::replaceAll(char16_t replaceThis, char16_t withThis)
 {
     const size_t N = size();
     const char16_t* str = string();
-    char16_t* edit = nullptr;
+    char16_t* edited = nullptr;
     for (size_t i=0; i<N; i++) {
         if (str[i] == replaceThis) {
-            if (!edit) {
-                SharedBuffer* buf = SharedBuffer::bufferFromData(mString)->edit();
+            if (!edited) {
+                SharedBuffer* buf = static_cast<SharedBuffer*>(edit());
                 if (!buf) {
                     return NO_MEMORY;
                 }
-                edit = (char16_t*)buf->data();
-                mString = str = edit;
+                edited = (char16_t*)buf->data();
+                mString = str = edited;
             }
-            edit[i] = withThis;
+            edited[i] = withThis;
         }
     }
     return OK;
@@ -385,7 +452,7 @@ status_t String16::remove(size_t len, size_t begin)
 {
     const size_t N = size();
     if (begin >= N) {
-        SharedBuffer::bufferFromData(mString)->release();
+        release();
         mString = getEmptyString();
         return OK;
     }
@@ -395,8 +462,7 @@ status_t String16::remove(size_t len, size_t begin)
     }
 
     if (begin > 0) {
-        SharedBuffer* buf = SharedBuffer::bufferFromData(mString)
-            ->editResize((N+1)*sizeof(char16_t));
+        SharedBuffer* buf = static_cast<SharedBuffer*>(editResize((N + 1) * sizeof(char16_t)));
         if (!buf) {
             return NO_MEMORY;
         }
@@ -404,8 +470,7 @@ status_t String16::remove(size_t len, size_t begin)
         memmove(str, str+begin, (N-begin+1)*sizeof(char16_t));
         mString = str;
     }
-    SharedBuffer* buf = SharedBuffer::bufferFromData(mString)
-        ->editResize((len+1)*sizeof(char16_t));
+    SharedBuffer* buf = static_cast<SharedBuffer*>(editResize((len + 1) * sizeof(char16_t)));
     if (buf) {
         char16_t* str = (char16_t*)buf->data();
         str[len] = 0;
