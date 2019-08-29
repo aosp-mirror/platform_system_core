@@ -66,7 +66,11 @@ enum class UpdateState : unsigned int {
     MergeCompleted,
 
     // Merging failed due to an unrecoverable error.
-    MergeFailed
+    MergeFailed,
+
+    // The update was implicitly cancelled, either by a rollback or a flash
+    // operation via fastboot. This state can only be returned by WaitForMerge.
+    Cancelled
 };
 
 class SnapshotManager final {
@@ -82,6 +86,7 @@ class SnapshotManager final {
         virtual std::string GetGsidDir() const = 0;
         virtual std::string GetMetadataDir() const = 0;
         virtual std::string GetSlotSuffix() const = 0;
+        virtual std::string GetSuperDevice(uint32_t slot) const = 0;
         virtual const IPartitionOpener& GetPartitionOpener() const = 0;
     };
 
@@ -117,12 +122,15 @@ class SnapshotManager final {
     // update has been marked successful after booting.
     bool InitiateMerge();
 
-    // Wait for the current merge to finish, then perform cleanup when it
-    // completes. It is necessary to call this after InitiateMerge(), or when
-    // a merge state is detected during boot.
+    // Perform any necessary post-boot actions. This should be run soon after
+    // /data is mounted.
     //
-    // Note that after calling WaitForMerge(), GetUpdateState() may still return
-    // that a merge is in progress:
+    // If a merge is in progress, this function will block until the merge is
+    // completed. If a merge or update was cancelled, this will clean up any
+    // update artifacts and return.
+    //
+    // Note that after calling this, GetUpdateState() may still return that a
+    // merge is in progress:
     //   MergeFailed indicates that a fatal error occurred. WaitForMerge() may
     //   called any number of times again to attempt to make more progress, but
     //   we do not expect it to succeed if a catastrophic error occurred.
@@ -135,7 +143,7 @@ class SnapshotManager final {
     //
     //   MergeCompleted indicates that the update has fully completed.
     //   GetUpdateState will return None, and a new update can begin.
-    UpdateState WaitForMerge();
+    UpdateState ProcessUpdateState();
 
     // Find the status of the current update, if any.
     //
@@ -158,6 +166,7 @@ class SnapshotManager final {
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
     FRIEND_TEST(SnapshotTest, FirstStageMountAfterRollback);
     FRIEND_TEST(SnapshotTest, FirstStageMountAndMerge);
+    FRIEND_TEST(SnapshotTest, FlashSuperDuringMerge);
     FRIEND_TEST(SnapshotTest, FlashSuperDuringUpdate);
     FRIEND_TEST(SnapshotTest, MapPartialSnapshot);
     FRIEND_TEST(SnapshotTest, MapSnapshot);
@@ -245,6 +254,14 @@ class SnapshotManager final {
     // List the known snapshot names.
     bool ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots);
 
+    // Check for a cancelled or rolled back merge, returning true if such a
+    // condition was detected and handled.
+    bool HandleCancelledUpdate(LockedFile* lock);
+
+    // Remove artifacts created by the update process, such as snapshots, and
+    // set the update state to None.
+    bool RemoveAllUpdateState(LockedFile* lock);
+
     // Interact with /metadata/ota/state.
     std::unique_ptr<LockedFile> OpenStateFile(int open_flags, int lock_flags);
     std::unique_ptr<LockedFile> LockShared();
@@ -272,6 +289,7 @@ class SnapshotManager final {
     bool MarkSnapshotMergeCompleted(LockedFile* snapshot_lock, const std::string& snapshot_name);
     void AcknowledgeMergeSuccess(LockedFile* lock);
     void AcknowledgeMergeFailure();
+    bool IsCancelledSnapshot(const std::string& snapshot_name);
 
     // Note that these require the name of the device containing the snapshot,
     // which may be the "inner" device. Use GetsnapshotDeviecName().
