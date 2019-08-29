@@ -160,6 +160,10 @@ static Image images[] = {
                                                       "vbmeta_system",
                                                                   true,  ImageType::BootCritical },
     { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  ImageType::Normal },
+    { "vendor_boot",
+                  "vendor_boot.img",  "vendor_boot.sig",
+                                                      "vendor_boot",
+                                                                  true,  ImageType::BootCritical },
     { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  ImageType::Normal },
         // clang-format on
 };
