@@ -437,7 +437,8 @@ void SelinuxInitialize() {
     bool is_enforcing = IsEnforcing();
     if (kernel_enforcing != is_enforcing) {
         if (security_setenforce(is_enforcing)) {
-            PLOG(FATAL) << "security_setenforce(%s) failed" << (is_enforcing ? "true" : "false");
+            PLOG(FATAL) << "security_setenforce(" << (is_enforcing ? "true" : "false")
+                        << ") failed";
         }
     }
 
