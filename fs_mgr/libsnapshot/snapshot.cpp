@@ -106,6 +106,10 @@ static std::string GetBaseDeviceName(const std::string& partition_name) {
     return partition_name + "-base";
 }
 
+static std::string GetSnapshotExtraDeviceName(const std::string& snapshot_name) {
+    return snapshot_name + "-inner";
+}
+
 bool SnapshotManager::BeginUpdate() {
     auto file = LockExclusive();
     if (!file) return false;
@@ -301,7 +305,7 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     // and a linear target in the same table. Instead, we stack them, and give the
     // snapshot device a different name. It is not exposed to the caller in this
     // case.
-    auto snap_name = (linear_sectors > 0) ? name + "-inner" : name;
+    auto snap_name = (linear_sectors > 0) ? GetSnapshotExtraDeviceName(name) : name;
 
     DmTable table;
     table.Emplace<DmTargetSnapshot>(0, snapshot_sectors, base_device, cow_dev, mode,
@@ -1402,7 +1406,7 @@ bool SnapshotManager::Truncate(LockedFile* file) {
 std::string SnapshotManager::GetSnapshotDeviceName(const std::string& snapshot_name,
                                                    const SnapshotStatus& status) {
     if (status.device_size != status.snapshot_size) {
-        return snapshot_name + "-inner";
+        return GetSnapshotExtraDeviceName(snapshot_name);
     }
     return snapshot_name;
 }
