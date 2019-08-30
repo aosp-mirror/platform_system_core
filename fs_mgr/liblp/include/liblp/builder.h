@@ -91,7 +91,7 @@ class PartitionGroup final {
     friend class MetadataBuilder;
 
   public:
-    explicit PartitionGroup(const std::string& name, uint64_t maximum_size)
+    explicit PartitionGroup(std::string_view name, uint64_t maximum_size)
         : name_(name), maximum_size_(maximum_size) {}
 
     const std::string& name() const { return name_; }
@@ -206,7 +206,7 @@ class MetadataBuilder {
     // total space used by all partitions in the group.
     //
     // This can fail and return false if the group already exists.
-    bool AddGroup(const std::string& group_name, uint64_t maximum_size);
+    bool AddGroup(std::string_view group_name, uint64_t maximum_size);
 
     // Export metadata so it can be serialized to an image, to disk, or mounted
     // via device-mapper.
