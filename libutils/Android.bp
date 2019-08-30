@@ -205,7 +205,6 @@ cc_test {
         "Mutex_test.cpp",
         "SharedBuffer_test.cpp",
         "String8_test.cpp",
-        "String16_test.cpp",
         "StrongPointer_test.cpp",
         "Unicode_test.cpp",
         "Vector_test.cpp",
