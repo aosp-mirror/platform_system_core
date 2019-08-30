@@ -426,7 +426,7 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
     return true;
 }
 
-bool MetadataBuilder::AddGroup(const std::string& group_name, uint64_t maximum_size) {
+bool MetadataBuilder::AddGroup(std::string_view group_name, uint64_t maximum_size) {
     if (FindGroup(group_name)) {
         LERROR << "Group already exists: " << group_name;
         return false;
