@@ -160,6 +160,10 @@ static Image images[] = {
                                                       "vbmeta_system",
                                                                   true,  ImageType::BootCritical },
     { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  ImageType::Normal },
+    { "vendor_boot",
+                  "vendor_boot.img",  "vendor_boot.sig",
+                                                      "vendor_boot",
+                                                                  true,  ImageType::BootCritical },
     { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  ImageType::Normal },
         // clang-format on
 };
@@ -2054,10 +2058,10 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (partition == "userdata" && set_fbe_marker) {
                 fprintf(stderr, "setting FBE marker on initial userdata...\n");
                 std::string initial_userdata_dir = create_fbemarker_tmpdir();
-                fb_perform_format(partition, 1, "", "", initial_userdata_dir);
+                fb_perform_format(partition, 1, partition_type, "", initial_userdata_dir);
                 delete_fbemarker_tmpdir(initial_userdata_dir);
             } else {
-                fb_perform_format(partition, 1, "", "", "");
+                fb_perform_format(partition, 1, partition_type, "", "");
             }
         }
     }

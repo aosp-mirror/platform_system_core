@@ -1190,6 +1190,11 @@ if ${overlayfs_needed}; then
     skip_unrelated_mounts |
     grep " overlay ro,") ||
     die "remount overlayfs missed a spot (ro)"
+  !(adb_sh grep -v noatime /proc/mounts </dev/null |
+    skip_administrative_mounts data |
+    skip_unrelated_mounts |
+    grep -v ' ro,') ||
+    die "mounts are not noatime"
   D=`adb_sh grep " rw," /proc/mounts </dev/null |
      skip_administrative_mounts data`
   if echo "${D}" | grep /dev/root >/dev/null; then

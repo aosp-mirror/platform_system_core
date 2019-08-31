@@ -532,6 +532,7 @@ on post-fs-data
     mkdir /data/misc/profiles/ref 0771 system system
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
+    mkdir /data/misc/installd 0700 root root
 
     mkdir /data/preloads 0775 system system
 
@@ -878,6 +879,8 @@ on property:ro.debuggable=1
     chmod 0773 /data/misc/trace
     # Give reads to anyone for the window trace folder on debug builds.
     chmod 0775 /data/misc/wmtrace
+
+on init && property:ro.debuggable=1
     start console
 
 service flash_recovery /system/bin/install-recovery.sh

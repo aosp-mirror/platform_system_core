@@ -305,9 +305,6 @@ bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t
         process_cmdline = "unknown process";
     }
 
-    LOG(INFO) << "Received control message '" << msg << "' for '" << name << "' from pid: " << pid
-              << " (" << process_cmdline << ")";
-
     const ControlMessageFunction& function = it->second;
 
     Service* svc = nullptr;
@@ -320,20 +317,25 @@ bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t
             svc = ServiceList::GetInstance().FindInterface(name);
             break;
         default:
-            LOG(ERROR) << "Invalid function target from static map key '" << msg << "': "
+            LOG(ERROR) << "Invalid function target from static map key ctl." << msg << ": "
                        << static_cast<std::underlying_type<ControlTarget>::type>(function.target);
             return false;
     }
 
     if (svc == nullptr) {
-        LOG(ERROR) << "Could not find '" << name << "' for ctl." << msg;
+        LOG(ERROR) << "Control message: Could not find '" << name << "' for ctl." << msg
+                   << " from pid: " << pid << " (" << process_cmdline << ")";
         return false;
     }
 
     if (auto result = function.action(svc); !result) {
-        LOG(ERROR) << "Could not ctl." << msg << " for '" << name << "': " << result.error();
+        LOG(ERROR) << "Control message: Could not ctl." << msg << " for '" << name
+                   << "' from pid: " << pid << " (" << process_cmdline << "): " << result.error();
         return false;
     }
+
+    LOG(INFO) << "Control message: Processed ctl." << msg << " for '" << name
+              << "' from pid: " << pid << " (" << process_cmdline << ")";
     return true;
 }
 
@@ -715,6 +717,7 @@ int SecondStageMain(int argc, char** argv) {
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
 
+    am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
     am.QueueEventTrigger("early-init");
 
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
@@ -722,7 +725,6 @@ int SecondStageMain(int argc, char** argv) {
     // ... so that we can start queuing up actions that require stuff from /dev.
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
-    am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
     Keychords keychords;
     am.QueueBuiltinAction(
             [&epoll, &keychords](const BuiltinArguments& args) -> Result<void> {

@@ -45,7 +45,7 @@ bool ZeroExtent::AddTo(LpMetadata* out) const {
     return true;
 }
 
-Partition::Partition(const std::string& name, const std::string& group_name, uint32_t attributes)
+Partition::Partition(std::string_view name, std::string_view group_name, uint32_t attributes)
     : name_(name), group_name_(group_name), attributes_(attributes), size_(0) {}
 
 void Partition::AddExtent(std::unique_ptr<Extent>&& extent) {
@@ -426,7 +426,7 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
     return true;
 }
 
-bool MetadataBuilder::AddGroup(const std::string& group_name, uint64_t maximum_size) {
+bool MetadataBuilder::AddGroup(std::string_view group_name, uint64_t maximum_size) {
     if (FindGroup(group_name)) {
         LERROR << "Group already exists: " << group_name;
         return false;
@@ -436,10 +436,10 @@ bool MetadataBuilder::AddGroup(const std::string& group_name, uint64_t maximum_s
 }
 
 Partition* MetadataBuilder::AddPartition(const std::string& name, uint32_t attributes) {
-    return AddPartition(name, std::string(kDefaultGroup), attributes);
+    return AddPartition(name, kDefaultGroup, attributes);
 }
 
-Partition* MetadataBuilder::AddPartition(const std::string& name, const std::string& group_name,
+Partition* MetadataBuilder::AddPartition(std::string_view name, std::string_view group_name,
                                          uint32_t attributes) {
     if (name.empty()) {
         LERROR << "Partition must have a non-empty name.";
@@ -457,7 +457,7 @@ Partition* MetadataBuilder::AddPartition(const std::string& name, const std::str
     return partitions_.back().get();
 }
 
-Partition* MetadataBuilder::FindPartition(const std::string& name) {
+Partition* MetadataBuilder::FindPartition(std::string_view name) {
     for (const auto& partition : partitions_) {
         if (partition->name() == name) {
             return partition.get();
@@ -958,7 +958,7 @@ std::vector<std::string> MetadataBuilder::ListGroups() const {
     return names;
 }
 
-void MetadataBuilder::RemoveGroupAndPartitions(const std::string& group_name) {
+void MetadataBuilder::RemoveGroupAndPartitions(std::string_view group_name) {
     if (group_name == kDefaultGroup) {
         // Cannot remove the default group.
         return;

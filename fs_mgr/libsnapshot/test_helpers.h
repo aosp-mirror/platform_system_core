@@ -47,6 +47,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     std::string GetGsidDir() const override { return "ota/test"s; }
     std::string GetMetadataDir() const override { return "/metadata/ota/test"s; }
     std::string GetSlotSuffix() const override { return slot_suffix_; }
+    std::string GetSuperDevice([[maybe_unused]] uint32_t slot) const override { return "super"; }
     const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const override {
         return *opener_.get();
     }
