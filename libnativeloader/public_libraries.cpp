@@ -49,12 +49,12 @@ constexpr const char* kVendorPublicLibrariesFile = "/vendor/etc/public.libraries
 constexpr const char* kLlndkLibrariesFile = "/system/etc/llndk.libraries.txt";
 constexpr const char* kVndkLibrariesFile = "/system/etc/vndksp.libraries.txt";
 
-const std::vector<const std::string> kRuntimePublicLibraries = {
+const std::vector<const std::string> kArtApexPublicLibraries = {
     "libicuuc.so",
     "libicui18n.so",
 };
 
-constexpr const char* kRuntimeApexLibPath = "/apex/com.android.runtime/" LIB;
+constexpr const char* kArtApexLibPath = "/apex/com.android.art/" LIB;
 
 constexpr const char* kNeuralNetworksApexPublicLibrary = "libneuralnetworks.so";
 
@@ -182,8 +182,8 @@ static std::string InitDefaultPublicLibraries(bool for_preload) {
   // For example, libicuuc.so is exposed to classloader namespace from runtime namespace.
   // Unfortunately, it does not have stable C symbols, and default namespace should only use
   // stable symbols in libandroidicu.so. http://b/120786417
-  for (const std::string& lib_name : kRuntimePublicLibraries) {
-    std::string path(kRuntimeApexLibPath);
+  for (const std::string& lib_name : kArtApexPublicLibraries) {
+    std::string path(kArtApexLibPath);
     path.append("/").append(lib_name);
 
     struct stat s;
@@ -207,9 +207,9 @@ static std::string InitDefaultPublicLibraries(bool for_preload) {
   return android::base::Join(*sonames, ':');
 }
 
-static std::string InitRuntimePublicLibraries() {
-  CHECK(sizeof(kRuntimePublicLibraries) > 0);
-  std::string list = android::base::Join(kRuntimePublicLibraries, ":");
+static std::string InitArtPublicLibraries() {
+  CHECK(sizeof(kArtApexPublicLibraries) > 0);
+  std::string list = android::base::Join(kArtApexPublicLibraries, ":");
 
   std::string additional_libs = additional_public_libraries();
   if (!additional_libs.empty()) {
@@ -277,7 +277,7 @@ const std::string& default_public_libraries() {
 }
 
 const std::string& runtime_public_libraries() {
-  static std::string list = InitRuntimePublicLibraries();
+  static std::string list = InitArtPublicLibraries();
   return list;
 }
 
