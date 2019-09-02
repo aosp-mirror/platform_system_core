@@ -85,8 +85,8 @@ namespace.runtime.isolated = true
 # android_link_namespaces in libnativeloader.
 namespace.runtime.visible = true
 
-namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.search.paths = /apex/com.android.art/${LIB}
+namespace.runtime.asan.search.paths = /apex/com.android.art/${LIB}
 namespace.runtime.links = default
 # Need allow_all_shared_libs because libart.so can dlopen oat files in
 # /system/framework and /data.
