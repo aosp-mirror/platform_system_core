@@ -278,6 +278,9 @@ class SnapshotManager final {
         SnapshotState state;
         uint64_t device_size;
         uint64_t snapshot_size;
+        uint64_t cow_partition_size;
+        uint64_t cow_file_size;
+
         // These are non-zero when merging.
         uint64_t sectors_allocated = 0;
         uint64_t metadata_sectors = 0;
