@@ -309,7 +309,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
   }
 }
 
-std::string Unwinder::FormatFrame(const FrameData& frame) {
+std::string Unwinder::FormatFrame(const FrameData& frame) const {
   std::string data;
   if (regs_->Is32Bit()) {
     data += android::base::StringPrintf("  #%02zu pc %08" PRIx64, frame.num, frame.rel_pc);
@@ -355,7 +355,7 @@ std::string Unwinder::FormatFrame(const FrameData& frame) {
   return data;
 }
 
-std::string Unwinder::FormatFrame(size_t frame_num) {
+std::string Unwinder::FormatFrame(size_t frame_num) const {
   if (frame_num >= frames_.size()) {
     return "";
   }
