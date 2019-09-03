@@ -54,6 +54,7 @@ using android::fs_mgr::CreateLogicalPartitionParams;
 using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::LpMetadata;
 using android::fs_mgr::SlotNumberForSlotSuffix;
+using std::chrono::duration_cast;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
@@ -1173,9 +1174,28 @@ bool SnapshotManager::CreateLogicalAndSnapshotPartitions(const std::string& supe
     return true;
 }
 
+static std::chrono::milliseconds GetRemainingTime(
+        const std::chrono::milliseconds& timeout,
+        const std::chrono::time_point<std::chrono::steady_clock>& begin) {
+    // If no timeout is specified, execute all commands without specifying any timeout.
+    if (timeout.count() == 0) return std::chrono::milliseconds(0);
+    auto passed_time = std::chrono::steady_clock::now() - begin;
+    auto remaining_time = timeout - duration_cast<std::chrono::milliseconds>(passed_time);
+    if (remaining_time.count() <= 0) {
+        LOG(ERROR) << "MapPartitionWithSnapshot has reached timeout " << timeout.count() << "ms ("
+                   << remaining_time.count() << "ms remaining)";
+        // Return min() instead of remaining_time here because 0 is treated as a special value for
+        // no timeout, where the rest of the commands will still be executed.
+        return std::chrono::milliseconds::min();
+    }
+    return remaining_time;
+}
+
 bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
                                                CreateLogicalPartitionParams params,
                                                std::string* path) {
+    auto begin = std::chrono::steady_clock::now();
+
     CHECK(lock);
     path->clear();
 
@@ -1246,15 +1266,25 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         return false;
     }
 
+    // If there is a timeout specified, compute the remaining time to call Map* functions.
+    // init calls CreateLogicalAndSnapshotPartitions, which has no timeout specified. Still call
+    // Map* functions in this case.
+    auto remaining_time = GetRemainingTime(params.timeout_ms, begin);
+    if (remaining_time.count() < 0) return false;
+
     std::string cow_image_device;
-    if (!MapCowImage(params.GetPartitionName(), {}, &cow_image_device)) {
+    if (!MapCowImage(params.GetPartitionName(), remaining_time, &cow_image_device)) {
         LOG(ERROR) << "Could not map cow image for partition: " << params.GetPartitionName();
         return false;
     }
     // TODO: map cow linear device here
     std::string cow_device = cow_image_device;
 
-    if (!MapSnapshot(lock, params.GetPartitionName(), base_device, cow_device, {}, path)) {
+    remaining_time = GetRemainingTime(params.timeout_ms, begin);
+    if (remaining_time.count() < 0) return false;
+
+    if (!MapSnapshot(lock, params.GetPartitionName(), base_device, cow_device, remaining_time,
+                     path)) {
         LOG(ERROR) << "Could not map snapshot for partition: " << params.GetPartitionName();
         return false;
     }
