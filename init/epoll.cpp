@@ -69,19 +69,24 @@ Result<void> Epoll::UnregisterHandler(int fd) {
     return {};
 }
 
-Result<void> Epoll::Wait(std::optional<std::chrono::milliseconds> timeout) {
+Result<std::vector<std::function<void()>*>> Epoll::Wait(
+        std::optional<std::chrono::milliseconds> timeout) {
     int timeout_ms = -1;
     if (timeout && timeout->count() < INT_MAX) {
         timeout_ms = timeout->count();
     }
-    epoll_event ev;
-    auto nr = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd_, &ev, 1, timeout_ms));
-    if (nr == -1) {
+    const auto max_events = epoll_handlers_.size();
+    epoll_event ev[max_events];
+    auto num_events = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd_, ev, max_events, timeout_ms));
+    if (num_events == -1) {
         return ErrnoError() << "epoll_wait failed";
-    } else if (nr == 1) {
-        std::invoke(*reinterpret_cast<std::function<void()>*>(ev.data.ptr));
     }
-    return {};
+    std::vector<std::function<void()>*> pending_functions;
+    for (int i = 0; i < num_events; ++i) {
+        pending_functions.emplace_back(reinterpret_cast<std::function<void()>*>(ev[i].data.ptr));
+    }
+
+    return pending_functions;
 }
 
 }  // namespace init
