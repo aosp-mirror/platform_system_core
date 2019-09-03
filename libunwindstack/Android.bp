@@ -211,6 +211,7 @@ cc_test {
         "tests/UnwindOfflineTest.cpp",
         "tests/UnwindTest.cpp",
         "tests/UnwinderTest.cpp",
+        "tests/VerifyBionicTerminationTest.cpp",
     ],
 
     cflags: [
