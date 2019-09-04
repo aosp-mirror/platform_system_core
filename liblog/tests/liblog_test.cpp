@@ -1747,22 +1747,21 @@ static int count_matching_ts(log_time ts) {
 
   return count;
 }
-
-// meant to be handed to ASSERT_TRUE / EXPECT_TRUE only to expand the message
-static testing::AssertionResult IsOk(bool ok, std::string& message) {
-  return ok ? testing::AssertionSuccess()
-            : (testing::AssertionFailure() << message);
-}
 #endif  // TEST_PREFIX
 
 TEST(liblog, enoent) {
 #ifdef TEST_PREFIX
+  if (getuid() != 0) {
+    GTEST_SKIP() << "Skipping test, must be run as root.";
+    return;
+  }
+
   TEST_PREFIX
   log_time ts(CLOCK_MONOTONIC);
   EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
   EXPECT_EQ(SUPPORTS_END_TO_END, count_matching_ts(ts));
 
-  // This call will fail if we are setuid(AID_SYSTEM), beware of any
+  // This call will fail unless we are root, beware of any
   // test prior to this one playing with setuid and causing interference.
   // We need to run before these tests so that they do not interfere with
   // this test.
@@ -1774,20 +1773,7 @@ TEST(liblog, enoent) {
   // liblog.android_logger_get_ is one of those tests that has no recourse
   // and that would be adversely affected by emptying the log if it was run
   // right after this test.
-  if (getuid() != AID_ROOT) {
-    fprintf(
-        stderr,
-        "WARNING: test conditions request being run as root and not AID=%d\n",
-        getuid());
-    if (!__android_log_is_debuggable()) {
-      fprintf(
-          stderr,
-          "WARNING: can not run test on a \"user\" build, bypassing test\n");
-      return;
-    }
-  }
-
-  system((getuid() == AID_ROOT) ? "stop logd" : "su 0 stop logd");
+  system("stop logd");
   usleep(1000000);
 
   // A clean stop like we are testing returns -ENOENT, but in the _real_
@@ -1799,19 +1785,15 @@ TEST(liblog, enoent) {
   std::string content = android::base::StringPrintf(
       "__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) = %d %s\n",
       ret, (ret <= 0) ? strerror(-ret) : "(content sent)");
-  EXPECT_TRUE(
-      IsOk((ret == -ENOENT) || (ret == -ENOTCONN) || (ret == -ECONNREFUSED),
-           content));
+  EXPECT_TRUE(ret == -ENOENT || ret == -ENOTCONN || ret == -ECONNREFUSED) << content;
   ret = __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts));
   content = android::base::StringPrintf(
       "__android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)) = %d %s\n",
       ret, (ret <= 0) ? strerror(-ret) : "(content sent)");
-  EXPECT_TRUE(
-      IsOk((ret == -ENOENT) || (ret == -ENOTCONN) || (ret == -ECONNREFUSED),
-           content));
+  EXPECT_TRUE(ret == -ENOENT || ret == -ENOTCONN || ret == -ECONNREFUSED) << content;
   EXPECT_EQ(0, count_matching_ts(ts));
 
-  system((getuid() == AID_ROOT) ? "start logd" : "su 0 start logd");
+  system("start logd");
   usleep(1000000);
 
   EXPECT_EQ(0, count_matching_ts(ts));
