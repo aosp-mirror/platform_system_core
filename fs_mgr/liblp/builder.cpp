@@ -579,12 +579,38 @@ bool MetadataBuilder::ValidatePartitionSizeChange(Partition* partition, uint64_t
     return true;
 }
 
-bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size) {
+Interval Interval::Intersect(const Interval& a, const Interval& b) {
+    Interval ret = a;
+    if (a.device_index != b.device_index) {
+        ret.start = ret.end = a.start;  // set length to 0 to indicate no intersection.
+        return ret;
+    }
+    ret.start = std::max(a.start, b.start);
+    ret.end = std::max(ret.start, std::min(a.end, b.end));
+    return ret;
+}
+
+std::vector<Interval> Interval::Intersect(const std::vector<Interval>& a,
+                                          const std::vector<Interval>& b) {
+    std::vector<Interval> ret;
+    for (const Interval& a_interval : a) {
+        for (const Interval& b_interval : b) {
+            auto intersect = Intersect(a_interval, b_interval);
+            if (intersect.length() > 0) ret.emplace_back(std::move(intersect));
+        }
+    }
+    return ret;
+}
+
+bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size,
+                                    const std::vector<Interval>& free_region_hint) {
     uint64_t space_needed = aligned_size - partition->size();
     uint64_t sectors_needed = space_needed / LP_SECTOR_SIZE;
     DCHECK(sectors_needed * LP_SECTOR_SIZE == space_needed);
 
     std::vector<Interval> free_regions = GetFreeRegions();
+    if (!free_region_hint.empty())
+        free_regions = Interval::Intersect(free_regions, free_region_hint);
 
     const uint64_t sectors_per_block = geometry_.logical_block_size / LP_SECTOR_SIZE;
     CHECK_NE(sectors_per_block, 0);
@@ -650,7 +676,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
     return true;
 }
 
-std::vector<MetadataBuilder::Interval> MetadataBuilder::PrioritizeSecondHalfOfSuper(
+std::vector<Interval> MetadataBuilder::PrioritizeSecondHalfOfSuper(
         const std::vector<Interval>& free_list) {
     const auto& super = block_devices_[0];
     uint64_t first_sector = super.first_logical_sector;
@@ -926,7 +952,8 @@ bool MetadataBuilder::UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo&
     return true;
 }
 
-bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size) {
+bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size,
+                                      const std::vector<Interval>& free_region_hint) {
     // Align the space needed up to the nearest sector.
     uint64_t aligned_size = AlignTo(requested_size, geometry_.logical_block_size);
     uint64_t old_size = partition->size();
@@ -936,7 +963,7 @@ bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_s
     }
 
     if (aligned_size > old_size) {
-        if (!GrowPartition(partition, aligned_size)) {
+        if (!GrowPartition(partition, aligned_size, free_region_hint)) {
             return false;
         }
     } else if (aligned_size < partition->size()) {
