@@ -953,7 +953,7 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
     // flushed remaining I/O. We could in theory replace with dm-zero (or
     // re-use the table above), but for now it's better to know why this
     // would fail.
-    if (!dm.DeleteDeviceIfExists(dm_name)) {
+    if (dm_name != name && !dm.DeleteDeviceIfExists(dm_name)) {
         LOG(ERROR) << "Unable to delete snapshot device " << dm_name << ", COW cannot be "
                    << "reclaimed until after reboot.";
         return false;
