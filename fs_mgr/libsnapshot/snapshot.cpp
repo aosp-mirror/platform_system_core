@@ -152,7 +152,13 @@ bool SnapshotManager::FinishedSnapshotWrites() {
     auto lock = LockExclusive();
     if (!lock) return false;
 
-    if (ReadUpdateState(lock.get()) != UpdateState::Initiated) {
+    auto update_state = ReadUpdateState(lock.get());
+    if (update_state == UpdateState::Unverified) {
+        LOG(INFO) << "FinishedSnapshotWrites already called before. Ignored.";
+        return true;
+    }
+
+    if (update_state != UpdateState::Initiated) {
         LOG(ERROR) << "Can only transition to the Unverified state from the Initiated state.";
         return false;
     }
