@@ -887,3 +887,38 @@ TEST_F(BuilderTest, UpdateSuper) {
     std::set<std::string> partitions_to_keep{"system_a", "vendor_a", "product_a"};
     ASSERT_TRUE(builder->ImportPartitions(*on_disk.get(), partitions_to_keep));
 }
+
+// Interval has operator< defined; it is not appropriate to re-define Interval::operator== that
+// compares device index.
+namespace android {
+namespace fs_mgr {
+bool operator==(const Interval& a, const Interval& b) {
+    return a.device_index == b.device_index && a.start == b.start && a.end == b.end;
+}
+}  // namespace fs_mgr
+}  // namespace android
+
+TEST_F(BuilderTest, Interval) {
+    EXPECT_EQ(0u, Interval::Intersect(Interval(0, 100, 200), Interval(0, 50, 100)).length());
+    EXPECT_EQ(Interval(0, 100, 150),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 50, 150)));
+    EXPECT_EQ(Interval(0, 100, 200),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 50, 200)));
+    EXPECT_EQ(Interval(0, 100, 200),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 50, 250)));
+    EXPECT_EQ(Interval(0, 100, 200),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 100, 200)));
+    EXPECT_EQ(Interval(0, 150, 200),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 150, 250)));
+    EXPECT_EQ(0u, Interval::Intersect(Interval(0, 100, 200), Interval(0, 200, 250)).length());
+
+    auto v = Interval::Intersect(std::vector<Interval>{Interval(0, 0, 50), Interval(0, 100, 150)},
+                                 std::vector<Interval>{Interval(0, 25, 125)});
+    ASSERT_EQ(2, v.size());
+    EXPECT_EQ(Interval(0, 25, 50), v[0]);
+    EXPECT_EQ(Interval(0, 100, 125), v[1]);
+
+    EXPECT_EQ(0u, Interval::Intersect(std::vector<Interval>{Interval(0, 0, 50)},
+                                      std::vector<Interval>{Interval(0, 100, 150)})
+                          .size());
+}
