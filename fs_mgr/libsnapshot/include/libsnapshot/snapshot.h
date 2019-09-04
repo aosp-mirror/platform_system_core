@@ -329,6 +329,10 @@ class SnapshotManager final {
     std::string GetSnapshotDeviceName(const std::string& snapshot_name,
                                       const SnapshotStatus& status);
 
+    // Map the base device, COW devices, and snapshot device.
+    bool MapPartitionWithSnapshot(LockedFile* lock, CreateLogicalPartitionParams params,
+                                  std::string* path);
+
     std::string gsid_dir_;
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;
