@@ -19,7 +19,6 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <seccomp_policy.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -579,15 +578,6 @@ void HandleKeychord(const std::vector<int>& keycodes) {
     }
 }
 
-static void GlobalSeccomp() {
-    import_kernel_cmdline(false, [](const std::string& key, const std::string& value,
-                                    bool in_qemu) {
-        if (key == "androidboot.seccomp" && value == "global" && !set_global_seccomp_filter()) {
-            LOG(FATAL) << "Failed to globally enable seccomp!";
-        }
-    });
-}
-
 static void UmountDebugRamdisk() {
     if (umount("/debug_ramdisk") != 0) {
         LOG(ERROR) << "Failed to umount /debug_ramdisk";
@@ -672,9 +662,6 @@ int SecondStageMain(int argc, char** argv) {
     if (auto result = WriteFile("/proc/1/oom_score_adj", "-1000"); !result) {
         LOG(ERROR) << "Unable to write -1000 to /proc/1/oom_score_adj: " << result.error();
     }
-
-    // Enable seccomp if global boot option was passed (otherwise it is enabled in zygote).
-    GlobalSeccomp();
 
     // Set up a session keyring that all processes will have access to. It
     // will hold things like FBE encryption keys. No process should override

@@ -92,7 +92,6 @@ LOCAL_STATIC_LIBRARIES := \
     liblogwrap \
     libext4_utils \
     libfscrypt \
-    libseccomp_policy \
     libcrypto_utils \
     libsparse \
     libavb \
