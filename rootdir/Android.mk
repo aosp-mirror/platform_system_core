@@ -233,18 +233,7 @@ LOCAL_POST_INSTALL_CMD = mkdir -p $(TARGET_OUT)/usr && rm -rf $(TARGET_OUT)/usr/
 LOCAL_POST_INSTALL_CMD += && ln -sf /apex/com.android.i18n/etc/icu $(TARGET_OUT)/usr/icu
 
 # TODO(b/124106384): Clean up compat symlinks for ART binaries.
-ART_BINARIES := \
-  dalvikvm \
-  dalvikvm32 \
-  dalvikvm64 \
-  dex2oat \
-  dexdiag \
-  dexdump \
-  dexlist \
-  dexoptanalyzer \
-  oatdump \
-  profman \
-
+ART_BINARIES := dalvikvm dex2oat
 LOCAL_POST_INSTALL_CMD += && mkdir -p $(TARGET_OUT)/bin
 $(foreach b,$(ART_BINARIES), \
   $(eval LOCAL_POST_INSTALL_CMD += \
