@@ -190,6 +190,7 @@ namespace.media.search.paths = /apex/com.android.media/${LIB}
 namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 
 namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
+namespace.media.asan.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
 namespace.media.links = default,neuralnetworks
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%
@@ -723,6 +724,7 @@ namespace.media.search.paths = /apex/com.android.media/${LIB}
 namespace.media.asan.search.paths = /apex/com.android.media/${LIB}
 
 namespace.media.permitted.paths = /apex/com.android.media/${LIB}/extractors
+namespace.media.asan.permitted.paths = /apex/com.android.media/${LIB}/extractors
 
 namespace.media.links = default,neuralnetworks
 namespace.media.link.default.shared_libs  = %LLNDK_LIBRARIES%

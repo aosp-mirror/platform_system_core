@@ -23,7 +23,6 @@ CHARGER_STATIC_LIBRARIES := \
     libcharger_sysprop \
     libhidltransport \
     libhidlbase \
-    libhwbinder_noltopgo \
     libhealthstoragedefault \
     libminui \
     libvndksupport \
@@ -77,7 +76,6 @@ LOCAL_STATIC_LIBRARIES := \
     libcharger_sysprop \
     libhidltransport \
     libhidlbase \
-    libhwbinder_noltopgo \
     libhealthstoragedefault \
     libvndksupport \
     libhealthd_charger_nops \

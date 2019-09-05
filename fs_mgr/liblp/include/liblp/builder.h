@@ -138,6 +138,33 @@ class Partition final {
     uint64_t size_;
 };
 
+// An interval in the metadata. This is similar to a LinearExtent with one difference.
+// LinearExtent represents a "used" region in the metadata, while Interval can also represent
+// an "unused" region.
+struct Interval {
+    uint32_t device_index;
+    uint64_t start;
+    uint64_t end;
+
+    Interval(uint32_t device_index, uint64_t start, uint64_t end)
+        : device_index(device_index), start(start), end(end) {}
+    uint64_t length() const { return end - start; }
+
+    // Note: the device index is not included in sorting (intervals are
+    // sorted in per-device lists).
+    bool operator<(const Interval& other) const {
+        return (start == other.start) ? end < other.end : start < other.start;
+    }
+
+    // Intersect |a| with |b|.
+    // If no intersection, result has 0 length().
+    static Interval Intersect(const Interval& a, const Interval& b);
+
+    // Intersect two lists of intervals, and store result to |a|.
+    static std::vector<Interval> Intersect(const std::vector<Interval>& a,
+                                           const std::vector<Interval>& b);
+};
+
 class MetadataBuilder {
   public:
     // Construct an empty logical partition table builder given the specified
@@ -244,7 +271,11 @@ class MetadataBuilder {
     //
     // Note, this is an in-memory operation, and it does not alter the
     // underlying filesystem or contents of the partition on disk.
-    bool ResizePartition(Partition* partition, uint64_t requested_size);
+    //
+    // If |free_region_hint| is not empty, it will only try to allocate extents
+    // in regions within the list.
+    bool ResizePartition(Partition* partition, uint64_t requested_size,
+                         const std::vector<Interval>& free_region_hint = {});
 
     // Return the list of partitions belonging to a group.
     std::vector<Partition*> ListPartitionsInGroup(const std::string& group_name);
@@ -291,6 +322,9 @@ class MetadataBuilder {
     // Return the name of the block device at |index|.
     std::string GetBlockDevicePartitionName(uint64_t index) const;
 
+    // Return the list of free regions not occupied by extents in the metadata.
+    std::vector<Interval> GetFreeRegions() const;
+
   private:
     MetadataBuilder();
     MetadataBuilder(const MetadataBuilder&) = delete;
@@ -300,7 +334,8 @@ class MetadataBuilder {
     bool Init(const std::vector<BlockDeviceInfo>& block_devices, const std::string& super_partition,
               uint32_t metadata_max_size, uint32_t metadata_slot_count);
     bool Init(const LpMetadata& metadata);
-    bool GrowPartition(Partition* partition, uint64_t aligned_size);
+    bool GrowPartition(Partition* partition, uint64_t aligned_size,
+                       const std::vector<Interval>& free_region_hint);
     void ShrinkPartition(Partition* partition, uint64_t aligned_size);
     uint64_t AlignSector(const LpMetadataBlockDevice& device, uint64_t sector) const;
     uint64_t TotalSizeOfGroup(PartitionGroup* group) const;
@@ -323,22 +358,6 @@ class MetadataBuilder {
 
     bool ValidatePartitionGroups() const;
 
-    struct Interval {
-        uint32_t device_index;
-        uint64_t start;
-        uint64_t end;
-
-        Interval(uint32_t device_index, uint64_t start, uint64_t end)
-            : device_index(device_index), start(start), end(end) {}
-        uint64_t length() const { return end - start; }
-
-        // Note: the device index is not included in sorting (intervals are
-        // sorted in per-device lists).
-        bool operator<(const Interval& other) const {
-            return (start == other.start) ? end < other.end : start < other.start;
-        }
-    };
-    std::vector<Interval> GetFreeRegions() const;
     bool IsAnyRegionCovered(const std::vector<Interval>& regions,
                             const LinearExtent& candidate) const;
     bool IsAnyRegionAllocated(const LinearExtent& candidate) const;

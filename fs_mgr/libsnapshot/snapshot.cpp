@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <sys/unistd.h>
 
+#include <optional>
 #include <thread>
 #include <unordered_set>
 
@@ -217,8 +218,27 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, const std::string& name,
     }
 
     auto cow_name = GetCowName(name);
-    int cow_flags = IImageManager::CREATE_IMAGE_ZERO_FILL;
-    return images_->CreateBackingImage(cow_name, cow_size, cow_flags);
+    int cow_flags = IImageManager::CREATE_IMAGE_DEFAULT;
+    if (!images_->CreateBackingImage(cow_name, cow_size, cow_flags)) {
+        return false;
+    }
+
+    // when the kernel creates a persistent dm-snapshot, it requires a CoW file
+    // to store the modifications. The kernel interface does not specify how
+    // the CoW is used, and there is no standard associated.
+    // By looking at the current implementation, the CoW file is treated as:
+    // - a _NEW_ snapshot if its first 32 bits are zero, so the newly created
+    // dm-snapshot device will look like a perfect copy of the origin device;
+    // - an _EXISTING_ snapshot if the first 32 bits are equal to a
+    // kernel-specified magic number and the CoW file metadata is set as valid,
+    // so it can be used to resume the last state of a snapshot device;
+    // - an _INVALID_ snapshot otherwise.
+    // To avoid zero-filling the whole CoW file when a new dm-snapshot is
+    // created, here we zero-fill only the first 32 bits. This is a temporary
+    // workaround that will be discussed again when the kernel API gets
+    // consolidated.
+    ssize_t dm_snap_magic_size = 4;  // 32 bit
+    return images_->ZeroFillNewImage(cow_name, dm_snap_magic_size);
 }
 
 bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
@@ -1108,22 +1128,6 @@ bool SnapshotManager::CreateLogicalAndSnapshotPartitions(const std::string& supe
     auto lock = LockExclusive();
     if (!lock) return false;
 
-    std::vector<std::string> snapshot_list;
-    if (!ListSnapshots(lock.get(), &snapshot_list)) {
-        return false;
-    }
-
-    std::unordered_set<std::string> live_snapshots;
-    for (const auto& snapshot : snapshot_list) {
-        SnapshotStatus status;
-        if (!ReadSnapshotStatus(lock.get(), snapshot, &status)) {
-            return false;
-        }
-        if (status.state != SnapshotState::MergeCompleted) {
-            live_snapshots.emplace(snapshot);
-        }
-    }
-
     const auto& opener = device_->GetPartitionOpener();
     uint32_t slot = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
     auto metadata = android::fs_mgr::ReadMetadata(opener, super_device, slot);
@@ -1132,59 +1136,102 @@ bool SnapshotManager::CreateLogicalAndSnapshotPartitions(const std::string& supe
         return false;
     }
 
-    // Map logical partitions.
-    auto& dm = DeviceMapper::Instance();
     for (const auto& partition : metadata->partitions) {
-        auto partition_name = GetPartitionName(partition);
-        if (!partition.num_extents) {
-            LOG(INFO) << "Skipping zero-length logical partition: " << partition_name;
-            continue;
-        }
-
-        if (!(partition.attributes & LP_PARTITION_ATTR_UPDATED)) {
-            LOG(INFO) << "Detected re-flashing of partition, will skip snapshot: "
-                      << partition_name;
-            live_snapshots.erase(partition_name);
-        }
-
         CreateLogicalPartitionParams params = {
                 .block_device = super_device,
                 .metadata = metadata.get(),
                 .partition = &partition,
                 .partition_opener = &opener,
         };
-
-        if (auto iter = live_snapshots.find(partition_name); iter != live_snapshots.end()) {
-            // If the device has a snapshot, it'll need to be writable, and
-            // we'll need to create the logical partition with a marked-up name
-            // (since the snapshot will use the partition name).
-            params.force_writable = true;
-            params.device_name = GetBaseDeviceName(partition_name);
-        }
-
         std::string ignore_path;
-        if (!CreateLogicalPartition(params, &ignore_path)) {
-            LOG(ERROR) << "Could not create logical partition " << partition_name << " as device "
-                       << params.GetDeviceName();
-            return false;
-        }
-        if (!params.force_writable) {
-            // No snapshot.
-            continue;
-        }
-
-        // We don't have ueventd in first-stage init, so use device major:minor
-        // strings instead.
-        std::string base_device;
-        if (!dm.GetDeviceString(params.GetDeviceName(), &base_device)) {
-            LOG(ERROR) << "Could not determine major/minor for: " << params.GetDeviceName();
-            return false;
-        }
-        if (!MapSnapshot(lock.get(), partition_name, base_device, {}, &ignore_path)) {
-            LOG(ERROR) << "Could not map snapshot for partition: " << partition_name;
+        if (!MapPartitionWithSnapshot(lock.get(), std::move(params), &ignore_path)) {
             return false;
         }
     }
+
+    LOG(INFO) << "Created logical partitions with snapshot.";
+    return true;
+}
+
+bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
+                                               CreateLogicalPartitionParams params,
+                                               std::string* path) {
+    CHECK(lock);
+    path->clear();
+
+    // Fill out fields in CreateLogicalPartitionParams so that we have more information (e.g. by
+    // reading super partition metadata).
+    CreateLogicalPartitionParams::OwnedData params_owned_data;
+    if (!params.InitDefaults(&params_owned_data)) {
+        return false;
+    }
+
+    if (!params.partition->num_extents) {
+        LOG(INFO) << "Skipping zero-length logical partition: " << params.GetPartitionName();
+        return true;  // leave path empty to indicate that nothing is mapped.
+    }
+
+    // Determine if there is a live snapshot for the SnapshotStatus of the partition; i.e. if the
+    // partition still has a snapshot that needs to be mapped.  If no live snapshot or merge
+    // completed, live_snapshot_status is set to nullopt.
+    std::optional<SnapshotStatus> live_snapshot_status;
+    do {
+        if (!(params.partition->attributes & LP_PARTITION_ATTR_UPDATED)) {
+            LOG(INFO) << "Detected re-flashing of partition, will skip snapshot: "
+                      << params.GetPartitionName();
+            break;
+        }
+        auto file_path = GetSnapshotStatusFilePath(params.GetPartitionName());
+        if (access(file_path.c_str(), F_OK) != 0) {
+            if (errno != ENOENT) {
+                PLOG(INFO) << "Can't map snapshot for " << params.GetPartitionName()
+                           << ": Can't access " << file_path;
+                return false;
+            }
+            break;
+        }
+        live_snapshot_status = std::make_optional<SnapshotStatus>();
+        if (!ReadSnapshotStatus(lock, params.GetPartitionName(), &*live_snapshot_status)) {
+            return false;
+        }
+        // No live snapshot if merge is completed.
+        if (live_snapshot_status->state == SnapshotState::MergeCompleted) {
+            live_snapshot_status.reset();
+        }
+    } while (0);
+
+    if (live_snapshot_status.has_value()) {
+        // dm-snapshot requires the base device to be writable.
+        params.force_writable = true;
+        // Map the base device with a different name to avoid collision.
+        params.device_name = GetBaseDeviceName(params.GetPartitionName());
+    }
+
+    auto& dm = DeviceMapper::Instance();
+    std::string ignore_path;
+    if (!CreateLogicalPartition(params, &ignore_path)) {
+        LOG(ERROR) << "Could not create logical partition " << params.GetPartitionName()
+                   << " as device " << params.GetDeviceName();
+        return false;
+    }
+    if (!live_snapshot_status.has_value()) {
+        return true;
+    }
+
+    // We don't have ueventd in first-stage init, so use device major:minor
+    // strings instead.
+    std::string base_device;
+    if (!dm.GetDeviceString(params.GetDeviceName(), &base_device)) {
+        LOG(ERROR) << "Could not determine major/minor for: " << params.GetDeviceName();
+        return false;
+    }
+    if (!MapSnapshot(lock, params.GetPartitionName(), base_device, {}, path)) {
+        LOG(ERROR) << "Could not map snapshot for partition: " << params.GetPartitionName();
+        return false;
+    }
+
+    LOG(INFO) << "Mapped " << params.GetPartitionName() << " as snapshot device at " << *path;
+
     return true;
 }
 
