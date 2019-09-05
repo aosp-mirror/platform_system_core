@@ -278,6 +278,9 @@ class SnapshotManager final {
         SnapshotState state;
         uint64_t device_size;
         uint64_t snapshot_size;
+        uint64_t cow_partition_size;
+        uint64_t cow_file_size;
+
         // These are non-zero when merging.
         uint64_t sectors_allocated = 0;
         uint64_t metadata_sectors = 0;
@@ -325,6 +328,10 @@ class SnapshotManager final {
     // for example there is a linear segment.
     std::string GetSnapshotDeviceName(const std::string& snapshot_name,
                                       const SnapshotStatus& status);
+
+    // Map the base device, COW devices, and snapshot device.
+    bool MapPartitionWithSnapshot(LockedFile* lock, CreateLogicalPartitionParams params,
+                                  std::string* path);
 
     std::string gsid_dir_;
     std::string metadata_dir_;
