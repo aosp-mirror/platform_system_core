@@ -25,6 +25,7 @@ namespace init {
 Result<void> check_chown(const BuiltinArguments& args);
 Result<void> check_exec(const BuiltinArguments& args);
 Result<void> check_exec_background(const BuiltinArguments& args);
+Result<void> check_exec_reboot_on_failure(const BuiltinArguments& args);
 Result<void> check_interface_restart(const BuiltinArguments& args);
 Result<void> check_interface_start(const BuiltinArguments& args);
 Result<void> check_interface_stop(const BuiltinArguments& args);
