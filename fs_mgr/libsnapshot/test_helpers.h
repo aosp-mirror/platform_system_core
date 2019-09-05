@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include <libfiemap/image_manager.h>
@@ -65,6 +66,11 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
 
 // Helper for error-spam-free cleanup.
 void DeleteBackingImage(android::fiemap::IImageManager* manager, const std::string& name);
+
+// Write some random data to the given device. Will write until reaching end of the device.
+bool WriteRandomData(const std::string& device);
+
+std::optional<std::string> GetHash(const std::string& path);
 
 }  // namespace snapshot
 }  // namespace android
