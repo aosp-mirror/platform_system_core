@@ -1433,8 +1433,8 @@ static int kill_one_process(struct proc* procp, int min_oom_score) {
     set_process_group_and_prio(pid, SP_FOREGROUND, ANDROID_PRIORITY_HIGHEST);
 
     inc_killcnt(procp->oomadj);
-    ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB",
-        taskname, pid, uid, procp->oomadj, tasksize * page_k);
+    ALOGE("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB", taskname, pid, uid, procp->oomadj,
+          tasksize * page_k);
 
     TRACE_KILL_END();
 
