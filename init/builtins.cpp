@@ -80,6 +80,7 @@
 using namespace std::literals::string_literals;
 
 using android::base::Basename;
+using android::base::StringPrintf;
 using android::base::unique_fd;
 using android::fs_mgr::Fstab;
 using android::fs_mgr::ReadFstabFromFile;
@@ -1062,32 +1063,57 @@ static bool is_file_crypto() {
     return android::base::GetProperty("ro.crypto.type", "") == "file";
 }
 
-static Result<void> ExecWithRebootOnFailure(const std::string& reboot_reason,
-                                            const BuiltinArguments& args) {
-    auto service = Service::MakeTemporaryOneshotService(args.args);
+static Result<void> ExecWithFunctionOnFailure(const std::vector<std::string>& args,
+                                              std::function<void(const std::string&)> function) {
+    auto service = Service::MakeTemporaryOneshotService(args);
     if (!service) {
-        return Error() << "Could not create exec service: " << service.error();
+        function("MakeTemporaryOneshotService failed: " + service.error().message());
     }
-    (*service)->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
+    (*service)->AddReapCallback([function](const siginfo_t& siginfo) {
         if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
-            // TODO (b/122850122): support this in gsi
-            if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
-                LOG(ERROR) << "Rebooting into recovery, reason: " << reboot_reason;
-                if (auto result = reboot_into_recovery(
-                            {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
-                    !result) {
-                    LOG(FATAL) << "Could not reboot into recovery: " << result.error();
-                }
-            } else {
-                LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
-            }
+            function(StringPrintf("Exec service failed, status %d", siginfo.si_status));
         }
     });
     if (auto result = (*service)->ExecStart(); !result) {
-        return Error() << "Could not start exec service: " << result.error();
+        function("ExecStart failed: " + result.error().message());
     }
     ServiceList::GetInstance().AddService(std::move(*service));
     return {};
+}
+
+static Result<void> do_exec_reboot_on_failure(const BuiltinArguments& args) {
+    auto reboot_reason = args[1];
+    auto reboot = [reboot_reason](const std::string& message) {
+        property_set(LAST_REBOOT_REASON_PROPERTY, reboot_reason);
+        sync();
+        LOG(FATAL) << message << ": rebooting into bootloader, reason: " << reboot_reason;
+    };
+
+    std::vector<std::string> remaining_args(args.begin() + 1, args.end());
+    remaining_args[0] = args[0];
+
+    return ExecWithFunctionOnFailure(remaining_args, reboot);
+}
+
+static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
+    auto reboot_reason = vdc_arg + "_failed";
+
+    auto reboot = [reboot_reason](const std::string& message) {
+        // TODO (b/122850122): support this in gsi
+        if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
+            LOG(ERROR) << message << ": Rebooting into recovery, reason: " << reboot_reason;
+            if (auto result = reboot_into_recovery(
+                        {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+                !result) {
+                LOG(FATAL) << "Could not reboot into recovery: " << result.error();
+            }
+        } else {
+            LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
+        }
+    };
+
+    std::vector<std::string> args = {"exec", "/system/bin/vdc", "--wait", "cryptfs", vdc_arg};
+    return ExecWithFunctionOnFailure(args, reboot);
 }
 
 static Result<void> do_installkey(const BuiltinArguments& args) {
@@ -1097,15 +1123,11 @@ static Result<void> do_installkey(const BuiltinArguments& args) {
     if (!make_dir(unencrypted_dir, 0700) && errno != EEXIST) {
         return ErrnoError() << "Failed to create " << unencrypted_dir;
     }
-    return ExecWithRebootOnFailure(
-        "enablefilecrypto_failed",
-        {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "enablefilecrypto"}, args.context});
+    return ExecVdcRebootOnFailure("enablefilecrypto");
 }
 
 static Result<void> do_init_user0(const BuiltinArguments& args) {
-    return ExecWithRebootOnFailure(
-        "init_user0_failed",
-        {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"}, args.context});
+    return ExecVdcRebootOnFailure("init_user0");
 }
 
 static Result<void> do_mark_post_data(const BuiltinArguments& args) {
@@ -1180,6 +1202,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"enable",                  {1,     1,    {false,  do_enable}}},
         {"exec",                    {1,     kMax, {false,  do_exec}}},
         {"exec_background",         {1,     kMax, {false,  do_exec_background}}},
+        {"exec_reboot_on_failure",  {2,     kMax, {false,  do_exec_reboot_on_failure}}},
         {"exec_start",              {1,     1,    {false,  do_exec_start}}},
         {"export",                  {2,     2,    {false,  do_export}}},
         {"hostname",                {1,     1,    {true,   do_hostname}}},
