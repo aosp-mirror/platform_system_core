@@ -175,7 +175,6 @@ static int set_system_de_policy_on(const std::string& dir) {
         return -1;
     }
 
-    LOG(INFO) << "Setting policy on " << dir;
     int result =
             fscrypt_policy_ensure(dir.c_str(), policy.c_str(), policy.length(), modes[0].c_str(),
                                   modes.size() >= 2 ? modes[1].c_str() : "aes-256-cts");
