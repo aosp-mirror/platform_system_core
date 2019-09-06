@@ -289,3 +289,9 @@ cc_test_library {
     ],
     shared_libs: ["libutils_test_singleton1"],
 }
+
+cc_benchmark {
+    name: "libutils_benchmark",
+    srcs: ["Vector_benchmark.cpp"],
+    shared_libs: ["libutils"],
+}
