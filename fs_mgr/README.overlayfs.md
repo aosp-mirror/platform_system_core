@@ -1,33 +1,27 @@
-Android Overlayfs integration with adb remount
+Android OverlayFS Integration with adb Remount
 ==============================================
 
 Introduction
 ------------
 
-Users working with userdebug or eng builds expect to be able to
-remount the system partition as read-write and then add or modify
-any number of files without reflashing the system image, which is
-understandably efficient for a development cycle.
-Limited memory systems that chose to use readonly filesystems like
-*squashfs*, or *Logical Resizable Android Partitions* which land
-system partition images right-sized, and with filesystem that have
-been deduped on the block level to compress the content; means that
-either a remount is not possible directly, or when done offers
-little or no utility because of remaining space limitations or
-support logistics.
+Users working with userdebug or eng builds expect to be able to remount the
+system partition as read-write and then add or modify any number of files
+without reflashing the system image, which is efficient for a development cycle.
 
-*Overlayfs* comes to the rescue for these debug scenarios, and logic
-will _automatically_ setup backing storage for a writable filesystem
-as an upper reference, and mount overtop the lower.  These actions
-will be performed in the **adb disable-verity** and **adb remount**
-requests.
+Limited memory systems use read-only types of file systems or logical resizable
+Android partitions (LRAPs). These file systems land system partition images
+right-sized, and have been deduped at the block level to compress the content.
+This means that a remount either isn’t possible, or isn't useful because of
+space limitations or support logistics.
 
-Operations
-----------
+OverlayFS resolves these debug scenarios with the _adb disable-verity_ and
+_adb remount_ commands, which set up backing storage for a writable file
+system as an upper reference, and mount the lower reference on top.
 
-### Cookbook
+Performing a remount
+--------------------
 
-The typical action to utilize the remount facility is:
+Use the following sequence to perform the remount.
 
     $ adb root
     $ adb disable-verity
@@ -36,7 +30,7 @@ The typical action to utilize the remount facility is:
     $ adb root
     $ adb remount
 
-Followed by one of the following:
+Then enter one of the following sequences:
 
     $ adb stop
     $ adb sync
@@ -48,75 +42,67 @@ Followed by one of the following:
     $ adb push <source> <destination>
     $ adb reboot
 
-Note that the sequence above:
+Note that you can replace these two lines:
 
     $ adb disable-verity
     $ adb reboot
 
-*or*
-
-    $ adb remount
-
-can be replaced in both places with:
+with this line:
 
     $ adb remount -R
 
-which will not reboot if everything is already prepared and ready
-to go.
+**Note:** _adb reboot -R_ won’t reboot if the device is already in the adb remount state.
 
-None of this changes if *overlayfs* needs to be engaged.
-The decisions whether to use traditional direct filesystem remount,
-or one wrapped by *overlayfs* is automatically determined based on
-a probe of the filesystem types and space remaining.
+None of this changes if OverlayFS needs to be engaged.
+The decisions whether to use traditional direct file-system remount,
+or one wrapped by OverlayFS is automatically determined based on
+a probe of the file-system types and space remaining.
 
 ### Backing Storage
 
-When *overlayfs* logic is feasible, it will use either the
+When *OverlayFS* logic is feasible, it uses either the
 **/cache/overlay/** directory for non-A/B devices, or the
 **/mnt/scratch/overlay** directory for A/B devices that have
-access to *Logical Resizable Android Partitions*.
+access to *LRAP*.
+It is also possible for an A/B device to use the system_<other> partition
+for backing storage. eg: if booting off system_a+vendor_a, use system_b.
 The backing store is used as soon as possible in the boot
-process and can occur at first stage init, or at the
-mount_all init rc commands.
+process and can occur at first stage init, or when the
+*mount_all* commands are run in init RC scripts.
 
-This early as possible attachment of *overlayfs* means that
-*sepolicy* or *init* itself can also be pushed and used after
-the exec phases that accompany each stage.
+By attaching OverlayFS early, SEpolicy or init can be pushed and used after the exec phases of each stage.
 
 Caveats
 -------
 
-- Space used in the backing storage is on a file by file basis
-  and will require more space than if updated in place.  As such
-  it is important to be mindful of any wasted space, for instance
-  **BOARD_<partition>IMAGE_PARTITION_RESERVED_SIZE** being defined
-  will have a negative impact on the overall right-sizing of images
-  and thus free dynamic partition space.
-- Kernel must have CONFIG_OVERLAY_FS=y and will need to be patched
-  with "*overlayfs: override_creds=off option bypass creator_cred*"
-  if kernel is 4.4 or higher.
+- Backing storage requires more space than immutable storage, as backing is
+  done file by file. Be mindful of wasted space. For example, defining
+  **BOARD_IMAGE_PARTITION_RESERVED_SIZE** has a negative impact on the
+  right-sizing of images and requires more free dynamic partition space.
+- The kernel requires **CONFIG_OVERLAY_FS=y**. If the kernel version is higher
+  than 4.4, it requires source to be in line with android-common kernels. 
   The patch series is available on the upstream mailing list and the latest as
-  of Jul 24 2019 is https://lore.kernel.org/patchwork/patch/1104577/.
-  This patch adds an override_creds _mount_ option to overlayfs that
+  of Sep 5 2019 is https://www.spinics.net/lists/linux-mtd/msg08331.html
+  This patch adds an override_creds _mount_ option to OverlayFS that
   permits legacy behavior for systems that do not have overlapping
   sepolicy rules, principals of least privilege, which is how Android behaves.
-- *adb enable-verity* will free up overlayfs and as a bonus the
-  device will be reverted pristine to before any content was updated.
-  Update engine does not take advantage of this, will perform a full OTA.
-- Update engine may not run if *fs_mgr_overlayfs_is_setup*() reports
-  true as adb remount overrides are incompatible with an OTA resources.
+  For 4.19 and higher a rework of the xattr handling to deal with recursion
+  is required. https://patchwork.kernel.org/patch/11117145/ is a start of that
+  adjustment.
+- _adb enable-verity_ frees up OverlayFS and reverts the device to the state
+  prior to content updates. The update engine performs a full OTA.
+- _adb remount_ overrides are incompatible with OTA resources, so the update
+  engine may not run if fs_mgr_overlayfs_is_setup() returns true.
+- If a dynamic partition runs out of space, making a logical partition larger
+  may fail because of the scratch partition. If this happens, clear the scratch
+  storage by running either either _fastboot flashall_ or _adb enable-verity_.
+  Then reinstate the overrides and continue.
 - For implementation simplicity on retrofit dynamic partition devices,
   take the whole alternate super (eg: if "*a*" slot, then the whole of
   "*system_b*").
   Since landing a filesystem on the alternate super physical device
   without differentiating if it is setup to support logical or physical,
   the alternate slot metadata and previous content will be lost.
-- If dynamic partitions runs out of space, resizing a logical
-  partition larger may fail because of the scratch partition.
-  If this happens, either fastboot flashall or adb enable-verity can
-  be used to clear scratch storage to permit the flash.
-  Then reinstate the overrides and continue.
-- File bugs or submit fixes for review.
 - There are other subtle caveats requiring complex logic to solve.
   Have evaluated them as too complex or not worth the trouble, please
   File a bug if a use case needs to be covered.
@@ -125,7 +111,7 @@ Caveats
     out and we reserve the right to not inform, if the layering
     does not prevent any messaging.
   - Space remaining threshold is hard coded.  If 1% or more space
-    still remains, overlayfs will not be used, yet that amount of
+    still remains, OverlayFS will not be used, yet that amount of
     space remaining is problematic.
   - Flashing a partition via bootloader fastboot, as opposed to user
     space fastbootd, is not detected, thus a partition may have
@@ -139,3 +125,4 @@ Caveats
     to confusion.  When debugging using **adb remount** it is
     currently advised to confirm update is present after a reboot
     to develop confidence.
+- File bugs or submit fixes for review.
