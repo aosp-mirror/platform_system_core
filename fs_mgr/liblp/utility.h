@@ -21,6 +21,9 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <string>
+#include <string_view>
+
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 
@@ -94,7 +97,7 @@ bool UpdatePartitionName(LpMetadataPartition* partition, const std::string& name
 // Call BLKROSET ioctl on fd so that fd is readonly / read-writable.
 bool SetBlockReadonly(int fd, bool readonly);
 
-::android::base::unique_fd GetControlFileOrOpen(const char* path, int flags);
+::android::base::unique_fd GetControlFileOrOpen(std::string_view path, int flags);
 
 // For Virtual A/B updates, modify |metadata| so that it can be written to |target_slot_number|.
 bool UpdateMetadataForInPlaceSnapshot(LpMetadata* metadata, uint32_t source_slot_number,
