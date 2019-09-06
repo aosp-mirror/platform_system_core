@@ -70,19 +70,30 @@ endif
 # /system image.
 llndk_libraries_moved_to_apex_list:=$(LLNDK_MOVED_TO_APEX_LIBRARIES)
 
+# Returns the unique installed basenames of a module, or module.so if there are
+# none.  The guess is to handle cases like libc, where the module itself is
+# marked uninstallable but a symlink is installed with the name libc.so.
 # $(1): list of libraries
-# $(2): output file to write the list of libraries to
-define write-libs-to-file
-$(2): PRIVATE_LIBRARIES := $(1)
-$(2):
-	echo -n > $$@ && $$(foreach lib,$$(PRIVATE_LIBRARIES),echo $$(lib).so >> $$@;)
+# $(2): suffix to to add to each library (not used for guess)
+define module-installed-files-or-guess
+$(foreach lib,$(1),$(or $(strip $(sort $(notdir $(call module-installed-files,$(lib)$(2))))),$(lib).so))
 endef
-$(eval $(call write-libs-to-file,$(llndk_libraries_list),$(llndk_libraries_file)))
-$(eval $(call write-libs-to-file,$(vndksp_libraries_list),$(vndksp_libraries_file)))
-$(eval $(call write-libs-to-file,$(VNDK_CORE_LIBRARIES),$(vndkcore_libraries_file)))
-$(eval $(call write-libs-to-file,$(VNDK_PRIVATE_LIBRARIES),$(vndkprivate_libraries_file)))
+
+# $(1): list of libraries
+# $(2): suffix to add to each library
+# $(3): output file to write the list of libraries to
+define write-libs-to-file
+$(3): PRIVATE_LIBRARIES := $(1)
+$(3): PRIVATE_SUFFIX := $(2)
+$(3):
+	echo -n > $$@ && $$(foreach so,$$(call module-installed-files-or-guess,$$(PRIVATE_LIBRARIES),$$(PRIVATE_SUFFIX)),echo $$(so) >> $$@;)
+endef
+$(eval $(call write-libs-to-file,$(llndk_libraries_list),,$(llndk_libraries_file)))
+$(eval $(call write-libs-to-file,$(vndksp_libraries_list),.vendor,$(vndksp_libraries_file)))
+$(eval $(call write-libs-to-file,$(VNDK_CORE_LIBRARIES),.vendor,$(vndkcore_libraries_file)))
+$(eval $(call write-libs-to-file,$(VNDK_PRIVATE_LIBRARIES),.vendor,$(vndkprivate_libraries_file)))
 ifeq ($(my_vndk_use_core_variant),true)
-$(eval $(call write-libs-to-file,$(VNDK_USING_CORE_VARIANT_LIBRARIES),$(vndk_using_core_variant_libraries_file)))
+$(eval $(call write-libs-to-file,$(VNDK_USING_CORE_VARIANT_LIBRARIES),,$(vndk_using_core_variant_libraries_file)))
 endif
 endif # ifneq ($(lib_list_from_prebuilts),true)
 
