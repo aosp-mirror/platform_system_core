@@ -42,7 +42,6 @@ cc_binary {
         "android.hardware.gatekeeper@1.0",
         "libbase",
         "libhidlbase",
-        "libhidltransport",
         "libgatekeeper",
         "libutils",
         "liblog",

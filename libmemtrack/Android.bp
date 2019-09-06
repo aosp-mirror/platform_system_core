@@ -15,8 +15,6 @@ cc_library_shared {
         "liblog",
         "libbase",
         "libhidlbase",
-        "libhidltransport",
-        "libhwbinder",
         "libutils",
         "android.hardware.memtrack@1.0",
     ],
