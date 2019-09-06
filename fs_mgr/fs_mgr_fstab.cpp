@@ -706,10 +706,12 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
 
 // For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
 // between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
-// /product and /system_ext. When they're skipped here, /system/product and /system/system_ext in
-// GSI will be used.
+// device-specific /product and /system_ext. skip_mount.cfg belongs to system_ext partition because
+// only common files for all targets can be put into system partition. It is under
+// /system/system_ext because GSI is a single system.img that includes the contents of system_ext
+// partition and product partition under /system/system_ext and /system/product, respectively.
 bool SkipMountingPartitions(Fstab* fstab) {
-    constexpr const char kSkipMountConfig[] = "/system/etc/init/config/skip_mount.cfg";
+    constexpr const char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
 
     std::string skip_config;
     auto save_errno = errno;
