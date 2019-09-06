@@ -21,11 +21,12 @@
 
 #include <string>
 
-#include "android-base/file.h"
-#include "android-base/logging.h"
-#include "android-base/strings.h"
-#include "backtrace/Backtrace.h"
-#include "cutils/android_reboot.h"
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/properties.h>
+#include <android-base/strings.h>
+#include <backtrace/Backtrace.h>
+#include <cutils/android_reboot.h>
 
 #include "capabilities.h"
 
@@ -93,7 +94,14 @@ void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string&
             break;
 
         case ANDROID_RB_THERMOFF:
-            reboot(RB_POWER_OFF);
+            if (android::base::GetBoolProperty("ro.thermal_warmreset", false)) {
+                LOG(INFO) << "Try to trigger a warm reset for thermal shutdown";
+                static constexpr const char kThermalShutdownTarget[] = "shutdown,thermal";
+                syscall(__NR_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
+                        LINUX_REBOOT_CMD_RESTART2, kThermalShutdownTarget);
+            } else {
+                reboot(RB_POWER_OFF);
+            }
             break;
     }
     // In normal case, reboot should not return.
