@@ -49,6 +49,7 @@ filegroup {
     name: "libsnapshot_sources",
     srcs: [
         "snapshot.cpp",
+        "utility.cpp",
     ],
 }
 
