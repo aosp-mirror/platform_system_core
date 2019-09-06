@@ -88,18 +88,17 @@ Result<void> ParseFirmwareDirectoriesLine(std::vector<std::string>&& args,
     return {};
 }
 
-Result<void> ParseModaliasHandlingLine(std::vector<std::string>&& args,
-                                       bool* enable_modalias_handling) {
+Result<void> ParseEnabledDisabledLine(std::vector<std::string>&& args, bool* feature) {
     if (args.size() != 2) {
-        return Error() << "modalias_handling lines take exactly one parameter";
+        return Error() << args[0] << " lines take exactly one parameter";
     }
 
     if (args[1] == "enabled") {
-        *enable_modalias_handling = true;
+        *feature = true;
     } else if (args[1] == "disabled") {
-        *enable_modalias_handling = false;
+        *feature = false;
     } else {
-        return Error() << "modalias_handling takes either 'enabled' or 'disabled' as a parameter";
+        return Error() << args[0] << " takes either 'enabled' or 'disabled' as a parameter";
     }
 
     return {};
@@ -213,11 +212,14 @@ UeventdConfiguration ParseConfig(const std::vector<std::string>& configs) {
                                std::bind(ParseFirmwareDirectoriesLine, _1,
                                          &ueventd_configuration.firmware_directories));
     parser.AddSingleLineParser("modalias_handling",
-                               std::bind(ParseModaliasHandlingLine, _1,
+                               std::bind(ParseEnabledDisabledLine, _1,
                                          &ueventd_configuration.enable_modalias_handling));
     parser.AddSingleLineParser("uevent_socket_rcvbuf_size",
                                std::bind(ParseUeventSocketRcvbufSizeLine, _1,
                                          &ueventd_configuration.uevent_socket_rcvbuf_size));
+    parser.AddSingleLineParser("parallel_restorecon",
+                               std::bind(ParseEnabledDisabledLine, _1,
+                                         &ueventd_configuration.enable_parallel_restorecon));
 
     for (const auto& config : configs) {
         parser.ParseConfig(config);
