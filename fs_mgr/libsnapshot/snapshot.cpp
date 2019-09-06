@@ -136,11 +136,27 @@ bool SnapshotManager::CancelUpdate() {
 
     UpdateState state = ReadUpdateState(file.get());
     if (state == UpdateState::None) return true;
-    if (state != UpdateState::Initiated) {
-        LOG(ERROR) << "Cannot cancel update after it has completed or started merging";
-        return false;
+
+    if (state == UpdateState::Initiated) {
+        LOG(INFO) << "Update has been initiated, now canceling";
+        return RemoveAllUpdateState(file.get());
     }
-    return RemoveAllUpdateState(file.get());
+
+    if (state == UpdateState::Unverified) {
+        // We completed an update, but it can still be canceled if we haven't booted into it.
+        auto boot_file = GetSnapshotBootIndicatorPath();
+        std::string contents;
+        if (!android::base::ReadFileToString(boot_file, &contents)) {
+            PLOG(WARNING) << "Cannot read " << boot_file << ", proceed to canceling the update:";
+            return RemoveAllUpdateState(file.get());
+        }
+        if (device_->GetSlotSuffix() == contents) {
+            LOG(INFO) << "Canceling a previously completed update";
+            return RemoveAllUpdateState(file.get());
+        }
+    }
+    LOG(ERROR) << "Cannot cancel update after it has completed or started merging";
+    return false;
 }
 
 bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock) {
