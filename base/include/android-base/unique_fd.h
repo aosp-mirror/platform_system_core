@@ -120,7 +120,7 @@ class unique_fd_impl final {
   // Catch bogus error checks (i.e.: "!fd" instead of "fd != -1").
   bool operator!() const = delete;
 
-  bool ok() const { return get() != -1; }
+  bool ok() const { return get() >= 0; }
 
   int release() __attribute__((warn_unused_result)) {
     tag(fd_, this, nullptr);

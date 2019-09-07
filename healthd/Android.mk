@@ -21,7 +21,6 @@ CHARGER_STATIC_LIBRARIES := \
     android.hardware.health@1.0-convert \
     libbinderthreadstate \
     libcharger_sysprop \
-    libhidltransport \
     libhidlbase \
     libhealthstoragedefault \
     libminui \
@@ -74,7 +73,6 @@ LOCAL_STATIC_LIBRARIES := \
     android.hardware.health@1.0-convert \
     libbinderthreadstate \
     libcharger_sysprop \
-    libhidltransport \
     libhidlbase \
     libhealthstoragedefault \
     libvndksupport \

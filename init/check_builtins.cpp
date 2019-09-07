@@ -81,6 +81,15 @@ Result<void> check_exec_background(const BuiltinArguments& args) {
     return check_exec(std::move(args));
 }
 
+Result<void> check_exec_reboot_on_failure(const BuiltinArguments& args) {
+    BuiltinArguments remaining_args(args.context);
+
+    remaining_args.args = std::vector<std::string>(args.begin() + 1, args.end());
+    remaining_args.args[0] = args[0];
+
+    return check_exec(remaining_args);
+}
+
 Result<void> check_interface_restart(const BuiltinArguments& args) {
     if (auto result = IsKnownInterface(args[1]); !result) {
         return result.error();
