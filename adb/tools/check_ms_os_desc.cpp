@@ -158,6 +158,49 @@ static void check_ms_os_desc_v1(libusb_device_handle* device_handle, const std::
     errx(1, "failed to find v1 MS OS descriptor specifying WinUSB for device %s", serial.c_str());
 }
 
+static void check_ms_os_desc_v2(libusb_device_handle* device_handle, const std::string& serial) {
+    libusb_bos_descriptor* bos;
+    int rc = libusb_get_bos_descriptor(device_handle, &bos);
+
+    if (rc != 0) {
+        fprintf(stderr, "failed to get bos descriptor for device %s\n", serial.c_str());
+        return;
+    }
+
+    for (size_t i = 0; i < bos->bNumDeviceCaps; ++i) {
+        libusb_bos_dev_capability_descriptor* desc = bos->dev_capability[i];
+        if (desc->bDescriptorType != LIBUSB_DT_DEVICE_CAPABILITY) {
+            errx(1, "invalid BOS descriptor type: %d", desc->bDescriptorType);
+        }
+
+        if (desc->bDevCapabilityType != 0x05 /* PLATFORM */) {
+            fprintf(stderr, "skipping non-platform dev capability: %#02x\n",
+                    desc->bDevCapabilityType);
+            continue;
+        }
+
+        if (desc->bLength < sizeof(*desc) + 16) {
+            errx(1, "received device capability descriptor not long enough to contain a UUID?");
+        }
+
+        char uuid[16];
+        memcpy(uuid, desc->dev_capability_data, 16);
+
+        constexpr uint8_t ms_os_uuid[16] = {0xD8, 0xDD, 0x60, 0xDF, 0x45, 0x89, 0x4C, 0xC7,
+                                            0x9C, 0xD2, 0x65, 0x9D, 0x9E, 0x64, 0x8A, 0x9F};
+        if (memcmp(uuid, ms_os_uuid, 16) != 0) {
+            fprintf(stderr, "skipping unknown UUID\n");
+            continue;
+        }
+
+        size_t data_length = desc->bLength - sizeof(*desc) - 16;
+        fprintf(stderr, "found MS OS 2.0 descriptor, length = %zu\n", data_length);
+
+        // Linux does not appear to support MS OS 2.0 Descriptors.
+        // TODO: If and when it does, verify that we're emitting them properly.
+    }
+}
+
 int main(int argc, char** argv) {
     libusb_context* ctx;
     if (libusb_init(&ctx) != 0) {
@@ -208,8 +251,10 @@ int main(int argc, char** argv) {
         check_ms_os_desc_v1(device_handle, *serial);
         fprintf(stderr, "found v1 OS descriptor for device %s\n", serial->c_str());
 
-        // TODO: Read BOS for MS OS Descriptor 2.0 descriptors:
+        // Read BOS for MS OS Descriptor 2.0 descriptors:
         // http://download.microsoft.com/download/3/5/6/3563ED4A-F318-4B66-A181-AB1D8F6FD42D/MS_OS_2_0_desc.docx
+        fprintf(stderr, "fetching v2 OS descriptor from device %s\n", serial->c_str());
+        check_ms_os_desc_v2(device_handle, *serial);
 
         found = true;
     }
