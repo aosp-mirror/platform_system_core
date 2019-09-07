@@ -109,7 +109,6 @@ cc_library_static {
         "action.cpp",
         "action_manager.cpp",
         "action_parser.cpp",
-        "boringssl_self_test.cpp",
         "bootchart.cpp",
         "builtins.cpp",
         "capabilities.cpp",
