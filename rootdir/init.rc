@@ -127,7 +127,7 @@ on init
     mkdir /mnt/expand 0771 system system
     mkdir /mnt/appfuse 0711 root root
 
-    # tmpfs place for BORINGSSL_self_test() to remember whether it has run
+    # These must already exist by the time boringssl_self_test32 / boringssl_self_test64 run.
     mkdir /dev/boringssl 0755 root root
     mkdir /dev/boringssl/selftest 0755 root root
 
@@ -314,6 +314,16 @@ on init
     start servicemanager
     start hwservicemanager
     start vndservicemanager
+
+# Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
+on init && property:ro.product.cpu.abilist32=*:
+    exec_reboot_on_failure boringssl-self-check-failed /system/bin/boringssl_self_test32
+on init && property:ro.product.cpu.abilist64=*
+    exec_reboot_on_failure boringssl-self-check-failed /system/bin/boringssl_self_test64
+on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
+    exec_reboot_on_failure boringssl-self-check-failed /apex/com.android.conscrypt/bin/boringssl_self_test64
+on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
+    exec_reboot_on_failure boringssl-self-check-failed /apex/com.android.conscrypt/bin/boringssl_self_test32
 
 # Healthd can trigger a full boot from charger mode by signaling this
 # property when the power button is held.
