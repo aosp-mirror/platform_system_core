@@ -445,7 +445,6 @@ on post-fs-data
     mark_post_data
 
     # Start checkpoint before we touch data
-    start vold
     exec - system system -- /system/bin/vdc checkpoint prepareCheckpoint
 
     # We chown/chmod /data again so because mount is run as root + defaults
