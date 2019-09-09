@@ -100,6 +100,7 @@ class SnapshotManager final {
         virtual std::string GetSlotSuffix() const = 0;
         virtual std::string GetSuperDevice(uint32_t slot) const = 0;
         virtual const IPartitionOpener& GetPartitionOpener() const = 0;
+        virtual bool IsOverlayfsSetup() const = 0;
     };
 
     ~SnapshotManager();

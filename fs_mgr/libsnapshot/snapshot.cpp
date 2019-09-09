@@ -32,6 +32,7 @@
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
+#include <fs_mgr_overlayfs.h>
 #include <fstab/fstab.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
@@ -77,6 +78,7 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
     std::string GetSuperDevice(uint32_t slot) const override {
         return fs_mgr_get_super_partition_name(slot);
     }
+    bool IsOverlayfsSetup() const override { return fs_mgr_overlayfs_is_setup(); }
 
   private:
     android::fs_mgr::PartitionOpener opener_;
@@ -1728,6 +1730,15 @@ bool SnapshotManager::CreateUpdateSnapshots(MetadataBuilder* target_metadata,
     target_metadata->RemoveGroupAndPartitions(kCowGroupName);
     if (!target_metadata->AddGroup(kCowGroupName, 0)) {
         LOG(ERROR) << "Cannot add group " << kCowGroupName;
+        return false;
+    }
+
+    // TODO(b/134949511): remove this check. Right now, with overlayfs mounted, the scratch
+    // partition takes up a big chunk of space in super, causing COW images to be created on
+    // retrofit Virtual A/B devices.
+    if (device_->IsOverlayfsSetup()) {
+        LOG(ERROR) << "Cannot create update snapshots with overlayfs setup. Run `adb enable-verity`"
+                   << ", reboot, then try again.";
         return false;
     }
 

@@ -51,6 +51,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const override {
         return *opener_.get();
     }
+    bool IsOverlayfsSetup() const override { return false; }
 
     void set_slot_suffix(const std::string& suffix) { slot_suffix_ = suffix; }
     void set_fake_super(const std::string& path) {
