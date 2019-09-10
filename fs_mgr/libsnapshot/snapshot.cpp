@@ -949,8 +949,8 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         return false;
     }
 
-    uint64_t num_sectors = status.snapshot_size / kSectorSize;
-    if (num_sectors * kSectorSize != status.snapshot_size) {
+    uint64_t snapshot_sectors = status.snapshot_size / kSectorSize;
+    if (snapshot_sectors * kSectorSize != status.snapshot_size) {
         LOG(ERROR) << "Snapshot " << name
                    << " size is not sector aligned: " << status.snapshot_size;
         return false;
@@ -978,10 +978,16 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
                 return false;
             }
         }
-        uint64_t sectors = outer_table[0].spec.length + outer_table[1].spec.length;
-        if (sectors != num_sectors) {
-            LOG(ERROR) << "Outer snapshot " << name << " should have " << num_sectors
-                       << ", got: " << sectors;
+        if (outer_table[0].spec.length != snapshot_sectors) {
+            LOG(ERROR) << "dm-snapshot " << name << " should have " << snapshot_sectors
+                       << " sectors, got: " << outer_table[0].spec.length;
+            return false;
+        }
+        uint64_t expected_device_sectors = status.device_size / kSectorSize;
+        uint64_t actual_device_sectors = outer_table[0].spec.length + outer_table[1].spec.length;
+        if (expected_device_sectors != actual_device_sectors) {
+            LOG(ERROR) << "Outer device " << name << " should have " << expected_device_sectors
+                       << " sectors, got: " << actual_device_sectors;
             return false;
         }
     }
