@@ -77,6 +77,12 @@ Result<void> CheckInterfaceInheritanceHierarchy(const std::set<std::string>& ins
                                                 const InterfaceInheritanceHierarchyMap& hierarchy) {
     std::set<FQName> interface_fqnames;
     for (const std::string& instance : instances) {
+        // There is insufficient build-time information on AIDL interfaces to check them here
+        // TODO(b/139307527): Rework how services store interfaces to avoid excess string parsing
+        if (base::Split(instance, "/")[0] == "aidl") {
+            continue;
+        }
+
         FqInstance fqinstance;
         if (!fqinstance.setTo(instance)) {
             return Error() << "Unable to parse interface instance '" << instance << "'";
