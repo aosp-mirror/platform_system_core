@@ -70,8 +70,15 @@ bool UpdatePartitionTable(const std::string& super_partition, const LpMetadata& 
                           uint32_t slot_number);
 std::unique_ptr<LpMetadata> ReadMetadata(const std::string& super_partition, uint32_t slot_number);
 
+// Returns whether an image is an "empty" image or not. An empty image contains
+// only metadata. Unlike a flashed block device, there are no reserved bytes or
+// backup sections, and only one slot is stored (even if multiple slots are
+// supported). It is a format specifically for storing only metadata.
+bool IsEmptySuperImage(const std::string& file);
+
 // Read/Write logical partition metadata to an image file, for diagnostics or
-// flashing.
+// flashing. If no partition images are specified, the file will be in the
+// empty format.
 bool WriteToImageFile(const std::string& file, const LpMetadata& metadata, uint32_t block_size,
                       const std::map<std::string, std::string>& images, bool sparsify);
 bool WriteToImageFile(const std::string& file, const LpMetadata& metadata);
