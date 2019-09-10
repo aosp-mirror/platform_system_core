@@ -362,12 +362,18 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     }
 
     if (linear_sectors) {
+        std::string snap_dev;
+        if (!dm.GetDeviceString(snap_name, &snap_dev)) {
+            LOG(ERROR) << "Cannot determine major/minor for: " << snap_name;
+            return false;
+        }
+
         // Our stacking will looks like this:
         //     [linear, linear] ; to snapshot, and non-snapshot region of base device
         //     [snapshot-inner]
         //     [base device]   [cow]
         DmTable table;
-        table.Emplace<DmTargetLinear>(0, snapshot_sectors, *dev_path, 0);
+        table.Emplace<DmTargetLinear>(0, snapshot_sectors, snap_dev, 0);
         table.Emplace<DmTargetLinear>(snapshot_sectors, linear_sectors, base_device,
                                       snapshot_sectors);
         if (!dm.CreateDevice(name, table, dev_path, timeout_ms)) {
