@@ -80,6 +80,7 @@
 using namespace std::literals::string_literals;
 
 using android::base::Basename;
+using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 using android::fs_mgr::Fstab;
@@ -701,6 +702,15 @@ static Result<void> do_swapon_all(const BuiltinArguments& args) {
 }
 
 static Result<void> do_setprop(const BuiltinArguments& args) {
+    if (StartsWith(args[1], "ctl.")) {
+        return Error()
+               << "Cannot set ctl. properties from init; call the Service functions directly";
+    }
+    if (args[1] == kRestoreconProperty) {
+        return Error() << "Cannot set '" << kRestoreconProperty
+                       << "' from init; use the restorecon builtin directly";
+    }
+
     property_set(args[1], args[2]);
     return {};
 }
@@ -1016,7 +1026,20 @@ static Result<void> do_loglevel(const BuiltinArguments& args) {
 }
 
 static Result<void> do_load_persist_props(const BuiltinArguments& args) {
-    load_persist_props();
+    // Devices with FDE have load_persist_props called twice; the first time when the temporary
+    // /data partition is mounted and then again once /data is truly mounted.  We do not want to
+    // read persistent properties from the temporary /data partition or mark persistent properties
+    // as having been loaded during the first call, so we return in that case.
+    std::string crypto_state = android::base::GetProperty("ro.crypto.state", "");
+    std::string crypto_type = android::base::GetProperty("ro.crypto.type", "");
+    if (crypto_state == "encrypted" && crypto_type == "block") {
+        static size_t num_calls = 0;
+        if (++num_calls == 1) return {};
+    }
+
+    SendLoadPersistentPropertiesMessage();
+
+    start_waiting_for_property("ro.persistent_properties.ready", "true");
     return {};
 }
 
