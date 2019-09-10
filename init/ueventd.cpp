@@ -113,10 +113,12 @@ namespace init {
 class ColdBoot {
   public:
     ColdBoot(UeventListener& uevent_listener,
-             std::vector<std::unique_ptr<UeventHandler>>& uevent_handlers)
+             std::vector<std::unique_ptr<UeventHandler>>& uevent_handlers,
+             bool enable_parallel_restorecon)
         : uevent_listener_(uevent_listener),
           uevent_handlers_(uevent_handlers),
-          num_handler_subprocesses_(std::thread::hardware_concurrency() ?: 4) {}
+          num_handler_subprocesses_(std::thread::hardware_concurrency() ?: 4),
+          enable_parallel_restorecon_(enable_parallel_restorecon) {}
 
     void Run();
 
@@ -132,6 +134,8 @@ class ColdBoot {
     std::vector<std::unique_ptr<UeventHandler>>& uevent_handlers_;
 
     unsigned int num_handler_subprocesses_;
+    bool enable_parallel_restorecon_;
+
     std::vector<Uevent> uevent_queue_;
 
     std::set<pid_t> subprocess_pids_;
@@ -155,7 +159,6 @@ void ColdBoot::RestoreConHandler(unsigned int process_num, unsigned int total_pr
 
         selinux_android_restorecon(dir.c_str(), SELINUX_ANDROID_RESTORECON_RECURSE);
     }
-    _exit(EXIT_SUCCESS);
 }
 
 void ColdBoot::GenerateRestoreCon(const std::string& directory) {
@@ -195,7 +198,10 @@ void ColdBoot::ForkSubProcesses() {
 
         if (pid == 0) {
             UeventHandlerMain(i, num_handler_subprocesses_);
-            RestoreConHandler(i, num_handler_subprocesses_);
+            if (enable_parallel_restorecon_) {
+                RestoreConHandler(i, num_handler_subprocesses_);
+            }
+            _exit(EXIT_SUCCESS);
         }
 
         subprocess_pids_.emplace(pid);
@@ -240,13 +246,19 @@ void ColdBoot::Run() {
 
     RegenerateUevents();
 
-    selinux_android_restorecon("/sys", 0);
-    selinux_android_restorecon("/sys/devices", 0);
-    GenerateRestoreCon("/sys");
-    // takes long time for /sys/devices, parallelize it
-    GenerateRestoreCon("/sys/devices");
+    if (enable_parallel_restorecon_) {
+        selinux_android_restorecon("/sys", 0);
+        selinux_android_restorecon("/sys/devices", 0);
+        GenerateRestoreCon("/sys");
+        // takes long time for /sys/devices, parallelize it
+        GenerateRestoreCon("/sys/devices");
+    }
 
     ForkSubProcesses();
+
+    if (!enable_parallel_restorecon_) {
+        selinux_android_restorecon("/sys", SELINUX_ANDROID_RESTORECON_RECURSE);
+    }
 
     WaitForSubProcesses();
 
@@ -293,7 +305,8 @@ int ueventd_main(int argc, char** argv) {
     UeventListener uevent_listener(ueventd_configuration.uevent_socket_rcvbuf_size);
 
     if (!android::base::GetBoolProperty(kColdBootDoneProp, false)) {
-        ColdBoot cold_boot(uevent_listener, uevent_handlers);
+        ColdBoot cold_boot(uevent_listener, uevent_handlers,
+                           ueventd_configuration.enable_parallel_restorecon);
         cold_boot.Run();
     }
 
