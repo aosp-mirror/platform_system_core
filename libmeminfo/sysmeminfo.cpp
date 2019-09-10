@@ -45,37 +45,36 @@
 namespace android {
 namespace meminfo {
 
-const std::vector<std::string> SysMemInfo::kDefaultSysMemInfoTags = {
-        SysMemInfo::kMemTotal,      SysMemInfo::kMemFree,        SysMemInfo::kMemBuffers,
-        SysMemInfo::kMemCached,     SysMemInfo::kMemShmem,       SysMemInfo::kMemSlab,
-        SysMemInfo::kMemSReclaim,   SysMemInfo::kMemSUnreclaim,  SysMemInfo::kMemSwapTotal,
-        SysMemInfo::kMemSwapFree,   SysMemInfo::kMemMapped,      SysMemInfo::kMemVmallocUsed,
-        SysMemInfo::kMemPageTables, SysMemInfo::kMemKernelStack,
-};
-
-bool SysMemInfo::ReadMemInfo(const std::string& path) {
-    return ReadMemInfo(SysMemInfo::kDefaultSysMemInfoTags, path,
-                       [&](const std::string& tag, uint64_t val) { mem_in_kb_[tag] = val; });
+bool SysMemInfo::ReadMemInfo(const char* path) {
+    return ReadMemInfo(path, SysMemInfo::kDefaultSysMemInfoTags.size(),
+                       &*SysMemInfo::kDefaultSysMemInfoTags.begin(),
+                       [&](std::string_view tag, uint64_t val) {
+                           // Safe to store the string_view in the map
+                           // because the tags from
+                           // kDefaultSysMemInfoTags are all
+                           // statically-allocated.
+                           mem_in_kb_[tag] = val;
+                       });
 }
 
-bool SysMemInfo::ReadMemInfo(std::vector<uint64_t>* out, const std::string& path) {
-    return ReadMemInfo(SysMemInfo::kDefaultSysMemInfoTags, out, path);
-}
-
-bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, std::vector<uint64_t>* out,
-                             const std::string& path) {
+bool SysMemInfo::ReadMemInfo(std::vector<uint64_t>* out, const char* path) {
     out->clear();
-    out->resize(tags.size());
+    out->resize(SysMemInfo::kDefaultSysMemInfoTags.size());
+    return ReadMemInfo(SysMemInfo::kDefaultSysMemInfoTags.size(),
+                       &*SysMemInfo::kDefaultSysMemInfoTags.begin(), out->data(), path);
+}
 
-    return ReadMemInfo(tags, path, [&]([[maybe_unused]] const std::string& tag, uint64_t val) {
-        auto it = std::find(tags.begin(), tags.end(), tag);
-        if (it == tags.end()) {
+bool SysMemInfo::ReadMemInfo(size_t ntags, const std::string_view* tags, uint64_t* out,
+                             const char* path) {
+    return ReadMemInfo(path, ntags, tags, [&]([[maybe_unused]] std::string_view tag, uint64_t val) {
+        auto it = std::find(tags, tags + ntags, tag);
+        if (it == tags + ntags) {
             LOG(ERROR) << "Tried to store invalid tag: " << tag;
             return;
         }
-        auto index = std::distance(tags.begin(), it);
+        auto index = std::distance(tags, it);
         // store the values in the same order as the tags
-        out->at(index) = val;
+        out[index] = val;
     });
 }
 
@@ -83,46 +82,10 @@ uint64_t SysMemInfo::ReadVmallocInfo() {
     return ::android::meminfo::ReadVmallocInfo();
 }
 
-// TODO: Delete this function if it can't match up with the c-like implementation below.
-// Currently, this added about 50 % extra overhead on hikey.
-#if 0
-bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::string& path) {
-    std::string buffer;
-    if (!::android::base::ReadFileToString(path, &buffer)) {
-        PLOG(ERROR) << "Failed to read : " << path;
-        return false;
-    }
-
-    uint32_t total_found = 0;
-    for (auto s = buffer.begin(); s < buffer.end() && total_found < tags.size();) {
-        for (auto& tag : tags) {
-            if (tag == std::string(s, s + tag.size())) {
-                s += tag.size();
-                while (isspace(*s)) s++;
-                auto num_start = s;
-                while (std::isdigit(*s)) s++;
-
-                std::string number(num_start, num_start + (s - num_start));
-                if (!::android::base::ParseUint(number, &mem_in_kb_[tag])) {
-                    LOG(ERROR) << "Failed to parse uint";
-                    return false;
-                }
-                total_found++;
-                break;
-            }
-        }
-        while (s < buffer.end() && *s != '\n') s++;
-        if (s < buffer.end()) s++;
-    }
-
-    return true;
-}
-
-#else
-bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::string& path,
-                             std::function<void(const std::string&, uint64_t)> store_val) {
+bool SysMemInfo::ReadMemInfo(const char* path, size_t ntags, const std::string_view* tags,
+                             std::function<void(std::string_view, uint64_t)> store_val) {
     char buffer[4096];
-    int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
         PLOG(ERROR) << "Failed to open file :" << path;
         return false;
@@ -139,8 +102,9 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
     uint32_t found = 0;
     uint32_t lineno = 0;
     bool zram_tag_found = false;
-    while (*p && found < tags.size()) {
-        for (auto& tag : tags) {
+    while (*p && found < ntags) {
+        for (size_t tagno = 0; tagno < ntags; ++tagno) {
+            const std::string_view& tag = tags[tagno];
             // Special case for "Zram:" tag that android_os_Debug and friends look
             // up along with the rest of the numbers from /proc/meminfo
             if (!zram_tag_found && tag == "Zram:") {
@@ -150,7 +114,7 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
                 continue;
             }
 
-            if (strncmp(p, tag.c_str(), tag.size()) == 0) {
+            if (strncmp(p, tag.data(), tag.size()) == 0) {
                 p += tag.size();
                 while (*p == ' ') p++;
                 char* endptr = nullptr;
@@ -175,12 +139,11 @@ bool SysMemInfo::ReadMemInfo(const std::vector<std::string>& tags, const std::st
 
     return true;
 }
-#endif
 
-uint64_t SysMemInfo::mem_zram_kb(const std::string& zram_dev) {
+uint64_t SysMemInfo::mem_zram_kb(const char* zram_dev_cstr) {
     uint64_t mem_zram_total = 0;
-    if (!zram_dev.empty()) {
-        if (!MemZramDevice(zram_dev, &mem_zram_total)) {
+    if (zram_dev_cstr) {
+        if (!MemZramDevice(zram_dev_cstr, &mem_zram_total)) {
             return 0;
         }
         return mem_zram_total / 1024;
@@ -188,15 +151,15 @@ uint64_t SysMemInfo::mem_zram_kb(const std::string& zram_dev) {
 
     constexpr uint32_t kMaxZramDevices = 256;
     for (uint32_t i = 0; i < kMaxZramDevices; i++) {
-        std::string zram_dev = ::android::base::StringPrintf("/sys/block/zram%u/", i);
-        if (access(zram_dev.c_str(), F_OK)) {
+        std::string zram_dev_abspath = ::android::base::StringPrintf("/sys/block/zram%u/", i);
+        if (access(zram_dev_abspath.c_str(), F_OK)) {
             // We assume zram devices appear in range 0-255 and appear always in sequence
             // under /sys/block. So, stop looking for them once we find one is missing.
             break;
         }
 
         uint64_t mem_zram_dev;
-        if (!MemZramDevice(zram_dev, &mem_zram_dev)) {
+        if (!MemZramDevice(zram_dev_abspath.c_str(), &mem_zram_dev)) {
             return 0;
         }
 
@@ -206,8 +169,8 @@ uint64_t SysMemInfo::mem_zram_kb(const std::string& zram_dev) {
     return mem_zram_total / 1024;
 }
 
-bool SysMemInfo::MemZramDevice(const std::string& zram_dev, uint64_t* mem_zram_dev) {
-    std::string mmstat = ::android::base::StringPrintf("%s/%s", zram_dev.c_str(), "mm_stat");
+bool SysMemInfo::MemZramDevice(const char* zram_dev, uint64_t* mem_zram_dev) {
+    std::string mmstat = ::android::base::StringPrintf("%s/%s", zram_dev, "mm_stat");
     auto mmstat_fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(mmstat.c_str(), "re"), fclose};
     if (mmstat_fp != nullptr) {
         // only if we do have mmstat, use it. Otherwise, fall through to trying out the old
@@ -220,7 +183,8 @@ bool SysMemInfo::MemZramDevice(const std::string& zram_dev, uint64_t* mem_zram_d
     }
 
     std::string content;
-    if (::android::base::ReadFileToString(zram_dev + "mem_used_total", &content)) {
+    if (::android::base::ReadFileToString(
+                ::android::base::StringPrintf("%s/mem_used_total", zram_dev), &content)) {
         *mem_zram_dev = strtoull(content.c_str(), NULL, 10);
         if (*mem_zram_dev == ULLONG_MAX) {
             PLOG(ERROR) << "Malformed mem_used_total file for zram dev: " << zram_dev
@@ -236,9 +200,9 @@ bool SysMemInfo::MemZramDevice(const std::string& zram_dev, uint64_t* mem_zram_d
 }
 
 // Public methods
-uint64_t ReadVmallocInfo(const std::string& path) {
+uint64_t ReadVmallocInfo(const char* path) {
     uint64_t vmalloc_total = 0;
-    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
+    auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path, "re"), fclose};
     if (fp == nullptr) {
         return vmalloc_total;
     }

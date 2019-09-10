@@ -218,8 +218,8 @@ Hugepagesize:       2048 kB)meminfo";
     android::base::WriteStringToFd(meminfo, tf.fd);
 
     std::string file = std::string(tf.path);
-    std::vector<uint64_t> mem(MEMINFO_COUNT);
-    const std::vector<std::string> tags = {
+    std::vector<uint64_t> mem;
+    const std::vector<std::string_view> tags = {
             SysMemInfo::kMemTotal,      SysMemInfo::kMemFree,        SysMemInfo::kMemBuffers,
             SysMemInfo::kMemCached,     SysMemInfo::kMemShmem,       SysMemInfo::kMemSlab,
             SysMemInfo::kMemSReclaim,   SysMemInfo::kMemSUnreclaim,  SysMemInfo::kMemSwapTotal,
@@ -229,7 +229,8 @@ Hugepagesize:       2048 kB)meminfo";
 
     SysMemInfo smi;
     for (auto _ : state) {
-        smi.ReadMemInfo(tags, &mem, file);
+        mem.resize(tags.size());
+        smi.ReadMemInfo(tags.size(), tags.data(), mem.data(), file.c_str());
     }
 }
 BENCHMARK(BM_ReadMemInfo_new);
@@ -276,7 +277,7 @@ static void BM_ZramTotal_new(benchmark::State& state) {
     std::string zram_mmstat_dir = exec_dir + "/testdata1/";
     SysMemInfo smi;
     for (auto _ : state) {
-        uint64_t zram_total __attribute__((unused)) = smi.mem_zram_kb(zram_mmstat_dir);
+        uint64_t zram_total __attribute__((unused)) = smi.mem_zram_kb(zram_mmstat_dir.c_str());
     }
 }
 BENCHMARK(BM_ZramTotal_new);
@@ -390,14 +391,16 @@ Hugepagesize:       2048 kB)meminfo";
     android::base::WriteStringToFd(meminfo, tf.fd);
 
     std::string file = std::string(tf.path);
-    std::vector<uint64_t> mem(MEMINFO_COUNT);
-    std::vector<std::string> tags(SysMemInfo::kDefaultSysMemInfoTags);
+    std::vector<uint64_t> mem;
+    std::vector<std::string_view> tags(SysMemInfo::kDefaultSysMemInfoTags.begin(),
+                                       SysMemInfo::kDefaultSysMemInfoTags.end());
     auto it = tags.begin();
     tags.insert(it + MEMINFO_ZRAM_TOTAL, "Zram:");
     SysMemInfo smi;
 
     for (auto _ : state) {
-        smi.ReadMemInfo(tags, &mem, file);
+        mem.resize(tags.size());
+        smi.ReadMemInfo(tags.size(), tags.data(), mem.data(), file.c_str());
         CHECK_EQ(mem[MEMINFO_KERNEL_STACK], 4880u);
     }
 }
@@ -455,7 +458,7 @@ static void BM_VmallocInfo_new(benchmark::State& state) {
     std::string vmallocinfo =
             ::android::base::StringPrintf("%s/testdata1/vmallocinfo", exec_dir.c_str());
     for (auto _ : state) {
-        CHECK_EQ(::android::meminfo::ReadVmallocInfo(vmallocinfo), 29884416);
+        CHECK_EQ(::android::meminfo::ReadVmallocInfo(vmallocinfo.c_str()), 29884416);
     }
 }
 BENCHMARK(BM_VmallocInfo_new);
