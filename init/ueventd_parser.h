@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_UEVENTD_PARSER_H
-#define _INIT_UEVENTD_PARSER_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -32,11 +31,10 @@ struct UeventdConfiguration {
     std::vector<std::string> firmware_directories;
     bool enable_modalias_handling = false;
     size_t uevent_socket_rcvbuf_size = 0;
+    bool enable_parallel_restorecon = false;
 };
 
 UeventdConfiguration ParseConfig(const std::vector<std::string>& configs);
 
 }  // namespace init
 }  // namespace android
-
-#endif
