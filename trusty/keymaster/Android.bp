@@ -136,4 +136,6 @@ cc_binary {
         "libkeymaster4",
         "android.hardware.keymaster@4.0"
     ],
+
+    vintf_fragments: ["4.0/android.hardware.keymaster@4.0-service.trusty.xml"],
 }
