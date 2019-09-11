@@ -38,7 +38,7 @@
 
 #define TAG "fscrypt"
 
-static int set_system_de_policy_on(const std::string& dir);
+static int set_policy_on(const std::string& ref_basename, const std::string& dir);
 
 int fscrypt_install_keyring() {
     key_serial_t device_keyring = add_key("keyring", "fscrypt", 0, 0, KEY_SPEC_SESSION_KEYRING);
@@ -104,7 +104,7 @@ int fscrypt_set_directory_policy(const std::string& dir) {
     // Special-case /data/media/obb per b/64566063
     if (dir == "/data/media/obb") {
         // Try to set policy on this directory, but if it is non-empty this may fail.
-        set_system_de_policy_on(dir);
+        set_policy_on(fscrypt_key_ref, dir);
         return 0;
     }
 
@@ -135,7 +135,16 @@ int fscrypt_set_directory_policy(const std::string& dir) {
             return 0;
         }
     }
-    int err = set_system_de_policy_on(dir);
+    std::vector<std::string> per_boot_directories = {
+            "per_boot",
+    };
+    for (const auto& d : per_boot_directories) {
+        if ((prefix + d) == dir) {
+            LOG(INFO) << "Setting per_boot key on " << dir;
+            return set_policy_on(fscrypt_key_per_boot_ref, dir);
+        }
+    }
+    int err = set_policy_on(fscrypt_key_ref, dir);
     if (err == 0) {
         return 0;
     }
@@ -147,15 +156,15 @@ int fscrypt_set_directory_policy(const std::string& dir) {
         if ((prefix + d) == dir) {
             LOG(ERROR) << "Setting policy failed, deleting: " << dir;
             delete_dir_contents(dir);
-            err = set_system_de_policy_on(dir);
+            err = set_policy_on(fscrypt_key_ref, dir);
             break;
         }
     }
     return err;
 }
 
-static int set_system_de_policy_on(const std::string& dir) {
-    std::string ref_filename = std::string("/data") + fscrypt_key_ref;
+static int set_policy_on(const std::string& ref_basename, const std::string& dir) {
+    std::string ref_filename = std::string("/data") + ref_basename;
     std::string policy;
     if (!android::base::ReadFileToString(ref_filename, &policy)) {
         LOG(ERROR) << "Unable to read system policy to set on " << dir;
