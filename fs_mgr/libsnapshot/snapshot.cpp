@@ -136,11 +136,27 @@ bool SnapshotManager::CancelUpdate() {
 
     UpdateState state = ReadUpdateState(file.get());
     if (state == UpdateState::None) return true;
-    if (state != UpdateState::Initiated) {
-        LOG(ERROR) << "Cannot cancel update after it has completed or started merging";
-        return false;
+
+    if (state == UpdateState::Initiated) {
+        LOG(INFO) << "Update has been initiated, now canceling";
+        return RemoveAllUpdateState(file.get());
     }
-    return RemoveAllUpdateState(file.get());
+
+    if (state == UpdateState::Unverified) {
+        // We completed an update, but it can still be canceled if we haven't booted into it.
+        auto boot_file = GetSnapshotBootIndicatorPath();
+        std::string contents;
+        if (!android::base::ReadFileToString(boot_file, &contents)) {
+            PLOG(WARNING) << "Cannot read " << boot_file << ", proceed to canceling the update:";
+            return RemoveAllUpdateState(file.get());
+        }
+        if (device_->GetSlotSuffix() == contents) {
+            LOG(INFO) << "Canceling a previously completed update";
+            return RemoveAllUpdateState(file.get());
+        }
+    }
+    LOG(ERROR) << "Cannot cancel update after it has completed or started merging";
+    return false;
 }
 
 bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock) {
@@ -346,12 +362,18 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     }
 
     if (linear_sectors) {
+        std::string snap_dev;
+        if (!dm.GetDeviceString(snap_name, &snap_dev)) {
+            LOG(ERROR) << "Cannot determine major/minor for: " << snap_name;
+            return false;
+        }
+
         // Our stacking will looks like this:
         //     [linear, linear] ; to snapshot, and non-snapshot region of base device
         //     [snapshot-inner]
         //     [base device]   [cow]
         DmTable table;
-        table.Emplace<DmTargetLinear>(0, snapshot_sectors, *dev_path, 0);
+        table.Emplace<DmTargetLinear>(0, snapshot_sectors, snap_dev, 0);
         table.Emplace<DmTargetLinear>(snapshot_sectors, linear_sectors, base_device,
                                       snapshot_sectors);
         if (!dm.CreateDevice(name, table, dev_path, timeout_ms)) {
@@ -927,8 +949,8 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         return false;
     }
 
-    uint64_t num_sectors = status.snapshot_size / kSectorSize;
-    if (num_sectors * kSectorSize != status.snapshot_size) {
+    uint64_t snapshot_sectors = status.snapshot_size / kSectorSize;
+    if (snapshot_sectors * kSectorSize != status.snapshot_size) {
         LOG(ERROR) << "Snapshot " << name
                    << " size is not sector aligned: " << status.snapshot_size;
         return false;
@@ -956,10 +978,16 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
                 return false;
             }
         }
-        uint64_t sectors = outer_table[0].spec.length + outer_table[1].spec.length;
-        if (sectors != num_sectors) {
-            LOG(ERROR) << "Outer snapshot " << name << " should have " << num_sectors
-                       << ", got: " << sectors;
+        if (outer_table[0].spec.length != snapshot_sectors) {
+            LOG(ERROR) << "dm-snapshot " << name << " should have " << snapshot_sectors
+                       << " sectors, got: " << outer_table[0].spec.length;
+            return false;
+        }
+        uint64_t expected_device_sectors = status.device_size / kSectorSize;
+        uint64_t actual_device_sectors = outer_table[0].spec.length + outer_table[1].spec.length;
+        if (expected_device_sectors != actual_device_sectors) {
+            LOG(ERROR) << "Outer device " << name << " should have " << expected_device_sectors
+                       << " sectors, got: " << actual_device_sectors;
             return false;
         }
     }

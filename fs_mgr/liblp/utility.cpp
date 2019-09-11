@@ -205,9 +205,9 @@ bool SetBlockReadonly(int fd, bool readonly) {
 #endif
 }
 
-base::unique_fd GetControlFileOrOpen(const char* path, int flags) {
+base::unique_fd GetControlFileOrOpen(std::string_view path, int flags) {
 #if defined(__ANDROID__)
-    int fd = android_get_control_file(path);
+    int fd = android_get_control_file(path.data());
     if (fd >= 0) {
         int newfd = TEMP_FAILURE_RETRY(dup(fd));
         if (newfd >= 0) {
@@ -216,7 +216,7 @@ base::unique_fd GetControlFileOrOpen(const char* path, int flags) {
         PERROR << "Cannot dup fd for already controlled file: " << path << ", reopening...";
     }
 #endif
-    return base::unique_fd(open(path, flags));
+    return base::unique_fd(open(path.data(), flags));
 }
 
 bool UpdateMetadataForInPlaceSnapshot(LpMetadata* metadata, uint32_t source_slot_number,
