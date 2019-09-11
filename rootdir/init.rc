@@ -728,6 +728,7 @@ on boot
     # to make it too large, since it may bring userdata loss, if they
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
     write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
+    write /sys/fs/f2fs/${dev.mnt.blk.data}/gc_urgent_sleep_time 50
 
     # Permissions for System Server and daemons.
     chown radio system /sys/android_power/state
