@@ -1,0 +1,20 @@
+filegroup {
+    name: "q-gsi_avbpubkey",
+    srcs: [
+        "q-gsi.avbpubkey",
+    ],
+}
+
+filegroup {
+    name: "r-gsi_avbpubkey",
+    srcs: [
+        "r-gsi.avbpubkey",
+    ],
+}
+
+filegroup {
+    name: "s-gsi_avbpubkey",
+    srcs: [
+        "s-gsi.avbpubkey",
+    ],
+}
