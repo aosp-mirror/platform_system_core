@@ -316,7 +316,7 @@ on init
     start vndservicemanager
 
 # Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
-on init && property:ro.product.cpu.abilist32=*:
+on init && property:ro.product.cpu.abilist32=*
     exec_reboot_on_failure boringssl-self-check-failed /system/bin/boringssl_self_test32
 on init && property:ro.product.cpu.abilist64=*
     exec_reboot_on_failure boringssl-self-check-failed /system/bin/boringssl_self_test64
