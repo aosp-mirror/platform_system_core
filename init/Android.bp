@@ -224,6 +224,7 @@ cc_test {
 
     srcs: [
         "devices_test.cpp",
+        "firmware_handler_test.cpp",
         "init_test.cpp",
         "keychords_test.cpp",
         "persistent_properties_test.cpp",
