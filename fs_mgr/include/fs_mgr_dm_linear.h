@@ -105,9 +105,7 @@ bool CreateLogicalPartition(CreateLogicalPartitionParams params, std::string* pa
 bool DestroyLogicalPartition(const std::string& name);
 
 // Helper for populating a DmTable for a logical partition.
-bool CreateDmTable(const IPartitionOpener& opener, const LpMetadata& metadata,
-                   const LpMetadataPartition& partition, const std::string& super_device,
-                   android::dm::DmTable* table);
+bool CreateDmTable(CreateLogicalPartitionParams params, android::dm::DmTable* table);
 
 }  // namespace fs_mgr
 }  // namespace android
