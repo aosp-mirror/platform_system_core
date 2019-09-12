@@ -14,11 +14,14 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 
 #include <android-base/macros.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
+#include <liblp/builder.h>
+#include <libsnapshot/snapshot.h>
 
 namespace android {
 namespace snapshot {
@@ -80,6 +83,28 @@ struct AutoUnmapImage : AutoDevice {
     DISALLOW_COPY_AND_ASSIGN(AutoUnmapImage);
     android::fiemap::IImageManager* images_ = nullptr;
 };
+
+// Automatically deletes a snapshot. |name| should be the name of the partition, e.g. "system_a".
+// Client is responsible for maintaining the lifetime of |manager| and |lock|.
+struct AutoDeleteSnapshot : AutoDevice {
+    AutoDeleteSnapshot(SnapshotManager* manager, SnapshotManager::LockedFile* lock,
+                       const std::string& name)
+        : AutoDevice(name), manager_(manager), lock_(lock) {}
+    AutoDeleteSnapshot(AutoDeleteSnapshot&& other);
+    ~AutoDeleteSnapshot();
+
+  private:
+    DISALLOW_COPY_AND_ASSIGN(AutoDeleteSnapshot);
+    SnapshotManager* manager_ = nullptr;
+    SnapshotManager::LockedFile* lock_ = nullptr;
+};
+
+// Return a list of partitions in |builder| with the name ending in |suffix|.
+std::vector<android::fs_mgr::Partition*> ListPartitionsWithSuffix(
+        android::fs_mgr::MetadataBuilder* builder, const std::string& suffix);
+
+// Initialize a device before using it as the COW device for a dm-snapshot device.
+bool InitializeCow(const std::string& device);
 
 }  // namespace snapshot
 }  // namespace android

@@ -79,22 +79,22 @@ static bool GetPhysicalPartitionDevicePath(const IPartitionOpener& opener,
     return true;
 }
 
-bool CreateDmTable(const IPartitionOpener& opener, const LpMetadata& metadata,
-                   const LpMetadataPartition& partition, const std::string& super_device,
-                   DmTable* table) {
+bool CreateDmTableInternal(const CreateLogicalPartitionParams& params, DmTable* table) {
+    const auto& super_device = params.block_device;
+
     uint64_t sector = 0;
-    for (size_t i = 0; i < partition.num_extents; i++) {
-        const auto& extent = metadata.extents[partition.first_extent_index + i];
+    for (size_t i = 0; i < params.partition->num_extents; i++) {
+        const auto& extent = params.metadata->extents[params.partition->first_extent_index + i];
         std::unique_ptr<DmTarget> target;
         switch (extent.target_type) {
             case LP_TARGET_TYPE_ZERO:
                 target = std::make_unique<DmTargetZero>(sector, extent.num_sectors);
                 break;
             case LP_TARGET_TYPE_LINEAR: {
-                const auto& block_device = metadata.block_devices[extent.target_source];
+                const auto& block_device = params.metadata->block_devices[extent.target_source];
                 std::string dev_string;
-                if (!GetPhysicalPartitionDevicePath(opener, metadata, block_device, super_device,
-                                                    &dev_string)) {
+                if (!GetPhysicalPartitionDevicePath(*params.partition_opener, *params.metadata,
+                                                    block_device, super_device, &dev_string)) {
                     LOG(ERROR) << "Unable to complete device-mapper table, unknown block device";
                     return false;
                 }
@@ -111,10 +111,19 @@ bool CreateDmTable(const IPartitionOpener& opener, const LpMetadata& metadata,
         }
         sector += extent.num_sectors;
     }
-    if (partition.attributes & LP_PARTITION_ATTR_READONLY) {
+    if (params.partition->attributes & LP_PARTITION_ATTR_READONLY) {
         table->set_readonly(true);
     }
+    if (params.force_writable) {
+        table->set_readonly(false);
+    }
     return true;
+}
+
+bool CreateDmTable(CreateLogicalPartitionParams params, DmTable* table) {
+    CreateLogicalPartitionParams::OwnedData owned_data;
+    if (!params.InitDefaults(&owned_data)) return false;
+    return CreateDmTableInternal(params, table);
 }
 
 bool CreateLogicalPartitions(const std::string& block_device) {
@@ -160,6 +169,11 @@ bool CreateLogicalPartitionParams::InitDefaults(CreateLogicalPartitionParams::Ow
         return false;
     }
 
+    if (!partition_opener) {
+        owned->partition_opener = std::make_unique<PartitionOpener>();
+        partition_opener = owned->partition_opener.get();
+    }
+
     // Read metadata if needed.
     if (!metadata) {
         if (!metadata_slot) {
@@ -167,7 +181,8 @@ bool CreateLogicalPartitionParams::InitDefaults(CreateLogicalPartitionParams::Ow
             return false;
         }
         auto slot = *metadata_slot;
-        if (owned->metadata = ReadMetadata(block_device, slot); !owned->metadata) {
+        if (owned->metadata = ReadMetadata(*partition_opener, block_device, slot);
+            !owned->metadata) {
             LOG(ERROR) << "Could not read partition table for: " << block_device;
             return false;
         }
@@ -195,11 +210,6 @@ bool CreateLogicalPartitionParams::InitDefaults(CreateLogicalPartitionParams::Ow
         return false;
     }
 
-    if (!partition_opener) {
-        owned->partition_opener = std::make_unique<PartitionOpener>();
-        partition_opener = owned->partition_opener.get();
-    }
-
     if (device_name.empty()) {
         device_name = partition_name;
     }
@@ -212,12 +222,8 @@ bool CreateLogicalPartition(CreateLogicalPartitionParams params, std::string* pa
     if (!params.InitDefaults(&owned_data)) return false;
 
     DmTable table;
-    if (!CreateDmTable(*params.partition_opener, *params.metadata, *params.partition,
-                       params.block_device, &table)) {
+    if (!CreateDmTableInternal(params, &table)) {
         return false;
-    }
-    if (params.force_writable) {
-        table.set_readonly(false);
     }
 
     DeviceMapper& dm = DeviceMapper::Instance();
