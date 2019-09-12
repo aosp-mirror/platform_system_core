@@ -20,8 +20,14 @@ cc_defaults {
         "-Wall",
         "-Werror",
         "-Wextra",
-        "-D_FILE_OFFSET_BITS=64",
     ],
+    target: {
+        android: {
+            cflags: [
+                "-D_FILE_OFFSET_BITS=64",
+            ],
+        },
+    },
 }
 
 cc_library_headers {
