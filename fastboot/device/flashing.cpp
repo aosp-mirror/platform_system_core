@@ -32,6 +32,7 @@
 #include <fstab/fstab.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
+#include <libsnapshot/snapshot.h>
 #include <sparse/sparse.h>
 
 #include "fastboot_device.h"
@@ -169,6 +170,11 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
         // Preserve partitions in the other slot, but not the current slot.
         std::string partition_name = GetPartitionName(partition);
         if (!slot_suffix.empty() && GetPartitionSlotSuffix(partition_name) == slot_suffix) {
+            continue;
+        }
+        std::string group_name = GetPartitionGroupName(old_metadata->groups[partition.group_index]);
+        // Skip partitions in the COW group
+        if (group_name == android::snapshot::kCowGroupName) {
             continue;
         }
         partitions_to_keep.emplace(partition_name);

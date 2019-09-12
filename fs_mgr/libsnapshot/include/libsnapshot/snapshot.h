@@ -17,13 +17,17 @@
 #include <stdint.h>
 
 #include <chrono>
+#include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <android-base/unique_fd.h>
+#include <fs_mgr_dm_linear.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
+#include <liblp/builder.h>
 #include <liblp/liblp.h>
 
 #ifndef FRIEND_TEST
@@ -44,6 +48,13 @@ class IPartitionOpener;
 }  // namespace fs_mgr
 
 namespace snapshot {
+
+struct AutoDeleteCowImage;
+struct AutoDeleteSnapshot;
+struct PartitionCowCreator;
+struct AutoDeviceList;
+
+static constexpr const std::string_view kCowGroupName = "cow";
 
 enum class UpdateState : unsigned int {
     // No update or merge is in progress.
@@ -75,8 +86,9 @@ enum class UpdateState : unsigned int {
 
 class SnapshotManager final {
     using CreateLogicalPartitionParams = android::fs_mgr::CreateLogicalPartitionParams;
-    using LpMetadata = android::fs_mgr::LpMetadata;
     using IPartitionOpener = android::fs_mgr::IPartitionOpener;
+    using LpMetadata = android::fs_mgr::LpMetadata;
+    using MetadataBuilder = android::fs_mgr::MetadataBuilder;
 
   public:
     // Dependency injection for testing.
@@ -88,6 +100,7 @@ class SnapshotManager final {
         virtual std::string GetSlotSuffix() const = 0;
         virtual std::string GetSuperDevice(uint32_t slot) const = 0;
         virtual const IPartitionOpener& GetPartitionOpener() const = 0;
+        virtual bool IsOverlayfsSetup() const = 0;
     };
 
     ~SnapshotManager();
@@ -153,6 +166,20 @@ class SnapshotManager final {
     //   Other: 0
     UpdateState GetUpdateState(double* progress = nullptr);
 
+    // Create necessary COW device / files for OTA clients. New logical partitions will be added to
+    // group "cow" in target_metadata. Regions of partitions of current_metadata will be
+    // "write-protected" and snapshotted.
+    bool CreateUpdateSnapshots(MetadataBuilder* target_metadata, const std::string& target_suffix,
+                               MetadataBuilder* current_metadata, const std::string& current_suffix,
+                               const std::map<std::string, uint64_t>& cow_sizes);
+
+    // Map a snapshotted partition for OTA clients to write to. Write-protected regions are
+    // determined previously in CreateSnapshots.
+    bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params, std::string* snapshot_path);
+
+    // Unmap a snapshot device that's previously mapped with MapUpdateSnapshot.
+    bool UnmapUpdateSnapshot(const std::string& target_partition_name);
+
     // If this returns true, first-stage mount must call
     // CreateLogicalAndSnapshotPartitions rather than CreateLogicalPartitions.
     bool NeedSnapshotsInFirstStageMount();
@@ -173,7 +200,12 @@ class SnapshotManager final {
     FRIEND_TEST(SnapshotTest, Merge);
     FRIEND_TEST(SnapshotTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
+    FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
     friend class SnapshotTest;
+    friend class SnapshotUpdateTest;
+    friend struct AutoDeleteCowImage;
+    friend struct AutoDeleteSnapshot;
+    friend struct PartitionCowCreator;
 
     using DmTargetSnapshot = android::dm::DmTargetSnapshot;
     using IImageManager = android::fiemap::IImageManager;
@@ -241,9 +273,8 @@ class SnapshotManager final {
     // be mapped with two table entries: a dm-snapshot range covering
     // snapshot_size, and a dm-linear range covering the remainder.
     //
-    // All sizes are specified in bytes, and the device, snapshot and COW partition sizes
-    // must be a multiple of the sector size (512 bytes). COW file size will be rounded up
-    // to the nearest sector.
+    // All sizes are specified in bytes, and the device, snapshot, COW partition and COW file sizes
+    // must be a multiple of the sector size (512 bytes).
     bool CreateSnapshot(LockedFile* lock, const std::string& name, SnapshotStatus status);
 
     // |name| should be the base partition name (e.g. "system_a"). Create the
@@ -262,8 +293,7 @@ class SnapshotManager final {
                      std::string* dev_path);
 
     // Map a COW image that was previous created with CreateCowImage.
-    bool MapCowImage(const std::string& name, const std::chrono::milliseconds& timeout_ms,
-                     std::string* cow_image_device);
+    bool MapCowImage(const std::string& name, const std::chrono::milliseconds& timeout_ms);
 
     // Remove the backing copy-on-write image and snapshot states for the named snapshot. The
     // caller is responsible for ensuring that the snapshot is unmapped.
@@ -343,6 +373,24 @@ class SnapshotManager final {
     // Map the base device, COW devices, and snapshot device.
     bool MapPartitionWithSnapshot(LockedFile* lock, CreateLogicalPartitionParams params,
                                   std::string* path);
+
+    // Map the COW devices, including the partition in super and the images.
+    // |params|:
+    //    - |partition_name| should be the name of the top-level partition (e.g. system_b),
+    //            not system_b-cow-img
+    //    - |device_name| and |partition| is ignored
+    //    - |timeout_ms| and the rest is respected
+    // Return the path in |cow_device_path| (e.g. /dev/block/dm-1) and major:minor in
+    // |cow_device_string|
+    bool MapCowDevices(LockedFile* lock, const CreateLogicalPartitionParams& params,
+                       const SnapshotStatus& snapshot_status, AutoDeviceList* created_devices,
+                       std::string* cow_name);
+
+    // The reverse of MapCowDevices.
+    bool UnmapCowDevices(LockedFile* lock, const std::string& name);
+
+    // The reverse of MapPartitionWithSnapshot.
+    bool UnmapPartitionWithSnapshot(LockedFile* lock, const std::string& target_partition_name);
 
     std::string gsid_dir_;
     std::string metadata_dir_;
