@@ -67,6 +67,9 @@ cc_defaults {
         "libfs_mgr",
         "liblp",
     ] + liblp_lib_deps,
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
     stl: "libc++_static",
     srcs: [
         "builder_test.cpp",
