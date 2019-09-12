@@ -992,24 +992,16 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         }
     }
 
-    // Grab the partition metadata for the snapshot.
     uint32_t slot = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
-    auto super_device = device_->GetSuperDevice(slot);
-    const auto& opener = device_->GetPartitionOpener();
-    auto metadata = android::fs_mgr::ReadMetadata(opener, super_device, slot);
-    if (!metadata) {
-        LOG(ERROR) << "Could not read super partition metadata.";
-        return false;
-    }
-    auto partition = android::fs_mgr::FindPartition(*metadata.get(), name);
-    if (!partition) {
-        LOG(ERROR) << "Snapshot does not have a partition in super: " << name;
-        return false;
-    }
-
     // Create a DmTable that is identical to the base device.
+    CreateLogicalPartitionParams base_device_params{
+            .block_device = device_->GetSuperDevice(slot),
+            .metadata_slot = slot,
+            .partition_name = name,
+            .partition_opener = &device_->GetPartitionOpener(),
+    };
     DmTable table;
-    if (!CreateDmTable(opener, *metadata.get(), *partition, super_device, &table)) {
+    if (!CreateDmTable(base_device_params, &table)) {
         LOG(ERROR) << "Could not create a DmTable for partition: " << name;
         return false;
     }
