@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "devices.h"
+#include "firmware_handler.h"
 
 namespace android {
 namespace init {
@@ -29,6 +30,7 @@ struct UeventdConfiguration {
     std::vector<SysfsPermissions> sysfs_permissions;
     std::vector<Permissions> dev_permissions;
     std::vector<std::string> firmware_directories;
+    std::vector<ExternalFirmwareHandler> external_firmware_handlers;
     bool enable_modalias_handling = false;
     size_t uevent_socket_rcvbuf_size = 0;
     bool enable_parallel_restorecon = false;
