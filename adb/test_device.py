@@ -139,6 +139,25 @@ class ForwardReverseTest(DeviceTest):
         msg = self.device.forward_list()
         self.assertEqual('', msg.strip())
 
+    def test_forward_old_protocol(self):
+        serialno = subprocess.check_output(self.device.adb_cmd + ['get-serialno']).strip()
+
+        msg = self.device.forward_list()
+        self.assertEqual('', msg.strip(),
+                         'Forwarding list must be empty to run this test.')
+
+        s = socket.create_connection(("localhost", 5037))
+        service = b"host-serial:%s:forward:tcp:5566;tcp:6655" % serialno
+        cmd = b"%04x%s" % (len(service), service)
+        s.sendall(cmd)
+
+        msg = self.device.forward_list()
+        self.assertTrue(re.search(r'tcp:5566.+tcp:6655', msg))
+
+        self.device.forward_remove_all()
+        msg = self.device.forward_list()
+        self.assertEqual('', msg.strip())
+
     def test_forward_tcp_port_0(self):
         self.assertEqual('', self.device.forward_list().strip(),
                          'Forwarding list must be empty to run this test.')
