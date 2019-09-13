@@ -1,0 +1,6 @@
+
+cc_library_headers {
+    name: "libstorage_literals_headers",
+    host_supported: true,
+    export_include_dirs: ["."],
+}

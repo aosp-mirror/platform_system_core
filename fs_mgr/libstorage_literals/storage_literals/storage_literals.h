@@ -18,25 +18,25 @@
 #include <stdlib.h>
 
 namespace android {
-namespace digital_storage {
+namespace storage_literals {
 
 template <size_t Power>
 struct Size {
     static constexpr size_t power = Power;
-    constexpr Size(uint64_t count) : value_(count) {}
+    explicit constexpr Size(uint64_t count) : value_(count) {}
 
-    constexpr uint64_t bytes() const { return value_ << (Power * 10); }
+    constexpr uint64_t bytes() const { return value_ << power; }
     constexpr uint64_t count() const { return value_; }
-    operator uint64_t() const { return bytes(); }
+    constexpr operator uint64_t() const { return bytes(); }
 
   private:
     uint64_t value_;
 };
 
 using B = Size<0>;
-using KiB = Size<1>;
-using MiB = Size<2>;
-using GiB = Size<3>;
+using KiB = Size<10>;
+using MiB = Size<20>;
+using GiB = Size<30>;
 
 constexpr B operator""_B(unsigned long long v) {  // NOLINT
     return B{v};
@@ -57,21 +57,21 @@ constexpr GiB operator""_GiB(unsigned long long v) {  // NOLINT
 template <typename Dest, typename Src>
 constexpr Dest size_cast(Src src) {
     if (Src::power < Dest::power) {
-        return Dest(src.count() >> ((Dest::power - Src::power) * 10));
+        return Dest(src.count() >> (Dest::power - Src::power));
     }
     if (Src::power > Dest::power) {
-        return Dest(src.count() << ((Src::power - Dest::power) * 10));
+        return Dest(src.count() << (Src::power - Dest::power));
     }
     return Dest(src.count());
 }
 
-static_assert((1_B).bytes() == 1);
-static_assert((1_KiB).bytes() == 1 << 10);
-static_assert((1_MiB).bytes() == 1 << 20);
-static_assert((1_GiB).bytes() == 1 << 30);
+static_assert(1_B == 1);
+static_assert(1_KiB == 1 << 10);
+static_assert(1_MiB == 1 << 20);
+static_assert(1_GiB == 1 << 30);
 static_assert(size_cast<KiB>(1_B).count() == 0);
 static_assert(size_cast<KiB>(1024_B).count() == 1);
 static_assert(size_cast<KiB>(1_MiB).count() == 1024);
 
-}  // namespace digital_storage
+}  // namespace storage_literals
 }  // namespace android
