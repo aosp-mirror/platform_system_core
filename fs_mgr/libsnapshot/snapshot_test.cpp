@@ -32,8 +32,8 @@
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
 #include <liblp/mock_property_fetcher.h>
+#include <storage_literals/storage_literals.h>
 
-#include "digital_storage.h"
 #include "test_helpers.h"
 #include "utility.h"
 
@@ -52,7 +52,7 @@ using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::MetadataBuilder;
 using namespace ::testing;
 using namespace android::fs_mgr::testing;
-using namespace android::digital_storage;
+using namespace android::storage_literals;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
@@ -62,7 +62,7 @@ std::unique_ptr<SnapshotManager> sm;
 TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
 
-static constexpr uint64_t kSuperSize = (16_MiB).bytes();
+static constexpr uint64_t kSuperSize = 16_MiB;
 
 class SnapshotTest : public ::testing::Test {
   public:
