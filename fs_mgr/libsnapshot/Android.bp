@@ -103,4 +103,7 @@ cc_test {
         "libsparse",
         "libz",
     ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
 }
