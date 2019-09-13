@@ -180,6 +180,16 @@ void ResetWaitForProp() {
     waiting_for_prop.reset();
 }
 
+void EnterShutdown(const std::string& command) {
+    // We can't call HandlePowerctlMessage() directly in this function,
+    // because it modifies the contents of the action queue, which can cause the action queue
+    // to get into a bad state if this function is called from a command being executed by the
+    // action queue.  Instead we set this flag and ensure that shutdown happens before the next
+    // command is run in the main init loop.
+    shutdown_command = command;
+    do_shutdown = true;
+}
+
 void property_changed(const std::string& name, const std::string& value) {
     // If the property is sys.powerctl, we bypass the event queue and immediately handle it.
     // This is to ensure that init will always and immediately shutdown/reboot, regardless of
@@ -188,16 +198,7 @@ void property_changed(const std::string& name, const std::string& value) {
     // In non-thermal-shutdown case, 'shutdown' trigger will be fired to let device specific
     // commands to be executed.
     if (name == "sys.powerctl") {
-        // Despite the above comment, we can't call HandlePowerctlMessage() in this function,
-        // because it modifies the contents of the action queue, which can cause the action queue
-        // to get into a bad state if this function is called from a command being executed by the
-        // action queue.  Instead we set this flag and ensure that shutdown happens before the next
-        // command is run in the main init loop.
-        // TODO: once property service is removed from init, this will never happen from a builtin,
-        // but rather from a callback from the property service socket, in which case this hack can
-        // go away.
-        shutdown_command = value;
-        do_shutdown = true;
+        EnterShutdown(value);
     }
 
     if (property_triggers_enabled) ActionManager::GetInstance().QueuePropertyChange(name, value);
