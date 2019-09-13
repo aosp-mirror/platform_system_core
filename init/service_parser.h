@@ -68,6 +68,7 @@ class ServiceParser : public SectionParser {
     Result<void> ParseMemcgSwappiness(std::vector<std::string>&& args);
     Result<void> ParseNamespace(std::vector<std::string>&& args);
     Result<void> ParseProcessRlimit(std::vector<std::string>&& args);
+    Result<void> ParseRebootOnFailure(std::vector<std::string>&& args);
     Result<void> ParseRestartPeriod(std::vector<std::string>&& args);
     Result<void> ParseSeclabel(std::vector<std::string>&& args);
     Result<void> ParseSetenv(std::vector<std::string>&& args);

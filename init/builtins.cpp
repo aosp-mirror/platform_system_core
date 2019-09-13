@@ -1104,20 +1104,6 @@ static Result<void> ExecWithFunctionOnFailure(const std::vector<std::string>& ar
     return {};
 }
 
-static Result<void> do_exec_reboot_on_failure(const BuiltinArguments& args) {
-    auto reboot_reason = args[1];
-    auto reboot = [reboot_reason](const std::string& message) {
-        property_set(LAST_REBOOT_REASON_PROPERTY, reboot_reason);
-        sync();
-        LOG(FATAL) << message << ": rebooting into bootloader, reason: " << reboot_reason;
-    };
-
-    std::vector<std::string> remaining_args(args.begin() + 1, args.end());
-    remaining_args[0] = args[0];
-
-    return ExecWithFunctionOnFailure(remaining_args, reboot);
-}
-
 static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
     auto reboot_reason = vdc_arg + "_failed";
 
@@ -1225,7 +1211,6 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"enable",                  {1,     1,    {false,  do_enable}}},
         {"exec",                    {1,     kMax, {false,  do_exec}}},
         {"exec_background",         {1,     kMax, {false,  do_exec_background}}},
-        {"exec_reboot_on_failure",  {2,     kMax, {false,  do_exec_reboot_on_failure}}},
         {"exec_start",              {1,     1,    {false,  do_exec_start}}},
         {"export",                  {2,     2,    {false,  do_export}}},
         {"hostname",                {1,     1,    {true,   do_hostname}}},

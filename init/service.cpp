@@ -29,6 +29,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/sockets.h>
@@ -41,6 +42,7 @@
 #if defined(__ANDROID__)
 #include <ApexProperties.sysprop.h>
 
+#include "init.h"
 #include "mount_namespace.h"
 #include "property_service.h"
 #else
@@ -50,6 +52,7 @@
 using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
+using android::base::make_scope_guard;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
@@ -250,6 +253,11 @@ void Service::Reap(const siginfo_t& siginfo) {
         f(siginfo);
     }
 
+    if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_) {
+        LOG(ERROR) << "Service with 'reboot_on_failure' option failed, shutting down system.";
+        EnterShutdown(*on_failure_reboot_target_);
+    }
+
     if (flags_ & SVC_EXEC) UnSetExec();
 
     if (flags_ & SVC_TEMPORARY) return;
@@ -325,6 +333,12 @@ void Service::DumpState() const {
 
 
 Result<void> Service::ExecStart() {
+    auto reboot_on_failure = make_scope_guard([this] {
+        if (on_failure_reboot_target_) {
+            EnterShutdown(*on_failure_reboot_target_);
+        }
+    });
+
     if (is_updatable() && !ServiceList::GetInstance().IsServicesUpdated()) {
         // Don't delay the service for ExecStart() as the semantic is that
         // the caller might depend on the side effect of the execution.
@@ -345,10 +359,17 @@ Result<void> Service::ExecStart() {
               << " gid " << proc_attr_.gid << "+" << proc_attr_.supp_gids.size() << " context "
               << (!seclabel_.empty() ? seclabel_ : "default") << ") started; waiting...";
 
+    reboot_on_failure.Disable();
     return {};
 }
 
 Result<void> Service::Start() {
+    auto reboot_on_failure = make_scope_guard([this] {
+        if (on_failure_reboot_target_) {
+            EnterShutdown(*on_failure_reboot_target_);
+        }
+    });
+
     if (is_updatable() && !ServiceList::GetInstance().IsServicesUpdated()) {
         ServiceList::GetInstance().DelayService(*this);
         return Error() << "Cannot start an updatable service '" << name_
@@ -371,6 +392,7 @@ Result<void> Service::Start() {
             flags_ |= SVC_RESTART;
         }
         // It is not an error to try to start a service that is already running.
+        reboot_on_failure.Disable();
         return {};
     }
 
@@ -532,6 +554,7 @@ Result<void> Service::Start() {
     }
 
     NotifyStateChange("running");
+    reboot_on_failure.Disable();
     return {};
 }
 
