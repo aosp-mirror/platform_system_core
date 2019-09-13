@@ -263,6 +263,12 @@ runs the service.
 > Scheduling priority of the service process. This value has to be in range
   -20 to 19. Default priority is 0. Priority is set via setpriority().
 
+`reboot_on_failure <target>`
+> If this process cannot be started or if the process terminates with an exit code other than
+  CLD_EXITED or an status other than '0', reboot the system with the target specified in
+  _target_. _target_ takes the same format as the parameter to sys.powerctl. This is particularly
+  intended to be used with the `exec_start` builtin for any must-have checks during boot.
+
 `restart_period <seconds>`
 > If a non-oneshot service exits, it will be restarted at its start time plus
   this period. It defaults to 5s to rate limit crashing services.

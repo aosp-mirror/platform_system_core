@@ -31,6 +31,8 @@ namespace init {
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
 Parser CreateServiceOnlyParser(ServiceList& service_list);
 
+void EnterShutdown(const std::string& command);
+
 bool start_waiting_for_property(const char *name, const char *value);
 
 void DumpState();

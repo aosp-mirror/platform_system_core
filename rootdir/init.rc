@@ -58,13 +58,25 @@ on early-init
 
 # Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
 on early-init && property:ro.product.cpu.abilist32=*
-    exec_reboot_on_failure boringssl-self-check-failed /system/bin/boringssl_self_test32
+    exec_start boringssl_self_test32
 on early-init && property:ro.product.cpu.abilist64=*
-    exec_reboot_on_failure boringssl-self-check-failed /system/bin/boringssl_self_test64
-on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
-    exec_reboot_on_failure boringssl-self-check-failed /apex/com.android.conscrypt/bin/boringssl_self_test64
+    exec_start boringssl_self_test64
 on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
-    exec_reboot_on_failure boringssl-self-check-failed /apex/com.android.conscrypt/bin/boringssl_self_test32
+    exec_start boringssl_self_test_apex32
+on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
+    exec_start boringssl_self_test_apex64
+
+service boringssl_self_test32 /system/bin/boringssl_self_test32
+    reboot_on_failure reboot,bootloader,boringssl-self-check-failed
+
+service boringssl_self_test64 /system/bin/boringssl_self_test64
+    reboot_on_failure reboot,bootloader,boringssl-self-check-failed
+
+service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
+    reboot_on_failure reboot,bootloader,boringssl-self-check-failed
+
+service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
+    reboot_on_failure reboot,bootloader,boringssl-self-check-failed
 
 on init
     sysclktz 0
