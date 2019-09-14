@@ -20,6 +20,8 @@
 #include <gtest/gtest.h>
 #include <private/android_filesystem_config.h>
 
+#include "firmware_handler.h"
+
 namespace android {
 namespace init {
 
@@ -93,7 +95,7 @@ subsystem test_devpath_dirname
             {"test_devname2", Subsystem::DEVNAME_UEVENT_DEVNAME, "/dev"},
             {"test_devpath_dirname", Subsystem::DEVNAME_UEVENT_DEVPATH, "/dev/graphics"}};
 
-    TestUeventdFile(ueventd_file, {subsystems, {}, {}, {}});
+    TestUeventdFile(ueventd_file, {subsystems, {}, {}, {}, {}});
 }
 
 TEST(ueventd_parser, Permissions) {
@@ -119,7 +121,7 @@ TEST(ueventd_parser, Permissions) {
             {"/sys/devices/virtual/*/input", "poll_delay", 0660, AID_ROOT, AID_INPUT},
     };
 
-    TestUeventdFile(ueventd_file, {{}, sysfs_permissions, permissions, {}});
+    TestUeventdFile(ueventd_file, {{}, sysfs_permissions, permissions, {}, {}});
 }
 
 TEST(ueventd_parser, FirmwareDirectories) {
@@ -135,7 +137,52 @@ firmware_directories /more
             "/more",
     };
 
-    TestUeventdFile(ueventd_file, {{}, {}, {}, firmware_directories});
+    TestUeventdFile(ueventd_file, {{}, {}, {}, firmware_directories, {}});
+}
+
+TEST(ueventd_parser, ExternalFirmwareHandlers) {
+    auto ueventd_file = R"(
+external_firmware_handler devpath root handler_path
+external_firmware_handler /devices/path/firmware/something001.bin system /vendor/bin/firmware_handler.sh
+external_firmware_handler /devices/path/firmware/something001.bin radio "/vendor/bin/firmware_handler.sh --has --arguments"
+)";
+
+    auto external_firmware_handlers = std::vector<ExternalFirmwareHandler>{
+            {
+                    "devpath",
+                    AID_ROOT,
+                    "handler_path",
+            },
+            {
+                    "/devices/path/firmware/something001.bin",
+                    AID_SYSTEM,
+                    "/vendor/bin/firmware_handler.sh",
+            },
+            {
+                    "/devices/path/firmware/something001.bin",
+                    AID_RADIO,
+                    "/vendor/bin/firmware_handler.sh --has --arguments",
+            },
+    };
+
+    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, external_firmware_handlers});
+}
+
+TEST(ueventd_parser, ExternalFirmwareHandlersDuplicate) {
+    auto ueventd_file = R"(
+external_firmware_handler devpath root handler_path
+external_firmware_handler devpath root handler_path2
+)";
+
+    auto external_firmware_handlers = std::vector<ExternalFirmwareHandler>{
+            {
+                    "devpath",
+                    AID_ROOT,
+                    "handler_path",
+            },
+    };
+
+    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, external_firmware_handlers});
 }
 
 TEST(ueventd_parser, UeventSocketRcvbufSize) {
@@ -144,7 +191,7 @@ uevent_socket_rcvbuf_size 8k
 uevent_socket_rcvbuf_size 8M
 )";
 
-    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, false, 8 * 1024 * 1024});
+    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, {}, false, 8 * 1024 * 1024});
 }
 
 TEST(ueventd_parser, EnabledDisabledLines) {
@@ -154,7 +201,7 @@ parallel_restorecon enabled
 modalias_handling disabled
 )";
 
-    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, false, 0, true});
+    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, {}, false, 0, true});
 
     auto ueventd_file2 = R"(
 parallel_restorecon enabled
@@ -162,7 +209,7 @@ modalias_handling enabled
 parallel_restorecon disabled
 )";
 
-    TestUeventdFile(ueventd_file2, {{}, {}, {}, {}, true, 0, false});
+    TestUeventdFile(ueventd_file2, {{}, {}, {}, {}, {}, true, 0, false});
 }
 
 TEST(ueventd_parser, AllTogether) {
@@ -196,6 +243,8 @@ subsystem test_devpath_dirname
 /sys/devices/virtual/*/input   poll_delay  0660  root   input
 firmware_directories /more
 
+external_firmware_handler /devices/path/firmware/firmware001.bin root /vendor/bin/touch.sh
+
 uevent_socket_rcvbuf_size 6M
 modalias_handling enabled
 parallel_restorecon enabled
@@ -228,10 +277,15 @@ parallel_restorecon enabled
             "/more",
     };
 
+    auto external_firmware_handlers = std::vector<ExternalFirmwareHandler>{
+            {"/devices/path/firmware/firmware001.bin", AID_ROOT, "/vendor/bin/touch.sh"},
+    };
+
     size_t uevent_socket_rcvbuf_size = 6 * 1024 * 1024;
 
-    TestUeventdFile(ueventd_file, {subsystems, sysfs_permissions, permissions, firmware_directories,
-                                   true, uevent_socket_rcvbuf_size, true});
+    TestUeventdFile(ueventd_file,
+                    {subsystems, sysfs_permissions, permissions, firmware_directories,
+                     external_firmware_handlers, true, uevent_socket_rcvbuf_size, true});
 }
 
 // All of these lines are ill-formed, so test that there is 0 output.
@@ -257,6 +311,11 @@ modalias_handling blah
 parallel_restorecon
 parallel_restorecon enabled enabled
 parallel_restorecon blah
+
+external_firmware_handler
+external_firmware_handler blah blah
+external_firmware_handler blah blah blah blah
+
 )";
 
     TestUeventdFile(ueventd_file, {});

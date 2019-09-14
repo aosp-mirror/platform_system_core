@@ -119,6 +119,7 @@ LOCAL_STATIC_LIBRARIES := \
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.
 LOCAL_NOSANITIZE := hwaddress
+LOCAL_INJECT_BSSL_HASH := true
 include $(BUILD_EXECUTABLE)
 endif
 

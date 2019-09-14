@@ -14,32 +14,48 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_FIRMWARE_HANDLER_H
-#define _INIT_FIRMWARE_HANDLER_H
+#pragma once
+
+#include <pwd.h>
 
 #include <string>
 #include <vector>
 
+#include "result.h"
 #include "uevent.h"
 #include "uevent_handler.h"
 
 namespace android {
 namespace init {
 
+struct ExternalFirmwareHandler {
+    ExternalFirmwareHandler(std::string devpath, uid_t uid, std::string handler_path)
+        : devpath(std::move(devpath)), uid(uid), handler_path(std::move(handler_path)) {}
+    std::string devpath;
+    uid_t uid;
+    std::string handler_path;
+};
+
 class FirmwareHandler : public UeventHandler {
   public:
-    explicit FirmwareHandler(std::vector<std::string> firmware_directories);
+    FirmwareHandler(std::vector<std::string> firmware_directories,
+                    std::vector<ExternalFirmwareHandler> external_firmware_handlers);
     virtual ~FirmwareHandler() = default;
 
     void HandleUevent(const Uevent& uevent) override;
 
   private:
-    void ProcessFirmwareEvent(const Uevent& uevent);
+    friend void FirmwareTestWithExternalHandler(const std::string& test_name,
+                                                bool expect_new_firmware);
+
+    Result<std::string> RunExternalHandler(const std::string& handler, uid_t uid,
+                                           const Uevent& uevent) const;
+    std::string GetFirmwarePath(const Uevent& uevent) const;
+    void ProcessFirmwareEvent(const std::string& root, const std::string& firmware) const;
 
     std::vector<std::string> firmware_directories_;
+    std::vector<ExternalFirmwareHandler> external_firmware_handlers_;
 };
 
 }  // namespace init
 }  // namespace android
-
-#endif
