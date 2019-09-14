@@ -76,14 +76,11 @@ TEST(PartitionCowCreator, IntersectSelf) {
                                 .target_suffix = "_b",
                                 .target_partition = system_b,
                                 .current_metadata = builder_a.get(),
-                                .current_suffix = "_a",
-                                .cow_size = 20 * 1024};
+                                .current_suffix = "_a"};
     auto ret = creator.Run();
     ASSERT_TRUE(ret.has_value());
     ASSERT_EQ(40 * 1024, ret->snapshot_status.device_size);
     ASSERT_EQ(40 * 1024, ret->snapshot_status.snapshot_size);
-    ASSERT_EQ(20 * 1024,
-              ret->snapshot_status.cow_file_size + ret->snapshot_status.cow_partition_size);
 }
 
 }  // namespace snapshot

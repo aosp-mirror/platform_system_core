@@ -25,6 +25,9 @@ using android::fs_mgr::Extent;
 using android::fs_mgr::Interval;
 using android::fs_mgr::kDefaultBlockSize;
 using android::fs_mgr::Partition;
+using chromeos_update_engine::InstallOperation;
+template <typename T>
+using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 
 namespace android {
 namespace snapshot {
@@ -117,9 +120,15 @@ std::optional<uint64_t> PartitionCowCreator::GetSnapshotSize() {
     return snapshot_size;
 }
 
-std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
+std::optional<uint64_t> PartitionCowCreator::GetCowSize(uint64_t snapshot_size) {
+    // TODO: Use |operations|. to determine a minimum COW size.
+    // kCowEstimateFactor is good for prototyping but we can't use that in production.
     static constexpr double kCowEstimateFactor = 1.05;
+    auto cow_size = RoundUp(snapshot_size * kCowEstimateFactor, kDefaultBlockSize);
+    return cow_size;
+}
 
+std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     CHECK(current_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME &&
           target_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME);
 
@@ -135,13 +144,8 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
 
     ret.snapshot_status.snapshot_size = *snapshot_size;
 
-    // TODO: always read from cow_size when the COW size is written in
-    // update package. kCowEstimateFactor is good for prototyping but
-    // we can't use that in production.
-    if (!cow_size.has_value()) {
-        cow_size =
-                RoundUp(ret.snapshot_status.snapshot_size * kCowEstimateFactor, kDefaultBlockSize);
-    }
+    auto cow_size = GetCowSize(*snapshot_size);
+    if (!cow_size.has_value()) return std::nullopt;
 
     // Compute regions that are free in both current and target metadata. These are the regions
     // we can use for COW partition.
