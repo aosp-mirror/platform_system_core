@@ -181,6 +181,7 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         CheckFlag("fsverity", fs_verity);
         CheckFlag("metadata_csum", ext_meta_csum);
         CheckFlag("fscompress", fs_compress);
+        CheckFlag("wrappedkey", wrapped_key);
 
 #undef CheckFlag
 
