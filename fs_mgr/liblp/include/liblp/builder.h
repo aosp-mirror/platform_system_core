@@ -260,7 +260,7 @@ class MetadataBuilder {
     Partition* AddPartition(const std::string& name, uint32_t attributes);
 
     // Delete a partition by name if it exists.
-    void RemovePartition(const std::string& name);
+    void RemovePartition(std::string_view name);
 
     // Find a partition by name. If no partition is found, nullptr is returned.
     Partition* FindPartition(std::string_view name);
