@@ -41,7 +41,7 @@ static std::unique_ptr<Extent> Intersect(Extent* target_extent, Extent* existing
     // Convert target_extent and existing_extent to linear extents. Zero extents
     // doesn't matter and doesn't result in any intersection.
     auto existing_linear_extent = existing_extent->AsLinearExtent();
-    if (!existing_extent) return nullptr;
+    if (!existing_linear_extent) return nullptr;
 
     auto target_linear_extent = target_extent->AsLinearExtent();
     if (!target_linear_extent) return nullptr;
