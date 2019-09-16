@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/cdefs.h>
+#include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -158,8 +159,22 @@ static void logcat_panic(android_logcat_context_internal* context,
                          enum helpType showHelp, const char* fmt, ...)
     __printflike(3, 4);
 
-static int openLogFile(const char* pathname) {
-    return open(pathname, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+#ifndef F2FS_IOC_SET_PIN_FILE
+#define F2FS_IOCTL_MAGIC       0xf5
+#define F2FS_IOC_SET_PIN_FILE _IOW(F2FS_IOCTL_MAGIC, 13, __u32)
+#endif
+
+static int openLogFile(const char* pathname, size_t sizeKB) {
+    int fd = open(pathname, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+        return fd;
+    }
+
+    // no need to check errors
+    __u32 set = 1;
+    ioctl(fd, F2FS_IOC_SET_PIN_FILE, &set);
+    fallocate(fd, FALLOC_FL_KEEP_SIZE, 0, (sizeKB << 10));
+    return fd;
 }
 
 static void close_output(android_logcat_context_internal* context) {
@@ -192,6 +207,7 @@ static void close_output(android_logcat_context_internal* context) {
             if (context->fds[1] == context->output_fd) {
                 context->fds[1] = -1;
             }
+            posix_fadvise(context->output_fd, 0, 0, POSIX_FADV_DONTNEED);
             close(context->output_fd);
         }
         context->output_fd = -1;
@@ -276,7 +292,7 @@ static void rotateLogs(android_logcat_context_internal* context) {
         }
     }
 
-    context->output_fd = openLogFile(context->outputFileName);
+    context->output_fd = openLogFile(context->outputFileName, context->logRotateSizeKBytes);
 
     if (context->output_fd < 0) {
         logcat_panic(context, HELP_FALSE, "couldn't open output file");
@@ -398,7 +414,7 @@ static void setupOutputAndSchedulingPolicy(
 
     close_output(context);
 
-    context->output_fd = openLogFile(context->outputFileName);
+    context->output_fd = openLogFile(context->outputFileName, context->logRotateSizeKBytes);
 
     if (context->output_fd < 0) {
         logcat_panic(context, HELP_FALSE, "couldn't open output file");
