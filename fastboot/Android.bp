@@ -189,7 +189,11 @@ cc_defaults {
     // will violate ODR.
     shared_libs: [],
 
-    header_libs: ["bootimg_headers"],
+    header_libs: [
+        "avb_headers",
+        "bootimg_headers",
+    ],
+
     static_libs: [
         "libziparchive",
         "libsparse",
