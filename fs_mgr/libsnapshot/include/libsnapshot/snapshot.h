@@ -19,6 +19,7 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -84,6 +85,7 @@ enum class UpdateState : unsigned int {
     // operation via fastboot. This state can only be returned by WaitForMerge.
     Cancelled
 };
+std::ostream& operator<<(std::ostream& os, UpdateState state);
 
 class SnapshotManager final {
     using CreateLogicalPartitionParams = android::fs_mgr::CreateLogicalPartitionParams;
