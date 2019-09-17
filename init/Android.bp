@@ -62,7 +62,6 @@ cc_defaults {
         },
     },
     static_libs: [
-        "libseccomp_policy",
         "libavb",
         "libc++fs",
         "libcgrouprc_format",
