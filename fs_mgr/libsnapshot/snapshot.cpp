@@ -39,6 +39,7 @@
 #include <liblp/liblp.h>
 
 #include "partition_cow_creator.h"
+#include "snapshot_metadata_updater.h"
 #include "utility.h"
 
 namespace android {
@@ -61,6 +62,10 @@ using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::LpMetadata;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::SlotNumberForSlotSuffix;
+using chromeos_update_engine::DeltaArchiveManifest;
+using chromeos_update_engine::InstallOperation;
+template <typename T>
+using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 using std::chrono::duration_cast;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -74,6 +79,7 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
     std::string GetGsidDir() const override { return "ota"s; }
     std::string GetMetadataDir() const override { return "/metadata/ota"s; }
     std::string GetSlotSuffix() const override { return fs_mgr_get_slot_suffix(); }
+    std::string GetOtherSlotSuffix() const override { return fs_mgr_get_other_slot_suffix(); }
     const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const { return opener_; }
     std::string GetSuperDevice(uint32_t slot) const override {
         return fs_mgr_get_super_partition_name(slot);
@@ -1713,24 +1719,42 @@ bool SnapshotManager::ForceLocalImageManager() {
     return true;
 }
 
-bool SnapshotManager::CreateUpdateSnapshots(MetadataBuilder* target_metadata,
-                                            const std::string& target_suffix,
-                                            MetadataBuilder* current_metadata,
-                                            const std::string& current_suffix,
-                                            const std::map<std::string, uint64_t>& cow_sizes) {
+bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) {
     auto lock = LockExclusive();
     if (!lock) return false;
 
-    // Add _{target_suffix} to COW size map.
-    std::map<std::string, uint64_t> suffixed_cow_sizes;
-    for (const auto& [name, size] : cow_sizes) {
-        suffixed_cow_sizes[name + target_suffix] = size;
+    const auto& opener = device_->GetPartitionOpener();
+    auto current_suffix = device_->GetSlotSuffix();
+    uint32_t current_slot = SlotNumberForSlotSuffix(current_suffix);
+    auto target_suffix = device_->GetOtherSlotSuffix();
+    uint32_t target_slot = SlotNumberForSlotSuffix(target_suffix);
+    auto current_super = device_->GetSuperDevice(current_slot);
+
+    auto current_metadata = MetadataBuilder::New(opener, current_super, current_slot);
+    auto target_metadata =
+            MetadataBuilder::NewForUpdate(opener, current_super, current_slot, target_slot);
+
+    SnapshotMetadataUpdater metadata_updater(target_metadata.get(), target_slot, manifest);
+    if (!metadata_updater.Update()) {
+        LOG(ERROR) << "Cannot calculate new metadata.";
+        return false;
     }
 
-    target_metadata->RemoveGroupAndPartitions(kCowGroupName);
     if (!target_metadata->AddGroup(kCowGroupName, 0)) {
         LOG(ERROR) << "Cannot add group " << kCowGroupName;
         return false;
+    }
+
+    std::map<std::string, const RepeatedPtrField<InstallOperation>*> install_operation_map;
+    for (const auto& partition_update : manifest.partitions()) {
+        auto suffixed_name = partition_update.partition_name() + target_suffix;
+        auto&& [it, inserted] = install_operation_map.emplace(std::move(suffixed_name),
+                                                              &partition_update.operations());
+        if (!inserted) {
+            LOG(ERROR) << "Duplicated partition " << partition_update.partition_name()
+                       << " in update manifest.";
+            return false;
+        }
     }
 
     // TODO(b/134949511): remove this check. Right now, with overlayfs mounted, the scratch
@@ -1757,18 +1781,16 @@ bool SnapshotManager::CreateUpdateSnapshots(MetadataBuilder* target_metadata,
     // these devices.
     AutoDeviceList created_devices;
 
-    for (auto* target_partition : ListPartitionsWithSuffix(target_metadata, target_suffix)) {
-        std::optional<uint64_t> cow_size = std::nullopt;
-        auto it = suffixed_cow_sizes.find(target_partition->name());
-        if (it != suffixed_cow_sizes.end()) {
-            cow_size = it->second;
-            LOG(INFO) << "Using provided COW size " << *cow_size << " for partition "
-                      << target_partition->name();
+    for (auto* target_partition : ListPartitionsWithSuffix(target_metadata.get(), target_suffix)) {
+        const RepeatedPtrField<InstallOperation>* operations = nullptr;
+        auto operations_it = install_operation_map.find(target_partition->name());
+        if (operations_it != install_operation_map.end()) {
+            operations = operations_it->second;
         }
 
         // Compute the device sizes for the partition.
-        PartitionCowCreator cow_creator{target_metadata,  target_suffix,  target_partition,
-                                        current_metadata, current_suffix, cow_size};
+        PartitionCowCreator cow_creator{target_metadata.get(),  target_suffix,  target_partition,
+                                        current_metadata.get(), current_suffix, operations};
         auto cow_creator_ret = cow_creator.Run();
         if (!cow_creator_ret.has_value()) {
             return false;
@@ -1846,13 +1868,17 @@ bool SnapshotManager::CreateUpdateSnapshots(MetadataBuilder* target_metadata,
 
     auto& dm = DeviceMapper::Instance();
     auto exported_target_metadata = target_metadata->Export();
+    if (exported_target_metadata == nullptr) {
+        LOG(ERROR) << "Cannot export target metadata";
+        return false;
+    }
     CreateLogicalPartitionParams cow_params{
             .block_device = LP_METADATA_DEFAULT_PARTITION_NAME,
             .metadata = exported_target_metadata.get(),
             .timeout_ms = std::chrono::milliseconds::max(),
             .partition_opener = &device_->GetPartitionOpener(),
     };
-    for (auto* target_partition : ListPartitionsWithSuffix(target_metadata, target_suffix)) {
+    for (auto* target_partition : ListPartitionsWithSuffix(target_metadata.get(), target_suffix)) {
         AutoDeviceList created_devices_for_cow;
 
         if (!UnmapPartitionWithSnapshot(lock.get(), target_partition->name())) {
@@ -1883,6 +1909,12 @@ bool SnapshotManager::CreateUpdateSnapshots(MetadataBuilder* target_metadata,
         }
         // Let destructor of created_devices_for_cow to unmap the COW devices.
     };
+
+    if (!UpdatePartitionTable(opener, device_->GetSuperDevice(target_slot),
+                              *exported_target_metadata, target_slot)) {
+        LOG(ERROR) << "Cannot write target metadata";
+        return false;
+    }
 
     created_devices.Release();
     LOG(INFO) << "Successfully created all snapshots for target slot " << target_suffix;

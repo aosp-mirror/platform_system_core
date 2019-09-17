@@ -17,12 +17,19 @@
 #include <optional>
 #include <string>
 
+#include <gtest/gtest.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/partition_opener.h>
 #include <libsnapshot/snapshot.h>
+#include <update_engine/update_metadata.pb.h>
 
 namespace android {
 namespace snapshot {
+
+using android::fs_mgr::MetadataBuilder;
+using chromeos_update_engine::DeltaArchiveManifest;
+using chromeos_update_engine::PartitionUpdate;
+using testing::AssertionResult;
 
 using namespace std::string_literals;
 
@@ -48,6 +55,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     std::string GetGsidDir() const override { return "ota/test"s; }
     std::string GetMetadataDir() const override { return "/metadata/ota/test"s; }
     std::string GetSlotSuffix() const override { return slot_suffix_; }
+    std::string GetOtherSlotSuffix() const override { return slot_suffix_ == "_a" ? "_b" : "_a"; }
     std::string GetSuperDevice([[maybe_unused]] uint32_t slot) const override { return "super"; }
     const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const override {
         return *opener_.get();
@@ -71,6 +79,13 @@ void DeleteBackingImage(android::fiemap::IImageManager* manager, const std::stri
 bool WriteRandomData(const std::string& device);
 
 std::optional<std::string> GetHash(const std::string& path);
+
+// Add partitions and groups described by |manifest|.
+AssertionResult FillFakeMetadata(MetadataBuilder* builder, const DeltaArchiveManifest& manifest,
+                                 const std::string& suffix);
+
+// In the update package metadata, set a partition with the given size.
+void SetSize(PartitionUpdate* partition_update, uint64_t size);
 
 }  // namespace snapshot
 }  // namespace android
