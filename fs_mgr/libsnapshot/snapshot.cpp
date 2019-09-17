@@ -131,6 +131,16 @@ static std::string GetSnapshotExtraDeviceName(const std::string& snapshot_name) 
 }
 
 bool SnapshotManager::BeginUpdate() {
+    bool needs_merge = false;
+    if (!TryCancelUpdate(&needs_merge)) {
+        return false;
+    }
+    if (needs_merge) {
+        LOG(INFO) << "Wait for merge (if any) before beginning a new update.";
+        auto state = ProcessUpdateState();
+        LOG(INFO) << "Merged with state = " << state;
+    }
+
     auto file = LockExclusive();
     if (!file) return false;
 
@@ -143,6 +153,19 @@ bool SnapshotManager::BeginUpdate() {
 }
 
 bool SnapshotManager::CancelUpdate() {
+    bool needs_merge = false;
+    if (!TryCancelUpdate(&needs_merge)) {
+        return false;
+    }
+    if (needs_merge) {
+        LOG(ERROR) << "Cannot cancel update after it has completed or started merging";
+    }
+    return !needs_merge;
+}
+
+bool SnapshotManager::TryCancelUpdate(bool* needs_merge) {
+    *needs_merge = false;
+
     auto file = LockExclusive();
     if (!file) return false;
 
@@ -167,8 +190,8 @@ bool SnapshotManager::CancelUpdate() {
             return RemoveAllUpdateState(file.get());
         }
     }
-    LOG(ERROR) << "Cannot cancel update after it has completed or started merging";
-    return false;
+    *needs_merge = true;
+    return true;
 }
 
 bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock) {
