@@ -504,7 +504,7 @@ uint64_t MetadataBuilder::TotalSizeOfGroup(PartitionGroup* group) const {
     return total;
 }
 
-void MetadataBuilder::RemovePartition(const std::string& name) {
+void MetadataBuilder::RemovePartition(std::string_view name) {
     for (auto iter = partitions_.begin(); iter != partitions_.end(); iter++) {
         if ((*iter)->name() == name) {
             partitions_.erase(iter);
