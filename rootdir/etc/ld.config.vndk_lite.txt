@@ -346,6 +346,7 @@ namespace.neuralnetworks.link.default.shared_libs += libdl.so
 namespace.neuralnetworks.link.default.shared_libs += liblog.so
 namespace.neuralnetworks.link.default.shared_libs += libm.so
 namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
+namespace.neuralnetworks.link.default.shared_libs += libneuralnetworks_packageinfo.so
 namespace.neuralnetworks.link.default.shared_libs += libsync.so
 namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
 
@@ -449,6 +450,7 @@ namespace.neuralnetworks.link.default.shared_libs += libdl.so
 namespace.neuralnetworks.link.default.shared_libs += liblog.so
 namespace.neuralnetworks.link.default.shared_libs += libm.so
 namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
+namespace.neuralnetworks.link.default.shared_libs += libneuralnetworks_packageinfo.so
 namespace.neuralnetworks.link.default.shared_libs += libsync.so
 namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
 
@@ -591,6 +593,7 @@ namespace.neuralnetworks.link.default.shared_libs += libdl.so
 namespace.neuralnetworks.link.default.shared_libs += liblog.so
 namespace.neuralnetworks.link.default.shared_libs += libm.so
 namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
+namespace.neuralnetworks.link.default.shared_libs += libneuralnetworks_packageinfo.so
 namespace.neuralnetworks.link.default.shared_libs += libsync.so
 namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
 
