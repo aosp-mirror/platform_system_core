@@ -149,9 +149,10 @@ bool LocalUpdatableMaps::Reparse() {
       }
 
       // Never delete these maps, they may be in use. The assumption is
-      // that there will only every be a handfull of these so waiting
+      // that there will only every be a handful of these so waiting
       // to destroy them is not too expensive.
       saved_maps_.emplace_back(std::move(info));
+      search_map_idx = old_map_idx + 1;
       maps_[old_map_idx] = nullptr;
       total_entries--;
     }
