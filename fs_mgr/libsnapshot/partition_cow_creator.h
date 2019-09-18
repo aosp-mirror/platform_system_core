@@ -32,20 +32,23 @@ struct PartitionCowCreator {
     using Interval = android::fs_mgr::Interval;
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
     using Partition = android::fs_mgr::Partition;
+    using InstallOperation = chromeos_update_engine::InstallOperation;
+    template <typename T>
+    using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 
     // The metadata that will be written to target metadata slot.
-    MetadataBuilder* target_metadata;
+    MetadataBuilder* target_metadata = nullptr;
     // The suffix of the target slot.
     std::string target_suffix;
     // The partition in target_metadata that needs to be snapshotted.
-    Partition* target_partition;
+    Partition* target_partition = nullptr;
     // The metadata at the current slot (that would be used if the device boots
     // normally). This is used to determine which extents are being used.
-    MetadataBuilder* current_metadata;
+    MetadataBuilder* current_metadata = nullptr;
     // The suffix of the current slot.
     std::string current_suffix;
-    // The COW size given by client code.
-    std::optional<uint64_t> cow_size;
+    // List of operations to be applied on the partition.
+    const RepeatedPtrField<InstallOperation>* operations = nullptr;
 
     struct Return {
         SnapshotManager::SnapshotStatus snapshot_status;
@@ -57,6 +60,7 @@ struct PartitionCowCreator {
   private:
     bool HasExtent(Partition* p, Extent* e);
     std::optional<uint64_t> GetSnapshotSize();
+    std::optional<uint64_t> GetCowSize(uint64_t snapshot_size);
 };
 
 }  // namespace snapshot

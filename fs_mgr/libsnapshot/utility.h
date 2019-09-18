@@ -22,6 +22,7 @@
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
 #include <libsnapshot/snapshot.h>
+#include <update_engine/update_metadata.pb.h>
 
 namespace android {
 namespace snapshot {
