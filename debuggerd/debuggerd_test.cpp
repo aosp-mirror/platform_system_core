@@ -603,6 +603,8 @@ static pid_t seccomp_fork_impl(void (*prejail)()) {
   policy += "\nclone: 1";
   policy += "\nsigaltstack: 1";
   policy += "\nnanosleep: 1";
+  policy += "\ngetrlimit: 1";
+  policy += "\nugetrlimit: 1";
 
   FILE* tmp_file = tmpfile();
   if (!tmp_file) {
