@@ -201,69 +201,68 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
 #else
         error_exit("fastdeploy is disabled");
 #endif
-    } else {
-        struct stat sb;
-        if (stat(file, &sb) == -1) {
-            fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
-            return 1;
-        }
+    }
 
-        unique_fd local_fd(adb_open(file, O_RDONLY | O_CLOEXEC));
-        if (local_fd < 0) {
-            fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
-            return 1;
-        }
-
-#ifdef __linux__
-        posix_fadvise(local_fd.get(), 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE);
-#endif
-
-        const bool use_abb = can_use_feature(kFeatureAbb);
-        std::string error;
-        std::vector<std::string> cmd_args = {use_abb ? "package" : "exec:cmd package"};
-        cmd_args.reserve(argc + 3);
-
-        // don't copy the APK name, but, copy the rest of the arguments as-is
-        while (argc-- > 1) {
-            if (use_abb) {
-                cmd_args.push_back(*argv++);
-            } else {
-                cmd_args.push_back(escape_arg(*argv++));
-            }
-        }
-
-        // add size parameter [required for streaming installs]
-        // do last to override any user specified value
-        cmd_args.push_back("-S");
-        cmd_args.push_back(
-                android::base::StringPrintf("%" PRIu64, static_cast<uint64_t>(sb.st_size)));
-
-        if (is_apex) {
-            cmd_args.push_back("--apex");
-        }
-
-        unique_fd remote_fd;
-        if (use_abb) {
-            remote_fd = send_abb_exec_command(cmd_args, &error);
-        } else {
-            remote_fd.reset(adb_connect(android::base::Join(cmd_args, " "), &error));
-        }
-        if (remote_fd < 0) {
-            fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
-            return 1;
-        }
-
-        copy_to_file(local_fd.get(), remote_fd.get());
-
-        char buf[BUFSIZ];
-        read_status_line(remote_fd.get(), buf, sizeof(buf));
-        if (!strncmp("Success", buf, 7)) {
-            fputs(buf, stdout);
-            return 0;
-        }
-        fprintf(stderr, "adb: failed to install %s: %s", file, buf);
+    struct stat sb;
+    if (stat(file, &sb) == -1) {
+        fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
         return 1;
     }
+
+    unique_fd local_fd(adb_open(file, O_RDONLY | O_CLOEXEC));
+    if (local_fd < 0) {
+        fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
+        return 1;
+    }
+
+#ifdef __linux__
+    posix_fadvise(local_fd.get(), 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE);
+#endif
+
+    const bool use_abb = can_use_feature(kFeatureAbbExec);
+    std::string error;
+    std::vector<std::string> cmd_args = {use_abb ? "package" : "exec:cmd package"};
+    cmd_args.reserve(argc + 3);
+
+    // don't copy the APK name, but, copy the rest of the arguments as-is
+    while (argc-- > 1) {
+        if (use_abb) {
+            cmd_args.push_back(*argv++);
+        } else {
+            cmd_args.push_back(escape_arg(*argv++));
+        }
+    }
+
+    // add size parameter [required for streaming installs]
+    // do last to override any user specified value
+    cmd_args.push_back("-S");
+    cmd_args.push_back(android::base::StringPrintf("%" PRIu64, static_cast<uint64_t>(sb.st_size)));
+
+    if (is_apex) {
+        cmd_args.push_back("--apex");
+    }
+
+    unique_fd remote_fd;
+    if (use_abb) {
+        remote_fd = send_abb_exec_command(cmd_args, &error);
+    } else {
+        remote_fd.reset(adb_connect(android::base::Join(cmd_args, " "), &error));
+    }
+    if (remote_fd < 0) {
+        fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
+        return 1;
+    }
+
+    copy_to_file(local_fd.get(), remote_fd.get());
+
+    char buf[BUFSIZ];
+    read_status_line(remote_fd.get(), buf, sizeof(buf));
+    if (!strncmp("Success", buf, 7)) {
+        fputs(buf, stdout);
+        return 0;
+    }
+    fprintf(stderr, "adb: failed to install %s: %s", file, buf);
+    return 1;
 }
 
 static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
