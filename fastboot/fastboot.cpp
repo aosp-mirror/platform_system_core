@@ -874,7 +874,7 @@ static bool load_buf_fd(int fd, struct fastboot_buffer* buf) {
         return false;
     }
 
-    if (sparse_file* s = sparse_file_import_auto(fd, false, false)) {
+    if (sparse_file* s = sparse_file_import(fd, false, false)) {
         buf->image_size = sparse_file_len(s, false, false);
         sparse_file_destroy(s);
     } else {
