@@ -29,6 +29,7 @@
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
+#include <update_engine/update_metadata.pb.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -89,6 +90,7 @@ class SnapshotManager final {
     using IPartitionOpener = android::fs_mgr::IPartitionOpener;
     using LpMetadata = android::fs_mgr::LpMetadata;
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
+    using DeltaArchiveManifest = chromeos_update_engine::DeltaArchiveManifest;
 
   public:
     // Dependency injection for testing.
@@ -98,6 +100,7 @@ class SnapshotManager final {
         virtual std::string GetGsidDir() const = 0;
         virtual std::string GetMetadataDir() const = 0;
         virtual std::string GetSlotSuffix() const = 0;
+        virtual std::string GetOtherSlotSuffix() const = 0;
         virtual std::string GetSuperDevice(uint32_t slot) const = 0;
         virtual const IPartitionOpener& GetPartitionOpener() const = 0;
         virtual bool IsOverlayfsSetup() const = 0;
@@ -169,9 +172,7 @@ class SnapshotManager final {
     // Create necessary COW device / files for OTA clients. New logical partitions will be added to
     // group "cow" in target_metadata. Regions of partitions of current_metadata will be
     // "write-protected" and snapshotted.
-    bool CreateUpdateSnapshots(MetadataBuilder* target_metadata, const std::string& target_suffix,
-                               MetadataBuilder* current_metadata, const std::string& current_suffix,
-                               const std::map<std::string, uint64_t>& cow_sizes);
+    bool CreateUpdateSnapshots(const DeltaArchiveManifest& manifest);
 
     // Map a snapshotted partition for OTA clients to write to. Write-protected regions are
     // determined previously in CreateSnapshots.

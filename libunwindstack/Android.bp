@@ -183,6 +183,7 @@ cc_defaults {
         "tests/ElfTestUtils.cpp",
         "tests/IsolatedSettings.cpp",
         "tests/JitDebugTest.cpp",
+        "tests/LocalUpdatableMapsTest.cpp",
         "tests/LogFake.cpp",
         "tests/MapInfoCreateMemoryTest.cpp",
         "tests/MapInfoGetBuildIDTest.cpp",

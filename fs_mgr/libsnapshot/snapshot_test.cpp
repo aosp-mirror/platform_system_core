@@ -50,6 +50,8 @@ using android::fs_mgr::DestroyLogicalPartition;
 using android::fs_mgr::GetPartitionGroupName;
 using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::MetadataBuilder;
+using chromeos_update_engine::DeltaArchiveManifest;
+using chromeos_update_engine::PartitionUpdate;
 using namespace ::testing;
 using namespace android::fs_mgr::testing;
 using namespace android::storage_literals;
@@ -62,7 +64,8 @@ std::unique_ptr<SnapshotManager> sm;
 TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
 
-static constexpr uint64_t kSuperSize = 16_MiB;
+static constexpr uint64_t kSuperSize = 16_MiB + 4_KiB;
+static constexpr uint64_t kGroupSize = 16_MiB;
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -636,28 +639,39 @@ class SnapshotUpdateTest : public SnapshotTest {
         ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
                 .WillByDefault(Return(true));
 
-        opener = std::make_unique<TestPartitionOpener>(fake_super);
+        opener_ = std::make_unique<TestPartitionOpener>(fake_super);
 
-        // Initialize source partition metadata. sys_b is similar to system_other.
+        // Create a fake update package metadata.
         // Not using full name "system", "vendor", "product" because these names collide with the
         // mapped partitions on the running device.
-        src = MetadataBuilder::New(*opener, "super", 0);
-        ASSERT_NE(nullptr, src);
-        auto partition = src->AddPartition("sys_a", 0);
+        // Each test modifies manifest_ slightly to indicate changes to the partition layout.
+        auto group = manifest_.mutable_dynamic_partition_metadata()->add_groups();
+        group->set_name("group");
+        group->set_size(kGroupSize);
+        group->add_partition_names("sys");
+        group->add_partition_names("vnd");
+        group->add_partition_names("prd");
+        sys_ = manifest_.add_partitions();
+        sys_->set_partition_name("sys");
+        SetSize(sys_, 3_MiB);
+        vnd_ = manifest_.add_partitions();
+        vnd_->set_partition_name("vnd");
+        SetSize(vnd_, 3_MiB);
+        prd_ = manifest_.add_partitions();
+        prd_->set_partition_name("prd");
+        SetSize(prd_, 3_MiB);
+
+        // Initialize source partition metadata using |manifest_|.
+        src_ = MetadataBuilder::New(*opener_, "super", 0);
+        ASSERT_TRUE(FillFakeMetadata(src_.get(), manifest_, "_a"));
+        ASSERT_NE(nullptr, src_);
+        // Add sys_b which is like system_other.
+        auto partition = src_->AddPartition("sys_b", 0);
         ASSERT_NE(nullptr, partition);
-        ASSERT_TRUE(src->ResizePartition(partition, 3_MiB));
-        partition = src->AddPartition("vnd_a", 0);
-        ASSERT_NE(nullptr, partition);
-        ASSERT_TRUE(src->ResizePartition(partition, 3_MiB));
-        partition = src->AddPartition("prd_a", 0);
-        ASSERT_NE(nullptr, partition);
-        ASSERT_TRUE(src->ResizePartition(partition, 3_MiB));
-        partition = src->AddPartition("sys_b", 0);
-        ASSERT_NE(nullptr, partition);
-        ASSERT_TRUE(src->ResizePartition(partition, 1_MiB));
-        auto metadata = src->Export();
+        ASSERT_TRUE(src_->ResizePartition(partition, 1_MiB));
+        auto metadata = src_->Export();
         ASSERT_NE(nullptr, metadata);
-        ASSERT_TRUE(UpdatePartitionTable(*opener, "super", *metadata.get(), 0));
+        ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *metadata.get(), 0));
 
         // Map source partitions. Additionally, map sys_b to simulate system_other after flashing.
         std::string path;
@@ -668,7 +682,7 @@ class SnapshotUpdateTest : public SnapshotTest {
                             .metadata_slot = 0,
                             .partition_name = name,
                             .timeout_ms = 1s,
-                            .partition_opener = opener.get(),
+                            .partition_opener = opener_.get(),
                     },
                     &path));
             ASSERT_TRUE(WriteRandomData(path));
@@ -690,22 +704,6 @@ class SnapshotUpdateTest : public SnapshotTest {
             EXPECT_TRUE(sm->CancelUpdate()) << suffix;
         }
         EXPECT_TRUE(UnmapAll());
-    }
-
-    static AssertionResult ResizePartitions(
-            MetadataBuilder* builder,
-            const std::vector<std::pair<std::string, uint64_t>>& partition_sizes) {
-        for (auto&& [name, size] : partition_sizes) {
-            auto partition = builder->FindPartition(name);
-            if (!partition) {
-                return AssertionFailure() << "Cannot find partition in metadata " << name;
-            }
-            if (!builder->ResizePartition(partition, size)) {
-                return AssertionFailure()
-                       << "Cannot resize partition " << name << " to " << size << " bytes";
-            }
-        }
-        return AssertionSuccess();
     }
 
     AssertionResult IsPartitionUnchanged(const std::string& name) {
@@ -748,9 +746,14 @@ class SnapshotUpdateTest : public SnapshotTest {
         return AssertionSuccess();
     }
 
-    std::unique_ptr<TestPartitionOpener> opener;
-    std::unique_ptr<MetadataBuilder> src;
+    std::unique_ptr<TestPartitionOpener> opener_;
+    DeltaArchiveManifest manifest_;
+    std::unique_ptr<MetadataBuilder> src_;
     std::map<std::string, std::string> hashes_;
+
+    PartitionUpdate* sys_ = nullptr;
+    PartitionUpdate* vnd_ = nullptr;
+    PartitionUpdate* prd_ = nullptr;
 };
 
 // Test full update flow executed by update_engine. Some partitions uses super empty space,
@@ -767,28 +770,18 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
         ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
     }
 
-    // OTA client adjusts the partition sizes before giving it to CreateUpdateSnapshots.
-    auto tgt = MetadataBuilder::NewForUpdate(*opener, "super", 0, 1);
-    ASSERT_NE(nullptr, tgt);
-    // clang-format off
-    ASSERT_TRUE(ResizePartitions(tgt.get(), {
-            {"sys_b", 4_MiB}, // grows
-            {"vnd_b", 4_MiB}, // grows
-            {"prd_b", 4_MiB}, // grows
-    }));
-    // clang-format on
+    // Grow all partitions.
+    SetSize(sys_, 4_MiB);
+    SetSize(vnd_, 4_MiB);
+    SetSize(prd_, 4_MiB);
 
-    ASSERT_TRUE(sm->CreateUpdateSnapshots(tgt.get(), "_b", src.get(), "_a", {}));
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Test that partitions prioritize using space in super.
+    auto tgt = MetadataBuilder::New(*opener_, "super", 1);
     ASSERT_NE(nullptr, tgt->FindPartition("sys_b-cow"));
     ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
     ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
-
-    // The metadata slot 1 is now updated.
-    auto metadata = tgt->Export();
-    ASSERT_NE(nullptr, metadata);
-    ASSERT_TRUE(UpdatePartitionTable(*opener, "super", *metadata.get(), 1));
 
     // Write some data to target partitions.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -799,7 +792,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
                         .metadata_slot = 1,
                         .partition_name = name,
                         .timeout_ms = 10s,
-                        .partition_opener = opener.get(),
+                        .partition_opener = opener_.get(),
                 },
                 &path))
                 << name;
@@ -845,49 +838,31 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
 // Test that if new system partitions uses empty space in super, that region is not snapshotted.
 TEST_F(SnapshotUpdateTest, DirectWriteEmptySpace) {
-    auto tgt = MetadataBuilder::NewForUpdate(*opener, "super", 0, 1);
-    ASSERT_NE(nullptr, tgt);
-    // clang-format off
-    ASSERT_TRUE(ResizePartitions(tgt.get(), {
-            {"sys_b", 4_MiB}, // grows
-            // vnd_b and prd_b are unchanged
-    }));
-    // clang-format on
-    ASSERT_TRUE(sm->CreateUpdateSnapshots(tgt.get(), "_b", src.get(), "_a", {}));
-
+    SetSize(sys_, 4_MiB);
+    // vnd_b and prd_b are unchanged.
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
     ASSERT_EQ(3_MiB, GetSnapshotSize("sys_b").value_or(0));
 }
 
 // Test that if new system partitions uses space of old vendor partition, that region is
 // snapshotted.
 TEST_F(SnapshotUpdateTest, SnapshotOldPartitions) {
-    auto tgt = MetadataBuilder::NewForUpdate(*opener, "super", 0, 1);
-    ASSERT_NE(nullptr, tgt);
-    // clang-format off
-    ASSERT_TRUE(ResizePartitions(tgt.get(), {
-            {"vnd_b", 2_MiB}, // shrinks
-            {"sys_b", 4_MiB}, // grows
-            // prd_b is unchanged
-    }));
-    // clang-format on
-    ASSERT_TRUE(sm->CreateUpdateSnapshots(tgt.get(), "_b", src.get(), "_a", {}));
-
+    SetSize(sys_, 4_MiB);  // grows
+    SetSize(vnd_, 2_MiB);  // shrinks
+    // prd_b is unchanged
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
     ASSERT_EQ(4_MiB, GetSnapshotSize("sys_b").value_or(0));
 }
 
 // Test that even if there seem to be empty space in target metadata, COW partition won't take
 // it because they are used by old partitions.
 TEST_F(SnapshotUpdateTest, CowPartitionDoNotTakeOldPartitions) {
-    auto tgt = MetadataBuilder::NewForUpdate(*opener, "super", 0, 1);
-    ASSERT_NE(nullptr, tgt);
-    // clang-format off
-    ASSERT_TRUE(ResizePartitions(tgt.get(), {
-            {"sys_b", 2_MiB}, // shrinks
-            // vnd_b and prd_b are unchanged
-    }));
-    // clang-format on
-    ASSERT_TRUE(sm->CreateUpdateSnapshots(tgt.get(), "_b", src.get(), "_a", {}));
+    SetSize(sys_, 2_MiB);  // shrinks
+    // vnd_b and prd_b are unchanged.
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
+    auto tgt = MetadataBuilder::New(*opener_, "super", 1);
+    ASSERT_NE(nullptr, tgt);
     auto metadata = tgt->Export();
     ASSERT_NE(nullptr, metadata);
     std::vector<std::string> written;
@@ -903,7 +878,7 @@ TEST_F(SnapshotUpdateTest, CowPartitionDoNotTakeOldPartitions) {
                         .metadata = metadata.get(),
                         .partition = &p,
                         .timeout_ms = 1s,
-                        .partition_opener = opener.get(),
+                        .partition_opener = opener_.get(),
                 },
                 &path));
         ASSERT_TRUE(WriteRandomData(path));
@@ -934,14 +909,8 @@ TEST_F(SnapshotUpdateTest, SnapshotStatusFileWithoutCow) {
     // Redo the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->UnmapUpdateSnapshot("sys_b"));
-    auto tgt = MetadataBuilder::NewForUpdate(*opener, "super", 0, 1);
-    ASSERT_NE(nullptr, tgt);
-    ASSERT_TRUE(sm->CreateUpdateSnapshots(tgt.get(), "_b", src.get(), "_a", {}));
 
-    // The metadata slot 1 is now updated.
-    auto metadata = tgt->Export();
-    ASSERT_NE(nullptr, metadata);
-    ASSERT_TRUE(UpdatePartitionTable(*opener, "super", *metadata.get(), 1));
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Check that target partitions can be mapped.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -952,7 +921,7 @@ TEST_F(SnapshotUpdateTest, SnapshotStatusFileWithoutCow) {
                         .metadata_slot = 1,
                         .partition_name = name,
                         .timeout_ms = 10s,
-                        .partition_opener = opener.get(),
+                        .partition_opener = opener_.get(),
                 },
                 &path))
                 << name;
@@ -964,14 +933,8 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->UnmapUpdateSnapshot("sys_b"));
-    auto tgt = MetadataBuilder::NewForUpdate(*opener, "super", 0, 1);
-    ASSERT_NE(nullptr, tgt);
-    ASSERT_TRUE(sm->CreateUpdateSnapshots(tgt.get(), "_b", src.get(), "_a", {}));
 
-    // The metadata slot 1 is now updated.
-    auto metadata = tgt->Export();
-    ASSERT_NE(nullptr, metadata);
-    ASSERT_TRUE(UpdatePartitionTable(*opener, "super", *metadata.get(), 1));
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -982,7 +945,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
                         .metadata_slot = 1,
                         .partition_name = name,
                         .timeout_ms = 10s,
-                        .partition_opener = opener.get(),
+                        .partition_opener = opener_.get(),
                 },
                 &path))
                 << name;
