@@ -1713,8 +1713,12 @@ int adb_commandline(int argc, const char** argv) {
         }
 
         if (CanUseFeature(features, kFeatureRemountShell)) {
-            const char* arg[2] = {"shell", "remount"};
-            return adb_shell(2, arg);
+            std::vector<const char*> args = {"shell"};
+            args.insert(args.cend(), argv, argv + argc);
+            return adb_shell(args.size(), args.data());
+        } else if (argc > 1) {
+            auto command = android::base::StringPrintf("%s:%s", argv[0], argv[1]);
+            return adb_connect_command(command);
         } else {
             return adb_connect_command("remount:");
         }
