@@ -32,6 +32,7 @@ cc_defaults {
         "libfs_mgr",
         "libfstab",
         "liblp",
+        "update_metadata-protos",
     ],
     whole_static_libs: [
         "libext2_uuid",
@@ -40,6 +41,9 @@ cc_defaults {
     ],
     header_libs: [
         "libfiemap_headers",
+    ],
+    export_static_lib_headers: [
+        "update_metadata-protos",
     ],
     export_header_lib_headers: [
         "libfiemap_headers",
@@ -51,6 +55,7 @@ filegroup {
     name: "libsnapshot_sources",
     srcs: [
         "snapshot.cpp",
+        "snapshot_metadata_updater.cpp",
         "partition_cow_creator.cpp",
         "utility.cpp",
     ],
@@ -87,10 +92,12 @@ cc_test {
     srcs: [
         "snapshot_test.cpp",
         "partition_cow_creator_test.cpp",
+        "snapshot_metadata_updater_test.cpp",
         "test_helpers.cpp",
     ],
     shared_libs: [
         "libbinder",
+        "libprotobuf-cpp-lite",
         "libutils",
     ],
     static_libs: [
