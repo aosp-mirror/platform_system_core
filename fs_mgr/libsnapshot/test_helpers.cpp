@@ -27,6 +27,8 @@ using android::base::ReadFully;
 using android::base::unique_fd;
 using android::base::WriteFully;
 using android::fiemap::IImageManager;
+using testing::AssertionFailure;
+using testing::AssertionSuccess;
 
 void DeleteBackingImage(IImageManager* manager, const std::string& name) {
     if (manager->IsImageMapped(name)) {
@@ -108,6 +110,41 @@ std::optional<std::string> GetHash(const std::string& path) {
     uint8_t out[32];
     SHA256_Final(out, &ctx);
     return ToHexString(out, sizeof(out));
+}
+
+AssertionResult FillFakeMetadata(MetadataBuilder* builder, const DeltaArchiveManifest& manifest,
+                                 const std::string& suffix) {
+    for (const auto& group : manifest.dynamic_partition_metadata().groups()) {
+        if (!builder->AddGroup(group.name() + suffix, group.size())) {
+            return AssertionFailure()
+                   << "Cannot add group " << group.name() << " with size " << group.size();
+        }
+        for (const auto& partition_name : group.partition_names()) {
+            auto p = builder->AddPartition(partition_name + suffix, group.name() + suffix,
+                                           0 /* attr */);
+            if (!p) {
+                return AssertionFailure() << "Cannot add partition " << partition_name + suffix
+                                          << " to group " << group.name() << suffix;
+            }
+        }
+    }
+    for (const auto& partition : manifest.partitions()) {
+        auto p = builder->FindPartition(partition.partition_name() + suffix);
+        if (!p) {
+            return AssertionFailure() << "Cannot resize partition " << partition.partition_name()
+                                      << suffix << "; it is not found.";
+        }
+        if (!builder->ResizePartition(p, partition.new_partition_info().size())) {
+            return AssertionFailure()
+                   << "Cannot resize partition " << partition.partition_name() << suffix
+                   << " to size " << partition.new_partition_info().size();
+        }
+    }
+    return AssertionSuccess();
+}
+
+void SetSize(PartitionUpdate* partition_update, uint64_t size) {
+    partition_update->mutable_new_partition_info()->set_size(size);
 }
 
 }  // namespace snapshot
