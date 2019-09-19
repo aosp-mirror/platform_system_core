@@ -121,13 +121,8 @@ Result<void> ActionParser::ParseSection(std::vector<std::string>&& args,
     }
 
     Subcontext* action_subcontext = nullptr;
-    if (subcontexts_) {
-        for (auto& subcontext : *subcontexts_) {
-            if (StartsWith(filename, subcontext.path_prefix())) {
-                action_subcontext = &subcontext;
-                break;
-            }
-        }
+    if (subcontext_ && subcontext_->PathMatchesSubcontext(filename)) {
+        action_subcontext = subcontext_;
     }
 
     std::string event_trigger;

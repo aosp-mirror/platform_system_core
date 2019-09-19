@@ -103,7 +103,7 @@ static std::string shutdown_command;
 static bool do_shutdown = false;
 static bool load_debug_prop = false;
 
-static std::vector<Subcontext>* subcontexts;
+static std::unique_ptr<Subcontext> subcontext;
 
 void DumpState() {
     ServiceList::GetInstance().DumpState();
@@ -113,9 +113,10 @@ void DumpState() {
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     Parser parser;
 
-    parser.AddSectionParser(
-            "service", std::make_unique<ServiceParser>(&service_list, subcontexts, std::nullopt));
-    parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, subcontexts));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(
+                                               &service_list, subcontext.get(), std::nullopt));
+    parser.AddSectionParser("on",
+                            std::make_unique<ActionParser>(&action_manager, subcontext.get()));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
     return parser;
@@ -125,8 +126,8 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
 Parser CreateServiceOnlyParser(ServiceList& service_list) {
     Parser parser;
 
-    parser.AddSectionParser(
-            "service", std::make_unique<ServiceParser>(&service_list, subcontexts, std::nullopt));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(
+                                               &service_list, subcontext.get(), std::nullopt));
     return parser;
 }
 
@@ -749,7 +750,7 @@ int SecondStageMain(int argc, char** argv) {
         PLOG(FATAL) << "SetupMountNamespaces failed";
     }
 
-    subcontexts = InitializeSubcontexts();
+    subcontext = InitializeSubcontext();
 
     ActionManager& am = ActionManager::GetInstance();
     ServiceList& sm = ServiceList::GetInstance();

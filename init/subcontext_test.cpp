@@ -52,7 +52,7 @@ void RunTest(F&& test_function) {
     auto context_string = std::string(context);
     free(context);
 
-    auto subcontext = Subcontext("dummy_path", context_string);
+    auto subcontext = Subcontext({"dummy_path"}, context_string);
     ASSERT_NE(0, subcontext.pid());
 
     test_function(subcontext, context_string);

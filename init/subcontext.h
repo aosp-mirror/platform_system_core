@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_SUBCONTEXT_H
-#define _INIT_SUBCONTEXT_H
+#pragma once
 
 #include <signal.h>
 
@@ -31,22 +30,21 @@
 namespace android {
 namespace init {
 
-extern const std::string kInitContext;
-extern const std::string kVendorContext;
-extern const char* const paths_and_secontexts[2][2];
+static constexpr const char kInitContext[] = "u:r:init:s0";
+static constexpr const char kVendorContext[] = "u:r:vendor_init:s0";
 
 class Subcontext {
   public:
-    Subcontext(std::string path_prefix, std::string context)
-        : path_prefix_(std::move(path_prefix)), context_(std::move(context)), pid_(0) {
+    Subcontext(std::vector<std::string> path_prefixes, std::string context)
+        : path_prefixes_(std::move(path_prefixes)), context_(std::move(context)), pid_(0) {
         Fork();
     }
 
     Result<void> Execute(const std::vector<std::string>& args);
     Result<std::vector<std::string>> ExpandArgs(const std::vector<std::string>& args);
     void Restart();
+    bool PathMatchesSubcontext(const std::string& path);
 
-    const std::string& path_prefix() const { return path_prefix_; }
     const std::string& context() const { return context_; }
     pid_t pid() const { return pid_; }
 
@@ -54,18 +52,16 @@ class Subcontext {
     void Fork();
     Result<SubcontextReply> TransmitMessage(const SubcontextCommand& subcontext_command);
 
-    std::string path_prefix_;
+    std::vector<std::string> path_prefixes_;
     std::string context_;
     pid_t pid_;
     android::base::unique_fd socket_;
 };
 
 int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map);
-std::vector<Subcontext>* InitializeSubcontexts();
+std::unique_ptr<Subcontext> InitializeSubcontext();
 bool SubcontextChildReap(pid_t pid);
 void SubcontextTerminate();
 
 }  // namespace init
 }  // namespace android
-
-#endif
