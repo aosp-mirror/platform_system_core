@@ -530,7 +530,7 @@ uint32_t InitPropertySet(const std::string& name, const std::string& value) {
     uint32_t result = 0;
     ucred cr = {.pid = 1, .uid = 0, .gid = 0};
     std::string error;
-    result = HandlePropertySet(name, value, kInitContext.c_str(), cr, nullptr, &error);
+    result = HandlePropertySet(name, value, kInitContext, cr, nullptr, &error);
     if (result != PROP_SUCCESS) {
         LOG(ERROR) << "Init cannot set '" << name << "' to '" << value << "': " << error;
     }
@@ -645,11 +645,16 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
     char *key, *value, *eol, *sol, *tmp, *fn;
     size_t flen = 0;
 
-    const char* context = kInitContext.c_str();
+    static constexpr const char* const kVendorPathPrefixes[2] = {
+            "/vendor",
+            "/odm",
+    };
+
+    const char* context = kInitContext;
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_P__) {
-        for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
-            if (StartsWith(filename, path_prefix)) {
-                context = secontext;
+        for (const auto& vendor_path_prefix : kVendorPathPrefixes) {
+            if (StartsWith(filename, vendor_path_prefix)) {
+                context = kVendorContext;
             }
         }
     }
