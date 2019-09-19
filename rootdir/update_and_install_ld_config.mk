@@ -128,7 +128,7 @@ $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES_MOVED_TO_APEX_LIST := $(llndk_lib
 deps := $(llndk_libraries_file) $(vndksp_libraries_file) $(vndkcore_libraries_file) \
   $(vndkprivate_libraries_file)
 ifeq ($(check_backward_compatibility),true)
-deps += $(compatibility_check_script)
+deps += $(compatibility_check_script) $(wildcard prebuilts/vndk/*/*/configs/ld.config.*.txt)
 endif
 ifeq ($(my_vndk_use_core_variant),true)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_USING_CORE_VARIANT_LIBRARIES_FILE := $(vndk_using_core_variant_libraries_file)
