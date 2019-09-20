@@ -10,6 +10,8 @@ cc_defaults {
     ],
     static_libs: [
         "libpropertyinfoparser",
+    ],
+    shared_libs: [
         "libbase",
     ],
 }
