@@ -19,6 +19,7 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -84,6 +85,7 @@ enum class UpdateState : unsigned int {
     // operation via fastboot. This state can only be returned by WaitForMerge.
     Cancelled
 };
+std::ostream& operator<<(std::ostream& os, UpdateState state);
 
 class SnapshotManager final {
     using CreateLogicalPartitionParams = android::fs_mgr::CreateLogicalPartitionParams;
@@ -125,8 +127,9 @@ class SnapshotManager final {
     // will fail if GetUpdateState() != None.
     bool BeginUpdate();
 
-    // Cancel an update; any snapshots will be deleted. This will fail if the
-    // state != Initiated or None.
+    // Cancel an update; any snapshots will be deleted. This is allowed if the
+    // state == Initiated, None, or Unverified (before rebooting to the new
+    // slot).
     bool CancelUpdate();
 
     // Mark snapshot writes as having completed. After this, new snapshots cannot
@@ -392,6 +395,13 @@ class SnapshotManager final {
 
     // The reverse of MapPartitionWithSnapshot.
     bool UnmapPartitionWithSnapshot(LockedFile* lock, const std::string& target_partition_name);
+
+    // If there isn't a previous update, return true. |needs_merge| is set to false.
+    // If there is a previous update but the device has not boot into it, tries to cancel the
+    //   update and delete any snapshots. Return true if successful. |needs_merge| is set to false.
+    // If there is a previous update and the device has boot into it, do nothing and return true.
+    //   |needs_merge| is set to true.
+    bool TryCancelUpdate(bool* needs_merge);
 
     std::string gsid_dir_;
     std::string metadata_dir_;
