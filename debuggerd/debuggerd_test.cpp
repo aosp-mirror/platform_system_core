@@ -195,9 +195,7 @@ void CrasherTest::StartIntercept(unique_fd* output_fd, DebuggerdDumpType interce
 void CrasherTest::FinishIntercept(int* result) {
   InterceptResponse response;
 
-  // Timeout for tombstoned intercept is 10 seconds.
-  ssize_t rc =
-      TIMEOUT(20, TEMP_FAILURE_RETRY(read(intercept_fd.get(), &response, sizeof(response))));
+  ssize_t rc = TIMEOUT(30, read(intercept_fd.get(), &response, sizeof(response)));
   if (rc == -1) {
     FAIL() << "failed to read response from tombstoned: " << strerror(errno);
   } else if (rc == 0) {
@@ -244,7 +242,7 @@ void CrasherTest::FinishCrasher() {
 
 void CrasherTest::AssertDeath(int signo) {
   int status;
-  pid_t pid = TIMEOUT(10, TEMP_FAILURE_RETRY(waitpid(crasher_pid, &status, 0)));
+  pid_t pid = TIMEOUT(30, waitpid(crasher_pid, &status, 0));
   if (pid != crasher_pid) {
     printf("failed to wait for crasher (expected pid %d, return value %d): %s\n", crasher_pid, pid,
            strerror(errno));
