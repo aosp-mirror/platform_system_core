@@ -22,12 +22,25 @@
 #include <string>
 #include <vector>
 
+#include <android-base/unique_fd.h>
 #include <cutils/iosched_policy.h>
 
 #include "result.h"
 
 namespace android {
 namespace init {
+
+class Descriptor {
+  public:
+    Descriptor(const std::string& name, android::base::unique_fd fd)
+        : name_(name), fd_(std::move(fd)){};
+
+    void Publish() const;
+
+  private:
+    std::string name_;
+    android::base::unique_fd fd_;
+};
 
 struct SocketDescriptor {
     std::string name;
@@ -38,14 +51,14 @@ struct SocketDescriptor {
     std::string context;
     bool passcred = false;
 
-    Result<void> CreateAndPublish(const std::string& global_context) const;
+    Result<Descriptor> Create(const std::string& global_context) const;
 };
 
 struct FileDescriptor {
     std::string name;
     std::string type;
 
-    Result<void> CreateAndPublish() const;
+    Result<Descriptor> Create() const;
 };
 
 struct NamespaceInfo {

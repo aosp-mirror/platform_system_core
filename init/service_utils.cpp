@@ -26,7 +26,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <android-base/unique_fd.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
 #include <processgroup/processgroup.h>
@@ -138,37 +137,44 @@ void OpenConsole(const std::string& console) {
     dup2(fd, 2);
 }
 
-void PublishDescriptor(const std::string& key, const std::string& name, int fd) {
-    std::string published_name = key + name;
+}  // namespace
+
+void Descriptor::Publish() const {
+    auto published_name = name_;
+
     for (auto& c : published_name) {
         c = isalnum(c) ? c : '_';
+    }
+
+    int fd = fd_.get();
+    // For safety, the FD is created as CLOEXEC, so that must be removed before publishing.
+    auto fd_flags = fcntl(fd, F_GETFD);
+    fd_flags &= ~FD_CLOEXEC;
+    if (fcntl(fd, F_SETFD, fd_flags) != 0) {
+        PLOG(ERROR) << "Failed to remove CLOEXEC from '" << published_name << "'";
     }
 
     std::string val = std::to_string(fd);
     setenv(published_name.c_str(), val.c_str(), 1);
 }
 
-}  // namespace
-
-Result<void> SocketDescriptor::CreateAndPublish(const std::string& global_context) const {
+Result<Descriptor> SocketDescriptor::Create(const std::string& global_context) const {
     const auto& socket_context = context.empty() ? global_context : context;
-    auto result = CreateSocket(name, type, passcred, perm, uid, gid, socket_context);
+    auto result = CreateSocket(name, type | SOCK_CLOEXEC, passcred, perm, uid, gid, socket_context);
     if (!result) {
         return result.error();
     }
 
-    PublishDescriptor(ANDROID_SOCKET_ENV_PREFIX, name, *result);
-
-    return {};
+    return Descriptor(ANDROID_SOCKET_ENV_PREFIX + name, unique_fd(*result));
 }
 
-Result<void> FileDescriptor::CreateAndPublish() const {
+Result<Descriptor> FileDescriptor::Create() const {
     int flags = (type == "r") ? O_RDONLY : (type == "w") ? O_WRONLY : O_RDWR;
 
     // Make sure we do not block on open (eg: devices can chose to block on carrier detect).  Our
     // intention is never to delay launch of a service for such a condition.  The service can
     // perform its own blocking on carrier detect.
-    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(name.c_str(), flags | O_NONBLOCK)));
+    unique_fd fd(TEMP_FAILURE_RETRY(open(name.c_str(), flags | O_NONBLOCK | O_CLOEXEC)));
 
     if (fd < 0) {
         return ErrnoError() << "Failed to open file '" << name << "'";
@@ -179,9 +185,7 @@ Result<void> FileDescriptor::CreateAndPublish() const {
 
     LOG(INFO) << "Opened file '" << name << "', flags " << flags;
 
-    PublishDescriptor(ANDROID_FILE_ENV_PREFIX, name, fd.release());
-
-    return {};
+    return Descriptor(ANDROID_FILE_ENV_PREFIX + name, std::move(fd));
 }
 
 Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name, bool pre_apexd) {
