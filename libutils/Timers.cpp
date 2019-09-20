@@ -22,7 +22,8 @@
 #include <limits.h>
 #include <time.h>
 
-#if defined(__ANDROID__)
+// host linux support requires Linux 2.6.39+
+#if defined(__linux__)
 nsecs_t systemTime(int clock)
 {
     static const clockid_t clocks[] = {
@@ -41,8 +42,7 @@ nsecs_t systemTime(int clock)
 nsecs_t systemTime(int /*clock*/)
 {
     // Clock support varies widely across hosts. Mac OS doesn't support
-    // posix clocks, older glibcs don't support CLOCK_BOOTTIME and Windows
-    // is windows.
+    // CLOCK_BOOTTIME, and Windows is windows.
     struct timeval t;
     t.tv_sec = t.tv_usec = 0;
     gettimeofday(&t, nullptr);
