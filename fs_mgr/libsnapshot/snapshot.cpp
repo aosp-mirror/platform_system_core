@@ -131,6 +131,16 @@ static std::string GetSnapshotExtraDeviceName(const std::string& snapshot_name) 
 }
 
 bool SnapshotManager::BeginUpdate() {
+    bool needs_merge = false;
+    if (!TryCancelUpdate(&needs_merge)) {
+        return false;
+    }
+    if (needs_merge) {
+        LOG(INFO) << "Wait for merge (if any) before beginning a new update.";
+        auto state = ProcessUpdateState();
+        LOG(INFO) << "Merged with state = " << state;
+    }
+
     auto file = LockExclusive();
     if (!file) return false;
 
@@ -143,6 +153,19 @@ bool SnapshotManager::BeginUpdate() {
 }
 
 bool SnapshotManager::CancelUpdate() {
+    bool needs_merge = false;
+    if (!TryCancelUpdate(&needs_merge)) {
+        return false;
+    }
+    if (needs_merge) {
+        LOG(ERROR) << "Cannot cancel update after it has completed or started merging";
+    }
+    return !needs_merge;
+}
+
+bool SnapshotManager::TryCancelUpdate(bool* needs_merge) {
+    *needs_merge = false;
+
     auto file = LockExclusive();
     if (!file) return false;
 
@@ -167,8 +190,8 @@ bool SnapshotManager::CancelUpdate() {
             return RemoveAllUpdateState(file.get());
         }
     }
-    LOG(ERROR) << "Cannot cancel update after it has completed or started merging";
-    return false;
+    *needs_merge = true;
+    return true;
 }
 
 bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock) {
@@ -1526,34 +1549,33 @@ UpdateState SnapshotManager::ReadUpdateState(LockedFile* file) {
     }
 }
 
-bool SnapshotManager::WriteUpdateState(LockedFile* file, UpdateState state) {
-    std::string contents;
+std::ostream& operator<<(std::ostream& os, UpdateState state) {
     switch (state) {
         case UpdateState::None:
-            contents = "none";
-            break;
+            return os << "none";
         case UpdateState::Initiated:
-            contents = "initiated";
-            break;
+            return os << "initiated";
         case UpdateState::Unverified:
-            contents = "unverified";
-            break;
+            return os << "unverified";
         case UpdateState::Merging:
-            contents = "merging";
-            break;
+            return os << "merging";
         case UpdateState::MergeCompleted:
-            contents = "merge-completed";
-            break;
+            return os << "merge-completed";
         case UpdateState::MergeNeedsReboot:
-            contents = "merge-needs-reboot";
-            break;
+            return os << "merge-needs-reboot";
         case UpdateState::MergeFailed:
-            contents = "merge-failed";
-            break;
+            return os << "merge-failed";
         default:
             LOG(ERROR) << "Unknown update state";
-            return false;
+            return os;
     }
+}
+
+bool SnapshotManager::WriteUpdateState(LockedFile* file, UpdateState state) {
+    std::stringstream ss;
+    ss << state;
+    std::string contents = ss.str();
+    if (contents.empty()) return false;
 
     if (!Truncate(file)) return false;
     if (!android::base::WriteStringToFd(contents, file->fd())) {
