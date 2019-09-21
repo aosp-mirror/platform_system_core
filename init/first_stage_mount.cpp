@@ -50,12 +50,13 @@ using android::fs_mgr::AvbHandle;
 using android::fs_mgr::AvbHandleStatus;
 using android::fs_mgr::AvbHashtreeResult;
 using android::fs_mgr::AvbUniquePtr;
-using android::fs_mgr::BuildGsiSystemFstabEntry;
 using android::fs_mgr::Fstab;
 using android::fs_mgr::FstabEntry;
 using android::fs_mgr::ReadDefaultFstab;
 using android::fs_mgr::ReadFstabFromDt;
 using android::fs_mgr::SkipMountingPartitions;
+using android::fs_mgr::TransformFstabForDsu;
+using android::init::WriteFile;
 using android::snapshot::SnapshotManager;
 
 using namespace std::literals;
@@ -596,14 +597,14 @@ bool FirstStageMount::MountPartitions() {
 }
 
 void FirstStageMount::UseGsiIfPresent() {
-    std::string metadata_file, error;
+    std::string error;
 
-    if (!android::gsi::CanBootIntoGsi(&metadata_file, &error)) {
+    if (!android::gsi::CanBootIntoGsi(&error)) {
         LOG(INFO) << "GSI " << error << ", proceeding with normal boot";
         return;
     }
 
-    auto metadata = android::fs_mgr::ReadFromImageFile(metadata_file.c_str());
+    auto metadata = android::fs_mgr::ReadFromImageFile(gsi::kDsuLpMetadataFile);
     if (!metadata) {
         LOG(ERROR) << "GSI partition layout could not be read";
         return;
@@ -627,14 +628,16 @@ void FirstStageMount::UseGsiIfPresent() {
         return;
     }
 
-    // Replace the existing system fstab entry.
-    auto system_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
-        return entry.mount_point == "/system";
-    });
-    if (system_partition != fstab_.end()) {
-        fstab_.erase(system_partition);
+    std::string lp_names = "";
+    std::vector<std::string> dsu_partitions;
+    for (auto&& partition : metadata->partitions) {
+        auto name = fs_mgr::GetPartitionName(partition);
+        dsu_partitions.push_back(name);
+        lp_names += name + ",";
     }
-    fstab_.emplace_back(BuildGsiSystemFstabEntry());
+    // Publish the logical partition names for TransformFstabForDsu
+    WriteFile(gsi::kGsiLpNamesFile, lp_names);
+    TransformFstabForDsu(&fstab_, dsu_partitions);
     gsi_not_on_userdata_ = (super_name != "userdata");
 }
 
