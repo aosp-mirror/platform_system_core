@@ -30,10 +30,10 @@ namespace init {
 class ServiceParser : public SectionParser {
   public:
     ServiceParser(
-            ServiceList* service_list, std::vector<Subcontext>* subcontexts,
+            ServiceList* service_list, Subcontext* subcontext,
             const std::optional<InterfaceInheritanceHierarchyMap>& interface_inheritance_hierarchy)
         : service_list_(service_list),
-          subcontexts_(subcontexts),
+          subcontext_(subcontext),
           interface_inheritance_hierarchy_(interface_inheritance_hierarchy),
           service_(nullptr) {}
     Result<void> ParseSection(std::vector<std::string>&& args, const std::string& filename,
@@ -84,7 +84,7 @@ class ServiceParser : public SectionParser {
     bool IsValidName(const std::string& name) const;
 
     ServiceList* service_list_;
-    std::vector<Subcontext>* subcontexts_;
+    Subcontext* subcontext_;
     std::optional<InterfaceInheritanceHierarchyMap> interface_inheritance_hierarchy_;
     std::unique_ptr<Service> service_;
     std::string filename_;

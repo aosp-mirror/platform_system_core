@@ -537,13 +537,8 @@ Result<void> ServiceParser::ParseSection(std::vector<std::string>&& args,
     filename_ = filename;
 
     Subcontext* restart_action_subcontext = nullptr;
-    if (subcontexts_) {
-        for (auto& subcontext : *subcontexts_) {
-            if (StartsWith(filename, subcontext.path_prefix())) {
-                restart_action_subcontext = &subcontext;
-                break;
-            }
-        }
+    if (subcontext_ && subcontext_->PathMatchesSubcontext(filename)) {
+        restart_action_subcontext = subcontext_;
     }
 
     std::vector<std::string> str_args(args.begin() + 2, args.end());
