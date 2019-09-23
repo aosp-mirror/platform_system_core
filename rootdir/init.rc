@@ -154,6 +154,14 @@ on init
     mkdir /mnt/user/0/self 0755 root root
     mkdir /mnt/user/0/emulated 0755 root root
     mkdir /mnt/user/0/emulated/0 0755 root root
+
+    # Prepare directories for pass through processes
+    mkdir /mnt/pass_through 0755 root root
+    mkdir /mnt/pass_through/0 0755 root root
+    mkdir /mnt/pass_through/0/self 0755 root root
+    mkdir /mnt/pass_through/0/emulated 0755 root root
+    mkdir /mnt/pass_through/0/emulated/0 0755 root root
+
     mkdir /mnt/expand 0771 system system
     mkdir /mnt/appfuse 0711 root root
 
@@ -678,6 +686,8 @@ on zygote-start && property:persist.sys.fuse=true
   # Mount default storage into root namespace
   mount none /mnt/user/0 /storage bind rec
   mount none none /storage slave rec
+  # Bootstrap the emulated volume for the pass_through directory for user 0
+  mount none /data/media /mnt/pass_through/0/emulated bind rec
 on zygote-start && property:persist.sys.fuse=false
   # Mount default storage into root namespace
   mount none /mnt/runtime/default /storage bind rec
