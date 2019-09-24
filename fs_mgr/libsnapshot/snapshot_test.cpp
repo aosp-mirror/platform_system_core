@@ -513,10 +513,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
     ASSERT_TRUE(DestroyLogicalPartition("test_partition_b-base"));
 
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -559,10 +556,7 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
     FormatFakeSuper();
     ASSERT_TRUE(CreatePartition("test_partition_b", kDeviceSize));
 
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -603,10 +597,7 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
     ASSERT_TRUE(DestroyLogicalPartition("test_partition_b-base"));
 
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -761,9 +752,6 @@ class SnapshotUpdateTest : public SnapshotTest {
 // Also test UnmapUpdateSnapshot unmaps everything.
 // Also test first stage mount and merge after this.
 TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
-    // OTA client calls BeginUpdate before doing anything.
-    ASSERT_TRUE(sm->BeginUpdate());
-
     // OTA client blindly unmaps all partitions that are possibly mapped.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
         ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
@@ -774,6 +762,8 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     SetSize(vnd_, 4_MiB);
     SetSize(prd_, 4_MiB);
 
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Test that partitions prioritize using space in super.
@@ -812,9 +802,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -965,9 +953,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -979,9 +965,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
 
     // Simulate shutting down the device again.
     ASSERT_TRUE(UnmapAll());
-    rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_a");
-    init = SnapshotManager::NewForFirstStageMount(rebooted);
+    init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_a"));
     ASSERT_NE(init, nullptr);
     ASSERT_FALSE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));

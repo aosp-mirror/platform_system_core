@@ -52,6 +52,10 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
   public:
     TestDeviceInfo() {}
     explicit TestDeviceInfo(const std::string& fake_super) { set_fake_super(fake_super); }
+    TestDeviceInfo(const std::string& fake_super, const std::string& slot_suffix)
+        : TestDeviceInfo(fake_super) {
+        set_slot_suffix(slot_suffix);
+    }
     std::string GetGsidDir() const override { return "ota/test"s; }
     std::string GetMetadataDir() const override { return "/metadata/ota/test"s; }
     std::string GetSlotSuffix() const override { return slot_suffix_; }
