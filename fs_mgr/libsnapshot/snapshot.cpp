@@ -1482,7 +1482,7 @@ auto SnapshotManager::OpenFile(const std::string& file, int open_flags, int lock
         PLOG(ERROR) << "Open failed: " << file;
         return nullptr;
     }
-    if (flock(fd, lock_flags) < 0) {
+    if (lock_flags != 0 && flock(fd, lock_flags) < 0) {
         PLOG(ERROR) << "Acquire flock failed: " << file;
         return nullptr;
     }
@@ -1960,6 +1960,48 @@ bool SnapshotManager::UnmapUpdateSnapshot(const std::string& target_partition_na
     auto lock = LockShared();
     if (!lock) return false;
     return UnmapPartitionWithSnapshot(lock.get(), target_partition_name);
+}
+
+bool SnapshotManager::Dump(std::ostream& os) {
+    // Don't actually lock. Dump() is for debugging purposes only, so it is okay
+    // if it is racy.
+    auto file = OpenStateFile(O_RDONLY, 0);
+    if (!file) return false;
+
+    std::stringstream ss;
+
+    ss << "Update state: " << ReadUpdateState(file.get()) << std::endl;
+
+    auto boot_file = GetSnapshotBootIndicatorPath();
+    std::string boot_indicator;
+    if (android::base::ReadFileToString(boot_file, &boot_indicator)) {
+        ss << "Boot indicator: old slot = " << boot_indicator << std::endl;
+    }
+
+    bool ok = true;
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(file.get(), &snapshots)) {
+        LOG(ERROR) << "Could not list snapshots";
+        snapshots.clear();
+        ok = false;
+    }
+    for (const auto& name : snapshots) {
+        ss << "Snapshot: " << name << std::endl;
+        SnapshotStatus status;
+        if (!ReadSnapshotStatus(file.get(), name, &status)) {
+            ok = false;
+            continue;
+        }
+        ss << "    state: " << to_string(status.state) << std::endl;
+        ss << "    device size (bytes): " << status.device_size << std::endl;
+        ss << "    snapshot size (bytes): " << status.snapshot_size << std::endl;
+        ss << "    cow partition size (bytes): " << status.cow_partition_size << std::endl;
+        ss << "    cow file size (bytes): " << status.cow_file_size << std::endl;
+        ss << "    allocated sectors: " << status.sectors_allocated << std::endl;
+        ss << "    metadata sectors: " << status.metadata_sectors << std::endl;
+    }
+    os << ss.rdbuf();
+    return ok;
 }
 
 }  // namespace snapshot
