@@ -114,3 +114,26 @@ cc_test {
         "libstorage_literals_headers",
     ],
 }
+
+cc_binary {
+    name: "snapshotctl",
+    srcs: [
+        "snapshotctl.cpp",
+    ],
+    static_libs: [
+        "libdm",
+        "libext2_uuid",
+        "libfiemap_binder",
+        "libfstab",
+        "libsnapshot",
+    ],
+    shared_libs: [
+        "libbase",
+        "libbinder",
+        "libext4_utils",
+        "libfs_mgr",
+        "libutils",
+        "liblog",
+        "liblp",
+    ],
+}
