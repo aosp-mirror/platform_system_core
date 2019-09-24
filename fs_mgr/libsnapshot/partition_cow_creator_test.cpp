@@ -18,48 +18,20 @@
 #include <liblp/property_fetcher.h>
 
 #include "partition_cow_creator.h"
+#include "test_helpers.h"
 
 using ::android::fs_mgr::MetadataBuilder;
-using ::testing::_;
-using ::testing::AnyNumber;
-using ::testing::Return;
 
 namespace android {
 namespace snapshot {
 
-class MockPropertyFetcher : public fs_mgr::IPropertyFetcher {
+class PartitionCowCreatorTest : public ::testing::Test {
   public:
-    MOCK_METHOD2(GetProperty, std::string(const std::string&, const std::string&));
-    MOCK_METHOD2(GetBoolProperty, bool(const std::string&, bool));
+    void SetUp() override { SnapshotTestPropertyFetcher::SetUp(); }
+    void TearDown() override { SnapshotTestPropertyFetcher::TearDown(); }
 };
 
-class PartitionCowCreatorTest : ::testing::Test {
-  public:
-    void SetUp() override {
-        fs_mgr::IPropertyFetcher::OverrideForTesting(std::make_unique<MockPropertyFetcher>());
-
-        EXPECT_CALL(fetcher(), GetProperty("ro.boot.slot_suffix", _))
-                .Times(AnyNumber())
-                .WillRepeatedly(Return("_a"));
-        EXPECT_CALL(fetcher(), GetBoolProperty("ro.boot.dynamic_partitions", _))
-                .Times(AnyNumber())
-                .WillRepeatedly(Return(true));
-        EXPECT_CALL(fetcher(), GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
-                .Times(AnyNumber())
-                .WillRepeatedly(Return(false));
-        EXPECT_CALL(fetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-                .Times(AnyNumber())
-                .WillRepeatedly(Return(true));
-    }
-    void TearDown() override {
-        fs_mgr::IPropertyFetcher::OverrideForTesting(std::make_unique<MockPropertyFetcher>());
-    }
-    MockPropertyFetcher& fetcher() {
-        return *static_cast<MockPropertyFetcher*>(fs_mgr::IPropertyFetcher::GetInstance());
-    }
-};
-
-TEST(PartitionCowCreator, IntersectSelf) {
+TEST_F(PartitionCowCreatorTest, IntersectSelf) {
     auto builder_a = MetadataBuilder::New(1024 * 1024, 1024, 2);
     ASSERT_NE(builder_a, nullptr);
     auto system_a = builder_a->AddPartition("system_a", LP_PARTITION_ATTR_READONLY);
