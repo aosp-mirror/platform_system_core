@@ -94,5 +94,3 @@ int ashmem_get_size_region(int fd)
 
     return buf.st_size;
 }
-
-void ashmem_init() {}
