@@ -136,4 +136,7 @@ cc_binary {
         "liblog",
         "liblp",
     ],
+    init_rc: [
+        "snapshotctl.rc",
+    ],
 }
