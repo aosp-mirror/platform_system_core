@@ -629,6 +629,7 @@ cc_test {
         "libselinux",
     ],
     test_suites: ["device-tests"],
+    require_root: true,
 }
 
 python_test_host {
