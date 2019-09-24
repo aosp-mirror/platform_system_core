@@ -160,7 +160,7 @@ void LogAudit::auditParse(const std::string& string, uid_t uid,
     }
     auto search = denial_to_bug.find(scontext + tcontext + tclass);
     if (search != denial_to_bug.end()) {
-        bug_num->assign(" b/" + search->second);
+        bug_num->assign(" " + search->second);
     } else {
         bug_num->assign("");
     }
