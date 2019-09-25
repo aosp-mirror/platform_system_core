@@ -77,6 +77,7 @@ struct ProcessAttributes {
     gid_t gid;
     std::vector<gid_t> supp_gids;
     int priority;
+    bool stdio_to_kmsg;
 };
 Result<void> SetProcessAttributes(const ProcessAttributes& attr);
 
