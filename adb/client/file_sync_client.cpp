@@ -849,6 +849,16 @@ static bool local_build_list(SyncConnection& sc, std::vector<copyinfo>* file_lis
     return true;
 }
 
+// dirname("//foo") returns "//", so we can't do the obvious `path == "/"`.
+static bool is_root_dir(std::string_view path) {
+    for (char c : path) {
+        if (c != '/') {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
                                   std::string rpath, bool check_timestamps,
                                   bool list_only) {
@@ -862,8 +872,8 @@ static bool copy_local_dir_remote(SyncConnection& sc, std::string lpath,
     std::vector<copyinfo> file_list;
     std::vector<std::string> directory_list;
 
-    for (std::string dirpath = rpath; dirpath != "/"; dirpath = android::base::Dirname(dirpath)) {
-        directory_list.push_back(dirpath);
+    for (std::string path = rpath; !is_root_dir(path); path = android::base::Dirname(path)) {
+        directory_list.push_back(path);
     }
     std::reverse(directory_list.begin(), directory_list.end());
 
