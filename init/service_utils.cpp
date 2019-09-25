@@ -16,10 +16,12 @@
 
 #include "service_utils.h"
 
+#include <fcntl.h>
 #include <grp.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -121,11 +123,15 @@ Result<void> SetUpPidNamespace(const char* name) {
     return {};
 }
 
-void ZapStdio() {
+void SetupStdio(bool stdio_to_kmsg) {
     auto fd = unique_fd{open("/dev/null", O_RDWR | O_CLOEXEC)};
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
+    dup2(fd, STDIN_FILENO);
+    if (stdio_to_kmsg) {
+        fd.reset(open("/dev/kmsg_debug", O_WRONLY | O_CLOEXEC));
+        if (fd == -1) fd.reset(open("/dev/null", O_WRONLY | O_CLOEXEC));
+    }
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
 }
 
 void OpenConsole(const std::string& console) {
@@ -238,7 +244,7 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
         if (setpgid(0, getpid()) == -1) {
             return ErrnoError() << "setpgid failed";
         }
-        ZapStdio();
+        SetupStdio(attr.stdio_to_kmsg);
     }
 
     for (const auto& rlimit : attr.rlimits) {

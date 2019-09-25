@@ -83,6 +83,9 @@ Result<void> ServiceParser::ParseClass(std::vector<std::string>&& args) {
 }
 
 Result<void> ServiceParser::ParseConsole(std::vector<std::string>&& args) {
+    if (service_->proc_attr_.stdio_to_kmsg) {
+        return Error() << "'console' and 'stdio_to_kmsg' are mutually exclusive";
+    }
     service_->flags_ |= SVC_CONSOLE;
     service_->proc_attr_.console = args.size() > 1 ? "/dev/" + args[1] : "";
     return {};
@@ -429,6 +432,14 @@ Result<void> ServiceParser::ParseSocket(std::vector<std::string>&& args) {
     return {};
 }
 
+Result<void> ServiceParser::ParseStdioToKmsg(std::vector<std::string>&& args) {
+    if (service_->flags_ & SVC_CONSOLE) {
+        return Error() << "'stdio_to_kmsg' and 'console' are mutually exclusive";
+    }
+    service_->proc_attr_.stdio_to_kmsg = true;
+    return {};
+}
+
 // name type
 Result<void> ServiceParser::ParseFile(std::vector<std::string>&& args) {
     if (args[2] != "r" && args[2] != "w" && args[2] != "rw") {
@@ -514,6 +525,7 @@ const KeywordMap<ServiceParser::OptionParser>& ServiceParser::GetParserMap() con
         {"shutdown",                {1,     1,    &ServiceParser::ParseShutdown}},
         {"sigstop",                 {0,     0,    &ServiceParser::ParseSigstop}},
         {"socket",                  {3,     6,    &ServiceParser::ParseSocket}},
+        {"stdio_to_kmsg",           {0,     0,    &ServiceParser::ParseStdioToKmsg}},
         {"timeout_period",          {1,     1,    &ServiceParser::ParseTimeoutPeriod}},
         {"updatable",               {0,     0,    &ServiceParser::ParseUpdatable}},
         {"user",                    {1,     1,    &ServiceParser::ParseUser}},
