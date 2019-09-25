@@ -170,6 +170,8 @@ runs the service.
   be changed by setting the "androidboot.console" kernel parameter. In
   all cases the leading "/dev/" should be omitted, so "/dev/tty0" would be
   specified as just "console tty0".
+  This option connects stdin, stdout, and stderr to the console. It is mutually exclusive with the
+  stdio_to_kmsg option, which only connects stdout and stderr to kmsg.
 
 `critical`
 > This is a device-critical service. If it exits more than four times in
@@ -312,6 +314,13 @@ runs the service.
   socket.  It defaults to the service security context, as specified by
   seclabel or computed based on the service executable file security context.
   For native executables see libcutils android\_get\_control\_socket().
+
+`stdio_to_kmsg`
+> Redirect stdout and stderr to /dev/kmsg_debug. This is useful for services that do not use native
+  Android logging during early boot and whose logs messages we want to capture. This is only enabled
+  when /dev/kmsg_debug is enabled, which is only enabled on userdebug and eng builds.
+  This is mutually exclusive with the console option, which additionally connects stdin to the
+  given console.
 
 `timeout_period <seconds>`
 > Provide a timeout after which point the service will be killed. The oneshot keyword is respected
