@@ -1741,6 +1741,22 @@ bool SnapshotManager::ForceLocalImageManager() {
     return true;
 }
 
+static void UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata) {
+    auto& dm = DeviceMapper::Instance();
+    std::vector<std::string> to_delete;
+    for (auto* existing_cow_partition : current_metadata->ListPartitionsInGroup(kCowGroupName)) {
+        if (!dm.DeleteDeviceIfExists(existing_cow_partition->name())) {
+            LOG(WARNING) << existing_cow_partition->name()
+                         << " cannot be unmapped and its space cannot be reclaimed";
+            continue;
+        }
+        to_delete.push_back(existing_cow_partition->name());
+    }
+    for (const auto& name : to_delete) {
+        current_metadata->RemovePartition(name);
+    }
+}
+
 bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) {
     auto lock = LockExclusive();
     if (!lock) return false;
@@ -1787,6 +1803,10 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
                    << ", reboot, then try again.";
         return false;
     }
+
+    // Delete previous COW partitions in current_metadata so that PartitionCowCreator marks those as
+    // free regions.
+    UnmapAndDeleteCowPartition(current_metadata.get());
 
     // Check that all these metadata is not retrofit dynamic partitions. Snapshots on
     // devices with retrofit dynamic partitions does not make sense.
