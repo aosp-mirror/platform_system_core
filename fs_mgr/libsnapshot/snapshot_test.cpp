@@ -31,7 +31,6 @@
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
-#include <liblp/mock_property_fetcher.h>
 #include <storage_literals/storage_literals.h>
 
 #include "test_helpers.h"
@@ -53,7 +52,6 @@ using android::fs_mgr::MetadataBuilder;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::PartitionUpdate;
 using namespace ::testing;
-using namespace android::fs_mgr::testing;
 using namespace android::storage_literals;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -79,7 +77,7 @@ class SnapshotTest : public ::testing::Test {
 
   protected:
     void SetUp() override {
-        ResetMockPropertyFetcher();
+        SnapshotTestPropertyFetcher::SetUp();
         InitializeState();
         CleanupTestArtifacts();
         FormatFakeSuper();
@@ -91,7 +89,7 @@ class SnapshotTest : public ::testing::Test {
         lock_ = nullptr;
 
         CleanupTestArtifacts();
-        ResetMockPropertyFetcher();
+        SnapshotTestPropertyFetcher::TearDown();
     }
 
     void InitializeState() {
@@ -373,9 +371,6 @@ TEST_F(SnapshotTest, FirstStageMountAfterRollback) {
 }
 
 TEST_F(SnapshotTest, Merge) {
-    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-            .WillByDefault(Return(true));
-
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -493,9 +488,6 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
 }
 
 TEST_F(SnapshotTest, FirstStageMountAndMerge) {
-    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-            .WillByDefault(Return(true));
-
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -535,9 +527,6 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
 }
 
 TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
-    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-            .WillByDefault(Return(true));
-
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -583,9 +572,6 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
 }
 
 TEST_F(SnapshotTest, FlashSuperDuringMerge) {
-    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-            .WillByDefault(Return(true));
-
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -635,9 +621,6 @@ class SnapshotUpdateTest : public SnapshotTest {
 
         // Cleanup() changes slot suffix, so initialize it again.
         test_device->set_slot_suffix("_a");
-
-        ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-                .WillByDefault(Return(true));
 
         opener_ = std::make_unique<TestPartitionOpener>(fake_super);
 
