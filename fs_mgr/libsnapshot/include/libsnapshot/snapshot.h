@@ -192,6 +192,9 @@ class SnapshotManager final {
     // call to CreateLogicalPartitions when snapshots are present.
     bool CreateLogicalAndSnapshotPartitions(const std::string& super_device);
 
+    // Dump debug information.
+    bool Dump(std::ostream& os);
+
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
