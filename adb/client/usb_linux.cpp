@@ -406,25 +406,44 @@ static int usb_bulk_read(usb_handle* h, void* data, int len) {
     }
 }
 
-int usb_write(usb_handle *h, const void *_data, int len)
-{
+static int usb_write_split(usb_handle* h, unsigned char* data, int len) {
+    for (int i = 0; i < len; i += 16384) {
+        int chunk_size = (i + 16384 > len) ? len - i : 16384;
+        int n = usb_bulk_write(h, data + i, chunk_size);
+        if (n != chunk_size) {
+            D("ERROR: n = %d, errno = %d (%s)", n, errno, strerror(errno));
+            return -1;
+        }
+    }
+
+    return len;
+}
+
+int usb_write(usb_handle* h, const void* _data, int len) {
     D("++ usb_write ++");
 
-    unsigned char *data = (unsigned char*) _data;
+    unsigned char* data = (unsigned char*)_data;
+
+    // The kernel will attempt to allocate a contiguous buffer for each write we submit.
+    // This might fail due to heap fragmentation, so attempt a contiguous write once, and if that
+    // fails, retry after having split the data into 16kB chunks to avoid allocation failure.
     int n = usb_bulk_write(h, data, len);
-    if (n != len) {
-        D("ERROR: n = %d, errno = %d (%s)", n, errno, strerror(errno));
+    if (n == -1 && errno == ENOMEM) {
+        n = usb_write_split(h, data, len);
+    }
+
+    if (n == -1) {
         return -1;
     }
 
     if (h->zero_mask && !(len & h->zero_mask)) {
         // If we need 0-markers and our transfer is an even multiple of the packet size,
         // then send a zero marker.
-        return usb_bulk_write(h, _data, 0) == 0 ? n : -1;
+        return usb_bulk_write(h, _data, 0) == 0 ? len : -1;
     }
 
     D("-- usb_write --");
-    return n;
+    return len;
 }
 
 int usb_read(usb_handle *h, void *_data, int len)
