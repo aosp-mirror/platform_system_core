@@ -31,7 +31,6 @@
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
-#include <liblp/mock_property_fetcher.h>
 #include <storage_literals/storage_literals.h>
 
 #include "test_helpers.h"
@@ -47,13 +46,14 @@ using android::fiemap::IImageManager;
 using android::fs_mgr::BlockDeviceInfo;
 using android::fs_mgr::CreateLogicalPartitionParams;
 using android::fs_mgr::DestroyLogicalPartition;
+using android::fs_mgr::Extent;
 using android::fs_mgr::GetPartitionGroupName;
 using android::fs_mgr::GetPartitionName;
+using android::fs_mgr::Interval;
 using android::fs_mgr::MetadataBuilder;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::PartitionUpdate;
 using namespace ::testing;
-using namespace android::fs_mgr::testing;
 using namespace android::storage_literals;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -79,7 +79,7 @@ class SnapshotTest : public ::testing::Test {
 
   protected:
     void SetUp() override {
-        ResetMockPropertyFetcher();
+        SnapshotTestPropertyFetcher::SetUp();
         InitializeState();
         CleanupTestArtifacts();
         FormatFakeSuper();
@@ -91,7 +91,7 @@ class SnapshotTest : public ::testing::Test {
         lock_ = nullptr;
 
         CleanupTestArtifacts();
-        ResetMockPropertyFetcher();
+        SnapshotTestPropertyFetcher::TearDown();
     }
 
     void InitializeState() {
@@ -373,9 +373,6 @@ TEST_F(SnapshotTest, FirstStageMountAfterRollback) {
 }
 
 TEST_F(SnapshotTest, Merge) {
-    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-            .WillByDefault(Return(true));
-
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -493,9 +490,6 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
 }
 
 TEST_F(SnapshotTest, FirstStageMountAndMerge) {
-    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-            .WillByDefault(Return(true));
-
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -513,10 +507,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
     ASSERT_TRUE(DestroyLogicalPartition("test_partition_b-base"));
 
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -535,9 +526,6 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
 }
 
 TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
-    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-            .WillByDefault(Return(true));
-
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -559,10 +547,7 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
     FormatFakeSuper();
     ASSERT_TRUE(CreatePartition("test_partition_b", kDeviceSize));
 
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -583,9 +568,6 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
 }
 
 TEST_F(SnapshotTest, FlashSuperDuringMerge) {
-    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-            .WillByDefault(Return(true));
-
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -603,10 +585,7 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
     ASSERT_TRUE(DestroyLogicalPartition("test_partition_b-base"));
 
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -635,9 +614,6 @@ class SnapshotUpdateTest : public SnapshotTest {
 
         // Cleanup() changes slot suffix, so initialize it again.
         test_device->set_slot_suffix("_a");
-
-        ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
-                .WillByDefault(Return(true));
 
         opener_ = std::make_unique<TestPartitionOpener>(fake_super);
 
@@ -761,9 +737,6 @@ class SnapshotUpdateTest : public SnapshotTest {
 // Also test UnmapUpdateSnapshot unmaps everything.
 // Also test first stage mount and merge after this.
 TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
-    // OTA client calls BeginUpdate before doing anything.
-    ASSERT_TRUE(sm->BeginUpdate());
-
     // OTA client blindly unmaps all partitions that are possibly mapped.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
         ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
@@ -774,6 +747,8 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     SetSize(vnd_, 4_MiB);
     SetSize(prd_, 4_MiB);
 
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Test that partitions prioritize using space in super.
@@ -812,9 +787,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -965,9 +938,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_b");
-    auto init = SnapshotManager::NewForFirstStageMount(rebooted);
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -979,9 +950,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
 
     // Simulate shutting down the device again.
     ASSERT_TRUE(UnmapAll());
-    rebooted = new TestDeviceInfo(fake_super);
-    rebooted->set_slot_suffix("_a");
-    init = SnapshotManager::NewForFirstStageMount(rebooted);
+    init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_a"));
     ASSERT_NE(init, nullptr);
     ASSERT_FALSE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
@@ -997,6 +966,57 @@ TEST_F(SnapshotUpdateTest, CancelAfterApply) {
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
     ASSERT_TRUE(sm->CancelUpdate());
+}
+
+static std::vector<Interval> ToIntervals(const std::vector<std::unique_ptr<Extent>>& extents) {
+    std::vector<Interval> ret;
+    std::transform(extents.begin(), extents.end(), std::back_inserter(ret),
+                   [](const auto& extent) { return extent->AsLinearExtent()->AsInterval(); });
+    return ret;
+}
+
+// Test that at the second update, old COW partition spaces are reclaimed.
+TEST_F(SnapshotUpdateTest, ReclaimCow) {
+    // Execute the first update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    init = nullptr;
+
+    // Initiate the merge and wait for it to be completed.
+    auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_TRUE(new_sm->InitiateMerge());
+    ASSERT_EQ(UpdateState::MergeCompleted, new_sm->ProcessUpdateState());
+
+    // Execute the second update.
+    ASSERT_TRUE(new_sm->BeginUpdate());
+    ASSERT_TRUE(new_sm->CreateUpdateSnapshots(manifest_));
+
+    // Check that the old COW space is reclaimed and does not occupy space of mapped partitions.
+    auto src = MetadataBuilder::New(*opener_, "super", 1);
+    auto tgt = MetadataBuilder::New(*opener_, "super", 0);
+    for (const auto& cow_part_name : {"sys_a-cow", "vnd_a-cow", "prd_a-cow"}) {
+        auto* cow_part = tgt->FindPartition(cow_part_name);
+        ASSERT_NE(nullptr, cow_part) << cow_part_name << " does not exist in target metadata";
+        auto cow_intervals = ToIntervals(cow_part->extents());
+        for (const auto& old_part_name : {"sys_b", "vnd_b", "prd_b"}) {
+            auto* old_part = src->FindPartition(old_part_name);
+            ASSERT_NE(nullptr, old_part) << old_part_name << " does not exist in source metadata";
+            auto old_intervals = ToIntervals(old_part->extents());
+
+            auto intersect = Interval::Intersect(cow_intervals, old_intervals);
+            ASSERT_TRUE(intersect.empty()) << "COW uses space of source partitions";
+        }
+    }
 }
 
 }  // namespace snapshot

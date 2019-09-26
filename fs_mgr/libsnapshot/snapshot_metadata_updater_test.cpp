@@ -45,6 +45,7 @@ class SnapshotMetadataUpdaterTest : public ::testing::TestWithParam<uint32_t> {
     void SetUp() override {
         target_slot_ = GetParam();
         target_suffix_ = SlotSuffixForSlotNumber(target_slot_);
+        SnapshotTestPropertyFetcher::SetUp(SlotSuffixForSlotNumber(1 - target_slot_));
         builder_ = MetadataBuilder::New(4_GiB + 1_MiB, 4_KiB, 2);
 
         group_ = manifest_.mutable_dynamic_partition_metadata()->add_groups();
@@ -61,6 +62,8 @@ class SnapshotMetadataUpdaterTest : public ::testing::TestWithParam<uint32_t> {
 
         ASSERT_TRUE(FillFakeMetadata(builder_.get(), manifest_, target_suffix_));
     }
+
+    void TearDown() override { SnapshotTestPropertyFetcher::TearDown(); }
 
     // Append suffix to name.
     std::string T(std::string_view name) { return std::string(name) + target_suffix_; }
