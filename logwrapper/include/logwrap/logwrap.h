@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-#ifndef __LIBS_LOGWRAP_H
-#define __LIBS_LOGWRAP_H
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -26,12 +25,6 @@ __BEGIN_DECLS
 /*
  * Run a command while logging its stdout and stderr
  *
- * WARNING: while this function is running it will clear all SIGCHLD handlers
- * if you rely on SIGCHLD in the caller there is a chance zombies will be
- * created if you're not calling waitpid after calling this. This function will
- * log a warning when it clears SIGCHLD for processes other than the child it
- * created.
- *
  * Arguments:
  *   argc:   the number of elements in argv
  *   argv:   an array of strings containing the command to be executed and its
@@ -40,10 +33,10 @@ __BEGIN_DECLS
  *   status: the equivalent child status as populated by wait(status). This
  *           value is only valid when logwrap successfully completes. If NULL
  *           the return value of the child will be the function's return value.
- *   ignore_int_quit: set to true if you want to completely ignore SIGINT and
- *           SIGQUIT while logwrap is running. This may force the end-user to
- *           send a signal twice to signal the caller (once for the child, and
- *           once for the caller)
+ *   forward_signals: set to true if you want to forward SIGINT, SIGQUIT, and
+ *           SIGHUP to the child process, while it is running.  You likely do
+ *           not need to use this; it is primarily for the logwrapper
+ *           executable itself.
  *   log_target: Specify where to log the output of the child, either LOG_NONE,
  *           LOG_ALOG (for the Android system log), LOG_KLOG (for the kernel
  *           log), or LOG_FILE (and you need to specify a pathname in the
@@ -54,8 +47,6 @@ __BEGIN_DECLS
  *           the specified log until the child has exited.
  *   file_path: if log_target has the LOG_FILE bit set, then this parameter
  *           must be set to the pathname of the file to log to.
- *   unused_opts: currently unused.
- *   unused_opts_len: currently unused.
  *
  * Return value:
  *   0 when logwrap successfully run the child process and captured its status
@@ -71,10 +62,18 @@ __BEGIN_DECLS
 #define LOG_KLOG        2
 #define LOG_FILE        4
 
-// TODO: Remove unused_opts / unused_opts_len in a followup change.
-int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int_quit,
-        int log_target, bool abbreviated, char *file_path, void* unused_opts,
-        int unused_opts_len);
+int android_fork_execvp_ext2(int argc, char* argv[], int* status, bool forward_signals,
+                             int log_target, bool abbreviated, char* file_path);
+
+// TODO: Actually deprecate this and the below.
+static inline int android_fork_execvp_ext(int argc, char* argv[], int* status, bool ignore_int_quit,
+                                          int log_target, bool abbreviated, char* file_path,
+                                          void* unused_opts, int unused_opts_len) {
+    (void)ignore_int_quit;
+    (void)unused_opts;
+    (void)unused_opts_len;
+    return android_fork_execvp_ext2(argc, argv, status, false, log_target, abbreviated, file_path);
+}
 
 /* Similar to above, except abbreviated logging is not available, and if logwrap
  * is true, logging is to the Android system log, and if false, there is no
@@ -89,5 +88,3 @@ static inline int android_fork_execvp(int argc, char* argv[], int *status,
 }
 
 __END_DECLS
-
-#endif /* __LIBS_LOGWRAP_H */
