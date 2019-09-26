@@ -41,6 +41,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <ApexProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -76,6 +77,7 @@
 using namespace std::literals::string_literals;
 
 using android::base::Basename;
+using android::base::StartsWith;
 using android::base::unique_fd;
 using android::fs_mgr::Fstab;
 using android::fs_mgr::ReadFstabFromFile;
@@ -125,6 +127,13 @@ static Result<Success> do_class_start_post_data(const BuiltinArguments& args) {
     if (args.context != kInitContext) {
         return Error() << "command 'class_start_post_data' only available in init context";
     }
+    static bool is_apex_updatable = android::sysprop::ApexProperties::updatable().value_or(false);
+
+    if (!is_apex_updatable) {
+        // No need to start these on devices that don't support APEX, since they're not
+        // stopped either.
+        return {};
+    }
     for (const auto& service : ServiceList::GetInstance()) {
         if (service->classnames().count(args[1])) {
             if (auto result = service->StartIfPostData(); !result) {
@@ -149,6 +158,11 @@ static Result<Success> do_class_reset(const BuiltinArguments& args) {
 static Result<Success> do_class_reset_post_data(const BuiltinArguments& args) {
     if (args.context != kInitContext) {
         return Error() << "command 'class_reset_post_data' only available in init context";
+    }
+    static bool is_apex_updatable = android::sysprop::ApexProperties::updatable().value_or(false);
+    if (!is_apex_updatable) {
+        // No need to stop these on devices that don't support APEX.
+        return {};
     }
     ForEachServiceInClass(args[1], &Service::ResetIfPostData);
     return Success();
@@ -698,6 +712,15 @@ static Result<Success> do_swapon_all(const BuiltinArguments& args) {
 }
 
 static Result<Success> do_setprop(const BuiltinArguments& args) {
+    if (StartsWith(args[1], "ctl.")) {
+        return Error()
+               << "Cannot set ctl. properties from init; call the Service functions directly";
+    }
+    if (args[1] == kRestoreconProperty) {
+        return Error() << "Cannot set '" << kRestoreconProperty
+                       << "' from init; use the restorecon builtin directly";
+    }
+
     property_set(args[1], args[2]);
     return Success();
 }
@@ -1049,7 +1072,20 @@ static Result<Success> do_loglevel(const BuiltinArguments& args) {
 }
 
 static Result<Success> do_load_persist_props(const BuiltinArguments& args) {
-    load_persist_props();
+    // Devices with FDE have load_persist_props called twice; the first time when the temporary
+    // /data partition is mounted and then again once /data is truly mounted.  We do not want to
+    // read persistent properties from the temporary /data partition or mark persistent properties
+    // as having been loaded during the first call, so we return in that case.
+    std::string crypto_state = android::base::GetProperty("ro.crypto.state", "");
+    std::string crypto_type = android::base::GetProperty("ro.crypto.type", "");
+    if (crypto_state == "encrypted" && crypto_type == "block") {
+        static size_t num_calls = 0;
+        if (++num_calls == 1) return Success();
+    }
+
+    SendLoadPersistentPropertiesMessage();
+
+    start_waiting_for_property("ro.persistent_properties.ready", "true");
     return Success();
 }
 

@@ -40,15 +40,14 @@ extern std::vector<std::string> late_import_paths;
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
 Parser CreateServiceOnlyParser(ServiceList& service_list);
 
-bool HandleControlMessage(const std::string& msg, const std::string& arg, pid_t pid);
-
-void property_changed(const std::string& name, const std::string& value);
-
 bool start_waiting_for_property(const char *name, const char *value);
 
 void DumpState();
 
 void ResetWaitForProp();
+
+void SendLoadPersistentPropertiesMessage();
+void SendStopSendingMessagesMessage();
 
 int SecondStageMain(int argc, char** argv);
 

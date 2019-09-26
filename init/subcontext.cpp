@@ -18,15 +18,16 @@
 
 #include <fcntl.h>
 #include <poll.h>
-#include <sys/socket.h>
 #include <unistd.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <selinux/android.h>
 
 #include "action.h"
+#include "proto_utils.h"
 #include "util.h"
 
 #if defined(__ANDROID__)
@@ -56,45 +57,6 @@ const char* const paths_and_secontexts[2][2] = {
 };
 
 namespace {
-
-constexpr size_t kBufferSize = 4096;
-
-Result<std::string> ReadMessage(int socket) {
-    char buffer[kBufferSize] = {};
-    auto result = TEMP_FAILURE_RETRY(recv(socket, buffer, sizeof(buffer), 0));
-    if (result == 0) {
-        return Error();
-    } else if (result < 0) {
-        return ErrnoError();
-    }
-    return std::string(buffer, result);
-}
-
-template <typename T>
-Result<Success> SendMessage(int socket, const T& message) {
-    std::string message_string;
-    if (!message.SerializeToString(&message_string)) {
-        return Error() << "Unable to serialize message";
-    }
-
-    if (message_string.size() > kBufferSize) {
-        return Error() << "Serialized message too long to send";
-    }
-
-    if (auto result =
-            TEMP_FAILURE_RETRY(send(socket, message_string.c_str(), message_string.size(), 0));
-        result != static_cast<long>(message_string.size())) {
-        return ErrnoError() << "send() failed to send message contents";
-    }
-    return Success();
-}
-
-std::vector<std::pair<std::string, std::string>> properties_to_set;
-
-uint32_t SubcontextPropertySet(const std::string& name, const std::string& value) {
-    properties_to_set.emplace_back(name, value);
-    return 0;
-}
 
 class SubcontextProcess {
   public:
@@ -128,14 +90,6 @@ void SubcontextProcess::RunCommand(const SubcontextCommand::ExecuteCommand& exec
     } else {
         result = RunBuiltinFunction(map_result->second, args, context_);
     }
-
-    for (const auto& [name, value] : properties_to_set) {
-        auto property = reply->add_properties_to_set();
-        property->set_name(name);
-        property->set_value(value);
-    }
-
-    properties_to_set.clear();
 
     if (result) {
         reply->set_success(true);
@@ -222,7 +176,10 @@ int SubcontextMain(int argc, char** argv, const KeywordFunctionMap* function_map
 
     SelabelInitialize();
 
-    property_set = SubcontextPropertySet;
+    property_set = [](const std::string& key, const std::string& value) -> uint32_t {
+        android::base::SetProperty(key, value);
+        return 0;
+    };
 
     auto subcontext_process = SubcontextProcess(function_map, context, init_fd);
     subcontext_process.MainLoop();
@@ -307,15 +264,6 @@ Result<Success> Subcontext::Execute(const std::vector<std::string>& args) {
     auto subcontext_reply = TransmitMessage(subcontext_command);
     if (!subcontext_reply) {
         return subcontext_reply.error();
-    }
-
-    for (const auto& property : subcontext_reply->properties_to_set()) {
-        ucred cr = {.pid = pid_, .uid = 0, .gid = 0};
-        std::string error;
-        if (HandlePropertySet(property.name(), property.value(), context_, cr, &error) != 0) {
-            LOG(ERROR) << "Subcontext init could not set '" << property.name() << "' to '"
-                       << property.value() << "': " << error;
-        }
     }
 
     if (subcontext_reply->reply_case() == SubcontextReply::kFailure) {
