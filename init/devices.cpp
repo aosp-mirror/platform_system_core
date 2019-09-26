@@ -441,6 +441,23 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     }
 }
 
+void DeviceHandler::HandleAshmemUevent(const Uevent& uevent) {
+    if (uevent.device_name == "ashmem") {
+        static const std::string boot_id_path = "/proc/sys/kernel/random/boot_id";
+        std::string boot_id;
+        if (!ReadFileToString(boot_id_path, &boot_id)) {
+            PLOG(ERROR) << "Cannot duplicate ashmem device node. Failed to read " << boot_id_path;
+            return;
+        };
+        boot_id = Trim(boot_id);
+
+        Uevent dup_ashmem_uevent = uevent;
+        dup_ashmem_uevent.device_name += boot_id;
+        dup_ashmem_uevent.path += boot_id;
+        HandleUevent(dup_ashmem_uevent);
+    }
+}
+
 void DeviceHandler::HandleUevent(const Uevent& uevent) {
     if (uevent.action == "add" || uevent.action == "change" || uevent.action == "online") {
         FixupSysPermissions(uevent.path, uevent.subsystem);
@@ -485,6 +502,10 @@ void DeviceHandler::HandleUevent(const Uevent& uevent) {
     mkdir_recursive(Dirname(devpath), 0755);
 
     HandleDevice(uevent.action, devpath, block, uevent.major, uevent.minor, links);
+
+    // Duplicate /dev/ashmem device and name it /dev/ashmem<boot_id>.
+    // TODO(b/111903542): remove once all users of /dev/ashmem are migrated to libcutils API.
+    HandleAshmemUevent(uevent);
 }
 
 void DeviceHandler::ColdbootDone() {
