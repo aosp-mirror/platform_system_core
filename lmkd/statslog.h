@@ -85,11 +85,40 @@ stats_write_lmk_state_changed(android_log_context ctx, int32_t code, int32_t sta
  * Code: LMK_KILL_OCCURRED = 51
  */
 int
+stats_write_lmk_kill_occurred_pid(android_log_context ctx, int32_t code, int32_t uid, int pid,
+                                  int32_t oom_score, int64_t pgfault, int64_t pgmajfault,
+                                  int64_t rss_in_bytes, int64_t cache_in_bytes,
+                                  int64_t swap_in_bytes, int64_t process_start_time_ns,
+                                  int32_t min_oom_score);
+
+/**
+ * Logs the event when LMKD kills a process to reduce memory pressure.
+ * Code: LMK_KILL_OCCURRED = 51
+ */
+int
 stats_write_lmk_kill_occurred(android_log_context ctx, int32_t code, int32_t uid,
                               char const* process_name, int32_t oom_score, int64_t pgfault,
                               int64_t pgmajfault, int64_t rss_in_bytes, int64_t cache_in_bytes,
                               int64_t swap_in_bytes, int64_t process_start_time_ns,
                               int32_t min_oom_score);
+
+/**
+ * Registers a process taskname by pid, while it is still alive.
+ */
+void
+stats_store_taskname(int pid, const char* taskname);
+
+/**
+ * Unregister all process tasknames.
+ */
+void
+stats_purge_tasknames();
+
+/**
+ * Unregister a process taskname, e.g. after it has been killed.
+ */
+void
+stats_remove_taskname(int pid);
 
 __END_DECLS
 
