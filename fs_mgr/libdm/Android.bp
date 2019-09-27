@@ -55,13 +55,7 @@ filegroup {
 
 cc_defaults {
     name: "libdm_defaults",
-    sanitize: {
-        misc_undefined: ["integer"],
-    },
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
+    defaults: ["fs_mgr_defaults"],
     static_libs: [
         "libdm",
         "libbase",
@@ -75,4 +69,13 @@ cc_defaults {
 cc_test {
     name: "libdm_test",
     defaults: ["libdm_defaults"],
+}
+
+cc_test {
+    name: "vts_libdm_test",
+    defaults: ["libdm_defaults"],
+    test_suites: ["vts-core"],
+    auto_gen_config: true,
+    require_root: true,
+    test_min_api_level: 29,
 }
