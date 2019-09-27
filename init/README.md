@@ -784,6 +784,12 @@ affected.
 
 Debugging init
 --------------
+When a service starts from init, it may fail to `execv()` the service. This is not typical, and may
+point to an error happening in the linker as the new service is started. The linker in Android
+prints its logs to `logd` and `stderr`, so they are visible in `logcat`. If the error is encountered
+before it is possible to access `logcat`, the `stdio_to_kmsg` service option may be used to direct
+the logs that the linker prints to `stderr` to `kmsg`, where they can be read via a serial port.
+
 Launching init services without init is not recommended as init sets up a significant amount of
 environment (user, groups, security label, capabilities, etc) that is hard to replicate manually.
 
