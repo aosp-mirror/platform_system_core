@@ -1761,6 +1761,15 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
     auto lock = LockExclusive();
     if (!lock) return false;
 
+    // TODO(b/134949511): remove this check. Right now, with overlayfs mounted, the scratch
+    // partition takes up a big chunk of space in super, causing COW images to be created on
+    // retrofit Virtual A/B devices.
+    if (device_->IsOverlayfsSetup()) {
+        LOG(ERROR) << "Cannot create update snapshots with overlayfs setup. Run `adb enable-verity`"
+                   << ", reboot, then try again.";
+        return false;
+    }
+
     const auto& opener = device_->GetPartitionOpener();
     auto current_suffix = device_->GetSlotSuffix();
     uint32_t current_slot = SlotNumberForSlotSuffix(current_suffix);
@@ -1775,32 +1784,6 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
     SnapshotMetadataUpdater metadata_updater(target_metadata.get(), target_slot, manifest);
     if (!metadata_updater.Update()) {
         LOG(ERROR) << "Cannot calculate new metadata.";
-        return false;
-    }
-
-    if (!target_metadata->AddGroup(kCowGroupName, 0)) {
-        LOG(ERROR) << "Cannot add group " << kCowGroupName;
-        return false;
-    }
-
-    std::map<std::string, const RepeatedPtrField<InstallOperation>*> install_operation_map;
-    for (const auto& partition_update : manifest.partitions()) {
-        auto suffixed_name = partition_update.partition_name() + target_suffix;
-        auto&& [it, inserted] = install_operation_map.emplace(std::move(suffixed_name),
-                                                              &partition_update.operations());
-        if (!inserted) {
-            LOG(ERROR) << "Duplicated partition " << partition_update.partition_name()
-                       << " in update manifest.";
-            return false;
-        }
-    }
-
-    // TODO(b/134949511): remove this check. Right now, with overlayfs mounted, the scratch
-    // partition takes up a big chunk of space in super, causing COW images to be created on
-    // retrofit Virtual A/B devices.
-    if (device_->IsOverlayfsSetup()) {
-        LOG(ERROR) << "Cannot create update snapshots with overlayfs setup. Run `adb enable-verity`"
-                   << ", reboot, then try again.";
         return false;
     }
 
@@ -1823,17 +1806,78 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
     // these devices.
     AutoDeviceList created_devices;
 
-    for (auto* target_partition : ListPartitionsWithSuffix(target_metadata.get(), target_suffix)) {
-        const RepeatedPtrField<InstallOperation>* operations = nullptr;
+    PartitionCowCreator cow_creator{.target_metadata = target_metadata.get(),
+                                    .target_suffix = target_suffix,
+                                    .target_partition = nullptr,
+                                    .current_metadata = current_metadata.get(),
+                                    .current_suffix = current_suffix,
+                                    .operations = nullptr};
+
+    if (!CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
+                                       &all_snapshot_status)) {
+        return false;
+    }
+
+    auto exported_target_metadata = target_metadata->Export();
+    if (exported_target_metadata == nullptr) {
+        LOG(ERROR) << "Cannot export target metadata";
+        return false;
+    }
+
+    if (!InitializeUpdateSnapshots(lock.get(), target_metadata.get(),
+                                   exported_target_metadata.get(), target_suffix,
+                                   all_snapshot_status)) {
+        return false;
+    }
+
+    if (!UpdatePartitionTable(opener, device_->GetSuperDevice(target_slot),
+                              *exported_target_metadata, target_slot)) {
+        LOG(ERROR) << "Cannot write target metadata";
+        return false;
+    }
+
+    created_devices.Release();
+    LOG(INFO) << "Successfully created all snapshots for target slot " << target_suffix;
+
+    return true;
+}
+
+bool SnapshotManager::CreateUpdateSnapshotsInternal(
+        LockedFile* lock, const DeltaArchiveManifest& manifest, PartitionCowCreator* cow_creator,
+        AutoDeviceList* created_devices,
+        std::map<std::string, SnapshotStatus>* all_snapshot_status) {
+    CHECK(lock);
+
+    auto* target_metadata = cow_creator->target_metadata;
+    const auto& target_suffix = cow_creator->target_suffix;
+
+    if (!target_metadata->AddGroup(kCowGroupName, 0)) {
+        LOG(ERROR) << "Cannot add group " << kCowGroupName;
+        return false;
+    }
+
+    std::map<std::string, const RepeatedPtrField<InstallOperation>*> install_operation_map;
+    for (const auto& partition_update : manifest.partitions()) {
+        auto suffixed_name = partition_update.partition_name() + target_suffix;
+        auto&& [it, inserted] = install_operation_map.emplace(std::move(suffixed_name),
+                                                              &partition_update.operations());
+        if (!inserted) {
+            LOG(ERROR) << "Duplicated partition " << partition_update.partition_name()
+                       << " in update manifest.";
+            return false;
+        }
+    }
+
+    for (auto* target_partition : ListPartitionsWithSuffix(target_metadata, target_suffix)) {
+        cow_creator->target_partition = target_partition;
+        cow_creator->operations = nullptr;
         auto operations_it = install_operation_map.find(target_partition->name());
         if (operations_it != install_operation_map.end()) {
-            operations = operations_it->second;
+            cow_creator->operations = operations_it->second;
         }
 
         // Compute the device sizes for the partition.
-        PartitionCowCreator cow_creator{target_metadata.get(),  target_suffix,  target_partition,
-                                        current_metadata.get(), current_suffix, operations};
-        auto cow_creator_ret = cow_creator.Run();
+        auto cow_creator_ret = cow_creator->Run();
         if (!cow_creator_ret.has_value()) {
             return false;
         }
@@ -1846,7 +1890,7 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
                   << ", cow file size = " << cow_creator_ret->snapshot_status.cow_file_size;
 
         // Delete any existing snapshot before re-creating one.
-        if (!DeleteSnapshot(lock.get(), target_partition->name())) {
+        if (!DeleteSnapshot(lock, target_partition->name())) {
             LOG(ERROR) << "Cannot delete existing snapshot before creating a new one for partition "
                        << target_partition->name();
             return false;
@@ -1866,11 +1910,10 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
         }
 
         // Store these device sizes to snapshot status file.
-        if (!CreateSnapshot(lock.get(), target_partition->name(),
-                            cow_creator_ret->snapshot_status)) {
+        if (!CreateSnapshot(lock, target_partition->name(), cow_creator_ret->snapshot_status)) {
             return false;
         }
-        created_devices.EmplaceBack<AutoDeleteSnapshot>(this, lock.get(), target_partition->name());
+        created_devices->EmplaceBack<AutoDeleteSnapshot>(this, lock, target_partition->name());
 
         // Create the COW partition. That is, use any remaining free space in super partition before
         // creating the COW images.
@@ -1898,32 +1941,36 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
 
         // Create the backing COW image if necessary.
         if (cow_creator_ret->snapshot_status.cow_file_size > 0) {
-            if (!CreateCowImage(lock.get(), target_partition->name())) {
+            if (!CreateCowImage(lock, target_partition->name())) {
                 return false;
             }
         }
 
-        all_snapshot_status[target_partition->name()] = std::move(cow_creator_ret->snapshot_status);
+        all_snapshot_status->emplace(target_partition->name(),
+                                     std::move(cow_creator_ret->snapshot_status));
 
         LOG(INFO) << "Successfully created snapshot for " << target_partition->name();
     }
+    return true;
+}
+
+bool SnapshotManager::InitializeUpdateSnapshots(
+        LockedFile* lock, MetadataBuilder* target_metadata,
+        const LpMetadata* exported_target_metadata, const std::string& target_suffix,
+        const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
+    CHECK(lock);
 
     auto& dm = DeviceMapper::Instance();
-    auto exported_target_metadata = target_metadata->Export();
-    if (exported_target_metadata == nullptr) {
-        LOG(ERROR) << "Cannot export target metadata";
-        return false;
-    }
     CreateLogicalPartitionParams cow_params{
             .block_device = LP_METADATA_DEFAULT_PARTITION_NAME,
-            .metadata = exported_target_metadata.get(),
+            .metadata = exported_target_metadata,
             .timeout_ms = std::chrono::milliseconds::max(),
             .partition_opener = &device_->GetPartitionOpener(),
     };
-    for (auto* target_partition : ListPartitionsWithSuffix(target_metadata.get(), target_suffix)) {
+    for (auto* target_partition : ListPartitionsWithSuffix(target_metadata, target_suffix)) {
         AutoDeviceList created_devices_for_cow;
 
-        if (!UnmapPartitionWithSnapshot(lock.get(), target_partition->name())) {
+        if (!UnmapPartitionWithSnapshot(lock, target_partition->name())) {
             LOG(ERROR) << "Cannot unmap existing COW devices before re-mapping them for zero-fill: "
                        << target_partition->name();
             return false;
@@ -1933,8 +1980,7 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
         CHECK(it != all_snapshot_status.end()) << target_partition->name();
         cow_params.partition_name = target_partition->name();
         std::string cow_name;
-        if (!MapCowDevices(lock.get(), cow_params, it->second, &created_devices_for_cow,
-                           &cow_name)) {
+        if (!MapCowDevices(lock, cow_params, it->second, &created_devices_for_cow, &cow_name)) {
             return false;
         }
 
@@ -1951,16 +1997,6 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
         }
         // Let destructor of created_devices_for_cow to unmap the COW devices.
     };
-
-    if (!UpdatePartitionTable(opener, device_->GetSuperDevice(target_slot),
-                              *exported_target_metadata, target_slot)) {
-        LOG(ERROR) << "Cannot write target metadata";
-        return false;
-    }
-
-    created_devices.Release();
-    LOG(INFO) << "Successfully created all snapshots for target slot " << target_suffix;
-
     return true;
 }
 
