@@ -13,11 +13,12 @@ cc_library {
     name: "liblogwrap",
     defaults: ["logwrapper_defaults"],
     recovery_available: true,
-    srcs: ["logwrap.c"],
+    srcs: ["logwrap.cpp"],
     shared_libs: [
         "libcutils",
         "liblog",
     ],
+    header_libs: ["libbase_headers"],
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
 }
@@ -31,9 +32,10 @@ cc_defaults {
     defaults: ["logwrapper_defaults"],
     local_include_dirs: ["include"],
     srcs: [
-        "logwrap.c",
-        "logwrapper.c",
+        "logwrap.cpp",
+        "logwrapper.cpp",
     ],
+    header_libs: ["libbase_headers"],
     shared_libs: ["libcutils", "liblog"],
 }
 
