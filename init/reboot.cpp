@@ -116,16 +116,16 @@ class MountEntry {
                     "-a",
                     mnt_fsname_.c_str(),
             };
-            android_fork_execvp_ext(arraysize(f2fs_argv), (char**)f2fs_argv, &st, true, LOG_KLOG,
-                                    true, nullptr, nullptr, 0);
+            logwrap_fork_execvp(arraysize(f2fs_argv), f2fs_argv, &st, false, LOG_KLOG, true,
+                                nullptr);
         } else if (IsExt4()) {
             const char* ext4_argv[] = {
                     "/system/bin/e2fsck",
                     "-y",
                     mnt_fsname_.c_str(),
             };
-            android_fork_execvp_ext(arraysize(ext4_argv), (char**)ext4_argv, &st, true, LOG_KLOG,
-                                    true, nullptr, nullptr, 0);
+            logwrap_fork_execvp(arraysize(ext4_argv), ext4_argv, &st, false, LOG_KLOG, true,
+                                nullptr);
         }
     }
 
@@ -163,8 +163,7 @@ static void TurnOffBacklight() {
 static void ShutdownVold() {
     const char* vdc_argv[] = {"/system/bin/vdc", "volume", "shutdown"};
     int status;
-    android_fork_execvp_ext(arraysize(vdc_argv), (char**)vdc_argv, &status, true, LOG_KLOG, true,
-                            nullptr, nullptr, 0);
+    logwrap_fork_execvp(arraysize(vdc_argv), vdc_argv, &status, false, LOG_KLOG, true, nullptr);
 }
 
 static void LogShutdownTime(UmountStat stat, Timer* t) {
@@ -221,8 +220,8 @@ static void DumpUmountDebuggingInfo() {
     if (!security_getenforce()) {
         LOG(INFO) << "Run lsof";
         const char* lsof_argv[] = {"/system/bin/lsof"};
-        android_fork_execvp_ext(arraysize(lsof_argv), (char**)lsof_argv, &status, true, LOG_KLOG,
-                                true, nullptr, nullptr, 0);
+        logwrap_fork_execvp(arraysize(lsof_argv), lsof_argv, &status, false, LOG_KLOG, true,
+                            nullptr);
     }
     FindPartitionsToUmount(nullptr, nullptr, true);
     // dump current CPU stack traces and uninterruptible tasks
@@ -317,8 +316,8 @@ void RebootMonitorThread(unsigned int cmd, const std::string& rebootTarget, sem_
                     LOG(INFO) << "Try to dump init process call trace:";
                     const char* vdc_argv[] = {"/system/bin/debuggerd", "-b", "1"};
                     int status;
-                    android_fork_execvp_ext(arraysize(vdc_argv), (char**)vdc_argv, &status, true,
-                                            LOG_KLOG, true, nullptr, nullptr, 0);
+                    logwrap_fork_execvp(arraysize(vdc_argv), vdc_argv, &status, false, LOG_KLOG,
+                                        true, nullptr);
                 }
                 LOG(INFO) << "Show stack for all active CPU:";
                 WriteStringToFile("l", PROC_SYSRQ);
