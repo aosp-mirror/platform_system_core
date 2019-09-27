@@ -100,7 +100,7 @@ class CrashQueue {
 
   static CrashQueue* for_tombstones() {
     static CrashQueue queue("/data/tombstones", "tombstone_" /* file_name_prefix */,
-                            GetIntProperty("tombstoned.max_tombstone_count", 10),
+                            GetIntProperty("tombstoned.max_tombstone_count", 32),
                             1 /* max_concurrent_dumps */);
     return &queue;
   }
