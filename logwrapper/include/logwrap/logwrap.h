@@ -17,11 +17,6 @@
 
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
-
-__BEGIN_DECLS
-
 /*
  * Run a command while logging its stdout and stderr
  *
@@ -56,35 +51,32 @@ __BEGIN_DECLS
  *
  */
 
-/* Values for the log_target parameter android_fork_execvp_ext() */
+/* Values for the log_target parameter logwrap_fork_execvp() */
 #define LOG_NONE        0
 #define LOG_ALOG        1
 #define LOG_KLOG        2
 #define LOG_FILE        4
 
-int android_fork_execvp_ext2(int argc, char* argv[], int* status, bool forward_signals,
-                             int log_target, bool abbreviated, char* file_path);
+int logwrap_fork_execvp(int argc, const char* const* argv, int* status, bool forward_signals,
+                        int log_target, bool abbreviated, const char* file_path);
 
 // TODO: Actually deprecate this and the below.
 static inline int android_fork_execvp_ext(int argc, char* argv[], int* status, bool ignore_int_quit,
-                                          int log_target, bool abbreviated, char* file_path,
+                                          int log_target, bool abbreviated, const char* file_path,
                                           void* unused_opts, int unused_opts_len) {
     (void)ignore_int_quit;
     (void)unused_opts;
     (void)unused_opts_len;
-    return android_fork_execvp_ext2(argc, argv, status, false, log_target, abbreviated, file_path);
+    return logwrap_fork_execvp(argc, argv, status, false, log_target, abbreviated, file_path);
 }
 
 /* Similar to above, except abbreviated logging is not available, and if logwrap
  * is true, logging is to the Android system log, and if false, there is no
  * logging.
  */
-static inline int android_fork_execvp(int argc, char* argv[], int *status,
-                                     bool ignore_int_quit, bool logwrap)
-{
-    return android_fork_execvp_ext(argc, argv, status, ignore_int_quit,
-                                   (logwrap ? LOG_ALOG : LOG_NONE), false, NULL,
-                                   NULL, 0);
+static inline int android_fork_execvp(int argc, char* argv[], int* status, bool ignore_int_quit,
+                                      bool logwrap) {
+    (void)ignore_int_quit;
+    return logwrap_fork_execvp(argc, argv, status, false, (logwrap ? LOG_ALOG : LOG_NONE), false,
+                               nullptr);
 }
-
-__END_DECLS
