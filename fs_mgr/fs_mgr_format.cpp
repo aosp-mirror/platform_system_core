@@ -76,8 +76,8 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
             "/system/bin/mke2fs", "-t",   "ext4", "-b", "4096", fs_blkdev.c_str(),
             size_str.c_str(),     nullptr};
 
-    rc = android_fork_execvp_ext(arraysize(mke2fs_args), const_cast<char**>(mke2fs_args), NULL,
-                                 true, LOG_KLOG, true, nullptr, nullptr, 0);
+    rc = logwrap_fork_execvp(arraysize(mke2fs_args), mke2fs_args, nullptr, false, LOG_KLOG, true,
+                             nullptr);
     if (rc) {
         LERROR << "mke2fs returned " << rc;
         return rc;
@@ -86,8 +86,8 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
     const char* const e2fsdroid_args[] = {
             "/system/bin/e2fsdroid", "-e", "-a", fs_mnt_point.c_str(), fs_blkdev.c_str(), nullptr};
 
-    rc = android_fork_execvp_ext(arraysize(e2fsdroid_args), const_cast<char**>(e2fsdroid_args),
-                                 NULL, true, LOG_KLOG, true, nullptr, nullptr, 0);
+    rc = logwrap_fork_execvp(arraysize(e2fsdroid_args), e2fsdroid_args, nullptr, false, LOG_KLOG,
+                             true, nullptr);
     if (rc) {
         LERROR << "e2fsdroid returned " << rc;
     }
@@ -119,8 +119,7 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool crypt
     };
     // clang-format on
 
-    return android_fork_execvp_ext(arraysize(args), const_cast<char**>(args), NULL, true,
-                                   LOG_KLOG, true, nullptr, nullptr, 0);
+    return logwrap_fork_execvp(arraysize(args), args, nullptr, false, LOG_KLOG, true, nullptr);
 }
 
 int fs_mgr_do_format(const FstabEntry& entry, bool crypt_footer) {
