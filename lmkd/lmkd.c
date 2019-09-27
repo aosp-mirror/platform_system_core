@@ -362,6 +362,9 @@ static uint32_t killcnt_total = 0;
 /* PAGE_SIZE / 1024 */
 static long page_k;
 
+static char* proc_get_name(int pid);
+static void poll_kernel();
+
 static bool parse_int64(const char* str, int64_t* ret) {
     char* endptr;
     long long val = strtoll(str, &endptr, 10);
@@ -634,6 +637,9 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     }
 
     if (use_inkernel_interface) {
+#ifdef LMKD_LOG_STATS
+        stats_store_taskname(params.pid, proc_get_name(params.pid));
+#endif
         return;
     }
 
@@ -704,6 +710,16 @@ static void cmd_procremove(LMKD_CTRL_PACKET packet) {
     struct lmk_procremove params;
 
     if (use_inkernel_interface) {
+#ifdef LMKD_LOG_STATS
+        /* Perform an extra check before the pid is removed, after which it
+         * will be impossible for poll_kernel to get the taskname. poll_kernel()
+         * is potentially a long-running blocking function; however this method
+         * handles AMS requests but does not block AMS.*/
+        if (enable_stats_log) {
+            poll_kernel();
+        }
+        stats_remove_taskname(params.pid);
+#endif
         return;
     }
 
@@ -721,6 +737,9 @@ static void cmd_procpurge() {
     struct proc *next;
 
     if (use_inkernel_interface) {
+#ifdef LMKD_LOG_STATS
+        stats_purge_tasknames();
+#endif
         return;
     }
 
@@ -1925,7 +1944,6 @@ err_open_mpfd:
 
 #ifdef LMKD_LOG_STATS
 static int kernel_poll_fd = -1;
-
 static void poll_kernel() {
     if (kernel_poll_fd == -1) {
         // not waiting
@@ -1958,9 +1976,9 @@ static void poll_kernel() {
         /* only the death of the group leader process is logged */
         if (fields_read == 10 && group_leader_pid == pid) {
             int64_t process_start_time_ns = starttime * (NS_PER_SEC / sysconf(_SC_CLK_TCK));
-            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, oom_score_adj,
-                                          min_flt, maj_flt, rss_in_pages * PAGE_SIZE, 0, 0,
-                                          process_start_time_ns, min_score_adj);
+            stats_write_lmk_kill_occurred_pid(log_ctx, LMK_KILL_OCCURRED, uid, pid, oom_score_adj,
+                                              min_flt, maj_flt, rss_in_pages * PAGE_SIZE, 0, 0,
+                                              process_start_time_ns, min_score_adj);
         }
 
         free(taskname);
