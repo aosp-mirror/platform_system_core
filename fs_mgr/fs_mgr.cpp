@@ -222,13 +222,11 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
         } else {
             LINFO << "Running " << E2FSCK_BIN << " on " << realpath(blk_device);
             if (should_force_check(*fs_stat)) {
-                ret = android_fork_execvp_ext(
-                    ARRAY_SIZE(e2fsck_forced_argv), const_cast<char**>(e2fsck_forced_argv), &status,
-                    true, LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), nullptr, 0);
+                ret = logwrap_fork_execvp(ARRAY_SIZE(e2fsck_forced_argv), e2fsck_forced_argv,
+                                          &status, false, LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
             } else {
-                ret = android_fork_execvp_ext(
-                    ARRAY_SIZE(e2fsck_argv), const_cast<char**>(e2fsck_argv), &status, true,
-                    LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), nullptr, 0);
+                ret = logwrap_fork_execvp(ARRAY_SIZE(e2fsck_argv), e2fsck_argv, &status, false,
+                                          LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
             }
 
             if (ret < 0) {
@@ -246,14 +244,12 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
 
         if (should_force_check(*fs_stat)) {
             LINFO << "Running " << F2FS_FSCK_BIN << " -f " << realpath(blk_device);
-            ret = android_fork_execvp_ext(
-                ARRAY_SIZE(f2fs_fsck_forced_argv), const_cast<char**>(f2fs_fsck_forced_argv), &status,
-                true, LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), nullptr, 0);
+            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
+                                      &status, false, LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
         } else {
             LINFO << "Running " << F2FS_FSCK_BIN << " -a " << realpath(blk_device);
-            ret = android_fork_execvp_ext(
-                ARRAY_SIZE(f2fs_fsck_argv), const_cast<char**>(f2fs_fsck_argv), &status, true,
-                LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), nullptr, 0);
+            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
+                                      LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
         }
         if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
@@ -331,8 +327,7 @@ static bool tune2fs_available(void) {
 static bool run_tune2fs(const char* argv[], int argc) {
     int ret;
 
-    ret = android_fork_execvp_ext(argc, const_cast<char**>(argv), nullptr, true,
-                                  LOG_KLOG | LOG_FILE, true, nullptr, nullptr, 0);
+    ret = logwrap_fork_execvp(argc, argv, nullptr, false, LOG_KLOG, true, nullptr);
     return ret == 0;
 }
 
@@ -852,37 +847,22 @@ static int handle_encryptable(const FstabEntry& entry) {
     }
 }
 
-static bool call_vdc(const std::vector<std::string>& args) {
+static bool call_vdc(const std::vector<std::string>& args, int* ret) {
     std::vector<char const*> argv;
     argv.emplace_back("/system/bin/vdc");
     for (auto& arg : args) {
         argv.emplace_back(arg.c_str());
     }
     LOG(INFO) << "Calling: " << android::base::Join(argv, ' ');
-    int ret =
-            android_fork_execvp(argv.size(), const_cast<char**>(argv.data()), nullptr, false, true);
-    if (ret != 0) {
-        LOG(ERROR) << "vdc returned error code: " << ret;
-        return false;
-    }
-    LOG(DEBUG) << "vdc finished successfully";
-    return true;
-}
-
-static bool call_vdc_ret(const std::vector<std::string>& args, int* ret) {
-    std::vector<char const*> argv;
-    argv.emplace_back("/system/bin/vdc");
-    for (auto& arg : args) {
-        argv.emplace_back(arg.c_str());
-    }
-    LOG(INFO) << "Calling: " << android::base::Join(argv, ' ');
-    int err = android_fork_execvp(argv.size(), const_cast<char**>(argv.data()), ret, false, true);
+    int err = logwrap_fork_execvp(argv.size(), argv.data(), ret, false, LOG_ALOG, false, nullptr);
     if (err != 0) {
         LOG(ERROR) << "vdc call failed with error code: " << err;
         return false;
     }
     LOG(DEBUG) << "vdc finished successfully";
-    *ret = WEXITSTATUS(*ret);
+    if (ret != nullptr) {
+        *ret = WEXITSTATUS(*ret);
+    }
     return true;
 }
 
@@ -914,11 +894,11 @@ class CheckpointManager {
         }
 
         if (entry->fs_mgr_flags.checkpoint_blk) {
-            call_vdc({"checkpoint", "restoreCheckpoint", entry->blk_device});
+            call_vdc({"checkpoint", "restoreCheckpoint", entry->blk_device}, nullptr);
         }
 
         if (needs_checkpoint_ == UNKNOWN &&
-            !call_vdc_ret({"checkpoint", "needsCheckpoint"}, &needs_checkpoint_)) {
+            !call_vdc({"checkpoint", "needsCheckpoint"}, &needs_checkpoint_)) {
             LERROR << "Failed to find if checkpointing is needed. Assuming no.";
             needs_checkpoint_ = NO;
         }
@@ -1193,7 +1173,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 encryptable = status;
                 if (status == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
                     if (!call_vdc({"cryptfs", "encryptFstab", attempted_entry.blk_device,
-                                   attempted_entry.mount_point})) {
+                                   attempted_entry.mount_point},
+                                  nullptr)) {
                         LERROR << "Encryption failed";
                         return FS_MGR_MNTALL_FAIL;
                     }
@@ -1265,7 +1246,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
         } else if (mount_errno != EBUSY && mount_errno != EACCES &&
                    should_use_metadata_encryption(attempted_entry)) {
             if (!call_vdc({"cryptfs", "mountFstab", attempted_entry.blk_device,
-                           attempted_entry.mount_point})) {
+                           attempted_entry.mount_point},
+                          nullptr)) {
                 ++error_count;
             }
             encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
@@ -1615,10 +1597,8 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
                 MKSWAP_BIN,
                 entry.blk_device.c_str(),
         };
-        int err = 0;
-        int status;
-        err = android_fork_execvp_ext(ARRAY_SIZE(mkswap_argv), const_cast<char**>(mkswap_argv),
-                                      &status, true, LOG_KLOG, false, nullptr, nullptr, 0);
+        int err = logwrap_fork_execvp(ARRAY_SIZE(mkswap_argv), mkswap_argv, nullptr, false,
+                                      LOG_KLOG, false, nullptr);
         if (err) {
             LERROR << "mkswap failed for " << entry.blk_device;
             ret = false;
