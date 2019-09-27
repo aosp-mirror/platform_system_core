@@ -406,6 +406,20 @@ class SnapshotManager final {
     //   |needs_merge| is set to true.
     bool TryCancelUpdate(bool* needs_merge);
 
+    // Helper for CreateUpdateSnapshots.
+    // Creates all underlying images, COW partitions and snapshot files. Does not initialize them.
+    bool CreateUpdateSnapshotsInternal(LockedFile* lock, const DeltaArchiveManifest& manifest,
+                                       PartitionCowCreator* cow_creator,
+                                       AutoDeviceList* created_devices,
+                                       std::map<std::string, SnapshotStatus>* all_snapshot_status);
+
+    // Initialize snapshots so that they can be mapped later.
+    // Map the COW partition and zero-initialize the header.
+    bool InitializeUpdateSnapshots(
+            LockedFile* lock, MetadataBuilder* target_metadata,
+            const LpMetadata* exported_target_metadata, const std::string& target_suffix,
+            const std::map<std::string, SnapshotStatus>& all_snapshot_status);
+
     std::string gsid_dir_;
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;
