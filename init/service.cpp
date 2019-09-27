@@ -490,7 +490,8 @@ Result<void> Service::Start() {
         SetProcessAttributesAndCaps();
 
         if (!ExpandArgsAndExecv(args_, sigstop_)) {
-            PLOG(ERROR) << "cannot execve('" << args_[0] << "')";
+            PLOG(ERROR) << "cannot execv('" << args_[0]
+                        << "'). See the 'Debugging init' section of init's README.md for tips";
         }
 
         _exit(127);
