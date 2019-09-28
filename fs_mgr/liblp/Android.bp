@@ -17,7 +17,6 @@
 liblp_lib_deps = [
     "libbase",
     "liblog",
-    "libcrypto",
     "libcrypto_utils",
     "libsparse",
     "libext4_utils",
@@ -41,7 +40,9 @@ cc_library {
         "utility.cpp",
         "writer.cpp",
     ],
-    shared_libs: liblp_lib_deps,
+    shared_libs: [
+        "libcrypto",
+    ] + liblp_lib_deps,
     target: {
         windows: {
             enabled: true,
@@ -83,6 +84,7 @@ cc_defaults {
         "libgmock",
         "libfs_mgr",
         "liblp",
+        "libcrypto_static",
     ] + liblp_lib_deps,
     header_libs: [
         "libstorage_literals_headers",

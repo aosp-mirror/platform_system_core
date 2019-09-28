@@ -18,7 +18,21 @@
 #include <errno.h>
 #include <log/log_id.h>
 #include <stats_event_list.h>
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
+
+#define LINE_MAX 128
+
+struct proc {
+    int pid;
+    char taskname[LINE_MAX];
+    struct proc* pidhash_next;
+};
+
+#define PIDHASH_SZ 1024
+static struct proc** pidhash = NULL;
+#define pid_hashfn(x) ((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
 
 static int64_t getElapsedRealTimeNs() {
     struct timespec t;
@@ -55,6 +69,17 @@ stats_write_lmk_state_changed(android_log_context ctx, int32_t code, int32_t sta
     }
 
     return write_to_logger(ctx, LOG_ID_STATS);
+}
+
+static struct proc* pid_lookup(int pid) {
+    struct proc* procp;
+
+    if (!pidhash) return NULL;
+
+    for (procp = pidhash[pid_hashfn(pid)]; procp && procp->pid != pid; procp = procp->pidhash_next)
+        ;
+
+    return procp;
 }
 
 /**
@@ -123,4 +148,75 @@ stats_write_lmk_kill_occurred(android_log_context ctx, int32_t code, int32_t uid
     }
 
     return write_to_logger(ctx, LOG_ID_STATS);
+}
+
+int stats_write_lmk_kill_occurred_pid(android_log_context ctx, int32_t code, int32_t uid, int pid,
+                                      int32_t oom_score, int64_t pgfault, int64_t pgmajfault,
+                                      int64_t rss_in_bytes, int64_t cache_in_bytes,
+                                      int64_t swap_in_bytes, int64_t process_start_time_ns,
+                                      int32_t min_oom_score) {
+    struct proc* proc = pid_lookup(pid);
+    if (!proc) return -EINVAL;
+
+    return stats_write_lmk_kill_occurred(ctx, code, uid, proc->taskname, oom_score, pgfault,
+                                         pgmajfault, rss_in_bytes, cache_in_bytes, swap_in_bytes,
+                                         process_start_time_ns, min_oom_score);
+}
+
+static void proc_insert(struct proc* procp) {
+    if (!pidhash)
+        pidhash = calloc(PIDHASH_SZ, sizeof(struct proc));
+    int hval = pid_hashfn(procp->pid);
+    procp->pidhash_next = pidhash[hval];
+    pidhash[hval] = procp;
+}
+
+void stats_remove_taskname(int pid) {
+    if (!pidhash) return;
+
+    int hval = pid_hashfn(pid);
+    struct proc* procp;
+    struct proc* prevp;
+
+    for (procp = pidhash[hval], prevp = NULL; procp && procp->pid != pid;
+         procp = procp->pidhash_next)
+        prevp = procp;
+
+    if (!procp)
+        return;
+
+    if (!prevp)
+        pidhash[hval] = procp->pidhash_next;
+    else
+        prevp->pidhash_next = procp->pidhash_next;
+
+    free(procp);
+}
+
+void stats_store_taskname(int pid, const char* taskname) {
+    struct proc* procp = pid_lookup(pid);
+    if (procp != NULL && strcmp(procp->taskname, taskname) == 0)
+        return;
+    procp = malloc(sizeof(struct proc));
+    stats_remove_taskname(pid);
+    procp->pid = pid;
+    strncpy(procp->taskname, taskname, LINE_MAX - 1);
+    procp->taskname[LINE_MAX - 1] = '\0';
+    proc_insert(procp);
+}
+
+void stats_purge_tasknames() {
+    if (!pidhash) return;
+    struct proc* procp;
+    struct proc* next;
+    int i;
+    for (i = 0; i < PIDHASH_SZ; i++) {
+        procp = pidhash[i];
+        while (procp) {
+            next = procp->pidhash_next;
+            free(procp);
+            procp = next;
+        }
+    }
+    memset(pidhash, 0, PIDHASH_SZ * sizeof(struct proc));
 }

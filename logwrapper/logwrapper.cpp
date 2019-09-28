@@ -24,27 +24,26 @@
 #include <log/log.h>
 #include <logwrap/logwrap.h>
 
-void fatal(const char *msg) {
+void fatal(const char* msg) {
     fprintf(stderr, "%s", msg);
     ALOG(LOG_ERROR, "logwrapper", "%s", msg);
     exit(-1);
 }
 
 void usage() {
-    fatal(
-        "Usage: logwrapper [-a] [-d] [-k] BINARY [ARGS ...]\n"
-        "\n"
-        "Forks and executes BINARY ARGS, redirecting stdout and stderr to\n"
-        "the Android logging system. Tag is set to BINARY, priority is\n"
-        "always LOG_INFO.\n"
-        "\n"
-        "-a: Causes logwrapper to do abbreviated logging.\n"
-        "    This logs up to the first 4K and last 4K of the command\n"
-        "    being run, and logs the output when the command exits\n"
-        "-d: Causes logwrapper to SIGSEGV when BINARY terminates\n"
-        "    fault address is set to the status of wait()\n"
-        "-k: Causes logwrapper to log to the kernel log instead of\n"
-        "    the Android system log\n");
+    fatal("Usage: logwrapper [-a] [-d] [-k] BINARY [ARGS ...]\n"
+          "\n"
+          "Forks and executes BINARY ARGS, redirecting stdout and stderr to\n"
+          "the Android logging system. Tag is set to BINARY, priority is\n"
+          "always LOG_INFO.\n"
+          "\n"
+          "-a: Causes logwrapper to do abbreviated logging.\n"
+          "    This logs up to the first 4K and last 4K of the command\n"
+          "    being run, and logs the output when the command exits\n"
+          "-d: Causes logwrapper to SIGSEGV when BINARY terminates\n"
+          "    fault address is set to the status of wait()\n"
+          "-k: Causes logwrapper to log to the kernel log instead of\n"
+          "    the Android system log\n");
 }
 
 int main(int argc, char* argv[]) {
@@ -69,7 +68,7 @@ int main(int argc, char* argv[]) {
                 break;
             case '?':
             default:
-              usage();
+                usage();
         }
     }
     argc -= optind;
@@ -79,8 +78,7 @@ int main(int argc, char* argv[]) {
         usage();
     }
 
-    rc = android_fork_execvp_ext(argc, &argv[0], &status, true,
-                                 log_target, abbreviated, NULL, NULL, 0);
+    rc = logwrap_fork_execvp(argc, &argv[0], &status, true, log_target, abbreviated, nullptr);
     if (!rc) {
         if (WIFEXITED(status))
             rc = WEXITSTATUS(status);
@@ -89,8 +87,8 @@ int main(int argc, char* argv[]) {
     }
 
     if (seg_fault_on_exit) {
-        uintptr_t fault_address = (uintptr_t) status;
-        *(int *) fault_address = 0;  // causes SIGSEGV with fault_address = status
+        uintptr_t fault_address = (uintptr_t)status;
+        *(int*)fault_address = 0;  // causes SIGSEGV with fault_address = status
     }
 
     return rc;

@@ -130,6 +130,7 @@ class DeviceHandler : public UeventHandler {
     void HandleDevice(const std::string& action, const std::string& devpath, bool block, int major,
                       int minor, const std::vector<std::string>& links) const;
     void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
+    void HandleAshmemUevent(const Uevent& uevent);
 
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;
