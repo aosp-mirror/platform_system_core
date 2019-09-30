@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdlib.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #include <iostream>
@@ -59,25 +60,25 @@ bool show_wss = false;
 
 static void print_separator(std::stringstream& ss) {
     if (show_wss) {
-        ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n", "-------",
+        ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n",
                                             "-------", "-------", "-------", "-------", "-------",
-                                            "-------", "");
+                                            "-------", "-------", "-------", "");
         return;
     }
-    ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n", "-------",
+    ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n",
                                         "-------", "-------", "-------", "-------", "-------",
-                                        "-------", "-------", "");
+                                        "-------", "-------", "-------", "-------", "");
 }
 
 static void print_header(std::stringstream& ss) {
     if (show_wss) {
-        ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n", "WRss",
+        ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n", "WRss",
                                             "WPss", "WUss", "WShCl", "WShDi", "WPrCl", "WPrDi",
-                                            "Name");
+                                            "Flags", "Name");
     } else {
-        ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n", "Vss",
-                                            "Rss", "Pss", "Uss", "ShCl", "ShDi", "PrCl", "PrDi",
-                                            "Name");
+        ss << ::android::base::StringPrintf("%7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %7s  %s\n",
+                                            "Vss", "Rss", "Pss", "Uss", "ShCl", "ShDi", "PrCl",
+                                            "PrDi", "Flags", "Name");
     }
     print_separator(ss);
 }
@@ -103,7 +104,15 @@ static int show(const MemUsage& proc_stats, const std::vector<Vma>& maps) {
             continue;
         }
         print_stats(ss, vma_stats);
-        ss << vma.name << std::endl;
+
+        // TODO: b/141711064 fix libprocinfo to record (p)rivate or (s)hared flag
+        // for now always report as private
+        std::string flags_str("---p");
+        if (vma.flags & PROT_READ) flags_str[0] = 'r';
+        if (vma.flags & PROT_WRITE) flags_str[1] = 'w';
+        if (vma.flags & PROT_EXEC) flags_str[2] = 'x';
+
+        ss << ::android::base::StringPrintf("%7s  ", flags_str.c_str()) << vma.name << std::endl;
     }
     print_separator(ss);
     print_stats(ss, proc_stats);
