@@ -432,6 +432,22 @@ $(LOCAL_BUILT_MODULE):
 		echo $(lib) >> $@;)
 
 #######################################
+# vndkcorevariant.libraries.txt
+include $(CLEAR_VARS)
+LOCAL_MODULE := vndkcorevariant.libraries.txt
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
+include $(BUILD_SYSTEM)/base_rules.mk
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_VARIANT_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_USING_CORE_VARIANT_LIBRARIES),.vendor)
+$(LOCAL_BUILT_MODULE):
+	@echo "Generate: $@"
+	@mkdir -p $(dir $@)
+	$(hide) echo -n > $@
+	$(hide) $(foreach lib,$(PRIVATE_VNDK_CORE_VARIANT_LIBRARIES), \
+		echo $(lib) >> $@;)
+
+#######################################
 # adb_debug.prop in debug ramdisk
 include $(CLEAR_VARS)
 LOCAL_MODULE := adb_debug.prop
