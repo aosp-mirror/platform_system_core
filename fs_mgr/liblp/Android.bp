@@ -69,13 +69,7 @@ filegroup {
 
 cc_defaults {
     name: "liblp_test_defaults",
-    sanitize: {
-        misc_undefined: ["integer"],
-    },
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
+    defaults: ["fs_mgr_defaults"],
     cppflags: [
         "-Wno-unused-parameter",
     ],
@@ -98,6 +92,14 @@ cc_test {
     defaults: ["liblp_test_defaults"],
     test_config: "liblp_test.xml",
     test_suites: ["device-tests"],
+}
+
+cc_test {
+    name: "vts_core_liblp_test",
+    defaults: ["liblp_test_defaults"],
+    test_suites: ["vts-core"],
+    auto_gen_config: true,
+    test_min_api_level: 29,
 }
 
 cc_test {
