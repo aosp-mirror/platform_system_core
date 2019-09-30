@@ -400,22 +400,6 @@ int android_log_write_list_buffer(android_log_context ctx, const char** buffer) 
 }
 
 /*
- * Extract a 4-byte value from a byte stream.
- */
-static inline uint32_t get4LE(const uint8_t* src) {
-  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-}
-
-/*
- * Extract an 8-byte value from a byte stream.
- */
-static inline uint64_t get8LE(const uint8_t* src) {
-  uint32_t low = src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-  uint32_t high = src[4] | (src[5] << 8) | (src[6] << 16) | (src[7] << 24);
-  return ((uint64_t)high << 32) | (uint64_t)low;
-}
-
-/*
  * Gets the next element. Parsing errors result in an EVENT_TYPE_UNKNOWN type.
  * If there is nothing to process, the complete field is set to non-zero. If
  * an EVENT_TYPE_UNKNOWN type is returned once, and the caller does not check
@@ -488,7 +472,7 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
         elem.type = EVENT_TYPE_UNKNOWN;
         return elem;
       }
-      elem.data.int32 = get4LE(&context->storage[pos]);
+      elem.data.int32 = *reinterpret_cast<int32_t*>(&context->storage[pos]);
       /* common tangeable object suffix */
       pos += elem.len;
       elem.complete = !context->list_nest_depth && !context->count[0];
@@ -507,7 +491,7 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
         elem.type = EVENT_TYPE_UNKNOWN;
         return elem;
       }
-      elem.data.int64 = get8LE(&context->storage[pos]);
+      elem.data.int64 = *reinterpret_cast<int64_t*>(&context->storage[pos]);
       /* common tangeable object suffix */
       pos += elem.len;
       elem.complete = !context->list_nest_depth && !context->count[0];
@@ -526,7 +510,7 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
         elem.complete = true;
         return elem;
       }
-      elem.len = get4LE(&context->storage[pos]);
+      elem.len = *reinterpret_cast<int32_t*>(&context->storage[pos]);
       pos += sizeof(int32_t);
       if ((pos + elem.len) > context->len) {
         elem.len = context->len - pos; /* truncate string */

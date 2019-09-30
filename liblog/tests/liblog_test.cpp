@@ -227,16 +227,6 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 #endif
 }
 
-#ifdef __ANDROID__
-static inline uint32_t get4LE(const uint8_t* src) {
-  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-}
-
-static inline uint32_t get4LE(const char* src) {
-  return get4LE(reinterpret_cast<const uint8_t*>(src));
-}
-#endif
-
 static void bswrite_test(const char* message) {
 #ifdef __ANDROID__
   struct logger_list* logger_list;
@@ -299,7 +289,7 @@ static void bswrite_test(const char* message) {
       continue;
     }
 
-    size_t len = get4LE(reinterpret_cast<char*>(&eventData->length));
+    size_t len = eventData->length;
     if (len == total) {
       ++count;
 
@@ -1914,7 +1904,7 @@ static void android_errorWriteWithInfoLog_helper(int TAG, const char* SUBTAG,
     char* original = eventData;
 
     // Tag
-    int tag = get4LE(eventData);
+    int tag = *reinterpret_cast<int32_t*>(eventData);
     eventData += 4;
 
     if (tag != TAG) {
@@ -1941,7 +1931,7 @@ static void android_errorWriteWithInfoLog_helper(int TAG, const char* SUBTAG,
 
     unsigned subtag_len = strlen(SUBTAG);
     if (subtag_len > 32) subtag_len = 32;
-    ASSERT_EQ(subtag_len, get4LE(eventData));
+    ASSERT_EQ(subtag_len, *reinterpret_cast<uint32_t*>(eventData));
     eventData += 4;
 
     if (memcmp(SUBTAG, eventData, subtag_len)) {
@@ -1953,14 +1943,14 @@ static void android_errorWriteWithInfoLog_helper(int TAG, const char* SUBTAG,
     ASSERT_EQ(EVENT_TYPE_INT, eventData[0]);
     eventData++;
 
-    ASSERT_EQ(UID, (int)get4LE(eventData));
+    ASSERT_EQ(UID, *reinterpret_cast<int32_t*>(eventData));
     eventData += 4;
 
     // Element #3: string type for data
     ASSERT_EQ(EVENT_TYPE_STRING, eventData[0]);
     eventData++;
 
-    size_t dataLen = get4LE(eventData);
+    size_t dataLen = *reinterpret_cast<int32_t*>(eventData);
     eventData += 4;
     if (DATA_LEN < 512) ASSERT_EQ(DATA_LEN, (int)dataLen);
 
@@ -2072,7 +2062,7 @@ static void android_errorWriteLog_helper(int TAG, const char* SUBTAG,
     if (!eventData) continue;
 
     // Tag
-    int tag = get4LE(eventData);
+    int tag = *reinterpret_cast<int32_t*>(eventData);
     eventData += 4;
 
     if (tag != TAG) continue;
@@ -2125,7 +2115,7 @@ static void android_errorWriteLog_helper(int TAG, const char* SUBTAG,
     }
 
     // Tag
-    int tag = get4LE(eventData);
+    int tag = *reinterpret_cast<int32_t*>(eventData);
     eventData += 4;
 
     if (tag != TAG) {
@@ -2150,7 +2140,7 @@ static void android_errorWriteLog_helper(int TAG, const char* SUBTAG,
     ASSERT_EQ(EVENT_TYPE_STRING, eventData[0]);
     eventData++;
 
-    ASSERT_EQ(strlen(SUBTAG), get4LE(eventData));
+    ASSERT_EQ(strlen(SUBTAG), *reinterpret_cast<uint32_t*>(eventData));
     eventData += 4;
 
     if (memcmp(SUBTAG, eventData, strlen(SUBTAG))) {
@@ -2663,7 +2653,7 @@ static void create_android_logger(const char* (*fn)(uint32_t tag,
     // test buffer reading API
     int buffer_to_string = -1;
     if (eventData) {
-      snprintf(msgBuf, sizeof(msgBuf), "I/[%" PRIu32 "]", get4LE(eventData));
+      snprintf(msgBuf, sizeof(msgBuf), "I/[%" PRIu32 "]", *reinterpret_cast<uint32_t*>(eventData));
       print_barrier();
       fprintf(stderr, "%-10s(%5u): ", msgBuf, pid);
       memset(msgBuf, 0, sizeof(msgBuf));
