@@ -1321,8 +1321,9 @@ static char *proc_get_name(int pid) {
     /* gid containing AID_READPROC required */
     snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
     fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd == -1)
+    if (fd == -1) {
         return NULL;
+    }
     ret = read_all(fd, line, sizeof(line) - 1);
     close(fd);
     if (ret < 0) {
@@ -1330,8 +1331,11 @@ static char *proc_get_name(int pid) {
     }
 
     cp = strchr(line, ' ');
-    if (cp)
+    if (cp) {
         *cp = '\0';
+    } else {
+        line[ret] = '\0';
+    }
 
     return line;
 }
