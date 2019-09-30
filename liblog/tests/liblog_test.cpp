@@ -43,6 +43,11 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
+#ifdef __ANDROID__
+#define TEST_LOGGER LOGGER_DEFAULT
+#endif
+#define USING_LOGGER_DEFAULT
+
 #ifndef TEST_PREFIX
 #ifdef TEST_LOGGER
 #define TEST_PREFIX android_set_log_transport(TEST_LOGGER);
@@ -281,11 +286,7 @@ static void print_transport(const char* prefix, int logger) {
     fprintf(stderr, "%sLOGGER_NULL", prefix);
     prefix = orstr;
   }
-  if (logger & LOGGER_STDERR) {
-    fprintf(stderr, "%sLOGGER_STDERR", prefix);
-    prefix = orstr;
-  }
-  logger &= ~(LOGGER_LOGD | LOGGER_KERNEL | LOGGER_NULL | LOGGER_STDERR);
+  logger &= ~(LOGGER_LOGD | LOGGER_KERNEL | LOGGER_NULL);
   if (logger) {
     fprintf(stderr, "%s0x%x", prefix, logger);
     prefix = orstr;

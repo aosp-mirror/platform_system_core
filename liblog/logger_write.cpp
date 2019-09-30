@@ -586,9 +586,9 @@ int android_set_log_transport(int transport_flag) {
     return retval;
   }
 
-  __android_log_transport &= LOGGER_LOGD | LOGGER_STDERR;
+  __android_log_transport &= LOGGER_LOGD;
 
-  transport_flag &= LOGGER_LOGD | LOGGER_STDERR;
+  transport_flag &= LOGGER_LOGD;
 
   if (__android_log_transport != transport_flag) {
     __android_log_transport = transport_flag;
@@ -614,7 +614,7 @@ int android_get_log_transport() {
   if (write_to_log == __write_to_log_null) {
     ret = LOGGER_NULL;
   } else {
-    __android_log_transport &= LOGGER_LOGD | LOGGER_STDERR;
+    __android_log_transport &= LOGGER_LOGD;
     ret = __android_log_transport;
     if ((write_to_log != __write_to_log_init) && (write_to_log != __write_to_log_daemon)) {
       ret = -EINVAL;

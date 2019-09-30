@@ -23,7 +23,6 @@ liblog_sources = [
     "logger_read.cpp",
     "logger_write.cpp",
     "logprint.cpp",
-    "stderr_write.cpp",
 ]
 liblog_host_sources = [
     "fake_log_device.cpp",
