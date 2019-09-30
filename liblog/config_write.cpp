@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include <log/log_transport.h>
-
 #include "config_write.h"
 #include "logger.h"
 
@@ -53,19 +51,17 @@ static void __android_log_add_transport(struct listnode* list,
 }
 
 void __android_log_config_write() {
-  if ((__android_log_transport == LOGGER_DEFAULT) || (__android_log_transport & LOGGER_LOGD)) {
 #if (FAKE_LOG_DEVICE == 0)
-    extern struct android_log_transport_write logdLoggerWrite;
-    extern struct android_log_transport_write pmsgLoggerWrite;
+  extern struct android_log_transport_write logdLoggerWrite;
+  extern struct android_log_transport_write pmsgLoggerWrite;
 
-    __android_log_add_transport(&__android_log_transport_write, &logdLoggerWrite);
-    __android_log_add_transport(&__android_log_persist_write, &pmsgLoggerWrite);
+  __android_log_add_transport(&__android_log_transport_write, &logdLoggerWrite);
+  __android_log_add_transport(&__android_log_persist_write, &pmsgLoggerWrite);
 #else
-    extern struct android_log_transport_write fakeLoggerWrite;
+  extern struct android_log_transport_write fakeLoggerWrite;
 
-    __android_log_add_transport(&__android_log_transport_write, &fakeLoggerWrite);
+  __android_log_add_transport(&__android_log_transport_write, &fakeLoggerWrite);
 #endif
-  }
 }
 
 void __android_log_config_write_close() {
