@@ -88,7 +88,6 @@ android_log_context create_android_logger(uint32_t tag) {
 
 android_log_context create_android_log_parser(const char* msg, size_t len) {
   android_log_context_internal* context;
-  size_t i;
 
   context =
       static_cast<android_log_context_internal*>(calloc(1, sizeof(android_log_context_internal)));

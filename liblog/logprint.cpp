@@ -291,8 +291,10 @@ int android_log_setPrintFormat(AndroidLogFormat* p_format, AndroidLogPrintFormat
   return 1;
 }
 
+#ifndef __MINGW32__
 static const char tz[] = "TZ";
 static const char utc[] = "UTC";
+#endif
 
 /**
  * Returns FORMAT_OFF on invalid string
@@ -1189,6 +1191,7 @@ size_t convertPrintable(char* p, const char* message, size_t messageLen) {
   return p - begin;
 }
 
+#ifdef __ANDROID__
 static char* readSeconds(char* e, struct timespec* t) {
   unsigned long multiplier;
   char* p;
@@ -1229,7 +1232,6 @@ static long long nsecTimespec(struct timespec* now) {
   return (long long)now->tv_sec * NS_PER_SEC + now->tv_nsec;
 }
 
-#ifdef __ANDROID__
 static void convertMonotonic(struct timespec* result, const AndroidLogEntry* entry) {
   struct listnode* node;
   struct conversionList {

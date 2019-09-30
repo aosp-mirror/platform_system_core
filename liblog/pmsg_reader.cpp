@@ -130,7 +130,6 @@ static int pmsgRead(struct android_log_logger_list* logger_list,
   ssize_t ret;
   off_t current, next;
   uid_t uid;
-  struct android_log_logger* logger;
   struct __attribute__((__packed__)) {
     android_pmsg_log_header_t p;
     android_log_header_t l;
