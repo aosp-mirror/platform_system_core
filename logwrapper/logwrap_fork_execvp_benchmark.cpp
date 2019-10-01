@@ -23,9 +23,7 @@ static void BM_android_fork_execvp_ext(benchmark::State& state) {
     const char* argv[] = {"/system/bin/echo", "hello", "world"};
     const int argc = 3;
     while (state.KeepRunning()) {
-        int rc = android_fork_execvp_ext(
-            argc, (char**)argv, NULL /* status */, false /* ignore_int_quit */, LOG_NONE,
-            false /* abbreviated */, NULL /* file_path */, NULL /* opts */, 0 /* opts_len */);
+        int rc = logwrap_fork_execvp(argc, argv, nullptr, false, LOG_NONE, false, nullptr);
         CHECK_EQ(0, rc);
     }
 }
