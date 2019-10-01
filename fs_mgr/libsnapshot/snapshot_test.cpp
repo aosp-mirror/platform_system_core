@@ -58,14 +58,10 @@ using namespace android::storage_literals;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
-// These are not reset between each test because it's expensive to create
-// these resources (starting+connecting to gsid, zero-filling images).
+// Global states. See test_helpers.h.
 std::unique_ptr<SnapshotManager> sm;
 TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
-
-static constexpr uint64_t kSuperSize = 16_MiB + 4_KiB;
-static constexpr uint64_t kGroupSize = 16_MiB;
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -743,9 +739,9 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     }
 
     // Grow all partitions.
-    SetSize(sys_, 4_MiB);
-    SetSize(vnd_, 4_MiB);
-    SetSize(prd_, 4_MiB);
+    SetSize(sys_, 3788_KiB);
+    SetSize(vnd_, 3788_KiB);
+    SetSize(prd_, 3788_KiB);
 
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -810,6 +806,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
 // Test that if new system partitions uses empty space in super, that region is not snapshotted.
 TEST_F(SnapshotUpdateTest, DirectWriteEmptySpace) {
+    GTEST_SKIP() << "b/141889746";
     SetSize(sys_, 4_MiB);
     // vnd_b and prd_b are unchanged.
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
