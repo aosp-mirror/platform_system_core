@@ -20,7 +20,7 @@
 #include "partition_cow_creator.h"
 #include "test_helpers.h"
 
-using ::android::fs_mgr::MetadataBuilder;
+using namespace android::fs_mgr;
 
 namespace android {
 namespace snapshot {
@@ -53,6 +53,47 @@ TEST_F(PartitionCowCreatorTest, IntersectSelf) {
     ASSERT_TRUE(ret.has_value());
     ASSERT_EQ(40 * 1024, ret->snapshot_status.device_size);
     ASSERT_EQ(40 * 1024, ret->snapshot_status.snapshot_size);
+}
+
+TEST_F(PartitionCowCreatorTest, Holes) {
+    const auto& opener = test_device->GetPartitionOpener();
+
+    constexpr auto slack_space = 1_MiB;
+    constexpr auto big_size = (kSuperSize - slack_space) / 2;
+    constexpr auto small_size = big_size / 2;
+
+    BlockDeviceInfo super_device("super", kSuperSize, 0, 0, 4_KiB);
+    std::vector<BlockDeviceInfo> devices = {super_device};
+    auto source = MetadataBuilder::New(devices, "super", 1024, 2);
+    auto system = source->AddPartition("system_a", 0);
+    ASSERT_NE(nullptr, system);
+    ASSERT_TRUE(source->ResizePartition(system, big_size));
+    auto vendor = source->AddPartition("vendor_a", 0);
+    ASSERT_NE(nullptr, vendor);
+    ASSERT_TRUE(source->ResizePartition(vendor, big_size));
+    // Create a hole between system and vendor
+    ASSERT_TRUE(source->ResizePartition(system, small_size));
+    auto source_metadata = source->Export();
+    ASSERT_NE(nullptr, source_metadata);
+    ASSERT_TRUE(FlashPartitionTable(opener, fake_super, *source_metadata.get()));
+
+    auto target = MetadataBuilder::NewForUpdate(opener, "super", 0, 1);
+    // Shrink vendor
+    vendor = target->FindPartition("vendor_b");
+    ASSERT_NE(nullptr, vendor);
+    ASSERT_TRUE(target->ResizePartition(vendor, small_size));
+    // Grow system to take hole & saved space from vendor
+    system = target->FindPartition("system_b");
+    ASSERT_NE(nullptr, system);
+    ASSERT_TRUE(target->ResizePartition(system, big_size * 2 - small_size));
+
+    PartitionCowCreator creator{.target_metadata = target.get(),
+                                .target_suffix = "_b",
+                                .target_partition = system,
+                                .current_metadata = source.get(),
+                                .current_suffix = "_a"};
+    auto ret = creator.Run();
+    ASSERT_TRUE(ret.has_value());
 }
 
 }  // namespace snapshot
