@@ -23,6 +23,7 @@
 #include <liblp/mock_property_fetcher.h>
 #include <liblp/partition_opener.h>
 #include <libsnapshot/snapshot.h>
+#include <storage_literals/storage_literals.h>
 #include <update_engine/update_metadata.pb.h>
 
 namespace android {
@@ -38,7 +39,16 @@ using testing::AssertionResult;
 using testing::NiceMock;
 using testing::Return;
 
+using namespace android::storage_literals;
 using namespace std::string_literals;
+
+// These are not reset between each test because it's expensive to create
+// these resources (starting+connecting to gsid, zero-filling images).
+extern std::unique_ptr<SnapshotManager> sm;
+extern class TestDeviceInfo* test_device;
+extern std::string fake_super;
+static constexpr uint64_t kSuperSize = 16_MiB + 4_KiB;
+static constexpr uint64_t kGroupSize = 16_MiB;
 
 // Redirect requests for "super" to our fake super partition.
 class TestPartitionOpener final : public android::fs_mgr::PartitionOpener {
