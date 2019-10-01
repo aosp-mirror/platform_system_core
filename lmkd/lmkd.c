@@ -1793,6 +1793,14 @@ static int kill_one_process(struct proc* procp, int min_oom_score, const char *r
     /* CAP_KILL required */
     r = kill(pid, SIGKILL);
 
+    TRACE_KILL_END();
+
+    if (r) {
+        ALOGE("kill(%d): errno=%d", pid, errno);
+        /* Delete process record even when we fail to kill so that we don't get stuck on it */
+        goto out;
+    }
+
     set_process_group_and_prio(pid, SP_FOREGROUND, ANDROID_PRIORITY_HIGHEST);
 
     inc_killcnt(procp->oomadj);
@@ -1804,28 +1812,21 @@ static int kill_one_process(struct proc* procp, int min_oom_score, const char *r
               uid, procp->oomadj, tasksize * page_k);
     }
 
-    TRACE_KILL_END();
-
     last_killed_pid = pid;
 
-    if (r) {
-        ALOGE("kill(%d): errno=%d", pid, errno);
-        goto out;
-    } else {
 #ifdef LMKD_LOG_STATS
-        if (memory_stat_parse_result == 0) {
-            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
-                    procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
-                    mem_st.cache_in_bytes, mem_st.swap_in_bytes, mem_st.process_start_time_ns,
-                    min_oom_score);
-        } else if (enable_stats_log) {
-            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, procp->oomadj,
-                                          -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1, -1,
-                                          min_oom_score);
-        }
-#endif
-        result = tasksize;
+    if (memory_stat_parse_result == 0) {
+        stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
+                procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
+                mem_st.cache_in_bytes, mem_st.swap_in_bytes, mem_st.process_start_time_ns,
+                min_oom_score);
+    } else if (enable_stats_log) {
+        stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, procp->oomadj,
+                                      -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1, -1,
+                                      min_oom_score);
     }
+#endif
+    result = tasksize;
 
 out:
     /*
