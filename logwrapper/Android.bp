@@ -56,10 +56,10 @@ cc_binary {
 // ========================================================
 
 cc_benchmark {
-    name: "android_fork_execvp_ext_benchmark",
+    name: "logwrap_fork_execvp_benchmark",
     defaults: ["logwrapper_defaults"],
     srcs: [
-        "android_fork_execvp_ext_benchmark.cpp",
+        "logwrap_fork_execvp_benchmark.cpp",
     ],
     shared_libs: [
         "libbase",
