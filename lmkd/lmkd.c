@@ -79,6 +79,7 @@
 #define MEMCG_MEMORYSW_USAGE "/dev/memcg/memory.memsw.usage_in_bytes"
 #define ZONEINFO_PATH "/proc/zoneinfo"
 #define MEMINFO_PATH "/proc/meminfo"
+#define VMSTAT_PATH "/proc/vmstat"
 #define PROC_STATUS_TGID_FIELD "Tgid:"
 #define LINE_MAX 128
 
@@ -110,12 +111,28 @@
  * PSI_WINDOW_SIZE_MS after the event happens.
  */
 #define PSI_WINDOW_SIZE_MS 1000
-/* Polling period after initial PSI signal */
-#define PSI_POLL_PERIOD_MS 10
+/* Polling period after PSI signal when pressure is high */
+#define PSI_POLL_PERIOD_SHORT_MS 10
+/* Polling period after PSI signal when pressure is low */
+#define PSI_POLL_PERIOD_LONG_MS 100
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 
 #define FAIL_REPORT_RLIMIT_MS 1000
+
+/*
+ * System property defaults
+ */
+/* ro.lmk.swap_free_low_percentage property defaults */
+#define DEF_LOW_SWAP_LOWRAM 10
+#define DEF_LOW_SWAP 20
+/* ro.lmk.thrashing_limit property defaults */
+#define DEF_THRASHING_LOWRAM 30
+#define DEF_THRASHING 100
+/* ro.lmk.thrashing_limit_decay property defaults */
+#define DEF_THRASHING_DECAY_LOWRAM 50
+#define DEF_THRASHING_DECAY 10
 
 /* default to old in-kernel interface if no memory pressure events */
 static bool use_inkernel_interface = true;
@@ -157,6 +174,8 @@ static unsigned long kill_timeout_ms;
 static bool use_minfree_levels;
 static bool per_app_memcg;
 static int swap_free_low_percentage;
+static int thrashing_limit_pct;
+static int thrashing_limit_decay_pct;
 static bool use_psi_monitors = false;
 static struct psi_threshold psi_thresholds[VMPRESS_LEVEL_COUNT] = {
     { PSI_SOME, 70 },    /* 70ms out of 1sec for partial stall */
@@ -390,6 +409,41 @@ union meminfo {
     int64_t arr[MI_FIELD_COUNT];
 };
 
+/* Fields to parse in /proc/vmstat */
+enum vmstat_field {
+    VS_FREE_PAGES,
+    VS_INACTIVE_FILE,
+    VS_ACTIVE_FILE,
+    VS_WORKINGSET_REFAULT,
+    VS_PGSCAN_KSWAPD,
+    VS_PGSCAN_DIRECT,
+    VS_PGSCAN_DIRECT_THROTTLE,
+    VS_FIELD_COUNT
+};
+
+static const char* const vmstat_field_names[MI_FIELD_COUNT] = {
+    "nr_free_pages",
+    "nr_inactive_file",
+    "nr_active_file",
+    "workingset_refault",
+    "pgscan_kswapd",
+    "pgscan_direct",
+    "pgscan_direct_throttle",
+};
+
+union vmstat {
+    struct {
+        int64_t nr_free_pages;
+        int64_t nr_inactive_file;
+        int64_t nr_active_file;
+        int64_t workingset_refault;
+        int64_t pgscan_kswapd;
+        int64_t pgscan_direct;
+        int64_t pgscan_direct_throttle;
+    } field;
+    int64_t arr[VS_FIELD_COUNT];
+};
+
 enum field_match_result {
     NO_MATCH,
     PARSE_FAIL,
@@ -444,6 +498,10 @@ static long page_k;
 
 static char* proc_get_name(int pid);
 static void poll_kernel();
+
+static int clamp(int low, int high, int value) {
+    return max(min(value, high), low);
+}
 
 static bool parse_int64(const char* str, int64_t* ret) {
     char* endptr;
@@ -1248,7 +1306,7 @@ static int memory_stat_from_procfs(struct memory_stat* mem_st, int pid) {
 #endif
 
 /*
- * /prop/zoneinfo parsing routines
+ * /proc/zoneinfo parsing routines
  * Expected file format is:
  *
  *   Node <node_id>, zone   <zone_name>
@@ -1442,7 +1500,7 @@ static int zoneinfo_parse(struct zoneinfo *zi) {
     return 0;
 }
 
-/* /prop/meminfo parsing routines */
+/* /proc/meminfo parsing routines */
 static bool meminfo_parse_line(char *line, union meminfo *mi) {
     char *cp = line;
     char *ap;
@@ -1493,6 +1551,59 @@ static int meminfo_parse(union meminfo *mi) {
     }
     mi->field.nr_file_pages = mi->field.cached + mi->field.swap_cached +
         mi->field.buffers;
+
+    return 0;
+}
+
+/* /proc/vmstat parsing routines */
+static bool vmstat_parse_line(char *line, union vmstat *vs) {
+    char *cp;
+    char *ap;
+    char *save_ptr;
+    int64_t val;
+    int field_idx;
+    enum field_match_result match_res;
+
+    cp = strtok_r(line, " ", &save_ptr);
+    if (!cp) {
+        return false;
+    }
+
+    ap = strtok_r(NULL, " ", &save_ptr);
+    if (!ap) {
+        return false;
+    }
+
+    match_res = match_field(cp, ap, vmstat_field_names, VS_FIELD_COUNT,
+        &val, &field_idx);
+    if (match_res == PARSE_SUCCESS) {
+        vs->arr[field_idx] = val;
+    }
+    return (match_res != PARSE_FAIL);
+}
+
+static int vmstat_parse(union vmstat *vs) {
+    static struct reread_data file_data = {
+        .filename = VMSTAT_PATH,
+        .fd = -1,
+    };
+    char *buf;
+    char *save_ptr;
+    char *line;
+
+    memset(vs, 0, sizeof(union vmstat));
+
+    if ((buf = reread_file(&file_data)) == NULL) {
+        return -1;
+    }
+
+    for (line = strtok_r(buf, "\n", &save_ptr); line;
+         line = strtok_r(NULL, "\n", &save_ptr)) {
+        if (!vmstat_parse_line(line, vs)) {
+            ALOGE("%s parse error", file_data.filename);
+            return -1;
+        }
+    }
 
     return 0;
 }
@@ -1833,6 +1944,219 @@ static bool is_kill_pending(void) {
     return false;
 }
 
+enum zone_watermark {
+    WMARK_MIN = 0,
+    WMARK_LOW,
+    WMARK_HIGH,
+    WMARK_NONE
+};
+
+/*
+ * Returns lowest breached watermark or WMARK_NONE.
+ */
+static enum zone_watermark get_lowest_watermark(struct zoneinfo *zi)
+{
+    enum zone_watermark wmark = WMARK_NONE;
+
+    for (int node_idx = 0; node_idx < zi->node_count; node_idx++) {
+        struct zoneinfo_node *node = &zi->nodes[node_idx];
+
+        for (int zone_idx = 0; zone_idx < node->zone_count; zone_idx++) {
+            struct zoneinfo_zone *zone = &node->zones[zone_idx];
+            int zone_free_mem;
+
+            if (!zone->fields.field.present) {
+                continue;
+            }
+
+            zone_free_mem = zone->fields.field.nr_free_pages - zone->fields.field.nr_free_cma;
+            if (zone_free_mem > zone->max_protection + zone->fields.field.high) {
+                continue;
+            }
+            if (zone_free_mem > zone->max_protection + zone->fields.field.low) {
+                if (wmark > WMARK_HIGH) wmark = WMARK_HIGH;
+                continue;
+            }
+            if (zone_free_mem > zone->max_protection + zone->fields.field.min) {
+                if (wmark > WMARK_LOW) wmark = WMARK_LOW;
+                continue;
+            }
+            wmark = WMARK_MIN;
+        }
+    }
+
+    return wmark;
+}
+
+static void mp_event_psi(int data, uint32_t events, struct polling_params *poll_params) {
+    enum kill_reasons {
+        NONE = -1, /* To denote no kill condition */
+        PRESSURE_AFTER_KILL = 0,
+        NOT_RESPONDING,
+        LOW_SWAP_AND_THRASHING,
+        LOW_MEM_AND_SWAP,
+        LOW_MEM_AND_THRASHING,
+        DIRECT_RECL_AND_THRASHING,
+        KILL_REASON_COUNT
+    };
+    enum reclaim_state {
+        NO_RECLAIM = 0,
+        KSWAPD_RECLAIM,
+        DIRECT_RECLAIM,
+    };
+    static int64_t init_ws_refault;
+    static int64_t base_file_lru;
+    static int64_t init_pgscan_kswapd;
+    static int64_t init_pgscan_direct;
+    static int64_t swap_low_threshold;
+    static bool killing;
+    static int thrashing_limit;
+    static bool in_reclaim;
+
+    union meminfo mi;
+    union vmstat vs;
+    struct zoneinfo zi;
+    struct timespec curr_tm;
+    int64_t thrashing = 0;
+    bool swap_is_low = false;
+    enum vmpressure_level level = (enum vmpressure_level)data;
+    enum kill_reasons kill_reason = NONE;
+    bool cycle_after_kill = false;
+    enum reclaim_state reclaim = NO_RECLAIM;
+    enum zone_watermark wmark = WMARK_NONE;
+
+    /* Skip while still killing a process */
+    if (is_kill_pending()) {
+        /* TODO: replace this quick polling with pidfd polling if kernel supports */
+        goto no_kill;
+    }
+
+    if (clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm) != 0) {
+        ALOGE("Failed to get current time");
+        return;
+    }
+
+    if (vmstat_parse(&vs) < 0) {
+        ALOGE("Failed to parse vmstat!");
+        return;
+    }
+
+    if (meminfo_parse(&mi) < 0) {
+        ALOGE("Failed to parse meminfo!");
+        return;
+    }
+
+    /* Reset states after process got killed */
+    if (killing) {
+        killing = false;
+        cycle_after_kill = true;
+        /* Reset file-backed pagecache size and refault amounts after a kill */
+        base_file_lru = vs.field.nr_inactive_file + vs.field.nr_active_file;
+        init_ws_refault = vs.field.workingset_refault;
+    }
+
+    /* Check free swap levels */
+    if (swap_free_low_percentage) {
+        if (!swap_low_threshold) {
+            swap_low_threshold = mi.field.total_swap * swap_free_low_percentage / 100;
+        }
+        swap_is_low = mi.field.free_swap < swap_low_threshold;
+    }
+
+    /* Identify reclaim state */
+    if (vs.field.pgscan_direct > init_pgscan_direct) {
+        init_pgscan_direct = vs.field.pgscan_direct;
+        init_pgscan_kswapd = vs.field.pgscan_kswapd;
+        reclaim = DIRECT_RECLAIM;
+    } else if (vs.field.pgscan_kswapd > init_pgscan_kswapd) {
+        init_pgscan_kswapd = vs.field.pgscan_kswapd;
+        reclaim = KSWAPD_RECLAIM;
+    } else {
+        in_reclaim = false;
+        /* Skip if system is not reclaiming */
+        goto no_kill;
+    }
+
+    if (!in_reclaim) {
+        /* Record file-backed pagecache size when entering reclaim cycle */
+        base_file_lru = vs.field.nr_inactive_file + vs.field.nr_active_file;
+        init_ws_refault = vs.field.workingset_refault;
+        thrashing_limit = thrashing_limit_pct;
+    } else {
+        /* Calculate what % of the file-backed pagecache refaulted so far */
+        thrashing = (vs.field.workingset_refault - init_ws_refault) * 100 / base_file_lru;
+    }
+    in_reclaim = true;
+
+    /* Find out which watermark is breached if any */
+    if (zoneinfo_parse(&zi) < 0) {
+        ALOGE("Failed to parse zoneinfo!");
+        return;
+    }
+    wmark = get_lowest_watermark(&zi);
+
+    /*
+     * TODO: move this logic into a separate function
+     * Decide if killing a process is necessary and record the reason
+     */
+    if (cycle_after_kill && wmark < WMARK_LOW) {
+        /*
+         * Prevent kills not freeing enough memory which might lead to OOM kill.
+         * This might happen when a process is consuming memory faster than reclaim can
+         * free even after a kill. Mostly happens when running memory stress tests.
+         */
+        kill_reason = PRESSURE_AFTER_KILL;
+    } else if (level == VMPRESS_LEVEL_CRITICAL && events != 0) {
+        /*
+         * Device is too busy reclaiming memory which might lead to ANR.
+         * Critical level is triggered when PSI complete stall (all tasks are blocked because
+         * of the memory congestion) breaches the configured threshold.
+         */
+        kill_reason = NOT_RESPONDING;
+    } else if (swap_is_low && thrashing > thrashing_limit_pct) {
+        /* Page cache is thrashing while swap is low */
+        kill_reason = LOW_SWAP_AND_THRASHING;
+    } else if (swap_is_low && wmark < WMARK_HIGH) {
+        /* Both free memory and swap are low */
+        kill_reason = LOW_MEM_AND_SWAP;
+    } else if (wmark < WMARK_HIGH && thrashing > thrashing_limit) {
+        /* Page cache is thrashing while memory is low */
+        thrashing_limit = (thrashing_limit * (100 - thrashing_limit_decay_pct)) / 100;
+        kill_reason = LOW_MEM_AND_THRASHING;
+    } else if (reclaim == DIRECT_RECLAIM && thrashing > thrashing_limit) {
+        /* Page cache is thrashing while in direct reclaim (mostly happens on lowram devices) */
+        thrashing_limit = (thrashing_limit * (100 - thrashing_limit_decay_pct)) / 100;
+        kill_reason = DIRECT_RECL_AND_THRASHING;
+    }
+
+    /* Kill a process if necessary */
+    if (kill_reason != NONE) {
+        int pages_freed = find_and_kill_process(0);
+        killing = (pages_freed > 0);
+        meminfo_log(&mi);
+    }
+
+no_kill:
+    /*
+     * Start polling after initial PSI event;
+     * extend polling while device is in direct reclaim or process is being killed;
+     * do not extend when kswapd reclaims because that might go on for a long time
+     * without causing memory pressure
+     */
+    if (events || killing || reclaim == DIRECT_RECLAIM) {
+        poll_params->update = POLLING_START;
+    }
+
+    /* Decide the polling interval */
+    if (swap_is_low || killing) {
+        /* Fast polling during and after a kill or when swap is low */
+        poll_params->polling_interval_ms = PSI_POLL_PERIOD_SHORT_MS;
+    } else {
+        /* By default use long intervals */
+        poll_params->polling_interval_ms = PSI_POLL_PERIOD_LONG_MS;
+    }
+}
+
 static void mp_event_common(int data, uint32_t events, struct polling_params *poll_params) {
     int ret;
     unsigned long long evcount;
@@ -1881,7 +2205,7 @@ static void mp_event_common(int data, uint32_t events, struct polling_params *po
     if (use_psi_monitors && events) {
         /* Override polling params only if current event is more critical */
         if (!poll_params->poll_handler || data > poll_params->poll_handler->data) {
-            poll_params->polling_interval_ms = PSI_POLL_PERIOD_MS;
+            poll_params->polling_interval_ms = PSI_POLL_PERIOD_SHORT_MS;
             poll_params->update = POLLING_START;
         }
     }
@@ -2483,8 +2807,12 @@ int main(int argc __unused, char **argv __unused) {
         property_get_bool("ro.lmk.use_minfree_levels", false);
     per_app_memcg =
         property_get_bool("ro.config.per_app_memcg", low_ram_device);
-    swap_free_low_percentage =
-        property_get_int32("ro.lmk.swap_free_low_percentage", 10);
+    swap_free_low_percentage = clamp(0, 100, property_get_int32("ro.lmk.swap_free_low_percentage",
+        low_ram_device ? DEF_LOW_SWAP_LOWRAM : DEF_LOW_SWAP));
+    thrashing_limit_pct = max(0, property_get_int32("ro.lmk.thrashing_limit",
+        low_ram_device ? DEF_THRASHING_LOWRAM : DEF_THRASHING));
+    thrashing_limit_decay_pct = clamp(0, 100, property_get_int32("ro.lmk.thrashing_limit_decay",
+        low_ram_device ? DEF_THRASHING_DECAY_LOWRAM : DEF_THRASHING_DECAY));
 
     ctx = create_android_logger(MEMINFO_LOG_TAG);
 
