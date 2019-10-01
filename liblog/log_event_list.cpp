@@ -176,13 +176,6 @@ int android_log_write_list_begin(android_log_context ctx) {
   return 0;
 }
 
-static inline void copy4LE(uint8_t* buf, uint32_t val) {
-  buf[0] = val & 0xFF;
-  buf[1] = (val >> 8) & 0xFF;
-  buf[2] = (val >> 16) & 0xFF;
-  buf[3] = (val >> 24) & 0xFF;
-}
-
 int android_log_write_int32(android_log_context ctx, int32_t value) {
   size_t needed;
   android_log_context_internal* context;
@@ -201,20 +194,9 @@ int android_log_write_int32(android_log_context ctx, int32_t value) {
   }
   context->count[context->list_nest_depth]++;
   context->storage[context->pos + 0] = EVENT_TYPE_INT;
-  copy4LE(&context->storage[context->pos + 1], value);
+  *reinterpret_cast<int32_t*>(&context->storage[context->pos + 1]) = value;
   context->pos += needed;
   return 0;
-}
-
-static inline void copy8LE(uint8_t* buf, uint64_t val) {
-  buf[0] = val & 0xFF;
-  buf[1] = (val >> 8) & 0xFF;
-  buf[2] = (val >> 16) & 0xFF;
-  buf[3] = (val >> 24) & 0xFF;
-  buf[4] = (val >> 32) & 0xFF;
-  buf[5] = (val >> 40) & 0xFF;
-  buf[6] = (val >> 48) & 0xFF;
-  buf[7] = (val >> 56) & 0xFF;
 }
 
 int android_log_write_int64(android_log_context ctx, int64_t value) {
@@ -235,7 +217,7 @@ int android_log_write_int64(android_log_context ctx, int64_t value) {
   }
   context->count[context->list_nest_depth]++;
   context->storage[context->pos + 0] = EVENT_TYPE_LONG;
-  copy8LE(&context->storage[context->pos + 1], value);
+  *reinterpret_cast<int64_t*>(&context->storage[context->pos + 1]) = value;
   context->pos += needed;
   return 0;
 }
@@ -267,7 +249,7 @@ int android_log_write_string8_len(android_log_context ctx, const char* value, si
   }
   context->count[context->list_nest_depth]++;
   context->storage[context->pos + 0] = EVENT_TYPE_STRING;
-  copy4LE(&context->storage[context->pos + 1], len);
+  *reinterpret_cast<ssize_t*>(&context->storage[context->pos + 1]) = len;
   if (len) {
     memcpy(&context->storage[context->pos + 5], value, len);
   }
@@ -299,7 +281,7 @@ int android_log_write_float32(android_log_context ctx, float value) {
   ivalue = *(uint32_t*)&value;
   context->count[context->list_nest_depth]++;
   context->storage[context->pos + 0] = EVENT_TYPE_FLOAT;
-  copy4LE(&context->storage[context->pos + 1], ivalue);
+  *reinterpret_cast<uint32_t*>(&context->storage[context->pos + 1]) = ivalue;
   context->pos += needed;
   return 0;
 }
