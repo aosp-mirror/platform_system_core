@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -184,9 +183,9 @@ static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
       android_log_event_int_t buffer;
 
       header.id = LOG_ID_SECURITY;
-      buffer.header.tag = htole32(LIBLOG_LOG_TAG);
+      buffer.header.tag = LIBLOG_LOG_TAG;
       buffer.payload.type = EVENT_TYPE_INT;
-      buffer.payload.data = htole32(snapshot);
+      buffer.payload.data = snapshot;
 
       newVec[headerLength].iov_base = &buffer;
       newVec[headerLength].iov_len = sizeof(buffer);
@@ -202,9 +201,9 @@ static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
       android_log_event_int_t buffer;
 
       header.id = LOG_ID_EVENTS;
-      buffer.header.tag = htole32(LIBLOG_LOG_TAG);
+      buffer.header.tag = LIBLOG_LOG_TAG;
       buffer.payload.type = EVENT_TYPE_INT;
-      buffer.payload.data = htole32(snapshot);
+      buffer.payload.data = snapshot;
 
       newVec[headerLength].iov_base = &buffer;
       newVec[headerLength].iov_len = sizeof(buffer);

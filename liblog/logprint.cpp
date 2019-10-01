@@ -291,8 +291,10 @@ int android_log_setPrintFormat(AndroidLogFormat* p_format, AndroidLogPrintFormat
   return 1;
 }
 
+#ifndef __MINGW32__
 static const char tz[] = "TZ";
 static const char utc[] = "UTC";
+#endif
 
 /**
  * Returns FORMAT_OFF on invalid string
@@ -580,24 +582,6 @@ int android_log_processLogBuffer(struct logger_entry* buf, AndroidLogEntry* entr
   return 0;
 }
 
-/*
- * Extract a 4-byte value from a byte stream.
- */
-static inline uint32_t get4LE(const uint8_t* src) {
-  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-}
-
-/*
- * Extract an 8-byte value from a byte stream.
- */
-static inline uint64_t get8LE(const uint8_t* src) {
-  uint32_t low, high;
-
-  low = src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-  high = src[4] | (src[5] << 8) | (src[6] << 16) | (src[7] << 24);
-  return ((uint64_t)high << 32) | (uint64_t)low;
-}
-
 static bool findChar(const char** cp, size_t* len, int c) {
   while ((*len) && isspace(*(*cp))) {
     ++(*cp);
@@ -744,7 +728,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData, size_t
         int32_t ival;
 
         if (eventDataLen < 4) return -1;
-        ival = get4LE(eventData);
+        ival = *reinterpret_cast<const int32_t*>(eventData);
         eventData += 4;
         eventDataLen -= 4;
 
@@ -754,7 +738,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData, size_t
     case EVENT_TYPE_LONG:
       /* 64-bit signed long */
       if (eventDataLen < 8) return -1;
-      lval = get8LE(eventData);
+      lval = *reinterpret_cast<const int64_t*>(eventData);
       eventData += 8;
       eventDataLen -= 8;
     pr_lval:
@@ -774,7 +758,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData, size_t
         float fval;
 
         if (eventDataLen < 4) return -1;
-        ival = get4LE(eventData);
+        ival = *reinterpret_cast<const uint32_t*>(eventData);
         fval = *(float*)&ival;
         eventData += 4;
         eventDataLen -= 4;
@@ -795,7 +779,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData, size_t
         unsigned int strLen;
 
         if (eventDataLen < 4) return -1;
-        strLen = get4LE(eventData);
+        strLen = *reinterpret_cast<const uint32_t*>(eventData);
         eventData += 4;
         eventDataLen -= 4;
 
@@ -1034,7 +1018,7 @@ int android_log_processBinaryLogBuffer(
   }
   inCount = buf->len;
   if (inCount < 4) return -1;
-  tagIndex = get4LE(eventData);
+  tagIndex = *reinterpret_cast<const uint32_t*>(eventData);
   eventData += 4;
   inCount -= 4;
 
@@ -1189,6 +1173,7 @@ size_t convertPrintable(char* p, const char* message, size_t messageLen) {
   return p - begin;
 }
 
+#ifdef __ANDROID__
 static char* readSeconds(char* e, struct timespec* t) {
   unsigned long multiplier;
   char* p;
@@ -1229,7 +1214,6 @@ static long long nsecTimespec(struct timespec* now) {
   return (long long)now->tv_sec * NS_PER_SEC + now->tv_nsec;
 }
 
-#ifdef __ANDROID__
 static void convertMonotonic(struct timespec* result, const AndroidLogEntry* entry) {
   struct listnode* node;
   struct conversionList {

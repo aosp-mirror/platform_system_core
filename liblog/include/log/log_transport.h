@@ -22,7 +22,7 @@ extern "C" {
 #define LOGGER_KERNEL  0x02 /* Reserved/Deprecated */
 #define LOGGER_NULL    0x04 /* Does not release resources of other selections */
 #define LOGGER_RESERVED 0x08 /* Reserved, previously for logging to local memory */
-#define LOGGER_STDERR  0x10 /* logs sent to stderr */
+#define LOGGER_RESERVED2  0x10 /* Reserved, previously for logs sent to stderr */
 /* clang-format on */
 
 /* Both return the selected transport flag mask, or negative errno */

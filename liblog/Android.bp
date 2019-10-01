@@ -23,7 +23,6 @@ liblog_sources = [
     "logger_read.cpp",
     "logger_write.cpp",
     "logprint.cpp",
-    "stderr_write.cpp",
 ]
 liblog_host_sources = [
     "fake_log_device.cpp",
@@ -108,7 +107,9 @@ cc_library {
     },
 
     cflags: [
+        "-Wall",
         "-Werror",
+        "-Wextra",
         // This is what we want to do:
         //  liblog_cflags := $(shell \
         //   sed -n \
