@@ -112,8 +112,6 @@
 #define PSI_WINDOW_SIZE_MS 1000
 /* Polling period after initial PSI signal */
 #define PSI_POLL_PERIOD_MS 10
-/* Poll for the duration of one window after initial PSI signal */
-#define PSI_POLL_COUNT (PSI_WINDOW_SIZE_MS / PSI_POLL_PERIOD_MS)
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -168,10 +166,30 @@ static struct psi_threshold psi_thresholds[VMPRESS_LEVEL_COUNT] = {
 
 static android_log_context ctx;
 
+enum polling_update {
+    POLLING_DO_NOT_CHANGE,
+    POLLING_START,
+    POLLING_STOP,
+};
+
+/*
+ * Data used for periodic polling for the memory state of the device.
+ * Note that when system is not polling poll_handler is set to NULL,
+ * when polling starts poll_handler gets set and is reset back to
+ * NULL when polling stops.
+ */
+struct polling_params {
+    struct event_handler_info* poll_handler;
+    struct timespec poll_start_tm;
+    struct timespec last_poll_tm;
+    int polling_interval_ms;
+    enum polling_update update;
+};
+
 /* data required to handle events */
 struct event_handler_info {
     int data;
-    void (*handler)(int data, uint32_t events);
+    void (*handler)(int data, uint32_t events, struct polling_params *poll_params);
 };
 
 /* data required to handle socket events */
@@ -1091,7 +1109,8 @@ wronglen:
     ALOGE("Wrong control socket read length cmd=%d len=%d", cmd, len);
 }
 
-static void ctrl_data_handler(int data, uint32_t events) {
+static void ctrl_data_handler(int data, uint32_t events,
+                              struct polling_params *poll_params __unused) {
     if (events & EPOLLIN) {
         ctrl_command_handler(data);
     }
@@ -1106,7 +1125,8 @@ static int get_free_dsock() {
     return -1;
 }
 
-static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
+static void ctrl_connect_handler(int data __unused, uint32_t events __unused,
+                                 struct polling_params *poll_params __unused) {
     struct epoll_event epev;
     int free_dscock_idx = get_free_dsock();
 
@@ -1813,7 +1833,7 @@ static bool is_kill_pending(void) {
     return false;
 }
 
-static void mp_event_common(int data, uint32_t events __unused) {
+static void mp_event_common(int data, uint32_t events, struct polling_params *poll_params) {
     int ret;
     unsigned long long evcount;
     int64_t mem_usage, memsw_usage;
@@ -1854,6 +1874,15 @@ static void mp_event_common(int data, uint32_t events __unused) {
                 evcount > 0 && lvl > level) {
                 level = lvl;
             }
+        }
+    }
+
+    /* Start polling after initial PSI event */
+    if (use_psi_monitors && events) {
+        /* Override polling params only if current event is more critical */
+        if (!poll_params->poll_handler || data > poll_params->poll_handler->data) {
+            poll_params->polling_interval_ms = PSI_POLL_PERIOD_MS;
+            poll_params->update = POLLING_START;
         }
     }
 
@@ -2308,32 +2337,55 @@ static int init(void) {
 
 static void mainloop(void) {
     struct event_handler_info* handler_info;
-    struct event_handler_info* poll_handler = NULL;
-    struct timespec last_report_tm, curr_tm;
+    struct polling_params poll_params;
+    struct timespec curr_tm;
     struct epoll_event *evt;
     long delay = -1;
-    int polling = 0;
+
+    poll_params.poll_handler = NULL;
+    poll_params.update = POLLING_DO_NOT_CHANGE;
 
     while (1) {
         struct epoll_event events[maxevents];
         int nevents;
         int i;
 
-        if (polling) {
+        if (poll_params.poll_handler) {
             /* Calculate next timeout */
             clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm);
-            delay = get_time_diff_ms(&last_report_tm, &curr_tm);
-            delay = (delay < PSI_POLL_PERIOD_MS) ?
-                PSI_POLL_PERIOD_MS - delay : PSI_POLL_PERIOD_MS;
+            delay = get_time_diff_ms(&poll_params.last_poll_tm, &curr_tm);
+            delay = (delay < poll_params.polling_interval_ms) ?
+                poll_params.polling_interval_ms - delay : poll_params.polling_interval_ms;
 
             /* Wait for events until the next polling timeout */
             nevents = epoll_wait(epollfd, events, maxevents, delay);
 
             clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm);
-            if (get_time_diff_ms(&last_report_tm, &curr_tm) >= PSI_POLL_PERIOD_MS) {
-                polling--;
-                poll_handler->handler(poll_handler->data, 0);
-                last_report_tm = curr_tm;
+            if (get_time_diff_ms(&poll_params.last_poll_tm, &curr_tm) >=
+                poll_params.polling_interval_ms) {
+                /* Set input params for the call */
+                poll_params.poll_handler->handler(poll_params.poll_handler->data, 0, &poll_params);
+                poll_params.last_poll_tm = curr_tm;
+
+                if (poll_params.update != POLLING_DO_NOT_CHANGE) {
+                    switch (poll_params.update) {
+                    case POLLING_START:
+                        poll_params.poll_start_tm = curr_tm;
+                        break;
+                    case POLLING_STOP:
+                        poll_params.poll_handler = NULL;
+                        break;
+                    default:
+                        break;
+                    }
+                    poll_params.update = POLLING_DO_NOT_CHANGE;
+                } else {
+                    if (get_time_diff_ms(&poll_params.poll_start_tm, &curr_tm) >
+                        PSI_WINDOW_SIZE_MS) {
+                        /* Polled for the duration of PSI window, time to stop */
+                        poll_params.poll_handler = NULL;
+                    }
+                }
             }
         } else {
             /* Wait for events with no timeout */
@@ -2364,25 +2416,37 @@ static void mainloop(void) {
 
         /* Second pass to handle all other events */
         for (i = 0, evt = &events[0]; i < nevents; ++i, evt++) {
-            if (evt->events & EPOLLERR)
+            if (evt->events & EPOLLERR) {
                 ALOGD("EPOLLERR on event #%d", i);
+            }
             if (evt->events & EPOLLHUP) {
                 /* This case was handled in the first pass */
                 continue;
             }
             if (evt->data.ptr) {
                 handler_info = (struct event_handler_info*)evt->data.ptr;
-                handler_info->handler(handler_info->data, evt->events);
+                /* Set input params for the call */
+                handler_info->handler(handler_info->data, evt->events, &poll_params);
 
-                if (use_psi_monitors && handler_info->handler == mp_event_common) {
-                    /*
-                     * Poll for the duration of PSI_WINDOW_SIZE_MS after the
-                     * initial PSI event because psi events are rate-limited
-                     * at one per sec.
-                     */
-                    polling = PSI_POLL_COUNT;
-                    poll_handler = handler_info;
-                    clock_gettime(CLOCK_MONOTONIC_COARSE, &last_report_tm);
+                if (poll_params.update != POLLING_DO_NOT_CHANGE) {
+                    switch (poll_params.update) {
+                    case POLLING_START:
+                        /*
+                         * Poll for the duration of PSI_WINDOW_SIZE_MS after the
+                         * initial PSI event because psi events are rate-limited
+                         * at one per sec.
+                         */
+                        clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm);
+                        poll_params.poll_start_tm = poll_params.last_poll_tm = curr_tm;
+                        poll_params.poll_handler = handler_info;
+                        break;
+                    case POLLING_STOP:
+                        poll_params.poll_handler = NULL;
+                        break;
+                    default:
+                        break;
+                    }
+                    poll_params.update = POLLING_DO_NOT_CHANGE;
                 }
             }
         }
