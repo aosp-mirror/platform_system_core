@@ -39,13 +39,6 @@
 static int __write_to_log_init(log_id_t, struct iovec* vec, size_t nr);
 static int (*write_to_log)(log_id_t, struct iovec* vec, size_t nr) = __write_to_log_init;
 
-/*
- * This is used by the C++ code to decide if it should write logs through
- * the C code.  Basically, if /dev/socket/logd is available, we're running in
- * the simulator rather than a desktop tool and want to use the device.
- */
-static enum { kLogUninitialized, kLogNotAvailable, kLogAvailable } g_log_status = kLogUninitialized;
-
 static int check_log_uid_permissions() {
 #if defined(__ANDROID__)
   uid_t uid = __android_log_uid();
@@ -102,22 +95,6 @@ static void __android_log_cache_available(struct android_log_transport_write* no
       node->logMask |= 1 << i;
     }
   }
-}
-
-extern "C" int __android_log_dev_available() {
-  struct android_log_transport_write* node;
-
-  if (list_empty(&__android_log_transport_write)) {
-    return kLogUninitialized;
-  }
-
-  write_transport_for_each(node, &__android_log_transport_write) {
-    __android_log_cache_available(node);
-    if (node->logMask) {
-      return kLogAvailable;
-    }
-  }
-  return kLogNotAvailable;
 }
 
 #if defined(__ANDROID__)
@@ -228,13 +205,6 @@ static int __write_to_log_initialize() {
   return ret;
 }
 
-/*
- * Extract a 4-byte value from a byte stream. le32toh open coded
- */
-static inline uint32_t get4LE(const uint8_t* src) {
-  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-}
-
 static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) {
   struct android_log_transport_write* node;
   int ret, save_errno;
@@ -302,7 +272,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
       }
     }
     if (m && (m != (EventTagMap*)(uintptr_t)-1LL)) {
-      tag = android_lookupEventTag_len(m, &len, get4LE(static_cast<uint8_t*>(vec[0].iov_base)));
+      tag = android_lookupEventTag_len(m, &len, *static_cast<uint32_t*>(vec[0].iov_base));
     }
     ret = __android_log_is_loggable_len(ANDROID_LOG_INFO, tag, len, ANDROID_LOG_VERBOSE);
     if (f) { /* local copy marked for close */
@@ -616,9 +586,9 @@ int android_set_log_transport(int transport_flag) {
     return retval;
   }
 
-  __android_log_transport &= LOGGER_LOGD | LOGGER_STDERR;
+  __android_log_transport &= LOGGER_LOGD;
 
-  transport_flag &= LOGGER_LOGD | LOGGER_STDERR;
+  transport_flag &= LOGGER_LOGD;
 
   if (__android_log_transport != transport_flag) {
     __android_log_transport = transport_flag;
@@ -644,7 +614,7 @@ int android_get_log_transport() {
   if (write_to_log == __write_to_log_null) {
     ret = LOGGER_NULL;
   } else {
-    __android_log_transport &= LOGGER_LOGD | LOGGER_STDERR;
+    __android_log_transport &= LOGGER_LOGD;
     ret = __android_log_transport;
     if ((write_to_log != __write_to_log_init) && (write_to_log != __write_to_log_daemon)) {
       ret = -EINVAL;
