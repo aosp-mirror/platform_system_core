@@ -47,9 +47,7 @@
 #include <psi/psi.h>
 #include <system/thread_defs.h>
 
-#ifdef LMKD_LOG_STATS
 #include "statslog.h"
-#endif
 
 /*
  * Define LMKD_TRACE_KILLS to record lmkd kills in kernel traces
@@ -186,6 +184,7 @@ static int psi_complete_stall_ms;
 static int thrashing_limit_pct;
 static int thrashing_limit_decay_pct;
 static bool use_psi_monitors = false;
+static struct kernel_poll_info kpoll_info;
 static struct psi_threshold psi_thresholds[VMPRESS_LEVEL_COUNT] = {
     { PSI_SOME, 70 },    /* 70ms out of 1sec for partial stall */
     { PSI_SOME, 100 },   /* 100ms out of 1sec for partial stall */
@@ -477,11 +476,6 @@ struct reread_data {
     int fd;
 };
 
-#ifdef LMKD_LOG_STATS
-static bool enable_stats_log;
-static android_log_context log_ctx;
-#endif
-
 #define PIDHASH_SZ 1024
 static struct proc *pidhash[PIDHASH_SZ];
 #define pid_hashfn(x) ((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
@@ -504,9 +498,6 @@ static uint32_t killcnt_total = 0;
 
 /* PAGE_SIZE / 1024 */
 static long page_k;
-
-static char* proc_get_name(int pid);
-static void poll_kernel();
 
 static int clamp(int low, int high, int value) {
     return max(min(value, high), low);
@@ -772,6 +763,60 @@ out:
     return (int)tgid;
 }
 
+static int proc_get_size(int pid) {
+    char path[PATH_MAX];
+    char line[LINE_MAX];
+    int fd;
+    int rss = 0;
+    int total;
+    ssize_t ret;
+
+    /* gid containing AID_READPROC required */
+    snprintf(path, PATH_MAX, "/proc/%d/statm", pid);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd == -1)
+        return -1;
+
+    ret = read_all(fd, line, sizeof(line) - 1);
+    if (ret < 0) {
+        close(fd);
+        return -1;
+    }
+
+    sscanf(line, "%d %d ", &total, &rss);
+    close(fd);
+    return rss;
+}
+
+static char *proc_get_name(int pid) {
+    char path[PATH_MAX];
+    static char line[LINE_MAX];
+    int fd;
+    char *cp;
+    ssize_t ret;
+
+    /* gid containing AID_READPROC required */
+    snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd == -1) {
+        return NULL;
+    }
+    ret = read_all(fd, line, sizeof(line) - 1);
+    close(fd);
+    if (ret < 0) {
+        return NULL;
+    }
+
+    cp = strchr(line, ' ');
+    if (cp) {
+        *cp = '\0';
+    } else {
+        line[ret] = '\0';
+    }
+
+    return line;
+}
+
 static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     struct proc *procp;
     char path[80];
@@ -811,9 +856,7 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     }
 
     if (use_inkernel_interface) {
-#ifdef LMKD_LOG_STATS
-        stats_store_taskname(params.pid, proc_get_name(params.pid));
-#endif
+        stats_store_taskname(params.pid, proc_get_name(params.pid), kpoll_info.poll_fd);
         return;
     }
 
@@ -884,16 +927,7 @@ static void cmd_procremove(LMKD_CTRL_PACKET packet) {
     struct lmk_procremove params;
 
     if (use_inkernel_interface) {
-#ifdef LMKD_LOG_STATS
-        /* Perform an extra check before the pid is removed, after which it
-         * will be impossible for poll_kernel to get the taskname. poll_kernel()
-         * is potentially a long-running blocking function; however this method
-         * handles AMS requests but does not block AMS.*/
-        if (enable_stats_log) {
-            poll_kernel();
-        }
-        stats_remove_taskname(params.pid);
-#endif
+        stats_remove_taskname(params.pid, kpoll_info.poll_fd);
         return;
     }
 
@@ -911,9 +945,7 @@ static void cmd_procpurge() {
     struct proc *next;
 
     if (use_inkernel_interface) {
-#ifdef LMKD_LOG_STATS
         stats_purge_tasknames();
-#endif
         return;
     }
 
@@ -1231,89 +1263,6 @@ static void ctrl_connect_handler(int data __unused, uint32_t events __unused,
     maxevents++;
 }
 
-#ifdef LMKD_LOG_STATS
-static void memory_stat_parse_line(char* line, struct memory_stat* mem_st) {
-    char key[LINE_MAX + 1];
-    int64_t value;
-
-    sscanf(line, "%" STRINGIFY(LINE_MAX) "s  %" SCNd64 "", key, &value);
-
-    if (strcmp(key, "total_") < 0) {
-        return;
-    }
-
-    if (!strcmp(key, "total_pgfault"))
-        mem_st->pgfault = value;
-    else if (!strcmp(key, "total_pgmajfault"))
-        mem_st->pgmajfault = value;
-    else if (!strcmp(key, "total_rss"))
-        mem_st->rss_in_bytes = value;
-    else if (!strcmp(key, "total_cache"))
-        mem_st->cache_in_bytes = value;
-    else if (!strcmp(key, "total_swap"))
-        mem_st->swap_in_bytes = value;
-}
-
-static int memory_stat_from_cgroup(struct memory_stat* mem_st, int pid, uid_t uid) {
-    FILE *fp;
-    char buf[PATH_MAX];
-
-    snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
-
-    fp = fopen(buf, "r");
-
-    if (fp == NULL) {
-        ALOGE("%s open failed: %s", buf, strerror(errno));
-        return -1;
-    }
-
-    while (fgets(buf, PAGE_SIZE, fp) != NULL) {
-        memory_stat_parse_line(buf, mem_st);
-    }
-    fclose(fp);
-
-    return 0;
-}
-
-static int memory_stat_from_procfs(struct memory_stat* mem_st, int pid) {
-    char path[PATH_MAX];
-    char buffer[PROC_STAT_BUFFER_SIZE];
-    int fd, ret;
-
-    snprintf(path, sizeof(path), PROC_STAT_FILE_PATH, pid);
-    if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0) {
-        ALOGE("%s open failed: %s", path, strerror(errno));
-        return -1;
-    }
-
-    ret = read(fd, buffer, sizeof(buffer));
-    if (ret < 0) {
-        ALOGE("%s read failed: %s", path, strerror(errno));
-        close(fd);
-        return -1;
-    }
-    close(fd);
-
-    // field 10 is pgfault
-    // field 12 is pgmajfault
-    // field 22 is starttime
-    // field 24 is rss_in_pages
-    int64_t pgfault = 0, pgmajfault = 0, starttime = 0, rss_in_pages = 0;
-    if (sscanf(buffer,
-               "%*u %*s %*s %*d %*d %*d %*d %*d %*d %" SCNd64 " %*d "
-               "%" SCNd64 " %*d %*u %*u %*d %*d %*d %*d %*d %*d "
-               "%" SCNd64 " %*d %" SCNd64 "",
-               &pgfault, &pgmajfault, &starttime, &rss_in_pages) != 4) {
-        return -1;
-    }
-    mem_st->pgfault = pgfault;
-    mem_st->pgmajfault = pgmajfault;
-    mem_st->rss_in_bytes = (rss_in_pages * PAGE_SIZE);
-    mem_st->process_start_time_ns = starttime * (NS_PER_SEC / sysconf(_SC_CLK_TCK));
-    return 0;
-}
-#endif
-
 /*
  * /proc/zoneinfo parsing routines
  * Expected file format is:
@@ -1626,60 +1575,6 @@ static void meminfo_log(union meminfo *mi) {
     android_log_reset(ctx);
 }
 
-static int proc_get_size(int pid) {
-    char path[PATH_MAX];
-    char line[LINE_MAX];
-    int fd;
-    int rss = 0;
-    int total;
-    ssize_t ret;
-
-    /* gid containing AID_READPROC required */
-    snprintf(path, PATH_MAX, "/proc/%d/statm", pid);
-    fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd == -1)
-        return -1;
-
-    ret = read_all(fd, line, sizeof(line) - 1);
-    if (ret < 0) {
-        close(fd);
-        return -1;
-    }
-
-    sscanf(line, "%d %d ", &total, &rss);
-    close(fd);
-    return rss;
-}
-
-static char *proc_get_name(int pid) {
-    char path[PATH_MAX];
-    static char line[LINE_MAX];
-    int fd;
-    char *cp;
-    ssize_t ret;
-
-    /* gid containing AID_READPROC required */
-    snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
-    fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd == -1) {
-        return NULL;
-    }
-    ret = read_all(fd, line, sizeof(line) - 1);
-    close(fd);
-    if (ret < 0) {
-        return NULL;
-    }
-
-    cp = strchr(line, ' ');
-    if (cp) {
-        *cp = '\0';
-    } else {
-        line[ret] = '\0';
-    }
-
-    return line;
-}
-
 static struct proc *proc_adj_lru(int oomadj) {
     return (struct proc *)adjslot_tail(&procadjslot_list[ADJTOSLOT(oomadj)]);
 }
@@ -1753,14 +1648,7 @@ static int kill_one_process(struct proc* procp, int min_oom_score, const char *r
     int tasksize;
     int r;
     int result = -1;
-
-#ifdef LMKD_LOG_STATS
-    struct memory_stat mem_st = {};
-    int memory_stat_parse_result = -1;
-#else
-    /* To prevent unused parameter warning */
-    (void)(min_oom_score);
-#endif
+    struct memory_stat *mem_st;
 
     tgid = proc_get_tgid(pid);
     if (tgid >= 0 && tgid != pid) {
@@ -1778,15 +1666,7 @@ static int kill_one_process(struct proc* procp, int min_oom_score, const char *r
         goto out;
     }
 
-#ifdef LMKD_LOG_STATS
-    if (enable_stats_log) {
-        if (per_app_memcg) {
-            memory_stat_parse_result = memory_stat_from_cgroup(&mem_st, pid, uid);
-        } else {
-            memory_stat_parse_result = memory_stat_from_procfs(&mem_st, pid);
-        }
-    }
-#endif
+    mem_st = stats_read_memory_stat(per_app_memcg, pid, uid);
 
     TRACE_KILL_START(pid);
 
@@ -1814,18 +1694,9 @@ static int kill_one_process(struct proc* procp, int min_oom_score, const char *r
 
     last_killed_pid = pid;
 
-#ifdef LMKD_LOG_STATS
-    if (memory_stat_parse_result == 0) {
-        stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
-                procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
-                mem_st.cache_in_bytes, mem_st.swap_in_bytes, mem_st.process_start_time_ns,
-                min_oom_score);
-    } else if (enable_stats_log) {
-        stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, procp->oomadj,
-                                      -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1, -1,
-                                      min_oom_score);
-    }
-#endif
+    stats_write_lmk_kill_occurred(LMK_KILL_OCCURRED, uid, taskname,
+            procp->oomadj, min_oom_score, tasksize, mem_st);
+
     result = tasksize;
 
 out:
@@ -1844,10 +1715,7 @@ out:
 static int find_and_kill_process(int min_score_adj, const char *reason) {
     int i;
     int killed_size = 0;
-
-#ifdef LMKD_LOG_STATS
     bool lmk_state_change_start = false;
-#endif
 
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
@@ -1861,13 +1729,11 @@ static int find_and_kill_process(int min_score_adj, const char *reason) {
 
             killed_size = kill_one_process(procp, min_score_adj, reason);
             if (killed_size >= 0) {
-#ifdef LMKD_LOG_STATS
-                if (enable_stats_log && !lmk_state_change_start) {
+                if (!lmk_state_change_start) {
                     lmk_state_change_start = true;
-                    stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED,
+                    stats_write_lmk_state_changed(LMK_STATE_CHANGED,
                                                   LMK_STATE_CHANGE_START);
                 }
-#endif
                 break;
             }
         }
@@ -1876,11 +1742,9 @@ static int find_and_kill_process(int min_score_adj, const char *reason) {
         }
     }
 
-#ifdef LMKD_LOG_STATS
-    if (enable_stats_log && lmk_state_change_start) {
-        stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED, LMK_STATE_CHANGE_STOP);
+    if (lmk_state_change_start) {
+        stats_write_lmk_state_changed(LMK_STATE_CHANGED, LMK_STATE_CHANGE_STOP);
     }
-#endif
 
     return killed_size;
 }
@@ -2586,74 +2450,13 @@ err_open_mpfd:
     return false;
 }
 
-#ifdef LMKD_LOG_STATS
-static int kernel_poll_fd = -1;
-static void poll_kernel() {
-    if (kernel_poll_fd == -1) {
-        // not waiting
-        return;
-    }
-
-    while (1) {
-        char rd_buf[256];
-        int bytes_read =
-                TEMP_FAILURE_RETRY(pread(kernel_poll_fd, (void*)rd_buf, sizeof(rd_buf), 0));
-        if (bytes_read <= 0) break;
-        rd_buf[bytes_read] = '\0';
-
-        int64_t pid;
-        int64_t uid;
-        int64_t group_leader_pid;
-        int64_t min_flt;
-        int64_t maj_flt;
-        int64_t rss_in_pages;
-        int16_t oom_score_adj;
-        int16_t min_score_adj;
-        int64_t starttime;
-        char* taskname = 0;
-        int fields_read = sscanf(rd_buf,
-                                 "%" SCNd64 " %" SCNd64 " %" SCNd64 " %" SCNd64 " %" SCNd64
-                                 " %" SCNd64 " %" SCNd16 " %" SCNd16 " %" SCNd64 "\n%m[^\n]",
-                                 &pid, &uid, &group_leader_pid, &min_flt, &maj_flt, &rss_in_pages,
-                                 &oom_score_adj, &min_score_adj, &starttime, &taskname);
-
-        /* only the death of the group leader process is logged */
-        if (fields_read == 10 && group_leader_pid == pid) {
-            int64_t process_start_time_ns = starttime * (NS_PER_SEC / sysconf(_SC_CLK_TCK));
-            stats_write_lmk_kill_occurred_pid(log_ctx, LMK_KILL_OCCURRED, uid, pid, oom_score_adj,
-                                              min_flt, maj_flt, rss_in_pages * PAGE_SIZE, 0, 0,
-                                              process_start_time_ns, min_score_adj);
-        }
-
-        free(taskname);
-    }
+static void kernel_event_handler(int data __unused, uint32_t events __unused,
+                                 struct polling_params *poll_params __unused) {
+    kpoll_info.handler(kpoll_info.poll_fd);
 }
-
-static struct event_handler_info kernel_poll_hinfo = {0, poll_kernel};
-
-static void init_poll_kernel() {
-    struct epoll_event epev;
-    kernel_poll_fd =
-            TEMP_FAILURE_RETRY(open("/proc/lowmemorykiller", O_RDONLY | O_NONBLOCK | O_CLOEXEC));
-
-    if (kernel_poll_fd < 0) {
-        ALOGE("kernel lmk event file could not be opened; errno=%d", kernel_poll_fd);
-        return;
-    }
-
-    epev.events = EPOLLIN;
-    epev.data.ptr = (void*)&kernel_poll_hinfo;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, kernel_poll_fd, &epev) != 0) {
-        ALOGE("epoll_ctl for lmk events failed; errno=%d", errno);
-        close(kernel_poll_fd);
-        kernel_poll_fd = -1;
-    } else {
-        maxevents++;
-    }
-}
-#endif
 
 static int init(void) {
+    static struct event_handler_info kernel_poll_hinfo = { 0, kernel_event_handler };
     struct reread_data file_data = {
         .filename = ZONEINFO_PATH,
         .fd = -1,
@@ -2704,11 +2507,17 @@ static int init(void) {
 
     if (use_inkernel_interface) {
         ALOGI("Using in-kernel low memory killer interface");
-#ifdef LMKD_LOG_STATS
-        if (enable_stats_log) {
-            init_poll_kernel();
+        if (init_poll_kernel(&kpoll_info)) {
+            epev.events = EPOLLIN;
+            epev.data.ptr = (void*)&kernel_poll_hinfo;
+            if (epoll_ctl(epollfd, EPOLL_CTL_ADD, kpoll_info.poll_fd, &epev) != 0) {
+                ALOGE("epoll_ctl for lmk events failed (errno=%d)", errno);
+                close(kpoll_info.poll_fd);
+                kpoll_info.poll_fd = -1;
+            } else {
+                maxevents++;
+            }
         }
-#endif
     } else {
         /* Try to use psi monitor first if kernel has it */
         use_psi_monitors = property_get_bool("ro.lmk.use_psi", true) &&
@@ -2907,9 +2716,7 @@ int main(int argc __unused, char **argv __unused) {
 
     ctx = create_android_logger(MEMINFO_LOG_TAG);
 
-#ifdef LMKD_LOG_STATS
-    statslog_init(&log_ctx, &enable_stats_log);
-#endif
+    statslog_init();
 
     if (!init()) {
         if (!use_inkernel_interface) {
@@ -2938,9 +2745,7 @@ int main(int argc __unused, char **argv __unused) {
         mainloop();
     }
 
-#ifdef LMKD_LOG_STATS
-    statslog_destroy(&log_ctx);
-#endif
+    statslog_destroy();
 
     android_log_destroy(&ctx);
 
