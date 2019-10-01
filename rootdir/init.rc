@@ -760,11 +760,6 @@ on boot
     write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
 
     # Permissions for System Server and daemons.
-    chown radio system /sys/android_power/state
-    chown radio system /sys/android_power/request_state
-    chown radio system /sys/android_power/acquire_full_wake_lock
-    chown radio system /sys/android_power/acquire_partial_wake_lock
-    chown radio system /sys/android_power/release_wake_lock
     chown system system /sys/power/autosleep
 
     chown system system /sys/devices/system/cpu/cpufreq/interactive/timer_rate
