@@ -59,24 +59,3 @@
 
 int logwrap_fork_execvp(int argc, const char* const* argv, int* status, bool forward_signals,
                         int log_target, bool abbreviated, const char* file_path);
-
-// TODO: Actually deprecate this and the below.
-static inline int android_fork_execvp_ext(int argc, char* argv[], int* status, bool ignore_int_quit,
-                                          int log_target, bool abbreviated, const char* file_path,
-                                          void* unused_opts, int unused_opts_len) {
-    (void)ignore_int_quit;
-    (void)unused_opts;
-    (void)unused_opts_len;
-    return logwrap_fork_execvp(argc, argv, status, false, log_target, abbreviated, file_path);
-}
-
-/* Similar to above, except abbreviated logging is not available, and if logwrap
- * is true, logging is to the Android system log, and if false, there is no
- * logging.
- */
-static inline int android_fork_execvp(int argc, char* argv[], int* status, bool ignore_int_quit,
-                                      bool logwrap) {
-    (void)ignore_int_quit;
-    return logwrap_fork_execvp(argc, argv, status, false, (logwrap ? LOG_ALOG : LOG_NONE), false,
-                               nullptr);
-}
