@@ -33,6 +33,7 @@
 #include <liblp/builder.h>
 #include <storage_literals/storage_literals.h>
 
+#include <android/snapshot/snapshot.pb.h>
 #include "test_helpers.h"
 #include "utility.h"
 
@@ -272,10 +273,12 @@ TEST_F(SnapshotTest, CreateSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test-snapshot",
-                                   {.device_size = kDeviceSize,
-                                    .snapshot_size = kDeviceSize,
-                                    .cow_file_size = kDeviceSize}));
+    SnapshotStatus status;
+    status.set_name("test-snapshot");
+    status.set_device_size(kDeviceSize);
+    status.set_snapshot_size(kDeviceSize);
+    status.set_cow_file_size(kDeviceSize);
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
     ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::vector<std::string> snapshots;
@@ -285,11 +288,11 @@ TEST_F(SnapshotTest, CreateSnapshot) {
 
     // Scope so delete can re-acquire the snapshot file lock.
     {
-        SnapshotManager::SnapshotStatus status;
+        SnapshotStatus status;
         ASSERT_TRUE(sm->ReadSnapshotStatus(lock_.get(), "test-snapshot", &status));
-        ASSERT_EQ(status.state, SnapshotManager::SnapshotState::Created);
-        ASSERT_EQ(status.device_size, kDeviceSize);
-        ASSERT_EQ(status.snapshot_size, kDeviceSize);
+        ASSERT_EQ(status.state(), SnapshotState::CREATED);
+        ASSERT_EQ(status.device_size(), kDeviceSize);
+        ASSERT_EQ(status.snapshot_size(), kDeviceSize);
     }
 
     ASSERT_TRUE(sm->UnmapSnapshot(lock_.get(), "test-snapshot"));
@@ -301,10 +304,12 @@ TEST_F(SnapshotTest, MapSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test-snapshot",
-                                   {.device_size = kDeviceSize,
-                                    .snapshot_size = kDeviceSize,
-                                    .cow_file_size = kDeviceSize}));
+    SnapshotStatus status;
+    status.set_name("test-snapshot");
+    status.set_device_size(kDeviceSize);
+    status.set_snapshot_size(kDeviceSize);
+    status.set_cow_file_size(kDeviceSize);
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
     ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::string base_device;
@@ -324,10 +329,12 @@ TEST_F(SnapshotTest, MapPartialSnapshot) {
 
     static const uint64_t kSnapshotSize = 1024 * 1024;
     static const uint64_t kDeviceSize = 1024 * 1024 * 2;
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test-snapshot",
-                                   {.device_size = kDeviceSize,
-                                    .snapshot_size = kSnapshotSize,
-                                    .cow_file_size = kSnapshotSize}));
+    SnapshotStatus status;
+    status.set_name("test-snapshot");
+    status.set_device_size(kDeviceSize);
+    status.set_snapshot_size(kSnapshotSize);
+    status.set_cow_file_size(kSnapshotSize);
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
     ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::string base_device;
@@ -377,10 +384,12 @@ TEST_F(SnapshotTest, Merge) {
     ASSERT_TRUE(CreatePartition("test_partition_a", kDeviceSize));
     ASSERT_TRUE(MapUpdatePartitions());
     ASSERT_TRUE(dm_.GetDmDevicePathByName("test_partition_b-base", &base_device));
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test_partition_b",
-                                   {.device_size = kDeviceSize,
-                                    .snapshot_size = kDeviceSize,
-                                    .cow_file_size = kDeviceSize}));
+    SnapshotStatus status;
+    status.set_name("test_partition_b");
+    status.set_device_size(kDeviceSize);
+    status.set_snapshot_size(kDeviceSize);
+    status.set_cow_file_size(kDeviceSize);
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
     ASSERT_TRUE(CreateCowImage("test_partition_b"));
     ASSERT_TRUE(MapCowImage("test_partition_b", 10s, &cow_device));
     ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test_partition_b", base_device, cow_device, 10s,
@@ -436,10 +445,12 @@ TEST_F(SnapshotTest, MergeCannotRemoveCow) {
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test-snapshot",
-                                   {.device_size = kDeviceSize,
-                                    .snapshot_size = kDeviceSize,
-                                    .cow_file_size = kDeviceSize}));
+    SnapshotStatus status;
+    status.set_name("test-snapshot");
+    status.set_device_size(kDeviceSize);
+    status.set_snapshot_size(kDeviceSize);
+    status.set_cow_file_size(kDeviceSize);
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
     ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::string base_device, cow_device, snap_device;
@@ -492,10 +503,12 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
 
     ASSERT_TRUE(CreatePartition("test_partition_a", kDeviceSize));
     ASSERT_TRUE(MapUpdatePartitions());
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test_partition_b",
-                                   {.device_size = kDeviceSize,
-                                    .snapshot_size = kDeviceSize,
-                                    .cow_file_size = kDeviceSize}));
+    SnapshotStatus status;
+    status.set_name("test_partition_b");
+    status.set_device_size(kDeviceSize);
+    status.set_snapshot_size(kDeviceSize);
+    status.set_cow_file_size(kDeviceSize);
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
     ASSERT_TRUE(CreateCowImage("test_partition_b"));
 
     // Simulate a reboot into the new slot.
@@ -511,9 +524,8 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     ASSERT_TRUE(AcquireLock());
 
     // Validate that we have a snapshot device.
-    SnapshotManager::SnapshotStatus status;
     ASSERT_TRUE(init->ReadSnapshotStatus(lock_.get(), "test_partition_b", &status));
-    ASSERT_EQ(status.state, SnapshotManager::SnapshotState::Created);
+    ASSERT_EQ(status.state(), SnapshotState::CREATED);
 
     DeviceMapper::TargetInfo target;
     auto dm_name = init->GetSnapshotDeviceName("test_partition_b", status);
@@ -528,10 +540,12 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
 
     ASSERT_TRUE(CreatePartition("test_partition_a", kDeviceSize));
     ASSERT_TRUE(MapUpdatePartitions());
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test_partition_b",
-                                   {.device_size = kDeviceSize,
-                                    .snapshot_size = kDeviceSize,
-                                    .cow_file_size = kDeviceSize}));
+    SnapshotStatus status;
+    status.set_name("test_partition_b");
+    status.set_device_size(kDeviceSize);
+    status.set_snapshot_size(kDeviceSize);
+    status.set_cow_file_size(kDeviceSize);
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
     ASSERT_TRUE(CreateCowImage("test_partition_b"));
 
     // Simulate a reboot into the new slot.
@@ -550,7 +564,6 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
 
     ASSERT_TRUE(AcquireLock());
 
-    SnapshotManager::SnapshotStatus status;
     ASSERT_TRUE(init->ReadSnapshotStatus(lock_.get(), "test_partition_b", &status));
 
     // We should not get a snapshot device now.
@@ -570,10 +583,12 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
 
     ASSERT_TRUE(CreatePartition("test_partition_a", kDeviceSize));
     ASSERT_TRUE(MapUpdatePartitions());
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), "test_partition_b",
-                                   {.device_size = kDeviceSize,
-                                    .snapshot_size = kDeviceSize,
-                                    .cow_file_size = kDeviceSize}));
+    SnapshotStatus status;
+    status.set_name("test_partition_b");
+    status.set_device_size(kDeviceSize);
+    status.set_snapshot_size(kDeviceSize);
+    status.set_cow_file_size(kDeviceSize);
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
     ASSERT_TRUE(CreateCowImage("test_partition_b"));
 
     // Simulate a reboot into the new slot.
@@ -699,11 +714,11 @@ class SnapshotUpdateTest : public SnapshotTest {
         }
         auto local_lock = std::move(lock_);
 
-        SnapshotManager::SnapshotStatus status;
+        SnapshotStatus status;
         if (!sm->ReadSnapshotStatus(local_lock.get(), name, &status)) {
             return std::nullopt;
         }
-        return status.snapshot_size;
+        return status.snapshot_size();
     }
 
     AssertionResult UnmapAll() {
@@ -869,8 +884,9 @@ TEST_F(SnapshotUpdateTest, SnapshotStatusFileWithoutCow) {
     {
         ASSERT_TRUE(AcquireLock());
         auto local_lock = std::move(lock_);
-        ASSERT_TRUE(sm->WriteSnapshotStatus(local_lock.get(), "sys_b",
-                                            SnapshotManager::SnapshotStatus{}));
+        SnapshotStatus status;
+        status.set_name("sys_b");
+        ASSERT_TRUE(sm->WriteSnapshotStatus(local_lock.get(), status));
         ASSERT_TRUE(image_manager_->CreateBackingImage("sys_b-cow-img", 1_MiB,
                                                        IImageManager::CREATE_IMAGE_DEFAULT));
     }
