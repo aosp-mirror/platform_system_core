@@ -87,13 +87,6 @@ static int pmsgAvailable(log_id_t logId) {
   return 1;
 }
 
-/*
- * Extract a 4-byte value from a byte stream.
- */
-static inline uint32_t get4LE(const uint8_t* src) {
-  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-}
-
 static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr) {
   static const unsigned headerLength = 2;
   struct iovec newVec[nr + headerLength];
@@ -107,7 +100,7 @@ static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
       return -EINVAL;
     }
 
-    if (SNET_EVENT_LOG_TAG != get4LE(static_cast<uint8_t*>(vec[0].iov_base))) {
+    if (SNET_EVENT_LOG_TAG != *static_cast<uint8_t*>(vec[0].iov_base)) {
       return -EPERM;
     }
   }
