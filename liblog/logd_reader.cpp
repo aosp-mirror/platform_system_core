@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
