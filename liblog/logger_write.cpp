@@ -28,12 +28,14 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "config_write.h"
 #include "log_portability.h"
 #include "logger.h"
 #include "uio.h"
 
 #define LOG_BUF_SIZE 1024
+
+android_log_transport_write* android_log_write = nullptr;
+android_log_transport_write* android_log_persist_write = nullptr;
 
 static int __write_to_log_init(log_id_t, struct iovec* vec, size_t nr);
 static int (*write_to_log)(log_id_t, struct iovec* vec, size_t nr) = __write_to_log_init;
@@ -104,7 +106,6 @@ static atomic_uintptr_t tagMap;
  * Release any logger resources. A new log write will immediately re-acquire.
  */
 void __android_log_close() {
-  struct android_log_transport_write* transport;
 #if defined(__ANDROID__)
   EventTagMap* m;
 #endif
@@ -123,19 +124,16 @@ void __android_log_close() {
    * disengenuous use of this function.
    */
 
-  write_transport_for_each(transport, &__android_log_persist_write) {
-    if (transport->close) {
-      (*transport->close)();
-    }
+  if (android_log_write != nullptr) {
+    android_log_write->close();
   }
 
-  write_transport_for_each(transport, &__android_log_transport_write) {
-    if (transport->close) {
-      (*transport->close)();
-    }
+  if (android_log_persist_write != nullptr) {
+    android_log_persist_write->close();
   }
 
-  __android_log_config_write_close();
+  android_log_write = nullptr;
+  android_log_persist_write = nullptr;
 
 #if defined(__ANDROID__)
   /*
@@ -160,52 +158,52 @@ void __android_log_close() {
 #endif
 }
 
+static bool transport_initialize(android_log_transport_write* transport) {
+  if (transport == nullptr) {
+    return false;
+  }
+
+  __android_log_cache_available(transport);
+  if (!transport->logMask) {
+    return false;
+  }
+
+  // TODO: Do we actually need to call close() if open() fails?
+  if (transport->open() < 0) {
+    transport->close();
+    return false;
+  }
+
+  return true;
+}
+
 /* log_init_lock assumed */
 static int __write_to_log_initialize() {
-  struct android_log_transport_write* transport;
-  struct listnode* n;
-  int i = 0, ret = 0;
+#if (FAKE_LOG_DEVICE == 0)
+  extern struct android_log_transport_write logdLoggerWrite;
+  extern struct android_log_transport_write pmsgLoggerWrite;
 
-  __android_log_config_write();
-  write_transport_for_each_safe(transport, n, &__android_log_transport_write) {
-    __android_log_cache_available(transport);
-    if (!transport->logMask) {
-      list_remove(&transport->node);
-      continue;
-    }
-    if (!transport->open || ((*transport->open)() < 0)) {
-      if (transport->close) {
-        (*transport->close)();
-      }
-      list_remove(&transport->node);
-      continue;
-    }
-    ++ret;
-  }
-  write_transport_for_each_safe(transport, n, &__android_log_persist_write) {
-    __android_log_cache_available(transport);
-    if (!transport->logMask) {
-      list_remove(&transport->node);
-      continue;
-    }
-    if (!transport->open || ((*transport->open)() < 0)) {
-      if (transport->close) {
-        (*transport->close)();
-      }
-      list_remove(&transport->node);
-      continue;
-    }
-    ++i;
-  }
-  if (!ret && !i) {
+  android_log_write = &logdLoggerWrite;
+  android_log_persist_write = &pmsgLoggerWrite;
+#else
+  extern struct android_log_transport_write fakeLoggerWrite;
+
+  android_log_write = &fakeLoggerWrite;
+#endif
+
+  if (!transport_initialize(android_log_write)) {
+    android_log_write = nullptr;
     return -ENODEV;
   }
 
-  return ret;
+  if (!transport_initialize(android_log_persist_write)) {
+    android_log_persist_write = nullptr;
+  }
+
+  return 1;
 }
 
 static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) {
-  struct android_log_transport_write* node;
   int ret, save_errno;
   struct timespec ts;
   size_t len, i;
@@ -324,20 +322,17 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
 
   ret = 0;
   i = 1 << log_id;
-  write_transport_for_each(node, &__android_log_transport_write) {
-    if (node->logMask & i) {
-      ssize_t retval;
-      retval = (*node->write)(log_id, &ts, vec, nr);
-      if (ret >= 0) {
-        ret = retval;
-      }
+
+  if (android_log_write != nullptr && (android_log_write->logMask & i)) {
+    ssize_t retval;
+    retval = android_log_write->write(log_id, &ts, vec, nr);
+    if (ret >= 0) {
+      ret = retval;
     }
   }
 
-  write_transport_for_each(node, &__android_log_persist_write) {
-    if (node->logMask & i) {
-      (void)(*node->write)(log_id, &ts, vec, nr);
-    }
+  if (android_log_persist_write != nullptr && (android_log_persist_write->logMask & i)) {
+    android_log_persist_write->write(log_id, &ts, vec, nr);
   }
 
   errno = save_errno;
@@ -353,9 +348,6 @@ static int __write_to_log_init(log_id_t log_id, struct iovec* vec, size_t nr) {
     ret = __write_to_log_initialize();
     if (ret < 0) {
       __android_log_unlock();
-      if (!list_empty(&__android_log_persist_write)) {
-        __write_to_log_daemon(log_id, vec, nr);
-      }
       errno = save_errno;
       return ret;
     }

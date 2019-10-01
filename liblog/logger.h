@@ -36,7 +36,6 @@ union android_log_context_union {
 };
 
 struct android_log_transport_write {
-  struct listnode node;
   const char* name;                  /* human name to describe the transport */
   unsigned logMask;                  /* mask cache of available() success */
   union android_log_context_union context; /* Initialized by static allocation */
