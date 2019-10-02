@@ -47,9 +47,7 @@
 #include <psi/psi.h>
 #include <system/thread_defs.h>
 
-#ifdef LMKD_LOG_STATS
 #include "statslog.h"
-#endif
 
 /*
  * Define LMKD_TRACE_KILLS to record lmkd kills in kernel traces
@@ -79,8 +77,11 @@
 #define MEMCG_MEMORYSW_USAGE "/dev/memcg/memory.memsw.usage_in_bytes"
 #define ZONEINFO_PATH "/proc/zoneinfo"
 #define MEMINFO_PATH "/proc/meminfo"
+#define VMSTAT_PATH "/proc/vmstat"
 #define PROC_STATUS_TGID_FIELD "Tgid:"
 #define LINE_MAX 128
+
+#define PERCEPTIBLE_APP_ADJ 200
 
 /* Android Logger event logtags (see event.logtags) */
 #define MEMINFO_LOG_TAG 10195355
@@ -110,14 +111,33 @@
  * PSI_WINDOW_SIZE_MS after the event happens.
  */
 #define PSI_WINDOW_SIZE_MS 1000
-/* Polling period after initial PSI signal */
-#define PSI_POLL_PERIOD_MS 10
-/* Poll for the duration of one window after initial PSI signal */
-#define PSI_POLL_COUNT (PSI_WINDOW_SIZE_MS / PSI_POLL_PERIOD_MS)
+/* Polling period after PSI signal when pressure is high */
+#define PSI_POLL_PERIOD_SHORT_MS 10
+/* Polling period after PSI signal when pressure is low */
+#define PSI_POLL_PERIOD_LONG_MS 100
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 
 #define FAIL_REPORT_RLIMIT_MS 1000
+
+/*
+ * System property defaults
+ */
+/* ro.lmk.swap_free_low_percentage property defaults */
+#define DEF_LOW_SWAP_LOWRAM 10
+#define DEF_LOW_SWAP 20
+/* ro.lmk.thrashing_limit property defaults */
+#define DEF_THRASHING_LOWRAM 30
+#define DEF_THRASHING 100
+/* ro.lmk.thrashing_limit_decay property defaults */
+#define DEF_THRASHING_DECAY_LOWRAM 50
+#define DEF_THRASHING_DECAY 10
+/* ro.lmk.psi_partial_stall_ms property defaults */
+#define DEF_PARTIAL_STALL_LOWRAM 200
+#define DEF_PARTIAL_STALL 70
+/* ro.lmk.psi_complete_stall_ms property defaults */
+#define DEF_COMPLETE_STALL 700
 
 /* default to old in-kernel interface if no memory pressure events */
 static bool use_inkernel_interface = true;
@@ -159,7 +179,12 @@ static unsigned long kill_timeout_ms;
 static bool use_minfree_levels;
 static bool per_app_memcg;
 static int swap_free_low_percentage;
+static int psi_partial_stall_ms;
+static int psi_complete_stall_ms;
+static int thrashing_limit_pct;
+static int thrashing_limit_decay_pct;
 static bool use_psi_monitors = false;
+static struct kernel_poll_info kpoll_info;
 static struct psi_threshold psi_thresholds[VMPRESS_LEVEL_COUNT] = {
     { PSI_SOME, 70 },    /* 70ms out of 1sec for partial stall */
     { PSI_SOME, 100 },   /* 100ms out of 1sec for partial stall */
@@ -168,10 +193,30 @@ static struct psi_threshold psi_thresholds[VMPRESS_LEVEL_COUNT] = {
 
 static android_log_context ctx;
 
+enum polling_update {
+    POLLING_DO_NOT_CHANGE,
+    POLLING_START,
+    POLLING_STOP,
+};
+
+/*
+ * Data used for periodic polling for the memory state of the device.
+ * Note that when system is not polling poll_handler is set to NULL,
+ * when polling starts poll_handler gets set and is reset back to
+ * NULL when polling stops.
+ */
+struct polling_params {
+    struct event_handler_info* poll_handler;
+    struct timespec poll_start_tm;
+    struct timespec last_poll_tm;
+    int polling_interval_ms;
+    enum polling_update update;
+};
+
 /* data required to handle events */
 struct event_handler_info {
     int data;
-    void (*handler)(int data, uint32_t events);
+    void (*handler)(int data, uint32_t events, struct polling_params *poll_params);
 };
 
 /* data required to handle socket events */
@@ -204,37 +249,99 @@ static int lowmem_minfree[MAX_TARGETS];
 static int lowmem_targets_size;
 
 /* Fields to parse in /proc/zoneinfo */
-enum zoneinfo_field {
-    ZI_NR_FREE_PAGES = 0,
-    ZI_NR_FILE_PAGES,
-    ZI_NR_SHMEM,
-    ZI_NR_UNEVICTABLE,
-    ZI_WORKINGSET_REFAULT,
-    ZI_HIGH,
-    ZI_FIELD_COUNT
+/* zoneinfo per-zone fields */
+enum zoneinfo_zone_field {
+    ZI_ZONE_NR_FREE_PAGES = 0,
+    ZI_ZONE_MIN,
+    ZI_ZONE_LOW,
+    ZI_ZONE_HIGH,
+    ZI_ZONE_PRESENT,
+    ZI_ZONE_NR_FREE_CMA,
+    ZI_ZONE_FIELD_COUNT
 };
 
-static const char* const zoneinfo_field_names[ZI_FIELD_COUNT] = {
+static const char* const zoneinfo_zone_field_names[ZI_ZONE_FIELD_COUNT] = {
     "nr_free_pages",
-    "nr_file_pages",
-    "nr_shmem",
-    "nr_unevictable",
-    "workingset_refault",
+    "min",
+    "low",
     "high",
+    "present",
+    "nr_free_cma",
 };
 
-union zoneinfo {
+/* zoneinfo per-zone special fields */
+enum zoneinfo_zone_spec_field {
+    ZI_ZONE_SPEC_PROTECTION = 0,
+    ZI_ZONE_SPEC_PAGESETS,
+    ZI_ZONE_SPEC_FIELD_COUNT,
+};
+
+static const char* const zoneinfo_zone_spec_field_names[ZI_ZONE_SPEC_FIELD_COUNT] = {
+    "protection:",
+    "pagesets",
+};
+
+/* see __MAX_NR_ZONES definition in kernel mmzone.h */
+#define MAX_NR_ZONES 6
+
+union zoneinfo_zone_fields {
     struct {
         int64_t nr_free_pages;
-        int64_t nr_file_pages;
-        int64_t nr_shmem;
-        int64_t nr_unevictable;
-        int64_t workingset_refault;
+        int64_t min;
+        int64_t low;
         int64_t high;
-        /* fields below are calculated rather than read from the file */
-        int64_t totalreserve_pages;
+        int64_t present;
+        int64_t nr_free_cma;
     } field;
-    int64_t arr[ZI_FIELD_COUNT];
+    int64_t arr[ZI_ZONE_FIELD_COUNT];
+};
+
+struct zoneinfo_zone {
+    union zoneinfo_zone_fields fields;
+    int64_t protection[MAX_NR_ZONES];
+    int64_t max_protection;
+};
+
+/* zoneinfo per-node fields */
+enum zoneinfo_node_field {
+    ZI_NODE_NR_INACTIVE_FILE = 0,
+    ZI_NODE_NR_ACTIVE_FILE,
+    ZI_NODE_WORKINGSET_REFAULT,
+    ZI_NODE_FIELD_COUNT
+};
+
+static const char* const zoneinfo_node_field_names[ZI_NODE_FIELD_COUNT] = {
+    "nr_inactive_file",
+    "nr_active_file",
+    "workingset_refault",
+};
+
+union zoneinfo_node_fields {
+    struct {
+        int64_t nr_inactive_file;
+        int64_t nr_active_file;
+        int64_t workingset_refault;
+    } field;
+    int64_t arr[ZI_NODE_FIELD_COUNT];
+};
+
+struct zoneinfo_node {
+    int id;
+    int zone_count;
+    struct zoneinfo_zone zones[MAX_NR_ZONES];
+    union zoneinfo_node_fields fields;
+};
+
+/* for now two memory nodes is more than enough */
+#define MAX_NR_NODES 2
+
+struct zoneinfo {
+    int node_count;
+    struct zoneinfo_node nodes[MAX_NR_NODES];
+    int64_t totalreserve_pages;
+    int64_t total_inactive_file;
+    int64_t total_active_file;
+    int64_t total_workingset_refault;
 };
 
 /* Fields to parse in /proc/meminfo */
@@ -310,6 +417,41 @@ union meminfo {
     int64_t arr[MI_FIELD_COUNT];
 };
 
+/* Fields to parse in /proc/vmstat */
+enum vmstat_field {
+    VS_FREE_PAGES,
+    VS_INACTIVE_FILE,
+    VS_ACTIVE_FILE,
+    VS_WORKINGSET_REFAULT,
+    VS_PGSCAN_KSWAPD,
+    VS_PGSCAN_DIRECT,
+    VS_PGSCAN_DIRECT_THROTTLE,
+    VS_FIELD_COUNT
+};
+
+static const char* const vmstat_field_names[MI_FIELD_COUNT] = {
+    "nr_free_pages",
+    "nr_inactive_file",
+    "nr_active_file",
+    "workingset_refault",
+    "pgscan_kswapd",
+    "pgscan_direct",
+    "pgscan_direct_throttle",
+};
+
+union vmstat {
+    struct {
+        int64_t nr_free_pages;
+        int64_t nr_inactive_file;
+        int64_t nr_active_file;
+        int64_t workingset_refault;
+        int64_t pgscan_kswapd;
+        int64_t pgscan_direct;
+        int64_t pgscan_direct_throttle;
+    } field;
+    int64_t arr[VS_FIELD_COUNT];
+};
+
 enum field_match_result {
     NO_MATCH,
     PARSE_FAIL,
@@ -334,11 +476,6 @@ struct reread_data {
     int fd;
 };
 
-#ifdef LMKD_LOG_STATS
-static bool enable_stats_log;
-static android_log_context log_ctx;
-#endif
-
 #define PIDHASH_SZ 1024
 static struct proc *pidhash[PIDHASH_SZ];
 #define pid_hashfn(x) ((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
@@ -362,8 +499,9 @@ static uint32_t killcnt_total = 0;
 /* PAGE_SIZE / 1024 */
 static long page_k;
 
-static char* proc_get_name(int pid);
-static void poll_kernel();
+static int clamp(int low, int high, int value) {
+    return max(min(value, high), low);
+}
 
 static bool parse_int64(const char* str, int64_t* ret) {
     char* endptr;
@@ -375,20 +513,25 @@ static bool parse_int64(const char* str, int64_t* ret) {
     return true;
 }
 
+static int find_field(const char* name, const char* const field_names[], int field_count) {
+    for (int i = 0; i < field_count; i++) {
+        if (!strcmp(name, field_names[i])) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 static enum field_match_result match_field(const char* cp, const char* ap,
                                    const char* const field_names[],
                                    int field_count, int64_t* field,
                                    int *field_idx) {
-    int64_t val;
-    int i;
-
-    for (i = 0; i < field_count; i++) {
-        if (!strcmp(cp, field_names[i])) {
-            *field_idx = i;
-            return parse_int64(ap, field) ? PARSE_SUCCESS : PARSE_FAIL;
-        }
+    int i = find_field(cp, field_names, field_count);
+    if (i < 0) {
+        return NO_MATCH;
     }
-    return NO_MATCH;
+    *field_idx = i;
+    return parse_int64(ap, field) ? PARSE_SUCCESS : PARSE_FAIL;
 }
 
 /*
@@ -424,28 +567,50 @@ static ssize_t read_all(int fd, char *buf, size_t max_len)
  * memory pressure to minimize file opening which by itself requires kernel
  * memory allocation and might result in a stall on memory stressed system.
  */
-static int reread_file(struct reread_data *data, char *buf, size_t buf_size) {
+static char *reread_file(struct reread_data *data) {
+    /* start with page-size buffer and increase if needed */
+    static ssize_t buf_size = PAGE_SIZE;
+    static char *new_buf, *buf = NULL;
     ssize_t size;
 
     if (data->fd == -1) {
-        data->fd = open(data->filename, O_RDONLY | O_CLOEXEC);
-        if (data->fd == -1) {
+        /* First-time buffer initialization */
+        if (!buf && (buf = malloc(buf_size)) == NULL) {
+            return NULL;
+        }
+
+        data->fd = TEMP_FAILURE_RETRY(open(data->filename, O_RDONLY | O_CLOEXEC));
+        if (data->fd < 0) {
             ALOGE("%s open: %s", data->filename, strerror(errno));
-            return -1;
+            return NULL;
         }
     }
 
-    size = read_all(data->fd, buf, buf_size - 1);
-    if (size < 0) {
-        ALOGE("%s read: %s", data->filename, strerror(errno));
-        close(data->fd);
-        data->fd = -1;
-        return -1;
+    while (true) {
+        size = read_all(data->fd, buf, buf_size - 1);
+        if (size < 0) {
+            ALOGE("%s read: %s", data->filename, strerror(errno));
+            close(data->fd);
+            data->fd = -1;
+            return NULL;
+        }
+        if (size < buf_size - 1) {
+            break;
+        }
+        /*
+         * Since we are reading /proc files we can't use fstat to find out
+         * the real size of the file. Double the buffer size and keep retrying.
+         */
+        if ((new_buf = realloc(buf, buf_size * 2)) == NULL) {
+            errno = ENOMEM;
+            return NULL;
+        }
+        buf = new_buf;
+        buf_size *= 2;
     }
-    ALOG_ASSERT((size_t)size < buf_size - 1, "%s too large", data->filename);
     buf[size] = 0;
 
-    return 0;
+    return buf;
 }
 
 static struct proc *pid_lookup(int pid) {
@@ -598,6 +763,60 @@ out:
     return (int)tgid;
 }
 
+static int proc_get_size(int pid) {
+    char path[PATH_MAX];
+    char line[LINE_MAX];
+    int fd;
+    int rss = 0;
+    int total;
+    ssize_t ret;
+
+    /* gid containing AID_READPROC required */
+    snprintf(path, PATH_MAX, "/proc/%d/statm", pid);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd == -1)
+        return -1;
+
+    ret = read_all(fd, line, sizeof(line) - 1);
+    if (ret < 0) {
+        close(fd);
+        return -1;
+    }
+
+    sscanf(line, "%d %d ", &total, &rss);
+    close(fd);
+    return rss;
+}
+
+static char *proc_get_name(int pid) {
+    char path[PATH_MAX];
+    static char line[LINE_MAX];
+    int fd;
+    char *cp;
+    ssize_t ret;
+
+    /* gid containing AID_READPROC required */
+    snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd == -1) {
+        return NULL;
+    }
+    ret = read_all(fd, line, sizeof(line) - 1);
+    close(fd);
+    if (ret < 0) {
+        return NULL;
+    }
+
+    cp = strchr(line, ' ');
+    if (cp) {
+        *cp = '\0';
+    } else {
+        line[ret] = '\0';
+    }
+
+    return line;
+}
+
 static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     struct proc *procp;
     char path[80];
@@ -637,9 +856,7 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     }
 
     if (use_inkernel_interface) {
-#ifdef LMKD_LOG_STATS
-        stats_store_taskname(params.pid, proc_get_name(params.pid));
-#endif
+        stats_store_taskname(params.pid, proc_get_name(params.pid), kpoll_info.poll_fd);
         return;
     }
 
@@ -710,16 +927,7 @@ static void cmd_procremove(LMKD_CTRL_PACKET packet) {
     struct lmk_procremove params;
 
     if (use_inkernel_interface) {
-#ifdef LMKD_LOG_STATS
-        /* Perform an extra check before the pid is removed, after which it
-         * will be impossible for poll_kernel to get the taskname. poll_kernel()
-         * is potentially a long-running blocking function; however this method
-         * handles AMS requests but does not block AMS.*/
-        if (enable_stats_log) {
-            poll_kernel();
-        }
-        stats_remove_taskname(params.pid);
-#endif
+        stats_remove_taskname(params.pid, kpoll_info.poll_fd);
         return;
     }
 
@@ -737,9 +945,7 @@ static void cmd_procpurge() {
     struct proc *next;
 
     if (use_inkernel_interface) {
-#ifdef LMKD_LOG_STATS
         stats_purge_tasknames();
-#endif
         return;
     }
 
@@ -1002,7 +1208,8 @@ wronglen:
     ALOGE("Wrong control socket read length cmd=%d len=%d", cmd, len);
 }
 
-static void ctrl_data_handler(int data, uint32_t events) {
+static void ctrl_data_handler(int data, uint32_t events,
+                              struct polling_params *poll_params __unused) {
     if (events & EPOLLIN) {
         ctrl_command_handler(data);
     }
@@ -1017,7 +1224,8 @@ static int get_free_dsock() {
     return -1;
 }
 
-static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
+static void ctrl_connect_handler(int data __unused, uint32_t events __unused,
+                                 struct polling_params *poll_params __unused) {
     struct epoll_event epev;
     int free_dscock_idx = get_free_dsock();
 
@@ -1055,174 +1263,202 @@ static void ctrl_connect_handler(int data __unused, uint32_t events __unused) {
     maxevents++;
 }
 
-#ifdef LMKD_LOG_STATS
-static void memory_stat_parse_line(char* line, struct memory_stat* mem_st) {
-    char key[LINE_MAX + 1];
-    int64_t value;
-
-    sscanf(line, "%" STRINGIFY(LINE_MAX) "s  %" SCNd64 "", key, &value);
-
-    if (strcmp(key, "total_") < 0) {
-        return;
-    }
-
-    if (!strcmp(key, "total_pgfault"))
-        mem_st->pgfault = value;
-    else if (!strcmp(key, "total_pgmajfault"))
-        mem_st->pgmajfault = value;
-    else if (!strcmp(key, "total_rss"))
-        mem_st->rss_in_bytes = value;
-    else if (!strcmp(key, "total_cache"))
-        mem_st->cache_in_bytes = value;
-    else if (!strcmp(key, "total_swap"))
-        mem_st->swap_in_bytes = value;
-}
-
-static int memory_stat_from_cgroup(struct memory_stat* mem_st, int pid, uid_t uid) {
-    FILE *fp;
-    char buf[PATH_MAX];
-
-    snprintf(buf, sizeof(buf), MEMCG_PROCESS_MEMORY_STAT_PATH, uid, pid);
-
-    fp = fopen(buf, "r");
-
-    if (fp == NULL) {
-        ALOGE("%s open failed: %s", buf, strerror(errno));
-        return -1;
-    }
-
-    while (fgets(buf, PAGE_SIZE, fp) != NULL) {
-        memory_stat_parse_line(buf, mem_st);
-    }
-    fclose(fp);
-
-    return 0;
-}
-
-static int memory_stat_from_procfs(struct memory_stat* mem_st, int pid) {
-    char path[PATH_MAX];
-    char buffer[PROC_STAT_BUFFER_SIZE];
-    int fd, ret;
-
-    snprintf(path, sizeof(path), PROC_STAT_FILE_PATH, pid);
-    if ((fd = open(path, O_RDONLY | O_CLOEXEC)) < 0) {
-        ALOGE("%s open failed: %s", path, strerror(errno));
-        return -1;
-    }
-
-    ret = read(fd, buffer, sizeof(buffer));
-    if (ret < 0) {
-        ALOGE("%s read failed: %s", path, strerror(errno));
-        close(fd);
-        return -1;
-    }
-    close(fd);
-
-    // field 10 is pgfault
-    // field 12 is pgmajfault
-    // field 22 is starttime
-    // field 24 is rss_in_pages
-    int64_t pgfault = 0, pgmajfault = 0, starttime = 0, rss_in_pages = 0;
-    if (sscanf(buffer,
-               "%*u %*s %*s %*d %*d %*d %*d %*d %*d %" SCNd64 " %*d "
-               "%" SCNd64 " %*d %*u %*u %*d %*d %*d %*d %*d %*d "
-               "%" SCNd64 " %*d %" SCNd64 "",
-               &pgfault, &pgmajfault, &starttime, &rss_in_pages) != 4) {
-        return -1;
-    }
-    mem_st->pgfault = pgfault;
-    mem_st->pgmajfault = pgmajfault;
-    mem_st->rss_in_bytes = (rss_in_pages * PAGE_SIZE);
-    mem_st->process_start_time_ns = starttime * (NS_PER_SEC / sysconf(_SC_CLK_TCK));
-    return 0;
-}
-#endif
-
-/* /prop/zoneinfo parsing routines */
-static int64_t zoneinfo_parse_protection(char *cp) {
+/*
+ * /proc/zoneinfo parsing routines
+ * Expected file format is:
+ *
+ *   Node <node_id>, zone   <zone_name>
+ *   (
+ *    per-node stats
+ *       (<per-node field name> <value>)+
+ *   )?
+ *   (pages free     <value>
+ *       (<per-zone field name> <value>)+
+ *    pagesets
+ *       (<unused fields>)*
+ *   )+
+ *   ...
+ */
+static void zoneinfo_parse_protection(char *buf, struct zoneinfo_zone *zone) {
+    int zone_idx;
     int64_t max = 0;
-    long long zoneval;
     char *save_ptr;
 
-    for (cp = strtok_r(cp, "(), ", &save_ptr); cp;
-         cp = strtok_r(NULL, "), ", &save_ptr)) {
-        zoneval = strtoll(cp, &cp, 0);
+    for (buf = strtok_r(buf, "(), ", &save_ptr), zone_idx = 0;
+         buf && zone_idx < MAX_NR_ZONES;
+         buf = strtok_r(NULL, "), ", &save_ptr), zone_idx++) {
+        long long zoneval = strtoll(buf, &buf, 0);
         if (zoneval > max) {
             max = (zoneval > INT64_MAX) ? INT64_MAX : zoneval;
         }
+        zone->protection[zone_idx] = zoneval;
     }
-
-    return max;
+    zone->max_protection = max;
 }
 
-static bool zoneinfo_parse_line(char *line, union zoneinfo *zi) {
-    char *cp = line;
-    char *ap;
-    char *save_ptr;
-    int64_t val;
-    int field_idx;
+static int zoneinfo_parse_zone(char **buf, struct zoneinfo_zone *zone) {
+    for (char *line = strtok_r(NULL, "\n", buf); line;
+         line = strtok_r(NULL, "\n", buf)) {
+        char *cp;
+        char *ap;
+        char *save_ptr;
+        int64_t val;
+        int field_idx;
+        enum field_match_result match_res;
 
-    cp = strtok_r(line, " ", &save_ptr);
-    if (!cp) {
-        return true;
-    }
-
-    if (!strcmp(cp, "protection:")) {
-        ap = strtok_r(NULL, ")", &save_ptr);
-    } else {
-        ap = strtok_r(NULL, " ", &save_ptr);
-    }
-
-    if (!ap) {
-        return true;
-    }
-
-    switch (match_field(cp, ap, zoneinfo_field_names,
-                        ZI_FIELD_COUNT, &val, &field_idx)) {
-    case (PARSE_SUCCESS):
-        zi->arr[field_idx] += val;
-        break;
-    case (NO_MATCH):
-        if (!strcmp(cp, "protection:")) {
-            zi->field.totalreserve_pages +=
-                zoneinfo_parse_protection(ap);
+        cp = strtok_r(line, " ", &save_ptr);
+        if (!cp) {
+            return false;
         }
-        break;
-    case (PARSE_FAIL):
-    default:
-        return false;
+
+        field_idx = find_field(cp, zoneinfo_zone_spec_field_names, ZI_ZONE_SPEC_FIELD_COUNT);
+        if (field_idx >= 0) {
+            /* special field */
+            if (field_idx == ZI_ZONE_SPEC_PAGESETS) {
+                /* no mode fields we are interested in */
+                return true;
+            }
+
+            /* protection field */
+            ap = strtok_r(NULL, ")", &save_ptr);
+            if (ap) {
+                zoneinfo_parse_protection(ap, zone);
+            }
+            continue;
+        }
+
+        ap = strtok_r(NULL, " ", &save_ptr);
+        if (!ap) {
+            continue;
+        }
+
+        match_res = match_field(cp, ap, zoneinfo_zone_field_names, ZI_ZONE_FIELD_COUNT,
+            &val, &field_idx);
+        if (match_res == PARSE_FAIL) {
+            return false;
+        }
+        if (match_res == PARSE_SUCCESS) {
+            zone->fields.arr[field_idx] = val;
+        }
+        if (field_idx == ZI_ZONE_PRESENT && val == 0) {
+            /* zone is not populated, stop parsing it */
+            return true;
+        }
     }
-    return true;
+    return false;
 }
 
-static int zoneinfo_parse(union zoneinfo *zi) {
+static int zoneinfo_parse_node(char **buf, struct zoneinfo_node *node) {
+    int fields_to_match = ZI_NODE_FIELD_COUNT;
+
+    for (char *line = strtok_r(NULL, "\n", buf); line;
+         line = strtok_r(NULL, "\n", buf)) {
+        char *cp;
+        char *ap;
+        char *save_ptr;
+        int64_t val;
+        int field_idx;
+        enum field_match_result match_res;
+
+        cp = strtok_r(line, " ", &save_ptr);
+        if (!cp) {
+            return false;
+        }
+
+        ap = strtok_r(NULL, " ", &save_ptr);
+        if (!ap) {
+            return false;
+        }
+
+        match_res = match_field(cp, ap, zoneinfo_node_field_names, ZI_NODE_FIELD_COUNT,
+            &val, &field_idx);
+        if (match_res == PARSE_FAIL) {
+            return false;
+        }
+        if (match_res == PARSE_SUCCESS) {
+            node->fields.arr[field_idx] = val;
+            fields_to_match--;
+            if (!fields_to_match) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static int zoneinfo_parse(struct zoneinfo *zi) {
     static struct reread_data file_data = {
         .filename = ZONEINFO_PATH,
         .fd = -1,
     };
-    char buf[PAGE_SIZE];
+    char *buf;
     char *save_ptr;
     char *line;
+    char zone_name[LINE_MAX];
+    struct zoneinfo_node *node = NULL;
+    int node_idx = 0;
+    int zone_idx = 0;
 
-    memset(zi, 0, sizeof(union zoneinfo));
+    memset(zi, 0, sizeof(struct zoneinfo));
 
-    if (reread_file(&file_data, buf, sizeof(buf)) < 0) {
+    if ((buf = reread_file(&file_data)) == NULL) {
         return -1;
     }
 
     for (line = strtok_r(buf, "\n", &save_ptr); line;
          line = strtok_r(NULL, "\n", &save_ptr)) {
-        if (!zoneinfo_parse_line(line, zi)) {
-            ALOGE("%s parse error", file_data.filename);
-            return -1;
+        int node_id;
+        if (sscanf(line, "Node %d, zone %" STRINGIFY(LINE_MAX) "s", &node_id, zone_name) == 2) {
+            if (!node || node->id != node_id) {
+                /* new node is found */
+                if (node) {
+                    node->zone_count = zone_idx + 1;
+                    node_idx++;
+                    if (node_idx == MAX_NR_NODES) {
+                        /* max node count exceeded */
+                        ALOGE("%s parse error", file_data.filename);
+                        return -1;
+                    }
+                }
+                node = &zi->nodes[node_idx];
+                node->id = node_id;
+                zone_idx = 0;
+                if (!zoneinfo_parse_node(&save_ptr, node)) {
+                    ALOGE("%s parse error", file_data.filename);
+                    return -1;
+                }
+            } else {
+                /* new zone is found */
+                zone_idx++;
+            }
+            if (!zoneinfo_parse_zone(&save_ptr, &node->zones[zone_idx])) {
+                ALOGE("%s parse error", file_data.filename);
+                return -1;
+            }
         }
     }
-    zi->field.totalreserve_pages += zi->field.high;
+    if (!node) {
+        ALOGE("%s parse error", file_data.filename);
+        return -1;
+    }
+    node->zone_count = zone_idx + 1;
+    zi->node_count = node_idx + 1;
 
+    /* calculate totals fields */
+    for (node_idx = 0; node_idx < zi->node_count; node_idx++) {
+        node = &zi->nodes[node_idx];
+        for (zone_idx = 0; zone_idx < node->zone_count; zone_idx++) {
+            struct zoneinfo_zone *zone = &zi->nodes[node_idx].zones[zone_idx];
+            zi->totalreserve_pages += zone->max_protection + zone->fields.field.high;
+        }
+        zi->total_inactive_file += node->fields.field.nr_inactive_file;
+        zi->total_active_file += node->fields.field.nr_active_file;
+        zi->total_workingset_refault += node->fields.field.workingset_refault;
+    }
     return 0;
 }
 
-/* /prop/meminfo parsing routines */
+/* /proc/meminfo parsing routines */
 static bool meminfo_parse_line(char *line, union meminfo *mi) {
     char *cp = line;
     char *ap;
@@ -1254,13 +1490,13 @@ static int meminfo_parse(union meminfo *mi) {
         .filename = MEMINFO_PATH,
         .fd = -1,
     };
-    char buf[PAGE_SIZE];
+    char *buf;
     char *save_ptr;
     char *line;
 
     memset(mi, 0, sizeof(union meminfo));
 
-    if (reread_file(&file_data, buf, sizeof(buf)) < 0) {
+    if ((buf = reread_file(&file_data)) == NULL) {
         return -1;
     }
 
@@ -1277,6 +1513,59 @@ static int meminfo_parse(union meminfo *mi) {
     return 0;
 }
 
+/* /proc/vmstat parsing routines */
+static bool vmstat_parse_line(char *line, union vmstat *vs) {
+    char *cp;
+    char *ap;
+    char *save_ptr;
+    int64_t val;
+    int field_idx;
+    enum field_match_result match_res;
+
+    cp = strtok_r(line, " ", &save_ptr);
+    if (!cp) {
+        return false;
+    }
+
+    ap = strtok_r(NULL, " ", &save_ptr);
+    if (!ap) {
+        return false;
+    }
+
+    match_res = match_field(cp, ap, vmstat_field_names, VS_FIELD_COUNT,
+        &val, &field_idx);
+    if (match_res == PARSE_SUCCESS) {
+        vs->arr[field_idx] = val;
+    }
+    return (match_res != PARSE_FAIL);
+}
+
+static int vmstat_parse(union vmstat *vs) {
+    static struct reread_data file_data = {
+        .filename = VMSTAT_PATH,
+        .fd = -1,
+    };
+    char *buf;
+    char *save_ptr;
+    char *line;
+
+    memset(vs, 0, sizeof(union vmstat));
+
+    if ((buf = reread_file(&file_data)) == NULL) {
+        return -1;
+    }
+
+    for (line = strtok_r(buf, "\n", &save_ptr); line;
+         line = strtok_r(NULL, "\n", &save_ptr)) {
+        if (!vmstat_parse_line(line, vs)) {
+            ALOGE("%s parse error", file_data.filename);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 static void meminfo_log(union meminfo *mi) {
     for (int field_idx = 0; field_idx < MI_FIELD_COUNT; field_idx++) {
         android_log_write_int32(ctx, (int32_t)min(mi->arr[field_idx] * page_k, INT32_MAX));
@@ -1284,60 +1573,6 @@ static void meminfo_log(union meminfo *mi) {
 
     android_log_write_list(ctx, LOG_ID_EVENTS);
     android_log_reset(ctx);
-}
-
-static int proc_get_size(int pid) {
-    char path[PATH_MAX];
-    char line[LINE_MAX];
-    int fd;
-    int rss = 0;
-    int total;
-    ssize_t ret;
-
-    /* gid containing AID_READPROC required */
-    snprintf(path, PATH_MAX, "/proc/%d/statm", pid);
-    fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd == -1)
-        return -1;
-
-    ret = read_all(fd, line, sizeof(line) - 1);
-    if (ret < 0) {
-        close(fd);
-        return -1;
-    }
-
-    sscanf(line, "%d %d ", &total, &rss);
-    close(fd);
-    return rss;
-}
-
-static char *proc_get_name(int pid) {
-    char path[PATH_MAX];
-    static char line[LINE_MAX];
-    int fd;
-    char *cp;
-    ssize_t ret;
-
-    /* gid containing AID_READPROC required */
-    snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
-    fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd == -1) {
-        return NULL;
-    }
-    ret = read_all(fd, line, sizeof(line) - 1);
-    close(fd);
-    if (ret < 0) {
-        return NULL;
-    }
-
-    cp = strchr(line, ' ');
-    if (cp) {
-        *cp = '\0';
-    } else {
-        line[ret] = '\0';
-    }
-
-    return line;
 }
 
 static struct proc *proc_adj_lru(int oomadj) {
@@ -1405,7 +1640,7 @@ static void set_process_group_and_prio(int pid, SchedPolicy sp, int prio) {
 static int last_killed_pid = -1;
 
 /* Kill one process specified by procp.  Returns the size of the process killed */
-static int kill_one_process(struct proc* procp, int min_oom_score) {
+static int kill_one_process(struct proc* procp, int min_oom_score, const char *reason) {
     int pid = procp->pid;
     uid_t uid = procp->uid;
     int tgid;
@@ -1413,14 +1648,7 @@ static int kill_one_process(struct proc* procp, int min_oom_score) {
     int tasksize;
     int r;
     int result = -1;
-
-#ifdef LMKD_LOG_STATS
-    struct memory_stat mem_st = {};
-    int memory_stat_parse_result = -1;
-#else
-    /* To prevent unused parameter warning */
-    (void)(min_oom_score);
-#endif
+    struct memory_stat *mem_st;
 
     tgid = proc_get_tgid(pid);
     if (tgid >= 0 && tgid != pid) {
@@ -1438,49 +1666,38 @@ static int kill_one_process(struct proc* procp, int min_oom_score) {
         goto out;
     }
 
-#ifdef LMKD_LOG_STATS
-    if (enable_stats_log) {
-        if (per_app_memcg) {
-            memory_stat_parse_result = memory_stat_from_cgroup(&mem_st, pid, uid);
-        } else {
-            memory_stat_parse_result = memory_stat_from_procfs(&mem_st, pid);
-        }
-    }
-#endif
+    mem_st = stats_read_memory_stat(per_app_memcg, pid, uid);
 
     TRACE_KILL_START(pid);
 
     /* CAP_KILL required */
     r = kill(pid, SIGKILL);
 
-    set_process_group_and_prio(pid, SP_FOREGROUND, ANDROID_PRIORITY_HIGHEST);
-
-    inc_killcnt(procp->oomadj);
-    ALOGE("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB", taskname, pid, uid, procp->oomadj,
-          tasksize * page_k);
-
     TRACE_KILL_END();
-
-    last_killed_pid = pid;
 
     if (r) {
         ALOGE("kill(%d): errno=%d", pid, errno);
+        /* Delete process record even when we fail to kill so that we don't get stuck on it */
         goto out;
-    } else {
-#ifdef LMKD_LOG_STATS
-        if (memory_stat_parse_result == 0) {
-            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname,
-                    procp->oomadj, mem_st.pgfault, mem_st.pgmajfault, mem_st.rss_in_bytes,
-                    mem_st.cache_in_bytes, mem_st.swap_in_bytes, mem_st.process_start_time_ns,
-                    min_oom_score);
-        } else if (enable_stats_log) {
-            stats_write_lmk_kill_occurred(log_ctx, LMK_KILL_OCCURRED, uid, taskname, procp->oomadj,
-                                          -1, -1, tasksize * BYTES_IN_KILOBYTE, -1, -1, -1,
-                                          min_oom_score);
-        }
-#endif
-        result = tasksize;
     }
+
+    set_process_group_and_prio(pid, SP_FOREGROUND, ANDROID_PRIORITY_HIGHEST);
+
+    inc_killcnt(procp->oomadj);
+    if (reason) {
+        ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB; reason: %s", taskname, pid,
+              uid, procp->oomadj, tasksize * page_k, reason);
+    } else {
+        ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB", taskname, pid,
+              uid, procp->oomadj, tasksize * page_k);
+    }
+
+    last_killed_pid = pid;
+
+    stats_write_lmk_kill_occurred(LMK_KILL_OCCURRED, uid, taskname,
+            procp->oomadj, min_oom_score, tasksize, mem_st);
+
+    result = tasksize;
 
 out:
     /*
@@ -1495,13 +1712,10 @@ out:
  * Find one process to kill at or above the given oom_adj level.
  * Returns size of the killed process.
  */
-static int find_and_kill_process(int min_score_adj) {
+static int find_and_kill_process(int min_score_adj, const char *reason) {
     int i;
     int killed_size = 0;
-
-#ifdef LMKD_LOG_STATS
     bool lmk_state_change_start = false;
-#endif
 
     for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
@@ -1513,15 +1727,13 @@ static int find_and_kill_process(int min_score_adj) {
             if (!procp)
                 break;
 
-            killed_size = kill_one_process(procp, min_score_adj);
+            killed_size = kill_one_process(procp, min_score_adj, reason);
             if (killed_size >= 0) {
-#ifdef LMKD_LOG_STATS
-                if (enable_stats_log && !lmk_state_change_start) {
+                if (!lmk_state_change_start) {
                     lmk_state_change_start = true;
-                    stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED,
+                    stats_write_lmk_state_changed(LMK_STATE_CHANGED,
                                                   LMK_STATE_CHANGE_START);
                 }
-#endif
                 break;
             }
         }
@@ -1530,11 +1742,9 @@ static int find_and_kill_process(int min_score_adj) {
         }
     }
 
-#ifdef LMKD_LOG_STATS
-    if (enable_stats_log && lmk_state_change_start) {
-        stats_write_lmk_state_changed(log_ctx, LMK_STATE_CHANGED, LMK_STATE_CHANGE_STOP);
+    if (lmk_state_change_start) {
+        stats_write_lmk_state_changed(LMK_STATE_CHANGED, LMK_STATE_CHANGE_STOP);
     }
-#endif
 
     return killed_size;
 }
@@ -1542,9 +1752,9 @@ static int find_and_kill_process(int min_score_adj) {
 static int64_t get_memory_usage(struct reread_data *file_data) {
     int ret;
     int64_t mem_usage;
-    char buf[32];
+    char *buf;
 
-    if (reread_file(file_data, buf, sizeof(buf)) < 0) {
+    if ((buf = reread_file(file_data)) == NULL) {
         return -1;
     }
 
@@ -1613,14 +1823,277 @@ static bool is_kill_pending(void) {
     return false;
 }
 
-static void mp_event_common(int data, uint32_t events __unused) {
+enum zone_watermark {
+    WMARK_MIN = 0,
+    WMARK_LOW,
+    WMARK_HIGH,
+    WMARK_NONE
+};
+
+struct zone_watermarks {
+    long high_wmark;
+    long low_wmark;
+    long min_wmark;
+};
+
+/*
+ * Returns lowest breached watermark or WMARK_NONE.
+ */
+static enum zone_watermark get_lowest_watermark(union meminfo *mi,
+                                                struct zone_watermarks *watermarks)
+{
+    int64_t nr_free_pages = mi->field.nr_free_pages - mi->field.cma_free;
+
+    if (nr_free_pages < watermarks->min_wmark) {
+        return WMARK_MIN;
+    }
+    if (nr_free_pages < watermarks->low_wmark) {
+        return WMARK_LOW;
+    }
+    if (nr_free_pages < watermarks->high_wmark) {
+        return WMARK_HIGH;
+    }
+    return WMARK_NONE;
+}
+
+void calc_zone_watermarks(struct zoneinfo *zi, struct zone_watermarks *watermarks) {
+    memset(watermarks, 0, sizeof(struct zone_watermarks));
+
+    for (int node_idx = 0; node_idx < zi->node_count; node_idx++) {
+        struct zoneinfo_node *node = &zi->nodes[node_idx];
+        for (int zone_idx = 0; zone_idx < node->zone_count; zone_idx++) {
+            struct zoneinfo_zone *zone = &node->zones[zone_idx];
+
+            if (!zone->fields.field.present) {
+                continue;
+            }
+
+            watermarks->high_wmark += zone->max_protection + zone->fields.field.high;
+            watermarks->low_wmark += zone->max_protection + zone->fields.field.low;
+            watermarks->min_wmark += zone->max_protection + zone->fields.field.min;
+        }
+    }
+}
+
+static void mp_event_psi(int data, uint32_t events, struct polling_params *poll_params) {
+    enum kill_reasons {
+        NONE = -1, /* To denote no kill condition */
+        PRESSURE_AFTER_KILL = 0,
+        NOT_RESPONDING,
+        LOW_SWAP_AND_THRASHING,
+        LOW_MEM_AND_SWAP,
+        LOW_MEM_AND_THRASHING,
+        DIRECT_RECL_AND_THRASHING,
+        KILL_REASON_COUNT
+    };
+    enum reclaim_state {
+        NO_RECLAIM = 0,
+        KSWAPD_RECLAIM,
+        DIRECT_RECLAIM,
+    };
+    static int64_t init_ws_refault;
+    static int64_t base_file_lru;
+    static int64_t init_pgscan_kswapd;
+    static int64_t init_pgscan_direct;
+    static int64_t swap_low_threshold;
+    static bool killing;
+    static int thrashing_limit;
+    static bool in_reclaim;
+    static struct zone_watermarks watermarks;
+    static struct timespec wmark_update_tm;
+
+    union meminfo mi;
+    union vmstat vs;
+    struct timespec curr_tm;
+    int64_t thrashing = 0;
+    bool swap_is_low = false;
+    enum vmpressure_level level = (enum vmpressure_level)data;
+    enum kill_reasons kill_reason = NONE;
+    bool cycle_after_kill = false;
+    enum reclaim_state reclaim = NO_RECLAIM;
+    enum zone_watermark wmark = WMARK_NONE;
+    char kill_desc[LINE_MAX];
+    bool cut_thrashing_limit = false;
+    int min_score_adj = 0;
+
+    /* Skip while still killing a process */
+    if (is_kill_pending()) {
+        /* TODO: replace this quick polling with pidfd polling if kernel supports */
+        goto no_kill;
+    }
+
+    if (clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm) != 0) {
+        ALOGE("Failed to get current time");
+        return;
+    }
+
+    if (vmstat_parse(&vs) < 0) {
+        ALOGE("Failed to parse vmstat!");
+        return;
+    }
+
+    if (meminfo_parse(&mi) < 0) {
+        ALOGE("Failed to parse meminfo!");
+        return;
+    }
+
+    /* Reset states after process got killed */
+    if (killing) {
+        killing = false;
+        cycle_after_kill = true;
+        /* Reset file-backed pagecache size and refault amounts after a kill */
+        base_file_lru = vs.field.nr_inactive_file + vs.field.nr_active_file;
+        init_ws_refault = vs.field.workingset_refault;
+    }
+
+    /* Check free swap levels */
+    if (swap_free_low_percentage) {
+        if (!swap_low_threshold) {
+            swap_low_threshold = mi.field.total_swap * swap_free_low_percentage / 100;
+        }
+        swap_is_low = mi.field.free_swap < swap_low_threshold;
+    }
+
+    /* Identify reclaim state */
+    if (vs.field.pgscan_direct > init_pgscan_direct) {
+        init_pgscan_direct = vs.field.pgscan_direct;
+        init_pgscan_kswapd = vs.field.pgscan_kswapd;
+        reclaim = DIRECT_RECLAIM;
+    } else if (vs.field.pgscan_kswapd > init_pgscan_kswapd) {
+        init_pgscan_kswapd = vs.field.pgscan_kswapd;
+        reclaim = KSWAPD_RECLAIM;
+    } else {
+        in_reclaim = false;
+        /* Skip if system is not reclaiming */
+        goto no_kill;
+    }
+
+    if (!in_reclaim) {
+        /* Record file-backed pagecache size when entering reclaim cycle */
+        base_file_lru = vs.field.nr_inactive_file + vs.field.nr_active_file;
+        init_ws_refault = vs.field.workingset_refault;
+        thrashing_limit = thrashing_limit_pct;
+    } else {
+        /* Calculate what % of the file-backed pagecache refaulted so far */
+        thrashing = (vs.field.workingset_refault - init_ws_refault) * 100 / base_file_lru;
+    }
+    in_reclaim = true;
+
+    /*
+     * Refresh watermarks once per min in case user updated one of the margins.
+     * TODO: b/140521024 replace this periodic update with an API for AMS to notify LMKD
+     * that zone watermarks were changed by the system software.
+     */
+    if (watermarks.high_wmark == 0 || get_time_diff_ms(&wmark_update_tm, &curr_tm) > 60000) {
+        struct zoneinfo zi;
+
+        if (zoneinfo_parse(&zi) < 0) {
+            ALOGE("Failed to parse zoneinfo!");
+            return;
+        }
+
+        calc_zone_watermarks(&zi, &watermarks);
+        wmark_update_tm = curr_tm;
+     }
+
+    /* Find out which watermark is breached if any */
+    wmark = get_lowest_watermark(&mi, &watermarks);
+
+    /*
+     * TODO: move this logic into a separate function
+     * Decide if killing a process is necessary and record the reason
+     */
+    if (cycle_after_kill && wmark < WMARK_LOW) {
+        /*
+         * Prevent kills not freeing enough memory which might lead to OOM kill.
+         * This might happen when a process is consuming memory faster than reclaim can
+         * free even after a kill. Mostly happens when running memory stress tests.
+         */
+        kill_reason = PRESSURE_AFTER_KILL;
+        strncpy(kill_desc, "min watermark is breached even after kill", sizeof(kill_desc));
+    } else if (level == VMPRESS_LEVEL_CRITICAL && events != 0) {
+        /*
+         * Device is too busy reclaiming memory which might lead to ANR.
+         * Critical level is triggered when PSI complete stall (all tasks are blocked because
+         * of the memory congestion) breaches the configured threshold.
+         */
+        kill_reason = NOT_RESPONDING;
+        strncpy(kill_desc, "device is not responding", sizeof(kill_desc));
+    } else if (swap_is_low && thrashing > thrashing_limit_pct) {
+        /* Page cache is thrashing while swap is low */
+        kill_reason = LOW_SWAP_AND_THRASHING;
+        snprintf(kill_desc, sizeof(kill_desc), "device is low on swap (%" PRId64
+            "kB < %" PRId64 "kB) and thrashing (%" PRId64 "%%)",
+            mi.field.free_swap * page_k, swap_low_threshold * page_k, thrashing);
+    } else if (swap_is_low && wmark < WMARK_HIGH) {
+        /* Both free memory and swap are low */
+        kill_reason = LOW_MEM_AND_SWAP;
+        snprintf(kill_desc, sizeof(kill_desc), "%s watermark is breached and swap is low (%"
+            PRId64 "kB < %" PRId64 "kB)", wmark > WMARK_LOW ? "min" : "low",
+            mi.field.free_swap * page_k, swap_low_threshold * page_k);
+    } else if (wmark < WMARK_HIGH && thrashing > thrashing_limit) {
+        /* Page cache is thrashing while memory is low */
+        kill_reason = LOW_MEM_AND_THRASHING;
+        snprintf(kill_desc, sizeof(kill_desc), "%s watermark is breached and thrashing (%"
+            PRId64 "%%)", wmark > WMARK_LOW ? "min" : "low", thrashing);
+        cut_thrashing_limit = true;
+        /* Do not kill perceptible apps because of thrashing */
+        min_score_adj = PERCEPTIBLE_APP_ADJ;
+    } else if (reclaim == DIRECT_RECLAIM && thrashing > thrashing_limit) {
+        /* Page cache is thrashing while in direct reclaim (mostly happens on lowram devices) */
+        kill_reason = DIRECT_RECL_AND_THRASHING;
+        snprintf(kill_desc, sizeof(kill_desc), "device is in direct reclaim and thrashing (%"
+            PRId64 "%%)", thrashing);
+        cut_thrashing_limit = true;
+        /* Do not kill perceptible apps because of thrashing */
+        min_score_adj = PERCEPTIBLE_APP_ADJ;
+    }
+
+    /* Kill a process if necessary */
+    if (kill_reason != NONE) {
+        int pages_freed = find_and_kill_process(min_score_adj, kill_desc);
+        if (pages_freed > 0) {
+            killing = true;
+            if (cut_thrashing_limit) {
+                /*
+                 * Cut thrasing limit by thrashing_limit_decay_pct percentage of the current
+                 * thrashing limit until the system stops thrashing.
+                 */
+                thrashing_limit = (thrashing_limit * (100 - thrashing_limit_decay_pct)) / 100;
+            }
+        }
+        meminfo_log(&mi);
+    }
+
+no_kill:
+    /*
+     * Start polling after initial PSI event;
+     * extend polling while device is in direct reclaim or process is being killed;
+     * do not extend when kswapd reclaims because that might go on for a long time
+     * without causing memory pressure
+     */
+    if (events || killing || reclaim == DIRECT_RECLAIM) {
+        poll_params->update = POLLING_START;
+    }
+
+    /* Decide the polling interval */
+    if (swap_is_low || killing) {
+        /* Fast polling during and after a kill or when swap is low */
+        poll_params->polling_interval_ms = PSI_POLL_PERIOD_SHORT_MS;
+    } else {
+        /* By default use long intervals */
+        poll_params->polling_interval_ms = PSI_POLL_PERIOD_LONG_MS;
+    }
+}
+
+static void mp_event_common(int data, uint32_t events, struct polling_params *poll_params) {
     int ret;
     unsigned long long evcount;
     int64_t mem_usage, memsw_usage;
     int64_t mem_pressure;
     enum vmpressure_level lvl;
     union meminfo mi;
-    union zoneinfo zi;
+    struct zoneinfo zi;
     struct timespec curr_tm;
     static struct timespec last_kill_tm;
     static unsigned long kill_skip_count = 0;
@@ -1657,6 +2130,15 @@ static void mp_event_common(int data, uint32_t events __unused) {
         }
     }
 
+    /* Start polling after initial PSI event */
+    if (use_psi_monitors && events) {
+        /* Override polling params only if current event is more critical */
+        if (!poll_params->poll_handler || data > poll_params->poll_handler->data) {
+            poll_params->polling_interval_ms = PSI_POLL_PERIOD_SHORT_MS;
+            poll_params->update = POLLING_START;
+        }
+    }
+
     if (clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm) != 0) {
         ALOGE("Failed to get current time");
         return;
@@ -1687,7 +2169,7 @@ static void mp_event_common(int data, uint32_t events __unused) {
     if (use_minfree_levels) {
         int i;
 
-        other_free = mi.field.nr_free_pages - zi.field.totalreserve_pages;
+        other_free = mi.field.nr_free_pages - zi.totalreserve_pages;
         if (mi.field.nr_file_pages > (mi.field.shmem + mi.field.unevictable + mi.field.swap_cached)) {
             other_file = (mi.field.nr_file_pages - mi.field.shmem -
                           mi.field.unevictable - mi.field.swap_cached);
@@ -1769,7 +2251,7 @@ static void mp_event_common(int data, uint32_t events __unused) {
 do_kill:
     if (low_ram_device) {
         /* For Go devices kill only one task */
-        if (find_and_kill_process(level_oomadj[level]) == 0) {
+        if (find_and_kill_process(level_oomadj[level], NULL) == 0) {
             if (debug_process_killing) {
                 ALOGI("Nothing to kill");
             }
@@ -1794,7 +2276,7 @@ do_kill:
             min_score_adj = level_oomadj[level];
         }
 
-        pages_freed = find_and_kill_process(min_score_adj);
+        pages_freed = find_and_kill_process(min_score_adj, NULL);
 
         if (pages_freed == 0) {
             /* Rate limit kill reports when nothing was reclaimed */
@@ -1815,7 +2297,7 @@ do_kill:
                 "free(%" PRId64 "kB)-reserved(%" PRId64 "kB) below min(%ldkB) for oom_adj %d",
                 pages_freed * page_k,
                 other_file * page_k, mi.field.nr_free_pages * page_k,
-                zi.field.totalreserve_pages * page_k,
+                zi.totalreserve_pages * page_k,
                 minfree * page_k, min_score_adj);
         } else {
             ALOGI("Reclaimed %ldkB at oom_adj %d",
@@ -1831,8 +2313,15 @@ do_kill:
     }
 }
 
-static bool init_mp_psi(enum vmpressure_level level) {
-    int fd = init_psi_monitor(psi_thresholds[level].stall_type,
+static bool init_mp_psi(enum vmpressure_level level, bool use_new_strategy) {
+    int fd;
+
+    /* Do not register a handler if threshold_ms is not set */
+    if (!psi_thresholds[level].threshold_ms) {
+        return true;
+    }
+
+    fd = init_psi_monitor(psi_thresholds[level].stall_type,
         psi_thresholds[level].threshold_ms * US_PER_MS,
         PSI_WINDOW_SIZE_MS * US_PER_MS);
 
@@ -1840,7 +2329,7 @@ static bool init_mp_psi(enum vmpressure_level level) {
         return false;
     }
 
-    vmpressure_hinfo[level].handler = mp_event_common;
+    vmpressure_hinfo[level].handler = use_new_strategy ? mp_event_psi : mp_event_common;
     vmpressure_hinfo[level].data = level;
     if (register_psi_monitor(epollfd, fd, &vmpressure_hinfo[level]) < 0) {
         destroy_psi_monitor(fd);
@@ -1864,14 +2353,29 @@ static void destroy_mp_psi(enum vmpressure_level level) {
 }
 
 static bool init_psi_monitors() {
-    if (!init_mp_psi(VMPRESS_LEVEL_LOW)) {
+    /*
+     * When PSI is used on low-ram devices or on high-end devices without memfree levels
+     * use new kill strategy based on zone watermarks, free swap and thrashing stats
+     */
+    bool use_new_strategy =
+        property_get_bool("ro.lmk.use_new_strategy", low_ram_device || !use_minfree_levels);
+
+    /* In default PSI mode override stall amounts using system properties */
+    if (use_new_strategy) {
+        /* Do not use low pressure level */
+        psi_thresholds[VMPRESS_LEVEL_LOW].threshold_ms = 0;
+        psi_thresholds[VMPRESS_LEVEL_MEDIUM].threshold_ms = psi_partial_stall_ms;
+        psi_thresholds[VMPRESS_LEVEL_CRITICAL].threshold_ms = psi_complete_stall_ms;
+    }
+
+    if (!init_mp_psi(VMPRESS_LEVEL_LOW, use_new_strategy)) {
         return false;
     }
-    if (!init_mp_psi(VMPRESS_LEVEL_MEDIUM)) {
+    if (!init_mp_psi(VMPRESS_LEVEL_MEDIUM, use_new_strategy)) {
         destroy_mp_psi(VMPRESS_LEVEL_LOW);
         return false;
     }
-    if (!init_mp_psi(VMPRESS_LEVEL_CRITICAL)) {
+    if (!init_mp_psi(VMPRESS_LEVEL_CRITICAL, use_new_strategy)) {
         destroy_mp_psi(VMPRESS_LEVEL_MEDIUM);
         destroy_mp_psi(VMPRESS_LEVEL_LOW);
         return false;
@@ -1946,74 +2450,17 @@ err_open_mpfd:
     return false;
 }
 
-#ifdef LMKD_LOG_STATS
-static int kernel_poll_fd = -1;
-static void poll_kernel() {
-    if (kernel_poll_fd == -1) {
-        // not waiting
-        return;
-    }
-
-    while (1) {
-        char rd_buf[256];
-        int bytes_read =
-                TEMP_FAILURE_RETRY(pread(kernel_poll_fd, (void*)rd_buf, sizeof(rd_buf), 0));
-        if (bytes_read <= 0) break;
-        rd_buf[bytes_read] = '\0';
-
-        int64_t pid;
-        int64_t uid;
-        int64_t group_leader_pid;
-        int64_t min_flt;
-        int64_t maj_flt;
-        int64_t rss_in_pages;
-        int16_t oom_score_adj;
-        int16_t min_score_adj;
-        int64_t starttime;
-        char* taskname = 0;
-        int fields_read = sscanf(rd_buf,
-                                 "%" SCNd64 " %" SCNd64 " %" SCNd64 " %" SCNd64 " %" SCNd64
-                                 " %" SCNd64 " %" SCNd16 " %" SCNd16 " %" SCNd64 "\n%m[^\n]",
-                                 &pid, &uid, &group_leader_pid, &min_flt, &maj_flt, &rss_in_pages,
-                                 &oom_score_adj, &min_score_adj, &starttime, &taskname);
-
-        /* only the death of the group leader process is logged */
-        if (fields_read == 10 && group_leader_pid == pid) {
-            int64_t process_start_time_ns = starttime * (NS_PER_SEC / sysconf(_SC_CLK_TCK));
-            stats_write_lmk_kill_occurred_pid(log_ctx, LMK_KILL_OCCURRED, uid, pid, oom_score_adj,
-                                              min_flt, maj_flt, rss_in_pages * PAGE_SIZE, 0, 0,
-                                              process_start_time_ns, min_score_adj);
-        }
-
-        free(taskname);
-    }
+static void kernel_event_handler(int data __unused, uint32_t events __unused,
+                                 struct polling_params *poll_params __unused) {
+    kpoll_info.handler(kpoll_info.poll_fd);
 }
-
-static struct event_handler_info kernel_poll_hinfo = {0, poll_kernel};
-
-static void init_poll_kernel() {
-    struct epoll_event epev;
-    kernel_poll_fd =
-            TEMP_FAILURE_RETRY(open("/proc/lowmemorykiller", O_RDONLY | O_NONBLOCK | O_CLOEXEC));
-
-    if (kernel_poll_fd < 0) {
-        ALOGE("kernel lmk event file could not be opened; errno=%d", kernel_poll_fd);
-        return;
-    }
-
-    epev.events = EPOLLIN;
-    epev.data.ptr = (void*)&kernel_poll_hinfo;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, kernel_poll_fd, &epev) != 0) {
-        ALOGE("epoll_ctl for lmk events failed; errno=%d", errno);
-        close(kernel_poll_fd);
-        kernel_poll_fd = -1;
-    } else {
-        maxevents++;
-    }
-}
-#endif
 
 static int init(void) {
+    static struct event_handler_info kernel_poll_hinfo = { 0, kernel_event_handler };
+    struct reread_data file_data = {
+        .filename = ZONEINFO_PATH,
+        .fd = -1,
+    };
     struct epoll_event epev;
     int i;
     int ret;
@@ -2060,11 +2507,17 @@ static int init(void) {
 
     if (use_inkernel_interface) {
         ALOGI("Using in-kernel low memory killer interface");
-#ifdef LMKD_LOG_STATS
-        if (enable_stats_log) {
-            init_poll_kernel();
+        if (init_poll_kernel(&kpoll_info)) {
+            epev.events = EPOLLIN;
+            epev.data.ptr = (void*)&kernel_poll_hinfo;
+            if (epoll_ctl(epollfd, EPOLL_CTL_ADD, kpoll_info.poll_fd, &epev) != 0) {
+                ALOGE("epoll_ctl for lmk events failed (errno=%d)", errno);
+                close(kpoll_info.poll_fd);
+                kpoll_info.poll_fd = -1;
+            } else {
+                maxevents++;
+            }
         }
-#endif
     } else {
         /* Try to use psi monitor first if kernel has it */
         use_psi_monitors = property_get_bool("ro.lmk.use_psi", true) &&
@@ -2091,37 +2544,68 @@ static int init(void) {
 
     memset(killcnt_idx, KILLCNT_INVALID_IDX, sizeof(killcnt_idx));
 
+    /*
+     * Read zoneinfo as the biggest file we read to create and size the initial
+     * read buffer and avoid memory re-allocations during memory pressure
+     */
+    if (reread_file(&file_data) == NULL) {
+        ALOGE("Failed to read %s: %s", file_data.filename, strerror(errno));
+    }
+
     return 0;
 }
 
 static void mainloop(void) {
     struct event_handler_info* handler_info;
-    struct event_handler_info* poll_handler = NULL;
-    struct timespec last_report_tm, curr_tm;
+    struct polling_params poll_params;
+    struct timespec curr_tm;
     struct epoll_event *evt;
     long delay = -1;
-    int polling = 0;
+
+    poll_params.poll_handler = NULL;
+    poll_params.update = POLLING_DO_NOT_CHANGE;
 
     while (1) {
         struct epoll_event events[maxevents];
         int nevents;
         int i;
 
-        if (polling) {
+        if (poll_params.poll_handler) {
             /* Calculate next timeout */
             clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm);
-            delay = get_time_diff_ms(&last_report_tm, &curr_tm);
-            delay = (delay < PSI_POLL_PERIOD_MS) ?
-                PSI_POLL_PERIOD_MS - delay : PSI_POLL_PERIOD_MS;
+            delay = get_time_diff_ms(&poll_params.last_poll_tm, &curr_tm);
+            delay = (delay < poll_params.polling_interval_ms) ?
+                poll_params.polling_interval_ms - delay : poll_params.polling_interval_ms;
 
             /* Wait for events until the next polling timeout */
             nevents = epoll_wait(epollfd, events, maxevents, delay);
 
             clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm);
-            if (get_time_diff_ms(&last_report_tm, &curr_tm) >= PSI_POLL_PERIOD_MS) {
-                polling--;
-                poll_handler->handler(poll_handler->data, 0);
-                last_report_tm = curr_tm;
+            if (get_time_diff_ms(&poll_params.last_poll_tm, &curr_tm) >=
+                poll_params.polling_interval_ms) {
+                /* Set input params for the call */
+                poll_params.poll_handler->handler(poll_params.poll_handler->data, 0, &poll_params);
+                poll_params.last_poll_tm = curr_tm;
+
+                if (poll_params.update != POLLING_DO_NOT_CHANGE) {
+                    switch (poll_params.update) {
+                    case POLLING_START:
+                        poll_params.poll_start_tm = curr_tm;
+                        break;
+                    case POLLING_STOP:
+                        poll_params.poll_handler = NULL;
+                        break;
+                    default:
+                        break;
+                    }
+                    poll_params.update = POLLING_DO_NOT_CHANGE;
+                } else {
+                    if (get_time_diff_ms(&poll_params.poll_start_tm, &curr_tm) >
+                        PSI_WINDOW_SIZE_MS) {
+                        /* Polled for the duration of PSI window, time to stop */
+                        poll_params.poll_handler = NULL;
+                    }
+                }
             }
         } else {
             /* Wait for events with no timeout */
@@ -2152,25 +2636,37 @@ static void mainloop(void) {
 
         /* Second pass to handle all other events */
         for (i = 0, evt = &events[0]; i < nevents; ++i, evt++) {
-            if (evt->events & EPOLLERR)
+            if (evt->events & EPOLLERR) {
                 ALOGD("EPOLLERR on event #%d", i);
+            }
             if (evt->events & EPOLLHUP) {
                 /* This case was handled in the first pass */
                 continue;
             }
             if (evt->data.ptr) {
                 handler_info = (struct event_handler_info*)evt->data.ptr;
-                handler_info->handler(handler_info->data, evt->events);
+                /* Set input params for the call */
+                handler_info->handler(handler_info->data, evt->events, &poll_params);
 
-                if (use_psi_monitors && handler_info->handler == mp_event_common) {
-                    /*
-                     * Poll for the duration of PSI_WINDOW_SIZE_MS after the
-                     * initial PSI event because psi events are rate-limited
-                     * at one per sec.
-                     */
-                    polling = PSI_POLL_COUNT;
-                    poll_handler = handler_info;
-                    clock_gettime(CLOCK_MONOTONIC_COARSE, &last_report_tm);
+                if (poll_params.update != POLLING_DO_NOT_CHANGE) {
+                    switch (poll_params.update) {
+                    case POLLING_START:
+                        /*
+                         * Poll for the duration of PSI_WINDOW_SIZE_MS after the
+                         * initial PSI event because psi events are rate-limited
+                         * at one per sec.
+                         */
+                        clock_gettime(CLOCK_MONOTONIC_COARSE, &curr_tm);
+                        poll_params.poll_start_tm = poll_params.last_poll_tm = curr_tm;
+                        poll_params.poll_handler = handler_info;
+                        break;
+                    case POLLING_STOP:
+                        poll_params.poll_handler = NULL;
+                        break;
+                    default:
+                        break;
+                    }
+                    poll_params.update = POLLING_DO_NOT_CHANGE;
                 }
             }
         }
@@ -2207,14 +2703,20 @@ int main(int argc __unused, char **argv __unused) {
         property_get_bool("ro.lmk.use_minfree_levels", false);
     per_app_memcg =
         property_get_bool("ro.config.per_app_memcg", low_ram_device);
-    swap_free_low_percentage =
-        property_get_int32("ro.lmk.swap_free_low_percentage", 10);
+    swap_free_low_percentage = clamp(0, 100, property_get_int32("ro.lmk.swap_free_low_percentage",
+        low_ram_device ? DEF_LOW_SWAP_LOWRAM : DEF_LOW_SWAP));
+    psi_partial_stall_ms = property_get_int32("ro.lmk.psi_partial_stall_ms",
+        low_ram_device ? DEF_PARTIAL_STALL_LOWRAM : DEF_PARTIAL_STALL);
+    psi_complete_stall_ms = property_get_int32("ro.lmk.psi_complete_stall_ms",
+        DEF_COMPLETE_STALL);
+    thrashing_limit_pct = max(0, property_get_int32("ro.lmk.thrashing_limit",
+        low_ram_device ? DEF_THRASHING_LOWRAM : DEF_THRASHING));
+    thrashing_limit_decay_pct = clamp(0, 100, property_get_int32("ro.lmk.thrashing_limit_decay",
+        low_ram_device ? DEF_THRASHING_DECAY_LOWRAM : DEF_THRASHING_DECAY));
 
     ctx = create_android_logger(MEMINFO_LOG_TAG);
 
-#ifdef LMKD_LOG_STATS
-    statslog_init(&log_ctx, &enable_stats_log);
-#endif
+    statslog_init();
 
     if (!init()) {
         if (!use_inkernel_interface) {
@@ -2243,9 +2745,7 @@ int main(int argc __unused, char **argv __unused) {
         mainloop();
     }
 
-#ifdef LMKD_LOG_STATS
-    statslog_destroy(&log_ctx);
-#endif
+    statslog_destroy();
 
     android_log_destroy(&ctx);
 

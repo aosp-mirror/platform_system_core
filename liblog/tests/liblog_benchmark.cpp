@@ -17,7 +17,6 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <poll.h>
-#include <sys/endian.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -227,14 +226,14 @@ static void BM_pmsg_short(benchmark::State& state) {
   buffer.header.tag = 0;
   buffer.payload.type = EVENT_TYPE_INT;
   uint32_t snapshot = 0;
-  buffer.payload.data = htole32(snapshot);
+  buffer.payload.data = snapshot;
 
   newVec[2].iov_base = &buffer;
   newVec[2].iov_len = sizeof(buffer);
 
   while (state.KeepRunning()) {
     ++snapshot;
-    buffer.payload.data = htole32(snapshot);
+    buffer.payload.data = snapshot;
     writev(pstore_fd, newVec, nr);
   }
   state.PauseTiming();
@@ -303,11 +302,11 @@ static void BM_pmsg_short_aligned(benchmark::State& state) {
   buffer->payload.header.tag = 0;
   buffer->payload.payload.type = EVENT_TYPE_INT;
   uint32_t snapshot = 0;
-  buffer->payload.payload.data = htole32(snapshot);
+  buffer->payload.payload.data = snapshot;
 
   while (state.KeepRunning()) {
     ++snapshot;
-    buffer->payload.payload.data = htole32(snapshot);
+    buffer->payload.payload.data = snapshot;
     write(pstore_fd, &buffer->pmsg_header,
           sizeof(android_pmsg_log_header_t) + sizeof(android_log_header_t) +
               sizeof(android_log_event_int_t));
@@ -378,11 +377,11 @@ static void BM_pmsg_short_unaligned1(benchmark::State& state) {
   buffer->payload.header.tag = 0;
   buffer->payload.payload.type = EVENT_TYPE_INT;
   uint32_t snapshot = 0;
-  buffer->payload.payload.data = htole32(snapshot);
+  buffer->payload.payload.data = snapshot;
 
   while (state.KeepRunning()) {
     ++snapshot;
-    buffer->payload.payload.data = htole32(snapshot);
+    buffer->payload.payload.data = snapshot;
     write(pstore_fd, &buffer->pmsg_header,
           sizeof(android_pmsg_log_header_t) + sizeof(android_log_header_t) +
               sizeof(android_log_event_int_t));
@@ -453,11 +452,11 @@ static void BM_pmsg_long_aligned(benchmark::State& state) {
   buffer->payload.header.tag = 0;
   buffer->payload.payload.type = EVENT_TYPE_INT;
   uint32_t snapshot = 0;
-  buffer->payload.payload.data = htole32(snapshot);
+  buffer->payload.payload.data = snapshot;
 
   while (state.KeepRunning()) {
     ++snapshot;
-    buffer->payload.payload.data = htole32(snapshot);
+    buffer->payload.payload.data = snapshot;
     write(pstore_fd, &buffer->pmsg_header, LOGGER_ENTRY_MAX_PAYLOAD);
   }
   state.PauseTiming();
@@ -526,11 +525,11 @@ static void BM_pmsg_long_unaligned1(benchmark::State& state) {
   buffer->payload.header.tag = 0;
   buffer->payload.payload.type = EVENT_TYPE_INT;
   uint32_t snapshot = 0;
-  buffer->payload.payload.data = htole32(snapshot);
+  buffer->payload.payload.data = snapshot;
 
   while (state.KeepRunning()) {
     ++snapshot;
-    buffer->payload.payload.data = htole32(snapshot);
+    buffer->payload.payload.data = snapshot;
     write(pstore_fd, &buffer->pmsg_header, LOGGER_ENTRY_MAX_PAYLOAD);
   }
   state.PauseTiming();

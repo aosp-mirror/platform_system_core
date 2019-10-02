@@ -67,59 +67,6 @@ bool PartitionCowCreator::HasExtent(Partition* p, Extent* e) {
     return false;
 }
 
-// Return the number of sectors, N, where |target_partition|[0..N] (from
-// |target_metadata|) are the sectors that should be snapshotted. N is computed
-// so that this range of sectors are used by partitions in |current_metadata|.
-//
-// The client code (update_engine) should have computed target_metadata by
-// resizing partitions of current_metadata, so only the first N sectors should
-// be snapshotted, not a range with start index != 0.
-//
-// Note that if partition A has shrunk and partition B has grown, the new
-// extents of partition B may use the empty space that was used by partition A.
-// In this case, that new extent cannot be written directly, as it may be used
-// by the running system. Hence, all extents of the new partition B must be
-// intersected with all old partitions (including old partition A and B) to get
-// the region that needs to be snapshotted.
-std::optional<uint64_t> PartitionCowCreator::GetSnapshotSize() {
-    // Compute the number of sectors that needs to be snapshotted.
-    uint64_t snapshot_sectors = 0;
-    std::vector<std::unique_ptr<Extent>> intersections;
-    for (const auto& extent : target_partition->extents()) {
-        for (auto* existing_partition :
-             ListPartitionsWithSuffix(current_metadata, current_suffix)) {
-            for (const auto& existing_extent : existing_partition->extents()) {
-                auto intersection = Intersect(extent.get(), existing_extent.get());
-                if (intersection != nullptr && intersection->num_sectors() > 0) {
-                    snapshot_sectors += intersection->num_sectors();
-                    intersections.emplace_back(std::move(intersection));
-                }
-            }
-        }
-    }
-    uint64_t snapshot_size = snapshot_sectors * kSectorSize;
-
-    // Sanity check that all recorded intersections are indeed within
-    // target_partition[0..snapshot_sectors].
-    Partition target_partition_snapshot = target_partition->GetBeginningExtents(snapshot_size);
-    for (const auto& intersection : intersections) {
-        if (!HasExtent(&target_partition_snapshot, intersection.get())) {
-            auto linear_intersection = intersection->AsLinearExtent();
-            LOG(ERROR) << "Extent "
-                       << (linear_intersection
-                                   ? (std::to_string(linear_intersection->physical_sector()) + "," +
-                                      std::to_string(linear_intersection->end_sector()))
-                                   : "")
-                       << " is not part of Partition " << target_partition->name() << "[0.."
-                       << snapshot_size
-                       << "]. The metadata wasn't constructed correctly. This should not happen.";
-            return std::nullopt;
-        }
-    }
-
-    return snapshot_size;
-}
-
 std::optional<uint64_t> PartitionCowCreator::GetCowSize(uint64_t snapshot_size) {
     // TODO: Use |operations|. to determine a minimum COW size.
     // kCowEstimateFactor is good for prototyping but we can't use that in production.
@@ -139,12 +86,11 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     Return ret;
     ret.snapshot_status.device_size = target_partition->size();
 
-    auto snapshot_size = GetSnapshotSize();
-    if (!snapshot_size.has_value()) return std::nullopt;
+    // TODO(b/141889746): Optimize by using a smaller snapshot. Some ranges in target_partition
+    // may be written directly.
+    ret.snapshot_status.snapshot_size = target_partition->size();
 
-    ret.snapshot_status.snapshot_size = *snapshot_size;
-
-    auto cow_size = GetCowSize(*snapshot_size);
+    auto cow_size = GetCowSize(ret.snapshot_status.snapshot_size);
     if (!cow_size.has_value()) return std::nullopt;
 
     // Compute regions that are free in both current and target metadata. These are the regions
