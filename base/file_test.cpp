@@ -16,17 +16,24 @@
 
 #include "android-base/file.h"
 
+#include "android-base/utf8.h"
+
 #include <gtest/gtest.h>
 
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <wchar.h>
 
 #include <string>
 
 #if !defined(_WIN32)
 #include <pwd.h>
+#else
+#include <processenv.h>
 #endif
+
+#include "android-base/logging.h"  // and must be after windows.h for ERROR
 
 TEST(file, ReadFileToString_ENOENT) {
   std::string s("hello");
@@ -38,7 +45,7 @@ TEST(file, ReadFileToString_ENOENT) {
 
 TEST(file, ReadFileToString_WriteStringToFile) {
   TemporaryFile tf;
-  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_NE(tf.fd, -1) << tf.path;
   ASSERT_TRUE(android::base::WriteStringToFile("abc", tf.path))
     << strerror(errno);
   std::string s;
@@ -70,7 +77,7 @@ TEST(file, ReadFileToString_WriteStringToFile_symlink) {
 #if !defined(_WIN32)
 TEST(file, WriteStringToFile2) {
   TemporaryFile tf;
-  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_NE(tf.fd, -1) << tf.path;
   ASSERT_TRUE(android::base::WriteStringToFile("abc", tf.path, 0660,
                                                getuid(), getgid()))
       << strerror(errno);
@@ -86,9 +93,83 @@ TEST(file, WriteStringToFile2) {
 }
 #endif
 
+#if defined(_WIN32)
+TEST(file, NonUnicodeCharsWindows) {
+  constexpr auto kMaxEnvVariableValueSize = 32767;
+  std::wstring old_tmp;
+  old_tmp.resize(kMaxEnvVariableValueSize);
+  old_tmp.resize(GetEnvironmentVariableW(L"TMP", old_tmp.data(), old_tmp.size()));
+  std::wstring new_tmp = old_tmp;
+  if (new_tmp.back() != L'\\') {
+    new_tmp.push_back(L'\\');
+  }
+
+  {
+    auto path(new_tmp + L"锦绣成都\\");
+    _wmkdir(path.c_str());
+    ASSERT_TRUE(SetEnvironmentVariableW(L"TMP", path.c_str()));
+
+    TemporaryFile tf;
+    ASSERT_NE(tf.fd, -1) << tf.path;
+    ASSERT_TRUE(android::base::WriteStringToFd("abc", tf.fd));
+
+    ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET)) << strerror(errno);
+
+    std::string s;
+    ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s)) << strerror(errno);
+    EXPECT_EQ("abc", s);
+  }
+  {
+    auto path(new_tmp + L"директория с длинным именем\\");
+    _wmkdir(path.c_str());
+    ASSERT_TRUE(SetEnvironmentVariableW(L"TMP", path.c_str()));
+
+    TemporaryFile tf;
+    ASSERT_NE(tf.fd, -1) << tf.path;
+    ASSERT_TRUE(android::base::WriteStringToFd("abc", tf.fd));
+
+    ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET)) << strerror(errno);
+
+    std::string s;
+    ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s)) << strerror(errno);
+    EXPECT_EQ("abc", s);
+  }
+  {
+    auto path(new_tmp + L"äüöß weiß\\");
+    _wmkdir(path.c_str());
+    ASSERT_TRUE(SetEnvironmentVariableW(L"TMP", path.c_str()));
+
+    TemporaryFile tf;
+    ASSERT_NE(tf.fd, -1) << tf.path;
+    ASSERT_TRUE(android::base::WriteStringToFd("abc", tf.fd));
+
+    ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET)) << strerror(errno);
+
+    std::string s;
+    ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s)) << strerror(errno);
+    EXPECT_EQ("abc", s);
+  }
+
+  SetEnvironmentVariableW(L"TMP", old_tmp.c_str());
+}
+
+TEST(file, RootDirectoryWindows) {
+  constexpr auto kMaxEnvVariableValueSize = 32767;
+  std::wstring old_tmp;
+  old_tmp.resize(kMaxEnvVariableValueSize);
+  old_tmp.resize(GetEnvironmentVariableW(L"TMP", old_tmp.data(), old_tmp.size()));
+  SetEnvironmentVariableW(L"TMP", L"C:");
+
+  TemporaryFile tf;
+  ASSERT_NE(tf.fd, -1) << tf.path;
+
+  SetEnvironmentVariableW(L"TMP", old_tmp.c_str());
+}
+#endif
+
 TEST(file, WriteStringToFd) {
   TemporaryFile tf;
-  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_NE(tf.fd, -1) << tf.path;
   ASSERT_TRUE(android::base::WriteStringToFd("abc", tf.fd));
 
   ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET)) << strerror(errno);
@@ -100,7 +181,7 @@ TEST(file, WriteStringToFd) {
 
 TEST(file, WriteFully) {
   TemporaryFile tf;
-  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_NE(tf.fd, -1) << tf.path;
   ASSERT_TRUE(android::base::WriteFully(tf.fd, "abc", 3));
 
   ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET)) << strerror(errno);
@@ -119,7 +200,7 @@ TEST(file, WriteFully) {
 
 TEST(file, RemoveFileIfExists) {
   TemporaryFile tf;
-  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_NE(tf.fd, -1) << tf.path;
   close(tf.fd);
   tf.fd = -1;
   std::string err;
@@ -253,7 +334,7 @@ TEST(file, Dirname) {
 
 TEST(file, ReadFileToString_capacity) {
   TemporaryFile tf;
-  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_NE(tf.fd, -1) << tf.path;
 
   // For a huge file, the overhead should still be small.
   std::string s;
@@ -280,7 +361,7 @@ TEST(file, ReadFileToString_capacity) {
 
 TEST(file, ReadFileToString_capacity_0) {
   TemporaryFile tf;
-  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_NE(tf.fd, -1) << tf.path;
 
   // Because /proc reports its files as zero-length, we don't actually trust
   // any file that claims to be zero-length. Rather than add increasingly
