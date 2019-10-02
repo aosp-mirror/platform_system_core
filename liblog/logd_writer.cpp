@@ -34,7 +34,6 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "config_write.h"
 #include "log_portability.h"
 #include "logger.h"
 #include "uio.h"
@@ -48,9 +47,9 @@ static void logdClose();
 static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
 
 struct android_log_transport_write logdLoggerWrite = {
-    .node = {&logdLoggerWrite.node, &logdLoggerWrite.node},
-    .context.sock = -EBADF,
     .name = "logd",
+    .logMask = 0,
+    .context.sock = -EBADF,
     .available = logdAvailable,
     .open = logdOpen,
     .close = logdClose,
