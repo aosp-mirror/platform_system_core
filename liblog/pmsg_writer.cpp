@@ -99,7 +99,7 @@ static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
       return -EINVAL;
     }
 
-    if (SNET_EVENT_LOG_TAG != *static_cast<uint8_t*>(vec[0].iov_base)) {
+    if (SNET_EVENT_LOG_TAG != *static_cast<uint32_t*>(vec[0].iov_base)) {
       return -EPERM;
     }
   }
