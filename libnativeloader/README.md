@@ -43,7 +43,7 @@ Currently, following extensions are available:
 - `/vendor/etc/public.libraries.txt`: libraries in `/vendor/lib` that are
 specific to the underlying SoC, e.g. GPU, DSP, etc.
 - `/{system|product}/etc/public.libraries-<companyname>.txt`: libraries in
-`/{system|system}/lib` that a device manufacturer has newly added. The
+`/{system|product}/lib` that a device manufacturer has newly added. The
 libraries should be named as `lib<name>.<companyname>.so` as in
 `libFoo.acme.so`.
 
@@ -73,8 +73,8 @@ is a manager-like entity that is responsible for creating and configuring
 linker namespaces and finding an already created linker namespace for a given
 classloader.
 
-`native_loader_namesapces.cpp` implements the class `NativeLoaderNamespace` that
-models a linker namespace. It's main job is to abstract the two types of the
+`native_loader_namespace.cpp` implements the class `NativeLoaderNamespace` that
+models a linker namespace. Its main job is to abstract the two types of the
 dynamic linker interface so that other parts of this library do not have to know
 the differences of the interfaces.
 
