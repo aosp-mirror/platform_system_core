@@ -66,7 +66,6 @@ static ssize_t logdGetStats(struct android_log_logger_list* logger,
                             struct android_log_transport_context* transp, char* buf, size_t len);
 
 struct android_log_transport_read logdLoggerRead = {
-    .node = {&logdLoggerRead.node, &logdLoggerRead.node},
     .name = "logd",
     .available = logdAvailable,
     .version = logdVersion,
