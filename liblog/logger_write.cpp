@@ -280,28 +280,11 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
       return -EPERM;
     }
   } else {
-    /* Validate the incoming tag, tag content can not split across iovec */
-    char prio = ANDROID_LOG_VERBOSE;
-    const char* tag = static_cast<const char*>(vec[0].iov_base);
-    size_t len = vec[0].iov_len;
-    if (!tag) {
-      len = 0;
-    }
-    if (len > 0) {
-      prio = *tag;
-      if (len > 1) {
-        --len;
-        ++tag;
-      } else {
-        len = vec[1].iov_len;
-        tag = ((const char*)vec[1].iov_base);
-        if (!tag) {
-          len = 0;
-        }
-      }
-    }
+    int prio = *static_cast<int*>(vec[0].iov_base);
+    const char* tag = static_cast<const char*>(vec[1].iov_base);
+    size_t len = vec[1].iov_len;
     /* tag must be nul terminated */
-    if (tag && strnlen(tag, len) >= len) {
+    if (strnlen(tag, len) >= len) {
       tag = NULL;
     }
 
