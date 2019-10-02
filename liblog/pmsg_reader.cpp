@@ -37,7 +37,6 @@ static int pmsgClear(struct android_log_logger* logger,
                      struct android_log_transport_context* transp);
 
 struct android_log_transport_read pmsgLoggerRead = {
-    .node = {&pmsgLoggerRead.node, &pmsgLoggerRead.node},
     .name = "pmsg",
     .available = pmsgAvailable,
     .version = pmsgVersion,
