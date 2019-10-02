@@ -963,6 +963,10 @@ void CreateSerializedPropertyInfo() {
         // Don't check for failure here, so we always have a sane list of properties.
         // E.g. In case of recovery, the vendor partition will not have mounted and we
         // still need the system / platform properties to function.
+        if (access("/system_ext/etc/selinux/system_ext_property_contexts", R_OK) != -1) {
+            LoadPropertyInfoFromFile("/system_ext/etc/selinux/system_ext_property_contexts",
+                                     &property_infos);
+        }
         if (!LoadPropertyInfoFromFile("/vendor/etc/selinux/vendor_property_contexts",
                                       &property_infos)) {
             // Fallback to nonplat_* if vendor_* doesn't exist.
@@ -980,6 +984,7 @@ void CreateSerializedPropertyInfo() {
         if (!LoadPropertyInfoFromFile("/plat_property_contexts", &property_infos)) {
             return;
         }
+        LoadPropertyInfoFromFile("/system_ext_property_contexts", &property_infos);
         if (!LoadPropertyInfoFromFile("/vendor_property_contexts", &property_infos)) {
             // Fallback to nonplat_* if vendor_* doesn't exist.
             LoadPropertyInfoFromFile("/nonplat_property_contexts", &property_infos);
