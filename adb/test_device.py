@@ -903,10 +903,12 @@ class FileOperationsTest(DeviceTest):
             remote_path += '/filename'
             self.device.push(local=tmp_file.name, remote=remote_path)
 
-    def test_push_multiple_slash_root(self):
+    def disabled_test_push_multiple_slash_root(self):
         """Regression test for pushing to //data/local/tmp.
 
         Bug: http://b/141311284
+
+        Disabled because this broken on the adbd side as well: b/141943968
         """
         with tempfile.NamedTemporaryFile() as tmp_file:
             tmp_file.write('\0' * 1024 * 1024)
