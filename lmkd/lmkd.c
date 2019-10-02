@@ -1394,7 +1394,7 @@ static int zoneinfo_parse(struct zoneinfo *zi) {
     char *buf;
     char *save_ptr;
     char *line;
-    char zone_name[LINE_MAX];
+    char zone_name[LINE_MAX + 1];
     struct zoneinfo_node *node = NULL;
     int node_idx = 0;
     int zone_idx = 0;
