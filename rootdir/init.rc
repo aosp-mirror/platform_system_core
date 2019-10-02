@@ -489,10 +489,6 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell
     bootchart start
 
-    # Load fsverity keys. This needs to happen before apexd, as post-install of
-    # APEXes may rely on keys.
-    exec -- /system/bin/fsverity_init
-
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
 
@@ -822,6 +818,9 @@ on boot
     class_start hal
 
     class_start core
+
+    # Requires keystore (currently a core service) to be ready first.
+    exec -- /system/bin/fsverity_init
 
 on nonencrypted
     class_start main
