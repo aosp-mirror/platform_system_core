@@ -29,7 +29,6 @@
 #include <benchmark/benchmark.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
-#include <log/log_transport.h>
 #include <private/android_logger.h>
 
 BENCHMARK_MAIN();
@@ -72,21 +71,6 @@ static void BM_log_maximum(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_log_maximum);
-
-static void set_log_null() {
-  android_set_log_transport(LOGGER_NULL);
-}
-
-static void set_log_default() {
-  android_set_log_transport(LOGGER_DEFAULT);
-}
-
-static void BM_log_maximum_null(benchmark::State& state) {
-  set_log_null();
-  BM_log_maximum(state);
-  set_log_default();
-}
-BENCHMARK(BM_log_maximum_null);
 
 /*
  *	Measure the time it takes to collect the time using
@@ -618,13 +602,6 @@ static void BM_log_event_overhead_42(benchmark::State& state) {
 }
 BENCHMARK(BM_log_event_overhead_42);
 
-static void BM_log_event_overhead_null(benchmark::State& state) {
-  set_log_null();
-  BM_log_event_overhead(state);
-  set_log_default();
-}
-BENCHMARK(BM_log_event_overhead_null);
-
 /*
  *	Measure the time it takes to submit the android event logging call
  * using discrete acquisition under very-light load (<1% CPU utilization).
@@ -638,15 +615,6 @@ static void BM_log_light_overhead(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_log_light_overhead);
-
-static void BM_log_light_overhead_null(benchmark::State& state) {
-  set_log_null();
-  BM_log_light_overhead(state);
-  set_log_default();
-}
-// Default gets out of hand for this test, so we set a reasonable number of
-// iterations for a timely result.
-BENCHMARK(BM_log_light_overhead_null)->Iterations(500);
 
 static void caught_latency(int /*signum*/) {
   unsigned long long v = 0xDEADBEEFA55A5AA5ULL;
