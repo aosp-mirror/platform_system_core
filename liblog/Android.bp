@@ -15,7 +15,6 @@
 //
 
 liblog_sources = [
-    "config_write.cpp",
     "log_event_list.cpp",
     "log_event_write.cpp",
     "logger_lock.cpp",
