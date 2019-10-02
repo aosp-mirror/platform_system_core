@@ -13,15 +13,76 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-java_binary {
-    name: "deployagent",
+java_library {
+    name: "deployagent_lib",
     sdk_version: "24",
-    srcs: ["deployagent/src/**/*.java", "deploylib/src/**/*.java", "proto/**/*.proto"],
-    static_libs: ["apkzlib_zip"],
+    srcs: [
+        "deployagent/src/**/*.java",
+        "proto/**/*.proto",
+    ],
     proto: {
         type: "lite",
     },
+}
+
+java_binary {
+    name: "deployagent",
+    static_libs: [
+        "deployagent_lib",
+    ],
     dex_preopt: {
         enabled: false,
     }
+}
+
+android_test {
+    name: "FastDeployTests",
+
+    manifest: "AndroidManifest.xml",
+
+    srcs: [
+        "deployagent/test/com/android/fastdeploy/ApkArchiveTest.java",
+    ],
+
+    static_libs: [
+        "androidx.test.core",
+        "androidx.test.runner",
+        "androidx.test.rules",
+        "deployagent_lib",
+        "mockito-target-inline-minus-junit4",
+    ],
+
+    libs: [
+        "android.test.runner",
+        "android.test.base",
+        "android.test.mock",
+    ],
+
+    data: [
+        "testdata/sample.apk",
+        "testdata/sample.cd",
+    ],
+
+    optimize: {
+        enabled: false,
+    },
+}
+
+java_test_host {
+    name: "FastDeployHostTests",
+    srcs: [
+        "deployagent/test/com/android/fastdeploy/FastDeployTest.java",
+    ],
+    data: [
+        "testdata/helloworld5.apk",
+        "testdata/helloworld7.apk",
+    ],
+    libs: [
+        "compatibility-host-util",
+        "cts-tradefed",
+        "tradefed",
+    ],
+    test_suites: [
+        "general-tests",
+    ],
 }

@@ -23,10 +23,13 @@
 #include <sstream>
 #include <string>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include "adb_io.h"
 #include "sysdeps.h"
 
 using namespace com::android::fastdeploy;
+using google::protobuf::util::MessageDifferencer;
 
 static std::string GetTestFile(const std::string& name) {
     return "fastdeploy/testdata/" + name;
@@ -86,11 +89,56 @@ TEST(PatchUtilsTest, SignatureConstMatches) {
 
 TEST(PatchUtilsTest, GatherMetadata) {
     std::string apkFile = GetTestFile("rotating_cube-release.apk");
-    APKMetaData metadata = PatchUtils::GetAPKMetaData(apkFile.c_str());
+    APKMetaData actual = PatchUtils::GetHostAPKMetaData(apkFile.c_str());
+
     std::string expectedMetadata;
     android::base::ReadFileToString(GetTestFile("rotating_cube-metadata-release.data"),
                                     &expectedMetadata);
+    APKMetaData expected;
+    EXPECT_TRUE(expected.ParseFromString(expectedMetadata));
+
+    // Test paths might vary.
+    expected.set_absolute_path(actual.absolute_path());
+
     std::string actualMetadata;
-    metadata.SerializeToString(&actualMetadata);
+    actual.SerializeToString(&actualMetadata);
+
+    expected.SerializeToString(&expectedMetadata);
+
+    EXPECT_EQ(expectedMetadata, actualMetadata);
+}
+
+static inline void sanitize(APKMetaData& metadata) {
+    metadata.clear_absolute_path();
+    for (auto&& entry : *metadata.mutable_entries()) {
+        entry.clear_datasize();
+    }
+}
+
+TEST(PatchUtilsTest, GatherDumpMetadata) {
+    APKMetaData hostMetadata;
+    APKMetaData deviceMetadata;
+
+    hostMetadata = PatchUtils::GetHostAPKMetaData(GetTestFile("sample.apk").c_str());
+
+    {
+        std::string cd;
+        android::base::ReadFileToString(GetTestFile("sample.cd"), &cd);
+
+        APKDump dump;
+        dump.set_cd(std::move(cd));
+
+        deviceMetadata = PatchUtils::GetDeviceAPKMetaData(dump);
+    }
+
+    sanitize(hostMetadata);
+    sanitize(deviceMetadata);
+
+    std::string expectedMetadata;
+    hostMetadata.SerializeToString(&expectedMetadata);
+
+    std::string actualMetadata;
+    deviceMetadata.SerializeToString(&actualMetadata);
+
     EXPECT_EQ(expectedMetadata, actualMetadata);
 }
