@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -37,9 +38,6 @@
 #include "log_portability.h"
 #include "logd_reader.h"
 #include "logger.h"
-
-/* branchless on many architectures. */
-#define min(x, y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
 
 static int logdAvailable(log_id_t LogId);
 static int logdVersion(struct android_log_logger* logger,
@@ -278,13 +276,13 @@ static ssize_t logdGetStats(struct android_log_logger_list* logger_list,
   size_t n;
 
   n = snprintf(cp, remaining, "getStatistics");
-  n = min(n, remaining);
+  n = MIN(n, remaining);
   remaining -= n;
   cp += n;
 
   logger_for_each(logger, logger_list) {
     n = snprintf(cp, remaining, " %d", logger->logId);
-    n = min(n, remaining);
+    n = MIN(n, remaining);
     remaining -= n;
     cp += n;
   }
@@ -361,7 +359,7 @@ static int logdOpen(struct android_log_logger_list* logger_list,
   remaining = sizeof(buffer) - (cp - buffer);
   logger_for_each(logger, logger_list) {
     ret = snprintf(cp, remaining, "%c%u", c, logger->logId);
-    ret = min(ret, remaining);
+    ret = MIN(ret, remaining);
     remaining -= ret;
     cp += ret;
     c = ',';
@@ -369,7 +367,7 @@ static int logdOpen(struct android_log_logger_list* logger_list,
 
   if (logger_list->tail) {
     ret = snprintf(cp, remaining, " tail=%u", logger_list->tail);
-    ret = min(ret, remaining);
+    ret = MIN(ret, remaining);
     remaining -= ret;
     cp += ret;
   }
@@ -378,20 +376,20 @@ static int logdOpen(struct android_log_logger_list* logger_list,
     if (logger_list->mode & ANDROID_LOG_WRAP) {
       // ToDo: alternate API to allow timeout to be adjusted.
       ret = snprintf(cp, remaining, " timeout=%u", ANDROID_LOG_WRAP_DEFAULT_TIMEOUT);
-      ret = min(ret, remaining);
+      ret = MIN(ret, remaining);
       remaining -= ret;
       cp += ret;
     }
     ret = snprintf(cp, remaining, " start=%" PRIu32 ".%09" PRIu32, logger_list->start.tv_sec,
                    logger_list->start.tv_nsec);
-    ret = min(ret, remaining);
+    ret = MIN(ret, remaining);
     remaining -= ret;
     cp += ret;
   }
 
   if (logger_list->pid) {
     ret = snprintf(cp, remaining, " pid=%u", logger_list->pid);
-    ret = min(ret, remaining);
+    ret = MIN(ret, remaining);
     cp += ret;
   }
 
