@@ -84,7 +84,7 @@
 #define PERCEPTIBLE_APP_ADJ 200
 
 /* Android Logger event logtags (see event.logtags) */
-#define MEMINFO_LOG_TAG 10195355
+#define KILLINFO_LOG_TAG 10195355
 
 /* gid containing AID_SYSTEM required */
 #define INKERNEL_MINFREE_PATH "/sys/module/lowmemorykiller/parameters/minfree"
@@ -1394,7 +1394,7 @@ static int zoneinfo_parse(struct zoneinfo *zi) {
     char *buf;
     char *save_ptr;
     char *line;
-    char zone_name[LINE_MAX];
+    char zone_name[LINE_MAX + 1];
     struct zoneinfo_node *node = NULL;
     int node_idx = 0;
     int zone_idx = 0;
@@ -1566,7 +1566,17 @@ static int vmstat_parse(union vmstat *vs) {
     return 0;
 }
 
-static void meminfo_log(union meminfo *mi) {
+static void killinfo_log(struct proc* procp, int min_oom_score, int tasksize,
+                         int kill_reason, union meminfo *mi) {
+    /* log process information */
+    android_log_write_int32(ctx, procp->pid);
+    android_log_write_int32(ctx, procp->uid);
+    android_log_write_int32(ctx, procp->oomadj);
+    android_log_write_int32(ctx, min_oom_score);
+    android_log_write_int32(ctx, (int32_t)min(tasksize * page_k, INT32_MAX));
+    android_log_write_int32(ctx, kill_reason);
+
+    /* log meminfo fields */
     for (int field_idx = 0; field_idx < MI_FIELD_COUNT; field_idx++) {
         android_log_write_int32(ctx, (int32_t)min(mi->arr[field_idx] * page_k, INT32_MAX));
     }
@@ -1640,7 +1650,8 @@ static void set_process_group_and_prio(int pid, SchedPolicy sp, int prio) {
 static int last_killed_pid = -1;
 
 /* Kill one process specified by procp.  Returns the size of the process killed */
-static int kill_one_process(struct proc* procp, int min_oom_score, const char *reason) {
+static int kill_one_process(struct proc* procp, int min_oom_score, int kill_reason,
+                            const char *kill_desc, union meminfo *mi) {
     int pid = procp->pid;
     uid_t uid = procp->uid;
     int tgid;
@@ -1684,9 +1695,12 @@ static int kill_one_process(struct proc* procp, int min_oom_score, const char *r
     set_process_group_and_prio(pid, SP_FOREGROUND, ANDROID_PRIORITY_HIGHEST);
 
     inc_killcnt(procp->oomadj);
-    if (reason) {
+
+    killinfo_log(procp, min_oom_score, tasksize, kill_reason, mi);
+
+    if (kill_desc) {
         ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB; reason: %s", taskname, pid,
-              uid, procp->oomadj, tasksize * page_k, reason);
+              uid, procp->oomadj, tasksize * page_k, kill_desc);
     } else {
         ALOGI("Kill '%s' (%d), uid %d, oom_adj %d to free %ldkB", taskname, pid,
               uid, procp->oomadj, tasksize * page_k);
@@ -1712,7 +1726,8 @@ out:
  * Find one process to kill at or above the given oom_adj level.
  * Returns size of the killed process.
  */
-static int find_and_kill_process(int min_score_adj, const char *reason) {
+static int find_and_kill_process(int min_score_adj, int kill_reason, const char *kill_desc,
+                                 union meminfo *mi) {
     int i;
     int killed_size = 0;
     bool lmk_state_change_start = false;
@@ -1727,7 +1742,7 @@ static int find_and_kill_process(int min_score_adj, const char *reason) {
             if (!procp)
                 break;
 
-            killed_size = kill_one_process(procp, min_score_adj, reason);
+            killed_size = kill_one_process(procp, min_score_adj, kill_reason, kill_desc, mi);
             if (killed_size >= 0) {
                 if (!lmk_state_change_start) {
                     lmk_state_change_start = true;
@@ -2051,7 +2066,7 @@ static void mp_event_psi(int data, uint32_t events, struct polling_params *poll_
 
     /* Kill a process if necessary */
     if (kill_reason != NONE) {
-        int pages_freed = find_and_kill_process(min_score_adj, kill_desc);
+        int pages_freed = find_and_kill_process(min_score_adj, kill_reason, kill_desc, &mi);
         if (pages_freed > 0) {
             killing = true;
             if (cut_thrashing_limit) {
@@ -2062,7 +2077,6 @@ static void mp_event_psi(int data, uint32_t events, struct polling_params *poll_
                 thrashing_limit = (thrashing_limit * (100 - thrashing_limit_decay_pct)) / 100;
             }
         }
-        meminfo_log(&mi);
     }
 
 no_kill:
@@ -2251,12 +2265,10 @@ static void mp_event_common(int data, uint32_t events, struct polling_params *po
 do_kill:
     if (low_ram_device) {
         /* For Go devices kill only one task */
-        if (find_and_kill_process(level_oomadj[level], NULL) == 0) {
+        if (find_and_kill_process(level_oomadj[level], -1, NULL, &mi) == 0) {
             if (debug_process_killing) {
                 ALOGI("Nothing to kill");
             }
-        } else {
-            meminfo_log(&mi);
         }
     } else {
         int pages_freed;
@@ -2276,7 +2288,7 @@ do_kill:
             min_score_adj = level_oomadj[level];
         }
 
-        pages_freed = find_and_kill_process(min_score_adj, NULL);
+        pages_freed = find_and_kill_process(min_score_adj, -1, NULL, &mi);
 
         if (pages_freed == 0) {
             /* Rate limit kill reports when nothing was reclaimed */
@@ -2289,9 +2301,7 @@ do_kill:
             last_kill_tm = curr_tm;
         }
 
-        /* Log meminfo whenever we kill or when report rate limit allows */
-        meminfo_log(&mi);
-
+        /* Log whenever we kill or when report rate limit allows */
         if (use_minfree_levels) {
             ALOGI("Reclaimed %ldkB, cache(%ldkB) and "
                 "free(%" PRId64 "kB)-reserved(%" PRId64 "kB) below min(%ldkB) for oom_adj %d",
@@ -2714,7 +2724,7 @@ int main(int argc __unused, char **argv __unused) {
     thrashing_limit_decay_pct = clamp(0, 100, property_get_int32("ro.lmk.thrashing_limit_decay",
         low_ram_device ? DEF_THRASHING_DECAY_LOWRAM : DEF_THRASHING_DECAY));
 
-    ctx = create_android_logger(MEMINFO_LOG_TAG);
+    ctx = create_android_logger(KILLINFO_LOG_TAG);
 
     statslog_init();
 

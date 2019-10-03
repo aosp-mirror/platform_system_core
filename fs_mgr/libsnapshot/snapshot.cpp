@@ -1307,8 +1307,8 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     // device itself. This device consists of the real blocks in the super
     // partition that this logical partition occupies.
     auto& dm = DeviceMapper::Instance();
-    std::string ignore_path;
-    if (!CreateLogicalPartition(params, &ignore_path)) {
+    std::string base_path;
+    if (!CreateLogicalPartition(params, &base_path)) {
         LOG(ERROR) << "Could not create logical partition " << params.GetPartitionName()
                    << " as device " << params.GetDeviceName();
         return false;
@@ -1316,6 +1316,7 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     created_devices.EmplaceBack<AutoUnmapDevice>(&dm, params.GetDeviceName());
 
     if (!live_snapshot_status.has_value()) {
+        *path = base_path;
         created_devices.Release();
         return true;
     }

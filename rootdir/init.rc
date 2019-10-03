@@ -489,10 +489,6 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell
     bootchart start
 
-    # Load fsverity keys. This needs to happen before apexd, as post-install of
-    # APEXes may rely on keys.
-    exec -- /system/bin/fsverity_init
-
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
 
@@ -761,11 +757,6 @@ on boot
     write /sys/fs/f2fs/${dev.mnt.blk.data}/gc_urgent_sleep_time 50
 
     # Permissions for System Server and daemons.
-    chown radio system /sys/android_power/state
-    chown radio system /sys/android_power/request_state
-    chown radio system /sys/android_power/acquire_full_wake_lock
-    chown radio system /sys/android_power/acquire_partial_wake_lock
-    chown radio system /sys/android_power/release_wake_lock
     chown system system /sys/power/autosleep
 
     chown system system /sys/devices/system/cpu/cpufreq/interactive/timer_rate
@@ -828,6 +819,9 @@ on boot
     class_start hal
 
     class_start core
+
+    # Requires keystore (currently a core service) to be ready first.
+    exec -- /system/bin/fsverity_init
 
 on nonencrypted
     class_start main
