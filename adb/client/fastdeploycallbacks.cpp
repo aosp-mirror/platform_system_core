@@ -49,35 +49,7 @@ class DeployAgentBufferCallback : public StandardStreamsCallbackInterface {
 int capture_shell_command(const char* command, std::vector<char>* outBuffer,
                           std::vector<char>* errBuffer) {
     DeployAgentBufferCallback cb(outBuffer, errBuffer);
-    return send_shell_command(command, false, &cb);
-}
-
-DeployAgentFileCallback::DeployAgentFileCallback(FILE* outputFile, std::vector<char>* errBuffer) {
-    mpOutFile = outputFile;
-    mpErrBuffer = errBuffer;
-    mBytesWritten = 0;
-}
-
-void DeployAgentFileCallback::OnStdout(const char* buffer, int length) {
-    if (mpOutFile != NULL) {
-        int bytes_written = fwrite(buffer, 1, length, mpOutFile);
-        if (bytes_written != length) {
-            printf("Write error %d\n", bytes_written);
-        }
-        mBytesWritten += bytes_written;
-    }
-}
-
-void DeployAgentFileCallback::OnStderr(const char* buffer, int length) {
-    appendBuffer(mpErrBuffer, buffer, length);
-}
-
-int DeployAgentFileCallback::Done(int status) {
-    return status;
-}
-
-int DeployAgentFileCallback::getBytesWritten() {
-    return mBytesWritten;
+    return send_shell_command(command, /*disable_shell_protocol=*/false, &cb);
 }
 
 DeployAgentBufferCallback::DeployAgentBufferCallback(std::vector<char>* outBuffer,

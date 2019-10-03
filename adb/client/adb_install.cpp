@@ -37,9 +37,7 @@
 #include "commandline.h"
 #include "fastdeploy.h"
 
-#if defined(ENABLE_FASTDEPLOY)
 static constexpr int kFastDeployMinApi = 24;
-#endif
 
 namespace {
 
@@ -146,15 +144,7 @@ static void read_status_line(int fd, char* buf, size_t count) {
     *buf = '\0';
 }
 
-#if defined(ENABLE_FASTDEPLOY)
-static int delete_device_patch_file(const char* apkPath) {
-    std::string patchDevicePath = get_patch_path(apkPath);
-    return delete_device_file(patchDevicePath);
-}
-#endif
-
-static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy,
-                                bool use_localagent) {
+static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy) {
     printf("Performing Streamed Install\n");
 
     // The last argument must be the APK file
@@ -176,31 +166,15 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
         error_exit("--fastdeploy doesn't support .apex files");
     }
 
-    if (use_fastdeploy == true) {
-#if defined(ENABLE_FASTDEPLOY)
-        TemporaryFile metadataTmpFile;
-        std::string patchTmpFilePath;
-        {
-            TemporaryFile patchTmpFile;
-            patchTmpFile.DoNotRemove();
-            patchTmpFilePath = patchTmpFile.path;
+    if (use_fastdeploy) {
+        auto metadata = extract_metadata(file);
+        if (metadata.has_value()) {
+            // pass all but 1st (command) and last (apk path) parameters through to pm for
+            // session creation
+            std::vector<const char*> pm_args{argv + 1, argv + argc - 1};
+            auto patchFd = install_patch(pm_args.size(), pm_args.data());
+            return stream_patch(file, std::move(metadata.value()), std::move(patchFd));
         }
-
-        FILE* metadataFile = fopen(metadataTmpFile.path, "wb");
-        extract_metadata(file, metadataFile);
-        fclose(metadataFile);
-
-        create_patch(file, metadataTmpFile.path, patchTmpFilePath.c_str());
-        // pass all but 1st (command) and last (apk path) parameters through to pm for
-        // session creation
-        std::vector<const char*> pm_args{argv + 1, argv + argc - 1};
-        install_patch(file, patchTmpFilePath.c_str(), pm_args.size(), pm_args.data());
-        adb_unlink(patchTmpFilePath.c_str());
-        delete_device_patch_file(file);
-        return 0;
-#else
-        error_exit("fastdeploy is disabled");
-#endif
     }
 
     struct stat sb;
@@ -265,8 +239,7 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
     return 1;
 }
 
-static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
-                              bool use_localagent) {
+static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy) {
     printf("Performing Push Install\n");
 
     // Find last APK argument.
@@ -287,35 +260,26 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
     int result = -1;
     std::vector<const char*> apk_file = {argv[last_apk]};
     std::string apk_dest = "/data/local/tmp/" + android::base::Basename(argv[last_apk]);
-
-    if (use_fastdeploy == true) {
-#if defined(ENABLE_FASTDEPLOY)
-        TemporaryFile metadataTmpFile;
-        TemporaryFile patchTmpFile;
-
-        FILE* metadataFile = fopen(metadataTmpFile.path, "wb");
-        extract_metadata(apk_file[0], metadataFile);
-        fclose(metadataFile);
-
-        create_patch(apk_file[0], metadataTmpFile.path, patchTmpFile.path);
-        apply_patch_on_device(apk_file[0], patchTmpFile.path, apk_dest.c_str());
-#else
-        error_exit("fastdeploy is disabled");
-#endif
-    } else {
-        if (!do_sync_push(apk_file, apk_dest.c_str(), false)) goto cleanup_apk;
-    }
-
     argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
-    result = pm_command(argc, argv);
 
-cleanup_apk:
-    if (use_fastdeploy == true) {
-#if defined(ENABLE_FASTDEPLOY)
-        delete_device_patch_file(apk_file[0]);
-#endif
+    if (use_fastdeploy) {
+        auto metadata = extract_metadata(apk_file[0]);
+        if (metadata.has_value()) {
+            auto patchFd = apply_patch_on_device(apk_dest.c_str());
+            int status = stream_patch(apk_file[0], std::move(metadata.value()), std::move(patchFd));
+
+            result = pm_command(argc, argv);
+            delete_device_file(apk_dest);
+
+            return status;
+        }
     }
-    delete_device_file(apk_dest);
+
+    if (do_sync_push(apk_file, apk_dest.c_str(), false)) {
+        result = pm_command(argc, argv);
+        delete_device_file(apk_dest);
+    }
+
     return result;
 }
 
@@ -324,7 +288,6 @@ int install_app(int argc, const char** argv) {
     InstallMode installMode = INSTALL_DEFAULT;
     bool use_fastdeploy = false;
     bool is_reinstall = false;
-    bool use_localagent = false;
     FastDeploy_AgentUpdateStrategy agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
 
     for (int i = 1; i < argc; i++) {
@@ -353,11 +316,6 @@ int install_app(int argc, const char** argv) {
         } else if (!strcmp(argv[i], "--version-check-agent")) {
             processedArgIndicies.push_back(i);
             agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
-#ifndef _WIN32
-        } else if (!strcmp(argv[i], "--local-agent")) {
-            processedArgIndicies.push_back(i);
-            use_localagent = true;
-#endif
         }
     }
 
@@ -369,14 +327,13 @@ int install_app(int argc, const char** argv) {
         error_exit("Attempting to use streaming install on unsupported device");
     }
 
-#if defined(ENABLE_FASTDEPLOY)
-    if (use_fastdeploy == true && get_device_api_level() < kFastDeployMinApi) {
+    if (use_fastdeploy && get_device_api_level() < kFastDeployMinApi) {
         printf("Fast Deploy is only compatible with devices of API version %d or higher, "
                "ignoring.\n",
                kFastDeployMinApi);
         use_fastdeploy = false;
     }
-#endif
+    fastdeploy_set_agent_update_strategy(agent_update_strategy);
 
     std::vector<const char*> passthrough_argv;
     for (int i = 0; i < argc; i++) {
@@ -389,26 +346,13 @@ int install_app(int argc, const char** argv) {
         error_exit("install requires an apk argument");
     }
 
-    if (use_fastdeploy == true) {
-#if defined(ENABLE_FASTDEPLOY)
-        fastdeploy_set_local_agent(use_localagent);
-        update_agent(agent_update_strategy);
-
-        // The last argument must be the APK file
-        const char* file = passthrough_argv.back();
-        use_fastdeploy = find_package(file);
-#else
-        error_exit("fastdeploy is disabled");
-#endif
-    }
-
     switch (installMode) {
         case INSTALL_PUSH:
             return install_app_legacy(passthrough_argv.size(), passthrough_argv.data(),
-                                      use_fastdeploy, use_localagent);
+                                      use_fastdeploy);
         case INSTALL_STREAM:
             return install_app_streamed(passthrough_argv.size(), passthrough_argv.data(),
-                                        use_fastdeploy, use_localagent);
+                                        use_fastdeploy);
         case INSTALL_DEFAULT:
         default:
             return 1;
