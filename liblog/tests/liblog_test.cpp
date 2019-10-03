@@ -2664,8 +2664,7 @@ static void create_android_logger(const char* (*fn)(uint32_t tag,
       print_barrier();
     }
     EXPECT_EQ(0, buffer_to_string);
-    EXPECT_EQ(strlen(expected_string), strlen(msgBuf));
-    EXPECT_EQ(0, strcmp(expected_string, msgBuf));
+    EXPECT_STREQ(expected_string, msgBuf);
   }
 
   EXPECT_EQ(1, count);
@@ -2858,7 +2857,7 @@ static ssize_t __pmsg_fn(log_id_t logId, char prio, const char* filename,
   EXPECT_EQ(ANDROID_LOG_VERBOSE, prio);
   EXPECT_FALSE(NULL == strstr(__pmsg_file, filename));
   EXPECT_EQ(len, sizeof(max_payload_buf));
-  EXPECT_EQ(0, strcmp(max_payload_buf, buf));
+  EXPECT_STREQ(max_payload_buf, buf);
 
   ++signaled;
   if ((len != sizeof(max_payload_buf)) || strcmp(max_payload_buf, buf)) {
