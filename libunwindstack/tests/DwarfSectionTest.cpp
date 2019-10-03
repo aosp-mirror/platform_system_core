@@ -30,7 +30,7 @@ class MockDwarfSection : public DwarfSection {
   MockDwarfSection(Memory* memory) : DwarfSection(memory) {}
   virtual ~MockDwarfSection() = default;
 
-  MOCK_METHOD3(Init, bool(uint64_t, uint64_t, uint64_t));
+  MOCK_METHOD3(Init, bool(uint64_t, uint64_t, int64_t));
 
   MOCK_METHOD5(Eval, bool(const DwarfCie*, Memory*, const dwarf_loc_regs_t&, Regs*, bool*));
 
