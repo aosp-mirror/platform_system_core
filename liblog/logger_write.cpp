@@ -100,9 +100,8 @@ static void __android_log_cache_available(struct android_log_transport_write* no
   }
 
   for (i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
-    if (node->write && (i != LOG_ID_KERNEL) &&
-        ((i != LOG_ID_SECURITY) || (check_log_uid_permissions() == 0)) &&
-        (!node->available || ((*node->available)(static_cast<log_id_t>(i)) >= 0))) {
+    if (i != LOG_ID_KERNEL && (i != LOG_ID_SECURITY || check_log_uid_permissions() == 0) &&
+        (*node->available)(static_cast<log_id_t>(i)) >= 0) {
       node->logMask |= 1 << i;
     }
   }
@@ -198,14 +197,6 @@ static int __write_to_log_initialize() {
 static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) {
   int ret, save_errno;
   struct timespec ts;
-  size_t len, i;
-
-  for (len = i = 0; i < nr; ++i) {
-    len += vec[i].iov_len;
-  }
-  if (!len) {
-    return -EINVAL;
-  }
 
   save_errno = errno;
 #if defined(__ANDROID__)
@@ -275,10 +266,6 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
     int prio = *static_cast<int*>(vec[0].iov_base);
     const char* tag = static_cast<const char*>(vec[1].iov_base);
     size_t len = vec[1].iov_len;
-    /* tag must be nul terminated */
-    if (strnlen(tag, len) >= len) {
-      tag = NULL;
-    }
 
     if (!__android_log_is_loggable_len(prio, tag, len - 1, ANDROID_LOG_VERBOSE)) {
       errno = save_errno;
@@ -296,7 +283,7 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
 #endif
 
   ret = 0;
-  i = 1 << log_id;
+  size_t i = 1 << log_id;
 
   if (android_log_write != nullptr && (android_log_write->logMask & i)) {
     ssize_t retval;
