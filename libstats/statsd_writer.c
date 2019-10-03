@@ -36,25 +36,6 @@
 #include <time.h>
 #include <unistd.h>
 
-/* branchless on many architectures. */
-#define min(x, y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
-
-#ifndef htole32
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define htole32(x) (x)
-#else
-#define htole32(x) __bswap_32(x)
-#endif
-#endif
-
-#ifndef htole64
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define htole64(x) (x)
-#else
-#define htole64(x) __bswap_64(x)
-#endif
-#endif
-
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 static atomic_int dropped = 0;
 static atomic_int log_error = 0;
@@ -221,14 +202,14 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
             android_log_event_long_t buffer;
             header.id = LOG_ID_STATS;
             // store the last log error in the tag field. This tag field is not used by statsd.
-            buffer.header.tag = htole32(atomic_load(&log_error));
+            buffer.header.tag = atomic_load(&log_error);
             buffer.payload.type = EVENT_TYPE_LONG;
             // format:
             // |atom_tag|dropped_count|
             int64_t composed_long = atomic_load(&atom_tag);
             // Send 2 int32's via an int64.
             composed_long = ((composed_long << 32) | ((int64_t)snapshot));
-            buffer.payload.data = htole64(composed_long);
+            buffer.payload.data = composed_long;
 
             newVec[headerLength].iov_base = &buffer;
             newVec[headerLength].iov_len = sizeof(buffer);
