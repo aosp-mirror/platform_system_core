@@ -255,13 +255,8 @@ static void stdin_raw_restore() {
 }
 #endif
 
-// Reads from |fd| and prints received data. If |use_shell_protocol| is true
-// this expects that incoming data will use the shell protocol, in which case
-// stdout/stderr are routed independently and the remote exit code will be
-// returned.
-// if |callback| is non-null, stdout/stderr output will be handled by it.
-int read_and_dump(borrowed_fd fd, bool use_shell_protocol = false,
-                  StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK) {
+int read_and_dump(borrowed_fd fd, bool use_shell_protocol,
+                  StandardStreamsCallbackInterface* callback) {
     int exit_code = 0;
     if (fd < 0) return exit_code;
 

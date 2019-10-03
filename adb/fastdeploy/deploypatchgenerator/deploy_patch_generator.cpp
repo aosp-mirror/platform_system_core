@@ -25,8 +25,12 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <unordered_map>
+
+#include <openssl/md5.h>
 
 #include "adb_unique_fd.h"
+#include "adb_utils.h"
 #include "android-base/file.h"
 #include "patch_utils.h"
 #include "sysdeps.h"
@@ -34,9 +38,6 @@
 using namespace com::android::fastdeploy;
 
 void DeployPatchGenerator::Log(const char* fmt, ...) {
-    if (!is_verbose_) {
-        return;
-    }
     va_list ap;
     va_start(ap, fmt);
     vprintf(fmt, ap);
@@ -44,19 +45,34 @@ void DeployPatchGenerator::Log(const char* fmt, ...) {
     va_end(ap);
 }
 
-void DeployPatchGenerator::APKEntryToLog(const APKEntry& entry) {
-    Log("Filename: %s", entry.filename().c_str());
-    Log("CRC32: 0x%08" PRIX64, entry.crc32());
-    Log("Data Offset: %" PRId64, entry.dataoffset());
-    Log("Compressed Size: %" PRId64, entry.compressedsize());
-    Log("Uncompressed Size: %" PRId64, entry.uncompressedsize());
+static std::string HexEncode(const void* in_buffer, unsigned int size) {
+    static const char kHexChars[] = "0123456789ABCDEF";
+
+    // Each input byte creates two output hex characters.
+    std::string out_buffer(size * 2, '\0');
+
+    for (unsigned int i = 0; i < size; ++i) {
+        char byte = ((const uint8_t*)in_buffer)[i];
+        out_buffer[(i << 1)] = kHexChars[(byte >> 4) & 0xf];
+        out_buffer[(i << 1) + 1] = kHexChars[byte & 0xf];
+    }
+    return out_buffer;
 }
 
-void DeployPatchGenerator::APKMetaDataToLog(const char* file, const APKMetaData& metadata) {
+void DeployPatchGenerator::APKEntryToLog(const APKEntry& entry) {
     if (!is_verbose_) {
         return;
     }
-    Log("APK Metadata: %s", file);
+    Log("MD5: %s", HexEncode(entry.md5().data(), entry.md5().size()).c_str());
+    Log("Data Offset: %" PRId64, entry.dataoffset());
+    Log("Data Size: %" PRId64, entry.datasize());
+}
+
+void DeployPatchGenerator::APKMetaDataToLog(const APKMetaData& metadata) {
+    if (!is_verbose_) {
+        return;
+    }
+    Log("APK Metadata: %s", metadata.absolute_path().c_str());
     for (int i = 0; i < metadata.entries_size(); i++) {
         const APKEntry& entry = metadata.entries(i);
         APKEntryToLog(entry);
@@ -65,49 +81,93 @@ void DeployPatchGenerator::APKMetaDataToLog(const char* file, const APKMetaData&
 
 void DeployPatchGenerator::ReportSavings(const std::vector<SimpleEntry>& identicalEntries,
                                          uint64_t totalSize) {
-    long totalEqualBytes = 0;
-    int totalEqualFiles = 0;
+    uint64_t totalEqualBytes = 0;
+    uint64_t totalEqualFiles = 0;
     for (size_t i = 0; i < identicalEntries.size(); i++) {
         if (identicalEntries[i].deviceEntry != nullptr) {
-            totalEqualBytes += identicalEntries[i].localEntry->compressedsize();
+            totalEqualBytes += identicalEntries[i].localEntry->datasize();
             totalEqualFiles++;
         }
     }
-    float savingPercent = (totalEqualBytes * 100.0f) / totalSize;
-    fprintf(stderr, "Detected %d equal APK entries\n", totalEqualFiles);
-    fprintf(stderr, "%ld bytes are equal out of %" PRIu64 " (%.2f%%)\n", totalEqualBytes, totalSize,
-            savingPercent);
+    double savingPercent = (totalEqualBytes * 100.0f) / totalSize;
+    fprintf(stderr, "Detected %" PRIu64 " equal APK entries\n", totalEqualFiles);
+    fprintf(stderr, "%" PRIu64 " bytes are equal out of %" PRIu64 " (%.2f%%)\n", totalEqualBytes,
+            totalSize, savingPercent);
+}
+
+struct PatchEntry {
+    int64_t deltaFromDeviceDataStart = 0;
+    int64_t deviceDataOffset = 0;
+    int64_t deviceDataLength = 0;
+};
+static void WritePatchEntry(const PatchEntry& patchEntry, borrowed_fd input, borrowed_fd output,
+                            size_t* realSizeOut) {
+    if (!(patchEntry.deltaFromDeviceDataStart | patchEntry.deviceDataOffset |
+          patchEntry.deviceDataLength)) {
+        return;
+    }
+
+    PatchUtils::WriteLong(patchEntry.deltaFromDeviceDataStart, output);
+    if (patchEntry.deltaFromDeviceDataStart > 0) {
+        PatchUtils::Pipe(input, output, patchEntry.deltaFromDeviceDataStart);
+    }
+    auto hostDataLength = patchEntry.deviceDataLength;
+    adb_lseek(input, hostDataLength, SEEK_CUR);
+
+    PatchUtils::WriteLong(patchEntry.deviceDataOffset, output);
+    PatchUtils::WriteLong(patchEntry.deviceDataLength, output);
+
+    *realSizeOut += patchEntry.deltaFromDeviceDataStart + hostDataLength;
 }
 
 void DeployPatchGenerator::GeneratePatch(const std::vector<SimpleEntry>& entriesToUseOnDevice,
-                                         const char* localApkPath, borrowed_fd output) {
-    unique_fd input(adb_open(localApkPath, O_RDONLY | O_CLOEXEC));
+                                         const std::string& localApkPath,
+                                         const std::string& deviceApkPath, borrowed_fd output) {
+    unique_fd input(adb_open(localApkPath.c_str(), O_RDONLY | O_CLOEXEC));
     size_t newApkSize = adb_lseek(input, 0L, SEEK_END);
     adb_lseek(input, 0L, SEEK_SET);
 
+    // Header.
     PatchUtils::WriteSignature(output);
     PatchUtils::WriteLong(newApkSize, output);
+    PatchUtils::WriteString(deviceApkPath, output);
+
     size_t currentSizeOut = 0;
+    size_t realSizeOut = 0;
     // Write data from the host upto the first entry we have that matches a device entry. Then write
     // the metadata about the device entry and repeat for all entries that match on device. Finally
     // write out any data left. If the device and host APKs are exactly the same this ends up
     // writing out zip metadata from the local APK followed by offsets to the data to use from the
     // device APK.
-    for (auto&& entry : entriesToUseOnDevice) {
-        int64_t deviceDataOffset = entry.deviceEntry->dataoffset();
+    PatchEntry patchEntry;
+    for (size_t i = 0, size = entriesToUseOnDevice.size(); i < size; ++i) {
+        auto&& entry = entriesToUseOnDevice[i];
         int64_t hostDataOffset = entry.localEntry->dataoffset();
-        int64_t deviceDataLength = entry.deviceEntry->compressedsize();
+        int64_t hostDataLength = entry.localEntry->datasize();
+        int64_t deviceDataOffset = entry.deviceEntry->dataoffset();
+        // Both entries are the same, using host data length.
+        int64_t deviceDataLength = hostDataLength;
+
         int64_t deltaFromDeviceDataStart = hostDataOffset - currentSizeOut;
-        PatchUtils::WriteLong(deltaFromDeviceDataStart, output);
         if (deltaFromDeviceDataStart > 0) {
-            PatchUtils::Pipe(input, output, deltaFromDeviceDataStart);
+            WritePatchEntry(patchEntry, input, output, &realSizeOut);
+            patchEntry.deltaFromDeviceDataStart = deltaFromDeviceDataStart;
+            patchEntry.deviceDataOffset = deviceDataOffset;
+            patchEntry.deviceDataLength = deviceDataLength;
+        } else {
+            patchEntry.deviceDataLength += deviceDataLength;
         }
-        PatchUtils::WriteLong(deviceDataOffset, output);
-        PatchUtils::WriteLong(deviceDataLength, output);
-        adb_lseek(input, deviceDataLength, SEEK_CUR);
-        currentSizeOut += deltaFromDeviceDataStart + deviceDataLength;
+
+        currentSizeOut += deltaFromDeviceDataStart + hostDataLength;
     }
-    if (currentSizeOut != newApkSize) {
+    WritePatchEntry(patchEntry, input, output, &realSizeOut);
+    if (realSizeOut != currentSizeOut) {
+        fprintf(stderr, "Size mismatch current %lld vs real %lld\n",
+                static_cast<long long>(currentSizeOut), static_cast<long long>(realSizeOut));
+        error_exit("Aborting");
+    }
+
+    if (newApkSize > currentSizeOut) {
         PatchUtils::WriteLong(newApkSize - currentSizeOut, output);
         PatchUtils::Pipe(input, output, newApkSize - currentSizeOut);
         PatchUtils::WriteLong(0, output);
@@ -115,44 +175,72 @@ void DeployPatchGenerator::GeneratePatch(const std::vector<SimpleEntry>& entries
     }
 }
 
-bool DeployPatchGenerator::CreatePatch(const char* localApkPath, const char* deviceApkMetadataPath,
-                                       borrowed_fd output) {
-    std::string content;
-    APKMetaData deviceApkMetadata;
-    if (android::base::ReadFileToString(deviceApkMetadataPath, &content)) {
-        deviceApkMetadata.ParsePartialFromString(content);
-    } else {
-        // TODO: What do we want to do if we don't find any metadata.
-        // The current fallback behavior is to build a patch with the contents of |localApkPath|.
-    }
+bool DeployPatchGenerator::CreatePatch(const char* localApkPath, APKMetaData deviceApkMetadata,
+                                       android::base::borrowed_fd output) {
+    return CreatePatch(PatchUtils::GetHostAPKMetaData(localApkPath), std::move(deviceApkMetadata),
+                       output);
+}
 
-    APKMetaData localApkMetadata = PatchUtils::GetAPKMetaData(localApkPath);
-    // Log gathered metadata info.
-    APKMetaDataToLog(deviceApkMetadataPath, deviceApkMetadata);
-    APKMetaDataToLog(localApkPath, localApkMetadata);
+bool DeployPatchGenerator::CreatePatch(APKMetaData localApkMetadata, APKMetaData deviceApkMetadata,
+                                       borrowed_fd output) {
+    // Log metadata info.
+    APKMetaDataToLog(deviceApkMetadata);
+    APKMetaDataToLog(localApkMetadata);
+
+    const std::string localApkPath = localApkMetadata.absolute_path();
+    const std::string deviceApkPath = deviceApkMetadata.absolute_path();
 
     std::vector<SimpleEntry> identicalEntries;
     uint64_t totalSize =
             BuildIdenticalEntries(identicalEntries, localApkMetadata, deviceApkMetadata);
     ReportSavings(identicalEntries, totalSize);
-    GeneratePatch(identicalEntries, localApkPath, output);
+    GeneratePatch(identicalEntries, localApkPath, deviceApkPath, output);
+
     return true;
 }
 
 uint64_t DeployPatchGenerator::BuildIdenticalEntries(std::vector<SimpleEntry>& outIdenticalEntries,
                                                      const APKMetaData& localApkMetadata,
                                                      const APKMetaData& deviceApkMetadata) {
+    outIdenticalEntries.reserve(
+            std::min(localApkMetadata.entries_size(), deviceApkMetadata.entries_size()));
+
+    using md5Digest = std::pair<uint64_t, uint64_t>;
+    struct md5Hash {
+        size_t operator()(const md5Digest& digest) const {
+            std::hash<uint64_t> hasher;
+            size_t seed = 0;
+            seed ^= hasher(digest.first) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= hasher(digest.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            return seed;
+        }
+    };
+    static_assert(sizeof(md5Digest) == MD5_DIGEST_LENGTH);
+    std::unordered_map<md5Digest, std::vector<const APKEntry*>, md5Hash> deviceEntries;
+    for (const auto& deviceEntry : deviceApkMetadata.entries()) {
+        md5Digest md5;
+        memcpy(&md5, deviceEntry.md5().data(), deviceEntry.md5().size());
+
+        deviceEntries[md5].push_back(&deviceEntry);
+    }
+
     uint64_t totalSize = 0;
-    for (int i = 0; i < localApkMetadata.entries_size(); i++) {
-        const APKEntry& localEntry = localApkMetadata.entries(i);
-        totalSize += localEntry.compressedsize();
-        for (int j = 0; j < deviceApkMetadata.entries_size(); j++) {
-            const APKEntry& deviceEntry = deviceApkMetadata.entries(j);
-            if (deviceEntry.crc32() == localEntry.crc32() &&
-                deviceEntry.filename().compare(localEntry.filename()) == 0) {
+    for (const auto& localEntry : localApkMetadata.entries()) {
+        totalSize += localEntry.datasize();
+
+        md5Digest md5;
+        memcpy(&md5, localEntry.md5().data(), localEntry.md5().size());
+
+        auto deviceEntriesIt = deviceEntries.find(md5);
+        if (deviceEntriesIt == deviceEntries.end()) {
+            continue;
+        }
+
+        for (const auto* deviceEntry : deviceEntriesIt->second) {
+            if (deviceEntry->md5() == localEntry.md5()) {
                 SimpleEntry simpleEntry;
-                simpleEntry.localEntry = const_cast<APKEntry*>(&localEntry);
-                simpleEntry.deviceEntry = const_cast<APKEntry*>(&deviceEntry);
+                simpleEntry.localEntry = &localEntry;
+                simpleEntry.deviceEntry = deviceEntry;
                 APKEntryToLog(localEntry);
                 outIdenticalEntries.push_back(simpleEntry);
                 break;

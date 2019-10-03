@@ -27,12 +27,15 @@
  */
 class DeployPatchGenerator {
   public:
+    using APKEntry = com::android::fastdeploy::APKEntry;
+    using APKMetaData = com::android::fastdeploy::APKMetaData;
+
     /**
      * Simple struct to hold mapping between local metadata and device metadata.
      */
     struct SimpleEntry {
-        com::android::fastdeploy::APKEntry* localEntry;
-        com::android::fastdeploy::APKEntry* deviceEntry;
+        const APKEntry* localEntry;
+        const APKEntry* deviceEntry;
     };
 
     /**
@@ -41,10 +44,10 @@ class DeployPatchGenerator {
      */
     explicit DeployPatchGenerator(bool is_verbose) : is_verbose_(is_verbose) {}
     /**
-     * Given a |localApkPath|, and the |deviceApkMetadataPath| from an installed APK this function
+     * Given a |localApkPath|, and the |deviceApkMetadata| from an installed APK this function
      * writes a patch to the given |output|.
      */
-    bool CreatePatch(const char* localApkPath, const char* deviceApkMetadataPath,
+    bool CreatePatch(const char* localApkPath, APKMetaData deviceApkMetadata,
                      android::base::borrowed_fd output);
 
   private:
@@ -57,14 +60,20 @@ class DeployPatchGenerator {
 
     /**
      * Helper function to log the APKMetaData structure. If |is_verbose_| is false this function
-     * early outs. |file| is the path to the file represented by |metadata|. This function is used
-     * for debugging / information.
+     * early outs. This function is used for debugging / information.
      */
-    void APKMetaDataToLog(const char* file, const com::android::fastdeploy::APKMetaData& metadata);
+    void APKMetaDataToLog(const APKMetaData& metadata);
     /**
      * Helper function to log APKEntry.
      */
-    void APKEntryToLog(const com::android::fastdeploy::APKEntry& entry);
+    void APKEntryToLog(const APKEntry& entry);
+
+    /**
+     * Given the |localApkMetadata| metadata, and the |deviceApkMetadata| from an installed APK this
+     * function writes a patch to the given |output|.
+     */
+    bool CreatePatch(APKMetaData localApkMetadata, APKMetaData deviceApkMetadata,
+                     android::base::borrowed_fd output);
 
     /**
      * Helper function to report savings by fastdeploy. This function prints out savings even with
@@ -92,11 +101,11 @@ class DeployPatchGenerator {
      * highest.
      */
     void GeneratePatch(const std::vector<SimpleEntry>& entriesToUseOnDevice,
-                       const char* localApkPath, android::base::borrowed_fd output);
+                       const std::string& localApkPath, const std::string& deviceApkPath,
+                       android::base::borrowed_fd output);
 
   protected:
-    uint64_t BuildIdenticalEntries(
-            std::vector<SimpleEntry>& outIdenticalEntries,
-            const com::android::fastdeploy::APKMetaData& localApkMetadata,
-            const com::android::fastdeploy::APKMetaData& deviceApkMetadataPath);
+    uint64_t BuildIdenticalEntries(std::vector<SimpleEntry>& outIdenticalEntries,
+                                   const APKMetaData& localApkMetadata,
+                                   const APKMetaData& deviceApkMetadata);
 };

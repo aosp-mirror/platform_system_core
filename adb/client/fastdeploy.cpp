@@ -30,110 +30,112 @@
 #include "deployagent.inc"        // Generated include via build rule.
 #include "deployagentscript.inc"  // Generated include via build rule.
 #include "fastdeploy/deploypatchgenerator/deploy_patch_generator.h"
+#include "fastdeploy/deploypatchgenerator/patch_utils.h"
+#include "fastdeploy/proto/ApkEntry.pb.h"
 #include "fastdeploycallbacks.h"
 #include "sysdeps.h"
 
 #include "adb_utils.h"
 
-static constexpr long kRequiredAgentVersion = 0x00000002;
+static constexpr long kRequiredAgentVersion = 0x00000003;
 
-static constexpr const char* kDeviceAgentPath = "/data/local/tmp/";
+static constexpr int kPackageMissing = 3;
+static constexpr int kInvalidAgentVersion = 4;
+
 static constexpr const char* kDeviceAgentFile = "/data/local/tmp/deployagent.jar";
 static constexpr const char* kDeviceAgentScript = "/data/local/tmp/deployagent";
 
-static bool g_use_localagent = false;
+static constexpr bool g_verbose_timings = false;
+static FastDeploy_AgentUpdateStrategy g_agent_update_strategy =
+        FastDeploy_AgentUpdateDifferentVersion;
 
-long get_agent_version() {
-    std::vector<char> versionOutputBuffer;
-    std::vector<char> versionErrorBuffer;
+using APKMetaData = com::android::fastdeploy::APKMetaData;
 
-    int statusCode = capture_shell_command("/data/local/tmp/deployagent version",
-                                           &versionOutputBuffer, &versionErrorBuffer);
-    long version = -1;
+namespace {
 
-    if (statusCode == 0 && versionOutputBuffer.size() > 0) {
-        version = strtol((char*)versionOutputBuffer.data(), NULL, 16);
+struct TimeReporter {
+    TimeReporter(const char* label) : label_(label) {}
+    ~TimeReporter() {
+        if (g_verbose_timings) {
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - start_);
+            fprintf(stderr, "%s finished in %lldms\n", label_,
+                    static_cast<long long>(duration.count()));
+        }
     }
 
-    return version;
-}
+  private:
+    const char* label_;
+    std::chrono::steady_clock::time_point start_ = std::chrono::steady_clock::now();
+};
+#define REPORT_FUNC_TIME() TimeReporter reporter(__func__)
+
+struct FileDeleter {
+    FileDeleter(const char* path) : path_(path) {}
+    ~FileDeleter() { adb_unlink(path_); }
+
+  private:
+    const char* const path_;
+};
+
+}  // namespace
 
 int get_device_api_level() {
-    std::vector<char> sdkVersionOutputBuffer;
-    std::vector<char> sdkVersionErrorBuffer;
+    REPORT_FUNC_TIME();
+    std::vector<char> sdk_version_output_buffer;
+    std::vector<char> sdk_version_error_buffer;
     int api_level = -1;
 
-    int statusCode = capture_shell_command("getprop ro.build.version.sdk", &sdkVersionOutputBuffer,
-                                           &sdkVersionErrorBuffer);
-    if (statusCode == 0 && sdkVersionOutputBuffer.size() > 0) {
-        api_level = strtol((char*)sdkVersionOutputBuffer.data(), NULL, 10);
+    int statusCode = capture_shell_command("getprop ro.build.version.sdk",
+                                           &sdk_version_output_buffer, &sdk_version_error_buffer);
+    if (statusCode == 0 && sdk_version_output_buffer.size() > 0) {
+        api_level = strtol((char*)sdk_version_output_buffer.data(), NULL, 10);
     }
 
     return api_level;
 }
 
-void fastdeploy_set_local_agent(bool use_localagent) {
-    g_use_localagent = use_localagent;
+void fastdeploy_set_agent_update_strategy(FastDeploy_AgentUpdateStrategy agent_update_strategy) {
+    g_agent_update_strategy = agent_update_strategy;
 }
 
-static bool deploy_agent(bool checkTimeStamps) {
+static void push_to_device(const void* data, size_t byte_count, const char* dst, bool sync) {
     std::vector<const char*> srcs;
-    // TODO: Deploy agent from bin2c directly instead of writing to disk first.
-    TemporaryFile tempAgent;
-    android::base::WriteFully(tempAgent.fd, kDeployAgent, sizeof(kDeployAgent));
-    srcs.push_back(tempAgent.path);
-    if (!do_sync_push(srcs, kDeviceAgentFile, checkTimeStamps)) {
+    {
+        TemporaryFile temp;
+        android::base::WriteFully(temp.fd, data, byte_count);
+        srcs.push_back(temp.path);
+
+        // On Windows, the file needs to be flushed before pushing to device.
+        // closing the file flushes its content, but we still need to remove it after push.
+        // FileDeleter does exactly that.
+        temp.DoNotRemove();
+    }
+    FileDeleter temp_deleter(srcs.back());
+
+    if (!do_sync_push(srcs, dst, sync)) {
         error_exit("Failed to push fastdeploy agent to device.");
     }
-    srcs.clear();
-    // TODO: Deploy agent from bin2c directly instead of writing to disk first.
-    TemporaryFile tempAgentScript;
-    android::base::WriteFully(tempAgentScript.fd, kDeployAgentScript, sizeof(kDeployAgentScript));
-    srcs.push_back(tempAgentScript.path);
-    if (!do_sync_push(srcs, kDeviceAgentScript, checkTimeStamps)) {
-        error_exit("Failed to push fastdeploy agent script to device.");
-    }
-    srcs.clear();
+}
+
+static bool deploy_agent(bool check_time_stamps) {
+    REPORT_FUNC_TIME();
+
+    push_to_device(kDeployAgent, sizeof(kDeployAgent), kDeviceAgentFile, check_time_stamps);
+    push_to_device(kDeployAgentScript, sizeof(kDeployAgentScript), kDeviceAgentScript,
+                   check_time_stamps);
+
     // on windows the shell script might have lost execute permission
     // so need to set this explicitly
     const char* kChmodCommandPattern = "chmod 777 %s";
-    std::string chmodCommand =
+    std::string chmod_command =
             android::base::StringPrintf(kChmodCommandPattern, kDeviceAgentScript);
-    int ret = send_shell_command(chmodCommand);
+    int ret = send_shell_command(chmod_command);
     if (ret != 0) {
-        error_exit("Error executing %s returncode: %d", chmodCommand.c_str(), ret);
+        error_exit("Error executing %s returncode: %d", chmod_command.c_str(), ret);
     }
 
     return true;
-}
-
-void update_agent(FastDeploy_AgentUpdateStrategy agentUpdateStrategy) {
-    long agent_version = get_agent_version();
-    switch (agentUpdateStrategy) {
-        case FastDeploy_AgentUpdateAlways:
-            deploy_agent(false);
-            break;
-        case FastDeploy_AgentUpdateNewerTimeStamp:
-            deploy_agent(true);
-            break;
-        case FastDeploy_AgentUpdateDifferentVersion:
-            if (agent_version != kRequiredAgentVersion) {
-                if (agent_version < 0) {
-                    printf("Could not detect agent on device, deploying\n");
-                } else {
-                    printf("Device agent version is (%ld), (%ld) is required, re-deploying\n",
-                           agent_version, kRequiredAgentVersion);
-                }
-                deploy_agent(false);
-            }
-            break;
-    }
-
-    agent_version = get_agent_version();
-    if (agent_version != kRequiredAgentVersion) {
-        error_exit("After update agent version remains incorrect! Expected %ld but version is %ld",
-                   kRequiredAgentVersion, agent_version);
-    }
 }
 
 static std::string get_string_from_utf16(const char16_t* input, int input_len) {
@@ -147,29 +149,29 @@ static std::string get_string_from_utf16(const char16_t* input, int input_len) {
     return utf8;
 }
 
-static std::string get_packagename_from_apk(const char* apkPath) {
+static std::string get_package_name_from_apk(const char* apk_path) {
 #undef open
-    std::unique_ptr<android::ZipFileRO> zipFile(android::ZipFileRO::open(apkPath));
+    std::unique_ptr<android::ZipFileRO> zip_file((android::ZipFileRO::open)(apk_path));
 #define open ___xxx_unix_open
-    if (zipFile == nullptr) {
-        perror_exit("Could not open %s", apkPath);
+    if (zip_file == nullptr) {
+        perror_exit("Could not open %s", apk_path);
     }
-    android::ZipEntryRO entry = zipFile->findEntryByName("AndroidManifest.xml");
+    android::ZipEntryRO entry = zip_file->findEntryByName("AndroidManifest.xml");
     if (entry == nullptr) {
-        error_exit("Could not find AndroidManifest.xml inside %s", apkPath);
+        error_exit("Could not find AndroidManifest.xml inside %s", apk_path);
     }
     uint32_t manifest_len = 0;
-    if (!zipFile->getEntryInfo(entry, NULL, &manifest_len, NULL, NULL, NULL, NULL)) {
-        error_exit("Could not read AndroidManifest.xml inside %s", apkPath);
+    if (!zip_file->getEntryInfo(entry, NULL, &manifest_len, NULL, NULL, NULL, NULL)) {
+        error_exit("Could not read AndroidManifest.xml inside %s", apk_path);
     }
     std::vector<char> manifest_data(manifest_len);
-    if (!zipFile->uncompressEntry(entry, manifest_data.data(), manifest_len)) {
-        error_exit("Could not uncompress AndroidManifest.xml inside %s", apkPath);
+    if (!zip_file->uncompressEntry(entry, manifest_data.data(), manifest_len)) {
+        error_exit("Could not uncompress AndroidManifest.xml inside %s", apk_path);
     }
     android::ResXMLTree tree;
     android::status_t setto_status = tree.setTo(manifest_data.data(), manifest_len, true);
     if (setto_status != android::OK) {
-        error_exit("Could not parse AndroidManifest.xml inside %s", apkPath);
+        error_exit("Could not parse AndroidManifest.xml inside %s", apk_path);
     }
     android::ResXMLParser::event_code_t code;
     while ((code = tree.next()) != android::ResXMLParser::BAD_DOCUMENT &&
@@ -210,80 +212,97 @@ static std::string get_packagename_from_apk(const char* apkPath) {
                 break;
         }
     }
-    error_exit("Could not find package name tag in AndroidManifest.xml inside %s", apkPath);
+    error_exit("Could not find package name tag in AndroidManifest.xml inside %s", apk_path);
 }
 
-void extract_metadata(const char* apkPath, FILE* outputFp) {
-    std::string packageName = get_packagename_from_apk(apkPath);
-    const char* kAgentExtractCommandPattern = "/data/local/tmp/deployagent extract %s";
-    std::string extractCommand =
-            android::base::StringPrintf(kAgentExtractCommandPattern, packageName.c_str());
+static long parse_agent_version(const std::vector<char>& version_buffer) {
+    long version = -1;
+    if (!version_buffer.empty()) {
+        version = strtol((char*)version_buffer.data(), NULL, 16);
+    }
+    return version;
+}
 
-    std::vector<char> extractErrorBuffer;
-    DeployAgentFileCallback cb(outputFp, &extractErrorBuffer);
-    int returnCode = send_shell_command(extractCommand, false, &cb);
+static void update_agent_if_necessary() {
+    switch (g_agent_update_strategy) {
+        case FastDeploy_AgentUpdateAlways:
+            deploy_agent(/*check_time_stamps=*/false);
+            break;
+        case FastDeploy_AgentUpdateNewerTimeStamp:
+            deploy_agent(/*check_time_stamps=*/true);
+            break;
+        default:
+            break;
+    }
+}
+
+std::optional<APKMetaData> extract_metadata(const char* apk_path) {
+    // Update agent if there is a command line argument forcing to do so.
+    update_agent_if_necessary();
+
+    REPORT_FUNC_TIME();
+
+    std::string package_name = get_package_name_from_apk(apk_path);
+
+    // Dump apk command checks the required vs current agent version and if they match then returns
+    // the APK dump for package. Doing this in a single call saves round-trip and agent launch time.
+    constexpr const char* kAgentDumpCommandPattern = "/data/local/tmp/deployagent dump %ld %s";
+    std::string dump_command = android::base::StringPrintf(
+            kAgentDumpCommandPattern, kRequiredAgentVersion, package_name.c_str());
+
+    std::vector<char> dump_out_buffer;
+    std::vector<char> dump_error_buffer;
+    int returnCode =
+            capture_shell_command(dump_command.c_str(), &dump_out_buffer, &dump_error_buffer);
+    if (returnCode >= kInvalidAgentVersion) {
+        // Agent has wrong version or missing.
+        long agent_version = parse_agent_version(dump_out_buffer);
+        if (agent_version < 0) {
+            printf("Could not detect agent on device, deploying\n");
+        } else {
+            printf("Device agent version is (%ld), (%ld) is required, re-deploying\n",
+                   agent_version, kRequiredAgentVersion);
+        }
+        deploy_agent(/*check_time_stamps=*/false);
+
+        // Retry with new agent.
+        dump_out_buffer.clear();
+        dump_error_buffer.clear();
+        returnCode =
+                capture_shell_command(dump_command.c_str(), &dump_out_buffer, &dump_error_buffer);
+    }
     if (returnCode != 0) {
-        fprintf(stderr, "Executing %s returned %d\n", extractCommand.c_str(), returnCode);
-        fprintf(stderr, "%*s\n", int(extractErrorBuffer.size()), extractErrorBuffer.data());
+        if (returnCode == kInvalidAgentVersion) {
+            long agent_version = parse_agent_version(dump_out_buffer);
+            error_exit(
+                    "After update agent version remains incorrect! Expected %ld but version is %ld",
+                    kRequiredAgentVersion, agent_version);
+        }
+        if (returnCode == kPackageMissing) {
+            fprintf(stderr, "Package %s not found, falling back to install\n",
+                    package_name.c_str());
+            return {};
+        }
+        fprintf(stderr, "Executing %s returned %d\n", dump_command.c_str(), returnCode);
+        fprintf(stderr, "%*s\n", int(dump_error_buffer.size()), dump_error_buffer.data());
         error_exit("Aborting");
     }
+
+    com::android::fastdeploy::APKDump dump;
+    if (!dump.ParseFromArray(dump_out_buffer.data(), dump_out_buffer.size())) {
+        fprintf(stderr, "Can't parse output of %s\n", dump_command.c_str());
+        error_exit("Aborting");
+    }
+
+    return PatchUtils::GetDeviceAPKMetaData(dump);
 }
 
-void create_patch(const char* apkPath, const char* metadataPath, const char* patchPath) {
-    DeployPatchGenerator generator(false);
-    unique_fd patchFd(adb_open(patchPath, O_WRONLY | O_CREAT | O_CLOEXEC));
-    if (patchFd < 0) {
-        perror_exit("adb: failed to create %s", patchPath);
-    }
-    bool success = generator.CreatePatch(apkPath, metadataPath, patchFd);
-    if (!success) {
-        error_exit("Failed to create patch for %s", apkPath);
-    }
-}
+unique_fd install_patch(int argc, const char** argv) {
+    REPORT_FUNC_TIME();
+    constexpr char kAgentApplyServicePattern[] = "shell:/data/local/tmp/deployagent apply - -pm %s";
 
-std::string get_patch_path(const char* apkPath) {
-    std::string packageName = get_packagename_from_apk(apkPath);
-    std::string patchDevicePath =
-            android::base::StringPrintf("%s%s.patch", kDeviceAgentPath, packageName.c_str());
-    return patchDevicePath;
-}
-
-void apply_patch_on_device(const char* apkPath, const char* patchPath, const char* outputPath) {
-    const std::string kAgentApplyCommandPattern = "/data/local/tmp/deployagent apply %s %s -o %s";
-    std::string packageName = get_packagename_from_apk(apkPath);
-    std::string patchDevicePath = get_patch_path(apkPath);
-
-    std::vector<const char*> srcs = {patchPath};
-    bool push_ok = do_sync_push(srcs, patchDevicePath.c_str(), false);
-    if (!push_ok) {
-        error_exit("Error pushing %s to %s returned", patchPath, patchDevicePath.c_str());
-    }
-
-    std::string applyPatchCommand =
-            android::base::StringPrintf(kAgentApplyCommandPattern.c_str(), packageName.c_str(),
-                                        patchDevicePath.c_str(), outputPath);
-
-    int returnCode = send_shell_command(applyPatchCommand);
-    if (returnCode != 0) {
-        error_exit("Executing %s returned %d", applyPatchCommand.c_str(), returnCode);
-    }
-}
-
-void install_patch(const char* apkPath, const char* patchPath, int argc, const char** argv) {
-    const std::string kAgentApplyCommandPattern = "/data/local/tmp/deployagent apply %s %s -pm %s";
-    std::string packageName = get_packagename_from_apk(apkPath);
-
-    std::string patchDevicePath =
-            android::base::StringPrintf("%s%s.patch", kDeviceAgentPath, packageName.c_str());
-
-    std::vector<const char*> srcs{patchPath};
-    bool push_ok = do_sync_push(srcs, patchDevicePath.c_str(), false);
-    if (!push_ok) {
-        error_exit("Error pushing %s to %s returned", patchPath, patchDevicePath.c_str());
-    }
-
-    std::vector<unsigned char> applyOutputBuffer;
-    std::vector<unsigned char> applyErrorBuffer;
+    std::vector<unsigned char> apply_output_buffer;
+    std::vector<unsigned char> apply_error_buffer;
     std::string argsString;
 
     bool rSwitchPresent = false;
@@ -298,17 +317,42 @@ void install_patch(const char* apkPath, const char* patchPath, int argc, const c
         argsString.append("-r");
     }
 
-    std::string applyPatchCommand =
-            android::base::StringPrintf(kAgentApplyCommandPattern.c_str(), packageName.c_str(),
-                                        patchDevicePath.c_str(), argsString.c_str());
-    int returnCode = send_shell_command(applyPatchCommand);
-    if (returnCode != 0) {
-        error_exit("Executing %s returned %d", applyPatchCommand.c_str(), returnCode);
+    std::string error;
+    std::string apply_patch_service_string =
+            android::base::StringPrintf(kAgentApplyServicePattern, argsString.c_str());
+    unique_fd fd{adb_connect(apply_patch_service_string, &error)};
+    if (fd < 0) {
+        error_exit("Executing %s returned %s", apply_patch_service_string.c_str(), error.c_str());
+    }
+    return fd;
+}
+
+unique_fd apply_patch_on_device(const char* output_path) {
+    REPORT_FUNC_TIME();
+    constexpr char kAgentApplyServicePattern[] = "shell:/data/local/tmp/deployagent apply - -o %s";
+
+    std::string error;
+    std::string apply_patch_service_string =
+            android::base::StringPrintf(kAgentApplyServicePattern, output_path);
+    unique_fd fd{adb_connect(apply_patch_service_string, &error)};
+    if (fd < 0) {
+        error_exit("Executing %s returned %s", apply_patch_service_string.c_str(), error.c_str());
+    }
+    return fd;
+}
+
+static void create_patch(const char* apk_path, APKMetaData metadata, borrowed_fd patch_fd) {
+    REPORT_FUNC_TIME();
+    DeployPatchGenerator generator(/*is_verbose=*/false);
+    bool success = generator.CreatePatch(apk_path, std::move(metadata), patch_fd);
+    if (!success) {
+        error_exit("Failed to create patch for %s", apk_path);
     }
 }
 
-bool find_package(const char* apkPath) {
-    const std::string findCommand =
-            "/data/local/tmp/deployagent find " + get_packagename_from_apk(apkPath);
-    return !send_shell_command(findCommand);
+int stream_patch(const char* apk_path, APKMetaData metadata, unique_fd patch_fd) {
+    create_patch(apk_path, std::move(metadata), patch_fd);
+
+    REPORT_FUNC_TIME();
+    return read_and_dump(patch_fd.get());
 }
