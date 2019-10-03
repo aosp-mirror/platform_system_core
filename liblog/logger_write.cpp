@@ -34,8 +34,18 @@
 
 #define LOG_BUF_SIZE 1024
 
-android_log_transport_write* android_log_write = nullptr;
+#if (FAKE_LOG_DEVICE == 0)
+extern struct android_log_transport_write logdLoggerWrite;
+extern struct android_log_transport_write pmsgLoggerWrite;
+
+android_log_transport_write* android_log_write = &logdLoggerWrite;
+android_log_transport_write* android_log_persist_write = &pmsgLoggerWrite;
+#else
+extern android_log_transport_write fakeLoggerWrite;
+
+android_log_transport_write* android_log_write = &fakeLoggerWrite;
 android_log_transport_write* android_log_persist_write = nullptr;
+#endif
 
 static int __write_to_log_init(log_id_t, struct iovec* vec, size_t nr);
 static int (*write_to_log)(log_id_t, struct iovec* vec, size_t nr) = __write_to_log_init;
@@ -132,9 +142,6 @@ void __android_log_close() {
     android_log_persist_write->close();
   }
 
-  android_log_write = nullptr;
-  android_log_persist_write = nullptr;
-
 #if defined(__ANDROID__)
   /*
    * Additional risk here somewhat mitigated by immediately unlock flushing
@@ -179,26 +186,11 @@ static bool transport_initialize(android_log_transport_write* transport) {
 
 /* log_init_lock assumed */
 static int __write_to_log_initialize() {
-#if (FAKE_LOG_DEVICE == 0)
-  extern struct android_log_transport_write logdLoggerWrite;
-  extern struct android_log_transport_write pmsgLoggerWrite;
-
-  android_log_write = &logdLoggerWrite;
-  android_log_persist_write = &pmsgLoggerWrite;
-#else
-  extern struct android_log_transport_write fakeLoggerWrite;
-
-  android_log_write = &fakeLoggerWrite;
-#endif
-
   if (!transport_initialize(android_log_write)) {
-    android_log_write = nullptr;
     return -ENODEV;
   }
 
-  if (!transport_initialize(android_log_persist_write)) {
-    android_log_persist_write = nullptr;
-  }
+  transport_initialize(android_log_persist_write);
 
   return 1;
 }
