@@ -601,6 +601,10 @@ static __inline__ int adb_is_absolute_host_path(const char* path) {
     return path[0] == '/';
 }
 
+static __inline__ int adb_get_os_handle(borrowed_fd fd) {
+    return fd.get();
+}
+
 #endif /* !_WIN32 */
 
 static inline void disable_tcp_nagle(borrowed_fd fd) {
