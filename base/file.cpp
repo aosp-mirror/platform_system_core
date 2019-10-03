@@ -53,34 +53,47 @@ namespace {
 
 #ifdef _WIN32
 static int mkstemp(char* name_template, size_t size_in_chars) {
-  auto path = name_template;
-  if (_mktemp_s(path, size_in_chars) != 0) {
+  std::wstring path;
+  CHECK(android::base::UTF8ToWide(name_template, &path))
+      << "path can't be converted to wchar: " << name_template;
+  if (_wmktemp_s(path.data(), path.size() + 1) != 0) {
     return -1;
   }
 
-  std::wstring path_wide;
-  CHECK(android::base::UTF8ToWide(path, &path_wide))
-      << "path can't be converted to wchar: " << path;
-
   // Use open() to match the close() that TemporaryFile's destructor does.
   // Use O_BINARY to match base file APIs.
-  return _wopen(path_wide.c_str(), O_CREAT | O_EXCL | O_RDWR | O_BINARY, S_IRUSR | S_IWUSR);
+  int fd = _wopen(path.c_str(), O_CREAT | O_EXCL | O_RDWR | O_BINARY, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    return -1;
+  }
+
+  std::string path_utf8;
+  CHECK(android::base::WideToUTF8(path, &path_utf8)) << "path can't be converted to utf8";
+  CHECK(strcpy_s(name_template, size_in_chars, path_utf8.c_str()) == 0)
+      << "utf8 path can't be assigned back to name_template";
+
+  return fd;
 }
 
 static char* mkdtemp(char* name_template, size_t size_in_chars) {
-  auto path = name_template;
-  if (_mktemp_s(path, size_in_chars) != 0) {
+  std::wstring path;
+  CHECK(android::base::UTF8ToWide(name_template, &path))
+      << "path can't be converted to wchar: " << name_template;
+
+  if (_wmktemp_s(path.data(), path.size() + 1) != 0) {
     return nullptr;
   }
 
-  std::wstring path_wide;
-  CHECK(android::base::UTF8ToWide(path, &path_wide))
-      << "path can't be converted to wchar: " << path;
-
-  if (_wmkdir(path_wide.c_str()) != 0) {
+  if (_wmkdir(path.c_str()) != 0) {
     return nullptr;
   }
-  return path;
+
+  std::string path_utf8;
+  CHECK(android::base::WideToUTF8(path, &path_utf8)) << "path can't be converted to utf8";
+  CHECK(strcpy_s(name_template, size_in_chars, path_utf8.c_str()) == 0)
+      << "utf8 path can't be assigned back to name_template";
+
+  return name_template;
 }
 #endif
 
