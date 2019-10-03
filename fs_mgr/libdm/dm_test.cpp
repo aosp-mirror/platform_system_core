@@ -114,6 +114,7 @@ TEST(libdm, DmLinear) {
     ASSERT_TRUE(table.Emplace<DmTargetLinear>(0, 1, loop_a.device(), 0));
     ASSERT_TRUE(table.Emplace<DmTargetLinear>(1, 1, loop_b.device(), 0));
     ASSERT_TRUE(table.valid());
+    ASSERT_EQ(2u, table.num_sectors());
 
     TempDevice dev("libdm-test-dm-linear", table);
     ASSERT_TRUE(dev.valid());
@@ -176,6 +177,7 @@ TEST(libdm, DmSuspendResume) {
     DmTable table;
     ASSERT_TRUE(table.Emplace<DmTargetLinear>(0, 1, loop_a.device(), 0));
     ASSERT_TRUE(table.valid());
+    ASSERT_EQ(1u, table.num_sectors());
 
     TempDevice dev("libdm-test-dm-suspend-resume", table);
     ASSERT_TRUE(dev.valid());
@@ -292,6 +294,7 @@ void SnapshotTestHarness::SetupImpl() {
     ASSERT_TRUE(origin_table.AddTarget(make_unique<DmTargetSnapshotOrigin>(
             0, kBaseDeviceSize / kSectorSize, base_loop_->device())));
     ASSERT_TRUE(origin_table.valid());
+    ASSERT_EQ(kBaseDeviceSize / kSectorSize, origin_table.num_sectors());
 
     origin_dev_ = std::make_unique<TempDevice>("libdm-test-dm-snapshot-origin", origin_table);
     ASSERT_TRUE(origin_dev_->valid());
@@ -303,6 +306,7 @@ void SnapshotTestHarness::SetupImpl() {
             0, kBaseDeviceSize / kSectorSize, base_loop_->device(), cow_loop_->device(),
             SnapshotStorageMode::Persistent, 8)));
     ASSERT_TRUE(snap_table.valid());
+    ASSERT_EQ(kBaseDeviceSize / kSectorSize, snap_table.num_sectors());
 
     snapshot_dev_ = std::make_unique<TempDevice>("libdm-test-dm-snapshot", snap_table);
     ASSERT_TRUE(snapshot_dev_->valid());
@@ -322,6 +326,7 @@ void SnapshotTestHarness::MergeImpl() {
             make_unique<DmTargetSnapshot>(0, kBaseDeviceSize / kSectorSize, base_loop_->device(),
                                           cow_loop_->device(), SnapshotStorageMode::Merge, 8)));
     ASSERT_TRUE(merge_table.valid());
+    ASSERT_EQ(kBaseDeviceSize / kSectorSize, merge_table.num_sectors());
 
     DeviceMapper& dm = DeviceMapper::Instance();
     ASSERT_TRUE(dm.LoadTableAndActivate("libdm-test-dm-snapshot", merge_table));
