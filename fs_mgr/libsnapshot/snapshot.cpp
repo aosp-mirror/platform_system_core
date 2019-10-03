@@ -1978,7 +1978,7 @@ bool SnapshotManager::InitializeUpdateSnapshots(
         }
 
         auto it = all_snapshot_status.find(target_partition->name());
-        CHECK(it != all_snapshot_status.end()) << target_partition->name();
+        if (it == all_snapshot_status.end()) continue;
         cow_params.partition_name = target_partition->name();
         std::string cow_name;
         if (!MapCowDevices(lock, cow_params, it->second, &created_devices_for_cow, &cow_name)) {
