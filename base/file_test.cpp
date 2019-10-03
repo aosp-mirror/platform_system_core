@@ -30,7 +30,7 @@
 #if !defined(_WIN32)
 #include <pwd.h>
 #else
-#include <processenv.h>
+#include <windows.h>
 #endif
 
 #include "android-base/logging.h"  // and must be after windows.h for ERROR
@@ -99,6 +99,11 @@ TEST(file, NonUnicodeCharsWindows) {
   std::wstring old_tmp;
   old_tmp.resize(kMaxEnvVariableValueSize);
   old_tmp.resize(GetEnvironmentVariableW(L"TMP", old_tmp.data(), old_tmp.size()));
+  if (old_tmp.empty()) {
+    // Can't continue with empty TMP folder.
+    return;
+  }
+
   std::wstring new_tmp = old_tmp;
   if (new_tmp.back() != L'\\') {
     new_tmp.push_back(L'\\');
@@ -156,14 +161,18 @@ TEST(file, NonUnicodeCharsWindows) {
 TEST(file, RootDirectoryWindows) {
   constexpr auto kMaxEnvVariableValueSize = 32767;
   std::wstring old_tmp;
+  bool tmp_is_empty = false;
   old_tmp.resize(kMaxEnvVariableValueSize);
   old_tmp.resize(GetEnvironmentVariableW(L"TMP", old_tmp.data(), old_tmp.size()));
+  if (old_tmp.empty()) {
+    tmp_is_empty = (GetLastError() == ERROR_ENVVAR_NOT_FOUND);
+  }
   SetEnvironmentVariableW(L"TMP", L"C:");
 
   TemporaryFile tf;
   ASSERT_NE(tf.fd, -1) << tf.path;
 
-  SetEnvironmentVariableW(L"TMP", old_tmp.c_str());
+  SetEnvironmentVariableW(L"TMP", tmp_is_empty ? nullptr : old_tmp.c_str());
 }
 #endif
 
