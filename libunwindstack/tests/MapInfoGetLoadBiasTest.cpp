@@ -141,6 +141,7 @@ static void InitElfData(MemoryFake* memory, uint64_t offset) {
   phdr.p_type = PT_NULL;
   memory->SetMemory(offset + 0x5000, &phdr, sizeof(phdr));
   phdr.p_type = PT_LOAD;
+  phdr.p_flags = PF_X;
   phdr.p_offset = 0;
   phdr.p_vaddr = 0xe000;
   memory->SetMemory(offset + 0x5000 + sizeof(phdr), &phdr, sizeof(phdr));

@@ -187,8 +187,13 @@ uint64_t ElfInterface::GetLoadBias(Memory* memory) {
     if (!memory->ReadFully(offset, &phdr, sizeof(phdr))) {
       return 0;
     }
-    if (phdr.p_type == PT_LOAD && phdr.p_offset == 0) {
-      return phdr.p_vaddr;
+
+    // Find the first executable load when looking for the load bias.
+    if (phdr.p_type == PT_LOAD && (phdr.p_flags & PF_X)) {
+      if (phdr.p_vaddr > phdr.p_offset) {
+        return phdr.p_vaddr - phdr.p_offset;
+      }
+      break;
     }
   }
   return 0;
