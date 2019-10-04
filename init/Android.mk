@@ -113,6 +113,7 @@ LOCAL_STATIC_LIBRARIES := \
     libbacktrace \
     libmodprobe \
     libext2_uuid \
+    libprotobuf-cpp-lite \
     libsnapshot_nobinder \
 
 LOCAL_SANITIZE := signed-integer-overflow

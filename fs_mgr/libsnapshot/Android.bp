@@ -49,11 +49,17 @@ cc_defaults {
         "libfiemap_headers",
     ],
     export_include_dirs: ["include"],
+    proto: {
+        type: "lite",
+        export_proto_headers: true,
+        canonical_path_from_root: false,
+    },
 }
 
 filegroup {
     name: "libsnapshot_sources",
     srcs: [
+        "android/snapshot/snapshot.proto",
         "snapshot.cpp",
         "snapshot_metadata_updater.cpp",
         "partition_cow_creator.cpp",
@@ -132,9 +138,10 @@ cc_binary {
         "libbinder",
         "libext4_utils",
         "libfs_mgr",
-        "libutils",
         "liblog",
         "liblp",
+        "libprotobuf-cpp-lite",
+        "libutils",
     ],
     init_rc: [
         "snapshotctl.rc",

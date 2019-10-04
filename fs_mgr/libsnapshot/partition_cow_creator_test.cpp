@@ -51,8 +51,8 @@ TEST_F(PartitionCowCreatorTest, IntersectSelf) {
                                 .current_suffix = "_a"};
     auto ret = creator.Run();
     ASSERT_TRUE(ret.has_value());
-    ASSERT_EQ(40 * 1024, ret->snapshot_status.device_size);
-    ASSERT_EQ(40 * 1024, ret->snapshot_status.snapshot_size);
+    ASSERT_EQ(40 * 1024, ret->snapshot_status.device_size());
+    ASSERT_EQ(40 * 1024, ret->snapshot_status.snapshot_size());
 }
 
 TEST_F(PartitionCowCreatorTest, Holes) {

@@ -20,8 +20,9 @@
 #include <string>
 
 #include <liblp/builder.h>
+#include <update_engine/update_metadata.pb.h>
 
-#include <libsnapshot/snapshot.h>
+#include <android/snapshot/snapshot.pb.h>
 
 namespace android {
 namespace snapshot {
@@ -51,7 +52,7 @@ struct PartitionCowCreator {
     const RepeatedPtrField<InstallOperation>* operations = nullptr;
 
     struct Return {
-        SnapshotManager::SnapshotStatus snapshot_status;
+        SnapshotStatus snapshot_status;
         std::vector<Interval> cow_partition_usable_regions;
     };
 
