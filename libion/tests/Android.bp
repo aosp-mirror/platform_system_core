@@ -29,5 +29,6 @@ cc_test {
         "invalid_values_test.cpp",
         "ion_test_fixture.cpp",
         "map_test.cpp",
+        "modular_heap_check.cpp",
     ],
 }
