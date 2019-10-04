@@ -782,6 +782,7 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
     } else {
         fs_mgr_set_blk_ro(device_path, false);
     }
+    entry.fs_mgr_flags.check = true;
     auto save_errno = errno;
     auto mounted = fs_mgr_do_mount_one(entry) == 0;
     if (!mounted) {
