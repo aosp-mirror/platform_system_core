@@ -18,6 +18,7 @@
 
 #include <android-base/logging.h>
 
+#include <android/snapshot/snapshot.pb.h>
 #include "utility.h"
 
 using android::dm::kSectorSize;
@@ -84,13 +85,14 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
             << "logical_block_size is not power of 2";
 
     Return ret;
-    ret.snapshot_status.device_size = target_partition->size();
+    ret.snapshot_status.set_name(target_partition->name());
+    ret.snapshot_status.set_device_size(target_partition->size());
 
     // TODO(b/141889746): Optimize by using a smaller snapshot. Some ranges in target_partition
     // may be written directly.
-    ret.snapshot_status.snapshot_size = target_partition->size();
+    ret.snapshot_status.set_snapshot_size(target_partition->size());
 
-    auto cow_size = GetCowSize(ret.snapshot_status.snapshot_size);
+    auto cow_size = GetCowSize(ret.snapshot_status.snapshot_size());
     if (!cow_size.has_value()) return std::nullopt;
 
     // Compute regions that are free in both current and target metadata. These are the regions
@@ -106,18 +108,20 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     LOG(INFO) << "Remaining free space for COW: " << free_region_length << " bytes";
 
     // Compute the COW partition size.
-    ret.snapshot_status.cow_partition_size = std::min(*cow_size, free_region_length);
+    uint64_t cow_partition_size = std::min(*cow_size, free_region_length);
     // Round it down to the nearest logical block. Logical partitions must be a multiple
     // of logical blocks.
-    ret.snapshot_status.cow_partition_size &= ~(logical_block_size - 1);
+    cow_partition_size &= ~(logical_block_size - 1);
+    ret.snapshot_status.set_cow_partition_size(cow_partition_size);
     // Assign cow_partition_usable_regions to indicate what regions should the COW partition uses.
     ret.cow_partition_usable_regions = std::move(free_regions);
 
     // The rest of the COW space is allocated on ImageManager.
-    ret.snapshot_status.cow_file_size = (*cow_size) - ret.snapshot_status.cow_partition_size;
+    uint64_t cow_file_size = (*cow_size) - ret.snapshot_status.cow_partition_size();
     // Round it up to the nearest sector.
-    ret.snapshot_status.cow_file_size += kSectorSize - 1;
-    ret.snapshot_status.cow_file_size &= ~(kSectorSize - 1);
+    cow_file_size += kSectorSize - 1;
+    cow_file_size &= ~(kSectorSize - 1);
+    ret.snapshot_status.set_cow_file_size(cow_file_size);
 
     return ret;
 }
