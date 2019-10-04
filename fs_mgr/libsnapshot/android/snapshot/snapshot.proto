@@ -1,0 +1,87 @@
+// Copyright (C) 2019 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+package android.snapshot;
+
+option optimize_for = LITE_RUNTIME;
+
+// Next: 4
+enum SnapshotState {
+    // No snapshot is found.
+    NONE = 0;
+
+    // The snapshot has been created and possibly written to. Rollbacks are
+    // possible by destroying the snapshot.
+    CREATED = 1;
+
+    // Changes are being merged. No rollbacks are possible beyond this point.
+    MERGING = 2;
+
+    // Changes have been merged, Future reboots may map the base device
+    // directly.
+    MERGE_COMPLETED = 3;
+}
+
+// Next: 9
+message SnapshotStatus {
+    // Name of the snapshot. This is usually the name of the snapshotted
+    // logical partition; for example, "system_b".
+    string name = 1;
+
+    SnapshotState state = 2;
+
+    // Size of the full (base) device.
+    uint64 device_size = 3;
+
+    // Size of the snapshot. This is the sum of lengths of ranges in the base
+    // device that needs to be snapshotted during the update.
+    // This must be less than or equal to |device_size|.
+    // This value is 0 if no snapshot is needed for this device because
+    // no changes
+    uint64 snapshot_size = 4;
+
+    // Size of the "COW partition". A COW partition is a special logical
+    // partition represented in the super partition metadata. This partition and
+    // the "COW image" form the "COW device" that supports the snapshot device.
+    //
+    // When SnapshotManager creates a COW device, it first searches for unused
+    // blocks in the super partition, and use those before creating the COW
+    // image if the COW partition is not big enough.
+    //
+    // This value is 0 if no space in super is left for the COW partition.
+    // |cow_partition_size + cow_file_size| must not be zero if |snapshot_size|
+    // is non-zero.
+    uint64 cow_partition_size = 5;
+
+    // Size of the "COW file", or "COW image". A COW file / image is created
+    // when the "COW partition" is not big enough to store changes to the
+    // snapshot device.
+    //
+    // This value is 0 if |cow_partition_size| is big enough to hold all changes
+    // to the snapshot device.
+    uint64 cow_file_size = 6;
+
+    // Sectors allocated for the COW device. Recording this value right after
+    // the update and before the merge allows us to infer the progress of the
+    // merge process.
+    // This is non-zero when |state| == MERGING or MERGE_COMPLETED.
+    uint64 sectors_allocated = 7;
+
+    // Metadata sectors allocated for the COW device. Recording this value right
+    // before the update and before the merge allows us to infer the progress of
+    // the merge process.
+    // This is non-zero when |state| == MERGING or MERGE_COMPLETED.
+    uint64 metadata_sectors = 8;
+}
