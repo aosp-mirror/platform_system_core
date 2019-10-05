@@ -917,7 +917,3 @@ on property:ro.debuggable=1
 
 on init && property:ro.debuggable=1
     start console
-
-service flash_recovery /system/bin/install-recovery.sh
-    class main
-    oneshot
