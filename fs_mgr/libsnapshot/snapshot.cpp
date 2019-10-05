@@ -38,6 +38,7 @@
 #include <libfiemap/image_manager.h>
 #include <liblp/liblp.h>
 
+#include <android/snapshot/snapshot.pb.h>
 #include "partition_cow_creator.h"
 #include "snapshot_metadata_updater.h"
 #include "utility.h"
@@ -234,42 +235,50 @@ bool SnapshotManager::FinishedSnapshotWrites() {
     return WriteUpdateState(lock.get(), UpdateState::Unverified);
 }
 
-bool SnapshotManager::CreateSnapshot(LockedFile* lock, const std::string& name,
-                                     SnapshotManager::SnapshotStatus status) {
+bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
     CHECK(lock);
     CHECK(lock->lock_mode() == LOCK_EX);
+    CHECK(status);
+
+    if (status->name().empty()) {
+        LOG(ERROR) << "SnapshotStatus has no name.";
+        return false;
+    }
     // Sanity check these sizes. Like liblp, we guarantee the partition size
     // is respected, which means it has to be sector-aligned. (This guarantee
     // is useful for locating avb footers correctly). The COW file size, however,
     // can be arbitrarily larger than specified, so we can safely round it up.
-    if (status.device_size % kSectorSize != 0) {
-        LOG(ERROR) << "Snapshot " << name
-                   << " device size is not a multiple of the sector size: " << status.device_size;
+    if (status->device_size() % kSectorSize != 0) {
+        LOG(ERROR) << "Snapshot " << status->name()
+                   << " device size is not a multiple of the sector size: "
+                   << status->device_size();
         return false;
     }
-    if (status.snapshot_size % kSectorSize != 0) {
-        LOG(ERROR) << "Snapshot " << name << " snapshot size is not a multiple of the sector size: "
-                   << status.snapshot_size;
+    if (status->snapshot_size() % kSectorSize != 0) {
+        LOG(ERROR) << "Snapshot " << status->name()
+                   << " snapshot size is not a multiple of the sector size: "
+                   << status->snapshot_size();
         return false;
     }
-    if (status.cow_partition_size % kSectorSize != 0) {
-        LOG(ERROR) << "Snapshot " << name
+    if (status->cow_partition_size() % kSectorSize != 0) {
+        LOG(ERROR) << "Snapshot " << status->name()
                    << " cow partition size is not a multiple of the sector size: "
-                   << status.cow_partition_size;
+                   << status->cow_partition_size();
         return false;
     }
-    if (status.cow_file_size % kSectorSize != 0) {
-        LOG(ERROR) << "Snapshot " << name << " cow file size is not a multiple of the sector size: "
-                   << status.cow_partition_size;
+    if (status->cow_file_size() % kSectorSize != 0) {
+        LOG(ERROR) << "Snapshot " << status->name()
+                   << " cow file size is not a multiple of the sector size: "
+                   << status->cow_file_size();
         return false;
     }
 
-    status.state = SnapshotState::Created;
-    status.sectors_allocated = 0;
-    status.metadata_sectors = 0;
+    status->set_state(SnapshotState::CREATED);
+    status->set_sectors_allocated(0);
+    status->set_metadata_sectors(0);
 
-    if (!WriteSnapshotStatus(lock, name, status)) {
-        PLOG(ERROR) << "Could not write snapshot status: " << name;
+    if (!WriteSnapshotStatus(lock, *status)) {
+        PLOG(ERROR) << "Could not write snapshot status: " << status->name();
         return false;
     }
     return true;
@@ -287,15 +296,15 @@ bool SnapshotManager::CreateCowImage(LockedFile* lock, const std::string& name) 
 
     // The COW file size should have been rounded up to the nearest sector in CreateSnapshot.
     // Sanity check this.
-    if (status.cow_file_size % kSectorSize != 0) {
+    if (status.cow_file_size() % kSectorSize != 0) {
         LOG(ERROR) << "Snapshot " << name << " COW file size is not a multiple of the sector size: "
-                   << status.cow_file_size;
+                   << status.cow_file_size();
         return false;
     }
 
     std::string cow_image_name = GetCowImageDeviceName(name);
     int cow_flags = IImageManager::CREATE_IMAGE_DEFAULT;
-    return images_->CreateBackingImage(cow_image_name, status.cow_file_size, cow_flags);
+    return images_->CreateBackingImage(cow_image_name, status.cow_file_size(), cow_flags);
 }
 
 bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
@@ -309,7 +318,7 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     if (!ReadSnapshotStatus(lock, name, &status)) {
         return false;
     }
-    if (status.state == SnapshotState::MergeCompleted) {
+    if (status.state() == SnapshotState::MERGE_COMPLETED) {
         LOG(ERROR) << "Should not create a snapshot device for " << name
                    << " after merging has completed.";
         return false;
@@ -328,24 +337,23 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
             PLOG(ERROR) << "Could not determine block device size: " << base_device;
             return false;
         }
-        if (status.device_size != dev_size) {
+        if (status.device_size() != dev_size) {
             LOG(ERROR) << "Block device size for " << base_device << " does not match"
-                       << "(expected " << status.device_size << ", got " << dev_size << ")";
+                       << "(expected " << status.device_size() << ", got " << dev_size << ")";
             return false;
         }
     }
-    if (status.device_size % kSectorSize != 0) {
-        LOG(ERROR) << "invalid blockdev size for " << base_device << ": " << status.device_size;
+    if (status.device_size() % kSectorSize != 0) {
+        LOG(ERROR) << "invalid blockdev size for " << base_device << ": " << status.device_size();
         return false;
     }
-    if (status.snapshot_size % kSectorSize != 0 || status.snapshot_size > status.device_size) {
-        LOG(ERROR) << "Invalid snapshot size for " << base_device << ": " << status.snapshot_size;
+    if (status.snapshot_size() % kSectorSize != 0 ||
+        status.snapshot_size() > status.device_size()) {
+        LOG(ERROR) << "Invalid snapshot size for " << base_device << ": " << status.snapshot_size();
         return false;
     }
-    uint64_t snapshot_sectors = status.snapshot_size / kSectorSize;
-    uint64_t linear_sectors = (status.device_size - status.snapshot_size) / kSectorSize;
-
-
+    uint64_t snapshot_sectors = status.snapshot_size() / kSectorSize;
+    uint64_t linear_sectors = (status.device_size() - status.snapshot_size()) / kSectorSize;
 
     auto& dm = DeviceMapper::Instance();
 
@@ -557,8 +565,9 @@ bool SnapshotManager::SwitchSnapshotToMerge(LockedFile* lock, const std::string&
     if (!ReadSnapshotStatus(lock, name, &status)) {
         return false;
     }
-    if (status.state != SnapshotState::Created) {
-        LOG(WARNING) << "Snapshot " << name << " has unexpected state: " << to_string(status.state);
+    if (status.state() != SnapshotState::CREATED) {
+        LOG(WARNING) << "Snapshot " << name
+                     << " has unexpected state: " << SnapshotState_Name(status.state());
     }
 
     // After this, we return true because we technically did switch to a merge
@@ -568,15 +577,15 @@ bool SnapshotManager::SwitchSnapshotToMerge(LockedFile* lock, const std::string&
         return false;
     }
 
-    status.state = SnapshotState::Merging;
+    status.set_state(SnapshotState::MERGING);
 
     DmTargetSnapshot::Status dm_status;
     if (!QuerySnapshotStatus(dm_name, nullptr, &dm_status)) {
         LOG(ERROR) << "Could not query merge status for snapshot: " << dm_name;
     }
-    status.sectors_allocated = dm_status.sectors_allocated;
-    status.metadata_sectors = dm_status.metadata_sectors;
-    if (!WriteSnapshotStatus(lock, name, status)) {
+    status.set_sectors_allocated(dm_status.sectors_allocated);
+    status.set_metadata_sectors(dm_status.metadata_sectors);
+    if (!WriteSnapshotStatus(lock, status)) {
         LOG(ERROR) << "Could not update status file for snapshot: " << name;
     }
     return true;
@@ -821,7 +830,7 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
         // rebooted after this check, the device will still be a snapshot-merge
         // target. If the have rebooted, the device will now be a linear target,
         // and we can try cleanup again.
-        if (snapshot_status.state == SnapshotState::MergeCompleted) {
+        if (snapshot_status.state() == SnapshotState::MERGE_COMPLETED) {
             // NB: It's okay if this fails now, we gave cleanup our best effort.
             OnSnapshotMergeComplete(lock, name, snapshot_status);
             return UpdateState::MergeCompleted;
@@ -849,7 +858,7 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
 
     // These two values are equal when merging is complete.
     if (status.sectors_allocated != status.metadata_sectors) {
-        if (snapshot_status.state == SnapshotState::MergeCompleted) {
+        if (snapshot_status.state() == SnapshotState::MERGE_COMPLETED) {
             LOG(ERROR) << "Snapshot " << name << " is merging after being marked merge-complete.";
             return UpdateState::MergeFailed;
         }
@@ -864,8 +873,8 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
     // This makes it simpler to reason about the next reboot: no matter what
     // part of cleanup failed, first-stage init won't try to create another
     // snapshot device for this partition.
-    snapshot_status.state = SnapshotState::MergeCompleted;
-    if (!WriteSnapshotStatus(lock, name, snapshot_status)) {
+    snapshot_status.set_state(SnapshotState::MERGE_COMPLETED);
+    if (!WriteSnapshotStatus(lock, snapshot_status)) {
         return UpdateState::MergeFailed;
     }
     if (!OnSnapshotMergeComplete(lock, name, snapshot_status)) {
@@ -969,10 +978,10 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         return false;
     }
 
-    uint64_t snapshot_sectors = status.snapshot_size / kSectorSize;
-    if (snapshot_sectors * kSectorSize != status.snapshot_size) {
+    uint64_t snapshot_sectors = status.snapshot_size() / kSectorSize;
+    if (snapshot_sectors * kSectorSize != status.snapshot_size()) {
         LOG(ERROR) << "Snapshot " << name
-                   << " size is not sector aligned: " << status.snapshot_size;
+                   << " size is not sector aligned: " << status.snapshot_size();
         return false;
     }
 
@@ -1003,7 +1012,7 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
                        << " sectors, got: " << outer_table[0].spec.length;
             return false;
         }
-        uint64_t expected_device_sectors = status.device_size / kSectorSize;
+        uint64_t expected_device_sectors = status.device_size() / kSectorSize;
         uint64_t actual_device_sectors = outer_table[0].spec.length + outer_table[1].spec.length;
         if (expected_device_sectors != actual_device_sectors) {
             LOG(ERROR) << "Outer device " << name << " should have " << expected_device_sectors
@@ -1289,7 +1298,7 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
             return false;
         }
         // No live snapshot if merge is completed.
-        if (live_snapshot_status->state == SnapshotState::MergeCompleted) {
+        if (live_snapshot_status->state() == SnapshotState::MERGE_COMPLETED) {
             live_snapshot_status.reset();
         }
     } while (0);
@@ -1390,7 +1399,7 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
                                     AutoDeviceList* created_devices, std::string* cow_name) {
     CHECK(lock);
     if (!EnsureImageManager()) return false;
-    CHECK(snapshot_status.cow_partition_size + snapshot_status.cow_file_size > 0);
+    CHECK(snapshot_status.cow_partition_size() + snapshot_status.cow_file_size() > 0);
     auto begin = std::chrono::steady_clock::now();
 
     std::string partition_name = params.GetPartitionName();
@@ -1400,7 +1409,7 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
     auto& dm = DeviceMapper::Instance();
 
     // Map COW image if necessary.
-    if (snapshot_status.cow_file_size > 0) {
+    if (snapshot_status.cow_file_size() > 0) {
         auto remaining_time = GetRemainingTime(params.timeout_ms, begin);
         if (remaining_time.count() < 0) return false;
 
@@ -1411,7 +1420,7 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
         created_devices->EmplaceBack<AutoUnmapImage>(images_.get(), cow_image_name);
 
         // If no COW partition exists, just return the image alone.
-        if (snapshot_status.cow_partition_size == 0) {
+        if (snapshot_status.cow_partition_size() == 0) {
             *cow_name = std::move(cow_image_name);
             LOG(INFO) << "Mapped COW image for " << partition_name << " at " << *cow_name;
             return true;
@@ -1421,7 +1430,7 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
     auto remaining_time = GetRemainingTime(params.timeout_ms, begin);
     if (remaining_time.count() < 0) return false;
 
-    CHECK(snapshot_status.cow_partition_size > 0);
+    CHECK(snapshot_status.cow_partition_size() > 0);
 
     // Create the DmTable for the COW device. It is the DmTable of the COW partition plus
     // COW image device as the last extent.
@@ -1434,14 +1443,14 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
         return false;
     }
     // If the COW image exists, append it as the last extent.
-    if (snapshot_status.cow_file_size > 0) {
+    if (snapshot_status.cow_file_size() > 0) {
         std::string cow_image_device;
         if (!dm.GetDeviceString(cow_image_name, &cow_image_device)) {
             LOG(ERROR) << "Cannot determine major/minor for: " << cow_image_name;
             return false;
         }
-        auto cow_partition_sectors = snapshot_status.cow_partition_size / kSectorSize;
-        auto cow_image_sectors = snapshot_status.cow_file_size / kSectorSize;
+        auto cow_partition_sectors = snapshot_status.cow_partition_size() / kSectorSize;
+        auto cow_image_sectors = snapshot_status.cow_file_size() / kSectorSize;
         table.Emplace<DmTargetLinear>(cow_partition_sectors, cow_image_sectors, cow_image_device,
                                       0);
     }
@@ -1602,101 +1611,38 @@ bool SnapshotManager::ReadSnapshotStatus(LockedFile* lock, const std::string& na
         return false;
     }
 
-    std::string contents;
-    if (!android::base::ReadFdToString(fd, &contents)) {
-        PLOG(ERROR) << "read failed: " << path;
-        return false;
-    }
-    auto pieces = android::base::Split(contents, " ");
-    if (pieces.size() != 7) {
-        LOG(ERROR) << "Invalid status line for snapshot: " << path;
+    if (!status->ParseFromFileDescriptor(fd.get())) {
+        PLOG(ERROR) << "Unable to parse " << path << " as SnapshotStatus";
         return false;
     }
 
-    if (pieces[0] == "none") {
-        status->state = SnapshotState::None;
-    } else if (pieces[0] == "created") {
-        status->state = SnapshotState::Created;
-    } else if (pieces[0] == "merging") {
-        status->state = SnapshotState::Merging;
-    } else if (pieces[0] == "merge-completed") {
-        status->state = SnapshotState::MergeCompleted;
-    } else {
-        LOG(ERROR) << "Unrecognized state " << pieces[0] << " for snapshot: " << name;
-        return false;
+    if (status->name() != name) {
+        LOG(WARNING) << "Found snapshot status named " << status->name() << " in " << path;
+        status->set_name(name);
     }
 
-    if (!android::base::ParseUint(pieces[1], &status->device_size)) {
-        LOG(ERROR) << "Invalid device size in status line for: " << path;
-        return false;
-    }
-    if (!android::base::ParseUint(pieces[2], &status->snapshot_size)) {
-        LOG(ERROR) << "Invalid snapshot size in status line for: " << path;
-        return false;
-    }
-    if (!android::base::ParseUint(pieces[3], &status->cow_partition_size)) {
-        LOG(ERROR) << "Invalid cow linear size in status line for: " << path;
-        return false;
-    }
-    if (!android::base::ParseUint(pieces[4], &status->cow_file_size)) {
-        LOG(ERROR) << "Invalid cow file size in status line for: " << path;
-        return false;
-    }
-    if (!android::base::ParseUint(pieces[5], &status->sectors_allocated)) {
-        LOG(ERROR) << "Invalid snapshot size in status line for: " << path;
-        return false;
-    }
-    if (!android::base::ParseUint(pieces[6], &status->metadata_sectors)) {
-        LOG(ERROR) << "Invalid snapshot size in status line for: " << path;
-        return false;
-    }
     return true;
 }
 
-std::string SnapshotManager::to_string(SnapshotState state) {
-    switch (state) {
-        case SnapshotState::None:
-            return "none";
-        case SnapshotState::Created:
-            return "created";
-        case SnapshotState::Merging:
-            return "merging";
-        case SnapshotState::MergeCompleted:
-            return "merge-completed";
-        default:
-            LOG(ERROR) << "Unknown snapshot state: " << (int)state;
-            return "unknown";
-    }
-}
-
-bool SnapshotManager::WriteSnapshotStatus(LockedFile* lock, const std::string& name,
-                                          const SnapshotStatus& status) {
+bool SnapshotManager::WriteSnapshotStatus(LockedFile* lock, const SnapshotStatus& status) {
     // The caller must take an exclusive lock to modify snapshots.
     CHECK(lock);
     CHECK(lock->lock_mode() == LOCK_EX);
+    CHECK(!status.name().empty());
 
-    auto path = GetSnapshotStatusFilePath(name);
-    unique_fd fd(open(path.c_str(), O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_CREAT | O_SYNC, 0660));
+    auto path = GetSnapshotStatusFilePath(status.name());
+    unique_fd fd(
+            open(path.c_str(), O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_CREAT | O_SYNC | O_TRUNC, 0660));
     if (fd < 0) {
         PLOG(ERROR) << "Open failed: " << path;
         return false;
     }
 
-    std::vector<std::string> pieces = {
-            to_string(status.state),
-            std::to_string(status.device_size),
-            std::to_string(status.snapshot_size),
-            std::to_string(status.cow_partition_size),
-            std::to_string(status.cow_file_size),
-            std::to_string(status.sectors_allocated),
-            std::to_string(status.metadata_sectors),
-    };
-    auto contents = android::base::Join(pieces, " ");
-
-    if (!android::base::WriteStringToFd(contents, fd)) {
-        PLOG(ERROR) << "write failed: " << path;
+    if (!status.SerializeToFileDescriptor(fd.get())) {
+        PLOG(ERROR) << "Unable to write SnapshotStatus to " << path;
         return false;
     }
+
     return true;
 }
 
@@ -1714,7 +1660,7 @@ bool SnapshotManager::Truncate(LockedFile* file) {
 
 std::string SnapshotManager::GetSnapshotDeviceName(const std::string& snapshot_name,
                                                    const SnapshotStatus& status) {
-    if (status.device_size != status.snapshot_size) {
+    if (status.device_size() != status.snapshot_size()) {
         return GetSnapshotExtraDeviceName(snapshot_name);
     }
     return snapshot_name;
@@ -1884,11 +1830,11 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
         }
 
         LOG(INFO) << "For partition " << target_partition->name()
-                  << ", device size = " << cow_creator_ret->snapshot_status.device_size
-                  << ", snapshot size = " << cow_creator_ret->snapshot_status.snapshot_size
+                  << ", device size = " << cow_creator_ret->snapshot_status.device_size()
+                  << ", snapshot size = " << cow_creator_ret->snapshot_status.snapshot_size()
                   << ", cow partition size = "
-                  << cow_creator_ret->snapshot_status.cow_partition_size
-                  << ", cow file size = " << cow_creator_ret->snapshot_status.cow_file_size;
+                  << cow_creator_ret->snapshot_status.cow_partition_size()
+                  << ", cow file size = " << cow_creator_ret->snapshot_status.cow_file_size();
 
         // Delete any existing snapshot before re-creating one.
         if (!DeleteSnapshot(lock, target_partition->name())) {
@@ -1899,9 +1845,9 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
 
         // It is possible that the whole partition uses free space in super, and snapshot / COW
         // would not be needed. In this case, skip the partition.
-        bool needs_snapshot = cow_creator_ret->snapshot_status.snapshot_size > 0;
-        bool needs_cow = (cow_creator_ret->snapshot_status.cow_partition_size +
-                          cow_creator_ret->snapshot_status.cow_file_size) > 0;
+        bool needs_snapshot = cow_creator_ret->snapshot_status.snapshot_size() > 0;
+        bool needs_cow = (cow_creator_ret->snapshot_status.cow_partition_size() +
+                          cow_creator_ret->snapshot_status.cow_file_size()) > 0;
         CHECK(needs_snapshot == needs_cow);
 
         if (!needs_snapshot) {
@@ -1911,17 +1857,17 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
         }
 
         // Store these device sizes to snapshot status file.
-        if (!CreateSnapshot(lock, target_partition->name(), cow_creator_ret->snapshot_status)) {
+        if (!CreateSnapshot(lock, &cow_creator_ret->snapshot_status)) {
             return false;
         }
         created_devices->EmplaceBack<AutoDeleteSnapshot>(this, lock, target_partition->name());
 
         // Create the COW partition. That is, use any remaining free space in super partition before
         // creating the COW images.
-        if (cow_creator_ret->snapshot_status.cow_partition_size > 0) {
-            CHECK(cow_creator_ret->snapshot_status.cow_partition_size % kSectorSize == 0)
+        if (cow_creator_ret->snapshot_status.cow_partition_size() > 0) {
+            CHECK(cow_creator_ret->snapshot_status.cow_partition_size() % kSectorSize == 0)
                     << "cow_partition_size == "
-                    << cow_creator_ret->snapshot_status.cow_partition_size
+                    << cow_creator_ret->snapshot_status.cow_partition_size()
                     << " is not a multiple of sector size " << kSectorSize;
             auto cow_partition = target_metadata->AddPartition(GetCowName(target_partition->name()),
                                                                kCowGroupName, 0 /* flags */);
@@ -1930,10 +1876,10 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
             }
 
             if (!target_metadata->ResizePartition(
-                        cow_partition, cow_creator_ret->snapshot_status.cow_partition_size,
+                        cow_partition, cow_creator_ret->snapshot_status.cow_partition_size(),
                         cow_creator_ret->cow_partition_usable_regions)) {
                 LOG(ERROR) << "Cannot create COW partition on metadata with size "
-                           << cow_creator_ret->snapshot_status.cow_partition_size;
+                           << cow_creator_ret->snapshot_status.cow_partition_size();
                 return false;
             }
             // Only the in-memory target_metadata is modified; nothing to clean up if there is an
@@ -1941,7 +1887,7 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
         }
 
         // Create the backing COW image if necessary.
-        if (cow_creator_ret->snapshot_status.cow_file_size > 0) {
+        if (cow_creator_ret->snapshot_status.cow_file_size() > 0) {
             if (!CreateCowImage(lock, target_partition->name())) {
                 return false;
             }
@@ -1978,7 +1924,7 @@ bool SnapshotManager::InitializeUpdateSnapshots(
         }
 
         auto it = all_snapshot_status.find(target_partition->name());
-        CHECK(it != all_snapshot_status.end()) << target_partition->name();
+        if (it == all_snapshot_status.end()) continue;
         cow_params.partition_name = target_partition->name();
         std::string cow_name;
         if (!MapCowDevices(lock, cow_params, it->second, &created_devices_for_cow, &cow_name)) {
@@ -2049,13 +1995,13 @@ bool SnapshotManager::Dump(std::ostream& os) {
             ok = false;
             continue;
         }
-        ss << "    state: " << to_string(status.state) << std::endl;
-        ss << "    device size (bytes): " << status.device_size << std::endl;
-        ss << "    snapshot size (bytes): " << status.snapshot_size << std::endl;
-        ss << "    cow partition size (bytes): " << status.cow_partition_size << std::endl;
-        ss << "    cow file size (bytes): " << status.cow_file_size << std::endl;
-        ss << "    allocated sectors: " << status.sectors_allocated << std::endl;
-        ss << "    metadata sectors: " << status.metadata_sectors << std::endl;
+        ss << "    state: " << SnapshotState_Name(status.state()) << std::endl;
+        ss << "    device size (bytes): " << status.device_size() << std::endl;
+        ss << "    snapshot size (bytes): " << status.snapshot_size() << std::endl;
+        ss << "    cow partition size (bytes): " << status.cow_partition_size() << std::endl;
+        ss << "    cow file size (bytes): " << status.cow_file_size() << std::endl;
+        ss << "    allocated sectors: " << status.sectors_allocated() << std::endl;
+        ss << "    metadata sectors: " << status.metadata_sectors() << std::endl;
     }
     os << ss.rdbuf();
     return ok;

@@ -26,6 +26,7 @@ bool DmTable::AddTarget(std::unique_ptr<DmTarget>&& target) {
     if (!target->Valid()) {
         return false;
     }
+    num_sectors_ += target->size();
     targets_.push_back(std::move(target));
     return true;
 }

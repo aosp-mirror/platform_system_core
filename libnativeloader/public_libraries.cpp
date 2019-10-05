@@ -176,6 +176,11 @@ static std::string InitDefaultPublicLibraries(bool for_preload) {
     std::copy(vec.begin(), vec.end(), std::back_inserter(*sonames));
   }
 
+  // If this is for preloading libs, don't remove the libs from APEXes.
+  if (for_preload) {
+    return android::base::Join(*sonames, ':');
+  }
+
   // Remove the public libs in the runtime namespace.
   // These libs are listed in public.android.txt, but we don't want the rest of android
   // in default namespace to dlopen the libs.

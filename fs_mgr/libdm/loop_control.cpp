@@ -133,18 +133,23 @@ bool LoopControl::EnableDirectIo(int fd) {
     return true;
 }
 
-LoopDevice::LoopDevice(int fd, const std::chrono::milliseconds& timeout_ms, bool auto_close)
-    : fd_(fd), owns_fd_(auto_close) {
+LoopDevice::LoopDevice(android::base::borrowed_fd fd, const std::chrono::milliseconds& timeout_ms,
+                       bool auto_close)
+    : fd_(fd), owned_fd_(-1) {
+    if (auto_close) {
+        owned_fd_.reset(fd.get());
+    }
     Init(timeout_ms);
 }
 
 LoopDevice::LoopDevice(const std::string& path, const std::chrono::milliseconds& timeout_ms)
-    : fd_(-1), owns_fd_(true) {
-    fd_.reset(open(path.c_str(), O_RDWR | O_CLOEXEC));
-    if (fd_ < -1) {
+    : fd_(-1), owned_fd_(-1) {
+    owned_fd_.reset(open(path.c_str(), O_RDWR | O_CLOEXEC));
+    if (owned_fd_ == -1) {
         PLOG(ERROR) << "open failed for " << path;
         return;
     }
+    fd_ = owned_fd_;
     Init(timeout_ms);
 }
 
@@ -152,13 +157,10 @@ LoopDevice::~LoopDevice() {
     if (valid()) {
         control_.Detach(device_);
     }
-    if (!owns_fd_) {
-        (void)fd_.release();
-    }
 }
 
 void LoopDevice::Init(const std::chrono::milliseconds& timeout_ms) {
-    valid_ = control_.Attach(fd_, timeout_ms, &device_);
+    valid_ = control_.Attach(fd_.get(), timeout_ms, &device_);
 }
 
 }  // namespace dm

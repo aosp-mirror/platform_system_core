@@ -926,12 +926,12 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
 static void cmd_procremove(LMKD_CTRL_PACKET packet) {
     struct lmk_procremove params;
 
+    lmkd_pack_get_procremove(packet, &params);
     if (use_inkernel_interface) {
         stats_remove_taskname(params.pid, kpoll_info.poll_fd);
         return;
     }
 
-    lmkd_pack_get_procremove(packet, &params);
     /*
      * WARNING: After pid_remove() procp is freed and can't be used!
      * Therefore placed at the end of the function.
