@@ -149,6 +149,11 @@ cc_library {
     srcs: [
         ":libfiemap_passthrough_srcs",
     ],
+    target: {
+        recovery: {
+            cflags: ["-DSKIP_SET_BLK_RO"],
+        },
+    },
 }
 
 cc_library {

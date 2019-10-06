@@ -828,9 +828,11 @@ static int __mount(const std::string& source, const std::string& target, const F
     }
     PINFO << __FUNCTION__ << "(source=" << source << source_missing << ",target=" << target
           << target_missing << ",type=" << entry.fs_type << ")=" << ret;
+#ifndef SKIP_SET_BLK_RO
     if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
         fs_mgr_set_blk_ro(source);
     }
+#endif
     android::base::SetProperty("ro.boottime.init.mount." + Basename(target),
                                std::to_string(t.duration().count()));
     errno = save_errno;
