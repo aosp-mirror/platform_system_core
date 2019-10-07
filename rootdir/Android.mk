@@ -237,6 +237,9 @@ ifeq ($(_enforce_vndk_at_runtime),true)
 
 # for VNDK enforced devices
 # This file will be replaced with dynamically generated one from system/linkerconfig
+LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+LOCAL_SRC_FILES := etc/ld.config.txt
+include $(BUILD_PREBUILT)
 
 else ifeq ($(_enforce_vndk_lite_at_runtime),true)
 
