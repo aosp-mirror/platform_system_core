@@ -143,10 +143,6 @@ std::string LogAudit::denialParse(const std::string& denial, char terminator,
 
 void LogAudit::auditParse(const std::string& string, uid_t uid,
                           std::string* bug_num) {
-    if (!__android_log_is_debuggable()) {
-        bug_num->assign("");
-        return;
-    }
     static std::map<std::string, std::string> denial_to_bug =
         populateDenialMap();
     std::string scontext = denialParse(string, ':', "scontext=u:object_r:");
