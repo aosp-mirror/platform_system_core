@@ -92,7 +92,7 @@ static std::unordered_map<std::string, Platform::mock_namespace_handle> namespac
 // The actual gmock object
 class MockPlatform : public Platform {
  public:
-  MockPlatform(bool is_bridged) : is_bridged_(is_bridged) {
+  explicit MockPlatform(bool is_bridged) : is_bridged_(is_bridged) {
     ON_CALL(*this, NativeBridgeIsSupported(_)).WillByDefault(Return(is_bridged_));
     ON_CALL(*this, NativeBridgeIsPathSupported(_)).WillByDefault(Return(is_bridged_));
     ON_CALL(*this, mock_get_exported_namespace(_, _))
