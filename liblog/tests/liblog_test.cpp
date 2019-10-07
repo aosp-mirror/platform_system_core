@@ -42,6 +42,8 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
+// #define ENABLE_FLAKY_TESTS
+
 // enhanced version of LOG_FAILURE_RETRY to add support for EAGAIN and
 // non-syscall libs. Since we are only using this in the emergency of
 // a signal to stuff a terminating code into the logs, we will spin rather
@@ -70,6 +72,7 @@ TEST(liblog, __android_log_btwrite) {
   usleep(1000);
 }
 
+#ifdef ENABLE_FLAKY_TESTS
 #if defined(__ANDROID__)
 static std::string popenToString(const std::string& command) {
   std::string ret;
@@ -138,6 +141,7 @@ static bool isLogdwActive() {
 
 static bool tested__android_log_close;
 #endif
+#endif  // ENABLE_FLAKY_TESTS
 
 TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 #ifdef __ANDROID__
@@ -152,6 +156,7 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 
   log_time ts(CLOCK_MONOTONIC);
   EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
+#ifdef ENABLE_FLAKY_TESTS
   // Check that we can close and reopen the logger
   bool logdwActiveAfter__android_log_btwrite;
   if (getuid() == AID_ROOT) {
@@ -174,9 +179,11 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     bool logdwActiveAfter__android_log_close = isLogdwActive();
     EXPECT_FALSE(logdwActiveAfter__android_log_close);
   }
+#endif  // ENABLE_FLAKY_TESTS
 
   log_time ts1(CLOCK_MONOTONIC);
   EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
+#ifdef ENABLE_FLAKY_TESTS
   if (getuid() == AID_ROOT) {
 #ifndef NO_PSTORE
     bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
@@ -185,6 +192,7 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     logdwActiveAfter__android_log_btwrite = isLogdwActive();
     EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
   }
+#endif  // ENABLE_FLAKY_TESTS
   usleep(1000000);
 
   int count = 0;
@@ -440,6 +448,7 @@ TEST(liblog, __android_log_buf_write_and_print__newline_space_prefix) {
   buf_write_test("\n Hello World \n");
 }
 
+#ifdef ENABLE_FLAKY_TESTS
 #ifdef __ANDROID__
 static unsigned signaled;
 static log_time signal_time;
@@ -749,12 +758,8 @@ TEST(liblog, android_logger_list_read__cpu_thread) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif  // ENABLE_FLAKY_TESTS
 
-#ifdef __ANDROID__
-static const char max_payload_tag[] = "TEST_max_payload_and_longish_tag_XXXX";
-#define SIZEOF_MAX_PAYLOAD_BUF \
-  (LOGGER_ENTRY_MAX_PAYLOAD - sizeof(max_payload_tag) - 1)
-#endif
 static const char max_payload_buf[] =
     "LEONATO\n\
 I learn in this letter that Don Peter of Arragon\n\
@@ -887,8 +892,12 @@ for trouble being gone, comfort should remain, but\n\
 when you depart from me, sorrow abides and happiness\n\
 takes his leave.";
 
+#ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, max_payload) {
 #ifdef __ANDROID__
+  static const char max_payload_tag[] = "TEST_max_payload_and_longish_tag_XXXX";
+#define SIZEOF_MAX_PAYLOAD_BUF (LOGGER_ENTRY_MAX_PAYLOAD - sizeof(max_payload_tag) - 1)
+
   pid_t pid = getpid();
   char tag[sizeof(max_payload_tag)];
   memcpy(tag, max_payload_tag, sizeof(tag));
@@ -950,6 +959,7 @@ TEST(liblog, max_payload) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif  // ENABLE_FLAKY_TESTS
 
 TEST(liblog, __android_log_buf_print__maxtag) {
 #ifdef __ANDROID__
@@ -1081,6 +1091,7 @@ TEST(liblog, too_big_payload) {
 #endif
 }
 
+#ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, dual_reader) {
 #ifdef __ANDROID__
 
@@ -1143,7 +1154,9 @@ TEST(liblog, dual_reader) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif  // ENABLE_FLAKY_TESTS
 
+#ifdef ENABLE_FLAKY_TESTS
 static bool checkPriForTag(AndroidLogFormat* p_format, const char* tag,
                            android_LogPriority pri) {
   return android_log_shouldPrintLine(p_format, tag, pri) &&
@@ -1219,7 +1232,9 @@ TEST(liblog, filterRule) {
 
   android_log_format_free(p_format);
 }
+#endif  // ENABLE_FLAKY_TESTS
 
+#ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, is_loggable) {
 #ifdef __ANDROID__
   static const char tag[] = "is_loggable";
@@ -1507,7 +1522,9 @@ TEST(liblog, is_loggable) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif  // ENABLE_FLAKY_TESTS
 
+#ifdef ENABLE_FLAKY_TESTS
 // Following tests the specific issues surrounding error handling wrt logd.
 // Kills logd and toss all collected data, equivalent to logcat -b all -c,
 // except we also return errors to the logging callers.
@@ -1604,9 +1621,11 @@ TEST(liblog, enoent) {
 #endif
 }
 #endif  // __ANDROID__
+#endif  // ENABLE_FLAKY_TESTS
 
 // Below this point we run risks of setuid(AID_SYSTEM) which may affect others.
 
+#ifdef ENABLE_FLAKY_TESTS
 // Do not retest properties, and cannot log into LOG_ID_SECURITY
 TEST(liblog, __security) {
 #ifdef __ANDROID__
@@ -1864,6 +1883,7 @@ TEST(liblog, __security_buffer) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif  // ENABLE_FLAKY_TESTS
 
 #ifdef __ANDROID__
 static void android_errorWriteWithInfoLog_helper(int TAG, const char* SUBTAG,
@@ -2753,6 +2773,7 @@ TEST(liblog, create_android_logger_android_log_error_write_null) {
 #endif
 }
 
+#ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, create_android_logger_overflow) {
   android_log_context ctx;
 
@@ -2779,7 +2800,9 @@ TEST(liblog, create_android_logger_overflow) {
   EXPECT_LE(0, android_log_destroy(&ctx));
   ASSERT_TRUE(NULL == ctx);
 }
+#endif  // ENABLE_FLAKY_TESTS
 
+#ifdef ENABLE_FLAKY_TESTS
 #ifdef __ANDROID__
 #ifndef NO_PSTORE
 static const char __pmsg_file[] =
@@ -2916,7 +2939,9 @@ TEST(liblog, __android_log_pmsg_file_read) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif  // ENABLE_FLAKY_TESTS
 
+#ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, android_lookupEventTagNum) {
 #ifdef __ANDROID__
   EventTagMap* map = android_openEventTagMap(NULL);
@@ -2933,3 +2958,4 @@ TEST(liblog, android_lookupEventTagNum) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif  // ENABLE_FLAKY_TESTS
