@@ -173,7 +173,8 @@ static std::shared_ptr<RSA> read_key_file(const std::string& file) {
 
     RSA* key = RSA_new();
     if (!PEM_read_RSAPrivateKey(fp.get(), &key, nullptr, nullptr)) {
-        LOG(ERROR) << "Failed to read key";
+        LOG(ERROR) << "Failed to read key from '" << file << "'";
+        ERR_print_errors_fp(stderr);
         RSA_free(key);
         return nullptr;
     }
@@ -249,7 +250,7 @@ static std::string get_user_key_path() {
     return adb_get_android_dir_path() + OS_PATH_SEPARATOR + "adbkey";
 }
 
-static bool generate_userkey() {
+static bool load_userkey() {
     std::string path = get_user_key_path();
     if (path.empty()) {
         PLOG(ERROR) << "Error getting user key filename";
@@ -435,8 +436,8 @@ static void adb_auth_inotify_init(const std::set<std::string>& paths) {
 void adb_auth_init() {
     LOG(INFO) << "adb_auth_init...";
 
-    if (!generate_userkey()) {
-        LOG(ERROR) << "Failed to generate user key";
+    if (!load_userkey()) {
+        LOG(ERROR) << "Failed to load (or generate) user key";
         return;
     }
 
