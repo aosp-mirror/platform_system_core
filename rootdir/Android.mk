@@ -236,12 +236,7 @@ $(foreach b,$(ART_BINARIES), \
 ifeq ($(_enforce_vndk_at_runtime),true)
 
 # for VNDK enforced devices
-LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
-include $(BUILD_SYSTEM)/base_rules.mk
-ld_config_template := $(LOCAL_PATH)/etc/ld.config.txt
-check_backward_compatibility := true
-vndk_version := $(PLATFORM_VNDK_VERSION)
-include $(LOCAL_PATH)/update_and_install_ld_config.mk
+# This file will be replaced with dynamically generated one from system/linkerconfig
 
 else ifeq ($(_enforce_vndk_lite_at_runtime),true)
 
@@ -277,7 +272,6 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $$(LOCAL_MODULE)
 include $(BUILD_SYSTEM)/base_rules.mk
 ld_config_template := $(LOCAL_PATH)/etc/ld.config.txt
-check_backward_compatibility := true
 vndk_version := $(1)
 lib_list_from_prebuilts := true
 include $(LOCAL_PATH)/update_and_install_ld_config.mk
