@@ -38,8 +38,8 @@ endif
 
 llndk_libraries_file := $(library_lists_dir)/llndk.libraries.$(vndk_version).txt
 vndksp_libraries_file := $(library_lists_dir)/vndksp.libraries.$(vndk_version).txt
-vndkcore_libraries_file := $(library_lists_dir)/vndkcore.libraries.txt
-vndkprivate_libraries_file := $(library_lists_dir)/vndkprivate.libraries.txt
+vndkcore_libraries_file := $(library_lists_dir)/vndkcore.libraries.$(vndk_version).txt
+vndkprivate_libraries_file := $(library_lists_dir)/vndkprivate.libraries.$(vndk_version).txt
 llndk_moved_to_apex_libraries_file := $(library_lists_dir)/llndkinapex.libraries.txt
 ifeq ($(my_vndk_use_core_variant),true)
 vndk_using_core_variant_libraries_file := $(library_lists_dir)/vndk_using_core_variant.libraries.$(vndk_version).txt
