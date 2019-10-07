@@ -50,7 +50,9 @@
 #include <private/android_filesystem_config.h>
 #include <selinux/selinux.h>
 
+#include "action.h"
 #include "action_manager.h"
+#include "builtin_arguments.h"
 #include "init.h"
 #include "property_service.h"
 #include "reboot_utils.h"
@@ -70,6 +72,8 @@ using android::base::WriteStringToFile;
 
 namespace android {
 namespace init {
+
+static bool shutting_down = false;
 
 // represents umount status during reboot / shutdown.
 enum UmountStat {
@@ -655,12 +659,58 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     abort();
 }
 
-bool HandlePowerctlMessage(const std::string& command) {
+static void EnterShutdown() {
+    shutting_down = true;
+    // Skip wait for prop if it is in progress
+    ResetWaitForProp();
+    // Clear EXEC flag if there is one pending
+    for (const auto& s : ServiceList::GetInstance()) {
+        s->UnSetExec();
+    }
+    // We no longer process messages about properties changing coming from property service, so we
+    // need to tell property service to stop sending us these messages, otherwise it'll fill the
+    // buffers and block indefinitely, causing future property sets, including those that init makes
+    // during shutdown in Service::NotifyStateChange() to also block indefinitely.
+    SendStopSendingMessagesMessage();
+}
+
+static void LeaveShutdown() {
+    shutting_down = false;
+    SendStartSendingMessagesMessage();
+}
+
+static void DoUserspaceReboot() {
+    // Triggering userspace-reboot-requested will result in a bunch of set_prop
+    // actions. We should make sure, that all of them are propagated before
+    // proceeding with userspace reboot.
+    // TODO(b/135984674): implement proper synchronization logic.
+    std::this_thread::sleep_for(500ms);
+    EnterShutdown();
+    // TODO(b/135984674): tear down post-data services
+    LeaveShutdown();
+    // TODO(b/135984674): remount userdata
+    ActionManager::GetInstance().QueueEventTrigger("userspace-reboot-resume");
+}
+
+static void HandleUserspaceReboot() {
+    LOG(INFO) << "Clearing queue and starting userspace-reboot-requested trigger";
+    auto& am = ActionManager::GetInstance();
+    am.ClearQueue();
+    am.QueueEventTrigger("userspace-reboot-requested");
+    auto handler = [](const BuiltinArguments&) {
+        DoUserspaceReboot();
+        return Result<void>{};
+    };
+    am.QueueBuiltinAction(handler, "userspace-reboot");
+}
+
+void HandlePowerctlMessage(const std::string& command) {
     unsigned int cmd = 0;
     std::vector<std::string> cmd_params = Split(command, ",");
     std::string reboot_target = "";
     bool run_fsck = false;
     bool command_invalid = false;
+    bool userspace_reboot = false;
 
     if (cmd_params[0] == "shutdown") {
         cmd = ANDROID_RB_POWEROFF;
@@ -680,6 +730,10 @@ bool HandlePowerctlMessage(const std::string& command) {
         cmd = ANDROID_RB_RESTART2;
         if (cmd_params.size() >= 2) {
             reboot_target = cmd_params[1];
+            if (reboot_target == "userspace") {
+                LOG(INFO) << "Userspace reboot requested";
+                userspace_reboot = true;
+            }
             // adb reboot fastboot should boot into bootloader for devices not
             // supporting logical partitions.
             if (reboot_target == "fastboot" &&
@@ -706,7 +760,7 @@ bool HandlePowerctlMessage(const std::string& command) {
                     strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
                     if (std::string err; !write_bootloader_message(boot, &err)) {
                         LOG(ERROR) << "Failed to set bootloader message: " << err;
-                        return false;
+                        return;
                     }
                 }
             } else if (reboot_target == "sideload" || reboot_target == "sideload-auto-reboot" ||
@@ -719,7 +773,7 @@ bool HandlePowerctlMessage(const std::string& command) {
                 std::string err;
                 if (!write_bootloader_message(options, &err)) {
                     LOG(ERROR) << "Failed to set bootloader message: " << err;
-                    return false;
+                    return;
                 }
                 reboot_target = "recovery";
             }
@@ -734,7 +788,12 @@ bool HandlePowerctlMessage(const std::string& command) {
     }
     if (command_invalid) {
         LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
-        return false;
+        return;
+    }
+
+    if (userspace_reboot) {
+        HandleUserspaceReboot();
+        return;
     }
 
     LOG(INFO) << "Clear action queue and start shutdown trigger";
@@ -748,21 +807,11 @@ bool HandlePowerctlMessage(const std::string& command) {
     };
     ActionManager::GetInstance().QueueBuiltinAction(shutdown_handler, "shutdown_done");
 
-    // Skip wait for prop if it is in progress
-    ResetWaitForProp();
+    EnterShutdown();
+}
 
-    // Clear EXEC flag if there is one pending
-    for (const auto& s : ServiceList::GetInstance()) {
-        s->UnSetExec();
-    }
-
-    // We no longer process messages about properties changing coming from property service, so we
-    // need to tell property service to stop sending us these messages, otherwise it'll fill the
-    // buffers and block indefinitely, causing future property sets, including those that init makes
-    // during shutdown in Service::NotifyStateChange() to also block indefinitely.
-    SendStopSendingMessagesMessage();
-
-    return true;
+bool IsShuttingDown() {
+    return shutting_down;
 }
 
 }  // namespace init
