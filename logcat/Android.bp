@@ -50,16 +50,13 @@ cc_binary {
     ],
 }
 
-cc_prebuilt_binary {
+sh_binary {
     name: "logpersist.start",
-    srcs: ["logpersist"],
+    src: "logpersist",
     init_rc: ["logcatd.rc"],
     required: ["logcatd"],
     symlinks: [
         "logpersist.stop",
         "logpersist.cat",
     ],
-    strip: {
-        none: true,
-    },
 }
