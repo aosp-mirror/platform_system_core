@@ -93,6 +93,7 @@ static bool persistent_properties_loaded = false;
 
 static int property_set_fd = -1;
 static int init_socket = -1;
+static bool accept_messages = false;
 
 static PropertyInfoAreaFile property_info_area;
 
@@ -211,7 +212,7 @@ static uint32_t PropertySet(const std::string& name, const std::string& value, s
     }
     // If init hasn't started its main loop, then it won't be handling property changed messages
     // anyway, so there's no need to try to send them.
-    if (init_socket != -1) {
+    if (accept_messages) {
         SendPropertyChanged(name, value);
     }
     return PROP_SUCCESS;
@@ -389,7 +390,7 @@ class SocketConnection {
 
 static uint32_t SendControlMessage(const std::string& msg, const std::string& name, pid_t pid,
                                    SocketConnection* socket, std::string* error) {
-    if (init_socket == -1) {
+    if (!accept_messages) {
         *error = "Received control message after shutdown, ignoring";
         return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
     }
@@ -1035,7 +1036,11 @@ static void HandleInitSocket() {
             break;
         }
         case InitMessage::kStopSendingMessages: {
-            init_socket = -1;
+            accept_messages = false;
+            break;
+        }
+        case InitMessage::kStartSendingMessages: {
+            accept_messages = true;
             break;
         }
         default:
@@ -1078,6 +1083,7 @@ void StartPropertyService(int* epoll_socket) {
     }
     *epoll_socket = sockets[0];
     init_socket = sockets[1];
+    accept_messages = true;
 
     if (auto result = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
                                    false, 0666, 0, 0, {})) {
