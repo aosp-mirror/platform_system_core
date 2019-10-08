@@ -245,6 +245,7 @@ cc_defaults {
         "tests/files/offline/jit_debug_x86/*",
         "tests/files/offline/jit_map_arm/*",
         "tests/files/offline/gnu_debugdata_arm/*",
+        "tests/files/offline/load_bias_different_section_bias_arm64/*",
         "tests/files/offline/load_bias_ro_rx_x86_64/*",
         "tests/files/offline/offset_arm/*",
         "tests/files/offline/shared_lib_in_apk_arm64/*",
