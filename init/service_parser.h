@@ -30,10 +30,10 @@ namespace init {
 class ServiceParser : public SectionParser {
   public:
     ServiceParser(
-            ServiceList* service_list, std::vector<Subcontext>* subcontexts,
+            ServiceList* service_list, Subcontext* subcontext,
             const std::optional<InterfaceInheritanceHierarchyMap>& interface_inheritance_hierarchy)
         : service_list_(service_list),
-          subcontexts_(subcontexts),
+          subcontext_(subcontext),
           interface_inheritance_hierarchy_(interface_inheritance_hierarchy),
           service_(nullptr) {}
     Result<void> ParseSection(std::vector<std::string>&& args, const std::string& filename,
@@ -68,12 +68,14 @@ class ServiceParser : public SectionParser {
     Result<void> ParseMemcgSwappiness(std::vector<std::string>&& args);
     Result<void> ParseNamespace(std::vector<std::string>&& args);
     Result<void> ParseProcessRlimit(std::vector<std::string>&& args);
+    Result<void> ParseRebootOnFailure(std::vector<std::string>&& args);
     Result<void> ParseRestartPeriod(std::vector<std::string>&& args);
     Result<void> ParseSeclabel(std::vector<std::string>&& args);
     Result<void> ParseSetenv(std::vector<std::string>&& args);
     Result<void> ParseShutdown(std::vector<std::string>&& args);
     Result<void> ParseSigstop(std::vector<std::string>&& args);
     Result<void> ParseSocket(std::vector<std::string>&& args);
+    Result<void> ParseStdioToKmsg(std::vector<std::string>&& args);
     Result<void> ParseTimeoutPeriod(std::vector<std::string>&& args);
     Result<void> ParseFile(std::vector<std::string>&& args);
     Result<void> ParseUser(std::vector<std::string>&& args);
@@ -83,7 +85,7 @@ class ServiceParser : public SectionParser {
     bool IsValidName(const std::string& name) const;
 
     ServiceList* service_list_;
-    std::vector<Subcontext>* subcontexts_;
+    Subcontext* subcontext_;
     std::optional<InterfaceInheritanceHierarchyMap> interface_inheritance_hierarchy_;
     std::unique_ptr<Service> service_;
     std::string filename_;

@@ -18,34 +18,22 @@
 
 #include <sys/socket.h>
 
-#include <functional>
 #include <string>
 
 #include "epoll.h"
-#include "result.h"
 
 namespace android {
 namespace init {
+
+static constexpr const char kRestoreconProperty[] = "selinux.restorecon_recursive";
 
 bool CanReadProperty(const std::string& source_context, const std::string& name);
 
 extern uint32_t (*property_set)(const std::string& name, const std::string& value);
 
-uint32_t HandlePropertySet(const std::string& name, const std::string& value,
-                           const std::string& source_context, const ucred& cr, std::string* error);
-
 void property_init();
 void property_load_boot_defaults(bool load_debug_prop);
-void load_persist_props();
-void StartPropertyService(Epoll* epoll);
-
-template <typename F, typename... Args>
-Result<int> CallFunctionAndHandleProperties(F&& f, Args&&... args) {
-    Result<int> CallFunctionAndHandlePropertiesImpl(const std::function<int()>& f);
-
-    auto func = [&] { return f(args...); };
-    return CallFunctionAndHandlePropertiesImpl(func);
-}
+void StartPropertyService(int* epoll_socket);
 
 }  // namespace init
 }  // namespace android

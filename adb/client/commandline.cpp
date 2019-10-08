@@ -255,13 +255,8 @@ static void stdin_raw_restore() {
 }
 #endif
 
-// Reads from |fd| and prints received data. If |use_shell_protocol| is true
-// this expects that incoming data will use the shell protocol, in which case
-// stdout/stderr are routed independently and the remote exit code will be
-// returned.
-// if |callback| is non-null, stdout/stderr output will be handled by it.
-int read_and_dump(borrowed_fd fd, bool use_shell_protocol = false,
-                  StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK) {
+int read_and_dump(borrowed_fd fd, bool use_shell_protocol,
+                  StandardStreamsCallbackInterface* callback) {
     int exit_code = 0;
     if (fd < 0) return exit_code;
 
@@ -1704,10 +1699,27 @@ int adb_commandline(int argc, const char** argv) {
             error_exit("tcpip: invalid port: %s", argv[1]);
         }
         return adb_connect_command(android::base::StringPrintf("tcpip:%d", port));
+    } else if (!strcmp(argv[0], "remount")) {
+        FeatureSet features;
+        std::string error;
+        if (!adb_get_feature_set(&features, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
+            return 1;
+        }
+
+        if (CanUseFeature(features, kFeatureRemountShell)) {
+            std::vector<const char*> args = {"shell"};
+            args.insert(args.cend(), argv, argv + argc);
+            return adb_shell(args.size(), args.data());
+        } else if (argc > 1) {
+            auto command = android::base::StringPrintf("%s:%s", argv[0], argv[1]);
+            return adb_connect_command(command);
+        } else {
+            return adb_connect_command("remount:");
+        }
     }
     // clang-format off
-    else if (!strcmp(argv[0], "remount") ||
-             !strcmp(argv[0], "reboot") ||
+    else if (!strcmp(argv[0], "reboot") ||
              !strcmp(argv[0], "reboot-bootloader") ||
              !strcmp(argv[0], "reboot-fastboot") ||
              !strcmp(argv[0], "usb") ||

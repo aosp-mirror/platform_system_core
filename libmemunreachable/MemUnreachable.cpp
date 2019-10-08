@@ -25,6 +25,7 @@
 #include <unordered_map>
 
 #include <android-base/macros.h>
+#include <android-base/strings.h>
 #include <backtrace.h>
 
 #include "Allocator.h"
@@ -250,7 +251,8 @@ bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings
     } else if (mapping_name == current_lib) {
       // .rodata or .data section
       globals_mappings.emplace_back(*it);
-    } else if (mapping_name == "[anon:libc_malloc]") {
+    } else if (mapping_name == "[anon:libc_malloc]" ||
+               android::base::StartsWith(mapping_name, "[anon:scudo:")) {
       // named malloc mapping
       heap_mappings.emplace_back(*it);
     } else if (has_prefix(mapping_name, "[anon:dalvik-")) {

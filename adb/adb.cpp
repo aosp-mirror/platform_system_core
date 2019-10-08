@@ -337,9 +337,12 @@ void handle_packet(apacket *p, atransport *t)
             case ADB_AUTH_SIGNATURE: {
                 // TODO: Switch to string_view.
                 std::string signature(p->payload.begin(), p->payload.end());
-                if (adbd_auth_verify(t->token, sizeof(t->token), signature)) {
+                std::string auth_key;
+                if (adbd_auth_verify(t->token, sizeof(t->token), signature, &auth_key)) {
                     adbd_auth_verified(t);
                     t->failed_auth_attempts = 0;
+                    t->auth_key = auth_key;
+                    adbd_notify_framework_connected_key(t);
                 } else {
                     if (t->failed_auth_attempts++ > 256) std::this_thread::sleep_for(1s);
                     send_auth_request(t);
@@ -348,7 +351,8 @@ void handle_packet(apacket *p, atransport *t)
             }
 
             case ADB_AUTH_RSAPUBLICKEY:
-                adbd_auth_confirm_key(p->payload.data(), p->msg.data_length, t);
+                t->auth_key = std::string(p->payload.data());
+                adbd_auth_confirm_key(t);
                 break;
 #endif
             default:

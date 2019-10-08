@@ -33,6 +33,7 @@
 // Include this before open/close/unlink are defined as macros below.
 #include <android-base/errors.h>
 #include <android-base/macros.h>
+#include <android-base/off64_t.h>
 #include <android-base/unique_fd.h>
 #include <android-base/utf8.h>
 
@@ -91,11 +92,14 @@ extern int adb_mkdir(const std::string& path, int mode);
 extern int adb_open(const char* path, int options);
 extern int adb_creat(const char* path, int mode);
 extern int adb_read(borrowed_fd fd, void* buf, int len);
+extern int adb_pread(borrowed_fd fd, void* buf, int len, off64_t offset);
 extern int adb_write(borrowed_fd fd, const void* buf, int len);
+extern int adb_pwrite(borrowed_fd fd, const void* buf, int len, off64_t offset);
 extern int64_t adb_lseek(borrowed_fd fd, int64_t pos, int where);
 extern int adb_shutdown(borrowed_fd fd, int direction = SHUT_RDWR);
 extern int adb_close(int fd);
 extern int adb_register_socket(SOCKET s);
+extern HANDLE adb_get_os_handle(borrowed_fd fd);
 
 // See the comments for the !defined(_WIN32) version of unix_close().
 static __inline__ int unix_close(int fd) {
@@ -115,12 +119,18 @@ static __inline__ int unix_read(borrowed_fd fd, void* buf, size_t len) {
 #undef   read
 #define  read  ___xxx_read
 
+#undef pread
+#define pread ___xxx_pread
+
 // See the comments for the !defined(_WIN32) version of unix_write().
 static __inline__ int unix_write(borrowed_fd fd, const void* buf, size_t len) {
     return write(fd.get(), buf, len);
 }
 #undef   write
 #define  write  ___xxx_write
+
+#undef pwrite
+#define pwrite ___xxx_pwrite
 
 // See the comments for the !defined(_WIN32) version of unix_lseek().
 static __inline__ int unix_lseek(borrowed_fd fd, int pos, int where) {
@@ -415,6 +425,14 @@ static __inline__ int adb_read(borrowed_fd fd, void* buf, size_t len) {
     return TEMP_FAILURE_RETRY(read(fd.get(), buf, len));
 }
 
+static __inline__ int adb_pread(int fd, void* buf, size_t len, off64_t offset) {
+#if defined(__APPLE__)
+    return TEMP_FAILURE_RETRY(pread(fd, buf, len, offset));
+#else
+    return TEMP_FAILURE_RETRY(pread64(fd, buf, len, offset));
+#endif
+}
+
 // Like unix_read(), but does not handle EINTR.
 static __inline__ int unix_read_interruptible(borrowed_fd fd, void* buf, size_t len) {
     return read(fd.get(), buf, len);
@@ -422,12 +440,25 @@ static __inline__ int unix_read_interruptible(borrowed_fd fd, void* buf, size_t 
 
 #undef read
 #define read ___xxx_read
+#undef pread
+#define pread ___xxx_pread
 
 static __inline__ int adb_write(borrowed_fd fd, const void* buf, size_t len) {
     return TEMP_FAILURE_RETRY(write(fd.get(), buf, len));
 }
+
+static __inline__ int adb_pwrite(int fd, const void* buf, size_t len, off64_t offset) {
+#if defined(__APPLE__)
+    return TEMP_FAILURE_RETRY(pwrite(fd, buf, len, offset));
+#else
+    return TEMP_FAILURE_RETRY(pwrite64(fd, buf, len, offset));
+#endif
+}
+
 #undef   write
 #define  write  ___xxx_write
+#undef pwrite
+#define pwrite ___xxx_pwrite
 
 static __inline__ int64_t adb_lseek(borrowed_fd fd, int64_t pos, int where) {
 #if defined(__APPLE__)
@@ -568,6 +599,10 @@ static __inline__ int adb_mkdir(const std::string& path, int mode) {
 
 static __inline__ int adb_is_absolute_host_path(const char* path) {
     return path[0] == '/';
+}
+
+static __inline__ int adb_get_os_handle(borrowed_fd fd) {
+    return fd.get();
 }
 
 #endif /* !_WIN32 */

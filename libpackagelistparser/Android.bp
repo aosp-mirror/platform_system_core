@@ -19,4 +19,5 @@ cc_test {
         "libpackagelistparser",
     ],
     test_suites: ["device-tests"],
+    require_root: true,
 }

@@ -131,6 +131,12 @@ class ElfInterfaceTest : public ::testing::Test {
   template <typename Ehdr, typename Shdr, typename Nhdr, typename ElfInterfaceType>
   void BuildIDSectionTooSmallForHeader();
 
+  template <typename Ehdr, typename Phdr, typename ElfInterfaceType>
+  void CheckLoadBiasInFirstPhdr(uint64_t load_bias);
+
+  template <typename Ehdr, typename Phdr, typename ElfInterfaceType>
+  void CheckLoadBiasInFirstExecPhdr(uint64_t offset, uint64_t vaddr, uint64_t load_bias);
+
   MemoryFake memory_;
 };
 
@@ -1493,6 +1499,124 @@ TEST_F(ElfInterfaceTest, build_id_section_too_small_for_header32) {
 
 TEST_F(ElfInterfaceTest, build_id_section_too_small_for_header64) {
   BuildIDSectionTooSmallForHeader<Elf64_Ehdr, Elf64_Shdr, Elf64_Nhdr, ElfInterface64>();
+}
+
+template <typename Ehdr, typename Phdr, typename ElfInterfaceType>
+void ElfInterfaceTest::CheckLoadBiasInFirstPhdr(uint64_t load_bias) {
+  Ehdr ehdr = {};
+  ehdr.e_phoff = 0x100;
+  ehdr.e_phnum = 2;
+  ehdr.e_phentsize = sizeof(Phdr);
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  Phdr phdr = {};
+  phdr.p_type = PT_LOAD;
+  phdr.p_offset = 0;
+  phdr.p_vaddr = load_bias;
+  phdr.p_memsz = 0x10000;
+  phdr.p_flags = PF_R | PF_X;
+  phdr.p_align = 0x1000;
+  memory_.SetMemory(0x100, &phdr, sizeof(phdr));
+
+  memset(&phdr, 0, sizeof(phdr));
+  phdr.p_type = PT_LOAD;
+  phdr.p_offset = 0x1000;
+  phdr.p_memsz = 0x2000;
+  phdr.p_flags = PF_R | PF_X;
+  phdr.p_align = 0x1000;
+  memory_.SetMemory(0x100 + sizeof(phdr), &phdr, sizeof(phdr));
+
+  uint64_t static_load_bias = ElfInterface::GetLoadBias<Ehdr, Phdr>(&memory_);
+  ASSERT_EQ(load_bias, static_load_bias);
+
+  std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
+  uint64_t init_load_bias = 0;
+  ASSERT_TRUE(elf->Init(&init_load_bias));
+  ASSERT_EQ(init_load_bias, static_load_bias);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_zero_32) {
+  CheckLoadBiasInFirstPhdr<Elf32_Ehdr, Elf32_Phdr, ElfInterface32>(0);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_zero_64) {
+  CheckLoadBiasInFirstPhdr<Elf64_Ehdr, Elf64_Phdr, ElfInterface64>(0);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_non_zero_32) {
+  CheckLoadBiasInFirstPhdr<Elf32_Ehdr, Elf32_Phdr, ElfInterface32>(0x1000);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_non_zero_64) {
+  CheckLoadBiasInFirstPhdr<Elf64_Ehdr, Elf64_Phdr, ElfInterface64>(0x1000);
+}
+
+template <typename Ehdr, typename Phdr, typename ElfInterfaceType>
+void ElfInterfaceTest::CheckLoadBiasInFirstExecPhdr(uint64_t offset, uint64_t vaddr,
+                                                    uint64_t load_bias) {
+  Ehdr ehdr = {};
+  ehdr.e_phoff = 0x100;
+  ehdr.e_phnum = 3;
+  ehdr.e_phentsize = sizeof(Phdr);
+  memory_.SetMemory(0, &ehdr, sizeof(ehdr));
+
+  Phdr phdr = {};
+  phdr.p_type = PT_LOAD;
+  phdr.p_memsz = 0x10000;
+  phdr.p_flags = PF_R;
+  phdr.p_align = 0x1000;
+  memory_.SetMemory(0x100, &phdr, sizeof(phdr));
+
+  memset(&phdr, 0, sizeof(phdr));
+  phdr.p_type = PT_LOAD;
+  phdr.p_offset = offset;
+  phdr.p_vaddr = vaddr;
+  phdr.p_memsz = 0x2000;
+  phdr.p_flags = PF_R | PF_X;
+  phdr.p_align = 0x1000;
+  memory_.SetMemory(0x100 + sizeof(phdr), &phdr, sizeof(phdr));
+
+  // Second executable load should be ignored for load bias computation.
+  memset(&phdr, 0, sizeof(phdr));
+  phdr.p_type = PT_LOAD;
+  phdr.p_offset = 0x1234;
+  phdr.p_vaddr = 0x2000;
+  phdr.p_memsz = 0x2000;
+  phdr.p_flags = PF_R | PF_X;
+  phdr.p_align = 0x1000;
+  memory_.SetMemory(0x200 + sizeof(phdr), &phdr, sizeof(phdr));
+
+  uint64_t static_load_bias = ElfInterface::GetLoadBias<Ehdr, Phdr>(&memory_);
+  ASSERT_EQ(load_bias, static_load_bias);
+
+  std::unique_ptr<ElfInterfaceType> elf(new ElfInterfaceType(&memory_));
+  uint64_t init_load_bias = 0;
+  ASSERT_TRUE(elf->Init(&init_load_bias));
+  ASSERT_EQ(init_load_bias, static_load_bias);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_exec_zero_32) {
+  CheckLoadBiasInFirstExecPhdr<Elf32_Ehdr, Elf32_Phdr, ElfInterface32>(0x1000, 0x1000, 0);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_exec_zero_64) {
+  CheckLoadBiasInFirstExecPhdr<Elf64_Ehdr, Elf64_Phdr, ElfInterface64>(0x1000, 0x1000, 0);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_exec_non_zero_32) {
+  CheckLoadBiasInFirstExecPhdr<Elf32_Ehdr, Elf32_Phdr, ElfInterface32>(0x1000, 0x4000, 0x3000);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_exec_non_zero_64) {
+  CheckLoadBiasInFirstExecPhdr<Elf64_Ehdr, Elf64_Phdr, ElfInterface64>(0x1000, 0x4000, 0x3000);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_exec_zero_from_error_32) {
+  CheckLoadBiasInFirstExecPhdr<Elf32_Ehdr, Elf32_Phdr, ElfInterface32>(0x5000, 0x1000, 0);
+}
+
+TEST_F(ElfInterfaceTest, get_load_bias_exec_zero_from_error_64) {
+  CheckLoadBiasInFirstExecPhdr<Elf64_Ehdr, Elf64_Phdr, ElfInterface64>(0x5000, 0x1000, 0);
 }
 
 }  // namespace unwindstack

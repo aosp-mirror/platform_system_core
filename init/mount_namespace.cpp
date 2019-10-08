@@ -91,22 +91,22 @@ static bool ActivateFlattenedApexesIfPossible() {
         return false;
     }
 
-    // Special casing for the runtime APEX
-    constexpr const char kRuntimeApexMountPath[] = "/system/apex/com.android.runtime";
-    static const std::vector<std::string> kRuntimeApexDirNames = {"com.android.runtime.release",
-                                                                  "com.android.runtime.debug"};
+    // Special casing for the ART APEX
+    constexpr const char kArtApexMountPath[] = "/system/apex/com.android.art";
+    static const std::vector<std::string> kArtApexDirNames = {"com.android.art.release",
+                                                              "com.android.art.debug"};
     bool success = false;
-    for (const auto& name : kRuntimeApexDirNames) {
+    for (const auto& name : kArtApexDirNames) {
         std::string path = std::string(kSystemApex) + "/" + name;
         if (access(path.c_str(), F_OK) == 0) {
-            if (mount(path.c_str(), kRuntimeApexMountPath, nullptr, MS_BIND, nullptr) == 0) {
+            if (mount(path.c_str(), kArtApexMountPath, nullptr, MS_BIND, nullptr) == 0) {
                 success = true;
                 break;
             }
         }
     }
     if (!success) {
-        PLOG(ERROR) << "Failed to bind mount the runtime APEX to " << kRuntimeApexMountPath;
+        PLOG(ERROR) << "Failed to bind mount the ART APEX to " << kArtApexMountPath;
     }
     return success;
 }

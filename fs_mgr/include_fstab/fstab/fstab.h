@@ -47,6 +47,7 @@ struct FstabEntry {
     off64_t reserved_size = 0;
     std::string file_contents_mode;
     std::string file_names_mode;
+    int file_policy_version = 0;
     off64_t erase_blk_size = 0;
     off64_t logical_blk_size = 0;
     std::string sysfs_path;
@@ -101,9 +102,18 @@ bool ReadDefaultFstab(Fstab* fstab);
 bool SkipMountingPartitions(Fstab* fstab);
 
 FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
+// The Fstab can contain multiple entries for the same mount point with different configurations.
+std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path);
 
-// Helper method to build a GSI fstab entry for mounting /system.
-FstabEntry BuildGsiSystemFstabEntry();
+// This method builds DSU fstab entries and transfer the fstab.
+//
+// fstab points to the unmodified fstab.
+//
+// dsu_partitions contains partition names, e.g.
+//     dsu_partitions[0] = "system_gsi"
+//     dsu_partitions[1] = "userdata_gsi"
+//     dsu_partitions[2] = ...
+void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_partitions);
 
 std::set<std::string> GetBootDevices();
 

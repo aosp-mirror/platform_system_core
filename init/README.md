@@ -170,6 +170,8 @@ runs the service.
   be changed by setting the "androidboot.console" kernel parameter. In
   all cases the leading "/dev/" should be omitted, so "/dev/tty0" would be
   specified as just "console tty0".
+  This option connects stdin, stdout, and stderr to the console. It is mutually exclusive with the
+  stdio_to_kmsg option, which only connects stdout and stderr to kmsg.
 
 `critical`
 > This is a device-critical service. If it exits more than four times in
@@ -263,6 +265,12 @@ runs the service.
 > Scheduling priority of the service process. This value has to be in range
   -20 to 19. Default priority is 0. Priority is set via setpriority().
 
+`reboot_on_failure <target>`
+> If this process cannot be started or if the process terminates with an exit code other than
+  CLD_EXITED or an status other than '0', reboot the system with the target specified in
+  _target_. _target_ takes the same format as the parameter to sys.powerctl. This is particularly
+  intended to be used with the `exec_start` builtin for any must-have checks during boot.
+
 `restart_period <seconds>`
 > If a non-oneshot service exits, it will be restarted at its start time plus
   this period. It defaults to 5s to rate limit crashing services.
@@ -306,6 +314,13 @@ runs the service.
   socket.  It defaults to the service security context, as specified by
   seclabel or computed based on the service executable file security context.
   For native executables see libcutils android\_get\_control\_socket().
+
+`stdio_to_kmsg`
+> Redirect stdout and stderr to /dev/kmsg_debug. This is useful for services that do not use native
+  Android logging during early boot and whose logs messages we want to capture. This is only enabled
+  when /dev/kmsg_debug is enabled, which is only enabled on userdebug and eng builds.
+  This is mutually exclusive with the console option, which additionally connects stdin to the
+  given console.
 
 `timeout_period <seconds>`
 > Provide a timeout after which point the service will be killed. The oneshot keyword is respected
@@ -769,6 +784,12 @@ affected.
 
 Debugging init
 --------------
+When a service starts from init, it may fail to `execv()` the service. This is not typical, and may
+point to an error happening in the linker as the new service is started. The linker in Android
+prints its logs to `logd` and `stderr`, so they are visible in `logcat`. If the error is encountered
+before it is possible to access `logcat`, the `stdio_to_kmsg` service option may be used to direct
+the logs that the linker prints to `stderr` to `kmsg`, where they can be read via a serial port.
+
 Launching init services without init is not recommended as init sets up a significant amount of
 environment (user, groups, security label, capabilities, etc) that is hard to replicate manually.
 

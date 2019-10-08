@@ -62,6 +62,11 @@ class IPartitionOpener {
     // Return block device information about the given named physical partition.
     // The name can be an absolute path if the full path is already known.
     virtual bool GetInfo(const std::string& partition_name, BlockDeviceInfo* info) const = 0;
+
+    // Return a path that can be used to pass the block device to device-mapper.
+    // This must either result in an absolute path, or a major:minor device
+    // sequence.
+    virtual std::string GetDeviceString(const std::string& partition_name) const = 0;
 };
 
 // Helper class to implement IPartitionOpener. If |partition_name| is not an
@@ -71,6 +76,7 @@ class PartitionOpener : public IPartitionOpener {
     virtual android::base::unique_fd Open(const std::string& partition_name,
                                           int flags) const override;
     virtual bool GetInfo(const std::string& partition_name, BlockDeviceInfo* info) const override;
+    virtual std::string GetDeviceString(const std::string& partition_name) const override;
 };
 
 }  // namespace fs_mgr

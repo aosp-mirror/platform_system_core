@@ -77,7 +77,7 @@ class Unwinder {
   void Unwind(const std::vector<std::string>* initial_map_names_to_skip = nullptr,
               const std::vector<std::string>* map_suffixes_to_ignore = nullptr);
 
-  size_t NumFrames() { return frames_.size(); }
+  size_t NumFrames() const { return frames_.size(); }
 
   const std::vector<FrameData>& frames() { return frames_; }
 
@@ -87,8 +87,8 @@ class Unwinder {
     return frames;
   }
 
-  std::string FormatFrame(size_t frame_num);
-  std::string FormatFrame(const FrameData& frame);
+  std::string FormatFrame(size_t frame_num) const;
+  std::string FormatFrame(const FrameData& frame) const;
 
   void SetJitDebug(JitDebug* jit_debug, ArchEnum arch);
 

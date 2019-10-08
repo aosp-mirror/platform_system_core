@@ -21,6 +21,9 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <string>
+#include <string_view>
+
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 
@@ -89,11 +92,16 @@ constexpr uint64_t AlignTo(uint64_t base, uint32_t alignment, uint32_t alignment
 // Update names from C++ strings.
 bool UpdateBlockDevicePartitionName(LpMetadataBlockDevice* device, const std::string& name);
 bool UpdatePartitionGroupName(LpMetadataPartitionGroup* group, const std::string& name);
+bool UpdatePartitionName(LpMetadataPartition* partition, const std::string& name);
 
 // Call BLKROSET ioctl on fd so that fd is readonly / read-writable.
 bool SetBlockReadonly(int fd, bool readonly);
 
-::android::base::unique_fd GetControlFileOrOpen(const char* path, int flags);
+::android::base::unique_fd GetControlFileOrOpen(std::string_view path, int flags);
+
+// For Virtual A/B updates, modify |metadata| so that it can be written to |target_slot_number|.
+bool UpdateMetadataForInPlaceSnapshot(LpMetadata* metadata, uint32_t source_slot_number,
+                                      uint32_t target_slot_number);
 
 }  // namespace fs_mgr
 }  // namespace android

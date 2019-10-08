@@ -56,6 +56,11 @@ TEST(property_service, very_long_name_35166374) {
 }
 
 TEST(property_service, non_utf8_value) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Skipping test, must be run as root.";
+        return;
+    }
+
     ASSERT_TRUE(SetProperty("property_service_utf8_test", "base_success"));
     EXPECT_FALSE(SetProperty("property_service_utf8_test", "\x80"));
     EXPECT_FALSE(SetProperty("property_service_utf8_test", "\xC2\x01"));

@@ -41,7 +41,21 @@ std::string GetPartitionAbsolutePath(const std::string& path) {
     if (android::base::StartsWith(path, "/")) {
         return path;
     }
-    return "/dev/block/by-name/" + path;
+
+    auto by_name = "/dev/block/by-name/" + path;
+    if (access(by_name.c_str(), F_OK) != 0) {
+        // If the by-name symlink doesn't exist, as a special case we allow
+        // certain devices to be used as partition names. This can happen if a
+        // Dynamic System Update is installed to an sdcard, which won't be in
+        // the boot device list.
+        //
+        // We whitelist because most devices in /dev/block are not valid for
+        // storing fiemaps.
+        if (android::base::StartsWith(path, "mmcblk")) {
+            return "/dev/block/" + path;
+        }
+    }
+    return by_name;
 }
 
 bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device_info) {
@@ -98,6 +112,10 @@ unique_fd PartitionOpener::Open(const std::string& partition_name, int flags) co
 bool PartitionOpener::GetInfo(const std::string& partition_name, BlockDeviceInfo* info) const {
     std::string path = GetPartitionAbsolutePath(partition_name);
     return GetBlockDeviceInfo(path, info);
+}
+
+std::string PartitionOpener::GetDeviceString(const std::string& partition_name) const {
+    return GetPartitionAbsolutePath(partition_name);
 }
 
 }  // namespace fs_mgr

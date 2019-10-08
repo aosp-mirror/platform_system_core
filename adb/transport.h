@@ -65,10 +65,13 @@ extern const char* const kFeaturePushSync;
 extern const char* const kFeatureApex;
 // adbd has b/110953234 fixed.
 extern const char* const kFeatureFixedPushMkdir;
-// adbd supports android binder bridge (abb).
+// adbd supports android binder bridge (abb) in interactive mode using shell protocol.
 extern const char* const kFeatureAbb;
+// adbd supports abb using raw pipe.
+extern const char* const kFeatureAbbExec;
 // adbd properly updates symlink timestamps on push.
 extern const char* const kFeatureFixedPushSymlinkTimestamp;
+extern const char* const kFeatureRemountShell;
 
 TransportId NextTransportId();
 
@@ -273,6 +276,9 @@ class atransport {
     std::string model;
     std::string device;
     std::string devpath;
+
+    // Used to provide the key to the framework.
+    std::string auth_key;
 
     bool IsTcpDevice() const { return type == kTransportLocal; }
 

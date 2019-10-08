@@ -196,6 +196,8 @@ class Service {
     bool post_data_ = false;
 
     bool running_at_post_data_reset_ = false;
+
+    std::optional<std::string> on_failure_reboot_target_;
 };
 
 }  // namespace init

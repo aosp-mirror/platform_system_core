@@ -64,7 +64,8 @@ class LoopDevice {
   public:
     // Create a loop device for the given file descriptor. It is closed when
     // LoopDevice is destroyed only if auto_close is true.
-    LoopDevice(int fd, const std::chrono::milliseconds& timeout_ms, bool auto_close = false);
+    LoopDevice(android::base::borrowed_fd fd, const std::chrono::milliseconds& timeout_ms,
+               bool auto_close = false);
     // Create a loop device for the given file path. It will be opened for
     // reading and writing and closed when the loop device is detached.
     LoopDevice(const std::string& path, const std::chrono::milliseconds& timeout_ms);
@@ -81,8 +82,8 @@ class LoopDevice {
   private:
     void Init(const std::chrono::milliseconds& timeout_ms);
 
-    android::base::unique_fd fd_;
-    bool owns_fd_;
+    android::base::borrowed_fd fd_;
+    android::base::unique_fd owned_fd_;
     std::string device_;
     LoopControl control_;
     bool valid_ = false;

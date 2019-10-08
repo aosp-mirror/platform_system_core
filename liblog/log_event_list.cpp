@@ -88,7 +88,6 @@ android_log_context create_android_logger(uint32_t tag) {
 
 android_log_context create_android_log_parser(const char* msg, size_t len) {
   android_log_context_internal* context;
-  size_t i;
 
   context =
       static_cast<android_log_context_internal*>(calloc(1, sizeof(android_log_context_internal)));
@@ -177,13 +176,6 @@ int android_log_write_list_begin(android_log_context ctx) {
   return 0;
 }
 
-static inline void copy4LE(uint8_t* buf, uint32_t val) {
-  buf[0] = val & 0xFF;
-  buf[1] = (val >> 8) & 0xFF;
-  buf[2] = (val >> 16) & 0xFF;
-  buf[3] = (val >> 24) & 0xFF;
-}
-
 int android_log_write_int32(android_log_context ctx, int32_t value) {
   size_t needed;
   android_log_context_internal* context;
@@ -202,20 +194,9 @@ int android_log_write_int32(android_log_context ctx, int32_t value) {
   }
   context->count[context->list_nest_depth]++;
   context->storage[context->pos + 0] = EVENT_TYPE_INT;
-  copy4LE(&context->storage[context->pos + 1], value);
+  *reinterpret_cast<int32_t*>(&context->storage[context->pos + 1]) = value;
   context->pos += needed;
   return 0;
-}
-
-static inline void copy8LE(uint8_t* buf, uint64_t val) {
-  buf[0] = val & 0xFF;
-  buf[1] = (val >> 8) & 0xFF;
-  buf[2] = (val >> 16) & 0xFF;
-  buf[3] = (val >> 24) & 0xFF;
-  buf[4] = (val >> 32) & 0xFF;
-  buf[5] = (val >> 40) & 0xFF;
-  buf[6] = (val >> 48) & 0xFF;
-  buf[7] = (val >> 56) & 0xFF;
 }
 
 int android_log_write_int64(android_log_context ctx, int64_t value) {
@@ -236,7 +217,7 @@ int android_log_write_int64(android_log_context ctx, int64_t value) {
   }
   context->count[context->list_nest_depth]++;
   context->storage[context->pos + 0] = EVENT_TYPE_LONG;
-  copy8LE(&context->storage[context->pos + 1], value);
+  *reinterpret_cast<int64_t*>(&context->storage[context->pos + 1]) = value;
   context->pos += needed;
   return 0;
 }
@@ -268,7 +249,7 @@ int android_log_write_string8_len(android_log_context ctx, const char* value, si
   }
   context->count[context->list_nest_depth]++;
   context->storage[context->pos + 0] = EVENT_TYPE_STRING;
-  copy4LE(&context->storage[context->pos + 1], len);
+  *reinterpret_cast<ssize_t*>(&context->storage[context->pos + 1]) = len;
   if (len) {
     memcpy(&context->storage[context->pos + 5], value, len);
   }
@@ -300,7 +281,7 @@ int android_log_write_float32(android_log_context ctx, float value) {
   ivalue = *(uint32_t*)&value;
   context->count[context->list_nest_depth]++;
   context->storage[context->pos + 0] = EVENT_TYPE_FLOAT;
-  copy4LE(&context->storage[context->pos + 1], ivalue);
+  *reinterpret_cast<uint32_t*>(&context->storage[context->pos + 1]) = ivalue;
   context->pos += needed;
   return 0;
 }
@@ -401,22 +382,6 @@ int android_log_write_list_buffer(android_log_context ctx, const char** buffer) 
 }
 
 /*
- * Extract a 4-byte value from a byte stream.
- */
-static inline uint32_t get4LE(const uint8_t* src) {
-  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-}
-
-/*
- * Extract an 8-byte value from a byte stream.
- */
-static inline uint64_t get8LE(const uint8_t* src) {
-  uint32_t low = src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-  uint32_t high = src[4] | (src[5] << 8) | (src[6] << 16) | (src[7] << 24);
-  return ((uint64_t)high << 32) | (uint64_t)low;
-}
-
-/*
  * Gets the next element. Parsing errors result in an EVENT_TYPE_UNKNOWN type.
  * If there is nothing to process, the complete field is set to non-zero. If
  * an EVENT_TYPE_UNKNOWN type is returned once, and the caller does not check
@@ -489,7 +454,7 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
         elem.type = EVENT_TYPE_UNKNOWN;
         return elem;
       }
-      elem.data.int32 = get4LE(&context->storage[pos]);
+      elem.data.int32 = *reinterpret_cast<int32_t*>(&context->storage[pos]);
       /* common tangeable object suffix */
       pos += elem.len;
       elem.complete = !context->list_nest_depth && !context->count[0];
@@ -508,7 +473,7 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
         elem.type = EVENT_TYPE_UNKNOWN;
         return elem;
       }
-      elem.data.int64 = get8LE(&context->storage[pos]);
+      elem.data.int64 = *reinterpret_cast<int64_t*>(&context->storage[pos]);
       /* common tangeable object suffix */
       pos += elem.len;
       elem.complete = !context->list_nest_depth && !context->count[0];
@@ -527,7 +492,7 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
         elem.complete = true;
         return elem;
       }
-      elem.len = get4LE(&context->storage[pos]);
+      elem.len = *reinterpret_cast<int32_t*>(&context->storage[pos]);
       pos += sizeof(int32_t);
       if ((pos + elem.len) > context->len) {
         elem.len = context->len - pos; /* truncate string */

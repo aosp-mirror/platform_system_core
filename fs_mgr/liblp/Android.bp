@@ -17,7 +17,6 @@
 liblp_lib_deps = [
     "libbase",
     "liblog",
-    "libcrypto",
     "libcrypto_utils",
     "libsparse",
     "libext4_utils",
@@ -41,7 +40,9 @@ cc_library {
         "utility.cpp",
         "writer.cpp",
     ],
-    shared_libs: liblp_lib_deps,
+    shared_libs: [
+        "libcrypto",
+    ] + liblp_lib_deps,
     target: {
         windows: {
             enabled: true,
@@ -55,29 +56,54 @@ cc_library {
     export_include_dirs: ["include"],
 }
 
-cc_test {
-    name: "liblp_test_static",
+filegroup {
+    name: "liblp_test_srcs",
+    srcs: [
+        "builder_test.cpp",
+        "device_test.cpp",
+        "io_test.cpp",
+        "test_partition_opener.cpp",
+        "utility_test.cpp",
+    ],
+}
+
+cc_defaults {
+    name: "liblp_test_defaults",
     defaults: ["fs_mgr_defaults"],
     cppflags: [
         "-Wno-unused-parameter",
     ],
     static_libs: [
+        "libcutils",
         "libgmock",
         "libfs_mgr",
         "liblp",
+        "libcrypto_static",
     ] + liblp_lib_deps,
-    stl: "libc++_static",
-    srcs: [
-        "builder_test.cpp",
-        "io_test.cpp",
-        "test_partition_opener.cpp",
-        "utility_test.cpp",
+    header_libs: [
+        "libstorage_literals_headers",
     ],
-    target: {
-        android: {
-            static_libs: [
-                "libcutils",
-            ],
-        },
-    },
+    stl: "libc++_static",
+    srcs: [":liblp_test_srcs"],
 }
+
+cc_test {
+    name: "liblp_test",
+    defaults: ["liblp_test_defaults"],
+    test_config: "liblp_test.xml",
+    test_suites: ["device-tests"],
+}
+
+cc_test {
+    name: "vts_core_liblp_test",
+    defaults: ["liblp_test_defaults"],
+    test_suites: ["vts-core"],
+    auto_gen_config: true,
+    test_min_api_level: 29,
+}
+
+cc_test {
+    name: "vts_kernel_liblp_test",
+    defaults: ["liblp_test_defaults"],
+}
+
