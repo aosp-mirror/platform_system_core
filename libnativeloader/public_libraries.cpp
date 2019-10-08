@@ -181,10 +181,10 @@ static std::string InitDefaultPublicLibraries(bool for_preload) {
     return android::base::Join(*sonames, ':');
   }
 
-  // Remove the public libs in the runtime namespace.
+  // Remove the public libs in the art namespace.
   // These libs are listed in public.android.txt, but we don't want the rest of android
   // in default namespace to dlopen the libs.
-  // For example, libicuuc.so is exposed to classloader namespace from runtime namespace.
+  // For example, libicuuc.so is exposed to classloader namespace from art namespace.
   // Unfortunately, it does not have stable C symbols, and default namespace should only use
   // stable symbols in libandroidicu.so. http://b/120786417
   for (const std::string& lib_name : kArtApexPublicLibraries) {
@@ -281,7 +281,7 @@ const std::string& default_public_libraries() {
   return list;
 }
 
-const std::string& runtime_public_libraries() {
+const std::string& art_public_libraries() {
   static std::string list = InitArtPublicLibraries();
   return list;
 }
