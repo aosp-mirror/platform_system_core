@@ -917,3 +917,15 @@ on property:ro.debuggable=1
 
 on init && property:ro.debuggable=1
     start console
+
+on userspace-reboot:
+  # TODO(b/135984674): reset all necessary properties here.
+  setprop sys.init.userspace_reboot_in_progress 1
+
+on userspace-reboot-resume:
+  # TODO(b/135984674): remount userdata and reset checkpointing
+  trigger nonencrypted
+  trigger post-fs-data
+  trigger zygote-start
+  trigger early-boot
+  trigger boot
