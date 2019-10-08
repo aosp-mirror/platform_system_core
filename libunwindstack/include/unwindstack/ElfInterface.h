@@ -52,9 +52,9 @@ class ElfInterface {
   ElfInterface(Memory* memory) : memory_(memory) {}
   virtual ~ElfInterface();
 
-  virtual bool Init(uint64_t* load_bias) = 0;
+  virtual bool Init(int64_t* load_bias) = 0;
 
-  virtual void InitHeaders(uint64_t load_bias) = 0;
+  virtual void InitHeaders() = 0;
 
   virtual std::string GetSoname() = 0;
 
@@ -80,10 +80,13 @@ class ElfInterface {
   uint64_t dynamic_vaddr() { return dynamic_vaddr_; }
   uint64_t dynamic_size() { return dynamic_size_; }
   uint64_t eh_frame_hdr_offset() { return eh_frame_hdr_offset_; }
+  int64_t eh_frame_hdr_section_bias() { return eh_frame_hdr_section_bias_; }
   uint64_t eh_frame_hdr_size() { return eh_frame_hdr_size_; }
   uint64_t eh_frame_offset() { return eh_frame_offset_; }
+  int64_t eh_frame_section_bias() { return eh_frame_section_bias_; }
   uint64_t eh_frame_size() { return eh_frame_size_; }
   uint64_t debug_frame_offset() { return debug_frame_offset_; }
+  int64_t debug_frame_section_bias() { return debug_frame_section_bias_; }
   uint64_t debug_frame_size() { return debug_frame_size_; }
   uint64_t gnu_debugdata_offset() { return gnu_debugdata_offset_; }
   uint64_t gnu_debugdata_size() { return gnu_debugdata_size_; }
@@ -98,20 +101,20 @@ class ElfInterface {
   uint64_t LastErrorAddress() { return last_error_.address; }
 
   template <typename EhdrType, typename PhdrType>
-  static uint64_t GetLoadBias(Memory* memory);
+  static int64_t GetLoadBias(Memory* memory);
 
   template <typename EhdrType, typename ShdrType, typename NhdrType>
   static std::string ReadBuildIDFromMemory(Memory* memory);
 
  protected:
   template <typename AddressType>
-  void InitHeadersWithTemplate(uint64_t load_bias);
+  void InitHeadersWithTemplate();
 
   template <typename EhdrType, typename PhdrType, typename ShdrType>
-  bool ReadAllHeaders(uint64_t* load_bias);
+  bool ReadAllHeaders(int64_t* load_bias);
 
   template <typename EhdrType, typename PhdrType>
-  void ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias);
+  void ReadProgramHeaders(const EhdrType& ehdr, int64_t* load_bias);
 
   template <typename EhdrType, typename ShdrType>
   void ReadSectionHeaders(const EhdrType& ehdr);
@@ -142,12 +145,15 @@ class ElfInterface {
   uint64_t dynamic_size_ = 0;
 
   uint64_t eh_frame_hdr_offset_ = 0;
+  int64_t eh_frame_hdr_section_bias_ = 0;
   uint64_t eh_frame_hdr_size_ = 0;
 
   uint64_t eh_frame_offset_ = 0;
+  int64_t eh_frame_section_bias_ = 0;
   uint64_t eh_frame_size_ = 0;
 
   uint64_t debug_frame_offset_ = 0;
+  int64_t debug_frame_section_bias_ = 0;
   uint64_t debug_frame_size_ = 0;
 
   uint64_t gnu_debugdata_offset_ = 0;
@@ -175,13 +181,11 @@ class ElfInterface32 : public ElfInterface {
   ElfInterface32(Memory* memory) : ElfInterface(memory) {}
   virtual ~ElfInterface32() = default;
 
-  bool Init(uint64_t* load_bias) override {
+  bool Init(int64_t* load_bias) override {
     return ElfInterface::ReadAllHeaders<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr>(load_bias);
   }
 
-  void InitHeaders(uint64_t load_bias) override {
-    ElfInterface::InitHeadersWithTemplate<uint32_t>(load_bias);
-  }
+  void InitHeaders() override { ElfInterface::InitHeadersWithTemplate<uint32_t>(); }
 
   std::string GetSoname() override { return ElfInterface::GetSonameWithTemplate<Elf32_Dyn>(); }
 
@@ -205,13 +209,11 @@ class ElfInterface64 : public ElfInterface {
   ElfInterface64(Memory* memory) : ElfInterface(memory) {}
   virtual ~ElfInterface64() = default;
 
-  bool Init(uint64_t* load_bias) override {
+  bool Init(int64_t* load_bias) override {
     return ElfInterface::ReadAllHeaders<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr>(load_bias);
   }
 
-  void InitHeaders(uint64_t load_bias) override {
-    ElfInterface::InitHeadersWithTemplate<uint64_t>(load_bias);
-  }
+  void InitHeaders() override { ElfInterface::InitHeadersWithTemplate<uint64_t>(); }
 
   std::string GetSoname() override { return ElfInterface::GetSonameWithTemplate<Elf64_Dyn>(); }
 
