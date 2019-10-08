@@ -154,6 +154,7 @@ namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so
 namespace.conscrypt.link.default.shared_libs += liblog.so
+namespace.conscrypt.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # "resolv" APEX namespace
@@ -173,6 +174,7 @@ namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so
 namespace.resolv.link.default.shared_libs += liblog.so
 namespace.resolv.link.default.shared_libs += libvndksupport.so
+namespace.resolv.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # "sphal" namespace
@@ -347,7 +349,7 @@ namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
 namespace.neuralnetworks.link.default.shared_libs += libneuralnetworks_packageinfo.so
 namespace.neuralnetworks.link.default.shared_libs += libsync.so
 namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
-
+namespace.neuralnetworks.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # Namespace config for vendor processes. In O, no restriction is enforced for
@@ -448,7 +450,7 @@ namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
 namespace.neuralnetworks.link.default.shared_libs += libneuralnetworks_packageinfo.so
 namespace.neuralnetworks.link.default.shared_libs += libsync.so
 namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
-
+namespace.neuralnetworks.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # Namespace config for native tests that need access to both system and vendor
@@ -488,7 +490,6 @@ namespace.default.link.art.shared_libs += libnativeloader.so
 
 # TODO(b/122876336): Remove libpac.so once it's migrated to Webview
 namespace.default.link.art.shared_libs += libpac.so
-namespace.default.link.art.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 
@@ -511,6 +512,7 @@ namespace.art.asan.search.paths = /apex/com.android.art/${LIB}
 namespace.art.links = default
 # TODO(b/130340935): Use a dynamically created linker namespace similar to
 # classloader-namespace for oat files, and tighten this up.
+namespace.runtime.link.default.allow_all_shared_libs = true
 
 ###############################################################################
 # "media" APEX namespace
@@ -550,6 +552,7 @@ namespace.conscrypt.link.art.shared_libs = libandroidio.so
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so
+namespace.conscrypt.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # "resolv" APEX namespace
@@ -567,6 +570,7 @@ namespace.resolv.link.default.shared_libs += libcgrouprc.so
 namespace.resolv.link.default.shared_libs += libm.so
 namespace.resolv.link.default.shared_libs += libdl.so
 namespace.resolv.link.default.shared_libs += libbinder_ndk.so
+namespace.resolv.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # "neuralnetworks" APEX namespace
@@ -588,7 +592,7 @@ namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
 namespace.neuralnetworks.link.default.shared_libs += libneuralnetworks_packageinfo.so
 namespace.neuralnetworks.link.default.shared_libs += libsync.so
 namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
-
+namespace.neuralnetworks.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # Namespace config for binaries under /postinstall.
