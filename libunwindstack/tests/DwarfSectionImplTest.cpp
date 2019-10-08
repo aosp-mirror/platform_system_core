@@ -35,7 +35,7 @@ class TestDwarfSectionImpl : public DwarfSectionImpl<TypeParam> {
   TestDwarfSectionImpl(Memory* memory) : DwarfSectionImpl<TypeParam>(memory) {}
   virtual ~TestDwarfSectionImpl() = default;
 
-  bool Init(uint64_t, uint64_t, uint64_t) override { return false; }
+  bool Init(uint64_t, uint64_t, int64_t) override { return false; }
 
   void GetFdes(std::vector<const DwarfFde*>*) override {}
 

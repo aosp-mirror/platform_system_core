@@ -84,7 +84,7 @@ TEST_F(MapInfoGetLoadBiasTest, elf_exists) {
   elf_->FakeSetLoadBias(0);
   EXPECT_EQ(0U, map_info_->GetLoadBias(process_memory_));
 
-  map_info_->load_bias = static_cast<uint64_t>(-1);
+  map_info_->load_bias = INT64_MAX;
   elf_->FakeSetLoadBias(0x1000);
   EXPECT_EQ(0x1000U, map_info_->GetLoadBias(process_memory_));
 }
