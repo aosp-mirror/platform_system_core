@@ -29,7 +29,7 @@ using android::base::Result;
 // e.g., if it is a vendor app or not, different set of libraries are made available.
 const std::string& preloadable_public_libraries();
 const std::string& default_public_libraries();
-const std::string& runtime_public_libraries();
+const std::string& art_public_libraries();
 const std::string& vendor_public_libraries();
 const std::string& extended_public_libraries();
 const std::string& neuralnetworks_public_libraries();
