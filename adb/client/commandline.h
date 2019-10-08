@@ -109,6 +109,14 @@ int send_shell_command(
         const std::string& command, bool disable_shell_protocol = false,
         StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK);
 
+// Reads from |fd| and prints received data. If |use_shell_protocol| is true
+// this expects that incoming data will use the shell protocol, in which case
+// stdout/stderr are routed independently and the remote exit code will be
+// returned.
+// if |callback| is non-null, stdout/stderr output will be handled by it.
+int read_and_dump(borrowed_fd fd, bool use_shell_protocol = false,
+                  StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK);
+
 // Connects to the device "abb" service with |command| and returns the fd.
 template <typename ContainerT>
 unique_fd send_abb_exec_command(const ContainerT& command_args, std::string* error) {

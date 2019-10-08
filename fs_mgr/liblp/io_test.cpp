@@ -21,14 +21,12 @@
 
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
-#include <fs_mgr.h>
-#include <fstab/fstab.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
 
 #include "images.h"
-#include "mock_property_fetcher.h"
+#include "liblp_test.h"
 #include "reader.h"
 #include "test_partition_opener.h"
 #include "utility.h"
@@ -36,6 +34,7 @@
 
 using namespace std;
 using namespace android::fs_mgr;
+using namespace android::fs_mgr::testing;
 using ::testing::_;
 using ::testing::Return;
 using unique_fd = android::base::unique_fd;
@@ -124,7 +123,7 @@ static unique_fd CreateFlashedDisk() {
 }
 
 // Test that our CreateFakeDisk() function works.
-TEST(liblp, CreateFakeDisk) {
+TEST_F(LiblpTest, CreateFakeDisk) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
@@ -140,7 +139,7 @@ TEST(liblp, CreateFakeDisk) {
 
 // Flashing metadata should not work if the metadata was created for a larger
 // disk than the destination disk.
-TEST(liblp, ExportDiskTooSmall) {
+TEST_F(LiblpTest, ExportDiskTooSmall) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(kDiskSize + 4096, 512, 2);
     ASSERT_NE(builder, nullptr);
     unique_ptr<LpMetadata> exported = builder->Export();
@@ -157,7 +156,7 @@ TEST(liblp, ExportDiskTooSmall) {
 }
 
 // Test the basics of flashing a partition and reading it back.
-TEST(liblp, FlashAndReadback) {
+TEST_F(LiblpTest, FlashAndReadback) {
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
     ASSERT_NE(builder, nullptr);
     ASSERT_TRUE(AddDefaultPartitions(builder.get()));
@@ -207,7 +206,7 @@ TEST(liblp, FlashAndReadback) {
 }
 
 // Test that we can update metadata slots without disturbing others.
-TEST(liblp, UpdateAnyMetadataSlot) {
+TEST_F(LiblpTest, UpdateAnyMetadataSlot) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -252,7 +251,7 @@ TEST(liblp, UpdateAnyMetadataSlot) {
     }
 }
 
-TEST(liblp, InvalidMetadataSlot) {
+TEST_F(LiblpTest, InvalidMetadataSlot) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -271,7 +270,7 @@ TEST(liblp, InvalidMetadataSlot) {
 
 // Test that updating a metadata slot does not allow it to be computed based
 // on mismatching geometry.
-TEST(liblp, NoChangingGeometry) {
+TEST_F(LiblpTest, NoChangingGeometry) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -300,7 +299,7 @@ TEST(liblp, NoChangingGeometry) {
 }
 
 // Test that changing one bit of metadata is enough to break the checksum.
-TEST(liblp, BitFlipGeometry) {
+TEST_F(LiblpTest, BitFlipGeometry) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -319,7 +318,7 @@ TEST(liblp, BitFlipGeometry) {
     EXPECT_EQ(metadata->geometry.metadata_slot_count, 2);
 }
 
-TEST(liblp, ReadBackupGeometry) {
+TEST_F(LiblpTest, ReadBackupGeometry) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -339,7 +338,7 @@ TEST(liblp, ReadBackupGeometry) {
     EXPECT_EQ(ReadMetadata(opener, "super", 0), nullptr);
 }
 
-TEST(liblp, ReadBackupMetadata) {
+TEST_F(LiblpTest, ReadBackupMetadata) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -366,7 +365,7 @@ TEST(liblp, ReadBackupMetadata) {
 
 // Test that we don't attempt to write metadata if it would overflow its
 // reserved space.
-TEST(liblp, TooManyPartitions) {
+TEST_F(LiblpTest, TooManyPartitions) {
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
     ASSERT_NE(builder, nullptr);
 
@@ -420,7 +419,7 @@ TEST(liblp, TooManyPartitions) {
 }
 
 // Test that we can read and write image files.
-TEST(liblp, ImageFiles) {
+TEST_F(LiblpTest, ImageFiles) {
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
     ASSERT_NE(builder, nullptr);
     ASSERT_TRUE(AddDefaultPartitions(builder.get()));
@@ -436,7 +435,7 @@ TEST(liblp, ImageFiles) {
 }
 
 // Test that we can read images from buffers.
-TEST(liblp, ImageFilesInMemory) {
+TEST_F(LiblpTest, ImageFilesInMemory) {
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
     ASSERT_NE(builder, nullptr);
     ASSERT_TRUE(AddDefaultPartitions(builder.get()));
@@ -496,7 +495,7 @@ class BadWriter {
 
 // Test that an interrupted flash operation on the "primary" copy of metadata
 // is not fatal.
-TEST(liblp, UpdatePrimaryMetadataFailure) {
+TEST_F(LiblpTest, UpdatePrimaryMetadataFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -524,7 +523,7 @@ TEST(liblp, UpdatePrimaryMetadataFailure) {
 
 // Test that an interrupted flash operation on the "backup" copy of metadata
 // is not fatal.
-TEST(liblp, UpdateBackupMetadataFailure) {
+TEST_F(LiblpTest, UpdateBackupMetadataFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -553,7 +552,7 @@ TEST(liblp, UpdateBackupMetadataFailure) {
 // Test that an interrupted write *in between* writing metadata will read
 // the correct metadata copy. The primary is always considered newer than
 // the backup.
-TEST(liblp, UpdateMetadataCleanFailure) {
+TEST_F(LiblpTest, UpdateMetadataCleanFailure) {
     unique_fd fd = CreateFlashedDisk();
     ASSERT_GE(fd, 0);
 
@@ -590,7 +589,7 @@ TEST(liblp, UpdateMetadataCleanFailure) {
 }
 
 // Test that writing a sparse image can be read back.
-TEST(liblp, FlashSparseImage) {
+TEST_F(LiblpTest, FlashSparseImage) {
     unique_fd fd = CreateFakeDisk();
     ASSERT_GE(fd, 0);
 
@@ -624,7 +623,7 @@ TEST(liblp, FlashSparseImage) {
     ASSERT_NE(ReadBackupMetadata(fd.get(), geometry, 0), nullptr);
 }
 
-TEST(liblp, AutoSlotSuffixing) {
+TEST_F(LiblpTest, AutoSlotSuffixing) {
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
     ASSERT_NE(builder, nullptr);
     ASSERT_TRUE(AddDefaultPartitions(builder.get()));
@@ -667,8 +666,8 @@ TEST(liblp, AutoSlotSuffixing) {
     EXPECT_EQ(metadata->groups[1].flags, 0);
 }
 
-TEST(liblp, UpdateRetrofit) {
-    ON_CALL(*GetMockedInstance(), GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
+TEST_F(LiblpTest, UpdateRetrofit) {
+    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
             .WillByDefault(Return(true));
 
     unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
@@ -699,8 +698,8 @@ TEST(liblp, UpdateRetrofit) {
     ASSERT_TRUE(updated->extents.empty());
 }
 
-TEST(liblp, UpdateNonRetrofit) {
-    ON_CALL(*GetMockedInstance(), GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
+TEST_F(LiblpTest, UpdateNonRetrofit) {
+    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
             .WillByDefault(Return(false));
 
     unique_fd fd = CreateFlashedDisk();
@@ -715,18 +714,31 @@ TEST(liblp, UpdateNonRetrofit) {
     EXPECT_EQ(GetBlockDevicePartitionName(updated->block_devices[0]), "super");
 }
 
-TEST(liblp, ReadSuperPartition) {
-    auto slot_suffix = fs_mgr_get_slot_suffix();
-    auto slot_number = SlotNumberForSlotSuffix(slot_suffix);
-    auto super_name = fs_mgr_get_super_partition_name(slot_number);
-    auto metadata = ReadMetadata(super_name, slot_number);
-    ASSERT_NE(metadata, nullptr);
+TEST_F(LiblpTest, UpdateVirtualAB) {
+    ON_CALL(*GetMockedPropertyFetcher(), GetBoolProperty("ro.virtual_ab.enabled", _))
+            .WillByDefault(Return(true));
 
-    if (!slot_suffix.empty()) {
-        auto other_slot_suffix = fs_mgr_get_other_slot_suffix();
-        auto other_slot_number = SlotNumberForSlotSuffix(other_slot_suffix);
-        auto other_super_name = fs_mgr_get_super_partition_name(other_slot_number);
-        auto other_metadata = ReadMetadata(other_super_name, other_slot_number);
-        ASSERT_NE(other_metadata, nullptr);
-    }
+    unique_fd fd = CreateFlashedDisk();
+    ASSERT_GE(fd, 0);
+
+    DefaultPartitionOpener opener(fd);
+    auto builder = MetadataBuilder::NewForUpdate(opener, "super", 0, 1);
+    ASSERT_NE(builder, nullptr);
+    auto updated = builder->Export();
+    ASSERT_NE(updated, nullptr);
+    ASSERT_TRUE(UpdatePartitionTable(opener, "super", *updated.get(), 1));
+
+    // Validate old slot.
+    auto metadata = ReadMetadata(opener, "super", 0);
+    ASSERT_NE(metadata, nullptr);
+    ASSERT_EQ(metadata->header.minor_version, 0);
+    ASSERT_GE(metadata->partitions.size(), 1);
+    ASSERT_EQ(metadata->partitions[0].attributes & LP_PARTITION_ATTR_UPDATED, 0);
+
+    // Validate new slot.
+    metadata = ReadMetadata(opener, "super", 1);
+    ASSERT_NE(metadata, nullptr);
+    ASSERT_EQ(metadata->header.minor_version, 1);
+    ASSERT_GE(metadata->partitions.size(), 1);
+    ASSERT_NE(metadata->partitions[0].attributes & LP_PARTITION_ATTR_UPDATED, 0);
 }

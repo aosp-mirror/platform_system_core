@@ -38,8 +38,6 @@ cc_binary {
         "libkeystore_aidl",
         "libkeystore_binder",
         "libhidlbase",
-        "libhidltransport",
-        "libhwbinder",
         "android.hardware.gatekeeper@1.0",
         "libgatekeeper_aidl",
     ],

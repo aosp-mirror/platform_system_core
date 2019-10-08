@@ -60,6 +60,31 @@ properties:
                              any eligible task (fast decision). Default = false
 
   ro.lmk.kill_timeout_ms:    duration in ms after a kill when no additional
-                             kill will be done, Default = 0 (disabled)
+                             kill will be done. Default = 0 (disabled)
 
   ro.lmk.debug:              enable lmkd debug logs, Default = false
+
+  ro.lmk.swap_free_low_percentage: level of free swap as a percentage of the
+                             total swap space used as a threshold to consider
+                             the system as swap space starved. Default for
+                             low-RAM devices = 10, for high-end devices = 20
+
+  ro.lmk.thrashing_limit:    number of workingset refaults as a percentage of
+                             the file-backed pagecache size used as a threshold
+                             to consider system thrashing its pagecache.
+                             Default for low-RAM devices = 30, for high-end
+                             devices = 100
+
+  ro.lmk.thrashing_limit_decay: thrashing threshold decay expressed as a
+                             percentage of the original threshold used to lower
+                             the threshold when system does not recover even
+                             after a kill. Default for low-RAM devices = 50,
+                             for high-end devices = 10
+
+  ro.lmk.psi_partial_stall_ms: partial PSI stall threshold in milliseconds for
+                             triggering low memory notification. Default for
+                             low-RAM devices = 200, for high-end devices = 70
+
+  ro.lmk.psi_complete_stall_ms: complete PSI stall threshold in milliseconds for
+                             triggering critical memory notification. Default =
+                             700

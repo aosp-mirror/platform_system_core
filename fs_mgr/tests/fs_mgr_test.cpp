@@ -467,6 +467,7 @@ source none2       swap   defaults      forcefdeorfbe=
     }
     EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
     EXPECT_EQ("", entry->key_loc);
 }
 
@@ -682,6 +683,7 @@ source none0       swap   defaults      forcefdeorfbe=/dir/key
     EXPECT_EQ("/dir/key", entry->key_loc);
     EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_FileEncryption) {
@@ -698,14 +700,18 @@ source none6       swap   defaults      fileencryption=ice:blah
 source none7       swap   defaults      fileencryption=ice:aes-256-cts
 source none8       swap   defaults      fileencryption=ice:aes-256-heh
 source none9       swap   defaults      fileencryption=ice:adiantum
-source none10      swap   defaults      fileencryption=ice:adiantum:
+source none10      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v1
+source none11      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v2
+source none12      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v2:
+source none13      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:blah
+source none14      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:vblah
 )fs";
 
     ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(11U, fstab.size());
+    ASSERT_EQ(15U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
     flags.file_encryption = true;
@@ -715,66 +721,105 @@ source none10      swap   defaults      fileencryption=ice:adiantum:
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("", entry->file_contents_mode);
     EXPECT_EQ("", entry->file_names_mode);
+    EXPECT_EQ(0, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none1", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none2", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none3", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("adiantum", entry->file_contents_mode);
     EXPECT_EQ("adiantum", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none4", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("adiantum", entry->file_contents_mode);
     EXPECT_EQ("aes-256-heh", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none5", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none6", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("", entry->file_names_mode);
+    EXPECT_EQ(0, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none7", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none8", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("aes-256-heh", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none9", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("ice", entry->file_contents_mode);
     EXPECT_EQ("adiantum", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
 
     entry++;
     EXPECT_EQ("none10", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
+    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(1, entry->file_policy_version);
+
+    entry++;
+    EXPECT_EQ("none11", entry->mount_point);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
+    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(2, entry->file_policy_version);
+
+    entry++;
+    EXPECT_EQ("none12", entry->mount_point);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ("", entry->file_contents_mode);
     EXPECT_EQ("", entry->file_names_mode);
+    EXPECT_EQ(0, entry->file_policy_version);
+
+    entry++;
+    EXPECT_EQ("none13", entry->mount_point);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
+    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(0, entry->file_policy_version);
+
+    entry++;
+    EXPECT_EQ("none14", entry->mount_point);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
+    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
+    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
+    EXPECT_EQ(0, entry->file_policy_version);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MaxCompStreams) {

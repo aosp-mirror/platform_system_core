@@ -181,7 +181,7 @@ static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
     }
     // Check that the version is compatible.
     if (header.major_version != LP_METADATA_MAJOR_VERSION ||
-        header.minor_version > LP_METADATA_MINOR_VERSION) {
+        header.minor_version > LP_METADATA_MINOR_VERSION_MAX) {
         LERROR << "Logical partition metadata has incompatible version.";
         return false;
     }
@@ -245,6 +245,13 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
         return nullptr;
     }
 
+    uint32_t valid_attributes = 0;
+    if (metadata->header.minor_version >= LP_METADATA_VERSION_FOR_UPDATED_ATTR) {
+        valid_attributes = LP_PARTITION_ATTRIBUTE_MASK_V1;
+    } else {
+        valid_attributes = LP_PARTITION_ATTRIBUTE_MASK_V0;
+    }
+
     // ValidateTableSize ensured that |cursor| is valid for the number of
     // entries in the table.
     uint8_t* cursor = buffer.get() + header.partitions.offset;
@@ -253,7 +260,7 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
         memcpy(&partition, cursor, sizeof(partition));
         cursor += header.partitions.entry_size;
 
-        if (partition.attributes & ~LP_PARTITION_ATTRIBUTE_MASK) {
+        if (partition.attributes & ~valid_attributes) {
             LERROR << "Logical partition has invalid attribute set.";
             return nullptr;
         }

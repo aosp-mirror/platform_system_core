@@ -153,12 +153,12 @@ cc_test_library {
     shared_libs: [
         "libunwindstack",
     ],
+    relative_install_path: "libunwindstack_test",
 }
 
-cc_test {
-    name: "libunwindstack_test",
+cc_defaults {
+    name: "libunwindstack_testlib_flags",
     defaults: ["libunwindstack_flags"],
-    isolated: true,
 
     srcs: [
         "tests/ArmExidxDecodeTest.cpp",
@@ -183,7 +183,7 @@ cc_test {
         "tests/ElfTestUtils.cpp",
         "tests/IsolatedSettings.cpp",
         "tests/JitDebugTest.cpp",
-        "tests/LocalUnwinderTest.cpp",
+        "tests/LocalUpdatableMapsTest.cpp",
         "tests/LogFake.cpp",
         "tests/MapInfoCreateMemoryTest.cpp",
         "tests/MapInfoGetBuildIDTest.cpp",
@@ -211,6 +211,7 @@ cc_test {
         "tests/UnwindOfflineTest.cpp",
         "tests/UnwindTest.cpp",
         "tests/UnwinderTest.cpp",
+        "tests/VerifyBionicTerminationTest.cpp",
     ],
 
     cflags: [
@@ -252,9 +253,26 @@ cc_test {
         "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
     ],
+}
+
+cc_test {
+    name: "libunwindstack_test",
+    defaults: ["libunwindstack_testlib_flags"],
+    isolated: true,
+
+    srcs: [
+        "tests/LocalUnwinderTest.cpp",
+    ],
     required: [
         "libunwindstack_local",
     ],
+}
+
+// Skip LocalUnwinderTest until atest understands required properly.
+cc_test {
+    name: "libunwindstack_unit_test",
+    defaults: ["libunwindstack_testlib_flags"],
+    isolated: true,
 }
 
 //-------------------------------------------------------------------------

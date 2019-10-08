@@ -29,6 +29,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <cutils/sockets.h>
@@ -41,6 +42,7 @@
 #if defined(__ANDROID__)
 #include <ApexProperties.sysprop.h>
 
+#include "init.h"
 #include "mount_namespace.h"
 #include "property_service.h"
 #else
@@ -50,6 +52,7 @@
 using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
+using android::base::make_scope_guard;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
@@ -116,9 +119,10 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
     return execv(c_strings[0], c_strings.data()) == 0;
 }
 
-static bool IsRuntimeApexReady() {
+static bool AreRuntimeApexesReady() {
     struct stat buf;
-    return stat("/apex/com.android.runtime/", &buf) == 0;
+    return stat("/apex/com.android.art/", &buf) == 0 &&
+           stat("/apex/com.android.runtime/", &buf) == 0;
 }
 
 unsigned long Service::next_start_order_ = 1;
@@ -249,6 +253,11 @@ void Service::Reap(const siginfo_t& siginfo) {
         f(siginfo);
     }
 
+    if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_) {
+        LOG(ERROR) << "Service with 'reboot_on_failure' option failed, shutting down system.";
+        EnterShutdown(*on_failure_reboot_target_);
+    }
+
     if (flags_ & SVC_EXEC) UnSetExec();
 
     if (flags_ & SVC_TEMPORARY) return;
@@ -291,7 +300,7 @@ void Service::Reap(const siginfo_t& siginfo) {
                     LOG(ERROR) << "updatable process '" << name_ << "' exited 4 times "
                                << (boot_completed ? "in 4 minutes" : "before boot completed");
                     // Notifies update_verifier and apexd
-                    property_set("ro.init.updatable_crashing", "1");
+                    property_set("sys.init.updatable_crashing", "1");
                 }
             }
         } else {
@@ -324,6 +333,12 @@ void Service::DumpState() const {
 
 
 Result<void> Service::ExecStart() {
+    auto reboot_on_failure = make_scope_guard([this] {
+        if (on_failure_reboot_target_) {
+            EnterShutdown(*on_failure_reboot_target_);
+        }
+    });
+
     if (is_updatable() && !ServiceList::GetInstance().IsServicesUpdated()) {
         // Don't delay the service for ExecStart() as the semantic is that
         // the caller might depend on the side effect of the execution.
@@ -344,10 +359,17 @@ Result<void> Service::ExecStart() {
               << " gid " << proc_attr_.gid << "+" << proc_attr_.supp_gids.size() << " context "
               << (!seclabel_.empty() ? seclabel_ : "default") << ") started; waiting...";
 
+    reboot_on_failure.Disable();
     return {};
 }
 
 Result<void> Service::Start() {
+    auto reboot_on_failure = make_scope_guard([this] {
+        if (on_failure_reboot_target_) {
+            EnterShutdown(*on_failure_reboot_target_);
+        }
+    });
+
     if (is_updatable() && !ServiceList::GetInstance().IsServicesUpdated()) {
         ServiceList::GetInstance().DelayService(*this);
         return Error() << "Cannot start an updatable service '" << name_
@@ -370,6 +392,7 @@ Result<void> Service::Start() {
             flags_ |= SVC_RESTART;
         }
         // It is not an error to try to start a service that is already running.
+        reboot_on_failure.Disable();
         return {};
     }
 
@@ -406,17 +429,34 @@ Result<void> Service::Start() {
         scon = *result;
     }
 
-    if (!IsRuntimeApexReady() && !pre_apexd_) {
-        // If this service is started before the runtime APEX gets available,
-        // mark it as pre-apexd one. Note that this marking is permanent. So
-        // for example, if the service is re-launched (e.g., due to crash),
-        // it is still recognized as pre-apexd... for consistency.
+    if (!AreRuntimeApexesReady() && !pre_apexd_) {
+        // If this service is started before the Runtime and ART APEXes get
+        // available, mark it as pre-apexd one. Note that this marking is
+        // permanent. So for example, if the service is re-launched (e.g., due
+        // to crash), it is still recognized as pre-apexd... for consistency.
         pre_apexd_ = true;
     }
 
     post_data_ = ServiceList::GetInstance().IsPostData();
 
     LOG(INFO) << "starting service '" << name_ << "'...";
+
+    std::vector<Descriptor> descriptors;
+    for (const auto& socket : sockets_) {
+        if (auto result = socket.Create(scon)) {
+            descriptors.emplace_back(std::move(*result));
+        } else {
+            LOG(INFO) << "Could not create socket '" << socket.name << "': " << result.error();
+        }
+    }
+
+    for (const auto& file : files_) {
+        if (auto result = file.Create()) {
+            descriptors.emplace_back(std::move(*result));
+        } else {
+            LOG(INFO) << "Could not open file '" << file.name << "': " << result.error();
+        }
+    }
 
     pid_t pid = -1;
     if (namespaces_.flags) {
@@ -437,16 +477,8 @@ Result<void> Service::Start() {
             setenv(key.c_str(), value.c_str(), 1);
         }
 
-        for (const auto& socket : sockets_) {
-            if (auto result = socket.CreateAndPublish(scon); !result) {
-                LOG(INFO) << "Could not create socket '" << socket.name << "': " << result.error();
-            }
-        }
-
-        for (const auto& file : files_) {
-            if (auto result = file.CreateAndPublish(); !result) {
-                LOG(INFO) << "Could not open file '" << file.name << "': " << result.error();
-            }
+        for (const auto& descriptor : descriptors) {
+            descriptor.Publish();
         }
 
         if (auto result = WritePidToFiles(&writepid_files_); !result) {
@@ -458,7 +490,8 @@ Result<void> Service::Start() {
         SetProcessAttributesAndCaps();
 
         if (!ExpandArgsAndExecv(args_, sigstop_)) {
-            PLOG(ERROR) << "cannot execve('" << args_[0] << "')";
+            PLOG(ERROR) << "cannot execv('" << args_[0]
+                        << "'). See the 'Debugging init' section of init's README.md for tips";
         }
 
         _exit(127);
@@ -531,6 +564,7 @@ Result<void> Service::Start() {
     }
 
     NotifyStateChange("running");
+    reboot_on_failure.Disable();
     return {};
 }
 

@@ -105,13 +105,15 @@ cc_test {
 cc_test {
     name: "memunreachable_binder_test",
     defaults: ["libmemunreachable_defaults"],
+    require_root: true,
+
     srcs: [
         "tests/Binder_test.cpp",
     ],
     static_libs: ["libmemunreachable"],
     shared_libs: [
         "libbinder",
-        "libhwbinder",
+        "libhidlbase",
         "libutils",
     ],
     test_suites: ["device-tests"],

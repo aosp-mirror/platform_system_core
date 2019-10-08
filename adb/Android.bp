@@ -27,7 +27,6 @@ cc_defaults {
         "-DADB_HOST=1",         // overridden by adbd_defaults
         "-DALLOW_ADBD_ROOT=0",  // overridden by adbd_defaults
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION=1",
-        "-DENABLE_FASTDEPLOY=1", // enable fast deploy
     ],
     cpp_std: "experimental",
 
@@ -142,6 +141,10 @@ libadb_posix_srcs = [
     "sysdeps/posix/network.cpp",
 ]
 
+libadb_linux_srcs = [
+    "fdevent/fdevent_epoll.cpp",
+]
+
 libadb_test_srcs = [
     "adb_io_test.cpp",
     "adb_listeners_test.cpp",
@@ -170,12 +173,11 @@ cc_library_host_static {
 
     target: {
         linux: {
-            srcs: ["client/usb_linux.cpp"],
+            srcs: ["client/usb_linux.cpp"] + libadb_linux_srcs,
         },
         darwin: {
             srcs: ["client/usb_osx.cpp"],
         },
-
         not_windows: {
             srcs: libadb_posix_srcs,
         },
@@ -250,7 +252,7 @@ cc_benchmark {
         "libbase",
         "libcutils",
         "libcrypto_utils",
-        "libcrypto",
+        "libcrypto_static",
         "libdiagnose_usb",
         "liblog",
         "libusb",
@@ -342,7 +344,7 @@ cc_library_static {
     // libminadbd wants both, as it's used to build native tests.
     compile_multilib: "both",
 
-    srcs: libadb_srcs + libadb_posix_srcs + [
+    srcs: libadb_srcs + libadb_linux_srcs + libadb_posix_srcs + [
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
     ],
@@ -550,7 +552,7 @@ cc_binary {
         "libbase",
         "libbootloader_message",
         "libcap",
-        "libcrypto",
+        "libcrypto_static",
         "libcrypto_utils",
         "libcutils",
         "libdiagnose_usb",
@@ -618,7 +620,7 @@ cc_test {
         "libbootloader_message",
         "libcutils",
         "libcrypto_utils",
-        "libcrypto",
+        "libcrypto_static",
         "libdiagnose_usb",
         "liblog",
         "libusb",
@@ -626,6 +628,7 @@ cc_test {
         "libselinux",
     ],
     test_suites: ["device-tests"],
+    require_root: true,
 }
 
 python_test_host {
@@ -687,6 +690,7 @@ cc_library_host_static {
     name: "libfastdeploy_host",
     defaults: ["adb_defaults"],
     srcs: [
+        "fastdeploy/deploypatchgenerator/apk_archive.cpp",
         "fastdeploy/deploypatchgenerator/deploy_patch_generator.cpp",
         "fastdeploy/deploypatchgenerator/patch_utils.cpp",
         "fastdeploy/proto/ApkEntry.proto",
@@ -723,6 +727,7 @@ cc_test_host {
     name: "fastdeploy_test",
     defaults: ["adb_defaults"],
     srcs: [
+        "fastdeploy/deploypatchgenerator/apk_archive_test.cpp",
         "fastdeploy/deploypatchgenerator/deploy_patch_generator_test.cpp",
         "fastdeploy/deploypatchgenerator/patch_utils_test.cpp",
     ],
@@ -750,6 +755,9 @@ cc_test_host {
         },
     },
     data: [
+        "fastdeploy/testdata/rotating_cube-metadata-release.data",
         "fastdeploy/testdata/rotating_cube-release.apk",
+        "fastdeploy/testdata/sample.apk",
+        "fastdeploy/testdata/sample.cd",
     ],
 }

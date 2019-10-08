@@ -14,34 +14,27 @@
  * limitations under the License.
  */
 
-#include <fs_mgr.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
+#include <storage_literals/storage_literals.h>
 
-#include "mock_property_fetcher.h"
+#include "liblp_test.h"
 #include "utility.h"
 
 using namespace std;
+using namespace android::storage_literals;
 using namespace android::fs_mgr;
-using ::android::fs_mgr::MockPropertyFetcher;
+using namespace android::fs_mgr::testing;
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::ElementsAre;
 using ::testing::NiceMock;
 using ::testing::Return;
 
-static void ResetPropertyFetcher() {
-    IPropertyFetcher::OverrideForTesting(std::make_unique<NiceMock<MockPropertyFetcher>>());
-}
-
-MockPropertyFetcher* GetMockedInstance() {
-    return static_cast<MockPropertyFetcher*>(IPropertyFetcher::GetInstance());
-}
-
 class Environment : public ::testing::Environment {
   public:
-    void SetUp() override { ResetPropertyFetcher(); }
+    void SetUp() override { ResetMockPropertyFetcher(); }
 };
 
 int main(int argc, char** argv) {
@@ -49,11 +42,7 @@ int main(int argc, char** argv) {
     return RUN_ALL_TESTS();
 }
 
-class BuilderTest : public ::testing::Test {
-  public:
-    void SetUp() override { ResetPropertyFetcher(); }
-    void TearDown() override { ResetPropertyFetcher(); }
-};
+class BuilderTest : public LiblpTest {};
 
 TEST_F(BuilderTest, BuildBasic) {
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
@@ -362,7 +351,7 @@ TEST_F(BuilderTest, BuilderExport) {
     const LpMetadataHeader& header = exported->header;
     EXPECT_EQ(header.magic, LP_METADATA_HEADER_MAGIC);
     EXPECT_EQ(header.major_version, LP_METADATA_MAJOR_VERSION);
-    EXPECT_EQ(header.minor_version, LP_METADATA_MINOR_VERSION);
+    EXPECT_EQ(header.minor_version, LP_METADATA_MINOR_VERSION_MIN);
 
     ASSERT_EQ(exported->partitions.size(), 2);
     ASSERT_EQ(exported->extents.size(), 3);
@@ -458,23 +447,6 @@ TEST_F(BuilderTest, MetadataTooLarge) {
     device_info.alignment_offset = 32768 - LP_SECTOR_SIZE;
     builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
     EXPECT_EQ(builder, nullptr);
-}
-
-TEST_F(BuilderTest, block_device_info) {
-    PartitionOpener opener;
-
-    BlockDeviceInfo device_info;
-    ASSERT_TRUE(opener.GetInfo(fs_mgr_get_super_partition_name(), &device_info));
-
-    // Sanity check that the device doesn't give us some weird inefficient
-    // alignment.
-    ASSERT_EQ(device_info.alignment % LP_SECTOR_SIZE, 0);
-    ASSERT_EQ(device_info.alignment_offset % LP_SECTOR_SIZE, 0);
-    ASSERT_LE(device_info.alignment_offset, INT_MAX);
-    ASSERT_EQ(device_info.logical_block_size % LP_SECTOR_SIZE, 0);
-
-    // Having an alignment offset > alignment doesn't really make sense.
-    ASSERT_LT(device_info.alignment_offset, device_info.alignment);
 }
 
 TEST_F(BuilderTest, UpdateBlockDeviceInfo) {
@@ -619,13 +591,6 @@ TEST_F(BuilderTest, ChangeGroups) {
     ASSERT_FALSE(builder->ChangeGroupSize("unknown", 2));
     ASSERT_TRUE(builder->ChangeGroupSize("groupA", 32768));
     ASSERT_NE(builder->Export(), nullptr);
-}
-
-constexpr unsigned long long operator"" _GiB(unsigned long long x) {  // NOLINT
-    return x << 30;
-}
-constexpr unsigned long long operator"" _MiB(unsigned long long x) {  // NOLINT
-    return x << 20;
 }
 
 TEST_F(BuilderTest, RemoveAndAddFirstPartition) {
@@ -789,7 +754,7 @@ TEST_F(BuilderTest, ABExtents) {
 
     // A and B slots should be allocated from separate halves of the partition,
     // to mitigate allocating too many extents. (b/120433288)
-    ON_CALL(*GetMockedInstance(), GetProperty("ro.boot.slot_suffix", _))
+    ON_CALL(*GetMockedPropertyFetcher(), GetProperty("ro.boot.slot_suffix", _))
             .WillByDefault(Return("_a"));
 
     auto builder = MetadataBuilder::New(device_info, 65536, 2);
@@ -916,4 +881,39 @@ TEST_F(BuilderTest, UpdateSuper) {
 
     std::set<std::string> partitions_to_keep{"system_a", "vendor_a", "product_a"};
     ASSERT_TRUE(builder->ImportPartitions(*on_disk.get(), partitions_to_keep));
+}
+
+// Interval has operator< defined; it is not appropriate to re-define Interval::operator== that
+// compares device index.
+namespace android {
+namespace fs_mgr {
+bool operator==(const Interval& a, const Interval& b) {
+    return a.device_index == b.device_index && a.start == b.start && a.end == b.end;
+}
+}  // namespace fs_mgr
+}  // namespace android
+
+TEST_F(BuilderTest, Interval) {
+    EXPECT_EQ(0u, Interval::Intersect(Interval(0, 100, 200), Interval(0, 50, 100)).length());
+    EXPECT_EQ(Interval(0, 100, 150),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 50, 150)));
+    EXPECT_EQ(Interval(0, 100, 200),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 50, 200)));
+    EXPECT_EQ(Interval(0, 100, 200),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 50, 250)));
+    EXPECT_EQ(Interval(0, 100, 200),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 100, 200)));
+    EXPECT_EQ(Interval(0, 150, 200),
+              Interval::Intersect(Interval(0, 100, 200), Interval(0, 150, 250)));
+    EXPECT_EQ(0u, Interval::Intersect(Interval(0, 100, 200), Interval(0, 200, 250)).length());
+
+    auto v = Interval::Intersect(std::vector<Interval>{Interval(0, 0, 50), Interval(0, 100, 150)},
+                                 std::vector<Interval>{Interval(0, 25, 125)});
+    ASSERT_EQ(2, v.size());
+    EXPECT_EQ(Interval(0, 25, 50), v[0]);
+    EXPECT_EQ(Interval(0, 100, 125), v[1]);
+
+    EXPECT_EQ(0u, Interval::Intersect(std::vector<Interval>{Interval(0, 0, 50)},
+                                      std::vector<Interval>{Interval(0, 100, 150)})
+                          .size());
 }

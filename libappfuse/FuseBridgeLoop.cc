@@ -86,6 +86,7 @@ class FuseBridgeEntry {
         const bool proxy_read_ready = last_proxy_events_.events & EPOLLIN;
         const bool proxy_write_ready = last_proxy_events_.events & EPOLLOUT;
 
+        last_state_ = state_;
         last_device_events_.events = 0;
         last_proxy_events_.events = 0;
 

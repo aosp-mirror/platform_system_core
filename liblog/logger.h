@@ -31,12 +31,9 @@ union android_log_context_union {
   void* priv;
   atomic_int sock;
   atomic_int fd;
-  struct listnode* node;
-  atomic_uintptr_t atomic_pointer;
 };
 
 struct android_log_transport_write {
-  struct listnode node;
   const char* name;                  /* human name to describe the transport */
   unsigned logMask;                  /* mask cache of available() success */
   union android_log_context_union context; /* Initialized by static allocation */
@@ -54,7 +51,6 @@ struct android_log_transport_context;
 struct android_log_logger;
 
 struct android_log_transport_read {
-  struct listnode node;
   const char* name; /* human name to describe the transport */
 
   /* Does not cause resources to be taken */
@@ -95,9 +91,19 @@ struct android_log_transport_read {
                       size_t len);
 };
 
+struct android_log_transport_context {
+  union android_log_context_union context; /* zero init per-transport context */
+
+  struct android_log_transport_read* transport;
+  unsigned logMask;      /* mask of requested log buffers */
+  int ret;               /* return value associated with following data */
+  struct log_msg logMsg; /* peek at upcoming data, valid if logMsg.len != 0 */
+};
+
 struct android_log_logger_list {
   struct listnode logger;
-  struct listnode transport;
+  android_log_transport_context transport_context;
+  bool transport_initialized;
   int mode;
   unsigned int tail;
   log_time start;
@@ -111,27 +117,7 @@ struct android_log_logger {
   log_id_t logId;
 };
 
-struct android_log_transport_context {
-  struct listnode node;
-  union android_log_context_union context; /* zero init per-transport context */
-  struct android_log_logger_list* parent;
-
-  struct android_log_transport_read* transport;
-  unsigned logMask;      /* mask of requested log buffers */
-  int ret;               /* return value associated with following data */
-  struct log_msg logMsg; /* peek at upcoming data, valid if logMsg.len != 0 */
-};
-
 /* assumes caller has structures read-locked, single threaded, or fenced */
-#define transport_context_for_each(transp, logger_list)                          \
-  for ((transp) = node_to_item((logger_list)->transport.next,                    \
-                               struct android_log_transport_context, node);      \
-       ((transp) != node_to_item(&(logger_list)->transport,                      \
-                                 struct android_log_transport_context, node)) && \
-       ((transp)->parent == (logger_list));                                      \
-       (transp) = node_to_item((transp)->node.next,                              \
-                               struct android_log_transport_context, node))
-
 #define logger_for_each(logp, logger_list)                          \
   for ((logp) = node_to_item((logger_list)->logger.next,            \
                              struct android_log_logger, node);      \
@@ -158,7 +144,5 @@ static inline uid_t __android_log_uid() {
 void __android_log_lock();
 int __android_log_trylock();
 void __android_log_unlock();
-
-extern int __android_log_transport;
 
 __END_DECLS

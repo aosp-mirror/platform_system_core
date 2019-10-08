@@ -29,6 +29,7 @@
 #include "public_libraries.h"
 
 using namespace ::testing;
+using namespace ::android::nativeloader::internal;
 
 namespace android {
 namespace nativeloader {
@@ -91,7 +92,7 @@ static std::unordered_map<std::string, Platform::mock_namespace_handle> namespac
 // The actual gmock object
 class MockPlatform : public Platform {
  public:
-  MockPlatform(bool is_bridged) : is_bridged_(is_bridged) {
+  explicit MockPlatform(bool is_bridged) : is_bridged_(is_bridged) {
     ON_CALL(*this, NativeBridgeIsSupported(_)).WillByDefault(Return(is_bridged_));
     ON_CALL(*this, NativeBridgeIsPathSupported(_)).WillByDefault(Return(is_bridged_));
     ON_CALL(*this, mock_get_exported_namespace(_, _))
@@ -289,7 +290,7 @@ class NativeLoaderTest : public ::testing::TestWithParam<bool> {
 
   void SetExpectations() {
     std::vector<std::string> default_public_libs =
-        android::base::Split(default_public_libraries(), ":");
+        android::base::Split(preloadable_public_libraries(), ":");
     for (auto l : default_public_libs) {
       EXPECT_CALL(*mock, dlopen(StrEq(l.c_str()), RTLD_NOW | RTLD_NODELETE))
           .WillOnce(Return(any_nonnull));
@@ -331,7 +332,8 @@ class NativeLoaderTest_Create : public NativeLoaderTest {
 
   // expected output (.. for the default test inputs)
   std::string expected_namespace_name = "classloader-namespace";
-  uint64_t expected_namespace_flags = ANDROID_NAMESPACE_TYPE_ISOLATED;
+  uint64_t expected_namespace_flags =
+      ANDROID_NAMESPACE_TYPE_ISOLATED | ANDROID_NAMESPACE_TYPE_ALSO_USED_AS_ANONYMOUS;
   std::string expected_library_path = library_path;
   std::string expected_permitted_path = std::string("/data:/mnt/expand:") + permitted_path;
   std::string expected_parent_namespace = "platform";
@@ -356,17 +358,6 @@ class NativeLoaderTest_Create : public NativeLoaderTest {
     EXPECT_CALL(*mock, NativeBridgeIsPathSupported(_)).Times(AnyNumber());
     EXPECT_CALL(*mock, NativeBridgeInitialized()).Times(AnyNumber());
 
-    if (IsBridged()) {
-      EXPECT_CALL(*mock,
-                  mock_init_anonymous_namespace(false, StrEq(default_public_libraries()), nullptr))
-          .WillOnce(Return(true));
-
-      EXPECT_CALL(*mock, NativeBridgeInitialized()).WillOnce(Return(true));
-    }
-
-    EXPECT_CALL(*mock, mock_init_anonymous_namespace(
-                           Eq(IsBridged()), StrEq(default_public_libraries()), StrEq(library_path)))
-        .WillOnce(Return(true));
     EXPECT_CALL(*mock, mock_create_namespace(
                            Eq(IsBridged()), StrEq(expected_namespace_name), nullptr,
                            StrEq(expected_library_path), expected_namespace_flags,
@@ -443,7 +434,7 @@ TEST_P(NativeLoaderTest_Create, BundledSystemApp) {
   dex_path = "/system/app/foo/foo.apk";
   is_shared = true;
 
-  expected_namespace_flags = ANDROID_NAMESPACE_TYPE_ISOLATED | ANDROID_NAMESPACE_TYPE_SHARED;
+  expected_namespace_flags |= ANDROID_NAMESPACE_TYPE_SHARED;
   SetExpectations();
   RunTest();
 }
@@ -452,7 +443,7 @@ TEST_P(NativeLoaderTest_Create, BundledVendorApp) {
   dex_path = "/vendor/app/foo/foo.apk";
   is_shared = true;
 
-  expected_namespace_flags = ANDROID_NAMESPACE_TYPE_ISOLATED | ANDROID_NAMESPACE_TYPE_SHARED;
+  expected_namespace_flags |= ANDROID_NAMESPACE_TYPE_SHARED;
   SetExpectations();
   RunTest();
 }
@@ -475,7 +466,7 @@ TEST_P(NativeLoaderTest_Create, BundledProductApp_pre30) {
   dex_path = "/product/app/foo/foo.apk";
   is_shared = true;
 
-  expected_namespace_flags = ANDROID_NAMESPACE_TYPE_ISOLATED | ANDROID_NAMESPACE_TYPE_SHARED;
+  expected_namespace_flags |= ANDROID_NAMESPACE_TYPE_SHARED;
   SetExpectations();
   RunTest();
 }
@@ -485,7 +476,7 @@ TEST_P(NativeLoaderTest_Create, BundledProductApp_post30) {
   is_shared = true;
   target_sdk_version = 30;
 
-  expected_namespace_flags = ANDROID_NAMESPACE_TYPE_ISOLATED | ANDROID_NAMESPACE_TYPE_SHARED;
+  expected_namespace_flags |= ANDROID_NAMESPACE_TYPE_SHARED;
   SetExpectations();
   RunTest();
 }
@@ -512,6 +503,22 @@ TEST_P(NativeLoaderTest_Create, UnbundledProductApp_post30) {
   RunTest();
 }
 
+TEST_P(NativeLoaderTest_Create, NamespaceForSharedLibIsNotUsedAsAnonymousNamespace) {
+  if (IsBridged()) {
+    // There is no shared lib in translated arch
+    // TODO(jiyong): revisit this
+    return;
+  }
+  // compared to apks, for java shared libs, library_path is empty; java shared
+  // libs don't have their own native libs. They use platform's.
+  library_path = "";
+  expected_library_path = library_path;
+  // no ALSO_USED_AS_ANONYMOUS
+  expected_namespace_flags = ANDROID_NAMESPACE_TYPE_ISOLATED;
+  SetExpectations();
+  RunTest();
+}
+
 TEST_P(NativeLoaderTest_Create, TwoApks) {
   SetExpectations();
   const uint32_t second_app_target_sdk_version = 29;
@@ -523,6 +530,8 @@ TEST_P(NativeLoaderTest_Create, TwoApks) {
   const std::string expected_second_app_permitted_path =
       std::string("/data:/mnt/expand:") + second_app_permitted_path;
   const std::string expected_second_app_parent_namespace = "classloader-namespace";
+  // no ALSO_USED_AS_ANONYMOUS
+  const uint64_t expected_second_namespace_flags = ANDROID_NAMESPACE_TYPE_ISOLATED;
 
   // The scenario is that second app is loaded by the first app.
   // So the first app's classloader (`classloader`) is parent of the second
@@ -532,10 +541,10 @@ TEST_P(NativeLoaderTest_Create, TwoApks) {
 
   // namespace for the second app is created. Its parent is set to the namespace
   // of the first app.
-  EXPECT_CALL(*mock, mock_create_namespace(Eq(IsBridged()), StrEq(expected_namespace_name), nullptr,
-                                           StrEq(second_app_library_path), expected_namespace_flags,
-                                           StrEq(expected_second_app_permitted_path),
-                                           NsEq(dex_path.c_str())))
+  EXPECT_CALL(*mock, mock_create_namespace(
+                         Eq(IsBridged()), StrEq(expected_namespace_name), nullptr,
+                         StrEq(second_app_library_path), expected_second_namespace_flags,
+                         StrEq(expected_second_app_permitted_path), NsEq(dex_path.c_str())))
       .WillOnce(Return(TO_MOCK_NAMESPACE(TO_ANDROID_NAMESPACE(second_app_dex_path.c_str()))));
   EXPECT_CALL(*mock, mock_link_namespaces(Eq(IsBridged()), NsEq(second_app_dex_path.c_str()), _, _))
       .WillRepeatedly(Return(true));
@@ -568,7 +577,87 @@ TEST_P(NativeLoaderTest_Create, TwoApks) {
 
 INSTANTIATE_TEST_SUITE_P(NativeLoaderTests_Create, NativeLoaderTest_Create, testing::Bool());
 
-// TODO(b/130388701#comment22) add a test for anonymous namespace
+const std::function<Result<bool>(const struct ConfigEntry&)> always_true =
+    [](const struct ConfigEntry&) -> Result<bool> { return true; };
+
+TEST(NativeLoaderConfigParser, NamesAndComments) {
+  const char file_content[] = R"(
+######
+
+libA.so
+#libB.so
+
+
+      libC.so
+libD.so
+    #### libE.so
+)";
+  const std::vector<std::string> expected_result = {"libA.so", "libC.so", "libD.so"};
+  Result<std::vector<std::string>> result = ParseConfig(file_content, always_true);
+  ASSERT_TRUE(result) << result.error().message();
+  ASSERT_EQ(expected_result, *result);
+}
+
+TEST(NativeLoaderConfigParser, WithBitness) {
+  const char file_content[] = R"(
+libA.so 32
+libB.so 64
+libC.so
+)";
+#if defined(__LP64__)
+  const std::vector<std::string> expected_result = {"libB.so", "libC.so"};
+#else
+  const std::vector<std::string> expected_result = {"libA.so", "libC.so"};
+#endif
+  Result<std::vector<std::string>> result = ParseConfig(file_content, always_true);
+  ASSERT_TRUE(result) << result.error().message();
+  ASSERT_EQ(expected_result, *result);
+}
+
+TEST(NativeLoaderConfigParser, WithNoPreload) {
+  const char file_content[] = R"(
+libA.so nopreload
+libB.so nopreload
+libC.so
+)";
+
+  const std::vector<std::string> expected_result = {"libC.so"};
+  Result<std::vector<std::string>> result =
+      ParseConfig(file_content,
+                  [](const struct ConfigEntry& entry) -> Result<bool> { return !entry.nopreload; });
+  ASSERT_TRUE(result) << result.error().message();
+  ASSERT_EQ(expected_result, *result);
+}
+
+TEST(NativeLoaderConfigParser, WithNoPreloadAndBitness) {
+  const char file_content[] = R"(
+libA.so nopreload 32
+libB.so 64 nopreload
+libC.so 32
+libD.so 64
+libE.so nopreload
+)";
+
+#if defined(__LP64__)
+  const std::vector<std::string> expected_result = {"libD.so"};
+#else
+  const std::vector<std::string> expected_result = {"libC.so"};
+#endif
+  Result<std::vector<std::string>> result =
+      ParseConfig(file_content,
+                  [](const struct ConfigEntry& entry) -> Result<bool> { return !entry.nopreload; });
+  ASSERT_TRUE(result) << result.error().message();
+  ASSERT_EQ(expected_result, *result);
+}
+
+TEST(NativeLoaderConfigParser, RejectMalformed) {
+  ASSERT_FALSE(ParseConfig("libA.so 32 64", always_true));
+  ASSERT_FALSE(ParseConfig("libA.so 32 32", always_true));
+  ASSERT_FALSE(ParseConfig("libA.so 32 nopreload 64", always_true));
+  ASSERT_FALSE(ParseConfig("32 libA.so nopreload", always_true));
+  ASSERT_FALSE(ParseConfig("nopreload libA.so 32", always_true));
+  ASSERT_FALSE(ParseConfig("libA.so nopreload # comment", always_true));
+}
 
 }  // namespace nativeloader
 }  // namespace android

@@ -27,12 +27,9 @@
 #include <log/log_properties.h>
 #include <log/log_read.h>
 #include <log/log_time.h>
-#include <log/log_transport.h>
 
 #ifdef __ANDROID__
 static void read_with_wrap() {
-  android_set_log_transport(LOGGER_LOGD);
-
   // Read the last line in the log to get a starting timestamp. We're assuming
   // the log is not empty.
   const int mode = ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;

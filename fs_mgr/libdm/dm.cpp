@@ -79,6 +79,13 @@ bool DeviceMapper::CreateDevice(const std::string& name, const std::string& uuid
     return true;
 }
 
+bool DeviceMapper::DeleteDeviceIfExists(const std::string& name) {
+    if (GetState(name) == DmDeviceState::INVALID) {
+        return true;
+    }
+    return DeleteDevice(name);
+}
+
 bool DeviceMapper::DeleteDevice(const std::string& name) {
     struct dm_ioctl io;
     InitIo(&io, name);

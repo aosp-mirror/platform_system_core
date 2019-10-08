@@ -56,14 +56,7 @@ LogBufferElement::LogBufferElement(const LogBufferElement& elem)
       mLogId(elem.mLogId),
       mDropped(elem.mDropped) {
     if (mDropped) {
-        if (elem.isBinary() && elem.mMsg != nullptr) {
-            // for the following "len" value, refer to : setDropped(uint16_t value), getTag()
-            const int len = sizeof(android_event_header_t);
-            mMsg = new char[len];
-            memcpy(mMsg, elem.mMsg, len);
-        } else {
-            mMsg = nullptr;
-        }
+        mTag = elem.getTag();
     } else {
         mMsg = new char[mMsgLen];
         memcpy(mMsg, elem.mMsg, mMsgLen);
@@ -71,31 +64,43 @@ LogBufferElement::LogBufferElement(const LogBufferElement& elem)
 }
 
 LogBufferElement::~LogBufferElement() {
-    delete[] mMsg;
+    if (!mDropped) {
+        delete[] mMsg;
+    }
 }
 
 uint32_t LogBufferElement::getTag() const {
-    return (isBinary() &&
-            ((mDropped && mMsg != nullptr) ||
-             (!mDropped && mMsgLen >= sizeof(android_event_header_t))))
-               ? reinterpret_cast<const android_event_header_t*>(mMsg)->tag
-               : 0;
+    // Binary buffers have no tag.
+    if (!isBinary()) {
+        return 0;
+    }
+
+    // Dropped messages store the tag in place of mMsg.
+    if (mDropped) {
+        return mTag;
+    }
+
+    // For non-dropped messages, we get the tag from the message header itself.
+    if (mMsgLen < sizeof(android_event_header_t)) {
+        return 0;
+    }
+
+    return reinterpret_cast<const android_event_header_t*>(mMsg)->tag;
 }
 
 uint16_t LogBufferElement::setDropped(uint16_t value) {
-    // The tag information is saved in mMsg data, if the tag is non-zero
-    // save only the information needed to get the tag.
-    if (getTag() != 0) {
-        if (mMsgLen > sizeof(android_event_header_t)) {
-            char* truncated_msg = new char[sizeof(android_event_header_t)];
-            memcpy(truncated_msg, mMsg, sizeof(android_event_header_t));
-            delete[] mMsg;
-            mMsg = truncated_msg;
-        }  // mMsgLen == sizeof(android_event_header_t), already at minimum.
-    } else {
-        delete[] mMsg;
-        mMsg = nullptr;
+    if (mDropped) {
+        return mDroppedCount = value;
     }
+
+    // The tag information is saved in mMsg data, which is in a union with mTag, used after mDropped
+    // is set to true. Therefore we save the tag value aside, delete mMsg, then set mTag to the tag
+    // value in its place.
+    auto old_tag = getTag();
+    delete[] mMsg;
+    mMsg = nullptr;
+
+    mTag = old_tag;
     mDropped = true;
     return mDroppedCount = value;
 }

@@ -194,6 +194,7 @@ cc_library_static {
 cc_test {
     name: "debuggerd_test",
     defaults: ["debuggerd_defaults"],
+    require_root: true,
 
     cflags: ["-Wno-missing-field-initializers"],
     srcs: [

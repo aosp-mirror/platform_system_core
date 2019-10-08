@@ -16,9 +16,14 @@
 
 #include <procinfo/process_map.h>
 
+#include <inttypes.h>
+#include <sys/mman.h>
+
 #include <string>
+#include <vector>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 
 #include <gtest/gtest.h>
 
@@ -62,4 +67,216 @@ TEST(process_map, ReadProcessMaps) {
   maps.clear();
   ASSERT_TRUE(android::procinfo::ReadProcessMaps(getpid(), &maps));
   ASSERT_GT(maps.size(), 0u);
+}
+
+extern "C" void malloc_disable();
+extern "C" void malloc_enable();
+
+struct TestMapInfo {
+  TestMapInfo() = default;
+  TestMapInfo(uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, ino_t inode,
+              const char* new_name)
+      : start(start), end(end), flags(flags), pgoff(pgoff), inode(inode) {
+    strcpy(name, new_name);
+  }
+  uint64_t start = 0;
+  uint64_t end = 0;
+  uint16_t flags = 0;
+  uint64_t pgoff = 0;
+  ino_t inode = 0;
+  char name[100] = {};
+};
+
+void VerifyReadMapFileAsyncSafe(const char* maps_data,
+                                const std::vector<TestMapInfo>& expected_info) {
+  TemporaryFile tf;
+  ASSERT_TRUE(android::base::WriteStringToFd(maps_data, tf.fd));
+
+  std::vector<TestMapInfo> saved_info(expected_info.size());
+  size_t num_maps = 0;
+
+  auto callback = [&](uint64_t start, uint64_t end, uint16_t flags, uint64_t pgoff, ino_t inode,
+                      const char* name) {
+    if (num_maps != saved_info.size()) {
+      TestMapInfo& saved = saved_info[num_maps];
+      saved.start = start;
+      saved.end = end;
+      saved.flags = flags;
+      saved.pgoff = pgoff;
+      saved.inode = inode;
+      strcpy(saved.name, name);
+    }
+    num_maps++;
+  };
+
+  std::vector<char> buffer(64 * 1024);
+
+#if defined(__BIONIC__)
+  // Any allocations will block after this call.
+  malloc_disable();
+#endif
+
+  bool parsed =
+      android::procinfo::ReadMapFileAsyncSafe(tf.path, buffer.data(), buffer.size(), callback);
+
+#if defined(__BIONIC__)
+  malloc_enable();
+#endif
+
+  ASSERT_TRUE(parsed) << "Parsing of data failed:\n" << maps_data;
+  ASSERT_EQ(expected_info.size(), num_maps);
+  for (size_t i = 0; i < expected_info.size(); i++) {
+    const TestMapInfo& expected = expected_info[i];
+    const TestMapInfo& saved = saved_info[i];
+    EXPECT_EQ(expected.start, saved.start);
+    EXPECT_EQ(expected.end, saved.end);
+    EXPECT_EQ(expected.flags, saved.flags);
+    EXPECT_EQ(expected.pgoff, saved.pgoff);
+    EXPECT_EQ(expected.inode, saved.inode);
+    EXPECT_STREQ(expected.name, saved.name);
+  }
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_invalid) {
+  std::vector<TestMapInfo> expected_info;
+
+  VerifyReadMapFileAsyncSafe("12c00000-2ac00000", expected_info);
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_single) {
+  std::vector<TestMapInfo> expected_info;
+  expected_info.emplace_back(0x12c00000, 0x2ac00000, PROT_READ | PROT_WRITE, 0x100, 10267643,
+                             "/lib/fake.so");
+
+  VerifyReadMapFileAsyncSafe("12c00000-2ac00000 rw-p 00000100 00:05 10267643 /lib/fake.so",
+                             expected_info);
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_single_with_newline) {
+  std::vector<TestMapInfo> expected_info;
+  expected_info.emplace_back(0x12c00000, 0x2ac00000, PROT_READ | PROT_WRITE, 0x100, 10267643,
+                             "/lib/fake.so");
+
+  VerifyReadMapFileAsyncSafe("12c00000-2ac00000 rw-p 00000100 00:05 10267643 /lib/fake.so\n",
+                             expected_info);
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_single_no_library) {
+  std::vector<TestMapInfo> expected_info;
+  expected_info.emplace_back(0xa0000, 0xc0000, PROT_READ | PROT_WRITE | PROT_EXEC, 0xb00, 101, "");
+
+  VerifyReadMapFileAsyncSafe("a0000-c0000 rwxp 00000b00 00:05 101", expected_info);
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_multiple) {
+  std::vector<TestMapInfo> expected_info;
+  expected_info.emplace_back(0xa0000, 0xc0000, PROT_READ | PROT_WRITE | PROT_EXEC, 1, 100, "");
+  expected_info.emplace_back(0xd0000, 0xe0000, PROT_READ, 2, 101, "/lib/libsomething1.so");
+  expected_info.emplace_back(0xf0000, 0x100000, PROT_WRITE, 3, 102, "/lib/libsomething2.so");
+  expected_info.emplace_back(0x110000, 0x120000, PROT_EXEC, 4, 103, "[anon:something or another]");
+
+  std::string map_data =
+      "0a0000-0c0000 rwxp 00000001 00:05 100\n"
+      "0d0000-0e0000 r--p 00000002 00:05 101  /lib/libsomething1.so\n"
+      "0f0000-100000 -w-p 00000003 00:05 102  /lib/libsomething2.so\n"
+      "110000-120000 --xp 00000004 00:05 103  [anon:something or another]\n";
+
+  VerifyReadMapFileAsyncSafe(map_data.c_str(), expected_info);
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_multiple_reads) {
+  std::vector<TestMapInfo> expected_info;
+  std::string map_data;
+  uint64_t start = 0xa0000;
+  for (size_t i = 0; i < 10000; i++) {
+    map_data += android::base::StringPrintf("%" PRIx64 "-%" PRIx64 " r--p %zx 01:20 %zu fake.so\n",
+                                            start, start + 0x1000, i, 1000 + i);
+    expected_info.emplace_back(start, start + 0x1000, PROT_READ, i, 1000 + i, "fake.so");
+  }
+
+  VerifyReadMapFileAsyncSafe(map_data.c_str(), expected_info);
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_buffer_nullptr) {
+  size_t num_calls = 0;
+  auto callback = [&](uint64_t, uint64_t, uint16_t, uint64_t, ino_t, const char*) { num_calls++; };
+
+#if defined(__BIONIC__)
+  // Any allocations will block after this call.
+  malloc_disable();
+#endif
+
+  bool parsed = android::procinfo::ReadMapFileAsyncSafe("/proc/self/maps", nullptr, 10, callback);
+
+#if defined(__BIONIC__)
+  malloc_enable();
+#endif
+
+  ASSERT_FALSE(parsed);
+  EXPECT_EQ(0UL, num_calls);
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_buffer_size_zero) {
+  size_t num_calls = 0;
+  auto callback = [&](uint64_t, uint64_t, uint16_t, uint64_t, ino_t, const char*) { num_calls++; };
+
+#if defined(__BIONIC__)
+  // Any allocations will block after this call.
+  malloc_disable();
+#endif
+
+  char buffer[10];
+  bool parsed = android::procinfo::ReadMapFileAsyncSafe("/proc/self/maps", buffer, 0, callback);
+
+#if defined(__BIONIC__)
+  malloc_enable();
+#endif
+
+  ASSERT_FALSE(parsed);
+  EXPECT_EQ(0UL, num_calls);
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_buffer_too_small_no_calls) {
+  size_t num_calls = 0;
+  auto callback = [&](uint64_t, uint64_t, uint16_t, uint64_t, ino_t, const char*) { num_calls++; };
+
+#if defined(__BIONIC__)
+  // Any allocations will block after this call.
+  malloc_disable();
+#endif
+
+  char buffer[10];
+  bool parsed =
+      android::procinfo::ReadMapFileAsyncSafe("/proc/self/maps", buffer, sizeof(buffer), callback);
+
+#if defined(__BIONIC__)
+  malloc_enable();
+#endif
+
+  ASSERT_FALSE(parsed);
+  EXPECT_EQ(0UL, num_calls);
+}
+
+TEST(process_map, ReadMapFileAsyncSafe_buffer_too_small_could_parse) {
+  TemporaryFile tf;
+  ASSERT_TRUE(android::base::WriteStringToFd(
+      "0a0000-0c0000 rwxp 00000001 00:05 100    /fake/lib.so\n", tf.fd));
+
+  size_t num_calls = 0;
+  auto callback = [&](uint64_t, uint64_t, uint16_t, uint64_t, ino_t, const char*) { num_calls++; };
+
+#if defined(__BIONIC__)
+  // Any allocations will block after this call.
+  malloc_disable();
+#endif
+
+  char buffer[39];
+  bool parsed = android::procinfo::ReadMapFileAsyncSafe(tf.path, buffer, sizeof(buffer), callback);
+
+#if defined(__BIONIC__)
+  malloc_enable();
+#endif
+
+  ASSERT_FALSE(parsed);
+  EXPECT_EQ(0UL, num_calls);
 }

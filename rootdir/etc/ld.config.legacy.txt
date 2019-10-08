@@ -80,13 +80,14 @@ namespace.default.link.neuralnetworks.shared_libs = libneuralnetworks.so
 # This namespace exposes externally accessible libraries from the Runtime APEX.
 # Keep in sync with the "runtime" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
+# TODO(b/139408016): Rename this namespace to "art".
 namespace.runtime.isolated = true
 # Visible to allow links to be created at runtime, e.g. through
 # android_link_namespaces in libnativeloader.
 namespace.runtime.visible = true
 
-namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
+namespace.runtime.search.paths = /apex/com.android.art/${LIB}
+namespace.runtime.asan.search.paths = /apex/com.android.art/${LIB}
 namespace.runtime.links = default
 # Need allow_all_shared_libs because libart.so can dlopen oat files in
 # /system/framework and /data.
@@ -178,6 +179,7 @@ namespace.neuralnetworks.link.default.shared_libs += libdl.so
 namespace.neuralnetworks.link.default.shared_libs += liblog.so
 namespace.neuralnetworks.link.default.shared_libs += libm.so
 namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
+namespace.neuralnetworks.link.default.shared_libs += libneuralnetworks_packageinfo.so
 namespace.neuralnetworks.link.default.shared_libs += libsync.so
 namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
 
