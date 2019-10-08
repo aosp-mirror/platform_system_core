@@ -109,7 +109,7 @@ void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string&
     abort();
 }
 
-void __attribute__((noreturn)) InitFatalReboot() {
+void __attribute__((noreturn)) InitFatalReboot(int signal_number) {
     auto pid = fork();
 
     if (pid == -1) {
@@ -124,6 +124,7 @@ void __attribute__((noreturn)) InitFatalReboot() {
     }
 
     // In the parent, let's try to get a backtrace then shutdown.
+    LOG(ERROR) << __FUNCTION__ << ": signal " << signal_number;
     std::unique_ptr<Backtrace> backtrace(
             Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
     if (!backtrace->Unwind(0)) {
@@ -154,7 +155,7 @@ void InstallRebootSignalHandlers() {
         // RebootSystem uses syscall() which isn't actually async-signal-safe, but our only option
         // and probably good enough given this is already an error case and only enabled for
         // development builds.
-        InitFatalReboot();
+        InitFatalReboot(signal);
     };
     action.sa_flags = SA_RESTART;
     sigaction(SIGABRT, &action, nullptr);
