@@ -316,16 +316,11 @@ static ssize_t logdSetPrune(struct android_log_logger_list* logger_list __unused
   return check_log_success(buf, send_log_msg(NULL, NULL, buf, len));
 }
 
-static void caught_signal(int signum __unused) {}
-
 static int logdOpen(struct android_log_logger_list* logger_list,
                     struct android_log_transport_context* transp) {
   struct android_log_logger* logger;
-  struct sigaction ignore;
-  struct sigaction old_sigaction;
-  unsigned int old_alarm = 0;
   char buffer[256], *cp, c;
-  int e, ret, remaining, sock;
+  int ret, remaining, sock;
 
   if (!logger_list) {
     return -EINVAL;
@@ -393,29 +388,13 @@ static int logdOpen(struct android_log_logger_list* logger_list,
     cp += ret;
   }
 
-  if (logger_list->mode & ANDROID_LOG_NONBLOCK) {
-    /* Deal with an unresponsive logd */
-    memset(&ignore, 0, sizeof(ignore));
-    ignore.sa_handler = caught_signal;
-    sigemptyset(&ignore.sa_mask);
-    /* particularily useful if tombstone is reporting for logd */
-    sigaction(SIGALRM, &ignore, &old_sigaction);
-    old_alarm = alarm(30);
-  }
-  ret = write(sock, buffer, cp - buffer);
-  e = errno;
-  if (logger_list->mode & ANDROID_LOG_NONBLOCK) {
-    if (e == EINTR) {
-      e = ETIMEDOUT;
-    }
-    alarm(old_alarm);
-    sigaction(SIGALRM, &old_sigaction, NULL);
-  }
+  ret = TEMP_FAILURE_RETRY(write(sock, buffer, cp - buffer));
+  int write_errno = errno;
 
   if (ret <= 0) {
     close(sock);
-    if ((ret == -1) && e) {
-      return -e;
+    if (ret == -1) {
+      return -write_errno;
     }
     if (ret == 0) {
       return -EIO;
@@ -433,52 +412,21 @@ static int logdOpen(struct android_log_logger_list* logger_list,
 /* Read from the selected logs */
 static int logdRead(struct android_log_logger_list* logger_list,
                     struct android_log_transport_context* transp, struct log_msg* log_msg) {
-  int ret, e;
-  struct sigaction ignore;
-  struct sigaction old_sigaction;
-  unsigned int old_alarm = 0;
-
-  ret = logdOpen(logger_list, transp);
+  int ret = logdOpen(logger_list, transp);
   if (ret < 0) {
     return ret;
   }
 
   memset(log_msg, 0, sizeof(*log_msg));
 
-  unsigned int new_alarm = 0;
-  if (logger_list->mode & ANDROID_LOG_NONBLOCK) {
-    if ((logger_list->mode & ANDROID_LOG_WRAP) &&
-        (logger_list->start.tv_sec || logger_list->start.tv_nsec)) {
-      /* b/64143705 */
-      new_alarm = (ANDROID_LOG_WRAP_DEFAULT_TIMEOUT * 11) / 10 + 10;
-      logger_list->mode &= ~ANDROID_LOG_WRAP;
-    } else {
-      new_alarm = 30;
-    }
-
-    memset(&ignore, 0, sizeof(ignore));
-    ignore.sa_handler = caught_signal;
-    sigemptyset(&ignore.sa_mask);
-    /* particularily useful if tombstone is reporting for logd */
-    sigaction(SIGALRM, &ignore, &old_sigaction);
-    old_alarm = alarm(new_alarm);
-  }
-
   /* NOTE: SOCK_SEQPACKET guarantees we read exactly one full entry */
-  ret = recv(ret, log_msg, LOGGER_ENTRY_MAX_LEN, 0);
-  e = errno;
-
-  if (new_alarm) {
-    if ((ret == 0) || (e == EINTR)) {
-      e = EAGAIN;
-      ret = -1;
-    }
-    alarm(old_alarm);
-    sigaction(SIGALRM, &old_sigaction, NULL);
+  ret = TEMP_FAILURE_RETRY(recv(ret, log_msg, LOGGER_ENTRY_MAX_LEN, 0));
+  if ((logger_list->mode & ANDROID_LOG_NONBLOCK) && ret == 0) {
+    return -EAGAIN;
   }
 
-  if ((ret == -1) && e) {
-    return -e;
+  if (ret == -1) {
+    return -errno;
   }
   return ret;
 }
