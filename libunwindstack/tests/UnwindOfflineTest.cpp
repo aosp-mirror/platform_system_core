@@ -1534,4 +1534,53 @@ TEST_F(UnwindOfflineTest, load_bias_ro_rx_x86_64) {
   EXPECT_EQ(0x7ffd22415e90ULL, unwinder.frames()[16].sp);
 }
 
+TEST_F(UnwindOfflineTest, load_bias_different_section_bias_arm64) {
+  ASSERT_NO_FATAL_FAILURE(Init("load_bias_different_section_bias_arm64/", ARCH_ARM64));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(12U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 00000000000d59bc  linker64 (__dl_syscall+28)\n"
+      "  #01 pc 00000000000554e8  linker64 (__dl__ZL24debuggerd_signal_handleriP7siginfoPv+1148)\n"
+      "  #02 pc 00000000000008c0  vdso (__kernel_rt_sigreturn)\n"
+      "  #03 pc 000000000007f3e8  libc.so (abort+168)\n"
+      "  #04 pc 00000000000459fc  test (std::__ndk1::__throw_bad_cast()+4)\n"
+      "  #05 pc 0000000000056d80  test (testing::Test::Run()+88)\n"
+      "  #06 pc 000000000005724c  test (testing::TestInfo::Run()+112)\n"
+      "  #07 pc 0000000000057558  test (testing::TestSuite::Run()+116)\n"
+      "  #08 pc 000000000005bffc  test (testing::internal::UnitTestImpl::RunAllTests()+464)\n"
+      "  #09 pc 000000000005bd9c  test (testing::UnitTest::Run()+116)\n"
+      "  #10 pc 00000000000464e4  test (main+144)\n"
+      "  #11 pc 000000000007aa34  libc.so (__libc_init+108)\n",
+      frame_info);
+
+  EXPECT_EQ(0x7112cb99bcULL, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x7112bdbbf0ULL, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x7112c394e8ULL, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x7112bdbbf0ULL, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x7112be28c0ULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7112bdbda0ULL, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x71115ab3e8ULL, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x7fdd4a3f00ULL, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x5f739dc9fcULL, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x7fdd4a3fe0ULL, unwinder.frames()[4].sp);
+  EXPECT_EQ(0x5f739edd80ULL, unwinder.frames()[5].pc);
+  EXPECT_EQ(0x7fdd4a3ff0ULL, unwinder.frames()[5].sp);
+  EXPECT_EQ(0x5f739ee24cULL, unwinder.frames()[6].pc);
+  EXPECT_EQ(0x7fdd4a4010ULL, unwinder.frames()[6].sp);
+  EXPECT_EQ(0x5f739ee558ULL, unwinder.frames()[7].pc);
+  EXPECT_EQ(0x7fdd4a4040ULL, unwinder.frames()[7].sp);
+  EXPECT_EQ(0x5f739f2ffcULL, unwinder.frames()[8].pc);
+  EXPECT_EQ(0x7fdd4a4070ULL, unwinder.frames()[8].sp);
+  EXPECT_EQ(0x5f739f2d9cULL, unwinder.frames()[9].pc);
+  EXPECT_EQ(0x7fdd4a4100ULL, unwinder.frames()[9].sp);
+  EXPECT_EQ(0x5f739dd4e4ULL, unwinder.frames()[10].pc);
+  EXPECT_EQ(0x7fdd4a4130ULL, unwinder.frames()[10].sp);
+  EXPECT_EQ(0x71115a6a34ULL, unwinder.frames()[11].pc);
+  EXPECT_EQ(0x7fdd4a4170ULL, unwinder.frames()[11].sp);
+}
+
 }  // namespace unwindstack
