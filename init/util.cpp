@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pwd.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -481,7 +482,7 @@ static void InitAborter(const char* abort_message) {
         return;
     }
 
-    InitFatalReboot();
+    InitFatalReboot(SIGABRT);
 }
 
 // The kernel opens /dev/console and uses that fd for stdin/stdout/stderr if there is a serial
