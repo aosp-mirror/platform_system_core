@@ -58,60 +58,27 @@ static void read_with_wrap() {
 
   android_logger_list_close(logger_list);
 }
-
-static void caught_signal(int /* signum */) {
-}
 #endif
 
 // b/64143705 confirm fixed
 TEST(liblog, wrap_mode_blocks) {
 #ifdef __ANDROID__
+  // The read call is expected to take up to 2 hours in the happy case.  There was a previous bug
+  // where it would take only 30 seconds due to an alarm() in logd_reader.cpp.  That alarm has been
+  // removed, so we check here that the read call blocks for a reasonable amount of time (5s).
+
+  struct sigaction ignore = {.sa_handler = [](int) { _exit(0); }};
+  struct sigaction old_sigaction;
+  sigaction(SIGALRM, &ignore, &old_sigaction);
+  alarm(5);
 
   android::base::Timer timer;
+  read_with_wrap();
 
-  // The read call is expected to take up to 2 hours in the happy case.
-  // We only want to make sure it waits for longer than 30s, but we can't
-  // use an alarm as the implementation uses it. So we run the test in
-  // a separate process.
-  pid_t pid = fork();
-
-  if (pid == 0) {
-    // child
-    read_with_wrap();
-    _exit(0);
-  }
-
-  struct sigaction ignore, old_sigaction;
-  memset(&ignore, 0, sizeof(ignore));
-  ignore.sa_handler = caught_signal;
-  sigemptyset(&ignore.sa_mask);
-  sigaction(SIGALRM, &ignore, &old_sigaction);
-  alarm(45);
-
-  bool killed = false;
-  for (;;) {
-    siginfo_t info = {};
-    // This wait will succeed if the child exits, or fail with EINTR if the
-    // alarm goes off first - a loose approximation to a timed wait.
-    int ret = waitid(P_PID, pid, &info, WEXITED);
-    if (ret >= 0 || errno != EINTR) {
-      EXPECT_EQ(ret, 0);
-      if (!killed) {
-        EXPECT_EQ(info.si_status, 0);
-      }
-      break;
-    }
-    unsigned int alarm_left = alarm(0);
-    if (alarm_left > 0) {
-      alarm(alarm_left);
-    } else {
-      kill(pid, SIGTERM);
-      killed = true;
-    }
-  }
+  FAIL() << "read_with_wrap() should not return before the alarm is triggered.";
 
   alarm(0);
-  EXPECT_GT(timer.duration(), std::chrono::seconds(40));
+  sigaction(SIGALRM, &old_sigaction, nullptr);
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
