@@ -21,6 +21,8 @@ cc_library_headers {
 cc_library {
     name: "libnativebridge",
     defaults: ["libnativebridge-defaults"],
+    // TODO(oth): remove after moving under art/ (b/137364733)
+    visibility: ["//visibility:public"],
 
     host_supported: true,
     srcs: ["native_bridge.cc"],
@@ -52,6 +54,8 @@ cc_library {
 cc_library {
     name: "libnativebridge_lazy",
     defaults: ["libnativebridge-defaults"],
+    // TODO(oth): remove after moving under art/ (b/137364733)
+    visibility: ["//visibility:public"],
 
     host_supported: false,
     srcs: ["native_bridge_lazy.cc"],
