@@ -87,12 +87,13 @@ namespace.art.visible = true
 
 namespace.art.search.paths = /apex/com.android.art/${LIB}
 namespace.art.asan.search.paths = /apex/com.android.art/${LIB}
-namespace.art.links = default
+namespace.art.links = default,neuralnetworks
 # Need allow_all_shared_libs because libart.so can dlopen oat files in
 # /system/framework and /data.
 # TODO(b/130340935): Use a dynamically created linker namespace similar to
 # classloader-namespace for oat files, and tighten this up.
 namespace.art.link.default.allow_all_shared_libs = true
+namespace.art.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
 # "media" APEX namespace
