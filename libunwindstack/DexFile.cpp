@@ -22,6 +22,9 @@
 
 #include <memory>
 
+#define LOG_TAG "unwind"
+#include <log/log.h>
+
 #include <android-base/unique_fd.h>
 #include <art_api/dex_file_support.h>
 
@@ -31,6 +34,19 @@
 #include "DexFile.h"
 
 namespace unwindstack {
+
+static bool CheckDexSupport() {
+  if (std::string err_msg; !art_api::dex::TryLoadLibdexfileExternal(&err_msg)) {
+    ALOGW("Failed to initialize DEX file support: %s", err_msg.c_str());
+    return false;
+  }
+  return true;
+}
+
+static bool HasDexSupport() {
+  static bool has_dex_support = CheckDexSupport();
+  return has_dex_support;
+}
 
 std::unique_ptr<DexFile> DexFile::Create(uint64_t dex_file_offset_in_memory, Memory* memory,
                                          MapInfo* info) {
@@ -57,6 +73,10 @@ bool DexFile::GetMethodInformation(uint64_t dex_offset, std::string* method_name
 
 std::unique_ptr<DexFileFromFile> DexFileFromFile::Create(uint64_t dex_file_offset_in_file,
                                                          const std::string& file) {
+  if (UNLIKELY(!HasDexSupport())) {
+    return nullptr;
+  }
+
   android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(file.c_str(), O_RDONLY | O_CLOEXEC)));
   if (fd == -1) {
     return nullptr;
@@ -75,6 +95,10 @@ std::unique_ptr<DexFileFromFile> DexFileFromFile::Create(uint64_t dex_file_offse
 std::unique_ptr<DexFileFromMemory> DexFileFromMemory::Create(uint64_t dex_file_offset_in_memory,
                                                              Memory* memory,
                                                              const std::string& name) {
+  if (UNLIKELY(!HasDexSupport())) {
+    return nullptr;
+  }
+
   std::vector<uint8_t> backing_memory;
 
   for (size_t size = 0;;) {
