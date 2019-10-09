@@ -144,6 +144,11 @@ static inline int sys_pidfd_open(pid_t pid, unsigned int flags) {
     return syscall(__NR_pidfd_open, pid, flags);
 }
 
+static inline int sys_pidfd_send_signal(int pidfd, int sig, siginfo_t *info,
+                                        unsigned int flags) {
+    return syscall(__NR_pidfd_send_signal, pidfd, sig, info, flags);
+}
+
 /* default to old in-kernel interface if no memory pressure events */
 static bool use_inkernel_interface = true;
 static bool has_inkernel_module;
@@ -482,6 +487,7 @@ struct adjslot_list {
 struct proc {
     struct adjslot_list asl;
     int pid;
+    int pidfd;
     uid_t uid;
     int oomadj;
     struct proc *pidhash_next;
@@ -698,6 +704,13 @@ static int pid_remove(int pid) {
         prevp->pidhash_next = procp->pidhash_next;
 
     proc_unslot(procp);
+    /*
+     * Close pidfd here if we are not waiting for corresponding process to die,
+     * in which case stop_wait_for_proc_kill() will close the pidfd later
+     */
+    if (procp->pidfd >= 0 && procp->pidfd != last_kill_pid_or_fd) {
+        close(procp->pidfd);
+    }
     free(procp);
     return 0;
 }
@@ -922,16 +935,27 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
 
     procp = pid_lookup(params.pid);
     if (!procp) {
-            procp = malloc(sizeof(struct proc));
-            if (!procp) {
-                // Oh, the irony.  May need to rebuild our state.
+        int pidfd = -1;
+
+        if (pidfd_supported) {
+            pidfd = TEMP_FAILURE_RETRY(sys_pidfd_open(params.pid, 0));
+            if (pidfd < 0) {
+                ALOGE("pidfd_open for pid %d failed; errno=%d", params.pid, errno);
                 return;
             }
+        }
 
-            procp->pid = params.pid;
-            procp->uid = params.uid;
-            procp->oomadj = params.oomadj;
-            proc_insert(procp);
+        procp = calloc(1, sizeof(struct proc));
+        if (!procp) {
+            // Oh, the irony.  May need to rebuild our state.
+            return;
+        }
+
+        procp->pid = params.pid;
+        procp->pidfd = pidfd;
+        procp->uid = params.uid;
+        procp->oomadj = params.oomadj;
+        proc_insert(procp);
     } else {
         proc_unslot(procp);
         procp->oomadj = params.oomadj;
@@ -1733,7 +1757,7 @@ static void kill_done_handler(int data __unused, uint32_t events __unused,
     poll_params->update = POLLING_RESUME;
 }
 
-static void start_wait_for_proc_kill(int pid) {
+static void start_wait_for_proc_kill(int pid_or_fd) {
     static struct event_handler_info kill_done_hinfo = { 0, kill_done_handler };
     struct epoll_event epev;
 
@@ -1743,15 +1767,10 @@ static void start_wait_for_proc_kill(int pid) {
         stop_wait_for_proc_kill(false);
     }
 
-    if (!pidfd_supported) {
-        /* If pidfd is not supported store PID of the process being killed */
-        last_kill_pid_or_fd = pid;
-        return;
-    }
+    last_kill_pid_or_fd = pid_or_fd;
 
-    last_kill_pid_or_fd = TEMP_FAILURE_RETRY(sys_pidfd_open(pid, 0));
-    if (last_kill_pid_or_fd < 0) {
-        ALOGE("pidfd_open for process pid %d failed; errno=%d", pid, errno);
+    if (!pidfd_supported) {
+        /* If pidfd is not supported just store PID and exit */
         return;
     }
 
@@ -1770,6 +1789,7 @@ static void start_wait_for_proc_kill(int pid) {
 static int kill_one_process(struct proc* procp, int min_oom_score, int kill_reason,
                             const char *kill_desc, union meminfo *mi, struct timespec *tm) {
     int pid = procp->pid;
+    int pidfd = procp->pidfd;
     uid_t uid = procp->uid;
     int tgid;
     char *taskname;
@@ -1799,11 +1819,14 @@ static int kill_one_process(struct proc* procp, int min_oom_score, int kill_reas
 
     TRACE_KILL_START(pid);
 
-    /* Have to start waiting before sending SIGKILL to make sure pid is valid */
-    start_wait_for_proc_kill(pid);
-
     /* CAP_KILL required */
-    r = kill(pid, SIGKILL);
+    if (pidfd < 0) {
+        start_wait_for_proc_kill(pid);
+        r = kill(pid, SIGKILL);
+    } else {
+        start_wait_for_proc_kill(pidfd);
+        r = sys_pidfd_send_signal(pidfd, SIGKILL, NULL, 0);
+    }
 
     TRACE_KILL_END();
 
