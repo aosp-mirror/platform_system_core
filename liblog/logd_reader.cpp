@@ -67,12 +67,12 @@ struct android_log_transport_read logdLoggerRead = {
     .name = "logd",
     .available = logdAvailable,
     .version = logdVersion,
+    .close = logdClose,
     .read = logdRead,
     .poll = logdPoll,
-    .close = logdClose,
     .clear = logdClear,
-    .getSize = logdGetSize,
     .setSize = logdSetSize,
+    .getSize = logdGetSize,
     .getReadableSize = logdGetReadableSize,
     .getPrune = logdGetPrune,
     .setPrune = logdSetPrune,
@@ -107,7 +107,7 @@ static int socket_local_client(const std::string& name, int type) {
   strlcpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path));
 
   int fd = socket(AF_LOCAL, type | SOCK_CLOEXEC, 0);
-  if (fd == 0) {
+  if (fd == -1) {
     return -1;
   }
 
@@ -337,12 +337,6 @@ static int logdOpen(struct android_log_logger_list* logger_list,
   }
 
   sock = socket_local_client("logdr", SOCK_SEQPACKET);
-  if (sock == 0) {
-    /* Guarantee not file descriptor zero */
-    int newsock = socket_local_client("logdr", SOCK_SEQPACKET);
-    close(sock);
-    sock = newsock;
-  }
   if (sock <= 0) {
     if ((sock == -1) && errno) {
       return -errno;

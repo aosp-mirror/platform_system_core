@@ -17,6 +17,9 @@
 #ifndef ANDROID_UTILS_FLATTENABLE_H
 #define ANDROID_UTILS_FLATTENABLE_H
 
+// DO NOT USE: please use parcelable instead
+// This code is deprecated and will not be supported via AIDL code gen. For data
+// to be sent over binder, please use parcelables.
 
 #include <stdint.h>
 #include <string.h>
@@ -28,7 +31,9 @@
 
 namespace android {
 
-
+// DO NOT USE: please use parcelable instead
+// This code is deprecated and will not be supported via AIDL code gen. For data
+// to be sent over binder, please use parcelables.
 class FlattenableUtils {
 public:
     template<size_t N>
@@ -47,7 +52,12 @@ public:
 
     template<size_t N>
     static size_t align(void*& buffer) {
-        return align<N>( const_cast<void const*&>(buffer) );
+        static_assert(!(N & (N - 1)), "Can only align to a power of 2.");
+        void* b = buffer;
+        buffer = reinterpret_cast<void*>((uintptr_t(buffer) + (N-1)) & ~(N-1));
+        size_t delta = size_t(uintptr_t(buffer) - uintptr_t(b));
+        memset(b, 0, delta);
+        return delta;
     }
 
     static void advance(void*& buffer, size_t& size, size_t offset) {
@@ -79,7 +89,9 @@ public:
     }
 };
 
-
+// DO NOT USE: please use parcelable instead
+// This code is deprecated and will not be supported via AIDL code gen. For data
+// to be sent over binder, please use parcelables.
 /*
  * The Flattenable protocol allows an object to serialize itself out
  * to a byte-buffer and an array of file descriptors.
@@ -131,6 +143,9 @@ inline status_t Flattenable<T>::unflatten(
     return static_cast<T*>(this)->T::unflatten(buffer, size, fds, count);
 }
 
+// DO NOT USE: please use parcelable instead
+// This code is deprecated and will not be supported via AIDL code gen. For data
+// to be sent over binder, please use parcelables.
 /*
  * LightFlattenable is a protocol allowing object to serialize themselves out
  * to a byte-buffer. Because it doesn't handle file-descriptors,
@@ -171,6 +186,9 @@ inline status_t LightFlattenable<T>::unflatten(void const* buffer, size_t size) 
     return static_cast<T*>(this)->T::unflatten(buffer, size);
 }
 
+// DO NOT USE: please use parcelable instead
+// This code is deprecated and will not be supported via AIDL code gen. For data
+// to be sent over binder, please use parcelables.
 /*
  * LightFlattenablePod is an implementation of the LightFlattenable protocol
  * for POD (plain-old-data) objects.

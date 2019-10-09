@@ -782,15 +782,15 @@ static int proc_get_size(int pid) {
         close(fd);
         return -1;
     }
+    line[ret] = '\0';
 
     sscanf(line, "%d %d ", &total, &rss);
     close(fd);
     return rss;
 }
 
-static char *proc_get_name(int pid) {
+static char *proc_get_name(int pid, char *buf, size_t buf_size) {
     char path[PATH_MAX];
-    static char line[LINE_MAX];
     int fd;
     char *cp;
     ssize_t ret;
@@ -801,25 +801,24 @@ static char *proc_get_name(int pid) {
     if (fd == -1) {
         return NULL;
     }
-    ret = read_all(fd, line, sizeof(line) - 1);
+    ret = read_all(fd, buf, buf_size - 1);
     close(fd);
     if (ret < 0) {
         return NULL;
     }
+    buf[ret] = '\0';
 
-    cp = strchr(line, ' ');
+    cp = strchr(buf, ' ');
     if (cp) {
         *cp = '\0';
-    } else {
-        line[ret] = '\0';
     }
 
-    return line;
+    return buf;
 }
 
 static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     struct proc *procp;
-    char path[80];
+    char path[LINE_MAX];
     char val[20];
     int soft_limit_mult;
     struct lmk_procprio params;
@@ -856,7 +855,8 @@ static void cmd_procprio(LMKD_CTRL_PACKET packet) {
     }
 
     if (use_inkernel_interface) {
-        stats_store_taskname(params.pid, proc_get_name(params.pid), kpoll_info.poll_fd);
+        stats_store_taskname(params.pid, proc_get_name(params.pid, path, sizeof(path)),
+                             kpoll_info.poll_fd);
         return;
     }
 
@@ -1660,6 +1660,7 @@ static int kill_one_process(struct proc* procp, int min_oom_score, int kill_reas
     int r;
     int result = -1;
     struct memory_stat *mem_st;
+    char buf[LINE_MAX];
 
     tgid = proc_get_tgid(pid);
     if (tgid >= 0 && tgid != pid) {
@@ -1667,7 +1668,7 @@ static int kill_one_process(struct proc* procp, int min_oom_score, int kill_reas
         goto out;
     }
 
-    taskname = proc_get_name(pid);
+    taskname = proc_get_name(pid, buf, sizeof(buf));
     if (!taskname) {
         goto out;
     }

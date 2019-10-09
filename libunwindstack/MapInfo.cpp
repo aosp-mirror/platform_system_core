@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <stdint.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -263,8 +264,8 @@ bool MapInfo::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_o
 }
 
 uint64_t MapInfo::GetLoadBias(const std::shared_ptr<Memory>& process_memory) {
-  uint64_t cur_load_bias = load_bias.load();
-  if (cur_load_bias != static_cast<uint64_t>(-1)) {
+  int64_t cur_load_bias = load_bias.load();
+  if (cur_load_bias != INT64_MAX) {
     return cur_load_bias;
   }
 
