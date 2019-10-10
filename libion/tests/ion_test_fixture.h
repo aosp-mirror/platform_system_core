@@ -18,8 +18,8 @@
 #define ION_TEST_FIXTURE_H_
 
 #include <gtest/gtest.h>
+#include <linux/ion_4.12.h>
 #include <vector>
-#include "ion_4.12.h"
 
 using ::testing::Test;
 
