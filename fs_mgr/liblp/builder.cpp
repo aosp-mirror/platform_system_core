@@ -40,12 +40,16 @@ bool LinearExtent::AddTo(LpMetadata* out) const {
     return true;
 }
 
+Interval LinearExtent::AsInterval() const {
+    return Interval(device_index(), physical_sector(), end_sector());
+}
+
 bool ZeroExtent::AddTo(LpMetadata* out) const {
     out->extents.emplace_back(LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_ZERO, 0, 0});
     return true;
 }
 
-Partition::Partition(const std::string& name, const std::string& group_name, uint32_t attributes)
+Partition::Partition(std::string_view name, std::string_view group_name, uint32_t attributes)
     : name_(name), group_name_(group_name), attributes_(attributes), size_(0) {}
 
 void Partition::AddExtent(std::unique_ptr<Extent>&& extent) {
@@ -94,6 +98,20 @@ void Partition::ShrinkTo(uint64_t aligned_size) {
         extents_.pop_back();
     }
     DCHECK(size_ == aligned_size);
+}
+
+Partition Partition::GetBeginningExtents(uint64_t aligned_size) const {
+    Partition p(name_, group_name_, attributes_);
+    for (const auto& extent : extents_) {
+        auto le = extent->AsLinearExtent();
+        if (le) {
+            p.AddExtent(std::make_unique<LinearExtent>(*le));
+        } else {
+            p.AddExtent(std::make_unique<ZeroExtent>(extent->num_sectors()));
+        }
+    }
+    p.ShrinkTo(aligned_size);
+    return p;
 }
 
 uint64_t Partition::BytesOnDisk() const {
@@ -232,7 +250,7 @@ MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
     memset(&header_, 0, sizeof(header_));
     header_.magic = LP_METADATA_HEADER_MAGIC;
     header_.major_version = LP_METADATA_MAJOR_VERSION;
-    header_.minor_version = LP_METADATA_MINOR_VERSION;
+    header_.minor_version = LP_METADATA_MINOR_VERSION_MIN;
     header_.header_size = sizeof(header_);
     header_.partitions.entry_size = sizeof(LpMetadataPartition);
     header_.extents.entry_size = sizeof(LpMetadataExtent);
@@ -426,7 +444,7 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
     return true;
 }
 
-bool MetadataBuilder::AddGroup(const std::string& group_name, uint64_t maximum_size) {
+bool MetadataBuilder::AddGroup(std::string_view group_name, uint64_t maximum_size) {
     if (FindGroup(group_name)) {
         LERROR << "Group already exists: " << group_name;
         return false;
@@ -436,10 +454,10 @@ bool MetadataBuilder::AddGroup(const std::string& group_name, uint64_t maximum_s
 }
 
 Partition* MetadataBuilder::AddPartition(const std::string& name, uint32_t attributes) {
-    return AddPartition(name, std::string(kDefaultGroup), attributes);
+    return AddPartition(name, kDefaultGroup, attributes);
 }
 
-Partition* MetadataBuilder::AddPartition(const std::string& name, const std::string& group_name,
+Partition* MetadataBuilder::AddPartition(std::string_view name, std::string_view group_name,
                                          uint32_t attributes) {
     if (name.empty()) {
         LERROR << "Partition must have a non-empty name.";
@@ -457,7 +475,7 @@ Partition* MetadataBuilder::AddPartition(const std::string& name, const std::str
     return partitions_.back().get();
 }
 
-Partition* MetadataBuilder::FindPartition(const std::string& name) {
+Partition* MetadataBuilder::FindPartition(std::string_view name) {
     for (const auto& partition : partitions_) {
         if (partition->name() == name) {
             return partition.get();
@@ -486,7 +504,7 @@ uint64_t MetadataBuilder::TotalSizeOfGroup(PartitionGroup* group) const {
     return total;
 }
 
-void MetadataBuilder::RemovePartition(const std::string& name) {
+void MetadataBuilder::RemovePartition(std::string_view name) {
     for (auto iter = partitions_.begin(); iter != partitions_.end(); iter++) {
         if ((*iter)->name() == name) {
             partitions_.erase(iter);
@@ -579,12 +597,42 @@ bool MetadataBuilder::ValidatePartitionSizeChange(Partition* partition, uint64_t
     return true;
 }
 
-bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size) {
+Interval Interval::Intersect(const Interval& a, const Interval& b) {
+    Interval ret = a;
+    if (a.device_index != b.device_index) {
+        ret.start = ret.end = a.start;  // set length to 0 to indicate no intersection.
+        return ret;
+    }
+    ret.start = std::max(a.start, b.start);
+    ret.end = std::max(ret.start, std::min(a.end, b.end));
+    return ret;
+}
+
+std::vector<Interval> Interval::Intersect(const std::vector<Interval>& a,
+                                          const std::vector<Interval>& b) {
+    std::vector<Interval> ret;
+    for (const Interval& a_interval : a) {
+        for (const Interval& b_interval : b) {
+            auto intersect = Intersect(a_interval, b_interval);
+            if (intersect.length() > 0) ret.emplace_back(std::move(intersect));
+        }
+    }
+    return ret;
+}
+
+std::unique_ptr<Extent> Interval::AsExtent() const {
+    return std::make_unique<LinearExtent>(length(), device_index, start);
+}
+
+bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size,
+                                    const std::vector<Interval>& free_region_hint) {
     uint64_t space_needed = aligned_size - partition->size();
     uint64_t sectors_needed = space_needed / LP_SECTOR_SIZE;
     DCHECK(sectors_needed * LP_SECTOR_SIZE == space_needed);
 
     std::vector<Interval> free_regions = GetFreeRegions();
+    if (!free_region_hint.empty())
+        free_regions = Interval::Intersect(free_regions, free_region_hint);
 
     const uint64_t sectors_per_block = geometry_.logical_block_size / LP_SECTOR_SIZE;
     CHECK_NE(sectors_per_block, 0);
@@ -650,7 +698,7 @@ bool MetadataBuilder::GrowPartition(Partition* partition, uint64_t aligned_size)
     return true;
 }
 
-std::vector<MetadataBuilder::Interval> MetadataBuilder::PrioritizeSecondHalfOfSuper(
+std::vector<Interval> MetadataBuilder::PrioritizeSecondHalfOfSuper(
         const std::vector<Interval>& free_list) {
     const auto& super = block_devices_[0];
     uint64_t first_sector = super.first_logical_sector;
@@ -796,6 +844,11 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
             return nullptr;
         }
 
+        if (partition->attributes() & LP_PARTITION_ATTR_UPDATED) {
+            static const uint16_t kMinVersion = LP_METADATA_VERSION_FOR_UPDATED_ATTR;
+            metadata->header.minor_version = std::max(metadata->header.minor_version, kMinVersion);
+        }
+
         strncpy(part.name, partition->name().c_str(), sizeof(part.name));
         part.first_extent_index = static_cast<uint32_t>(metadata->extents.size());
         part.num_extents = static_cast<uint32_t>(partition->extents().size());
@@ -921,7 +974,8 @@ bool MetadataBuilder::UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo&
     return true;
 }
 
-bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size) {
+bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size,
+                                      const std::vector<Interval>& free_region_hint) {
     // Align the space needed up to the nearest sector.
     uint64_t aligned_size = AlignTo(requested_size, geometry_.logical_block_size);
     uint64_t old_size = partition->size();
@@ -931,7 +985,7 @@ bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_s
     }
 
     if (aligned_size > old_size) {
-        if (!GrowPartition(partition, aligned_size)) {
+        if (!GrowPartition(partition, aligned_size, free_region_hint)) {
             return false;
         }
     } else if (aligned_size < partition->size()) {
@@ -953,7 +1007,7 @@ std::vector<std::string> MetadataBuilder::ListGroups() const {
     return names;
 }
 
-void MetadataBuilder::RemoveGroupAndPartitions(const std::string& group_name) {
+void MetadataBuilder::RemoveGroupAndPartitions(std::string_view group_name) {
     if (group_name == kDefaultGroup) {
         // Cannot remove the default group.
         return;
@@ -1082,7 +1136,7 @@ bool MetadataBuilder::AddLinearExtent(Partition* partition, const std::string& b
     return true;
 }
 
-std::vector<Partition*> MetadataBuilder::ListPartitionsInGroup(const std::string& group_name) {
+std::vector<Partition*> MetadataBuilder::ListPartitionsInGroup(std::string_view group_name) {
     std::vector<Partition*> partitions;
     for (const auto& partition : partitions_) {
         if (partition->group_name() == group_name) {
@@ -1134,6 +1188,10 @@ std::string MetadataBuilder::GetBlockDevicePartitionName(uint64_t index) const {
     return index < block_devices_.size()
                    ? android::fs_mgr::GetBlockDevicePartitionName(block_devices_[index])
                    : "";
+}
+
+uint64_t MetadataBuilder::logical_block_size() const {
+    return geometry_.logical_block_size;
 }
 
 }  // namespace fs_mgr

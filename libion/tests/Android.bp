@@ -24,9 +24,11 @@ cc_test {
     srcs: [
         "allocate_test.cpp",
         "exit_test.cpp",
-    	"heap_query.cpp",
+        "heap_query.cpp",
+        "system_heap.cpp",
         "invalid_values_test.cpp",
         "ion_test_fixture.cpp",
         "map_test.cpp",
+        "modular_heap_check.cpp",
     ],
 }

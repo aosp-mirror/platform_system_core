@@ -82,7 +82,7 @@ Note that `*` matches as a wildcard and can be used anywhere in a path.
 
 ## Firmware loading
 ----------------
-Ueventd automatically serves firmware requests by searching through a list of firmware directories
+Ueventd by default serves firmware requests by searching through a list of firmware directories
 for a file matching the uevent `FIRMWARE`. It then forks a process to serve this firmware to the
 kernel.
 
@@ -100,6 +100,26 @@ entries.
 Ueventd will wait until after `post-fs` in init, to keep retrying before believing the firmwares are
 not present.
 
+The exact firmware file to be served can be customized by running an external program by a
+`external_firmware_handler` line in a ueventd.rc file. This line takes the format of
+
+    external_firmware_handler <devpath> <user name to run as> <path to external program>
+For example
+
+    external_firmware_handler /devices/leds/red/firmware/coeffs.bin system /vendor/bin/led_coeffs.bin
+Will launch `/vendor/bin/led_coeffs.bin` as the system user instead of serving the default firmware
+for `/devices/leds/red/firmware/coeffs.bin`.
+
+Ueventd will provide the uevent `DEVPATH` and `FIRMWARE` to this external program on the environment
+via environment variables with the same names. Ueventd will use the string written to stdout as the
+new name of the firmware to load. It will still look for the new firmware in the list of firmware
+directories stated above. It will also reject file names with `..` in them, to prevent leaving these
+directories. If stdout cannot be read, or the program returns with any exit code other than
+`EXIT_SUCCESS`, or the program crashes, the default firmware from the uevent will be loaded.
+
+Ueventd will additionally log all messages sent to stderr from the external program to the serial
+console after the external program has exited.
+
 ## Coldboot
 --------
 Ueventd must create devices in `/dev` for all devices that have already sent their uevents before
@@ -110,3 +130,9 @@ ueventd to create the nodes.
 
 For boot time purposes, this is done in parallel across a set of child processes. `ueventd.cpp` in
 this directory contains documentation on how the parallelization is done.
+
+There is an option to parallelize the restorecon function during cold boot as well. This should only
+be done for devices that do not use genfscon, which is the recommended method for labeling sysfs
+nodes. To enable this option, use the below line in a ueventd.rc script:
+
+    parallel_restorecon enabled

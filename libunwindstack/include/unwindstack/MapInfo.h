@@ -39,7 +39,7 @@ struct MapInfo {
         flags(flags),
         name(name),
         prev_map(map_info),
-        load_bias(static_cast<uint64_t>(-1)),
+        load_bias(INT64_MAX),
         build_id(0) {}
   MapInfo(MapInfo* map_info, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
           const std::string& name)
@@ -49,7 +49,7 @@ struct MapInfo {
         flags(flags),
         name(name),
         prev_map(map_info),
-        load_bias(static_cast<uint64_t>(-1)),
+        load_bias(INT64_MAX),
         build_id(0) {}
   ~MapInfo();
 
@@ -59,17 +59,20 @@ struct MapInfo {
   uint16_t flags = 0;
   std::string name;
   std::shared_ptr<Elf> elf;
+  // The offset of the beginning of this mapping to the beginning of the
+  // ELF file.
+  // elf_offset == offset - elf_start_offset.
   // This value is only non-zero if the offset is non-zero but there is
   // no elf signature found at that offset.
   uint64_t elf_offset = 0;
-  // This value is the offset from the map in memory that is the start
-  // of the elf. This is not equal to offset when the linker splits
+  // This value is the offset into the file of the map in memory that is the
+  // start of the elf. This is not equal to offset when the linker splits
   // shared libraries into a read-only and read-execute map.
   uint64_t elf_start_offset = 0;
 
   MapInfo* prev_map = nullptr;
 
-  std::atomic_uint64_t load_bias;
+  std::atomic_int64_t load_bias;
 
   // This is a pointer to a new'd std::string.
   // Using an atomic value means that we don't need to lock and will

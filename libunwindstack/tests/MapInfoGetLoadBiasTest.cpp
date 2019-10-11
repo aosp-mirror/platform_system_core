@@ -84,7 +84,7 @@ TEST_F(MapInfoGetLoadBiasTest, elf_exists) {
   elf_->FakeSetLoadBias(0);
   EXPECT_EQ(0U, map_info_->GetLoadBias(process_memory_));
 
-  map_info_->load_bias = static_cast<uint64_t>(-1);
+  map_info_->load_bias = INT64_MAX;
   elf_->FakeSetLoadBias(0x1000);
   EXPECT_EQ(0x1000U, map_info_->GetLoadBias(process_memory_));
 }
@@ -141,6 +141,7 @@ static void InitElfData(MemoryFake* memory, uint64_t offset) {
   phdr.p_type = PT_NULL;
   memory->SetMemory(offset + 0x5000, &phdr, sizeof(phdr));
   phdr.p_type = PT_LOAD;
+  phdr.p_flags = PF_X;
   phdr.p_offset = 0;
   phdr.p_vaddr = 0xe000;
   memory->SetMemory(offset + 0x5000 + sizeof(phdr), &phdr, sizeof(phdr));

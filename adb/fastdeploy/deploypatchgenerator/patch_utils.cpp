@@ -16,12 +16,14 @@
 
 #include "patch_utils.h"
 
-#include <androidfw/ZipFileRO.h>
 #include <stdio.h>
 
 #include "adb_io.h"
+#include "adb_utils.h"
 #include "android-base/endian.h"
 #include "sysdeps.h"
+
+#include "apk_archive.h"
 
 using namespace com::android;
 using namespace com::android::fastdeploy;
@@ -29,38 +31,50 @@ using namespace android::base;
 
 static constexpr char kSignature[] = "FASTDEPLOY";
 
-APKMetaData PatchUtils::GetAPKMetaData(const char* apkPath) {
+APKMetaData PatchUtils::GetDeviceAPKMetaData(const APKDump& apk_dump) {
     APKMetaData apkMetaData;
-#undef open
-    std::unique_ptr<android::ZipFileRO> zipFile(android::ZipFileRO::open(apkPath));
-#define open ___xxx_unix_open
-    if (zipFile == nullptr) {
-        printf("Could not open %s", apkPath);
-        exit(1);
-    }
-    void* cookie;
-    if (zipFile->startIteration(&cookie)) {
-        android::ZipEntryRO entry;
-        while ((entry = zipFile->nextEntry(cookie)) != NULL) {
-            char fileName[256];
-            // Make sure we have a file name.
-            // TODO: Handle filenames longer than 256.
-            if (zipFile->getEntryFileName(entry, fileName, sizeof(fileName))) {
-                continue;
-            }
+    apkMetaData.set_absolute_path(apk_dump.absolute_path());
 
-            uint32_t uncompressedSize, compressedSize, crc32;
-            int64_t dataOffset;
-            zipFile->getEntryInfo(entry, nullptr, &uncompressedSize, &compressedSize, &dataOffset,
-                                  nullptr, &crc32);
-            APKEntry* apkEntry = apkMetaData.add_entries();
-            apkEntry->set_crc32(crc32);
-            apkEntry->set_filename(fileName);
-            apkEntry->set_compressedsize(compressedSize);
-            apkEntry->set_uncompressedsize(uncompressedSize);
-            apkEntry->set_dataoffset(dataOffset);
-        }
+    std::string md5Hash;
+    int64_t localFileHeaderOffset;
+    int64_t dataSize;
+
+    const auto& cd = apk_dump.cd();
+    auto cur = cd.data();
+    int64_t size = cd.size();
+    while (auto consumed = ApkArchive::ParseCentralDirectoryRecord(
+                   cur, size, &md5Hash, &localFileHeaderOffset, &dataSize)) {
+        cur += consumed;
+        size -= consumed;
+
+        auto apkEntry = apkMetaData.add_entries();
+        apkEntry->set_md5(md5Hash);
+        apkEntry->set_dataoffset(localFileHeaderOffset);
+        apkEntry->set_datasize(dataSize);
     }
+    return apkMetaData;
+}
+
+APKMetaData PatchUtils::GetHostAPKMetaData(const char* apkPath) {
+    ApkArchive archive(apkPath);
+    auto dump = archive.ExtractMetadata();
+    if (dump.cd().empty()) {
+        fprintf(stderr, "adb: Could not extract Central Directory from %s\n", apkPath);
+        error_exit("Aborting");
+    }
+
+    auto apkMetaData = GetDeviceAPKMetaData(dump);
+
+    // Now let's set data sizes.
+    for (auto& apkEntry : *apkMetaData.mutable_entries()) {
+        auto dataSize =
+                archive.CalculateLocalFileEntrySize(apkEntry.dataoffset(), apkEntry.datasize());
+        if (dataSize == 0) {
+            error_exit("Aborting");
+        }
+        apkEntry.set_datasize(dataSize);
+    }
+
     return apkMetaData;
 }
 
@@ -69,18 +83,26 @@ void PatchUtils::WriteSignature(borrowed_fd output) {
 }
 
 void PatchUtils::WriteLong(int64_t value, borrowed_fd output) {
-    int64_t toLittleEndian = htole64(value);
-    WriteFdExactly(output, &toLittleEndian, sizeof(int64_t));
+    int64_t littleEndian = htole64(value);
+    WriteFdExactly(output, &littleEndian, sizeof(littleEndian));
+}
+
+void PatchUtils::WriteString(const std::string& value, android::base::borrowed_fd output) {
+    WriteLong(value.size(), output);
+    WriteFdExactly(output, value);
 }
 
 void PatchUtils::Pipe(borrowed_fd input, borrowed_fd output, size_t amount) {
-    constexpr static int BUFFER_SIZE = 128 * 1024;
+    constexpr static size_t BUFFER_SIZE = 128 * 1024;
     char buffer[BUFFER_SIZE];
     size_t transferAmount = 0;
     while (transferAmount != amount) {
-        long chunkAmount =
-                amount - transferAmount > BUFFER_SIZE ? BUFFER_SIZE : amount - transferAmount;
-        long readAmount = adb_read(input, buffer, chunkAmount);
+        auto chunkAmount = std::min(amount - transferAmount, BUFFER_SIZE);
+        auto readAmount = adb_read(input, buffer, chunkAmount);
+        if (readAmount < 0) {
+            fprintf(stderr, "adb: failed to read from input: %s\n", strerror(errno));
+            error_exit("Aborting");
+        }
         WriteFdExactly(output, buffer, readAmount);
         transferAmount += readAmount;
     }

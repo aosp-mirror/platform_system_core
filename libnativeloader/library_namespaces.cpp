@@ -44,7 +44,7 @@ namespace {
 // vendor and system namespaces.
 constexpr const char* kVendorNamespaceName = "sphal";
 constexpr const char* kVndkNamespaceName = "vndk";
-constexpr const char* kRuntimeNamespaceName = "runtime";
+constexpr const char* kArtNamespaceName = "art";
 constexpr const char* kNeuralNetworksNamespaceName = "neuralnetworks";
 
 // classloader-namespace is a linker namespace that is created for the loaded
@@ -237,10 +237,10 @@ Result<NativeLoaderNamespace*> LibraryNamespaces::Create(JNIEnv* env, uint32_t t
     return linked.error();
   }
 
-  auto runtime_ns = NativeLoaderNamespace::GetExportedNamespace(kRuntimeNamespaceName, is_bridged);
-  // Runtime apex does not exist in host, and under certain build conditions.
-  if (runtime_ns) {
-    linked = app_ns->Link(*runtime_ns, runtime_public_libraries());
+  auto art_ns = NativeLoaderNamespace::GetExportedNamespace(kArtNamespaceName, is_bridged);
+  // ART APEX does not exist on host, and under certain build conditions.
+  if (art_ns) {
+    linked = app_ns->Link(*art_ns, art_public_libraries());
     if (!linked) {
       return linked.error();
     }

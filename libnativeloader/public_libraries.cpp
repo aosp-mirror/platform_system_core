@@ -49,12 +49,12 @@ constexpr const char* kVendorPublicLibrariesFile = "/vendor/etc/public.libraries
 constexpr const char* kLlndkLibrariesFile = "/system/etc/llndk.libraries.txt";
 constexpr const char* kVndkLibrariesFile = "/system/etc/vndksp.libraries.txt";
 
-const std::vector<const std::string> kRuntimePublicLibraries = {
+const std::vector<const std::string> kArtApexPublicLibraries = {
     "libicuuc.so",
     "libicui18n.so",
 };
 
-constexpr const char* kRuntimeApexLibPath = "/apex/com.android.runtime/" LIB;
+constexpr const char* kArtApexLibPath = "/apex/com.android.art/" LIB;
 
 constexpr const char* kNeuralNetworksApexPublicLibrary = "libneuralnetworks.so";
 
@@ -176,14 +176,19 @@ static std::string InitDefaultPublicLibraries(bool for_preload) {
     std::copy(vec.begin(), vec.end(), std::back_inserter(*sonames));
   }
 
-  // Remove the public libs in the runtime namespace.
+  // If this is for preloading libs, don't remove the libs from APEXes.
+  if (for_preload) {
+    return android::base::Join(*sonames, ':');
+  }
+
+  // Remove the public libs in the art namespace.
   // These libs are listed in public.android.txt, but we don't want the rest of android
   // in default namespace to dlopen the libs.
-  // For example, libicuuc.so is exposed to classloader namespace from runtime namespace.
+  // For example, libicuuc.so is exposed to classloader namespace from art namespace.
   // Unfortunately, it does not have stable C symbols, and default namespace should only use
   // stable symbols in libandroidicu.so. http://b/120786417
-  for (const std::string& lib_name : kRuntimePublicLibraries) {
-    std::string path(kRuntimeApexLibPath);
+  for (const std::string& lib_name : kArtApexPublicLibraries) {
+    std::string path(kArtApexLibPath);
     path.append("/").append(lib_name);
 
     struct stat s;
@@ -207,9 +212,9 @@ static std::string InitDefaultPublicLibraries(bool for_preload) {
   return android::base::Join(*sonames, ':');
 }
 
-static std::string InitRuntimePublicLibraries() {
-  CHECK(sizeof(kRuntimePublicLibraries) > 0);
-  std::string list = android::base::Join(kRuntimePublicLibraries, ":");
+static std::string InitArtPublicLibraries() {
+  CHECK(sizeof(kArtApexPublicLibraries) > 0);
+  std::string list = android::base::Join(kArtApexPublicLibraries, ":");
 
   std::string additional_libs = additional_public_libraries();
   if (!additional_libs.empty()) {
@@ -276,8 +281,8 @@ const std::string& default_public_libraries() {
   return list;
 }
 
-const std::string& runtime_public_libraries() {
-  static std::string list = InitRuntimePublicLibraries();
+const std::string& art_public_libraries() {
+  static std::string list = InitArtPublicLibraries();
   return list;
 }
 

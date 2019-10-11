@@ -221,3 +221,19 @@ TEST(init, EventTriggerOrderMultipleFiles) {
 
 }  // namespace init
 }  // namespace android
+
+int SubcontextTestChildMain(int, char**);
+int FirmwareTestChildMain(int, char**);
+
+int main(int argc, char** argv) {
+    if (argc > 1 && !strcmp(argv[1], "subcontext")) {
+        return SubcontextTestChildMain(argc, argv);
+    }
+
+    if (argc > 1 && !strcmp(argv[1], "firmware")) {
+        return FirmwareTestChildMain(argc, argv);
+    }
+
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

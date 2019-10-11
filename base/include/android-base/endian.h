@@ -51,8 +51,10 @@
 /* macOS has some of the basics. */
 #include <sys/_endian.h>
 #else
-/* Windows has even less. */
+/* Windows has some of the basics as well. */
 #include <sys/param.h>
+#include <winsock2.h>
+/* winsock2.h *must* be included before the following four macros. */
 #define htons(x) __builtin_bswap16(x)
 #define htonl(x) __builtin_bswap32(x)
 #define ntohs(x) __builtin_bswap16(x)

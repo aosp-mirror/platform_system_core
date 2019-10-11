@@ -30,8 +30,8 @@ namespace init {
 
 class ActionParser : public SectionParser {
   public:
-    ActionParser(ActionManager* action_manager, std::vector<Subcontext>* subcontexts)
-        : action_manager_(action_manager), subcontexts_(subcontexts), action_(nullptr) {}
+    ActionParser(ActionManager* action_manager, Subcontext* subcontext)
+        : action_manager_(action_manager), subcontext_(subcontext), action_(nullptr) {}
     Result<void> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                               int line) override;
     Result<void> ParseLineSection(std::vector<std::string>&& args, int line) override;
@@ -39,7 +39,7 @@ class ActionParser : public SectionParser {
 
   private:
     ActionManager* action_manager_;
-    std::vector<Subcontext>* subcontexts_;
+    Subcontext* subcontext_;
     std::unique_ptr<Action> action_;
 };
 

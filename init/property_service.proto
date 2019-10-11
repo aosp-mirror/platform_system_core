@@ -22,6 +22,7 @@ message PropertyMessage {
         optional string msg = 1;
         optional string name = 2;
         optional int32 pid = 3;
+        optional int32 fd = 4;
     }
 
     message ChangedMessage {
@@ -36,10 +37,9 @@ message PropertyMessage {
 }
 
 message InitMessage {
-    message ControlResponse { optional bool result = 1; }
-
     oneof msg {
-        ControlResponse control_response = 1;
-        bool load_persistent_properties = 2;
+        bool load_persistent_properties = 1;
+        bool stop_sending_messages = 2;
+        bool start_sending_messages = 3;
     };
 }

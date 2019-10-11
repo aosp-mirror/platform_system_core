@@ -92,7 +92,6 @@ LOCAL_STATIC_LIBRARIES := \
     liblogwrap \
     libext4_utils \
     libfscrypt \
-    libseccomp_policy \
     libcrypto_utils \
     libsparse \
     libavb \
@@ -101,7 +100,7 @@ LOCAL_STATIC_LIBRARIES := \
     libcutils \
     libbase \
     liblog \
-    libcrypto \
+    libcrypto_static \
     libdl \
     libz \
     libselinux \
@@ -109,11 +108,13 @@ LOCAL_STATIC_LIBRARIES := \
     libgsi \
     libcom.android.sysprop.apex \
     liblzma \
-    libdexfile_support \
+    libdexfile_support_static \
     libunwindstack \
     libbacktrace \
     libmodprobe \
     libext2_uuid \
+    libprotobuf-cpp-lite \
+    libsnapshot_nobinder \
 
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.

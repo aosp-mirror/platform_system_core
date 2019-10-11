@@ -20,11 +20,11 @@
 
 #include <log/log.h>
 
-#include "config_write.h"
 #include "fake_log_device.h"
 #include "log_portability.h"
 #include "logger.h"
 
+static int fakeAvailable(log_id_t);
 static int fakeOpen();
 static void fakeClose();
 static int fakeWrite(log_id_t log_id, struct timespec* ts, struct iovec* vec, size_t nr);
@@ -32,14 +32,18 @@ static int fakeWrite(log_id_t log_id, struct timespec* ts, struct iovec* vec, si
 static int logFds[(int)LOG_ID_MAX] = {-1, -1, -1, -1, -1, -1};
 
 struct android_log_transport_write fakeLoggerWrite = {
-    .node = {&fakeLoggerWrite.node, &fakeLoggerWrite.node},
-    .context.priv = &logFds,
     .name = "fake",
-    .available = NULL,
+    .logMask = 0,
+    .context.priv = &logFds,
+    .available = fakeAvailable,
     .open = fakeOpen,
     .close = fakeClose,
     .write = fakeWrite,
 };
+
+static int fakeAvailable(log_id_t) {
+  return 0;
+}
 
 static int fakeOpen() {
   int i;

@@ -43,7 +43,7 @@ namespace init {
 template <typename F>
 void RunTest(F&& test_function) {
     if (getuid() != 0) {
-        GTEST_LOG_(INFO) << "Skipping test, must be run as root.";
+        GTEST_SKIP() << "Skipping test, must be run as root.";
         return;
     }
 
@@ -52,7 +52,7 @@ void RunTest(F&& test_function) {
     auto context_string = std::string(context);
     free(context);
 
-    auto subcontext = Subcontext("dummy_path", context_string);
+    auto subcontext = Subcontext({"dummy_path"}, context_string);
     ASSERT_NE(0, subcontext.pid());
 
     test_function(subcontext, context_string);
@@ -224,12 +224,8 @@ BuiltinFunctionMap BuildTestFunctionMap() {
 }  // namespace init
 }  // namespace android
 
-int main(int argc, char** argv) {
-    if (argc > 1 && !strcmp(basename(argv[1]), "subcontext")) {
-        auto test_function_map = android::init::BuildTestFunctionMap();
-        return android::init::SubcontextMain(argc, argv, &test_function_map);
-    }
-
-    testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+// init_test.cpp contains the main entry point for all init tests.
+int SubcontextTestChildMain(int argc, char** argv) {
+    auto test_function_map = android::init::BuildTestFunctionMap();
+    return android::init::SubcontextMain(argc, argv, &test_function_map);
 }

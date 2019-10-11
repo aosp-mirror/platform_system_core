@@ -17,6 +17,7 @@
 #include "images.h"
 
 #include <limits.h>
+#include <sys/stat.h>
 
 #include <android-base/file.h>
 
@@ -27,11 +28,44 @@
 namespace android {
 namespace fs_mgr {
 
+using android::base::borrowed_fd;
 using android::base::unique_fd;
 
 #if defined(_WIN32)
 static const int O_NOFOLLOW = 0;
 #endif
+
+static bool IsEmptySuperImage(borrowed_fd fd) {
+    struct stat s;
+    if (fstat(fd.get(), &s) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " fstat failed";
+        return false;
+    }
+    if (s.st_size < LP_METADATA_GEOMETRY_SIZE) {
+        return false;
+    }
+
+    // Rewind back to the start, read the geometry struct.
+    LpMetadataGeometry geometry = {};
+    if (SeekFile64(fd.get(), 0, SEEK_SET) < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " lseek failed";
+        return false;
+    }
+    if (!android::base::ReadFully(fd, &geometry, sizeof(geometry))) {
+        PERROR << __PRETTY_FUNCTION__ << " read failed";
+        return false;
+    }
+    return geometry.magic == LP_METADATA_GEOMETRY_MAGIC;
+}
+
+bool IsEmptySuperImage(const std::string& file) {
+    unique_fd fd = GetControlFileOrOpen(file, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        PERROR << __PRETTY_FUNCTION__ << " open failed";
+        return false;
+    }
+    return IsEmptySuperImage(fd);
+}
 
 std::unique_ptr<LpMetadata> ReadFromImageFile(int fd) {
     std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(LP_METADATA_GEOMETRY_SIZE);

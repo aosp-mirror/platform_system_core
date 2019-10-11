@@ -134,8 +134,6 @@ cc_binary {
         "libfs_mgr",
         "libgsi",
         "libhidlbase",
-        "libhidltransport",
-        "libhwbinder",
         "liblog",
         "liblp",
         "libsparse",
@@ -145,6 +143,10 @@ cc_binary {
     static_libs: [
         "libhealthhalutils",
     ],
+
+    header_libs: [
+        "libsnapshot_headers",
+    ]
 }
 
 cc_defaults {
@@ -187,7 +189,11 @@ cc_defaults {
     // will violate ODR.
     shared_libs: [],
 
-    header_libs: ["bootimg_headers"],
+    header_libs: [
+        "avb_headers",
+        "bootimg_headers",
+    ],
+
     static_libs: [
         "libziparchive",
         "libsparse",

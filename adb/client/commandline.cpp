@@ -255,13 +255,8 @@ static void stdin_raw_restore() {
 }
 #endif
 
-// Reads from |fd| and prints received data. If |use_shell_protocol| is true
-// this expects that incoming data will use the shell protocol, in which case
-// stdout/stderr are routed independently and the remote exit code will be
-// returned.
-// if |callback| is non-null, stdout/stderr output will be handled by it.
-int read_and_dump(borrowed_fd fd, bool use_shell_protocol = false,
-                  StandardStreamsCallbackInterface* callback = &DEFAULT_STANDARD_STREAMS_CALLBACK) {
+int read_and_dump(borrowed_fd fd, bool use_shell_protocol,
+                  StandardStreamsCallbackInterface* callback) {
     int exit_code = 0;
     if (fd < 0) return exit_code;
 
@@ -1713,8 +1708,12 @@ int adb_commandline(int argc, const char** argv) {
         }
 
         if (CanUseFeature(features, kFeatureRemountShell)) {
-            const char* arg[2] = {"shell", "remount"};
-            return adb_shell(2, arg);
+            std::vector<const char*> args = {"shell"};
+            args.insert(args.cend(), argv, argv + argc);
+            return adb_shell(args.size(), args.data());
+        } else if (argc > 1) {
+            auto command = android::base::StringPrintf("%s:%s", argv[0], argv[1]);
+            return adb_connect_command(command);
         } else {
             return adb_connect_command("remount:");
         }

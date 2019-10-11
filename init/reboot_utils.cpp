@@ -21,11 +21,12 @@
 
 #include <string>
 
-#include "android-base/file.h"
-#include "android-base/logging.h"
-#include "android-base/strings.h"
-#include "backtrace/Backtrace.h"
-#include "cutils/android_reboot.h"
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/properties.h>
+#include <android-base/strings.h>
+#include <backtrace/Backtrace.h>
+#include <cutils/android_reboot.h>
 
 #include "capabilities.h"
 
@@ -93,7 +94,14 @@ void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string&
             break;
 
         case ANDROID_RB_THERMOFF:
-            reboot(RB_POWER_OFF);
+            if (android::base::GetBoolProperty("ro.thermal_warmreset", false)) {
+                LOG(INFO) << "Try to trigger a warm reset for thermal shutdown";
+                static constexpr const char kThermalShutdownTarget[] = "shutdown,thermal";
+                syscall(__NR_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
+                        LINUX_REBOOT_CMD_RESTART2, kThermalShutdownTarget);
+            } else {
+                reboot(RB_POWER_OFF);
+            }
             break;
     }
     // In normal case, reboot should not return.
@@ -101,7 +109,7 @@ void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string&
     abort();
 }
 
-void __attribute__((noreturn)) InitFatalReboot() {
+void __attribute__((noreturn)) InitFatalReboot(int signal_number) {
     auto pid = fork();
 
     if (pid == -1) {
@@ -116,6 +124,7 @@ void __attribute__((noreturn)) InitFatalReboot() {
     }
 
     // In the parent, let's try to get a backtrace then shutdown.
+    LOG(ERROR) << __FUNCTION__ << ": signal " << signal_number;
     std::unique_ptr<Backtrace> backtrace(
             Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
     if (!backtrace->Unwind(0)) {
@@ -146,7 +155,7 @@ void InstallRebootSignalHandlers() {
         // RebootSystem uses syscall() which isn't actually async-signal-safe, but our only option
         // and probably good enough given this is already an error case and only enabled for
         // development builds.
-        InitFatalReboot();
+        InitFatalReboot(signal);
     };
     action.sa_flags = SA_RESTART;
     sigaction(SIGABRT, &action, nullptr);
