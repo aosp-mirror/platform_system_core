@@ -107,6 +107,18 @@ TEST(SchedPolicy, set_sched_policy_timerslack) {
 
 TEST(SchedPolicy, get_sched_policy_name) {
     EXPECT_STREQ("bg", get_sched_policy_name(SP_BACKGROUND));
-    EXPECT_STREQ("error", get_sched_policy_name(SchedPolicy(-2)));
-    EXPECT_STREQ("error", get_sched_policy_name(SP_CNT));
+    EXPECT_EQ(nullptr, get_sched_policy_name(SchedPolicy(-2)));
+    EXPECT_EQ(nullptr, get_sched_policy_name(SP_CNT));
+}
+
+TEST(SchedPolicy, get_cpuset_policy_profile_name) {
+    EXPECT_STREQ("CPUSET_SP_BACKGROUND", get_cpuset_policy_profile_name(SP_BACKGROUND));
+    EXPECT_EQ(nullptr, get_cpuset_policy_profile_name(SchedPolicy(-2)));
+    EXPECT_EQ(nullptr, get_cpuset_policy_profile_name(SP_CNT));
+}
+
+TEST(SchedPolicy, get_sched_policy_profile_name) {
+    EXPECT_STREQ("SCHED_SP_BACKGROUND", get_sched_policy_profile_name(SP_BACKGROUND));
+    EXPECT_EQ(nullptr, get_sched_policy_profile_name(SchedPolicy(-2)));
+    EXPECT_EQ(nullptr, get_sched_policy_profile_name(SP_CNT));
 }
