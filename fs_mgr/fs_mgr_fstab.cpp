@@ -686,13 +686,14 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
         if (entries.empty()) {
             FstabEntry entry = {
                     .blk_device = partition,
+                    // .logical_partition_name is required to look up AVB Hashtree descriptors.
+                    .logical_partition_name = "system",
                     .mount_point = mount_point,
                     .fs_type = "ext4",
                     .flags = MS_RDONLY,
                     .fs_options = "barrier=1",
                     .avb_keys = kGsiKeys,
-                    // .logical_partition_name is required to look up AVB Hashtree descriptors.
-                    .logical_partition_name = "system"};
+            };
             entry.fs_mgr_flags.wait = true;
             entry.fs_mgr_flags.logical = true;
             entry.fs_mgr_flags.first_stage_mount = true;

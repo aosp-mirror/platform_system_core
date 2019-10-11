@@ -101,10 +101,10 @@ TEST_F(AvbUtilTest, AvbPartitionToDevicePatition) {
 TEST_F(AvbUtilTest, DeriveAvbPartitionName) {
     // The fstab_entry to test.
     FstabEntry fstab_entry = {
-        .blk_device = "/dev/block/dm-1",  // a dm-linear device (logical)
-        .mount_point = "/system",
-        .fs_type = "ext4",
-        .logical_partition_name = "system",
+            .blk_device = "/dev/block/dm-1",  // a dm-linear device (logical)
+            .logical_partition_name = "system",
+            .mount_point = "/system",
+            .fs_type = "ext4",
     };
 
     // Logical partitions.
