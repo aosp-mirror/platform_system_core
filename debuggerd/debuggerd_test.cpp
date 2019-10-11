@@ -101,7 +101,10 @@ static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, uniq
     FAIL() << "failed to contact tombstoned: " << strerror(errno);
   }
 
-  InterceptRequest req = {.pid = target_pid, .dump_type = intercept_type};
+  InterceptRequest req = {
+      .dump_type = intercept_type,
+      .pid = target_pid,
+  };
 
   unique_fd output_pipe_write;
   if (!Pipe(output_fd, &output_pipe_write)) {
