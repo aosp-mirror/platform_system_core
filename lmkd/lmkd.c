@@ -2743,9 +2743,7 @@ static void call_handler(struct event_handler_info* handler_info,
          * at one per sec.
          */
         poll_params->poll_start_tm = curr_tm;
-        if (poll_params->poll_handler != handler_info) {
-            poll_params->poll_handler = handler_info;
-        }
+        poll_params->poll_handler = handler_info;
         break;
     case POLLING_STOP:
         poll_params->poll_handler = NULL;
