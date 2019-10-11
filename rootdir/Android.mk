@@ -58,15 +58,6 @@ endif
 endif
 
 #######################################
-# fsverity_init
-
-include $(CLEAR_VARS)
-LOCAL_MODULE:= fsverity_init
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_SRC_FILES := fsverity_init.sh
-include $(BUILD_PREBUILT)
-
-#######################################
 # init.environ.rc
 
 include $(CLEAR_VARS)
@@ -214,7 +205,7 @@ LOCAL_MODULE := ld.config.txt
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 
-# Start of runtime APEX compatibility.
+# Start of i18n and ART APEX compatibility.
 #
 # Meta-comment:
 # The placing of this section is somewhat arbitrary. The LOCAL_POST_INSTALL_CMD
@@ -226,42 +217,29 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 # come to rely on them.
 
 # http://b/121248172 - create a link from /system/usr/icu to
-# /apex/com.android.runtime/etc/icu so that apps can find the ICU .dat file.
+# /apex/com.android.i18n/etc/icu so that apps can find the ICU .dat file.
 # A symlink can't overwrite a directory and the /system/usr/icu directory once
 # existed so the required structure must be created whatever we find.
 LOCAL_POST_INSTALL_CMD = mkdir -p $(TARGET_OUT)/usr && rm -rf $(TARGET_OUT)/usr/icu
 LOCAL_POST_INSTALL_CMD += && ln -sf /apex/com.android.i18n/etc/icu $(TARGET_OUT)/usr/icu
 
 # TODO(b/124106384): Clean up compat symlinks for ART binaries.
-ART_BINARIES := \
-  dalvikvm \
-  dalvikvm32 \
-  dalvikvm64 \
-  dex2oat \
-  dexdiag \
-  dexdump \
-  dexlist \
-  dexoptanalyzer \
-  oatdump \
-  profman \
-
+ART_BINARIES := dalvikvm dex2oat
 LOCAL_POST_INSTALL_CMD += && mkdir -p $(TARGET_OUT)/bin
 $(foreach b,$(ART_BINARIES), \
   $(eval LOCAL_POST_INSTALL_CMD += \
-    && ln -sf /apex/com.android.runtime/bin/$(b) $(TARGET_OUT)/bin/$(b)) \
+    && ln -sf /apex/com.android.art/bin/$(b) $(TARGET_OUT)/bin/$(b)) \
 )
 
-# End of runtime APEX compatibilty.
+# End of i18n and ART APEX compatibilty.
 
 ifeq ($(_enforce_vndk_at_runtime),true)
 
 # for VNDK enforced devices
-LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
-include $(BUILD_SYSTEM)/base_rules.mk
-ld_config_template := $(LOCAL_PATH)/etc/ld.config.txt
-check_backward_compatibility := true
-vndk_version := $(PLATFORM_VNDK_VERSION)
-include $(LOCAL_PATH)/update_and_install_ld_config.mk
+# This file will be replaced with dynamically generated one from system/linkerconfig
+LOCAL_MODULE_STEM := $(LOCAL_MODULE)
+LOCAL_SRC_FILES := etc/ld.config.txt
+include $(BUILD_PREBUILT)
 
 else ifeq ($(_enforce_vndk_lite_at_runtime),true)
 
@@ -281,36 +259,6 @@ LOCAL_SRC_FILES := etc/ld.config.legacy.txt
 include $(BUILD_PREBUILT)
 
 endif  # ifeq ($(_enforce_vndk_at_runtime),true)
-
-# ld.config.txt for VNDK versions older than PLATFORM_VNDK_VERSION
-# are built with the VNDK libraries lists under /prebuilts/vndk.
-#
-# ld.config.$(VER).txt is built and installed for all VNDK versions
-# listed in PRODUCT_EXTRA_VNDK_VERSIONS.
-#
-# $(1): VNDK version
-define build_versioned_ld_config
-include $(CLEAR_VARS)
-LOCAL_MODULE := ld.config.$(1).txt
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $$(LOCAL_MODULE)
-include $(BUILD_SYSTEM)/base_rules.mk
-ld_config_template := $(LOCAL_PATH)/etc/ld.config.txt
-check_backward_compatibility := true
-vndk_version := $(1)
-lib_list_from_prebuilts := true
-include $(LOCAL_PATH)/update_and_install_ld_config.mk
-endef
-
-vndk_snapshots := $(wildcard prebuilts/vndk/*)
-supported_vndk_snapshot_versions := \
-  $(strip $(patsubst prebuilts/vndk/v%,%,$(vndk_snapshots)))
-$(foreach ver,$(supported_vndk_snapshot_versions),\
-  $(eval $(call build_versioned_ld_config,$(ver))))
-
-vndk_snapshots :=
-supported_vndk_snapshot_versions :=
 
 #######################################
 # ld.config.vndk_lite.txt
@@ -345,6 +293,15 @@ LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/etc
 LOCAL_MODULE_STEM := ld.config.txt
 include $(BUILD_PREBUILT)
 
+# Returns the unique installed basenames of a module, or module.so if there are
+# none.  The guess is to handle cases like libc, where the module itself is
+# marked uninstallable but a symlink is installed with the name libc.so.
+# $(1): list of libraries
+# $(2): suffix to to add to each library (not used for guess)
+define module-installed-files-or-guess
+$(foreach lib,$(1),$(or $(strip $(sort $(notdir $(call module-installed-files,$(lib)$(2))))),$(lib).so))
+endef
+
 #######################################
 # llndk.libraries.txt
 include $(CLEAR_VARS)
@@ -353,13 +310,13 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES := $(LLNDK_LIBRARIES)
+$(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES := $(call module-installed-files-or-guess,$(LLNDK_LIBRARIES),)
 $(LOCAL_BUILT_MODULE):
 	@echo "Generate: $@"
 	@mkdir -p $(dir $@)
 	$(hide) echo -n > $@
 	$(hide) $(foreach lib,$(PRIVATE_LLNDK_LIBRARIES), \
-		echo $(lib).so >> $@;)
+		echo $(lib) >> $@;)
 
 #######################################
 # vndksp.libraries.txt
@@ -369,13 +326,13 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(VNDK_SAMEPROCESS_LIBRARIES)
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_SAMEPROCESS_LIBRARIES),.vendor)
 $(LOCAL_BUILT_MODULE):
 	@echo "Generate: $@"
 	@mkdir -p $(dir $@)
 	$(hide) echo -n > $@
 	$(hide) $(foreach lib,$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES), \
-		echo $(lib).so >> $@;)
+		echo $(lib) >> $@;)
 
 #######################################
 # vndkcore.libraries.txt
@@ -385,13 +342,13 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES := $(VNDK_CORE_LIBRARIES)
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_CORE_LIBRARIES),.vendor)
 $(LOCAL_BUILT_MODULE):
 	@echo "Generate: $@"
 	@mkdir -p $(dir $@)
 	$(hide) echo -n > $@
 	$(hide) $(foreach lib,$(PRIVATE_VNDK_CORE_LIBRARIES), \
-		echo $(lib).so >> $@;)
+		echo $(lib) >> $@;)
 
 #######################################
 # vndkprivate.libraries.txt
@@ -401,13 +358,13 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_PRIVATE_LIBRARIES := $(VNDK_PRIVATE_LIBRARIES)
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_PRIVATE_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_PRIVATE_LIBRARIES),.vendor)
 $(LOCAL_BUILT_MODULE):
 	@echo "Generate: $@"
 	@mkdir -p $(dir $@)
 	$(hide) echo -n > $@
 	$(hide) $(foreach lib,$(PRIVATE_VNDK_PRIVATE_LIBRARIES), \
-		echo $(lib).so >> $@;)
+		echo $(lib) >> $@;)
 
 #######################################
 # sanitizer.libraries.txt
@@ -431,6 +388,22 @@ $(LOCAL_BUILT_MODULE):
 	@mkdir -p $(dir $@)
 	$(hide) echo -n > $@
 	$(hide) $(foreach lib,$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES), \
+		echo $(lib) >> $@;)
+
+#######################################
+# vndkcorevariant.libraries.txt
+include $(CLEAR_VARS)
+LOCAL_MODULE := vndkcorevariant.libraries.txt
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
+include $(BUILD_SYSTEM)/base_rules.mk
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_VARIANT_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_USING_CORE_VARIANT_LIBRARIES),.vendor)
+$(LOCAL_BUILT_MODULE):
+	@echo "Generate: $@"
+	@mkdir -p $(dir $@)
+	$(hide) echo -n > $@
+	$(hide) $(foreach lib,$(PRIVATE_VNDK_CORE_VARIANT_LIBRARIES), \
 		echo $(lib) >> $@;)
 
 #######################################

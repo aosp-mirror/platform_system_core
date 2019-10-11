@@ -77,13 +77,35 @@ struct CreateLogicalPartitionParams {
     // If non-null, this will use the specified IPartitionOpener rather than
     // the default one.
     const IPartitionOpener* partition_opener = nullptr;
+
+    // Helpers for determining the effective partition and device name.
+    std::string GetPartitionName() const;
+    std::string GetDeviceName() const;
+
+    // Specify ownership of fields. The ownership of these fields are managed
+    // by the caller of InitDefaults().
+    // These are not declared in CreateLogicalPartitionParams so that the
+    // copy constructor is not deleted.
+    struct OwnedData {
+        std::unique_ptr<LpMetadata> metadata;
+        std::unique_ptr<IPartitionOpener> partition_opener;
+    };
+
+    // Fill in default values for |params| that CreateLogicalPartition assumes. Caller does
+    // not need to call this before calling CreateLogicalPartition; CreateLogicalPartition sets
+    // values when they are missing.
+    // Caller is responsible for destroying owned_data when |this| is not used.
+    bool InitDefaults(OwnedData* owned);
 };
 
-bool CreateLogicalPartition(const CreateLogicalPartitionParams& params, std::string* path);
+bool CreateLogicalPartition(CreateLogicalPartitionParams params, std::string* path);
 
 // Destroy the block device for a logical partition, by name. If |timeout_ms|
 // is non-zero, then this will block until the device path has been unlinked.
 bool DestroyLogicalPartition(const std::string& name);
+
+// Helper for populating a DmTable for a logical partition.
+bool CreateDmTable(CreateLogicalPartitionParams params, android::dm::DmTable* table);
 
 }  // namespace fs_mgr
 }  // namespace android

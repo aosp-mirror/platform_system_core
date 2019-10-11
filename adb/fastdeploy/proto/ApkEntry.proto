@@ -1,18 +1,26 @@
-syntax = "proto2";
+syntax = "proto3";
 
 package com.android.fastdeploy;
 
 option java_package = "com.android.fastdeploy";
+option java_outer_classname = "ApkEntryProto";
 option java_multiple_files = true;
+option optimize_for = LITE_RUNTIME;
+
+message APKDump {
+    string name = 1;
+    bytes cd = 2;
+    bytes signature = 3;
+    string absolute_path = 4;
+}
 
 message APKEntry {
-    required int64 crc32 = 1;
-    required string fileName = 2;
-    required int64 dataOffset = 3;
-    required int64 compressedSize = 4;
-    required int64 uncompressedSize = 5;
+    bytes md5 = 1;
+    int64 dataOffset = 2;
+    int64 dataSize = 3;
 }
 
 message APKMetaData {
-    repeated APKEntry entries = 1;
+    string absolute_path = 1;
+    repeated APKEntry entries = 2;
 }

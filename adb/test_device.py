@@ -139,6 +139,25 @@ class ForwardReverseTest(DeviceTest):
         msg = self.device.forward_list()
         self.assertEqual('', msg.strip())
 
+    def test_forward_old_protocol(self):
+        serialno = subprocess.check_output(self.device.adb_cmd + ['get-serialno']).strip()
+
+        msg = self.device.forward_list()
+        self.assertEqual('', msg.strip(),
+                         'Forwarding list must be empty to run this test.')
+
+        s = socket.create_connection(("localhost", 5037))
+        service = b"host-serial:%s:forward:tcp:5566;tcp:6655" % serialno
+        cmd = b"%04x%s" % (len(service), service)
+        s.sendall(cmd)
+
+        msg = self.device.forward_list()
+        self.assertTrue(re.search(r'tcp:5566.+tcp:6655', msg))
+
+        self.device.forward_remove_all()
+        msg = self.device.forward_list()
+        self.assertEqual('', msg.strip())
+
     def test_forward_tcp_port_0(self):
         self.assertEqual('', self.device.forward_list().strip(),
                          'Forwarding list must be empty to run this test.')
@@ -882,6 +901,20 @@ class FileOperationsTest(DeviceTest):
             self.device.shell(['rm', '-rf', remote_path])
 
             remote_path += '/filename'
+            self.device.push(local=tmp_file.name, remote=remote_path)
+
+    def disabled_test_push_multiple_slash_root(self):
+        """Regression test for pushing to //data/local/tmp.
+
+        Bug: http://b/141311284
+
+        Disabled because this broken on the adbd side as well: b/141943968
+        """
+        with tempfile.NamedTemporaryFile() as tmp_file:
+            tmp_file.write('\0' * 1024 * 1024)
+            tmp_file.flush()
+            remote_path = '/' + self.DEVICE_TEMP_DIR + '/test_push_multiple_slash_root'
+            self.device.shell(['rm', '-rf', remote_path])
             self.device.push(local=tmp_file.name, remote=remote_path)
 
     def _test_pull(self, remote_file, checksum):

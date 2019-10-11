@@ -31,6 +31,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 using namespace std;
 using namespace android::meminfo;
@@ -334,7 +335,9 @@ TEST(ProcMemInfo, ForEachVmaFromFileTest) {
     // Check for names
     EXPECT_EQ(vmas[0].name, "[anon:dalvik-zygote-jit-code-cache]");
     EXPECT_EQ(vmas[1].name, "/system/framework/x86_64/boot-framework.art");
-    EXPECT_EQ(vmas[2].name, "[anon:libc_malloc]");
+    EXPECT_TRUE(vmas[2].name == "[anon:libc_malloc]" ||
+                android::base::StartsWith(vmas[2].name, "[anon:scudo:"))
+            << "Unknown map name " << vmas[2].name;
     EXPECT_EQ(vmas[3].name, "/system/priv-app/SettingsProvider/oat/x86_64/SettingsProvider.odex");
     EXPECT_EQ(vmas[4].name, "/system/lib64/libhwui.so");
     EXPECT_EQ(vmas[5].name, "[vsyscall]");
@@ -432,7 +435,9 @@ TEST(ProcMemInfo, SmapsTest) {
     // Check for names
     EXPECT_EQ(vmas[0].name, "[anon:dalvik-zygote-jit-code-cache]");
     EXPECT_EQ(vmas[1].name, "/system/framework/x86_64/boot-framework.art");
-    EXPECT_EQ(vmas[2].name, "[anon:libc_malloc]");
+    EXPECT_TRUE(vmas[2].name == "[anon:libc_malloc]" ||
+                android::base::StartsWith(vmas[2].name, "[anon:scudo:"))
+            << "Unknown map name " << vmas[2].name;
     EXPECT_EQ(vmas[3].name, "/system/priv-app/SettingsProvider/oat/x86_64/SettingsProvider.odex");
     EXPECT_EQ(vmas[4].name, "/system/lib64/libhwui.so");
     EXPECT_EQ(vmas[5].name, "[vsyscall]");

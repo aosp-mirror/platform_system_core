@@ -101,7 +101,6 @@ cc_binary {
         "libutils",
         "libhardware",
         "libhidlbase",
-        "libhidltransport",
         "libtrusty",
         "libkeymaster_messages",
         "libkeymaster3device",
@@ -132,10 +131,11 @@ cc_binary {
         "libutils",
         "libhardware",
         "libhidlbase",
-        "libhidltransport",
         "libtrusty",
         "libkeymaster_messages",
         "libkeymaster4",
         "android.hardware.keymaster@4.0"
     ],
+
+    vintf_fragments: ["4.0/android.hardware.keymaster@4.0-service.trusty.xml"],
 }

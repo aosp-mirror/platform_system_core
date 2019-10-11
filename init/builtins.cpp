@@ -55,7 +55,6 @@
 #include <cutils/android_reboot.h>
 #include <fs_mgr.h>
 #include <fscrypt/fscrypt.h>
-#include <fscrypt/fscrypt_init_extensions.h>
 #include <libgsi/libgsi.h>
 #include <selinux/android.h>
 #include <selinux/label.h>
@@ -64,6 +63,7 @@
 
 #include "action_manager.h"
 #include "bootchart.h"
+#include "fscrypt_init_extensions.h"
 #include "init.h"
 #include "mount_namespace.h"
 #include "parser.h"
@@ -81,6 +81,7 @@ using namespace std::literals::string_literals;
 
 using android::base::Basename;
 using android::base::StartsWith;
+using android::base::StringPrintf;
 using android::base::unique_fd;
 using android::fs_mgr::Fstab;
 using android::fs_mgr::ReadFstabFromFile;
@@ -357,51 +358,64 @@ static Result<void> do_interface_stop(const BuiltinArguments& args) {
 // mkdir <path> [mode] [owner] [group]
 static Result<void> do_mkdir(const BuiltinArguments& args) {
     mode_t mode = 0755;
-    if (args.size() >= 3) {
-        mode = std::strtoul(args[2].c_str(), 0, 8);
-    }
+    Result<uid_t> uid = -1;
+    Result<gid_t> gid = -1;
 
-    if (!make_dir(args[1], mode)) {
-        /* chmod in case the directory already exists */
-        if (errno == EEXIST) {
-            if (fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
-                return ErrnoError() << "fchmodat() failed";
-            }
-        } else {
-            return ErrnoErrorIgnoreEnoent() << "mkdir() failed";
-        }
-    }
-
-    if (args.size() >= 4) {
-        auto uid = DecodeUid(args[3]);
-        if (!uid) {
-            return Error() << "Unable to decode UID for '" << args[3] << "': " << uid.error();
-        }
-        Result<gid_t> gid = -1;
-
-        if (args.size() == 5) {
+    switch (args.size()) {
+        case 5:
             gid = DecodeUid(args[4]);
             if (!gid) {
                 return Error() << "Unable to decode GID for '" << args[4] << "': " << gid.error();
             }
-        }
-
-        if (lchown(args[1].c_str(), *uid, *gid) == -1) {
-            return ErrnoError() << "lchown failed";
-        }
-
-        /* chown may have cleared S_ISUID and S_ISGID, chmod again */
-        if (mode & (S_ISUID | S_ISGID)) {
-            if (fchmodat(AT_FDCWD, args[1].c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
-                return ErrnoError() << "fchmodat failed";
+            FALLTHROUGH_INTENDED;
+        case 4:
+            uid = DecodeUid(args[3]);
+            if (!uid) {
+                return Error() << "Unable to decode UID for '" << args[3] << "': " << uid.error();
             }
+            FALLTHROUGH_INTENDED;
+        case 3:
+            mode = std::strtoul(args[2].c_str(), 0, 8);
+            FALLTHROUGH_INTENDED;
+        case 2:
+            break;
+        default:
+            return Error() << "Unexpected argument count: " << args.size();
+    }
+    std::string target = args[1];
+    struct stat mstat;
+    if (lstat(target.c_str(), &mstat) != 0) {
+        if (errno != ENOENT) {
+            return ErrnoError() << "lstat() failed on " << target;
+        }
+        if (!make_dir(target, mode)) {
+            return ErrnoErrorIgnoreEnoent() << "mkdir() failed on " << target;
+        }
+        if (lstat(target.c_str(), &mstat) != 0) {
+            return ErrnoError() << "lstat() failed on new " << target;
         }
     }
-
+    if (!S_ISDIR(mstat.st_mode)) {
+        return Error() << "Not a directory on " << target;
+    }
+    bool needs_chmod = (mstat.st_mode & ~S_IFMT) != mode;
+    if ((*uid != static_cast<uid_t>(-1) && *uid != mstat.st_uid) ||
+        (*gid != static_cast<gid_t>(-1) && *gid != mstat.st_gid)) {
+        if (lchown(target.c_str(), *uid, *gid) == -1) {
+            return ErrnoError() << "lchown failed on " << target;
+        }
+        // chown may have cleared S_ISUID and S_ISGID, chmod again
+        needs_chmod = true;
+    }
+    if (needs_chmod) {
+        if (fchmodat(AT_FDCWD, target.c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
+            return ErrnoError() << "fchmodat() failed on " << target;
+        }
+    }
     if (fscrypt_is_native()) {
-        if (fscrypt_set_directory_policy(args[1].c_str())) {
+        if (fscrypt_set_directory_policy(target)) {
             return reboot_into_recovery(
-                {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + args[1]});
+                    {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + target});
         }
     }
     return {};
@@ -1072,32 +1086,43 @@ static bool is_file_crypto() {
     return android::base::GetProperty("ro.crypto.type", "") == "file";
 }
 
-static Result<void> ExecWithRebootOnFailure(const std::string& reboot_reason,
-                                            const BuiltinArguments& args) {
-    auto service = Service::MakeTemporaryOneshotService(args.args);
+static Result<void> ExecWithFunctionOnFailure(const std::vector<std::string>& args,
+                                              std::function<void(const std::string&)> function) {
+    auto service = Service::MakeTemporaryOneshotService(args);
     if (!service) {
-        return Error() << "Could not create exec service: " << service.error();
+        function("MakeTemporaryOneshotService failed: " + service.error().message());
     }
-    (*service)->AddReapCallback([reboot_reason](const siginfo_t& siginfo) {
+    (*service)->AddReapCallback([function](const siginfo_t& siginfo) {
         if (siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) {
-            // TODO (b/122850122): support this in gsi
-            if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
-                LOG(ERROR) << "Rebooting into recovery, reason: " << reboot_reason;
-                if (auto result = reboot_into_recovery(
-                            {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
-                    !result) {
-                    LOG(FATAL) << "Could not reboot into recovery: " << result.error();
-                }
-            } else {
-                LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
-            }
+            function(StringPrintf("Exec service failed, status %d", siginfo.si_status));
         }
     });
     if (auto result = (*service)->ExecStart(); !result) {
-        return Error() << "Could not start exec service: " << result.error();
+        function("ExecStart failed: " + result.error().message());
     }
     ServiceList::GetInstance().AddService(std::move(*service));
     return {};
+}
+
+static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
+    auto reboot_reason = vdc_arg + "_failed";
+
+    auto reboot = [reboot_reason](const std::string& message) {
+        // TODO (b/122850122): support this in gsi
+        if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
+            LOG(ERROR) << message << ": Rebooting into recovery, reason: " << reboot_reason;
+            if (auto result = reboot_into_recovery(
+                        {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+                !result) {
+                LOG(FATAL) << "Could not reboot into recovery: " << result.error();
+            }
+        } else {
+            LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
+        }
+    };
+
+    std::vector<std::string> args = {"exec", "/system/bin/vdc", "--wait", "cryptfs", vdc_arg};
+    return ExecWithFunctionOnFailure(args, reboot);
 }
 
 static Result<void> do_installkey(const BuiltinArguments& args) {
@@ -1107,15 +1132,11 @@ static Result<void> do_installkey(const BuiltinArguments& args) {
     if (!make_dir(unencrypted_dir, 0700) && errno != EEXIST) {
         return ErrnoError() << "Failed to create " << unencrypted_dir;
     }
-    return ExecWithRebootOnFailure(
-        "enablefilecrypto_failed",
-        {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "enablefilecrypto"}, args.context});
+    return ExecVdcRebootOnFailure("enablefilecrypto");
 }
 
 static Result<void> do_init_user0(const BuiltinArguments& args) {
-    return ExecWithRebootOnFailure(
-        "init_user0_failed",
-        {{"exec", "/system/bin/vdc", "--wait", "cryptfs", "init_user0"}, args.context});
+    return ExecVdcRebootOnFailure("init_user0");
 }
 
 static Result<void> do_mark_post_data(const BuiltinArguments& args) {

@@ -33,7 +33,7 @@ subsystem sound
 /dev/urandom              0666   root       root
 # Make HW RNG readable by group system to let EntropyMixer read it.
 /dev/hw_random            0440   root       system
-/dev/ashmem               0666   root       root
+/dev/ashmem*              0666   root       root
 /dev/binder               0666   root       root
 /dev/hwbinder             0666   root       root
 /dev/vndbinder            0666   root       root

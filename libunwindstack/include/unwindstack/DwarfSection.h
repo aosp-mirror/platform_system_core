@@ -86,7 +86,7 @@ class DwarfSection {
   DwarfErrorCode LastErrorCode() { return last_error_.code; }
   uint64_t LastErrorAddress() { return last_error_.address; }
 
-  virtual bool Init(uint64_t offset, uint64_t size, uint64_t load_bias) = 0;
+  virtual bool Init(uint64_t offset, uint64_t size, int64_t section_bias) = 0;
 
   virtual bool Eval(const DwarfCie*, Memory*, const dwarf_loc_regs_t&, Regs*, bool*) = 0;
 
@@ -150,7 +150,7 @@ class DwarfSectionImpl : public DwarfSection {
   bool EvalExpression(const DwarfLocation& loc, Memory* regular_memory, AddressType* value,
                       RegsInfo<AddressType>* regs_info, bool* is_dex_pc);
 
-  uint64_t load_bias_ = 0;
+  int64_t section_bias_ = 0;
   uint64_t entries_offset_ = 0;
   uint64_t entries_end_ = 0;
   uint64_t pc_offset_ = 0;
@@ -166,7 +166,7 @@ class DwarfSectionImplNoHdr : public DwarfSectionImpl<AddressType> {
   using DwarfSectionImpl<AddressType>::entries_offset_;
   using DwarfSectionImpl<AddressType>::entries_end_;
   using DwarfSectionImpl<AddressType>::last_error_;
-  using DwarfSectionImpl<AddressType>::load_bias_;
+  using DwarfSectionImpl<AddressType>::section_bias_;
   using DwarfSectionImpl<AddressType>::cie_entries_;
   using DwarfSectionImpl<AddressType>::fde_entries_;
   using DwarfSectionImpl<AddressType>::cie32_value_;
@@ -175,7 +175,7 @@ class DwarfSectionImplNoHdr : public DwarfSectionImpl<AddressType> {
   DwarfSectionImplNoHdr(Memory* memory) : DwarfSectionImpl<AddressType>(memory) {}
   virtual ~DwarfSectionImplNoHdr() = default;
 
-  bool Init(uint64_t offset, uint64_t size, uint64_t load_bias) override;
+  bool Init(uint64_t offset, uint64_t size, int64_t section_bias) override;
 
   const DwarfFde* GetFdeFromPc(uint64_t pc) override;
 

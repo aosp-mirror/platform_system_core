@@ -42,29 +42,29 @@ namespace.default.asan.search.paths +=           /odm/${LIB}
 # APEX related namespaces.
 ###############################################################################
 
-additional.namespaces = runtime,conscrypt,media,neuralnetworks,resolv
+additional.namespaces = art,conscrypt,media,neuralnetworks,resolv
 
 # Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
 # If a shared library or an executable requests a shared library that
 # cannot be loaded into the default namespace, the dynamic linker tries
-# to load the shared library from the runtime namespace. And then, if the
-# shared library cannot be loaded from the runtime namespace either, the
+# to load the shared library from the art namespace. And then, if the
+# shared library cannot be loaded from the art namespace either, the
 # dynamic linker tries to load the shared library from the resolv namespace.
 # Finally, if all attempts fail, the dynamic linker returns an error.
-namespace.default.links = runtime,resolv,neuralnetworks
-namespace.default.asan.links = runtime,resolv,neuralnetworks
-namespace.default.link.runtime.shared_libs  = libandroidicu.so
-namespace.default.link.runtime.shared_libs += libdexfile_external.so
-namespace.default.link.runtime.shared_libs += libdexfiled_external.so
+namespace.default.links = art,resolv,neuralnetworks
+namespace.default.asan.links = art,resolv,neuralnetworks
+namespace.default.link.art.shared_libs  = libandroidicu.so
+namespace.default.link.art.shared_libs += libdexfile_external.so
+namespace.default.link.art.shared_libs += libdexfiled_external.so
 # TODO(b/120786417 or b/134659294): libicuuc.so and libicui18n.so are kept for app compat.
-namespace.default.link.runtime.shared_libs += libicui18n.so
-namespace.default.link.runtime.shared_libs += libicuuc.so
-namespace.default.link.runtime.shared_libs += libnativebridge.so
-namespace.default.link.runtime.shared_libs += libnativehelper.so
-namespace.default.link.runtime.shared_libs += libnativeloader.so
+namespace.default.link.art.shared_libs += libicui18n.so
+namespace.default.link.art.shared_libs += libicuuc.so
+namespace.default.link.art.shared_libs += libnativebridge.so
+namespace.default.link.art.shared_libs += libnativehelper.so
+namespace.default.link.art.shared_libs += libnativeloader.so
 
 # TODO(b/122876336): Remove libpac.so once it's migrated to Webview
-namespace.default.link.runtime.shared_libs += libpac.so
+namespace.default.link.art.shared_libs += libpac.so
 
 # When libnetd_resolv.so can't be found in the default namespace, search for it
 # in the resolv namespace. Don't allow any other libraries from the resolv namespace
@@ -75,24 +75,25 @@ namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 namespace.default.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
-# "runtime" APEX namespace
+# "art" APEX namespace
 #
-# This namespace exposes externally accessible libraries from the Runtime APEX.
-# Keep in sync with the "runtime" namespace in art/build/apex/ld.config.txt.
+# This namespace exposes externally accessible libraries from the ART APEX.
+# Keep in sync with the "art" namespace in art/build/apex/ld.config.txt.
 ###############################################################################
-namespace.runtime.isolated = true
+namespace.art.isolated = true
 # Visible to allow links to be created at runtime, e.g. through
 # android_link_namespaces in libnativeloader.
-namespace.runtime.visible = true
+namespace.art.visible = true
 
-namespace.runtime.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.asan.search.paths = /apex/com.android.runtime/${LIB}
-namespace.runtime.links = default
+namespace.art.search.paths = /apex/com.android.art/${LIB}
+namespace.art.asan.search.paths = /apex/com.android.art/${LIB}
+namespace.art.links = default,neuralnetworks
 # Need allow_all_shared_libs because libart.so can dlopen oat files in
 # /system/framework and /data.
 # TODO(b/130340935): Use a dynamically created linker namespace similar to
 # classloader-namespace for oat files, and tighten this up.
-namespace.runtime.link.default.allow_all_shared_libs = true
+namespace.art.link.default.allow_all_shared_libs = true
+namespace.art.link.neuralnetworks.shared_libs = libneuralnetworks.so
 
 ###############################################################################
 # "media" APEX namespace
@@ -135,8 +136,8 @@ namespace.conscrypt.visible = true
 
 namespace.conscrypt.search.paths = /apex/com.android.conscrypt/${LIB}
 namespace.conscrypt.asan.search.paths = /apex/com.android.conscrypt/${LIB}
-namespace.conscrypt.links = runtime,default
-namespace.conscrypt.link.runtime.shared_libs  = libandroidio.so
+namespace.conscrypt.links = art,default
+namespace.conscrypt.link.art.shared_libs = libandroidio.so
 namespace.conscrypt.link.default.shared_libs  = libc.so
 namespace.conscrypt.link.default.shared_libs += libm.so
 namespace.conscrypt.link.default.shared_libs += libdl.so
@@ -178,6 +179,7 @@ namespace.neuralnetworks.link.default.shared_libs += libdl.so
 namespace.neuralnetworks.link.default.shared_libs += liblog.so
 namespace.neuralnetworks.link.default.shared_libs += libm.so
 namespace.neuralnetworks.link.default.shared_libs += libnativewindow.so
+namespace.neuralnetworks.link.default.shared_libs += libneuralnetworks_packageinfo.so
 namespace.neuralnetworks.link.default.shared_libs += libsync.so
 namespace.neuralnetworks.link.default.shared_libs += libvndksupport.so
 

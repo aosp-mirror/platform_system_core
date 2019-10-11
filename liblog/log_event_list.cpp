@@ -51,11 +51,9 @@ struct android_log_context_internal {
 typedef struct android_log_context_internal android_log_context_internal;
 
 static void init_context(android_log_context_internal* context, uint32_t tag) {
-  size_t needed;
-
   context->tag = tag;
   context->read_write_flag = kAndroidLoggerWrite;
-  needed = sizeof(uint8_t) + sizeof(uint8_t);
+  size_t needed = sizeof(android_event_list_t);
   if ((context->pos + needed) > MAX_EVENT_PAYLOAD) {
     context->overflow = true;
   }
@@ -88,7 +86,6 @@ android_log_context create_android_logger(uint32_t tag) {
 
 android_log_context create_android_log_parser(const char* msg, size_t len) {
   android_log_context_internal* context;
-  size_t i;
 
   context =
       static_cast<android_log_context_internal*>(calloc(1, sizeof(android_log_context_internal)));
@@ -144,7 +141,6 @@ int android_log_parser_reset(android_log_context ctx, const char* msg, size_t le
 }
 
 int android_log_write_list_begin(android_log_context ctx) {
-  size_t needed;
   android_log_context_internal* context;
 
   context = (android_log_context_internal*)ctx;
@@ -155,7 +151,7 @@ int android_log_write_list_begin(android_log_context ctx) {
     context->overflow = true;
     return -EOVERFLOW;
   }
-  needed = sizeof(uint8_t) + sizeof(uint8_t);
+  size_t needed = sizeof(android_event_list_t);
   if ((context->pos + needed) > MAX_EVENT_PAYLOAD) {
     context->overflow = true;
     return -EIO;
@@ -169,84 +165,59 @@ int android_log_write_list_begin(android_log_context ctx) {
   if (context->overflow) {
     return -EIO;
   }
-  context->storage[context->pos + 0] = EVENT_TYPE_LIST;
-  context->storage[context->pos + 1] = 0;
+  auto* event_list = reinterpret_cast<android_event_list_t*>(&context->storage[context->pos]);
+  event_list->type = EVENT_TYPE_LIST;
+  event_list->element_count = 0;
   context->list[context->list_nest_depth] = context->pos + 1;
   context->count[context->list_nest_depth] = 0;
   context->pos += needed;
   return 0;
 }
 
-static inline void copy4LE(uint8_t* buf, uint32_t val) {
-  buf[0] = val & 0xFF;
-  buf[1] = (val >> 8) & 0xFF;
-  buf[2] = (val >> 16) & 0xFF;
-  buf[3] = (val >> 24) & 0xFF;
-}
-
 int android_log_write_int32(android_log_context ctx, int32_t value) {
-  size_t needed;
-  android_log_context_internal* context;
-
-  context = (android_log_context_internal*)ctx;
+  android_log_context_internal* context = (android_log_context_internal*)ctx;
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
   if (context->overflow) {
     return -EIO;
   }
-  needed = sizeof(uint8_t) + sizeof(value);
+  size_t needed = sizeof(android_event_int_t);
   if ((context->pos + needed) > MAX_EVENT_PAYLOAD) {
     context->overflow = true;
     return -EIO;
   }
   context->count[context->list_nest_depth]++;
-  context->storage[context->pos + 0] = EVENT_TYPE_INT;
-  copy4LE(&context->storage[context->pos + 1], value);
+  auto* event_int = reinterpret_cast<android_event_int_t*>(&context->storage[context->pos]);
+  event_int->type = EVENT_TYPE_INT;
+  event_int->data = value;
   context->pos += needed;
   return 0;
 }
 
-static inline void copy8LE(uint8_t* buf, uint64_t val) {
-  buf[0] = val & 0xFF;
-  buf[1] = (val >> 8) & 0xFF;
-  buf[2] = (val >> 16) & 0xFF;
-  buf[3] = (val >> 24) & 0xFF;
-  buf[4] = (val >> 32) & 0xFF;
-  buf[5] = (val >> 40) & 0xFF;
-  buf[6] = (val >> 48) & 0xFF;
-  buf[7] = (val >> 56) & 0xFF;
-}
-
 int android_log_write_int64(android_log_context ctx, int64_t value) {
-  size_t needed;
-  android_log_context_internal* context;
-
-  context = (android_log_context_internal*)ctx;
+  android_log_context_internal* context = (android_log_context_internal*)ctx;
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
   if (context->overflow) {
     return -EIO;
   }
-  needed = sizeof(uint8_t) + sizeof(value);
+  size_t needed = sizeof(android_event_long_t);
   if ((context->pos + needed) > MAX_EVENT_PAYLOAD) {
     context->overflow = true;
     return -EIO;
   }
   context->count[context->list_nest_depth]++;
-  context->storage[context->pos + 0] = EVENT_TYPE_LONG;
-  copy8LE(&context->storage[context->pos + 1], value);
+  auto* event_long = reinterpret_cast<android_event_long_t*>(&context->storage[context->pos]);
+  event_long->type = EVENT_TYPE_LONG;
+  event_long->data = value;
   context->pos += needed;
   return 0;
 }
 
 int android_log_write_string8_len(android_log_context ctx, const char* value, size_t maxlen) {
-  size_t needed;
-  ssize_t len;
-  android_log_context_internal* context;
-
-  context = (android_log_context_internal*)ctx;
+  android_log_context_internal* context = (android_log_context_internal*)ctx;
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -256,8 +227,8 @@ int android_log_write_string8_len(android_log_context ctx, const char* value, si
   if (!value) {
     value = "";
   }
-  len = strnlen(value, maxlen);
-  needed = sizeof(uint8_t) + sizeof(int32_t) + len;
+  int32_t len = strnlen(value, maxlen);
+  size_t needed = sizeof(android_event_string_t) + len;
   if ((context->pos + needed) > MAX_EVENT_PAYLOAD) {
     /* Truncate string for delivery */
     len = MAX_EVENT_PAYLOAD - context->pos - 1 - sizeof(int32_t);
@@ -267,10 +238,11 @@ int android_log_write_string8_len(android_log_context ctx, const char* value, si
     }
   }
   context->count[context->list_nest_depth]++;
-  context->storage[context->pos + 0] = EVENT_TYPE_STRING;
-  copy4LE(&context->storage[context->pos + 1], len);
+  auto* event_string = reinterpret_cast<android_event_string_t*>(&context->storage[context->pos]);
+  event_string->type = EVENT_TYPE_STRING;
+  event_string->length = len;
   if (len) {
-    memcpy(&context->storage[context->pos + 5], value, len);
+    memcpy(&event_string->data, value, len);
   }
   context->pos += needed;
   return len;
@@ -281,26 +253,22 @@ int android_log_write_string8(android_log_context ctx, const char* value) {
 }
 
 int android_log_write_float32(android_log_context ctx, float value) {
-  size_t needed;
-  uint32_t ivalue;
-  android_log_context_internal* context;
-
-  context = (android_log_context_internal*)ctx;
+  android_log_context_internal* context = (android_log_context_internal*)ctx;
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
   if (context->overflow) {
     return -EIO;
   }
-  needed = sizeof(uint8_t) + sizeof(ivalue);
+  size_t needed = sizeof(android_event_float_t);
   if ((context->pos + needed) > MAX_EVENT_PAYLOAD) {
     context->overflow = true;
     return -EIO;
   }
-  ivalue = *(uint32_t*)&value;
   context->count[context->list_nest_depth]++;
-  context->storage[context->pos + 0] = EVENT_TYPE_FLOAT;
-  copy4LE(&context->storage[context->pos + 1], ivalue);
+  auto* event_float = reinterpret_cast<android_event_float_t*>(&context->storage[context->pos]);
+  event_float->type = EVENT_TYPE_FLOAT;
+  event_float->data = value;
   context->pos += needed;
   return 0;
 }
@@ -401,22 +369,6 @@ int android_log_write_list_buffer(android_log_context ctx, const char** buffer) 
 }
 
 /*
- * Extract a 4-byte value from a byte stream.
- */
-static inline uint32_t get4LE(const uint8_t* src) {
-  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-}
-
-/*
- * Extract an 8-byte value from a byte stream.
- */
-static inline uint64_t get8LE(const uint8_t* src) {
-  uint32_t low = src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-  uint32_t high = src[4] | (src[5] << 8) | (src[6] << 16) | (src[7] << 24);
-  return ((uint64_t)high << 32) | (uint64_t)low;
-}
-
-/*
  * Gets the next element. Parsing errors result in an EVENT_TYPE_UNKNOWN type.
  * If there is nothing to process, the complete field is set to non-zero. If
  * an EVENT_TYPE_UNKNOWN type is returned once, and the caller does not check
@@ -478,20 +430,22 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
     return elem;
   }
 
-  elem.type = static_cast<AndroidEventLogType>(context->storage[pos++]);
+  elem.type = static_cast<AndroidEventLogType>(context->storage[pos]);
   switch ((int)elem.type) {
     case EVENT_TYPE_FLOAT:
     /* Rely on union to translate elem.data.int32 into elem.data.float32 */
     /* FALLTHRU */
-    case EVENT_TYPE_INT:
+    case EVENT_TYPE_INT: {
       elem.len = sizeof(int32_t);
-      if ((pos + elem.len) > context->len) {
+      if ((pos + sizeof(android_event_int_t)) > context->len) {
         elem.type = EVENT_TYPE_UNKNOWN;
         return elem;
       }
-      elem.data.int32 = get4LE(&context->storage[pos]);
+
+      auto* event_int = reinterpret_cast<android_event_int_t*>(&context->storage[pos]);
+      pos += sizeof(android_event_int_t);
+      elem.data.int32 = event_int->data;
       /* common tangeable object suffix */
-      pos += elem.len;
       elem.complete = !context->list_nest_depth && !context->count[0];
       if (!peek) {
         if (!context->count[context->list_nest_depth] ||
@@ -501,16 +455,19 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
         context->pos = pos;
       }
       return elem;
+    }
 
-    case EVENT_TYPE_LONG:
+    case EVENT_TYPE_LONG: {
       elem.len = sizeof(int64_t);
-      if ((pos + elem.len) > context->len) {
+      if ((pos + sizeof(android_event_long_t)) > context->len) {
         elem.type = EVENT_TYPE_UNKNOWN;
         return elem;
       }
-      elem.data.int64 = get8LE(&context->storage[pos]);
+
+      auto* event_long = reinterpret_cast<android_event_long_t*>(&context->storage[pos]);
+      pos += sizeof(android_event_long_t);
+      elem.data.int64 = event_long->data;
       /* common tangeable object suffix */
-      pos += elem.len;
       elem.complete = !context->list_nest_depth && !context->count[0];
       if (!peek) {
         if (!context->count[context->list_nest_depth] ||
@@ -520,15 +477,22 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
         context->pos = pos;
       }
       return elem;
+    }
 
-    case EVENT_TYPE_STRING:
-      if ((pos + sizeof(int32_t)) > context->len) {
+    case EVENT_TYPE_STRING: {
+      if ((pos + sizeof(android_event_string_t)) > context->len) {
         elem.type = EVENT_TYPE_UNKNOWN;
         elem.complete = true;
         return elem;
       }
-      elem.len = get4LE(&context->storage[pos]);
-      pos += sizeof(int32_t);
+      auto* event_string = reinterpret_cast<android_event_string_t*>(&context->storage[pos]);
+      pos += sizeof(android_event_string_t);
+      // Wire format is int32_t, but elem.len is uint16_t...
+      if (event_string->length >= UINT16_MAX) {
+        elem.type = EVENT_TYPE_UNKNOWN;
+        return elem;
+      }
+      elem.len = event_string->length;
       if ((pos + elem.len) > context->len) {
         elem.len = context->len - pos; /* truncate string */
         elem.complete = true;
@@ -537,7 +501,7 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
           return elem;
         }
       }
-      elem.data.string = (char*)&context->storage[pos];
+      elem.data.string = event_string->data;
       /* common tangeable object suffix */
       pos += elem.len;
       elem.complete = !context->list_nest_depth && !context->count[0];
@@ -549,13 +513,16 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
         context->pos = pos;
       }
       return elem;
+    }
 
-    case EVENT_TYPE_LIST:
-      if ((pos + sizeof(uint8_t)) > context->len) {
+    case EVENT_TYPE_LIST: {
+      if ((pos + sizeof(android_event_list_t)) > context->len) {
         elem.type = EVENT_TYPE_UNKNOWN;
         elem.complete = true;
         return elem;
       }
+      auto* event_list = reinterpret_cast<android_event_list_t*>(&context->storage[pos]);
+      pos += sizeof(android_event_list_t);
       elem.complete = context->list_nest_depth >= ANDROID_MAX_LIST_NEST_DEPTH;
       if (peek) {
         return elem;
@@ -563,15 +530,17 @@ static android_log_list_element android_log_read_next_internal(android_log_conte
       if (context->count[context->list_nest_depth]) {
         context->count[context->list_nest_depth]--;
       }
-      context->list_stop = !context->storage[pos];
+      context->list_stop = event_list->element_count == 0;
       context->list_nest_depth++;
       if (context->list_nest_depth <= ANDROID_MAX_LIST_NEST_DEPTH) {
-        context->count[context->list_nest_depth] = context->storage[pos];
+        context->count[context->list_nest_depth] = event_list->element_count;
       }
-      context->pos = pos + sizeof(uint8_t);
+      context->pos = pos;
       return elem;
+    }
 
     case EVENT_TYPE_LIST_STOP: /* Suprise Newline terminates lists. */
+      pos++;
       if (!peek) {
         context->pos = pos;
       }

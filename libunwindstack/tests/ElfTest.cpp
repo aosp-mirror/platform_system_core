@@ -310,8 +310,8 @@ class ElfInterfaceMock : public ElfInterface {
   ElfInterfaceMock(Memory* memory) : ElfInterface(memory) {}
   virtual ~ElfInterfaceMock() = default;
 
-  bool Init(uint64_t*) override { return false; }
-  void InitHeaders(uint64_t) override {}
+  bool Init(int64_t*) override { return false; }
+  void InitHeaders() override {}
   std::string GetSoname() override { return ""; }
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override { return false; }
   std::string GetBuildID() override { return ""; }

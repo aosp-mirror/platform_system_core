@@ -124,10 +124,10 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
 }
 
 template <typename AddressType>
-void ElfInterface::InitHeadersWithTemplate(uint64_t load_bias) {
+void ElfInterface::InitHeadersWithTemplate() {
   if (eh_frame_hdr_offset_ != 0) {
     eh_frame_.reset(new DwarfEhFrameWithHdr<AddressType>(memory_));
-    if (!eh_frame_->Init(eh_frame_hdr_offset_, eh_frame_hdr_size_, load_bias)) {
+    if (!eh_frame_->Init(eh_frame_hdr_offset_, eh_frame_hdr_size_, eh_frame_hdr_section_bias_)) {
       eh_frame_.reset(nullptr);
     }
   }
@@ -136,21 +136,23 @@ void ElfInterface::InitHeadersWithTemplate(uint64_t load_bias) {
     // If there is an eh_frame section without an eh_frame_hdr section,
     // or using the frame hdr object failed to init.
     eh_frame_.reset(new DwarfEhFrame<AddressType>(memory_));
-    if (!eh_frame_->Init(eh_frame_offset_, eh_frame_size_, load_bias)) {
+    if (!eh_frame_->Init(eh_frame_offset_, eh_frame_size_, eh_frame_section_bias_)) {
       eh_frame_.reset(nullptr);
     }
   }
 
   if (eh_frame_.get() == nullptr) {
     eh_frame_hdr_offset_ = 0;
+    eh_frame_hdr_section_bias_ = 0;
     eh_frame_hdr_size_ = static_cast<uint64_t>(-1);
     eh_frame_offset_ = 0;
+    eh_frame_section_bias_ = 0;
     eh_frame_size_ = static_cast<uint64_t>(-1);
   }
 
   if (debug_frame_offset_ != 0) {
     debug_frame_.reset(new DwarfDebugFrame<AddressType>(memory_));
-    if (!debug_frame_->Init(debug_frame_offset_, debug_frame_size_, load_bias)) {
+    if (!debug_frame_->Init(debug_frame_offset_, debug_frame_size_, debug_frame_section_bias_)) {
       debug_frame_.reset(nullptr);
       debug_frame_offset_ = 0;
       debug_frame_size_ = static_cast<uint64_t>(-1);
@@ -159,7 +161,7 @@ void ElfInterface::InitHeadersWithTemplate(uint64_t load_bias) {
 }
 
 template <typename EhdrType, typename PhdrType, typename ShdrType>
-bool ElfInterface::ReadAllHeaders(uint64_t* load_bias) {
+bool ElfInterface::ReadAllHeaders(int64_t* load_bias) {
   EhdrType ehdr;
   if (!memory_->ReadFully(0, &ehdr, sizeof(ehdr))) {
     last_error_.code = ERROR_MEMORY_INVALID;
@@ -175,7 +177,7 @@ bool ElfInterface::ReadAllHeaders(uint64_t* load_bias) {
 }
 
 template <typename EhdrType, typename PhdrType>
-uint64_t ElfInterface::GetLoadBias(Memory* memory) {
+int64_t ElfInterface::GetLoadBias(Memory* memory) {
   EhdrType ehdr;
   if (!memory->ReadFully(0, &ehdr, sizeof(ehdr))) {
     return false;
@@ -187,15 +189,17 @@ uint64_t ElfInterface::GetLoadBias(Memory* memory) {
     if (!memory->ReadFully(offset, &phdr, sizeof(phdr))) {
       return 0;
     }
-    if (phdr.p_type == PT_LOAD && phdr.p_offset == 0) {
-      return phdr.p_vaddr;
+
+    // Find the first executable load when looking for the load bias.
+    if (phdr.p_type == PT_LOAD && (phdr.p_flags & PF_X)) {
+      return static_cast<uint64_t>(phdr.p_vaddr) - phdr.p_offset;
     }
   }
   return 0;
 }
 
 template <typename EhdrType, typename PhdrType>
-void ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias) {
+void ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, int64_t* load_bias) {
   uint64_t offset = ehdr.e_phoff;
   bool first_exec_load_header = true;
   for (size_t i = 0; i < ehdr.e_phnum; i++, offset += ehdr.e_phentsize) {
@@ -214,8 +218,8 @@ void ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias)
       pt_loads_[phdr.p_offset] = LoadInfo{phdr.p_offset, phdr.p_vaddr,
                                           static_cast<size_t>(phdr.p_memsz)};
       // Only set the load bias from the first executable load header.
-      if (first_exec_load_header && phdr.p_vaddr > phdr.p_offset) {
-        *load_bias = phdr.p_vaddr - phdr.p_offset;
+      if (first_exec_load_header) {
+        *load_bias = static_cast<uint64_t>(phdr.p_vaddr) - phdr.p_offset;
       }
       first_exec_load_header = false;
       break;
@@ -224,6 +228,7 @@ void ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, uint64_t* load_bias)
     case PT_GNU_EH_FRAME:
       // This is really the pointer to the .eh_frame_hdr section.
       eh_frame_hdr_offset_ = phdr.p_offset;
+      eh_frame_hdr_section_bias_ = static_cast<uint64_t>(phdr.p_paddr) - phdr.p_offset;
       eh_frame_hdr_size_ = phdr.p_memsz;
       break;
 
@@ -338,24 +343,21 @@ void ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
       if (shdr.sh_name < sec_size) {
         std::string name;
         if (memory_->ReadString(sec_offset + shdr.sh_name, &name)) {
-          uint64_t* offset_ptr = nullptr;
-          uint64_t* size_ptr = nullptr;
           if (name == ".debug_frame") {
-            offset_ptr = &debug_frame_offset_;
-            size_ptr = &debug_frame_size_;
+            debug_frame_offset_ = shdr.sh_offset;
+            debug_frame_size_ = shdr.sh_size;
+            debug_frame_section_bias_ = static_cast<uint64_t>(shdr.sh_addr) - shdr.sh_offset;
           } else if (name == ".gnu_debugdata") {
-            offset_ptr = &gnu_debugdata_offset_;
-            size_ptr = &gnu_debugdata_size_;
+            gnu_debugdata_offset_ = shdr.sh_offset;
+            gnu_debugdata_size_ = shdr.sh_size;
           } else if (name == ".eh_frame") {
-            offset_ptr = &eh_frame_offset_;
-            size_ptr = &eh_frame_size_;
+            eh_frame_offset_ = shdr.sh_offset;
+            eh_frame_section_bias_ = static_cast<uint64_t>(shdr.sh_addr) - shdr.sh_offset;
+            eh_frame_size_ = shdr.sh_size;
           } else if (eh_frame_hdr_offset_ == 0 && name == ".eh_frame_hdr") {
-            offset_ptr = &eh_frame_hdr_offset_;
-            size_ptr = &eh_frame_hdr_size_;
-          }
-          if (offset_ptr != nullptr) {
-            *offset_ptr = shdr.sh_offset;
-            *size_ptr = shdr.sh_size;
+            eh_frame_hdr_offset_ = shdr.sh_offset;
+            eh_frame_hdr_section_bias_ = static_cast<uint64_t>(shdr.sh_addr) - shdr.sh_offset;
+            eh_frame_hdr_size_ = shdr.sh_size;
           }
         }
       }
@@ -637,16 +639,14 @@ std::string ElfInterface::ReadBuildIDFromMemory(Memory* memory) {
 }
 
 // Instantiate all of the needed template functions.
-template void ElfInterface::InitHeadersWithTemplate<uint32_t>(uint64_t);
-template void ElfInterface::InitHeadersWithTemplate<uint64_t>(uint64_t);
+template void ElfInterface::InitHeadersWithTemplate<uint32_t>();
+template void ElfInterface::InitHeadersWithTemplate<uint64_t>();
 
-template bool ElfInterface::ReadAllHeaders<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr>(uint64_t*);
-template bool ElfInterface::ReadAllHeaders<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr>(uint64_t*);
+template bool ElfInterface::ReadAllHeaders<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr>(int64_t*);
+template bool ElfInterface::ReadAllHeaders<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr>(int64_t*);
 
-template void ElfInterface::ReadProgramHeaders<Elf32_Ehdr, Elf32_Phdr>(const Elf32_Ehdr&,
-                                                                       uint64_t*);
-template void ElfInterface::ReadProgramHeaders<Elf64_Ehdr, Elf64_Phdr>(const Elf64_Ehdr&,
-                                                                       uint64_t*);
+template void ElfInterface::ReadProgramHeaders<Elf32_Ehdr, Elf32_Phdr>(const Elf32_Ehdr&, int64_t*);
+template void ElfInterface::ReadProgramHeaders<Elf64_Ehdr, Elf64_Phdr>(const Elf64_Ehdr&, int64_t*);
 
 template void ElfInterface::ReadSectionHeaders<Elf32_Ehdr, Elf32_Shdr>(const Elf32_Ehdr&);
 template void ElfInterface::ReadSectionHeaders<Elf64_Ehdr, Elf64_Shdr>(const Elf64_Ehdr&);
@@ -668,8 +668,8 @@ template bool ElfInterface::GetGlobalVariableWithTemplate<Elf64_Sym>(const std::
 template void ElfInterface::GetMaxSizeWithTemplate<Elf32_Ehdr>(Memory*, uint64_t*);
 template void ElfInterface::GetMaxSizeWithTemplate<Elf64_Ehdr>(Memory*, uint64_t*);
 
-template uint64_t ElfInterface::GetLoadBias<Elf32_Ehdr, Elf32_Phdr>(Memory*);
-template uint64_t ElfInterface::GetLoadBias<Elf64_Ehdr, Elf64_Phdr>(Memory*);
+template int64_t ElfInterface::GetLoadBias<Elf32_Ehdr, Elf32_Phdr>(Memory*);
+template int64_t ElfInterface::GetLoadBias<Elf64_Ehdr, Elf64_Phdr>(Memory*);
 
 template std::string ElfInterface::ReadBuildIDFromMemory<Elf32_Ehdr, Elf32_Shdr, Elf32_Nhdr>(
     Memory*);

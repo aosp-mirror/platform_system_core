@@ -205,6 +205,7 @@ cc_test {
         "Mutex_test.cpp",
         "SharedBuffer_test.cpp",
         "String8_test.cpp",
+        "String16_test.cpp",
         "StrongPointer_test.cpp",
         "Unicode_test.cpp",
         "Vector_test.cpp",
@@ -288,4 +289,10 @@ cc_test_library {
         "-Werror",
     ],
     shared_libs: ["libutils_test_singleton1"],
+}
+
+cc_benchmark {
+    name: "libutils_benchmark",
+    srcs: ["Vector_benchmark.cpp"],
+    shared_libs: ["libutils"],
 }

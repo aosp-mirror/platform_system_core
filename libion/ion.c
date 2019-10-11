@@ -31,9 +31,11 @@
 #include <unistd.h>
 
 #include <ion/ion.h>
-#include "ion_4.12.h"
+#include <linux/ion_4.19.h>
 
 #include <log/log.h>
+
+#define ION_ABI_VERSION_MODULAR_HEAPS 2
 
 enum ion_version { ION_VERSION_UNKNOWN, ION_VERSION_MODERN, ION_VERSION_LEGACY };
 
@@ -73,6 +75,14 @@ static int ion_ioctl(int fd, int req, void* arg) {
         return -errno;
     }
     return ret;
+}
+
+int ion_is_using_modular_heaps(int fd) {
+    int ion_abi_version = 0;
+    int ret = 0;
+
+    ret = ion_ioctl(fd, ION_IOC_ABI_VERSION, &ion_abi_version);
+    return (ret == 0 && ion_abi_version >= ION_ABI_VERSION_MODULAR_HEAPS);
 }
 
 int ion_alloc(int fd, size_t len, size_t align, unsigned int heap_mask, unsigned int flags,

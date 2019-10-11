@@ -52,6 +52,40 @@ on early-init
     # the libraries are available to the processes started after this statement.
     exec_start apexd-bootstrap
 
+    # These must already exist by the time boringssl_self_test32 / boringssl_self_test64 run.
+    mkdir /dev/boringssl 0755 root root
+    mkdir /dev/boringssl/selftest 0755 root root
+
+# Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
+on early-init && property:ro.product.cpu.abilist32=*
+    exec_start boringssl_self_test32
+on early-init && property:ro.product.cpu.abilist64=*
+    exec_start boringssl_self_test64
+on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
+    exec_start boringssl_self_test_apex32
+on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
+    exec_start boringssl_self_test_apex64
+
+service boringssl_self_test32 /system/bin/boringssl_self_test32
+    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+
+service boringssl_self_test64 /system/bin/boringssl_self_test64
+    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+
+service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
+    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+
+service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
+    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+
 on init
     sysclktz 0
 
@@ -124,6 +158,14 @@ on init
     mkdir /mnt/user/0/self 0755 root root
     mkdir /mnt/user/0/emulated 0755 root root
     mkdir /mnt/user/0/emulated/0 0755 root root
+
+    # Prepare directories for pass through processes
+    mkdir /mnt/pass_through 0755 root root
+    mkdir /mnt/pass_through/0 0755 root root
+    mkdir /mnt/pass_through/0/self 0755 root root
+    mkdir /mnt/pass_through/0/emulated 0755 root root
+    mkdir /mnt/pass_through/0/emulated/0 0755 root root
+
     mkdir /mnt/expand 0771 system system
     mkdir /mnt/appfuse 0711 root root
 
@@ -427,15 +469,10 @@ on late-fs
     # HALs required before storage encryption can get unlocked (FBE/FDE)
     class_start early_hal
 
-    # Check and mark a successful boot, before mounting userdata with mount_all.
-    # No-op for non-A/B device.
-    exec_start update_verifier_nonencrypted
-
 on post-fs-data
     mark_post_data
 
     # Start checkpoint before we touch data
-    start vold
     exec - system system -- /system/bin/vdc checkpoint prepareCheckpoint
 
     # We chown/chmod /data again so because mount is run as root + defaults
@@ -451,10 +488,6 @@ on post-fs-data
     # mounted to collect more data.
     mkdir /data/bootchart 0755 shell shell
     bootchart start
-
-    # Load fsverity keys. This needs to happen before apexd, as post-install of
-    # APEXes may rely on keys.
-    exec -- /system/bin/fsverity_init
 
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
@@ -532,6 +565,7 @@ on post-fs-data
     mkdir /data/misc/profiles/ref 0771 system system
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
+    mkdir /data/misc/installd 0700 root root
 
     mkdir /data/preloads 0775 system system
 
@@ -614,6 +648,9 @@ on post-fs-data
     mkdir /data/cache/backup_stage 0700 system system
     mkdir /data/cache/backup 0700 system system
 
+    mkdir /data/rollback 0700 system system
+    mkdir /data/rollback-observer 0700 system system
+
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready
     parse_apex_configs
@@ -649,6 +686,8 @@ on zygote-start && property:persist.sys.fuse=true
   # Mount default storage into root namespace
   mount none /mnt/user/0 /storage bind rec
   mount none none /storage slave rec
+  # Bootstrap the emulated volume for the pass_through directory for user 0
+  mount none /data/media /mnt/pass_through/0/emulated bind rec
 on zygote-start && property:persist.sys.fuse=false
   # Mount default storage into root namespace
   mount none /mnt/runtime/default /storage bind rec
@@ -661,16 +700,22 @@ on zygote-start && property:persist.sys.fuse=""
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted
+    # A/B update verifier that marks a successful boot.
+    exec_start update_verifier_nonencrypted
     start netd
     start zygote
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=unsupported
+    # A/B update verifier that marks a successful boot.
+    exec_start update_verifier_nonencrypted
     start netd
     start zygote
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
+    # A/B update verifier that marks a successful boot.
+    exec_start update_verifier_nonencrypted
     start netd
     start zygote
     start zygote_secondary
@@ -694,6 +739,12 @@ on boot
     chown root system /sys/module/lowmemorykiller/parameters/minfree
     chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
 
+    # System server manages zram writeback
+    chown root system /sys/block/zram0/idle
+    chmod 0664 /sys/block/zram0/idle
+    chown root system /sys/block/zram0/writeback
+    chmod 0664 /sys/block/zram0/writeback
+
     # Tweak background writeout
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
@@ -705,11 +756,6 @@ on boot
     write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
 
     # Permissions for System Server and daemons.
-    chown radio system /sys/android_power/state
-    chown radio system /sys/android_power/request_state
-    chown radio system /sys/android_power/acquire_full_wake_lock
-    chown radio system /sys/android_power/acquire_partial_wake_lock
-    chown radio system /sys/android_power/release_wake_lock
     chown system system /sys/power/autosleep
 
     chown system system /sys/devices/system/cpu/cpufreq/interactive/timer_rate
@@ -773,6 +819,9 @@ on boot
 
     class_start core
 
+    # Requires keystore (currently a core service) to be ready first.
+    exec -- /system/bin/fsverity_init
+
 on nonencrypted
     class_start main
     class_start late_start
@@ -793,6 +842,8 @@ on property:vold.decrypt=trigger_post_fs_data
     trigger zygote-start
 
 on property:vold.decrypt=trigger_restart_min_framework
+    # A/B update verifier that marks a successful boot.
+    exec_start update_verifier
     class_start main
 
 on property:vold.decrypt=trigger_restart_framework
@@ -813,6 +864,9 @@ on property:vold.decrypt=trigger_shutdown_framework
 
 on property:sys.boot_completed=1
     bootchart stop
+    # Setup per_boot directory so other .rc could start to use it on boot_completed
+    exec - system system -- /bin/rm -rf /data/per_boot
+    mkdir /data/per_boot 0700 system system
 
 # system server cannot write to /proc/sys files,
 # and chown/chmod does not work for /proc/sys/ entries.
@@ -860,8 +914,18 @@ on property:ro.debuggable=1
     chmod 0773 /data/misc/trace
     # Give reads to anyone for the window trace folder on debug builds.
     chmod 0775 /data/misc/wmtrace
+
+on init && property:ro.debuggable=1
     start console
 
-service flash_recovery /system/bin/install-recovery.sh
-    class main
-    oneshot
+on userspace-reboot:
+  # TODO(b/135984674): reset all necessary properties here.
+  setprop sys.init.userspace_reboot_in_progress 1
+
+on userspace-reboot-resume:
+  # TODO(b/135984674): remount userdata and reset checkpointing
+  trigger nonencrypted
+  trigger post-fs-data
+  trigger zygote-start
+  trigger early-boot
+  trigger boot

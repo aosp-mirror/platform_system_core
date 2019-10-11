@@ -34,6 +34,7 @@ cc_library {
     host_supported: true,
     srcs: [
         "process.cpp",
+        "process_map.cpp",
     ],
 
     local_include_dirs: ["include"],
@@ -58,6 +59,7 @@ cc_test {
     name: "libprocinfo_test",
     defaults: ["libprocinfo_defaults"],
     host_supported: true,
+    isolated: true,
     srcs: [
         "process_test.cpp",
         "process_map_test.cpp",

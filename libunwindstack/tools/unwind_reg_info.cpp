@@ -165,8 +165,8 @@ void PrintArmRegInformation(ElfInterfaceArm* interface, uint64_t pc) {
   }
 }
 
-int GetInfo(const char* file, uint64_t pc) {
-  Elf elf(Memory::CreateFileMemory(file, pc).release());
+int GetInfo(const char* file, uint64_t offset, uint64_t pc) {
+  Elf elf(Memory::CreateFileMemory(file, offset).release());
   if (!elf.Init() || !elf.valid()) {
     printf("%s is not a valid elf file.\n", file);
     return 1;
@@ -243,12 +243,14 @@ int GetInfo(const char* file, uint64_t pc) {
 }  // namespace unwindstack
 
 int main(int argc, char** argv) {
-  if (argc != 3) {
-    printf("Usage: unwind_reg_info ELF_FILE PC\n");
+  if (argc != 3 && argc != 4) {
+    printf("Usage: unwind_reg_info ELF_FILE PC [OFFSET]\n");
     printf("  ELF_FILE\n");
     printf("    The path to an elf file.\n");
     printf("  PC\n");
     printf("    The pc for which the register information should be obtained.\n");
+    printf("  OFFSET\n");
+    printf("    Use the offset into the ELF file as the beginning of the elf.\n");
     return 1;
   }
 
@@ -270,5 +272,15 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  return unwindstack::GetInfo(argv[1], pc);
+  uint64_t offset = 0;
+  if (argc == 4) {
+    char* end;
+    offset = strtoull(argv[3], &end, 16);
+    if (*end != '\0') {
+      printf("Malformed OFFSET value: %s\n", argv[3]);
+      return 1;
+    }
+  }
+
+  return unwindstack::GetInfo(argv[1], offset, pc);
 }

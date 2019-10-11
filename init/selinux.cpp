@@ -36,21 +36,25 @@
 // The split SEPolicy is loaded as described below:
 // 1) There is a precompiled SEPolicy located at either /vendor/etc/selinux/precompiled_sepolicy or
 //    /odm/etc/selinux/precompiled_sepolicy if odm parition is present.  Stored along with this file
-//    are the sha256 hashes of the parts of the SEPolicy on /system and /product that were used to
-//    compile this precompiled policy.  The system partition contains a similar sha256 of the parts
-//    of the SEPolicy that it currently contains.  Symmetrically, product paritition contains a
-//    sha256 of its SEPolicy.  System loads this precompiled_sepolicy directly if and only if hashes
-//    for system policy match and hashes for product policy match.
-// 2) If these hashes do not match, then either /system or /product (or both) have been updated out
-//    of sync with /vendor and the init needs to compile the SEPolicy.  /system contains the
-//    SEPolicy compiler, secilc, and it is used by the LoadSplitPolicy() function below to compile
-//    the SEPolicy to a temp directory and load it.  That function contains even more documentation
-//    with the specific implementation details of how the SEPolicy is compiled if needed.
+//    are the sha256 hashes of the parts of the SEPolicy on /system, /system_ext and /product that
+//    were used to compile this precompiled policy.  The system partition contains a similar sha256
+//    of the parts of the SEPolicy that it currently contains.  Symmetrically, system_ext and
+//    product paritition contain sha256 hashes of their SEPolicy.  The init loads this
+//    precompiled_sepolicy directly if and only if the hashes along with the precompiled SEPolicy on
+//    /vendor or /odm match the hashes for system, system_ext and product SEPolicy, respectively.
+// 2) If these hashes do not match, then either /system or /system_ext or /product (or some of them)
+//    have been updated out of sync with /vendor (or /odm if it is present) and the init needs to
+//    compile the SEPolicy.  /system contains the SEPolicy compiler, secilc, and it is used by the
+//    LoadSplitPolicy() function below to compile the SEPolicy to a temp directory and load it.
+//    That function contains even more documentation with the specific implementation details of how
+//    the SEPolicy is compiled if needed.
 
 #include "selinux.h"
 
 #include <android/api-level.h>
 #include <fcntl.h>
+#include <linux/audit.h>
+#include <linux/netlink.h>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -226,6 +230,13 @@ bool FindPrecompiledSplitPolicy(std::string* file) {
                       "/system/etc/selinux/plat_sepolicy_and_mapping.sha256";
         return false;
     }
+    std::string actual_system_ext_id;
+    if (!ReadFirstLine("/system_ext/etc/selinux/system_ext_sepolicy_and_mapping.sha256",
+                       &actual_system_ext_id)) {
+        PLOG(INFO) << "Failed to read "
+                      "/system_ext/etc/selinux/system_ext_sepolicy_and_mapping.sha256";
+        return false;
+    }
     std::string actual_product_id;
     if (!ReadFirstLine("/product/etc/selinux/product_sepolicy_and_mapping.sha256",
                        &actual_product_id)) {
@@ -241,6 +252,13 @@ bool FindPrecompiledSplitPolicy(std::string* file) {
         file->clear();
         return false;
     }
+    std::string precompiled_system_ext_id;
+    std::string precompiled_system_ext_sha256 = *file + ".system_ext_sepolicy_and_mapping.sha256";
+    if (!ReadFirstLine(precompiled_system_ext_sha256.c_str(), &precompiled_system_ext_id)) {
+        PLOG(INFO) << "Failed to read " << precompiled_system_ext_sha256;
+        file->clear();
+        return false;
+    }
     std::string precompiled_product_id;
     std::string precompiled_product_sha256 = *file + ".product_sepolicy_and_mapping.sha256";
     if (!ReadFirstLine(precompiled_product_sha256.c_str(), &precompiled_product_id)) {
@@ -249,6 +267,7 @@ bool FindPrecompiledSplitPolicy(std::string* file) {
         return false;
     }
     if (actual_plat_id.empty() || actual_plat_id != precompiled_plat_id ||
+        actual_system_ext_id.empty() || actual_system_ext_id != precompiled_system_ext_id ||
         actual_product_id.empty() || actual_product_id != precompiled_product_id) {
         file->clear();
         return false;
@@ -334,6 +353,17 @@ bool LoadSplitPolicy() {
         plat_compat_cil_file.clear();
     }
 
+    std::string system_ext_policy_cil_file("/system_ext/etc/selinux/system_ext_sepolicy.cil");
+    if (access(system_ext_policy_cil_file.c_str(), F_OK) == -1) {
+        system_ext_policy_cil_file.clear();
+    }
+
+    std::string system_ext_mapping_file("/system_ext/etc/selinux/mapping/" + vend_plat_vers +
+                                        ".cil");
+    if (access(system_ext_mapping_file.c_str(), F_OK) == -1) {
+        system_ext_mapping_file.clear();
+    }
+
     std::string product_policy_cil_file("/product/etc/selinux/product_sepolicy.cil");
     if (access(product_policy_cil_file.c_str(), F_OK) == -1) {
         product_policy_cil_file.clear();
@@ -381,6 +411,12 @@ bool LoadSplitPolicy() {
 
     if (!plat_compat_cil_file.empty()) {
         compile_args.push_back(plat_compat_cil_file.c_str());
+    }
+    if (!system_ext_policy_cil_file.empty()) {
+        compile_args.push_back(system_ext_policy_cil_file.c_str());
+    }
+    if (!system_ext_mapping_file.empty()) {
+        compile_args.push_back(system_ext_mapping_file.c_str());
     }
     if (!product_policy_cil_file.empty()) {
         compile_args.push_back(product_policy_cil_file.c_str());
@@ -437,13 +473,43 @@ void SelinuxInitialize() {
     bool is_enforcing = IsEnforcing();
     if (kernel_enforcing != is_enforcing) {
         if (security_setenforce(is_enforcing)) {
-            PLOG(FATAL) << "security_setenforce(%s) failed" << (is_enforcing ? "true" : "false");
+            PLOG(FATAL) << "security_setenforce(" << (is_enforcing ? "true" : "false")
+                        << ") failed";
         }
     }
 
     if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result) {
         LOG(FATAL) << "Unable to write to /sys/fs/selinux/checkreqprot: " << result.error();
     }
+}
+
+constexpr size_t kKlogMessageSize = 1024;
+
+void SelinuxAvcLog(char* buf, size_t buf_len) {
+    CHECK_GT(buf_len, 0u);
+
+    size_t str_len = strnlen(buf, buf_len);
+    // trim newline at end of string
+    if (buf[str_len - 1] == '\n') {
+        buf[str_len - 1] = '\0';
+    }
+
+    struct NetlinkMessage {
+        nlmsghdr hdr;
+        char buf[kKlogMessageSize];
+    } request = {};
+
+    request.hdr.nlmsg_flags = NLM_F_REQUEST;
+    request.hdr.nlmsg_type = AUDIT_USER_AVC;
+    request.hdr.nlmsg_len = sizeof(request);
+    strlcpy(request.buf, buf, sizeof(request.buf));
+
+    auto fd = unique_fd{socket(PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_AUDIT)};
+    if (!fd.ok()) {
+        return;
+    }
+
+    TEMP_FAILURE_RETRY(send(fd, &request, sizeof(request), 0));
 }
 
 }  // namespace
@@ -478,12 +544,19 @@ int SelinuxKlogCallback(int type, const char* fmt, ...) {
     } else if (type == SELINUX_INFO) {
         severity = android::base::INFO;
     }
-    char buf[1024];
+    char buf[kKlogMessageSize];
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
+    int length_written = vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    android::base::KernelLogger(android::base::MAIN, severity, "selinux", nullptr, 0, buf);
+    if (length_written <= 0) {
+        return 0;
+    }
+    if (type == SELINUX_AVC) {
+        SelinuxAvcLog(buf, sizeof(buf));
+    } else {
+        android::base::KernelLogger(android::base::MAIN, severity, "selinux", nullptr, 0, buf);
+    }
     return 0;
 }
 

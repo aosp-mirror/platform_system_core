@@ -83,6 +83,9 @@ Result<void> ServiceParser::ParseClass(std::vector<std::string>&& args) {
 }
 
 Result<void> ServiceParser::ParseConsole(std::vector<std::string>&& args) {
+    if (service_->proc_attr_.stdio_to_kmsg) {
+        return Error() << "'console' and 'stdio_to_kmsg' are mutually exclusive";
+    }
     service_->flags_ |= SVC_CONSOLE;
     service_->proc_attr_.console = args.size() > 1 ? "/dev/" + args[1] : "";
     return {};
@@ -145,17 +148,21 @@ Result<void> ServiceParser::ParseInterface(std::vector<std::string>&& args) {
     const std::string& interface_name = args[1];
     const std::string& instance_name = args[2];
 
-    FQName fq_name;
-    if (!FQName::parse(interface_name, &fq_name)) {
-        return Error() << "Invalid fully-qualified name for interface '" << interface_name << "'";
-    }
+    // AIDL services don't use fully qualified names and instead just use "interface aidl <name>"
+    if (interface_name != "aidl") {
+        FQName fq_name;
+        if (!FQName::parse(interface_name, &fq_name)) {
+            return Error() << "Invalid fully-qualified name for interface '" << interface_name
+                           << "'";
+        }
 
-    if (!fq_name.isFullyQualified()) {
-        return Error() << "Interface name not fully-qualified '" << interface_name << "'";
-    }
+        if (!fq_name.isFullyQualified()) {
+            return Error() << "Interface name not fully-qualified '" << interface_name << "'";
+        }
 
-    if (fq_name.isValidValueName()) {
-        return Error() << "Interface name must not be a value name '" << interface_name << "'";
+        if (fq_name.isValidValueName()) {
+            return Error() << "Interface name must not be a value name '" << interface_name << "'";
+        }
     }
 
     const std::string fullname = interface_name + "/" + instance_name;
@@ -306,6 +313,18 @@ Result<void> ServiceParser::ParseProcessRlimit(std::vector<std::string>&& args) 
     return {};
 }
 
+Result<void> ServiceParser::ParseRebootOnFailure(std::vector<std::string>&& args) {
+    if (service_->on_failure_reboot_target_) {
+        return Error() << "Only one reboot_on_failure command may be specified";
+    }
+    if (!StartsWith(args[1], "shutdown") && !StartsWith(args[1], "reboot")) {
+        return Error()
+               << "reboot_on_failure commands must begin with either 'shutdown' or 'reboot'";
+    }
+    service_->on_failure_reboot_target_ = std::move(args[1]);
+    return {};
+}
+
 Result<void> ServiceParser::ParseRestartPeriod(std::vector<std::string>&& args) {
     int period;
     if (!ParseInt(args[1], &period, 5)) {
@@ -413,6 +432,14 @@ Result<void> ServiceParser::ParseSocket(std::vector<std::string>&& args) {
     return {};
 }
 
+Result<void> ServiceParser::ParseStdioToKmsg(std::vector<std::string>&& args) {
+    if (service_->flags_ & SVC_CONSOLE) {
+        return Error() << "'stdio_to_kmsg' and 'console' are mutually exclusive";
+    }
+    service_->proc_attr_.stdio_to_kmsg = true;
+    return {};
+}
+
 // name type
 Result<void> ServiceParser::ParseFile(std::vector<std::string>&& args) {
     if (args[2] != "r" && args[2] != "w" && args[2] != "rw") {
@@ -467,49 +494,42 @@ const KeywordMap<ServiceParser::OptionParser>& ServiceParser::GetParserMap() con
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
     // clang-format off
     static const KeywordMap<ServiceParser::OptionParser> parser_map = {
-        {"capabilities",
-                        {0,     kMax, &ServiceParser::ParseCapabilities}},
-        {"class",       {1,     kMax, &ServiceParser::ParseClass}},
-        {"console",     {0,     1,    &ServiceParser::ParseConsole}},
-        {"critical",    {0,     0,    &ServiceParser::ParseCritical}},
-        {"disabled",    {0,     0,    &ServiceParser::ParseDisabled}},
-        {"enter_namespace",
-                        {2,     2,    &ServiceParser::ParseEnterNamespace}},
-        {"file",        {2,     2,    &ServiceParser::ParseFile}},
-        {"group",       {1,     NR_SVC_SUPP_GIDS + 1, &ServiceParser::ParseGroup}},
-        {"interface",   {2,     2,    &ServiceParser::ParseInterface}},
-        {"ioprio",      {2,     2,    &ServiceParser::ParseIoprio}},
-        {"keycodes",    {1,     kMax, &ServiceParser::ParseKeycodes}},
-        {"memcg.limit_in_bytes",
-                        {1,     1,    &ServiceParser::ParseMemcgLimitInBytes}},
-        {"memcg.limit_percent",
-                        {1,     1,    &ServiceParser::ParseMemcgLimitPercent}},
-        {"memcg.limit_property",
-                        {1,     1,    &ServiceParser::ParseMemcgLimitProperty}},
+        {"capabilities",            {0,     kMax, &ServiceParser::ParseCapabilities}},
+        {"class",                   {1,     kMax, &ServiceParser::ParseClass}},
+        {"console",                 {0,     1,    &ServiceParser::ParseConsole}},
+        {"critical",                {0,     0,    &ServiceParser::ParseCritical}},
+        {"disabled",                {0,     0,    &ServiceParser::ParseDisabled}},
+        {"enter_namespace",         {2,     2,    &ServiceParser::ParseEnterNamespace}},
+        {"file",                    {2,     2,    &ServiceParser::ParseFile}},
+        {"group",                   {1,     NR_SVC_SUPP_GIDS + 1, &ServiceParser::ParseGroup}},
+        {"interface",               {2,     2,    &ServiceParser::ParseInterface}},
+        {"ioprio",                  {2,     2,    &ServiceParser::ParseIoprio}},
+        {"keycodes",                {1,     kMax, &ServiceParser::ParseKeycodes}},
+        {"memcg.limit_in_bytes",    {1,     1,    &ServiceParser::ParseMemcgLimitInBytes}},
+        {"memcg.limit_percent",     {1,     1,    &ServiceParser::ParseMemcgLimitPercent}},
+        {"memcg.limit_property",    {1,     1,    &ServiceParser::ParseMemcgLimitProperty}},
         {"memcg.soft_limit_in_bytes",
-                        {1,     1,    &ServiceParser::ParseMemcgSoftLimitInBytes}},
-        {"memcg.swappiness",
-                        {1,     1,    &ServiceParser::ParseMemcgSwappiness}},
-        {"namespace",   {1,     2,    &ServiceParser::ParseNamespace}},
-        {"oneshot",     {0,     0,    &ServiceParser::ParseOneshot}},
-        {"onrestart",   {1,     kMax, &ServiceParser::ParseOnrestart}},
-        {"oom_score_adjust",
-                        {1,     1,    &ServiceParser::ParseOomScoreAdjust}},
-        {"override",    {0,     0,    &ServiceParser::ParseOverride}},
-        {"priority",    {1,     1,    &ServiceParser::ParsePriority}},
-        {"restart_period",
-                        {1,     1,    &ServiceParser::ParseRestartPeriod}},
-        {"rlimit",      {3,     3,    &ServiceParser::ParseProcessRlimit}},
-        {"seclabel",    {1,     1,    &ServiceParser::ParseSeclabel}},
-        {"setenv",      {2,     2,    &ServiceParser::ParseSetenv}},
-        {"shutdown",    {1,     1,    &ServiceParser::ParseShutdown}},
-        {"sigstop",     {0,     0,    &ServiceParser::ParseSigstop}},
-        {"socket",      {3,     6,    &ServiceParser::ParseSocket}},
-        {"timeout_period",
-                        {1,     1,    &ServiceParser::ParseTimeoutPeriod}},
-        {"updatable",   {0,     0,    &ServiceParser::ParseUpdatable}},
-        {"user",        {1,     1,    &ServiceParser::ParseUser}},
-        {"writepid",    {1,     kMax, &ServiceParser::ParseWritepid}},
+                                    {1,     1,    &ServiceParser::ParseMemcgSoftLimitInBytes}},
+        {"memcg.swappiness",        {1,     1,    &ServiceParser::ParseMemcgSwappiness}},
+        {"namespace",               {1,     2,    &ServiceParser::ParseNamespace}},
+        {"oneshot",                 {0,     0,    &ServiceParser::ParseOneshot}},
+        {"onrestart",               {1,     kMax, &ServiceParser::ParseOnrestart}},
+        {"oom_score_adjust",        {1,     1,    &ServiceParser::ParseOomScoreAdjust}},
+        {"override",                {0,     0,    &ServiceParser::ParseOverride}},
+        {"priority",                {1,     1,    &ServiceParser::ParsePriority}},
+        {"reboot_on_failure",       {1,     1,    &ServiceParser::ParseRebootOnFailure}},
+        {"restart_period",          {1,     1,    &ServiceParser::ParseRestartPeriod}},
+        {"rlimit",                  {3,     3,    &ServiceParser::ParseProcessRlimit}},
+        {"seclabel",                {1,     1,    &ServiceParser::ParseSeclabel}},
+        {"setenv",                  {2,     2,    &ServiceParser::ParseSetenv}},
+        {"shutdown",                {1,     1,    &ServiceParser::ParseShutdown}},
+        {"sigstop",                 {0,     0,    &ServiceParser::ParseSigstop}},
+        {"socket",                  {3,     6,    &ServiceParser::ParseSocket}},
+        {"stdio_to_kmsg",           {0,     0,    &ServiceParser::ParseStdioToKmsg}},
+        {"timeout_period",          {1,     1,    &ServiceParser::ParseTimeoutPeriod}},
+        {"updatable",               {0,     0,    &ServiceParser::ParseUpdatable}},
+        {"user",                    {1,     1,    &ServiceParser::ParseUser}},
+        {"writepid",                {1,     kMax, &ServiceParser::ParseWritepid}},
     };
     // clang-format on
     return parser_map;
@@ -529,13 +549,8 @@ Result<void> ServiceParser::ParseSection(std::vector<std::string>&& args,
     filename_ = filename;
 
     Subcontext* restart_action_subcontext = nullptr;
-    if (subcontexts_) {
-        for (auto& subcontext : *subcontexts_) {
-            if (StartsWith(filename, subcontext.path_prefix())) {
-                restart_action_subcontext = &subcontext;
-                break;
-            }
-        }
+    if (subcontext_ && subcontext_->PathMatchesSubcontext(filename)) {
+        restart_action_subcontext = subcontext_;
     }
 
     std::vector<std::string> str_args(args.begin() + 2, args.end());

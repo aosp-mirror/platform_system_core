@@ -337,9 +337,12 @@ void handle_packet(apacket *p, atransport *t)
             case ADB_AUTH_SIGNATURE: {
                 // TODO: Switch to string_view.
                 std::string signature(p->payload.begin(), p->payload.end());
-                if (adbd_auth_verify(t->token, sizeof(t->token), signature)) {
+                std::string auth_key;
+                if (adbd_auth_verify(t->token, sizeof(t->token), signature, &auth_key)) {
                     adbd_auth_verified(t);
                     t->failed_auth_attempts = 0;
+                    t->auth_key = auth_key;
+                    adbd_notify_framework_connected_key(t);
                 } else {
                     if (t->failed_auth_attempts++ > 256) std::this_thread::sleep_for(1s);
                     send_auth_request(t);
@@ -348,7 +351,8 @@ void handle_packet(apacket *p, atransport *t)
             }
 
             case ADB_AUTH_RSAPUBLICKEY:
-                adbd_auth_confirm_key(p->payload.data(), p->msg.data_length, t);
+                t->auth_key = std::string(p->payload.data());
+                adbd_auth_confirm_key(t);
                 break;
 #endif
             default:
@@ -1127,7 +1131,9 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
 
     if (service == "features") {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
+        atransport* t =
+                s->transport ? s->transport
+                             : acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t != nullptr) {
             SendOkay(reply_fd, FeatureSetToString(t->features()));
         } else {
@@ -1186,7 +1192,9 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
     // These always report "unknown" rather than the actual error, for scripts.
     if (service == "get-serialno") {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
+        atransport* t =
+                s->transport ? s->transport
+                             : acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             SendOkay(reply_fd, !t->serial.empty() ? t->serial : "unknown");
         } else {
@@ -1196,7 +1204,9 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
     }
     if (service == "get-devpath") {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
+        atransport* t =
+                s->transport ? s->transport
+                             : acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             SendOkay(reply_fd, !t->devpath.empty() ? t->devpath : "unknown");
         } else {
@@ -1206,7 +1216,9 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
     }
     if (service == "get-state") {
         std::string error;
-        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
+        atransport* t =
+                s->transport ? s->transport
+                             : acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             SendOkay(reply_fd, t->connection_state_name());
         } else {
@@ -1230,7 +1242,9 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
 
     if (service == "reconnect") {
         std::string response;
-        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &response, true);
+        atransport* t = s->transport ? s->transport
+                                     : acquire_one_transport(type, serial, transport_id, nullptr,
+                                                             &response, true);
         if (t != nullptr) {
             kick_transport(t, true);
             response =
@@ -1242,8 +1256,15 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
 
     // TODO: Switch handle_forward_request to string_view.
     std::string service_str(service);
-    if (handle_forward_request(
-                service_str.c_str(), [=](std::string* error) { return s->transport; }, reply_fd)) {
+    auto transport_acquirer = [=](std::string* error) {
+        if (s->transport) {
+            return s->transport;
+        } else {
+            std::string error;
+            return acquire_one_transport(type, serial, transport_id, nullptr, &error);
+        }
+    };
+    if (handle_forward_request(service_str.c_str(), transport_acquirer, reply_fd)) {
         return HostRequestResult::Handled;
     }
 

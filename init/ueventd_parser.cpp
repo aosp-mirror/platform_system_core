@@ -88,18 +88,42 @@ Result<void> ParseFirmwareDirectoriesLine(std::vector<std::string>&& args,
     return {};
 }
 
-Result<void> ParseModaliasHandlingLine(std::vector<std::string>&& args,
-                                       bool* enable_modalias_handling) {
+Result<void> ParseExternalFirmwareHandlerLine(
+        std::vector<std::string>&& args,
+        std::vector<ExternalFirmwareHandler>* external_firmware_handlers) {
+    if (args.size() != 4) {
+        return Error() << "external_firmware_handler lines must have exactly 3 parameters";
+    }
+
+    if (std::find_if(external_firmware_handlers->begin(), external_firmware_handlers->end(),
+                     [&args](const auto& other) { return other.devpath == args[2]; }) !=
+        external_firmware_handlers->end()) {
+        return Error() << "found a previous external_firmware_handler with the same devpath, '"
+                       << args[2] << "'";
+    }
+
+    passwd* pwd = getpwnam(args[2].c_str());
+    if (!pwd) {
+        return ErrnoError() << "invalid handler uid'" << args[2] << "'";
+    }
+
+    ExternalFirmwareHandler handler(std::move(args[1]), pwd->pw_uid, std::move(args[3]));
+    external_firmware_handlers->emplace_back(std::move(handler));
+
+    return {};
+}
+
+Result<void> ParseEnabledDisabledLine(std::vector<std::string>&& args, bool* feature) {
     if (args.size() != 2) {
-        return Error() << "modalias_handling lines take exactly one parameter";
+        return Error() << args[0] << " lines take exactly one parameter";
     }
 
     if (args[1] == "enabled") {
-        *enable_modalias_handling = true;
+        *feature = true;
     } else if (args[1] == "disabled") {
-        *enable_modalias_handling = false;
+        *feature = false;
     } else {
-        return Error() << "modalias_handling takes either 'enabled' or 'disabled' as a parameter";
+        return Error() << args[0] << " takes either 'enabled' or 'disabled' as a parameter";
     }
 
     return {};
@@ -212,12 +236,18 @@ UeventdConfiguration ParseConfig(const std::vector<std::string>& configs) {
     parser.AddSingleLineParser("firmware_directories",
                                std::bind(ParseFirmwareDirectoriesLine, _1,
                                          &ueventd_configuration.firmware_directories));
+    parser.AddSingleLineParser("external_firmware_handler",
+                               std::bind(ParseExternalFirmwareHandlerLine, _1,
+                                         &ueventd_configuration.external_firmware_handlers));
     parser.AddSingleLineParser("modalias_handling",
-                               std::bind(ParseModaliasHandlingLine, _1,
+                               std::bind(ParseEnabledDisabledLine, _1,
                                          &ueventd_configuration.enable_modalias_handling));
     parser.AddSingleLineParser("uevent_socket_rcvbuf_size",
                                std::bind(ParseUeventSocketRcvbufSizeLine, _1,
                                          &ueventd_configuration.uevent_socket_rcvbuf_size));
+    parser.AddSingleLineParser("parallel_restorecon",
+                               std::bind(ParseEnabledDisabledLine, _1,
+                                         &ueventd_configuration.enable_parallel_restorecon));
 
     for (const auto& config : configs) {
         parser.ParseConfig(config);

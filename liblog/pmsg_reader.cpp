@@ -24,7 +24,6 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "config_read.h"
 #include "logger.h"
 
 static int pmsgAvailable(log_id_t logId);
@@ -38,13 +37,12 @@ static int pmsgClear(struct android_log_logger* logger,
                      struct android_log_transport_context* transp);
 
 struct android_log_transport_read pmsgLoggerRead = {
-    .node = {&pmsgLoggerRead.node, &pmsgLoggerRead.node},
     .name = "pmsg",
     .available = pmsgAvailable,
     .version = pmsgVersion,
+    .close = pmsgClose,
     .read = pmsgRead,
     .poll = NULL,
-    .close = pmsgClose,
     .clear = pmsgClear,
     .setSize = NULL,
     .getSize = NULL,
@@ -131,7 +129,6 @@ static int pmsgRead(struct android_log_logger_list* logger_list,
   ssize_t ret;
   off_t current, next;
   uid_t uid;
-  struct android_log_logger* logger;
   struct __attribute__((__packed__)) {
     android_pmsg_log_header_t p;
     android_log_header_t l;

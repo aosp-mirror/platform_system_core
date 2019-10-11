@@ -49,15 +49,6 @@ using android::base::unique_fd;
 
 namespace android {
 namespace init {
-
-const std::string kInitContext = "u:r:init:s0";
-const std::string kVendorContext = "u:r:vendor_init:s0";
-
-const char* const paths_and_secontexts[2][2] = {
-    {"/vendor", kVendorContext.c_str()},
-    {"/odm", kVendorContext.c_str()},
-};
-
 namespace {
 
 class SubcontextProcess {
@@ -237,6 +228,15 @@ void Subcontext::Restart() {
     Fork();
 }
 
+bool Subcontext::PathMatchesSubcontext(const std::string& path) {
+    for (const auto& prefix : path_prefixes_) {
+        if (StartsWith(path, prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Result<SubcontextReply> Subcontext::TransmitMessage(const SubcontextCommand& subcontext_command) {
     if (auto result = SendMessage(socket_, subcontext_command); !result) {
         Restart();
@@ -313,13 +313,12 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
 static std::vector<Subcontext> subcontexts;
 static bool shutting_down;
 
-std::vector<Subcontext>* InitializeSubcontexts() {
+std::unique_ptr<Subcontext> InitializeSubcontext() {
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_P__) {
-        for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
-            subcontexts.emplace_back(path_prefix, secontext);
-        }
+        return std::make_unique<Subcontext>(std::vector<std::string>{"/vendor", "/odm"},
+                                            kVendorContext);
     }
-    return &subcontexts;
+    return nullptr;
 }
 
 bool SubcontextChildReap(pid_t pid) {

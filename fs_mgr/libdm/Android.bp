@@ -44,8 +44,17 @@ cc_library_static {
     },
 }
 
-cc_test {
-    name: "libdm_test",
+filegroup {
+    name: "libdm_test_srcs",
+    srcs: [
+        "dm_test.cpp",
+        "loop_control_test.cpp",
+        "test_util.cpp",
+    ],
+}
+
+cc_defaults {
+    name: "libdm_defaults",
     defaults: ["fs_mgr_defaults"],
     static_libs: [
         "libdm",
@@ -54,9 +63,19 @@ cc_test {
         "libfs_mgr",
         "liblog",
     ],
-    srcs: [
-        "dm_test.cpp",
-        "loop_control_test.cpp",
-        "test_util.cpp",
-    ]
+    srcs: [":libdm_test_srcs"],
+}
+
+cc_test {
+    name: "libdm_test",
+    defaults: ["libdm_defaults"],
+}
+
+cc_test {
+    name: "vts_libdm_test",
+    defaults: ["libdm_defaults"],
+    test_suites: ["vts-core"],
+    auto_gen_config: true,
+    require_root: true,
+    test_min_api_level: 29,
 }

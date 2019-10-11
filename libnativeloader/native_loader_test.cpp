@@ -83,7 +83,7 @@ class Platform {
 static std::unordered_map<std::string, Platform::mock_namespace_handle> namespaces = {
     {"platform", TO_MOCK_NAMESPACE(TO_ANDROID_NAMESPACE("platform"))},
     {"default", TO_MOCK_NAMESPACE(TO_ANDROID_NAMESPACE("default"))},
-    {"runtime", TO_MOCK_NAMESPACE(TO_ANDROID_NAMESPACE("runtime"))},
+    {"art", TO_MOCK_NAMESPACE(TO_ANDROID_NAMESPACE("art"))},
     {"sphal", TO_MOCK_NAMESPACE(TO_ANDROID_NAMESPACE("sphal"))},
     {"vndk", TO_MOCK_NAMESPACE(TO_ANDROID_NAMESPACE("vndk"))},
     {"neuralnetworks", TO_MOCK_NAMESPACE(TO_ANDROID_NAMESPACE("neuralnetworks"))},
@@ -92,7 +92,7 @@ static std::unordered_map<std::string, Platform::mock_namespace_handle> namespac
 // The actual gmock object
 class MockPlatform : public Platform {
  public:
-  MockPlatform(bool is_bridged) : is_bridged_(is_bridged) {
+  explicit MockPlatform(bool is_bridged) : is_bridged_(is_bridged) {
     ON_CALL(*this, NativeBridgeIsSupported(_)).WillByDefault(Return(is_bridged_));
     ON_CALL(*this, NativeBridgeIsPathSupported(_)).WillByDefault(Return(is_bridged_));
     ON_CALL(*this, mock_get_exported_namespace(_, _))
@@ -338,13 +338,13 @@ class NativeLoaderTest_Create : public NativeLoaderTest {
   std::string expected_permitted_path = std::string("/data:/mnt/expand:") + permitted_path;
   std::string expected_parent_namespace = "platform";
   bool expected_link_with_platform_ns = true;
-  bool expected_link_with_runtime_ns = true;
+  bool expected_link_with_art_ns = true;
   bool expected_link_with_sphal_ns = !vendor_public_libraries().empty();
   bool expected_link_with_vndk_ns = false;
   bool expected_link_with_default_ns = false;
   bool expected_link_with_neuralnetworks_ns = true;
   std::string expected_shared_libs_to_platform_ns = default_public_libraries();
-  std::string expected_shared_libs_to_runtime_ns = runtime_public_libraries();
+  std::string expected_shared_libs_to_art_ns = art_public_libraries();
   std::string expected_shared_libs_to_sphal_ns = vendor_public_libraries();
   std::string expected_shared_libs_to_vndk_ns = vndksp_libraries();
   std::string expected_shared_libs_to_default_ns = default_public_libraries();
@@ -368,9 +368,9 @@ class NativeLoaderTest_Create : public NativeLoaderTest {
                                               StrEq(expected_shared_libs_to_platform_ns)))
           .WillOnce(Return(true));
     }
-    if (expected_link_with_runtime_ns) {
-      EXPECT_CALL(*mock, mock_link_namespaces(Eq(IsBridged()), _, NsEq("runtime"),
-                                              StrEq(expected_shared_libs_to_runtime_ns)))
+    if (expected_link_with_art_ns) {
+      EXPECT_CALL(*mock, mock_link_namespaces(Eq(IsBridged()), _, NsEq("art"),
+                                              StrEq(expected_shared_libs_to_art_ns)))
           .WillOnce(Return(true));
     }
     if (expected_link_with_sphal_ns) {

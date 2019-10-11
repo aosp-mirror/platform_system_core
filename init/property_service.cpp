@@ -93,14 +93,9 @@ static bool persistent_properties_loaded = false;
 
 static int property_set_fd = -1;
 static int init_socket = -1;
+static bool accept_messages = false;
 
 static PropertyInfoAreaFile property_info_area;
-
-uint32_t HandlePropertySet(const std::string& name, const std::string& value,
-                           const std::string& source_context, const ucred& cr, std::string* error);
-uint32_t InitPropertySet(const std::string& name, const std::string& value);
-
-uint32_t (*property_set)(const std::string& name, const std::string& value) = InitPropertySet;
 
 void CreateSerializedPropertyInfo();
 
@@ -217,7 +212,7 @@ static uint32_t PropertySet(const std::string& name, const std::string& value, s
     }
     // If init hasn't started its main loop, then it won't be handling property changed messages
     // anyway, so there's no need to try to send them.
-    if (init_socket != -1) {
+    if (accept_messages) {
         SendPropertyChanged(name, value);
     }
     return PROP_SUCCESS;
@@ -259,18 +254,6 @@ class AsyncRestorecon {
     bool thread_started_ = false;
 };
 
-uint32_t InitPropertySet(const std::string& name, const std::string& value) {
-    uint32_t result = 0;
-    ucred cr = {.pid = 1, .uid = 0, .gid = 0};
-    std::string error;
-    result = HandlePropertySet(name, value, kInitContext.c_str(), cr, &error);
-    if (result != PROP_SUCCESS) {
-        LOG(ERROR) << "Init cannot set '" << name << "' to '" << value << "': " << error;
-    }
-
-    return result;
-}
-
 class SocketConnection {
   public:
     SocketConnection(int socket, const ucred& cred) : socket_(socket), cred_(cred) {}
@@ -311,6 +294,9 @@ class SocketConnection {
     }
 
     bool SendUint32(uint32_t value) {
+        if (!socket_.ok()) {
+            return true;
+        }
         int result = TEMP_FAILURE_RETRY(send(socket_, &value, sizeof(value), 0));
         return result == sizeof(value);
     }
@@ -325,7 +311,7 @@ class SocketConnection {
         return true;
     }
 
-    int socket() { return socket_; }
+    [[nodiscard]] int Release() { return socket_.release(); }
 
     const ucred& cred() { return cred_; }
 
@@ -398,58 +384,42 @@ class SocketConnection {
 
     unique_fd socket_;
     ucred cred_;
+
+    DISALLOW_IMPLICIT_CONSTRUCTORS(SocketConnection);
 };
 
-// Init responds with whether or not the control message was successful.  However, init may set
-// properties in the process of handling the control message, particularly when starting services.
-// Therefore we cannot block in SendControlMessage() to wait for init's response.  Instead, we store
-// the SocketConnection for the socket that sent the control message.  We then return to the main
-// poll loop and handle messages until we get the response from init.
-//
-// Note that this is a queue, since it is possible for more control messages to come while init is
-// handling the first.  Both init and property service will handle these in order.
-//
-// Also note that the 1st version of the property service does not expect a result to be sent, so
-// we have a nullopt as a placeholder in the queue to keep track of which control messages have been
-// responded to.
-static std::queue<std::optional<SocketConnection>> pending_control_message_results;
-
 static uint32_t SendControlMessage(const std::string& msg, const std::string& name, pid_t pid,
-                                   std::string* error) {
+                                   SocketConnection* socket, std::string* error) {
+    if (!accept_messages) {
+        *error = "Received control message after shutdown, ignoring";
+        return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
+    }
+
     auto property_msg = PropertyMessage{};
     auto* control_message = property_msg.mutable_control_message();
     control_message->set_msg(msg);
     control_message->set_name(name);
     control_message->set_pid(pid);
 
+    // We must release the fd before sending it to init, otherwise there will be a race with init.
+    // If init calls close() before Release(), then fdsan will see the wrong tag and abort().
+    int fd = -1;
+    if (socket != nullptr) {
+        fd = socket->Release();
+        control_message->set_fd(fd);
+    }
+
     if (auto result = SendMessage(init_socket, property_msg); !result) {
+        // We've already released the fd above, so if we fail to send the message to init, we need
+        // to manually free it here.
+        if (fd != -1) {
+            close(fd);
+        }
         *error = "Failed to send control message: " + result.error().message();
         return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
     }
 
     return PROP_SUCCESS;
-}
-
-void HandleControlResponse(const InitMessage& init_message) {
-    if (pending_control_message_results.empty()) {
-        LOG(ERROR) << "Got a control response without pending control messages";
-        return;
-    }
-
-    if (!pending_control_message_results.front().has_value()) {
-        pending_control_message_results.pop();
-        return;
-    }
-
-    if (!pending_control_message_results.front().has_value()) {
-        return;
-    }
-
-    auto& control_response = init_message.control_response();
-    uint32_t response =
-            control_response.result() ? PROP_SUCCESS : PROP_ERROR_HANDLE_CONTROL_MESSAGE;
-    pending_control_message_results.front()->SendUint32(response);
-    pending_control_message_results.pop();
 }
 
 bool CheckControlPropertyPerms(const std::string& name, const std::string& value,
@@ -519,13 +489,14 @@ uint32_t CheckPermissions(const std::string& name, const std::string& value,
 
 // This returns one of the enum of PROP_SUCCESS or PROP_ERROR*.
 uint32_t HandlePropertySet(const std::string& name, const std::string& value,
-                           const std::string& source_context, const ucred& cr, std::string* error) {
+                           const std::string& source_context, const ucred& cr,
+                           SocketConnection* socket, std::string* error) {
     if (auto ret = CheckPermissions(name, value, source_context, cr, error); ret != PROP_SUCCESS) {
         return ret;
     }
 
     if (StartsWith(name, "ctl.")) {
-        return SendControlMessage(name.c_str() + 4, value, cr.pid, error);
+        return SendControlMessage(name.c_str() + 4, value, cr.pid, socket, error);
     }
 
     // sys.powerctl is a special property that is used to make the device reboot.  We want to log
@@ -555,6 +526,20 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
 
     return PropertySet(name, value, error);
 }
+
+uint32_t InitPropertySet(const std::string& name, const std::string& value) {
+    uint32_t result = 0;
+    ucred cr = {.pid = 1, .uid = 0, .gid = 0};
+    std::string error;
+    result = HandlePropertySet(name, value, kInitContext, cr, nullptr, &error);
+    if (result != PROP_SUCCESS) {
+        LOG(ERROR) << "Init cannot set '" << name << "' to '" << value << "': " << error;
+    }
+
+    return result;
+}
+
+uint32_t (*property_set)(const std::string& name, const std::string& value) = InitPropertySet;
 
 static void handle_property_set_fd() {
     static constexpr uint32_t kDefaultSocketTimeout = 2000; /* ms */
@@ -604,14 +589,11 @@ static void handle_property_set_fd() {
 
         const auto& cr = socket.cred();
         std::string error;
-        uint32_t result = HandlePropertySet(prop_name, prop_value, source_context, cr, &error);
+        uint32_t result =
+                HandlePropertySet(prop_name, prop_value, source_context, cr, nullptr, &error);
         if (result != PROP_SUCCESS) {
             LOG(ERROR) << "Unable to set property '" << prop_name << "' from uid:" << cr.uid
                        << " gid:" << cr.gid << " pid:" << cr.pid << ": " << error;
-        }
-
-        if (result == PROP_SUCCESS && StartsWith(prop_name, "ctl.")) {
-            pending_control_message_results.emplace(std::nullopt);
         }
 
         break;
@@ -636,17 +618,12 @@ static void handle_property_set_fd() {
 
         const auto& cr = socket.cred();
         std::string error;
-        uint32_t result = HandlePropertySet(name, value, source_context, cr, &error);
+        uint32_t result = HandlePropertySet(name, value, source_context, cr, &socket, &error);
         if (result != PROP_SUCCESS) {
             LOG(ERROR) << "Unable to set property '" << name << "' from uid:" << cr.uid
                        << " gid:" << cr.gid << " pid:" << cr.pid << ": " << error;
         }
-
-        if (result == PROP_SUCCESS && StartsWith(name, "ctl.")) {
-            pending_control_message_results.emplace(std::move(socket));
-        } else {
-            socket.SendUint32(result);
-        }
+        socket.SendUint32(result);
         break;
       }
 
@@ -669,11 +646,16 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
     char *key, *value, *eol, *sol, *tmp, *fn;
     size_t flen = 0;
 
-    const char* context = kInitContext.c_str();
+    static constexpr const char* const kVendorPathPrefixes[2] = {
+            "/vendor",
+            "/odm",
+    };
+
+    const char* context = kInitContext;
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_P__) {
-        for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
-            if (StartsWith(filename, path_prefix)) {
-                context = secontext;
+        for (const auto& vendor_path_prefix : kVendorPathPrefixes) {
+            if (StartsWith(filename, vendor_path_prefix)) {
+                context = kVendorContext;
             }
         }
     }
@@ -982,6 +964,10 @@ void CreateSerializedPropertyInfo() {
         // Don't check for failure here, so we always have a sane list of properties.
         // E.g. In case of recovery, the vendor partition will not have mounted and we
         // still need the system / platform properties to function.
+        if (access("/system_ext/etc/selinux/system_ext_property_contexts", R_OK) != -1) {
+            LoadPropertyInfoFromFile("/system_ext/etc/selinux/system_ext_property_contexts",
+                                     &property_infos);
+        }
         if (!LoadPropertyInfoFromFile("/vendor/etc/selinux/vendor_property_contexts",
                                       &property_infos)) {
             // Fallback to nonplat_* if vendor_* doesn't exist.
@@ -999,6 +985,7 @@ void CreateSerializedPropertyInfo() {
         if (!LoadPropertyInfoFromFile("/plat_property_contexts", &property_infos)) {
             return;
         }
+        LoadPropertyInfoFromFile("/system_ext_property_contexts", &property_infos);
         if (!LoadPropertyInfoFromFile("/vendor_property_contexts", &property_infos)) {
             // Fallback to nonplat_* if vendor_* doesn't exist.
             LoadPropertyInfoFromFile("/nonplat_property_contexts", &property_infos);
@@ -1036,10 +1023,6 @@ static void HandleInitSocket() {
     }
 
     switch (init_message.msg_case()) {
-        case InitMessage::kControlResponse: {
-            HandleControlResponse(init_message);
-            break;
-        }
         case InitMessage::kLoadPersistentProperties: {
             load_override_properties();
             // Read persistent properties after all default values have been loaded.
@@ -1050,6 +1033,14 @@ static void HandleInitSocket() {
             }
             InitPropertySet("ro.persistent_properties.ready", "true");
             persistent_properties_loaded = true;
+            break;
+        }
+        case InitMessage::kStopSendingMessages: {
+            accept_messages = false;
+            break;
+        }
+        case InitMessage::kStartSendingMessages: {
+            accept_messages = true;
             break;
         }
         default:
@@ -1072,8 +1063,13 @@ static void PropertyServiceThread() {
     }
 
     while (true) {
-        if (auto result = epoll.Wait(std::nullopt); !result) {
-            LOG(ERROR) << result.error();
+        auto pending_functions = epoll.Wait(std::nullopt);
+        if (!pending_functions) {
+            LOG(ERROR) << pending_functions.error();
+        } else {
+            for (const auto& function : *pending_functions) {
+                (*function)();
+            }
         }
     }
 }
@@ -1087,9 +1083,10 @@ void StartPropertyService(int* epoll_socket) {
     }
     *epoll_socket = sockets[0];
     init_socket = sockets[1];
+    accept_messages = true;
 
-    if (auto result = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC, false, 0666, 0, 0,
-                                   {})) {
+    if (auto result = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+                                   false, 0666, 0, 0, {})) {
         property_set_fd = *result;
     } else {
         LOG(FATAL) << "start_property_service socket creation failed: " << result.error();
