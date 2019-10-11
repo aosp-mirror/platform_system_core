@@ -17,10 +17,15 @@
 #ifndef _INIT_SIGCHLD_HANDLER_H_
 #define _INIT_SIGCHLD_HANDLER_H_
 
+#include <chrono>
+#include <vector>
+
 namespace android {
 namespace init {
 
 void ReapAnyOutstandingChildren();
+
+void WaitToBeReaped(const std::vector<pid_t>& pids, std::chrono::milliseconds timeout);
 
 }  // namespace init
 }  // namespace android
