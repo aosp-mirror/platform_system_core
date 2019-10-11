@@ -76,7 +76,6 @@ cc_defaults {
         "libbase",
         "libbootloader_message",
         "libcutils",
-        "libcrypto",
         "libdl",
         "libext4_utils",
         "libfs_mgr",

@@ -18,6 +18,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/mman.h>
 #include <sys/signal.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -139,6 +140,9 @@ static void print_header() {
     if (!g_verbose && !g_show_addr) {
         printf("   # ");
     }
+    if (g_verbose) {
+        printf(" flags ");
+    }
     printf(" object\n");
 }
 
@@ -149,6 +153,9 @@ static void print_divider() {
     printf("-------- -------- -------- -------- -------- -------- -------- -------- -------- ");
     if (!g_verbose && !g_show_addr) {
         printf("---- ");
+    }
+    if (g_verbose) {
+        printf("------ ");
     }
     printf("------------------------------\n");
 }
@@ -168,6 +175,18 @@ static void print_vmainfo(const VmaInfo& v, bool total) {
            v.vma.usage.swap, v.vma.usage.swap_pss);
     if (!g_verbose && !g_show_addr) {
         printf("%4" PRIu32 " ", v.count);
+    }
+    if (g_verbose) {
+        if (total) {
+            printf("       ");
+        } else {
+            std::string flags_str("---");
+            if (v.vma.flags & PROT_READ) flags_str[0] = 'r';
+            if (v.vma.flags & PROT_WRITE) flags_str[1] = 'w';
+            if (v.vma.flags & PROT_EXEC) flags_str[2] = 'x';
+
+            printf("%6s ", flags_str.c_str());
+        }
     }
 }
 

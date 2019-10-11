@@ -57,6 +57,18 @@ typedef struct __attribute__((__packed__)) {
   int32_t tag;  // Little Endian Order
 } android_event_header_t;
 
+// Event payload EVENT_TYPE_LIST
+typedef struct __attribute__((__packed__)) {
+  int8_t type;  // EVENT_TYPE_LIST
+  int8_t element_count;
+} android_event_list_t;
+
+// Event payload EVENT_TYPE_FLOAT
+typedef struct __attribute__((__packed__)) {
+  int8_t type;  // EVENT_TYPE_FLOAT
+  float data;
+} android_event_float_t;
+
 /* Event payload EVENT_TYPE_INT */
 typedef struct __attribute__((__packed__)) {
   int8_t type;   // EVENT_TYPE_INT

@@ -333,7 +333,7 @@ bool DwarfSectionImpl<AddressType>::FillInFde(DwarfFde* fde) {
   memory_.set_cur_offset(cur_offset);
 
   // The load bias only applies to the start.
-  memory_.set_pc_offset(load_bias_);
+  memory_.set_pc_offset(section_bias_);
   bool valid = memory_.ReadEncodedValue<AddressType>(cie->fde_address_encoding, &fde->pc_start);
   fde->pc_start = AdjustPcFromFde(fde->pc_start);
 
@@ -591,8 +591,9 @@ bool DwarfSectionImpl<AddressType>::Log(uint8_t indent, uint64_t pc, const Dwarf
 }
 
 template <typename AddressType>
-bool DwarfSectionImplNoHdr<AddressType>::Init(uint64_t offset, uint64_t size, uint64_t load_bias) {
-  load_bias_ = load_bias;
+bool DwarfSectionImplNoHdr<AddressType>::Init(uint64_t offset, uint64_t size,
+                                              int64_t section_bias) {
+  section_bias_ = section_bias;
   entries_offset_ = offset;
   next_entries_offset_ = offset;
   entries_end_ = offset + size;
