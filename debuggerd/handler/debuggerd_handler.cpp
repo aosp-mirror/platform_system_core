@@ -525,8 +525,8 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   log_signal_summary(info);
 
   debugger_thread_info thread_info = {
-      .pseudothread_tid = -1,
       .crashing_tid = __gettid(),
+      .pseudothread_tid = -1,
       .siginfo = info,
       .ucontext = context,
       .abort_msg = reinterpret_cast<uintptr_t>(abort_message),
