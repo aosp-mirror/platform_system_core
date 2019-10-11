@@ -39,7 +39,7 @@ struct MapInfo {
         flags(flags),
         name(name),
         prev_map(map_info),
-        load_bias(static_cast<uint64_t>(-1)),
+        load_bias(INT64_MAX),
         build_id(0) {}
   MapInfo(MapInfo* map_info, uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
           const std::string& name)
@@ -49,7 +49,7 @@ struct MapInfo {
         flags(flags),
         name(name),
         prev_map(map_info),
-        load_bias(static_cast<uint64_t>(-1)),
+        load_bias(INT64_MAX),
         build_id(0) {}
   ~MapInfo();
 
@@ -72,7 +72,7 @@ struct MapInfo {
 
   MapInfo* prev_map = nullptr;
 
-  std::atomic_uint64_t load_bias;
+  std::atomic_int64_t load_bias;
 
   // This is a pointer to a new'd std::string.
   // Using an atomic value means that we don't need to lock and will

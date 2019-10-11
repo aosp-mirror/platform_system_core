@@ -66,8 +66,8 @@ class ElfInterfaceFake : public ElfInterface {
   ElfInterfaceFake(Memory* memory) : ElfInterface(memory) {}
   virtual ~ElfInterfaceFake() = default;
 
-  bool Init(uint64_t*) override { return false; }
-  void InitHeaders(uint64_t) override {}
+  bool Init(int64_t*) override { return false; }
+  void InitHeaders() override {}
   std::string GetSoname() override { return fake_soname_; }
 
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override;

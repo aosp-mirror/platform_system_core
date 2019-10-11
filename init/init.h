@@ -41,6 +41,7 @@ void ResetWaitForProp();
 
 void SendLoadPersistentPropertiesMessage();
 void SendStopSendingMessagesMessage();
+void SendStartSendingMessagesMessage();
 
 int SecondStageMain(int argc, char** argv);
 

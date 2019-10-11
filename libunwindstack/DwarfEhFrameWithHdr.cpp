@@ -32,8 +32,8 @@ static inline bool IsEncodingRelative(uint8_t encoding) {
 }
 
 template <typename AddressType>
-bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size, uint64_t load_bias) {
-  load_bias_ = load_bias;
+bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size, int64_t section_bias) {
+  section_bias_ = section_bias;
 
   memory_.clear_func_offset();
   memory_.clear_text_offset();
@@ -138,7 +138,7 @@ DwarfEhFrameWithHdr<AddressType>::GetFdeInfoFromIndex(size_t index) {
 
   // Relative encodings require adding in the load bias.
   if (IsEncodingRelative(table_encoding_)) {
-    value += load_bias_;
+    value += section_bias_;
   }
   info->pc = value;
   return info;
