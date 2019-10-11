@@ -34,12 +34,9 @@ static void atrace_init_once()
     if (atrace_marker_fd == -1) {
         ALOGE("Error opening trace file: %s (%d)", strerror(errno), errno);
         atrace_enabled_tags = 0;
-        goto done;
+    } else {
+      atrace_enabled_tags = atrace_get_property();
     }
-
-    atrace_enabled_tags = atrace_get_property();
-
-done:
     atomic_store_explicit(&atrace_is_ready, true, memory_order_release);
 }
 
