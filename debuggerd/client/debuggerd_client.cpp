@@ -195,7 +195,10 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
     return false;
   }
 
-  InterceptRequest req = {.pid = pid, .dump_type = dump_type};
+  InterceptRequest req = {
+      .dump_type = dump_type,
+      .pid = pid,
+  };
   if (!set_timeout(sockfd)) {
     PLOG(ERROR) << "libdebugger_client: failed to set timeout";
     return false;
