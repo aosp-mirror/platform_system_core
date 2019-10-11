@@ -203,9 +203,9 @@ class SnapshotTest : public ::testing::Test {
                     .block_device = fake_super,
                     .metadata = metadata.get(),
                     .partition = &partition,
-                    .device_name = GetPartitionName(partition) + "-base",
                     .force_writable = true,
                     .timeout_ms = 10s,
+                    .device_name = GetPartitionName(partition) + "-base",
             };
             std::string ignore_path;
             if (!CreateLogicalPartition(params, &ignore_path)) {
