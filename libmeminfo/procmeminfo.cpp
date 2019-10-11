@@ -244,6 +244,15 @@ bool ProcMemInfo::PageMap(const Vma& vma, std::vector<uint64_t>* pagemap) {
     return true;
 }
 
+static int GetPagemapFd(pid_t pid) {
+    std::string pagemap_file = ::android::base::StringPrintf("/proc/%d/pagemap", pid);
+    int fd = TEMP_FAILURE_RETRY(open(pagemap_file.c_str(), O_RDONLY | O_CLOEXEC));
+    if (fd == -1) {
+        PLOG(ERROR) << "Failed to open " << pagemap_file;
+    }
+    return fd;
+}
+
 bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle, bool get_usage_stats) {
     // Each object reads /proc/<pid>/maps only once. This is done to make sure programs that are
     // running for the lifetime of the system can recycle the objects and don't have to
@@ -269,11 +278,8 @@ bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle, bool get_usage_stats
         return true;
     }
 
-    std::string pagemap_file = ::android::base::StringPrintf("/proc/%d/pagemap", pid_);
-    ::android::base::unique_fd pagemap_fd(
-            TEMP_FAILURE_RETRY(open(pagemap_file.c_str(), O_RDONLY | O_CLOEXEC)));
-    if (pagemap_fd < 0) {
-        PLOG(ERROR) << "Failed to open " << pagemap_file;
+    ::android::base::unique_fd pagemap_fd(GetPagemapFd(pid_));
+    if (pagemap_fd == -1) {
         return false;
     }
 
@@ -287,6 +293,20 @@ bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle, bool get_usage_stats
         add_mem_usage(&usage_, vma.usage);
     }
 
+    return true;
+}
+
+bool ProcMemInfo::FillInVmaStats(Vma& vma) {
+    ::android::base::unique_fd pagemap_fd(GetPagemapFd(pid_));
+    if (pagemap_fd == -1) {
+        return false;
+    }
+
+    if (!ReadVmaStats(pagemap_fd.get(), vma, get_wss_, false)) {
+        LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start << "-"
+                   << vma.end << "]";
+        return false;
+    }
     return true;
 }
 
