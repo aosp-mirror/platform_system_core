@@ -316,9 +316,9 @@ class ElfInterfaceMock : public ElfInterface {
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override { return false; }
   std::string GetBuildID() override { return ""; }
 
-  MOCK_METHOD4(Step, bool(uint64_t, Regs*, Memory*, bool*));
-  MOCK_METHOD2(GetGlobalVariable, bool(const std::string&, uint64_t*));
-  MOCK_METHOD1(IsValidPc, bool(uint64_t));
+  MOCK_METHOD(bool, Step, (uint64_t, Regs*, Memory*, bool*), (override));
+  MOCK_METHOD(bool, GetGlobalVariable, (const std::string&, uint64_t*), (override));
+  MOCK_METHOD(bool, IsValidPc, (uint64_t), (override));
 
   void MockSetDynamicOffset(uint64_t offset) { dynamic_offset_ = offset; }
   void MockSetDynamicVaddr(uint64_t vaddr) { dynamic_vaddr_ = vaddr; }
