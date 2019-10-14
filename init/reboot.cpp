@@ -710,7 +710,7 @@ static Result<void> DoUserspaceReboot() {
     auto guard = android::base::make_scope_guard([] {
         // Leave shutdown so that we can handle a full reboot.
         LeaveShutdown();
-        property_set("sys.powerctl", "reboot,abort-userspace-reboot");
+        TriggerShutdown("reboot,abort-userspace-reboot");
     });
     // Triggering userspace-reboot-requested will result in a bunch of set_prop
     // actions. We should make sure, that all of them are propagated before

@@ -138,7 +138,14 @@ static Result<void> reboot_into_recovery(const std::vector<std::string>& options
     if (!write_bootloader_message(options, &err)) {
         return Error() << "Failed to set bootloader message: " << err;
     }
-    property_set("sys.powerctl", "reboot,recovery");
+    // This function should only be reached from init and not from vendor_init, and we want to
+    // immediately trigger reboot instead of relaying through property_service.  Older devices may
+    // still have paths that reach here from vendor_init, so we keep the property_set as a fallback.
+    if (getpid() == 1) {
+        TriggerShutdown("reboot,recovery");
+    } else {
+        property_set("sys.powerctl", "reboot,recovery");
+    }
     return {};
 }
 
