@@ -17,6 +17,7 @@
 #include <liblp/builder.h>
 #include <liblp/property_fetcher.h>
 
+#include "dm_snapshot_internals.h"
 #include "partition_cow_creator.h"
 #include "test_helpers.h"
 
@@ -97,6 +98,32 @@ TEST_F(PartitionCowCreatorTest, Holes) {
                                 .current_suffix = "_a"};
     auto ret = creator.Run();
     ASSERT_TRUE(ret.has_value());
+}
+
+TEST(DmSnapshotInternals, CowSizeCalculator) {
+    DmSnapCowSizeCalculator cc(512, 8);
+    unsigned long int b;
+
+    // Empty COW
+    ASSERT_EQ(cc.cow_size_sectors(), 16);
+
+    // First chunk written
+    for (b = 0; b < 4_KiB; ++b) {
+        cc.WriteByte(b);
+        ASSERT_EQ(cc.cow_size_sectors(), 24);
+    }
+
+    // Second chunk written
+    for (b = 4_KiB; b < 8_KiB; ++b) {
+        cc.WriteByte(b);
+        ASSERT_EQ(cc.cow_size_sectors(), 32);
+    }
+
+    // Leave a hole and write 5th chunk
+    for (b = 16_KiB; b < 20_KiB; ++b) {
+        cc.WriteByte(b);
+        ASSERT_EQ(cc.cow_size_sectors(), 40);
+    }
 }
 
 }  // namespace snapshot
