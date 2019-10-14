@@ -32,17 +32,20 @@ class PartitionCowCreatorTest : public ::testing::Test {
 };
 
 TEST_F(PartitionCowCreatorTest, IntersectSelf) {
-    auto builder_a = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    constexpr uint64_t initial_size = 1_MiB;
+    constexpr uint64_t final_size = 40_KiB;
+
+    auto builder_a = MetadataBuilder::New(initial_size, 1_KiB, 2);
     ASSERT_NE(builder_a, nullptr);
     auto system_a = builder_a->AddPartition("system_a", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system_a, nullptr);
-    ASSERT_TRUE(builder_a->ResizePartition(system_a, 40 * 1024));
+    ASSERT_TRUE(builder_a->ResizePartition(system_a, final_size));
 
-    auto builder_b = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    auto builder_b = MetadataBuilder::New(initial_size, 1_KiB, 2);
     ASSERT_NE(builder_b, nullptr);
     auto system_b = builder_b->AddPartition("system_b", LP_PARTITION_ATTR_READONLY);
     ASSERT_NE(system_b, nullptr);
-    ASSERT_TRUE(builder_b->ResizePartition(system_b, 40 * 1024));
+    ASSERT_TRUE(builder_b->ResizePartition(system_b, final_size));
 
     PartitionCowCreator creator{.target_metadata = builder_b.get(),
                                 .target_suffix = "_b",
@@ -51,8 +54,8 @@ TEST_F(PartitionCowCreatorTest, IntersectSelf) {
                                 .current_suffix = "_a"};
     auto ret = creator.Run();
     ASSERT_TRUE(ret.has_value());
-    ASSERT_EQ(40 * 1024, ret->snapshot_status.device_size());
-    ASSERT_EQ(40 * 1024, ret->snapshot_status.snapshot_size());
+    ASSERT_EQ(final_size, ret->snapshot_status.device_size());
+    ASSERT_EQ(final_size, ret->snapshot_status.snapshot_size());
 }
 
 TEST_F(PartitionCowCreatorTest, Holes) {
@@ -64,7 +67,7 @@ TEST_F(PartitionCowCreatorTest, Holes) {
 
     BlockDeviceInfo super_device("super", kSuperSize, 0, 0, 4_KiB);
     std::vector<BlockDeviceInfo> devices = {super_device};
-    auto source = MetadataBuilder::New(devices, "super", 1024, 2);
+    auto source = MetadataBuilder::New(devices, "super", 1_KiB, 2);
     auto system = source->AddPartition("system_a", 0);
     ASSERT_NE(nullptr, system);
     ASSERT_TRUE(source->ResizePartition(system, big_size));
