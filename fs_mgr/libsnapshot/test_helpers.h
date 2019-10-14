@@ -138,5 +138,8 @@ AssertionResult FillFakeMetadata(MetadataBuilder* builder, const DeltaArchiveMan
 // In the update package metadata, set a partition with the given size.
 void SetSize(PartitionUpdate* partition_update, uint64_t size);
 
+// Get partition size from update package metadata.
+uint64_t GetSize(PartitionUpdate* partition_update);
+
 }  // namespace snapshot
 }  // namespace android
