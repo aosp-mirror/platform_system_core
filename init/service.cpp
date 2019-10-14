@@ -255,7 +255,7 @@ void Service::Reap(const siginfo_t& siginfo) {
 
     if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_) {
         LOG(ERROR) << "Service with 'reboot_on_failure' option failed, shutting down system.";
-        EnterShutdown(*on_failure_reboot_target_);
+        TriggerShutdown(*on_failure_reboot_target_);
     }
 
     if (flags_ & SVC_EXEC) UnSetExec();
@@ -335,7 +335,7 @@ void Service::DumpState() const {
 Result<void> Service::ExecStart() {
     auto reboot_on_failure = make_scope_guard([this] {
         if (on_failure_reboot_target_) {
-            EnterShutdown(*on_failure_reboot_target_);
+            TriggerShutdown(*on_failure_reboot_target_);
         }
     });
 
@@ -366,7 +366,7 @@ Result<void> Service::ExecStart() {
 Result<void> Service::Start() {
     auto reboot_on_failure = make_scope_guard([this] {
         if (on_failure_reboot_target_) {
-            EnterShutdown(*on_failure_reboot_target_);
+            TriggerShutdown(*on_failure_reboot_target_);
         }
     });
 
