@@ -35,7 +35,7 @@ namespace android {
 namespace init {
 
 // init.h
-inline void EnterShutdown(const std::string&) {
+inline void TriggerShutdown(const std::string&) {
     abort();
 }
 
