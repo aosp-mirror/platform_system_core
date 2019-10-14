@@ -35,11 +35,6 @@
 
 extern "C" {
 
-/*
- * NB: we did NOT define a copy constructor. This will result in structure
- * no longer being compatible with pass-by-value which is desired
- * efficient behavior. Also, pass-by-reference breaks C/C++ ABI.
- */
 struct log_time {
  public:
   uint32_t tv_sec = 0; /* good to Feb 5 2106 */
