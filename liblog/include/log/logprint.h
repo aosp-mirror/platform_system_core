@@ -16,7 +16,8 @@
 
 #pragma once
 
-#include <pthread.h>
+#include <stdint.h>
+#include <sys/types.h>
 
 #include <android/log.h>
 #include <log/event_tag_map.h>
