@@ -179,7 +179,7 @@ void ResetWaitForProp() {
     waiting_for_prop.reset();
 }
 
-void EnterShutdown(const std::string& command) {
+void TriggerShutdown(const std::string& command) {
     // We can't call HandlePowerctlMessage() directly in this function,
     // because it modifies the contents of the action queue, which can cause the action queue
     // to get into a bad state if this function is called from a command being executed by the
@@ -197,7 +197,7 @@ void property_changed(const std::string& name, const std::string& value) {
     // In non-thermal-shutdown case, 'shutdown' trigger will be fired to let device specific
     // commands to be executed.
     if (name == "sys.powerctl") {
-        EnterShutdown(value);
+        TriggerShutdown(value);
     }
 
     if (property_triggers_enabled) ActionManager::GetInstance().QueuePropertyChange(name, value);
