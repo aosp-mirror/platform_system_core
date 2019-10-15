@@ -22,6 +22,7 @@
 #include <linux/loop.h>
 #include <mntent.h>
 #include <semaphore.h>
+#include <stdlib.h>
 #include <sys/cdefs.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
@@ -31,6 +32,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include <chrono>
 #include <memory>
 #include <set>
 #include <thread>
@@ -41,6 +43,7 @@
 #include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <bootloader_message/bootloader_message.h>
@@ -59,6 +62,7 @@
 #include "service.h"
 #include "service_list.h"
 #include "sigchld_handler.h"
+#include "util.h"
 
 #define PROC_SYSRQ "/proc/sysrq-trigger"
 
@@ -74,6 +78,19 @@ namespace android {
 namespace init {
 
 static bool shutting_down = false;
+
+static const std::set<std::string> kDebuggingServices{"tombstoned", "logd", "adbd", "console"};
+
+static std::vector<Service*> GetDebuggingServices(bool only_post_data) {
+    std::vector<Service*> ret;
+    ret.reserve(kDebuggingServices.size());
+    for (const auto& s : ServiceList::GetInstance()) {
+        if (kDebuggingServices.count(s->name()) && (!only_post_data || s->is_post_data())) {
+            ret.push_back(s.get());
+        }
+    }
+    return ret;
+}
 
 // represents umount status during reboot / shutdown.
 enum UmountStat {
@@ -446,6 +463,49 @@ static void KillZramBackingDevice() {
     LOG(INFO) << "zram_backing_dev: `" << backing_dev << "` is cleared successfully.";
 }
 
+// Stops given services, waits for them to be stopped for |timeout| ms.
+// If terminate is true, then SIGTERM is sent to services, otherwise SIGKILL is sent.
+static void StopServices(const std::vector<Service*>& services, std::chrono::milliseconds timeout,
+                         bool terminate) {
+    LOG(INFO) << "Stopping " << services.size() << " services by sending "
+              << (terminate ? "SIGTERM" : "SIGKILL");
+    std::vector<pid_t> pids;
+    pids.reserve(services.size());
+    for (const auto& s : services) {
+        if (s->pid() > 0) {
+            pids.push_back(s->pid());
+        }
+        if (terminate) {
+            s->Terminate();
+        } else {
+            s->Stop();
+        }
+    }
+    if (timeout > 0ms) {
+        WaitToBeReaped(pids, timeout);
+    } else {
+        // Even if we don't to wait for services to stop, we still optimistically reap zombies.
+        ReapAnyOutstandingChildren();
+    }
+}
+
+// Like StopServices, but also logs all the services that failed to stop after the provided timeout.
+// Returns number of violators.
+static int StopServicesAndLogViolations(const std::vector<Service*>& services,
+                                        std::chrono::milliseconds timeout, bool terminate) {
+    StopServices(services, timeout, terminate);
+    int still_running = 0;
+    for (const auto& s : services) {
+        if (s->IsRunning()) {
+            LOG(ERROR) << "[service-misbehaving] : service '" << s->name() << "' is still running "
+                       << timeout.count() << "ms after receiving "
+                       << (terminate ? "SIGTERM" : "SIGKILL");
+            still_running++;
+        }
+    }
+    return still_running;
+}
+
 //* Reboot / shutdown the system.
 // cmd ANDROID_RB_* as defined in android_reboot.h
 // reason Reason string like "reboot", "shutdown,userrequested"
@@ -510,12 +570,13 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // Start reboot monitor thread
     sem_post(&reboot_semaphore);
 
-    // keep debugging tools until non critical ones are all gone.
-    const std::set<std::string> kill_after_apps{"tombstoned", "logd", "adbd"};
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
     const std::set<std::string> to_starts{"watchdogd"};
+    std::vector<Service*> stop_first;
+    stop_first.reserve(ServiceList::GetInstance().services().size());
     for (const auto& s : ServiceList::GetInstance()) {
-        if (kill_after_apps.count(s->name())) {
+        if (kDebuggingServices.count(s->name())) {
+            // keep debugging tools until non critical ones are all gone.
             s->SetShutdownCritical();
         } else if (to_starts.count(s->name())) {
             if (auto result = s->Start(); !result) {
@@ -529,6 +590,8 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
                 LOG(ERROR) << "Could not start shutdown critical service '" << s->name()
                            << "': " << result.error();
             }
+        } else {
+            stop_first.push_back(s.get());
         }
     }
 
@@ -571,49 +634,12 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // optional shutdown step
     // 1. terminate all services except shutdown critical ones. wait for delay to finish
     if (shutdown_timeout > 0ms) {
-        LOG(INFO) << "terminating init services";
-
-        // Ask all services to terminate except shutdown critical ones.
-        for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
-            if (!s->IsShutdownCritical()) s->Terminate();
-        }
-
-        int service_count = 0;
-        // Only wait up to half of timeout here
-        auto termination_wait_timeout = shutdown_timeout / 2;
-        while (t.duration() < termination_wait_timeout) {
-            ReapAnyOutstandingChildren();
-
-            service_count = 0;
-            for (const auto& s : ServiceList::GetInstance()) {
-                // Count the number of services running except shutdown critical.
-                // Exclude the console as it will ignore the SIGTERM signal
-                // and not exit.
-                // Note: SVC_CONSOLE actually means "requires console" but
-                // it is only used by the shell.
-                if (!s->IsShutdownCritical() && s->pid() != 0 && (s->flags() & SVC_CONSOLE) == 0) {
-                    service_count++;
-                }
-            }
-
-            if (service_count == 0) {
-                // All terminable services terminated. We can exit early.
-                break;
-            }
-
-            // Wait a bit before recounting the number or running services.
-            std::this_thread::sleep_for(50ms);
-        }
-        LOG(INFO) << "Terminating running services took " << t
-                  << " with remaining services:" << service_count;
+        StopServicesAndLogViolations(stop_first, shutdown_timeout / 2, true /* SIGTERM */);
     }
-
-    // minimum safety steps before restarting
-    // 2. kill all services except ones that are necessary for the shutdown sequence.
-    for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
-        if (!s->IsShutdownCritical()) s->Stop();
-    }
+    // Send SIGKILL to ones that didn't terminate cleanly.
+    StopServicesAndLogViolations(stop_first, 0ms, false /* SIGKILL */);
     SubcontextTerminate();
+    // Reap subcontext pids.
     ReapAnyOutstandingChildren();
 
     // 3. send volume shutdown to vold
@@ -625,9 +651,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
         LOG(INFO) << "vold not running, skipping vold shutdown";
     }
     // logcat stopped here
-    for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
-        if (kill_after_apps.count(s->name())) s->Stop();
-    }
+    StopServices(GetDebuggingServices(false /* only_post_data */), 0ms, false /* SIGKILL */);
     // 4. sync, try umount, and optionally run fsck for user shutdown
     {
         Timer sync_timer;
@@ -660,6 +684,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
 }
 
 static void EnterShutdown() {
+    LOG(INFO) << "Entering shutdown mode";
     shutting_down = true;
     // Skip wait for prop if it is in progress
     ResetWaitForProp();
@@ -675,21 +700,61 @@ static void EnterShutdown() {
 }
 
 static void LeaveShutdown() {
+    LOG(INFO) << "Leaving shutdown mode";
     shutting_down = false;
     SendStartSendingMessagesMessage();
 }
 
-static void DoUserspaceReboot() {
+static Result<void> DoUserspaceReboot() {
+    LOG(INFO) << "Userspace reboot initiated";
+    auto guard = android::base::make_scope_guard([] {
+        // Leave shutdown so that we can handle a full reboot.
+        LeaveShutdown();
+        TriggerShutdown("reboot,abort-userspace-reboot");
+    });
     // Triggering userspace-reboot-requested will result in a bunch of set_prop
     // actions. We should make sure, that all of them are propagated before
     // proceeding with userspace reboot.
     // TODO(b/135984674): implement proper synchronization logic.
     std::this_thread::sleep_for(500ms);
     EnterShutdown();
-    // TODO(b/135984674): tear down post-data services
-    LeaveShutdown();
+    std::vector<Service*> stop_first;
+    // Remember the services that were enabled. We will need to manually enable them again otherwise
+    // triggers like class_start won't restart them.
+    std::vector<Service*> were_enabled;
+    stop_first.reserve(ServiceList::GetInstance().services().size());
+    for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
+        if (s->is_post_data() && !kDebuggingServices.count(s->name())) {
+            stop_first.push_back(s);
+        }
+        if (s->is_post_data() && s->IsEnabled()) {
+            were_enabled.push_back(s);
+        }
+    }
+    // TODO(b/135984674): do we need shutdown animation for userspace reboot?
+    // TODO(b/135984674): control userspace timeout via read-only property?
+    StopServicesAndLogViolations(stop_first, 10s, true /* SIGTERM */);
+    if (int r = StopServicesAndLogViolations(stop_first, 20s, false /* SIGKILL */); r > 0) {
+        // TODO(b/135984674): store information about offending services for debugging.
+        return Error() << r << " post-data services are still running";
+    }
     // TODO(b/135984674): remount userdata
+    if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */), 5s,
+                                             false /* SIGKILL */);
+        r > 0) {
+        // TODO(b/135984674): store information about offending services for debugging.
+        return Error() << r << " debugging services are still running";
+    }
+    // TODO(b/135984674): deactivate APEX modules and switch back to bootstrap namespace.
+    // Re-enable services
+    for (const auto& s : were_enabled) {
+        LOG(INFO) << "Re-enabling service '" << s->name() << "'";
+        s->Enable();
+    }
+    LeaveShutdown();
     ActionManager::GetInstance().QueueEventTrigger("userspace-reboot-resume");
+    guard.Disable();  // Go on with userspace reboot.
+    return {};
 }
 
 static void HandleUserspaceReboot() {
@@ -697,10 +762,7 @@ static void HandleUserspaceReboot() {
     auto& am = ActionManager::GetInstance();
     am.ClearQueue();
     am.QueueEventTrigger("userspace-reboot-requested");
-    auto handler = [](const BuiltinArguments&) {
-        DoUserspaceReboot();
-        return Result<void>{};
-    };
+    auto handler = [](const BuiltinArguments&) { return DoUserspaceReboot(); };
     am.QueueBuiltinAction(handler, "userspace-reboot");
 }
 
