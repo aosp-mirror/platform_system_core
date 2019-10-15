@@ -27,6 +27,8 @@ struct AutoDevice {
     virtual ~AutoDevice(){};
     void Release();
 
+    bool HasDevice() const { return !name_.empty(); }
+
   protected:
     AutoDevice(const std::string& name) : name_(name) {}
     std::string name_;

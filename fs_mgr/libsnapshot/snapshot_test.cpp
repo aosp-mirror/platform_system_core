@@ -1230,6 +1230,80 @@ TEST_F(MetadataMountedTest, Recovery) {
     EXPECT_FALSE(IsMetadataMounted());
 }
 
+// Test that during a merge, we can wipe data in recovery.
+TEST_F(SnapshotUpdateTest, MergeInRecovery) {
+    // Execute the first update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    init = nullptr;
+
+    // Initiate the merge and then immediately stop it to simulate a reboot.
+    auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_TRUE(new_sm->InitiateMerge());
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate a reboot into recovery.
+    auto test_device = std::make_unique<TestDeviceInfo>(fake_super, "_b");
+    test_device->set_recovery(true);
+    new_sm = SnapshotManager::NewForFirstStageMount(test_device.release());
+
+    ASSERT_TRUE(new_sm->HandleImminentDataWipe());
+    ASSERT_EQ(new_sm->GetUpdateState(), UpdateState::None);
+}
+
+// Test that after an OTA, before a merge, we can wipe data in recovery.
+TEST_F(SnapshotUpdateTest, DataWipeRollbackInRecovery) {
+    // Execute the first update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate a reboot into recovery.
+    auto test_device = new TestDeviceInfo(fake_super, "_b");
+    test_device->set_recovery(true);
+    auto new_sm = SnapshotManager::NewForFirstStageMount(test_device);
+
+    ASSERT_TRUE(new_sm->HandleImminentDataWipe());
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
+    EXPECT_TRUE(test_device->IsSlotUnbootable(1));
+    EXPECT_FALSE(test_device->IsSlotUnbootable(0));
+}
+
+// Test that after an OTA and a bootloader rollback with no merge, we can wipe
+// data in recovery.
+TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
+    // Execute the first update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate a rollback, with reboot into recovery.
+    auto test_device = new TestDeviceInfo(fake_super, "_a");
+    test_device->set_recovery(true);
+    auto new_sm = SnapshotManager::NewForFirstStageMount(test_device);
+
+    ASSERT_TRUE(new_sm->HandleImminentDataWipe());
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
+    EXPECT_FALSE(test_device->IsSlotUnbootable(0));
+    EXPECT_FALSE(test_device->IsSlotUnbootable(0));
+}
+
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
                              public WithParamInterface<std::tuple<uint32_t, bool>> {
   public:
