@@ -27,6 +27,9 @@
 namespace android {
 namespace snapshot {
 
+// Unit is sectors, this is a 4K chunk.
+static constexpr uint32_t kSnapshotChunkSize = 8;
+
 struct AutoDevice {
     virtual ~AutoDevice(){};
     void Release();
