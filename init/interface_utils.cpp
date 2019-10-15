@@ -21,7 +21,6 @@
 
 #include <android-base/strings.h>
 #include <hidl-util/FqInstance.h>
-#include <json/json.h>
 
 using android::FqInstance;
 using android::FQName;
@@ -41,37 +40,6 @@ std::string FQNamesToString(const std::set<FQName>& fqnames) {
 }
 
 }  // namespace
-
-Result<InterfaceInheritanceHierarchyMap> ReadInterfaceInheritanceHierarchy(
-        const std::string& path) {
-    Json::Value root;
-    Json::Reader reader;
-    std::ifstream stream(path);
-    if (!reader.parse(stream, root)) {
-        return Error() << "Failed to read interface inheritance hierarchy file: " << path << "\n"
-                       << reader.getFormattedErrorMessages();
-    }
-
-    InterfaceInheritanceHierarchyMap result;
-    for (const Json::Value& entry : root) {
-        std::set<FQName> inherited_interfaces;
-        for (const Json::Value& intf : entry["inheritedInterfaces"]) {
-            FQName fqname;
-            if (!fqname.setTo(intf.asString())) {
-                return Error() << "Unable to parse interface '" << intf.asString() << "'";
-            }
-            inherited_interfaces.insert(fqname);
-        }
-        std::string intf_string = entry["interface"].asString();
-        FQName fqname;
-        if (!fqname.setTo(intf_string)) {
-            return Error() << "Unable to parse interface '" << intf_string << "'";
-        }
-        result[fqname] = inherited_interfaces;
-    }
-
-    return result;
-}
 
 Result<void> CheckInterfaceInheritanceHierarchy(const std::set<std::string>& instances,
                                                 const InterfaceInheritanceHierarchyMap& hierarchy) {
