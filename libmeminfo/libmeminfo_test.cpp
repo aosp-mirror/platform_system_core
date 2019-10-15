@@ -101,6 +101,33 @@ TEST(ProcMemInfo, MapsUsageEmpty) {
     }
 }
 
+TEST(ProcMemInfo, MapsUsageFillInLater) {
+    ProcMemInfo proc_mem(pid);
+    const std::vector<Vma>& maps = proc_mem.MapsWithoutUsageStats();
+    EXPECT_FALSE(maps.empty());
+    for (auto& map : maps) {
+        Vma update_map(map);
+        ASSERT_EQ(map.start, update_map.start);
+        ASSERT_EQ(map.end, update_map.end);
+        ASSERT_EQ(map.offset, update_map.offset);
+        ASSERT_EQ(map.flags, update_map.flags);
+        ASSERT_EQ(map.name, update_map.name);
+        ASSERT_EQ(0, update_map.usage.vss);
+        ASSERT_EQ(0, update_map.usage.rss);
+        ASSERT_EQ(0, update_map.usage.pss);
+        ASSERT_EQ(0, update_map.usage.uss);
+        ASSERT_EQ(0, update_map.usage.swap);
+        ASSERT_EQ(0, update_map.usage.swap_pss);
+        ASSERT_EQ(0, update_map.usage.private_clean);
+        ASSERT_EQ(0, update_map.usage.private_dirty);
+        ASSERT_EQ(0, update_map.usage.shared_clean);
+        ASSERT_EQ(0, update_map.usage.shared_dirty);
+        ASSERT_TRUE(proc_mem.FillInVmaStats(update_map));
+        // Check that at least one usage stat was updated.
+        ASSERT_NE(0, update_map.usage.vss);
+    }
+}
+
 TEST(ProcMemInfo, PageMapPresent) {
     static constexpr size_t kNumPages = 20;
     size_t pagesize = getpagesize();
