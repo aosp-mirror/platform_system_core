@@ -62,6 +62,12 @@ using android::base::make_scope_guard;
     _rc;                                                                 \
   })
 
+// std::unique_ptr doesn't let you provide a pointer to a deleter (android_logger_list_close()) if
+// the type (struct logger_list) is an incomplete type, so we create ListCloser instead.
+struct ListCloser {
+  void operator()(struct logger_list* list) { android_logger_list_close(list); }
+};
+
 // This function is meant to be used for most log tests, it does the following:
 // 1) Open the log_buffer with a blocking reader
 // 2) Write the messages via write_messages
@@ -75,11 +81,6 @@ template <typename FWrite, typename FCheck>
 static void RunLogTests(log_id_t log_buffer, FWrite write_messages, FCheck check_message) {
   pid_t pid = getpid();
 
-  // std::unique_ptr doesn't let you provide a pointer to a deleter (android_logger_list_close()) if
-  // the type (struct logger_list) is an incomplete type, so we create ListCloser instead.
-  struct ListCloser {
-    void operator()(struct logger_list* list) { android_logger_list_close(list); }
-  };
   auto logger_list = std::unique_ptr<struct logger_list, ListCloser>{
       android_logger_list_open(log_buffer, ANDROID_LOG_RDONLY, 1000, pid)};
   ASSERT_TRUE(logger_list);
@@ -946,7 +947,6 @@ for trouble being gone, comfort should remain, but\n\
 when you depart from me, sorrow abides and happiness\n\
 takes his leave.";
 
-#ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, max_payload) {
 #ifdef __ANDROID__
   static const char max_payload_tag[] = "TEST_max_payload_and_longish_tag_XXXX";
@@ -995,7 +995,6 @@ TEST(liblog, max_payload) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
-#endif  // ENABLE_FLAKY_TESTS
 
 TEST(liblog, __android_log_buf_print__maxtag) {
 #ifdef __ANDROID__
@@ -1089,11 +1088,20 @@ TEST(liblog, too_big_payload) {
 #endif
 }
 
-#ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, dual_reader) {
 #ifdef __ANDROID__
+  static const int expected_count1 = 25;
+  static const int expected_count2 = 25;
 
-  static const int num = 25;
+  pid_t pid = getpid();
+
+  auto logger_list1 = std::unique_ptr<struct logger_list, ListCloser>{
+      android_logger_list_open(LOG_ID_MAIN, ANDROID_LOG_RDONLY, expected_count1, pid)};
+  ASSERT_TRUE(logger_list1);
+
+  auto logger_list2 = std::unique_ptr<struct logger_list, ListCloser>{
+      android_logger_list_open(LOG_ID_MAIN, ANDROID_LOG_RDONLY, expected_count2, pid)};
+  ASSERT_TRUE(logger_list2);
 
   for (int i = 25; i > 0; --i) {
     static const char fmt[] = "dual_reader %02d";
@@ -1102,32 +1110,46 @@ TEST(liblog, dual_reader) {
     LOG_FAILURE_RETRY(__android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_INFO,
                                               "liblog", buffer));
   }
-  usleep(1000000);
 
-  struct logger_list* logger_list1;
-  ASSERT_TRUE(NULL != (logger_list1 = android_logger_list_open(
-                           LOG_ID_MAIN,
-                           ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, num, 0)));
+  alarm(2);
+  auto alarm_guard = android::base::make_scope_guard([] { alarm(0); });
 
-  struct logger_list* logger_list2;
+  // Wait until we see all messages with the blocking reader.
+  int count1 = 0;
+  int count2 = 0;
 
-  if (NULL == (logger_list2 = android_logger_list_open(
-                   LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
-                   num - 10, 0))) {
-    android_logger_list_close(logger_list1);
-    ASSERT_TRUE(NULL != logger_list2);
+  while (count1 != expected_count2 || count2 != expected_count2) {
+    log_msg log_msg;
+    if (count1 < expected_count1) {
+      ASSERT_GT(android_logger_list_read(logger_list1.get(), &log_msg), 0);
+      count1++;
+    }
+    if (count2 < expected_count2) {
+      ASSERT_GT(android_logger_list_read(logger_list2.get(), &log_msg), 0);
+      count2++;
+    }
   }
 
-  int count1 = 0;
+  // Test again with the nonblocking reader.
+  auto logger_list_non_block1 =
+      std::unique_ptr<struct logger_list, ListCloser>{android_logger_list_open(
+          LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, expected_count1, pid)};
+  ASSERT_TRUE(logger_list_non_block1);
+
+  auto logger_list_non_block2 =
+      std::unique_ptr<struct logger_list, ListCloser>{android_logger_list_open(
+          LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, expected_count2, pid)};
+  ASSERT_TRUE(logger_list_non_block2);
+  count1 = 0;
+  count2 = 0;
   bool done1 = false;
-  int count2 = 0;
   bool done2 = false;
 
-  do {
+  while (!done1 || !done2) {
     log_msg log_msg;
 
     if (!done1) {
-      if (android_logger_list_read(logger_list1, &log_msg) <= 0) {
+      if (android_logger_list_read(logger_list_non_block1.get(), &log_msg) <= 0) {
         done1 = true;
       } else {
         ++count1;
@@ -1135,26 +1157,21 @@ TEST(liblog, dual_reader) {
     }
 
     if (!done2) {
-      if (android_logger_list_read(logger_list2, &log_msg) <= 0) {
+      if (android_logger_list_read(logger_list_non_block2.get(), &log_msg) <= 0) {
         done2 = true;
       } else {
         ++count2;
       }
     }
-  } while ((!done1) || (!done2));
+  }
 
-  android_logger_list_close(logger_list1);
-  android_logger_list_close(logger_list2);
-
-  EXPECT_EQ(num, count1);
-  EXPECT_EQ(num - 10, count2);
+  EXPECT_EQ(expected_count1, count1);
+  EXPECT_EQ(expected_count2, count2);
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
-#endif  // ENABLE_FLAKY_TESTS
 
-#ifdef ENABLE_FLAKY_TESTS
 static bool checkPriForTag(AndroidLogFormat* p_format, const char* tag,
                            android_LogPriority pri) {
   return android_log_shouldPrintLine(p_format, tag, pri) &&
@@ -1230,7 +1247,6 @@ TEST(liblog, filterRule) {
 
   android_log_format_free(p_format);
 }
-#endif  // ENABLE_FLAKY_TESTS
 
 #ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, is_loggable) {
@@ -2609,7 +2625,6 @@ TEST(liblog, create_android_logger_android_log_error_write_null) {
 #endif
 }
 
-#ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, create_android_logger_overflow) {
   android_log_context ctx;
 
@@ -2636,7 +2651,6 @@ TEST(liblog, create_android_logger_overflow) {
   EXPECT_LE(0, android_log_destroy(&ctx));
   ASSERT_TRUE(NULL == ctx);
 }
-#endif  // ENABLE_FLAKY_TESTS
 
 #ifdef ENABLE_FLAKY_TESTS
 #ifdef __ANDROID__
@@ -2777,7 +2791,6 @@ TEST(liblog, __android_log_pmsg_file_read) {
 }
 #endif  // ENABLE_FLAKY_TESTS
 
-#ifdef ENABLE_FLAKY_TESTS
 TEST(liblog, android_lookupEventTagNum) {
 #ifdef __ANDROID__
   EventTagMap* map = android_openEventTagMap(NULL);
@@ -2794,4 +2807,3 @@ TEST(liblog, android_lookupEventTagNum) {
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
-#endif  // ENABLE_FLAKY_TESTS
