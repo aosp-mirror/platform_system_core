@@ -53,8 +53,6 @@ extern "C" {
 /*
  * The userspace structure for version 1 of the logger_entry ABI.
  */
-#ifndef __struct_logger_entry_defined
-#define __struct_logger_entry_defined
 struct logger_entry {
   uint16_t len;   /* length of the payload */
   uint16_t __pad; /* no matter what, we get 2 bytes of padding */
@@ -64,13 +62,10 @@ struct logger_entry {
   int32_t nsec;   /* nanoseconds */
   char msg[0]; /* the entry's payload */
 };
-#endif
 
 /*
  * The userspace structure for version 2 of the logger_entry ABI.
  */
-#ifndef __struct_logger_entry_v2_defined
-#define __struct_logger_entry_v2_defined
 struct logger_entry_v2 {
   uint16_t len;      /* length of the payload */
   uint16_t hdr_size; /* sizeof(struct logger_entry_v2) */
@@ -81,13 +76,10 @@ struct logger_entry_v2 {
   uint32_t euid;     /* effective UID of logger */
   char msg[0]; /* the entry's payload */
 } __attribute__((__packed__));
-#endif
 
 /*
  * The userspace structure for version 3 of the logger_entry ABI.
  */
-#ifndef __struct_logger_entry_v3_defined
-#define __struct_logger_entry_v3_defined
 struct logger_entry_v3 {
   uint16_t len;      /* length of the payload */
   uint16_t hdr_size; /* sizeof(struct logger_entry_v3) */
@@ -98,13 +90,10 @@ struct logger_entry_v3 {
   uint32_t lid;      /* log id of the payload */
   char msg[0]; /* the entry's payload */
 } __attribute__((__packed__));
-#endif
 
 /*
  * The userspace structure for version 4 of the logger_entry ABI.
  */
-#ifndef __struct_logger_entry_v4_defined
-#define __struct_logger_entry_v4_defined
 struct logger_entry_v4 {
   uint16_t len;      /* length of the payload */
   uint16_t hdr_size; /* sizeof(struct logger_entry_v4) */
@@ -116,7 +105,6 @@ struct logger_entry_v4 {
   uint32_t uid;      /* generating process's uid */
   char msg[0]; /* the entry's payload */
 };
-#endif
 #pragma clang diagnostic pop
 
 /*
@@ -133,8 +121,6 @@ struct logger_entry_v4 {
  */
 #define LOGGER_ENTRY_MAX_LEN (5 * 1024)
 
-#ifndef __struct_log_msg_defined
-#define __struct_log_msg_defined
 struct log_msg {
   union {
     unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
@@ -191,7 +177,6 @@ struct log_msg {
   }
 #endif
 };
-#endif
 
 struct logger;
 

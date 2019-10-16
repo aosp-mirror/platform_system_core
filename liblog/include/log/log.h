@@ -22,7 +22,6 @@
 #endif
 #include <stdint.h> /* uint16_t, int32_t */
 #include <stdio.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -64,21 +63,6 @@ extern "C" {
 #define LOG_NDEBUG 0
 #endif
 #endif
-
-/* --------------------------------------------------------------------- */
-
-/*
- * This file uses ", ## __VA_ARGS__" zero-argument token pasting to
- * work around issues with debug-only syntax errors in assertions
- * that are missing format strings.  See commit
- * 19299904343daf191267564fe32e6cd5c165cd42
- */
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
-#endif
-
-/* --------------------------------------------------------------------- */
 
 /*
  * Event logging.
@@ -163,10 +147,6 @@ clockid_t android_log_clockid(void);
  * all O_CLOEXEC so wil self clean on exec().
  */
 void __android_log_close(void);
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
 
 #ifdef __cplusplus
 }
