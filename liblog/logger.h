@@ -96,8 +96,6 @@ struct android_log_transport_context {
 
   struct android_log_transport_read* transport;
   unsigned logMask;      /* mask of requested log buffers */
-  int ret;               /* return value associated with following data */
-  struct log_msg logMsg; /* peek at upcoming data, valid if logMsg.len != 0 */
 };
 
 struct android_log_logger_list {
