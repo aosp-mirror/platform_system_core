@@ -71,8 +71,6 @@ using std::chrono::duration_cast;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
-// Unit is sectors, this is a 4K chunk.
-static constexpr uint32_t kSnapshotChunkSize = 8;
 static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 
 class DeviceInfo final : public SnapshotManager::IDeviceInfo {
