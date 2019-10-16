@@ -36,16 +36,11 @@ extern "C" {
 /*
  * The opaque context used to manipulate lists of events.
  */
-#ifndef __android_log_context_defined
-#define __android_log_context_defined
 typedef struct android_log_context_internal* android_log_context;
-#endif
 
 /*
  * Elements returned when reading a list of events.
  */
-#ifndef __android_log_list_element_defined
-#define __android_log_list_element_defined
 typedef struct {
   AndroidEventLogType type;
   uint16_t complete;
@@ -57,7 +52,6 @@ typedef struct {
     float float32;
   } data;
 } android_log_list_element;
-#endif
 
 /*
  * Creates a context associated with an event tag to write elements to
@@ -104,8 +98,6 @@ int android_log_parser_reset(android_log_context ctx,
 int android_log_destroy(android_log_context* ctx);
 
 #ifdef __cplusplus
-#ifndef __class_android_log_event_list_defined
-#define __class_android_log_event_list_defined
 /* android_log_list C++ helpers */
 extern "C++" {
 class android_log_event_list {
@@ -279,7 +271,6 @@ class android_log_event_list {
   }
 };
 }
-#endif
 #endif
 
 #ifdef __cplusplus
