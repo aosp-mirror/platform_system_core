@@ -142,14 +142,11 @@ TEST(liblog, __android_log_btwrite) {
   long long longBuf = 0xDEADBEEFA55A5AA5;
   EXPECT_LT(
       0, __android_log_btwrite(0, EVENT_TYPE_LONG, &longBuf, sizeof(longBuf)));
-  usleep(1000);
   char Buf[] = "\20\0\0\0DeAdBeEfA55a5aA5";
   EXPECT_LT(0,
             __android_log_btwrite(0, EVENT_TYPE_STRING, Buf, sizeof(Buf) - 1));
-  usleep(1000);
 }
 
-#ifdef ENABLE_FLAKY_TESTS
 #if defined(__ANDROID__)
 static std::string popenToString(const std::string& command) {
   std::string ret;
@@ -218,81 +215,63 @@ static bool isLogdwActive() {
 
 static bool tested__android_log_close;
 #endif
-#endif  // ENABLE_FLAKY_TESTS
 
 TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 #ifdef __ANDROID__
-  struct logger_list* logger_list;
-
-  pid_t pid = getpid();
-
-  ASSERT_TRUE(NULL !=
-              (logger_list = android_logger_list_open(
-                   LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
-                   1000, pid)));
-
   log_time ts(CLOCK_MONOTONIC);
-  EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
-#ifdef ENABLE_FLAKY_TESTS
-  // Check that we can close and reopen the logger
-  bool logdwActiveAfter__android_log_btwrite;
-  if (getuid() == AID_ROOT) {
-    tested__android_log_close = true;
-#ifndef NO_PSTORE
-    bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-    EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
-#endif /* NO_PSTORE */
-    logdwActiveAfter__android_log_btwrite = isLogdwActive();
-    EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
-  } else if (!tested__android_log_close) {
-    fprintf(stderr, "WARNING: can not test __android_log_close()\n");
-  }
-  __android_log_close();
-  if (getuid() == AID_ROOT) {
-#ifndef NO_PSTORE
-    bool pmsgActiveAfter__android_log_close = isPmsgActive();
-    EXPECT_FALSE(pmsgActiveAfter__android_log_close);
-#endif /* NO_PSTORE */
-    bool logdwActiveAfter__android_log_close = isLogdwActive();
-    EXPECT_FALSE(logdwActiveAfter__android_log_close);
-  }
-#endif  // ENABLE_FLAKY_TESTS
+  log_time ts1(ts);
 
-  log_time ts1(CLOCK_MONOTONIC);
-  EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
-#ifdef ENABLE_FLAKY_TESTS
-  if (getuid() == AID_ROOT) {
+  auto write_function = [&] {
+    EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
+    // Check that we can close and reopen the logger
+    bool logdwActiveAfter__android_log_btwrite;
+    if (getuid() == AID_ROOT) {
+      tested__android_log_close = true;
 #ifndef NO_PSTORE
-    bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-    EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+      bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+      EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
 #endif /* NO_PSTORE */
-    logdwActiveAfter__android_log_btwrite = isLogdwActive();
-    EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
-  }
-#endif  // ENABLE_FLAKY_TESTS
-  usleep(1000000);
+      logdwActiveAfter__android_log_btwrite = isLogdwActive();
+      EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
+    } else if (!tested__android_log_close) {
+      fprintf(stderr, "WARNING: can not test __android_log_close()\n");
+    }
+    __android_log_close();
+    if (getuid() == AID_ROOT) {
+#ifndef NO_PSTORE
+      bool pmsgActiveAfter__android_log_close = isPmsgActive();
+      EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+#endif /* NO_PSTORE */
+      bool logdwActiveAfter__android_log_close = isLogdwActive();
+      EXPECT_FALSE(logdwActiveAfter__android_log_close);
+    }
+
+    ts1 = log_time(CLOCK_MONOTONIC);
+    EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
+    if (getuid() == AID_ROOT) {
+#ifndef NO_PSTORE
+      bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+      EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+#endif /* NO_PSTORE */
+      logdwActiveAfter__android_log_btwrite = isLogdwActive();
+      EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
+    }
+  };
 
   int count = 0;
   int second_count = 0;
 
-  for (;;) {
-    log_msg log_msg;
-    if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-      break;
-    }
-
-    EXPECT_EQ(log_msg.entry.pid, pid);
-
+  auto check_function = [&](log_msg log_msg, bool* found) {
     if ((log_msg.entry.len != sizeof(android_log_event_long_t)) ||
         (log_msg.id() != LOG_ID_EVENTS)) {
-      continue;
+      return;
     }
 
     android_log_event_long_t* eventData;
     eventData = reinterpret_cast<android_log_event_long_t*>(log_msg.msg());
 
     if (!eventData || (eventData->payload.type != EVENT_TYPE_LONG)) {
-      continue;
+      return;
     }
 
     log_time tx(reinterpret_cast<char*>(&eventData->payload.data));
@@ -301,12 +280,50 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     } else if (ts1 == tx) {
       ++second_count;
     }
-  }
 
-  EXPECT_EQ(1, count);
-  EXPECT_EQ(1, second_count);
+    if (count == 1 && second_count == 1) {
+      count = 0;
+      second_count = 0;
+      *found = true;
+    }
+  };
 
-  android_logger_list_close(logger_list);
+  RunLogTests(LOG_ID_EVENTS, write_function, check_function);
+
+#else
+  GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+TEST(liblog, __android_log_write__android_logger_list_read) {
+#ifdef __ANDROID__
+  pid_t pid = getpid();
+
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  std::string buf = android::base::StringPrintf("pid=%u ts=%ld.%09ld", pid, ts.tv_sec, ts.tv_nsec);
+  static const char tag[] = "liblog.__android_log_write__android_logger_list_read";
+  static const char prio = ANDROID_LOG_DEBUG;
+
+  std::string expected_message =
+      std::string(&prio, sizeof(prio)) + tag + std::string("", 1) + buf + std::string("", 1);
+
+  auto write_function = [&] { ASSERT_LT(0, __android_log_write(prio, tag, buf.c_str())); };
+
+  auto check_function = [&](log_msg log_msg, bool* found) {
+    if (log_msg.entry.len != expected_message.length()) {
+      return;
+    }
+
+    if (expected_message != std::string(log_msg.msg(), log_msg.entry.len)) {
+      return;
+    }
+
+    *found = true;
+  };
+
+  RunLogTests(LOG_ID_MAIN, write_function, check_function);
+
 #else
   GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
@@ -314,18 +331,10 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 
 static void bswrite_test(const char* message) {
 #ifdef __ANDROID__
-  struct logger_list* logger_list;
-
   pid_t pid = getpid();
-
-  ASSERT_TRUE(NULL !=
-              (logger_list = android_logger_list_open(
-                   LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
-                   1000, pid)));
 
   log_time ts(android_log_clockid());
 
-  EXPECT_LT(0, __android_log_bswrite(0, message));
   size_t num_lines = 1, size = 0, length = 0, total = 0;
   const char* cp = message;
   while (*cp) {
@@ -347,36 +356,25 @@ static void bswrite_test(const char* message) {
     ++cp;
     ++total;
   }
-  usleep(1000000);
 
-  int count = 0;
+  auto write_function = [&] { EXPECT_LT(0, __android_log_bswrite(0, message)); };
 
-  for (;;) {
-    log_msg log_msg;
-    if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-      break;
-    }
-
-    EXPECT_EQ(log_msg.entry.pid, pid);
-
-    if ((log_msg.entry.sec < (ts.tv_sec - 1)) ||
-        ((ts.tv_sec + 1) < log_msg.entry.sec) ||
-        ((size_t)log_msg.entry.len !=
-         (sizeof(android_log_event_string_t) + length)) ||
-        (log_msg.id() != LOG_ID_EVENTS)) {
-      continue;
+  auto check_function = [&](log_msg log_msg, bool* found) {
+    if ((size_t)log_msg.entry.len != (sizeof(android_log_event_string_t) + length) ||
+        log_msg.id() != LOG_ID_EVENTS) {
+      return;
     }
 
     android_log_event_string_t* eventData;
     eventData = reinterpret_cast<android_log_event_string_t*>(log_msg.msg());
 
     if (!eventData || (eventData->type != EVENT_TYPE_STRING)) {
-      continue;
+      return;
     }
 
     size_t len = eventData->length;
     if (len == total) {
-      ++count;
+      *found = true;
 
       AndroidLogFormat* logformat = android_log_format_new();
       EXPECT_TRUE(NULL != logformat);
@@ -403,11 +401,10 @@ static void bswrite_test(const char* message) {
       }
       android_log_format_free(logformat);
     }
-  }
+  };
 
-  EXPECT_EQ(1, count);
+  RunLogTests(LOG_ID_EVENTS, write_function, check_function);
 
-  android_logger_list_close(logger_list);
 #else
   message = NULL;
   GTEST_LOG_(INFO) << "This test does nothing.\n";
@@ -436,20 +433,14 @@ TEST(liblog, __android_log_bswrite_and_print__multiple_newline) {
 
 static void buf_write_test(const char* message) {
 #ifdef __ANDROID__
-  struct logger_list* logger_list;
-
   pid_t pid = getpid();
-
-  ASSERT_TRUE(
-      NULL !=
-      (logger_list = android_logger_list_open(
-           LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
 
   static const char tag[] = "TEST__android_log_buf_write";
   log_time ts(android_log_clockid());
 
-  EXPECT_LT(
-      0, __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_INFO, tag, message));
+  auto write_function = [&] {
+    EXPECT_LT(0, __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_INFO, tag, message));
+  };
   size_t num_lines = 1, size = 0, length = 0;
   const char* cp = message;
   while (*cp) {
@@ -466,26 +457,13 @@ static void buf_write_test(const char* message) {
     }
     ++cp;
   }
-  usleep(1000000);
 
-  int count = 0;
-
-  for (;;) {
-    log_msg log_msg;
-    if (android_logger_list_read(logger_list, &log_msg) <= 0) {
-      break;
+  auto check_function = [&](log_msg log_msg, bool* found) {
+    if ((size_t)log_msg.entry.len != (sizeof(tag) + length + 2) || log_msg.id() != LOG_ID_MAIN) {
+      return;
     }
 
-    ASSERT_EQ(log_msg.entry.pid, pid);
-
-    if ((log_msg.entry.sec < (ts.tv_sec - 1)) ||
-        ((ts.tv_sec + 1) < log_msg.entry.sec) ||
-        ((size_t)log_msg.entry.len != (sizeof(tag) + length + 2)) ||
-        (log_msg.id() != LOG_ID_MAIN)) {
-      continue;
-    }
-
-    ++count;
+    *found = true;
 
     AndroidLogFormat* logformat = android_log_format_new();
     EXPECT_TRUE(NULL != logformat);
@@ -502,11 +480,10 @@ static void buf_write_test(const char* message) {
                 android_log_printLogLine(logformat, fileno(stderr), &entry));
     }
     android_log_format_free(logformat);
-  }
+  };
 
-  EXPECT_EQ(1, count);
+  RunLogTests(LOG_ID_MAIN, write_function, check_function);
 
-  android_logger_list_close(logger_list);
 #else
   message = NULL;
   GTEST_LOG_(INFO) << "This test does nothing.\n";
