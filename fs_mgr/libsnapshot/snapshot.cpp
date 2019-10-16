@@ -418,9 +418,9 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     return true;
 }
 
-bool SnapshotManager::MapCowImage(const std::string& name,
-                                  const std::chrono::milliseconds& timeout_ms) {
-    if (!EnsureImageManager()) return false;
+std::optional<std::string> SnapshotManager::MapCowImage(
+        const std::string& name, const std::chrono::milliseconds& timeout_ms) {
+    if (!EnsureImageManager()) return std::nullopt;
     auto cow_image_name = GetCowImageDeviceName(name);
 
     bool ok;
@@ -436,10 +436,10 @@ bool SnapshotManager::MapCowImage(const std::string& name,
 
     if (ok) {
         LOG(INFO) << "Mapped " << cow_image_name << " to " << cow_dev;
-    } else {
-        LOG(ERROR) << "Could not map image device: " << cow_image_name;
+        return cow_dev;
     }
-    return ok;
+    LOG(ERROR) << "Could not map image device: " << cow_image_name;
+    return std::nullopt;
 }
 
 bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
@@ -1411,7 +1411,7 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
         auto remaining_time = GetRemainingTime(params.timeout_ms, begin);
         if (remaining_time.count() < 0) return false;
 
-        if (!MapCowImage(partition_name, remaining_time)) {
+        if (!MapCowImage(partition_name, remaining_time).has_value()) {
             LOG(ERROR) << "Could not map cow image for partition: " << partition_name;
             return false;
         }
