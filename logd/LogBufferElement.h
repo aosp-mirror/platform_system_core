@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_BUFFER_ELEMENT_H__
-#define _LOGD_LOG_BUFFER_ELEMENT_H__
+#pragma once
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -96,8 +95,5 @@ class __attribute__((packed)) LogBufferElement {
     }
 
     static const log_time FLUSH_ERROR;
-    log_time flushTo(SocketClient* writer, LogBuffer* parent, bool privileged,
-                     bool lastSame);
+    log_time flushTo(SocketClient* writer, LogBuffer* parent, bool lastSame);
 };
-
-#endif
