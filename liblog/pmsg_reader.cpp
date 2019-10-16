@@ -62,58 +62,9 @@ static int pmsgAvailable(log_id_t logId) {
   return -EBADF;
 }
 
-/* Determine the credentials of the caller */
-static bool uid_has_log_permission(uid_t uid) {
-  return (uid == AID_SYSTEM) || (uid == AID_LOG) || (uid == AID_ROOT) || (uid == AID_LOGD);
-}
-
-static uid_t get_best_effective_uid() {
-  uid_t euid;
-  uid_t uid;
-  gid_t gid;
-  ssize_t i;
-  static uid_t last_uid = (uid_t)-1;
-
-  if (last_uid != (uid_t)-1) {
-    return last_uid;
-  }
-  uid = __android_log_uid();
-  if (uid_has_log_permission(uid)) {
-    return last_uid = uid;
-  }
-  euid = geteuid();
-  if (uid_has_log_permission(euid)) {
-    return last_uid = euid;
-  }
-  gid = getgid();
-  if (uid_has_log_permission(gid)) {
-    return last_uid = gid;
-  }
-  gid = getegid();
-  if (uid_has_log_permission(gid)) {
-    return last_uid = gid;
-  }
-  i = getgroups((size_t)0, NULL);
-  if (i > 0) {
-    gid_t list[i];
-
-    getgroups(i, list);
-    while (--i >= 0) {
-      if (uid_has_log_permission(list[i])) {
-        return last_uid = list[i];
-      }
-    }
-  }
-  return last_uid = uid;
-}
-
 static int pmsgClear(struct android_log_logger* logger __unused,
                      struct android_log_transport_context* transp __unused) {
-  if (uid_has_log_permission(get_best_effective_uid())) {
-    return unlink("/sys/fs/pstore/pmsg-ramoops-0");
-  }
-  errno = EPERM;
-  return -1;
+  return unlink("/sys/fs/pstore/pmsg-ramoops-0");
 }
 
 /*
@@ -128,14 +79,12 @@ static int pmsgRead(struct android_log_logger_list* logger_list,
                     struct android_log_transport_context* transp, struct log_msg* log_msg) {
   ssize_t ret;
   off_t current, next;
-  uid_t uid;
   struct __attribute__((__packed__)) {
     android_pmsg_log_header_t p;
     android_log_header_t l;
     uint8_t prio;
   } buf;
   static uint8_t preread_count;
-  bool is_system;
 
   memset(log_msg, 0, sizeof(*log_msg));
 
@@ -195,37 +144,30 @@ static int pmsgRead(struct android_log_logger_list* logger_list,
           ((logger_list->start.tv_sec != buf.l.realtime.tv_sec) ||
            (logger_list->start.tv_nsec <= buf.l.realtime.tv_nsec)))) &&
         (!logger_list->pid || (logger_list->pid == buf.p.pid))) {
-      uid = get_best_effective_uid();
-      is_system = uid_has_log_permission(uid);
-      if (is_system || (uid == buf.p.uid)) {
-        char* msg = is_system ? log_msg->entry_v4.msg : log_msg->entry_v3.msg;
-        *msg = buf.prio;
-        fd = atomic_load(&transp->context.fd);
-        if (fd <= 0) {
-          return -EBADF;
-        }
-        ret = TEMP_FAILURE_RETRY(read(fd, msg + sizeof(buf.prio), buf.p.len - sizeof(buf)));
-        if (ret < 0) {
-          return -errno;
-        }
-        if (ret != (ssize_t)(buf.p.len - sizeof(buf))) {
-          return -EIO;
-        }
-
-        log_msg->entry_v4.len = buf.p.len - sizeof(buf) + sizeof(buf.prio);
-        log_msg->entry_v4.hdr_size =
-            is_system ? sizeof(log_msg->entry_v4) : sizeof(log_msg->entry_v3);
-        log_msg->entry_v4.pid = buf.p.pid;
-        log_msg->entry_v4.tid = buf.l.tid;
-        log_msg->entry_v4.sec = buf.l.realtime.tv_sec;
-        log_msg->entry_v4.nsec = buf.l.realtime.tv_nsec;
-        log_msg->entry_v4.lid = buf.l.id;
-        if (is_system) {
-          log_msg->entry_v4.uid = buf.p.uid;
-        }
-
-        return ret + sizeof(buf.prio) + log_msg->entry_v4.hdr_size;
+      char* msg = log_msg->entry_v4.msg;
+      *msg = buf.prio;
+      fd = atomic_load(&transp->context.fd);
+      if (fd <= 0) {
+        return -EBADF;
       }
+      ret = TEMP_FAILURE_RETRY(read(fd, msg + sizeof(buf.prio), buf.p.len - sizeof(buf)));
+      if (ret < 0) {
+        return -errno;
+      }
+      if (ret != (ssize_t)(buf.p.len - sizeof(buf))) {
+        return -EIO;
+      }
+
+      log_msg->entry_v4.len = buf.p.len - sizeof(buf) + sizeof(buf.prio);
+      log_msg->entry_v4.hdr_size = sizeof(log_msg->entry_v4);
+      log_msg->entry_v4.pid = buf.p.pid;
+      log_msg->entry_v4.tid = buf.l.tid;
+      log_msg->entry_v4.sec = buf.l.realtime.tv_sec;
+      log_msg->entry_v4.nsec = buf.l.realtime.tv_nsec;
+      log_msg->entry_v4.lid = buf.l.id;
+      log_msg->entry_v4.uid = buf.p.uid;
+
+      return ret + sizeof(buf.prio) + log_msg->entry_v4.hdr_size;
     }
 
     fd = atomic_load(&transp->context.fd);
@@ -273,13 +215,7 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
   struct android_log_transport_context transp;
   struct content {
     struct listnode node;
-    union {
-      struct logger_entry_v4 entry;
-      struct logger_entry_v4 entry_v4;
-      struct logger_entry_v3 entry_v3;
-      struct logger_entry_v2 entry_v2;
-      struct logger_entry entry_v1;
-    };
+    struct logger_entry_v4 entry;
   } * content;
   struct names {
     struct listnode node;
