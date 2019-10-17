@@ -28,6 +28,7 @@ cc_defaults {
         "liblp",
     ],
     static_libs: [
+        "libcutils",
         "libdm",
         "libfs_mgr",
         "libfstab",
@@ -56,6 +57,17 @@ cc_defaults {
     },
 }
 
+cc_defaults {
+    name: "libsnapshot_hal_deps",
+    cflags: [
+        "-DLIBSNAPSHOT_USE_HAL",
+    ],
+    shared_libs: [
+        "android.hardware.boot@1.0",
+        "android.hardware.boot@1.1",
+    ],
+}
+
 filegroup {
     name: "libsnapshot_sources",
     srcs: [
@@ -75,7 +87,10 @@ cc_library_headers {
 
 cc_library_static {
     name: "libsnapshot",
-    defaults: ["libsnapshot_defaults"],
+    defaults: [
+        "libsnapshot_defaults",
+        "libsnapshot_hal_deps",
+    ],
     srcs: [":libsnapshot_sources"],
     whole_static_libs: [
         "libfiemap_binder",
@@ -83,8 +98,21 @@ cc_library_static {
 }
 
 cc_library_static {
-    name: "libsnapshot_nobinder",
+    name: "libsnapshot_init",
     defaults: ["libsnapshot_defaults"],
+    srcs: [":libsnapshot_sources"],
+    recovery_available: true,
+    whole_static_libs: [
+        "libfiemap_passthrough",
+    ],
+}
+
+cc_library_static {
+    name: "libsnapshot_nobinder",
+    defaults: [
+        "libsnapshot_defaults",
+        "libsnapshot_hal_deps",
+    ],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
     whole_static_libs: [
@@ -103,11 +131,13 @@ cc_test {
     ],
     shared_libs: [
         "libbinder",
+        "libhidlbase",
         "libprotobuf-cpp-lite",
         "libutils",
     ],
     static_libs: [
-        "libcutils",
+        "android.hardware.boot@1.0",
+        "android.hardware.boot@1.1",
         "libcrypto_static",
         "libfs_mgr",
         "libgmock",
@@ -134,10 +164,14 @@ cc_binary {
         "libsnapshot",
     ],
     shared_libs: [
+        "android.hardware.boot@1.0",
+        "android.hardware.boot@1.1",
         "libbase",
         "libbinder",
+        "libbinderthreadstate",
         "libext4_utils",
         "libfs_mgr",
+        "libhidlbase",
         "liblog",
         "liblp",
         "libprotobuf-cpp-lite",

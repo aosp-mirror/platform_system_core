@@ -49,6 +49,16 @@ struct CreateLogicalPartitionParams;
 class IPartitionOpener;
 }  // namespace fs_mgr
 
+// Forward declare IBootControl types since we cannot include only the headers
+// with Soong. Note: keep the enum width in sync.
+namespace hardware {
+namespace boot {
+namespace V1_1 {
+enum class MergeStatus : int32_t;
+}  // namespace V1_1
+}  // namespace boot
+}  // namespace hardware
+
 namespace snapshot {
 
 struct AutoDeleteCowImage;
@@ -94,6 +104,7 @@ class SnapshotManager final {
     using LpMetadata = android::fs_mgr::LpMetadata;
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
     using DeltaArchiveManifest = chromeos_update_engine::DeltaArchiveManifest;
+    using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
 
   public:
     // Dependency injection for testing.
@@ -107,6 +118,7 @@ class SnapshotManager final {
         virtual std::string GetSuperDevice(uint32_t slot) const = 0;
         virtual const IPartitionOpener& GetPartitionOpener() const = 0;
         virtual bool IsOverlayfsSetup() const = 0;
+        virtual bool SetBootControlMergeStatus(MergeStatus status) = 0;
     };
 
     ~SnapshotManager();
@@ -208,6 +220,7 @@ class SnapshotManager final {
     FRIEND_TEST(SnapshotTest, Merge);
     FRIEND_TEST(SnapshotTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
+    FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
     FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
     friend class SnapshotTest;
     friend class SnapshotUpdateTest;
