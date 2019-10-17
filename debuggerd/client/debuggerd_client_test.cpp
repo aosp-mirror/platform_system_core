@@ -73,15 +73,15 @@ TEST(debuggerd_client, race) {
   unique_fd pipe_read, pipe_write;
   ASSERT_TRUE(Pipe(&pipe_read, &pipe_write));
 
-  // 64 kB should be enough for everyone.
+  // 64 MiB should be enough for everyone.
   constexpr int PIPE_SIZE = 64 * 1024 * 1024;
   ASSERT_EQ(PIPE_SIZE, fcntl(pipe_read.get(), F_SETPIPE_SZ, PIPE_SIZE));
 
   // Wait for a bit to let the child spawn all of its threads.
-  std::this_thread::sleep_for(250ms);
+  std::this_thread::sleep_for(1s);
 
   ASSERT_TRUE(
-      debuggerd_trigger_dump(forkpid, kDebuggerdNativeBacktrace, 10000, std::move(pipe_write)));
+      debuggerd_trigger_dump(forkpid, kDebuggerdNativeBacktrace, 60000, std::move(pipe_write)));
   // Immediately kill the forked child, to make sure that the dump didn't return early.
   ASSERT_EQ(0, kill(forkpid, SIGKILL)) << strerror(errno);
 
