@@ -69,7 +69,7 @@ cc_defaults {
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
-        "libsnapshot_nobinder",
+        "libsnapshot_init",
     ],
     shared_libs: [
         "libbacktrace",

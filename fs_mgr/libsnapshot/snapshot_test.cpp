@@ -617,6 +617,31 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     ASSERT_EQ(sm->GetUpdateState(), UpdateState::None);
 }
 
+TEST_F(SnapshotTest, UpdateBootControlHal) {
+    ASSERT_TRUE(AcquireLock());
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::None));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Initiated));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::SNAPSHOTTED);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Unverified));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::SNAPSHOTTED);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Merging));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::MERGING);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::MergeNeedsReboot));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::MergeCompleted));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::MergeFailed));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::MERGING);
+}
+
 class SnapshotUpdateTest : public SnapshotTest {
   public:
     void SetUp() override {
