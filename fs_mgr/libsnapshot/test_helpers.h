@@ -17,6 +17,7 @@
 #include <optional>
 #include <string>
 
+#include <android/hardware/boot/1.1/IBootControl.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <libfiemap/image_manager.h>
@@ -32,6 +33,7 @@ namespace snapshot {
 using android::fs_mgr::IPropertyFetcher;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::testing::MockPropertyFetcher;
+using android::hardware::boot::V1_1::MergeStatus;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::PartitionUpdate;
 using testing::_;
@@ -81,16 +83,22 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const override {
         return *opener_.get();
     }
+    bool SetBootControlMergeStatus(MergeStatus status) override {
+        merge_status_ = status;
+        return true;
+    }
     bool IsOverlayfsSetup() const override { return false; }
 
     void set_slot_suffix(const std::string& suffix) { slot_suffix_ = suffix; }
     void set_fake_super(const std::string& path) {
         opener_ = std::make_unique<TestPartitionOpener>(path);
     }
+    MergeStatus merge_status() const { return merge_status_; }
 
   private:
     std::string slot_suffix_ = "_a";
     std::unique_ptr<TestPartitionOpener> opener_;
+    MergeStatus merge_status_;
 };
 
 class SnapshotTestPropertyFetcher : public android::fs_mgr::testing::MockPropertyFetcher {
