@@ -92,21 +92,14 @@ std::string ToHexString(const uint8_t* buf, size_t len) {
 }
 
 std::optional<std::string> GetHash(const std::string& path) {
-    unique_fd fd(open(path.c_str(), O_RDONLY));
-    char buf[4096];
+    std::string content;
+    if (!android::base::ReadFileToString(path, &content, true)) {
+        PLOG(ERROR) << "Cannot access " << path;
+        return std::nullopt;
+    }
     SHA256_CTX ctx;
     SHA256_Init(&ctx);
-    while (true) {
-        ssize_t n = TEMP_FAILURE_RETRY(read(fd.get(), buf, sizeof(buf)));
-        if (n < 0) {
-            PLOG(ERROR) << "Cannot read " << path;
-            return std::nullopt;
-        }
-        if (n == 0) {
-            break;
-        }
-        SHA256_Update(&ctx, buf, n);
-    }
+    SHA256_Update(&ctx, content.c_str(), content.size());
     uint8_t out[32];
     SHA256_Final(out, &ctx);
     return ToHexString(out, sizeof(out));

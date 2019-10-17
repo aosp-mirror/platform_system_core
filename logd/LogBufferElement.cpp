@@ -244,14 +244,10 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
     return retval;
 }
 
-log_time LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
-                                   bool privileged, bool lastSame) {
-    struct logger_entry_v4 entry;
+log_time LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent, bool lastSame) {
+    struct logger_entry_v4 entry = {};
 
-    memset(&entry, 0, sizeof(struct logger_entry_v4));
-
-    entry.hdr_size = privileged ? sizeof(struct logger_entry_v4)
-                                : sizeof(struct logger_entry_v3);
+    entry.hdr_size = sizeof(struct logger_entry_v4);
     entry.lid = mLogId;
     entry.pid = mPid;
     entry.tid = mTid;
