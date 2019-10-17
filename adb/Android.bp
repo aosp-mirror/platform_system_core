@@ -429,7 +429,6 @@ cc_library {
                 "daemon/framebuffer_service.cpp",
                 "daemon/mdns.cpp",
                 "daemon/reboot_service.cpp",
-                "daemon/remount_service.cpp",
                 "daemon/restart_service.cpp",
                 "daemon/set_verity_enable_state_service.cpp",
             ],
