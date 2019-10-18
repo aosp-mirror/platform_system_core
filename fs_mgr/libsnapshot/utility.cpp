@@ -17,9 +17,15 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
+#include <fs_mgr/roots.h>
 
+using android::fs_mgr::EnsurePathMounted;
+using android::fs_mgr::EnsurePathUnmounted;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::GetEntryForPath;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::Partition;
+using android::fs_mgr::ReadDefaultFstab;
 
 namespace android {
 namespace snapshot {
@@ -107,6 +113,32 @@ bool InitializeCow(const std::string& device) {
         return false;
     }
     return true;
+}
+
+std::unique_ptr<AutoUnmountDevice> AutoUnmountDevice::New(const std::string& path) {
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        LOG(ERROR) << "Cannot read default fstab";
+        return nullptr;
+    }
+
+    if (GetEntryForPath(&fstab, path) == nullptr) {
+        LOG(INFO) << "EnsureMetadataMounted can't find entry for " << path << ", skipping";
+        return std::unique_ptr<AutoUnmountDevice>(new AutoUnmountDevice("", {}));
+    }
+
+    if (!EnsurePathMounted(&fstab, path)) {
+        LOG(ERROR) << "Cannot mount " << path;
+        return nullptr;
+    }
+    return std::unique_ptr<AutoUnmountDevice>(new AutoUnmountDevice(path, std::move(fstab)));
+}
+
+AutoUnmountDevice::~AutoUnmountDevice() {
+    if (name_.empty()) return;
+    if (!EnsurePathUnmounted(&fstab_, name_)) {
+        LOG(ERROR) << "Cannot unmount " << name_;
+    }
 }
 
 }  // namespace snapshot
