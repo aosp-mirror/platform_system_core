@@ -114,7 +114,7 @@ LOCAL_STATIC_LIBRARIES := \
     libmodprobe \
     libext2_uuid \
     libprotobuf-cpp-lite \
-    libsnapshot_nobinder \
+    libsnapshot_init \
 
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.

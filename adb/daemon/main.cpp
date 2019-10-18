@@ -248,6 +248,12 @@ int adbd_main(int server_port) {
         prop_port = android::base::GetProperty("persist.adb.tcp.port", "");
     }
 
+#if !defined(__ANDROID__)
+    if (prop_port.empty() && getenv("ADBD_PORT")) {
+        prop_port = getenv("ADBD_PORT");
+    }
+#endif
+
     int port;
     if (sscanf(prop_port.c_str(), "%d", &port) == 1 && port > 0) {
         D("using port=%d", port);

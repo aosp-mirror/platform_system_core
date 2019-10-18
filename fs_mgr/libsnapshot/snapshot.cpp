@@ -29,6 +29,9 @@
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#ifdef LIBSNAPSHOT_USE_HAL
+#include <android/hardware/boot/1.1/IBootControl.h>
+#endif
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
@@ -63,6 +66,7 @@ using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::LpMetadata;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::SlotNumberForSlotSuffix;
+using android::hardware::boot::V1_1::MergeStatus;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::InstallOperation;
 template <typename T>
@@ -71,8 +75,6 @@ using std::chrono::duration_cast;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
-// Unit is sectors, this is a 4K chunk.
-static constexpr uint32_t kSnapshotChunkSize = 8;
 static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 
 class DeviceInfo final : public SnapshotManager::IDeviceInfo {
@@ -86,10 +88,38 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
         return fs_mgr_get_super_partition_name(slot);
     }
     bool IsOverlayfsSetup() const override { return fs_mgr_overlayfs_is_setup(); }
+    bool SetBootControlMergeStatus(MergeStatus status) override;
 
   private:
     android::fs_mgr::PartitionOpener opener_;
+#ifdef LIBSNAPSHOT_USE_HAL
+    android::sp<android::hardware::boot::V1_1::IBootControl> boot_control_;
+#endif
 };
+
+bool DeviceInfo::SetBootControlMergeStatus([[maybe_unused]] MergeStatus status) {
+#ifdef LIBSNAPSHOT_USE_HAL
+    if (!boot_control_) {
+        auto hal = android::hardware::boot::V1_0::IBootControl::getService();
+        if (!hal) {
+            LOG(ERROR) << "Could not find IBootControl HAL";
+            return false;
+        }
+        boot_control_ = android::hardware::boot::V1_1::IBootControl::castFrom(hal);
+        if (!boot_control_) {
+            LOG(ERROR) << "Could not find IBootControl 1.1 HAL";
+            return false;
+        }
+    }
+    if (!boot_control_->setSnapshotMergeStatus(status)) {
+        LOG(ERROR) << "Unable to set the snapshot merge status";
+        return false;
+    }
+    return true;
+#else
+    return false;
+#endif
+}
 
 // Note: IImageManager is an incomplete type in the header, so the default
 // destructor doesn't work.
@@ -1592,6 +1622,35 @@ bool SnapshotManager::WriteUpdateState(LockedFile* file, UpdateState state) {
         PLOG(ERROR) << "Could not write to state file";
         return false;
     }
+
+#ifdef LIBSNAPSHOT_USE_HAL
+    auto merge_status = MergeStatus::UNKNOWN;
+    switch (state) {
+        // The needs-reboot and completed cases imply that /data and /metadata
+        // can be safely wiped, so we don't report a merge status.
+        case UpdateState::None:
+        case UpdateState::MergeNeedsReboot:
+        case UpdateState::MergeCompleted:
+            merge_status = MergeStatus::NONE;
+            break;
+        case UpdateState::Initiated:
+        case UpdateState::Unverified:
+            merge_status = MergeStatus::SNAPSHOTTED;
+            break;
+        case UpdateState::Merging:
+        case UpdateState::MergeFailed:
+            merge_status = MergeStatus::MERGING;
+            break;
+        default:
+            // Note that Cancelled flows to here - it is never written, since
+            // it only communicates a transient state to the caller.
+            LOG(ERROR) << "Unexpected update status: " << state;
+            break;
+    }
+    if (!device_->SetBootControlMergeStatus(merge_status)) {
+        return false;
+    }
+#endif
     return true;
 }
 

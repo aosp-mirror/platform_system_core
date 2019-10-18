@@ -212,7 +212,45 @@ const char* get_sched_policy_name(SchedPolicy policy) {
     };
     static_assert(arraysize(kSchedPolicyNames) == SP_CNT, "missing name");
     if (policy < SP_BACKGROUND || policy >= SP_CNT) {
-        return "error";
+        return nullptr;
     }
     return kSchedPolicyNames[policy];
+}
+
+const char* get_cpuset_policy_profile_name(SchedPolicy policy) {
+    /*
+     *  cpuset profile array for:
+     *  SP_DEFAULT(-1), SP_BACKGROUND(0), SP_FOREGROUND(1),
+     *  SP_SYSTEM(2), SP_AUDIO_APP(3), SP_AUDIO_SYS(4),
+     *  SP_TOP_APP(5), SP_RT_APP(6), SP_RESTRICTED(7)
+     *  index is policy + 1
+     *  this need keep in sync with SchedPolicy enum
+     */
+    static constexpr const char* kCpusetProfiles[SP_CNT + 1] = {
+            "CPUSET_SP_DEFAULT", "CPUSET_SP_BACKGROUND", "CPUSET_SP_FOREGROUND",
+            "CPUSET_SP_SYSTEM",  "CPUSET_SP_FOREGROUND", "CPUSET_SP_FOREGROUND",
+            "CPUSET_SP_TOP_APP", "CPUSET_SP_DEFAULT",    "CPUSET_SP_RESTRICTED"};
+    if (policy < SP_DEFAULT || policy >= SP_CNT) {
+        return nullptr;
+    }
+    return kCpusetProfiles[policy + 1];
+}
+
+const char* get_sched_policy_profile_name(SchedPolicy policy) {
+    /*
+     *  sched profile array for:
+     *  SP_DEFAULT(-1), SP_BACKGROUND(0), SP_FOREGROUND(1),
+     *  SP_SYSTEM(2), SP_AUDIO_APP(3), SP_AUDIO_SYS(4),
+     *  SP_TOP_APP(5), SP_RT_APP(6), SP_RESTRICTED(7)
+     *  index is policy + 1
+     *  this need keep in sync with SchedPolicy enum
+     */
+    static constexpr const char* kSchedProfiles[SP_CNT + 1] = {
+            "SCHED_SP_DEFAULT", "SCHED_SP_BACKGROUND", "SCHED_SP_FOREGROUND",
+            "SCHED_SP_DEFAULT", "SCHED_SP_FOREGROUND", "SCHED_SP_FOREGROUND",
+            "SCHED_SP_TOP_APP", "SCHED_SP_RT_APP",     "SCHED_SP_DEFAULT"};
+    if (policy < SP_DEFAULT || policy >= SP_CNT) {
+        return nullptr;
+    }
+    return kSchedProfiles[policy + 1];
 }
