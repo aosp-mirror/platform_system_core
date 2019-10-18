@@ -30,23 +30,24 @@ class MockDwarfSection : public DwarfSection {
   MockDwarfSection(Memory* memory) : DwarfSection(memory) {}
   virtual ~MockDwarfSection() = default;
 
-  MOCK_METHOD3(Init, bool(uint64_t, uint64_t, int64_t));
+  MOCK_METHOD(bool, Init, (uint64_t, uint64_t, int64_t), (override));
 
-  MOCK_METHOD5(Eval, bool(const DwarfCie*, Memory*, const dwarf_loc_regs_t&, Regs*, bool*));
+  MOCK_METHOD(bool, Eval, (const DwarfCie*, Memory*, const dwarf_loc_regs_t&, Regs*, bool*),
+              (override));
 
-  MOCK_METHOD3(Log, bool(uint8_t, uint64_t, const DwarfFde*));
+  MOCK_METHOD(bool, Log, (uint8_t, uint64_t, const DwarfFde*), (override));
 
-  MOCK_METHOD1(GetFdes, void(std::vector<const DwarfFde*>*));
+  MOCK_METHOD(void, GetFdes, (std::vector<const DwarfFde*>*), (override));
 
-  MOCK_METHOD1(GetFdeFromPc, const DwarfFde*(uint64_t));
+  MOCK_METHOD(const DwarfFde*, GetFdeFromPc, (uint64_t), (override));
 
-  MOCK_METHOD3(GetCfaLocationInfo, bool(uint64_t, const DwarfFde*, dwarf_loc_regs_t*));
+  MOCK_METHOD(bool, GetCfaLocationInfo, (uint64_t, const DwarfFde*, dwarf_loc_regs_t*), (override));
 
-  MOCK_METHOD1(GetCieOffsetFromFde32, uint64_t(uint32_t));
+  MOCK_METHOD(uint64_t, GetCieOffsetFromFde32, (uint32_t), (override));
 
-  MOCK_METHOD1(GetCieOffsetFromFde64, uint64_t(uint64_t));
+  MOCK_METHOD(uint64_t, GetCieOffsetFromFde64, (uint64_t), (override));
 
-  MOCK_METHOD1(AdjustPcFromFde, uint64_t(uint64_t));
+  MOCK_METHOD(uint64_t, AdjustPcFromFde, (uint64_t), (override));
 };
 
 class DwarfSectionTest : public ::testing::Test {

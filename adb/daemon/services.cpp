@@ -54,7 +54,6 @@
 #include "daemon/file_sync_service.h"
 #include "daemon/framebuffer_service.h"
 #include "daemon/reboot_service.h"
-#include "daemon/remount_service.h"
 #include "daemon/restart_service.h"
 #include "daemon/set_verity_enable_state_service.h"
 #include "daemon/shell_service.h"
@@ -251,9 +250,9 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
     if (name.starts_with("framebuffer:")) {
         return create_service_thread("fb", framebuffer_service);
     } else if (android::base::ConsumePrefix(&name, "remount:")) {
-        std::string arg(name);
-        return create_service_thread("remount",
-                                     std::bind(remount_service, std::placeholders::_1, arg));
+        std::string cmd = "/system/bin/remount ";
+        cmd += name;
+        return StartSubprocess(cmd, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
     } else if (android::base::ConsumePrefix(&name, "reboot:")) {
         std::string arg(name);
         return create_service_thread("reboot",

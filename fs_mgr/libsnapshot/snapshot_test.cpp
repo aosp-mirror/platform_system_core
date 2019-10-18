@@ -203,9 +203,9 @@ class SnapshotTest : public ::testing::Test {
                     .block_device = fake_super,
                     .metadata = metadata.get(),
                     .partition = &partition,
-                    .device_name = GetPartitionName(partition) + "-base",
                     .force_writable = true,
                     .timeout_ms = 10s,
+                    .device_name = GetPartitionName(partition) + "-base",
             };
             std::string ignore_path;
             if (!CreateLogicalPartition(params, &ignore_path)) {
@@ -615,6 +615,31 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     // detect a cancelled update.
     ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::Cancelled);
     ASSERT_EQ(sm->GetUpdateState(), UpdateState::None);
+}
+
+TEST_F(SnapshotTest, UpdateBootControlHal) {
+    ASSERT_TRUE(AcquireLock());
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::None));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Initiated));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::SNAPSHOTTED);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Unverified));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::SNAPSHOTTED);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Merging));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::MERGING);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::MergeNeedsReboot));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::MergeCompleted));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
+
+    ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::MergeFailed));
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::MERGING);
 }
 
 class SnapshotUpdateTest : public SnapshotTest {

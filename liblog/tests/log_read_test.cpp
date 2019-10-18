@@ -29,54 +29,6 @@
 // Do not use anything in log/log_time.h despite side effects of the above.
 #include <private/android_logger.h>
 
-TEST(liblog, __android_log_write__android_logger_list_read) {
-#ifdef __ANDROID__
-  pid_t pid = getpid();
-
-  struct logger_list* logger_list;
-  ASSERT_TRUE(
-      NULL !=
-      (logger_list = android_logger_list_open(
-           LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
-
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  std::string buf = android::base::StringPrintf("pid=%u ts=%ld.%09ld", pid,
-                                                ts.tv_sec, ts.tv_nsec);
-  static const char tag[] =
-      "liblog.__android_log_write__android_logger_list_read";
-  static const char prio = ANDROID_LOG_DEBUG;
-  ASSERT_LT(0, __android_log_write(prio, tag, buf.c_str()));
-  usleep(1000000);
-
-  buf = std::string(&prio, sizeof(prio)) + tag + std::string("", 1) + buf +
-        std::string("", 1);
-
-  int count = 0;
-
-  for (;;) {
-    log_msg log_msg;
-    if (android_logger_list_read(logger_list, &log_msg) <= 0) break;
-
-    EXPECT_EQ(log_msg.entry.pid, pid);
-    // There may be a future where we leak "liblog" tagged LOG_ID_EVENT
-    // binary messages through so that logger losses can be correlated?
-    EXPECT_EQ(log_msg.id(), LOG_ID_MAIN);
-
-    if (log_msg.entry.len != buf.length()) continue;
-
-    if (buf != std::string(log_msg.msg(), log_msg.entry.len)) continue;
-
-    ++count;
-  }
-  android_logger_list_close(logger_list);
-
-  EXPECT_EQ(1, count);
-#else
-  GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}
-
 TEST(liblog, android_logger_get_) {
 #ifdef __ANDROID__
   // This test assumes the log buffers are filled with noise from
