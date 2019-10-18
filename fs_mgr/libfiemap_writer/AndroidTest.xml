@@ -24,6 +24,6 @@
         <option name="binary-test-source" value="_32bit::DATA/nativetest/fiemap_writer_test/fiemap_writer_test" />
         <option name="binary-test-source" value="_64bit::DATA/nativetest64/fiemap_writer_test/fiemap_writer_test" />
         <option name="binary-test-type" value="gtest"/>
-        <option name="test-timeout" value="1m"/>
+        <option name="test-timeout" value="2m"/>
     </test>
 </configuration>
