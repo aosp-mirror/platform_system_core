@@ -131,6 +131,7 @@ cc_test {
     ],
     shared_libs: [
         "libbinder",
+        "libcrypto",
         "libhidlbase",
         "libprotobuf-cpp-lite",
         "libutils",
@@ -138,7 +139,6 @@ cc_test {
     static_libs: [
         "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
-        "libcrypto_static",
         "libfs_mgr",
         "libgmock",
         "liblp",
