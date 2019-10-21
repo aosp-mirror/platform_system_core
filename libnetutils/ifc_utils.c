@@ -362,10 +362,12 @@ int ifc_act_on_address(int action, const char *name, const char *address,
     return err->error;
 }
 
+// Returns zero on success and negative errno on failure.
 int ifc_add_address(const char *name, const char *address, int prefixlen) {
     return ifc_act_on_address(RTM_NEWADDR, name, address, prefixlen);
 }
 
+// Returns zero on success and negative errno on failure.
 int ifc_del_address(const char *name, const char * address, int prefixlen) {
     return ifc_act_on_address(RTM_DELADDR, name, address, prefixlen);
 }
