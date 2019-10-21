@@ -104,6 +104,8 @@ class FastBootDriver {
                       std::vector<std::string>* info = nullptr);
     RetCode Upload(const std::string& outfile, std::string* response = nullptr,
                    std::vector<std::string>* info = nullptr);
+    RetCode SnapshotUpdateCommand(const std::string& command, std::string* response = nullptr,
+                                  std::vector<std::string>* info = nullptr);
 
     /* HIGHER LEVEL COMMANDS -- Composed of the commands above */
     RetCode FlashPartition(const std::string& partition, const std::vector<char>& data);
