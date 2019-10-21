@@ -16,29 +16,11 @@
 
 #pragma once
 
+#include <android/log.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef log_id_t_defined
-#define log_id_t_defined
-typedef enum log_id {
-  LOG_ID_MIN = 0,
-
-  LOG_ID_MAIN = 0,
-  LOG_ID_RADIO = 1,
-  LOG_ID_EVENTS = 2,
-  LOG_ID_SYSTEM = 3,
-  LOG_ID_CRASH = 4,
-  LOG_ID_STATS = 5,
-  LOG_ID_SECURITY = 6,
-  LOG_ID_KERNEL = 7, /* place last, third-parties can not use it */
-
-  LOG_ID_MAX
-} log_id_t;
-#endif
-#define sizeof_log_id_t sizeof(typeof_log_id_t)
-#define typeof_log_id_t unsigned char
 
 /*
  * Send a simple string to the log.
