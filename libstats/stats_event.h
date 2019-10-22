@@ -28,7 +28,6 @@
  * Usage:
  *      struct stats_event* event = stats_event_obtain();
  *
- *      stats_event_set_timestamp_ns(event, timestampNs);
  *      stats_event_set_atom_id(event, atomId);
  *      stats_event_write_int32(event, 24);
  *      stats_event_add_bool_annotation(event, 1, true); // annotations apply to the previous field
@@ -41,7 +40,7 @@
  * Notes:
  *    (a) write_<type>() and add_<type>_annotation() should be called in the order that fields
  *        and annotations are defined in the atom.
- *    (b) set_timestamp_ns() and set_atom_id() can be called anytime before stats_event_write().
+ *    (b) set_atom_id() can be called anytime before stats_event_write().
  *    (c) add_<type>_annotation() calls apply to the previous field.
  *    (d) If errors occur, stats_event_write() will write a bitmask of the errors to the socket.
  *    (e) Strings should be encoded using UTF8 and written using stats_event_write_string8().
@@ -60,13 +59,12 @@ struct stats_event;
 #define ERROR_TOO_MANY_ANNOTATIONS 0x80
 #define ERROR_TOO_MANY_FIELDS 0x100
 
-/* System API */
+/* SYSTEM API */
 struct stats_event* stats_event_obtain();
 void stats_event_write(struct stats_event* event);
 void stats_event_release(struct stats_event* event);
 
 void stats_event_set_atom_id(struct stats_event* event, const uint32_t atomId);
-void stats_event_set_timestamp_ns(struct stats_event* event, const uint64_t timestampNs);
 
 void stats_event_write_int32(struct stats_event* event, int32_t value);
 void stats_event_write_int64(struct stats_event* event, int64_t value);
@@ -82,5 +80,8 @@ void stats_event_add_int32_annotation(struct stats_event* event, uint32_t annota
                                       int32_t value);
 
 uint32_t stats_event_get_errors(struct stats_event* event);
+
+/* TESTING ONLY */
+void stats_event_set_timestamp_ns(struct stats_event* event, const uint64_t timestampNs);
 
 #endif  // ANDROID_STATS_LOG_STATS_EVENT_H
