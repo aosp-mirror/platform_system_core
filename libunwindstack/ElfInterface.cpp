@@ -228,7 +228,7 @@ void ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, int64_t* load_bias) 
     case PT_GNU_EH_FRAME:
       // This is really the pointer to the .eh_frame_hdr section.
       eh_frame_hdr_offset_ = phdr.p_offset;
-      eh_frame_hdr_section_bias_ = static_cast<uint64_t>(phdr.p_paddr) - phdr.p_offset;
+      eh_frame_hdr_section_bias_ = static_cast<uint64_t>(phdr.p_vaddr) - phdr.p_offset;
       eh_frame_hdr_size_ = phdr.p_memsz;
       break;
 
