@@ -55,7 +55,6 @@
 #include "daemon/framebuffer_service.h"
 #include "daemon/reboot_service.h"
 #include "daemon/restart_service.h"
-#include "daemon/set_verity_enable_state_service.h"
 #include "daemon/shell_service.h"
 
 
@@ -269,11 +268,11 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
         return StartSubprocess("/system/bin/bu restore", nullptr, SubprocessType::kRaw,
                                SubprocessProtocol::kNone);
     } else if (name.starts_with("disable-verity:")) {
-        return create_service_thread("verity-on", std::bind(set_verity_enabled_state_service,
-                                                            std::placeholders::_1, false));
+        return StartSubprocess("/system/bin/disable-verity", nullptr, SubprocessType::kRaw,
+                               SubprocessProtocol::kNone);
     } else if (name.starts_with("enable-verity:")) {
-        return create_service_thread("verity-off", std::bind(set_verity_enabled_state_service,
-                                                             std::placeholders::_1, true));
+        return StartSubprocess("/system/bin/enable-verity", nullptr, SubprocessType::kRaw,
+                               SubprocessProtocol::kNone);
     } else if (android::base::ConsumePrefix(&name, "tcpip:")) {
         std::string str(name);
 
