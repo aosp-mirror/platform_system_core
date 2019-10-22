@@ -275,6 +275,9 @@ int SaveData(pid_t pid) {
 
     if (maps_by_start.count(frame.map_start) == 0) {
       map_info = maps->Find(frame.map_start);
+      if (map_info == nullptr) {
+        continue;
+      }
 
       auto info = FillInAndGetMapInfo(maps_by_start, map_info);
       bool file_copied = false;
