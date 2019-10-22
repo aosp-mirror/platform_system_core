@@ -200,9 +200,7 @@ int BatteryMonitor::getIntField(const String8& path) {
     return value;
 }
 
-bool BatteryMonitor::update(void) {
-    bool logthis;
-
+void BatteryMonitor::updateValues(void) {
     initBatteryProperties(&props);
 
     if (!mHealthdConfig->batteryPresentPath.isEmpty())
@@ -289,50 +287,44 @@ bool BatteryMonitor::update(void) {
             }
         }
     }
+}
 
-    logthis = !healthd_board_battery_update(&props);
+void BatteryMonitor::logValues(void) {
+    char dmesgline[256];
+    size_t len;
+    if (props.batteryPresent) {
+        snprintf(dmesgline, sizeof(dmesgline), "battery l=%d v=%d t=%s%d.%d h=%d st=%d",
+                 props.batteryLevel, props.batteryVoltage, props.batteryTemperature < 0 ? "-" : "",
+                 abs(props.batteryTemperature / 10), abs(props.batteryTemperature % 10),
+                 props.batteryHealth, props.batteryStatus);
 
-    if (logthis) {
-        char dmesgline[256];
-        size_t len;
-        if (props.batteryPresent) {
-            snprintf(dmesgline, sizeof(dmesgline),
-                 "battery l=%d v=%d t=%s%d.%d h=%d st=%d",
-                 props.batteryLevel, props.batteryVoltage,
-                 props.batteryTemperature < 0 ? "-" : "",
-                 abs(props.batteryTemperature / 10),
-                 abs(props.batteryTemperature % 10), props.batteryHealth,
-                 props.batteryStatus);
-
-            len = strlen(dmesgline);
-            if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
-                len += snprintf(dmesgline + len, sizeof(dmesgline) - len,
-                                " c=%d", props.batteryCurrent);
-            }
-
-            if (!mHealthdConfig->batteryFullChargePath.isEmpty()) {
-                len += snprintf(dmesgline + len, sizeof(dmesgline) - len,
-                                " fc=%d", props.batteryFullCharge);
-            }
-
-            if (!mHealthdConfig->batteryCycleCountPath.isEmpty()) {
-                len += snprintf(dmesgline + len, sizeof(dmesgline) - len,
-                                " cc=%d", props.batteryCycleCount);
-            }
-        } else {
-            len = snprintf(dmesgline, sizeof(dmesgline),
-                 "battery none");
+        len = strlen(dmesgline);
+        if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+            len += snprintf(dmesgline + len, sizeof(dmesgline) - len, " c=%d",
+                            props.batteryCurrent);
         }
 
-        snprintf(dmesgline + len, sizeof(dmesgline) - len, " chg=%s%s%s",
-                 props.chargerAcOnline ? "a" : "",
-                 props.chargerUsbOnline ? "u" : "",
-                 props.chargerWirelessOnline ? "w" : "");
+        if (!mHealthdConfig->batteryFullChargePath.isEmpty()) {
+            len += snprintf(dmesgline + len, sizeof(dmesgline) - len, " fc=%d",
+                            props.batteryFullCharge);
+        }
 
-        KLOG_WARNING(LOG_TAG, "%s\n", dmesgline);
+        if (!mHealthdConfig->batteryCycleCountPath.isEmpty()) {
+            len += snprintf(dmesgline + len, sizeof(dmesgline) - len, " cc=%d",
+                            props.batteryCycleCount);
+        }
+    } else {
+        len = snprintf(dmesgline, sizeof(dmesgline), "battery none");
     }
 
-    healthd_mode_ops->battery_update(&props);
+    snprintf(dmesgline + len, sizeof(dmesgline) - len, " chg=%s%s%s",
+             props.chargerAcOnline ? "a" : "", props.chargerUsbOnline ? "u" : "",
+             props.chargerWirelessOnline ? "w" : "");
+
+    KLOG_WARNING(LOG_TAG, "%s\n", dmesgline);
+}
+
+bool BatteryMonitor::isChargerOnline() {
     return props.chargerAcOnline | props.chargerUsbOnline |
             props.chargerWirelessOnline;
 }
