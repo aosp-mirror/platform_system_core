@@ -28,7 +28,7 @@
 int lmkd_connect() {
     return socket_local_client("lmkd",
                                ANDROID_SOCKET_NAMESPACE_RESERVED,
-                               SOCK_SEQPACKET);
+                               SOCK_SEQPACKET | SOCK_CLOEXEC);
 }
 
 int lmkd_register_proc(int sock, struct lmk_procprio *params) {
