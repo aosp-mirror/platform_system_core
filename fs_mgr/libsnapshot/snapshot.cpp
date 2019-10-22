@@ -342,7 +342,6 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
                                   const std::chrono::milliseconds& timeout_ms,
                                   std::string* dev_path) {
     CHECK(lock);
-    if (!EnsureImageManager()) return false;
 
     SnapshotStatus status;
     if (!ReadSnapshotStatus(lock, name, &status)) {
@@ -1428,7 +1427,6 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
                                     const SnapshotStatus& snapshot_status,
                                     AutoDeviceList* created_devices, std::string* cow_name) {
     CHECK(lock);
-    if (!EnsureImageManager()) return false;
     CHECK(snapshot_status.cow_partition_size() + snapshot_status.cow_file_size() > 0);
     auto begin = std::chrono::steady_clock::now();
 
@@ -1440,6 +1438,7 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
 
     // Map COW image if necessary.
     if (snapshot_status.cow_file_size() > 0) {
+        if (!EnsureImageManager()) return false;
         auto remaining_time = GetRemainingTime(params.timeout_ms, begin);
         if (remaining_time.count() < 0) return false;
 
