@@ -300,6 +300,7 @@ static void handle_new_connection(atransport* t, apacket* p) {
     handle_online(t);
 #else
     if (!auth_required) {
+        LOG(INFO) << "authentication not required";
         handle_online(t);
         send_connect(t);
     } else {
