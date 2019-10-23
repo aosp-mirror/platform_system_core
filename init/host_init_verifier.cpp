@@ -30,6 +30,7 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
+#include <hidl/metadata.h>
 
 #include "action.h"
 #include "action_manager.h"
@@ -142,20 +143,38 @@ static Result<void> check_stub(const BuiltinArguments& args) {
 #include "generated_stub_builtin_function_map.h"
 
 void PrintUsage() {
-    std::cout << "usage: host_init_verifier [-p FILE] -i FILE <init rc file>\n"
+    std::cout << "usage: host_init_verifier [-p FILE] <init rc file>\n"
                  "\n"
                  "Tests an init script for correctness\n"
                  "\n"
                  "-p FILE\tSearch this passwd file for users and groups\n"
-                 "-i FILE\tParse this JSON file for the HIDL interface inheritance hierarchy\n"
               << std::endl;
+}
+
+Result<InterfaceInheritanceHierarchyMap> ReadInterfaceInheritanceHierarchy() {
+    InterfaceInheritanceHierarchyMap result;
+    for (const HidlInterfaceMetadata& iface : HidlInterfaceMetadata::all()) {
+        std::set<FQName> inherited_interfaces;
+        for (const std::string& intf : iface.inherited) {
+            FQName fqname;
+            if (!fqname.setTo(intf)) {
+                return Error() << "Unable to parse interface '" << intf << "'";
+            }
+            inherited_interfaces.insert(fqname);
+        }
+        FQName fqname;
+        if (!fqname.setTo(iface.name)) {
+            return Error() << "Unable to parse interface '" << iface.name << "'";
+        }
+        result[fqname] = inherited_interfaces;
+    }
+
+    return result;
 }
 
 int main(int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::StdioLogger);
     android::base::SetMinimumLogSeverity(android::base::ERROR);
-
-    std::string interface_inheritance_hierarchy_file;
 
     while (true) {
         static const struct option long_options[] = {
@@ -163,7 +182,7 @@ int main(int argc, char** argv) {
                 {nullptr, 0, nullptr, 0},
         };
 
-        int arg = getopt_long(argc, argv, "p:i:", long_options, nullptr);
+        int arg = getopt_long(argc, argv, "p:", long_options, nullptr);
 
         if (arg == -1) {
             break;
@@ -176,9 +195,6 @@ int main(int argc, char** argv) {
             case 'p':
                 passwd_files.emplace_back(optarg);
                 break;
-            case 'i':
-                interface_inheritance_hierarchy_file = optarg;
-                break;
             default:
                 std::cerr << "getprop: getopt returned invalid result: " << arg << std::endl;
                 return EXIT_FAILURE;
@@ -188,13 +204,12 @@ int main(int argc, char** argv) {
     argc -= optind;
     argv += optind;
 
-    if (argc != 1 || interface_inheritance_hierarchy_file.empty()) {
+    if (argc != 1) {
         PrintUsage();
         return EXIT_FAILURE;
     }
 
-    auto interface_inheritance_hierarchy_map =
-            ReadInterfaceInheritanceHierarchy(interface_inheritance_hierarchy_file);
+    auto interface_inheritance_hierarchy_map = ReadInterfaceInheritanceHierarchy();
     if (!interface_inheritance_hierarchy_map) {
         LOG(ERROR) << interface_inheritance_hierarchy_map.error();
         return EXIT_FAILURE;
