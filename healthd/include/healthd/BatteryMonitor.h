@@ -38,11 +38,14 @@ class BatteryMonitor {
 
     BatteryMonitor();
     void init(struct healthd_config *hc);
-    bool update(void);
     int getChargeStatus();
     status_t getProperty(int id, struct BatteryProperty *val);
     void dumpState(int fd);
     friend struct BatteryProperties getBatteryProperties(BatteryMonitor* batteryMonitor);
+
+    void updateValues(void);
+    void logValues(void);
+    bool isChargerOnline();
 
   private:
     struct healthd_config *mHealthdConfig;

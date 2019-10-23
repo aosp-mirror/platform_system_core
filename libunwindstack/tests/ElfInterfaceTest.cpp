@@ -1310,7 +1310,7 @@ void ElfInterfaceTest::CheckGnuEhFrame(uint64_t addr, uint64_t offset, int64_t e
 
   memset(&phdr, 0, sizeof(phdr));
   phdr.p_type = PT_GNU_EH_FRAME;
-  phdr.p_paddr = addr;
+  phdr.p_vaddr = addr;
   phdr.p_offset = offset;
   memory_.SetMemory(phdr_offset, &phdr, sizeof(phdr));
 
