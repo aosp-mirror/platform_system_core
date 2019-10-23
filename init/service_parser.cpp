@@ -29,6 +29,7 @@
 #include <hidl-util/FQName.h>
 #include <system/thread_defs.h>
 
+#include "lmkd_service.h"
 #include "rlimit_parser.h"
 #include "service_utils.h"
 #include "util.h"
@@ -261,8 +262,10 @@ Result<void> ServiceParser::ParseNamespace(std::vector<std::string>&& args) {
 }
 
 Result<void> ServiceParser::ParseOomScoreAdjust(std::vector<std::string>&& args) {
-    if (!ParseInt(args[1], &service_->oom_score_adjust_, -1000, 1000)) {
-        return Error() << "oom_score_adjust value must be in range -1000 - +1000";
+    if (!ParseInt(args[1], &service_->oom_score_adjust_, MIN_OOM_SCORE_ADJUST,
+                  MAX_OOM_SCORE_ADJUST)) {
+        return Error() << "oom_score_adjust value must be in range " << MIN_OOM_SCORE_ADJUST
+                       << " - +" << MAX_OOM_SCORE_ADJUST;
     }
     return {};
 }
