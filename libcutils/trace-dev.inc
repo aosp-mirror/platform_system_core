@@ -32,7 +32,6 @@
 #include <cutils/properties.h>
 #include <cutils/trace.h>
 #include <log/log.h>
-#include <log/log_properties.h>
 
 /**
  * Maximum size of a message that can be logged to the trace buffer.
