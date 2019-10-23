@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef _LIBS_LOG_LOG_TIME_H
+#define _LIBS_LOG_LOG_TIME_H
 
 #include <stdint.h>
 
@@ -29,6 +30,9 @@
 #define MS_PER_SEC 1000ULL
 #endif
 
+#ifndef __struct_log_time_defined
+#define __struct_log_time_defined
+
 #define LOG_TIME_SEC(t) ((t)->tv_sec)
 /* next power of two after NS_PER_SEC */
 #define LOG_TIME_NSEC(t) ((t)->tv_nsec & (UINT32_MAX >> 2))
@@ -37,3 +41,7 @@ typedef struct log_time {
   uint32_t tv_sec;
   uint32_t tv_nsec;
 } __attribute__((__packed__)) log_time;
+
+#endif
+
+#endif /* _LIBS_LOG_LOG_TIME_H */
