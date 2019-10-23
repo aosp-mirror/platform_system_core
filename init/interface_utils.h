@@ -29,9 +29,6 @@ namespace init {
 
 using InterfaceInheritanceHierarchyMap = std::map<android::FQName, std::set<android::FQName>>;
 
-// Reads the HIDL interface inheritance hierarchy JSON file at the given path.
-Result<InterfaceInheritanceHierarchyMap> ReadInterfaceInheritanceHierarchy(const std::string& path);
-
 // For the given set of interfaces / interface instances, checks that each
 // interface's hierarchy of inherited interfaces is also included in the given
 // interface set. Uses the provided hierarchy data.
