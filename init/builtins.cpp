@@ -42,6 +42,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <memory>
+
 #include <ApexProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
@@ -627,6 +629,8 @@ static Result<void> queue_fs_event(int code) {
     return Error() << "Invalid code: " << code;
 }
 
+static int initial_mount_fstab_return_code = -1;
+
 /* mount_all <fstab> [ <path> ]* [--<options>]*
  *
  * This function might request a reboot, in which case it will
@@ -662,6 +666,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     if (!ReadFstabFromFile(fstab_file, &fstab)) {
         return Error() << "Could not read fstab";
     }
+
     auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_mode);
     property_set(prop_name, std::to_string(t.duration().count()));
 
@@ -673,6 +678,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
+        initial_mount_fstab_return_code = mount_fstab_return_code;
         auto queue_fs_result = queue_fs_event(mount_fstab_return_code);
         if (!queue_fs_result) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
@@ -1132,6 +1138,25 @@ static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
     return ExecWithFunctionOnFailure(args, reboot);
 }
 
+static Result<void> do_remount_userdata(const BuiltinArguments& args) {
+    if (initial_mount_fstab_return_code == -1) {
+        return Error() << "Calling remount_userdata too early";
+    }
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        // TODO(b/135984674): should we reboot here?
+        return Error() << "Failed to read fstab";
+    }
+    // TODO(b/135984674): check that fstab contains /data.
+    if (auto rc = fs_mgr_remount_userdata_into_checkpointing(&fstab); rc < 0) {
+        TriggerShutdown("reboot,mount-userdata-failed");
+    }
+    if (auto result = queue_fs_event(initial_mount_fstab_return_code); !result) {
+        return Error() << "queue_fs_event() failed: " << result.error();
+    }
+    return {};
+}
+
 static Result<void> do_installkey(const BuiltinArguments& args) {
     if (!is_file_crypto()) return {};
 
@@ -1243,6 +1268,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"umount",                  {1,     1,    {false,  do_umount}}},
         {"umount_all",              {1,     1,    {false,  do_umount_all}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},
+        {"remount_userdata",        {0,     0,    {false,  do_remount_userdata}}},
         {"restart",                 {1,     1,    {false,  do_restart}}},
         {"restorecon",              {1,     kMax, {true,   do_restorecon}}},
         {"restorecon_recursive",    {1,     kMax, {true,   do_restorecon_recursive}}},
