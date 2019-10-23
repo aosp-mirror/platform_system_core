@@ -1,11 +1,13 @@
 /*Special log.h file for VNDK linking modules*/
 
-#pragma once
+#ifndef _LIBS_LOG_LOG_H
+#define _LIBS_LOG_LOG_H
 
 #include <android/log.h>
 #include <log/log_id.h>
 #include <log/log_main.h>
 #include <log/log_radio.h>
+#include <log/log_read.h>
 #include <log/log_safetynet.h>
 #include <log/log_system.h>
 #include <log/log_time.h>
@@ -20,16 +22,4 @@
 #define LOG_TAG NULL
 #endif
 
-// Legacy dependencies...
-/* deal with possible sys/cdefs.h conflict with fcntl.h */
-#ifdef __unused
-#define __unused_defined __unused
-#undef __unused
-#endif
-
-#include <fcntl.h> /* Pick up O_* macros */
-
-/* restore definitions from above */
-#ifdef __unused_defined
-#define __unused __attribute__((__unused__))
-#endif
+#endif /*_LIBS_LOG_LOG_H*/
