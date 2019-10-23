@@ -404,7 +404,7 @@ static uint32_t SendControlMessage(const std::string& msg, const std::string& na
     // We must release the fd before sending it to init, otherwise there will be a race with init.
     // If init calls close() before Release(), then fdsan will see the wrong tag and abort().
     int fd = -1;
-    if (socket != nullptr) {
+    if (socket != nullptr && SelinuxGetVendorAndroidVersion() > __ANDROID_API_Q__) {
         fd = socket->Release();
         control_message->set_fd(fd);
     }
