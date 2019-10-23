@@ -95,14 +95,14 @@ class MappedZipFile {
   explicit MappedZipFile(const int fd)
       : has_fd_(true), fd_(fd), base_ptr_(nullptr), data_length_(0) {}
 
-  explicit MappedZipFile(void* address, size_t length)
+  explicit MappedZipFile(const void* address, size_t length)
       : has_fd_(false), fd_(-1), base_ptr_(address), data_length_(static_cast<off64_t>(length)) {}
 
   bool HasFd() const { return has_fd_; }
 
   int GetFileDescriptor() const;
 
-  void* GetBasePtr() const;
+  const void* GetBasePtr() const;
 
   off64_t GetFileLength() const;
 
@@ -117,7 +117,7 @@ class MappedZipFile {
 
   const int fd_;
 
-  void* const base_ptr_;
+  const void* const base_ptr_;
   const off64_t data_length_;
 };
 
@@ -129,7 +129,7 @@ class CentralDirectory {
 
   size_t GetMapLength() const { return length_; }
 
-  void Initialize(void* map_base_ptr, off64_t cd_start_offset, size_t cd_size);
+  void Initialize(const void* map_base_ptr, off64_t cd_start_offset, size_t cd_size);
 
  private:
   const uint8_t* base_ptr_;
@@ -177,7 +177,7 @@ struct ZipArchive {
   ZipStringOffset* hash_table;
 
   ZipArchive(const int fd, bool assume_ownership);
-  ZipArchive(void* address, size_t length);
+  ZipArchive(const void* address, size_t length);
   ~ZipArchive();
 
   bool InitializeCentralDirectory(off64_t cd_start_offset, size_t cd_size);
