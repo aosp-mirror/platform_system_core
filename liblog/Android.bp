@@ -105,6 +105,11 @@ cc_library {
         versions: ["10000"],
     },
 
+    // TODO(tomcherry): Renable this before release branch is cut
+    header_abi_checker: {
+        enabled: false,
+    },
+
     cflags: [
         "-Wall",
         "-Werror",
