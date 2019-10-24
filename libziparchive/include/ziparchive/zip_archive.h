@@ -114,7 +114,7 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle);
 int32_t OpenArchiveFd(const int fd, const char* debugFileName, ZipArchiveHandle* handle,
                       bool assume_ownership = true);
 
-int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debugFileName,
+int32_t OpenArchiveFromMemory(const void* address, size_t length, const char* debugFileName,
                               ZipArchiveHandle* handle);
 /*
  * Close archive, releasing resources associated with it. This will
