@@ -513,6 +513,19 @@ cc_binary {
     ],
 }
 
+phony {
+    name: "adbd_system_binaries",
+    required: [
+        "abb",
+    ]
+}
+
+phony {
+    name: "adbd_system_binaries_recovery",
+    required: [
+    ],
+}
+
 cc_binary {
     name: "static_adbd",
     defaults: ["adbd_defaults", "host_adbd_supported"],
