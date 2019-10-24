@@ -254,12 +254,11 @@ class SnapshotTest : public ::testing::Test {
 
     AssertionResult MapCowImage(const std::string& name,
                                 const std::chrono::milliseconds& timeout_ms, std::string* path) {
-        if (!sm->MapCowImage(name, timeout_ms)) {
+        auto cow_image_path = sm->MapCowImage(name, timeout_ms);
+        if (!cow_image_path.has_value()) {
             return AssertionFailure() << "Cannot map cow image " << name;
         }
-        if (!dm_.GetDmDevicePathByName(name + "-cow-img"s, path)) {
-            return AssertionFailure() << "No path for " << name << "-cow-img";
-        }
+        *path = *cow_image_path;
         return AssertionSuccess();
     }
 
