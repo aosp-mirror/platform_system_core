@@ -53,7 +53,6 @@
 
 #include "daemon/file_sync_service.h"
 #include "daemon/framebuffer_service.h"
-#include "daemon/reboot_service.h"
 #include "daemon/restart_service.h"
 #include "daemon/shell_service.h"
 
@@ -253,9 +252,9 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
         cmd += name;
         return StartSubprocess(cmd, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
     } else if (android::base::ConsumePrefix(&name, "reboot:")) {
-        std::string arg(name);
-        return create_service_thread("reboot",
-                                     std::bind(reboot_service, std::placeholders::_1, arg));
+        std::string cmd = "/system/bin/reboot ";
+        cmd += name;
+        return StartSubprocess(cmd, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
     } else if (name.starts_with("root:")) {
         return create_service_thread("root", restart_root_service);
     } else if (name.starts_with("unroot:")) {
