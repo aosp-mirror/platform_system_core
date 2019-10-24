@@ -428,18 +428,10 @@ cc_library {
                 "daemon/abb_service.cpp",
                 "daemon/framebuffer_service.cpp",
                 "daemon/mdns.cpp",
-                "daemon/reboot_service.cpp",
                 "daemon/restart_service.cpp",
-                "daemon/set_verity_enable_state_service.cpp",
-            ],
-            static_libs: [
-                "libavb_user",
             ],
             shared_libs: [
-                "libbootloader_message",
                 "libmdnssd",
-                "libfec",
-                "libfs_mgr",
                 "libselinux",
             ],
         },
@@ -510,6 +502,22 @@ cc_binary {
         "liblog",
         "libminijail",
         "libselinux",
+    ],
+}
+
+phony {
+    name: "adbd_system_binaries",
+    required: [
+        "abb",
+        "reboot",
+        "set-verity-state",
+    ]
+}
+
+phony {
+    name: "adbd_system_binaries_recovery",
+    required: [
+        "reboot.recovery",
     ],
 }
 
@@ -608,7 +616,6 @@ cc_test {
     static_libs: [
         "libadbd",
         "libbase",
-        "libbootloader_message",
         "libcutils",
         "libcrypto_utils",
         "libcrypto_static",
