@@ -67,9 +67,37 @@ static void register_mdns_service(int index, int port) {
     std::string hostname = "adb-";
     hostname += android::base::GetProperty("ro.serialno", "unidentified");
 
-    auto error = DNSServiceRegister(&mdns_refs[index], 0, 0, hostname.c_str(),
-                                    kADBDNSServices[index], nullptr, nullptr,
-                                    htobe16((uint16_t)port), 0, nullptr, mdns_callback, nullptr);
+    // https://tools.ietf.org/html/rfc6763
+    // """
+    // The format of the data within a DNS TXT record is one or more
+    // strings, packed together in memory without any intervening gaps or
+    // padding bytes for word alignment.
+    //
+    // The format of each constituent string within the DNS TXT record is a
+    // single length byte, followed by 0-255 bytes of text data.
+    // """
+    //
+    // Therefore:
+    // 1. Begin with the string length
+    // 2. No null termination
+
+    std::vector<char> txtRecord;
+
+    if (kADBDNSServiceTxtRecords[index]) {
+        size_t txtRecordStringLength = strlen(kADBDNSServiceTxtRecords[index]);
+
+        txtRecord.resize(1 +                    // length byte
+                         txtRecordStringLength  // string bytes
+        );
+
+        txtRecord[0] = (char)txtRecordStringLength;
+        memcpy(txtRecord.data() + 1, kADBDNSServiceTxtRecords[index], txtRecordStringLength);
+    }
+
+    auto error = DNSServiceRegister(
+            &mdns_refs[index], 0, 0, hostname.c_str(), kADBDNSServices[index], nullptr, nullptr,
+            htobe16((uint16_t)port), (uint16_t)txtRecord.size(),
+            txtRecord.empty() ? nullptr : txtRecord.data(), mdns_callback, nullptr);
 
     if (error != kDNSServiceErr_NoError) {
         LOG(ERROR) << "Could not register mDNS service " << kADBDNSServices[index] << ", error ("

@@ -27,10 +27,60 @@ const int kADBTransportServiceRefIndex = 0;
 const int kADBSecurePairingServiceRefIndex = 1;
 const int kADBSecureConnectServiceRefIndex = 2;
 
+// Each ADB Secure service advertises with a TXT record indicating the version
+// using a key/value pair per RFC 6763 (https://tools.ietf.org/html/rfc6763).
+//
+// The first key/value pair is always the version of the protocol.
+// There may be more key/value pairs added after.
+//
+// The version is purposely represented as the single letter "v" due to the
+// need to minimize DNS traffic. The version starts at 1.  With each breaking
+// protocol change, the version is incremented by 1.
+//
+// Newer adb clients/daemons need to recognize and either reject
+// or be backward-compatible with older verseions if there is a mismatch.
+//
+// Relevant sections:
+//
+// """
+// 6.4.  Rules for Keys in DNS-SD Key/Value Pairs
+//
+// The key MUST be at least one character.  DNS-SD TXT record strings
+// beginning with an '=' character (i.e., the key is missing) MUST be
+// silently ignored.
+//
+// ...
+//
+// 6.5.  Rules for Values in DNS-SD Key/Value Pairs
+//
+// If there is an '=' in a DNS-SD TXT record string, then everything
+// after the first '=' to the end of the string is the value.  The value
+// can contain any eight-bit values including '='.
+// """
+
+#define ADB_SECURE_SERVICE_VERSION_TXT_RECORD(ver) ("v=" #ver)
+
+// Client/service versions are initially defined to be matching,
+// but may go out of sync as different clients and services
+// try to talk to each other.
+#define ADB_SECURE_SERVICE_VERSION 1
+#define ADB_SECURE_CLIENT_VERSION ADB_SECURE_SERVICE_VERSION
+
+const char* kADBSecurePairingServiceTxtRecord =
+        ADB_SECURE_SERVICE_VERSION_TXT_RECORD(ADB_SECURE_SERVICE_VERSION);
+const char* kADBSecureConnectServiceTxtRecord =
+        ADB_SECURE_SERVICE_VERSION_TXT_RECORD(ADB_SECURE_SERVICE_VERSION);
+
 const char* kADBDNSServices[] = {
         kADBServiceType,
         kADBSecurePairingServiceType,
         kADBSecureConnectServiceType,
+};
+
+const char* kADBDNSServiceTxtRecords[] = {
+        nullptr,
+        kADBSecurePairingServiceTxtRecord,
+        kADBSecureConnectServiceTxtRecord,
 };
 
 const int kNumADBDNSServices = arraysize(kADBDNSServices);
