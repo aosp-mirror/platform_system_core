@@ -148,24 +148,6 @@ static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
     return 0;
   }
 
-  /*
-   *  struct {
-   *      // what we provide to socket
-   *      android_log_header_t header;
-   *      // caller provides
-   *      union {
-   *          struct {
-   *              char     prio;
-   *              char     payload[];
-   *          } string;
-   *          struct {
-   *              uint32_t tag
-   *              char     payload[];
-   *          } binary;
-   *      };
-   *  };
-   */
-
   header.tid = gettid();
   header.realtime.tv_sec = ts->tv_sec;
   header.realtime.tv_nsec = ts->tv_nsec;
