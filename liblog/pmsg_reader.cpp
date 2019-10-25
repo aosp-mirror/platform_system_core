@@ -144,7 +144,7 @@ static int pmsgRead(struct android_log_logger_list* logger_list,
           ((logger_list->start.tv_sec != buf.l.realtime.tv_sec) ||
            (logger_list->start.tv_nsec <= buf.l.realtime.tv_nsec)))) &&
         (!logger_list->pid || (logger_list->pid == buf.p.pid))) {
-      char* msg = log_msg->entry_v4.msg;
+      char* msg = log_msg->entry.msg;
       *msg = buf.prio;
       fd = atomic_load(&transp->context.fd);
       if (fd <= 0) {
@@ -158,16 +158,16 @@ static int pmsgRead(struct android_log_logger_list* logger_list,
         return -EIO;
       }
 
-      log_msg->entry_v4.len = buf.p.len - sizeof(buf) + sizeof(buf.prio);
-      log_msg->entry_v4.hdr_size = sizeof(log_msg->entry_v4);
-      log_msg->entry_v4.pid = buf.p.pid;
-      log_msg->entry_v4.tid = buf.l.tid;
-      log_msg->entry_v4.sec = buf.l.realtime.tv_sec;
-      log_msg->entry_v4.nsec = buf.l.realtime.tv_nsec;
-      log_msg->entry_v4.lid = buf.l.id;
-      log_msg->entry_v4.uid = buf.p.uid;
+      log_msg->entry.len = buf.p.len - sizeof(buf) + sizeof(buf.prio);
+      log_msg->entry.hdr_size = sizeof(log_msg->entry);
+      log_msg->entry.pid = buf.p.pid;
+      log_msg->entry.tid = buf.l.tid;
+      log_msg->entry.sec = buf.l.realtime.tv_sec;
+      log_msg->entry.nsec = buf.l.realtime.tv_nsec;
+      log_msg->entry.lid = buf.l.id;
+      log_msg->entry.uid = buf.p.uid;
 
-      return ret + sizeof(buf.prio) + log_msg->entry_v4.hdr_size;
+      return ret + sizeof(buf.prio) + log_msg->entry.hdr_size;
     }
 
     fd = atomic_load(&transp->context.fd);
@@ -215,7 +215,7 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
   struct android_log_transport_context transp;
   struct content {
     struct listnode node;
-    struct logger_entry_v4 entry;
+    struct logger_entry entry;
   } * content;
   struct names {
     struct listnode node;
@@ -269,12 +269,12 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
   /* Read the file content */
   while (pmsgRead(&logger_list, &transp, &transp.logMsg) > 0) {
     const char* cp;
-    size_t hdr_size = transp.logMsg.entry.hdr_size ? transp.logMsg.entry.hdr_size
-                                                   : sizeof(transp.logMsg.entry_v1);
+    size_t hdr_size = transp.logMsg.entry.hdr_size;
+
     char* msg = (char*)&transp.logMsg + hdr_size;
     const char* split = NULL;
 
-    if ((hdr_size < sizeof(transp.logMsg.entry_v1)) || (hdr_size > sizeof(transp.logMsg.entry))) {
+    if (hdr_size != sizeof(transp.logMsg.entry)) {
       continue;
     }
     /* Check for invalid sequence number */
