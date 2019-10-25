@@ -92,7 +92,6 @@ static int init_transport_context(struct android_log_logger_list* logger_list) {
 
   logger_list->transport_context.transport = transport;
   logger_list->transport_context.logMask = logMask;
-  logger_list->transport_context.ret = 1;
 #endif
   return 0;
 }
@@ -280,8 +279,6 @@ static int android_transport_read(struct android_log_logger_list* logger_list,
   if (ret > (int)sizeof(*log_msg)) {
     ret = sizeof(*log_msg);
   }
-
-  transp->ret = ret;
 
   if (ret < static_cast<int>(sizeof(log_msg->entry))) {
     return -EINVAL;

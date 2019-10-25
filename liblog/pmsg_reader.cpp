@@ -267,25 +267,26 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
   }
 
   /* Read the file content */
-  while (pmsgRead(&logger_list, &transp, &transp.logMsg) > 0) {
+  log_msg log_msg;
+  while (pmsgRead(&logger_list, &transp, &log_msg) > 0) {
     const char* cp;
-    size_t hdr_size = transp.logMsg.entry.hdr_size;
+    size_t hdr_size = log_msg.entry.hdr_size;
 
-    char* msg = (char*)&transp.logMsg + hdr_size;
+    char* msg = (char*)&log_msg + hdr_size;
     const char* split = NULL;
 
-    if (hdr_size != sizeof(transp.logMsg.entry)) {
+    if (hdr_size != sizeof(log_msg.entry)) {
       continue;
     }
     /* Check for invalid sequence number */
-    if ((transp.logMsg.entry.nsec % ANDROID_LOG_PMSG_FILE_SEQUENCE) ||
-        ((transp.logMsg.entry.nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >=
-         ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE)) {
+    if (log_msg.entry.nsec % ANDROID_LOG_PMSG_FILE_SEQUENCE ||
+        (log_msg.entry.nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >=
+            ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE) {
       continue;
     }
 
     /* Determine if it has <dirbase>:<filebase> format for tag */
-    len = transp.logMsg.entry.len - sizeof(prio);
+    len = log_msg.entry.len - sizeof(prio);
     for (cp = msg + sizeof(prio); *cp && isprint(*cp) && !isspace(*cp) && --len; ++cp) {
       if (*cp == ':') {
         if (split) {
@@ -331,8 +332,8 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
     /* check if there is an existing entry */
     list_for_each(node, &name_list) {
       names = node_to_item(node, struct names, node);
-      if (!strcmp(names->name, msg + sizeof(prio)) && (names->id == transp.logMsg.entry.lid) &&
-          (names->prio == *msg)) {
+      if (!strcmp(names->name, msg + sizeof(prio)) && names->id == log_msg.entry.lid &&
+          names->prio == *msg) {
         break;
       }
     }
@@ -349,7 +350,7 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
         break;
       }
       strcpy(names->name, msg + sizeof(prio));
-      names->id = static_cast<log_id_t>(transp.logMsg.entry.lid);
+      names->id = static_cast<log_id_t>(log_msg.entry.lid);
       names->prio = *msg;
       list_init(&names->content);
       /*
@@ -402,7 +403,7 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
     /* Remove any file fragments that match our sequence number */
     list_for_each_safe(node, n, &names->content) {
       content = node_to_item(node, struct content, node);
-      if (transp.logMsg.entry.nsec == content->entry.nsec) {
+      if (log_msg.entry.nsec == content->entry.nsec) {
         list_remove(&content->node);
         free(content);
       }
@@ -410,16 +411,16 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
 
     /* Add content */
     content = static_cast<struct content*>(
-        calloc(1, sizeof(content->node) + hdr_size + transp.logMsg.entry.len));
+        calloc(1, sizeof(content->node) + hdr_size + log_msg.entry.len));
     if (!content) {
       ret = -ENOMEM;
       break;
     }
-    memcpy(&content->entry, &transp.logMsg.entry, hdr_size + transp.logMsg.entry.len);
+    memcpy(&content->entry, &log_msg.entry, hdr_size + log_msg.entry.len);
 
     /* Insert in sequence number sorted order, to ease reconstruction */
     list_for_each_reverse(node, &names->content) {
-      if ((node_to_item(node, struct content, node))->entry.nsec < transp.logMsg.entry.nsec) {
+      if ((node_to_item(node, struct content, node))->entry.nsec < log_msg.entry.nsec) {
         break;
       }
     }
