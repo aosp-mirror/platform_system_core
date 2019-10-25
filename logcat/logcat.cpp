@@ -337,13 +337,12 @@ static void processBuffer(android_logcat_context_internal* context,
             context->eventTagMap = android_openEventTagMap(nullptr);
             context->hasOpenedEventTagMap = true;
         }
-        err = android_log_processBinaryLogBuffer(
-            &buf->entry_v1, &entry, context->eventTagMap, binaryMsgBuf,
-            sizeof(binaryMsgBuf));
+        err = android_log_processBinaryLogBuffer(&buf->entry, &entry, context->eventTagMap,
+                                                 binaryMsgBuf, sizeof(binaryMsgBuf));
         // printf(">>> pri=%d len=%d msg='%s'\n",
         //    entry.priority, entry.messageLen, entry.message);
     } else {
-        err = android_log_processLogBuffer(&buf->entry_v1, &entry);
+        err = android_log_processLogBuffer(&buf->entry, &entry);
     }
     if ((err < 0) && !context->debug) return;
 
