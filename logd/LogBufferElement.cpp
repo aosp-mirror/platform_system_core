@@ -245,9 +245,9 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
 }
 
 log_time LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent, bool lastSame) {
-    struct logger_entry_v4 entry = {};
+    struct logger_entry entry = {};
 
-    entry.hdr_size = sizeof(struct logger_entry_v4);
+    entry.hdr_size = sizeof(struct logger_entry);
     entry.lid = mLogId;
     entry.pid = mPid;
     entry.tid = mTid;
