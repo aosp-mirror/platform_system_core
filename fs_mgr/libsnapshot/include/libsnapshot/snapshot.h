@@ -19,6 +19,7 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -298,7 +299,8 @@ class SnapshotManager final {
                      std::string* dev_path);
 
     // Map a COW image that was previous created with CreateCowImage.
-    bool MapCowImage(const std::string& name, const std::chrono::milliseconds& timeout_ms);
+    std::optional<std::string> MapCowImage(const std::string& name,
+                                           const std::chrono::milliseconds& timeout_ms);
 
     // Remove the backing copy-on-write image and snapshot states for the named snapshot. The
     // caller is responsible for ensuring that the snapshot is unmapped.

@@ -532,18 +532,12 @@ int android_log_processLogBuffer(struct logger_entry* buf, AndroidLogEntry* entr
 
   int i;
   char* msg = buf->msg;
-  struct logger_entry_v2* buf2 = (struct logger_entry_v2*)buf;
-  if (buf2->hdr_size) {
-    if ((buf2->hdr_size < sizeof(((struct log_msg*)NULL)->entry_v1)) ||
-        (buf2->hdr_size > sizeof(((struct log_msg*)NULL)->entry))) {
-      fprintf(stderr, "+++ LOG: entry illegal hdr_size\n");
-      return -1;
-    }
-    msg = ((char*)buf2) + buf2->hdr_size;
-    if (buf2->hdr_size >= sizeof(struct logger_entry_v4)) {
-      entry->uid = ((struct logger_entry_v4*)buf)->uid;
-    }
+  if (buf->hdr_size != sizeof(struct logger_entry)) {
+    fprintf(stderr, "+++ LOG: entry illegal hdr_size\n");
+    return -1;
   }
+  entry->uid = buf->uid;
+
   for (i = 1; i < buf->len; i++) {
     if (msg[i] == '\0') {
       if (msgStart == -1) {
@@ -993,27 +987,15 @@ int android_log_processBinaryLogBuffer(
   entry->pid = buf->pid;
   entry->tid = buf->tid;
 
-  /*
-   * Pull the tag out, fill in some additional details based on incoming
-   * buffer version (v3 adds lid, v4 adds uid).
-   */
   eventData = (const unsigned char*)buf->msg;
-  struct logger_entry_v2* buf2 = (struct logger_entry_v2*)buf;
-  if (buf2->hdr_size) {
-    if ((buf2->hdr_size < sizeof(((struct log_msg*)NULL)->entry_v1)) ||
-        (buf2->hdr_size > sizeof(((struct log_msg*)NULL)->entry))) {
-      fprintf(stderr, "+++ LOG: entry illegal hdr_size\n");
-      return -1;
-    }
-    eventData = ((unsigned char*)buf2) + buf2->hdr_size;
-    if ((buf2->hdr_size >= sizeof(struct logger_entry_v3)) &&
-        (((struct logger_entry_v3*)buf)->lid == LOG_ID_SECURITY)) {
-      entry->priority = ANDROID_LOG_WARN;
-    }
-    if (buf2->hdr_size >= sizeof(struct logger_entry_v4)) {
-      entry->uid = ((struct logger_entry_v4*)buf)->uid;
-    }
+  if (buf->hdr_size != sizeof(struct logger_entry)) {
+    fprintf(stderr, "+++ LOG: entry illegal hdr_size\n");
+    return -1;
   }
+  if (buf->lid == LOG_ID_SECURITY) {
+    entry->priority = ANDROID_LOG_WARN;
+  }
+  entry->uid = buf->uid;
   inCount = buf->len;
   if (inCount < sizeof(android_event_header_t)) return -1;
   auto* event_header = reinterpret_cast<const android_event_header_t*>(eventData);
@@ -1069,9 +1051,6 @@ int android_log_processBinaryLogBuffer(
   if ((result == 1) && fmtStr) {
     /* We overflowed :-(, let's repaint the line w/o format dressings */
     eventData = (const unsigned char*)buf->msg;
-    if (buf2->hdr_size) {
-      eventData = ((unsigned char*)buf2) + buf2->hdr_size;
-    }
     eventData += 4;
     outBuf = messageBuf;
     outRemaining = messageBufLen - 1;
