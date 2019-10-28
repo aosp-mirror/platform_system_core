@@ -21,6 +21,7 @@ cc_defaults {
         "-Wall",
         "-Wextra",
         "-Werror",
+        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION=1",
     ],
     shared_libs: [
         "libbase",
