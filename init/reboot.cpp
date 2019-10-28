@@ -181,10 +181,17 @@ static void TurnOffBacklight() {
     }
 }
 
-static void ShutdownVold() {
+static Result<void> ShutdownVold() {
     const char* vdc_argv[] = {"/system/bin/vdc", "volume", "shutdown"};
     int status;
-    logwrap_fork_execvp(arraysize(vdc_argv), vdc_argv, &status, false, LOG_KLOG, true, nullptr);
+    if (logwrap_fork_execvp(arraysize(vdc_argv), vdc_argv, &status, false, LOG_KLOG, true,
+                            nullptr) != 0) {
+        return ErrnoError() << "Failed to call 'vdc volume shutdown'";
+    }
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        return {};
+    }
+    return Error() << "'vdc volume shutdown' failed : " << status;
 }
 
 static void LogShutdownTime(UmountStat stat, Timer* t) {
@@ -427,11 +434,11 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
 #define ZRAM_DEVICE   "/dev/block/zram0"
 #define ZRAM_RESET    "/sys/block/zram0/reset"
 #define ZRAM_BACK_DEV "/sys/block/zram0/backing_dev"
-static void KillZramBackingDevice() {
+static Result<void> KillZramBackingDevice() {
     std::string backing_dev;
-    if (!android::base::ReadFileToString(ZRAM_BACK_DEV, &backing_dev)) return;
+    if (!android::base::ReadFileToString(ZRAM_BACK_DEV, &backing_dev)) return {};
 
-    if (!android::base::StartsWith(backing_dev, "/dev/block/loop")) return;
+    if (!android::base::StartsWith(backing_dev, "/dev/block/loop")) return {};
 
     // cut the last "\n"
     backing_dev.erase(backing_dev.length() - 1);
@@ -440,28 +447,29 @@ static void KillZramBackingDevice() {
     Timer swap_timer;
     LOG(INFO) << "swapoff() start...";
     if (swapoff(ZRAM_DEVICE) == -1) {
-        LOG(ERROR) << "zram_backing_dev: swapoff (" << backing_dev << ")" << " failed";
-        return;
+        return ErrnoError() << "zram_backing_dev: swapoff (" << backing_dev << ")"
+                            << " failed";
     }
     LOG(INFO) << "swapoff() took " << swap_timer;;
 
     if (!WriteStringToFile("1", ZRAM_RESET)) {
-        LOG(ERROR) << "zram_backing_dev: reset (" << backing_dev << ")" << " failed";
-        return;
+        return Error() << "zram_backing_dev: reset (" << backing_dev << ")"
+                       << " failed";
     }
 
     // clear loopback device
     unique_fd loop(TEMP_FAILURE_RETRY(open(backing_dev.c_str(), O_RDWR | O_CLOEXEC)));
     if (loop.get() < 0) {
-        LOG(ERROR) << "zram_backing_dev: open(" << backing_dev << ")" << " failed";
-        return;
+        return ErrnoError() << "zram_backing_dev: open(" << backing_dev << ")"
+                            << " failed";
     }
 
     if (ioctl(loop.get(), LOOP_CLR_FD, 0) < 0) {
-        LOG(ERROR) << "zram_backing_dev: loop_clear (" << backing_dev << ")" << " failed";
-        return;
+        return ErrnoError() << "zram_backing_dev: loop_clear (" << backing_dev << ")"
+                            << " failed";
     }
     LOG(INFO) << "zram_backing_dev: `" << backing_dev << "` is cleared successfully.";
+    return {};
 }
 
 // Stops given services, waits for them to be stopped for |timeout| ms.
@@ -738,7 +746,23 @@ static Result<void> DoUserspaceReboot() {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
-    // TODO(b/135984674): remount userdata
+    // We only really need to restart vold if userdata is ext4 filesystem.
+    // TODO(b/135984674): get userdata fs type here, and do nothing in case of f2fs.
+    // First shutdown volumes managed by vold. They will be recreated by
+    // system_server.
+    Service* vold_service = ServiceList::GetInstance().FindService("vold");
+    if (vold_service != nullptr && vold_service->IsRunning()) {
+        if (auto result = ShutdownVold(); !result) {
+            return result;
+        }
+        LOG(INFO) << "Restarting vold";
+        vold_service->Restart();
+    }
+    // Again, we only need to kill zram backing device in case of ext4 userdata.
+    // TODO(b/135984674): get userdata fs type here, and do nothing in case of f2fs.
+    if (auto result = KillZramBackingDevice(); !result) {
+        return result;
+    }
     if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */), 5s,
                                              false /* SIGKILL */);
         r > 0) {
