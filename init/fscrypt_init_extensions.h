@@ -18,5 +18,13 @@
 
 #include <string>
 
-int fscrypt_install_keyring();
-int fscrypt_set_directory_policy(const std::string& dir);
+enum class FscryptAction {
+    kNone,
+    kAttempt,
+    kRequire,
+    kDeleteIfNecessary,
+};
+
+bool FscryptInstallKeyring();
+bool FscryptSetDirectoryPolicy(const std::string& ref_basename, FscryptAction action,
+                               const std::string& dir);

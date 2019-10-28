@@ -364,67 +364,52 @@ static Result<void> do_interface_stop(const BuiltinArguments& args) {
     return {};
 }
 
-// mkdir <path> [mode] [owner] [group]
+// mkdir <path> [mode] [owner] [group] [<option> ...]
 static Result<void> do_mkdir(const BuiltinArguments& args) {
-    mode_t mode = 0755;
-    Result<uid_t> uid = -1;
-    Result<gid_t> gid = -1;
-
-    switch (args.size()) {
-        case 5:
-            gid = DecodeUid(args[4]);
-            if (!gid) {
-                return Error() << "Unable to decode GID for '" << args[4] << "': " << gid.error();
-            }
-            FALLTHROUGH_INTENDED;
-        case 4:
-            uid = DecodeUid(args[3]);
-            if (!uid) {
-                return Error() << "Unable to decode UID for '" << args[3] << "': " << uid.error();
-            }
-            FALLTHROUGH_INTENDED;
-        case 3:
-            mode = std::strtoul(args[2].c_str(), 0, 8);
-            FALLTHROUGH_INTENDED;
-        case 2:
-            break;
-        default:
-            return Error() << "Unexpected argument count: " << args.size();
+    auto options = ParseMkdir(args.args);
+    if (!options) return options.error();
+    std::string ref_basename;
+    if (options->ref_option == "ref") {
+        ref_basename = fscrypt_key_ref;
+    } else if (options->ref_option == "per_boot_ref") {
+        ref_basename = fscrypt_key_per_boot_ref;
+    } else {
+        return Error() << "Unknown key option: '" << options->ref_option << "'";
     }
-    std::string target = args[1];
+
     struct stat mstat;
-    if (lstat(target.c_str(), &mstat) != 0) {
+    if (lstat(options->target.c_str(), &mstat) != 0) {
         if (errno != ENOENT) {
-            return ErrnoError() << "lstat() failed on " << target;
+            return ErrnoError() << "lstat() failed on " << options->target;
         }
-        if (!make_dir(target, mode)) {
-            return ErrnoErrorIgnoreEnoent() << "mkdir() failed on " << target;
+        if (!make_dir(options->target, options->mode)) {
+            return ErrnoErrorIgnoreEnoent() << "mkdir() failed on " << options->target;
         }
-        if (lstat(target.c_str(), &mstat) != 0) {
-            return ErrnoError() << "lstat() failed on new " << target;
+        if (lstat(options->target.c_str(), &mstat) != 0) {
+            return ErrnoError() << "lstat() failed on new " << options->target;
         }
     }
     if (!S_ISDIR(mstat.st_mode)) {
-        return Error() << "Not a directory on " << target;
+        return Error() << "Not a directory on " << options->target;
     }
-    bool needs_chmod = (mstat.st_mode & ~S_IFMT) != mode;
-    if ((*uid != static_cast<uid_t>(-1) && *uid != mstat.st_uid) ||
-        (*gid != static_cast<gid_t>(-1) && *gid != mstat.st_gid)) {
-        if (lchown(target.c_str(), *uid, *gid) == -1) {
-            return ErrnoError() << "lchown failed on " << target;
+    bool needs_chmod = (mstat.st_mode & ~S_IFMT) != options->mode;
+    if ((options->uid != static_cast<uid_t>(-1) && options->uid != mstat.st_uid) ||
+        (options->gid != static_cast<gid_t>(-1) && options->gid != mstat.st_gid)) {
+        if (lchown(options->target.c_str(), options->uid, options->gid) == -1) {
+            return ErrnoError() << "lchown failed on " << options->target;
         }
         // chown may have cleared S_ISUID and S_ISGID, chmod again
         needs_chmod = true;
     }
     if (needs_chmod) {
-        if (fchmodat(AT_FDCWD, target.c_str(), mode, AT_SYMLINK_NOFOLLOW) == -1) {
-            return ErrnoError() << "fchmodat() failed on " << target;
+        if (fchmodat(AT_FDCWD, options->target.c_str(), options->mode, AT_SYMLINK_NOFOLLOW) == -1) {
+            return ErrnoError() << "fchmodat() failed on " << options->target;
         }
     }
     if (fscrypt_is_native()) {
-        if (fscrypt_set_directory_policy(target)) {
+        if (!FscryptSetDirectoryPolicy(ref_basename, options->fscrypt_action, options->target)) {
             return reboot_into_recovery(
-                    {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + target});
+                    {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + options->target});
         }
     }
     return {};
@@ -589,8 +574,8 @@ static Result<void> queue_fs_event(int code) {
         return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
-        if (fscrypt_install_keyring()) {
-            return Error() << "fscrypt_install_keyring() failed";
+        if (!FscryptInstallKeyring()) {
+            return Error() << "FscryptInstallKeyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -600,8 +585,8 @@ static Result<void> queue_fs_event(int code) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
-        if (fscrypt_install_keyring()) {
-            return Error() << "fscrypt_install_keyring() failed";
+        if (!FscryptInstallKeyring()) {
+            return Error() << "FscryptInstallKeyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -611,8 +596,8 @@ static Result<void> queue_fs_event(int code) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
-        if (fscrypt_install_keyring()) {
-            return Error() << "fscrypt_install_keyring() failed";
+        if (!FscryptInstallKeyring()) {
+            return Error() << "FscryptInstallKeyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "file");
@@ -1257,7 +1242,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"load_system_props",       {0,     0,    {false,  do_load_system_props}}},
         {"loglevel",                {1,     1,    {false,  do_loglevel}}},
         {"mark_post_data",          {0,     0,    {false,  do_mark_post_data}}},
-        {"mkdir",                   {1,     4,    {true,   do_mkdir}}},
+        {"mkdir",                   {1,     6,    {true,   do_mkdir}}},
         // TODO: Do mount operations in vendor_init.
         // mount_all is currently too complex to run in vendor_init as it queues action triggers,
         // imports rc scripts, etc.  It should be simplified and run in vendor_init context.
