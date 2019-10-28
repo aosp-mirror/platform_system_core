@@ -23,10 +23,7 @@
 
 #include "logcat.h"
 
-int main(int argc, char** argv, char** envp) {
-    android_logcat_context ctx = create_android_logcat();
-    if (!ctx) return -1;
-
+int main(int argc, char** argv) {
     signal(SIGPIPE, exit);
 
     // Save and detect presence of -L or --last flag
@@ -46,8 +43,7 @@ int main(int argc, char** argv, char** envp) {
     int ret = 0;
     if (last) {
         // Run logcat command with -L flag
-        ret = android_logcat_run_command(ctx, -1, -1, argv_hold.size() - 1,
-                                         (char* const*)&argv_hold[0], envp);
+        ret = RunLogcat(argv_hold.size() - 1, (char**)&argv_hold[0]);
         // Remove -L and --last flags from argument list
         for (std::vector<const char*>::iterator it = argv_hold.begin();
              it != argv_hold.end();) {
@@ -62,10 +58,7 @@ int main(int argc, char** argv, char** envp) {
     }
 
     // Run logcat command without -L flag
-    int retval = android_logcat_run_command(ctx, -1, -1, argv_hold.size() - 1,
-                                            (char* const*)&argv_hold[0], envp);
-    if (!ret) ret = retval;
-    retval = android_logcat_destroy(&ctx);
+    int retval = RunLogcat(argv_hold.size() - 1, (char**)&argv_hold[0]);
     if (!ret) ret = retval;
     return ret;
 }
