@@ -79,6 +79,12 @@ struct ZipEntry {
 
   // The offset to the start of data for this ZipEntry.
   off64_t offset;
+
+  // The version of zip and the host file system this came from.
+  uint16_t version_made_by;
+
+  // Whether this entry is believed to be text or binary.
+  bool is_text;
 };
 
 struct ZipArchive;
@@ -124,6 +130,19 @@ int32_t OpenArchiveFromMemory(const void* address, size_t length, const char* de
  * call to one of the OpenArchive variants.
  */
 void CloseArchive(ZipArchiveHandle archive);
+
+/** See GetArchiveInfo(). */
+struct ZipArchiveInfo {
+  /** The size in bytes of the archive itself. Used by zipinfo. */
+  off64_t archive_size;
+  /** The number of entries in the archive. */
+  size_t entry_count;
+};
+
+/**
+ * Returns information about the given archive.
+ */
+ZipArchiveInfo GetArchiveInfo(ZipArchiveHandle archive);
 
 /*
  * Find an entry in the Zip archive, by name. |data| must be non-null.
