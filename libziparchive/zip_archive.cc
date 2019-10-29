@@ -622,11 +622,15 @@ static int32_t FindEntry(const ZipArchive* archive, const int32_t ent, ZipEntry*
 
   // 4.4.2.1: the upper byte of `version_made_by` gives the source OS. Unix is 3.
   data->version_made_by = cdr->version_made_by;
+  data->external_file_attributes = cdr->external_file_attributes;
   if ((data->version_made_by >> 8) == 3) {
     data->unix_mode = (cdr->external_file_attributes >> 16) & 0xffff;
   } else {
     data->unix_mode = 0777;
   }
+
+  // 4.4.4: general purpose bit flags.
+  data->gpbf = lfh->gpb_flags;
 
   // 4.4.14: the lowest bit of the internal file attributes field indicates text.
   // Currently only needed to implement zipinfo.
