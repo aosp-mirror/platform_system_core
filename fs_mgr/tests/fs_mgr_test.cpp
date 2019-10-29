@@ -948,3 +948,10 @@ source none4       swap   defaults      zram_backingdev_size=2m
     EXPECT_EQ(2U * 1024U * 1024U, entry->zram_backingdev_size);
     entry++;
 }
+
+TEST(fs_mgr, DefaultFstabContainsUserdata) {
+    Fstab fstab;
+    ASSERT_TRUE(ReadDefaultFstab(&fstab)) << "Failed to read default fstab";
+    ASSERT_NE(nullptr, GetEntryForMountPoint(&fstab, "/data"))
+            << "Default fstab doesn't contain /data entry";
+}
