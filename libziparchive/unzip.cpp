@@ -34,13 +34,21 @@
 #include <android-base/strings.h>
 #include <ziparchive/zip_archive.h>
 
+using android::base::EndsWith;
+using android::base::StartsWith;
+
 enum OverwriteMode {
   kAlways,
   kNever,
   kPrompt,
 };
 
-static bool is_unzip;
+enum Role {
+  kUnzip,
+  kZipinfo,
+};
+
+static Role role;
 static OverwriteMode overwrite_mode = kPrompt;
 static bool flag_1 = false;
 static const char* flag_d = nullptr;
@@ -92,7 +100,7 @@ static int CompressionRatio(int64_t uncompressed, int64_t compressed) {
 }
 
 static void MaybeShowHeader(ZipArchiveHandle zah) {
-  if (is_unzip) {
+  if (role == kUnzip) {
     // unzip has three formats.
     if (!flag_q) printf("Archive:  %s\n", archive_name);
     if (flag_v) {
@@ -116,7 +124,7 @@ static void MaybeShowHeader(ZipArchiveHandle zah) {
 }
 
 static void MaybeShowFooter() {
-  if (is_unzip) {
+  if (role == kUnzip) {
     if (flag_v) {
       printf(
           "--------          -------  ---                            -------\n"
@@ -185,8 +193,7 @@ static void ExtractToPipe(ZipArchiveHandle zah, ZipEntry& entry, const std::stri
 
 static void ExtractOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string& name) {
   // Bad filename?
-  if (android::base::StartsWith(name, "/") || android::base::StartsWith(name, "../") ||
-      name.find("/../") != std::string::npos) {
+  if (StartsWith(name, "/") || StartsWith(name, "../") || name.find("/../") != std::string::npos) {
     error(1, 0, "bad filename %s", name.c_str());
   }
 
@@ -194,7 +201,7 @@ static void ExtractOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string&
   std::string dst;
   if (flag_d) {
     dst = flag_d;
-    if (!android::base::EndsWith(dst, "/")) dst += '/';
+    if (!EndsWith(dst, "/")) dst += '/';
   }
   dst += name;
 
@@ -204,7 +211,7 @@ static void ExtractOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string&
   }
 
   // An entry in a zip file can just be a directory itself.
-  if (android::base::EndsWith(name, "/")) {
+  if (EndsWith(name, "/")) {
     if (mkdir(name.c_str(), entry.unix_mode) == -1) {
       // If the directory already exists, that's fine.
       if (errno == EEXIST) {
@@ -258,9 +265,26 @@ static void InfoOne(const ZipEntry& entry, const std::string& name) {
   int version = entry.version_made_by & 0xff;
   int os = (entry.version_made_by >> 8) & 0xff;
 
-  // TODO: Support suid/sgid? Non-Unix host file system attributes?
-  char mode[] = "??????????";
-  if (os == 3) {
+  // TODO: Support suid/sgid? Non-Unix/non-FAT host file system attributes?
+  const char* src_fs = "???";
+  char mode[] = "???       ";
+  if (os == 0) {
+    src_fs = "fat";
+    // https://docs.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+    int attrs = entry.external_file_attributes & 0xff;
+    mode[0] = (attrs & 0x10) ? 'd' : '-';
+    mode[1] = 'r';
+    mode[2] = (attrs & 0x01) ? '-' : 'w';
+    // The man page also mentions ".btm", but that seems to be obsolete?
+    mode[3] = EndsWith(name, ".exe") || EndsWith(name, ".com") || EndsWith(name, ".bat") ||
+                      EndsWith(name, ".cmd")
+                  ? 'x'
+                  : '-';
+    mode[4] = (attrs & 0x20) ? 'a' : '-';
+    mode[5] = (attrs & 0x02) ? 'h' : '-';
+    mode[6] = (attrs & 0x04) ? 's' : '-';
+  } else if (os == 3) {
+    src_fs = "unx";
     mode[0] = S_ISDIR(entry.unix_mode) ? 'd' : (S_ISREG(entry.unix_mode) ? '-' : '?');
     mode[1] = entry.unix_mode & S_IRUSR ? 'r' : '-';
     mode[2] = entry.unix_mode & S_IWUSR ? 'w' : '-';
@@ -273,6 +297,11 @@ static void InfoOne(const ZipEntry& entry, const std::string& name) {
     mode[9] = entry.unix_mode & S_IXOTH ? 'x' : '-';
   }
 
+  char method[5] = "stor";
+  if (entry.method == kCompressDeflated) {
+    snprintf(method, sizeof(method), "def%c", "NXFS"[(entry.gpbf >> 1) & 0x3]);
+  }
+
   // TODO: zipinfo (unlike unzip) sometimes uses time zone?
   // TODO: this uses 4-digit years because we're not barbarians unless interoperability forces it.
   tm t = entry.GetModificationTime();
@@ -281,14 +310,13 @@ static void InfoOne(const ZipEntry& entry, const std::string& name) {
            t.tm_mday, t.tm_hour, t.tm_min);
 
   // "-rw-r--r--  3.0 unx      577 t- defX 19-Feb-12 16:09 android-ndk-r19b/sources/android/NOTICE"
-  printf("%s %2d.%d %s %8d %c%c %s %s %s\n", mode, version / 10, version % 10,
-         os == 3 ? "unx" : "???", entry.uncompressed_length, entry.is_text ? 't' : 'b',
-         entry.has_data_descriptor ? 'X' : 'x', entry.method == kCompressStored ? "stor" : "defX",
-         time, name.c_str());
+  printf("%s %2d.%d %s %8d %c%c %s %s %s\n", mode, version / 10, version % 10, src_fs,
+         entry.uncompressed_length, entry.is_text ? 't' : 'b',
+         entry.has_data_descriptor ? 'X' : 'x', method, time, name.c_str());
 }
 
 static void ProcessOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string& name) {
-  if (is_unzip) {
+  if (role == kUnzip) {
     if (flag_l || flag_v) {
       // -l or -lv or -lq or -v.
       ListOne(entry, name);
@@ -333,7 +361,7 @@ static void ProcessAll(ZipArchiveHandle zah) {
 }
 
 static void ShowHelp(bool full) {
-  if (is_unzip) {
+  if (role == kUnzip) {
     fprintf(full ? stdout : stderr, "usage: unzip [-d DIR] [-lnopqv] ZIP [FILE...] [-x FILE...]\n");
     if (!full) exit(EXIT_FAILURE);
 
@@ -391,12 +419,22 @@ static void HandleCommonOption(int opt) {
 }
 
 int main(int argc, char* argv[]) {
-  static struct option opts[] = {
+  // Who am I, and what am I doing?
+  const char* base = basename(argv[0]);
+  if (!strcmp(base, "ziptool") && argc > 1) return main(argc - 1, argv + 1);
+  if (!strcmp(base, "unzip")) {
+    role = kUnzip;
+  } else if (!strcmp(base, "zipinfo")) {
+    role = kZipinfo;
+  } else {
+    error(1, 0, "run as ziptool with unzip or zipinfo as the first argument, or symlink");
+  }
+
+  static const struct option opts[] = {
       {"help", no_argument, 0, 'h'},
   };
 
-  is_unzip = !strcmp(basename(argv[0]), "unzip");
-  if (is_unzip) {
+  if (role == kUnzip) {
     int opt;
     while ((opt = getopt_long(argc, argv, "-d:hlnopqvx", opts, nullptr)) != -1) {
       switch (opt) {
