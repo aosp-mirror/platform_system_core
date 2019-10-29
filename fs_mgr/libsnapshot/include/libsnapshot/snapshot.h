@@ -33,6 +33,8 @@
 #include <liblp/liblp.h>
 #include <update_engine/update_metadata.pb.h>
 
+#include <libsnapshot/auto_device.h>
+
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
     friend class test_set_name##_##individual_test##_Test
@@ -120,6 +122,7 @@ class SnapshotManager final {
         virtual const IPartitionOpener& GetPartitionOpener() const = 0;
         virtual bool IsOverlayfsSetup() const = 0;
         virtual bool SetBootControlMergeStatus(MergeStatus status) = 0;
+        virtual bool IsRecovery() const = 0;
     };
 
     ~SnapshotManager();
@@ -208,6 +211,22 @@ class SnapshotManager final {
 
     // Dump debug information.
     bool Dump(std::ostream& os);
+
+    // Ensure metadata directory is mounted in recovery. When the returned
+    // AutoDevice is destroyed, the metadata directory is automatically
+    // unmounted.
+    // Return nullptr if any failure.
+    // In Android mode, Return an AutoDevice that does nothing
+    // In recovery, return an AutoDevice that does nothing if metadata entry
+    // is not found in fstab.
+    // Note: if this function is called the second time before the AutoDevice returned from the
+    // first call is destroyed, the device will be unmounted when any of these AutoDevices is
+    // destroyed. FOr example:
+    //   auto a = mgr->EnsureMetadataMounted(); // mounts
+    //   auto b = mgr->EnsureMetadataMounted(); // does nothing
+    //   b.reset() // unmounts
+    //   a.reset() // does nothing
+    std::unique_ptr<AutoDevice> EnsureMetadataMounted();
 
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);

@@ -26,6 +26,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <fs_mgr/roots.h>
 #include <fs_mgr_dm_linear.h>
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
@@ -47,7 +48,10 @@ using android::fiemap::IImageManager;
 using android::fs_mgr::BlockDeviceInfo;
 using android::fs_mgr::CreateLogicalPartitionParams;
 using android::fs_mgr::DestroyLogicalPartition;
+using android::fs_mgr::EnsurePathMounted;
+using android::fs_mgr::EnsurePathUnmounted;
 using android::fs_mgr::Extent;
+using android::fs_mgr::Fstab;
 using android::fs_mgr::GetPartitionGroupName;
 using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::Interval;
@@ -1056,6 +1060,64 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
     }
 }
 
+class MetadataMountedTest : public SnapshotUpdateTest {
+  public:
+    void SetUp() override {
+        metadata_dir_ = test_device->GetMetadataDir();
+        ASSERT_TRUE(ReadDefaultFstab(&fstab_));
+    }
+    void TearDown() override {
+        SetUp();
+        // Remount /metadata
+        test_device->set_recovery(false);
+        EXPECT_TRUE(android::fs_mgr::EnsurePathMounted(&fstab_, metadata_dir_));
+    }
+    AssertionResult IsMetadataMounted() {
+        Fstab mounted_fstab;
+        if (!ReadFstabFromFile("/proc/mounts", &mounted_fstab)) {
+            ADD_FAILURE() << "Failed to scan mounted volumes";
+            return AssertionFailure() << "Failed to scan mounted volumes";
+        }
+
+        auto entry = GetEntryForPath(&fstab_, metadata_dir_);
+        if (entry == nullptr) {
+            return AssertionFailure() << "No mount point found in fstab for path " << metadata_dir_;
+        }
+
+        auto mv = GetEntryForMountPoint(&mounted_fstab, entry->mount_point);
+        if (mv == nullptr) {
+            return AssertionFailure() << metadata_dir_ << " is not mounted";
+        }
+        return AssertionSuccess() << metadata_dir_ << " is mounted";
+    }
+    std::string metadata_dir_;
+    Fstab fstab_;
+};
+
+TEST_F(MetadataMountedTest, Android) {
+    auto device = sm->EnsureMetadataMounted();
+    EXPECT_NE(nullptr, device);
+    device.reset();
+
+    EXPECT_TRUE(IsMetadataMounted());
+    EXPECT_TRUE(sm->CancelUpdate()) << "Metadata dir should never be unmounted in Android mode";
+}
+
+TEST_F(MetadataMountedTest, Recovery) {
+    test_device->set_recovery(true);
+    metadata_dir_ = test_device->GetMetadataDir();
+
+    EXPECT_TRUE(android::fs_mgr::EnsurePathUnmounted(&fstab_, metadata_dir_));
+    EXPECT_FALSE(IsMetadataMounted());
+
+    auto device = sm->EnsureMetadataMounted();
+    EXPECT_NE(nullptr, device);
+    EXPECT_TRUE(IsMetadataMounted());
+
+    device.reset();
+    EXPECT_FALSE(IsMetadataMounted());
+}
+
 }  // namespace snapshot
 }  // namespace android
 
@@ -1097,6 +1159,7 @@ int main(int argc, char** argv) {
     }
 
     // Clean up previous run.
+    MetadataMountedTest().TearDown();
     SnapshotUpdateTest().Cleanup();
     SnapshotTest().Cleanup();
 
