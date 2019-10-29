@@ -784,9 +784,17 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     }
 
     // Grow all partitions.
-    SetSize(sys_, 3788_KiB);
-    SetSize(vnd_, 3788_KiB);
-    SetSize(prd_, 3788_KiB);
+    constexpr uint64_t partition_size = 3788_KiB;
+    SetSize(sys_, partition_size);
+    SetSize(vnd_, partition_size);
+    SetSize(prd_, partition_size);
+
+    // Create fake install operations to grow the COW device size.
+    for (auto& partition : {sys_, vnd_, prd_}) {
+        auto e = partition->add_operations()->add_dst_extents();
+        e->set_start_block(0);
+        e->set_num_blocks(GetSize(partition) / manifest_.block_size());
+    }
 
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -948,6 +956,13 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->UnmapUpdateSnapshot("sys_b"));
+
+    // Create fake install operations to grow the COW device size.
+    for (auto& partition : {sys_, vnd_, prd_}) {
+        auto e = partition->add_operations()->add_dst_extents();
+        e->set_start_block(0);
+        e->set_num_blocks(GetSize(partition) / manifest_.block_size());
+    }
 
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 

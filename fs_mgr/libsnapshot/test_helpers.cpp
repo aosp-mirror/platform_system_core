@@ -140,5 +140,9 @@ void SetSize(PartitionUpdate* partition_update, uint64_t size) {
     partition_update->mutable_new_partition_info()->set_size(size);
 }
 
+uint64_t GetSize(PartitionUpdate* partition_update) {
+    return partition_update->mutable_new_partition_info()->size();
+}
+
 }  // namespace snapshot
 }  // namespace android
