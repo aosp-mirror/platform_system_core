@@ -179,6 +179,7 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
                 {"nodiratime", MS_NODIRATIME},
                 {"ro", MS_RDONLY},
                 {"rw", 0},
+                {"sync", MS_SYNCHRONOUS},
                 {"remount", MS_REMOUNT},
                 {"bind", MS_BIND},
                 {"rec", MS_REC},
@@ -197,7 +198,7 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
         if (!(entry.flags & MS_RDONLY)) {
             fs_options.emplace("rw");
         }
-        EXPECT_EQ(mnt_opts, fs_options);
+        EXPECT_EQ(mnt_opts, fs_options) << "At line " << i;
         ++i;
     }
     EXPECT_EQ(i, fstab.size());
