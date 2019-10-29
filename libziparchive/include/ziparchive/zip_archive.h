@@ -40,8 +40,8 @@ enum {
  * Represents information about a zip entry in a zip file.
  */
 struct ZipEntry {
-  // Compression method: One of kCompressStored or
-  // kCompressDeflated.
+  // Compression method. One of kCompressStored or kCompressDeflated.
+  // See also `gpbf` for deflate subtypes.
   uint16_t method;
 
   // Modification time. The zipfile format specifies
@@ -55,7 +55,7 @@ struct ZipEntry {
   struct tm GetModificationTime() const;
 
   // Suggested Unix mode for this entry, from the zip archive if created on
-  // Unix, or a default otherwise.
+  // Unix, or a default otherwise. See also `external_file_attributes`.
   mode_t unix_mode;
 
   // 1 if this entry contains a data descriptor segment, 0
@@ -80,10 +80,16 @@ struct ZipEntry {
   // The offset to the start of data for this ZipEntry.
   off64_t offset;
 
-  // The version of zip and the host file system this came from.
+  // The version of zip and the host file system this came from (for zipinfo).
   uint16_t version_made_by;
 
-  // Whether this entry is believed to be text or binary.
+  // The raw attributes, whose interpretation depends on the host
+  // file system in `version_made_by` (for zipinfo). See also `unix_mode`.
+  uint32_t external_file_attributes;
+
+  // Specifics about the deflation (for zipinfo).
+  uint16_t gpbf;
+  // Whether this entry is believed to be text or binary (for zipinfo).
   bool is_text;
 };
 
