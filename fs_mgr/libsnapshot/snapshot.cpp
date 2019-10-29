@@ -1793,6 +1793,14 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
     auto target_metadata =
             MetadataBuilder::NewForUpdate(opener, current_super, current_slot, target_slot);
 
+    // Delete partitions with target suffix in |current_metadata|. Otherwise,
+    // partition_cow_creator recognizes these left-over partitions as used space.
+    for (const auto& group_name : current_metadata->ListGroups()) {
+        if (android::base::EndsWith(group_name, target_suffix)) {
+            current_metadata->RemoveGroupAndPartitions(group_name);
+        }
+    }
+
     SnapshotMetadataUpdater metadata_updater(target_metadata.get(), target_slot, manifest);
     if (!metadata_updater.Update()) {
         LOG(ERROR) << "Cannot calculate new metadata.";
