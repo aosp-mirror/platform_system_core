@@ -50,9 +50,7 @@ struct FstabEntry {
     off64_t logical_blk_size = 0;
     std::string sysfs_path;
     std::string vbmeta_partition;
-    std::string zram_loopback_path;
-    uint64_t zram_loopback_size = 512 * 1024 * 1024;  // 512MB by default;
-    std::string zram_backing_dev_path;
+    uint64_t zram_backingdev_size = 0;
     std::string avb_keys;
 
     struct FsMgrFlags {
