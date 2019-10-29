@@ -962,3 +962,10 @@ source none5       swap   defaults      zram_backing_dev_path=/dev/path2
     EXPECT_EQ("none5", entry->mount_point);
     EXPECT_EQ("/dev/path2", entry->zram_backing_dev_path);
 }
+
+TEST(fs_mgr, DefaultFstabContainsUserdata) {
+    Fstab fstab;
+    ASSERT_TRUE(ReadDefaultFstab(&fstab)) << "Failed to read default fstab";
+    ASSERT_NE(nullptr, GetEntryForMountPoint(&fstab, "/data"))
+            << "Default fstab doesn't contain /data entry";
+}
