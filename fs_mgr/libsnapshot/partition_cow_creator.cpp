@@ -17,8 +17,9 @@
 #include <math.h>
 
 #include <android-base/logging.h>
-
 #include <android/snapshot/snapshot.pb.h>
+
+#include "dm_snapshot_internals.h"
 #include "utility.h"
 
 using android::dm::kSectorSize;
@@ -32,13 +33,6 @@ using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 
 namespace android {
 namespace snapshot {
-
-// Round |d| up to a multiple of |block_size|.
-static uint64_t RoundUp(double d, uint64_t block_size) {
-    uint64_t ret = ((uint64_t)ceil(d) + block_size - 1) / block_size * block_size;
-    CHECK(ret >= d) << "Can't round " << d << " up to a multiple of " << block_size;
-    return ret;
-}
 
 // Intersect two linear extents. If no intersection, return an extent with length 0.
 static std::unique_ptr<Extent> Intersect(Extent* target_extent, Extent* existing_extent) {
@@ -68,33 +62,58 @@ bool PartitionCowCreator::HasExtent(Partition* p, Extent* e) {
     return false;
 }
 
-std::optional<uint64_t> PartitionCowCreator::GetCowSize(uint64_t snapshot_size) {
-    // TODO: Use |operations|. to determine a minimum COW size.
-    // kCowEstimateFactor is good for prototyping but we can't use that in production.
-    static constexpr double kCowEstimateFactor = 1.05;
-    auto cow_size = RoundUp(snapshot_size * kCowEstimateFactor, kDefaultBlockSize);
-    return cow_size;
+uint64_t PartitionCowCreator::GetCowSize() {
+    // WARNING: The origin partition should be READ-ONLY
+    const uint64_t logical_block_size = current_metadata->logical_block_size();
+    const unsigned int sectors_per_block = logical_block_size / kSectorSize;
+    DmSnapCowSizeCalculator sc(kSectorSize, kSnapshotChunkSize);
+
+    if (operations == nullptr) return sc.cow_size_bytes();
+
+    for (const auto& iop : *operations) {
+        for (const auto& de : iop.dst_extents()) {
+            // Skip if no blocks are written
+            if (de.num_blocks() == 0) continue;
+
+            // Flag all the blocks that were written
+            const auto block_boundary = de.start_block() + de.num_blocks();
+            for (auto b = de.start_block(); b < block_boundary; ++b) {
+                for (unsigned int s = 0; s < sectors_per_block; ++s) {
+                    const auto sector_id = b * sectors_per_block + s;
+                    sc.WriteSector(sector_id);
+                }
+            }
+        }
+    }
+
+    return sc.cow_size_bytes();
 }
 
 std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     CHECK(current_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME &&
           target_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME);
 
-    uint64_t logical_block_size = current_metadata->logical_block_size();
+    const uint64_t logical_block_size = current_metadata->logical_block_size();
     CHECK(logical_block_size != 0 && !(logical_block_size & (logical_block_size - 1)))
             << "logical_block_size is not power of 2";
 
     Return ret;
     ret.snapshot_status.set_name(target_partition->name());
     ret.snapshot_status.set_device_size(target_partition->size());
-
-    // TODO(b/141889746): Optimize by using a smaller snapshot. Some ranges in target_partition
-    // may be written directly.
     ret.snapshot_status.set_snapshot_size(target_partition->size());
 
-    auto cow_size = GetCowSize(ret.snapshot_status.snapshot_size());
-    if (!cow_size.has_value()) return std::nullopt;
-
+    // Being the COW partition virtual, its size doesn't affect the storage
+    // memory that will be occupied by the target.
+    // The actual storage space is affected by the COW file, whose size depends
+    // on the chunks that diverged between |current| and |target|.
+    // If the |target| partition is bigger than |current|, the data that is
+    // modified outside of |current| can be written directly to |current|.
+    // This because the data that will be written outside of |current| would
+    // not invalidate any useful information of |current|, thus:
+    // - if the snapshot is accepted for merge, this data would be already at
+    // the right place and should not be copied;
+    // - in the unfortunate case of the snapshot to be discarded, the regions
+    // modified by this data can be set as free regions and reused.
     // Compute regions that are free in both current and target metadata. These are the regions
     // we can use for COW partition.
     auto target_free_regions = target_metadata->GetFreeRegions();
@@ -102,13 +121,15 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     auto free_regions = Interval::Intersect(target_free_regions, current_free_regions);
     uint64_t free_region_length = 0;
     for (const auto& interval : free_regions) {
-        free_region_length += interval.length() * kSectorSize;
+        free_region_length += interval.length();
     }
+    free_region_length *= kSectorSize;
 
     LOG(INFO) << "Remaining free space for COW: " << free_region_length << " bytes";
+    auto cow_size = GetCowSize();
 
     // Compute the COW partition size.
-    uint64_t cow_partition_size = std::min(*cow_size, free_region_length);
+    uint64_t cow_partition_size = std::min(cow_size, free_region_length);
     // Round it down to the nearest logical block. Logical partitions must be a multiple
     // of logical blocks.
     cow_partition_size &= ~(logical_block_size - 1);
@@ -116,8 +137,7 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     // Assign cow_partition_usable_regions to indicate what regions should the COW partition uses.
     ret.cow_partition_usable_regions = std::move(free_regions);
 
-    // The rest of the COW space is allocated on ImageManager.
-    uint64_t cow_file_size = (*cow_size) - ret.snapshot_status.cow_partition_size();
+    auto cow_file_size = cow_size - cow_partition_size;
     // Round it up to the nearest sector.
     cow_file_size += kSectorSize - 1;
     cow_file_size &= ~(kSectorSize - 1);
