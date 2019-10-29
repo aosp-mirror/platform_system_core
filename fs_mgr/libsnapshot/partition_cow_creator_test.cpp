@@ -14,12 +14,14 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <libdm/dm.h>
 #include <liblp/builder.h>
 #include <liblp/property_fetcher.h>
 
 #include "dm_snapshot_internals.h"
 #include "partition_cow_creator.h"
 #include "test_helpers.h"
+#include "utility.h"
 
 using namespace android::fs_mgr;
 
@@ -98,6 +100,90 @@ TEST_F(PartitionCowCreatorTest, Holes) {
                                 .current_suffix = "_a"};
     auto ret = creator.Run();
     ASSERT_TRUE(ret.has_value());
+}
+
+TEST_F(PartitionCowCreatorTest, CowSize) {
+    using InstallOperation = chromeos_update_engine::InstallOperation;
+    using RepeatedInstallOperationPtr = google::protobuf::RepeatedPtrField<InstallOperation>;
+    using Extent = chromeos_update_engine::Extent;
+
+    constexpr uint64_t initial_size = 50_MiB;
+    constexpr uint64_t final_size = 40_MiB;
+
+    auto builder_a = MetadataBuilder::New(initial_size, 1_KiB, 2);
+    ASSERT_NE(builder_a, nullptr);
+    auto system_a = builder_a->AddPartition("system_a", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(system_a, nullptr);
+    ASSERT_TRUE(builder_a->ResizePartition(system_a, final_size));
+
+    auto builder_b = MetadataBuilder::New(initial_size, 1_KiB, 2);
+    ASSERT_NE(builder_b, nullptr);
+    auto system_b = builder_b->AddPartition("system_b", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(system_b, nullptr);
+    ASSERT_TRUE(builder_b->ResizePartition(system_b, final_size));
+
+    const uint64_t block_size = builder_b->logical_block_size();
+    const uint64_t chunk_size = kSnapshotChunkSize * dm::kSectorSize;
+    ASSERT_EQ(chunk_size, block_size);
+
+    auto cow_device_size = [](const std::vector<InstallOperation>& iopv, MetadataBuilder* builder_a,
+                              MetadataBuilder* builder_b, Partition* system_b) {
+        RepeatedInstallOperationPtr riop(iopv.begin(), iopv.end());
+        PartitionCowCreator creator{.target_metadata = builder_b,
+                                    .target_suffix = "_b",
+                                    .target_partition = system_b,
+                                    .current_metadata = builder_a,
+                                    .current_suffix = "_a",
+                                    .operations = &riop};
+
+        auto ret = creator.Run();
+
+        if (ret.has_value()) {
+            return ret->snapshot_status.cow_file_size() + ret->snapshot_status.cow_partition_size();
+        }
+        return std::numeric_limits<uint64_t>::max();
+    };
+
+    std::vector<InstallOperation> iopv;
+    InstallOperation iop;
+    Extent* e;
+
+    // No data written, no operations performed
+    ASSERT_EQ(2 * chunk_size, cow_device_size(iopv, builder_a.get(), builder_b.get(), system_b));
+
+    // No data written
+    e = iop.add_dst_extents();
+    e->set_start_block(0);
+    e->set_num_blocks(0);
+    iopv.push_back(iop);
+    ASSERT_EQ(2 * chunk_size, cow_device_size(iopv, builder_a.get(), builder_b.get(), system_b));
+
+    e = iop.add_dst_extents();
+    e->set_start_block(1);
+    e->set_num_blocks(0);
+    iopv.push_back(iop);
+    ASSERT_EQ(2 * chunk_size, cow_device_size(iopv, builder_a.get(), builder_b.get(), system_b));
+
+    // Fill the first block
+    e = iop.add_dst_extents();
+    e->set_start_block(0);
+    e->set_num_blocks(1);
+    iopv.push_back(iop);
+    ASSERT_EQ(3 * chunk_size, cow_device_size(iopv, builder_a.get(), builder_b.get(), system_b));
+
+    // Fill the second block
+    e = iop.add_dst_extents();
+    e->set_start_block(1);
+    e->set_num_blocks(1);
+    iopv.push_back(iop);
+    ASSERT_EQ(4 * chunk_size, cow_device_size(iopv, builder_a.get(), builder_b.get(), system_b));
+
+    // Jump to 5th block and write 2
+    e = iop.add_dst_extents();
+    e->set_start_block(5);
+    e->set_num_blocks(2);
+    iopv.push_back(iop);
+    ASSERT_EQ(6 * chunk_size, cow_device_size(iopv, builder_a.get(), builder_b.get(), system_b));
 }
 
 TEST(DmSnapshotInternals, CowSizeCalculator) {
