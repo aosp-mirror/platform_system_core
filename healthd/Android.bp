@@ -17,6 +17,10 @@ cc_library_static {
     shared_libs: [
         "libutils",
         "libbase",
+
+        // Need latest HealthInfo definition from headers of this shared
+        // library. Clients don't need to link to this.
+        "android.hardware.health@2.1",
     ],
     header_libs: ["libhealthd_headers"],
     export_header_lib_headers: ["libhealthd_headers"],
