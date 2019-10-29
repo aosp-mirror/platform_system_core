@@ -54,6 +54,7 @@ using HealthInfo_2_0 = android::hardware::health::V2_0::HealthInfo;
 using HealthInfo_2_1 = android::hardware::health::V2_1::HealthInfo;
 using android::hardware::health::V1_0::BatteryHealth;
 using android::hardware::health::V1_0::BatteryStatus;
+using android::hardware::health::V2_1::BatteryCapacityLevel;
 
 namespace android {
 
@@ -222,6 +223,15 @@ void BatteryMonitor::updateValues(void) {
 
     if (!mHealthdConfig->batteryChargeCounterPath.isEmpty())
         props.batteryChargeCounter = getIntField(mHealthdConfig->batteryChargeCounterPath);
+
+    if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty())
+        mHealthInfo->legacy.batteryCurrentAverage =
+                getIntField(mHealthdConfig->batteryCurrentAvgPath);
+
+    // TODO(b/142260281): Retrieve these values correctly.
+    mHealthInfo->batteryCapacityLevel = BatteryCapacityLevel::UNKNOWN;
+    mHealthInfo->batteryChargeTimeToFullNowSeconds = 0;
+    mHealthInfo->batteryFullCapacityUah = props.batteryFullCharge;
 
     props.batteryTemperature = mBatteryFixedTemperature ?
         mBatteryFixedTemperature :
