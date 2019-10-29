@@ -2089,5 +2089,23 @@ std::unique_ptr<AutoDevice> SnapshotManager::EnsureMetadataMounted() {
     return AutoUnmountDevice::New(device_->GetMetadataDir());
 }
 
+UpdateState SnapshotManager::InitiateMergeAndWait() {
+    auto state = GetUpdateState();
+    if (state == UpdateState::None) {
+        LOG(INFO) << "Can't find any snapshot to merge.";
+        return state;
+    }
+    if (state == UpdateState::Unverified) {
+        if (!InitiateMerge()) {
+            LOG(ERROR) << "Failed to initiate merge.";
+            return state;
+        }
+    }
+
+    // All other states can be handled by ProcessUpdateState.
+    LOG(INFO) << "Waiting for any merge to complete. This can take up to 1 minute.";
+    return ProcessUpdateState();
+}
+
 }  // namespace snapshot
 }  // namespace android

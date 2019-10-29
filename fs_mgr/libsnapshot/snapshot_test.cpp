@@ -847,8 +847,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     }
 
     // Initiate the merge and wait for it to be completed.
-    ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
+    ASSERT_EQ(UpdateState::MergeCompleted, init->InitiateMergeAndWait());
 
     // Check that the target partitions have the same content after the merge.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1052,8 +1051,7 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
 
     // Initiate the merge and wait for it to be completed.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
-    ASSERT_TRUE(new_sm->InitiateMerge());
-    ASSERT_EQ(UpdateState::MergeCompleted, new_sm->ProcessUpdateState());
+    ASSERT_EQ(UpdateState::MergeCompleted, new_sm->InitiateMergeAndWait());
 
     // Execute the second update.
     ASSERT_TRUE(new_sm->BeginUpdate());

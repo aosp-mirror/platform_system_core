@@ -154,6 +154,7 @@ class SnapshotManager final {
     // rebooting or after rolling back), or merge the OTA.
     bool FinishedSnapshotWrites();
 
+  private:
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
     bool InitiateMerge();
@@ -180,6 +181,15 @@ class SnapshotManager final {
     //   MergeCompleted indicates that the update has fully completed.
     //   GetUpdateState will return None, and a new update can begin.
     UpdateState ProcessUpdateState();
+
+  public:
+    // Initiate the merge if necessary, then wait for the merge to finish.
+    // See InitiateMerge() and ProcessUpdateState() for details.
+    // Returns:
+    //   - None if no merge to initiate
+    //   - MergeCompleted if merge is completed
+    //   - other states indicating an error has occurred
+    UpdateState InitiateMergeAndWait();
 
     // Find the status of the current update, if any.
     //
