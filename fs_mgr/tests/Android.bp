@@ -13,8 +13,21 @@
 // limitations under the License.
 
 cc_test {
-    name: "fs_mgr_unit_test",
-    test_suites: ["device-tests"],
+    name: "CtsFsMgrTestCases",
+    test_suites: [
+        "cts",
+        "device-tests",
+        "vts",
+    ],
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
 
     shared_libs: [
         "libbase",
