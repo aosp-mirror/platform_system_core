@@ -254,6 +254,7 @@ class SnapshotManager final {
     FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
     friend class SnapshotTest;
     friend class SnapshotUpdateTest;
+    friend class FlashAfterUpdateTest;
     friend struct AutoDeleteCowImage;
     friend struct AutoDeleteSnapshot;
     friend struct PartitionCowCreator;
@@ -351,6 +352,9 @@ class SnapshotManager final {
     // condition was detected and handled.
     bool HandleCancelledUpdate(LockedFile* lock);
 
+    // Helper for HandleCancelledUpdate. Assumes booting from new slot.
+    bool HandleCancelledUpdateOnNewSlot(LockedFile* lock);
+
     // Remove artifacts created by the update process, such as snapshots, and
     // set the update state to None.
     bool RemoveAllUpdateState(LockedFile* lock);
@@ -369,7 +373,19 @@ class SnapshotManager final {
     bool MarkSnapshotMergeCompleted(LockedFile* snapshot_lock, const std::string& snapshot_name);
     void AcknowledgeMergeSuccess(LockedFile* lock);
     void AcknowledgeMergeFailure();
-    bool IsCancelledSnapshot(const std::string& snapshot_name);
+    std::unique_ptr<LpMetadata> ReadCurrentMetadata();
+
+    enum class MetadataPartitionState {
+        // Partition does not exist.
+        None,
+        // Partition is flashed.
+        Flashed,
+        // Partition is created by OTA client.
+        Updated,
+    };
+    // Helper function to check the state of a partition as described in metadata.
+    MetadataPartitionState GetMetadataPartitionState(const LpMetadata& metadata,
+                                                     const std::string& name);
 
     // Note that these require the name of the device containing the snapshot,
     // which may be the "inner" device. Use GetsnapshotDeviecName().

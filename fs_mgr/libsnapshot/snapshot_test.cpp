@@ -56,6 +56,7 @@ using android::fs_mgr::GetPartitionGroupName;
 using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::Interval;
 using android::fs_mgr::MetadataBuilder;
+using android::fs_mgr::SlotSuffixForSlotNumber;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::DynamicPartitionGroup;
 using chromeos_update_engine::PartitionUpdate;
@@ -680,7 +681,6 @@ class SnapshotUpdateTest : public SnapshotTest {
         // Initialize source partition metadata using |manifest_|.
         src_ = MetadataBuilder::New(*opener_, "super", 0);
         ASSERT_TRUE(FillFakeMetadata(src_.get(), manifest_, "_a"));
-        ASSERT_NE(nullptr, src_);
         // Add sys_b which is like system_other.
         auto partition = src_->AddPartition("sys_b", 0);
         ASSERT_NE(nullptr, partition);
@@ -731,8 +731,12 @@ class SnapshotUpdateTest : public SnapshotTest {
         if (!hash.has_value()) {
             return AssertionFailure() << "Cannot read partition " << name << ": " << path;
         }
-        if (hashes_[name] != *hash) {
-            return AssertionFailure() << "Content of " << name << " has changed after the merge";
+        auto it = hashes_.find(name);
+        if (it == hashes_.end()) {
+            return AssertionFailure() << "No existing hash for " << name << ". Bad test code?";
+        }
+        if (it->second != *hash) {
+            return AssertionFailure() << "Content of " << name << " has changed";
         }
         return AssertionSuccess();
     }
@@ -1217,6 +1221,121 @@ TEST_F(MetadataMountedTest, Recovery) {
     device.reset();
     EXPECT_FALSE(IsMetadataMounted());
 }
+
+class FlashAfterUpdateTest : public SnapshotUpdateTest,
+                             public WithParamInterface<std::tuple<uint32_t, bool>> {
+  public:
+    AssertionResult InitiateMerge(const std::string& slot_suffix) {
+        auto sm = SnapshotManager::New(new TestDeviceInfo(fake_super, slot_suffix));
+        if (!sm->CreateLogicalAndSnapshotPartitions("super")) {
+            return AssertionFailure() << "Cannot CreateLogicalAndSnapshotPartitions";
+        }
+        if (!sm->InitiateMerge()) {
+            return AssertionFailure() << "Cannot initiate merge";
+        }
+        return AssertionSuccess();
+    }
+};
+
+TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
+    // OTA client blindly unmaps all partitions that are possibly mapped.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
+    }
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    if (std::get<1>(GetParam()) /* merge */) {
+        ASSERT_TRUE(InitiateMerge("_b"));
+        // Simulate shutting down the device after merge has initiated.
+        ASSERT_TRUE(UnmapAll());
+    }
+
+    auto flashed_slot = std::get<0>(GetParam());
+    auto flashed_slot_suffix = SlotSuffixForSlotNumber(flashed_slot);
+
+    // Simulate flashing |flashed_slot|. This clears the UPDATED flag.
+    auto flashed_builder = MetadataBuilder::New(*opener_, "super", flashed_slot);
+    flashed_builder->RemoveGroupAndPartitions(group_->name() + flashed_slot_suffix);
+    flashed_builder->RemoveGroupAndPartitions(kCowGroupName);
+    ASSERT_TRUE(FillFakeMetadata(flashed_builder.get(), manifest_, flashed_slot_suffix));
+
+    // Deliberately remove a partition from this build so that
+    // InitiateMerge do not switch state to "merging". This is possible in
+    // practice because the list of dynamic partitions may change.
+    ASSERT_NE(nullptr, flashed_builder->FindPartition("prd" + flashed_slot_suffix));
+    flashed_builder->RemovePartition("prd" + flashed_slot_suffix);
+
+    auto flashed_metadata = flashed_builder->Export();
+    ASSERT_NE(nullptr, flashed_metadata);
+    ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *flashed_metadata, flashed_slot));
+
+    std::string path;
+    for (const auto& name : {"sys", "vnd"}) {
+        ASSERT_TRUE(CreateLogicalPartition(
+                CreateLogicalPartitionParams{
+                        .block_device = fake_super,
+                        .metadata_slot = flashed_slot,
+                        .partition_name = name + flashed_slot_suffix,
+                        .timeout_ms = 1s,
+                        .partition_opener = opener_.get(),
+                },
+                &path));
+        ASSERT_TRUE(WriteRandomData(path));
+        auto hash = GetHash(path);
+        ASSERT_TRUE(hash.has_value());
+        hashes_[name + flashed_slot_suffix] = *hash;
+    }
+
+    // Simulate shutting down the device after flash.
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate reboot. After reboot, init does first stage mount.
+    auto init = SnapshotManager::NewForFirstStageMount(
+            new TestDeviceInfo(fake_super, flashed_slot_suffix));
+    ASSERT_NE(init, nullptr);
+    if (init->NeedSnapshotsInFirstStageMount()) {
+        ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    } else {
+        for (const auto& name : {"sys", "vnd"}) {
+            ASSERT_TRUE(CreateLogicalPartition(
+                    CreateLogicalPartitionParams{
+                            .block_device = fake_super,
+                            .metadata_slot = flashed_slot,
+                            .partition_name = name + flashed_slot_suffix,
+                            .timeout_ms = 1s,
+                            .partition_opener = opener_.get(),
+                    },
+                    &path));
+        }
+    }
+
+    // Check that the target partitions have the same content.
+    for (const auto& name : {"sys", "vnd"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name + flashed_slot_suffix));
+    }
+
+    // There should be no snapshot to merge.
+    auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, flashed_slot_suffix));
+    ASSERT_EQ(UpdateState::Cancelled, new_sm->InitiateMergeAndWait());
+
+    // Next OTA calls CancelUpdate no matter what.
+    ASSERT_TRUE(new_sm->CancelUpdate());
+}
+
+INSTANTIATE_TEST_SUITE_P(, FlashAfterUpdateTest, Combine(Values(0, 1), Bool()),
+                         [](const TestParamInfo<FlashAfterUpdateTest::ParamType>& info) {
+                             return "Flash"s + (std::get<0>(info.param) ? "New"s : "Old"s) +
+                                    "Slot"s + (std::get<1>(info.param) ? "After"s : "Before"s) +
+                                    "Merge"s;
+                         });
 
 }  // namespace snapshot
 }  // namespace android
