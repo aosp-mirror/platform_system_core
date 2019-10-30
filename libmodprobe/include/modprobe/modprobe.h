@@ -19,6 +19,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Modprobe {
@@ -59,5 +60,6 @@ class Modprobe {
     std::vector<std::string> module_load_;
     std::unordered_map<std::string, std::string> module_options_;
     std::set<std::string> module_blacklist_;
+    std::unordered_set<std::string> module_loaded_;
     bool blacklist_enabled = false;
 };
