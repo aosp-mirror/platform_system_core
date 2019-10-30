@@ -19,6 +19,7 @@
 #include <android-base/strings.h>
 #include <fs_mgr/roots.h>
 
+using android::dm::kSectorSize;
 using android::fs_mgr::EnsurePathMounted;
 using android::fs_mgr::EnsurePathUnmounted;
 using android::fs_mgr::Fstab;
@@ -94,13 +95,11 @@ bool InitializeCow(const std::string& device) {
     // so it can be used to resume the last state of a snapshot device;
     // - an _INVALID_ snapshot otherwise.
     // To avoid zero-filling the whole CoW file when a new dm-snapshot is
-    // created, here we zero-fill only the first 32 bits. This is a temporary
-    // workaround that will be discussed again when the kernel API gets
-    // consolidated.
-    // TODO(b/139202197): Remove this hack once the kernel API is consolidated.
-    constexpr ssize_t kDmSnapZeroFillSize = 4;  // 32-bit
+    // created, here we zero-fill only the first chunk to be compliant with
+    // lvm.
+    constexpr ssize_t kDmSnapZeroFillSize = kSectorSize * kSnapshotChunkSize;
 
-    char zeros[kDmSnapZeroFillSize] = {0};
+    std::vector<uint8_t> zeros(kDmSnapZeroFillSize, 0);
     android::base::unique_fd fd(open(device.c_str(), O_WRONLY | O_BINARY));
     if (fd < 0) {
         PLOG(ERROR) << "Can't open COW device: " << device;
@@ -108,7 +107,7 @@ bool InitializeCow(const std::string& device) {
     }
 
     LOG(INFO) << "Zero-filling COW device: " << device;
-    if (!android::base::WriteFully(fd, zeros, kDmSnapZeroFillSize)) {
+    if (!android::base::WriteFully(fd, zeros.data(), kDmSnapZeroFillSize)) {
         PLOG(ERROR) << "Can't zero-fill COW device for " << device;
         return false;
     }
