@@ -26,6 +26,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <fs_mgr/roots.h>
 #include <fs_mgr_dm_linear.h>
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
@@ -47,12 +48,16 @@ using android::fiemap::IImageManager;
 using android::fs_mgr::BlockDeviceInfo;
 using android::fs_mgr::CreateLogicalPartitionParams;
 using android::fs_mgr::DestroyLogicalPartition;
+using android::fs_mgr::EnsurePathMounted;
+using android::fs_mgr::EnsurePathUnmounted;
 using android::fs_mgr::Extent;
+using android::fs_mgr::Fstab;
 using android::fs_mgr::GetPartitionGroupName;
 using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::Interval;
 using android::fs_mgr::MetadataBuilder;
 using chromeos_update_engine::DeltaArchiveManifest;
+using chromeos_update_engine::DynamicPartitionGroup;
 using chromeos_update_engine::PartitionUpdate;
 using namespace ::testing;
 using namespace android::storage_literals;
@@ -656,12 +661,12 @@ class SnapshotUpdateTest : public SnapshotTest {
         // Not using full name "system", "vendor", "product" because these names collide with the
         // mapped partitions on the running device.
         // Each test modifies manifest_ slightly to indicate changes to the partition layout.
-        auto group = manifest_.mutable_dynamic_partition_metadata()->add_groups();
-        group->set_name("group");
-        group->set_size(kGroupSize);
-        group->add_partition_names("sys");
-        group->add_partition_names("vnd");
-        group->add_partition_names("prd");
+        group_ = manifest_.mutable_dynamic_partition_metadata()->add_groups();
+        group_->set_name("group");
+        group_->set_size(kGroupSize);
+        group_->add_partition_names("sys");
+        group_->add_partition_names("vnd");
+        group_->add_partition_names("prd");
         sys_ = manifest_.add_partitions();
         sys_->set_partition_name("sys");
         SetSize(sys_, 3_MiB);
@@ -765,6 +770,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     PartitionUpdate* sys_ = nullptr;
     PartitionUpdate* vnd_ = nullptr;
     PartitionUpdate* prd_ = nullptr;
+    DynamicPartitionGroup* group_ = nullptr;
 };
 
 // Test full update flow executed by update_engine. Some partitions uses super empty space,
@@ -778,9 +784,17 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     }
 
     // Grow all partitions.
-    SetSize(sys_, 3788_KiB);
-    SetSize(vnd_, 3788_KiB);
-    SetSize(prd_, 3788_KiB);
+    constexpr uint64_t partition_size = 3788_KiB;
+    SetSize(sys_, partition_size);
+    SetSize(vnd_, partition_size);
+    SetSize(prd_, partition_size);
+
+    // Create fake install operations to grow the COW device size.
+    for (auto& partition : {sys_, vnd_, prd_}) {
+        auto e = partition->add_operations()->add_dst_extents();
+        e->set_start_block(0);
+        e->set_num_blocks(GetSize(partition) / manifest_.block_size());
+    }
 
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -943,6 +957,13 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->UnmapUpdateSnapshot("sys_b"));
 
+    // Create fake install operations to grow the COW device size.
+    for (auto& partition : {sys_, vnd_, prd_}) {
+        auto e = partition->add_operations()->add_dst_extents();
+        e->set_start_block(0);
+        e->set_num_blocks(GetSize(partition) / manifest_.block_size());
+    }
+
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
@@ -1056,6 +1077,149 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
     }
 }
 
+TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
+    constexpr auto kRetrofitGroupSize = kGroupSize / 2;
+
+    // Initialize device-mapper / disk
+    ASSERT_TRUE(UnmapAll());
+    FormatFakeSuper();
+
+    // Setup source partition metadata to have both _a and _b partitions.
+    src_ = MetadataBuilder::New(*opener_, "super", 0);
+    ASSERT_NE(nullptr, src_);
+    for (const auto& suffix : {"_a"s, "_b"s}) {
+        ASSERT_TRUE(src_->AddGroup(group_->name() + suffix, kRetrofitGroupSize));
+        for (const auto& name : {"sys"s, "vnd"s, "prd"s}) {
+            auto partition = src_->AddPartition(name + suffix, group_->name() + suffix, 0);
+            ASSERT_NE(nullptr, partition);
+            ASSERT_TRUE(src_->ResizePartition(partition, 2_MiB));
+        }
+    }
+    auto metadata = src_->Export();
+    ASSERT_NE(nullptr, metadata);
+    ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *metadata.get(), 0));
+
+    // Flash source partitions
+    std::string path;
+    for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
+        ASSERT_TRUE(CreateLogicalPartition(
+                CreateLogicalPartitionParams{
+                        .block_device = fake_super,
+                        .metadata_slot = 0,
+                        .partition_name = name,
+                        .timeout_ms = 1s,
+                        .partition_opener = opener_.get(),
+                },
+                &path));
+        ASSERT_TRUE(WriteRandomData(path));
+        auto hash = GetHash(path);
+        ASSERT_TRUE(hash.has_value());
+        hashes_[name] = *hash;
+    }
+
+    // Setup manifest.
+    group_->set_size(kRetrofitGroupSize);
+    for (auto* partition : {sys_, vnd_, prd_}) {
+        SetSize(partition, 2_MiB);
+        auto* e = partition->add_operations()->add_dst_extents();
+        e->set_start_block(0);
+        e->set_num_blocks(2_MiB / manifest_.block_size());
+    }
+
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    // Test that COW image should not be created for retrofit devices; super
+    // should be big enough.
+    ASSERT_FALSE(image_manager_->BackingImageExists("sys_b-cow-img"));
+    ASSERT_FALSE(image_manager_->BackingImageExists("vnd_b-cow-img"));
+    ASSERT_FALSE(image_manager_->BackingImageExists("prd_b-cow-img"));
+
+    // Write some data to target partitions.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        std::string path;
+        ASSERT_TRUE(sm->MapUpdateSnapshot(
+                CreateLogicalPartitionParams{
+                        .block_device = fake_super,
+                        .metadata_slot = 1,
+                        .partition_name = name,
+                        .timeout_ms = 10s,
+                        .partition_opener = opener_.get(),
+                },
+                &path))
+                << name;
+        ASSERT_TRUE(WriteRandomData(path));
+        auto hash = GetHash(path);
+        ASSERT_TRUE(hash.has_value());
+        hashes_[name] = *hash;
+    }
+
+    // Assert that source partitions aren't affected.
+    for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name));
+    }
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+}
+
+class MetadataMountedTest : public SnapshotUpdateTest {
+  public:
+    void SetUp() override {
+        metadata_dir_ = test_device->GetMetadataDir();
+        ASSERT_TRUE(ReadDefaultFstab(&fstab_));
+    }
+    void TearDown() override {
+        SetUp();
+        // Remount /metadata
+        test_device->set_recovery(false);
+        EXPECT_TRUE(android::fs_mgr::EnsurePathMounted(&fstab_, metadata_dir_));
+    }
+    AssertionResult IsMetadataMounted() {
+        Fstab mounted_fstab;
+        if (!ReadFstabFromFile("/proc/mounts", &mounted_fstab)) {
+            ADD_FAILURE() << "Failed to scan mounted volumes";
+            return AssertionFailure() << "Failed to scan mounted volumes";
+        }
+
+        auto entry = GetEntryForPath(&fstab_, metadata_dir_);
+        if (entry == nullptr) {
+            return AssertionFailure() << "No mount point found in fstab for path " << metadata_dir_;
+        }
+
+        auto mv = GetEntryForMountPoint(&mounted_fstab, entry->mount_point);
+        if (mv == nullptr) {
+            return AssertionFailure() << metadata_dir_ << " is not mounted";
+        }
+        return AssertionSuccess() << metadata_dir_ << " is mounted";
+    }
+    std::string metadata_dir_;
+    Fstab fstab_;
+};
+
+TEST_F(MetadataMountedTest, Android) {
+    auto device = sm->EnsureMetadataMounted();
+    EXPECT_NE(nullptr, device);
+    device.reset();
+
+    EXPECT_TRUE(IsMetadataMounted());
+    EXPECT_TRUE(sm->CancelUpdate()) << "Metadata dir should never be unmounted in Android mode";
+}
+
+TEST_F(MetadataMountedTest, Recovery) {
+    test_device->set_recovery(true);
+    metadata_dir_ = test_device->GetMetadataDir();
+
+    EXPECT_TRUE(android::fs_mgr::EnsurePathUnmounted(&fstab_, metadata_dir_));
+    EXPECT_FALSE(IsMetadataMounted());
+
+    auto device = sm->EnsureMetadataMounted();
+    EXPECT_NE(nullptr, device);
+    EXPECT_TRUE(IsMetadataMounted());
+
+    device.reset();
+    EXPECT_FALSE(IsMetadataMounted());
+}
+
 }  // namespace snapshot
 }  // namespace android
 
@@ -1097,6 +1261,7 @@ int main(int argc, char** argv) {
     }
 
     // Clean up previous run.
+    MetadataMountedTest().TearDown();
     SnapshotUpdateTest().Cleanup();
     SnapshotTest().Cleanup();
 

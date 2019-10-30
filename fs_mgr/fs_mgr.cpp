@@ -1561,12 +1561,10 @@ static bool InstallZramDevice(const std::string& device) {
     return true;
 }
 
-static bool PrepareZramDevice(const std::string& loop, off64_t size, const std::string& bdev) {
-    if (loop.empty() && bdev.empty()) return true;
+static bool PrepareZramBackingDevice(off64_t size) {
 
-    if (bdev.length()) {
-        return InstallZramDevice(bdev);
-    }
+    constexpr const char* file_path = "/data/per_boot/zram_swap";
+    if (size == 0) return true;
 
     // Get free loopback
     unique_fd loop_fd(TEMP_FAILURE_RETRY(open("/dev/loop-control", O_RDWR | O_CLOEXEC)));
@@ -1582,13 +1580,13 @@ static bool PrepareZramDevice(const std::string& loop, off64_t size, const std::
     }
 
     // Prepare target path
-    unique_fd target_fd(TEMP_FAILURE_RETRY(open(loop.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600)));
+    unique_fd target_fd(TEMP_FAILURE_RETRY(open(file_path, O_RDWR | O_CREAT | O_CLOEXEC, 0600)));
     if (target_fd.get() == -1) {
-        PERROR << "Cannot open target path: " << loop;
+        PERROR << "Cannot open target path: " << file_path;
         return false;
     }
     if (fallocate(target_fd.get(), 0, 0, size) < 0) {
-        PERROR << "Cannot truncate target path: " << loop;
+        PERROR << "Cannot truncate target path: " << file_path;
         return false;
     }
 
@@ -1624,11 +1622,10 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
             continue;
         }
 
-        if (!PrepareZramDevice(entry.zram_loopback_path, entry.zram_loopback_size, entry.zram_backing_dev_path)) {
-            LERROR << "Skipping losetup for '" << entry.blk_device << "'";
-        }
-
         if (entry.zram_size > 0) {
+	    if (!PrepareZramBackingDevice(entry.zram_backingdev_size)) {
+                LERROR << "Failure of zram backing device file for '" << entry.blk_device << "'";
+            }
             // A zram_size was specified, so we need to configure the
             // device.  There is no point in having multiple zram devices
             // on a system (all the memory comes from the same pool) so

@@ -45,16 +45,12 @@ struct FstabEntry {
     int max_comp_streams = 0;
     off64_t zram_size = 0;
     off64_t reserved_size = 0;
-    std::string file_contents_mode;
-    std::string file_names_mode;
-    int file_policy_version = 0;
+    std::string encryption_options;
     off64_t erase_blk_size = 0;
     off64_t logical_blk_size = 0;
     std::string sysfs_path;
     std::string vbmeta_partition;
-    std::string zram_loopback_path;
-    uint64_t zram_loopback_size = 512 * 1024 * 1024;  // 512MB by default;
-    std::string zram_backing_dev_path;
+    uint64_t zram_backingdev_size = 0;
     std::string avb_keys;
 
     struct FsMgrFlags {

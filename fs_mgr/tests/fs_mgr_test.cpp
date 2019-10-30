@@ -179,6 +179,7 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
                 {"nodiratime", MS_NODIRATIME},
                 {"ro", MS_RDONLY},
                 {"rw", 0},
+                {"sync", MS_SYNCHRONOUS},
                 {"remount", MS_REMOUNT},
                 {"bind", MS_BIND},
                 {"rec", MS_REC},
@@ -197,7 +198,7 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
         if (!(entry.flags & MS_RDONLY)) {
             fs_options.emplace("rw");
         }
-        EXPECT_EQ(mnt_opts, fs_options);
+        EXPECT_EQ(mnt_opts, fs_options) << "At line " << i;
         ++i;
     }
     EXPECT_EQ(i, fstab.size());
@@ -392,9 +393,9 @@ TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_AllBad) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source none0       swap   defaults      encryptable,forceencrypt,fileencryption,forcefdeorfbe,keydirectory,length,swapprio,zramsize,max_comp_streams,reservedsize,eraseblk,logicalblk,sysfs_path,zram_loopback_path,zram_loopback_size,zram_backing_dev_path
+source none0       swap   defaults      encryptable,forceencrypt,fileencryption,forcefdeorfbe,keydirectory,length,swapprio,zramsize,max_comp_streams,reservedsize,eraseblk,logicalblk,sysfs_path,zram_backingdev_size
 
-source none1       swap   defaults      encryptable=,forceencrypt=,fileencryption=,keydirectory=,length=,swapprio=,zramsize=,max_comp_streams=,avb=,reservedsize=,eraseblk=,logicalblk=,sysfs_path=,zram_loopback_path=,zram_loopback_size=,zram_backing_dev_path=
+source none1       swap   defaults      encryptable=,forceencrypt=,fileencryption=,keydirectory=,length=,swapprio=,zramsize=,max_comp_streams=,avb=,reservedsize=,eraseblk=,logicalblk=,sysfs_path=,zram_backingdev_size=
 
 source none2       swap   defaults      forcefdeorfbe=
 
@@ -420,14 +421,11 @@ source none2       swap   defaults      forcefdeorfbe=
     EXPECT_EQ(0, entry->max_comp_streams);
     EXPECT_EQ(0, entry->zram_size);
     EXPECT_EQ(0, entry->reserved_size);
-    EXPECT_EQ("", entry->file_contents_mode);
-    EXPECT_EQ("", entry->file_names_mode);
+    EXPECT_EQ("", entry->encryption_options);
     EXPECT_EQ(0, entry->erase_blk_size);
     EXPECT_EQ(0, entry->logical_blk_size);
     EXPECT_EQ("", entry->sysfs_path);
-    EXPECT_EQ("", entry->zram_loopback_path);
-    EXPECT_EQ(512U * 1024U * 1024U, entry->zram_loopback_size);
-    EXPECT_EQ("", entry->zram_backing_dev_path);
+    EXPECT_EQ(0U, entry->zram_backingdev_size);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
@@ -448,26 +446,21 @@ source none2       swap   defaults      forcefdeorfbe=
     EXPECT_EQ(0, entry->max_comp_streams);
     EXPECT_EQ(0, entry->zram_size);
     EXPECT_EQ(0, entry->reserved_size);
-    EXPECT_EQ("", entry->file_contents_mode);
-    EXPECT_EQ("", entry->file_names_mode);
+    EXPECT_EQ("", entry->encryption_options);
     EXPECT_EQ(0, entry->erase_blk_size);
     EXPECT_EQ(0, entry->logical_blk_size);
     EXPECT_EQ("", entry->sysfs_path);
-    EXPECT_EQ("", entry->zram_loopback_path);
-    EXPECT_EQ(512U * 1024U * 1024U, entry->zram_loopback_size);
-    EXPECT_EQ("", entry->zram_backing_dev_path);
+    EXPECT_EQ(0U, entry->zram_backingdev_size);
     entry++;
 
-    // forcefdeorfbe sets file_contents_mode and file_names_mode by default, so test it separately.
+    // forcefdeorfbe has its own encryption_options defaults, so test it separately.
     EXPECT_EQ("none2", entry->mount_point);
     {
         FstabEntry::FsMgrFlags flags = {};
         flags.force_fde_or_fbe = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
-    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
+    EXPECT_EQ("aes-256-xts:aes-256-cts", entry->encryption_options);
     EXPECT_EQ("", entry->key_loc);
 }
 
@@ -681,37 +674,21 @@ source none0       swap   defaults      forcefdeorfbe=/dir/key
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
 
     EXPECT_EQ("/dir/key", entry->key_loc);
-    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
+    EXPECT_EQ("aes-256-xts:aes-256-cts", entry->encryption_options);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_FileEncryption) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source none0       swap   defaults      fileencryption=blah
-source none1       swap   defaults      fileencryption=software
-source none2       swap   defaults      fileencryption=aes-256-xts
-source none3       swap   defaults      fileencryption=adiantum
-source none4       swap   defaults      fileencryption=adiantum:aes-256-heh
-source none5       swap   defaults      fileencryption=ice
-source none6       swap   defaults      fileencryption=ice:blah
-source none7       swap   defaults      fileencryption=ice:aes-256-cts
-source none8       swap   defaults      fileencryption=ice:aes-256-heh
-source none9       swap   defaults      fileencryption=ice:adiantum
-source none10      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v1
-source none11      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v2
-source none12      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v2:
-source none13      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:blah
-source none14      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:vblah
+source none0       swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v1
 )fs";
 
     ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(15U, fstab.size());
+    ASSERT_EQ(1U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
     flags.file_encryption = true;
@@ -719,107 +696,7 @@ source none14      swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("", entry->file_contents_mode);
-    EXPECT_EQ("", entry->file_names_mode);
-    EXPECT_EQ(0, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("adiantum", entry->file_contents_mode);
-    EXPECT_EQ("adiantum", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none4", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("adiantum", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-heh", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none5", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("ice", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none6", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("ice", entry->file_contents_mode);
-    EXPECT_EQ("", entry->file_names_mode);
-    EXPECT_EQ(0, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none7", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("ice", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none8", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("ice", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-heh", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none9", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("ice", entry->file_contents_mode);
-    EXPECT_EQ("adiantum", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none10", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(1, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none11", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(2, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none12", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("", entry->file_contents_mode);
-    EXPECT_EQ("", entry->file_names_mode);
-    EXPECT_EQ(0, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none13", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(0, entry->file_policy_version);
-
-    entry++;
-    EXPECT_EQ("none14", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("aes-256-xts", entry->file_contents_mode);
-    EXPECT_EQ("aes-256-cts", entry->file_names_mode);
-    EXPECT_EQ(0, entry->file_policy_version);
+    EXPECT_EQ("aes-256-xts:aes-256-cts:v1", entry->encryption_options);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MaxCompStreams) {
@@ -1040,14 +917,10 @@ TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_Zram) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source none0       swap   defaults      zram_loopback_path=/dev/path
-
-source none1       swap   defaults      zram_loopback_size=blah
-source none2       swap   defaults      zram_loopback_size=2
-source none3       swap   defaults      zram_loopback_size=1K
-source none4       swap   defaults      zram_loopback_size=2m
-
-source none5       swap   defaults      zram_backing_dev_path=/dev/path2
+source none1       swap   defaults      zram_backingdev_size=blah
+source none2       swap   defaults      zram_backingdev_size=2
+source none3       swap   defaults      zram_backingdev_size=1K
+source none4       swap   defaults      zram_backingdev_size=2m
 
 )fs";
 
@@ -1055,29 +928,30 @@ source none5       swap   defaults      zram_backing_dev_path=/dev/path2
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(6U, fstab.size());
+    ASSERT_EQ(4U, fstab.size());
 
     auto entry = fstab.begin();
-    EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ("/dev/path", entry->zram_loopback_path);
-    entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(512U * 1024U * 1024U, entry->zram_loopback_size);
+    EXPECT_EQ(0U, entry->zram_backingdev_size);
     entry++;
 
     EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_EQ(2U, entry->zram_loopback_size);
+    EXPECT_EQ(2U, entry->zram_backingdev_size);
     entry++;
 
     EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_EQ(1024U, entry->zram_loopback_size);
+    EXPECT_EQ(1024U, entry->zram_backingdev_size);
     entry++;
 
     EXPECT_EQ("none4", entry->mount_point);
-    EXPECT_EQ(2U * 1024U * 1024U, entry->zram_loopback_size);
+    EXPECT_EQ(2U * 1024U * 1024U, entry->zram_backingdev_size);
     entry++;
+}
 
-    EXPECT_EQ("none5", entry->mount_point);
-    EXPECT_EQ("/dev/path2", entry->zram_backing_dev_path);
+TEST(fs_mgr, DefaultFstabContainsUserdata) {
+    Fstab fstab;
+    ASSERT_TRUE(ReadDefaultFstab(&fstab)) << "Failed to read default fstab";
+    ASSERT_NE(nullptr, GetEntryForMountPoint(&fstab, "/data"))
+            << "Default fstab doesn't contain /data entry";
 }
