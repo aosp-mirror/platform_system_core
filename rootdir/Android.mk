@@ -326,7 +326,7 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_SAMEPROCESS_LIBRARIES),.vendor)
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_SAMEPROCESS_LIBRARIES),.com.android.vndk.current)
 $(LOCAL_BUILT_MODULE):
 	@echo "Generate: $@"
 	@mkdir -p $(dir $@)
@@ -342,7 +342,7 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_CORE_LIBRARIES),.vendor)
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_CORE_LIBRARIES),.com.android.vndk.current)
 $(LOCAL_BUILT_MODULE):
 	@echo "Generate: $@"
 	@mkdir -p $(dir $@)
@@ -358,7 +358,7 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
 include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_PRIVATE_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_PRIVATE_LIBRARIES),.vendor)
+$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_PRIVATE_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_PRIVATE_LIBRARIES),.com.android.vndk.current)
 $(LOCAL_BUILT_MODULE):
 	@echo "Generate: $@"
 	@mkdir -p $(dir $@)
