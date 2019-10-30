@@ -435,6 +435,12 @@ int main(int argc, char* argv[]) {
   };
 
   if (role == kUnzip) {
+    // `unzip -Z` is "zipinfo mode", so in that case just restart...
+    if (argc > 1 && !strcmp(argv[1], "-Z")) {
+      argv[1] = const_cast<char*>("zipinfo");
+      return main(argc - 1, argv + 1);
+    }
+
     int opt;
     while ((opt = getopt_long(argc, argv, "-d:hlnopqvx", opts, nullptr)) != -1) {
       switch (opt) {
