@@ -148,9 +148,9 @@ case ${progname} in
     echo "WARNING: Can not use --size or --buffer with ${progname%.*}.stop" >&2
   fi
   if [ "true" = "${clear}" ]; then
-    setprop ${property} "clear"
+    setprop ${property#persist.} "clear"
   else
-    setprop ${property} "stop"
+    setprop ${property#persist.} "stop"
   fi
   if [ -n "`getprop ${property#persist.}.buffer`" ]; then
     setprop ${property}.buffer ""
