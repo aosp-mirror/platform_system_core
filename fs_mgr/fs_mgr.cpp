@@ -58,6 +58,7 @@
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr/file_wait.h>
 #include <fs_mgr_overlayfs.h>
+#include <fscrypt/fscrypt.h>
 #include <libdm/dm.h>
 #include <liblp/metadata_format.h>
 #include <linux/fs.h>
@@ -83,6 +84,9 @@
 #define ZRAM_BACK_DEV   "/sys/block/zram0/backing_dev"
 
 #define SYSFS_EXT4_VERITY "/sys/fs/ext4/features/verity"
+
+// FIXME: this should be in system/extras
+#define EXT4_FEATURE_COMPAT_STABLE_INODES 0x0800
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
@@ -412,25 +416,43 @@ static void tune_reserved_size(const std::string& blk_device, const FstabEntry& 
 // Enable file-based encryption if needed.
 static void tune_encrypt(const std::string& blk_device, const FstabEntry& entry,
                          const struct ext4_super_block* sb, int* fs_stat) {
-    bool has_encrypt = (sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_ENCRYPT)) != 0;
-    bool want_encrypt = entry.fs_mgr_flags.file_encryption;
-
-    if (has_encrypt || !want_encrypt) {
+    if (!entry.fs_mgr_flags.file_encryption) {
+        return;  // Nothing needs done.
+    }
+    std::vector<std::string> features_needed;
+    if ((sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_ENCRYPT)) == 0) {
+        features_needed.emplace_back("encrypt");
+    }
+    android::fscrypt::EncryptionOptions options;
+    if (!android::fscrypt::ParseOptions(entry.encryption_options, &options)) {
+        LERROR << "Unable to parse encryption options on " << blk_device << ": "
+               << entry.encryption_options;
         return;
     }
-
+    if ((options.flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64) != 0) {
+        // We can only use this policy on ext4 if the "stable_inodes" feature
+        // is set on the filesystem, otherwise shrinking will break encrypted files.
+        if ((sb->s_feature_compat & cpu_to_le32(EXT4_FEATURE_COMPAT_STABLE_INODES)) == 0) {
+            features_needed.emplace_back("stable_inodes");
+        }
+    }
+    if (features_needed.size() == 0) {
+        return;
+    }
     if (!tune2fs_available()) {
         LERROR << "Unable to enable ext4 encryption on " << blk_device
                << " because " TUNE2FS_BIN " is missing";
         return;
     }
 
-    const char* argv[] = {TUNE2FS_BIN, "-Oencrypt", blk_device.c_str()};
+    auto flags = android::base::Join(features_needed, ',');
+    auto flag_arg = "-O"s + flags;
+    const char* argv[] = {TUNE2FS_BIN, flag_arg.c_str(), blk_device.c_str()};
 
-    LINFO << "Enabling ext4 encryption on " << blk_device;
+    LINFO << "Enabling ext4 flags " << flags << " on " << blk_device;
     if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
         LERROR << "Failed to run " TUNE2FS_BIN " to enable "
-               << "ext4 encryption on " << blk_device;
+               << "ext4 flags " << flags << " on " << blk_device;
         *fs_stat |= FS_STAT_ENABLE_ENCRYPTION_FAILED;
     }
 }

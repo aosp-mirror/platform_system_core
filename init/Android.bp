@@ -79,7 +79,6 @@ cc_defaults {
         "libdl",
         "libext4_utils",
         "libfs_mgr",
-        "libfscrypt",
         "libgsi",
         "libhidl-gen-utils",
         "libkeyutils",
