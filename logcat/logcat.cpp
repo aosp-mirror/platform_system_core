@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include "logcat.h"
-
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -1177,7 +1175,7 @@ int Logcat::Run(int argc, char** argv) {
     return EXIT_SUCCESS;
 }
 
-int RunLogcat(int argc, char** argv) {
+int main(int argc, char** argv) {
     Logcat logcat;
     return logcat.Run(argc, argv);
 }
