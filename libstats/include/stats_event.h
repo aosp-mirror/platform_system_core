@@ -59,6 +59,19 @@ struct stats_event;
 #define ERROR_TOO_MANY_ANNOTATIONS 0x80
 #define ERROR_TOO_MANY_FIELDS 0x100
 
+/* TYPE IDS */
+#define INT32_TYPE 0x00
+#define INT64_TYPE 0x01
+#define STRING_TYPE 0x02
+#define LIST_TYPE 0x03
+#define FLOAT_TYPE 0x04
+#define BOOL_TYPE 0x05
+#define BYTE_ARRAY_TYPE 0x06
+#define OBJECT_TYPE 0x07
+#define KEY_VALUE_PAIRS_TYPE 0x08
+#define ATTRIBUTION_CHAIN_TYPE 0x09
+#define ERROR_TYPE 0x0F
+
 /* SYSTEM API */
 struct stats_event* stats_event_obtain();
 void stats_event_write(struct stats_event* event);
