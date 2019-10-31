@@ -1,0 +1,14 @@
+close: 1
+mkdirat: 1
+msync: 1
+munmap: 1
+openat: 1
+write: 1
+fcntl64: 1
+fstat64: 1
+geteuid32: 1
+_llseek: 1
+mmap2: 1
+sigreturn: 1
+gettimeofday: 1
+prctl: 1
