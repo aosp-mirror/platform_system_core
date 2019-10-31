@@ -23,6 +23,7 @@
 #include <iostream>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
@@ -446,61 +447,6 @@ TEST_F(SnapshotTest, Merge) {
     ASSERT_EQ(test_string, buffer);
 }
 
-TEST_F(SnapshotTest, MergeCannotRemoveCow) {
-    ASSERT_TRUE(AcquireLock());
-
-    static const uint64_t kDeviceSize = 1024 * 1024;
-    SnapshotStatus status;
-    status.set_name("test-snapshot");
-    status.set_device_size(kDeviceSize);
-    status.set_snapshot_size(kDeviceSize);
-    status.set_cow_file_size(kDeviceSize);
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
-    ASSERT_TRUE(CreateCowImage("test-snapshot"));
-
-    std::string base_device, cow_device, snap_device;
-    ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
-    ASSERT_TRUE(MapCowImage("test-snapshot", 10s, &cow_device));
-    ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, cow_device, 10s,
-                                &snap_device));
-
-    // Keep an open handle to the cow device. This should cause the merge to
-    // be incomplete.
-    auto cow_path = android::base::GetProperty("gsid.mapped_image.test-snapshot-cow-img", "");
-    unique_fd fd(open(cow_path.c_str(), O_RDONLY | O_CLOEXEC));
-    ASSERT_GE(fd, 0);
-
-    // Release the lock.
-    lock_ = nullptr;
-
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
-
-    test_device->set_slot_suffix("_b");
-    ASSERT_TRUE(sm->InitiateMerge());
-
-    // COW cannot be removed due to open fd, so expect a soft failure.
-    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeNeedsReboot);
-
-    // Release the handle to the COW device to fake a reboot.
-    fd.reset();
-    // Wait 1s, otherwise DeleteSnapshotDevice may fail with EBUSY.
-    sleep(1);
-    // Forcefully delete the snapshot device, so it looks like we just rebooted.
-    ASSERT_TRUE(DeleteSnapshotDevice("test-snapshot"));
-
-    // Map snapshot should fail now, because we're in a merge-complete state.
-    ASSERT_TRUE(AcquireLock());
-    ASSERT_TRUE(MapCowImage("test-snapshot", 10s, &cow_device));
-    ASSERT_FALSE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, cow_device, 10s,
-                                 &snap_device));
-
-    // Release everything and now the merge should complete.
-    fd = {};
-    lock_ = nullptr;
-
-    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeCompleted);
-}
-
 TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     ASSERT_TRUE(AcquireLock());
 
@@ -682,7 +628,8 @@ class SnapshotUpdateTest : public SnapshotTest {
         src_ = MetadataBuilder::New(*opener_, "super", 0);
         ASSERT_TRUE(FillFakeMetadata(src_.get(), manifest_, "_a"));
         // Add sys_b which is like system_other.
-        auto partition = src_->AddPartition("sys_b", 0);
+        ASSERT_TRUE(src_->AddGroup("group_b", kGroupSize));
+        auto partition = src_->AddPartition("sys_b", "group_b", 0);
         ASSERT_NE(nullptr, partition);
         ASSERT_TRUE(src_->ResizePartition(partition, 1_MiB));
         auto metadata = src_->Export();
@@ -1162,6 +1109,67 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
     }
 
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
+}
+
+TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
+    // Make source partitions as big as possible to force COW image to be created.
+    SetSize(sys_, 5_MiB);
+    SetSize(vnd_, 5_MiB);
+    SetSize(prd_, 5_MiB);
+    src_ = MetadataBuilder::New(*opener_, "super", 0);
+    src_->RemoveGroupAndPartitions(group_->name() + "_a");
+    src_->RemoveGroupAndPartitions(group_->name() + "_b");
+    ASSERT_TRUE(FillFakeMetadata(src_.get(), manifest_, "_a"));
+    auto metadata = src_->Export();
+    ASSERT_NE(nullptr, metadata);
+    ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *metadata.get(), 0));
+
+    // OTA client blindly unmaps all partitions that are possibly mapped.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
+    }
+
+    // Add operations for sys. The whole device is written.
+    auto e = sys_->add_operations()->add_dst_extents();
+    e->set_start_block(0);
+    e->set_num_blocks(GetSize(sys_) / manifest_.block_size());
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    // Normally we should use NewForFirstStageMount, but if so, "gsid.mapped_image.sys_b-cow-img"
+    // won't be set.
+    auto init = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+
+    // Keep an open handle to the cow device. This should cause the merge to
+    // be incomplete.
+    auto cow_path = android::base::GetProperty("gsid.mapped_image.sys_b-cow-img", "");
+    unique_fd fd(open(cow_path.c_str(), O_RDONLY | O_CLOEXEC));
+    ASSERT_GE(fd, 0);
+
+    // COW cannot be removed due to open fd, so expect a soft failure.
+    ASSERT_EQ(UpdateState::MergeNeedsReboot, init->InitiateMergeAndWait());
+
+    // Simulate shutting down the device.
+    fd.reset();
+    ASSERT_TRUE(UnmapAll());
+
+    // init does first stage mount again.
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+
+    // sys_b should be mapped as a dm-linear device directly.
+    ASSERT_FALSE(sm->IsSnapshotDevice("sys_b", nullptr));
+
+    // Merge should be able to complete now.
+    ASSERT_EQ(UpdateState::MergeCompleted, init->InitiateMergeAndWait());
 }
 
 class MetadataMountedTest : public SnapshotUpdateTest {
