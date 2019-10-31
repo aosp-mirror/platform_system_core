@@ -49,3 +49,4 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
 bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& args);
 bool OemCmdHandler(FastbootDevice* device, const std::vector<std::string>& args);
 bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args);
+bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string>& args);
