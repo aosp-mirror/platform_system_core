@@ -23,6 +23,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android/hardware/boot/1.1/IBootControl.h>
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr.h>
 #include <healthhalutils/HealthHalUtils.h>
@@ -34,9 +35,11 @@
 
 using ::android::hardware::boot::V1_0::BoolResult;
 using ::android::hardware::boot::V1_0::Slot;
+using ::android::hardware::boot::V1_1::MergeStatus;
 using ::android::hardware::fastboot::V1_0::FileSystemType;
 using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
+using IBootControl1_1 = ::android::hardware::boot::V1_1::IBootControl;
 using namespace android::fs_mgr;
 
 constexpr char kFastbootProtocolVersion[] = "0.4";
@@ -422,5 +425,36 @@ bool GetSuperPartitionName(FastbootDevice* device, const std::vector<std::string
                            std::string* message) {
     uint32_t slot_number = SlotNumberForSlotSuffix(device->GetCurrentSlot());
     *message = fs_mgr_get_super_partition_name(slot_number);
+    return true;
+}
+
+bool GetSnapshotUpdateStatus(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                             std::string* message) {
+    // Note that we use the HAL rather than mounting /metadata, since we want
+    // our results to match the bootloader.
+    auto hal = device->boot_control_hal();
+    if (!hal) {
+        *message = "not supported";
+        return false;
+    }
+
+    android::sp<IBootControl1_1> hal11 = IBootControl1_1::castFrom(hal);
+    if (!hal11) {
+        *message = "not supported";
+        return false;
+    }
+
+    MergeStatus status = hal11->getSnapshotMergeStatus();
+    switch (status) {
+        case MergeStatus::SNAPSHOTTED:
+            *message = "snapshotted";
+            break;
+        case MergeStatus::MERGING:
+            *message = "merging";
+            break;
+        default:
+            *message = "none";
+            break;
+    }
     return true;
 }
