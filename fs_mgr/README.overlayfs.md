@@ -32,9 +32,9 @@ Use the following sequence to perform the remount.
 
 Then enter one of the following sequences:
 
-    $ adb stop
+    $ adb shell stop
     $ adb sync
-    $ adb start
+    $ adb shell start
     $ adb reboot
 
 *or*
