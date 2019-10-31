@@ -36,19 +36,13 @@ cc_binary {
 
     defaults: ["logcat_defaults"],
     srcs: [
-        "logcat_main.cpp",
         "logcat.cpp",
     ],
 }
 
-cc_binary {
+sh_binary {
     name: "logcatd",
-
-    defaults: ["logcat_defaults"],
-    srcs: [
-        "logcatd_main.cpp",
-        "logcat.cpp",
-    ],
+    src: "logcatd",
 }
 
 sh_binary {
