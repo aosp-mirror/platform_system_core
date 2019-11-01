@@ -919,7 +919,7 @@ on property:ro.debuggable=1
 on init && property:ro.debuggable=1
     start console
 
-on userspace-reboot
+on userspace-reboot-requested
   # TODO(b/135984674): reset all necessary properties here.
   setprop sys.init.userspace_reboot_in_progress 1
   setprop sys.boot_completed 0
