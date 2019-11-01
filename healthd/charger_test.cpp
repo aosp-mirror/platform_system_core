@@ -21,13 +21,22 @@
 #include <condition_variable>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <streambuf>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include <health2/Health.h>
+#include <health/utils.h>
+#include <health2impl/Health.h>
+
+#include "healthd_mode_charger.h"
+
+using android::hardware::health::InitHealthdConfig;
+using android::hardware::health::V2_1::HealthInfo;
+using android::hardware::health::V2_1::IHealth;
+using android::hardware::health::V2_1::implementation::Health;
 
 #define LOG_THIS(fmt, ...)     \
     ALOGE(fmt, ##__VA_ARGS__); \
@@ -129,22 +138,23 @@ void healthd_board_init(struct healthd_config* config) {
     config->screen_on = NULL;
 }
 
-int healthd_board_battery_update(struct android::BatteryProperties*) {
-    getUpdateNotifier().set(true /* updated */);
+class TestHealth : public Health {
+  protected:
+    using Health::Health;
+    void UpdateHealthInfo(HealthInfo*) override { getUpdateNotifier().set(true /* updated */); }
+};
 
-    // return 0 to log periodic polled battery status to kernel log
-    return 0;
-}
-
-extern int healthd_charger_main(int argc, char** argv);
-
-int main(int argc, char** argv) {
-    using android::hardware::health::V2_0::implementation::Health;
-
+int main(int /*argc*/, char** /*argv*/) {
     const char* dumpFile = "/data/local/tmp/dump.txt";
 
+    auto config = std::make_unique<healthd_config>();
+    InitHealthdConfig(config.get());
+    healthd_board_init(config.get());
+    sp<IHealth> passthrough = new TestHealth(std::move(config));
+
     std::thread bgThread([=] {
-        healthd_charger_main(argc, argv);
+        android::Charger charger(passthrough);
+        charger.StartLoop();
     });
 
     // wait for healthd_init to finish
@@ -153,7 +163,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    Health::getImplementation()->debug(createHidlHandle(dumpFile), {} /* options */);
+    passthrough->debug(createHidlHandle(dumpFile), {} /* options */);
 
     std::string content = openToString(dumpFile);
     int status = expectContains(content, {
