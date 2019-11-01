@@ -432,19 +432,13 @@ bool GetSnapshotUpdateStatus(FastbootDevice* device, const std::vector<std::stri
                              std::string* message) {
     // Note that we use the HAL rather than mounting /metadata, since we want
     // our results to match the bootloader.
-    auto hal = device->boot_control_hal();
+    auto hal = device->boot1_1();
     if (!hal) {
         *message = "not supported";
         return false;
     }
 
-    android::sp<IBootControl1_1> hal11 = IBootControl1_1::castFrom(hal);
-    if (!hal11) {
-        *message = "not supported";
-        return false;
-    }
-
-    MergeStatus status = hal11->getSnapshotMergeStatus();
+    MergeStatus status = hal->getSnapshotMergeStatus();
     switch (status) {
         case MergeStatus::SNAPSHOTTED:
             *message = "snapshotted";
