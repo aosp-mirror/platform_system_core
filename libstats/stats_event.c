@@ -17,6 +17,7 @@
 #include "stats_event.h"
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "include/stats_event_list.h"
 
 #define byte unsigned char
@@ -66,6 +67,13 @@ struct stats_event {
     uint32_t tag;
 };
 
+static int64_t get_elapsed_realtime_ns() {
+    struct timespec t;
+    t.tv_sec = t.tv_nsec = 0;
+    clock_gettime(CLOCK_BOOTTIME, &t);
+    return (int64_t)t.tv_sec * 1000000000LL + t.tv_nsec;
+}
+
 struct stats_event* stats_event_obtain() {
     struct stats_event* event = malloc(sizeof(struct stats_event));
 
@@ -77,7 +85,7 @@ struct stats_event* stats_event_obtain() {
     event->size = 0;
     event->numElements = 0;
     event->atomId = 0;
-    event->timestampNs = 0;
+    event->timestampNs = get_elapsed_realtime_ns();
     event->errors = 0;
     event->tag = STATS_EVENT_TAG;
     return event;
@@ -87,6 +95,7 @@ void stats_event_release(struct stats_event* event) {
     free(event);  // free is a no-op if event is NULL
 }
 
+// Should only be used for testing
 void stats_event_set_timestamp_ns(struct stats_event* event, uint64_t timestampNs) {
     if (event) event->timestampNs = timestampNs;
 }
