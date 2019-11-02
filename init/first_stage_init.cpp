@@ -239,11 +239,16 @@ int FirstStageMain(int argc, char** argv) {
     }
 
     Modprobe m({"/lib/modules"});
-    if (!m.LoadListedModules()) {
-        LOG(FATAL) << "Failed to load kernel modules";
+    auto want_console = ALLOW_FIRST_STAGE_CONSOLE && FirstStageConsole(cmdline);
+    if (!m.LoadListedModules(!want_console)) {
+        if (want_console) {
+            LOG(ERROR) << "Failed to load kernel modules, starting console";
+        } else {
+            LOG(FATAL) << "Failed to load kernel modules";
+        }
     }
 
-    if (ALLOW_FIRST_STAGE_CONSOLE && FirstStageConsole(cmdline)) {
+    if (want_console) {
         StartConsole();
     }
 

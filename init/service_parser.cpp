@@ -560,6 +560,11 @@ Result<void> ServiceParser::ParseSection(std::vector<std::string>&& args,
             str_args[0] = "/system/bin/watchdogd";
         }
     }
+    if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
+        if (str_args[0] == "/charger") {
+            str_args[0] = "/system/bin/charger";
+        }
+    }
 
     service_ = std::make_unique<Service>(name, restart_action_subcontext, str_args);
     return {};

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2017 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,4 +16,12 @@
 
 #pragma once
 
-int RunLogcat(int argc, char** argv);
+#include <android/hardware/health/2.1/IHealth.h>
+
+namespace android {
+namespace hardware {
+namespace health {
+sp<V2_1::IHealth> GetPassthroughHealth();
+}  // namespace health
+}  // namespace hardware
+}  // namespace android

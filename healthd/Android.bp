@@ -89,6 +89,7 @@ cc_binary {
 
 cc_library_static {
     name: "libhealthd_charger_nops",
+    recovery_available: true,
 
     srcs: [
         "healthd_mode_charger_nops.cpp",
@@ -104,17 +105,19 @@ cc_library_static {
     ],
 
     static_libs: [
-        "android.hardware.health@2.0-impl",
+        "libhealthloop",
+        "libhealth2impl",
     ],
 
     shared_libs: [
-        "android.hardware.health@2.0",
+        "android.hardware.health@2.1",
         "libutils",
     ],
 }
 
 sysprop_library {
     name: "charger_sysprop",
+    recovery_available: true,
     srcs: ["charger.sysprop"],
     property_owner: "Platform",
     api_packages: ["android.sysprop"],
@@ -141,16 +144,16 @@ cc_library_static {
     export_include_dirs: [".", "include"],
 
     static_libs: [
-        "android.hardware.health@2.0-impl",
         "android.hardware.health@1.0-convert",
         "libcharger_sysprop",
-        "libhealthstoragedefault",
         "libhealthd_draw",
+        "libhealthloop",
+        "libhealth2impl",
         "libminui",
     ],
 
     shared_libs: [
-        "android.hardware.health@2.0",
+        "android.hardware.health@2.1",
         "libbase",
         "libcutils",
         "liblog",
@@ -163,4 +166,77 @@ cc_library_static {
         "healthd_mode_charger.cpp",
         "AnimationParser.cpp",
     ],
+}
+
+cc_defaults {
+    name: "charger_defaults",
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    shared_libs: [
+        // common
+        "android.hardware.health@2.0",
+        "android.hardware.health@2.1",
+        "libbase",
+        "libcutils",
+        "libhidlbase",
+        "liblog",
+        "libutils",
+
+        // system charger only
+        "libpng",
+    ],
+
+    static_libs: [
+        // common
+        "android.hardware.health@1.0-convert",
+        "libbatterymonitor",
+        "libcharger_sysprop",
+        "libhealthd_charger_nops",
+        "libhealthloop",
+        "libhealth2impl",
+
+        // system charger only
+        "libhealthd_draw",
+        "libhealthd_charger",
+        "libminui",
+        "libsuspend",
+    ],
+}
+
+cc_binary {
+    name: "charger",
+    defaults: ["charger_defaults"],
+    recovery_available: true,
+    srcs: [
+        "charger.cpp",
+        "charger_utils.cpp",
+    ],
+
+    target: {
+        recovery: {
+            // No UI and libsuspend for recovery charger.
+            cflags: [
+                "-DCHARGER_FORCE_NO_UI=1",
+            ],
+            exclude_shared_libs: [
+                "libpng",
+            ],
+            exclude_static_libs: [
+                "libhealthd_draw",
+                "libhealthd_charger",
+                "libminui",
+                "libsuspend",
+            ],
+        }
+    }
+}
+
+cc_test {
+    name: "charger_test",
+    defaults: ["charger_defaults"],
+    srcs: ["charger_test.cpp"],
 }

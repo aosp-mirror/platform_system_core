@@ -26,7 +26,7 @@ class Modprobe {
   public:
     Modprobe(const std::vector<std::string>&);
 
-    bool LoadListedModules();
+    bool LoadListedModules(bool strict = true);
     bool LoadWithAliases(const std::string& module_name, bool strict,
                          const std::string& parameters = "");
     bool Remove(const std::string& module_name);
