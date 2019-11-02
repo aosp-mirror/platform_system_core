@@ -14,16 +14,14 @@
  * limitations under the License.
  */
 
-#include "healthd_mode_charger_nops.h"
+#pragma once
 
-#include <health2impl/HalHealthLoop.h>
+#include <android/hardware/health/2.1/IHealth.h>
 
-#include "charger_utils.h"
-
-using android::hardware::health::GetPassthroughHealth;
-using android::hardware::health::V2_1::implementation::HalHealthLoop;
-
-int healthd_charger_nops(int /* argc */, char** /* argv */) {
-    HalHealthLoop charger("charger", GetPassthroughHealth());
-    return charger.StartLoop();
-}
+namespace android {
+namespace hardware {
+namespace health {
+sp<V2_1::IHealth> GetPassthroughHealth();
+}  // namespace health
+}  // namespace hardware
+}  // namespace android
