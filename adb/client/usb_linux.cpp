@@ -609,6 +609,7 @@ static void device_poll_thread() {
     while (true) {
         // TODO: Use inotify.
         find_usb_device("/dev/bus/usb", register_device);
+        adb_notify_device_scan_complete();
         kick_disconnected_devices();
         std::this_thread::sleep_for(1s);
     }
