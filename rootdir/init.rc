@@ -5,11 +5,11 @@
 #
 
 import /init.environ.rc
-import /init.usb.rc
+import /system/etc/init/hw/init.usb.rc
 import /init.${ro.hardware}.rc
 import /vendor/etc/init/hw/init.${ro.hardware}.rc
-import /init.usb.configfs.rc
-import /init.${ro.zygote}.rc
+import /system/etc/init/hw/init.usb.configfs.rc
+import /system/etc/init/hw/init.${ro.zygote}.rc
 
 # Cgroups are mounted right before early-init using list from /etc/cgroups.json
 on early-init
