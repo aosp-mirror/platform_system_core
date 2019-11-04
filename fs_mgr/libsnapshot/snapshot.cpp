@@ -568,6 +568,27 @@ bool SnapshotManager::InitiateMerge() {
         }
     }
 
+    auto metadata = ReadCurrentMetadata();
+    for (auto it = snapshots.begin(); it != snapshots.end();) {
+        switch (GetMetadataPartitionState(*metadata, *it)) {
+            case MetadataPartitionState::Flashed:
+                LOG(WARNING) << "Detected re-flashing for partition " << *it
+                             << ". Skip merging it.";
+                [[fallthrough]];
+            case MetadataPartitionState::None: {
+                LOG(WARNING) << "Deleting snapshot for partition " << *it;
+                if (!DeleteSnapshot(lock.get(), *it)) {
+                    LOG(WARNING) << "Cannot delete snapshot for partition " << *it
+                                 << ". Skip merging it anyways.";
+                }
+                it = snapshots.erase(it);
+            } break;
+            case MetadataPartitionState::Updated: {
+                ++it;
+            } break;
+        }
+    }
+
     // Point of no return - mark that we're starting a merge. From now on every
     // snapshot must be a merge target.
     if (!WriteUpdateState(lock.get(), UpdateState::Merging)) {
@@ -855,8 +876,15 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
 
     std::string dm_name = GetSnapshotDeviceName(name, snapshot_status);
 
+    std::unique_ptr<LpMetadata> current_metadata;
+
     if (!IsSnapshotDevice(dm_name)) {
-        if (IsCancelledSnapshot(name)) {
+        if (!current_metadata) {
+            current_metadata = ReadCurrentMetadata();
+        }
+
+        if (!current_metadata ||
+            GetMetadataPartitionState(*current_metadata, name) != MetadataPartitionState::Updated) {
             DeleteSnapshot(lock, name);
             return UpdateState::Cancelled;
         }
@@ -877,7 +905,8 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
     }
 
     // This check is expensive so it is only enabled for debugging.
-    DCHECK(!IsCancelledSnapshot(name));
+    DCHECK((current_metadata = ReadCurrentMetadata()) &&
+           GetMetadataPartitionState(*current_metadata, name) == MetadataPartitionState::Updated);
 
     std::string target_type;
     DmTargetSnapshot::Status status;
@@ -1106,13 +1135,17 @@ bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock) {
     if (device_->GetSlotSuffix() != old_slot) {
         // We're booted into the target slot, which means we just rebooted
         // after applying the update.
-        return false;
+        if (!HandleCancelledUpdateOnNewSlot(lock)) {
+            return false;
+        }
     }
 
     // The only way we can get here is if:
     //  (1) The device rolled back to the previous slot.
     //  (2) This function was called prematurely before rebooting the device.
     //  (3) fastboot set_active was used.
+    //  (4) The device updates to the new slot but re-flashed *all* partitions
+    //      in the new slot.
     //
     // In any case, delete the snapshots. It may be worth using the boot_control
     // HAL to differentiate case (2).
@@ -1120,18 +1153,66 @@ bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock) {
     return true;
 }
 
-bool SnapshotManager::IsCancelledSnapshot(const std::string& snapshot_name) {
+std::unique_ptr<LpMetadata> SnapshotManager::ReadCurrentMetadata() {
     const auto& opener = device_->GetPartitionOpener();
     uint32_t slot = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
     auto super_device = device_->GetSuperDevice(slot);
     auto metadata = android::fs_mgr::ReadMetadata(opener, super_device, slot);
     if (!metadata) {
         LOG(ERROR) << "Could not read dynamic partition metadata for device: " << super_device;
-        return false;
+        return nullptr;
     }
-    auto partition = android::fs_mgr::FindPartition(*metadata.get(), snapshot_name);
-    if (!partition) return false;
-    return (partition->attributes & LP_PARTITION_ATTR_UPDATED) == 0;
+    return metadata;
+}
+
+SnapshotManager::MetadataPartitionState SnapshotManager::GetMetadataPartitionState(
+        const LpMetadata& metadata, const std::string& name) {
+    auto partition = android::fs_mgr::FindPartition(metadata, name);
+    if (!partition) return MetadataPartitionState::None;
+    if (partition->attributes & LP_PARTITION_ATTR_UPDATED) {
+        return MetadataPartitionState::Updated;
+    }
+    return MetadataPartitionState::Flashed;
+}
+
+bool SnapshotManager::HandleCancelledUpdateOnNewSlot(LockedFile* lock) {
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock, &snapshots)) {
+        LOG(WARNING) << "Failed to list snapshots to determine whether device has been flashed "
+                     << "after applying an update. Assuming no snapshots.";
+        // Let HandleCancelledUpdate resets UpdateState.
+        return true;
+    }
+
+    // Attempt to detect re-flashing on each partition.
+    // - If all partitions are re-flashed, we can proceed to cancel the whole update.
+    // - If only some of the partitions are re-flashed, snapshots for re-flashed partitions are
+    //   deleted. Caller is responsible for merging the rest of the snapshots.
+    // - If none of the partitions are re-flashed, caller is responsible for merging the snapshots.
+    auto metadata = ReadCurrentMetadata();
+    if (!metadata) return false;
+    bool all_snapshot_cancelled = true;
+    for (const auto& snapshot_name : snapshots) {
+        if (GetMetadataPartitionState(*metadata, snapshot_name) ==
+            MetadataPartitionState::Updated) {
+            LOG(WARNING) << "Cannot cancel update because snapshot" << snapshot_name
+                         << " is in use.";
+            all_snapshot_cancelled = false;
+            continue;
+        }
+        // Delete snapshots for partitions that are re-flashed after the update.
+        LOG(INFO) << "Detected re-flashing of partition " << snapshot_name << ".";
+        if (!DeleteSnapshot(lock, snapshot_name)) {
+            // This is an error, but it is okay to leave the snapshot in the short term.
+            // However, if all_snapshot_cancelled == false after exiting the loop, caller may
+            // initiate merge for this unused snapshot, which is likely to fail.
+            LOG(WARNING) << "Failed to delete snapshot for re-flashed partition " << snapshot_name;
+        }
+    }
+    if (!all_snapshot_cancelled) return false;
+
+    LOG(INFO) << "All partitions are re-flashed after update, removing all update states.";
+    return true;
 }
 
 bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
@@ -2087,6 +2168,28 @@ std::unique_ptr<AutoDevice> SnapshotManager::EnsureMetadataMounted() {
         return std::unique_ptr<AutoUnmountDevice>(new AutoUnmountDevice());
     }
     return AutoUnmountDevice::New(device_->GetMetadataDir());
+}
+
+UpdateState SnapshotManager::InitiateMergeAndWait() {
+    LOG(INFO) << "Waiting for any previous merge request to complete. "
+              << "This can take up to several minutes.";
+    auto state = ProcessUpdateState();
+    if (state == UpdateState::None) {
+        LOG(INFO) << "Can't find any snapshot to merge.";
+        return state;
+    }
+    if (state == UpdateState::Unverified) {
+        if (!InitiateMerge()) {
+            LOG(ERROR) << "Failed to initiate merge.";
+            return state;
+        }
+        // All other states can be handled by ProcessUpdateState.
+        LOG(INFO) << "Waiting for merge to complete. This can take up to several minutes.";
+        state = ProcessUpdateState();
+    }
+
+    LOG(INFO) << "Merge finished with state \"" << state << "\".";
+    return state;
 }
 
 }  // namespace snapshot
