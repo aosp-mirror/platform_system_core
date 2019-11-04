@@ -183,9 +183,11 @@ cc_binary {
     static_libs: ["libinit"],
     required: [
         "e2fsdroid",
+        "init.rc",
         "mke2fs",
         "sload_f2fs",
         "make_f2fs",
+        "ueventd.rc",
     ],
     srcs: ["main.cpp"],
     symlinks: ["ueventd"],

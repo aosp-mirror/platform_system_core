@@ -1,22 +1,6 @@
 LOCAL_PATH:= $(call my-dir)
 
 #######################################
-# init.rc
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := init.rc
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
-LOCAL_REQUIRED_MODULES := fsverity_init
-
-# The init symlink must be a post install command of a file that is to TARGET_ROOT_OUT.
-# Since init.rc is required for init and satisfies that requirement, we hijack it to create the symlink.
-LOCAL_POST_INSTALL_CMD := ln -sf /system/bin/init $(TARGET_ROOT_OUT)/init
-
-include $(BUILD_PREBUILT)
-
-#######################################
 # init-debug.rc
 include $(CLEAR_VARS)
 
@@ -147,6 +131,10 @@ endif
 ifeq ($(AB_OTA_UPDATER),true)
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/postinstall
 endif
+
+# The init symlink must be a post install command of a file that is to TARGET_ROOT_OUT.
+# Since init.environ.rc is required for init and satisfies that requirement, we hijack it to create the symlink.
+LOCAL_POST_INSTALL_CMD += ; ln -sf /system/bin/init $(TARGET_ROOT_OUT)/init
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
