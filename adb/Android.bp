@@ -356,11 +356,11 @@ cc_library_static {
     generated_headers: ["platform_tools_version"],
 
     static_libs: [
-        "libadbconnection_server",
         "libdiagnose_usb",
     ],
 
     shared_libs: [
+        "libadbconnection_server",
         "libadbd_auth",
         "libasyncio",
         "libbase",
@@ -409,12 +409,12 @@ cc_library {
     ],
 
     static_libs: [
-        "libadbconnection_server",
         "libadbd_core",
         "libdiagnose_usb",
     ],
 
     shared_libs: [
+        "libadbconnection_server",
         "libadbd_auth",
         "libasyncio",
         "libbase",
@@ -462,6 +462,7 @@ cc_library {
     ],
 
     shared_libs: [
+        "libadbconnection_server",
         "libadbd_auth",
         "libadbd_services",
         "libasyncio",
@@ -495,17 +496,26 @@ cc_binary {
         keep_symbols: true,
     },
 
-    shared_libs: [
+    stl: "libc++_static",
+    static_libs: [
         "libadbd",
         "libadbd_auth",
         "libadbd_services",
+        "libasyncio",
         "libbase",
         "libcap",
-        "libcrypto",
+        "libcrypto_utils",
         "libcutils",
+        "libdiagnose_usb",
         "liblog",
+        "libmdnssd",
         "libminijail",
         "libselinux",
+    ],
+
+    shared_libs: [
+        "libadbconnection_server",
+        "libcrypto",
     ],
 }
 
@@ -523,53 +533,6 @@ phony {
     name: "adbd_system_binaries_recovery",
     required: [
         "reboot.recovery",
-    ],
-}
-
-cc_binary {
-    name: "static_adbd",
-    defaults: ["adbd_defaults", "host_adbd_supported"],
-
-    recovery_available: false,
-    static_executable: true,
-    host_supported: false,
-
-    srcs: [
-        "daemon/main.cpp",
-    ],
-
-    cflags: [
-        "-D_GNU_SOURCE",
-        "-Wno-deprecated-declarations",
-    ],
-
-    strip: {
-        keep_symbols: true,
-    },
-
-    static_libs: [
-        "libadbconnection_server",
-        "libadbd",
-        "libadbd_services",
-        "libasyncio",
-        "libavb_user",
-        "libbase",
-        "libbootloader_message",
-        "libcap",
-        "libcrypto_static",
-        "libcrypto_utils",
-        "libcutils",
-        "libdiagnose_usb",
-        "libext4_utils",
-        "libfec",
-        "libfec_rs",
-        "libfs_mgr",
-        "liblog",
-        "liblp",
-        "libmdnssd",
-        "libminijail",
-        "libselinux",
-        "libsquashfs_utils",
     ],
 }
 
@@ -764,4 +727,40 @@ cc_test_host {
         "fastdeploy/testdata/sample.apk",
         "fastdeploy/testdata/sample.cd",
     ],
+}
+
+prebuilt_etc {
+    name: "com.android.adbd.ld.config.txt",
+    src: "apex/ld.config.txt",
+    filename: "ld.config.txt",
+    installable: false,
+}
+
+apex {
+    name: "com.android.adbd",
+    manifest: "apex/apex_manifest.json",
+
+    binaries: ["adbd"],
+    prebuilts: ["com.android.adbd.init.rc", "com.android.adbd.ld.config.txt"],
+
+    key: "com.android.adbd.key",
+    certificate: ":com.android.adbd.certificate",
+}
+
+apex_key {
+    name: "com.android.adbd.key",
+    public_key: "apex/com.android.adbd.avbpubkey",
+    private_key: "apex/com.android.adbd.pem",
+}
+
+android_app_certificate {
+    name: "com.android.adbd.certificate",
+    certificate: "apex/com.android.adbd",
+}
+
+prebuilt_etc {
+    name: "com.android.adbd.init.rc",
+    src: "apex/adbd.rc",
+    filename: "init.rc",
+    installable: false,
 }

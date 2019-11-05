@@ -16,6 +16,7 @@ service adbd /system/bin/adbd --root_seclabel=u:r:su:s0
     class core
     socket adbd seqpacket 660 system system
     disabled
+    updatable
     seclabel u:r:adbd:s0
 
 on boot
