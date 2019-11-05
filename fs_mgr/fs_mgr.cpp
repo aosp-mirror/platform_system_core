@@ -1407,9 +1407,8 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
             return -1;
         }
     } else {
-        // TODO(b/135984674): support remounting for ext4.
-        LERROR << "Remounting in checkpointing mode is not yet supported for ext4";
-        return -1;
+        // STOPSHIP(b/143970043): support remounting for ext4.
+        LWARNING << "Remounting into checkpointing is not supported for ex4. Proceed with caution";
     }
     return 0;
 }
