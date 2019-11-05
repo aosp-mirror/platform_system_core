@@ -361,6 +361,7 @@ cc_library_static {
     ],
 
     shared_libs: [
+        "libadbd_auth",
         "libasyncio",
         "libbase",
         "libcrypto",
@@ -414,6 +415,7 @@ cc_library {
     ],
 
     shared_libs: [
+        "libadbd_auth",
         "libasyncio",
         "libbase",
         "libcrypto",
@@ -460,6 +462,7 @@ cc_library {
     ],
 
     shared_libs: [
+        "libadbd_auth",
         "libadbd_services",
         "libasyncio",
         "libbase",
@@ -494,6 +497,7 @@ cc_binary {
 
     shared_libs: [
         "libadbd",
+        "libadbd_auth",
         "libadbd_services",
         "libbase",
         "libcap",
@@ -509,6 +513,7 @@ phony {
     name: "adbd_system_binaries",
     required: [
         "abb",
+        "libadbd_auth",
         "reboot",
         "set-verity-state",
     ]
@@ -615,6 +620,7 @@ cc_test {
 
     static_libs: [
         "libadbd",
+        "libadbd_auth",
         "libbase",
         "libcutils",
         "libcrypto_utils",
