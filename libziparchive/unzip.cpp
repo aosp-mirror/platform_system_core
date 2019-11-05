@@ -19,6 +19,7 @@
 #include <fnmatch.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
