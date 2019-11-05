@@ -172,6 +172,7 @@ void device_poll_thread() {
 
     while (true) {
         find_devices();
+        adb_notify_device_scan_complete();
         std::this_thread::sleep_for(1s);
     }
 }
