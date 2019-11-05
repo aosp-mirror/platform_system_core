@@ -218,8 +218,6 @@ int adbd_main(int server_port) {
     }
 #endif
 
-    adbd_auth_init();
-
     // Our external storage path may be different than apps, since
     // we aren't able to bind mount after dropping root.
     const char* adb_external_storage = getenv("ADB_EXTERNAL_STORAGE");
@@ -233,6 +231,9 @@ int adbd_main(int server_port) {
 #if defined(__ANDROID__)
     drop_privileges(server_port);
 #endif
+
+    // adbd_auth_init will spawn a thread, so we need to defer it until after selinux transitions.
+    adbd_auth_init();
 
     bool is_usb = false;
 
