@@ -53,11 +53,13 @@ struct stats_event;
 #define ERROR_NO_ATOM_ID 0x2
 #define ERROR_OVERFLOW 0x4
 #define ERROR_ATTRIBUTION_CHAIN_TOO_LONG 0x8
-#define ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD 0x10
-#define ERROR_INVALID_ANNOTATION_ID 0x20
-#define ERROR_ANNOTATION_ID_TOO_LARGE 0x40
-#define ERROR_TOO_MANY_ANNOTATIONS 0x80
-#define ERROR_TOO_MANY_FIELDS 0x100
+#define ERROR_TOO_MANY_KEY_VALUE_PAIRS 0x10
+#define ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD 0x20
+#define ERROR_INVALID_ANNOTATION_ID 0x40
+#define ERROR_ANNOTATION_ID_TOO_LARGE 0x80
+#define ERROR_TOO_MANY_ANNOTATIONS 0x100
+#define ERROR_TOO_MANY_FIELDS 0x200
+#define ERROR_INVALID_VALUE_TYPE 0x400
 
 /* TYPE IDS */
 #define INT32_TYPE 0x00
@@ -87,6 +89,30 @@ void stats_event_write_byte_array(struct stats_event* event, uint8_t* buf, uint3
 void stats_event_write_string8(struct stats_event* event, char* buf, uint32_t numBytes);
 void stats_event_write_attribution_chain(struct stats_event* event, uint32_t* uids, char** tags,
                                          uint32_t* tagLengths, uint32_t numNodes);
+
+/* key_value_pair struct can be constructed as follows:
+ *    struct key_value_pair pair;
+ *    pair.key = key;
+ *    pair.typeId = STRING_TYPE;
+ *    pair.stringValue = buf;
+ *    pair.stringBytes = strlen(buf);
+ */
+struct key_value_pair {
+    int32_t key;
+    uint8_t valueType;  // expected to be INT32_TYPE, INT64_TYPE, FLOAT_TYPE, or STRING_TYPE
+    union {
+        int32_t int32Value;
+        int64_t int64Value;
+        float floatValue;
+        struct {
+            char* stringValue;
+            uint32_t stringBytes;
+        };
+    };
+};
+
+void stats_event_add_key_value_pairs(struct stats_event* event, struct key_value_pair* pairs,
+                                     uint32_t numPairs);
 
 void stats_event_add_bool_annotation(struct stats_event* event, uint32_t annotationId, bool value);
 void stats_event_add_int32_annotation(struct stats_event* event, uint32_t annotationId,
