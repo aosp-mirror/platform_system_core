@@ -33,6 +33,8 @@
 #include <liblp/liblp.h>
 #include <update_engine/update_metadata.pb.h>
 
+#include <libsnapshot/auto_device.h>
+
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
     friend class test_set_name##_##individual_test##_Test
@@ -120,6 +122,7 @@ class SnapshotManager final {
         virtual const IPartitionOpener& GetPartitionOpener() const = 0;
         virtual bool IsOverlayfsSetup() const = 0;
         virtual bool SetBootControlMergeStatus(MergeStatus status) = 0;
+        virtual bool IsRecovery() const = 0;
     };
 
     ~SnapshotManager();
@@ -151,6 +154,7 @@ class SnapshotManager final {
     // rebooting or after rolling back), or merge the OTA.
     bool FinishedSnapshotWrites();
 
+  private:
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
     bool InitiateMerge();
@@ -177,6 +181,15 @@ class SnapshotManager final {
     //   MergeCompleted indicates that the update has fully completed.
     //   GetUpdateState will return None, and a new update can begin.
     UpdateState ProcessUpdateState();
+
+  public:
+    // Initiate the merge if necessary, then wait for the merge to finish.
+    // See InitiateMerge() and ProcessUpdateState() for details.
+    // Returns:
+    //   - None if no merge to initiate
+    //   - MergeCompleted if merge is completed
+    //   - other states indicating an error has occurred
+    UpdateState InitiateMergeAndWait();
 
     // Find the status of the current update, if any.
     //
@@ -209,6 +222,22 @@ class SnapshotManager final {
     // Dump debug information.
     bool Dump(std::ostream& os);
 
+    // Ensure metadata directory is mounted in recovery. When the returned
+    // AutoDevice is destroyed, the metadata directory is automatically
+    // unmounted.
+    // Return nullptr if any failure.
+    // In Android mode, Return an AutoDevice that does nothing
+    // In recovery, return an AutoDevice that does nothing if metadata entry
+    // is not found in fstab.
+    // Note: if this function is called the second time before the AutoDevice returned from the
+    // first call is destroyed, the device will be unmounted when any of these AutoDevices is
+    // destroyed. FOr example:
+    //   auto a = mgr->EnsureMetadataMounted(); // mounts
+    //   auto b = mgr->EnsureMetadataMounted(); // does nothing
+    //   b.reset() // unmounts
+    //   a.reset() // does nothing
+    std::unique_ptr<AutoDevice> EnsureMetadataMounted();
+
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
@@ -219,12 +248,13 @@ class SnapshotManager final {
     FRIEND_TEST(SnapshotTest, MapPartialSnapshot);
     FRIEND_TEST(SnapshotTest, MapSnapshot);
     FRIEND_TEST(SnapshotTest, Merge);
-    FRIEND_TEST(SnapshotTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
     FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
+    FRIEND_TEST(SnapshotUpdateTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
     friend class SnapshotTest;
     friend class SnapshotUpdateTest;
+    friend class FlashAfterUpdateTest;
     friend struct AutoDeleteCowImage;
     friend struct AutoDeleteSnapshot;
     friend struct PartitionCowCreator;
@@ -322,6 +352,9 @@ class SnapshotManager final {
     // condition was detected and handled.
     bool HandleCancelledUpdate(LockedFile* lock);
 
+    // Helper for HandleCancelledUpdate. Assumes booting from new slot.
+    bool HandleCancelledUpdateOnNewSlot(LockedFile* lock);
+
     // Remove artifacts created by the update process, such as snapshots, and
     // set the update state to None.
     bool RemoveAllUpdateState(LockedFile* lock);
@@ -340,7 +373,19 @@ class SnapshotManager final {
     bool MarkSnapshotMergeCompleted(LockedFile* snapshot_lock, const std::string& snapshot_name);
     void AcknowledgeMergeSuccess(LockedFile* lock);
     void AcknowledgeMergeFailure();
-    bool IsCancelledSnapshot(const std::string& snapshot_name);
+    std::unique_ptr<LpMetadata> ReadCurrentMetadata();
+
+    enum class MetadataPartitionState {
+        // Partition does not exist.
+        None,
+        // Partition is flashed.
+        Flashed,
+        // Partition is created by OTA client.
+        Updated,
+    };
+    // Helper function to check the state of a partition as described in metadata.
+    MetadataPartitionState GetMetadataPartitionState(const LpMetadata& metadata,
+                                                     const std::string& name);
 
     // Note that these require the name of the device containing the snapshot,
     // which may be the "inner" device. Use GetsnapshotDeviecName().
