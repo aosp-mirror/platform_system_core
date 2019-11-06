@@ -595,7 +595,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename, unsigned 
       }
       AndroidLogEntry e;
       char buf[512];
-      if (android_log_processBinaryLogBuffer(&log_entry.entry_v1, &e, g_eventTagMap, buf,
+      if (android_log_processBinaryLogBuffer(&log_entry.entry, &e, g_eventTagMap, buf,
                                              sizeof(buf)) == 0) {
         _LOG(log, logtype::LOGS, "%s.%03d %5d %5d %c %-8.*s: %s\n", timeBuf,
              log_entry.entry.nsec / 1000000, log_entry.entry.pid, log_entry.entry.tid, 'I',

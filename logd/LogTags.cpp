@@ -311,9 +311,7 @@ void LogTags::ReadPersistEventLogTags() {
         if (log_msg.entry.len <= sizeof(uint32_t)) continue;
         uint32_t Tag = get4LE(msg);
         if (Tag != TAG_DEF_LOG_TAG) continue;
-        uid_t uid = (log_msg.entry.hdr_size >= sizeof(logger_entry_v4))
-                        ? log_msg.entry.uid
-                        : AID_ROOT;
+        uid_t uid = log_msg.entry.uid;
 
         std::string Name;
         std::string Format;

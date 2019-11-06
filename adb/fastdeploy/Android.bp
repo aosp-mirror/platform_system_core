@@ -27,6 +27,7 @@ java_library {
 
 java_binary {
     name: "deployagent",
+    sdk_version: "24",
     static_libs: [
         "deployagent_lib",
     ],

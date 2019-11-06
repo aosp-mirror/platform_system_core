@@ -60,7 +60,7 @@ struct PartitionCowCreator {
 
   private:
     bool HasExtent(Partition* p, Extent* e);
-    std::optional<uint64_t> GetCowSize(uint64_t snapshot_size);
+    uint64_t GetCowSize();
 };
 
 }  // namespace snapshot

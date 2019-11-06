@@ -175,7 +175,7 @@ cc_benchmark {
 }
 
 cc_binary {
-    name: "unzip",
+    name: "ziptool",
     defaults: ["libziparchive_flags"],
     srcs: ["unzip.cpp"],
     shared_libs: [
@@ -183,4 +183,17 @@ cc_binary {
         "libziparchive",
     ],
     recovery_available: true,
+    host_supported: true,
+    target: {
+        android: {
+            symlinks: ["unzip", "zipinfo"],
+        },
+    },
+}
+
+cc_fuzz {
+    name: "libziparchive_fuzzer",
+    srcs: ["libziparchive_fuzzer.cpp"],
+    static_libs: ["libziparchive", "libbase", "libz", "liblog"],
+    host_supported: true,
 }

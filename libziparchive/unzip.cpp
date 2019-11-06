@@ -15,11 +15,12 @@
  */
 
 #include <errno.h>
-#include <error.h>
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <libgen.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -34,24 +35,49 @@
 #include <android-base/strings.h>
 #include <ziparchive/zip_archive.h>
 
+using android::base::EndsWith;
+using android::base::StartsWith;
+
 enum OverwriteMode {
   kAlways,
   kNever,
   kPrompt,
 };
 
+enum Role {
+  kUnzip,
+  kZipinfo,
+};
+
+static Role role;
 static OverwriteMode overwrite_mode = kPrompt;
+static bool flag_1 = false;
 static const char* flag_d = nullptr;
 static bool flag_l = false;
 static bool flag_p = false;
 static bool flag_q = false;
 static bool flag_v = false;
+static bool flag_x = false;
 static const char* archive_name = nullptr;
 static std::set<std::string> includes;
 static std::set<std::string> excludes;
 static uint64_t total_uncompressed_length = 0;
 static uint64_t total_compressed_length = 0;
 static size_t file_count = 0;
+
+static const char* g_progname;
+
+static void die(int error, const char* fmt, ...) {
+  va_list ap;
+
+  va_start(ap, fmt);
+  fprintf(stderr, "%s: ", g_progname);
+  vfprintf(stderr, fmt, ap);
+  if (error != 0) fprintf(stderr, ": %s", strerror(error));
+  fprintf(stderr, "\n");
+  va_end(ap);
+  exit(1);
+}
 
 static bool ShouldInclude(const std::string& name) {
   // Explicitly excluded?
@@ -88,32 +114,51 @@ static int CompressionRatio(int64_t uncompressed, int64_t compressed) {
   return static_cast<int>((100LL * (uncompressed - compressed)) / uncompressed);
 }
 
-static void MaybeShowHeader() {
-  if (!flag_q) printf("Archive:  %s\n", archive_name);
-  if (flag_v) {
-    printf(
-        " Length   Method    Size  Cmpr    Date    Time   CRC-32   Name\n"
-        "--------  ------  ------- ---- ---------- ----- --------  ----\n");
-  } else if (flag_l) {
-    printf(
-        "  Length      Date    Time    Name\n"
-        "---------  ---------- -----   ----\n");
+static void MaybeShowHeader(ZipArchiveHandle zah) {
+  if (role == kUnzip) {
+    // unzip has three formats.
+    if (!flag_q) printf("Archive:  %s\n", archive_name);
+    if (flag_v) {
+      printf(
+          " Length   Method    Size  Cmpr    Date    Time   CRC-32   Name\n"
+          "--------  ------  ------- ---- ---------- ----- --------  ----\n");
+    } else if (flag_l) {
+      printf(
+          "  Length      Date    Time    Name\n"
+          "---------  ---------- -----   ----\n");
+    }
+  } else {
+    // zipinfo.
+    if (!flag_1 && includes.empty() && excludes.empty()) {
+      ZipArchiveInfo info{GetArchiveInfo(zah)};
+      printf("Archive:  %s\n", archive_name);
+      printf("Zip file size: %" PRId64 " bytes, number of entries: %zu\n", info.archive_size,
+             info.entry_count);
+    }
   }
 }
 
 static void MaybeShowFooter() {
-  if (flag_v) {
-    printf(
-        "--------          -------  ---                            -------\n"
-        "%8" PRId64 "         %8" PRId64 " %3d%%                            %zu file%s\n",
-        total_uncompressed_length, total_compressed_length,
-        CompressionRatio(total_uncompressed_length, total_compressed_length), file_count,
-        (file_count == 1) ? "" : "s");
-  } else if (flag_l) {
-    printf(
-        "---------                     -------\n"
-        "%9" PRId64 "                     %zu file%s\n",
-        total_uncompressed_length, file_count, (file_count == 1) ? "" : "s");
+  if (role == kUnzip) {
+    if (flag_v) {
+      printf(
+          "--------          -------  ---                            -------\n"
+          "%8" PRId64 "         %8" PRId64 " %3d%%                            %zu file%s\n",
+          total_uncompressed_length, total_compressed_length,
+          CompressionRatio(total_uncompressed_length, total_compressed_length), file_count,
+          (file_count == 1) ? "" : "s");
+    } else if (flag_l) {
+      printf(
+          "---------                     -------\n"
+          "%9" PRId64 "                     %zu file%s\n",
+          total_uncompressed_length, file_count, (file_count == 1) ? "" : "s");
+    }
+  } else {
+    if (!flag_1 && includes.empty() && excludes.empty()) {
+      printf("%zu files, %" PRId64 " bytes uncompressed, %" PRId64 " bytes compressed: %3d%%\n",
+             file_count, total_uncompressed_length, total_compressed_length,
+             CompressionRatio(total_uncompressed_length, total_compressed_length));
+    }
   }
 }
 
@@ -125,7 +170,7 @@ static bool PromptOverwrite(const std::string& dst) {
     char* line = nullptr;
     size_t n;
     if (getline(&line, &n, stdin) == -1) {
-      error(1, 0, "(EOF/read error; assuming [N]one...)");
+      die(0, "(EOF/read error; assuming [N]one...)");
       overwrite_mode = kNever;
       return false;
     }
@@ -153,43 +198,42 @@ static void ExtractToPipe(ZipArchiveHandle zah, ZipEntry& entry, const std::stri
   uint8_t* buffer = new uint8_t[entry.uncompressed_length];
   int err = ExtractToMemory(zah, &entry, buffer, entry.uncompressed_length);
   if (err < 0) {
-    error(1, 0, "failed to extract %s: %s", name.c_str(), ErrorCodeString(err));
+    die(0, "failed to extract %s: %s", name.c_str(), ErrorCodeString(err));
   }
   if (!android::base::WriteFully(1, buffer, entry.uncompressed_length)) {
-    error(1, errno, "failed to write %s to stdout", name.c_str());
+    die(errno, "failed to write %s to stdout", name.c_str());
   }
   delete[] buffer;
 }
 
 static void ExtractOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string& name) {
   // Bad filename?
-  if (android::base::StartsWith(name, "/") || android::base::StartsWith(name, "../") ||
-      name.find("/../") != std::string::npos) {
-    error(1, 0, "bad filename %s", name.c_str());
+  if (StartsWith(name, "/") || StartsWith(name, "../") || name.find("/../") != std::string::npos) {
+    die(0, "bad filename %s", name.c_str());
   }
 
   // Where are we actually extracting to (for human-readable output)?
   std::string dst;
   if (flag_d) {
     dst = flag_d;
-    if (!android::base::EndsWith(dst, "/")) dst += '/';
+    if (!EndsWith(dst, "/")) dst += '/';
   }
   dst += name;
 
   // Ensure the directory hierarchy exists.
   if (!MakeDirectoryHierarchy(android::base::Dirname(name))) {
-    error(1, errno, "couldn't create directory hierarchy for %s", dst.c_str());
+    die(errno, "couldn't create directory hierarchy for %s", dst.c_str());
   }
 
   // An entry in a zip file can just be a directory itself.
-  if (android::base::EndsWith(name, "/")) {
+  if (EndsWith(name, "/")) {
     if (mkdir(name.c_str(), entry.unix_mode) == -1) {
       // If the directory already exists, that's fine.
       if (errno == EEXIST) {
         struct stat sb;
         if (stat(name.c_str(), &sb) != -1 && S_ISDIR(sb.st_mode)) return;
       }
-      error(1, errno, "couldn't extract directory %s", dst.c_str());
+      die(errno, "couldn't extract directory %s", dst.c_str());
     }
     return;
   }
@@ -202,12 +246,12 @@ static void ExtractOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string&
     // Either overwrite_mode is kAlways or the user consented to this specific case.
     fd = open(name.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC | O_TRUNC, entry.unix_mode);
   }
-  if (fd == -1) error(1, errno, "couldn't create file %s", dst.c_str());
+  if (fd == -1) die(errno, "couldn't create file %s", dst.c_str());
 
   // Actually extract into the file.
   if (!flag_q) printf("  inflating: %s\n", dst.c_str());
   int err = ExtractEntryToFile(zah, &entry, fd);
-  if (err < 0) error(1, 0, "failed to extract %s: %s", dst.c_str(), ErrorCodeString(err));
+  if (err < 0) die(0, "failed to extract %s: %s", dst.c_str(), ErrorCodeString(err));
   close(fd);
 }
 
@@ -226,17 +270,82 @@ static void ListOne(const ZipEntry& entry, const std::string& name) {
   }
 }
 
+static void InfoOne(const ZipEntry& entry, const std::string& name) {
+  if (flag_1) {
+    // "android-ndk-r19b/sources/android/NOTICE"
+    printf("%s\n", name.c_str());
+    return;
+  }
+
+  int version = entry.version_made_by & 0xff;
+  int os = (entry.version_made_by >> 8) & 0xff;
+
+  // TODO: Support suid/sgid? Non-Unix/non-FAT host file system attributes?
+  const char* src_fs = "???";
+  char mode[] = "???       ";
+  if (os == 0) {
+    src_fs = "fat";
+    // https://docs.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+    int attrs = entry.external_file_attributes & 0xff;
+    mode[0] = (attrs & 0x10) ? 'd' : '-';
+    mode[1] = 'r';
+    mode[2] = (attrs & 0x01) ? '-' : 'w';
+    // The man page also mentions ".btm", but that seems to be obsolete?
+    mode[3] = EndsWith(name, ".exe") || EndsWith(name, ".com") || EndsWith(name, ".bat") ||
+                      EndsWith(name, ".cmd")
+                  ? 'x'
+                  : '-';
+    mode[4] = (attrs & 0x20) ? 'a' : '-';
+    mode[5] = (attrs & 0x02) ? 'h' : '-';
+    mode[6] = (attrs & 0x04) ? 's' : '-';
+  } else if (os == 3) {
+    src_fs = "unx";
+    mode[0] = S_ISDIR(entry.unix_mode) ? 'd' : (S_ISREG(entry.unix_mode) ? '-' : '?');
+    mode[1] = entry.unix_mode & S_IRUSR ? 'r' : '-';
+    mode[2] = entry.unix_mode & S_IWUSR ? 'w' : '-';
+    mode[3] = entry.unix_mode & S_IXUSR ? 'x' : '-';
+    mode[4] = entry.unix_mode & S_IRGRP ? 'r' : '-';
+    mode[5] = entry.unix_mode & S_IWGRP ? 'w' : '-';
+    mode[6] = entry.unix_mode & S_IXGRP ? 'x' : '-';
+    mode[7] = entry.unix_mode & S_IROTH ? 'r' : '-';
+    mode[8] = entry.unix_mode & S_IWOTH ? 'w' : '-';
+    mode[9] = entry.unix_mode & S_IXOTH ? 'x' : '-';
+  }
+
+  char method[5] = "stor";
+  if (entry.method == kCompressDeflated) {
+    snprintf(method, sizeof(method), "def%c", "NXFS"[(entry.gpbf >> 1) & 0x3]);
+  }
+
+  // TODO: zipinfo (unlike unzip) sometimes uses time zone?
+  // TODO: this uses 4-digit years because we're not barbarians unless interoperability forces it.
+  tm t = entry.GetModificationTime();
+  char time[32];
+  snprintf(time, sizeof(time), "%04d-%02d-%02d %02d:%02d", t.tm_year + 1900, t.tm_mon + 1,
+           t.tm_mday, t.tm_hour, t.tm_min);
+
+  // "-rw-r--r--  3.0 unx      577 t- defX 19-Feb-12 16:09 android-ndk-r19b/sources/android/NOTICE"
+  printf("%s %2d.%d %s %8d %c%c %s %s %s\n", mode, version / 10, version % 10, src_fs,
+         entry.uncompressed_length, entry.is_text ? 't' : 'b',
+         entry.has_data_descriptor ? 'X' : 'x', method, time, name.c_str());
+}
+
 static void ProcessOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string& name) {
-  if (flag_l || flag_v) {
-    // -l or -lv or -lq or -v.
-    ListOne(entry, name);
-  } else {
-    // Actually extract.
-    if (flag_p) {
-      ExtractToPipe(zah, entry, name);
+  if (role == kUnzip) {
+    if (flag_l || flag_v) {
+      // -l or -lv or -lq or -v.
+      ListOne(entry, name);
     } else {
-      ExtractOne(zah, entry, name);
+      // Actually extract.
+      if (flag_p) {
+        ExtractToPipe(zah, entry, name);
+      } else {
+        ExtractOne(zah, entry, name);
+      }
     }
+  } else {
+    // zipinfo or zipinfo -1.
+    InfoOne(entry, name);
   }
   total_uncompressed_length += entry.uncompressed_length;
   total_compressed_length += entry.compressed_length;
@@ -244,14 +353,14 @@ static void ProcessOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string&
 }
 
 static void ProcessAll(ZipArchiveHandle zah) {
-  MaybeShowHeader();
+  MaybeShowHeader(zah);
 
   // libziparchive iteration order doesn't match the central directory.
   // We could sort, but that would cost extra and wouldn't match either.
   void* cookie;
   int err = StartIteration(zah, &cookie);
   if (err != 0) {
-    error(1, 0, "couldn't iterate %s: %s", archive_name, ErrorCodeString(err));
+    die(0, "couldn't iterate %s: %s", archive_name, ErrorCodeString(err));
   }
 
   ZipEntry entry;
@@ -260,96 +369,149 @@ static void ProcessAll(ZipArchiveHandle zah) {
     if (ShouldInclude(name)) ProcessOne(zah, entry, name);
   }
 
-  if (err < -1) error(1, 0, "failed iterating %s: %s", archive_name, ErrorCodeString(err));
+  if (err < -1) die(0, "failed iterating %s: %s", archive_name, ErrorCodeString(err));
   EndIteration(cookie);
 
   MaybeShowFooter();
 }
 
 static void ShowHelp(bool full) {
-  fprintf(full ? stdout : stderr, "usage: unzip [-d DIR] [-lnopqv] ZIP [FILE...] [-x FILE...]\n");
-  if (!full) exit(EXIT_FAILURE);
+  if (role == kUnzip) {
+    fprintf(full ? stdout : stderr, "usage: unzip [-d DIR] [-lnopqv] ZIP [FILE...] [-x FILE...]\n");
+    if (!full) exit(EXIT_FAILURE);
 
-  printf(
-      "\n"
-      "Extract FILEs from ZIP archive. Default is all files. Both the include and\n"
-      "exclude (-x) lists use shell glob patterns.\n"
-      "\n"
-      "-d DIR	Extract into DIR\n"
-      "-l	List contents (-lq excludes archive name, -lv is verbose)\n"
-      "-n	Never overwrite files (default: prompt)\n"
-      "-o	Always overwrite files\n"
-      "-p	Pipe to stdout\n"
-      "-q	Quiet\n"
-      "-v	List contents verbosely\n"
-      "-x FILE	Exclude files\n");
+    printf(
+        "\n"
+        "Extract FILEs from ZIP archive. Default is all files. Both the include and\n"
+        "exclude (-x) lists use shell glob patterns.\n"
+        "\n"
+        "-d DIR	Extract into DIR\n"
+        "-l	List contents (-lq excludes archive name, -lv is verbose)\n"
+        "-n	Never overwrite files (default: prompt)\n"
+        "-o	Always overwrite files\n"
+        "-p	Pipe to stdout\n"
+        "-q	Quiet\n"
+        "-v	List contents verbosely\n"
+        "-x FILE	Exclude files\n");
+  } else {
+    fprintf(full ? stdout : stderr, "usage: zipinfo [-1] ZIP [FILE...] [-x FILE...]\n");
+    if (!full) exit(EXIT_FAILURE);
+
+    printf(
+        "\n"
+        "Show information about FILEs from ZIP archive. Default is all files.\n"
+        "Both the include and exclude (-x) lists use shell glob patterns.\n"
+        "\n"
+        "-1	Show filenames only, one per line\n"
+        "-x FILE	Exclude files\n");
+  }
   exit(EXIT_SUCCESS);
 }
 
+static void HandleCommonOption(int opt) {
+  switch (opt) {
+    case 'h':
+      ShowHelp(true);
+      break;
+    case 'x':
+      flag_x = true;
+      break;
+    case 1:
+      // -x swallows all following arguments, so we use '-' in the getopt
+      // string and collect files here.
+      if (!archive_name) {
+        archive_name = optarg;
+      } else if (flag_x) {
+        excludes.insert(optarg);
+      } else {
+        includes.insert(optarg);
+      }
+      break;
+    default:
+      ShowHelp(false);
+      break;
+  }
+}
+
 int main(int argc, char* argv[]) {
-  static struct option opts[] = {
+  // Who am I, and what am I doing?
+  g_progname = basename(argv[0]);
+  if (!strcmp(g_progname, "ziptool") && argc > 1) return main(argc - 1, argv + 1);
+  if (!strcmp(g_progname, "unzip")) {
+    role = kUnzip;
+  } else if (!strcmp(g_progname, "zipinfo")) {
+    role = kZipinfo;
+  } else {
+    die(0, "run as ziptool with unzip or zipinfo as the first argument, or symlink");
+  }
+
+  static const struct option opts[] = {
       {"help", no_argument, 0, 'h'},
   };
-  bool saw_x = false;
-  int opt;
-  while ((opt = getopt_long(argc, argv, "-d:hlnopqvx", opts, nullptr)) != -1) {
-    switch (opt) {
-      case 'd':
-        flag_d = optarg;
-        break;
-      case 'h':
-        ShowHelp(true);
-        break;
-      case 'l':
-        flag_l = true;
-        break;
-      case 'n':
-        overwrite_mode = kNever;
-        break;
-      case 'o':
-        overwrite_mode = kAlways;
-        break;
-      case 'p':
-        flag_p = flag_q = true;
-        break;
-      case 'q':
-        flag_q = true;
-        break;
-      case 'v':
-        flag_v = true;
-        break;
-      case 'x':
-        saw_x = true;
-        break;
-      case 1:
-        // -x swallows all following arguments, so we use '-' in the getopt
-        // string and collect files here.
-        if (!archive_name) {
-          archive_name = optarg;
-        } else if (saw_x) {
-          excludes.insert(optarg);
-        } else {
-          includes.insert(optarg);
-        }
-        break;
-      default:
-        ShowHelp(false);
+
+  if (role == kUnzip) {
+    // `unzip -Z` is "zipinfo mode", so in that case just restart...
+    if (argc > 1 && !strcmp(argv[1], "-Z")) {
+      argv[1] = const_cast<char*>("zipinfo");
+      return main(argc - 1, argv + 1);
+    }
+
+    int opt;
+    while ((opt = getopt_long(argc, argv, "-d:hlnopqvx", opts, nullptr)) != -1) {
+      switch (opt) {
+        case 'd':
+          flag_d = optarg;
+          break;
+        case 'l':
+          flag_l = true;
+          break;
+        case 'n':
+          overwrite_mode = kNever;
+          break;
+        case 'o':
+          overwrite_mode = kAlways;
+          break;
+        case 'p':
+          flag_p = flag_q = true;
+          break;
+        case 'q':
+          flag_q = true;
+          break;
+        case 'v':
+          flag_v = true;
+          break;
+        default:
+          HandleCommonOption(opt);
+          break;
+      }
+    }
+  } else {
+    int opt;
+    while ((opt = getopt_long(argc, argv, "-1hx", opts, nullptr)) != -1) {
+      switch (opt) {
+        case '1':
+          flag_1 = true;
+          break;
+        default:
+          HandleCommonOption(opt);
+          break;
+      }
     }
   }
 
-  if (!archive_name) error(1, 0, "missing archive filename");
+  if (!archive_name) die(0, "missing archive filename");
 
   // We can't support "-" to unzip from stdin because libziparchive relies on mmap.
   ZipArchiveHandle zah;
   int32_t err;
   if ((err = OpenArchive(archive_name, &zah)) != 0) {
-    error(1, 0, "couldn't open %s: %s", archive_name, ErrorCodeString(err));
+    die(0, "couldn't open %s: %s", archive_name, ErrorCodeString(err));
   }
 
   // Implement -d by changing into that directory.
   // We'll create implicit directories based on paths in the zip file, but we
   // require that the -d directory already exists.
-  if (flag_d && chdir(flag_d) == -1) error(1, errno, "couldn't chdir to %s", flag_d);
+  if (flag_d && chdir(flag_d) == -1) die(errno, "couldn't chdir to %s", flag_d);
 
   ProcessAll(zah);
 

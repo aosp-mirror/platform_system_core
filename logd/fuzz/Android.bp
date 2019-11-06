@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,13 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-#pragma once
-
-#include <string>
-
-#include "adb_unique_fd.h"
-
-#if defined(__ANDROID__)
-void remount_service(unique_fd, const std::string&);
-#endif
+cc_fuzz {
+    name: "log_buffer_log_fuzzer",
+    srcs: [
+        "log_buffer_log_fuzzer.cpp",
+    ],
+    static_libs: [
+        "libbase",
+        "libcutils",
+        "libselinux",
+        "liblog",
+        "liblogd",
+        "libcutils",
+    ],
+    cflags: ["-Werror"],
+}

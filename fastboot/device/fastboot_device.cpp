@@ -54,6 +54,7 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_UPDATE_SUPER, UpdateSuperHandler},
               {FB_CMD_OEM, OemCmdHandler},
               {FB_CMD_GSI, GsiHandler},
+              {FB_CMD_SNAPSHOT_UPDATE, SnapshotUpdateHandler},
       }),
       transport_(std::make_unique<ClientUsbTransport>()),
       boot_control_hal_(IBootControl::getService()),

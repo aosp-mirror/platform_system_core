@@ -1,0 +1,51 @@
+# Copyright (C) 2019 The Android Open Source Project
+#
+# Bionic loader config file for the adbd APEX.
+
+dir.adbd = /apex/com.android.adbd/bin/
+
+[adbd]
+additional.namespaces = platform,art,adbd
+
+namespace.default.isolated = true
+namespace.default.links = art,adbd,platform
+namespace.default.link.art.shared_libs = libadbconnection_server.so
+namespace.default.link.platform.allow_all_shared_libs = true
+namespace.default.link.adbd.allow_all_shared_libs = true
+
+###############################################################################
+# "adbd" APEX namespace
+###############################################################################
+namespace.adbd.isolated = true
+namespace.adbd.search.paths = /apex/com.android.adbd/${LIB}
+namespace.adbd.asan.search.paths = /apex/com.android.adbd/${LIB}
+namespace.adbd.links = platform
+namespace.adbd.link.platform.allow_all_shared_libs = true
+
+###############################################################################
+# "art" APEX namespace: used for libadbdconnection_server
+###############################################################################
+namespace.art.isolated = true
+namespace.art.search.paths = /apex/com.android.art/${LIB}
+namespace.art.asan.search.paths = /apex/com.android.art/${LIB}
+namespace.art.links = platform
+namespace.art.link.platform.allow_all_shared_libs = true
+
+###############################################################################
+# "platform" namespace: used for NDK libraries, and libadbd_auth
+###############################################################################
+namespace.platform.isolated = true
+namespace.platform.search.paths = /system/${LIB}
+namespace.platform.asan.search.paths = /data/asan/system/${LIB}
+
+# /system/lib/libc.so, etc are symlinks to
+# /apex/com.android.runtime/lib/bionic/libc.so, etc. Add the path to the
+# permitted paths because linker uses realpath(3) to check the accessibility
+# of the lib. We could add this to search.paths instead but that makes the
+# resolution of bionic libs be dependent on the order of /system/lib and
+# /apex/.../lib/bionic in search.paths. If the latter is after the former,
+# then the latter is never tried because libc.so is always found in
+# /system/lib but fails to pass the accessibility test because of its realpath.
+# It's better to not depend on the ordering if possible.
+namespace.platform.permitted.paths = /apex/com.android.runtime/${LIB}/bionic
+namespace.platform.asan.permitted.paths = /apex/com.android.runtime/${LIB}/bionic

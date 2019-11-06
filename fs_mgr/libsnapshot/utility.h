@@ -18,30 +18,20 @@
 #include <string>
 
 #include <android-base/macros.h>
+#include <fstab/fstab.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
 #include <libsnapshot/snapshot.h>
 #include <update_engine/update_metadata.pb.h>
 
+#include <libsnapshot/auto_device.h>
+
 namespace android {
 namespace snapshot {
 
 // Unit is sectors, this is a 4K chunk.
 static constexpr uint32_t kSnapshotChunkSize = 8;
-
-struct AutoDevice {
-    virtual ~AutoDevice(){};
-    void Release();
-
-  protected:
-    AutoDevice(const std::string& name) : name_(name) {}
-    std::string name_;
-
-  private:
-    DISALLOW_COPY_AND_ASSIGN(AutoDevice);
-    AutoDevice(AutoDevice&& other) = delete;
-};
 
 // A list of devices we created along the way.
 // - Whenever a device is created that is subject to GC'ed at the end of
@@ -101,6 +91,18 @@ struct AutoDeleteSnapshot : AutoDevice {
     DISALLOW_COPY_AND_ASSIGN(AutoDeleteSnapshot);
     SnapshotManager* manager_ = nullptr;
     SnapshotManager::LockedFile* lock_ = nullptr;
+};
+
+struct AutoUnmountDevice : AutoDevice {
+    // Empty object that does nothing.
+    AutoUnmountDevice() : AutoDevice("") {}
+    static std::unique_ptr<AutoUnmountDevice> New(const std::string& path);
+    ~AutoUnmountDevice();
+
+  private:
+    AutoUnmountDevice(const std::string& path, android::fs_mgr::Fstab&& fstab)
+        : AutoDevice(path), fstab_(std::move(fstab)) {}
+    android::fs_mgr::Fstab fstab_;
 };
 
 // Return a list of partitions in |builder| with the name ending in |suffix|.
