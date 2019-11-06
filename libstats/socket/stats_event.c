@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "include/stats_event_list.h"
+#include "stats_buffer_writer.h"
 
 #define STATS_EVENT_TAG 1937006964
 #define LOGGER_ENTRY_MAX_PAYLOAD 4068
@@ -323,11 +323,5 @@ void stats_event_build(struct stats_event* event) {
 void stats_event_write(struct stats_event* event) {
     stats_event_build(event);
 
-    // Prepare iovecs for write to statsd.
-    struct iovec vecs[2];
-    vecs[0].iov_base = &event->tag;
-    vecs[0].iov_len = sizeof(event->tag);
-    vecs[1].iov_base = &event->buf;
-    vecs[1].iov_len = event->size;
-    write_to_statsd(vecs, 2);
+    write_buffer_to_statsd(&event->buf, event->size, event->atomId);
 }
