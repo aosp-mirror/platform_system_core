@@ -5,7 +5,7 @@ cc_test_host {
   srcs: [
     "main.cpp",
     "extensions.cpp",
-    "usb_transport_sniffer.cpp",
+    "transport_sniffer.cpp",
     "fixtures.cpp",
     "test_utils.cpp",
   ],
