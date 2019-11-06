@@ -57,6 +57,7 @@
 #include "action_manager.h"
 #include "builtin_arguments.h"
 #include "init.h"
+#include "mount_namespace.h"
 #include "property_service.h"
 #include "reboot_utils.h"
 #include "service.h"
@@ -713,6 +714,18 @@ static void LeaveShutdown() {
     SendStartSendingMessagesMessage();
 }
 
+static Result<void> UnmountAllApexes() {
+    const char* args[] = {"/system/bin/apexd", "--unmount-all"};
+    int status;
+    if (logwrap_fork_execvp(arraysize(args), args, &status, false, LOG_KLOG, true, nullptr) != 0) {
+        return ErrnoError() << "Failed to call '/system/bin/apexd --unmount-all'";
+    }
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        return {};
+    }
+    return Error() << "'/system/bin/apexd --unmount-all' failed : " << status;
+}
+
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
     auto guard = android::base::make_scope_guard([] {
@@ -754,7 +767,12 @@ static Result<void> DoUserspaceReboot() {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " debugging services are still running";
     }
-    // TODO(b/135984674): deactivate APEX modules and switch back to bootstrap namespace.
+    if (auto result = UnmountAllApexes(); !result) {
+        return result;
+    }
+    if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
+        return Error() << "Failed to switch to bootstrap namespace";
+    }
     // Re-enable services
     for (const auto& s : were_enabled) {
         LOG(INFO) << "Re-enabling service '" << s->name() << "'";
