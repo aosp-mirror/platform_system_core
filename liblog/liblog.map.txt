@@ -51,7 +51,7 @@ LIBLOG_M {
 LIBLOG_O {
   global:
     __android_log_is_loggable_len;
-    __android_log_is_debuggable; # vndk
+    __android_log_is_debuggable; # apex vndk
 };
 
 LIBLOG_Q {
@@ -61,15 +61,15 @@ LIBLOG_Q {
     __android_log_bwrite; # apex
     __android_log_close; # apex
     __android_log_security; # apex
-    android_log_reset; #vndk
-    android_log_parser_reset; #vndk
+    __android_log_security_bswrite; # apex
+    android_log_reset; # vndk
+    android_log_parser_reset; # vndk
 };
 
 LIBLOG_PRIVATE {
   global:
     __android_log_pmsg_file_read;
     __android_log_pmsg_file_write;
-    __android_log_security_bswrite;
     __android_logger_get_buffer_size;
     __android_logger_property_get_bool;
     android_openEventTagMap;

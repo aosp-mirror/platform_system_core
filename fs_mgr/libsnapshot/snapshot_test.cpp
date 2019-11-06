@@ -23,6 +23,7 @@
 #include <iostream>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
@@ -56,6 +57,7 @@ using android::fs_mgr::GetPartitionGroupName;
 using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::Interval;
 using android::fs_mgr::MetadataBuilder;
+using android::fs_mgr::SlotSuffixForSlotNumber;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::DynamicPartitionGroup;
 using chromeos_update_engine::PartitionUpdate;
@@ -445,61 +447,6 @@ TEST_F(SnapshotTest, Merge) {
     ASSERT_EQ(test_string, buffer);
 }
 
-TEST_F(SnapshotTest, MergeCannotRemoveCow) {
-    ASSERT_TRUE(AcquireLock());
-
-    static const uint64_t kDeviceSize = 1024 * 1024;
-    SnapshotStatus status;
-    status.set_name("test-snapshot");
-    status.set_device_size(kDeviceSize);
-    status.set_snapshot_size(kDeviceSize);
-    status.set_cow_file_size(kDeviceSize);
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
-    ASSERT_TRUE(CreateCowImage("test-snapshot"));
-
-    std::string base_device, cow_device, snap_device;
-    ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
-    ASSERT_TRUE(MapCowImage("test-snapshot", 10s, &cow_device));
-    ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, cow_device, 10s,
-                                &snap_device));
-
-    // Keep an open handle to the cow device. This should cause the merge to
-    // be incomplete.
-    auto cow_path = android::base::GetProperty("gsid.mapped_image.test-snapshot-cow-img", "");
-    unique_fd fd(open(cow_path.c_str(), O_RDONLY | O_CLOEXEC));
-    ASSERT_GE(fd, 0);
-
-    // Release the lock.
-    lock_ = nullptr;
-
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
-
-    test_device->set_slot_suffix("_b");
-    ASSERT_TRUE(sm->InitiateMerge());
-
-    // COW cannot be removed due to open fd, so expect a soft failure.
-    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeNeedsReboot);
-
-    // Release the handle to the COW device to fake a reboot.
-    fd.reset();
-    // Wait 1s, otherwise DeleteSnapshotDevice may fail with EBUSY.
-    sleep(1);
-    // Forcefully delete the snapshot device, so it looks like we just rebooted.
-    ASSERT_TRUE(DeleteSnapshotDevice("test-snapshot"));
-
-    // Map snapshot should fail now, because we're in a merge-complete state.
-    ASSERT_TRUE(AcquireLock());
-    ASSERT_TRUE(MapCowImage("test-snapshot", 10s, &cow_device));
-    ASSERT_FALSE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, cow_device, 10s,
-                                 &snap_device));
-
-    // Release everything and now the merge should complete.
-    fd = {};
-    lock_ = nullptr;
-
-    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeCompleted);
-}
-
 TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     ASSERT_TRUE(AcquireLock());
 
@@ -680,9 +627,9 @@ class SnapshotUpdateTest : public SnapshotTest {
         // Initialize source partition metadata using |manifest_|.
         src_ = MetadataBuilder::New(*opener_, "super", 0);
         ASSERT_TRUE(FillFakeMetadata(src_.get(), manifest_, "_a"));
-        ASSERT_NE(nullptr, src_);
         // Add sys_b which is like system_other.
-        auto partition = src_->AddPartition("sys_b", 0);
+        ASSERT_TRUE(src_->AddGroup("group_b", kGroupSize));
+        auto partition = src_->AddPartition("sys_b", "group_b", 0);
         ASSERT_NE(nullptr, partition);
         ASSERT_TRUE(src_->ResizePartition(partition, 1_MiB));
         auto metadata = src_->Export();
@@ -731,8 +678,12 @@ class SnapshotUpdateTest : public SnapshotTest {
         if (!hash.has_value()) {
             return AssertionFailure() << "Cannot read partition " << name << ": " << path;
         }
-        if (hashes_[name] != *hash) {
-            return AssertionFailure() << "Content of " << name << " has changed after the merge";
+        auto it = hashes_.find(name);
+        if (it == hashes_.end()) {
+            return AssertionFailure() << "No existing hash for " << name << ". Bad test code?";
+        }
+        if (it->second != *hash) {
+            return AssertionFailure() << "Content of " << name << " has changed";
         }
         return AssertionSuccess();
     }
@@ -847,8 +798,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     }
 
     // Initiate the merge and wait for it to be completed.
-    ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
+    ASSERT_EQ(UpdateState::MergeCompleted, init->InitiateMergeAndWait());
 
     // Check that the target partitions have the same content after the merge.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1052,8 +1002,7 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
 
     // Initiate the merge and wait for it to be completed.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
-    ASSERT_TRUE(new_sm->InitiateMerge());
-    ASSERT_EQ(UpdateState::MergeCompleted, new_sm->ProcessUpdateState());
+    ASSERT_EQ(UpdateState::MergeCompleted, new_sm->InitiateMergeAndWait());
 
     // Execute the second update.
     ASSERT_TRUE(new_sm->BeginUpdate());
@@ -1162,6 +1111,67 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
     ASSERT_TRUE(sm->FinishedSnapshotWrites());
 }
 
+TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
+    // Make source partitions as big as possible to force COW image to be created.
+    SetSize(sys_, 5_MiB);
+    SetSize(vnd_, 5_MiB);
+    SetSize(prd_, 5_MiB);
+    src_ = MetadataBuilder::New(*opener_, "super", 0);
+    src_->RemoveGroupAndPartitions(group_->name() + "_a");
+    src_->RemoveGroupAndPartitions(group_->name() + "_b");
+    ASSERT_TRUE(FillFakeMetadata(src_.get(), manifest_, "_a"));
+    auto metadata = src_->Export();
+    ASSERT_NE(nullptr, metadata);
+    ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *metadata.get(), 0));
+
+    // OTA client blindly unmaps all partitions that are possibly mapped.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
+    }
+
+    // Add operations for sys. The whole device is written.
+    auto e = sys_->add_operations()->add_dst_extents();
+    e->set_start_block(0);
+    e->set_num_blocks(GetSize(sys_) / manifest_.block_size());
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    // Normally we should use NewForFirstStageMount, but if so, "gsid.mapped_image.sys_b-cow-img"
+    // won't be set.
+    auto init = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+
+    // Keep an open handle to the cow device. This should cause the merge to
+    // be incomplete.
+    auto cow_path = android::base::GetProperty("gsid.mapped_image.sys_b-cow-img", "");
+    unique_fd fd(open(cow_path.c_str(), O_RDONLY | O_CLOEXEC));
+    ASSERT_GE(fd, 0);
+
+    // COW cannot be removed due to open fd, so expect a soft failure.
+    ASSERT_EQ(UpdateState::MergeNeedsReboot, init->InitiateMergeAndWait());
+
+    // Simulate shutting down the device.
+    fd.reset();
+    ASSERT_TRUE(UnmapAll());
+
+    // init does first stage mount again.
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+
+    // sys_b should be mapped as a dm-linear device directly.
+    ASSERT_FALSE(sm->IsSnapshotDevice("sys_b", nullptr));
+
+    // Merge should be able to complete now.
+    ASSERT_EQ(UpdateState::MergeCompleted, init->InitiateMergeAndWait());
+}
+
 class MetadataMountedTest : public SnapshotUpdateTest {
   public:
     void SetUp() override {
@@ -1219,6 +1229,121 @@ TEST_F(MetadataMountedTest, Recovery) {
     device.reset();
     EXPECT_FALSE(IsMetadataMounted());
 }
+
+class FlashAfterUpdateTest : public SnapshotUpdateTest,
+                             public WithParamInterface<std::tuple<uint32_t, bool>> {
+  public:
+    AssertionResult InitiateMerge(const std::string& slot_suffix) {
+        auto sm = SnapshotManager::New(new TestDeviceInfo(fake_super, slot_suffix));
+        if (!sm->CreateLogicalAndSnapshotPartitions("super")) {
+            return AssertionFailure() << "Cannot CreateLogicalAndSnapshotPartitions";
+        }
+        if (!sm->InitiateMerge()) {
+            return AssertionFailure() << "Cannot initiate merge";
+        }
+        return AssertionSuccess();
+    }
+};
+
+TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
+    // OTA client blindly unmaps all partitions that are possibly mapped.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
+    }
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    if (std::get<1>(GetParam()) /* merge */) {
+        ASSERT_TRUE(InitiateMerge("_b"));
+        // Simulate shutting down the device after merge has initiated.
+        ASSERT_TRUE(UnmapAll());
+    }
+
+    auto flashed_slot = std::get<0>(GetParam());
+    auto flashed_slot_suffix = SlotSuffixForSlotNumber(flashed_slot);
+
+    // Simulate flashing |flashed_slot|. This clears the UPDATED flag.
+    auto flashed_builder = MetadataBuilder::New(*opener_, "super", flashed_slot);
+    flashed_builder->RemoveGroupAndPartitions(group_->name() + flashed_slot_suffix);
+    flashed_builder->RemoveGroupAndPartitions(kCowGroupName);
+    ASSERT_TRUE(FillFakeMetadata(flashed_builder.get(), manifest_, flashed_slot_suffix));
+
+    // Deliberately remove a partition from this build so that
+    // InitiateMerge do not switch state to "merging". This is possible in
+    // practice because the list of dynamic partitions may change.
+    ASSERT_NE(nullptr, flashed_builder->FindPartition("prd" + flashed_slot_suffix));
+    flashed_builder->RemovePartition("prd" + flashed_slot_suffix);
+
+    auto flashed_metadata = flashed_builder->Export();
+    ASSERT_NE(nullptr, flashed_metadata);
+    ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *flashed_metadata, flashed_slot));
+
+    std::string path;
+    for (const auto& name : {"sys", "vnd"}) {
+        ASSERT_TRUE(CreateLogicalPartition(
+                CreateLogicalPartitionParams{
+                        .block_device = fake_super,
+                        .metadata_slot = flashed_slot,
+                        .partition_name = name + flashed_slot_suffix,
+                        .timeout_ms = 1s,
+                        .partition_opener = opener_.get(),
+                },
+                &path));
+        ASSERT_TRUE(WriteRandomData(path));
+        auto hash = GetHash(path);
+        ASSERT_TRUE(hash.has_value());
+        hashes_[name + flashed_slot_suffix] = *hash;
+    }
+
+    // Simulate shutting down the device after flash.
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate reboot. After reboot, init does first stage mount.
+    auto init = SnapshotManager::NewForFirstStageMount(
+            new TestDeviceInfo(fake_super, flashed_slot_suffix));
+    ASSERT_NE(init, nullptr);
+    if (init->NeedSnapshotsInFirstStageMount()) {
+        ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    } else {
+        for (const auto& name : {"sys", "vnd"}) {
+            ASSERT_TRUE(CreateLogicalPartition(
+                    CreateLogicalPartitionParams{
+                            .block_device = fake_super,
+                            .metadata_slot = flashed_slot,
+                            .partition_name = name + flashed_slot_suffix,
+                            .timeout_ms = 1s,
+                            .partition_opener = opener_.get(),
+                    },
+                    &path));
+        }
+    }
+
+    // Check that the target partitions have the same content.
+    for (const auto& name : {"sys", "vnd"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name + flashed_slot_suffix));
+    }
+
+    // There should be no snapshot to merge.
+    auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, flashed_slot_suffix));
+    ASSERT_EQ(UpdateState::Cancelled, new_sm->InitiateMergeAndWait());
+
+    // Next OTA calls CancelUpdate no matter what.
+    ASSERT_TRUE(new_sm->CancelUpdate());
+}
+
+INSTANTIATE_TEST_SUITE_P(, FlashAfterUpdateTest, Combine(Values(0, 1), Bool()),
+                         [](const TestParamInfo<FlashAfterUpdateTest::ParamType>& info) {
+                             return "Flash"s + (std::get<0>(info.param) ? "New"s : "Old"s) +
+                                    "Slot"s + (std::get<1>(info.param) ? "After"s : "Before"s) +
+                                    "Merge"s;
+                         });
 
 }  // namespace snapshot
 }  // namespace android
