@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,12 @@
 
 #pragma once
 
-#include <stdlib.h>
+#include <android/hardware/health/2.1/IHealth.h>
 
-// Provide emulation for at_quick_exit/quick_exit on platforms that don't have it.
 namespace android {
-namespace base {
-
-// Bionic and glibc have quick_exit, Darwin and Windows don't.
-#if !defined(__linux__)
-  void quick_exit(int exit_code) __attribute__((noreturn));
-  int at_quick_exit(void (*func)());
-#else
-  using ::at_quick_exit;
-  using ::quick_exit;
-#endif
-}
-}
+namespace hardware {
+namespace health {
+sp<V2_1::IHealth> GetPassthroughHealth();
+}  // namespace health
+}  // namespace hardware
+}  // namespace android

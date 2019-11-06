@@ -81,7 +81,7 @@ cc_test {
 }
 
 cc_fuzz {
-  name: "dm_table_fuzzer",
+  name: "dm_linear_table_fuzzer",
   defaults: ["fs_mgr_defaults"],
   srcs: [
     "dm_linear_fuzzer.cpp",

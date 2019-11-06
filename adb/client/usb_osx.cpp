@@ -461,6 +461,7 @@ void usb_init() {
             std::this_thread::sleep_for(100ms);
         }
 
+        adb_notify_device_scan_complete();
         initialized = true;
     }
 }

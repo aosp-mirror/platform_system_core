@@ -205,7 +205,11 @@ int adbd_main(int server_port) {
     // descriptor will always be open.
     adbd_cloexec_auth_socket();
 
-#if defined(ALLOW_ADBD_NO_AUTH)
+#if defined(__ANDROID_RECOVERY__)
+    if (is_device_unlocked() || __android_log_is_debuggable()) {
+        auth_required = false;
+    }
+#elif defined(ALLOW_ADBD_NO_AUTH)
     // If ro.adb.secure is unset, default to no authentication required.
     auth_required = android::base::GetBoolProperty("ro.adb.secure", false);
 #elif defined(__ANDROID__)
@@ -213,8 +217,6 @@ int adbd_main(int server_port) {
         auth_required = android::base::GetBoolProperty("ro.adb.secure", false);
     }
 #endif
-
-    adbd_auth_init();
 
     // Our external storage path may be different than apps, since
     // we aren't able to bind mount after dropping root.
@@ -229,6 +231,9 @@ int adbd_main(int server_port) {
 #if defined(__ANDROID__)
     drop_privileges(server_port);
 #endif
+
+    // adbd_auth_init will spawn a thread, so we need to defer it until after selinux transitions.
+    adbd_auth_init();
 
     bool is_usb = false;
 
@@ -247,6 +252,12 @@ int adbd_main(int server_port) {
     if (prop_port.empty()) {
         prop_port = android::base::GetProperty("persist.adb.tcp.port", "");
     }
+
+#if !defined(__ANDROID__)
+    if (prop_port.empty() && getenv("ADBD_PORT")) {
+        prop_port = getenv("ADBD_PORT");
+    }
+#endif
 
     int port;
     if (sscanf(prop_port.c_str(), "%d", &port) == 1 && port > 0) {

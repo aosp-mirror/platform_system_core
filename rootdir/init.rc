@@ -754,6 +754,7 @@ on boot
     # to make it too large, since it may bring userdata loss, if they
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
     write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
+    write /sys/fs/f2fs/${dev.mnt.blk.data}/gc_urgent_sleep_time 50
 
     # Permissions for System Server and daemons.
     chown system system /sys/power/autosleep
@@ -918,16 +919,24 @@ on property:ro.debuggable=1
 on init && property:ro.debuggable=1
     start console
 
-on userspace-reboot
+on userspace-reboot-requested
   # TODO(b/135984674): reset all necessary properties here.
   setprop sys.init.userspace_reboot_in_progress 1
   setprop sys.boot_completed 0
   setprop sys.init.updatable_crashing 0
   setprop apexd.status 0
 
+on userspace-reboot-fs-remount
+  # Make sure that vold is running.
+  # This is mostly a precaution measure in case vold for some reason wasn't running when
+  # userspace reboot was initiated.
+  start vold
+  exec - system system -- /system/bin/vdc checkpoint resetCheckpoint
+  exec - system system -- /system/bin/vdc checkpoint markBootAttempt
+  remount_userdata
+
 on userspace-reboot-resume
-  # TODO(b/135984674): remount userdata and reset checkpointing
-  trigger nonencrypted
+  trigger userspace-reboot-fs-remount
   trigger post-fs-data
   trigger zygote-start
   trigger early-boot

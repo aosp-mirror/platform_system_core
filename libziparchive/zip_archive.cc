@@ -178,7 +178,7 @@ ZipArchive::ZipArchive(const int fd, bool assume_ownership)
 #endif
 }
 
-ZipArchive::ZipArchive(void* address, size_t length)
+ZipArchive::ZipArchive(const void* address, size_t length)
     : mapped_zip(address, length),
       close_file(false),
       directory_offset(0),
@@ -471,11 +471,18 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle) {
   return OpenArchiveInternal(archive, fileName);
 }
 
-int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debug_file_name,
+int32_t OpenArchiveFromMemory(const void* address, size_t length, const char* debug_file_name,
                               ZipArchiveHandle* handle) {
   ZipArchive* archive = new ZipArchive(address, length);
   *handle = archive;
   return OpenArchiveInternal(archive, debug_file_name);
+}
+
+ZipArchiveInfo GetArchiveInfo(ZipArchiveHandle archive) {
+  ZipArchiveInfo result;
+  result.archive_size = archive->mapped_zip.GetFileLength();
+  result.entry_count = archive->num_entries;
+  return result;
 }
 
 /*
@@ -614,11 +621,20 @@ static int32_t FindEntry(const ZipArchive* archive, const int32_t ent, ZipEntry*
   }
 
   // 4.4.2.1: the upper byte of `version_made_by` gives the source OS. Unix is 3.
-  if ((cdr->version_made_by >> 8) == 3) {
+  data->version_made_by = cdr->version_made_by;
+  data->external_file_attributes = cdr->external_file_attributes;
+  if ((data->version_made_by >> 8) == 3) {
     data->unix_mode = (cdr->external_file_attributes >> 16) & 0xffff;
   } else {
     data->unix_mode = 0777;
   }
+
+  // 4.4.4: general purpose bit flags.
+  data->gpbf = lfh->gpb_flags;
+
+  // 4.4.14: the lowest bit of the internal file attributes field indicates text.
+  // Currently only needed to implement zipinfo.
+  data->is_text = (cdr->internal_file_attributes & 1);
 
   // Check that the local file header name matches the declared
   // name in the central directory.
@@ -1152,7 +1168,7 @@ int MappedZipFile::GetFileDescriptor() const {
   return fd_;
 }
 
-void* MappedZipFile::GetBasePtr() const {
+const void* MappedZipFile::GetBasePtr() const {
   if (has_fd_) {
     ALOGW("Zip: MappedZipFile doesn't have a base pointer.");
     return nullptr;
@@ -1188,13 +1204,14 @@ bool MappedZipFile::ReadAtOffset(uint8_t* buf, size_t len, off64_t off) const {
       ALOGE("Zip: invalid offset: %" PRId64 ", data length: %" PRId64 "\n", off, data_length_);
       return false;
     }
-    memcpy(buf, static_cast<uint8_t*>(base_ptr_) + off, len);
+    memcpy(buf, static_cast<const uint8_t*>(base_ptr_) + off, len);
   }
   return true;
 }
 
-void CentralDirectory::Initialize(void* map_base_ptr, off64_t cd_start_offset, size_t cd_size) {
-  base_ptr_ = static_cast<uint8_t*>(map_base_ptr) + cd_start_offset;
+void CentralDirectory::Initialize(const void* map_base_ptr, off64_t cd_start_offset,
+                                  size_t cd_size) {
+  base_ptr_ = static_cast<const uint8_t*>(map_base_ptr) + cd_start_offset;
   length_ = cd_size;
 }
 

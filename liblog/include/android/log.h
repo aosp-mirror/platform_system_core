@@ -96,20 +96,14 @@ int __android_log_write(int prio, const char* tag, const char* text);
  * [printf(3)](http://man7.org/linux/man-pages/man3/printf.3.html).
  */
 int __android_log_print(int prio, const char* tag, const char* fmt, ...)
-#if defined(__GNUC__)
-    __attribute__((__format__(printf, 3, 4)))
-#endif
-    ;
+    __attribute__((__format__(printf, 3, 4)));
 
 /**
  * Equivalent to `__android_log_print`, but taking a `va_list`.
  * (If `__android_log_print` is like `printf`, this is like `vprintf`.)
  */
 int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap)
-#if defined(__GNUC__)
-    __attribute__((__format__(printf, 3, 0)))
-#endif
-    ;
+    __attribute__((__format__(printf, 3, 0)));
 
 /**
  * Writes an assertion failure to the log (as `ANDROID_LOG_FATAL`) and to
@@ -127,16 +121,9 @@ int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap)
  * including the source filename and line number more conveniently than this
  * function.
  */
-void __android_log_assert(const char* cond, const char* tag, const char* fmt,
-                          ...)
-#if defined(__GNUC__)
-    __attribute__((__noreturn__))
-    __attribute__((__format__(printf, 3, 4)))
-#endif
-    ;
+void __android_log_assert(const char* cond, const char* tag, const char* fmt, ...)
+    __attribute__((__noreturn__)) __attribute__((__format__(printf, 3, 4)));
 
-#ifndef log_id_t_defined
-#define log_id_t_defined
 /**
  * Identifies a specific log buffer for __android_log_buf_write()
  * and __android_log_buf_print().
@@ -163,7 +150,6 @@ typedef enum log_id {
 
   LOG_ID_MAX
 } log_id_t;
-#endif
 
 /**
  * Writes the constant string `text` to the log buffer `id`,
@@ -171,8 +157,7 @@ typedef enum log_id {
  *
  * Apps should use __android_log_write() instead.
  */
-int __android_log_buf_write(int bufID, int prio, const char* tag,
-                            const char* text);
+int __android_log_buf_write(int bufID, int prio, const char* tag, const char* text);
 
 /**
  * Writes a formatted string to log buffer `id`,
@@ -182,12 +167,8 @@ int __android_log_buf_write(int bufID, int prio, const char* tag,
  *
  * Apps should use __android_log_print() instead.
  */
-int __android_log_buf_print(int bufID, int prio, const char* tag,
-                            const char* fmt, ...)
-#if defined(__GNUC__)
-    __attribute__((__format__(printf, 4, 5)))
-#endif
-    ;
+int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...)
+    __attribute__((__format__(printf, 4, 5)));
 
 #ifdef __cplusplus
 }

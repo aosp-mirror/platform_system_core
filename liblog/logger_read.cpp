@@ -92,7 +92,6 @@ static int init_transport_context(struct android_log_logger_list* logger_list) {
 
   logger_list->transport_context.transport = transport;
   logger_list->transport_context.logMask = logMask;
-  logger_list->transport_context.ret = 1;
 #endif
   return 0;
 }
@@ -273,34 +272,24 @@ static int android_transport_read(struct android_log_logger_list* logger_list,
                                   struct log_msg* log_msg) {
   int ret = (*transp->transport->read)(logger_list, transp, log_msg);
 
+  if (ret < 0) {
+    return ret;
+  }
+
   if (ret > (int)sizeof(*log_msg)) {
     ret = sizeof(*log_msg);
   }
 
-  transp->ret = ret;
-
-  /* propagate errors, or make sure len & hdr_size members visible */
-  if (ret < (int)(sizeof(log_msg->entry.len) + sizeof(log_msg->entry.hdr_size))) {
-    if (ret >= (int)sizeof(log_msg->entry.len)) {
-      log_msg->entry.len = 0;
-    }
-    return ret;
-  }
-
-  /* hdr_size correction (logger_entry -> logger_entry_v2+ conversion) */
-  if (log_msg->entry_v2.hdr_size == 0) {
-    log_msg->entry_v2.hdr_size = sizeof(struct logger_entry);
-  }
-  if ((log_msg->entry_v2.hdr_size < sizeof(log_msg->entry_v1)) ||
-      (log_msg->entry_v2.hdr_size > sizeof(log_msg->entry))) {
+  if (ret < static_cast<int>(sizeof(log_msg->entry))) {
     return -EINVAL;
   }
 
-  /* len validation */
-  if (ret <= log_msg->entry_v2.hdr_size) {
-    log_msg->entry.len = 0;
-  } else {
-    log_msg->entry.len = ret - log_msg->entry_v2.hdr_size;
+  if (log_msg->entry.hdr_size != sizeof(log_msg->entry)) {
+    return -EINVAL;
+  }
+
+  if (log_msg->entry.len > ret - log_msg->entry.hdr_size) {
+    return -EINVAL;
   }
 
   return ret;

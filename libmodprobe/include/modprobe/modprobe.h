@@ -19,13 +19,14 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Modprobe {
   public:
     Modprobe(const std::vector<std::string>&);
 
-    bool LoadListedModules();
+    bool LoadListedModules(bool strict = true);
     bool LoadWithAliases(const std::string& module_name, bool strict,
                          const std::string& parameters = "");
     bool Remove(const std::string& module_name);
@@ -59,5 +60,6 @@ class Modprobe {
     std::vector<std::string> module_load_;
     std::unordered_map<std::string, std::string> module_options_;
     std::set<std::string> module_blacklist_;
+    std::unordered_set<std::string> module_loaded_;
     bool blacklist_enabled = false;
 };

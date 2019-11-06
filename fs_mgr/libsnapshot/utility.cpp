@@ -17,9 +17,16 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
+#include <fs_mgr/roots.h>
 
+using android::dm::kSectorSize;
+using android::fs_mgr::EnsurePathMounted;
+using android::fs_mgr::EnsurePathUnmounted;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::GetEntryForPath;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::Partition;
+using android::fs_mgr::ReadDefaultFstab;
 
 namespace android {
 namespace snapshot {
@@ -88,13 +95,11 @@ bool InitializeCow(const std::string& device) {
     // so it can be used to resume the last state of a snapshot device;
     // - an _INVALID_ snapshot otherwise.
     // To avoid zero-filling the whole CoW file when a new dm-snapshot is
-    // created, here we zero-fill only the first 32 bits. This is a temporary
-    // workaround that will be discussed again when the kernel API gets
-    // consolidated.
-    // TODO(b/139202197): Remove this hack once the kernel API is consolidated.
-    constexpr ssize_t kDmSnapZeroFillSize = 4;  // 32-bit
+    // created, here we zero-fill only the first chunk to be compliant with
+    // lvm.
+    constexpr ssize_t kDmSnapZeroFillSize = kSectorSize * kSnapshotChunkSize;
 
-    char zeros[kDmSnapZeroFillSize] = {0};
+    std::vector<uint8_t> zeros(kDmSnapZeroFillSize, 0);
     android::base::unique_fd fd(open(device.c_str(), O_WRONLY | O_BINARY));
     if (fd < 0) {
         PLOG(ERROR) << "Can't open COW device: " << device;
@@ -102,11 +107,37 @@ bool InitializeCow(const std::string& device) {
     }
 
     LOG(INFO) << "Zero-filling COW device: " << device;
-    if (!android::base::WriteFully(fd, zeros, kDmSnapZeroFillSize)) {
+    if (!android::base::WriteFully(fd, zeros.data(), kDmSnapZeroFillSize)) {
         PLOG(ERROR) << "Can't zero-fill COW device for " << device;
         return false;
     }
     return true;
+}
+
+std::unique_ptr<AutoUnmountDevice> AutoUnmountDevice::New(const std::string& path) {
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        LOG(ERROR) << "Cannot read default fstab";
+        return nullptr;
+    }
+
+    if (GetEntryForPath(&fstab, path) == nullptr) {
+        LOG(INFO) << "EnsureMetadataMounted can't find entry for " << path << ", skipping";
+        return std::unique_ptr<AutoUnmountDevice>(new AutoUnmountDevice("", {}));
+    }
+
+    if (!EnsurePathMounted(&fstab, path)) {
+        LOG(ERROR) << "Cannot mount " << path;
+        return nullptr;
+    }
+    return std::unique_ptr<AutoUnmountDevice>(new AutoUnmountDevice(path, std::move(fstab)));
+}
+
+AutoUnmountDevice::~AutoUnmountDevice() {
+    if (name_.empty()) return;
+    if (!EnsurePathUnmounted(&fstab_, name_)) {
+        LOG(ERROR) << "Cannot unmount " << name_;
+    }
 }
 
 }  // namespace snapshot

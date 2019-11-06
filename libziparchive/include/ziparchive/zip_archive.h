@@ -40,8 +40,8 @@ enum {
  * Represents information about a zip entry in a zip file.
  */
 struct ZipEntry {
-  // Compression method: One of kCompressStored or
-  // kCompressDeflated.
+  // Compression method. One of kCompressStored or kCompressDeflated.
+  // See also `gpbf` for deflate subtypes.
   uint16_t method;
 
   // Modification time. The zipfile format specifies
@@ -55,7 +55,7 @@ struct ZipEntry {
   struct tm GetModificationTime() const;
 
   // Suggested Unix mode for this entry, from the zip archive if created on
-  // Unix, or a default otherwise.
+  // Unix, or a default otherwise. See also `external_file_attributes`.
   mode_t unix_mode;
 
   // 1 if this entry contains a data descriptor segment, 0
@@ -79,6 +79,18 @@ struct ZipEntry {
 
   // The offset to the start of data for this ZipEntry.
   off64_t offset;
+
+  // The version of zip and the host file system this came from (for zipinfo).
+  uint16_t version_made_by;
+
+  // The raw attributes, whose interpretation depends on the host
+  // file system in `version_made_by` (for zipinfo). See also `unix_mode`.
+  uint32_t external_file_attributes;
+
+  // Specifics about the deflation (for zipinfo).
+  uint16_t gpbf;
+  // Whether this entry is believed to be text or binary (for zipinfo).
+  bool is_text;
 };
 
 struct ZipArchive;
@@ -114,7 +126,7 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle);
 int32_t OpenArchiveFd(const int fd, const char* debugFileName, ZipArchiveHandle* handle,
                       bool assume_ownership = true);
 
-int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debugFileName,
+int32_t OpenArchiveFromMemory(const void* address, size_t length, const char* debugFileName,
                               ZipArchiveHandle* handle);
 /*
  * Close archive, releasing resources associated with it. This will
@@ -124,6 +136,19 @@ int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debugFil
  * call to one of the OpenArchive variants.
  */
 void CloseArchive(ZipArchiveHandle archive);
+
+/** See GetArchiveInfo(). */
+struct ZipArchiveInfo {
+  /** The size in bytes of the archive itself. Used by zipinfo. */
+  off64_t archive_size;
+  /** The number of entries in the archive. */
+  size_t entry_count;
+};
+
+/**
+ * Returns information about the given archive.
+ */
+ZipArchiveInfo GetArchiveInfo(ZipArchiveHandle archive);
 
 /*
  * Find an entry in the Zip archive, by name. |data| must be non-null.
