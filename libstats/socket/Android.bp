@@ -20,7 +20,10 @@
 cc_library {
     name: "libstatssocket",
     srcs: [
+        "stats_buffer_writer.c",
         "stats_event.c",
+        // TODO(b/145573568): Remove stats_event_list once stats_event
+        // migration is complete.
         "stats_event_list.c",
         "statsd_writer.c",
     ],

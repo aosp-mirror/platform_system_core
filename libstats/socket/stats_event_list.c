@@ -18,7 +18,7 @@
 
 #include <string.h>
 #include <sys/time.h>
-#include "statsd_writer.h"
+#include "stats_buffer_writer.h"
 
 #define MAX_EVENT_PAYLOAD (LOGGER_ENTRY_MAX_PAYLOAD - sizeof(int32_t))
 
@@ -37,11 +37,6 @@ typedef struct {
     } read_write_flag;
     uint8_t storage[LOGGER_ENTRY_MAX_PAYLOAD];
 } android_log_context_internal;
-
-extern struct android_log_transport_write statsdLoggerWrite;
-
-static int __write_to_statsd_init(struct iovec* vec, size_t nr);
-int (*write_to_statsd)(struct iovec* vec, size_t nr) = __write_to_statsd_init;
 
 // Similar to create_android_logger(), but instead of allocation a new buffer,
 // this function resets the buffer for resuse.
@@ -92,12 +87,7 @@ int stats_write_list(android_log_context ctx) {
         msg += sizeof(uint8_t) + sizeof(uint8_t);
     }
 
-    struct iovec vec[2];
-    vec[0].iov_base = &context->tag;
-    vec[0].iov_len = sizeof(context->tag);
-    vec[1].iov_base = (void*)msg;
-    vec[1].iov_len = len;
-    return write_to_statsd(vec, 2);
+    return write_buffer_to_statsd((void*)msg, len, 0);
 }
 
 int write_to_logger(android_log_context ctx, log_id_t id) {
@@ -118,80 +108,6 @@ int write_to_logger(android_log_context ctx, log_id_t id) {
     }
 
     return retValue;
-}
-
-void note_log_drop(int error, int tag) {
-    statsdLoggerWrite.noteDrop(error, tag);
-}
-
-void stats_log_close() {
-    statsd_writer_init_lock();
-    write_to_statsd = __write_to_statsd_init;
-    if (statsdLoggerWrite.close) {
-        (*statsdLoggerWrite.close)();
-    }
-    statsd_writer_init_unlock();
-}
-
-/* log_init_lock assumed */
-static int __write_to_statsd_initialize_locked() {
-    if (!statsdLoggerWrite.open || ((*statsdLoggerWrite.open)() < 0)) {
-        if (statsdLoggerWrite.close) {
-            (*statsdLoggerWrite.close)();
-            return -ENODEV;
-        }
-    }
-    return 1;
-}
-
-static int __write_to_stats_daemon(struct iovec* vec, size_t nr) {
-    int save_errno;
-    struct timespec ts;
-    size_t len, i;
-
-    for (len = i = 0; i < nr; ++i) {
-        len += vec[i].iov_len;
-    }
-    if (!len) {
-        return -EINVAL;
-    }
-
-    save_errno = errno;
-#if defined(__ANDROID__)
-    clock_gettime(CLOCK_REALTIME, &ts);
-#else
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    ts.tv_sec = tv.tv_sec;
-    ts.tv_nsec = tv.tv_usec * 1000;
-#endif
-
-    int ret = (int)(*statsdLoggerWrite.write)(&ts, vec, nr);
-    errno = save_errno;
-    return ret;
-}
-
-static int __write_to_statsd_init(struct iovec* vec, size_t nr) {
-    int ret, save_errno = errno;
-
-    statsd_writer_init_lock();
-
-    if (write_to_statsd == __write_to_statsd_init) {
-        ret = __write_to_statsd_initialize_locked();
-        if (ret < 0) {
-            statsd_writer_init_unlock();
-            errno = save_errno;
-            return ret;
-        }
-
-        write_to_statsd = __write_to_stats_daemon;
-    }
-
-    statsd_writer_init_unlock();
-
-    ret = write_to_statsd(vec, nr);
-    errno = save_errno;
-    return ret;
 }
 
 static inline void copy4LE(uint8_t* buf, uint32_t val) {
