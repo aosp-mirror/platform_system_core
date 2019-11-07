@@ -107,6 +107,7 @@ static void help() {
         "       localfilesystem:<unix domain socket name>\n"
         "       dev:<character device name>\n"
         "       jdwp:<process pid> (remote only)\n"
+        "       acceptfd:<fd> (listen only)\n"
         " forward --remove LOCAL   remove specific forward socket connection\n"
         " forward --remove-all     remove all forward socket connections\n"
         " ppp TTY [PARAMETER...]   run PPP over USB\n"
