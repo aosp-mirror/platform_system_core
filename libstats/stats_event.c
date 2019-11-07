@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "stats_event.h"
+#include "include/stats_event.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -33,19 +33,6 @@
 #define POS_TIMESTAMP (POS_NUM_ELEMENTS + 1)
 #define POS_ATOM_ID (POS_TIMESTAMP + sizeof(byte) + sizeof(uint64_t))
 #define POS_FIRST_FIELD (POS_ATOM_ID + sizeof(byte) + sizeof(uint32_t))
-
-/* TYPE IDS */
-#define INT32_TYPE 0x00
-#define INT64_TYPE 0x01
-#define STRING_TYPE 0x02
-#define LIST_TYPE 0x03
-#define FLOAT_TYPE 0x04
-#define BOOL_TYPE 0x05
-#define BYTE_ARRAY_TYPE 0x06
-#define OBJECT_TYPE 0x07
-#define KEY_VALUE_PAIR_TYPE 0x08
-#define ATTRIBUTION_CHAIN_TYPE 0x09
-#define ERROR_TYPE 0x0F
 
 /* LIMITS */
 #define MAX_ANNOTATION_COUNT 15
