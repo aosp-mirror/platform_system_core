@@ -19,10 +19,19 @@
 namespace android {
 namespace init {
 
+// Initialize SELinux, then exec init to run in the init SELinux context.
 int SetupSelinux(char** argv);
+
+// Restore the proper security context to files and directories on ramdisk, and
+// those that were created before initial sepolicy load.
+// This must happen before /dev is populated by ueventd.
 void SelinuxRestoreContext();
 
+// Set up SELinux logging to be written to kmsg, to match init's logging.
 void SelinuxSetupKernelLogging();
+
+// Return the Android API level with which the vendor SEPolicy was compiled.
+// Used for version checks such as whether or not vendor_init should be used.
 int SelinuxGetVendorAndroidVersion();
 
 static constexpr char kEnvSelinuxStartedAt[] = "SELINUX_STARTED_AT";
