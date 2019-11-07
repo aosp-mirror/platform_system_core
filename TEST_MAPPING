@@ -22,6 +22,9 @@
       "name": "libpackagelistparser_test"
     },
     {
+      "name": "libcutils_test"
+    },
+    {
       "name": "libprocinfo_test"
     },
     {
