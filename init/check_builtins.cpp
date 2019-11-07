@@ -121,22 +121,10 @@ Result<void> check_loglevel(const BuiltinArguments& args) {
 }
 
 Result<void> check_mkdir(const BuiltinArguments& args) {
-    if (args.size() >= 4) {
-        if (!args[3].empty()) {
-            auto uid = DecodeUid(args[3]);
-            if (!uid) {
-                return Error() << "Unable to decode UID for '" << args[3] << "': " << uid.error();
-            }
-        }
-
-        if (args.size() == 5 && !args[4].empty()) {
-            auto gid = DecodeUid(args[4]);
-            if (!gid) {
-                return Error() << "Unable to decode GID for '" << args[4] << "': " << gid.error();
-            }
-        }
+    auto options = ParseMkdir(args.args);
+    if (!options) {
+        return options.error();
     }
-
     return {};
 }
 

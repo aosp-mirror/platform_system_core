@@ -25,6 +25,7 @@
 
 #include <android-base/chrono_utils.h>
 
+#include "fscrypt_init_extensions.h"
 #include "result.h"
 
 using android::base::boot_clock;
@@ -59,6 +60,17 @@ bool is_android_dt_value_expected(const std::string& sub_path, const std::string
 
 bool IsLegalPropertyName(const std::string& name);
 Result<void> IsLegalPropertyValue(const std::string& name, const std::string& value);
+
+struct MkdirOptions {
+    std::string target;
+    mode_t mode;
+    uid_t uid;
+    gid_t gid;
+    FscryptAction fscrypt_action;
+    std::string ref_option;
+};
+
+Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args);
 
 Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
         const std::vector<std::string>& args);
