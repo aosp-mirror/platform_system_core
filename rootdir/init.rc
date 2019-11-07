@@ -486,26 +486,26 @@ on post-fs-data
 
     # Start bootcharting as soon as possible after the data partition is
     # mounted to collect more data.
-    mkdir /data/bootchart 0755 shell shell
+    mkdir /data/bootchart 0755 shell shell encryption=Require
     bootchart start
 
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
 
     # /data/apex is now available. Start apexd to scan and activate APEXes.
-    mkdir /data/apex 0750 root system
+    mkdir /data/apex 0750 root system encryption=None
     mkdir /data/apex/active 0750 root system
     mkdir /data/apex/backup 0700 root system
     mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
-    mkdir /data/app-staging 0750 system system
+    mkdir /data/app-staging 0750 system system encryption=None
     start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
     copy /data/system/entropy.dat /dev/urandom
 
     # create basic filesystem structure
-    mkdir /data/misc 01771 system misc
+    mkdir /data/misc 01771 system misc encryption=Require
     mkdir /data/misc/recovery 0770 system log
     copy /data/misc/recovery/ro.build.fingerprint /data/misc/recovery/ro.build.fingerprint.1
     chmod 0440 /data/misc/recovery/ro.build.fingerprint.1
@@ -548,7 +548,7 @@ on post-fs-data
     mkdir /data/misc/user 0771 root root
     # give system access to wpa_supplicant.conf for backup and restore
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
-    mkdir /data/local 0751 root root
+    mkdir /data/local 0751 root root encryption=Require
     mkdir /data/misc/media 0700 media media
     mkdir /data/misc/audioserver 0700 audioserver audioserver
     mkdir /data/misc/cameraserver 0700 cameraserver cameraserver
@@ -567,89 +567,91 @@ on post-fs-data
     mkdir /data/misc/gcov 0770 root root
     mkdir /data/misc/installd 0700 root root
 
-    mkdir /data/preloads 0775 system system
+    mkdir /data/preloads 0775 system system encryption=None
 
-    mkdir /data/vendor 0771 root root
-    mkdir /data/vendor_ce 0771 root root
-    mkdir /data/vendor_de 0771 root root
+    mkdir /data/vendor 0771 root root encryption=Require
+    mkdir /data/vendor_ce 0771 root root encryption=None
+    mkdir /data/vendor_de 0771 root root encryption=None
     mkdir /data/vendor/hardware 0771 root root
 
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
     mkdir /data/local/tmp 0771 shell shell
     mkdir /data/local/traces 0777 shell shell
-    mkdir /data/data 0771 system system
-    mkdir /data/app-private 0771 system system
-    mkdir /data/app-ephemeral 0771 system system
-    mkdir /data/app-asec 0700 root root
-    mkdir /data/app-lib 0771 system system
-    mkdir /data/app 0771 system system
-    mkdir /data/property 0700 root root
-    mkdir /data/tombstones 0771 system system
+    mkdir /data/data 0771 system system encryption=None
+    mkdir /data/app-private 0771 system system encryption=Require
+    mkdir /data/app-ephemeral 0771 system system encryption=Require
+    mkdir /data/app-asec 0700 root root encryption=Require
+    mkdir /data/app-lib 0771 system system encryption=Require
+    mkdir /data/app 0771 system system encryption=Require
+    mkdir /data/property 0700 root root encryption=Require
+    mkdir /data/tombstones 0771 system system encryption=Require
     mkdir /data/vendor/tombstones 0771 root root
     mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
 
     # create dalvik-cache, so as to enforce our permissions
-    mkdir /data/dalvik-cache 0771 root root
+    mkdir /data/dalvik-cache 0771 root root encryption=Require
     # create the A/B OTA directory, so as to enforce our permissions
-    mkdir /data/ota 0771 root root
+    mkdir /data/ota 0771 root root encryption=Require
 
     # create the OTA package directory. It will be accessed by GmsCore (cache
     # group), update_engine and update_verifier.
-    mkdir /data/ota_package 0770 system cache
+    mkdir /data/ota_package 0770 system cache encryption=Require
 
     # create resource-cache and double-check the perms
-    mkdir /data/resource-cache 0771 system system
+    mkdir /data/resource-cache 0771 system system encryption=Require
     chown system system /data/resource-cache
     chmod 0771 /data/resource-cache
 
     # create the lost+found directories, so as to enforce our permissions
-    mkdir /data/lost+found 0770 root root
+    mkdir /data/lost+found 0770 root root encryption=None
 
     # create directory for DRM plug-ins - give drm the read/write access to
     # the following directory.
-    mkdir /data/drm 0770 drm drm
+    mkdir /data/drm 0770 drm drm encryption=Require
 
     # create directory for MediaDrm plug-ins - give drm the read/write access to
     # the following directory.
-    mkdir /data/mediadrm 0770 mediadrm mediadrm
+    mkdir /data/mediadrm 0770 mediadrm mediadrm encryption=Require
 
-    mkdir /data/anr 0775 system system
+    mkdir /data/anr 0775 system system encryption=Require
 
     # NFC: create data/nfc for nv storage
-    mkdir /data/nfc 0770 nfc nfc
+    mkdir /data/nfc 0770 nfc nfc encryption=Require
     mkdir /data/nfc/param 0770 nfc nfc
 
     # Create all remaining /data root dirs so that they are made through init
     # and get proper encryption policy installed
-    mkdir /data/backup 0700 system system
-    mkdir /data/ss 0700 system system
+    mkdir /data/backup 0700 system system encryption=Require
+    mkdir /data/ss 0700 system system encryption=Require
 
-    mkdir /data/system 0775 system system
+    mkdir /data/system 0775 system system encryption=Require
     mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
 
-    mkdir /data/system_de 0770 system system
-    mkdir /data/system_ce 0770 system system
+    mkdir /data/system_de 0770 system system encryption=None
+    mkdir /data/system_ce 0770 system system encryption=None
 
-    mkdir /data/misc_de 01771 system misc
-    mkdir /data/misc_ce 01771 system misc
+    mkdir /data/misc_de 01771 system misc encryption=None
+    mkdir /data/misc_ce 01771 system misc encryption=None
 
-    mkdir /data/user 0711 system system
-    mkdir /data/user_de 0711 system system
+    mkdir /data/user 0711 system system encryption=None
+    mkdir /data/user_de 0711 system system encryption=None
     symlink /data/data /data/user/0
 
-    mkdir /data/media 0770 media_rw media_rw
-    mkdir /data/media/obb 0770 media_rw media_rw
+    # Special-case /data/media/obb per b/64566063
+    mkdir /data/media 0770 media_rw media_rw encryption=None
+    mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
 
-    mkdir /data/cache 0770 system cache
+    mkdir /data/cache 0770 system cache encryption=Require
     mkdir /data/cache/recovery 0770 system cache
     mkdir /data/cache/backup_stage 0700 system system
     mkdir /data/cache/backup 0700 system system
 
-    mkdir /data/rollback 0700 system system
-    mkdir /data/rollback-observer 0700 system system
+    # Delete these if need be, per b/139193659
+    mkdir /data/rollback 0700 system system encryption=DeleteIfNecessary
+    mkdir /data/rollback-observer 0700 system system encryption=DeleteIfNecessary
 
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready
@@ -867,7 +869,7 @@ on property:sys.boot_completed=1
     bootchart stop
     # Setup per_boot directory so other .rc could start to use it on boot_completed
     exec - system system -- /bin/rm -rf /data/per_boot
-    mkdir /data/per_boot 0700 system system
+    mkdir /data/per_boot 0700 system system encryption=Require key=per_boot_ref
 
 # system server cannot write to /proc/sys files,
 # and chown/chmod does not work for /proc/sys/ entries.
