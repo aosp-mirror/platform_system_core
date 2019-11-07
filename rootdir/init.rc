@@ -924,7 +924,7 @@ on userspace-reboot-requested
   setprop sys.init.userspace_reboot_in_progress 1
   setprop sys.boot_completed 0
   setprop sys.init.updatable_crashing 0
-  setprop apexd.status 0
+  setprop apexd.status ""
 
 on userspace-reboot-fs-remount
   # Make sure that vold is running.
