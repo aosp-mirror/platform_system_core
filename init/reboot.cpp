@@ -746,23 +746,8 @@ static Result<void> DoUserspaceReboot() {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
-    // We only really need to restart vold if userdata is ext4 filesystem.
-    // TODO(b/135984674): get userdata fs type here, and do nothing in case of f2fs.
-    // First shutdown volumes managed by vold. They will be recreated by
-    // system_server.
-    Service* vold_service = ServiceList::GetInstance().FindService("vold");
-    if (vold_service != nullptr && vold_service->IsRunning()) {
-        if (auto result = ShutdownVold(); !result) {
-            return result;
-        }
-        LOG(INFO) << "Restarting vold";
-        vold_service->Restart();
-    }
-    // Again, we only need to kill zram backing device in case of ext4 userdata.
-    // TODO(b/135984674): get userdata fs type here, and do nothing in case of f2fs.
-    if (auto result = KillZramBackingDevice(); !result) {
-        return result;
-    }
+    // TODO(b/143970043): in case of ext4 we probably we will need to restart vold and kill zram
+    //  backing device.
     if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */), 5s,
                                              false /* SIGKILL */);
         r > 0) {
