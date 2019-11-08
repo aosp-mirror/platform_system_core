@@ -28,7 +28,7 @@
 int lmkd_connect() {
     return socket_local_client("lmkd",
                                ANDROID_SOCKET_NAMESPACE_RESERVED,
-                               SOCK_SEQPACKET);
+                               SOCK_SEQPACKET | SOCK_CLOEXEC);
 }
 
 int lmkd_register_proc(int sock, struct lmk_procprio *params) {
@@ -37,6 +37,17 @@ int lmkd_register_proc(int sock, struct lmk_procprio *params) {
     int ret;
 
     size = lmkd_pack_set_procprio(packet, params);
+    ret = TEMP_FAILURE_RETRY(write(sock, packet, size));
+
+    return (ret < 0) ? -1 : 0;
+}
+
+int lmkd_unregister_proc(int sock, struct lmk_procremove *params) {
+    LMKD_CTRL_PACKET packet;
+    size_t size;
+    int ret;
+
+    size = lmkd_pack_set_procremove(packet, params);
     ret = TEMP_FAILURE_RETRY(write(sock, packet, size));
 
     return (ret < 0) ? -1 : 0;
