@@ -547,11 +547,25 @@ static void import_late(const std::vector<std::string>& args, size_t start_index
  *
  * return code is processed based on input code
  */
-static Result<void> queue_fs_event(int code) {
+static Result<void> queue_fs_event(int code, bool userdata_remount) {
     if (code == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
+        if (userdata_remount) {
+            // FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION should only happen on FDE devices. Since we don't
+            // support userdata remount on FDE devices, this should never been triggered. Time to
+            // panic!
+            LOG(ERROR) << "Userdata remount is not supported on FDE devices. How did you get here?";
+            TriggerShutdown("reboot,requested-userdata-remount-on-fde-device");
+        }
         ActionManager::GetInstance().QueueEventTrigger("encrypt");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
+        if (userdata_remount) {
+            // FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED should only happen on FDE devices. Since we
+            // don't support userdata remount on FDE devices, this should never been triggered.
+            // Time to panic!
+            LOG(ERROR) << "Userdata remount is not supported on FDE devices. How did you get here?";
+            TriggerShutdown("reboot,requested-userdata-remount-on-fde-device");
+        }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "block");
         ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
@@ -574,7 +588,7 @@ static Result<void> queue_fs_event(int code) {
         return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
-        if (!FscryptInstallKeyring()) {
+        if (!userdata_remount && !FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
@@ -585,7 +599,7 @@ static Result<void> queue_fs_event(int code) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
-        if (!FscryptInstallKeyring()) {
+        if (!userdata_remount && !FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
@@ -596,7 +610,7 @@ static Result<void> queue_fs_event(int code) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
-        if (!FscryptInstallKeyring()) {
+        if (!userdata_remount && !FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
@@ -664,7 +678,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
         initial_mount_fstab_return_code = mount_fstab_return_code;
-        auto queue_fs_result = queue_fs_event(mount_fstab_return_code);
+        auto queue_fs_result = queue_fs_event(mount_fstab_return_code, false);
         if (!queue_fs_result) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
@@ -1136,7 +1150,7 @@ static Result<void> do_remount_userdata(const BuiltinArguments& args) {
     if (auto rc = fs_mgr_remount_userdata_into_checkpointing(&fstab); rc < 0) {
         TriggerShutdown("reboot,mount-userdata-failed");
     }
-    if (auto result = queue_fs_event(initial_mount_fstab_return_code); !result) {
+    if (auto result = queue_fs_event(initial_mount_fstab_return_code, true); !result) {
         return Error() << "queue_fs_event() failed: " << result.error();
     }
     return {};
