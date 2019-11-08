@@ -48,6 +48,7 @@ cc_library_static {
 cc_library_static {
     name: "liblmkd_utils",
     srcs: ["liblmkd_utils.c"],
+    recovery_available: true,
     shared_libs: [
         "libcutils",
     ],

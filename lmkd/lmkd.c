@@ -245,8 +245,8 @@ struct sock_event_handler_info {
     struct event_handler_info handler_info;
 };
 
-/* max supported number of data connections */
-#define MAX_DATA_CONN 2
+/* max supported number of data connections (AMS, init, tests) */
+#define MAX_DATA_CONN 3
 
 /* socket event handler data */
 static struct sock_event_handler_info ctrl_sock;
@@ -256,7 +256,7 @@ static struct sock_event_handler_info data_sock[MAX_DATA_CONN];
 static struct event_handler_info vmpressure_hinfo[VMPRESS_LEVEL_COUNT];
 
 /*
- * 1 ctrl listen socket, 2 ctrl data socket, 3 memory pressure levels,
+ * 1 ctrl listen socket, 3 ctrl data socket, 3 memory pressure levels,
  * 1 lmk events + 1 fd to wait for process death
  */
 #define MAX_EPOLL_EVENTS (1 + MAX_DATA_CONN + VMPRESS_LEVEL_COUNT + 1 + 1)
