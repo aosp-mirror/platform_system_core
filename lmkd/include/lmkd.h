@@ -135,7 +135,7 @@ static inline void lmkd_pack_get_procremove(LMKD_CTRL_PACKET packet,
  * Warning: no checks performed, caller should ensure valid parameters.
  */
 static inline size_t lmkd_pack_set_procremove(LMKD_CTRL_PACKET packet,
-                                              struct lmk_procprio* params) {
+                                              struct lmk_procremove* params) {
     packet[0] = htonl(LMK_PROCREMOVE);
     packet[1] = htonl(params->pid);
     return 2 * sizeof(int);
