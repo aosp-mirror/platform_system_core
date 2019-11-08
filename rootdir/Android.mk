@@ -294,27 +294,6 @@ LOCAL_MODULE_STEM := ld.config.txt
 include $(BUILD_PREBUILT)
 
 #######################################
-# {llndk,vndkcore,vndksp,vndkprivate,vndkcorevariant}.libraries.txt
-vndk_libraries_files := \
-  llndk.libraries.txt:$(SOONG_LLNDK_LIBRARIES_FILE)\
-  vndkcore.libraries.txt:$(SOONG_VNDKCORE_LIBRARIES_FILE)\
-  vndksp.libraries.txt:$(SOONG_VNDKSP_LIBRARIES_FILE)\
-  vndkprivate.libraries.txt:$(SOONG_VNDKPRIVATE_LIBRARIES_FILE)\
-  vndkcorevariant.libraries.txt:$(SOONG_VNDKCOREVARIANT_LIBRARIES_FILE)
-
-$(foreach pair,$(vndk_libraries_files),\
-  $(eval _filename := $(call word-colon,1,$(pair)))\
-  $(eval _prebuilt := $(call word-colon,2,$(pair)))\
-  $(eval include $(CLEAR_VARS))\
-  $(eval LOCAL_MODULE := $(_filename))\
-  $(eval LOCAL_MODULE_CLASS := ETC)\
-  $(eval LOCAL_PREBUILT_MODULE_FILE := $(_prebuilt))\
-  $(eval LOCAL_MODULE_PATH := $(TARGET_OUT_ETC))\
-  $(eval LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE)))\
-  $(eval include $(BUILD_PREBUILT)))
-vndk_libraries_files :=
-
-#######################################
 # sanitizer.libraries.txt
 include $(CLEAR_VARS)
 LOCAL_MODULE := sanitizer.libraries.txt
