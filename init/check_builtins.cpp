@@ -29,7 +29,9 @@
 #include <android-base/strings.h>
 
 #include "builtin_arguments.h"
+#include "host_init_verifier.h"
 #include "interface_utils.h"
+#include "property_type.h"
 #include "rlimit_parser.h"
 #include "service.h"
 #include "util.h"
@@ -169,6 +171,15 @@ Result<void> check_setprop(const BuiltinArguments& args) {
     if (name == kRestoreconProperty) {
         return Error() << "Do not set '" << kRestoreconProperty
                        << "' from init; use the restorecon builtin directly";
+    }
+
+    const char* target_context = nullptr;
+    const char* type = nullptr;
+    property_info_area->GetPropertyInfo(name.c_str(), &target_context, &type);
+
+    if (!CheckType(type, value)) {
+        return Error() << "Property type check failed, value doesn't match expected type '"
+                       << (type ?: "(null)") << "'";
     }
 
     return {};

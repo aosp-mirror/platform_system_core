@@ -281,6 +281,8 @@ cc_binary {
     static_libs: [
         "libbase",
         "libselinux",
+        "libpropertyinfoserializer",
+        "libpropertyinfoparser",
     ],
     whole_static_libs: ["libcap"],
     shared_libs: [
@@ -304,6 +306,7 @@ cc_binary {
         "host_import_parser.cpp",
         "host_init_verifier.cpp",
         "parser.cpp",
+        "property_type.cpp",
         "rlimit_parser.cpp",
         "tokenizer.cpp",
         "service.cpp",
