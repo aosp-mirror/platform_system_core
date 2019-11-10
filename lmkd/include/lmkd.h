@@ -87,21 +87,33 @@ static inline size_t lmkd_pack_set_target(LMKD_CTRL_PACKET packet, struct lmk_ta
     return idx * sizeof(int);
 }
 
+/* Process types for lmk_procprio.ptype */
+enum proc_type {
+    PROC_TYPE_FIRST,
+    PROC_TYPE_APP = PROC_TYPE_FIRST,
+    PROC_TYPE_SERVICE,
+    PROC_TYPE_COUNT,
+};
+
 /* LMK_PROCPRIO packet payload */
 struct lmk_procprio {
     pid_t pid;
     uid_t uid;
     int oomadj;
+    enum proc_type ptype;
 };
 
 /*
  * For LMK_PROCPRIO packet get its payload.
  * Warning: no checks performed, caller should ensure valid parameters.
  */
-static inline void lmkd_pack_get_procprio(LMKD_CTRL_PACKET packet, struct lmk_procprio* params) {
+static inline void lmkd_pack_get_procprio(LMKD_CTRL_PACKET packet, int field_count,
+                                          struct lmk_procprio* params) {
     params->pid = (pid_t)ntohl(packet[1]);
     params->uid = (uid_t)ntohl(packet[2]);
     params->oomadj = ntohl(packet[3]);
+    /* if field is missing assume PROC_TYPE_APP for backward compatibility */
+    params->ptype = field_count > 3 ? (enum proc_type)ntohl(packet[4]) : PROC_TYPE_APP;
 }
 
 /*
@@ -113,7 +125,8 @@ static inline size_t lmkd_pack_set_procprio(LMKD_CTRL_PACKET packet, struct lmk_
     packet[1] = htonl(params->pid);
     packet[2] = htonl(params->uid);
     packet[3] = htonl(params->oomadj);
-    return 4 * sizeof(int);
+    packet[4] = htonl((int)params->ptype);
+    return 5 * sizeof(int);
 }
 
 /* LMK_PROCREMOVE packet payload */
@@ -135,7 +148,7 @@ static inline void lmkd_pack_get_procremove(LMKD_CTRL_PACKET packet,
  * Warning: no checks performed, caller should ensure valid parameters.
  */
 static inline size_t lmkd_pack_set_procremove(LMKD_CTRL_PACKET packet,
-                                              struct lmk_procprio* params) {
+                                              struct lmk_procremove* params) {
     packet[0] = htonl(LMK_PROCREMOVE);
     packet[1] = htonl(params->pid);
     return 2 * sizeof(int);
