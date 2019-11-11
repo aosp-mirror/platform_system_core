@@ -385,7 +385,7 @@ static void bswrite_test(const char* message) {
         fprintf(stderr, "Expect \"Binary log entry conversion failed\"\n");
       }
       int processBinaryLogBuffer = android_log_processBinaryLogBuffer(
-          &log_msg.entry_v1, &entry, NULL, msgBuf, sizeof(msgBuf));
+          &log_msg.entry, &entry, nullptr, msgBuf, sizeof(msgBuf));
       EXPECT_EQ((length == total) ? 0 : -1, processBinaryLogBuffer);
       if ((processBinaryLogBuffer == 0) || entry.message) {
         size_t line_overhead = 20;
@@ -469,8 +469,7 @@ static void buf_write_test(const char* message) {
     AndroidLogFormat* logformat = android_log_format_new();
     EXPECT_TRUE(NULL != logformat);
     AndroidLogEntry entry;
-    int processLogBuffer =
-        android_log_processLogBuffer(&log_msg.entry_v1, &entry);
+    int processLogBuffer = android_log_processLogBuffer(&log_msg.entry, &entry);
     EXPECT_EQ(0, processLogBuffer);
     if (processLogBuffer == 0) {
       size_t line_overhead = 11;
@@ -1013,8 +1012,7 @@ TEST(liblog, __android_log_buf_print__maxtag) {
     AndroidLogFormat* logformat = android_log_format_new();
     EXPECT_TRUE(NULL != logformat);
     AndroidLogEntry entry;
-    int processLogBuffer =
-        android_log_processLogBuffer(&log_msg.entry_v1, &entry);
+    int processLogBuffer = android_log_processLogBuffer(&log_msg.entry, &entry);
     EXPECT_EQ(0, processLogBuffer);
     if (processLogBuffer == 0) {
       fflush(stderr);
@@ -2507,8 +2505,8 @@ static void create_android_logger(const char* (*fn)(uint32_t tag,
     EXPECT_TRUE(NULL != logformat);
     AndroidLogEntry entry;
     char msgBuf[1024];
-    int processBinaryLogBuffer = android_log_processBinaryLogBuffer(
-        &log_msg.entry_v1, &entry, NULL, msgBuf, sizeof(msgBuf));
+    int processBinaryLogBuffer =
+        android_log_processBinaryLogBuffer(&log_msg.entry, &entry, nullptr, msgBuf, sizeof(msgBuf));
     EXPECT_EQ(0, processBinaryLogBuffer);
     if (processBinaryLogBuffer == 0) {
       int line_overhead = 20;

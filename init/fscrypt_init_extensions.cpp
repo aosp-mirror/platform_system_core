@@ -39,19 +39,17 @@
 
 #define TAG "fscrypt"
 
-static int set_policy_on(const std::string& ref_basename, const std::string& dir);
+using namespace android::fscrypt;
 
-int fscrypt_install_keyring() {
+bool FscryptInstallKeyring() {
     key_serial_t device_keyring = add_key("keyring", "fscrypt", 0, 0, KEY_SPEC_SESSION_KEYRING);
 
     if (device_keyring == -1) {
         PLOG(ERROR) << "Failed to create keyring";
-        return -1;
+        return false;
     }
-
     LOG(INFO) << "Keyring created with id " << device_keyring << " in process " << getpid();
-
-    return 0;
+    return true;
 }
 
 // TODO(b/139378601): use a single central implementation of this.
@@ -95,131 +93,57 @@ static void delete_dir_contents(const std::string& dir) {
     }
 }
 
-int fscrypt_set_directory_policy(const std::string& dir) {
-    const std::string prefix = "/data/";
-
-    if (!android::base::StartsWith(dir, prefix)) {
-        return 0;
-    }
-
-    // Special-case /data/media/obb per b/64566063
-    if (dir == "/data/media/obb") {
-        // Try to set policy on this directory, but if it is non-empty this may fail.
-        set_policy_on(fscrypt_key_ref, dir);
-        return 0;
-    }
-
-    // Only set policy on first level /data directories
-    // To make this less restrictive, consider using a policy file.
-    // However this is overkill for as long as the policy is simply
-    // to apply a global policy to all /data folders created via makedir
-    if (dir.find_first_of('/', prefix.size()) != std::string::npos) {
-        return 0;
-    }
-
-    // Special case various directories that must not be encrypted,
-    // often because their subdirectories must be encrypted.
-    // This isn't a nice way to do this, see b/26641735
-    std::vector<std::string> directories_to_exclude = {
-        "lost+found",
-        "system_ce", "system_de",
-        "misc_ce", "misc_de",
-        "vendor_ce", "vendor_de",
-        "media",
-        "data", "user", "user_de",
-        "apex", "preloads", "app-staging",
-        "gsi",
-    };
-    for (const auto& d : directories_to_exclude) {
-        if ((prefix + d) == dir) {
-            LOG(INFO) << "Not setting policy on " << dir;
-            return 0;
-        }
-    }
-    std::vector<std::string> per_boot_directories = {
-            "per_boot",
-    };
-    for (const auto& d : per_boot_directories) {
-        if ((prefix + d) == dir) {
-            LOG(INFO) << "Setting per_boot key on " << dir;
-            return set_policy_on(fscrypt_key_per_boot_ref, dir);
-        }
-    }
-    int err = set_policy_on(fscrypt_key_ref, dir);
-    if (err == 0) {
-        return 0;
-    }
-    // Empty these directories if policy setting fails.
-    std::vector<std::string> wipe_on_failure = {
-            "rollback", "rollback-observer",  // b/139193659
-    };
-    for (const auto& d : wipe_on_failure) {
-        if ((prefix + d) == dir) {
-            LOG(ERROR) << "Setting policy failed, deleting: " << dir;
-            delete_dir_contents(dir);
-            err = set_policy_on(fscrypt_key_ref, dir);
-            break;
-        }
-    }
-    return err;
-}
-
-static int parse_encryption_options_string(const std::string& options_string,
-                                           std::string* contents_mode_ret,
-                                           std::string* filenames_mode_ret,
-                                           int* policy_version_ret) {
-    auto parts = android::base::Split(options_string, ":");
-
-    if (parts.size() != 3) {
-        return -1;
-    }
-
-    *contents_mode_ret = parts[0];
-    *filenames_mode_ret = parts[1];
-    if (!android::base::StartsWith(parts[2], 'v') ||
-        !android::base::ParseInt(&parts[2][1], policy_version_ret)) {
-        return -1;
-    }
-
-    return 0;
-}
-
-// Set an encryption policy on the given directory.  The policy (key reference
+// Look up an encryption policy  The policy (key reference
 // and encryption options) to use is read from files that were written by vold.
-static int set_policy_on(const std::string& ref_basename, const std::string& dir) {
+static bool LookupPolicy(const std::string& ref_basename, EncryptionPolicy* policy) {
     std::string ref_filename = std::string("/data") + ref_basename;
-    std::string key_ref;
-    if (!android::base::ReadFileToString(ref_filename, &key_ref)) {
-        LOG(ERROR) << "Unable to read system policy to set on " << dir;
-        return -1;
+    if (!android::base::ReadFileToString(ref_filename, &policy->key_raw_ref)) {
+        LOG(ERROR) << "Unable to read system policy with name " << ref_filename;
+        return false;
     }
 
     auto options_filename = std::string("/data") + fscrypt_key_mode;
     std::string options_string;
     if (!android::base::ReadFileToString(options_filename, &options_string)) {
         LOG(ERROR) << "Cannot read encryption options string";
-        return -1;
+        return false;
     }
-
-    std::string contents_mode;
-    std::string filenames_mode;
-    int policy_version = 0;
-
-    if (parse_encryption_options_string(options_string, &contents_mode, &filenames_mode,
-                                        &policy_version)) {
+    if (!ParseOptions(options_string, &policy->options)) {
         LOG(ERROR) << "Invalid encryption options string: " << options_string;
-        return -1;
+        return false;
     }
+    return true;
+}
 
-    int result =
-            fscrypt_policy_ensure(dir.c_str(), key_ref.c_str(), key_ref.length(),
-                                  contents_mode.c_str(), filenames_mode.c_str(), policy_version);
-    if (result) {
-        LOG(ERROR) << android::base::StringPrintf("Setting %02x%02x%02x%02x policy on %s failed!",
-                                                  key_ref[0], key_ref[1], key_ref[2], key_ref[3],
-                                                  dir.c_str());
-        return -1;
+static bool EnsurePolicyOrLog(const EncryptionPolicy& policy, const std::string& dir) {
+    if (!EnsurePolicy(policy, dir)) {
+        std::string ref_hex;
+        BytesToHex(policy.key_raw_ref, &ref_hex);
+        LOG(ERROR) << "Setting " << ref_hex << " policy on " << dir << " failed!";
+        return false;
     }
+    return true;
+}
 
-    return 0;
+static bool SetPolicyOn(const std::string& ref_basename, const std::string& dir) {
+    EncryptionPolicy policy;
+    if (!LookupPolicy(ref_basename, &policy)) return false;
+    if (!EnsurePolicyOrLog(policy, dir)) return false;
+    return true;
+}
+
+bool FscryptSetDirectoryPolicy(const std::string& ref_basename, FscryptAction action,
+                               const std::string& dir) {
+    if (action == FscryptAction::kNone) {
+        return true;
+    }
+    if (SetPolicyOn(ref_basename, dir) || action == FscryptAction::kAttempt) {
+        return true;
+    }
+    if (action == FscryptAction::kDeleteIfNecessary) {
+        LOG(ERROR) << "Setting policy failed, deleting: " << dir;
+        delete_dir_contents(dir);
+        return SetPolicyOn(ref_basename, dir);
+    }
+    return false;
 }

@@ -29,10 +29,12 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 
 #include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
+#include <android/hardware/health/2.1/types.h>
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
 #include <cutils/properties.h>
@@ -47,97 +49,106 @@
 #define MILLION 1.0e6
 #define DEFAULT_VBUS_VOLTAGE 5000000
 
+using HealthInfo_1_0 = android::hardware::health::V1_0::HealthInfo;
+using HealthInfo_2_0 = android::hardware::health::V2_0::HealthInfo;
+using HealthInfo_2_1 = android::hardware::health::V2_1::HealthInfo;
+using android::hardware::health::V1_0::BatteryHealth;
+using android::hardware::health::V1_0::BatteryStatus;
+using android::hardware::health::V2_1::BatteryCapacityLevel;
+
 namespace android {
 
-struct sysfsStringEnumMap {
+template <typename T>
+struct SysfsStringEnumMap {
     const char* s;
-    int val;
+    T val;
 };
 
-static int mapSysfsString(const char* str,
-                          struct sysfsStringEnumMap map[]) {
+template <typename T>
+static std::optional<T> mapSysfsString(const char* str, SysfsStringEnumMap<T> map[]) {
     for (int i = 0; map[i].s; i++)
         if (!strcmp(str, map[i].s))
             return map[i].val;
 
-    return -1;
+    return std::nullopt;
 }
 
-static void initBatteryProperties(BatteryProperties* props) {
-    props->chargerAcOnline = false;
-    props->chargerUsbOnline = false;
-    props->chargerWirelessOnline = false;
-    props->maxChargingCurrent = 0;
-    props->maxChargingVoltage = 0;
-    props->batteryStatus = BATTERY_STATUS_UNKNOWN;
-    props->batteryHealth = BATTERY_HEALTH_UNKNOWN;
-    props->batteryPresent = false;
-    props->batteryLevel = 0;
-    props->batteryVoltage = 0;
-    props->batteryTemperature = 0;
-    props->batteryCurrent = 0;
-    props->batteryCycleCount = 0;
-    props->batteryFullCharge = 0;
-    props->batteryChargeCounter = 0;
-    props->batteryTechnology.clear();
+static void initHealthInfo(HealthInfo_2_1* health_info_2_1) {
+    *health_info_2_1 = HealthInfo_2_1{};
+
+    // HIDL enum values are zero initialized, so they need to be initialized
+    // properly.
+    health_info_2_1->batteryCapacityLevel = BatteryCapacityLevel::UNKNOWN;
+    auto* props = &health_info_2_1->legacy.legacy;
+    props->batteryStatus = BatteryStatus::UNKNOWN;
+    props->batteryHealth = BatteryHealth::UNKNOWN;
 }
 
 BatteryMonitor::BatteryMonitor()
     : mHealthdConfig(nullptr),
       mBatteryDevicePresent(false),
       mBatteryFixedCapacity(0),
-      mBatteryFixedTemperature(0) {
-    initBatteryProperties(&props);
+      mBatteryFixedTemperature(0),
+      mHealthInfo(std::make_unique<HealthInfo_2_1>()) {
+    initHealthInfo(mHealthInfo.get());
 }
 
-struct BatteryProperties getBatteryProperties(BatteryMonitor* batteryMonitor) {
-    return batteryMonitor->props;
+BatteryMonitor::~BatteryMonitor() {}
+
+const HealthInfo_1_0& BatteryMonitor::getHealthInfo_1_0() const {
+    return getHealthInfo_2_0().legacy;
 }
 
-int BatteryMonitor::getBatteryStatus(const char* status) {
-    int ret;
-    struct sysfsStringEnumMap batteryStatusMap[] = {
-        { "Unknown", BATTERY_STATUS_UNKNOWN },
-        { "Charging", BATTERY_STATUS_CHARGING },
-        { "Discharging", BATTERY_STATUS_DISCHARGING },
-        { "Not charging", BATTERY_STATUS_NOT_CHARGING },
-        { "Full", BATTERY_STATUS_FULL },
-        { NULL, 0 },
+const HealthInfo_2_0& BatteryMonitor::getHealthInfo_2_0() const {
+    return getHealthInfo_2_1().legacy;
+}
+
+const HealthInfo_2_1& BatteryMonitor::getHealthInfo_2_1() const {
+    return *mHealthInfo;
+}
+
+BatteryStatus getBatteryStatus(const char* status) {
+    static SysfsStringEnumMap<BatteryStatus> batteryStatusMap[] = {
+            {"Unknown", BatteryStatus::UNKNOWN},
+            {"Charging", BatteryStatus::CHARGING},
+            {"Discharging", BatteryStatus::DISCHARGING},
+            {"Not charging", BatteryStatus::NOT_CHARGING},
+            {"Full", BatteryStatus::FULL},
+            {NULL, BatteryStatus::UNKNOWN},
     };
 
-    ret = mapSysfsString(status, batteryStatusMap);
-    if (ret < 0) {
+    auto ret = mapSysfsString(status, batteryStatusMap);
+    if (!ret) {
         KLOG_WARNING(LOG_TAG, "Unknown battery status '%s'\n", status);
-        ret = BATTERY_STATUS_UNKNOWN;
+        *ret = BatteryStatus::UNKNOWN;
     }
 
-    return ret;
+    return *ret;
 }
 
-int BatteryMonitor::getBatteryHealth(const char* status) {
-    int ret;
-    struct sysfsStringEnumMap batteryHealthMap[] = {
-        { "Unknown", BATTERY_HEALTH_UNKNOWN },
-        { "Good", BATTERY_HEALTH_GOOD },
-        { "Overheat", BATTERY_HEALTH_OVERHEAT },
-        { "Dead", BATTERY_HEALTH_DEAD },
-        { "Over voltage", BATTERY_HEALTH_OVER_VOLTAGE },
-        { "Unspecified failure", BATTERY_HEALTH_UNSPECIFIED_FAILURE },
-        { "Cold", BATTERY_HEALTH_COLD },
-        // battery health values from JEITA spec
-        { "Warm", BATTERY_HEALTH_GOOD },
-        { "Cool", BATTERY_HEALTH_GOOD },
-        { "Hot", BATTERY_HEALTH_OVERHEAT },
-        { NULL, 0 },
+BatteryHealth getBatteryHealth(const char* status) {
+    static SysfsStringEnumMap<BatteryHealth> batteryHealthMap[] = {
+            {"Unknown", BatteryHealth::UNKNOWN},
+            {"Good", BatteryHealth::GOOD},
+            {"Overheat", BatteryHealth::OVERHEAT},
+            {"Dead", BatteryHealth::DEAD},
+            {"Over voltage", BatteryHealth::OVER_VOLTAGE},
+            {"Unspecified failure", BatteryHealth::UNSPECIFIED_FAILURE},
+            {"Cold", BatteryHealth::COLD},
+            // battery health values from JEITA spec
+            {"Warm", BatteryHealth::GOOD},
+            {"Cool", BatteryHealth::GOOD},
+            {"Hot", BatteryHealth::OVERHEAT},
+            {NULL, BatteryHealth::UNKNOWN},
     };
 
-    ret = mapSysfsString(status, batteryHealthMap);
-    if (ret < 0) {
+    auto ret = mapSysfsString(status, batteryHealthMap);
+    if (!ret) {
         KLOG_WARNING(LOG_TAG, "Unknown battery health '%s'\n", status);
-        ret = BATTERY_HEALTH_UNKNOWN;
+        *ret = BatteryHealth::UNKNOWN;
     }
 
-    return ret;
+    return *ret;
 }
 
 int BatteryMonitor::readFromFile(const String8& path, std::string* buf) {
@@ -148,35 +159,34 @@ int BatteryMonitor::readFromFile(const String8& path, std::string* buf) {
 }
 
 BatteryMonitor::PowerSupplyType BatteryMonitor::readPowerSupplyType(const String8& path) {
-    std::string buf;
-    int ret;
-    struct sysfsStringEnumMap supplyTypeMap[] = {
-            { "Unknown", ANDROID_POWER_SUPPLY_TYPE_UNKNOWN },
-            { "Battery", ANDROID_POWER_SUPPLY_TYPE_BATTERY },
-            { "UPS", ANDROID_POWER_SUPPLY_TYPE_AC },
-            { "Mains", ANDROID_POWER_SUPPLY_TYPE_AC },
-            { "USB", ANDROID_POWER_SUPPLY_TYPE_USB },
-            { "USB_DCP", ANDROID_POWER_SUPPLY_TYPE_AC },
-            { "USB_HVDCP", ANDROID_POWER_SUPPLY_TYPE_AC },
-            { "USB_CDP", ANDROID_POWER_SUPPLY_TYPE_AC },
-            { "USB_ACA", ANDROID_POWER_SUPPLY_TYPE_AC },
-            { "USB_C", ANDROID_POWER_SUPPLY_TYPE_AC },
-            { "USB_PD", ANDROID_POWER_SUPPLY_TYPE_AC },
-            { "USB_PD_DRP", ANDROID_POWER_SUPPLY_TYPE_USB },
-            { "Wireless", ANDROID_POWER_SUPPLY_TYPE_WIRELESS },
-            { NULL, 0 },
+    static SysfsStringEnumMap<int> supplyTypeMap[] = {
+            {"Unknown", ANDROID_POWER_SUPPLY_TYPE_UNKNOWN},
+            {"Battery", ANDROID_POWER_SUPPLY_TYPE_BATTERY},
+            {"UPS", ANDROID_POWER_SUPPLY_TYPE_AC},
+            {"Mains", ANDROID_POWER_SUPPLY_TYPE_AC},
+            {"USB", ANDROID_POWER_SUPPLY_TYPE_USB},
+            {"USB_DCP", ANDROID_POWER_SUPPLY_TYPE_AC},
+            {"USB_HVDCP", ANDROID_POWER_SUPPLY_TYPE_AC},
+            {"USB_CDP", ANDROID_POWER_SUPPLY_TYPE_AC},
+            {"USB_ACA", ANDROID_POWER_SUPPLY_TYPE_AC},
+            {"USB_C", ANDROID_POWER_SUPPLY_TYPE_AC},
+            {"USB_PD", ANDROID_POWER_SUPPLY_TYPE_AC},
+            {"USB_PD_DRP", ANDROID_POWER_SUPPLY_TYPE_USB},
+            {"Wireless", ANDROID_POWER_SUPPLY_TYPE_WIRELESS},
+            {NULL, 0},
     };
+    std::string buf;
 
     if (readFromFile(path, &buf) <= 0)
         return ANDROID_POWER_SUPPLY_TYPE_UNKNOWN;
 
-    ret = mapSysfsString(buf.c_str(), supplyTypeMap);
-    if (ret < 0) {
+    auto ret = mapSysfsString(buf.c_str(), supplyTypeMap);
+    if (!ret) {
         KLOG_WARNING(LOG_TAG, "Unknown power supply type '%s'\n", buf.c_str());
-        ret = ANDROID_POWER_SUPPLY_TYPE_UNKNOWN;
+        *ret = ANDROID_POWER_SUPPLY_TYPE_UNKNOWN;
     }
 
-    return static_cast<BatteryMonitor::PowerSupplyType>(ret);
+    return static_cast<BatteryMonitor::PowerSupplyType>(*ret);
 }
 
 bool BatteryMonitor::getBooleanField(const String8& path) {
@@ -201,7 +211,9 @@ int BatteryMonitor::getIntField(const String8& path) {
 }
 
 void BatteryMonitor::updateValues(void) {
-    initBatteryProperties(&props);
+    initHealthInfo(mHealthInfo.get());
+
+    HealthInfo_1_0& props = mHealthInfo->legacy.legacy;
 
     if (!mHealthdConfig->batteryPresentPath.isEmpty())
         props.batteryPresent = getBooleanField(mHealthdConfig->batteryPresentPath);
@@ -224,6 +236,15 @@ void BatteryMonitor::updateValues(void) {
 
     if (!mHealthdConfig->batteryChargeCounterPath.isEmpty())
         props.batteryChargeCounter = getIntField(mHealthdConfig->batteryChargeCounterPath);
+
+    if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty())
+        mHealthInfo->legacy.batteryCurrentAverage =
+                getIntField(mHealthdConfig->batteryCurrentAvgPath);
+
+    // TODO(b/142260281): Retrieve these values correctly.
+    mHealthInfo->batteryCapacityLevel = BatteryCapacityLevel::UNKNOWN;
+    mHealthInfo->batteryChargeTimeToFullNowSeconds = 0;
+    mHealthInfo->batteryFullCapacityUah = props.batteryFullCharge;
 
     props.batteryTemperature = mBatteryFixedTemperature ?
         mBatteryFixedTemperature :
@@ -292,6 +313,7 @@ void BatteryMonitor::updateValues(void) {
 void BatteryMonitor::logValues(void) {
     char dmesgline[256];
     size_t len;
+    const HealthInfo_1_0& props = mHealthInfo->legacy.legacy;
     if (props.batteryPresent) {
         snprintf(dmesgline, sizeof(dmesgline), "battery l=%d v=%d t=%s%d.%d h=%d st=%d",
                  props.batteryLevel, props.batteryVoltage, props.batteryTemperature < 0 ? "-" : "",
@@ -325,18 +347,19 @@ void BatteryMonitor::logValues(void) {
 }
 
 bool BatteryMonitor::isChargerOnline() {
+    const HealthInfo_1_0& props = mHealthInfo->legacy.legacy;
     return props.chargerAcOnline | props.chargerUsbOnline |
             props.chargerWirelessOnline;
 }
 
 int BatteryMonitor::getChargeStatus() {
-    int result = BATTERY_STATUS_UNKNOWN;
+    BatteryStatus result = BatteryStatus::UNKNOWN;
     if (!mHealthdConfig->batteryStatusPath.isEmpty()) {
         std::string buf;
         if (readFromFile(mHealthdConfig->batteryStatusPath, &buf) > 0)
             result = getBatteryStatus(buf.c_str());
     }
-    return result;
+    return static_cast<int>(result);
 }
 
 status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
@@ -409,6 +432,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
 void BatteryMonitor::dumpState(int fd) {
     int v;
     char vs[128];
+    const HealthInfo_1_0& props = mHealthInfo->legacy.legacy;
 
     snprintf(vs, sizeof(vs), "ac: %d usb: %d wireless: %d current_max: %d voltage_max: %d\n",
              props.chargerAcOnline, props.chargerUsbOnline,
