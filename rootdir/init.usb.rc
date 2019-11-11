@@ -9,13 +9,14 @@ on post-fs-data
     chown system system /sys/class/android_usb/android0/f_rndis/ethaddr
     chmod 0660 /sys/class/android_usb/android0/f_rndis/ethaddr
     mkdir /data/misc/adb 02750 system shell
-    mkdir /data/adb 0700 root root
+    mkdir /data/adb 0700 root root encryption=Require
 
 # adbd is controlled via property triggers in init.<platform>.usb.rc
 service adbd /system/bin/adbd --root_seclabel=u:r:su:s0
     class core
     socket adbd seqpacket 660 system system
     disabled
+    updatable
     seclabel u:r:adbd:s0
 
 on boot

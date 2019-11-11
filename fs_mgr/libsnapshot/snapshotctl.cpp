@@ -60,24 +60,11 @@ bool MergeCmdHandler(int argc, char** argv) {
         android::base::InitLogging(argv, &android::base::StdioLogger);
     }
 
-    auto sm = SnapshotManager::New();
+    auto state = SnapshotManager::New()->InitiateMergeAndWait();
 
-    auto state = sm->GetUpdateState();
     if (state == UpdateState::None) {
-        LOG(INFO) << "Can't find any snapshot to merge.";
         return true;
     }
-    if (state == UpdateState::Unverified) {
-        if (!sm->InitiateMerge()) {
-            LOG(ERROR) << "Failed to initiate merge.";
-            return false;
-        }
-    }
-
-    // All other states can be handled by ProcessUpdateState.
-    LOG(INFO) << "Waiting for any merge to complete. This can take up to 1 minute.";
-    state = SnapshotManager::New()->ProcessUpdateState();
-
     if (state == UpdateState::MergeCompleted) {
         auto end = std::chrono::steady_clock::now();
         auto passed = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();

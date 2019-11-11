@@ -36,6 +36,7 @@
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
 
+#include "lmkd_service.h"
 #include "service_list.h"
 #include "util.h"
 
@@ -151,7 +152,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       seclabel_(seclabel),
       onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0,
                  "onrestart", {}),
-      oom_score_adjust_(-1000),
+      oom_score_adjust_(DEFAULT_OOM_SCORE_ADJUST),
       start_order_(0),
       args_(args) {}
 
@@ -198,6 +199,10 @@ void Service::KillProcessGroup(int signal) {
         }
 
         if (r == 0) process_cgroup_empty_ = true;
+    }
+
+    if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
+        LmkdUnregister(name_, pid_);
     }
 }
 
@@ -502,7 +507,7 @@ Result<void> Service::Start() {
         return ErrnoError() << "Failed to fork";
     }
 
-    if (oom_score_adjust_ != -1000) {
+    if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
         std::string oom_str = std::to_string(oom_score_adjust_);
         std::string oom_file = StringPrintf("/proc/%d/oom_score_adj", pid);
         if (!WriteStringToFile(oom_str, oom_file)) {
@@ -561,6 +566,10 @@ Result<void> Service::Start() {
                 PLOG(ERROR) << "setProcessGroupLimit failed";
             }
         }
+    }
+
+    if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
+        LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
     }
 
     NotifyStateChange("running");

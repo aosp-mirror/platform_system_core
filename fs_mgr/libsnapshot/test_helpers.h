@@ -88,17 +88,20 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
         return true;
     }
     bool IsOverlayfsSetup() const override { return false; }
+    bool IsRecovery() const override { return recovery_; }
 
     void set_slot_suffix(const std::string& suffix) { slot_suffix_ = suffix; }
     void set_fake_super(const std::string& path) {
         opener_ = std::make_unique<TestPartitionOpener>(path);
     }
+    void set_recovery(bool value) { recovery_ = value; }
     MergeStatus merge_status() const { return merge_status_; }
 
   private:
     std::string slot_suffix_ = "_a";
     std::unique_ptr<TestPartitionOpener> opener_;
     MergeStatus merge_status_;
+    bool recovery_ = false;
 };
 
 class SnapshotTestPropertyFetcher : public android::fs_mgr::testing::MockPropertyFetcher {
@@ -137,6 +140,9 @@ AssertionResult FillFakeMetadata(MetadataBuilder* builder, const DeltaArchiveMan
 
 // In the update package metadata, set a partition with the given size.
 void SetSize(PartitionUpdate* partition_update, uint64_t size);
+
+// Get partition size from update package metadata.
+uint64_t GetSize(PartitionUpdate* partition_update);
 
 }  // namespace snapshot
 }  // namespace android

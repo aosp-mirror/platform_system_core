@@ -73,25 +73,6 @@ static void TestConnectedSockets(cutils_socket_t server, cutils_socket_t client,
     EXPECT_EQ(0, socket_close(client));
 }
 
-// Tests receive timeout. The timing verification logic must be very coarse to
-// make sure different systems can all pass these tests.
-void TestReceiveTimeout(cutils_socket_t sock) {
-    time_t start_time;
-    char buffer[32];
-
-    // Make sure a 20ms timeout completes in 1 second or less.
-    EXPECT_EQ(0, socket_set_receive_timeout(sock, 20));
-    start_time = time(nullptr);
-    EXPECT_EQ(-1, recv(sock, buffer, sizeof(buffer), 0));
-    EXPECT_LE(difftime(time(nullptr), start_time), 1.0);
-
-    // Make sure a 1250ms timeout takes 1 second or more.
-    EXPECT_EQ(0, socket_set_receive_timeout(sock, 1250));
-    start_time = time(nullptr);
-    EXPECT_EQ(-1, recv(sock, buffer, sizeof(buffer), 0));
-    EXPECT_LE(1.0, difftime(time(nullptr), start_time));
-}
-
 // Tests socket_get_local_port().
 TEST(SocketsTest, TestGetLocalPort) {
     cutils_socket_t server;
@@ -155,32 +136,6 @@ TEST(SocketsTest, TestIpv6TcpLoopback) {
     EXPECT_EQ(0, socket_close(server));
 
     TestConnectedSockets(handler, client, SOCK_STREAM);
-}
-
-// Tests setting a receive timeout for UDP sockets.
-TEST(SocketsTest, TestUdpReceiveTimeout) {
-    cutils_socket_t sock = socket_inaddr_any_server(0, SOCK_DGRAM);
-    ASSERT_NE(INVALID_SOCKET, sock);
-
-    TestReceiveTimeout(sock);
-
-    EXPECT_EQ(0, socket_close(sock));
-}
-
-// Tests setting a receive timeout for TCP sockets.
-TEST(SocketsTest, TestTcpReceiveTimeout) {
-    cutils_socket_t server = socket_inaddr_any_server(0, SOCK_STREAM);
-    ASSERT_NE(INVALID_SOCKET, server);
-
-    cutils_socket_t client = socket_network_client(
-            "localhost", socket_get_local_port(server), SOCK_STREAM);
-    cutils_socket_t handler = accept(server, nullptr, nullptr);
-    EXPECT_EQ(0, socket_close(server));
-
-    TestReceiveTimeout(handler);
-
-    EXPECT_EQ(0, socket_close(client));
-    EXPECT_EQ(0, socket_close(handler));
 }
 
 // Tests socket_send_buffers() failure.

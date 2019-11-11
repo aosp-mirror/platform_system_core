@@ -59,6 +59,7 @@
 #include "first_stage_mount.h"
 #include "import_parser.h"
 #include "keychords.h"
+#include "lmkd_service.h"
 #include "mount_handler.h"
 #include "mount_namespace.h"
 #include "property_service.h"
@@ -684,9 +685,15 @@ int SecondStageMain(int argc, char** argv) {
     InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
 
+    // Will handle EPIPE at the time of write by checking the errno
+    signal(SIGPIPE, SIG_IGN);
+
     // Set init and its forked children's oom_adj.
-    if (auto result = WriteFile("/proc/1/oom_score_adj", "-1000"); !result) {
-        LOG(ERROR) << "Unable to write -1000 to /proc/1/oom_score_adj: " << result.error();
+    if (auto result =
+                WriteFile("/proc/1/oom_score_adj", StringPrintf("%d", DEFAULT_OOM_SCORE_ADJUST));
+        !result) {
+        LOG(ERROR) << "Unable to write " << DEFAULT_OOM_SCORE_ADJUST
+                   << " to /proc/1/oom_score_adj: " << result.error();
     }
 
     // Set up a session keyring that all processes will have access to. It

@@ -293,79 +293,6 @@ LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/system/etc
 LOCAL_MODULE_STEM := ld.config.txt
 include $(BUILD_PREBUILT)
 
-# Returns the unique installed basenames of a module, or module.so if there are
-# none.  The guess is to handle cases like libc, where the module itself is
-# marked uninstallable but a symlink is installed with the name libc.so.
-# $(1): list of libraries
-# $(2): suffix to to add to each library (not used for guess)
-define module-installed-files-or-guess
-$(foreach lib,$(1),$(or $(strip $(sort $(notdir $(call module-installed-files,$(lib)$(2))))),$(lib).so))
-endef
-
-#######################################
-# llndk.libraries.txt
-include $(CLEAR_VARS)
-LOCAL_MODULE := llndk.libraries.txt
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
-include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES := $(call module-installed-files-or-guess,$(LLNDK_LIBRARIES),)
-$(LOCAL_BUILT_MODULE):
-	@echo "Generate: $@"
-	@mkdir -p $(dir $@)
-	$(hide) echo -n > $@
-	$(hide) $(foreach lib,$(PRIVATE_LLNDK_LIBRARIES), \
-		echo $(lib) >> $@;)
-
-#######################################
-# vndksp.libraries.txt
-include $(CLEAR_VARS)
-LOCAL_MODULE := vndksp.libraries.txt
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
-include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SAMEPROCESS_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_SAMEPROCESS_LIBRARIES),.vendor)
-$(LOCAL_BUILT_MODULE):
-	@echo "Generate: $@"
-	@mkdir -p $(dir $@)
-	$(hide) echo -n > $@
-	$(hide) $(foreach lib,$(PRIVATE_VNDK_SAMEPROCESS_LIBRARIES), \
-		echo $(lib) >> $@;)
-
-#######################################
-# vndkcore.libraries.txt
-include $(CLEAR_VARS)
-LOCAL_MODULE := vndkcore.libraries.txt
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
-include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_CORE_LIBRARIES),.vendor)
-$(LOCAL_BUILT_MODULE):
-	@echo "Generate: $@"
-	@mkdir -p $(dir $@)
-	$(hide) echo -n > $@
-	$(hide) $(foreach lib,$(PRIVATE_VNDK_CORE_LIBRARIES), \
-		echo $(lib) >> $@;)
-
-#######################################
-# vndkprivate.libraries.txt
-include $(CLEAR_VARS)
-LOCAL_MODULE := vndkprivate.libraries.txt
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
-include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_PRIVATE_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_PRIVATE_LIBRARIES),.vendor)
-$(LOCAL_BUILT_MODULE):
-	@echo "Generate: $@"
-	@mkdir -p $(dir $@)
-	$(hide) echo -n > $@
-	$(hide) $(foreach lib,$(PRIVATE_VNDK_PRIVATE_LIBRARIES), \
-		echo $(lib) >> $@;)
-
 #######################################
 # sanitizer.libraries.txt
 include $(CLEAR_VARS)
@@ -388,22 +315,6 @@ $(LOCAL_BUILT_MODULE):
 	@mkdir -p $(dir $@)
 	$(hide) echo -n > $@
 	$(hide) $(foreach lib,$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES), \
-		echo $(lib) >> $@;)
-
-#######################################
-# vndkcorevariant.libraries.txt
-include $(CLEAR_VARS)
-LOCAL_MODULE := vndkcorevariant.libraries.txt
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(call append_vndk_version,$(LOCAL_MODULE))
-include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_VARIANT_LIBRARIES := $(call module-installed-files-or-guess,$(VNDK_USING_CORE_VARIANT_LIBRARIES),.vendor)
-$(LOCAL_BUILT_MODULE):
-	@echo "Generate: $@"
-	@mkdir -p $(dir $@)
-	$(hide) echo -n > $@
-	$(hide) $(foreach lib,$(PRIVATE_VNDK_CORE_VARIANT_LIBRARIES), \
 		echo $(lib) >> $@;)
 
 #######################################
