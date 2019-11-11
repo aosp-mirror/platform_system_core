@@ -1338,7 +1338,7 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
     ASSERT_TRUE(new_sm->CancelUpdate());
 }
 
-INSTANTIATE_TEST_SUITE_P(, FlashAfterUpdateTest, Combine(Values(0, 1), Bool()),
+INSTANTIATE_TEST_SUITE_P(Snapshot, FlashAfterUpdateTest, Combine(Values(0, 1), Bool()),
                          [](const TestParamInfo<FlashAfterUpdateTest::ParamType>& info) {
                              return "Flash"s + (std::get<0>(info.param) ? "New"s : "Old"s) +
                                     "Slot"s + (std::get<1>(info.param) ? "After"s : "Before"s) +

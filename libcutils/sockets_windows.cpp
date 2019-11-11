@@ -54,11 +54,6 @@ int socket_close(cutils_socket_t sock) {
     return closesocket(sock);
 }
 
-int socket_set_receive_timeout(cutils_socket_t sock, int timeout_ms) {
-    return setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
-                      reinterpret_cast<char*>(&timeout_ms), sizeof(timeout_ms));
-}
-
 ssize_t socket_send_buffers(cutils_socket_t sock,
                             const cutils_socket_buffer_t* buffers,
                             size_t num_buffers) {
