@@ -325,7 +325,7 @@ TEST_P(SnapshotMetadataUpdaterTest, DeleteAndAddGroup) {
     EXPECT_TRUE(CheckGroupName("product", "another_group"));
 }
 
-INSTANTIATE_TEST_SUITE_P(, SnapshotMetadataUpdaterTest, testing::Values(0, 1));
+INSTANTIATE_TEST_SUITE_P(Snapshot, SnapshotMetadataUpdaterTest, testing::Values(0, 1));
 
 }  // namespace snapshot
 }  // namespace android

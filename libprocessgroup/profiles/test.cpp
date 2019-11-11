@@ -33,14 +33,14 @@ JsonSchemaTestConfigFactory MakeTestParam(const std::string& path) {
 }
 
 // Test suite instantiations
-INSTANTIATE_TEST_SUITE_P(, JsonSchemaTest,
+INSTANTIATE_TEST_SUITE_P(Cgroups, JsonSchemaTest,
                          ::testing::Values(MakeTestParam<Cgroups>("/cgroups.json"),
                                            MakeTestParam<Cgroups>("/cgroups.recovery.json"),
                                            MakeTestParam<TaskProfiles>("/task_profiles.json")));
-INSTANTIATE_TEST_SUITE_P(, CgroupsTest,
+INSTANTIATE_TEST_SUITE_P(Cgroups, CgroupsTest,
                          ::testing::Values(MakeTestParam<Cgroups>("/cgroups.json"),
                                            MakeTestParam<Cgroups>("/cgroups.recovery.json")));
-INSTANTIATE_TEST_SUITE_P(, TaskProfilesTest,
+INSTANTIATE_TEST_SUITE_P(TaskProfiles, TaskProfilesTest,
                          ::testing::Values(MakeTestParam<TaskProfiles>("/task_profiles.json")));
 
 }  // namespace profiles
