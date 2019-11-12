@@ -164,15 +164,6 @@ void remove_all_listeners() EXCLUDES(listener_list_mutex) {
     }
 }
 
-void enable_daemon_sockets() EXCLUDES(listener_list_mutex) {
-    std::lock_guard<std::mutex> lock(listener_list_mutex);
-    for (auto& l : listener_list) {
-        if (l->connect_to == "*smartsocket*") {
-            fdevent_set(l->fde, FDE_READ);
-        }
-    }
-}
-
 void close_smartsockets() EXCLUDES(listener_list_mutex) {
     std::lock_guard<std::mutex> lock(listener_list_mutex);
     auto pred = [](const std::unique_ptr<alistener>& listener) {
@@ -182,7 +173,7 @@ void close_smartsockets() EXCLUDES(listener_list_mutex) {
 }
 
 InstallStatus install_listener(const std::string& local_name, const char* connect_to,
-                               atransport* transport, int flags, int* resolved_tcp_port,
+                               atransport* transport, int no_rebind, int* resolved_tcp_port,
                                std::string* error) EXCLUDES(listener_list_mutex) {
     std::lock_guard<std::mutex> lock(listener_list_mutex);
     for (auto& l : listener_list) {
@@ -193,8 +184,8 @@ InstallStatus install_listener(const std::string& local_name, const char* connec
                 return INSTALL_STATUS_INTERNAL_ERROR;
             }
 
-            // Can't repurpose a listener if INSTALL_LISTENER_NO_REBIND is set
-            if (flags & INSTALL_LISTENER_NO_REBIND) {
+            // Can't repurpose a listener if 'no_rebind' is true.
+            if (no_rebind) {
                 *error = "cannot rebind";
                 return INSTALL_STATUS_CANNOT_REBIND;
             }
@@ -231,9 +222,7 @@ InstallStatus install_listener(const std::string& local_name, const char* connec
     } else {
         listener->fde = fdevent_create(listener->fd, listener_event_func, listener.get());
     }
-    if ((flags & INSTALL_LISTENER_DISABLED) == 0) {
-        fdevent_set(listener->fde, FDE_READ);
-    }
+    fdevent_set(listener->fde, FDE_READ);
 
     listener->transport = transport;
 
