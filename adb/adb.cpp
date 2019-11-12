@@ -979,8 +979,12 @@ bool handle_forward_request(const char* service,
         if (kill_forward) {
             r = remove_listener(pieces[0].c_str(), transport);
         } else {
-            r = install_listener(pieces[0], pieces[1].c_str(), transport, no_rebind,
-                                 &resolved_tcp_port, &error);
+            int flags = 0;
+            if (no_rebind) {
+                flags |= INSTALL_LISTENER_NO_REBIND;
+            }
+            r = install_listener(pieces[0], pieces[1].c_str(), transport, flags, &resolved_tcp_port,
+                                 &error);
         }
         if (r == INSTALL_STATUS_OK) {
 #if ADB_HOST
