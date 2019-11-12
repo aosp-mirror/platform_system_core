@@ -355,8 +355,8 @@ static __inline__ int get_fd_flags(borrowed_fd fd) {
 
 static __inline__ void close_on_exec(borrowed_fd fd) {
     int flags = get_fd_flags(fd);
-    if (flags >= 0 && (flags & FD_CLOEXEC) == 0) {
-        fcntl(fd.get(), F_SETFD, flags | FD_CLOEXEC);
+    if (flags >= 0 && (flags & O_CLOEXEC) == 0) {
+        fcntl(fd.get(), F_SETFD, flags | O_CLOEXEC);
     }
 }
 
