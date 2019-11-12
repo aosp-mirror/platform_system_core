@@ -222,7 +222,7 @@ std::optional<std::string> adb_get_server_executable_path() {
     int port;
     std::string error;
     if (!parse_tcp_socket_spec(__adb_server_socket_spec, nullptr, &port, nullptr, &error)) {
-        LOG(FATAL) << "failed to parse server socket spec: " << error;
+        return {};
     }
 
     return adb_get_android_dir_path() + OS_PATH_SEPARATOR + "adb." + std::to_string(port);
