@@ -288,7 +288,7 @@ int ueventd_main(int argc, char** argv) {
     // TODO: cleanup platform ueventd.rc to remove vendor specific device node entries (b/34968103)
     auto hardware = android::base::GetProperty("ro.hardware", "");
 
-    auto ueventd_configuration = ParseConfig({"/ueventd.rc", "/vendor/ueventd.rc",
+    auto ueventd_configuration = ParseConfig({"/system/etc/ueventd.rc", "/vendor/ueventd.rc",
                                               "/odm/ueventd.rc", "/ueventd." + hardware + ".rc"});
 
     uevent_handlers.emplace_back(std::make_unique<DeviceHandler>(
