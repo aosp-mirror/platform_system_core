@@ -100,7 +100,7 @@ bool UeventListener::ReadUevent(Uevent* uevent) const {
     int n = uevent_kernel_multicast_recv(device_fd_, msg, UEVENT_MSG_LEN);
     if (n <= 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            LOG(ERROR) << "Error reading from Uevent Fd";
+            PLOG(ERROR) << "Error reading from Uevent Fd";
         }
         return false;
     }
