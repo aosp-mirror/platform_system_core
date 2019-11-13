@@ -51,6 +51,8 @@ namespace android {
 namespace init {
 namespace {
 
+std::string shutdown_command;
+
 class SubcontextProcess {
   public:
     SubcontextProcess(const BuiltinFunctionMap* function_map, std::string context, int init_fd)
@@ -153,6 +155,11 @@ void SubcontextProcess::MainLoop() {
                            << subcontext_command.command_case();
         }
 
+        if (!shutdown_command.empty()) {
+            reply.set_trigger_shutdown(shutdown_command);
+            shutdown_command.clear();
+        }
+
         if (auto result = SendMessage(init_fd_, reply); !result) {
             LOG(FATAL) << "Failed to send message to init: " << result.error();
         }
@@ -173,6 +180,8 @@ int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map
         android::base::SetProperty(key, value);
         return 0;
     };
+
+    trigger_shutdown = [](const std::string& command) { shutdown_command = command; };
 
     auto subcontext_process = SubcontextProcess(function_map, context, init_fd);
     subcontext_process.MainLoop();
@@ -254,6 +263,11 @@ Result<SubcontextReply> Subcontext::TransmitMessage(const SubcontextCommand& sub
         Restart();
         return Error() << "Unable to parse message from subcontext";
     }
+
+    if (subcontext_reply.has_trigger_shutdown()) {
+        trigger_shutdown(subcontext_reply.trigger_shutdown());
+    }
+
     return subcontext_reply;
 }
 
