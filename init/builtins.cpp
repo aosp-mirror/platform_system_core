@@ -140,14 +140,7 @@ static Result<void> reboot_into_recovery(const std::vector<std::string>& options
     if (!write_bootloader_message(options, &err)) {
         return Error() << "Failed to set bootloader message: " << err;
     }
-    // This function should only be reached from init and not from vendor_init, and we want to
-    // immediately trigger reboot instead of relaying through property_service.  Older devices may
-    // still have paths that reach here from vendor_init, so we keep the property_set as a fallback.
-    if (getpid() == 1) {
-        TriggerShutdown("reboot,recovery");
-    } else {
-        property_set("sys.powerctl", "reboot,recovery");
-    }
+    trigger_shutdown("reboot,recovery");
     return {};
 }
 
@@ -554,7 +547,7 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             // support userdata remount on FDE devices, this should never been triggered. Time to
             // panic!
             LOG(ERROR) << "Userdata remount is not supported on FDE devices. How did you get here?";
-            TriggerShutdown("reboot,requested-userdata-remount-on-fde-device");
+            trigger_shutdown("reboot,requested-userdata-remount-on-fde-device");
         }
         ActionManager::GetInstance().QueueEventTrigger("encrypt");
         return {};
@@ -564,7 +557,7 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             // don't support userdata remount on FDE devices, this should never been triggered.
             // Time to panic!
             LOG(ERROR) << "Userdata remount is not supported on FDE devices. How did you get here?";
-            TriggerShutdown("reboot,requested-userdata-remount-on-fde-device");
+            trigger_shutdown("reboot,requested-userdata-remount-on-fde-device");
         }
         property_set("ro.crypto.state", "encrypted");
         property_set("ro.crypto.type", "block");
@@ -1148,7 +1141,7 @@ static Result<void> do_remount_userdata(const BuiltinArguments& args) {
     }
     // TODO(b/135984674): check that fstab contains /data.
     if (auto rc = fs_mgr_remount_userdata_into_checkpointing(&fstab); rc < 0) {
-        TriggerShutdown("reboot,mount-userdata-failed");
+        trigger_shutdown("reboot,mount-userdata-failed");
     }
     if (auto result = queue_fs_event(initial_mount_fstab_return_code, true); !result) {
         return Error() << "queue_fs_event() failed: " << result.error();
