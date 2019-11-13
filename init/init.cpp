@@ -180,7 +180,7 @@ void ResetWaitForProp() {
     waiting_for_prop.reset();
 }
 
-void TriggerShutdown(const std::string& command) {
+static void TriggerShutdown(const std::string& command) {
     // We can't call HandlePowerctlMessage() directly in this function,
     // because it modifies the contents of the action queue, which can cause the action queue
     // to get into a bad state if this function is called from a command being executed by the
@@ -680,6 +680,8 @@ int SecondStageMain(int argc, char** argv) {
     }
 
     boot_clock::time_point start_time = boot_clock::now();
+
+    trigger_shutdown = TriggerShutdown;
 
     SetStdioToDevNull(argv);
     InitKernelLogging(argv);

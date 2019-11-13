@@ -35,11 +35,6 @@
 namespace android {
 namespace init {
 
-// init.h
-inline void TriggerShutdown(const std::string&) {
-    abort();
-}
-
 // property_service.h
 inline bool CanReadProperty(const std::string&, const std::string&) {
     return true;
