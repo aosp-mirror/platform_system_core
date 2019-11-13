@@ -478,7 +478,7 @@ uint32_t CheckPermissions(const std::string& name, const std::string& value,
         return PROP_ERROR_PERMISSION_DENIED;
     }
 
-    if (type == nullptr || !CheckType(type, value)) {
+    if (!CheckType(type, value)) {
         *error = StringPrintf("Property type check failed, value doesn't match expected type '%s'",
                               (type ?: "(null)"));
         return PROP_ERROR_INVALID_VALUE;
