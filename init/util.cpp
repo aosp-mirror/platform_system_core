@@ -61,6 +61,8 @@ namespace init {
 
 const std::string kDefaultAndroidDtDir("/proc/device-tree/firmware/android/");
 
+void (*trigger_shutdown)(const std::string& command) = nullptr;
+
 // DecodeUid() - decodes and returns the given string, which can be either the
 // numeric or name representation, into the integer uid or gid.
 Result<uid_t> DecodeUid(const std::string& name) {
