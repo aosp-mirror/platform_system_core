@@ -174,7 +174,10 @@ cc_library {
 
 cc_defaults {
     name: "libcutils_test_default",
-    srcs: ["sockets_test.cpp"],
+    srcs: [
+        "native_handle_test.cpp",
+        "sockets_test.cpp",
+    ],
 
     target: {
         android: {
