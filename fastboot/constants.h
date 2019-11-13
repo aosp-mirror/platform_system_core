@@ -68,3 +68,4 @@
 #define FB_VAR_BATTERY_SOC_OK "battery-soc-ok"
 #define FB_VAR_SUPER_PARTITION_NAME "super-partition-name"
 #define FB_VAR_SNAPSHOT_UPDATE_STATUS "snapshot-update-status"
+#define FB_VAR_CPU_ABI "cpu-abi"
