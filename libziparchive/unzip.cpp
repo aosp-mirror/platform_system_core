@@ -111,7 +111,8 @@ static bool MakeDirectoryHierarchy(const std::string& path) {
 
 static float CompressionRatio(int64_t uncompressed, int64_t compressed) {
   if (uncompressed == 0) return 0;
-  return static_cast<float>(100LL * (uncompressed - compressed)) / uncompressed;
+  return static_cast<float>(100LL * (uncompressed - compressed)) /
+         static_cast<float>(uncompressed);
 }
 
 static void MaybeShowHeader(ZipArchiveHandle zah) {
