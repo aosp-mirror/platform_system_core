@@ -39,6 +39,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <cutils/android_reboot.h>
 #include <cutils/sockets.h>
 #include <log/log_properties.h>
 
@@ -138,6 +139,26 @@ static void spin_service(unique_fd fd) {
     });
 
     WriteFdExactly(fd.get(), "spinning\n");
+}
+
+[[maybe_unused]] static unique_fd reboot_device(const std::string& name) {
+#if defined(__ANDROID_RECOVERY__)
+    if (!__android_log_is_debuggable()) {
+        auto reboot_service = [name](unique_fd fd) {
+            std::string reboot_string = android::base::StringPrintf("reboot,%s", name.c_str());
+            if (!android::base::SetProperty(ANDROID_RB_PROPERTY, reboot_string)) {
+                WriteFdFmt(fd.get(), "reboot (%s) failed\n", reboot_string.c_str());
+                return;
+            }
+            while (true) pause();
+        };
+        return create_service_thread("reboot", reboot_service);
+    }
+#endif
+    // Fall through
+    std::string cmd = "/system/bin/reboot ";
+    cmd += name;
+    return StartSubprocess(cmd, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
 }
 
 struct ServiceSocket : public asocket {
@@ -252,9 +273,7 @@ unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
         cmd += name;
         return StartSubprocess(cmd, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
     } else if (android::base::ConsumePrefix(&name, "reboot:")) {
-        std::string cmd = "/system/bin/reboot ";
-        cmd += name;
-        return StartSubprocess(cmd, nullptr, SubprocessType::kRaw, SubprocessProtocol::kNone);
+        return reboot_device(std::string(name));
     } else if (name.starts_with("root:")) {
         return create_service_thread("root", restart_root_service);
     } else if (name.starts_with("unroot:")) {
