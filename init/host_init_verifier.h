@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,32 +16,12 @@
 
 #pragma once
 
-#include <sys/types.h>
-
-#include <string>
-
-#include "action.h"
-#include "action_manager.h"
-#include "parser.h"
-#include "service_list.h"
+#include <property_info_parser/property_info_parser.h>
 
 namespace android {
 namespace init {
 
-Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
-Parser CreateServiceOnlyParser(ServiceList& service_list);
-
-bool start_waiting_for_property(const char *name, const char *value);
-
-void DumpState();
-
-void ResetWaitForProp();
-
-void SendLoadPersistentPropertiesMessage();
-void SendStopSendingMessagesMessage();
-void SendStartSendingMessagesMessage();
-
-int SecondStageMain(int argc, char** argv);
+extern const android::properties::PropertyInfoArea* property_info_area;
 
 }  // namespace init
 }  // namespace android
