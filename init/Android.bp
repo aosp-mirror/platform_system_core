@@ -152,6 +152,7 @@ cc_library_static {
     whole_static_libs: [
         "libcap",
         "com.android.sysprop.apex",
+        "com.android.sysprop.init",
     ],
     header_libs: ["bootimg_headers"],
     proto: {

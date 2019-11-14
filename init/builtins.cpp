@@ -45,6 +45,7 @@
 #include <memory>
 
 #include <ApexProperties.sysprop.h>
+#include <InitProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -1222,7 +1223,9 @@ static Result<void> do_finish_userspace_reboot(const BuiltinArguments&) {
     boot_clock::time_point now = boot_clock::now();
     property_set("sys.init.userspace_reboot.last_finished",
                  std::to_string(now.time_since_epoch().count()));
-    property_set(kUserspaceRebootInProgress, "0");
+    if (!android::sysprop::InitProperties::userspace_reboot_in_progress(false)) {
+        return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
+    }
     return {};
 }
 
