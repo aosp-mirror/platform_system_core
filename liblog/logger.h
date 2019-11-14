@@ -46,49 +46,37 @@ struct android_log_transport_write {
                size_t nr);
 };
 
-struct android_log_logger_list;
 struct android_log_transport_context;
-struct android_log_logger;
 
 struct android_log_transport_read {
   const char* name; /* human name to describe the transport */
 
   /* Does not cause resources to be taken */
   int (*available)(log_id_t logId);
-  int (*version)(struct android_log_logger* logger,
-                 struct android_log_transport_context* transp);
+  int (*version)(struct logger* logger, struct android_log_transport_context* transp);
   /* Release resources taken by the following interfaces */
-  void (*close)(struct android_log_logger_list* logger_list,
-                struct android_log_transport_context* transp);
+  void (*close)(struct logger_list* logger_list, struct android_log_transport_context* transp);
   /*
    * Expect all to instantiate open automagically on any call,
    * so we do not have an explicit open call.
    */
-  int (*read)(struct android_log_logger_list* logger_list,
-              struct android_log_transport_context* transp,
+  int (*read)(struct logger_list* logger_list, struct android_log_transport_context* transp,
               struct log_msg* log_msg);
   /* Must only be called if not ANDROID_LOG_NONBLOCK (blocking) */
-  int (*poll)(struct android_log_logger_list* logger_list,
-              struct android_log_transport_context* transp);
+  int (*poll)(struct logger_list* logger_list, struct android_log_transport_context* transp);
 
-  int (*clear)(struct android_log_logger* logger,
-               struct android_log_transport_context* transp);
-  ssize_t (*setSize)(struct android_log_logger* logger,
-                     struct android_log_transport_context* transp, size_t size);
-  ssize_t (*getSize)(struct android_log_logger* logger,
-                     struct android_log_transport_context* transp);
-  ssize_t (*getReadableSize)(struct android_log_logger* logger,
-                             struct android_log_transport_context* transp);
+  int (*clear)(struct logger* logger, struct android_log_transport_context* transp);
+  ssize_t (*setSize)(struct logger* logger, struct android_log_transport_context* transp,
+                     size_t size);
+  ssize_t (*getSize)(struct logger* logger, struct android_log_transport_context* transp);
+  ssize_t (*getReadableSize)(struct logger* logger, struct android_log_transport_context* transp);
 
-  ssize_t (*getPrune)(struct android_log_logger_list* logger_list,
-                      struct android_log_transport_context* transp, char* buf,
-                      size_t len);
-  ssize_t (*setPrune)(struct android_log_logger_list* logger_list,
-                      struct android_log_transport_context* transp, char* buf,
-                      size_t len);
-  ssize_t (*getStats)(struct android_log_logger_list* logger_list,
-                      struct android_log_transport_context* transp, char* buf,
-                      size_t len);
+  ssize_t (*getPrune)(struct logger_list* logger_list, struct android_log_transport_context* transp,
+                      char* buf, size_t len);
+  ssize_t (*setPrune)(struct logger_list* logger_list, struct android_log_transport_context* transp,
+                      char* buf, size_t len);
+  ssize_t (*getStats)(struct logger_list* logger_list, struct android_log_transport_context* transp,
+                      char* buf, size_t len);
 };
 
 struct android_log_transport_context {
@@ -98,7 +86,7 @@ struct android_log_transport_context {
   unsigned logMask;      /* mask of requested log buffers */
 };
 
-struct android_log_logger_list {
+struct logger_list {
   struct listnode logger;
   android_log_transport_context transport_context;
   bool transport_initialized;
@@ -108,22 +96,19 @@ struct android_log_logger_list {
   pid_t pid;
 };
 
-struct android_log_logger {
+struct logger {
   struct listnode node;
-  struct android_log_logger_list* parent;
+  struct logger_list* parent;
 
   log_id_t logId;
 };
 
 /* assumes caller has structures read-locked, single threaded, or fenced */
-#define logger_for_each(logp, logger_list)                          \
-  for ((logp) = node_to_item((logger_list)->logger.next,            \
-                             struct android_log_logger, node);      \
-       ((logp) != node_to_item(&(logger_list)->logger,              \
-                               struct android_log_logger, node)) && \
-       ((logp)->parent == (logger_list));                           \
-       (logp) =                                                     \
-           node_to_item((logp)->node.next, struct android_log_logger, node))
+#define logger_for_each(logp, logger_list)                                      \
+  for ((logp) = node_to_item((logger_list)->logger.next, struct logger, node);  \
+       ((logp) != node_to_item(&(logger_list)->logger, struct logger, node)) && \
+       ((logp)->parent == (logger_list));                                       \
+       (logp) = node_to_item((logp)->node.next, struct logger, node))
 
 /* OS specific dribs and drabs */
 
