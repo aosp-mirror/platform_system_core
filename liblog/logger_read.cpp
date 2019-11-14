@@ -21,6 +21,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -32,211 +33,53 @@
 #include "log_portability.h"
 #include "logger.h"
 
-/* android_logger_alloc unimplemented, no use case */
-/* android_logger_free not exported */
-static void android_logger_free(struct logger* logger) {
-  if (!logger) {
-    return;
-  }
-
-  list_remove(&logger->node);
-
-  free(logger);
-}
-
-/* android_logger_alloc unimplemented, no use case */
-
 /* method for getting the associated sublog id */
 log_id_t android_logger_get_id(struct logger* logger) {
-  return ((struct logger*)logger)->logId;
+  return static_cast<log_id_t>(reinterpret_cast<uintptr_t>(logger) & LOGGER_LOG_ID_MASK);
 }
 
-static int init_transport_context(struct logger_list* logger_list) {
+static struct logger_list* android_logger_list_alloc_internal(int mode, unsigned int tail,
+                                                              log_time start, pid_t pid) {
+  auto* logger_list = static_cast<struct logger_list*>(calloc(1, sizeof(struct logger_list)));
   if (!logger_list) {
-    return -EINVAL;
+    return nullptr;
   }
 
-  if (list_empty(&logger_list->logger)) {
-    return -EINVAL;
-  }
-
-  if (logger_list->transport_initialized) {
-    return 0;
-  }
+  logger_list->mode = mode;
+  logger_list->start = start;
+  logger_list->tail = tail;
+  logger_list->pid = pid;
 
 #if (FAKE_LOG_DEVICE == 0)
   extern struct android_log_transport_read logdLoggerRead;
   extern struct android_log_transport_read pmsgLoggerRead;
 
-  struct android_log_transport_read* transport;
-  transport = (logger_list->mode & ANDROID_LOG_PSTORE) ? &pmsgLoggerRead : &logdLoggerRead;
-
-  struct logger* logger;
-  unsigned logMask = 0;
-
-  logger_for_each(logger, logger_list) {
-    log_id_t logId = logger->logId;
-
-    if (logId == LOG_ID_SECURITY && __android_log_uid() != AID_SYSTEM) {
-      continue;
-    }
-    if (transport->read && (!transport->available || transport->available(logId) >= 0)) {
-      logMask |= 1 << logId;
-    }
-  }
-  if (!logMask) {
-    return -ENODEV;
-  }
-
-  logger_list->transport_context.transport = transport;
-  logger_list->transport_context.logMask = logMask;
+  logger_list->transport_context.transport =
+      (mode & ANDROID_LOG_PSTORE) ? &pmsgLoggerRead : &logdLoggerRead;
 #endif
-  return 0;
-}
 
-#define LOGGER_FUNCTION(logger, def, func, args...)                                           \
-  ssize_t ret = -EINVAL;                                                                      \
-                                                                                              \
-  if (!logger) {                                                                              \
-    return ret;                                                                               \
-  }                                                                                           \
-  ret = init_transport_context(logger->parent);                                               \
-  if (ret < 0) {                                                                              \
-    return ret;                                                                               \
-  }                                                                                           \
-                                                                                              \
-  ret = (def);                                                                                \
-  android_log_transport_context* transport_context = &logger->parent->transport_context;      \
-  if (transport_context->logMask & (1 << logger->logId) && transport_context->transport &&    \
-      transport_context->transport->func) {                                                   \
-    ssize_t retval = (transport_context->transport->func)(logger, transport_context, ##args); \
-    if (ret >= 0 || ret == (def)) {                                                           \
-      ret = retval;                                                                           \
-    }                                                                                         \
-  }                                                                                           \
-  return ret
-
-int android_logger_clear(struct logger* logger) {
-  LOGGER_FUNCTION(logger, -ENODEV, clear);
-}
-
-/* returns the total size of the log's ring buffer */
-long android_logger_get_log_size(struct logger* logger) {
-  LOGGER_FUNCTION(logger, -ENODEV, getSize);
-}
-
-int android_logger_set_log_size(struct logger* logger, unsigned long size) {
-  LOGGER_FUNCTION(logger, -ENODEV, setSize, size);
-}
-
-/*
- * returns the readable size of the log's ring buffer (that is, amount of the
- * log consumed)
- */
-long android_logger_get_log_readable_size(struct logger* logger) {
-  LOGGER_FUNCTION(logger, -ENODEV, getReadableSize);
-}
-
-/*
- * returns the logger version
- */
-int android_logger_get_log_version(struct logger* logger) {
-  LOGGER_FUNCTION(logger, 4, version);
-}
-
-#define LOGGER_LIST_FUNCTION(logger_list, def, func, args...)                                      \
-  ssize_t ret = init_transport_context(logger_list);                                               \
-  if (ret < 0) {                                                                                   \
-    return ret;                                                                                    \
-  }                                                                                                \
-                                                                                                   \
-  ret = (def);                                                                                     \
-  android_log_transport_context* transport_context = &logger_list->transport_context;              \
-  if (transport_context->transport && transport_context->transport->func) {                        \
-    ssize_t retval = (transport_context->transport->func)(logger_list, transport_context, ##args); \
-    if (ret >= 0 || ret == (def)) {                                                                \
-      ret = retval;                                                                                \
-    }                                                                                              \
-  }                                                                                                \
-  return ret
-
-/*
- * returns statistics
- */
-ssize_t android_logger_get_statistics(struct logger_list* logger_list, char* buf, size_t len) {
-  LOGGER_LIST_FUNCTION(logger_list, -ENODEV, getStats, buf, len);
-}
-
-ssize_t android_logger_get_prune_list(struct logger_list* logger_list, char* buf, size_t len) {
-  LOGGER_LIST_FUNCTION(logger_list, -ENODEV, getPrune, buf, len);
-}
-
-int android_logger_set_prune_list(struct logger_list* logger_list, char* buf, size_t len) {
-  LOGGER_LIST_FUNCTION(logger_list, -ENODEV, setPrune, buf, len);
+  return logger_list;
 }
 
 struct logger_list* android_logger_list_alloc(int mode, unsigned int tail, pid_t pid) {
-  struct logger_list* logger_list;
-
-  logger_list = static_cast<struct logger_list*>(calloc(1, sizeof(*logger_list)));
-  if (!logger_list) {
-    return NULL;
-  }
-
-  list_init(&logger_list->logger);
-  logger_list->mode = mode;
-  logger_list->tail = tail;
-  logger_list->pid = pid;
-
-  return logger_list;
+  return android_logger_list_alloc_internal(mode, tail, log_time(0, 0), pid);
 }
 
 struct logger_list* android_logger_list_alloc_time(int mode, log_time start, pid_t pid) {
-  struct logger_list* logger_list;
-
-  logger_list = static_cast<struct logger_list*>(calloc(1, sizeof(*logger_list)));
-  if (!logger_list) {
-    return NULL;
-  }
-
-  list_init(&logger_list->logger);
-  logger_list->mode = mode;
-  logger_list->start = start;
-  logger_list->pid = pid;
-
-  return logger_list;
+  return android_logger_list_alloc_internal(mode, 0, start, pid);
 }
-
-/* android_logger_list_register unimplemented, no use case */
-/* android_logger_list_unregister unimplemented, no use case */
 
 /* Open the named log and add it to the logger list */
 struct logger* android_logger_open(struct logger_list* logger_list, log_id_t logId) {
-  struct logger* logger;
-
   if (!logger_list || (logId >= LOG_ID_MAX)) {
     return nullptr;
   }
 
-  logger_for_each(logger, logger_list) {
-    if (logger->logId == logId) {
-      return reinterpret_cast<struct logger*>(logger);
-    }
-  }
+  logger_list->log_mask |= 1 << logId;
 
-  logger = static_cast<struct logger*>(calloc(1, sizeof(*logger)));
-  if (!logger) {
-    return nullptr;
-  }
-
-  logger->logId = logId;
-  list_add_tail(&logger_list->logger, &logger->node);
-  logger->parent = logger_list;
-
-  // Reset known transport to re-evaluate, since we added a new logger.
-  logger_list->transport_initialized = false;
-
-  return logger;
+  uintptr_t logger = logId;
+  logger |= (logger_list->mode & ANDROID_LOG_PSTORE) ? LOGGER_PMSG : LOGGER_LOGD;
+  return reinterpret_cast<struct logger*>(logger);
 }
 
 /* Open the single named log and make it part of a new logger list */
@@ -256,10 +99,14 @@ struct logger_list* android_logger_list_open(log_id_t logId, int mode, unsigned 
   return logger_list;
 }
 
-/* Validate log_msg packet, read function has already been null checked */
-static int android_transport_read(struct logger_list* logger_list,
-                                  struct android_log_transport_context* transp,
-                                  struct log_msg* log_msg) {
+int android_logger_list_read(struct logger_list* logger_list, struct log_msg* log_msg) {
+  if (logger_list == nullptr || logger_list->transport_context.transport == nullptr ||
+      logger_list->log_mask == 0) {
+    return -EINVAL;
+  }
+
+  android_log_transport_context* transp = &logger_list->transport_context;
+
   int ret = (*transp->transport->read)(logger_list, transp, log_msg);
 
   if (ret < 0) {
@@ -285,17 +132,6 @@ static int android_transport_read(struct logger_list* logger_list,
   return ret;
 }
 
-/* Read from the selected logs */
-int android_logger_list_read(struct logger_list* logger_list, struct log_msg* log_msg) {
-  int ret = init_transport_context(logger_list);
-  if (ret < 0) {
-    return ret;
-  }
-
-  android_log_transport_context* transport_context = &logger_list->transport_context;
-  return android_transport_read(logger_list, transport_context, log_msg);
-}
-
 /* Close all the logs */
 void android_logger_list_free(struct logger_list* logger_list) {
   if (logger_list == NULL) {
@@ -306,12 +142,6 @@ void android_logger_list_free(struct logger_list* logger_list) {
 
   if (transport_context->transport && transport_context->transport->close) {
     (*transport_context->transport->close)(logger_list, transport_context);
-  }
-
-  while (!list_empty(&logger_list->logger)) {
-    struct listnode* node = list_head(&logger_list->logger);
-    struct logger* logger = node_to_item(node, struct logger, node);
-    android_logger_free((struct logger*)logger);
   }
 
   free(logger_list);
