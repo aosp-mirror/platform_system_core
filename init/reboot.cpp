@@ -69,10 +69,13 @@
 
 using namespace std::literals;
 
+using android::base::boot_clock;
 using android::base::GetBoolProperty;
+using android::base::SetProperty;
 using android::base::Split;
 using android::base::Timer;
 using android::base::unique_fd;
+using android::base::WaitForProperty;
 using android::base::WriteStringToFile;
 
 namespace android {
@@ -728,16 +731,21 @@ static Result<void> UnmountAllApexes() {
 
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
+    boot_clock::time_point now = boot_clock::now();
+    property_set("sys.init.userspace_reboot.last_started",
+                 std::to_string(now.time_since_epoch().count()));
     auto guard = android::base::make_scope_guard([] {
         // Leave shutdown so that we can handle a full reboot.
         LeaveShutdown();
         trigger_shutdown("reboot,abort-userspace-reboot");
     });
-    // Triggering userspace-reboot-requested will result in a bunch of set_prop
+    // Triggering userspace-reboot-requested will result in a bunch of setprop
     // actions. We should make sure, that all of them are propagated before
-    // proceeding with userspace reboot.
-    // TODO(b/135984674): implement proper synchronization logic.
-    std::this_thread::sleep_for(500ms);
+    // proceeding with userspace reboot. Synchronously setting kUserspaceRebootInProgress property
+    // is not perfect, but it should do the trick.
+    if (property_set(kUserspaceRebootInProgress, "1") != 0) {
+        return Error() << "Failed to set property " << kUserspaceRebootInProgress;
+    }
     EnterShutdown();
     std::vector<Service*> stop_first;
     // Remember the services that were enabled. We will need to manually enable them again otherwise
