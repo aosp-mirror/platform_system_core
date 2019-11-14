@@ -458,3 +458,9 @@ bool GetSnapshotUpdateStatus(FastbootDevice* device, const std::vector<std::stri
     }
     return true;
 }
+
+bool GetCpuAbi(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+               std::string* message) {
+    *message = android::base::GetProperty("ro.product.cpu.abi", "");
+    return true;
+}
