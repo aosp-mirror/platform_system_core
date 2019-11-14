@@ -283,6 +283,16 @@ on init
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
 
+    # freezer cgroup entries
+    mkdir /dev/freezer/frozen
+    write /dev/freezer/frozen/freezer.state FROZEN
+    chown system system /dev/freezer/cgroup.procs
+    chown system system /dev/freezer/frozen
+    chown system system /dev/freezer/frozen/freezer.state
+    chown system system /dev/freezer/frozen/cgroup.procs
+
+    chmod 0444 /dev/freezer/frozen/freezer.state
+
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
     chmod 0664 /proc/pressure/memory
