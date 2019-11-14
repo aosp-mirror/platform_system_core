@@ -26,24 +26,22 @@
 
 #include "logger.h"
 
-static int pmsgAvailable(log_id_t logId);
-static int pmsgVersion(struct android_log_logger* logger,
-                       struct android_log_transport_context* transp);
-static int pmsgRead(struct android_log_logger_list* logger_list,
-                    struct android_log_transport_context* transp, struct log_msg* log_msg);
-static void pmsgClose(struct android_log_logger_list* logger_list,
+static int PmsgAvailable(log_id_t logId);
+static int PmsgVersion(struct logger* logger, struct android_log_transport_context* transp);
+static int PmsgRead(struct logger_list* logger_list, struct android_log_transport_context* transp,
+                    struct log_msg* log_msg);
+static void PmsgClose(struct logger_list* logger_list,
                       struct android_log_transport_context* transp);
-static int pmsgClear(struct android_log_logger* logger,
-                     struct android_log_transport_context* transp);
+static int PmsgClear(struct logger* logger, struct android_log_transport_context* transp);
 
 struct android_log_transport_read pmsgLoggerRead = {
     .name = "pmsg",
-    .available = pmsgAvailable,
-    .version = pmsgVersion,
-    .close = pmsgClose,
-    .read = pmsgRead,
+    .available = PmsgAvailable,
+    .version = PmsgVersion,
+    .close = PmsgClose,
+    .read = PmsgRead,
     .poll = NULL,
-    .clear = pmsgClear,
+    .clear = PmsgClear,
     .setSize = NULL,
     .getSize = NULL,
     .getReadableSize = NULL,
@@ -52,7 +50,7 @@ struct android_log_transport_read pmsgLoggerRead = {
     .getStats = NULL,
 };
 
-static int pmsgAvailable(log_id_t logId) {
+static int PmsgAvailable(log_id_t logId) {
   if (logId > LOG_ID_SECURITY) {
     return -EINVAL;
   }
@@ -62,21 +60,19 @@ static int pmsgAvailable(log_id_t logId) {
   return -EBADF;
 }
 
-static int pmsgClear(struct android_log_logger* logger __unused,
-                     struct android_log_transport_context* transp __unused) {
+static int PmsgClear(struct logger*, struct android_log_transport_context*) {
   return unlink("/sys/fs/pstore/pmsg-ramoops-0");
 }
 
 /*
  * returns the logger version
  */
-static int pmsgVersion(struct android_log_logger* logger __unused,
-                       struct android_log_transport_context* transp __unused) {
+static int PmsgVersion(struct logger*, struct android_log_transport_context*) {
   return 4;
 }
 
-static int pmsgRead(struct android_log_logger_list* logger_list,
-                    struct android_log_transport_context* transp, struct log_msg* log_msg) {
+static int PmsgRead(struct logger_list* logger_list, struct android_log_transport_context* transp,
+                    struct log_msg* log_msg) {
   ssize_t ret;
   off_t current, next;
   struct __attribute__((__packed__)) {
@@ -192,8 +188,7 @@ static int pmsgRead(struct android_log_logger_list* logger_list,
   }
 }
 
-static void pmsgClose(struct android_log_logger_list* logger_list __unused,
-                      struct android_log_transport_context* transp) {
+static void PmsgClose(struct logger_list*, struct android_log_transport_context* transp) {
   int fd = atomic_exchange(&transp->context.fd, 0);
   if (fd > 0) {
     close(fd);
@@ -211,7 +206,7 @@ static void* realloc_or_free(void* ptr, size_t new_size) {
 ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* prefix,
                                      __android_log_pmsg_file_read_fn fn, void* arg) {
   ssize_t ret;
-  struct android_log_logger_list logger_list;
+  struct logger_list logger_list;
   struct android_log_transport_context transp;
   struct content {
     struct listnode node;
@@ -268,7 +263,7 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
 
   /* Read the file content */
   log_msg log_msg;
-  while (pmsgRead(&logger_list, &transp, &log_msg) > 0) {
+  while (PmsgRead(&logger_list, &transp, &log_msg) > 0) {
     const char* cp;
     size_t hdr_size = log_msg.entry.hdr_size;
 
@@ -426,7 +421,7 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
     }
     list_add_head(node, &content->node);
   }
-  pmsgClose(&logger_list, &transp);
+  PmsgClose(&logger_list, &transp);
 
   /* Progress through all the collected files */
   list_for_each_safe(node, n, &name_list) {
