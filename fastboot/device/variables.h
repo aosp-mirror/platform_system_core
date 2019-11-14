@@ -63,6 +63,7 @@ bool GetSuperPartitionName(FastbootDevice* device, const std::vector<std::string
                            std::string* message);
 bool GetSnapshotUpdateStatus(FastbootDevice* device, const std::vector<std::string>& args,
                              std::string* message);
+bool GetCpuAbi(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
 
 // Helpers for getvar all.
 std::vector<std::vector<std::string>> GetAllPartitionArgsWithSlot(FastbootDevice* device);
