@@ -39,6 +39,13 @@
       "Mode": "0755",
       "UID": "system",
       "GID": "system"
+    },
+    {
+      "Controller": "freezer",
+      "Path": "/dev/freezer",
+      "Mode": "0755",
+      "UID": "system",
+      "GID": "system"
     }
   ],
   "Cgroups2": {
