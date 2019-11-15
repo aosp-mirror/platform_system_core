@@ -760,6 +760,12 @@ static Result<void> DoUserspaceReboot() {
             were_enabled.push_back(s);
         }
     }
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() before terminating services...";
+        sync();
+        LOG(INFO) << "sync() took " << sync_timer;
+    }
     // TODO(b/135984674): do we need shutdown animation for userspace reboot?
     // TODO(b/135984674): control userspace timeout via read-only property?
     StopServicesAndLogViolations(stop_first, 10s, true /* SIGTERM */);
@@ -774,6 +780,12 @@ static Result<void> DoUserspaceReboot() {
         r > 0) {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " debugging services are still running";
+    }
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() after stopping services...";
+        sync();
+        LOG(INFO) << "sync() took " << sync_timer;
     }
     if (auto result = UnmountAllApexes(); !result) {
         return result;
@@ -792,7 +804,38 @@ static Result<void> DoUserspaceReboot() {
     return {};
 }
 
+static void UserspaceRebootWatchdogThread() {
+    if (!WaitForProperty("sys.init.userspace_reboot_in_progress", "1", 20s)) {
+        // TODO(b/135984674): should we reboot instead?
+        LOG(WARNING) << "Userspace reboot didn't start in 20 seconds. Stopping watchdog";
+        return;
+    }
+    LOG(INFO) << "Starting userspace reboot watchdog";
+    // TODO(b/135984674): this should be configured via a read-only sysprop.
+    std::chrono::milliseconds timeout = 60s;
+    if (!WaitForProperty("sys.boot_completed", "1", timeout)) {
+        LOG(ERROR) << "Failed to boot in " << timeout.count() << "ms. Switching to full reboot";
+        // In this case device is in a boot loop. Only way to recover is to do dirty reboot.
+        RebootSystem(ANDROID_RB_RESTART2, "userspace-reboot-watchdog-triggered");
+    }
+    LOG(INFO) << "Device booted, stopping userspace reboot watchdog";
+}
+
 static void HandleUserspaceReboot() {
+    // Spinnig up a separate thread will fail the setns call later in the boot sequence.
+    // Fork a new process to monitor userspace reboot while we are investigating a better solution.
+    pid_t pid = fork();
+    if (pid < 0) {
+        PLOG(ERROR) << "Failed to fork process for userspace reboot watchdog. Switching to full "
+                    << "reboot";
+        trigger_shutdown("reboot,userspace-reboot-failed-to-fork");
+        return;
+    }
+    if (pid == 0) {
+        // Child
+        UserspaceRebootWatchdogThread();
+        _exit(EXIT_SUCCESS);
+    }
     LOG(INFO) << "Clearing queue and starting userspace-reboot-requested trigger";
     auto& am = ActionManager::GetInstance();
     am.ClearQueue();
