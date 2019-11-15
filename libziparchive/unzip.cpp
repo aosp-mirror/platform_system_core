@@ -52,7 +52,7 @@ enum Role {
 static Role role;
 static OverwriteMode overwrite_mode = kPrompt;
 static bool flag_1 = false;
-static const char* flag_d = nullptr;
+static std::string flag_d;
 static bool flag_l = false;
 static bool flag_p = false;
 static bool flag_q = false;
@@ -214,12 +214,9 @@ static void ExtractOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string&
   }
 
   // Where are we actually extracting to (for human-readable output)?
-  std::string dst;
-  if (flag_d) {
-    dst = flag_d;
-    if (!EndsWith(dst, "/")) dst += '/';
-  }
-  dst += name;
+  // flag_d is the empty string if -d wasn't used, or has a trailing '/'
+  // otherwise.
+  std::string dst = flag_d + name;
 
   // Ensure the directory hierarchy exists.
   if (!MakeDirectoryHierarchy(android::base::Dirname(name))) {
@@ -463,6 +460,7 @@ int main(int argc, char* argv[]) {
       switch (opt) {
         case 'd':
           flag_d = optarg;
+          if (!EndsWith(flag_d, "/")) flag_d += '/';
           break;
         case 'l':
           flag_l = true;
@@ -511,9 +509,17 @@ int main(int argc, char* argv[]) {
   }
 
   // Implement -d by changing into that directory.
-  // We'll create implicit directories based on paths in the zip file, but we
-  // require that the -d directory already exists.
-  if (flag_d && chdir(flag_d) == -1) die(errno, "couldn't chdir to %s", flag_d);
+  // We'll create implicit directories based on paths in the zip file, and we'll create
+  // the -d directory itself, but we require that *parents* of the -d directory already exists.
+  // This is pretty arbitrary, but it's the behavior of the original unzip.
+  if (!flag_d.empty()) {
+    if (mkdir(flag_d.c_str(), 0777) == -1 && errno != EEXIST) {
+      die(errno, "couldn't created %s", flag_d.c_str());
+    }
+    if (chdir(flag_d.c_str()) == -1) {
+      die(errno, "couldn't chdir to %s", flag_d.c_str());
+    }
+  }
 
   ProcessAll(zah);
 
