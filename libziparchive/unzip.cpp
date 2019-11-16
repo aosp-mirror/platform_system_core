@@ -448,6 +448,7 @@ int main(int argc, char* argv[]) {
 
   static const struct option opts[] = {
       {"help", no_argument, 0, 'h'},
+      {},
   };
 
   if (role == kUnzip) {
