@@ -69,10 +69,13 @@
 
 using namespace std::literals;
 
+using android::base::boot_clock;
 using android::base::GetBoolProperty;
+using android::base::SetProperty;
 using android::base::Split;
 using android::base::Timer;
 using android::base::unique_fd;
+using android::base::WaitForProperty;
 using android::base::WriteStringToFile;
 
 namespace android {
@@ -728,16 +731,21 @@ static Result<void> UnmountAllApexes() {
 
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
+    boot_clock::time_point now = boot_clock::now();
+    property_set("sys.init.userspace_reboot.last_started",
+                 std::to_string(now.time_since_epoch().count()));
     auto guard = android::base::make_scope_guard([] {
         // Leave shutdown so that we can handle a full reboot.
         LeaveShutdown();
         trigger_shutdown("reboot,abort-userspace-reboot");
     });
-    // Triggering userspace-reboot-requested will result in a bunch of set_prop
+    // Triggering userspace-reboot-requested will result in a bunch of setprop
     // actions. We should make sure, that all of them are propagated before
-    // proceeding with userspace reboot.
-    // TODO(b/135984674): implement proper synchronization logic.
-    std::this_thread::sleep_for(500ms);
+    // proceeding with userspace reboot. Synchronously setting kUserspaceRebootInProgress property
+    // is not perfect, but it should do the trick.
+    if (property_set(kUserspaceRebootInProgress, "1") != 0) {
+        return Error() << "Failed to set property " << kUserspaceRebootInProgress;
+    }
     EnterShutdown();
     std::vector<Service*> stop_first;
     // Remember the services that were enabled. We will need to manually enable them again otherwise
@@ -751,6 +759,12 @@ static Result<void> DoUserspaceReboot() {
         if (s->is_post_data() && s->IsEnabled()) {
             were_enabled.push_back(s);
         }
+    }
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() before terminating services...";
+        sync();
+        LOG(INFO) << "sync() took " << sync_timer;
     }
     // TODO(b/135984674): do we need shutdown animation for userspace reboot?
     // TODO(b/135984674): control userspace timeout via read-only property?
@@ -766,6 +780,12 @@ static Result<void> DoUserspaceReboot() {
         r > 0) {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " debugging services are still running";
+    }
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() after stopping services...";
+        sync();
+        LOG(INFO) << "sync() took " << sync_timer;
     }
     if (auto result = UnmountAllApexes(); !result) {
         return result;
@@ -784,7 +804,38 @@ static Result<void> DoUserspaceReboot() {
     return {};
 }
 
+static void UserspaceRebootWatchdogThread() {
+    if (!WaitForProperty("sys.init.userspace_reboot_in_progress", "1", 20s)) {
+        // TODO(b/135984674): should we reboot instead?
+        LOG(WARNING) << "Userspace reboot didn't start in 20 seconds. Stopping watchdog";
+        return;
+    }
+    LOG(INFO) << "Starting userspace reboot watchdog";
+    // TODO(b/135984674): this should be configured via a read-only sysprop.
+    std::chrono::milliseconds timeout = 60s;
+    if (!WaitForProperty("sys.boot_completed", "1", timeout)) {
+        LOG(ERROR) << "Failed to boot in " << timeout.count() << "ms. Switching to full reboot";
+        // In this case device is in a boot loop. Only way to recover is to do dirty reboot.
+        RebootSystem(ANDROID_RB_RESTART2, "userspace-reboot-watchdog-triggered");
+    }
+    LOG(INFO) << "Device booted, stopping userspace reboot watchdog";
+}
+
 static void HandleUserspaceReboot() {
+    // Spinnig up a separate thread will fail the setns call later in the boot sequence.
+    // Fork a new process to monitor userspace reboot while we are investigating a better solution.
+    pid_t pid = fork();
+    if (pid < 0) {
+        PLOG(ERROR) << "Failed to fork process for userspace reboot watchdog. Switching to full "
+                    << "reboot";
+        trigger_shutdown("reboot,userspace-reboot-failed-to-fork");
+        return;
+    }
+    if (pid == 0) {
+        // Child
+        UserspaceRebootWatchdogThread();
+        _exit(EXIT_SUCCESS);
+    }
     LOG(INFO) << "Clearing queue and starting userspace-reboot-requested trigger";
     auto& am = ActionManager::GetInstance();
     am.ClearQueue();

@@ -105,7 +105,8 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
             {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
             {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}},
-            {FB_VAR_SNAPSHOT_UPDATE_STATUS, {GetSnapshotUpdateStatus, nullptr}}};
+            {FB_VAR_SNAPSHOT_UPDATE_STATUS, {GetSnapshotUpdateStatus, nullptr}},
+            {FB_VAR_CPU_ABI, {GetCpuAbi, nullptr}}};
 
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");

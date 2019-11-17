@@ -935,7 +935,6 @@ on init && property:ro.debuggable=1
 
 on userspace-reboot-requested
   # TODO(b/135984674): reset all necessary properties here.
-  setprop sys.init.userspace_reboot_in_progress 1
   setprop sys.boot_completed 0
   setprop sys.init.updatable_crashing 0
   setprop apexd.status ""
@@ -955,3 +954,6 @@ on userspace-reboot-resume
   trigger zygote-start
   trigger early-boot
   trigger boot
+
+on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
+  finish_userspace_reboot
