@@ -27,27 +27,16 @@
 #include "logger.h"
 
 static int PmsgAvailable(log_id_t logId);
-static int PmsgVersion(struct logger* logger, struct android_log_transport_context* transp);
 static int PmsgRead(struct logger_list* logger_list, struct android_log_transport_context* transp,
                     struct log_msg* log_msg);
 static void PmsgClose(struct logger_list* logger_list,
                       struct android_log_transport_context* transp);
-static int PmsgClear(struct logger* logger, struct android_log_transport_context* transp);
 
 struct android_log_transport_read pmsgLoggerRead = {
     .name = "pmsg",
     .available = PmsgAvailable,
-    .version = PmsgVersion,
     .close = PmsgClose,
     .read = PmsgRead,
-    .poll = NULL,
-    .clear = PmsgClear,
-    .setSize = NULL,
-    .getSize = NULL,
-    .getReadableSize = NULL,
-    .getPrune = NULL,
-    .setPrune = NULL,
-    .getStats = NULL,
 };
 
 static int PmsgAvailable(log_id_t logId) {
@@ -58,17 +47,6 @@ static int PmsgAvailable(log_id_t logId) {
     return 0;
   }
   return -EBADF;
-}
-
-static int PmsgClear(struct logger*, struct android_log_transport_context*) {
-  return unlink("/sys/fs/pstore/pmsg-ramoops-0");
-}
-
-/*
- * returns the logger version
- */
-static int PmsgVersion(struct logger*, struct android_log_transport_context*) {
-  return 4;
 }
 
 static int PmsgRead(struct logger_list* logger_list, struct android_log_transport_context* transp,
@@ -134,7 +112,7 @@ static int PmsgRead(struct logger_list* logger_list, struct android_log_transpor
     }
     preread_count = 0;
 
-    if ((transp->logMask & (1 << buf.l.id)) &&
+    if ((logger_list->log_mask & (1 << buf.l.id)) &&
         ((!logger_list->start.tv_sec && !logger_list->start.tv_nsec) ||
          ((logger_list->start.tv_sec <= buf.l.realtime.tv_sec) &&
           ((logger_list->start.tv_sec != buf.l.realtime.tv_sec) ||
@@ -232,12 +210,12 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
   memset(&transp, 0, sizeof(transp));
 
   logger_list.mode = ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK | ANDROID_LOG_RDONLY;
-  transp.logMask = (unsigned)-1;
+  logger_list.log_mask = (unsigned)-1;
   if (logId != LOG_ID_ANY) {
-    transp.logMask = (1 << logId);
+    logger_list.log_mask = (1 << logId);
   }
-  transp.logMask &= ~((1 << LOG_ID_KERNEL) | (1 << LOG_ID_EVENTS) | (1 << LOG_ID_SECURITY));
-  if (!transp.logMask) {
+  logger_list.log_mask &= ~((1 << LOG_ID_KERNEL) | (1 << LOG_ID_EVENTS) | (1 << LOG_ID_SECURITY));
+  if (!logger_list.log_mask) {
     return -EINVAL;
   }
 
