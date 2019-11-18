@@ -262,7 +262,7 @@ static int android_transport_read(struct logger_list* logger_list,
                                   struct log_msg* log_msg) {
   int ret = (*transp->transport->read)(logger_list, transp, log_msg);
 
-  if (ret < 0) {
+  if (ret <= 0) {
     return ret;
   }
 
