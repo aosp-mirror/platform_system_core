@@ -969,6 +969,16 @@ int Logcat::Run(int argc, char** argv) {
         }
     }
 
+    if (mode & ANDROID_LOG_PSTORE) {
+        if (clearLog) {
+            unlink("/sys/fs/pstore/pmsg-ramoops-0");
+            return EXIT_SUCCESS;
+        }
+        if (setLogSize || getLogSize || printStatistics || getPruneList || setPruneList) {
+            LogcatPanic(HELP_TRUE, "-L is incompatible with -g/-G, -S, and -p/-P");
+        }
+    }
+
     std::unique_ptr<logger_list, decltype(&android_logger_list_free)> logger_list{
             nullptr, &android_logger_list_free};
     if (tail_time != log_time::EPOCH) {

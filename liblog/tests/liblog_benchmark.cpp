@@ -913,7 +913,7 @@ static void BM_lookupEventTagNum(benchmark::State& state) {
 }
 BENCHMARK(BM_lookupEventTagNum);
 
-// Must be functionally identical to liblog internal __send_log_msg.
+// Must be functionally identical to liblog internal SendLogdControlMessage()
 static void send_to_control(char* buf, size_t len) {
   int sock =
       socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM | SOCK_CLOEXEC);
