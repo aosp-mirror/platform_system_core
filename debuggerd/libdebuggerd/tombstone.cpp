@@ -391,7 +391,7 @@ void dump_registers(log_t* log, unwindstack::Regs* regs) {
   std::vector<std::pair<std::string, uint64_t>> special_row;
 
 #if defined(__arm__) || defined(__aarch64__)
-  static constexpr const char* special_registers[] = {"ip", "lr", "sp", "pc"};
+  static constexpr const char* special_registers[] = {"ip", "lr", "sp", "pc", "pst"};
 #elif defined(__i386__)
   static constexpr const char* special_registers[] = {"ebp", "esp", "eip"};
 #elif defined(__x86_64__)
