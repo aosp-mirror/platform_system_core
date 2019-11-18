@@ -53,7 +53,6 @@ struct android_log_transport_read {
 
   /* Does not cause resources to be taken */
   int (*available)(log_id_t logId);
-  int (*version)(struct logger* logger, struct android_log_transport_context* transp);
   /* Release resources taken by the following interfaces */
   void (*close)(struct logger_list* logger_list, struct android_log_transport_context* transp);
   /*
@@ -62,53 +61,37 @@ struct android_log_transport_read {
    */
   int (*read)(struct logger_list* logger_list, struct android_log_transport_context* transp,
               struct log_msg* log_msg);
-  /* Must only be called if not ANDROID_LOG_NONBLOCK (blocking) */
-  int (*poll)(struct logger_list* logger_list, struct android_log_transport_context* transp);
-
-  int (*clear)(struct logger* logger, struct android_log_transport_context* transp);
-  ssize_t (*setSize)(struct logger* logger, struct android_log_transport_context* transp,
-                     size_t size);
-  ssize_t (*getSize)(struct logger* logger, struct android_log_transport_context* transp);
-  ssize_t (*getReadableSize)(struct logger* logger, struct android_log_transport_context* transp);
-
-  ssize_t (*getPrune)(struct logger_list* logger_list, struct android_log_transport_context* transp,
-                      char* buf, size_t len);
-  ssize_t (*setPrune)(struct logger_list* logger_list, struct android_log_transport_context* transp,
-                      char* buf, size_t len);
-  ssize_t (*getStats)(struct logger_list* logger_list, struct android_log_transport_context* transp,
-                      char* buf, size_t len);
 };
 
 struct android_log_transport_context {
   union android_log_context_union context; /* zero init per-transport context */
 
   struct android_log_transport_read* transport;
-  unsigned logMask;      /* mask of requested log buffers */
 };
 
 struct logger_list {
-  struct listnode logger;
   android_log_transport_context transport_context;
   bool transport_initialized;
   int mode;
   unsigned int tail;
   log_time start;
   pid_t pid;
+  uint32_t log_mask;
 };
 
-struct logger {
-  struct listnode node;
-  struct logger_list* parent;
+// Format for a 'logger' entry: uintptr_t where only the bottom 32 bits are used.
+// bit 31: Set if this 'logger' is for logd.
+// bit 30: Set if this 'logger' is for pmsg
+// bits 0-2: the decimal value of the log buffer.
+// Other bits are unused.
 
-  log_id_t logId;
-};
+#define LOGGER_LOGD (1 << 31)
+#define LOGGER_PMSG (1 << 30)
+#define LOGGER_LOG_ID_MASK ((1 << 3) - 1)
 
-/* assumes caller has structures read-locked, single threaded, or fenced */
-#define logger_for_each(logp, logger_list)                                      \
-  for ((logp) = node_to_item((logger_list)->logger.next, struct logger, node);  \
-       ((logp) != node_to_item(&(logger_list)->logger, struct logger, node)) && \
-       ((logp)->parent == (logger_list));                                       \
-       (logp) = node_to_item((logp)->node.next, struct logger, node))
+inline bool android_logger_is_logd(struct logger* logger) {
+  return reinterpret_cast<uintptr_t>(logger) & LOGGER_LOGD;
+}
 
 /* OS specific dribs and drabs */
 
