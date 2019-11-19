@@ -1,0 +1,7 @@
+sysprop_library {
+  name: "com.android.sysprop.init",
+  srcs: ["InitProperties.sysprop"],
+  property_owner: "Platform",
+  api_packages: ["android.sysprop"],
+  recovery_available: true,
+}
