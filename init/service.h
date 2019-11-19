@@ -132,7 +132,7 @@ class Service {
   private:
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
-    void KillProcessGroup(int signal);
+    void KillProcessGroup(int signal, bool report_oneshot = false);
     void SetProcessAttributesAndCaps();
 
     static unsigned long next_start_order_;
