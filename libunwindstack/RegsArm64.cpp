@@ -103,6 +103,7 @@ void RegsArm64::IterateRegisters(std::function<void(const char*, uint64_t)> fn) 
   fn("sp", regs_[ARM64_REG_SP]);
   fn("lr", regs_[ARM64_REG_LR]);
   fn("pc", regs_[ARM64_REG_PC]);
+  fn("pst", regs_[ARM64_REG_PSTATE]);
 }
 
 Regs* RegsArm64::Read(void* remote_data) {
@@ -113,6 +114,7 @@ Regs* RegsArm64::Read(void* remote_data) {
   uint64_t* reg_data = reinterpret_cast<uint64_t*>(regs->RawData());
   reg_data[ARM64_REG_PC] = user->pc;
   reg_data[ARM64_REG_SP] = user->sp;
+  reg_data[ARM64_REG_PSTATE] = user->pstate;
   return regs;
 }
 
