@@ -125,6 +125,7 @@ cc_library {
     native_bridge_supported: true,
 
     srcs: [
+        "Errors.cpp",
         "FileMap.cpp",
         "JenkinsHash.cpp",
         "NativeHandle.cpp",
