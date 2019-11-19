@@ -650,10 +650,6 @@ int fakeLogOpen(const char* pathName) {
   return fd;
 }
 
-ssize_t __send_log_msg(char*, size_t) {
-  return -ENODEV;
-}
-
 int __android_log_is_loggable(int prio, const char*, int def) {
   int logLevel = def;
   return logLevel >= 0 && prio >= logLevel;
