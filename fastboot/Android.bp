@@ -137,12 +137,14 @@ cc_binary {
         "libhidlbase",
         "liblog",
         "liblp",
+        "libprotobuf-cpp-lite",
         "libsparse",
         "libutils",
     ],
 
     static_libs: [
         "libhealthhalutils",
+        "libsnapshot_nobinder",
     ],
 
     header_libs: [

@@ -224,7 +224,8 @@ class SnapshotManager final {
     bool CreateLogicalAndSnapshotPartitions(const std::string& super_device);
 
     // This method should be called preceding any wipe or flash of metadata or
-    // userdata. It is only valid in recovery.
+    // userdata. It is only valid in recovery or fastbootd, and it ensures that
+    // a merge has been completed.
     //
     // When userdata will be wiped or flashed, it is necessary to clean up any
     // snapshot state. If a merge is in progress, the merge must be finished.
