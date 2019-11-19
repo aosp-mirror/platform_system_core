@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,9 +23,7 @@
 
 __BEGIN_DECLS
 
-int LogdRead(struct logger_list* logger_list, struct log_msg* log_msg);
-void LogdClose(struct logger_list* logger_list);
-
-ssize_t SendLogdControlMessage(char* buf, size_t buf_size);
+int PmsgRead(struct logger_list* logger_list, struct log_msg* log_msg);
+void PmsgClose(struct logger_list* logger_list);
 
 __END_DECLS

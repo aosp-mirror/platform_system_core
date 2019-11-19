@@ -31,7 +31,9 @@
 #include <private/android_filesystem_config.h>
 
 #include "log_portability.h"
+#include "logd_reader.h"
 #include "logger.h"
+#include "pmsg_reader.h"
 
 /* method for getting the associated sublog id */
 log_id_t android_logger_get_id(struct logger* logger) {
@@ -49,14 +51,6 @@ static struct logger_list* android_logger_list_alloc_internal(int mode, unsigned
   logger_list->start = start;
   logger_list->tail = tail;
   logger_list->pid = pid;
-
-#if (FAKE_LOG_DEVICE == 0)
-  extern struct android_log_transport_read logdLoggerRead;
-  extern struct android_log_transport_read pmsgLoggerRead;
-
-  logger_list->transport_context.transport =
-      (mode & ANDROID_LOG_PSTORE) ? &pmsgLoggerRead : &logdLoggerRead;
-#endif
 
   return logger_list;
 }
@@ -100,14 +94,19 @@ struct logger_list* android_logger_list_open(log_id_t logId, int mode, unsigned 
 }
 
 int android_logger_list_read(struct logger_list* logger_list, struct log_msg* log_msg) {
-  if (logger_list == nullptr || logger_list->transport_context.transport == nullptr ||
-      logger_list->log_mask == 0) {
+  if (logger_list == nullptr || logger_list->log_mask == 0) {
     return -EINVAL;
   }
 
-  android_log_transport_context* transp = &logger_list->transport_context;
+  int ret = 0;
 
-  int ret = (*transp->transport->read)(logger_list, transp, log_msg);
+#if (FAKE_LOG_DEVICE == 0)
+  if (logger_list->mode & ANDROID_LOG_PSTORE) {
+    ret = PmsgRead(logger_list, log_msg);
+  } else {
+    ret = LogdRead(logger_list, log_msg);
+  }
+#endif
 
   if (ret <= 0) {
     return ret;
@@ -138,11 +137,13 @@ void android_logger_list_free(struct logger_list* logger_list) {
     return;
   }
 
-  android_log_transport_context* transport_context = &logger_list->transport_context;
-
-  if (transport_context->transport && transport_context->transport->close) {
-    (*transport_context->transport->close)(logger_list, transport_context);
+#if (FAKE_LOG_DEVICE == 0)
+  if (logger_list->mode & ANDROID_LOG_PSTORE) {
+    PmsgClose(logger_list);
+  } else {
+    LogdClose(logger_list);
   }
+#endif
 
   free(logger_list);
 }
