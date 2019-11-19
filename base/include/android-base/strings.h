@@ -85,5 +85,10 @@ inline bool ConsumeSuffix(std::string_view* s, std::string_view suffix) {
   return true;
 }
 
+// Replaces `from` with `to` in `s`, once if `all == false`, or as many times as
+// there are matches if `all == true`.
+[[nodiscard]] std::string StringReplace(std::string_view s, std::string_view from,
+                                        std::string_view to, bool all);
+
 }  // namespace base
 }  // namespace android
