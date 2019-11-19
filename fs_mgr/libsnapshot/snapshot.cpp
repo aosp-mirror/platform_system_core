@@ -2185,6 +2185,15 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
         return true;
     }
 
+    // Check this early, so we don't accidentally start trying to populate
+    // the state file in recovery. Note we don't call GetUpdateState since
+    // we want errors in acquiring the lock to be propagated, instead of
+    // returning UpdateState::None.
+    auto state_file = GetStateFilePath();
+    if (access(state_file.c_str(), F_OK) != 0 && errno == ENOENT) {
+        return true;
+    }
+
     auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
     auto super_path = device_->GetSuperDevice(slot_number);
     if (!CreateLogicalAndSnapshotPartitions(super_path)) {

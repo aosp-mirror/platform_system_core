@@ -399,6 +399,9 @@ static int show_help() {
             " snapshot-update cancel     On devices that support snapshot-based updates, cancel\n"
             "                            an in-progress update. This may make the device\n"
             "                            unbootable until it is reflashed.\n"
+            " snapshot-update merge      On devices that support snapshot-based updates, finish\n"
+            "                            an in-progress update if it is in the \"merging\"\n"
+            "                            phase.\n"
             "\n"
             "boot image:\n"
             " boot KERNEL [RAMDISK [SECOND]]\n"
@@ -2089,8 +2092,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (!args.empty()) {
                 arg = next_arg(&args);
             }
-            if (!arg.empty() && arg != "cancel") {
-                syntax_error("expected: snapshot-update [cancel]");
+            if (!arg.empty() && (arg != "cancel" && arg != "merge")) {
+                syntax_error("expected: snapshot-update [cancel|merge]");
             }
             fb->SnapshotUpdateCommand(arg);
         } else {
