@@ -29,7 +29,9 @@
 #include <android-base/strings.h>
 
 #include "builtin_arguments.h"
+#include "host_init_verifier.h"
 #include "interface_utils.h"
+#include "property_type.h"
 #include "rlimit_parser.h"
 #include "service.h"
 #include "util.h"
@@ -121,22 +123,10 @@ Result<void> check_loglevel(const BuiltinArguments& args) {
 }
 
 Result<void> check_mkdir(const BuiltinArguments& args) {
-    if (args.size() >= 4) {
-        if (!args[3].empty()) {
-            auto uid = DecodeUid(args[3]);
-            if (!uid) {
-                return Error() << "Unable to decode UID for '" << args[3] << "': " << uid.error();
-            }
-        }
-
-        if (args.size() == 5 && !args[4].empty()) {
-            auto gid = DecodeUid(args[4]);
-            if (!gid) {
-                return Error() << "Unable to decode GID for '" << args[4] << "': " << gid.error();
-            }
-        }
+    auto options = ParseMkdir(args.args);
+    if (!options) {
+        return options.error();
     }
-
     return {};
 }
 
@@ -181,6 +171,15 @@ Result<void> check_setprop(const BuiltinArguments& args) {
     if (name == kRestoreconProperty) {
         return Error() << "Do not set '" << kRestoreconProperty
                        << "' from init; use the restorecon builtin directly";
+    }
+
+    const char* target_context = nullptr;
+    const char* type = nullptr;
+    property_info_area->GetPropertyInfo(name.c_str(), &target_context, &type);
+
+    if (!CheckType(type, value)) {
+        return Error() << "Property type check failed, value doesn't match expected type '"
+                       << (type ?: "(null)") << "'";
     }
 
     return {};

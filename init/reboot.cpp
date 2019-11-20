@@ -38,6 +38,7 @@
 #include <thread>
 #include <vector>
 
+#include <InitProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -57,6 +58,7 @@
 #include "action_manager.h"
 #include "builtin_arguments.h"
 #include "init.h"
+#include "mount_namespace.h"
 #include "property_service.h"
 #include "reboot_utils.h"
 #include "service.h"
@@ -68,10 +70,13 @@
 
 using namespace std::literals;
 
+using android::base::boot_clock;
 using android::base::GetBoolProperty;
+using android::base::SetProperty;
 using android::base::Split;
 using android::base::Timer;
 using android::base::unique_fd;
+using android::base::WaitForProperty;
 using android::base::WriteStringToFile;
 
 namespace android {
@@ -713,18 +718,35 @@ static void LeaveShutdown() {
     SendStartSendingMessagesMessage();
 }
 
+static Result<void> UnmountAllApexes() {
+    const char* args[] = {"/system/bin/apexd", "--unmount-all"};
+    int status;
+    if (logwrap_fork_execvp(arraysize(args), args, &status, false, LOG_KLOG, true, nullptr) != 0) {
+        return ErrnoError() << "Failed to call '/system/bin/apexd --unmount-all'";
+    }
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        return {};
+    }
+    return Error() << "'/system/bin/apexd --unmount-all' failed : " << status;
+}
+
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
+    boot_clock::time_point now = boot_clock::now();
+    property_set("sys.init.userspace_reboot.last_started",
+                 std::to_string(now.time_since_epoch().count()));
     auto guard = android::base::make_scope_guard([] {
         // Leave shutdown so that we can handle a full reboot.
         LeaveShutdown();
-        TriggerShutdown("reboot,abort-userspace-reboot");
+        trigger_shutdown("reboot,abort-userspace-reboot");
     });
-    // Triggering userspace-reboot-requested will result in a bunch of set_prop
+    // Triggering userspace-reboot-requested will result in a bunch of setprop
     // actions. We should make sure, that all of them are propagated before
-    // proceeding with userspace reboot.
-    // TODO(b/135984674): implement proper synchronization logic.
-    std::this_thread::sleep_for(500ms);
+    // proceeding with userspace reboot. Synchronously setting kUserspaceRebootInProgress property
+    // is not perfect, but it should do the trick.
+    if (!android::sysprop::InitProperties::userspace_reboot_in_progress(true)) {
+        return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
+    }
     EnterShutdown();
     std::vector<Service*> stop_first;
     // Remember the services that were enabled. We will need to manually enable them again otherwise
@@ -739,6 +761,12 @@ static Result<void> DoUserspaceReboot() {
             were_enabled.push_back(s);
         }
     }
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() before terminating services...";
+        sync();
+        LOG(INFO) << "sync() took " << sync_timer;
+    }
     // TODO(b/135984674): do we need shutdown animation for userspace reboot?
     // TODO(b/135984674): control userspace timeout via read-only property?
     StopServicesAndLogViolations(stop_first, 10s, true /* SIGTERM */);
@@ -746,30 +774,26 @@ static Result<void> DoUserspaceReboot() {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
-    // We only really need to restart vold if userdata is ext4 filesystem.
-    // TODO(b/135984674): get userdata fs type here, and do nothing in case of f2fs.
-    // First shutdown volumes managed by vold. They will be recreated by
-    // system_server.
-    Service* vold_service = ServiceList::GetInstance().FindService("vold");
-    if (vold_service != nullptr && vold_service->IsRunning()) {
-        if (auto result = ShutdownVold(); !result) {
-            return result;
-        }
-        LOG(INFO) << "Restarting vold";
-        vold_service->Restart();
-    }
-    // Again, we only need to kill zram backing device in case of ext4 userdata.
-    // TODO(b/135984674): get userdata fs type here, and do nothing in case of f2fs.
-    if (auto result = KillZramBackingDevice(); !result) {
-        return result;
-    }
+    // TODO(b/143970043): in case of ext4 we probably we will need to restart vold and kill zram
+    //  backing device.
     if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */), 5s,
                                              false /* SIGKILL */);
         r > 0) {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " debugging services are still running";
     }
-    // TODO(b/135984674): deactivate APEX modules and switch back to bootstrap namespace.
+    {
+        Timer sync_timer;
+        LOG(INFO) << "sync() after stopping services...";
+        sync();
+        LOG(INFO) << "sync() took " << sync_timer;
+    }
+    if (auto result = UnmountAllApexes(); !result) {
+        return result;
+    }
+    if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
+        return Error() << "Failed to switch to bootstrap namespace";
+    }
     // Re-enable services
     for (const auto& s : were_enabled) {
         LOG(INFO) << "Re-enabling service '" << s->name() << "'";
@@ -781,7 +805,38 @@ static Result<void> DoUserspaceReboot() {
     return {};
 }
 
+static void UserspaceRebootWatchdogThread() {
+    if (!WaitForProperty("sys.init.userspace_reboot_in_progress", "1", 20s)) {
+        // TODO(b/135984674): should we reboot instead?
+        LOG(WARNING) << "Userspace reboot didn't start in 20 seconds. Stopping watchdog";
+        return;
+    }
+    LOG(INFO) << "Starting userspace reboot watchdog";
+    // TODO(b/135984674): this should be configured via a read-only sysprop.
+    std::chrono::milliseconds timeout = 60s;
+    if (!WaitForProperty("sys.boot_completed", "1", timeout)) {
+        LOG(ERROR) << "Failed to boot in " << timeout.count() << "ms. Switching to full reboot";
+        // In this case device is in a boot loop. Only way to recover is to do dirty reboot.
+        RebootSystem(ANDROID_RB_RESTART2, "userspace-reboot-watchdog-triggered");
+    }
+    LOG(INFO) << "Device booted, stopping userspace reboot watchdog";
+}
+
 static void HandleUserspaceReboot() {
+    // Spinnig up a separate thread will fail the setns call later in the boot sequence.
+    // Fork a new process to monitor userspace reboot while we are investigating a better solution.
+    pid_t pid = fork();
+    if (pid < 0) {
+        PLOG(ERROR) << "Failed to fork process for userspace reboot watchdog. Switching to full "
+                    << "reboot";
+        trigger_shutdown("reboot,userspace-reboot-failed-to-fork");
+        return;
+    }
+    if (pid == 0) {
+        // Child
+        UserspaceRebootWatchdogThread();
+        _exit(EXIT_SUCCESS);
+    }
     LOG(INFO) << "Clearing queue and starting userspace-reboot-requested trigger";
     auto& am = ActionManager::GetInstance();
     am.ClearQueue();

@@ -18,10 +18,14 @@
 
 #include <unistd.h>
 
+#include "log/log_read.h"
 #include "log_portability.h"
 
 __BEGIN_DECLS
 
-ssize_t __send_log_msg(char* buf, size_t buf_size);
+int LogdRead(struct logger_list* logger_list, struct log_msg* log_msg);
+void LogdClose(struct logger_list* logger_list);
+
+ssize_t SendLogdControlMessage(char* buf, size_t buf_size);
 
 __END_DECLS

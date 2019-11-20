@@ -122,6 +122,7 @@ class SnapshotManager final {
         virtual const IPartitionOpener& GetPartitionOpener() const = 0;
         virtual bool IsOverlayfsSetup() const = 0;
         virtual bool SetBootControlMergeStatus(MergeStatus status) = 0;
+        virtual bool SetSlotAsUnbootable(unsigned int slot) = 0;
         virtual bool IsRecovery() const = 0;
     };
 
@@ -133,7 +134,7 @@ class SnapshotManager final {
     static std::unique_ptr<SnapshotManager> New(IDeviceInfo* device = nullptr);
 
     // This is similar to New(), except designed specifically for first-stage
-    // init.
+    // init or recovery.
     static std::unique_ptr<SnapshotManager> NewForFirstStageMount(IDeviceInfo* device = nullptr);
 
     // Helper function for first-stage init to check whether a SnapshotManager
@@ -180,7 +181,10 @@ class SnapshotManager final {
     //
     //   MergeCompleted indicates that the update has fully completed.
     //   GetUpdateState will return None, and a new update can begin.
-    UpdateState ProcessUpdateState();
+    //
+    // The optional callback allows the caller to periodically check the
+    // progress with GetUpdateState().
+    UpdateState ProcessUpdateState(const std::function<void()>& callback = {});
 
   public:
     // Initiate the merge if necessary, then wait for the merge to finish.
@@ -219,6 +223,19 @@ class SnapshotManager final {
     // call to CreateLogicalPartitions when snapshots are present.
     bool CreateLogicalAndSnapshotPartitions(const std::string& super_device);
 
+    // This method should be called preceding any wipe or flash of metadata or
+    // userdata. It is only valid in recovery or fastbootd, and it ensures that
+    // a merge has been completed.
+    //
+    // When userdata will be wiped or flashed, it is necessary to clean up any
+    // snapshot state. If a merge is in progress, the merge must be finished.
+    // If a snapshot is present but not yet merged, the slot must be marked as
+    // unbootable.
+    //
+    // Returns true on success (or nothing to do), false on failure. The
+    // optional callback fires periodically to query progress via GetUpdateState.
+    bool HandleImminentDataWipe(const std::function<void()>& callback = {});
+
     // Dump debug information.
     bool Dump(std::ostream& os);
 
@@ -231,7 +248,7 @@ class SnapshotManager final {
     // is not found in fstab.
     // Note: if this function is called the second time before the AutoDevice returned from the
     // first call is destroyed, the device will be unmounted when any of these AutoDevices is
-    // destroyed. FOr example:
+    // destroyed. For example:
     //   auto a = mgr->EnsureMetadataMounted(); // mounts
     //   auto b = mgr->EnsureMetadataMounted(); // does nothing
     //   b.reset() // unmounts
@@ -250,7 +267,10 @@ class SnapshotManager final {
     FRIEND_TEST(SnapshotTest, Merge);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
     FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
+    FRIEND_TEST(SnapshotUpdateTest, DataWipeAfterRollback);
+    FRIEND_TEST(SnapshotUpdateTest, DataWipeRollbackInRecovery);
     FRIEND_TEST(SnapshotUpdateTest, MergeCannotRemoveCow);
+    FRIEND_TEST(SnapshotUpdateTest, MergeInRecovery);
     FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
     friend class SnapshotTest;
     friend class SnapshotUpdateTest;
@@ -463,6 +483,10 @@ class SnapshotManager final {
             LockedFile* lock, MetadataBuilder* target_metadata,
             const LpMetadata* exported_target_metadata, const std::string& target_suffix,
             const std::map<std::string, SnapshotStatus>& all_snapshot_status);
+
+    // Unmap all partitions that were mapped by CreateLogicalAndSnapshotPartitions.
+    // This should only be called in recovery.
+    bool UnmapAllPartitions();
 
     std::string gsid_dir_;
     std::string metadata_dir_;

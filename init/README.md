@@ -505,11 +505,22 @@ Commands
 > Used to mark the point right after /data is mounted. Used to implement the
   `class_reset_post_data` and `class_start_post_data` commands.
 
-`mkdir <path> [mode] [owner] [group]`
+`mkdir <path> [<mode>] [<owner>] [<group>] [encryption=<action>] [key=<key>]`
 > Create a directory at _path_, optionally with the given mode, owner, and
   group. If not provided, the directory is created with permissions 755 and
   owned by the root user and root group. If provided, the mode, owner and group
   will be updated if the directory exists already.
+
+ > _action_ can be one of:
+  * `None`: take no encryption action; directory will be encrypted if parent is.
+  * `Require`: encrypt directory, abort boot process if encryption fails
+  * `Attempt`: try to set an encryption policy, but continue if it fails
+  * `DeleteIfNecessary`: recursively delete directory if necessary to set
+  encryption policy.
+
+  > _key_ can be one of:
+  * `ref`: use the systemwide DE key
+  * `per_boot_ref`: use the key freshly generated on each boot.
 
 `mount_all <fstab> [ <path> ]\* [--<option>]`
 > Calls fs\_mgr\_mount\_all on the given fs\_mgr-format fstab with optional

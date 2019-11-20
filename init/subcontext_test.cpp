@@ -26,6 +26,7 @@
 #include <selinux/selinux.h>
 
 #include "builtin_arguments.h"
+#include "util.h"
 
 using namespace std::literals;
 
@@ -142,6 +143,18 @@ TEST(subcontext, ContextString) {
     });
 }
 
+TEST(subcontext, TriggerShutdown) {
+    static constexpr const char kTestShutdownCommand[] = "reboot,test-shutdown-command";
+    static std::string trigger_shutdown_command;
+    trigger_shutdown = [](const std::string& command) { trigger_shutdown_command = command; };
+    RunTest([](auto& subcontext, auto& context_string) {
+        auto result = subcontext.Execute(
+                std::vector<std::string>{"trigger_shutdown", kTestShutdownCommand});
+        ASSERT_TRUE(result);
+    });
+    EXPECT_EQ(kTestShutdownCommand, trigger_shutdown_command);
+}
+
 TEST(subcontext, ExpandArgs) {
     RunTest([](auto& subcontext, auto& context_string) {
         auto args = std::vector<std::string>{
@@ -207,6 +220,11 @@ BuiltinFunctionMap BuildTestFunctionMap() {
         return Error() << args.context;
     };
 
+    auto do_trigger_shutdown = [](const BuiltinArguments& args) -> Result<void> {
+        trigger_shutdown(args[1]);
+        return {};
+    };
+
     // clang-format off
     BuiltinFunctionMap test_function_map = {
         {"return_pids_as_error",        {0,     0,      {true,  do_return_pids_as_error}}},
@@ -216,6 +234,7 @@ BuiltinFunctionMap BuildTestFunctionMap() {
         {"cause_log_fatal",             {0,     0,      {true,  do_cause_log_fatal}}},
         {"generate_sane_error",         {0,     0,      {true,  do_generate_sane_error}}},
         {"return_context_as_error",     {0,     0,      {true,  do_return_context_as_error}}},
+        {"trigger_shutdown",            {1,     1,      {true,  do_trigger_shutdown}}},
     };
     // clang-format on
     return test_function_map;

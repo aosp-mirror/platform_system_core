@@ -116,5 +116,24 @@ bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs) {
   return lhs.size() == rhs.size() && strncasecmp(lhs.data(), rhs.data(), lhs.size()) == 0;
 }
 
+std::string StringReplace(std::string_view s, std::string_view from, std::string_view to,
+                          bool all) {
+  if (from.empty()) return std::string(s);
+
+  std::string result;
+  std::string_view::size_type start_pos = 0;
+  do {
+    std::string_view::size_type pos = s.find(from, start_pos);
+    if (pos == std::string_view::npos) break;
+
+    result.append(s.data() + start_pos, pos - start_pos);
+    result.append(to.data(), to.size());
+
+    start_pos = pos + from.size();
+  } while (all);
+  result.append(s.data() + start_pos, s.size() - start_pos);
+  return result;
+}
+
 }  // namespace base
 }  // namespace android

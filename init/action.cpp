@@ -180,21 +180,24 @@ void Action::ExecuteCommand(const Command& command) const {
 // It takes an optional (name, value) pair, which if provided must
 // be present in property_triggers_; it skips the check of the current
 // property value for this pair.
-bool Action::CheckPropertyTriggers(const std::string& name,
-                                   const std::string& value) const {
+bool Action::CheckPropertyTriggers(const std::string& name, const std::string& value) const {
     if (property_triggers_.empty()) {
         return true;
     }
 
-    bool found = name.empty();
+    if (!name.empty()) {
+        auto it = property_triggers_.find(name);
+        if (it == property_triggers_.end()) {
+            return false;
+        }
+        const auto& trigger_value = it->second;
+        if (trigger_value != "*" && trigger_value != value) {
+            return false;
+        }
+    }
+
     for (const auto& [trigger_name, trigger_value] : property_triggers_) {
-        if (trigger_name == name) {
-            if (trigger_value != "*" && trigger_value != value) {
-                return false;
-            } else {
-                found = true;
-            }
-        } else {
+        if (trigger_name != name) {
             std::string prop_value = android::base::GetProperty(trigger_name, "");
             if (trigger_value == "*" && !prop_value.empty()) {
                 continue;
@@ -202,7 +205,7 @@ bool Action::CheckPropertyTriggers(const std::string& name,
             if (trigger_value != prop_value) return false;
         }
     }
-    return found;
+    return true;
 }
 
 bool Action::CheckEvent(const EventTrigger& event_trigger) const {

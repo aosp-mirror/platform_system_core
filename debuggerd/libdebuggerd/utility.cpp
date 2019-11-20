@@ -67,6 +67,14 @@ static bool should_write_to_kmsg() {
 
 __attribute__((__weak__, visibility("default")))
 void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  _VLOG(log, ltype, fmt, ap);
+  va_end(ap);
+}
+
+__attribute__((__weak__, visibility("default")))
+void _VLOG(log_t* log, enum logtype ltype, const char* fmt, va_list ap) {
   bool write_to_tombstone = (log->tfd != -1);
   bool write_to_logcat = is_allowed_in_logcat(ltype)
                       && log->crashed_tid != -1
@@ -75,10 +83,7 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   static bool write_to_kmsg = should_write_to_kmsg();
 
   std::string msg;
-  va_list ap;
-  va_start(ap, fmt);
   android::base::StringAppendV(&msg, fmt, ap);
-  va_end(ap);
 
   if (msg.empty()) return;
 

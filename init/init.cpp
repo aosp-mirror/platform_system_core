@@ -59,6 +59,7 @@
 #include "first_stage_mount.h"
 #include "import_parser.h"
 #include "keychords.h"
+#include "lmkd_service.h"
 #include "mount_handler.h"
 #include "mount_namespace.h"
 #include "property_service.h"
@@ -135,7 +136,7 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
 
     std::string bootscript = GetProperty("ro.boot.init_rc", "");
     if (bootscript.empty()) {
-        parser.ParseConfig("/init.rc");
+        parser.ParseConfig("/system/etc/init/hw/init.rc");
         if (!parser.ParseConfig("/system/etc/init")) {
             late_import_paths.emplace_back("/system/etc/init");
         }
@@ -179,7 +180,7 @@ void ResetWaitForProp() {
     waiting_for_prop.reset();
 }
 
-void TriggerShutdown(const std::string& command) {
+static void TriggerShutdown(const std::string& command) {
     // We can't call HandlePowerctlMessage() directly in this function,
     // because it modifies the contents of the action queue, which can cause the action queue
     // to get into a bad state if this function is called from a command being executed by the
@@ -680,13 +681,21 @@ int SecondStageMain(int argc, char** argv) {
 
     boot_clock::time_point start_time = boot_clock::now();
 
+    trigger_shutdown = TriggerShutdown;
+
     SetStdioToDevNull(argv);
     InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
 
+    // Will handle EPIPE at the time of write by checking the errno
+    signal(SIGPIPE, SIG_IGN);
+
     // Set init and its forked children's oom_adj.
-    if (auto result = WriteFile("/proc/1/oom_score_adj", "-1000"); !result) {
-        LOG(ERROR) << "Unable to write -1000 to /proc/1/oom_score_adj: " << result.error();
+    if (auto result =
+                WriteFile("/proc/1/oom_score_adj", StringPrintf("%d", DEFAULT_OOM_SCORE_ADJUST));
+        !result) {
+        LOG(ERROR) << "Unable to write " << DEFAULT_OOM_SCORE_ADJUST
+                   << " to /proc/1/oom_score_adj: " << result.error();
     }
 
     // Set up a session keyring that all processes will have access to. It

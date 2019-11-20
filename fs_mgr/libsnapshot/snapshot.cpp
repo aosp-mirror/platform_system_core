@@ -29,19 +29,16 @@
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#ifdef LIBSNAPSHOT_USE_HAL
-#include <android/hardware/boot/1.1/IBootControl.h>
-#endif
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
-#include <fs_mgr_overlayfs.h>
 #include <fstab/fstab.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/liblp.h>
 
 #include <android/snapshot/snapshot.pb.h>
+#include "device_info.h"
 #include "partition_cow_creator.h"
 #include "snapshot_metadata_updater.h"
 #include "utility.h"
@@ -76,57 +73,6 @@ using namespace std::chrono_literals;
 using namespace std::string_literals;
 
 static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
-
-#ifdef __ANDROID_RECOVERY__
-constexpr bool kIsRecovery = true;
-#else
-constexpr bool kIsRecovery = false;
-#endif
-
-class DeviceInfo final : public SnapshotManager::IDeviceInfo {
-  public:
-    std::string GetGsidDir() const override { return "ota"s; }
-    std::string GetMetadataDir() const override { return "/metadata/ota"s; }
-    std::string GetSlotSuffix() const override { return fs_mgr_get_slot_suffix(); }
-    std::string GetOtherSlotSuffix() const override { return fs_mgr_get_other_slot_suffix(); }
-    const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const { return opener_; }
-    std::string GetSuperDevice(uint32_t slot) const override {
-        return fs_mgr_get_super_partition_name(slot);
-    }
-    bool IsOverlayfsSetup() const override { return fs_mgr_overlayfs_is_setup(); }
-    bool SetBootControlMergeStatus(MergeStatus status) override;
-    bool IsRecovery() const override { return kIsRecovery; }
-
-  private:
-    android::fs_mgr::PartitionOpener opener_;
-#ifdef LIBSNAPSHOT_USE_HAL
-    android::sp<android::hardware::boot::V1_1::IBootControl> boot_control_;
-#endif
-};
-
-bool DeviceInfo::SetBootControlMergeStatus([[maybe_unused]] MergeStatus status) {
-#ifdef LIBSNAPSHOT_USE_HAL
-    if (!boot_control_) {
-        auto hal = android::hardware::boot::V1_0::IBootControl::getService();
-        if (!hal) {
-            LOG(ERROR) << "Could not find IBootControl HAL";
-            return false;
-        }
-        boot_control_ = android::hardware::boot::V1_1::IBootControl::castFrom(hal);
-        if (!boot_control_) {
-            LOG(ERROR) << "Could not find IBootControl 1.1 HAL";
-            return false;
-        }
-    }
-    if (!boot_control_->setSnapshotMergeStatus(status)) {
-        LOG(ERROR) << "Unable to set the snapshot merge status";
-        return false;
-    }
-    return true;
-#else
-    return false;
-#endif
-}
 
 // Note: IImageManager is an incomplete type in the header, so the default
 // destructor doesn't work.
@@ -512,6 +458,14 @@ bool SnapshotManager::DeleteSnapshot(LockedFile* lock, const std::string& name) 
         return false;
     }
 
+    // We can't delete snapshots in recovery. The only way we'd try is it we're
+    // completing or canceling a merge in preparation for a data wipe, in which
+    // case, we don't care if the file sticks around.
+    if (device_->IsRecovery()) {
+        LOG(INFO) << "Skipping delete of snapshot " << name << " in recovery.";
+        return true;
+    }
+
     auto cow_image_name = GetCowImageDeviceName(name);
     if (images_->BackingImageExists(cow_image_name)) {
         if (!images_->DeleteBackingImage(cow_image_name)) {
@@ -744,7 +698,7 @@ bool SnapshotManager::QuerySnapshotStatus(const std::string& dm_name, std::strin
 // Note that when a merge fails, we will *always* try again to complete the
 // merge each time the device boots. There is no harm in doing so, and if
 // the problem was transient, we might manage to get a new outcome.
-UpdateState SnapshotManager::ProcessUpdateState() {
+UpdateState SnapshotManager::ProcessUpdateState(const std::function<void()>& callback) {
     while (true) {
         UpdateState state = CheckMergeState();
         if (state == UpdateState::MergeFailed) {
@@ -754,6 +708,10 @@ UpdateState SnapshotManager::ProcessUpdateState() {
             // Either there is no merge, or the merge was finished, so no need
             // to keep waiting.
             return state;
+        }
+
+        if (callback) {
+            callback();
         }
 
         // This wait is not super time sensitive, so we have a relatively
@@ -1718,9 +1676,9 @@ bool SnapshotManager::WriteUpdateState(LockedFile* file, UpdateState state) {
         case UpdateState::None:
         case UpdateState::MergeNeedsReboot:
         case UpdateState::MergeCompleted:
+        case UpdateState::Initiated:
             merge_status = MergeStatus::NONE;
             break;
-        case UpdateState::Initiated:
         case UpdateState::Unverified:
             merge_status = MergeStatus::SNAPSHOTTED;
             break;
@@ -2119,6 +2077,27 @@ bool SnapshotManager::UnmapUpdateSnapshot(const std::string& target_partition_na
     return UnmapPartitionWithSnapshot(lock.get(), target_partition_name);
 }
 
+bool SnapshotManager::UnmapAllPartitions() {
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    const auto& opener = device_->GetPartitionOpener();
+    uint32_t slot = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+    auto super_device = device_->GetSuperDevice(slot);
+    auto metadata = android::fs_mgr::ReadMetadata(opener, super_device, slot);
+    if (!metadata) {
+        LOG(ERROR) << "Could not read dynamic partition metadata for device: " << super_device;
+        return false;
+    }
+
+    bool ok = true;
+    for (const auto& partition : metadata->partitions) {
+        auto partition_name = GetPartitionName(partition);
+        ok &= UnmapPartitionWithSnapshot(lock.get(), partition_name);
+    }
+    return ok;
+}
+
 bool SnapshotManager::Dump(std::ostream& os) {
     // Don't actually lock. Dump() is for debugging purposes only, so it is okay
     // if it is racy.
@@ -2190,6 +2169,76 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
 
     LOG(INFO) << "Merge finished with state \"" << state << "\".";
     return state;
+}
+
+bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callback) {
+    if (!device_->IsRecovery()) {
+        LOG(ERROR) << "Data wipes are only allowed in recovery.";
+        return false;
+    }
+
+    auto mount = EnsureMetadataMounted();
+    if (!mount || !mount->HasDevice()) {
+        // We allow the wipe to continue, because if we can't mount /metadata,
+        // it is unlikely the device would have booted anyway. If there is no
+        // metadata partition, then the device predates Virtual A/B.
+        return true;
+    }
+
+    // Check this early, so we don't accidentally start trying to populate
+    // the state file in recovery. Note we don't call GetUpdateState since
+    // we want errors in acquiring the lock to be propagated, instead of
+    // returning UpdateState::None.
+    auto state_file = GetStateFilePath();
+    if (access(state_file.c_str(), F_OK) != 0 && errno == ENOENT) {
+        return true;
+    }
+
+    auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+    auto super_path = device_->GetSuperDevice(slot_number);
+    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+        LOG(ERROR) << "Unable to map partitions to complete merge.";
+        return false;
+    }
+
+    UpdateState state = ProcessUpdateState(callback);
+    LOG(INFO) << "Update state in recovery: " << state;
+    switch (state) {
+        case UpdateState::MergeFailed:
+            LOG(ERROR) << "Unrecoverable merge failure detected.";
+            return false;
+        case UpdateState::Unverified: {
+            // If an OTA was just applied but has not yet started merging, we
+            // have no choice but to revert slots, because the current slot will
+            // immediately become unbootable. Rather than wait for the device
+            // to reboot N times until a rollback, we proactively disable the
+            // new slot instead.
+            //
+            // Since the rollback is inevitable, we don't treat a HAL failure
+            // as an error here.
+            std::string old_slot;
+            auto boot_file = GetSnapshotBootIndicatorPath();
+            if (android::base::ReadFileToString(boot_file, &old_slot) &&
+                device_->GetSlotSuffix() != old_slot) {
+                LOG(ERROR) << "Reverting to slot " << old_slot << " since update will be deleted.";
+                device_->SetSlotAsUnbootable(slot_number);
+            }
+            break;
+        }
+        case UpdateState::MergeNeedsReboot:
+            // We shouldn't get here, because nothing is depending on
+            // logical partitions.
+            LOG(ERROR) << "Unexpected merge-needs-reboot state in recovery.";
+            break;
+        default:
+            break;
+    }
+
+    // Nothing should be depending on partitions now, so unmap them all.
+    if (!UnmapAllPartitions()) {
+        LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
+    }
+    return true;
 }
 
 }  // namespace snapshot

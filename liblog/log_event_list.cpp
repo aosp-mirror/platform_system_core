@@ -47,9 +47,6 @@ struct android_log_context_internal {
   uint8_t storage[LOGGER_ENTRY_MAX_PAYLOAD];
 };
 
-// TODO(tomcherry): real C++ structs.
-typedef struct android_log_context_internal android_log_context_internal;
-
 static void init_context(android_log_context_internal* context, uint32_t tag) {
   context->tag = tag;
   context->read_write_flag = kAndroidLoggerWrite;
@@ -110,11 +107,9 @@ int android_log_destroy(android_log_context* ctx) {
   return 0;
 }
 
-int android_log_reset(android_log_context ctx) {
-  android_log_context_internal* context;
+int android_log_reset(android_log_context context) {
   uint32_t tag;
 
-  context = (android_log_context_internal*)ctx;
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -126,10 +121,7 @@ int android_log_reset(android_log_context ctx) {
   return 0;
 }
 
-int android_log_parser_reset(android_log_context ctx, const char* msg, size_t len) {
-  android_log_context_internal* context;
-
-  context = (android_log_context_internal*)ctx;
+int android_log_parser_reset(android_log_context context, const char* msg, size_t len) {
   if (!context || (kAndroidLoggerRead != context->read_write_flag)) {
     return -EBADF;
   }
@@ -140,10 +132,7 @@ int android_log_parser_reset(android_log_context ctx, const char* msg, size_t le
   return 0;
 }
 
-int android_log_write_list_begin(android_log_context ctx) {
-  android_log_context_internal* context;
-
-  context = (android_log_context_internal*)ctx;
+int android_log_write_list_begin(android_log_context context) {
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -174,8 +163,7 @@ int android_log_write_list_begin(android_log_context ctx) {
   return 0;
 }
 
-int android_log_write_int32(android_log_context ctx, int32_t value) {
-  android_log_context_internal* context = (android_log_context_internal*)ctx;
+int android_log_write_int32(android_log_context context, int32_t value) {
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -195,8 +183,7 @@ int android_log_write_int32(android_log_context ctx, int32_t value) {
   return 0;
 }
 
-int android_log_write_int64(android_log_context ctx, int64_t value) {
-  android_log_context_internal* context = (android_log_context_internal*)ctx;
+int android_log_write_int64(android_log_context context, int64_t value) {
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -216,8 +203,7 @@ int android_log_write_int64(android_log_context ctx, int64_t value) {
   return 0;
 }
 
-int android_log_write_string8_len(android_log_context ctx, const char* value, size_t maxlen) {
-  android_log_context_internal* context = (android_log_context_internal*)ctx;
+int android_log_write_string8_len(android_log_context context, const char* value, size_t maxlen) {
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -252,8 +238,7 @@ int android_log_write_string8(android_log_context ctx, const char* value) {
   return android_log_write_string8_len(ctx, value, MAX_EVENT_PAYLOAD);
 }
 
-int android_log_write_float32(android_log_context ctx, float value) {
-  android_log_context_internal* context = (android_log_context_internal*)ctx;
+int android_log_write_float32(android_log_context context, float value) {
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -273,10 +258,7 @@ int android_log_write_float32(android_log_context ctx, float value) {
   return 0;
 }
 
-int android_log_write_list_end(android_log_context ctx) {
-  android_log_context_internal* context;
-
-  context = (android_log_context_internal*)ctx;
+int android_log_write_list_end(android_log_context context) {
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -303,8 +285,7 @@ int android_log_write_list_end(android_log_context ctx) {
 /*
  * Logs the list of elements to the event log.
  */
-int android_log_write_list(android_log_context ctx, log_id_t id) {
-  android_log_context_internal* context;
+int android_log_write_list(android_log_context context, log_id_t id) {
   const char* msg;
   ssize_t len;
 
@@ -312,7 +293,6 @@ int android_log_write_list(android_log_context ctx, log_id_t id) {
     return -EINVAL;
   }
 
-  context = (android_log_context_internal*)ctx;
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -337,12 +317,10 @@ int android_log_write_list(android_log_context ctx, log_id_t id) {
                                      : __android_log_security_bwrite(context->tag, msg, len));
 }
 
-int android_log_write_list_buffer(android_log_context ctx, const char** buffer) {
-  android_log_context_internal* context;
+int android_log_write_list_buffer(android_log_context context, const char** buffer) {
   const char* msg;
   ssize_t len;
 
-  context = (android_log_context_internal*)ctx;
   if (!context || (kAndroidLoggerWrite != context->read_write_flag)) {
     return -EBADF;
   }
@@ -375,12 +353,10 @@ int android_log_write_list_buffer(android_log_context ctx, const char** buffer) 
  * this and continues to call this function, the behavior is undefined
  * (although it won't crash).
  */
-static android_log_list_element android_log_read_next_internal(android_log_context ctx, int peek) {
+static android_log_list_element android_log_read_next_internal(android_log_context context,
+                                                               int peek) {
   android_log_list_element elem;
   unsigned pos;
-  android_log_context_internal* context;
-
-  context = (android_log_context_internal*)ctx;
 
   memset(&elem, 0, sizeof(elem));
 
