@@ -110,7 +110,7 @@ std::unique_ptr<LpMetadata> ReadFromImageFile(const std::string& image_file) {
     return ReadFromImageFile(fd);
 }
 
-bool WriteToImageFile(int fd, const LpMetadata& input) {
+bool WriteToImageFile(borrowed_fd fd, const LpMetadata& input) {
     std::string geometry = SerializeGeometry(input.geometry);
     std::string metadata = SerializeMetadata(input);
 
