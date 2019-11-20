@@ -88,6 +88,8 @@ extern int adb_mkdir(const std::string& path, int mode);
 #undef mkdir
 #define mkdir ___xxx_mkdir
 
+extern int adb_rename(const char* oldpath, const char* newpath);
+
 // See the comments for the !defined(_WIN32) versions of adb_*().
 extern int adb_open(const char* path, int options);
 extern int adb_creat(const char* path, int mode);
@@ -100,6 +102,9 @@ extern int adb_shutdown(borrowed_fd fd, int direction = SHUT_RDWR);
 extern int adb_close(int fd);
 extern int adb_register_socket(SOCKET s);
 extern HANDLE adb_get_os_handle(borrowed_fd fd);
+
+extern int adb_gethostname(char* name, size_t len);
+extern int adb_getlogin_r(char* buf, size_t bufsize);
 
 // See the comments for the !defined(_WIN32) version of unix_close().
 static __inline__ int unix_close(int fd) {
@@ -461,6 +466,14 @@ __inline__ int adb_register_socket(int s) {
     return s;
 }
 
+static __inline__ int adb_gethostname(char* name, size_t len) {
+    return gethostname(name, len);
+}
+
+static __inline__ int adb_getlogin_r(char* buf, size_t bufsize) {
+    return getlogin_r(buf, bufsize);
+}
+
 static __inline__ int adb_read(borrowed_fd fd, void* buf, size_t len) {
     return TEMP_FAILURE_RETRY(read(fd.get(), buf, len));
 }
@@ -636,6 +649,10 @@ static __inline__ int adb_mkdir(const std::string& path, int mode) {
 
 #undef mkdir
 #define mkdir ___xxx_mkdir
+
+static __inline__ int adb_rename(const char* oldpath, const char* newpath) {
+    return rename(oldpath, newpath);
+}
 
 static __inline__ int adb_is_absolute_host_path(const char* path) {
     return path[0] == '/';

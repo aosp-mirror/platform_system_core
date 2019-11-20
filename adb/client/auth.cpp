@@ -279,6 +279,28 @@ static bool pubkey_from_privkey(std::string* out, const std::string& path) {
     return CalculatePublicKey(out, privkey.get());
 }
 
+bssl::UniquePtr<EVP_PKEY> adb_auth_get_user_privkey() {
+    std::string path = get_user_key_path();
+    if (path.empty()) {
+        PLOG(ERROR) << "Error getting user key filename";
+        return nullptr;
+    }
+
+    std::shared_ptr<RSA> rsa_privkey = read_key_file(path);
+    if (!rsa_privkey) {
+        return nullptr;
+    }
+
+    bssl::UniquePtr<EVP_PKEY> pkey(EVP_PKEY_new());
+    if (!pkey) {
+        LOG(ERROR) << "Failed to allocate key";
+        return nullptr;
+    }
+
+    EVP_PKEY_set1_RSA(pkey.get(), rsa_privkey.get());
+    return pkey;
+}
+
 std::string adb_auth_get_userkey() {
     std::string path = get_user_key_path();
     if (path.empty()) {

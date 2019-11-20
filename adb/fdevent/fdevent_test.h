@@ -48,6 +48,12 @@ class FdeventTest : public ::testing::Test {
   protected:
     unique_fd dummy;
 
+    ~FdeventTest() {
+        if (thread_.joinable()) {
+            TerminateThread();
+        }
+    }
+
     static void SetUpTestCase() {
 #if !defined(_WIN32)
         ASSERT_NE(SIG_ERR, signal(SIGPIPE, SIG_IGN));

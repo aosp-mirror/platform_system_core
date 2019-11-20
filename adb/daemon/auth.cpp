@@ -35,10 +35,12 @@
 #include <openssl/obj_mac.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
+#include <openssl/ssl.h>
 
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_io.h"
+#include "adb_wifi.h"
 #include "fdevent/fdevent.h"
 #include "transport.h"
 #include "types.h"
@@ -159,11 +161,20 @@ static void adbd_auth_key_authorized(void* arg, uint64_t id) {
     });
 }
 
+static void adbd_key_removed(const char* public_key, size_t len) {
+    // The framework removed the key from its keystore. We need to disconnect all
+    // devices using that key. Search by t->auth_key
+    std::string_view auth_key(public_key, len);
+    kick_all_transports_by_auth_key(auth_key);
+}
+
 void adbd_auth_init(void) {
     AdbdAuthCallbacksV1 cb;
     cb.version = 1;
     cb.key_authorized = adbd_auth_key_authorized;
+    cb.key_removed = adbd_key_removed;
     auth_ctx = adbd_auth_new(&cb);
+    adbd_wifi_init(auth_ctx);
     std::thread([]() {
         adb_thread_setname("adbd auth");
         adbd_auth_run(auth_ctx);
