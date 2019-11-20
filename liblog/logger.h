@@ -85,9 +85,9 @@ struct logger_list {
 // bits 0-2: the decimal value of the log buffer.
 // Other bits are unused.
 
-#define LOGGER_LOGD (1 << 31)
-#define LOGGER_PMSG (1 << 30)
-#define LOGGER_LOG_ID_MASK ((1 << 3) - 1)
+#define LOGGER_LOGD (1U << 31)
+#define LOGGER_PMSG (1U << 30)
+#define LOGGER_LOG_ID_MASK ((1U << 3) - 1)
 
 inline bool android_logger_is_logd(struct logger* logger) {
   return reinterpret_cast<uintptr_t>(logger) & LOGGER_LOGD;
