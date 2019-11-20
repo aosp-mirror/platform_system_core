@@ -101,17 +101,12 @@ void fastdeploy_set_agent_update_strategy(FastDeploy_AgentUpdateStrategy agent_u
 
 static void push_to_device(const void* data, size_t byte_count, const char* dst, bool sync) {
     std::vector<const char*> srcs;
-    {
-        TemporaryFile temp;
-        android::base::WriteFully(temp.fd, data, byte_count);
-        srcs.push_back(temp.path);
-
-        // On Windows, the file needs to be flushed before pushing to device.
-        // closing the file flushes its content, but we still need to remove it after push.
-        // FileDeleter does exactly that.
-        temp.DoNotRemove();
-    }
-    FileDeleter temp_deleter(srcs.back());
+    TemporaryFile tf;
+    android::base::WriteFully(tf.fd, data, byte_count);
+    srcs.push_back(tf.path);
+    // On Windows, the file needs to be flushed before pushing to device,
+    // but can't be removed until after the push.
+    unix_close(tf.release());
 
     if (!do_sync_push(srcs, dst, sync)) {
         error_exit("Failed to push fastdeploy agent to device.");

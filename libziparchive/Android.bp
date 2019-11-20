@@ -196,4 +196,5 @@ cc_fuzz {
     srcs: ["libziparchive_fuzzer.cpp"],
     static_libs: ["libziparchive", "libbase", "libz", "liblog"],
     host_supported: true,
+    corpus: ["testdata/*"],
 }

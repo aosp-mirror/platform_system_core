@@ -73,12 +73,25 @@ static std::optional<T> mapSysfsString(const char* str, SysfsStringEnumMap<T> ma
     return std::nullopt;
 }
 
+static void initHealthInfo(HealthInfo_2_1* health_info_2_1) {
+    *health_info_2_1 = HealthInfo_2_1{};
+
+    // HIDL enum values are zero initialized, so they need to be initialized
+    // properly.
+    health_info_2_1->batteryCapacityLevel = BatteryCapacityLevel::UNKNOWN;
+    auto* props = &health_info_2_1->legacy.legacy;
+    props->batteryStatus = BatteryStatus::UNKNOWN;
+    props->batteryHealth = BatteryHealth::UNKNOWN;
+}
+
 BatteryMonitor::BatteryMonitor()
     : mHealthdConfig(nullptr),
       mBatteryDevicePresent(false),
       mBatteryFixedCapacity(0),
       mBatteryFixedTemperature(0),
-      mHealthInfo(std::make_unique<HealthInfo_2_1>()) {}
+      mHealthInfo(std::make_unique<HealthInfo_2_1>()) {
+    initHealthInfo(mHealthInfo.get());
+}
 
 BatteryMonitor::~BatteryMonitor() {}
 
@@ -168,7 +181,7 @@ BatteryMonitor::PowerSupplyType BatteryMonitor::readPowerSupplyType(const String
         return ANDROID_POWER_SUPPLY_TYPE_UNKNOWN;
 
     auto ret = mapSysfsString(buf.c_str(), supplyTypeMap);
-    if (ret < 0) {
+    if (!ret) {
         KLOG_WARNING(LOG_TAG, "Unknown power supply type '%s'\n", buf.c_str());
         *ret = ANDROID_POWER_SUPPLY_TYPE_UNKNOWN;
     }
@@ -198,7 +211,7 @@ int BatteryMonitor::getIntField(const String8& path) {
 }
 
 void BatteryMonitor::updateValues(void) {
-    *mHealthInfo = HealthInfo_2_1{};
+    initHealthInfo(mHealthInfo.get());
 
     HealthInfo_1_0& props = mHealthInfo->legacy.legacy;
 

@@ -197,7 +197,10 @@ cc_library {
 
 cc_defaults {
     name: "libcutils_test_default",
-    srcs: ["sockets_test.cpp"],
+    srcs: [
+        "native_handle_test.cpp",
+        "sockets_test.cpp",
+    ],
 
     target: {
         android: {
@@ -244,6 +247,7 @@ cc_test {
     defaults: ["libcutils_test_default"],
     host_supported: true,
     shared_libs: test_libraries,
+    require_root: true,
 }
 
 cc_test {
@@ -255,6 +259,7 @@ cc_test {
         "libcgrouprc_format",
     ] + test_libraries,
     stl: "libc++_static",
+    require_root: true,
 
     target: {
         android: {

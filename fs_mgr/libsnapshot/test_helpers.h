@@ -16,6 +16,7 @@
 
 #include <optional>
 #include <string>
+#include <unordered_set>
 
 #include <android/hardware/boot/1.1/IBootControl.h>
 #include <gmock/gmock.h>
@@ -89,6 +90,12 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     }
     bool IsOverlayfsSetup() const override { return false; }
     bool IsRecovery() const override { return recovery_; }
+    bool SetSlotAsUnbootable(unsigned int slot) override {
+        unbootable_slots_.insert(slot);
+        return true;
+    }
+
+    bool IsSlotUnbootable(uint32_t slot) { return unbootable_slots_.count(slot) != 0; }
 
     void set_slot_suffix(const std::string& suffix) { slot_suffix_ = suffix; }
     void set_fake_super(const std::string& path) {
@@ -102,6 +109,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     std::unique_ptr<TestPartitionOpener> opener_;
     MergeStatus merge_status_;
     bool recovery_ = false;
+    std::unordered_set<uint32_t> unbootable_slots_;
 };
 
 class SnapshotTestPropertyFetcher : public android::fs_mgr::testing::MockPropertyFetcher {

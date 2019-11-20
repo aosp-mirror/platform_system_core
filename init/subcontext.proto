@@ -38,4 +38,6 @@ message SubcontextReply {
         Failure failure = 2;
         ExpandArgsReply expand_args_reply = 3;
     }
+
+    optional string trigger_shutdown = 4;
 }

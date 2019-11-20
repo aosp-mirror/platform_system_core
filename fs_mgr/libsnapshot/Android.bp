@@ -72,6 +72,7 @@ filegroup {
     name: "libsnapshot_sources",
     srcs: [
         "android/snapshot/snapshot.proto",
+        "device_info.cpp",
         "snapshot.cpp",
         "snapshot_metadata_updater.cpp",
         "partition_cow_creator.cpp",

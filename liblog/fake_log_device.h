@@ -29,7 +29,6 @@ int fakeLogOpen(const char* pathName);
 int fakeLogClose(int fd);
 ssize_t fakeLogWritev(int fd, const struct iovec* vector, int count);
 
-ssize_t __send_log_msg(char*, size_t);
 int __android_log_is_loggable(int prio, const char*, int def);
 int __android_log_is_loggable_len(int prio, const char*, size_t, int def);
 int __android_log_is_debuggable();

@@ -65,6 +65,7 @@ cc_defaults {
         "libavb",
         "libc++fs",
         "libcgrouprc_format",
+        "liblmkd_utils",
         "libmodprobe",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
@@ -118,6 +119,7 @@ cc_library_static {
         "init.cpp",
         "interface_utils.cpp",
         "keychords.cpp",
+        "lmkd_service.cpp",
         "modalias_handler.cpp",
         "mount_handler.cpp",
         "mount_namespace.cpp",
@@ -150,6 +152,7 @@ cc_library_static {
     whole_static_libs: [
         "libcap",
         "com.android.sysprop.apex",
+        "com.android.sysprop.init",
     ],
     header_libs: ["bootimg_headers"],
     proto: {
@@ -183,9 +186,11 @@ cc_binary {
     static_libs: ["libinit"],
     required: [
         "e2fsdroid",
+        "init.rc",
         "mke2fs",
         "sload_f2fs",
         "make_f2fs",
+        "ueventd.rc",
     ],
     srcs: ["main.cpp"],
     symlinks: ["ueventd"],
@@ -279,6 +284,8 @@ cc_binary {
     static_libs: [
         "libbase",
         "libselinux",
+        "libpropertyinfoserializer",
+        "libpropertyinfoparser",
     ],
     whole_static_libs: ["libcap"],
     shared_libs: [
@@ -302,6 +309,7 @@ cc_binary {
         "host_import_parser.cpp",
         "host_init_verifier.cpp",
         "parser.cpp",
+        "property_type.cpp",
         "rlimit_parser.cpp",
         "tokenizer.cpp",
         "service.cpp",

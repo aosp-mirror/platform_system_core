@@ -109,9 +109,10 @@ static bool MakeDirectoryHierarchy(const std::string& path) {
   return (mkdir(path.c_str(), 0777) != -1);
 }
 
-static int CompressionRatio(int64_t uncompressed, int64_t compressed) {
+static float CompressionRatio(int64_t uncompressed, int64_t compressed) {
   if (uncompressed == 0) return 0;
-  return static_cast<int>((100LL * (uncompressed - compressed)) / uncompressed);
+  return static_cast<float>(100LL * (uncompressed - compressed)) /
+         static_cast<float>(uncompressed);
 }
 
 static void MaybeShowHeader(ZipArchiveHandle zah) {
@@ -143,7 +144,7 @@ static void MaybeShowFooter() {
     if (flag_v) {
       printf(
           "--------          -------  ---                            -------\n"
-          "%8" PRId64 "         %8" PRId64 " %3d%%                            %zu file%s\n",
+          "%8" PRId64 "         %8" PRId64 " %3.0f%%                            %zu file%s\n",
           total_uncompressed_length, total_compressed_length,
           CompressionRatio(total_uncompressed_length, total_compressed_length), file_count,
           (file_count == 1) ? "" : "s");
@@ -155,7 +156,7 @@ static void MaybeShowFooter() {
     }
   } else {
     if (!flag_1 && includes.empty() && excludes.empty()) {
-      printf("%zu files, %" PRId64 " bytes uncompressed, %" PRId64 " bytes compressed: %3d%%\n",
+      printf("%zu files, %" PRId64 " bytes uncompressed, %" PRId64 " bytes compressed:  %.1f%%\n",
              file_count, total_uncompressed_length, total_compressed_length,
              CompressionRatio(total_uncompressed_length, total_compressed_length));
     }
@@ -261,7 +262,7 @@ static void ListOne(const ZipEntry& entry, const std::string& name) {
   snprintf(time, sizeof(time), "%04d-%02d-%02d %02d:%02d", t.tm_year + 1900, t.tm_mon + 1,
            t.tm_mday, t.tm_hour, t.tm_min);
   if (flag_v) {
-    printf("%8d  %s  %7d %3d%% %s %08x  %s\n", entry.uncompressed_length,
+    printf("%8d  %s  %7d %3.0f%% %s %08x  %s\n", entry.uncompressed_length,
            (entry.method == kCompressStored) ? "Stored" : "Defl:N", entry.compressed_length,
            CompressionRatio(entry.uncompressed_length, entry.compressed_length), time, entry.crc32,
            name.c_str());
@@ -447,6 +448,7 @@ int main(int argc, char* argv[]) {
 
   static const struct option opts[] = {
       {"help", no_argument, 0, 'h'},
+      {},
   };
 
   if (role == kUnzip) {
