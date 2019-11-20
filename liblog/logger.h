@@ -46,32 +46,8 @@ struct android_log_transport_write {
                size_t nr);
 };
 
-struct android_log_transport_context;
-
-struct android_log_transport_read {
-  const char* name; /* human name to describe the transport */
-
-  /* Does not cause resources to be taken */
-  int (*available)(log_id_t logId);
-  /* Release resources taken by the following interfaces */
-  void (*close)(struct logger_list* logger_list, struct android_log_transport_context* transp);
-  /*
-   * Expect all to instantiate open automagically on any call,
-   * so we do not have an explicit open call.
-   */
-  int (*read)(struct logger_list* logger_list, struct android_log_transport_context* transp,
-              struct log_msg* log_msg);
-};
-
-struct android_log_transport_context {
-  union android_log_context_union context; /* zero init per-transport context */
-
-  struct android_log_transport_read* transport;
-};
-
 struct logger_list {
-  android_log_transport_context transport_context;
-  bool transport_initialized;
+  atomic_int fd;
   int mode;
   unsigned int tail;
   log_time start;
