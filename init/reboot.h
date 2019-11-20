@@ -22,8 +22,6 @@
 namespace android {
 namespace init {
 
-static const constexpr char* kUserspaceRebootInProgress = "sys.init.userspace_reboot.in_progress";
-
 // Parses and handles a setprop sys.powerctl message.
 void HandlePowerctlMessage(const std::string& command);
 
