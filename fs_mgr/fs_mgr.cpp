@@ -86,6 +86,7 @@
 #define ZRAM_BACK_DEV   "/sys/block/zram0/backing_dev"
 
 #define SYSFS_EXT4_VERITY "/sys/fs/ext4/features/verity"
+#define SYSFS_EXT4_CASEFOLD "/sys/fs/ext4/features/casefold"
 
 // FIXME: this should be in system/extras
 #define EXT4_FEATURE_COMPAT_STABLE_INODES 0x0800
@@ -123,6 +124,7 @@ enum FsStatFlags {
     FS_STAT_SET_RESERVED_BLOCKS_FAILED = 0x20000,
     FS_STAT_ENABLE_ENCRYPTION_FAILED = 0x40000,
     FS_STAT_ENABLE_VERITY_FAILED = 0x80000,
+    FS_STAT_ENABLE_CASEFOLD_FAILED = 0x100000,
 };
 
 static void log_fs_stat(const std::string& blk_device, int fs_stat) {
@@ -344,6 +346,7 @@ static void tune_quota(const std::string& blk_device, const FstabEntry& entry,
                        const struct ext4_super_block* sb, int* fs_stat) {
     bool has_quota = (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_QUOTA)) != 0;
     bool want_quota = entry.fs_mgr_flags.quota;
+    bool want_projid = android::base::GetBoolProperty("ro.emulated_storage.projid", false);
 
     if (has_quota == want_quota) {
         return;
@@ -360,12 +363,16 @@ static void tune_quota(const std::string& blk_device, const FstabEntry& entry,
     if (want_quota) {
         LINFO << "Enabling quotas on " << blk_device;
         argv[1] = "-Oquota";
-        argv[2] = "-Qusrquota,grpquota";
+        // Once usr/grp unneeded, make just prjquota to save overhead
+        if (want_projid)
+            argv[2] = "-Qusrquota,grpquota,prjquota";
+        else
+            argv[2] = "-Qusrquota,grpquota";
         *fs_stat |= FS_STAT_QUOTA_ENABLED;
     } else {
         LINFO << "Disabling quotas on " << blk_device;
         argv[1] = "-O^quota";
-        argv[2] = "-Q^usrquota,^grpquota";
+        argv[2] = "-Q^usrquota,^grpquota,^prjquota";
     }
 
     if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
@@ -498,6 +505,42 @@ static void tune_verity(const std::string& blk_device, const FstabEntry& entry,
     }
 }
 
+// Enable casefold if needed.
+static void tune_casefold(const std::string& blk_device, const struct ext4_super_block* sb,
+                          int* fs_stat) {
+    bool has_casefold =
+            (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_CASEFOLD)) != 0;
+    bool wants_casefold = android::base::GetBoolProperty("ro.emulated_storage.casefold", false);
+
+    if (!wants_casefold || has_casefold) return;
+
+    std::string casefold_support;
+    if (!android::base::ReadFileToString(SYSFS_EXT4_CASEFOLD, &casefold_support)) {
+        LERROR << "Failed to open " << SYSFS_EXT4_CASEFOLD;
+        return;
+    }
+
+    if (!(android::base::Trim(casefold_support) == "supported")) {
+        LERROR << "Current ext4 casefolding not supported by kernel";
+        return;
+    }
+
+    if (!tune2fs_available()) {
+        LERROR << "Unable to enable ext4 casefold on " << blk_device
+               << " because " TUNE2FS_BIN " is missing";
+        return;
+    }
+
+    LINFO << "Enabling ext4 casefold on " << blk_device;
+
+    const char* argv[] = {TUNE2FS_BIN, "-O", "casefold", "-E", "encoding=utf8", blk_device.c_str()};
+    if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
+        LERROR << "Failed to run " TUNE2FS_BIN " to enable "
+               << "ext4 casefold on " << blk_device;
+        *fs_stat |= FS_STAT_ENABLE_CASEFOLD_FAILED;
+    }
+}
+
 // Read the primary superblock from an f2fs filesystem.  On failure return
 // false.  If it's not an f2fs filesystem, also set FS_STAT_INVALID_MAGIC.
 #define F2FS_BLKSIZE 4096
@@ -595,6 +638,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
             tune_reserved_size(blk_device, entry, &sb, &fs_stat);
             tune_encrypt(blk_device, entry, &sb, &fs_stat);
             tune_verity(blk_device, entry, &sb, &fs_stat);
+            tune_casefold(blk_device, &sb, &fs_stat);
         }
     }
 
