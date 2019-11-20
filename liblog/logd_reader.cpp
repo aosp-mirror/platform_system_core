@@ -392,8 +392,6 @@ static int LogdRead(struct logger_list* logger_list, struct android_log_transpor
     return ret;
   }
 
-  memset(log_msg, 0, sizeof(*log_msg));
-
   /* NOTE: SOCK_SEQPACKET guarantees we read exactly one full entry */
   ret = TEMP_FAILURE_RETRY(recv(ret, log_msg, LOGGER_ENTRY_MAX_LEN, 0));
   if ((logger_list->mode & ANDROID_LOG_NONBLOCK) && ret == 0) {
