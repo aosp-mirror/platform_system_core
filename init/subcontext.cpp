@@ -209,8 +209,12 @@ void Subcontext::Fork() {
             PLOG(FATAL) << "Could not dup child_fd";
         }
 
-        if (setexeccon(context_.c_str()) < 0) {
-            PLOG(FATAL) << "Could not set execcon for '" << context_ << "'";
+        // We don't switch contexts if we're running the unit tests.  We don't use std::optional,
+        // since we still need a real context string to pass to the builtin functions.
+        if (context_ != kTestContext) {
+            if (setexeccon(context_.c_str()) < 0) {
+                PLOG(FATAL) << "Could not set execcon for '" << context_ << "'";
+            }
         }
 
         auto init_path = GetExecutablePath();
