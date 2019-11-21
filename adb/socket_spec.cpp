@@ -272,7 +272,9 @@ int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_
         if (hostname.empty() && gListenAll) {
             result = network_inaddr_any_server(port, SOCK_STREAM, error);
         } else if (tcp_host_is_local(hostname)) {
-            result = network_loopback_server(port, SOCK_STREAM, error);
+            result = network_loopback_server(port, SOCK_STREAM, error, true);
+        } else if (hostname == "::1") {
+            result = network_loopback_server(port, SOCK_STREAM, error, false);
         } else {
             // TODO: Implement me.
             *error = "listening on specified hostname currently unsupported";

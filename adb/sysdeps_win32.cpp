@@ -920,7 +920,8 @@ static int _network_server(int port, int type, u_long interface_address, std::st
     return fd;
 }
 
-int network_loopback_server(int port, int type, std::string* error) {
+int network_loopback_server(int port, int type, std::string* error, bool prefer_ipv4) {
+    // TODO implement IPv6 support on windows
     return _network_server(port, type, INADDR_LOOPBACK, error);
 }
 
@@ -1132,7 +1133,7 @@ int adb_socketpair(int sv[2]) {
     int local_port = -1;
     std::string error;
 
-    server = network_loopback_server(0, SOCK_STREAM, &error);
+    server = network_loopback_server(0, SOCK_STREAM, &error, true);
     if (server < 0) {
         D("adb_socketpair: failed to create server: %s", error.c_str());
         goto fail;
