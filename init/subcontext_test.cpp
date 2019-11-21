@@ -39,24 +39,12 @@ using android::base::WaitForProperty;
 namespace android {
 namespace init {
 
-// I would use test fixtures, but I cannot skip the test if not root with them, so instead we have
-// this test runner.
 template <typename F>
 void RunTest(F&& test_function) {
-    if (getuid() != 0) {
-        GTEST_SKIP() << "Skipping test, must be run as root.";
-        return;
-    }
-
-    char* context;
-    ASSERT_EQ(0, getcon(&context));
-    auto context_string = std::string(context);
-    free(context);
-
-    auto subcontext = Subcontext({"dummy_path"}, context_string);
+    auto subcontext = Subcontext({"dummy_path"}, kTestContext);
     ASSERT_NE(0, subcontext.pid());
 
-    test_function(subcontext, context_string);
+    test_function(subcontext);
 
     if (subcontext.pid() > 0) {
         kill(subcontext.pid(), SIGTERM);
@@ -65,7 +53,7 @@ void RunTest(F&& test_function) {
 }
 
 TEST(subcontext, CheckDifferentPid) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto result = subcontext.Execute(std::vector<std::string>{"return_pids_as_error"});
         ASSERT_FALSE(result);
 
@@ -78,7 +66,12 @@ TEST(subcontext, CheckDifferentPid) {
 }
 
 TEST(subcontext, SetProp) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Skipping test, must be run as root.";
+        return;
+    }
+
+    RunTest([](auto& subcontext) {
         SetProperty("init.test.subcontext", "fail");
         WaitForProperty("init.test.subcontext", "fail");
 
@@ -95,7 +88,7 @@ TEST(subcontext, SetProp) {
 }
 
 TEST(subcontext, MultipleCommands) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto first_pid = subcontext.pid();
 
         auto expected_words = std::vector<std::string>{
@@ -122,7 +115,7 @@ TEST(subcontext, MultipleCommands) {
 }
 
 TEST(subcontext, RecoverAfterAbort) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto first_pid = subcontext.pid();
 
         auto result = subcontext.Execute(std::vector<std::string>{"cause_log_fatal"});
@@ -136,10 +129,10 @@ TEST(subcontext, RecoverAfterAbort) {
 }
 
 TEST(subcontext, ContextString) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto result = subcontext.Execute(std::vector<std::string>{"return_context_as_error"});
         ASSERT_FALSE(result);
-        ASSERT_EQ(context_string, result.error().message());
+        ASSERT_EQ(kTestContext, result.error().message());
     });
 }
 
@@ -147,7 +140,7 @@ TEST(subcontext, TriggerShutdown) {
     static constexpr const char kTestShutdownCommand[] = "reboot,test-shutdown-command";
     static std::string trigger_shutdown_command;
     trigger_shutdown = [](const std::string& command) { trigger_shutdown_command = command; };
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto result = subcontext.Execute(
                 std::vector<std::string>{"trigger_shutdown", kTestShutdownCommand});
         ASSERT_TRUE(result);
@@ -156,7 +149,7 @@ TEST(subcontext, TriggerShutdown) {
 }
 
 TEST(subcontext, ExpandArgs) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto args = std::vector<std::string>{
             "first",
             "${ro.hardware}",
@@ -172,7 +165,7 @@ TEST(subcontext, ExpandArgs) {
 }
 
 TEST(subcontext, ExpandArgsFailure) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto args = std::vector<std::string>{
             "first",
             "${",
