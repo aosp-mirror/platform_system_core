@@ -638,6 +638,8 @@ void LogBuffer::kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows) {
     if (stats.sizes(id) > (2 * log_buffer_size(id))) {  // +100%
         // A misbehaving or slow reader has its connection
         // dropped if we hit too much memory pressure.
+        android::prdebug("Kicking blocked reader, pid %d, from LogBuffer::kickMe()\n",
+                         me->mClient->getPid());
         me->release_Locked();
     } else if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
         // Allow a blocked WRAP timeout reader to
@@ -645,6 +647,9 @@ void LogBuffer::kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows) {
         me->triggerReader_Locked();
     } else {
         // tell slow reader to skip entries to catch up
+        android::prdebug(
+                "Skipping %lu entries from slow reader, pid %d, from LogBuffer::kickMe()\n",
+                pruneRows, me->mClient->getPid());
         me->triggerSkip_Locked(id, pruneRows);
     }
 }
@@ -1051,6 +1056,9 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
                     LogTimeEntry* entry = times->get();
                     // Killer punch
                     if (entry->isWatching(id)) {
+                        android::prdebug(
+                                "Kicking blocked reader, pid %d, from LogBuffer::clear()\n",
+                                entry->mClient->getPid());
                         entry->release_Locked();
                     }
                     times++;
