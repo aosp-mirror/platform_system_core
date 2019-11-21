@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,21 @@
  * limitations under the License.
  */
 
-#pragma once
+#include "android-base/parsebool.h"
+#include <errno.h>
 
-#include <unistd.h>
+namespace android {
+namespace base {
 
-#include "log/log_read.h"
-#include "log_portability.h"
+ParseBoolResult ParseBool(std::string_view s) {
+  if (s == "1" || s == "y" || s == "yes" || s == "on" || s == "true") {
+    return ParseBoolResult::kTrue;
+  }
+  if (s == "0" || s == "n" || s == "no" || s == "off" || s == "false") {
+    return ParseBoolResult::kFalse;
+  }
+  return ParseBoolResult::kError;
+}
 
-__BEGIN_DECLS
-
-int LogdRead(struct logger_list* logger_list, struct log_msg* log_msg);
-void LogdClose(struct logger_list* logger_list);
-
-ssize_t SendLogdControlMessage(char* buf, size_t buf_size);
-
-__END_DECLS
+}  // namespace base
+}  // namespace android

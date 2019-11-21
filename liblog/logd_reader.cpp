@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "logd_reader.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -35,38 +37,7 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "log_portability.h"
-#include "logd_reader.h"
 #include "logger.h"
-
-static int LogdAvailable(log_id_t LogId);
-static int LogdRead(struct logger_list* logger_list, struct android_log_transport_context* transp,
-                    struct log_msg* log_msg);
-static void LogdClose(struct logger_list* logger_list,
-                      struct android_log_transport_context* transp);
-
-struct android_log_transport_read logdLoggerRead = {
-    .name = "logd",
-    .available = LogdAvailable,
-    .close = LogdClose,
-    .read = LogdRead,
-};
-
-static int LogdAvailable(log_id_t logId) {
-  if (logId >= LOG_ID_MAX) {
-    return -EINVAL;
-  }
-  if (logId == LOG_ID_SECURITY) {
-    uid_t uid = __android_log_uid();
-    if (uid != AID_SYSTEM) {
-      return -EPERM;
-    }
-  }
-  if (access("/dev/socket/logdw", W_OK) == 0) {
-    return 0;
-  }
-  return -EBADF;
-}
 
 // Connects to /dev/socket/<name> and returns the associated fd or returns -1 on error.
 // O_CLOEXEC is always set.
@@ -296,15 +267,11 @@ int android_logger_set_prune_list(struct logger_list* logger_list, char* buf, si
   return check_log_success(buf, SendLogdControlMessage(buf, len));
 }
 
-static int logdOpen(struct logger_list* logger_list, struct android_log_transport_context* transp) {
+static int logdOpen(struct logger_list* logger_list) {
   char buffer[256], *cp, c;
   int ret, remaining, sock;
 
-  if (!logger_list) {
-    return -EINVAL;
-  }
-
-  sock = atomic_load(&transp->context.sock);
+  sock = atomic_load(&logger_list->fd);
   if (sock > 0) {
     return sock;
   }
@@ -377,7 +344,7 @@ static int logdOpen(struct logger_list* logger_list, struct android_log_transpor
     return ret;
   }
 
-  ret = atomic_exchange(&transp->context.sock, sock);
+  ret = atomic_exchange(&logger_list->fd, sock);
   if ((ret > 0) && (ret != sock)) {
     close(ret);
   }
@@ -385,14 +352,11 @@ static int logdOpen(struct logger_list* logger_list, struct android_log_transpor
 }
 
 /* Read from the selected logs */
-static int LogdRead(struct logger_list* logger_list, struct android_log_transport_context* transp,
-                    struct log_msg* log_msg) {
-  int ret = logdOpen(logger_list, transp);
+int LogdRead(struct logger_list* logger_list, struct log_msg* log_msg) {
+  int ret = logdOpen(logger_list);
   if (ret < 0) {
     return ret;
   }
-
-  memset(log_msg, 0, sizeof(*log_msg));
 
   /* NOTE: SOCK_SEQPACKET guarantees we read exactly one full entry */
   ret = TEMP_FAILURE_RETRY(recv(ret, log_msg, LOGGER_ENTRY_MAX_LEN, 0));
@@ -407,8 +371,8 @@ static int LogdRead(struct logger_list* logger_list, struct android_log_transpor
 }
 
 /* Close all the logs */
-static void LogdClose(struct logger_list*, struct android_log_transport_context* transp) {
-  int sock = atomic_exchange(&transp->context.sock, -1);
+void LogdClose(struct logger_list* logger_list) {
+  int sock = atomic_exchange(&logger_list->fd, -1);
   if (sock > 0) {
     close(sock);
   }

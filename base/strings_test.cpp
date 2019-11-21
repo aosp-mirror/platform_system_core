@@ -311,3 +311,46 @@ TEST(strings, ConsumeSuffix) {
   ASSERT_TRUE(android::base::ConsumeSuffix(&s, ".bar"));
   ASSERT_EQ("foo", s);
 }
+
+TEST(strings, StringReplace_false) {
+  // No change.
+  ASSERT_EQ("abcabc", android::base::StringReplace("abcabc", "z", "Z", false));
+  ASSERT_EQ("", android::base::StringReplace("", "z", "Z", false));
+  ASSERT_EQ("abcabc", android::base::StringReplace("abcabc", "", "Z", false));
+
+  // Equal lengths.
+  ASSERT_EQ("Abcabc", android::base::StringReplace("abcabc", "a", "A", false));
+  ASSERT_EQ("aBcabc", android::base::StringReplace("abcabc", "b", "B", false));
+  ASSERT_EQ("abCabc", android::base::StringReplace("abcabc", "c", "C", false));
+
+  // Longer replacement.
+  ASSERT_EQ("foobcabc", android::base::StringReplace("abcabc", "a", "foo", false));
+  ASSERT_EQ("afoocabc", android::base::StringReplace("abcabc", "b", "foo", false));
+  ASSERT_EQ("abfooabc", android::base::StringReplace("abcabc", "c", "foo", false));
+
+  // Shorter replacement.
+  ASSERT_EQ("xxyz", android::base::StringReplace("abcxyz", "abc", "x", false));
+  ASSERT_EQ("axyz", android::base::StringReplace("abcxyz", "bcx", "x", false));
+  ASSERT_EQ("abcx", android::base::StringReplace("abcxyz", "xyz", "x", false));
+}
+
+TEST(strings, StringReplace_true) {
+  // No change.
+  ASSERT_EQ("abcabc", android::base::StringReplace("abcabc", "z", "Z", true));
+  ASSERT_EQ("", android::base::StringReplace("", "z", "Z", true));
+  ASSERT_EQ("abcabc", android::base::StringReplace("abcabc", "", "Z", true));
+
+  // Equal lengths.
+  ASSERT_EQ("AbcAbc", android::base::StringReplace("abcabc", "a", "A", true));
+  ASSERT_EQ("aBcaBc", android::base::StringReplace("abcabc", "b", "B", true));
+  ASSERT_EQ("abCabC", android::base::StringReplace("abcabc", "c", "C", true));
+
+  // Longer replacement.
+  ASSERT_EQ("foobcfoobc", android::base::StringReplace("abcabc", "a", "foo", true));
+  ASSERT_EQ("afoocafooc", android::base::StringReplace("abcabc", "b", "foo", true));
+  ASSERT_EQ("abfooabfoo", android::base::StringReplace("abcabc", "c", "foo", true));
+
+  // Shorter replacement.
+  ASSERT_EQ("xxyzx", android::base::StringReplace("abcxyzabc", "abc", "x", true));
+  ASSERT_EQ("<xx>", android::base::StringReplace("<abcabc>", "abc", "x", true));
+}
