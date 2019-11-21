@@ -107,9 +107,7 @@ class Unwinder {
 
   void SetDisplayBuildID(bool display_build_id) { display_build_id_ = display_build_id; }
 
-#if !defined(NO_LIBDEXFILE_SUPPORT)
   void SetDexFiles(DexFiles* dex_files, ArchEnum arch);
-#endif
 
   bool elf_from_memory_not_file() { return elf_from_memory_not_file_; }
 
@@ -128,9 +126,7 @@ class Unwinder {
   std::vector<FrameData> frames_;
   std::shared_ptr<Memory> process_memory_;
   JitDebug* jit_debug_ = nullptr;
-#if !defined(NO_LIBDEXFILE_SUPPORT)
   DexFiles* dex_files_ = nullptr;
-#endif
   bool resolve_names_ = true;
   bool embedded_soname_ = true;
   bool display_build_id_ = false;
@@ -151,9 +147,7 @@ class UnwinderFromPid : public Unwinder {
   pid_t pid_;
   std::unique_ptr<Maps> maps_ptr_;
   std::unique_ptr<JitDebug> jit_debug_ptr_;
-#if !defined(NO_LIBDEXFILE_SUPPORT)
   std::unique_ptr<DexFiles> dex_files_ptr_;
-#endif
 };
 
 }  // namespace unwindstack
