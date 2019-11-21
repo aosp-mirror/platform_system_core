@@ -32,6 +32,7 @@ namespace init {
 
 static constexpr const char kInitContext[] = "u:r:init:s0";
 static constexpr const char kVendorContext[] = "u:r:vendor_init:s0";
+static constexpr const char kTestContext[] = "test-test-test";
 
 class Subcontext {
   public:
