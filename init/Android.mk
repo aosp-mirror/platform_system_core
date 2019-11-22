@@ -75,7 +75,6 @@ LOCAL_REQUIRED_MODULES := \
 
 # Set up the same mount points on the ramdisk that system-as-root contains.
 LOCAL_POST_INSTALL_CMD := mkdir -p \
-    $(TARGET_RAMDISK_OUT)/apex \
     $(TARGET_RAMDISK_OUT)/debug_ramdisk \
     $(TARGET_RAMDISK_OUT)/dev \
     $(TARGET_RAMDISK_OUT)/mnt \
