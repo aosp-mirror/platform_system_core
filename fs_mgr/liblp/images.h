@@ -29,8 +29,6 @@ namespace fs_mgr {
 // Helper function to serialize geometry and metadata to a normal file, for
 // flashing or debugging.
 std::unique_ptr<LpMetadata> ReadFromImageFile(int fd);
-bool WriteToImageFile(const char* file, const LpMetadata& metadata);
-bool WriteToImageFile(int fd, const LpMetadata& metadata);
 
 // We use an object to build the image file since it requires that data
 // pointers be held alive until the sparse file is destroyed. It's easier
