@@ -1351,38 +1351,9 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
     return ret;
 }
 
-static std::string GetUserdataBlockDevice() {
-    Fstab fstab;
-    if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
-        LERROR << "Failed to read /proc/mounts";
-        return "";
-    }
-    auto entry = GetEntryForMountPoint(&fstab, "/data");
-    if (entry == nullptr) {
-        LERROR << "Didn't find /data mount point in /proc/mounts";
-        return "";
-    }
-    return entry->blk_device;
-}
-
 int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
-    const std::string& block_device = GetUserdataBlockDevice();
-    LINFO << "Userdata is mounted on " << block_device;
-    auto entry = std::find_if(fstab->begin(), fstab->end(), [&block_device](const FstabEntry& e) {
-        if (e.mount_point != "/data") {
-            return false;
-        }
-        if (e.blk_device == block_device) {
-            return true;
-        }
-        DeviceMapper& dm = DeviceMapper::Instance();
-        std::string path;
-        if (!dm.GetDmDevicePathByName("userdata", &path)) {
-            return false;
-        }
-        return path == block_device;
-    });
-    if (entry == fstab->end()) {
+    auto entry = GetMountedEntryForUserdata(fstab);
+    if (entry == nullptr) {
         LERROR << "Can't find /data in fstab";
         return -1;
     }
