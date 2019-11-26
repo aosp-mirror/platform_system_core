@@ -1284,6 +1284,8 @@ TEST_F(SnapshotUpdateTest, DataWipeRollbackInRecovery) {
     auto new_sm = SnapshotManager::NewForFirstStageMount(test_device);
 
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
+    // Manually mount metadata so that we can call GetUpdateState() below.
+    MountMetadata();
     EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     EXPECT_TRUE(test_device->IsSlotUnbootable(1));
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
