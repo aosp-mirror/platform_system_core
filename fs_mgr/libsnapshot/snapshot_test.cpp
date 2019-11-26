@@ -71,6 +71,8 @@ std::unique_ptr<SnapshotManager> sm;
 TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
 
+void MountMetadata();
+
 class SnapshotTest : public ::testing::Test {
   public:
     SnapshotTest() : dm_(DeviceMapper::Instance()) {}
@@ -87,7 +89,7 @@ class SnapshotTest : public ::testing::Test {
         InitializeState();
         CleanupTestArtifacts();
         FormatFakeSuper();
-
+        MountMetadata();
         ASSERT_TRUE(sm->BeginUpdate());
     }
 
@@ -662,6 +664,7 @@ class SnapshotUpdateTest : public SnapshotTest {
         if (!image_manager_) {
             InitializeState();
         }
+        MountMetadata();
         for (const auto& suffix : {"_a", "_b"}) {
             test_device->set_slot_suffix(suffix);
             EXPECT_TRUE(sm->CancelUpdate()) << suffix;
@@ -1205,6 +1208,10 @@ class MetadataMountedTest : public SnapshotUpdateTest {
     std::string metadata_dir_;
     Fstab fstab_;
 };
+
+void MountMetadata() {
+    MetadataMountedTest().TearDown();
+}
 
 TEST_F(MetadataMountedTest, Android) {
     auto device = sm->EnsureMetadataMounted();
