@@ -577,7 +577,7 @@ TEST_F(SnapshotTest, UpdateBootControlHal) {
     ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
 
     ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Initiated));
-    ASSERT_EQ(test_device->merge_status(), MergeStatus::SNAPSHOTTED);
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
 
     ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Unverified));
     ASSERT_EQ(test_device->merge_status(), MergeStatus::SNAPSHOTTED);
