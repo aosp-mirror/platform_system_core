@@ -20,8 +20,6 @@
 #include <time.h>
 #include "include/stats_event_list.h"
 
-#define byte unsigned char
-
 #define STATS_EVENT_TAG 1937006964
 #define LOGGER_ENTRY_MAX_PAYLOAD 4068
 // Max payload size is 4 bytes less as 4 bytes are reserved for stats_eventTag.
@@ -30,9 +28,9 @@
 
 /* POSITIONS */
 #define POS_NUM_ELEMENTS 1
-#define POS_TIMESTAMP (POS_NUM_ELEMENTS + 1)
-#define POS_ATOM_ID (POS_TIMESTAMP + sizeof(byte) + sizeof(uint64_t))
-#define POS_FIRST_FIELD (POS_ATOM_ID + sizeof(byte) + sizeof(uint32_t))
+#define POS_TIMESTAMP (POS_NUM_ELEMENTS + sizeof(uint8_t))
+#define POS_ATOM_ID (POS_TIMESTAMP + sizeof(uint8_t) + sizeof(uint64_t))
+#define POS_FIRST_FIELD (POS_ATOM_ID + sizeof(uint8_t) + sizeof(uint32_t))
 
 /* LIMITS */
 #define MAX_ANNOTATION_COUNT 15
@@ -41,16 +39,14 @@
 // The stats_event struct holds the serialized encoding of an event
 // within a buf. Also includes other required fields.
 struct stats_event {
-    byte buf[MAX_EVENT_PAYLOAD];
-    size_t bufPos;        // current write position within the buf
+    uint8_t buf[MAX_EVENT_PAYLOAD];
     size_t lastFieldPos;  // location of last field within the buf
-    byte lastFieldType;   // type of last field
     size_t size;          // number of valid bytes within buffer
     uint32_t numElements;
     uint32_t atomId;
-    uint64_t timestampNs;
     uint32_t errors;
     uint32_t tag;
+    bool built;
 };
 
 static int64_t get_elapsed_realtime_ns() {
@@ -65,184 +61,184 @@ struct stats_event* stats_event_obtain() {
 
     memset(event->buf, 0, MAX_EVENT_PAYLOAD);
     event->buf[0] = OBJECT_TYPE;
-
-    event->bufPos = POS_FIRST_FIELD;
-    event->lastFieldPos = 0;
-    event->lastFieldType = OBJECT_TYPE;
-    event->size = 0;
-    event->numElements = 0;
     event->atomId = 0;
-    event->timestampNs = get_elapsed_realtime_ns();
     event->errors = 0;
     event->tag = STATS_EVENT_TAG;
+    event->built = false;
+
+    // place the timestamp
+    uint64_t timestampNs = get_elapsed_realtime_ns();
+    event->buf[POS_TIMESTAMP] = INT64_TYPE;
+    memcpy(&event->buf[POS_TIMESTAMP + sizeof(uint8_t)], &timestampNs, sizeof(timestampNs));
+
+    event->numElements = 1;
+    event->lastFieldPos = 0;  // 0 since we haven't written a field yet
+    event->size = POS_FIRST_FIELD;
+
     return event;
 }
 
 void stats_event_release(struct stats_event* event) {
-    free(event);  // free is a no-op if event is NULL
-}
-
-// Should only be used for testing
-void stats_event_set_timestamp_ns(struct stats_event* event, uint64_t timestampNs) {
-    if (event) event->timestampNs = timestampNs;
+    free(event);
 }
 
 void stats_event_set_atom_id(struct stats_event* event, uint32_t atomId) {
-    if (event) event->atomId = atomId;
+    event->atomId = atomId;
+    event->buf[POS_ATOM_ID] = INT32_TYPE;
+    memcpy(&event->buf[POS_ATOM_ID + sizeof(uint8_t)], &atomId, sizeof(atomId));
+    event->numElements++;
 }
 
 // Side-effect: modifies event->errors if the buffer would overflow
 static bool overflows(struct stats_event* event, size_t size) {
-    if (event->bufPos + size > MAX_EVENT_PAYLOAD) {
+    if (event->size + size > MAX_EVENT_PAYLOAD) {
         event->errors |= ERROR_OVERFLOW;
         return true;
     }
     return false;
 }
 
-static size_t put_byte(struct stats_event* event, byte value) {
+// Side-effect: all append functions increment event->size if there is
+// sufficient space within the buffer to place the value
+static void append_byte(struct stats_event* event, uint8_t value) {
     if (!overflows(event, sizeof(value))) {
-        event->buf[event->bufPos] = value;
-        return sizeof(byte);
+        event->buf[event->size] = value;
+        event->size += sizeof(value);
     }
-    return 0;
 }
 
-static size_t put_bool(struct stats_event* event, bool value) {
-    return put_byte(event, (byte)value);
+static void append_bool(struct stats_event* event, bool value) {
+    append_byte(event, (uint8_t)value);
 }
 
-static size_t put_int32(struct stats_event* event, int32_t value) {
+static void append_int32(struct stats_event* event, int32_t value) {
     if (!overflows(event, sizeof(value))) {
-        memcpy(&event->buf[event->bufPos], &value, sizeof(int32_t));
-        return sizeof(int32_t);
+        memcpy(&event->buf[event->size], &value, sizeof(value));
+        event->size += sizeof(value);
     }
-    return 0;
 }
 
-static size_t put_int64(struct stats_event* event, int64_t value) {
+static void append_int64(struct stats_event* event, int64_t value) {
     if (!overflows(event, sizeof(value))) {
-        memcpy(&event->buf[event->bufPos], &value, sizeof(int64_t));
-        return sizeof(int64_t);
+        memcpy(&event->buf[event->size], &value, sizeof(value));
+        event->size += sizeof(value);
     }
-    return 0;
 }
 
-static size_t put_float(struct stats_event* event, float value) {
+static void append_float(struct stats_event* event, float value) {
     if (!overflows(event, sizeof(value))) {
-        memcpy(&event->buf[event->bufPos], &value, sizeof(float));
-        return sizeof(float);
+        memcpy(&event->buf[event->size], &value, sizeof(value));
+        event->size += sizeof(float);
     }
-    return 0;
 }
 
-static size_t put_byte_array(struct stats_event* event, void* buf, size_t size) {
+static void append_byte_array(struct stats_event* event, uint8_t* buf, size_t size) {
     if (!overflows(event, size)) {
-        memcpy(&event->buf[event->bufPos], buf, size);
-        return size;
+        memcpy(&event->buf[event->size], buf, size);
+        event->size += size;
     }
-    return 0;
 }
 
-static void start_field(struct stats_event* event, byte typeId) {
-    event->lastFieldPos = event->bufPos;
-    event->lastFieldType = typeId;
-    event->bufPos += put_byte(event, typeId);
+// Side-effect: modifies event->errors if buf is not properly null-terminated
+static void append_string(struct stats_event* event, const char* buf) {
+    size_t size = strnlen(buf, MAX_EVENT_PAYLOAD);
+    if (event->errors) {
+        event->errors |= ERROR_STRING_NOT_NULL_TERMINATED;
+        return;
+    }
+
+    append_int32(event, size);
+    append_byte_array(event, (uint8_t*)buf, size);
+}
+
+static void start_field(struct stats_event* event, uint8_t typeId) {
+    event->lastFieldPos = event->size;
+    append_byte(event, typeId);
     event->numElements++;
 }
 
 void stats_event_write_int32(struct stats_event* event, int32_t value) {
-    if (!event || event->errors) return;
+    if (event->errors) return;
 
     start_field(event, INT32_TYPE);
-    event->bufPos += put_int32(event, value);
+    append_int32(event, value);
 }
 
 void stats_event_write_int64(struct stats_event* event, int64_t value) {
-    if (!event || event->errors) return;
+    if (event->errors) return;
 
     start_field(event, INT64_TYPE);
-    event->bufPos += put_int64(event, value);
+    append_int64(event, value);
 }
 
 void stats_event_write_float(struct stats_event* event, float value) {
-    if (!event || event->errors) return;
+    if (event->errors) return;
 
     start_field(event, FLOAT_TYPE);
-    event->bufPos += put_float(event, value);
+    append_float(event, value);
 }
 
 void stats_event_write_bool(struct stats_event* event, bool value) {
-    if (!event || event->errors) return;
+    if (event->errors) return;
 
     start_field(event, BOOL_TYPE);
-    event->bufPos += put_bool(event, value);
+    append_bool(event, value);
 }
 
-// Buf is assumed to be encoded using UTF8
-void stats_event_write_byte_array(struct stats_event* event, uint8_t* buf, uint32_t numBytes) {
-    if (!event || !buf || event->errors) return;
+void stats_event_write_byte_array(struct stats_event* event, uint8_t* buf, size_t numBytes) {
+    if (event->errors) return;
 
     start_field(event, BYTE_ARRAY_TYPE);
-    event->bufPos += put_int32(event, numBytes);
-    event->bufPos += put_byte_array(event, buf, numBytes);
+    append_int32(event, numBytes);
+    append_byte_array(event, buf, numBytes);
 }
 
 // Buf is assumed to be encoded using UTF8
-void stats_event_write_string8(struct stats_event* event, char* buf, uint32_t numBytes) {
-    if (!event || !buf || event->errors) return;
+void stats_event_write_string8(struct stats_event* event, const char* buf) {
+    if (event->errors) return;
 
     start_field(event, STRING_TYPE);
-    event->bufPos += put_int32(event, numBytes);
-    event->bufPos += put_byte_array(event, buf, numBytes);
+    append_string(event, buf);
 }
 
 // Tags are assumed to be encoded using UTF8
-void stats_event_write_attribution_chain(struct stats_event* event, uint32_t* uids, char** tags,
-                                         uint32_t* tagLengths, uint32_t numNodes) {
-    if (!event || event->errors) return;
-    if (numNodes > MAX_BYTE_VALUE) {
-        event->errors |= ERROR_ATTRIBUTION_CHAIN_TOO_LONG;
-        return;
-    }
+void stats_event_write_attribution_chain(struct stats_event* event, uint32_t* uids,
+                                         const char** tags, uint8_t numNodes) {
+    if (numNodes > MAX_BYTE_VALUE) event->errors |= ERROR_ATTRIBUTION_CHAIN_TOO_LONG;
+    if (event->errors) return;
 
     start_field(event, ATTRIBUTION_CHAIN_TYPE);
-    event->bufPos += put_byte(event, (byte)numNodes);
+    append_byte(event, numNodes);
 
-    for (int i = 0; i < numNodes; i++) {
-        event->bufPos += put_int32(event, uids[i]);
-        event->bufPos += put_int32(event, tagLengths[i]);
-        event->bufPos += put_byte_array(event, tags[i], tagLengths[i]);
+    for (uint8_t i = 0; i < numNodes; i++) {
+        append_int32(event, uids[i]);
+        append_string(event, tags[i]);
     }
 }
 
-void stats_event_add_key_value_pairs(struct stats_event* event, struct key_value_pair* pairs,
-                                     uint32_t numPairs) {
-    if (!event || event->errors) return;
-    if (numPairs > MAX_BYTE_VALUE) {
-        event->errors |= ERROR_TOO_MANY_KEY_VALUE_PAIRS;
-        return;
-    }
+void stats_event_write_key_value_pairs(struct stats_event* event, struct key_value_pair* pairs,
+                                       uint8_t numPairs) {
+    if (numPairs > MAX_BYTE_VALUE) event->errors |= ERROR_TOO_MANY_KEY_VALUE_PAIRS;
+    if (event->errors) return;
 
     start_field(event, KEY_VALUE_PAIRS_TYPE);
-    event->bufPos += put_byte(event, (byte)numPairs);
+    append_byte(event, numPairs);
 
-    for (int i = 0; i < numPairs; i++) {
-        event->bufPos += put_int32(event, pairs[i].key);
-        event->bufPos += put_byte(event, pairs[i].valueType);
+    for (uint8_t i = 0; i < numPairs; i++) {
+        append_int32(event, pairs[i].key);
+        append_byte(event, pairs[i].valueType);
         switch (pairs[i].valueType) {
             case INT32_TYPE:
-                event->bufPos += put_int32(event, pairs[i].int32Value);
+                append_int32(event, pairs[i].int32Value);
                 break;
             case INT64_TYPE:
-                event->bufPos += put_int64(event, pairs[i].int64Value);
+                append_int64(event, pairs[i].int64Value);
                 break;
             case FLOAT_TYPE:
-                event->bufPos += put_float(event, pairs[i].floatValue);
+                append_float(event, pairs[i].floatValue);
                 break;
             case STRING_TYPE:
-                event->bufPos += put_int32(event, pairs[i].stringBytes);
-                event->bufPos += put_byte_array(event, pairs[i].stringValue, pairs[i].stringBytes);
+                append_string(event, pairs[i].stringValue);
                 break;
             default:
                 event->errors |= ERROR_INVALID_VALUE_TYPE;
@@ -251,28 +247,10 @@ void stats_event_add_key_value_pairs(struct stats_event* event, struct key_value
     }
 }
 
-// Side-effect: modifies event->errors if annotation does not follow field
-static bool does_annotation_follow_field(struct stats_event* event) {
-    if (event->lastFieldPos == 0) {
-        event->errors |= ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD;
-        return false;
-    }
-    return true;
-}
-
-// Side-effect: modifies event->errors if annotation id is too large
-static bool is_valid_annotation_id(struct stats_event* event, uint32_t annotationId) {
-    if (annotationId > MAX_BYTE_VALUE) {
-        event->errors |= ERROR_ANNOTATION_ID_TOO_LARGE;
-        return false;
-    }
-    return true;
-}
-
 // Side-effect: modifies event->errors if field has too many annotations
 static void increment_annotation_count(struct stats_event* event) {
-    byte fieldType = event->buf[event->lastFieldPos] & 0x0F;
-    uint32_t oldAnnotationCount = event->buf[event->lastFieldPos] & 0xF0;
+    uint8_t fieldType = event->buf[event->lastFieldPos] & 0x0F;
+    uint32_t oldAnnotationCount = (event->buf[event->lastFieldPos] & 0xF0) >> 4;
     uint32_t newAnnotationCount = oldAnnotationCount + 1;
 
     if (newAnnotationCount > MAX_ANNOTATION_COUNT) {
@@ -280,86 +258,72 @@ static void increment_annotation_count(struct stats_event* event) {
         return;
     }
 
-    event->buf[event->lastFieldPos] = (((byte)newAnnotationCount << 4) & 0xF0) | fieldType;
+    event->buf[event->lastFieldPos] = (((uint8_t)newAnnotationCount << 4) & 0xF0) | fieldType;
 }
 
-void stats_event_add_bool_annotation(struct stats_event* event, uint32_t annotationId, bool value) {
-    if (!event || event->errors) return;
-    if (!does_annotation_follow_field(event)) return;
-    if (!is_valid_annotation_id(event, annotationId)) return;
+void stats_event_add_bool_annotation(struct stats_event* event, uint8_t annotationId, bool value) {
+    if (event->lastFieldPos == 0) event->errors |= ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD;
+    if (annotationId > MAX_BYTE_VALUE) event->errors |= ERROR_ANNOTATION_ID_TOO_LARGE;
+    if (event->errors) return;
 
-    event->bufPos += put_byte(event, (byte)annotationId);
-    event->bufPos += put_byte(event, BOOL_TYPE);
-    event->bufPos += put_bool(event, value);
+    append_byte(event, annotationId);
+    append_byte(event, BOOL_TYPE);
+    append_bool(event, value);
     increment_annotation_count(event);
 }
 
-void stats_event_add_int32_annotation(struct stats_event* event, uint32_t annotationId,
+void stats_event_add_int32_annotation(struct stats_event* event, uint8_t annotationId,
                                       int32_t value) {
-    if (!event || event->errors) return;
-    if (!does_annotation_follow_field(event)) return;
-    if (!is_valid_annotation_id(event, annotationId)) return;
+    if (event->lastFieldPos == 0) event->errors |= ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD;
+    if (annotationId > MAX_BYTE_VALUE) event->errors |= ERROR_ANNOTATION_ID_TOO_LARGE;
+    if (event->errors) return;
 
-    event->bufPos += put_byte(event, (byte)annotationId);
-    event->bufPos += put_byte(event, INT32_TYPE);
-    event->bufPos += put_int32(event, value);
+    append_byte(event, annotationId);
+    append_byte(event, INT32_TYPE);
+    append_int32(event, value);
     increment_annotation_count(event);
+}
+
+uint32_t stats_event_get_atom_id(struct stats_event* event) {
+    return event->atomId;
+}
+
+uint8_t* stats_event_get_buffer(struct stats_event* event, size_t* size) {
+    if (size) *size = event->size;
+    return event->buf;
 }
 
 uint32_t stats_event_get_errors(struct stats_event* event) {
     return event->errors;
 }
 
-static void build(struct stats_event* event) {
-    // store size before we modify bufPos
-    event->size = event->bufPos;
+void stats_event_build(struct stats_event* event) {
+    if (event->built) return;
 
-    if (event->timestampNs == 0) {
-        event->errors |= ERROR_NO_TIMESTAMP;
-    } else {
-        // Don't use the write functions since they short-circuit if there was
-        // an error previously. We, regardless, want to know the timestamp and
-        // atomId.
-        event->bufPos = POS_TIMESTAMP;
-        event->bufPos += put_byte(event, INT64_TYPE);
-        event->bufPos += put_int64(event, event->timestampNs);
-        event->numElements++;
-    }
-
-    if (event->atomId == 0) {
-        event->errors |= ERROR_NO_ATOM_ID;
-    } else {
-        event->bufPos = POS_ATOM_ID;
-        event->bufPos += put_byte(event, INT32_TYPE);
-        event->bufPos += put_int64(event, event->atomId);
-        event->numElements++;
-    }
+    if (event->atomId == 0) event->errors |= ERROR_NO_ATOM_ID;
 
     if (event->numElements > MAX_BYTE_VALUE) {
         event->errors |= ERROR_TOO_MANY_FIELDS;
     } else {
-        event->bufPos = POS_NUM_ELEMENTS;
-        put_byte(event, (byte)event->numElements);
+        event->buf[POS_NUM_ELEMENTS] = event->numElements;
     }
 
-    // If there are errors, rewrite buffer
+    // If there are errors, rewrite buffer.
     if (event->errors) {
-        event->bufPos = POS_NUM_ELEMENTS;
-        put_byte(event, (byte)3);
-
-        event->bufPos = POS_FIRST_FIELD;
-        event->bufPos += put_byte(event, ERROR_TYPE);
-        event->bufPos += put_int32(event, event->errors);
-        event->size = event->bufPos;
+        event->buf[POS_NUM_ELEMENTS] = 3;
+        event->buf[POS_FIRST_FIELD] = ERROR_TYPE;
+        memcpy(&event->buf[POS_FIRST_FIELD + sizeof(uint8_t)], &event->errors,
+               sizeof(event->errors));
+        event->size = POS_FIRST_FIELD + sizeof(uint8_t) + sizeof(uint32_t);
     }
+
+    event->built = true;
 }
 
 void stats_event_write(struct stats_event* event) {
-    if (!event) return;
+    stats_event_build(event);
 
-    build(event);
-
-    // prepare iovecs for write to statsd
+    // Prepare iovecs for write to statsd.
     struct iovec vecs[2];
     vecs[0].iov_base = &event->tag;
     vecs[0].iov_len = sizeof(event->tag);
