@@ -128,6 +128,11 @@ bool SnapshotManager::BeginUpdate() {
     auto file = LockExclusive();
     if (!file) return false;
 
+    // Purge the ImageManager just in case there is a corrupt lp_metadata file
+    // lying around. (NB: no need to return false on an error, we can let the
+    // update try to progress.)
+    images_->RemoveAllImages();
+
     auto state = ReadUpdateState(file.get());
     if (state != UpdateState::None) {
         LOG(ERROR) << "An update is already in progress, cannot begin a new update";
@@ -1181,8 +1186,26 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
     }
 
     bool ok = true;
+    bool has_mapped_cow_images = false;
     for (const auto& name : snapshots) {
-        ok &= (UnmapPartitionWithSnapshot(lock, name) && DeleteSnapshot(lock, name));
+        if (!UnmapPartitionWithSnapshot(lock, name) || !DeleteSnapshot(lock, name)) {
+            // Remember whether or not we were able to unmap the cow image.
+            auto cow_image_device = GetCowImageDeviceName(name);
+            has_mapped_cow_images |= images_->IsImageMapped(cow_image_device);
+
+            ok = false;
+        }
+    }
+
+    if (ok || !has_mapped_cow_images) {
+        // Delete any image artifacts as a precaution, in case an update is
+        // being cancelled due to some corrupted state in an lp_metadata file.
+        // Note that we do not do this if some cow images are still mapped,
+        // since we must not remove backing storage if it's in use.
+        if (!images_->RemoveAllImages()) {
+            LOG(ERROR) << "Could not remove all snapshot artifacts";
+            return false;
+        }
     }
     return ok;
 }
