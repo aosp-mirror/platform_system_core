@@ -1218,12 +1218,12 @@ UpdateState SnapshotManager::GetUpdateState(double* progress) {
         return UpdateState::None;
     }
 
-    auto file = LockShared();
-    if (!file) {
+    auto lock = LockShared();
+    if (!lock) {
         return UpdateState::None;
     }
 
-    auto state = ReadUpdateState(file.get());
+    auto state = ReadUpdateState(lock.get());
     if (progress) {
         *progress = 0.0;
         if (state == UpdateState::Merging) {
@@ -1595,9 +1595,9 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
     return true;
 }
 
-auto SnapshotManager::OpenFile(const std::string& file, int open_flags, int lock_flags)
+auto SnapshotManager::OpenFile(const std::string& file, int lock_flags)
         -> std::unique_ptr<LockedFile> {
-    unique_fd fd(open(file.c_str(), open_flags | O_CLOEXEC | O_NOFOLLOW | O_SYNC, 0660));
+    unique_fd fd(open(file.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (fd < 0) {
         PLOG(ERROR) << "Open failed: " << file;
         return nullptr;
@@ -1622,29 +1622,28 @@ std::string SnapshotManager::GetStateFilePath() const {
     return metadata_dir_ + "/state"s;
 }
 
-std::unique_ptr<SnapshotManager::LockedFile> SnapshotManager::OpenStateFile(int open_flags,
-                                                                            int lock_flags) {
-    auto state_file = GetStateFilePath();
-    return OpenFile(state_file, open_flags, lock_flags);
+std::string SnapshotManager::GetLockPath() const {
+    return metadata_dir_;
+}
+
+std::unique_ptr<SnapshotManager::LockedFile> SnapshotManager::OpenLock(int lock_flags) {
+    auto lock_file = GetLockPath();
+    return OpenFile(lock_file, lock_flags);
 }
 
 std::unique_ptr<SnapshotManager::LockedFile> SnapshotManager::LockShared() {
-    return OpenStateFile(O_RDONLY, LOCK_SH);
+    return OpenLock(LOCK_SH);
 }
 
 std::unique_ptr<SnapshotManager::LockedFile> SnapshotManager::LockExclusive() {
-    return OpenStateFile(O_RDWR | O_CREAT, LOCK_EX);
+    return OpenLock(LOCK_EX);
 }
 
-UpdateState SnapshotManager::ReadUpdateState(LockedFile* file) {
-    // Reset position since some calls read+write.
-    if (lseek(file->fd(), 0, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek state file failed";
-        return UpdateState::None;
-    }
+UpdateState SnapshotManager::ReadUpdateState(LockedFile* lock) {
+    CHECK(lock);
 
     std::string contents;
-    if (!android::base::ReadFdToString(file->fd(), &contents)) {
+    if (!android::base::ReadFileToString(GetStateFilePath(), &contents)) {
         PLOG(ERROR) << "Read state file failed";
         return UpdateState::None;
     }
@@ -1691,13 +1690,14 @@ std::ostream& operator<<(std::ostream& os, UpdateState state) {
     }
 }
 
-bool SnapshotManager::WriteUpdateState(LockedFile* file, UpdateState state) {
+bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state) {
+    CHECK(lock);
+    CHECK(lock->lock_mode() == LOCK_EX);
+
     std::stringstream ss;
     ss << state;
     std::string contents = ss.str();
     if (contents.empty()) return false;
-
-    if (!Truncate(file)) return false;
 
 #ifdef LIBSNAPSHOT_USE_HAL
     auto merge_status = MergeStatus::UNKNOWN;
@@ -1731,7 +1731,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* file, UpdateState state) {
     }
 #endif
 
-    if (!android::base::WriteStringToFd(contents, file->fd())) {
+    if (!android::base::WriteStringToFile(contents, GetStateFilePath())) {
         PLOG(ERROR) << "Could not write to state file";
         return false;
     }
@@ -1792,18 +1792,6 @@ bool SnapshotManager::WriteSnapshotStatus(LockedFile* lock, const SnapshotStatus
         return false;
     }
 
-    return true;
-}
-
-bool SnapshotManager::Truncate(LockedFile* file) {
-    if (lseek(file->fd(), 0, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek file failed: " << file->path();
-        return false;
-    }
-    if (ftruncate(file->fd(), 0) < 0) {
-        PLOG(ERROR) << "truncate failed: " << file->path();
-        return false;
-    }
     return true;
 }
 
@@ -2164,7 +2152,7 @@ bool SnapshotManager::UnmapAllPartitions() {
 bool SnapshotManager::Dump(std::ostream& os) {
     // Don't actually lock. Dump() is for debugging purposes only, so it is okay
     // if it is racy.
-    auto file = OpenStateFile(O_RDONLY, 0);
+    auto file = OpenLock(0 /* lock flag */);
     if (!file) return false;
 
     std::stringstream ss;
