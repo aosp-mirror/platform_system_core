@@ -217,7 +217,7 @@ bool SnapshotManager::FinishedSnapshotWrites() {
     // we can tell whether or not we performed a rollback.
     auto contents = device_->GetSlotSuffix();
     auto boot_file = GetSnapshotBootIndicatorPath();
-    if (!android::base::WriteStringToFile(contents, boot_file)) {
+    if (!WriteStringToFileAtomic(contents, boot_file)) {
         PLOG(ERROR) << "write failed: " << boot_file;
         return false;
     }
@@ -1731,7 +1731,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state) {
     }
 #endif
 
-    if (!android::base::WriteStringToFile(contents, GetStateFilePath())) {
+    if (!WriteStringToFileAtomic(contents, GetStateFilePath())) {
         PLOG(ERROR) << "Could not write to state file";
         return false;
     }
@@ -1780,14 +1780,14 @@ bool SnapshotManager::WriteSnapshotStatus(LockedFile* lock, const SnapshotStatus
     CHECK(!status.name().empty());
 
     auto path = GetSnapshotStatusFilePath(status.name());
-    unique_fd fd(
-            open(path.c_str(), O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_CREAT | O_SYNC | O_TRUNC, 0660));
-    if (fd < 0) {
-        PLOG(ERROR) << "Open failed: " << path;
+
+    std::string content;
+    if (!status.SerializeToString(&content)) {
+        LOG(ERROR) << "Unable to serialize SnapshotStatus for " << status.name();
         return false;
     }
 
-    if (!status.SerializeToFileDescriptor(fd.get())) {
+    if (!WriteStringToFileAtomic(content, path)) {
         PLOG(ERROR) << "Unable to write SnapshotStatus to " << path;
         return false;
     }
