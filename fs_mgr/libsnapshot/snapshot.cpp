@@ -300,7 +300,7 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     if (!ReadSnapshotStatus(lock, name, &status)) {
         return false;
     }
-    if (status.state() == SnapshotState::MERGE_COMPLETED) {
+    if (status.state() == SnapshotState::NONE || status.state() == SnapshotState::MERGE_COMPLETED) {
         LOG(ERROR) << "Should not create a snapshot device for " << name
                    << " after merging has completed.";
         return false;
@@ -1374,6 +1374,17 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         }
         // No live snapshot if merge is completed.
         if (live_snapshot_status->state() == SnapshotState::MERGE_COMPLETED) {
+            live_snapshot_status.reset();
+        }
+
+        if (live_snapshot_status->state() == SnapshotState::NONE ||
+            live_snapshot_status->cow_partition_size() + live_snapshot_status->cow_file_size() ==
+                    0) {
+            LOG(WARNING) << "Snapshot status for " << params.GetPartitionName()
+                         << " is invalid, ignoring: state = "
+                         << SnapshotState_Name(live_snapshot_status->state())
+                         << ", cow_partition_size = " << live_snapshot_status->cow_partition_size()
+                         << ", cow_file_size = " << live_snapshot_status->cow_file_size();
             live_snapshot_status.reset();
         }
     } while (0);
