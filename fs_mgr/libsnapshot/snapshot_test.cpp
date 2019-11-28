@@ -71,6 +71,8 @@ std::unique_ptr<SnapshotManager> sm;
 TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
 
+void MountMetadata();
+
 class SnapshotTest : public ::testing::Test {
   public:
     SnapshotTest() : dm_(DeviceMapper::Instance()) {}
@@ -87,7 +89,7 @@ class SnapshotTest : public ::testing::Test {
         InitializeState();
         CleanupTestArtifacts();
         FormatFakeSuper();
-
+        MountMetadata();
         ASSERT_TRUE(sm->BeginUpdate());
     }
 
@@ -575,7 +577,7 @@ TEST_F(SnapshotTest, UpdateBootControlHal) {
     ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
 
     ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Initiated));
-    ASSERT_EQ(test_device->merge_status(), MergeStatus::SNAPSHOTTED);
+    ASSERT_EQ(test_device->merge_status(), MergeStatus::NONE);
 
     ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::Unverified));
     ASSERT_EQ(test_device->merge_status(), MergeStatus::SNAPSHOTTED);
@@ -662,6 +664,7 @@ class SnapshotUpdateTest : public SnapshotTest {
         if (!image_manager_) {
             InitializeState();
         }
+        MountMetadata();
         for (const auto& suffix : {"_a", "_b"}) {
             test_device->set_slot_suffix(suffix);
             EXPECT_TRUE(sm->CancelUpdate()) << suffix;
@@ -1206,6 +1209,10 @@ class MetadataMountedTest : public SnapshotUpdateTest {
     Fstab fstab_;
 };
 
+void MountMetadata() {
+    MetadataMountedTest().TearDown();
+}
+
 TEST_F(MetadataMountedTest, Android) {
     auto device = sm->EnsureMetadataMounted();
     EXPECT_NE(nullptr, device);
@@ -1277,6 +1284,8 @@ TEST_F(SnapshotUpdateTest, DataWipeRollbackInRecovery) {
     auto new_sm = SnapshotManager::NewForFirstStageMount(test_device);
 
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
+    // Manually mount metadata so that we can call GetUpdateState() below.
+    MountMetadata();
     EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     EXPECT_TRUE(test_device->IsSlotUnbootable(1));
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
