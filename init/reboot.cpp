@@ -806,7 +806,7 @@ static Result<void> DoUserspaceReboot() {
 }
 
 static void UserspaceRebootWatchdogThread() {
-    if (!WaitForProperty("sys.init.userspace_reboot_in_progress", "1", 20s)) {
+    if (!WaitForProperty("sys.init.userspace_reboot.in_progress", "1", 20s)) {
         // TODO(b/135984674): should we reboot instead?
         LOG(WARNING) << "Userspace reboot didn't start in 20 seconds. Stopping watchdog";
         return;
