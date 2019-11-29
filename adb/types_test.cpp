@@ -19,21 +19,21 @@
 #include <memory>
 #include "types.h"
 
-static std::unique_ptr<IOVector::block_type> create_block(const std::string& string) {
-    return std::make_unique<IOVector::block_type>(string.begin(), string.end());
+static IOVector::block_type create_block(const std::string& string) {
+    return IOVector::block_type(string.begin(), string.end());
 }
 
-static std::unique_ptr<IOVector::block_type> create_block(char value, size_t len) {
-    auto block = std::make_unique<IOVector::block_type>();
-    block->resize(len);
-    memset(&(*block)[0], value, len);
+static IOVector::block_type create_block(char value, size_t len) {
+    auto block = IOVector::block_type();
+    block.resize(len);
+    memset(&(block)[0], value, len);
     return block;
 }
 
 template <typename T>
-static std::unique_ptr<IOVector::block_type> copy_block(T&& block) {
-    auto copy = std::make_unique<IOVector::block_type>();
-    copy->assign(block->begin(), block->end());
+static IOVector::block_type copy_block(const T& block) {
+    auto copy = IOVector::block_type();
+    copy.assign(block.begin(), block.end());
     return copy;
 }
 
@@ -50,7 +50,7 @@ TEST(IOVector, single_block) {
     bc.append(copy_block(block));
     ASSERT_EQ(100ULL, bc.size());
     auto coalesced = bc.coalesce();
-    ASSERT_EQ(*block, coalesced);
+    ASSERT_EQ(block, coalesced);
 }
 
 TEST(IOVector, single_block_split) {
@@ -60,8 +60,8 @@ TEST(IOVector, single_block_split) {
     IOVector foo = bc.take_front(3);
     ASSERT_EQ(3ULL, foo.size());
     ASSERT_EQ(3ULL, bc.size());
-    ASSERT_EQ(*create_block("foo"), foo.coalesce());
-    ASSERT_EQ(*create_block("bar"), bc.coalesce());
+    ASSERT_EQ(create_block("foo"), foo.coalesce());
+    ASSERT_EQ(create_block("bar"), bc.coalesce());
 }
 
 TEST(IOVector, aligned_split) {
@@ -73,15 +73,15 @@ TEST(IOVector, aligned_split) {
 
     IOVector foo = bc.take_front(3);
     ASSERT_EQ(3ULL, foo.size());
-    ASSERT_EQ(*create_block("foo"), foo.coalesce());
+    ASSERT_EQ(create_block("foo"), foo.coalesce());
 
     IOVector bar = bc.take_front(3);
     ASSERT_EQ(3ULL, bar.size());
-    ASSERT_EQ(*create_block("bar"), bar.coalesce());
+    ASSERT_EQ(create_block("bar"), bar.coalesce());
 
     IOVector baz = bc.take_front(3);
     ASSERT_EQ(3ULL, baz.size());
-    ASSERT_EQ(*create_block("baz"), baz.coalesce());
+    ASSERT_EQ(create_block("baz"), baz.coalesce());
 
     ASSERT_EQ(0ULL, bc.size());
 }
@@ -97,23 +97,23 @@ TEST(IOVector, misaligned_split) {
     // Aligned left, misaligned right, across multiple blocks.
     IOVector foob = bc.take_front(4);
     ASSERT_EQ(4ULL, foob.size());
-    ASSERT_EQ(*create_block("foob"), foob.coalesce());
+    ASSERT_EQ(create_block("foob"), foob.coalesce());
 
     // Misaligned left, misaligned right, in one block.
     IOVector a = bc.take_front(1);
     ASSERT_EQ(1ULL, a.size());
-    ASSERT_EQ(*create_block("a"), a.coalesce());
+    ASSERT_EQ(create_block("a"), a.coalesce());
 
     // Misaligned left, misaligned right, across two blocks.
     IOVector rba = bc.take_front(3);
     ASSERT_EQ(3ULL, rba.size());
-    ASSERT_EQ(*create_block("rba"), rba.coalesce());
+    ASSERT_EQ(create_block("rba"), rba.coalesce());
 
     // Misaligned left, misaligned right, across three blocks.
     IOVector zquxquu = bc.take_front(7);
     ASSERT_EQ(7ULL, zquxquu.size());
-    ASSERT_EQ(*create_block("zquxquu"), zquxquu.coalesce());
+    ASSERT_EQ(create_block("zquxquu"), zquxquu.coalesce());
 
     ASSERT_EQ(1ULL, bc.size());
-    ASSERT_EQ(*create_block("x"), bc.coalesce());
+    ASSERT_EQ(create_block("x"), bc.coalesce());
 }
