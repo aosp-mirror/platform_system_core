@@ -93,8 +93,8 @@ struct NonblockingFdConnection : public Connection {
 
                 if (pfds[0].revents & POLLIN) {
                     // TODO: Should we be getting blocks from a free list?
-                    auto block = std::make_unique<IOVector::block_type>(MAX_PAYLOAD);
-                    rc = adb_read(fd_.get(), &(*block)[0], block->size());
+                    auto block = IOVector::block_type(MAX_PAYLOAD);
+                    rc = adb_read(fd_.get(), &block[0], block.size());
                     if (rc == -1) {
                         *error = std::string("read failed: ") + strerror(errno);
                         return;
@@ -102,7 +102,7 @@ struct NonblockingFdConnection : public Connection {
                         *error = "read failed: EOF";
                         return;
                     }
-                    block->resize(rc);
+                    block.resize(rc);
                     read_buffer_.append(std::move(block));
 
                     if (!read_header_ && read_buffer_.size() >= sizeof(amessage)) {
@@ -116,7 +116,7 @@ struct NonblockingFdConnection : public Connection {
                         auto data_chain = read_buffer_.take_front(read_header_->data_length);
 
                         // TODO: Make apacket carry around a IOVector instead of coalescing.
-                        auto payload = data_chain.coalesce<apacket::payload_type>();
+                        auto payload = std::move(data_chain).coalesce();
                         auto packet = std::make_unique<apacket>();
                         packet->msg = *read_header_;
                         packet->payload = std::move(payload);
@@ -184,8 +184,7 @@ struct NonblockingFdConnection : public Connection {
             return WriteResult::Error;
         }
 
-        // TODO: Implement a more efficient drop_front?
-        write_buffer_.take_front(rc);
+        write_buffer_.drop_front(rc);
         writable_ = write_buffer_.empty();
         if (write_buffer_.empty()) {
             return WriteResult::Completed;
@@ -199,10 +198,10 @@ struct NonblockingFdConnection : public Connection {
         std::lock_guard<std::mutex> lock(write_mutex_);
         const char* header_begin = reinterpret_cast<const char*>(&packet->msg);
         const char* header_end = header_begin + sizeof(packet->msg);
-        auto header_block = std::make_unique<IOVector::block_type>(header_begin, header_end);
+        auto header_block = IOVector::block_type(header_begin, header_end);
         write_buffer_.append(std::move(header_block));
         if (!packet->payload.empty()) {
-            write_buffer_.append(std::make_unique<IOVector::block_type>(std::move(packet->payload)));
+            write_buffer_.append(std::move(packet->payload));
         }
 
         WriteResult result = DispatchWrites();
