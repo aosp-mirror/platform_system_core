@@ -801,21 +801,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Write some data to target partitions.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        std::string path;
-        ASSERT_TRUE(sm->MapUpdateSnapshot(
-                CreateLogicalPartitionParams{
-                        .block_device = fake_super,
-                        .metadata_slot = 1,
-                        .partition_name = name,
-                        .timeout_ms = 10s,
-                        .partition_opener = opener_.get(),
-                },
-                &path))
-                << name;
-        ASSERT_TRUE(WriteRandomData(path));
-        auto hash = GetHash(path);
-        ASSERT_TRUE(hash.has_value());
-        hashes_[name] = *hash;
+        ASSERT_TRUE(WriteSnapshotAndHash(name, partition_size));
     }
 
     // Assert that source partitions aren't affected.
@@ -929,17 +915,7 @@ TEST_F(SnapshotUpdateTest, SnapshotStatusFileWithoutCow) {
 
     // Check that target partitions can be mapped.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        std::string path;
-        EXPECT_TRUE(sm->MapUpdateSnapshot(
-                CreateLogicalPartitionParams{
-                        .block_device = fake_super,
-                        .metadata_slot = 1,
-                        .partition_name = name,
-                        .timeout_ms = 10s,
-                        .partition_opener = opener_.get(),
-                },
-                &path))
-                << name;
+        EXPECT_TRUE(MapUpdateSnapshot(name));
     }
 }
 
@@ -960,21 +936,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
 
     // Write some data to target partitions.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        std::string path;
-        ASSERT_TRUE(sm->MapUpdateSnapshot(
-                CreateLogicalPartitionParams{
-                        .block_device = fake_super,
-                        .metadata_slot = 1,
-                        .partition_name = name,
-                        .timeout_ms = 10s,
-                        .partition_opener = opener_.get(),
-                },
-                &path))
-                << name;
-        ASSERT_TRUE(WriteRandomData(path));
-        auto hash = GetHash(path);
-        ASSERT_TRUE(hash.has_value());
-        hashes_[name] = *hash;
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
     }
 
     // Assert that source partitions aren't affected.
@@ -1128,21 +1090,7 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
 
     // Write some data to target partitions.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        std::string path;
-        ASSERT_TRUE(sm->MapUpdateSnapshot(
-                CreateLogicalPartitionParams{
-                        .block_device = fake_super,
-                        .metadata_slot = 1,
-                        .partition_name = name,
-                        .timeout_ms = 10s,
-                        .partition_opener = opener_.get(),
-                },
-                &path))
-                << name;
-        ASSERT_TRUE(WriteRandomData(path));
-        auto hash = GetHash(path);
-        ASSERT_TRUE(hash.has_value());
-        hashes_[name] = *hash;
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
     }
 
     // Assert that source partitions aren't affected.
