@@ -716,6 +716,45 @@ class SnapshotUpdateTest : public SnapshotTest {
         return AssertionSuccess();
     }
 
+    AssertionResult MapUpdateSnapshot(const std::string& name, std::string* path = nullptr) {
+        std::string real_path;
+        if (!sm->MapUpdateSnapshot(
+                    CreateLogicalPartitionParams{
+                            .block_device = fake_super,
+                            .metadata_slot = 1,
+                            .partition_name = name,
+                            .timeout_ms = 10s,
+                            .partition_opener = opener_.get(),
+                    },
+                    &real_path)) {
+            return AssertionFailure() << "Unable to map snapshot " << name;
+        }
+        if (path) {
+            *path = real_path;
+        }
+        return AssertionSuccess() << "Mapped snapshot " << name << " to " << real_path;
+    }
+
+    AssertionResult WriteSnapshotAndHash(const std::string& name,
+                                         std::optional<size_t> size = std::nullopt) {
+        std::string path;
+        auto res = MapUpdateSnapshot(name, &path);
+        if (!res) {
+            return res;
+        }
+
+        std::string size_string = size ? (std::to_string(*size) + " bytes") : "";
+
+        if (!WriteRandomData(path, size, &hashes_[name])) {
+            return AssertionFailure() << "Unable to write " << size_string << " to " << path
+                                      << " for partition " << name;
+        }
+
+        return AssertionSuccess() << "Written " << size_string << " to " << path
+                                  << " for snapshot partition " << name
+                                  << ", hash: " << hashes_[name];
+    }
+
     std::unique_ptr<TestPartitionOpener> opener_;
     DeltaArchiveManifest manifest_;
     std::unique_ptr<MetadataBuilder> src_;
@@ -1311,6 +1350,56 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
     EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
+}
+
+TEST_F(SnapshotUpdateTest, Hashtree) {
+    constexpr auto partition_size = 4_MiB;
+    constexpr auto data_size = 3_MiB;
+    constexpr auto hashtree_size = 512_KiB;
+    constexpr auto fec_size = partition_size - data_size - hashtree_size;
+
+    const auto block_size = manifest_.block_size();
+    SetSize(sys_, partition_size);
+
+    auto e = sys_->add_operations()->add_dst_extents();
+    e->set_start_block(0);
+    e->set_num_blocks(data_size / block_size);
+
+    // Set hastree extents.
+    sys_->mutable_hash_tree_data_extent()->set_start_block(0);
+    sys_->mutable_hash_tree_data_extent()->set_num_blocks(data_size / block_size);
+
+    sys_->mutable_hash_tree_extent()->set_start_block(data_size / block_size);
+    sys_->mutable_hash_tree_extent()->set_num_blocks(hashtree_size / block_size);
+
+    // Set FEC extents.
+    sys_->mutable_fec_data_extent()->set_start_block(0);
+    sys_->mutable_fec_data_extent()->set_num_blocks((data_size + hashtree_size) / block_size);
+
+    sys_->mutable_fec_extent()->set_start_block((data_size + hashtree_size) / block_size);
+    sys_->mutable_fec_extent()->set_num_blocks(fec_size / block_size);
+
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    // Write some data to target partition.
+    ASSERT_TRUE(WriteSnapshotAndHash("sys_b", partition_size));
+
+    // Finish update.
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+
+    // Check that the target partition have the same content. Hashtree and FEC extents
+    // should be accounted for.
+    ASSERT_TRUE(IsPartitionUnchanged("sys_b"));
 }
 
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
