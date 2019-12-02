@@ -1118,6 +1118,12 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             continue;
         }
 
+        // Terrible hack to make it possible to remount /data.
+        // TODO: refact fs_mgr_mount_all and get rid of this.
+        if (mount_mode == MOUNT_MODE_ONLY_USERDATA && current_entry.mount_point != "/data") {
+            continue;
+        }
+
         // Translate LABEL= file system labels into block devices.
         if (is_extfs(current_entry.fs_type)) {
             if (!TranslateExtLabels(&current_entry)) {
@@ -1351,6 +1357,7 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
     return ret;
 }
 
+// TODO(b/143970043): return different error codes based on which step failed.
 int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
     auto entry = GetMountedEntryForUserdata(fstab);
     if (entry == nullptr) {
@@ -1374,12 +1381,29 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
         }
         if (mount(entry->blk_device.c_str(), entry->mount_point.c_str(), "none",
                   MS_REMOUNT | entry->flags, entry->fs_options.c_str()) != 0) {
-            LERROR << "Failed to remount userdata in checkpointing mode";
+            PERROR << "Failed to remount userdata in checkpointing mode";
             return -1;
         }
     } else {
-        // STOPSHIP(b/143970043): support remounting for ext4.
-        LWARNING << "Remounting into checkpointing is not supported for ex4. Proceed with caution";
+        // STOPSHIP(b/143970043): support remounting for ext4 + metadata encryption.
+        if (should_use_metadata_encryption(*entry)) {
+            LWARNING << "Remounting into checkpointing is not supported for metadata encrypted "
+                     << "ext4 userdata. Proceed with caution";
+            return 0;
+        }
+        if (umount2("/data", UMOUNT_NOFOLLOW) != 0) {
+            PERROR << "Failed to umount /data";
+            return -1;
+        }
+        DeviceMapper& dm = DeviceMapper::Instance();
+        // TODO(b/143970043): need to delete every dm-device under the one userdata is mounted on.
+        if (!dm.DeleteDeviceIfExists("bow")) {
+            LERROR << "Failed to delete dm-bow";
+            return -1;
+        }
+        // TODO(b/143970043): remove this hack after fs_mgr_mount_all is refactored.
+        int result = fs_mgr_mount_all(fstab, MOUNT_MODE_ONLY_USERDATA);
+        return result == FS_MGR_MNTALL_FAIL ? -1 : 0;
     }
     return 0;
 }

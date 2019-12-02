@@ -46,7 +46,9 @@ enum verity_mode {
 enum mount_mode {
     MOUNT_MODE_DEFAULT = 0,
     MOUNT_MODE_EARLY = 1,
-    MOUNT_MODE_LATE = 2
+    MOUNT_MODE_LATE = 2,
+    // TODO(b/135984674): remove this after refactoring fs_mgr_mount_all.
+    MOUNT_MODE_ONLY_USERDATA = 3
 };
 
 #define FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED 7
