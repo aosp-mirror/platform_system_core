@@ -65,6 +65,7 @@ using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::SlotNumberForSlotSuffix;
 using android::hardware::boot::V1_1::MergeStatus;
 using chromeos_update_engine::DeltaArchiveManifest;
+using chromeos_update_engine::Extent;
 using chromeos_update_engine::InstallOperation;
 template <typename T>
 using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
@@ -1886,12 +1887,15 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
     // these devices.
     AutoDeviceList created_devices;
 
-    PartitionCowCreator cow_creator{.target_metadata = target_metadata.get(),
-                                    .target_suffix = target_suffix,
-                                    .target_partition = nullptr,
-                                    .current_metadata = current_metadata.get(),
-                                    .current_suffix = current_suffix,
-                                    .operations = nullptr};
+    PartitionCowCreator cow_creator{
+            .target_metadata = target_metadata.get(),
+            .target_suffix = target_suffix,
+            .target_partition = nullptr,
+            .current_metadata = current_metadata.get(),
+            .current_suffix = current_suffix,
+            .operations = nullptr,
+            .extra_extents = {},
+    };
 
     if (!CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
                                        &all_snapshot_status)) {
@@ -1937,14 +1941,23 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
     }
 
     std::map<std::string, const RepeatedPtrField<InstallOperation>*> install_operation_map;
+    std::map<std::string, std::vector<Extent>> extra_extents_map;
     for (const auto& partition_update : manifest.partitions()) {
         auto suffixed_name = partition_update.partition_name() + target_suffix;
-        auto&& [it, inserted] = install_operation_map.emplace(std::move(suffixed_name),
-                                                              &partition_update.operations());
+        auto&& [it, inserted] =
+                install_operation_map.emplace(suffixed_name, &partition_update.operations());
         if (!inserted) {
             LOG(ERROR) << "Duplicated partition " << partition_update.partition_name()
                        << " in update manifest.";
             return false;
+        }
+
+        auto& extra_extents = extra_extents_map[suffixed_name];
+        if (partition_update.has_hash_tree_extent()) {
+            extra_extents.push_back(partition_update.hash_tree_extent());
+        }
+        if (partition_update.has_fec_extent()) {
+            extra_extents.push_back(partition_update.fec_extent());
         }
     }
 
@@ -1954,6 +1967,12 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
         auto operations_it = install_operation_map.find(target_partition->name());
         if (operations_it != install_operation_map.end()) {
             cow_creator->operations = operations_it->second;
+        }
+
+        cow_creator->extra_extents.clear();
+        auto extra_extents_it = extra_extents_map.find(target_partition->name());
+        if (extra_extents_it != extra_extents_map.end()) {
+            cow_creator->extra_extents = std::move(extra_extents_it->second);
         }
 
         // Compute the device sizes for the partition.
