@@ -18,6 +18,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <liblp/builder.h>
 #include <update_engine/update_metadata.pb.h>
@@ -30,6 +31,7 @@ namespace snapshot {
 // Helper class that creates COW for a partition.
 struct PartitionCowCreator {
     using Extent = android::fs_mgr::Extent;
+    using ChromeOSExtent = chromeos_update_engine::Extent;
     using Interval = android::fs_mgr::Interval;
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
     using Partition = android::fs_mgr::Partition;
@@ -50,6 +52,9 @@ struct PartitionCowCreator {
     std::string current_suffix;
     // List of operations to be applied on the partition.
     const RepeatedPtrField<InstallOperation>* operations = nullptr;
+    // Extra extents that are going to be invalidated during the update
+    // process.
+    std::vector<ChromeOSExtent> extra_extents = {};
 
     struct Return {
         SnapshotStatus snapshot_status;
