@@ -113,6 +113,10 @@ int string_to_ip(const char *string, struct sockaddr_storage *ss) {
     if (ret == 0) {
         memcpy(ss, ai->ai_addr, ai->ai_addrlen);
         freeaddrinfo(ai);
+    } else {
+        // Getaddrinfo has its own error codes. Convert to negative errno.
+        // There, the only thing that can reasonably happen is that the passed-in string is invalid.
+        ret = (ret == EAI_SYSTEM) ? -errno : -EINVAL;
     }
 
     return ret;
