@@ -62,27 +62,34 @@ bool PartitionCowCreator::HasExtent(Partition* p, Extent* e) {
     return false;
 }
 
+void WriteExtent(DmSnapCowSizeCalculator* sc, const chromeos_update_engine::Extent& de,
+                 unsigned int sectors_per_block) {
+    const auto block_boundary = de.start_block() + de.num_blocks();
+    for (auto b = de.start_block(); b < block_boundary; ++b) {
+        for (unsigned int s = 0; s < sectors_per_block; ++s) {
+            const auto sector_id = b * sectors_per_block + s;
+            sc->WriteSector(sector_id);
+        }
+    }
+}
+
 uint64_t PartitionCowCreator::GetCowSize() {
     // WARNING: The origin partition should be READ-ONLY
     const uint64_t logical_block_size = current_metadata->logical_block_size();
     const unsigned int sectors_per_block = logical_block_size / kSectorSize;
     DmSnapCowSizeCalculator sc(kSectorSize, kSnapshotChunkSize);
 
+    // Allocate space for extra extents (if any). These extents are those that can be
+    // used for error corrections or to store verity hash trees.
+    for (const auto& de : extra_extents) {
+        WriteExtent(&sc, de, sectors_per_block);
+    }
+
     if (operations == nullptr) return sc.cow_size_bytes();
 
     for (const auto& iop : *operations) {
         for (const auto& de : iop.dst_extents()) {
-            // Skip if no blocks are written
-            if (de.num_blocks() == 0) continue;
-
-            // Flag all the blocks that were written
-            const auto block_boundary = de.start_block() + de.num_blocks();
-            for (auto b = de.start_block(); b < block_boundary; ++b) {
-                for (unsigned int s = 0; s < sectors_per_block; ++s) {
-                    const auto sector_id = b * sectors_per_block + s;
-                    sc.WriteSector(sector_id);
-                }
-            }
+            WriteExtent(&sc, de, sectors_per_block);
         }
     }
 
