@@ -137,8 +137,11 @@ class SnapshotTestPropertyFetcher : public android::fs_mgr::testing::MockPropert
 // Helper for error-spam-free cleanup.
 void DeleteBackingImage(android::fiemap::IImageManager* manager, const std::string& name);
 
-// Write some random data to the given device. Will write until reaching end of the device.
-bool WriteRandomData(const std::string& device);
+// Write some random data to the given device.
+// If expect_size is not specified, will write until reaching end of the device.
+// Expect space of |path| is multiple of 4K.
+bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size = std::nullopt,
+                     std::string* hash = nullptr);
 
 std::optional<std::string> GetHash(const std::string& path);
 
