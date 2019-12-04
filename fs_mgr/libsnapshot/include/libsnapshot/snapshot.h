@@ -72,6 +72,8 @@ class SnapshotStatus;
 
 static constexpr const std::string_view kCowGroupName = "cow";
 
+bool SourceCopyOperationIsClone(const chromeos_update_engine::InstallOperation& operation);
+
 enum class UpdateState : unsigned int {
     // No update or merge is in progress.
     None,
