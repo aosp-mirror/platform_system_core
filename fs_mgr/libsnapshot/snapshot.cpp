@@ -132,7 +132,9 @@ bool SnapshotManager::BeginUpdate() {
     // Purge the ImageManager just in case there is a corrupt lp_metadata file
     // lying around. (NB: no need to return false on an error, we can let the
     // update try to progress.)
-    images_->RemoveAllImages();
+    if (EnsureImageManager()) {
+        images_->RemoveAllImages();
+    }
 
     auto state = ReadUpdateState(file.get());
     if (state != UpdateState::None) {
@@ -1203,7 +1205,7 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
         // being cancelled due to some corrupted state in an lp_metadata file.
         // Note that we do not do this if some cow images are still mapped,
         // since we must not remove backing storage if it's in use.
-        if (!images_->RemoveAllImages()) {
+        if (!EnsureImageManager() || !images_->RemoveAllImages()) {
             LOG(ERROR) << "Could not remove all snapshot artifacts";
             return false;
         }
