@@ -301,7 +301,8 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
     return feof(fd.get()) ? processes : -1;
 }
 
-static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries) {
+static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries,
+                            int* max_processes) {
     std::string cpuacct_path;
     std::string memory_path;
 
@@ -316,9 +317,16 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries) 
 
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 
+    if (max_processes != nullptr) {
+        *max_processes = 0;
+    }
+
     int retry = retries;
     int processes;
     while ((processes = DoKillProcessGroupOnce(cgroup, uid, initialPid, signal)) > 0) {
+        if (max_processes != nullptr && processes > *max_processes) {
+            *max_processes = processes;
+        }
         LOG(VERBOSE) << "Killed " << processes << " processes for processgroup " << initialPid;
         if (retry > 0) {
             std::this_thread::sleep_for(5ms);
@@ -359,12 +367,12 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries) 
     }
 }
 
-int killProcessGroup(uid_t uid, int initialPid, int signal) {
-    return KillProcessGroup(uid, initialPid, signal, 40 /*retries*/);
+int killProcessGroup(uid_t uid, int initialPid, int signal, int* max_processes) {
+    return KillProcessGroup(uid, initialPid, signal, 40 /*retries*/, max_processes);
 }
 
-int killProcessGroupOnce(uid_t uid, int initialPid, int signal) {
-    return KillProcessGroup(uid, initialPid, signal, 0 /*retries*/);
+int killProcessGroupOnce(uid_t uid, int initialPid, int signal, int* max_processes) {
+    return KillProcessGroup(uid, initialPid, signal, 0 /*retries*/, max_processes);
 }
 
 int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
