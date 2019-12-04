@@ -186,17 +186,17 @@ static void TurnOffBacklight() {
     }
 }
 
-static Result<void> ShutdownVold() {
-    const char* vdc_argv[] = {"/system/bin/vdc", "volume", "shutdown"};
+static Result<void> CallVdc(const std::string& system, const std::string& cmd) {
+    const char* vdc_argv[] = {"/system/bin/vdc", system.c_str(), cmd.c_str()};
     int status;
     if (logwrap_fork_execvp(arraysize(vdc_argv), vdc_argv, &status, false, LOG_KLOG, true,
                             nullptr) != 0) {
-        return ErrnoError() << "Failed to call 'vdc volume shutdown'";
+        return ErrnoError() << "Failed to call '/system/bin/vdc " << system << " " << cmd << "'";
     }
     if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
         return {};
     }
-    return Error() << "'vdc volume shutdown' failed : " << status;
+    return Error() << "'/system/bin/vdc " << system << " " << cmd << "' failed : " << status;
 }
 
 static void LogShutdownTime(UmountStat stat, Timer* t) {
@@ -658,7 +658,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // 3. send volume shutdown to vold
     Service* vold_service = ServiceList::GetInstance().FindService("vold");
     if (vold_service != nullptr && vold_service->IsRunning()) {
-        ShutdownVold();
+        CallVdc("volume", "shutdown");
         vold_service->Stop();
     } else {
         LOG(INFO) << "vold not running, skipping vold shutdown";
@@ -774,8 +774,12 @@ static Result<void> DoUserspaceReboot() {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
-    // TODO(b/143970043): in case of ext4 we probably we will need to restart vold and kill zram
-    //  backing device.
+    if (auto result = KillZramBackingDevice(); !result) {
+        return result;
+    }
+    if (auto result = CallVdc("volume", "reset"); !result) {
+        return result;
+    }
     if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */), 5s,
                                              false /* SIGKILL */);
         r > 0) {
