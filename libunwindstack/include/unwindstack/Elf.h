@@ -63,7 +63,7 @@ class Elf {
 
   bool GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offset);
 
-  bool GetGlobalVariable(const std::string& name, uint64_t* memory_address);
+  bool GetGlobalVariableOffset(const std::string& name, uint64_t* memory_offset);
 
   uint64_t GetRelPc(uint64_t pc, const MapInfo* map_info);
 
