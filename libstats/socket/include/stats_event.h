@@ -76,7 +76,7 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif  // __CPLUSPLUS
 
 struct stats_event;
 
@@ -132,6 +132,6 @@ uint32_t stats_event_get_errors(struct stats_event* event);
 
 #ifdef __cplusplus
 }
-#endif
+#endif  // __CPLUSPLUS
 
 #endif  // ANDROID_STATS_LOG_STATS_EVENT_H
