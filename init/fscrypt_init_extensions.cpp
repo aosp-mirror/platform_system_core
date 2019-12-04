@@ -42,6 +42,10 @@
 using namespace android::fscrypt;
 
 bool FscryptInstallKeyring() {
+    if (keyctl_search(KEY_SPEC_SESSION_KEYRING, "keyring", "fscrypt", 0) != -1) {
+        LOG(INFO) << "Keyring is already created";
+        return true;
+    }
     key_serial_t device_keyring = add_key("keyring", "fscrypt", 0, 0, KEY_SPEC_SESSION_KEYRING);
 
     if (device_keyring == -1) {
