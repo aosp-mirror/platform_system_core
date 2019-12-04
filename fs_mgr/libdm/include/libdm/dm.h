@@ -90,6 +90,10 @@ class DeviceMapper final {
     // Returns 'true' on success, false otherwise.
     bool DeleteDevice(const std::string& name);
     bool DeleteDeviceIfExists(const std::string& name);
+    // Removes a device mapper device with the given name and waits for |timeout_ms| milliseconds
+    // for the corresponding block device to be deleted.
+    bool DeleteDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms);
+    bool DeleteDeviceIfExists(const std::string& name, const std::chrono::milliseconds& timeout_ms);
 
     // Fetches and returns the complete state of the underlying device mapper
     // device with given name.
