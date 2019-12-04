@@ -583,7 +583,7 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
         return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
-        if (!userdata_remount && !FscryptInstallKeyring()) {
+        if (!FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
@@ -594,7 +594,7 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
-        if (!userdata_remount && !FscryptInstallKeyring()) {
+        if (!FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
@@ -605,7 +605,7 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
-        if (!userdata_remount && !FscryptInstallKeyring()) {
+        if (!FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         property_set("ro.crypto.state", "encrypted");
