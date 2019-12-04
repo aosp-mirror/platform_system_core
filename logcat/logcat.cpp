@@ -865,7 +865,7 @@ int Logcat::Run(int argc, char** argv) {
                         }
                     }
                     // close output and error channels, replace with console
-                    dup2(fd, STDOUT_FILENO);
+                    dup2(fd, output_fd_.get());
                     dup2(fd, STDERR_FILENO);
                     close(fd);
                 }
