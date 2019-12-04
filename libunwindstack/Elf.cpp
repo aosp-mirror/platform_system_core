@@ -112,35 +112,33 @@ bool Elf::GetFunctionName(uint64_t addr, std::string* name, uint64_t* func_offse
                      gnu_debugdata_interface_->GetFunctionName(addr, name, func_offset)));
 }
 
-bool Elf::GetGlobalVariable(const std::string& name, uint64_t* memory_address) {
+bool Elf::GetGlobalVariableOffset(const std::string& name, uint64_t* memory_offset) {
   if (!valid_) {
     return false;
   }
 
-  if (!interface_->GetGlobalVariable(name, memory_address) &&
+  uint64_t vaddr;
+  if (!interface_->GetGlobalVariable(name, &vaddr) &&
       (gnu_debugdata_interface_ == nullptr ||
-       !gnu_debugdata_interface_->GetGlobalVariable(name, memory_address))) {
+       !gnu_debugdata_interface_->GetGlobalVariable(name, &vaddr))) {
     return false;
   }
 
-  // Adjust by the load bias.
-  if (load_bias_ > 0 && *memory_address < static_cast<uint64_t>(load_bias_)) {
-    return false;
+  // Check the .data section.
+  uint64_t vaddr_start = interface_->data_vaddr_start();
+  if (vaddr >= vaddr_start && vaddr < interface_->data_vaddr_end()) {
+    *memory_offset = vaddr - vaddr_start + interface_->data_offset();
+    return true;
   }
 
-  *memory_address -= load_bias_;
-
-  // If this winds up in the dynamic section, then we might need to adjust
-  // the address.
-  uint64_t dynamic_end = interface_->dynamic_vaddr() + interface_->dynamic_size();
-  if (*memory_address >= interface_->dynamic_vaddr() && *memory_address < dynamic_end) {
-    if (interface_->dynamic_vaddr() > interface_->dynamic_offset()) {
-      *memory_address -= interface_->dynamic_vaddr() - interface_->dynamic_offset();
-    } else {
-      *memory_address += interface_->dynamic_offset() - interface_->dynamic_vaddr();
-    }
+  // Check the .dynamic section.
+  vaddr_start = interface_->dynamic_vaddr_start();
+  if (vaddr >= vaddr_start && vaddr < interface_->dynamic_vaddr_end()) {
+    *memory_offset = vaddr - vaddr_start + interface_->dynamic_offset();
+    return true;
   }
-  return true;
+
+  return false;
 }
 
 std::string Elf::GetBuildID() {
