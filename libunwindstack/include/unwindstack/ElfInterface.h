@@ -77,8 +77,11 @@ class ElfInterface {
   void SetGnuDebugdataInterface(ElfInterface* interface) { gnu_debugdata_interface_ = interface; }
 
   uint64_t dynamic_offset() { return dynamic_offset_; }
-  uint64_t dynamic_vaddr() { return dynamic_vaddr_; }
-  uint64_t dynamic_size() { return dynamic_size_; }
+  uint64_t dynamic_vaddr_start() { return dynamic_vaddr_start_; }
+  uint64_t dynamic_vaddr_end() { return dynamic_vaddr_end_; }
+  uint64_t data_offset() { return data_offset_; }
+  uint64_t data_vaddr_start() { return data_vaddr_start_; }
+  uint64_t data_vaddr_end() { return data_vaddr_end_; }
   uint64_t eh_frame_hdr_offset() { return eh_frame_hdr_offset_; }
   int64_t eh_frame_hdr_section_bias() { return eh_frame_hdr_section_bias_; }
   uint64_t eh_frame_hdr_size() { return eh_frame_hdr_size_; }
@@ -141,8 +144,12 @@ class ElfInterface {
 
   // Stored elf data.
   uint64_t dynamic_offset_ = 0;
-  uint64_t dynamic_vaddr_ = 0;
-  uint64_t dynamic_size_ = 0;
+  uint64_t dynamic_vaddr_start_ = 0;
+  uint64_t dynamic_vaddr_end_ = 0;
+
+  uint64_t data_offset_ = 0;
+  uint64_t data_vaddr_start_ = 0;
+  uint64_t data_vaddr_end_ = 0;
 
   uint64_t eh_frame_hdr_offset_ = 0;
   int64_t eh_frame_hdr_section_bias_ = 0;
