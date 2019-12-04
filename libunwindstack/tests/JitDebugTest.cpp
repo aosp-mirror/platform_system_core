@@ -35,13 +35,17 @@ namespace unwindstack {
 
 class JitDebugTest : public ::testing::Test {
  protected:
-  void CreateFakeElf(MapInfo* map_info) {
+  void CreateFakeElf(MapInfo* map_info, uint64_t global_offset, uint64_t data_offset,
+                     uint64_t data_vaddr, uint64_t data_size) {
     MemoryFake* memory = new MemoryFake;
     ElfFake* elf = new ElfFake(memory);
     elf->FakeSetValid(true);
     ElfInterfaceFake* interface = new ElfInterfaceFake(memory);
     elf->FakeSetInterface(interface);
-    interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x800);
+    interface->FakeSetGlobalVariable("__jit_debug_descriptor", global_offset);
+    interface->FakeSetDataOffset(data_offset);
+    interface->FakeSetDataVaddrStart(data_vaddr);
+    interface->FakeSetDataVaddrEnd(data_vaddr + data_size);
     map_info->elf.reset(elf);
   }
 
@@ -52,27 +56,27 @@ class JitDebugTest : public ::testing::Test {
     maps_.reset(
         new BufferMaps("1000-4000 ---s 00000000 00:00 0 /fake/elf1\n"
                        "4000-6000 r--s 00000000 00:00 0 /fake/elf1\n"
-                       "6000-8000 -wxs 00000000 00:00 0 /fake/elf1\n"
+                       "6000-8000 -wxs 00002000 00:00 0 /fake/elf1\n"
                        "a000-c000 --xp 00000000 00:00 0 /fake/elf2\n"
-                       "c000-f000 rw-p 00001000 00:00 0 /fake/elf2\n"
+                       "c000-f000 rw-p 00002000 00:00 0 /fake/elf2\n"
                        "f000-11000 r--p 00000000 00:00 0 /fake/elf3\n"
-                       "11000-12000 rw-p 00001000 00:00 0 /fake/elf3\n"
+                       "11000-12000 rw-p 00002000 00:00 0 /fake/elf3\n"
                        "12000-14000 r--p 00000000 00:00 0 /fake/elf4\n"
-                       "100000-110000 rw-p 0001000 00:00 0 /fake/elf4\n"
-                       "200000-210000 rw-p 0002000 00:00 0 /fake/elf4\n"));
+                       "100000-110000 rw-p 00ee000 00:00 0 /fake/elf4\n"
+                       "200000-210000 rw-p 01ee000 00:00 0 /fake/elf4\n"));
     ASSERT_TRUE(maps_->Parse());
 
     MapInfo* map_info = maps_->Get(3);
     ASSERT_TRUE(map_info != nullptr);
-    CreateFakeElf(map_info);
+    CreateFakeElf(map_info, 0x2800, 0x2000, 0x2000, 0x3000);
 
     map_info = maps_->Get(5);
     ASSERT_TRUE(map_info != nullptr);
-    CreateFakeElf(map_info);
+    CreateFakeElf(map_info, 0x2800, 0x2000, 0x2000, 0x3000);
 
     map_info = maps_->Get(7);
     ASSERT_TRUE(map_info != nullptr);
-    CreateFakeElf(map_info);
+    CreateFakeElf(map_info, 0xee800, 0xee000, 0xee000, 0x10000);
   }
 
   void SetUp() override {
@@ -258,7 +262,7 @@ TEST_F(JitDebugTest, get_elf_no_valid_descriptor_in_memory) {
 TEST_F(JitDebugTest, get_elf_no_valid_code_entry) {
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x4000, ELFCLASS32, EM_ARM, 0x1500, 0x200);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x11800, 0x200000);
 
   Elf* elf = jit_debug_->GetElf(maps_.get(), 0x1500);
   ASSERT_TRUE(elf == nullptr);
@@ -267,7 +271,7 @@ TEST_F(JitDebugTest, get_elf_no_valid_code_entry) {
 TEST_F(JitDebugTest, get_elf_invalid_descriptor_first_entry) {
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x4000, ELFCLASS32, EM_ARM, 0x1500, 0x200);
 
-  WriteDescriptor32(0xf800, 0);
+  WriteDescriptor32(0x11800, 0);
 
   Elf* elf = jit_debug_->GetElf(maps_.get(), 0x1500);
   ASSERT_TRUE(elf == nullptr);
@@ -276,9 +280,9 @@ TEST_F(JitDebugTest, get_elf_invalid_descriptor_first_entry) {
 TEST_F(JitDebugTest, get_elf_invalid_descriptor_version) {
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x4000, ELFCLASS32, EM_ARM, 0x1500, 0x200);
 
-  WriteDescriptor32(0xf800, 0x20000);
+  WriteDescriptor32(0x11800, 0x20000);
   // Set the version to an invalid value.
-  memory_->SetData32(0xf800, 2);
+  memory_->SetData32(0x11800, 2);
 
   Elf* elf = jit_debug_->GetElf(maps_.get(), 0x1500);
   ASSERT_TRUE(elf == nullptr);
@@ -287,7 +291,7 @@ TEST_F(JitDebugTest, get_elf_invalid_descriptor_version) {
 TEST_F(JitDebugTest, get_elf_32) {
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x4000, ELFCLASS32, EM_ARM, 0x1500, 0x200);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x11800, 0x200000);
   WriteEntry32Pad(0x200000, 0, 0, 0x4000, 0x1000);
 
   Elf* elf = jit_debug_->GetElf(maps_.get(), 0x1500);
@@ -304,16 +308,16 @@ TEST_F(JitDebugTest, get_multiple_jit_debug_descriptors_valid) {
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x4000, ELFCLASS32, EM_ARM, 0x1500, 0x200);
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x5000, ELFCLASS32, EM_ARM, 0x2000, 0x300);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x11800, 0x200000);
   WriteEntry32Pad(0x200000, 0, 0, 0x4000, 0x1000);
-  WriteDescriptor32(0x12800, 0x201000);
+  WriteDescriptor32(0x100800, 0x201000);
   WriteEntry32Pad(0x201000, 0, 0, 0x5000, 0x1000);
 
   ASSERT_TRUE(jit_debug_->GetElf(maps_.get(), 0x1500) != nullptr);
   ASSERT_TRUE(jit_debug_->GetElf(maps_.get(), 0x2000) == nullptr);
 
   // Now clear the descriptor entry for the first one.
-  WriteDescriptor32(0xf800, 0);
+  WriteDescriptor32(0x11800, 0);
   jit_debug_.reset(new JitDebug(process_memory_));
   jit_debug_->SetArch(ARCH_ARM);
 
@@ -326,7 +330,7 @@ TEST_F(JitDebugTest, get_elf_x86) {
 
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x4000, ELFCLASS32, EM_ARM, 0x1500, 0x200);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x11800, 0x200000);
   WriteEntry32Pack(0x200000, 0, 0, 0x4000, 0x1000);
 
   jit_debug_->SetArch(ARCH_X86);
@@ -345,7 +349,7 @@ TEST_F(JitDebugTest, get_elf_64) {
 
   CreateElf<Elf64_Ehdr, Elf64_Shdr>(0x4000, ELFCLASS64, EM_AARCH64, 0x1500, 0x200);
 
-  WriteDescriptor64(0xf800, 0x200000);
+  WriteDescriptor64(0x11800, 0x200000);
   WriteEntry64(0x200000, 0, 0, 0x4000, 0x1000);
 
   Elf* elf = jit_debug_->GetElf(maps_.get(), 0x1500);
@@ -362,7 +366,7 @@ TEST_F(JitDebugTest, get_elf_multiple_entries) {
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x4000, ELFCLASS32, EM_ARM, 0x1500, 0x200);
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x5000, ELFCLASS32, EM_ARM, 0x2300, 0x400);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x11800, 0x200000);
   WriteEntry32Pad(0x200000, 0, 0x200100, 0x4000, 0x1000);
   WriteEntry32Pad(0x200100, 0x200100, 0, 0x5000, 0x1000);
 
@@ -385,7 +389,7 @@ TEST_F(JitDebugTest, get_elf_multiple_entries) {
 TEST_F(JitDebugTest, get_elf_search_libs) {
   CreateElf<Elf32_Ehdr, Elf32_Shdr>(0x4000, ELFCLASS32, EM_ARM, 0x1500, 0x200);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x11800, 0x200000);
   WriteEntry32Pad(0x200000, 0, 0, 0x4000, 0x1000);
 
   // Only search a given named list of libs.
