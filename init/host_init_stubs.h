@@ -39,15 +39,6 @@ namespace init {
 inline bool CanReadProperty(const std::string&, const std::string&) {
     return true;
 }
-inline uint32_t SetProperty(const std::string& key, const std::string& value) {
-    android::base::SetProperty(key, value);
-    return 0;
-}
-inline uint32_t (*property_set)(const std::string& name, const std::string& value) = SetProperty;
-inline uint32_t HandlePropertySet(const std::string&, const std::string&, const std::string&,
-                                  const ucred&, std::string*) {
-    return 0;
-}
 
 // reboot_utils.h
 inline void SetFatalRebootTarget() {}

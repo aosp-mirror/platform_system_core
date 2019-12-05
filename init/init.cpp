@@ -81,6 +81,7 @@ using namespace std::string_literals;
 using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::ReadFileToString;
+using android::base::SetProperty;
 using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::Trim;
@@ -91,8 +92,6 @@ namespace init {
 
 static int property_triggers_enabled = 0;
 
-static char qemu[32];
-
 static int signal_fd = -1;
 static int property_fd = -1;
 
@@ -101,7 +100,6 @@ static std::string wait_prop_name;
 static std::string wait_prop_value;
 static std::string shutdown_command;
 static bool do_shutdown = false;
-static bool load_debug_prop = false;
 
 static std::unique_ptr<Subcontext> subcontext;
 
@@ -208,7 +206,7 @@ void property_changed(const std::string& name, const std::string& value) {
     // to wait.
     if (name == kColdBootDoneProp) {
         auto time_waited = waiting_for_prop ? waiting_for_prop->duration().count() : 0;
-        property_set("ro.boottime.init.cold_boot_wait", std::to_string(time_waited));
+        SetProperty("ro.boottime.init.cold_boot_wait", std::to_string(time_waited));
     }
 
     if (waiting_for_prop) {
@@ -364,85 +362,15 @@ static Result<void> SetupCgroupsAction(const BuiltinArguments&) {
     return {};
 }
 
-static void import_kernel_nv(const std::string& key, const std::string& value, bool for_emulator) {
-    if (key.empty()) return;
-
-    if (for_emulator) {
-        // In the emulator, export any kernel option with the "ro.kernel." prefix.
-        property_set("ro.kernel." + key, value);
-        return;
-    }
-
-    if (key == "qemu") {
-        strlcpy(qemu, value.c_str(), sizeof(qemu));
-    } else if (android::base::StartsWith(key, "androidboot.")) {
-        property_set("ro.boot." + key.substr(12), value);
-    }
-}
-
 static void export_oem_lock_status() {
     if (!android::base::GetBoolProperty("ro.oem_unlock_supported", false)) {
         return;
     }
-    import_kernel_cmdline(
-            false, [](const std::string& key, const std::string& value, bool in_qemu) {
-                if (key == "androidboot.verifiedbootstate") {
-                    property_set("ro.boot.flash.locked", value == "orange" ? "0" : "1");
-                }
-            });
-}
-
-static void export_kernel_boot_props() {
-    constexpr const char* UNSET = "";
-    struct {
-        const char *src_prop;
-        const char *dst_prop;
-        const char *default_value;
-    } prop_map[] = {
-        { "ro.boot.serialno",   "ro.serialno",   UNSET, },
-        { "ro.boot.mode",       "ro.bootmode",   "unknown", },
-        { "ro.boot.baseband",   "ro.baseband",   "unknown", },
-        { "ro.boot.bootloader", "ro.bootloader", "unknown", },
-        { "ro.boot.hardware",   "ro.hardware",   "unknown", },
-        { "ro.boot.revision",   "ro.revision",   "0", },
-    };
-    for (const auto& prop : prop_map) {
-        std::string value = GetProperty(prop.src_prop, prop.default_value);
-        if (value != UNSET)
-            property_set(prop.dst_prop, value);
-    }
-}
-
-static void process_kernel_dt() {
-    if (!is_android_dt_value_expected("compatible", "android,firmware")) {
-        return;
-    }
-
-    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(get_android_dt_dir().c_str()), closedir);
-    if (!dir) return;
-
-    std::string dt_file;
-    struct dirent *dp;
-    while ((dp = readdir(dir.get())) != NULL) {
-        if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible") || !strcmp(dp->d_name, "name")) {
-            continue;
+    ImportKernelCmdline([](const std::string& key, const std::string& value) {
+        if (key == "androidboot.verifiedbootstate") {
+            SetProperty("ro.boot.flash.locked", value == "orange" ? "0" : "1");
         }
-
-        std::string file_name = get_android_dt_dir() + dp->d_name;
-
-        android::base::ReadFileToString(file_name, &dt_file);
-        std::replace(dt_file.begin(), dt_file.end(), ',', '.');
-
-        property_set("ro.boot."s + dp->d_name, dt_file);
-    }
-}
-
-static void process_kernel_cmdline() {
-    // The first pass does the common stuff, and finds if we are in qemu.
-    // The second pass is only necessary for qemu to export all kernel params
-    // as properties.
-    import_kernel_cmdline(false, import_kernel_nv);
-    if (qemu[0]) import_kernel_cmdline(true, import_kernel_nv);
+    });
 }
 
 static Result<void> property_enable_triggers_action(const BuiltinArguments& args) {
@@ -468,7 +396,7 @@ static void set_usb_controller() {
     while ((dp = readdir(dir.get())) != nullptr) {
         if (dp->d_name[0] == '.') continue;
 
-        property_set("sys.usb.controller", dp->d_name);
+        SetProperty("sys.usb.controller", dp->d_name);
         break;
     }
 }
@@ -591,7 +519,7 @@ static void RecordStageBoottimes(const boot_clock::time_point& second_stage_star
     int64_t first_stage_start_time_ns = -1;
     if (auto first_stage_start_time_str = getenv(kEnvFirstStageStartedAt);
         first_stage_start_time_str) {
-        property_set("ro.boottime.init", first_stage_start_time_str);
+        SetProperty("ro.boottime.init", first_stage_start_time_str);
         android::base::ParseInt(first_stage_start_time_str, &first_stage_start_time_ns);
     }
     unsetenv(kEnvFirstStageStartedAt);
@@ -605,11 +533,11 @@ static void RecordStageBoottimes(const boot_clock::time_point& second_stage_star
     if (selinux_start_time_ns == -1) return;
     if (first_stage_start_time_ns == -1) return;
 
-    property_set("ro.boottime.init.first_stage",
-                 std::to_string(selinux_start_time_ns - first_stage_start_time_ns));
-    property_set("ro.boottime.init.selinux",
-                 std::to_string(second_stage_start_time.time_since_epoch().count() -
-                                selinux_start_time_ns));
+    SetProperty("ro.boottime.init.first_stage",
+                std::to_string(selinux_start_time_ns - first_stage_start_time_ns));
+    SetProperty("ro.boottime.init.selinux",
+                std::to_string(second_stage_start_time.time_since_epoch().count() -
+                               selinux_start_time_ns));
 }
 
 void SendLoadPersistentPropertiesMessage() {
@@ -706,33 +634,26 @@ int SecondStageMain(int argc, char** argv) {
     // Indicate that booting is in progress to background fw loaders, etc.
     close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
 
-    property_init();
-
-    // If arguments are passed both on the command line and in DT,
-    // properties set in DT always have priority over the command-line ones.
-    process_kernel_dt();
-    process_kernel_cmdline();
-
-    // Propagate the kernel variables to internal variables
-    // used by init as well as the current required properties.
-    export_kernel_boot_props();
-
-    // Make the time that init stages started available for bootstat to log.
-    RecordStageBoottimes(start_time);
-
-    // Set libavb version for Framework-only OTA match in Treble build.
-    const char* avb_version = getenv("INIT_AVB_VERSION");
-    if (avb_version) property_set("ro.boot.avb_version", avb_version);
-
     // See if need to load debug props to allow adb root, when the device is unlocked.
     const char* force_debuggable_env = getenv("INIT_FORCE_DEBUGGABLE");
+    bool load_debug_prop = false;
     if (force_debuggable_env && AvbHandle::IsDeviceUnlocked()) {
         load_debug_prop = "true"s == force_debuggable_env;
     }
-
-    // Clean up our environment.
-    unsetenv("INIT_AVB_VERSION");
     unsetenv("INIT_FORCE_DEBUGGABLE");
+
+    // Umount the debug ramdisk so property service doesn't read .prop files from there, when it
+    // is not meant to.
+    if (!load_debug_prop) {
+        UmountDebugRamdisk();
+    }
+
+    PropertyInit();
+
+    // Umount the debug ramdisk after property service has read the .prop files when it means to.
+    if (load_debug_prop) {
+        UmountDebugRamdisk();
+    }
 
     // Now set up SELinux for second stage.
     SelinuxSetupKernelLogging();
@@ -746,16 +667,22 @@ int SecondStageMain(int argc, char** argv) {
 
     InstallSignalFdHandler(&epoll);
 
-    property_load_boot_defaults(load_debug_prop);
-    UmountDebugRamdisk();
-    fs_mgr_vendor_overlay_mount_all();
-    export_oem_lock_status();
-
     StartPropertyService(&property_fd);
     if (auto result = epoll.RegisterHandler(property_fd, HandlePropertyFd); !result) {
         LOG(FATAL) << "Could not register epoll handler for property fd: " << result.error();
     }
 
+    // Make the time that init stages started available for bootstat to log.
+    RecordStageBoottimes(start_time);
+
+    // Set libavb version for Framework-only OTA match in Treble build.
+    if (const char* avb_version = getenv("INIT_AVB_VERSION"); avb_version != nullptr) {
+        SetProperty("ro.boot.avb_version", avb_version);
+    }
+    unsetenv("INIT_AVB_VERSION");
+
+    fs_mgr_vendor_overlay_mount_all();
+    export_oem_lock_status();
     MountHandler mount_handler(&epoll);
     set_usb_controller();
 
@@ -779,9 +706,9 @@ int SecondStageMain(int argc, char** argv) {
 
     // Make the GSI status available before scripts start running.
     if (android::gsi::IsGsiRunning()) {
-        property_set("ro.gsid.image_running", "1");
+        SetProperty("ro.gsid.image_running", "1");
     } else {
-        property_set("ro.gsid.image_running", "0");
+        SetProperty("ro.gsid.image_running", "0");
     }
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
