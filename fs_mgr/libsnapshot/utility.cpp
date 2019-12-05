@@ -140,5 +140,17 @@ AutoUnmountDevice::~AutoUnmountDevice() {
     }
 }
 
+bool WriteStringToFileAtomic(const std::string& content, const std::string& path) {
+    std::string tmp_path = path + ".tmp";
+    if (!android::base::WriteStringToFile(content, tmp_path)) {
+        return false;
+    }
+    if (rename(tmp_path.c_str(), path.c_str()) == -1) {
+        PLOG(ERROR) << "rename failed from " << tmp_path << " to " << path;
+        return false;
+    }
+    return true;
+}
+
 }  // namespace snapshot
 }  // namespace android
