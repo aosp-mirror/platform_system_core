@@ -114,7 +114,7 @@ struct log_msg {
   }
   char* msg() {
     unsigned short hdr_size = entry.hdr_size;
-    if (hdr_size != sizeof(entry)) {
+    if (hdr_size >= sizeof(struct log_msg) - sizeof(entry)) {
       return nullptr;
     }
     return reinterpret_cast<char*>(buf) + hdr_size;
