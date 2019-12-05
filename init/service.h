@@ -65,11 +65,12 @@ class Service {
 
   public:
     Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
-            const std::vector<std::string>& args);
+            const std::vector<std::string>& args, bool from_apex = false);
 
     Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
             const std::vector<gid_t>& supp_gids, int namespace_flags, const std::string& seclabel,
-            Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args);
+            Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args,
+            bool from_apex = false);
 
     static Result<std::unique_ptr<Service>> MakeTemporaryOneshotService(
             const std::vector<std::string>& args);
@@ -128,6 +129,7 @@ class Service {
     const std::vector<std::string>& args() const { return args_; }
     bool is_updatable() const { return updatable_; }
     bool is_post_data() const { return post_data_; }
+    bool is_from_apex() const { return from_apex_; }
 
   private:
     void NotifyStateChange(const std::string& new_state) const;
@@ -199,6 +201,8 @@ class Service {
     bool running_at_post_data_reset_ = false;
 
     std::optional<std::string> on_failure_reboot_target_;
+
+    bool from_apex_ = false;
 };
 
 }  // namespace init

@@ -131,13 +131,13 @@ unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
-                 const std::vector<std::string>& args)
-    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, args) {}
+                 const std::vector<std::string>& args, bool from_apex)
+    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, args, from_apex) {}
 
 Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  const std::vector<gid_t>& supp_gids, int namespace_flags,
                  const std::string& seclabel, Subcontext* subcontext_for_restart_commands,
-                 const std::vector<std::string>& args)
+                 const std::vector<std::string>& args, bool from_apex)
     : name_(name),
       classnames_({"default"}),
       flags_(flags),
@@ -155,7 +155,8 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  "onrestart", {}),
       oom_score_adjust_(DEFAULT_OOM_SCORE_ADJUST),
       start_order_(0),
-      args_(args) {}
+      args_(args),
+      from_apex_(from_apex) {}
 
 void Service::NotifyStateChange(const std::string& new_state) const {
     if ((flags_ & SVC_TEMPORARY) != 0) {
@@ -763,7 +764,7 @@ Result<std::unique_ptr<Service>> Service::MakeTemporaryOneshotService(
     }
 
     return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, namespace_flags, seclabel,
-                                     nullptr, str_args);
+                                     nullptr, str_args, false);
 }
 
 }  // namespace init
