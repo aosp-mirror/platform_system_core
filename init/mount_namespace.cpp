@@ -25,6 +25,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/result.h>
 #include <android-base/unique_fd.h>
 
 #include "util.h"
@@ -79,30 +80,69 @@ static bool IsApexUpdatable() {
     return updatable;
 }
 
+static Result<void> MountDir(const std::string& path, const std::string& mount_path) {
+    if (int ret = mkdir(mount_path.c_str(), 0755); ret != 0 && ret != EEXIST) {
+        return ErrnoError() << "Could not create mount point " << mount_path;
+    }
+    if (mount(path.c_str(), mount_path.c_str(), nullptr, MS_BIND, nullptr) != 0) {
+        return ErrnoError() << "Could not bind mount " << path << " to " << mount_path;
+    }
+    return {};
+}
+
+static Result<void> ActivateFlattenedApexesFrom(const std::string& from_dir,
+                                                const std::string& to_dir) {
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(from_dir.c_str()), closedir);
+    if (!dir) {
+        return {};
+    }
+    dirent* entry;
+    while ((entry = readdir(dir.get())) != nullptr) {
+        if (entry->d_name[0] == '.') continue;
+        if (entry->d_type == DT_DIR) {
+            const std::string apex_path = from_dir + "/" + entry->d_name;
+            const std::string mount_path = to_dir + "/" + entry->d_name;
+            if (auto result = MountDir(apex_path, mount_path); !result) {
+                return result;
+            }
+        }
+    }
+    return {};
+}
+
 static bool ActivateFlattenedApexesIfPossible() {
     if (IsRecoveryMode() || IsApexUpdatable()) {
         return true;
     }
 
-    constexpr const char kSystemApex[] = "/system/apex";
-    constexpr const char kApexTop[] = "/apex";
-    if (mount(kSystemApex, kApexTop, nullptr, MS_BIND, nullptr) != 0) {
-        PLOG(ERROR) << "Could not bind mount " << kSystemApex << " to " << kApexTop;
-        return false;
-    }
+    const std::string kApexTop = "/apex";
+    const std::vector<std::string> kBuiltinDirsForApexes = {
+            "/system/apex",
+            "/system_ext/apex",
+            "/product/apex",
+            "/vendor/apex",
+    };
 
+    for (const auto& dir : kBuiltinDirsForApexes) {
+        if (auto result = ActivateFlattenedApexesFrom(dir, kApexTop); !result) {
+            LOG(ERROR) << result.error();
+            return false;
+        }
+    }
     // Special casing for the ART APEX
-    constexpr const char kArtApexMountPath[] = "/system/apex/com.android.art";
+    constexpr const char kArtApexMountPath[] = "/apex/com.android.art";
     static const std::vector<std::string> kArtApexDirNames = {"com.android.art.release",
                                                               "com.android.art.debug"};
     bool success = false;
     for (const auto& name : kArtApexDirNames) {
-        std::string path = std::string(kSystemApex) + "/" + name;
+        std::string path = kApexTop + "/" + name;
         if (access(path.c_str(), F_OK) == 0) {
-            if (mount(path.c_str(), kArtApexMountPath, nullptr, MS_BIND, nullptr) == 0) {
-                success = true;
-                break;
+            if (auto result = MountDir(path, kArtApexMountPath); !result) {
+                LOG(ERROR) << result.error();
+                return false;
             }
+            success = true;
+            break;
         }
     }
     if (!success) {
