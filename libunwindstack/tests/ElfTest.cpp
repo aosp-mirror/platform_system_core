@@ -104,6 +104,8 @@ class ElfTest : public ::testing::Test {
     memory_->SetMemory(0x100, &phdr, sizeof(phdr));
   }
 
+  void VerifyStepIfSignalHandler(uint64_t load_bias);
+
   MemoryFake* memory_;
 };
 
@@ -281,7 +283,7 @@ TEST_F(ElfTest, rel_pc) {
   ASSERT_EQ(0x101U, elf.GetRelPc(0x1101, &map_info));
 }
 
-TEST_F(ElfTest, step_in_signal_map) {
+void ElfTest::VerifyStepIfSignalHandler(uint64_t load_bias) {
   ElfFake elf(memory_);
 
   RegsArm regs;
@@ -290,6 +292,7 @@ TEST_F(ElfTest, step_in_signal_map) {
 
   ElfInterfaceFake* interface = new ElfInterfaceFake(memory_);
   elf.FakeSetInterface(interface);
+  elf.FakeSetLoadBias(load_bias);
 
   memory_->SetData32(0x3000, 0xdf0027ad);
   MemoryFake process_memory;
@@ -299,10 +302,18 @@ TEST_F(ElfTest, step_in_signal_map) {
   }
 
   elf.FakeSetValid(true);
-  ASSERT_TRUE(elf.StepIfSignalHandler(0x3000, &regs, &process_memory));
+  ASSERT_TRUE(elf.StepIfSignalHandler(0x3000 + load_bias, &regs, &process_memory));
   EXPECT_EQ(ERROR_NONE, elf.GetLastErrorCode());
   EXPECT_EQ(15U, regs.pc());
   EXPECT_EQ(13U, regs.sp());
+}
+
+TEST_F(ElfTest, step_in_signal_map) {
+  VerifyStepIfSignalHandler(0);
+}
+
+TEST_F(ElfTest, step_in_signal_map_non_zero_load_bias) {
+  VerifyStepIfSignalHandler(0x1000);
 }
 
 class ElfInterfaceMock : public ElfInterface {

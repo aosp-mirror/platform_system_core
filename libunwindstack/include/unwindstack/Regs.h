@@ -66,7 +66,7 @@ class Regs {
 
   virtual uint64_t GetPcAdjustment(uint64_t rel_pc, Elf* elf) = 0;
 
-  virtual bool StepIfSignalHandler(uint64_t rel_pc, Elf* elf, Memory* process_memory) = 0;
+  virtual bool StepIfSignalHandler(uint64_t elf_offset, Elf* elf, Memory* process_memory) = 0;
 
   virtual bool SetPcFromReturnAddress(Memory* process_memory) = 0;
 

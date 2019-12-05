@@ -173,7 +173,12 @@ bool Elf::StepIfSignalHandler(uint64_t rel_pc, Regs* regs, Memory* process_memor
   if (!valid_) {
     return false;
   }
-  return regs->StepIfSignalHandler(rel_pc, this, process_memory);
+
+  // Convert the rel_pc to an elf_offset.
+  if (rel_pc < static_cast<uint64_t>(load_bias_)) {
+    return false;
+  }
+  return regs->StepIfSignalHandler(rel_pc - load_bias_, this, process_memory);
 }
 
 // The relative pc is always relative to the start of the map from which it comes.
