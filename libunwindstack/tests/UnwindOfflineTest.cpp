@@ -1629,4 +1629,72 @@ TEST_F(UnwindOfflineTest, eh_frame_bias_x86) {
   EXPECT_EQ(0xfffe1d74ULL, unwinder.frames()[10].sp);
 }
 
+TEST_F(UnwindOfflineTest, signal_load_bias_arm) {
+  ASSERT_NO_FATAL_FAILURE(Init("signal_load_bias_arm/", ARCH_ARM));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(17U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 0029ef9e  libunwindstack_unit_test (SignalInnerFunction+10)\n"
+      "  #01 pc 0029efa7  libunwindstack_unit_test (SignalMiddleFunction+2)\n"
+      "  #02 pc 0029efaf  libunwindstack_unit_test (SignalOuterFunction+2)\n"
+      "  #03 pc 002a280b  libunwindstack_unit_test (unwindstack::SignalCallerHandler(int, "
+      "siginfo*, void*)+10)\n"
+      "  #04 pc 00058bd4  libc.so (__restore)\n"
+      "  #05 pc 0029f01e  libunwindstack_unit_test (InnerFunction+106)\n"
+      "  #06 pc 0029f633  libunwindstack_unit_test (MiddleFunction+16)\n"
+      "  #07 pc 0029f64b  libunwindstack_unit_test (OuterFunction+16)\n"
+      "  #08 pc 002a1711  libunwindstack_unit_test (unwindstack::RemoteThroughSignal(int, unsigned "
+      "int)+260)\n"
+      "  #09 pc 002a1603  libunwindstack_unit_test "
+      "(unwindstack::UnwindTest_remote_through_signal_Test::TestBody()+10)\n"
+      "  #10 pc 002c8fe3  libunwindstack_unit_test (testing::Test::Run()+130)\n"
+      "  #11 pc 002c9b25  libunwindstack_unit_test (testing::TestInfo::Run()+184)\n"
+      "  #12 pc 002c9e27  libunwindstack_unit_test (testing::TestSuite::Run()+202)\n"
+      "  #13 pc 002d193d  libunwindstack_unit_test "
+      "(testing::internal::UnitTestImpl::RunAllTests()+660)\n"
+      "  #14 pc 002d160b  libunwindstack_unit_test (testing::UnitTest::Run()+134)\n"
+      "  #15 pc 002de035  libunwindstack_unit_test (IsolateMain+680)\n"
+      "  #16 pc 00058155  libc.so (__libc_init+68)\n",
+      frame_info);
+
+  EXPECT_EQ(0xb6955f9eULL, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xf2790ce8ULL, unwinder.frames()[0].sp);
+  EXPECT_EQ(0xb6955fa7ULL, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xf2790ce8ULL, unwinder.frames()[1].sp);
+  EXPECT_EQ(0xb6955fafULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xf2790cf0ULL, unwinder.frames()[2].sp);
+  EXPECT_EQ(0xb695980bULL, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xf2790cf8ULL, unwinder.frames()[3].sp);
+  EXPECT_EQ(0xf23febd4ULL, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xf2790d10ULL, unwinder.frames()[4].sp);
+  EXPECT_EQ(0xb695601eULL, unwinder.frames()[5].pc);
+  EXPECT_EQ(0xffe67798ULL, unwinder.frames()[5].sp);
+  EXPECT_EQ(0xb6956633ULL, unwinder.frames()[6].pc);
+  EXPECT_EQ(0xffe67890ULL, unwinder.frames()[6].sp);
+  EXPECT_EQ(0xb695664bULL, unwinder.frames()[7].pc);
+  EXPECT_EQ(0xffe678a0ULL, unwinder.frames()[7].sp);
+  EXPECT_EQ(0xb6958711ULL, unwinder.frames()[8].pc);
+  EXPECT_EQ(0xffe678b0ULL, unwinder.frames()[8].sp);
+  EXPECT_EQ(0xb6958603ULL, unwinder.frames()[9].pc);
+  EXPECT_EQ(0xffe67ac8ULL, unwinder.frames()[9].sp);
+  EXPECT_EQ(0xb697ffe3ULL, unwinder.frames()[10].pc);
+  EXPECT_EQ(0xffe67ad8ULL, unwinder.frames()[10].sp);
+  EXPECT_EQ(0xb6980b25ULL, unwinder.frames()[11].pc);
+  EXPECT_EQ(0xffe67ae8ULL, unwinder.frames()[11].sp);
+  EXPECT_EQ(0xb6980e27ULL, unwinder.frames()[12].pc);
+  EXPECT_EQ(0xffe67b18ULL, unwinder.frames()[12].sp);
+  EXPECT_EQ(0xb698893dULL, unwinder.frames()[13].pc);
+  EXPECT_EQ(0xffe67b48ULL, unwinder.frames()[13].sp);
+  EXPECT_EQ(0xb698860bULL, unwinder.frames()[14].pc);
+  EXPECT_EQ(0xffe67bb0ULL, unwinder.frames()[14].sp);
+  EXPECT_EQ(0xb6995035ULL, unwinder.frames()[15].pc);
+  EXPECT_EQ(0xffe67bd0ULL, unwinder.frames()[15].sp);
+  EXPECT_EQ(0xf23fe155ULL, unwinder.frames()[16].pc);
+  EXPECT_EQ(0xffe67d10ULL, unwinder.frames()[16].sp);
+}
+
 }  // namespace unwindstack
