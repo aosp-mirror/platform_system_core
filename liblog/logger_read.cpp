@@ -120,7 +120,8 @@ int android_logger_list_read(struct logger_list* logger_list, struct log_msg* lo
     return -EINVAL;
   }
 
-  if (log_msg->entry.hdr_size != sizeof(log_msg->entry)) {
+  if (log_msg->entry.hdr_size < sizeof(log_msg->entry) ||
+      log_msg->entry.hdr_size >= sizeof(struct log_msg) - sizeof(log_msg->entry)) {
     return -EINVAL;
   }
 
