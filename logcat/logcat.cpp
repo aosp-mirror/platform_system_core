@@ -282,72 +282,78 @@ static void show_help() {
 
     fprintf(stderr, "Usage: %s [options] [filterspecs]\n", cmd);
 
-    fprintf(stderr, "options include:\n"
-                    "  -s              Set default filter to silent. Equivalent to filterspec '*:S'\n"
-                    "  -f <file>, --file=<file>               Log to file. Default is stdout\n"
-                    "  -r <kbytes>, --rotate-kbytes=<kbytes>\n"
-                    "                  Rotate log every kbytes. Requires -f option\n"
-                    "  -n <count>, --rotate-count=<count>\n"
-                    "                  Sets max number of rotated logs to <count>, default 4\n"
-                    "  --id=<id>       If the signature id for logging to file changes, then clear\n"
-                    "                  the fileset and continue\n"
-                    "  -v <format>, --format=<format>\n"
-                    "                  Sets log print format verb and adverbs, where <format> is:\n"
-                    "                    brief help long process raw tag thread threadtime time\n"
-                    "                  and individually flagged modifying adverbs can be added:\n"
-                    "                    color descriptive epoch monotonic printable uid\n"
-                    "                    usec UTC year zone\n"
-                    "                  Multiple -v parameters or comma separated list of format and\n"
-                    "                  format modifiers are allowed.\n"
-                    // private and undocumented nsec, no signal, too much noise
-                    // useful for -T or -t <timestamp> accurate testing though.
-                    "  -D, --dividers  Print dividers between each log buffer\n"
-                    "  -c, --clear     Clear (flush) the entire log and exit\n"
-                    "                  if Log to File specified, clear fileset instead\n"
-                    "  -d              Dump the log and then exit (don't block)\n"
-                    "  -e <expr>, --regex=<expr>\n"
-                    "                  Only print lines where the log message matches <expr>\n"
-                    "                  where <expr> is a regular expression\n"
-                    // Leave --head undocumented as alias for -m
-                    "  -m <count>, --max-count=<count>\n"
-                    "                  Quit after printing <count> lines. This is meant to be\n"
-                    "                  paired with --regex, but will work on its own.\n"
-                    "  --print         Paired with --regex and --max-count to let content bypass\n"
-                    "                  regex filter but still stop at number of matches.\n"
-                    // Leave --tail undocumented as alias for -t
-                    "  -t <count>      Print only the most recent <count> lines (implies -d)\n"
-                    "  -t '<time>'     Print most recent lines since specified time (implies -d)\n"
-                    "  -T <count>      Print only the most recent <count> lines (does not imply -d)\n"
-                    "  -T '<time>'     Print most recent lines since specified time (not imply -d)\n"
-                    "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'\n"
-                    "                  'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format\n"
-                    "  -g, --buffer-size                      Get the size of the ring buffer.\n"
-                    "  -G <size>, --buffer-size=<size>\n"
-                    "                  Set size of log ring buffer, may suffix with K or M.\n"
-                    "  -L, --last      Dump logs from prior to last reboot\n"
-                    "  -b <buffer>, --buffer=<buffer>         Request alternate ring buffer, 'main',\n"
-                    "                  'system', 'radio', 'events', 'crash', 'default' or 'all'.\n"
-                    "                  Additionally, 'kernel' for userdebug and eng builds, and\n"
-                    "                  'security' for Device Owner installations.\n"
-                    "                  Multiple -b parameters or comma separated list of buffers are\n"
-                    "                  allowed. Buffers interleaved.\n"
-                    "                  Default -b main,system,crash,kernel.\n"
-                    "  -B, --binary    Output the log in binary.\n"
-                    "  -S, --statistics                       Output statistics.\n"
-                    "  -p, --prune     Print prune white and ~black list. Service is specified as\n"
-                    "                  UID, UID/PID or /PID. Weighed for quicker pruning if prefix\n"
-                    "                  with ~, otherwise weighed for longevity if unadorned. All\n"
-                    "                  other pruning activity is oldest first. Special case ~!\n"
-                    "                  represents an automatic quicker pruning for the noisiest\n"
-                    "                  UID as determined by the current statistics.\n"
-                    "  -P '<list> ...', --prune='<list> ...'\n"
-                    "                  Set prune white and ~black list, using same format as\n"
-                    "                  listed above. Must be quoted.\n"
-                    "  --pid=<pid>     Only prints logs from the given pid.\n"
-                    // Check ANDROID_LOG_WRAP_DEFAULT_TIMEOUT value for match to 2 hours
-                    "  --wrap          Sleep for 2 hours or when buffer about to wrap whichever\n"
-                    "                  comes first. Improves efficiency of polling by providing\n"
-                    "                  an about-to-wrap wakeup.\n");
+    fprintf(stderr, R"init(
+General options:
+  -b, --buffer=<buffer>       Request alternate ring buffer(s):
+                                main system radio events crash default all
+                              Additionally, 'kernel' for userdebug and eng builds, and
+                              'security' for Device Owner installations.
+                              Multiple -b parameters or comma separated list of buffers are
+                              allowed. Buffers are interleaved.
+                              Default -b main,system,crash,kernel.
+  -L, --last                  Dump logs from prior to last reboot from pstore.
+  -c, --clear                 Clear (flush) the entire log and exit.
+                              if -f is specified, clear the specified file and its related rotated
+                              log files instead.
+                              if -L is specified, clear pstore log instead.
+  -d                          Dump the log and then exit (don't block).
+  --pid=<pid>                 Only print logs from the given pid.
+  --wrap                      Sleep for 2 hours or when buffer about to wrap whichever
+                              comes first. Improves efficiency of polling by providing
+                              an about-to-wrap wakeup.
+
+Formatting:
+  -v, --format=<format>       Sets log print format verb and adverbs, where <format> is one of:
+                                brief help long process raw tag thread threadtime time
+                              Modifying adverbs can be added:
+                                color descriptive epoch monotonic printable uid usec UTC year zone
+                              Multiple -v parameters or comma separated list of format and format
+                              modifiers are allowed.
+  -D, --dividers              Print dividers between each log buffer.
+  -B, --binary                Output the log in binary.
+
+Outfile files:
+  -f, --file=<file>           Log to file instead of stdout.
+  -r, --rotate-kbytes=<n>     Rotate log every <n> kbytes. Requires -f option.
+  -n, --rotate-count=<count>  Sets max number of rotated logs to <count>, default 4.
+  --id=<id>                   If the signature <id> for logging to file changes, then clear the
+                              associated files and continue.
+
+Logd control:
+ These options send a control message to the logd daemon on device, print its return message if
+ applicable, then exit. They are incompatible with -L, as these attributes do not apply to pstore.
+  -g, --buffer-size           Get the size of the ring buffers within logd.
+  -G, --buffer-size=<size>    Set size of a ring buffer in logd. May suffix with K or M.
+                              This can individually control each buffer's size with -b.
+  -S, --statistics            Output statistics.
+                              --pid can be used to provide pid specific stats.
+  -p, --prune                 Print prune white and ~black list. Service is specified as UID,
+                              UID/PID or /PID. Weighed for quicker pruning if prefix with ~,
+                              otherwise weighed for longevity if unadorned. All other pruning
+                              activity is oldest first. Special case ~! represents an automatic
+                              quicker pruning for the noisiest UID as determined by the current
+                              statistics.
+  -P, --prune='<list> ...'    Set prune white and ~black list, using same format as listed above.
+                              Must be quoted.
+
+Filtering:
+  -s                          Set default filter to silent. Equivalent to filterspec '*:S'
+  -e, --regex=<expr>          Only print lines where the log message matches <expr> where <expr> is
+                              an ECMAScript regular expression.
+  -m, --max-count=<count>     Quit after printing <count> lines. This is meant to be paired with
+                              --regex, but will work on its own.
+  --print                     This option is only applicable when --regex is set and only useful if
+                              --max-count is also provided.
+                              With --print, logcat will print all messages even if they do not
+                              match the regex. Logcat will quit after printing the max-count number
+                              of lines that match the regex.
+  -t <count>                  Print only the most recent <count> lines (implies -d).
+  -t '<time>'                 Print the lines since specified time (implies -d).
+  -T <count>                  Print only the most recent <count> lines (does not imply -d).
+  -T '<time>'                 Print the lines since specified time (not imply -d).
+                              count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'
+                              'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format.
+)init");
 
     fprintf(stderr, "\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
@@ -1154,7 +1160,13 @@ int Logcat::Run(int argc, char** argv) {
         struct log_msg log_msg;
         int ret = android_logger_list_read(logger_list.get(), &log_msg);
         if (!ret) {
-            LogcatPanic(HELP_FALSE, "read: unexpected EOF!\n");
+            LogcatPanic(HELP_FALSE, R"init(read: unexpected EOF!
+
+This means that either logd crashed, or more likely, this instance of logcat was unable to read log
+messages as quickly as they were being produced.
+
+If you have enabled significant logging, look into using the -G option to increase log buffer sizes.
+)init");
         }
 
         if (ret < 0) {
