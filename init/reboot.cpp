@@ -59,7 +59,6 @@
 #include "builtin_arguments.h"
 #include "init.h"
 #include "mount_namespace.h"
-#include "property_service.h"
 #include "reboot_utils.h"
 #include "service.h"
 #include "service_list.h"
@@ -548,7 +547,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
          reasons[1] == "hard" || reasons[1] == "warm")) {
         skip = strlen("reboot,");
     }
-    property_set(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
+    SetProperty(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
     sync();
 
     bool is_thermal_shutdown = cmd == ANDROID_RB_THERMOFF;
@@ -619,7 +618,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
         bool do_shutdown_animation = GetBoolProperty("ro.init.shutdown_animation", false);
 
         if (do_shutdown_animation) {
-            property_set("service.bootanim.exit", "0");
+            SetProperty("service.bootanim.exit", "0");
             // Could be in the middle of animation. Stop and start so that it can pick
             // up the right mode.
             boot_anim->Stop();
@@ -733,8 +732,8 @@ static Result<void> UnmountAllApexes() {
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
     boot_clock::time_point now = boot_clock::now();
-    property_set("sys.init.userspace_reboot.last_started",
-                 std::to_string(now.time_since_epoch().count()));
+    SetProperty("sys.init.userspace_reboot.last_started",
+                std::to_string(now.time_since_epoch().count()));
     auto guard = android::base::make_scope_guard([] {
         // Leave shutdown so that we can handle a full reboot.
         LeaveShutdown();

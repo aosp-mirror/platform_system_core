@@ -88,12 +88,11 @@ enum EnforcingStatus { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
 EnforcingStatus StatusFromCmdline() {
     EnforcingStatus status = SELINUX_ENFORCING;
 
-    import_kernel_cmdline(false,
-                          [&](const std::string& key, const std::string& value, bool in_qemu) {
-                              if (key == "androidboot.selinux" && value == "permissive") {
-                                  status = SELINUX_PERMISSIVE;
-                              }
-                          });
+    ImportKernelCmdline([&](const std::string& key, const std::string& value) {
+        if (key == "androidboot.selinux" && value == "permissive") {
+            status = SELINUX_PERMISSIVE;
+        }
+    });
 
     return status;
 }
