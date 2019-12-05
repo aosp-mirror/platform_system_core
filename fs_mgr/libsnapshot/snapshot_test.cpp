@@ -20,6 +20,8 @@
 #include <sys/types.h>
 
 #include <chrono>
+#include <deque>
+#include <future>
 #include <iostream>
 
 #include <android-base/file.h>
@@ -142,7 +144,7 @@ class SnapshotTest : public ::testing::Test {
     }
 
     bool AcquireLock() {
-        lock_ = sm->OpenStateFile(O_RDWR, LOCK_EX);
+        lock_ = sm->LockExclusive();
         return !!lock_;
     }
 
@@ -594,6 +596,154 @@ TEST_F(SnapshotTest, UpdateBootControlHal) {
     ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::MergeFailed));
     ASSERT_EQ(test_device->merge_status(), MergeStatus::MERGING);
 }
+
+enum class Request { UNKNOWN, LOCK_SHARED, LOCK_EXCLUSIVE, UNLOCK, EXIT };
+std::ostream& operator<<(std::ostream& os, Request request) {
+    switch (request) {
+        case Request::LOCK_SHARED:
+            return os << "LOCK_SHARED";
+        case Request::LOCK_EXCLUSIVE:
+            return os << "LOCK_EXCLUSIVE";
+        case Request::UNLOCK:
+            return os << "UNLOCK";
+        case Request::EXIT:
+            return os << "EXIT";
+        case Request::UNKNOWN:
+            [[fallthrough]];
+        default:
+            return os << "UNKNOWN";
+    }
+}
+
+class LockTestConsumer {
+  public:
+    AssertionResult MakeRequest(Request new_request) {
+        {
+            std::unique_lock<std::mutex> ulock(mutex_);
+            requests_.push_back(new_request);
+        }
+        cv_.notify_all();
+        return AssertionSuccess() << "Request " << new_request << " successful";
+    }
+
+    template <typename R, typename P>
+    AssertionResult WaitFulfill(std::chrono::duration<R, P> timeout) {
+        std::unique_lock<std::mutex> ulock(mutex_);
+        if (cv_.wait_for(ulock, timeout, [this] { return requests_.empty(); })) {
+            return AssertionSuccess() << "All requests_ fulfilled.";
+        }
+        return AssertionFailure() << "Timeout waiting for fulfilling " << requests_.size()
+                                  << " request(s), first one is "
+                                  << (requests_.empty() ? Request::UNKNOWN : requests_.front());
+    }
+
+    void StartHandleRequestsInBackground() {
+        future_ = std::async(std::launch::async, &LockTestConsumer::HandleRequests, this);
+    }
+
+  private:
+    void HandleRequests() {
+        static constexpr auto consumer_timeout = 3s;
+
+        auto next_request = Request::UNKNOWN;
+        do {
+            // Peek next request.
+            {
+                std::unique_lock<std::mutex> ulock(mutex_);
+                if (cv_.wait_for(ulock, consumer_timeout, [this] { return !requests_.empty(); })) {
+                    next_request = requests_.front();
+                } else {
+                    next_request = Request::EXIT;
+                }
+            }
+
+            // Handle next request.
+            switch (next_request) {
+                case Request::LOCK_SHARED: {
+                    lock_ = sm->LockShared();
+                } break;
+                case Request::LOCK_EXCLUSIVE: {
+                    lock_ = sm->LockExclusive();
+                } break;
+                case Request::EXIT:
+                    [[fallthrough]];
+                case Request::UNLOCK: {
+                    lock_.reset();
+                } break;
+                case Request::UNKNOWN:
+                    [[fallthrough]];
+                default:
+                    break;
+            }
+
+            // Pop next request. This thread is the only thread that
+            // pops from the front of the requests_ deque.
+            {
+                std::unique_lock<std::mutex> ulock(mutex_);
+                if (next_request == Request::EXIT) {
+                    requests_.clear();
+                } else {
+                    requests_.pop_front();
+                }
+            }
+            cv_.notify_all();
+        } while (next_request != Request::EXIT);
+    }
+
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    std::deque<Request> requests_;
+    std::unique_ptr<SnapshotManager::LockedFile> lock_;
+    std::future<void> future_;
+};
+
+class LockTest : public ::testing::Test {
+  public:
+    void SetUp() {
+        first_consumer.StartHandleRequestsInBackground();
+        second_consumer.StartHandleRequestsInBackground();
+    }
+
+    void TearDown() {
+        EXPECT_TRUE(first_consumer.MakeRequest(Request::EXIT));
+        EXPECT_TRUE(second_consumer.MakeRequest(Request::EXIT));
+    }
+
+    static constexpr auto request_timeout = 500ms;
+    LockTestConsumer first_consumer;
+    LockTestConsumer second_consumer;
+};
+
+TEST_F(LockTest, SharedShared) {
+    ASSERT_TRUE(first_consumer.MakeRequest(Request::LOCK_SHARED));
+    ASSERT_TRUE(first_consumer.WaitFulfill(request_timeout));
+    ASSERT_TRUE(second_consumer.MakeRequest(Request::LOCK_SHARED));
+    ASSERT_TRUE(second_consumer.WaitFulfill(request_timeout));
+}
+
+using LockTestParam = std::pair<Request, Request>;
+class LockTestP : public LockTest, public ::testing::WithParamInterface<LockTestParam> {};
+TEST_P(LockTestP, Test) {
+    ASSERT_TRUE(first_consumer.MakeRequest(GetParam().first));
+    ASSERT_TRUE(first_consumer.WaitFulfill(request_timeout));
+    ASSERT_TRUE(second_consumer.MakeRequest(GetParam().second));
+    ASSERT_FALSE(second_consumer.WaitFulfill(request_timeout))
+            << "Should not be able to " << GetParam().second << " while separate thread "
+            << GetParam().first;
+    ASSERT_TRUE(first_consumer.MakeRequest(Request::UNLOCK));
+    ASSERT_TRUE(second_consumer.WaitFulfill(request_timeout))
+            << "Should be able to hold lock that is released by separate thread";
+}
+INSTANTIATE_TEST_SUITE_P(
+        LockTest, LockTestP,
+        testing::Values(LockTestParam{Request::LOCK_EXCLUSIVE, Request::LOCK_EXCLUSIVE},
+                        LockTestParam{Request::LOCK_EXCLUSIVE, Request::LOCK_SHARED},
+                        LockTestParam{Request::LOCK_SHARED, Request::LOCK_EXCLUSIVE}),
+        [](const testing::TestParamInfo<LockTestP::ParamType>& info) {
+            std::stringstream ss;
+            ss << info.param.first << "_" << info.param.second;
+            return ss.str();
+        });
 
 class SnapshotUpdateTest : public SnapshotTest {
   public:
