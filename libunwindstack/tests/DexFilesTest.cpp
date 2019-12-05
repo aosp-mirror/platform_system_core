@@ -36,14 +36,18 @@ namespace unwindstack {
 
 class DexFilesTest : public ::testing::Test {
  protected:
-  void CreateFakeElf(MapInfo* map_info) {
+  void CreateFakeElf(MapInfo* map_info, uint64_t global_offset, uint64_t data_offset,
+                     uint64_t data_vaddr, uint64_t data_size) {
     MemoryFake* memory = new MemoryFake;
     ElfFake* elf = new ElfFake(memory);
     elf->FakeSetValid(true);
     ElfInterfaceFake* interface = new ElfInterfaceFake(memory);
     elf->FakeSetInterface(interface);
 
-    interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x800);
+    interface->FakeSetGlobalVariable("__dex_debug_descriptor", global_offset);
+    interface->FakeSetDataOffset(data_offset);
+    interface->FakeSetDataVaddrStart(data_vaddr);
+    interface->FakeSetDataVaddrEnd(data_vaddr + data_size);
     map_info->elf.reset(elf);
   }
 
@@ -54,11 +58,11 @@ class DexFilesTest : public ::testing::Test {
     maps_.reset(
         new BufferMaps("1000-4000 ---s 00000000 00:00 0 /fake/elf\n"
                        "4000-6000 r--s 00000000 00:00 0 /fake/elf\n"
-                       "6000-8000 -wxs 00000000 00:00 0 /fake/elf\n"
+                       "6000-8000 -wxs 00002000 00:00 0 /fake/elf\n"
                        "a000-c000 r--p 00000000 00:00 0 /fake/elf2\n"
-                       "c000-f000 rw-p 00001000 00:00 0 /fake/elf2\n"
+                       "c000-f000 rw-p 00002000 00:00 0 /fake/elf2\n"
                        "f000-11000 r--p 00000000 00:00 0 /fake/elf3\n"
-                       "100000-110000 rw-p 0001000 00:00 0 /fake/elf3\n"
+                       "100000-110000 rw-p 00f1000 00:00 0 /fake/elf3\n"
                        "200000-210000 rw-p 0002000 00:00 0 /fake/elf3\n"
                        "300000-400000 rw-p 0003000 00:00 0 /fake/elf3\n"));
     ASSERT_TRUE(maps_->Parse());
@@ -66,17 +70,17 @@ class DexFilesTest : public ::testing::Test {
     // Global variable in a section that is not readable.
     MapInfo* map_info = maps_->Get(kMapGlobalNonReadable);
     ASSERT_TRUE(map_info != nullptr);
-    CreateFakeElf(map_info);
+    CreateFakeElf(map_info, 0x2800, 0x2000, 0x2000, 0x3000);
 
     // Global variable not set by default.
     map_info = maps_->Get(kMapGlobalSetToZero);
     ASSERT_TRUE(map_info != nullptr);
-    CreateFakeElf(map_info);
+    CreateFakeElf(map_info, 0x2800, 0x2000, 0x2000, 0x3000);
 
     // Global variable set in this map.
     map_info = maps_->Get(kMapGlobal);
     ASSERT_TRUE(map_info != nullptr);
-    CreateFakeElf(map_info);
+    CreateFakeElf(map_info, 0xf1800, 0xf1000, 0xf1000, 0x10000);
   }
 
   void SetUp() override {
@@ -156,7 +160,7 @@ TEST_F(DexFilesTest, get_method_information_32) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x100800, 0x200000);
   WriteEntry32(0x200000, 0, 0, 0x300000);
   WriteDex(0x300000);
 
@@ -172,7 +176,7 @@ TEST_F(DexFilesTest, get_method_information_64) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  WriteDescriptor64(0xf800, 0x200000);
+  WriteDescriptor64(0x100800, 0x200000);
   WriteEntry64(0x200000, 0, 0, 0x301000);
   WriteDex(0x301000);
 
@@ -186,7 +190,7 @@ TEST_F(DexFilesTest, get_method_information_not_first_entry_32) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x100800, 0x200000);
   WriteEntry32(0x200000, 0x200100, 0, 0x100000);
   WriteEntry32(0x200100, 0, 0x200000, 0x300000);
   WriteDex(0x300000);
@@ -203,7 +207,7 @@ TEST_F(DexFilesTest, get_method_information_not_first_entry_64) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  WriteDescriptor64(0xf800, 0x200000);
+  WriteDescriptor64(0x100800, 0x200000);
   WriteEntry64(0x200000, 0x200100, 0, 0x100000);
   WriteEntry64(0x200100, 0, 0x200000, 0x300000);
   WriteDex(0x300000);
@@ -218,7 +222,7 @@ TEST_F(DexFilesTest, get_method_information_cached) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x100800, 0x200000);
   WriteEntry32(0x200000, 0, 0, 0x300000);
   WriteDex(0x300000);
 
@@ -238,7 +242,7 @@ TEST_F(DexFilesTest, get_method_information_search_libs) {
   uint64_t method_offset = 0x124;
   MapInfo* info = maps_->Get(kMapDexFiles);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x100800, 0x200000);
   WriteEntry32(0x200000, 0x200100, 0, 0x100000);
   WriteEntry32(0x200100, 0, 0x200000, 0x300000);
   WriteDex(0x300000);
@@ -274,9 +278,9 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_32) {
   MapInfo* info = maps_->Get(kMapDexFiles);
 
   // First global variable found, but value is zero.
-  WriteDescriptor32(0xa800, 0);
+  WriteDescriptor32(0xc800, 0);
 
-  WriteDescriptor32(0xf800, 0x200000);
+  WriteDescriptor32(0x100800, 0x200000);
   WriteEntry32(0x200000, 0, 0, 0x300000);
   WriteDex(0x300000);
 
@@ -289,7 +293,7 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_32) {
   dex_files_->SetArch(ARCH_ARM);
   method_name = "fail";
   method_offset = 0x123;
-  WriteDescriptor32(0xa800, 0x100000);
+  WriteDescriptor32(0xc800, 0x100000);
   dex_files_->GetMethodInformation(maps_.get(), info, 0x300100, &method_name, &method_offset);
   EXPECT_EQ("fail", method_name);
   EXPECT_EQ(0x123U, method_offset);
@@ -303,9 +307,9 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_64) {
   MapInfo* info = maps_->Get(kMapDexFiles);
 
   // First global variable found, but value is zero.
-  WriteDescriptor64(0xa800, 0);
+  WriteDescriptor64(0xc800, 0);
 
-  WriteDescriptor64(0xf800, 0x200000);
+  WriteDescriptor64(0x100800, 0x200000);
   WriteEntry64(0x200000, 0, 0, 0x300000);
   WriteDex(0x300000);
 
@@ -318,7 +322,7 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_64) {
   dex_files_->SetArch(ARCH_ARM64);
   method_name = "fail";
   method_offset = 0x123;
-  WriteDescriptor64(0xa800, 0x100000);
+  WriteDescriptor64(0xc800, 0x100000);
   dex_files_->GetMethodInformation(maps_.get(), info, 0x300100, &method_name, &method_offset);
   EXPECT_EQ("fail", method_name);
   EXPECT_EQ(0x123U, method_offset);

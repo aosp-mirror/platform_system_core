@@ -97,6 +97,14 @@ class ElfInterfaceFake : public ElfInterface {
 
   void FakeSetErrorAddress(uint64_t address) { last_error_.address = address; }
 
+  void FakeSetDataOffset(uint64_t offset) { data_offset_ = offset; }
+  void FakeSetDataVaddrStart(uint64_t vaddr) { data_vaddr_start_ = vaddr; }
+  void FakeSetDataVaddrEnd(uint64_t vaddr) { data_vaddr_end_ = vaddr; }
+
+  void FakeSetDynamicOffset(uint64_t offset) { dynamic_offset_ = offset; }
+  void FakeSetDynamicVaddrStart(uint64_t vaddr) { dynamic_vaddr_start_ = vaddr; }
+  void FakeSetDynamicVaddrEnd(uint64_t vaddr) { dynamic_vaddr_end_ = vaddr; }
+
  private:
   std::unordered_map<std::string, uint64_t> globals_;
   std::string fake_build_id_;
