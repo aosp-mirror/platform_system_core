@@ -33,6 +33,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <string>
+
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
@@ -249,22 +251,14 @@ ssize_t android_logger_get_prune_list(struct logger_list* logger_list, char* buf
   return SendLogdControlMessage(buf, len);
 }
 
-int android_logger_set_prune_list(struct logger_list* logger_list, char* buf, size_t len) {
+int android_logger_set_prune_list(struct logger_list* logger_list, const char* buf, size_t len) {
   if (logger_list->mode & ANDROID_LOG_PSTORE) {
     return -EINVAL;
   }
 
-  const char cmd[] = "setPruneList ";
-  const size_t cmdlen = sizeof(cmd) - 1;
+  std::string cmd = "setPruneList " + std::string{buf, len};
 
-  if (strlen(buf) > (len - cmdlen)) {
-    return -ENOMEM; /* KISS */
-  }
-  memmove(buf + cmdlen, buf, len - cmdlen);
-  buf[len - 1] = '\0';
-  memcpy(buf, cmd, cmdlen);
-
-  return check_log_success(buf, SendLogdControlMessage(buf, len));
+  return check_log_success(cmd.data(), SendLogdControlMessage(cmd.data(), cmd.size()));
 }
 
 static int logdOpen(struct logger_list* logger_list) {
