@@ -38,7 +38,6 @@
 #include <libdm/dm.h>
 
 #include "epoll.h"
-#include "property_service.h"
 
 namespace android {
 namespace init {
@@ -96,7 +95,7 @@ void SetMountProperty(const MountHandlerEntry& entry, bool add) {
     // handling, except for clearing non-existent or already clear property.
     // Goal is reduction of empty properties and associated triggers.
     if (value.empty() && android::base::GetProperty(mount_prop, "").empty()) return;
-    property_set(mount_prop, value);
+    android::base::SetProperty(mount_prop, value);
 }
 
 }  // namespace
