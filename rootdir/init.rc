@@ -669,6 +669,7 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready
     parse_apex_configs
+    exec_start derive_sdk
 
     init_user0
 
