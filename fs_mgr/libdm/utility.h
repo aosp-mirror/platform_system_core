@@ -23,6 +23,7 @@ namespace dm {
 enum class WaitResult { Wait, Done, Fail };
 
 bool WaitForFile(const std::string& path, const std::chrono::milliseconds& timeout_ms);
+bool WaitForFileDeleted(const std::string& path, const std::chrono::milliseconds& timeout_ms);
 bool WaitForCondition(const std::function<WaitResult()>& condition,
                       const std::chrono::milliseconds& timeout_ms);
 
