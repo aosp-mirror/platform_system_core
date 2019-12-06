@@ -1075,17 +1075,8 @@ int Logcat::Run(int argc, char** argv) {
 
     if (setPruneList) {
         size_t len = strlen(setPruneList);
-        // extra 32 bytes are needed by android_logger_set_prune_list
-        size_t bLen = len + 32;
-        char* buf = nullptr;
-        if (asprintf(&buf, "%-*s", (int)(bLen - 1), setPruneList) > 0) {
-            buf[len] = '\0';
-            if (android_logger_set_prune_list(logger_list.get(), buf, bLen)) {
-                error(EXIT_FAILURE, 0, "Failed to set the prune list.");
-            }
-            free(buf);
-        } else {
-            error(EXIT_FAILURE, 0, "Failed to set the prune list (alloc).");
+        if (android_logger_set_prune_list(logger_list.get(), setPruneList, len)) {
+            error(EXIT_FAILURE, 0, "Failed to set the prune list.");
         }
         return EXIT_SUCCESS;
     }
