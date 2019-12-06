@@ -976,12 +976,47 @@ int Logcat::Run(int argc, char** argv) {
     }
 
     if (mode & ANDROID_LOG_PSTORE) {
+        if (output_file_name_) {
+            LogcatPanic(HELP_FALSE, "-c is ambiguous with both -f and -L specified.\n");
+        }
+        if (setLogSize || getLogSize || printStatistics || getPruneList || setPruneList) {
+            LogcatPanic(HELP_TRUE, "-L is incompatible with -g/-G, -S, and -p/-P\n");
+        }
         if (clearLog) {
             unlink("/sys/fs/pstore/pmsg-ramoops-0");
             return EXIT_SUCCESS;
         }
+    }
+
+    if (output_file_name_) {
         if (setLogSize || getLogSize || printStatistics || getPruneList || setPruneList) {
-            LogcatPanic(HELP_TRUE, "-L is incompatible with -g/-G, -S, and -p/-P");
+            LogcatPanic(HELP_TRUE, "-f is incompatible with -g/-G, -S, and -p/-P\n");
+        }
+
+        if (clearLog || setId) {
+            int max_rotation_count_digits =
+                    max_rotated_logs_ > 0 ? (int)(floor(log10(max_rotated_logs_) + 1)) : 0;
+
+            for (int i = max_rotated_logs_; i >= 0; --i) {
+                std::string file;
+
+                if (!i) {
+                    file = output_file_name_;
+                } else {
+                    file = StringPrintf("%s.%.*d", output_file_name_, max_rotation_count_digits, i);
+                }
+
+                int err = unlink(file.c_str());
+
+                if (err < 0 && errno != ENOENT) {
+                    fprintf(stderr, "failed to delete log file '%s': %s\n", file.c_str(),
+                            strerror(errno));
+                }
+            }
+        }
+
+        if (clearLog) {
+            return EXIT_SUCCESS;
         }
     }
 
@@ -1009,35 +1044,8 @@ int Logcat::Run(int argc, char** argv) {
             continue;
         }
 
-        if (clearLog || setId) {
-            if (output_file_name_) {
-                int max_rotation_count_digits =
-                        max_rotated_logs_ > 0 ? (int)(floor(log10(max_rotated_logs_) + 1)) : 0;
-
-                for (int i = max_rotated_logs_; i >= 0; --i) {
-                    std::string file;
-
-                    if (!i) {
-                        file = output_file_name_;
-                    } else {
-                        file = StringPrintf("%s.%.*d", output_file_name_, max_rotation_count_digits,
-                                            i);
-                    }
-
-                    if (!file.length()) {
-                        perror("while clearing log files");
-                        ReportErrorName(buffer_name, security_buffer_selected, &clear_failures);
-                        break;
-                    }
-
-                    int err = unlink(file.c_str());
-
-                    if (err < 0 && errno != ENOENT) {
-                        perror("while clearing log files");
-                        ReportErrorName(buffer_name, security_buffer_selected, &clear_failures);
-                    }
-                }
-            } else if (android_logger_clear(logger)) {
+        if (clearLog) {
+            if (android_logger_clear(logger)) {
                 ReportErrorName(buffer_name, security_buffer_selected, &clear_failures);
             }
         }
