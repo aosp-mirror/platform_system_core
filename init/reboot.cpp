@@ -797,6 +797,14 @@ static Result<void> DoUserspaceReboot() {
     if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
         return Error() << "Failed to switch to bootstrap namespace";
     }
+    // Remove services that were defined in an APEX.
+    ServiceList::GetInstance().RemoveServiceIf([](const std::unique_ptr<Service>& s) -> bool {
+        if (s->is_from_apex()) {
+            LOG(INFO) << "Removing service '" << s->name() << "' because it's defined in an APEX";
+            return true;
+        }
+        return false;
+    });
     // Re-enable services
     for (const auto& s : were_enabled) {
         LOG(INFO) << "Re-enabling service '" << s->name() << "'";
