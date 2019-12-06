@@ -121,11 +121,12 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
 }
 
 // parser that only accepts new services
-Parser CreateServiceOnlyParser(ServiceList& service_list) {
+Parser CreateServiceOnlyParser(ServiceList& service_list, bool from_apex) {
     Parser parser;
 
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(
-                                               &service_list, subcontext.get(), std::nullopt));
+    parser.AddSectionParser("service",
+                            std::make_unique<ServiceParser>(&service_list, subcontext.get(),
+                                                            std::nullopt, from_apex));
     return parser;
 }
 

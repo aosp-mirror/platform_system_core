@@ -34,6 +34,11 @@ class ServiceList {
 
     void AddService(std::unique_ptr<Service> service);
     void RemoveService(const Service& svc);
+    template <class UnaryPredicate>
+    void RemoveServiceIf(UnaryPredicate predicate) {
+        services_.erase(std::remove_if(services_.begin(), services_.end(), predicate),
+                        services_.end());
+    }
 
     template <typename T, typename F = decltype(&Service::name)>
     Service* FindService(T value, F function = &Service::name) const {
