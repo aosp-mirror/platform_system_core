@@ -139,6 +139,9 @@ bool LocalUpdatableMaps::Reparse() {
       if (start == info->start && end == info->end && flags == info->flags && *name == info->name) {
         // No need to check
         search_map_idx = old_map_idx + 1;
+        if (new_map_idx + 1 < maps_.size()) {
+          maps_[new_map_idx + 1]->prev_map = info.get();
+        }
         maps_[new_map_idx] = nullptr;
         total_entries--;
         break;
