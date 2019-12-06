@@ -20,6 +20,7 @@
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 
+#include <chrono>
 #include <functional>
 #include <thread>
 
@@ -79,14 +80,24 @@ bool DeviceMapper::CreateDevice(const std::string& name, const std::string& uuid
     return true;
 }
 
-bool DeviceMapper::DeleteDeviceIfExists(const std::string& name) {
+bool DeviceMapper::DeleteDeviceIfExists(const std::string& name,
+                                        const std::chrono::milliseconds& timeout_ms) {
     if (GetState(name) == DmDeviceState::INVALID) {
         return true;
     }
-    return DeleteDevice(name);
+    return DeleteDevice(name, timeout_ms);
 }
 
-bool DeviceMapper::DeleteDevice(const std::string& name) {
+bool DeviceMapper::DeleteDeviceIfExists(const std::string& name) {
+    return DeleteDeviceIfExists(name, 0ms);
+}
+
+bool DeviceMapper::DeleteDevice(const std::string& name,
+                                const std::chrono::milliseconds& timeout_ms) {
+    std::string unique_path;
+    if (!GetDeviceUniquePath(name, &unique_path)) {
+        LOG(ERROR) << "Failed to get unique path for device " << name;
+    }
     struct dm_ioctl io;
     InitIo(&io, name);
 
@@ -100,7 +111,21 @@ bool DeviceMapper::DeleteDevice(const std::string& name) {
     CHECK(io.flags & DM_UEVENT_GENERATED_FLAG)
             << "Didn't generate uevent for [" << name << "] removal";
 
+    if (timeout_ms <= std::chrono::milliseconds::zero()) {
+        return true;
+    }
+    if (unique_path.empty()) {
+        return false;
+    }
+    if (!WaitForFileDeleted(unique_path, timeout_ms)) {
+        LOG(ERROR) << "Timeout out waiting for " << unique_path << " to be deleted";
+        return false;
+    }
     return true;
+}
+
+bool DeviceMapper::DeleteDevice(const std::string& name) {
+    return DeleteDevice(name, 0ms);
 }
 
 static std::string GenerateUuid() {
