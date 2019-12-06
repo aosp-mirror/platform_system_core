@@ -149,6 +149,7 @@ cc_test {
         "logging_test.cpp",
         "macros_test.cpp",
         "mapped_file_test.cpp",
+        "no_destructor_test.cpp",
         "parsedouble_test.cpp",
         "parsebool_test.cpp",
         "parseint_test.cpp",
