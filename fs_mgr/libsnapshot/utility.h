@@ -112,5 +112,12 @@ std::vector<android::fs_mgr::Partition*> ListPartitionsWithSuffix(
 // Initialize a device before using it as the COW device for a dm-snapshot device.
 bool InitializeCow(const std::string& device);
 
+// "Atomically" write string to file. This is done by a series of actions:
+// 1. Write to path + ".tmp"
+// 2. Move temporary file to path using rename()
+// Note that rename() is an atomic operation. This function may not work properly if there
+// is an open fd to |path|, because that fd has an old view of the file.
+bool WriteStringToFileAtomic(const std::string& content, const std::string& path);
+
 }  // namespace snapshot
 }  // namespace android
