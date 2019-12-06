@@ -583,6 +583,7 @@ Commands
   Note that this is _not_ synchronous, and even if it were, there is
   no guarantee that the operating system's scheduler will execute the
   service sufficiently to guarantee anything about the service's status.
+  See the `exec_start` command for a synchronous version of `start`.
 
 > This creates an important consequence that if the service offers
   functionality to other services, such as providing a
