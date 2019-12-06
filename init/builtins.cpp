@@ -1181,7 +1181,7 @@ static Result<void> do_parse_apex_configs(const BuiltinArguments& args) {
         return Error() << "glob pattern '" << glob_pattern << "' failed";
     }
     std::vector<std::string> configs;
-    Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance());
+    Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance(), true);
     for (size_t i = 0; i < glob_result.gl_pathc; i++) {
         std::string path = glob_result.gl_pathv[i];
         // Filter-out /apex/<name>@<ver> paths. The paths are bind-mounted to
