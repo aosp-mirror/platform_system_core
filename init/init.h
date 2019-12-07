@@ -29,7 +29,7 @@ namespace android {
 namespace init {
 
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
-Parser CreateServiceOnlyParser(ServiceList& service_list);
+Parser CreateServiceOnlyParser(ServiceList& service_list, bool from_apex);
 
 bool start_waiting_for_property(const char *name, const char *value);
 

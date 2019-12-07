@@ -17,6 +17,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <error.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <math.h>
@@ -108,10 +109,6 @@ class Logcat {
 
 enum helpType { HELP_FALSE, HELP_TRUE, HELP_FORMAT };
 
-// if show_help is set, newline required in fmt statement to transition to usage
-static void LogcatPanic(enum helpType showHelp, const char* fmt, ...) __printflike(2, 3)
-        __attribute__((__noreturn__));
-
 #ifndef F2FS_IOC_SET_PIN_FILE
 #define F2FS_IOCTL_MAGIC       0xf5
 #define F2FS_IOC_SET_PIN_FILE _IOW(F2FS_IOCTL_MAGIC, 13, __u32)
@@ -170,7 +167,7 @@ void Logcat::RotateLogs() {
     output_fd_.reset(openLogFile(output_file_name_, log_rotate_size_kb_));
 
     if (!output_fd_.ok()) {
-        LogcatPanic(HELP_FALSE, "couldn't open output file");
+        error(EXIT_FAILURE, errno, "Couldn't open output file");
     }
 
     out_byte_count_ = 0;
@@ -209,7 +206,7 @@ void Logcat::ProcessBuffer(struct log_msg* buf) {
             bytesWritten = android_log_printLogLine(logformat_.get(), output_fd_.get(), &entry);
 
             if (bytesWritten < 0) {
-                LogcatPanic(HELP_FALSE, "output error");
+                error(EXIT_FAILURE, 0, "Output error.");
             }
         }
     }
@@ -229,7 +226,7 @@ void Logcat::PrintDividers(log_id_t log_id, bool print_dividers) {
         if (dprintf(output_fd_.get(), "--------- %s %s\n",
                     printed_start_[log_id] ? "switch to" : "beginning of",
                     android_log_id_to_name(log_id)) < 0) {
-            LogcatPanic(HELP_FALSE, "output error");
+            error(EXIT_FAILURE, errno, "Output error");
         }
     }
     last_printed_id_ = log_id;
@@ -259,18 +256,16 @@ void Logcat::SetupOutputAndSchedulingPolicy(bool blocking) {
     output_fd_.reset(openLogFile(output_file_name_, log_rotate_size_kb_));
 
     if (!output_fd_.ok()) {
-        LogcatPanic(HELP_FALSE, "couldn't open output file");
+        error(EXIT_FAILURE, errno, "Couldn't open output file");
     }
 
     struct stat statbuf;
     if (fstat(output_fd_.get(), &statbuf) == -1) {
-        output_fd_.reset();
-        LogcatPanic(HELP_FALSE, "couldn't get output file stat\n");
+        error(EXIT_FAILURE, errno, "Couldn't get output file stat");
     }
 
     if ((size_t)statbuf.st_size > SIZE_MAX || statbuf.st_size < 0) {
-        output_fd_.reset();
-        LogcatPanic(HELP_FALSE, "invalid output file stat\n");
+        error(EXIT_FAILURE, 0, "Invalid output file stat.");
     }
 
     out_byte_count_ = statbuf.st_size;
@@ -282,72 +277,78 @@ static void show_help() {
 
     fprintf(stderr, "Usage: %s [options] [filterspecs]\n", cmd);
 
-    fprintf(stderr, "options include:\n"
-                    "  -s              Set default filter to silent. Equivalent to filterspec '*:S'\n"
-                    "  -f <file>, --file=<file>               Log to file. Default is stdout\n"
-                    "  -r <kbytes>, --rotate-kbytes=<kbytes>\n"
-                    "                  Rotate log every kbytes. Requires -f option\n"
-                    "  -n <count>, --rotate-count=<count>\n"
-                    "                  Sets max number of rotated logs to <count>, default 4\n"
-                    "  --id=<id>       If the signature id for logging to file changes, then clear\n"
-                    "                  the fileset and continue\n"
-                    "  -v <format>, --format=<format>\n"
-                    "                  Sets log print format verb and adverbs, where <format> is:\n"
-                    "                    brief help long process raw tag thread threadtime time\n"
-                    "                  and individually flagged modifying adverbs can be added:\n"
-                    "                    color descriptive epoch monotonic printable uid\n"
-                    "                    usec UTC year zone\n"
-                    "                  Multiple -v parameters or comma separated list of format and\n"
-                    "                  format modifiers are allowed.\n"
-                    // private and undocumented nsec, no signal, too much noise
-                    // useful for -T or -t <timestamp> accurate testing though.
-                    "  -D, --dividers  Print dividers between each log buffer\n"
-                    "  -c, --clear     Clear (flush) the entire log and exit\n"
-                    "                  if Log to File specified, clear fileset instead\n"
-                    "  -d              Dump the log and then exit (don't block)\n"
-                    "  -e <expr>, --regex=<expr>\n"
-                    "                  Only print lines where the log message matches <expr>\n"
-                    "                  where <expr> is a regular expression\n"
-                    // Leave --head undocumented as alias for -m
-                    "  -m <count>, --max-count=<count>\n"
-                    "                  Quit after printing <count> lines. This is meant to be\n"
-                    "                  paired with --regex, but will work on its own.\n"
-                    "  --print         Paired with --regex and --max-count to let content bypass\n"
-                    "                  regex filter but still stop at number of matches.\n"
-                    // Leave --tail undocumented as alias for -t
-                    "  -t <count>      Print only the most recent <count> lines (implies -d)\n"
-                    "  -t '<time>'     Print most recent lines since specified time (implies -d)\n"
-                    "  -T <count>      Print only the most recent <count> lines (does not imply -d)\n"
-                    "  -T '<time>'     Print most recent lines since specified time (not imply -d)\n"
-                    "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'\n"
-                    "                  'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format\n"
-                    "  -g, --buffer-size                      Get the size of the ring buffer.\n"
-                    "  -G <size>, --buffer-size=<size>\n"
-                    "                  Set size of log ring buffer, may suffix with K or M.\n"
-                    "  -L, --last      Dump logs from prior to last reboot\n"
-                    "  -b <buffer>, --buffer=<buffer>         Request alternate ring buffer, 'main',\n"
-                    "                  'system', 'radio', 'events', 'crash', 'default' or 'all'.\n"
-                    "                  Additionally, 'kernel' for userdebug and eng builds, and\n"
-                    "                  'security' for Device Owner installations.\n"
-                    "                  Multiple -b parameters or comma separated list of buffers are\n"
-                    "                  allowed. Buffers interleaved.\n"
-                    "                  Default -b main,system,crash,kernel.\n"
-                    "  -B, --binary    Output the log in binary.\n"
-                    "  -S, --statistics                       Output statistics.\n"
-                    "  -p, --prune     Print prune white and ~black list. Service is specified as\n"
-                    "                  UID, UID/PID or /PID. Weighed for quicker pruning if prefix\n"
-                    "                  with ~, otherwise weighed for longevity if unadorned. All\n"
-                    "                  other pruning activity is oldest first. Special case ~!\n"
-                    "                  represents an automatic quicker pruning for the noisiest\n"
-                    "                  UID as determined by the current statistics.\n"
-                    "  -P '<list> ...', --prune='<list> ...'\n"
-                    "                  Set prune white and ~black list, using same format as\n"
-                    "                  listed above. Must be quoted.\n"
-                    "  --pid=<pid>     Only prints logs from the given pid.\n"
-                    // Check ANDROID_LOG_WRAP_DEFAULT_TIMEOUT value for match to 2 hours
-                    "  --wrap          Sleep for 2 hours or when buffer about to wrap whichever\n"
-                    "                  comes first. Improves efficiency of polling by providing\n"
-                    "                  an about-to-wrap wakeup.\n");
+    fprintf(stderr, R"init(
+General options:
+  -b, --buffer=<buffer>       Request alternate ring buffer(s):
+                                main system radio events crash default all
+                              Additionally, 'kernel' for userdebug and eng builds, and
+                              'security' for Device Owner installations.
+                              Multiple -b parameters or comma separated list of buffers are
+                              allowed. Buffers are interleaved.
+                              Default -b main,system,crash,kernel.
+  -L, --last                  Dump logs from prior to last reboot from pstore.
+  -c, --clear                 Clear (flush) the entire log and exit.
+                              if -f is specified, clear the specified file and its related rotated
+                              log files instead.
+                              if -L is specified, clear pstore log instead.
+  -d                          Dump the log and then exit (don't block).
+  --pid=<pid>                 Only print logs from the given pid.
+  --wrap                      Sleep for 2 hours or when buffer about to wrap whichever
+                              comes first. Improves efficiency of polling by providing
+                              an about-to-wrap wakeup.
+
+Formatting:
+  -v, --format=<format>       Sets log print format verb and adverbs, where <format> is one of:
+                                brief help long process raw tag thread threadtime time
+                              Modifying adverbs can be added:
+                                color descriptive epoch monotonic printable uid usec UTC year zone
+                              Multiple -v parameters or comma separated list of format and format
+                              modifiers are allowed.
+  -D, --dividers              Print dividers between each log buffer.
+  -B, --binary                Output the log in binary.
+
+Outfile files:
+  -f, --file=<file>           Log to file instead of stdout.
+  -r, --rotate-kbytes=<n>     Rotate log every <n> kbytes. Requires -f option.
+  -n, --rotate-count=<count>  Sets max number of rotated logs to <count>, default 4.
+  --id=<id>                   If the signature <id> for logging to file changes, then clear the
+                              associated files and continue.
+
+Logd control:
+ These options send a control message to the logd daemon on device, print its return message if
+ applicable, then exit. They are incompatible with -L, as these attributes do not apply to pstore.
+  -g, --buffer-size           Get the size of the ring buffers within logd.
+  -G, --buffer-size=<size>    Set size of a ring buffer in logd. May suffix with K or M.
+                              This can individually control each buffer's size with -b.
+  -S, --statistics            Output statistics.
+                              --pid can be used to provide pid specific stats.
+  -p, --prune                 Print prune white and ~black list. Service is specified as UID,
+                              UID/PID or /PID. Weighed for quicker pruning if prefix with ~,
+                              otherwise weighed for longevity if unadorned. All other pruning
+                              activity is oldest first. Special case ~! represents an automatic
+                              quicker pruning for the noisiest UID as determined by the current
+                              statistics.
+  -P, --prune='<list> ...'    Set prune white and ~black list, using same format as listed above.
+                              Must be quoted.
+
+Filtering:
+  -s                          Set default filter to silent. Equivalent to filterspec '*:S'
+  -e, --regex=<expr>          Only print lines where the log message matches <expr> where <expr> is
+                              an ECMAScript regular expression.
+  -m, --max-count=<count>     Quit after printing <count> lines. This is meant to be paired with
+                              --regex, but will work on its own.
+  --print                     This option is only applicable when --regex is set and only useful if
+                              --max-count is also provided.
+                              With --print, logcat will print all messages even if they do not
+                              match the regex. Logcat will quit after printing the max-count number
+                              of lines that match the regex.
+  -t <count>                  Print only the most recent <count> lines (implies -d).
+  -t '<time>'                 Print the lines since specified time (implies -d).
+  -T <count>                  Print only the most recent <count> lines (does not imply -d).
+  -T '<time>'                 Print the lines since specified time (not imply -d).
+                              count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'
+                              'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format.
+)init");
 
     fprintf(stderr, "\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
@@ -419,27 +420,6 @@ static std::pair<unsigned long, const char*> format_of_size(unsigned long value)
          value /= 1024, ++i)
         ;
     return std::make_pair(value, multipliers[i]);
-}
-
-static void LogcatPanic(enum helpType showHelp, const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
-
-    switch (showHelp) {
-        case HELP_TRUE:
-            show_help();
-            break;
-        case HELP_FORMAT:
-            show_format_help();
-            break;
-        case HELP_FALSE:
-        default:
-            break;
-    }
-
-    exit(EXIT_FAILURE);
 }
 
 static char* parseTime(log_time& t, const char* cp) {
@@ -606,13 +586,12 @@ int Logcat::Run(int argc, char** argv) {
                 // only long options
                 if (long_options[option_index].name == pid_str) {
                     if (pid != 0) {
-                        LogcatPanic(HELP_TRUE, "Only supports one PID argument.\n");
+                        error(EXIT_FAILURE, 0, "Only one --pid argument can be provided.");
                     }
 
-                    // ToDo: determine runtime PID_MAX?
                     if (!ParseUint(optarg, &pid) || pid < 1) {
-                        LogcatPanic(HELP_TRUE, "%s %s out of range\n",
-                                    long_options[option_index].name, optarg);
+                        error(EXIT_FAILURE, 0, "%s %s out of range.",
+                              long_options[option_index].name, optarg);
                     }
                     break;
                 }
@@ -622,8 +601,8 @@ int Logcat::Run(int argc, char** argv) {
                     // ToDo: implement API that supports setting a wrap timeout
                     size_t dummy = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
                     if (optarg && (!ParseUint(optarg, &dummy) || dummy < 1)) {
-                        LogcatPanic(HELP_TRUE, "%s %s out of range\n",
-                                    long_options[option_index].name, optarg);
+                        error(EXIT_FAILURE, 0, "%s %s out of range.",
+                              long_options[option_index].name, optarg);
                     }
                     if (dummy != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
                         fprintf(stderr, "WARNING: %s %u seconds, ignoring %zu\n",
@@ -672,13 +651,13 @@ int Logcat::Run(int argc, char** argv) {
                 if (strspn(optarg, "0123456789") != strlen(optarg)) {
                     char* cp = parseTime(tail_time, optarg);
                     if (!cp) {
-                        LogcatPanic(HELP_FALSE, "-%c \"%s\" not in time format\n", c, optarg);
+                        error(EXIT_FAILURE, 0, "-%c '%s' not in time format.", c, optarg);
                     }
                     if (*cp) {
                         char ch = *cp;
                         *cp = '\0';
-                        fprintf(stderr, "WARNING: -%c \"%s\"\"%c%s\" time truncated\n", c, optarg,
-                                ch, cp + 1);
+                        fprintf(stderr, "WARNING: -%c '%s' '%c%s' time truncated\n", c, optarg, ch,
+                                cp + 1);
                         *cp = ch;
                     }
                 } else {
@@ -699,8 +678,8 @@ int Logcat::Run(int argc, char** argv) {
 
             case 'm': {
                 if (!ParseUint(optarg, &max_count_) || max_count_ < 1) {
-                    LogcatPanic(HELP_FALSE, "-%c \"%s\" isn't an integer greater than zero\n", c,
-                                optarg);
+                    error(EXIT_FAILURE, 0, "-%c '%s' isn't an integer greater than zero.", c,
+                          optarg);
                 }
             } break;
 
@@ -713,7 +692,7 @@ int Logcat::Run(int argc, char** argv) {
 
             case 'G': {
                 if (!ParseByteCount(optarg, &setLogSize) || setLogSize < 1) {
-                    LogcatPanic(HELP_FALSE, "ERROR: -G <num><multiplier>\n");
+                    error(EXIT_FAILURE, 0, "-G must be specified as <num><multiplier>.");
                 }
             } break;
 
@@ -737,7 +716,8 @@ int Logcat::Run(int argc, char** argv) {
                     } else {
                         log_id_t log_id = android_name_to_log_id(buffer.c_str());
                         if (log_id >= LOG_ID_MAX) {
-                            LogcatPanic(HELP_TRUE, "unknown buffer %s\n", buffer.c_str());
+                            error(EXIT_FAILURE, 0, "Unknown buffer '%s' listed for -b.",
+                                  buffer.c_str());
                         }
                         if (log_id == LOG_ID_SECURITY) {
                             security_buffer_selected = true;
@@ -761,13 +741,13 @@ int Logcat::Run(int argc, char** argv) {
 
             case 'r':
                 if (!ParseUint(optarg, &log_rotate_size_kb_) || log_rotate_size_kb_ < 1) {
-                    LogcatPanic(HELP_TRUE, "Invalid parameter \"%s\" to -r\n", optarg);
+                    error(EXIT_FAILURE, 0, "Invalid parameter '%s' to -r.", optarg);
                 }
                 break;
 
             case 'n':
                 if (!ParseUint(optarg, &max_rotated_logs_) || max_rotated_logs_ < 1) {
-                    LogcatPanic(HELP_TRUE, "Invalid parameter \"%s\" to -n\n", optarg);
+                    error(EXIT_FAILURE, 0, "Invalid parameter '%s' to -n.", optarg);
                 }
                 break;
 
@@ -779,7 +759,7 @@ int Logcat::Run(int argc, char** argv) {
                 for (const auto& arg : Split(optarg, delimiters)) {
                     int err = SetLogFormat(arg.c_str());
                     if (err < 0) {
-                        LogcatPanic(HELP_FORMAT, "Invalid parameter \"%s\" to -v\n", arg.c_str());
+                        error(EXIT_FAILURE, 0, "Invalid parameter '%s' to -v.", arg.c_str());
                     }
                     if (err) hasSetLogFormat = true;
                 }
@@ -876,20 +856,25 @@ int Logcat::Run(int argc, char** argv) {
                 break;
 
             case ':':
-                LogcatPanic(HELP_TRUE, "Option -%c needs an argument\n", optopt);
+                error(EXIT_FAILURE, 0, "Option '%s' needs an argument.", argv[optind - 1]);
+                break;
 
             case 'h':
                 show_help();
                 show_format_help();
                 return EXIT_SUCCESS;
 
+            case '?':
+                error(EXIT_FAILURE, 0, "Unknown option '%s'.", argv[optind - 1]);
+                break;
+
             default:
-                LogcatPanic(HELP_TRUE, "Unrecognized Option %c\n", optopt);
+                error(EXIT_FAILURE, 0, "Unknown getopt_long() result '%c'.", c);
         }
     }
 
     if (max_count_ && got_t) {
-        LogcatPanic(HELP_TRUE, "Cannot use -m (--max-count) and -t together\n");
+        error(EXIT_FAILURE, 0, "Cannot use -m (--max-count) and -t together.");
     }
     if (print_it_anyways_ && (!regex_ || !max_count_)) {
         // One day it would be nice if --print -v color and --regex <expr>
@@ -909,12 +894,12 @@ int Logcat::Run(int argc, char** argv) {
     }
 
     if (log_rotate_size_kb_ != 0 && !output_file_name_) {
-        LogcatPanic(HELP_TRUE, "-r requires -f as well\n");
+        error(EXIT_FAILURE, 0, "-r requires -f as well.");
     }
 
     if (setId != 0) {
         if (!output_file_name_) {
-            LogcatPanic(HELP_TRUE, "--id='%s' requires -f as well\n", setId);
+            error(EXIT_FAILURE, 0, "--id='%s' requires -f as well.", setId);
         }
 
         std::string file_name = StringPrintf("%s.id", output_file_name_);
@@ -946,7 +931,7 @@ int Logcat::Run(int argc, char** argv) {
     if (forceFilters.size()) {
         int err = android_log_addFilterString(logformat_.get(), forceFilters.c_str());
         if (err < 0) {
-            LogcatPanic(HELP_FALSE, "Invalid filter expression in logcat args\n");
+            error(EXIT_FAILURE, 0, "Invalid filter expression in logcat args.");
         }
     } else if (argc == optind) {
         // Add from environment variable
@@ -956,7 +941,7 @@ int Logcat::Run(int argc, char** argv) {
             int err = android_log_addFilterString(logformat_.get(), env_tags_orig);
 
             if (err < 0) {
-                LogcatPanic(HELP_TRUE, "Invalid filter expression in ANDROID_LOG_TAGS\n");
+                error(EXIT_FAILURE, 0, "Invalid filter expression in ANDROID_LOG_TAGS.");
             }
         }
     } else {
@@ -964,18 +949,53 @@ int Logcat::Run(int argc, char** argv) {
         for (int i = optind ; i < argc ; i++) {
             int err = android_log_addFilterString(logformat_.get(), argv[i]);
             if (err < 0) {
-                LogcatPanic(HELP_TRUE, "Invalid filter expression '%s'\n", argv[i]);
+                error(EXIT_FAILURE, 0, "Invalid filter expression '%s'.", argv[i]);
             }
         }
     }
 
     if (mode & ANDROID_LOG_PSTORE) {
+        if (output_file_name_) {
+            error(EXIT_FAILURE, 0, "-c is ambiguous with both -f and -L specified.");
+        }
+        if (setLogSize || getLogSize || printStatistics || getPruneList || setPruneList) {
+            error(EXIT_FAILURE, 0, "-L is incompatible with -g/-G, -S, and -p/-P.");
+        }
         if (clearLog) {
             unlink("/sys/fs/pstore/pmsg-ramoops-0");
             return EXIT_SUCCESS;
         }
+    }
+
+    if (output_file_name_) {
         if (setLogSize || getLogSize || printStatistics || getPruneList || setPruneList) {
-            LogcatPanic(HELP_TRUE, "-L is incompatible with -g/-G, -S, and -p/-P");
+            error(EXIT_FAILURE, 0, "-f is incompatible with -g/-G, -S, and -p/-P.");
+        }
+
+        if (clearLog || setId) {
+            int max_rotation_count_digits =
+                    max_rotated_logs_ > 0 ? (int)(floor(log10(max_rotated_logs_) + 1)) : 0;
+
+            for (int i = max_rotated_logs_; i >= 0; --i) {
+                std::string file;
+
+                if (!i) {
+                    file = output_file_name_;
+                } else {
+                    file = StringPrintf("%s.%.*d", output_file_name_, max_rotation_count_digits, i);
+                }
+
+                int err = unlink(file.c_str());
+
+                if (err < 0 && errno != ENOENT) {
+                    fprintf(stderr, "failed to delete log file '%s': %s\n", file.c_str(),
+                            strerror(errno));
+                }
+            }
+        }
+
+        if (clearLog) {
+            return EXIT_SUCCESS;
         }
     }
 
@@ -1003,35 +1023,8 @@ int Logcat::Run(int argc, char** argv) {
             continue;
         }
 
-        if (clearLog || setId) {
-            if (output_file_name_) {
-                int max_rotation_count_digits =
-                        max_rotated_logs_ > 0 ? (int)(floor(log10(max_rotated_logs_) + 1)) : 0;
-
-                for (int i = max_rotated_logs_; i >= 0; --i) {
-                    std::string file;
-
-                    if (!i) {
-                        file = output_file_name_;
-                    } else {
-                        file = StringPrintf("%s.%.*d", output_file_name_, max_rotation_count_digits,
-                                            i);
-                    }
-
-                    if (!file.length()) {
-                        perror("while clearing log files");
-                        ReportErrorName(buffer_name, security_buffer_selected, &clear_failures);
-                        break;
-                    }
-
-                    int err = unlink(file.c_str());
-
-                    if (err < 0 && errno != ENOENT) {
-                        perror("while clearing log files");
-                        ReportErrorName(buffer_name, security_buffer_selected, &clear_failures);
-                    }
-                }
-            } else if (android_logger_clear(logger)) {
+        if (clearLog) {
+            if (android_logger_clear(logger)) {
                 ReportErrorName(buffer_name, security_buffer_selected, &clear_failures);
             }
         }
@@ -1064,36 +1057,26 @@ int Logcat::Run(int argc, char** argv) {
 
     // report any errors in the above loop and exit
     if (!open_device_failures.empty()) {
-        LogcatPanic(HELP_FALSE, "Unable to open log device%s '%s'\n",
-                    open_device_failures.size() > 1 ? "s" : "",
-                    Join(open_device_failures, ",").c_str());
+        error(EXIT_FAILURE, 0, "Unable to open log device%s '%s'.",
+              open_device_failures.size() > 1 ? "s" : "", Join(open_device_failures, ",").c_str());
     }
     if (!clear_failures.empty()) {
-        LogcatPanic(HELP_FALSE, "failed to clear the '%s' log%s\n",
-                    Join(clear_failures, ",").c_str(), clear_failures.size() > 1 ? "s" : "");
+        error(EXIT_FAILURE, 0, "failed to clear the '%s' log%s.", Join(clear_failures, ",").c_str(),
+              clear_failures.size() > 1 ? "s" : "");
     }
     if (!set_size_failures.empty()) {
-        LogcatPanic(HELP_FALSE, "failed to set the '%s' log size%s\n",
-                    Join(set_size_failures, ",").c_str(), set_size_failures.size() > 1 ? "s" : "");
+        error(EXIT_FAILURE, 0, "failed to set the '%s' log size%s.",
+              Join(set_size_failures, ",").c_str(), set_size_failures.size() > 1 ? "s" : "");
     }
     if (!get_size_failures.empty()) {
-        LogcatPanic(HELP_FALSE, "failed to get the readable '%s' log size%s\n",
-                    Join(get_size_failures, ",").c_str(), get_size_failures.size() > 1 ? "s" : "");
+        error(EXIT_FAILURE, 0, "failed to get the readable '%s' log size%s.",
+              Join(get_size_failures, ",").c_str(), get_size_failures.size() > 1 ? "s" : "");
     }
 
     if (setPruneList) {
         size_t len = strlen(setPruneList);
-        // extra 32 bytes are needed by android_logger_set_prune_list
-        size_t bLen = len + 32;
-        char* buf = nullptr;
-        if (asprintf(&buf, "%-*s", (int)(bLen - 1), setPruneList) > 0) {
-            buf[len] = '\0';
-            if (android_logger_set_prune_list(logger_list.get(), buf, bLen)) {
-                LogcatPanic(HELP_FALSE, "failed to set the prune list");
-            }
-            free(buf);
-        } else {
-            LogcatPanic(HELP_FALSE, "failed to set the prune list (alloc)");
+        if (android_logger_set_prune_list(logger_list.get(), setPruneList, len)) {
+            error(EXIT_FAILURE, 0, "Failed to set the prune list.");
         }
         return EXIT_SUCCESS;
     }
@@ -1124,7 +1107,7 @@ int Logcat::Run(int argc, char** argv) {
         }
 
         if (!buf) {
-            LogcatPanic(HELP_FALSE, "failed to read data");
+            error(EXIT_FAILURE, 0, "Failed to read data.");
         }
 
         // remove trailing FF
@@ -1154,24 +1137,29 @@ int Logcat::Run(int argc, char** argv) {
         struct log_msg log_msg;
         int ret = android_logger_list_read(logger_list.get(), &log_msg);
         if (!ret) {
-            LogcatPanic(HELP_FALSE, "read: unexpected EOF!\n");
+            error(EXIT_FAILURE, 0, R"init(Unexpected EOF!
+
+This means that either logd crashed, or more likely, this instance of logcat was unable to read log
+messages as quickly as they were being produced.
+
+If you have enabled significant logging, look into using the -G option to increase log buffer sizes.)init");
         }
 
         if (ret < 0) {
             if (ret == -EAGAIN) break;
 
             if (ret == -EIO) {
-                LogcatPanic(HELP_FALSE, "read: unexpected EOF!\n");
+                error(EXIT_FAILURE, 0, "Unexpected EOF!");
             }
             if (ret == -EINVAL) {
-                LogcatPanic(HELP_FALSE, "read: unexpected length.\n");
+                error(EXIT_FAILURE, 0, "Unexpected length.");
             }
-            LogcatPanic(HELP_FALSE, "logcat read failure\n");
+            error(EXIT_FAILURE, errno, "Logcat read failure");
         }
 
         if (log_msg.id() > LOG_ID_MAX) {
-            LogcatPanic(HELP_FALSE, "read: unexpected log id (%d) over LOG_ID_MAX (%d)",
-                        log_msg.id(), LOG_ID_MAX);
+            error(EXIT_FAILURE, 0, "Unexpected log id (%d) over LOG_ID_MAX (%d).", log_msg.id(),
+                  LOG_ID_MAX);
         }
 
         PrintDividers(log_msg.id(), printDividers);
