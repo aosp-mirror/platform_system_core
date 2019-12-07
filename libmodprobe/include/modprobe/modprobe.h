@@ -44,6 +44,9 @@ class Modprobe {
     bool Rmmod(const std::string& module_name);
     std::vector<std::string> GetDependencies(const std::string& module);
     bool ModuleExists(const std::string& module_name);
+    void AddOption(const std::string& module_name, const std::string& option_name,
+                   const std::string& value);
+    std::string GetKernelCmdline();
 
     bool ParseDepCallback(const std::string& base_path, const std::vector<std::string>& args);
     bool ParseAliasCallback(const std::vector<std::string>& args);
@@ -51,6 +54,7 @@ class Modprobe {
     bool ParseLoadCallback(const std::vector<std::string>& args);
     bool ParseOptionsCallback(const std::vector<std::string>& args);
     bool ParseBlacklistCallback(const std::vector<std::string>& args);
+    void ParseKernelCmdlineOptions();
     void ParseCfg(const std::string& cfg, std::function<bool(const std::vector<std::string>&)> f);
 
     std::vector<std::pair<std::string, std::string>> module_aliases_;
