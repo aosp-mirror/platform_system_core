@@ -23,7 +23,7 @@
 #include <android/os/BnPullAtomCallback.h>
 #include <android/os/IPullAtomResultReceiver.h>
 #include <android/os/IStatsManager.h>
-#include <android/util/StatsEvent.h>
+#include <android/util/StatsEventParcel.h>
 #include <binder/IServiceManager.h>
 #include "include/stats_pull_atom_callback.h"
 
@@ -56,9 +56,21 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
             const ::android::sp<::android::os::IPullAtomResultReceiver>& resultReceiver) override {
         pulled_stats_event_list statsEventList;
         bool success = (*mCallback)(atomTag, &statsEventList, mCookie);
-        std::vector<android::util::StatsEvent> output;
-        // TODO convert stats_event into parcelable stats_event.
-        resultReceiver->pullFinished(atomTag, success, output);
+
+        // Convert stats_events into StatsEventParcels.
+        std::vector<android::util::StatsEventParcel> parcels;
+        for (int i = 0; i < statsEventList.data.size(); i++) {
+            size_t size;
+            uint8_t* buffer = stats_event_get_buffer(statsEventList.data[i], &size);
+
+            android::util::StatsEventParcel p;
+            // vector.assign() creates a copy, but this is inevitable unless
+            // stats_event.h/c uses a vector as opposed to a buffer.
+            p.buffer.assign(buffer, buffer + size);
+            parcels.push_back(std::move(p));
+        }
+
+        resultReceiver->pullFinished(atomTag, success, parcels);
         for (int i = 0; i < statsEventList.data.size(); i++) {
             stats_event_release(statsEventList.data[i]);
         }
