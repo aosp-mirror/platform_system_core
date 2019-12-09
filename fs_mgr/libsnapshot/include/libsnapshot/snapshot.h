@@ -74,6 +74,12 @@ static constexpr const std::string_view kCowGroupName = "cow";
 
 bool SourceCopyOperationIsClone(const chromeos_update_engine::InstallOperation& operation);
 
+enum class CreateResult : unsigned int {
+    ERROR,
+    CREATED,
+    NOT_CREATED,
+};
+
 enum class UpdateState : unsigned int {
     // No update or merge is in progress.
     None,
@@ -238,6 +244,17 @@ class SnapshotManager final {
     // Returns true on success (or nothing to do), false on failure. The
     // optional callback fires periodically to query progress via GetUpdateState.
     bool HandleImminentDataWipe(const std::function<void()>& callback = {});
+
+    // This method is only allowed in recovery and is used as a helper to
+    // initialize the snapshot devices as a requirement to mount a snapshotted
+    // /system in recovery.
+    // This function returns:
+    // - CreateResult::CREATED if snapshot devices were successfully created;
+    // - CreateResult::NOT_CREATED if it was not necessary to create snapshot
+    // devices;
+    // - CreateResult::ERROR if a fatal error occurred, mounting /system should
+    // be aborted.
+    CreateResult RecoveryCreateSnapshotDevices();
 
     // Dump debug information.
     bool Dump(std::ostream& os);

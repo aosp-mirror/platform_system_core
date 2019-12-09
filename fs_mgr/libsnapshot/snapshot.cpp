@@ -2339,5 +2339,37 @@ bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
     return true;
 }
 
+CreateResult SnapshotManager::RecoveryCreateSnapshotDevices() {
+    if (!device_->IsRecovery()) {
+        LOG(ERROR) << __func__ << " is only allowed in recovery.";
+        return CreateResult::NOT_CREATED;
+    }
+
+    auto mount = EnsureMetadataMounted();
+    if (!mount || !mount->HasDevice()) {
+        LOG(ERROR) << "Couldn't mount Metadata.";
+        return CreateResult::NOT_CREATED;
+    }
+
+    auto state_file = GetStateFilePath();
+    if (access(state_file.c_str(), F_OK) != 0 && errno == ENOENT) {
+        LOG(ERROR) << "Couldn't access state file.";
+        return CreateResult::NOT_CREATED;
+    }
+
+    if (!NeedSnapshotsInFirstStageMount()) {
+        return CreateResult::NOT_CREATED;
+    }
+
+    auto slot_suffix = device_->GetOtherSlotSuffix();
+    auto slot_number = SlotNumberForSlotSuffix(slot_suffix);
+    auto super_path = device_->GetSuperDevice(slot_number);
+    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+        LOG(ERROR) << "Unable to map partitions.";
+        return CreateResult::ERROR;
+    }
+    return CreateResult::CREATED;
+}
+
 }  // namespace snapshot
 }  // namespace android
