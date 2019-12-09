@@ -198,7 +198,7 @@ Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_
     // Note in this case, that the source and destination directories are the same, so only one
     // fsync() is required.
     auto dir = Dirname(persistent_property_filename);
-    auto dir_fd = unique_fd{open(dir.c_str(), O_DIRECTORY | O_RDONLY)};
+    auto dir_fd = unique_fd{open(dir.c_str(), O_DIRECTORY | O_RDONLY | O_CLOEXEC)};
     if (dir_fd < 0) {
         return ErrnoError() << "Unable to open persistent properties directory for fsync()";
     }
