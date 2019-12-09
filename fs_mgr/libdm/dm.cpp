@@ -575,5 +575,9 @@ std::optional<std::string> DeviceMapper::GetParentBlockDeviceByPath(const std::s
     return "/dev/block/" + sub_device_name;
 }
 
+bool DeviceMapper::TargetInfo::IsOverflowSnapshot() const {
+    return spec.target_type == "snapshot"s && data == "Overflow"s;
+}
+
 }  // namespace dm
 }  // namespace android
