@@ -1082,50 +1082,45 @@ int Logcat::Run(int argc, char** argv) {
     }
 
     if (printStatistics || getPruneList) {
-        size_t len = 8192;
-        char* buf;
+        std::string buf(8192, '\0');
+        size_t ret_length = 0;
+        int retry = 32;
 
-        for (int retry = 32; (retry >= 0) && ((buf = new char[len]));
-             delete[] buf, buf = nullptr, --retry) {
+        for (; retry >= 0; --retry) {
             if (getPruneList) {
-                android_logger_get_prune_list(logger_list.get(), buf, len);
+                android_logger_get_prune_list(logger_list.get(), buf.data(), buf.size());
             } else {
-                android_logger_get_statistics(logger_list.get(), buf, len);
+                android_logger_get_statistics(logger_list.get(), buf.data(), buf.size());
             }
-            buf[len - 1] = '\0';
-            if (atol(buf) < 3) {
-                delete[] buf;
-                buf = nullptr;
+
+            ret_length = atol(buf.c_str());
+            if (ret_length < 3) {
+                error(EXIT_FAILURE, 0, "Failed to read data.");
+            }
+
+            if (ret_length < buf.size()) {
                 break;
             }
-            size_t ret = atol(buf) + 1;
-            if (ret <= len) {
-                len = ret;
-                break;
-            }
-            len = ret;
+
+            buf.resize(ret_length + 1);
         }
 
-        if (!buf) {
+        if (retry < 0) {
             error(EXIT_FAILURE, 0, "Failed to read data.");
         }
 
-        // remove trailing FF
-        char* cp = buf + len - 1;
-        *cp = '\0';
-        bool truncated = *--cp != '\f';
-        if (!truncated) *cp = '\0';
-
-        // squash out the byte count
-        cp = buf;
-        if (!truncated) {
-            while (isdigit(*cp)) ++cp;
-            if (*cp == '\n') ++cp;
+        buf.resize(ret_length);
+        if (buf.back() == '\f') {
+            buf.pop_back();
         }
 
-        len = strlen(cp);
+        // Remove the byte count prefix
+        const char* cp = buf.c_str();
+        while (isdigit(*cp)) ++cp;
+        if (*cp == '\n') ++cp;
+
+        size_t len = strlen(cp);
         TEMP_FAILURE_RETRY(write(output_fd_.get(), cp, len));
-        delete[] buf;
         return EXIT_SUCCESS;
     }
 
