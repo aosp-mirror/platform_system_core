@@ -24,7 +24,6 @@
 #include <linux/if_link.h>
 #include <linux/netfilter/nfnetlink.h>
 #include <linux/netfilter/nfnetlink_log.h>
-#include <linux/netfilter_ipv4/ipt_ULOG.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <net/if.h>
@@ -38,6 +37,23 @@
 /* From kernel's net/netfilter/xt_quota2.c */
 const int LOCAL_QLOG_NL_EVENT = 112;
 const int LOCAL_NFLOG_PACKET = NFNL_SUBSYS_ULOG << 8 | NFULNL_MSG_PACKET;
+
+/* From deprecated ipt_ULOG.h to parse QLOG_NL_EVENT. */
+#define ULOG_MAC_LEN 80
+#define ULOG_PREFIX_LEN 32
+typedef struct ulog_packet_msg {
+    unsigned long mark;
+    long timestamp_sec;
+    long timestamp_usec;
+    unsigned int hook;
+    char indev_name[IFNAMSIZ];
+    char outdev_name[IFNAMSIZ];
+    size_t data_len;
+    char prefix[ULOG_PREFIX_LEN];
+    unsigned char mac_len;
+    unsigned char mac[ULOG_MAC_LEN];
+    unsigned char payload[0];
+} ulog_packet_msg_t;
 
 #include <android-base/parseint.h>
 #include <log/log.h>
