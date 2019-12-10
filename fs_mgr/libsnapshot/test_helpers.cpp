@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "test_helpers.h"
+#include <libsnapshot/test_helpers.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>

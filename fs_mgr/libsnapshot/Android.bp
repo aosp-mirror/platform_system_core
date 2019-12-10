@@ -121,6 +121,34 @@ cc_library_static {
     ],
 }
 
+cc_library_static {
+    name: "libsnapshot_test_helpers",
+    defaults: ["libsnapshot_defaults"],
+    export_include_dirs: [
+        "include_test",
+    ],
+    srcs: [
+        "test_helpers.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.boot@1.1",
+        "libcrypto",
+    ],
+    export_shared_lib_headers: [
+        "android.hardware.boot@1.1",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    export_header_lib_headers: [
+        "libstorage_literals_headers",
+    ],
+    static_libs: [
+        "libgtest",
+        "libgmock",
+    ],
+}
+
 cc_test {
     name: "libsnapshot_test",
     defaults: ["libsnapshot_defaults"],
@@ -144,6 +172,7 @@ cc_test {
         "libgmock",
         "liblp",
         "libsnapshot",
+        "libsnapshot_test_helpers",
         "libsparse",
         "libz",
     ],

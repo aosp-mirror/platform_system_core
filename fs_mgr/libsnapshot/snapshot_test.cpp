@@ -38,7 +38,7 @@
 #include <storage_literals/storage_literals.h>
 
 #include <android/snapshot/snapshot.pb.h>
-#include "test_helpers.h"
+#include <libsnapshot/test_helpers.h>
 #include "utility.h"
 
 namespace android {
