@@ -45,7 +45,7 @@ std::string statusToString(status_t s) {
 #undef STATUS_CASE
     }
 
-    return std::to_string(s) + ' ' + strerror(-s);
+    return std::to_string(s) + " (" + strerror(-s) + ")";
 }
 
 }  // namespace android
