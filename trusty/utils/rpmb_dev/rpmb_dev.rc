@@ -1,0 +1,29 @@
+# RPMB Mock
+on post-fs-data
+    mkdir /data/vendor/ss
+    chown root system /data/vendor/ss
+    chmod 0770 /data/vendor/ss
+    rm /data/vendor/ss/rpmb_sock
+    start rpmb_mock_init
+    start rpmb_mock
+
+    # Storage proxy
+    start storageproxyd
+
+service storageproxyd /vendor/bin/storageproxyd -d /dev/trusty-ipc-dev0 \
+        -r /data/vendor/ss/rpmb_sock -p /data/vendor/ss -t sock
+    class main
+    disabled
+    user root
+
+service rpmb_mock_init /vendor/bin/rpmb_dev --dev /data/vendor/ss/RPMB_DATA --init --key "ea df 64 44 ea 65 5d 1c 87 27 d4 20 71 0d 53 42 dd 73 a3 38 63 e1 d7 94 c3 72 a6 ea e0 64 64 e6" --size 2048
+    disabled
+    user system
+    group system
+    oneshot
+
+service rpmb_mock /vendor/bin/rpmb_dev --dev /data/vendor/ss/RPMB_DATA --sock /data/vendor/ss/rpmb_sock
+    class main
+    disabled
+    user system
+    group system
