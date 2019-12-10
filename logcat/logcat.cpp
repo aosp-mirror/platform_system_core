@@ -104,11 +104,6 @@ class Logcat {
     bool debug_ = false;
 };
 
-// logd prefixes records with a length field
-#define RECORD_LENGTH_FIELD_SIZE_BYTES sizeof(uint32_t)
-
-enum helpType { HELP_FALSE, HELP_TRUE, HELP_FORMAT };
-
 #ifndef F2FS_IOC_SET_PIN_FILE
 #define F2FS_IOCTL_MAGIC       0xf5
 #define F2FS_IOC_SET_PIN_FILE _IOW(F2FS_IOCTL_MAGIC, 13, __u32)
