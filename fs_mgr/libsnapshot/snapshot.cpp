@@ -171,19 +171,27 @@ bool SnapshotManager::TryCancelUpdate(bool* needs_merge) {
 
     if (state == UpdateState::Unverified) {
         // We completed an update, but it can still be canceled if we haven't booted into it.
-        auto boot_file = GetSnapshotBootIndicatorPath();
-        std::string contents;
-        if (!android::base::ReadFileToString(boot_file, &contents)) {
-            PLOG(WARNING) << "Cannot read " << boot_file << ", proceed to canceling the update:";
-            return RemoveAllUpdateState(file.get());
-        }
-        if (device_->GetSlotSuffix() == contents) {
-            LOG(INFO) << "Canceling a previously completed update";
+        auto slot = GetCurrentSlot();
+        if (slot != Slot::Target) {
+            LOG(INFO) << "Canceling previously completed updates (if any)";
             return RemoveAllUpdateState(file.get());
         }
     }
     *needs_merge = true;
     return true;
+}
+
+SnapshotManager::Slot SnapshotManager::GetCurrentSlot() {
+    auto boot_file = GetSnapshotBootIndicatorPath();
+    std::string contents;
+    if (!android::base::ReadFileToString(boot_file, &contents)) {
+        PLOG(WARNING) << "Cannot read " << boot_file;
+        return Slot::Unknown;
+    }
+    if (device_->GetSlotSuffix() == contents) {
+        return Slot::Source;
+    }
+    return Slot::Target;
 }
 
 bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock) {
@@ -505,15 +513,9 @@ bool SnapshotManager::InitiateMerge() {
         return false;
     }
 
-    std::string old_slot;
-    auto boot_file = GetSnapshotBootIndicatorPath();
-    if (!android::base::ReadFileToString(boot_file, &old_slot)) {
-        LOG(ERROR) << "Could not determine the previous slot; aborting merge";
-        return false;
-    }
-    auto new_slot = device_->GetSlotSuffix();
-    if (new_slot == old_slot) {
-        LOG(ERROR) << "Device cannot merge while booting off old slot " << old_slot;
+    auto slot = GetCurrentSlot();
+    if (slot != Slot::Target) {
+        LOG(ERROR) << "Device cannot merge while not booting from new slot";
         return false;
     }
 
@@ -1097,13 +1099,11 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
 }
 
 bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock) {
-    std::string old_slot;
-    auto boot_file = GetSnapshotBootIndicatorPath();
-    if (!android::base::ReadFileToString(boot_file, &old_slot)) {
-        PLOG(ERROR) << "Unable to read the snapshot indicator file: " << boot_file;
+    auto slot = GetCurrentSlot();
+    if (slot == Slot::Unknown) {
         return false;
     }
-    if (device_->GetSlotSuffix() != old_slot) {
+    if (slot == Slot::Target) {
         // We're booted into the target slot, which means we just rebooted
         // after applying the update.
         if (!HandleCancelledUpdateOnNewSlot(lock)) {
@@ -1271,14 +1271,9 @@ bool SnapshotManager::NeedSnapshotsInFirstStageMount() {
     // ultimately we'll fail to boot. Why not make it a fatal error and have
     // the reason be clearer? Because the indicator file still exists, and
     // if this was FATAL, reverting to the old slot would be broken.
-    std::string old_slot;
-    auto boot_file = GetSnapshotBootIndicatorPath();
-    if (!android::base::ReadFileToString(boot_file, &old_slot)) {
-        PLOG(ERROR) << "Unable to read the snapshot indicator file: " << boot_file;
-        return false;
-    }
-    if (device_->GetSlotSuffix() == old_slot) {
-        LOG(INFO) << "Detected slot rollback, will not mount snapshots.";
+    auto slot = GetCurrentSlot();
+    if (slot != Slot::Target) {
+        LOG(INFO) << "Not booting from new slot. Will not mount snapshots.";
         return false;
     }
 
@@ -2156,6 +2151,17 @@ bool SnapshotManager::UnmapAllPartitions() {
     return ok;
 }
 
+std::ostream& operator<<(std::ostream& os, SnapshotManager::Slot slot) {
+    switch (slot) {
+        case SnapshotManager::Slot::Unknown:
+            return os << "unknown";
+        case SnapshotManager::Slot::Source:
+            return os << "source";
+        case SnapshotManager::Slot::Target:
+            return os << "target";
+    }
+}
+
 bool SnapshotManager::Dump(std::ostream& os) {
     // Don't actually lock. Dump() is for debugging purposes only, so it is okay
     // if it is racy.
@@ -2166,11 +2172,8 @@ bool SnapshotManager::Dump(std::ostream& os) {
 
     ss << "Update state: " << ReadUpdateState(file.get()) << std::endl;
 
-    auto boot_file = GetSnapshotBootIndicatorPath();
-    std::string boot_indicator;
-    if (android::base::ReadFileToString(boot_file, &boot_indicator)) {
-        ss << "Boot indicator: old slot = " << boot_indicator << std::endl;
-    }
+    ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
+    ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
 
     bool ok = true;
     std::vector<std::string> snapshots;
@@ -2283,11 +2286,9 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
             //
             // Since the rollback is inevitable, we don't treat a HAL failure
             // as an error here.
-            std::string old_slot;
-            auto boot_file = GetSnapshotBootIndicatorPath();
-            if (android::base::ReadFileToString(boot_file, &old_slot) &&
-                device_->GetSlotSuffix() != old_slot) {
-                LOG(ERROR) << "Reverting to slot " << old_slot << " since update will be deleted.";
+            auto slot = GetCurrentSlot();
+            if (slot == Slot::Target) {
+                LOG(ERROR) << "Reverting to old slot since update will be deleted.";
                 device_->SetSlotAsUnbootable(slot_number);
             }
             break;

@@ -496,6 +496,10 @@ class SnapshotManager final {
     // as a sanity check.
     bool EnsureNoOverflowSnapshot(LockedFile* lock);
 
+    enum class Slot { Unknown, Source, Target };
+    friend std::ostream& operator<<(std::ostream& os, SnapshotManager::Slot slot);
+    Slot GetCurrentSlot();
+
     std::string gsid_dir_;
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;
