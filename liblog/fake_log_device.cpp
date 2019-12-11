@@ -48,21 +48,20 @@
 #define TRACE(...) ((void)0)
 #endif
 
-static int FakeAvailable(log_id_t);
-static int FakeOpen();
 static void FakeClose();
 static int FakeWrite(log_id_t log_id, struct timespec* ts, struct iovec* vec, size_t nr);
 
 struct android_log_transport_write fakeLoggerWrite = {
     .name = "fake",
     .logMask = 0,
-    .available = FakeAvailable,
-    .open = FakeOpen,
+    .available = [](log_id_t) { return 0; },
+    .open = [] { return 0; },
     .close = FakeClose,
     .write = FakeWrite,
 };
 
 typedef struct LogState {
+  bool initialized = false;
   /* global minimum priority */
   int global_min_priority;
 
@@ -76,19 +75,8 @@ typedef struct LogState {
   } tagSet[kTagSetSize];
 } LogState;
 
-/*
- * Locking.  Since we're emulating a device, we need to be prepared
- * to have multiple callers at the same time.  This lock is used
- * to both protect the fd list and to prevent LogStates from being
- * freed out from under a user.
- */
-std::mutex mutex;
-
 static LogState log_state;
-
-static int FakeAvailable(log_id_t) {
-  return 0;
-}
+static std::mutex fake_log_mutex;
 
 /*
  * Configure logging based on ANDROID_LOG_TAGS environment variable.  We
@@ -103,8 +91,8 @@ static int FakeAvailable(log_id_t) {
  * We also want to check ANDROID_PRINTF_LOG to determine how the output
  * will look.
  */
-int FakeOpen() {
-  std::lock_guard guard{mutex};
+void InitializeLogStateLocked() {
+  log_state.initialized = true;
 
   /* global min priority defaults to "info" level */
   log_state.global_min_priority = ANDROID_LOG_INFO;
@@ -129,7 +117,7 @@ int FakeOpen() {
       }
       if (i == kMaxTagLen) {
         TRACE("ERROR: env tag too long (%d chars max)\n", kMaxTagLen - 1);
-        return 0;
+        return;
       }
       tagName[i] = '\0';
 
@@ -180,7 +168,7 @@ int FakeOpen() {
         if (*tags != '\0' && !isspace(*tags)) {
           TRACE("ERROR: garbage in tag env; expected whitespace\n");
           TRACE("       env='%s'\n", tags);
-          return 0;
+          return;
         }
       }
 
@@ -224,7 +212,6 @@ int FakeOpen() {
   }
 
   log_state.output_format = format;
-  return 0;
 }
 
 /*
@@ -474,7 +461,11 @@ static int FakeWrite(log_id_t log_id, struct timespec*, struct iovec* vector, si
    * Also guarantees that only one thread is in showLog() at a given
    * time (if it matters).
    */
-  std::lock_guard guard{mutex};
+  auto lock = std::lock_guard{fake_log_mutex};
+
+  if (!log_state.initialized) {
+    InitializeLogStateLocked();
+  }
 
   if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS || log_id == LOG_ID_SECURITY) {
     TRACE("%s: ignoring binary log\n", android_log_id_to_name(log_id));
@@ -532,7 +523,7 @@ static int FakeWrite(log_id_t log_id, struct timespec*, struct iovec* vector, si
  * help debug HOST tools ...
  */
 static void FakeClose() {
-  std::lock_guard guard{mutex};
+  auto lock = std::lock_guard{fake_log_mutex};
 
   memset(&log_state, 0, sizeof(log_state));
 }
