@@ -45,10 +45,6 @@ static int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
 static void LogdClose();
 
 struct android_log_transport_write logdLoggerWrite = {
-    .name = "logd",
-    .logMask = 0,
-    .available = [](log_id_t) { return 0; },
-    .open = [] { return 0; },
     .close = LogdClose,
     .write = LogdWrite,
 };

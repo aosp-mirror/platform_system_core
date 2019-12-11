@@ -52,10 +52,6 @@ static void FakeClose();
 static int FakeWrite(log_id_t log_id, struct timespec* ts, struct iovec* vec, size_t nr);
 
 struct android_log_transport_write fakeLoggerWrite = {
-    .name = "fake",
-    .logMask = 0,
-    .available = [](log_id_t) { return 0; },
-    .open = [] { return 0; },
     .close = FakeClose,
     .write = FakeWrite,
 };

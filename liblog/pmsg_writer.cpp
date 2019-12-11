@@ -40,10 +40,6 @@ static void PmsgClose();
 static int PmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
 
 struct android_log_transport_write pmsgLoggerWrite = {
-    .name = "pmsg",
-    .logMask = 0,
-    .available = [](log_id_t) { return 0; },
-    .open = [] { return 0; },
     .close = PmsgClose,
     .write = PmsgWrite,
 };
