@@ -96,3 +96,11 @@ cc_test {
         "vts",
     ],
 }
+
+cc_test_host {
+    name: "liblog-host-test",
+    static_libs: ["liblog"],
+    shared_libs: ["libbase"],
+    srcs: ["liblog_host_test.cpp"],
+    isolated: true,
+}
