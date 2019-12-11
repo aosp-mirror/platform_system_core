@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2018 The Android Open Source Project
+// Copyright (C) 2019 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,35 +15,40 @@
 //
 
 // =========================================================================
-// Native library to write stats log to statsd socket on Android R and later
+// Native library that toggles between the old and new statsd socket
+// protocols. This library should only be used by DNS resolver or other
+// native modules on Q that log pushed atoms to statsd.
 // =========================================================================
-cc_library {
-    name: "libstatssocket",
-    srcs: [
-        "stats_buffer_writer.c",
-        "stats_event.c",
-        // TODO(b/145573568): Remove stats_event_list once stats_event
-        // migration is complete.
-        "stats_event_list.c",
-        "statsd_writer.c",
-    ],
-    host_supported: true,
+cc_defaults {
+    name: "libstatspush_compat_defaults",
+    srcs: ["StatsEventCompat.cpp"],
     cflags: [
         "-Wall",
         "-Werror",
-        "-DLIBLOG_LOG_TAG=1006",
-        "-DWRITE_TO_STATSD=1",
-        "-DWRITE_TO_LOGD=0",
     ],
-    export_include_dirs: ["include"],
-    shared_libs: [
-        "libcutils",
+    header_libs: ["libstatssocket_headers"],
+    static_libs: [
+        "libbase",
         "liblog",
+        "libstatssocket_q",
+        "libutils"
     ],
 }
 
-cc_library_headers {
-    name: "libstatssocket_headers",
+cc_library {
+    name: "libstatspush_compat",
+    defaults: ["libstatspush_compat_defaults"],
     export_include_dirs: ["include"],
-    host_supported: true,
+    static_libs: ["libgtest_prod"],
 }
+
+cc_test {
+    name: "libstatspush_compat_test",
+    defaults: ["libstatspush_compat_defaults"],
+    test_suites: ["device_tests"],
+    srcs: [
+        "tests/StatsEventCompat_test.cpp",
+    ],
+    static_libs: ["libgmock"],
+}
+
