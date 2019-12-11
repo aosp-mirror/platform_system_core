@@ -182,7 +182,8 @@ static void configureInitialState(const char* pathName, LogState* logState) {
   logState->debugName[sizeof(logState->debugName) - 1] = '\0';
 
   /* identify binary logs */
-  if (!strcmp(pathName + kDevLogLen, "events") || !strcmp(pathName + kDevLogLen, "security")) {
+  if (!strcmp(pathName + kDevLogLen, "events") || !strcmp(pathName + kDevLogLen, "security") ||
+      !strcmp(pathName + kDevLogLen, "stats")) {
     logState->isBinary = 1;
   }
 
