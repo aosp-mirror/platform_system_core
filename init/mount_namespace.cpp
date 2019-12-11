@@ -172,6 +172,11 @@ bool SetupMountNamespaces() {
     // the bootstrap namespace get APEXes from the read-only partition.
     if (!(MakePrivate("/apex"))) return false;
 
+    // /linkerconfig is a private mountpoint to give a different linker configuration
+    // based on the mount namespace. Subdirectory will be bind-mounted based on current mount
+    // namespace
+    if (!(MakePrivate("/linkerconfig"))) return false;
+
     bootstrap_ns_fd.reset(OpenMountNamespace());
     bootstrap_ns_id = GetMountNamespaceId();
 

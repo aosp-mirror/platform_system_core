@@ -204,10 +204,6 @@ int FirstStageMain(int argc, char** argv) {
     // part of the product partition, e.g. because they are mounted read-write.
     CHECKCALL(mkdir("/mnt/product", 0755));
 
-    // /apex is used to mount APEXes
-    CHECKCALL(mount("tmpfs", "/apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
-                    "mode=0755,uid=0,gid=0"));
-
     // /debug_ramdisk is used to preserve additional files from the debug ramdisk
     CHECKCALL(mount("tmpfs", "/debug_ramdisk", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
