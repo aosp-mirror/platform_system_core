@@ -1066,6 +1066,25 @@ Fstab fs_mgr_overlayfs_candidate_list(const Fstab& fstab) {
     return candidates;
 }
 
+static void TryMountScratch() {
+    auto scratch_device = fs_mgr_overlayfs_scratch_device();
+    if (!fs_mgr_overlayfs_scratch_can_be_mounted(scratch_device)) {
+        return;
+    }
+    if (!WaitForFile(scratch_device, 10s)) {
+        return;
+    }
+    const auto mount_type = fs_mgr_overlayfs_scratch_mount_type();
+    if (!fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type, true /* readonly */)) {
+        return;
+    }
+    auto has_overlayfs_dir = fs_mgr_access(kScratchMountPoint + kOverlayTopDir);
+    fs_mgr_overlayfs_umount_scratch();
+    if (has_overlayfs_dir) {
+        fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type);
+    }
+}
+
 bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
     auto ret = false;
     if (fs_mgr_overlayfs_invalid()) return ret;
@@ -1080,19 +1099,7 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
         }
         if (scratch_can_be_mounted) {
             scratch_can_be_mounted = false;
-            auto scratch_device = fs_mgr_overlayfs_scratch_device();
-            if (fs_mgr_overlayfs_scratch_can_be_mounted(scratch_device) &&
-                WaitForFile(scratch_device, 10s)) {
-                const auto mount_type = fs_mgr_overlayfs_scratch_mount_type();
-                if (fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type,
-                                                   true /* readonly */)) {
-                    auto has_overlayfs_dir = fs_mgr_access(kScratchMountPoint + kOverlayTopDir);
-                    fs_mgr_overlayfs_umount_scratch();
-                    if (has_overlayfs_dir) {
-                        fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type);
-                    }
-                }
-            }
+            TryMountScratch();
         }
         if (fs_mgr_overlayfs_mount(mount_point)) ret = true;
     }
