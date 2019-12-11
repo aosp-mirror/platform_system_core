@@ -22,6 +22,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 
+#include <algorithm>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -308,7 +309,18 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const FstabEntry& fstab_entry) {
             return nullptr;
     }
 
-    if (!ValidatePublicKeyBlob(public_key_data, Split(fstab_entry.avb_keys, ":"))) {
+    // fstab_entry.avb_keys might be either a directory containing multiple keys,
+    // or a string indicating multiple keys separated by ':'.
+    std::vector<std::string> allowed_avb_keys;
+    auto list_avb_keys_in_dir = ListFiles(fstab_entry.avb_keys);
+    if (list_avb_keys_in_dir) {
+        std::sort(list_avb_keys_in_dir->begin(), list_avb_keys_in_dir->end());
+        allowed_avb_keys = *list_avb_keys_in_dir;
+    } else {
+        allowed_avb_keys = Split(fstab_entry.avb_keys, ":");
+    }
+
+    if (!ValidatePublicKeyBlob(public_key_data, allowed_avb_keys)) {
         avb_handle->status_ = AvbHandleStatus::kVerificationError;
         LWARNING << "Found unknown public key used to sign " << fstab_entry.mount_point;
         if (!allow_verification_error) {
