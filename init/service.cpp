@@ -326,6 +326,7 @@ void Service::Reap(const siginfo_t& siginfo) {
                                << (boot_completed ? "in 4 minutes" : "before boot completed");
                     // Notifies update_verifier and apexd
                     SetProperty("sys.init.updatable_crashing", "1");
+                    SetProperty("sys.init.updatable_crashing_process_name", name_);
                 }
             }
         } else {
