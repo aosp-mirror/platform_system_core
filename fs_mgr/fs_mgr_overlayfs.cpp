@@ -440,13 +440,9 @@ void fs_mgr_overlayfs_umount_scratch() {
     rmdir(kScratchMountPoint.c_str());
 }
 
-// reduce 'DM_DEV_STATUS failed for scratch: No such device or address' noise
-std::string scratch_device_cache;
-
 bool fs_mgr_overlayfs_teardown_scratch(const std::string& overlay, bool* change) {
     // umount and delete kScratchMountPoint storage if we have logical partitions
     if (overlay != kScratchMountPoint) return true;
-    scratch_device_cache.erase();
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
     if (!fs_mgr_rw_access(super_device)) return true;
@@ -877,13 +873,6 @@ static std::string GetScratchDevice() {
     }
 }
 
-std::string fs_mgr_overlayfs_scratch_device() {
-    if (!scratch_device_cache.empty()) return scratch_device_cache;
-
-    scratch_device_cache = GetScratchDevice();
-    return scratch_device_cache;
-}
-
 bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std::string& mnt_type) {
     // Force mkfs by design for overlay support of adb remount, simplify and
     // thus do not rely on fsck to correct problems that could creep in.
@@ -1131,7 +1120,7 @@ Fstab fs_mgr_overlayfs_candidate_list(const Fstab& fstab) {
 }
 
 static void TryMountScratch() {
-    auto scratch_device = fs_mgr_overlayfs_scratch_device();
+    auto scratch_device = GetScratchDevice();
     if (!fs_mgr_overlayfs_scratch_can_be_mounted(scratch_device)) {
         return;
     }
@@ -1180,7 +1169,7 @@ std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab* fstab) {
     for (const auto& entry : fs_mgr_overlayfs_candidate_list(*fstab)) {
         if (fs_mgr_is_verity_enabled(entry)) continue;
         if (fs_mgr_overlayfs_already_mounted(fs_mgr_mount_point(entry.mount_point))) continue;
-        auto device = fs_mgr_overlayfs_scratch_device();
+        auto device = GetScratchDevice();
         if (!fs_mgr_overlayfs_scratch_can_be_mounted(device)) break;
         return {device};
     }
