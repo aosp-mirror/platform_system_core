@@ -963,6 +963,6 @@ REGISTER_TYPED_TEST_SUITE_P(DwarfCfaTest, cfa_illegal, cfa_nop, cfa_offset, cfa_
                             cfa_register_override);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfCfaTestTypes;
-INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfCfaTest, DwarfCfaTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfCfaTest, DwarfCfaTestTypes);
 
 }  // namespace unwindstack

@@ -128,6 +128,6 @@ TYPED_TEST_P(DwarfEhFrameTest, GetFdeCieFromOffset64) {
 REGISTER_TYPED_TEST_SUITE_P(DwarfEhFrameTest, GetFdeCieFromOffset32, GetFdeCieFromOffset64);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfEhFrameTestTypes;
-INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfEhFrameTest, DwarfEhFrameTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfEhFrameTest, DwarfEhFrameTestTypes);
 
 }  // namespace unwindstack

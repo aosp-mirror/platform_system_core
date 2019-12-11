@@ -774,6 +774,6 @@ REGISTER_TYPED_TEST_SUITE_P(DwarfCfaLogTest, cfa_illegal, cfa_nop, cfa_offset, c
                             cfa_gnu_negative_offset_extended, cfa_register_override);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfCfaLogTestTypes;
-INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfCfaLogTest, DwarfCfaLogTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfCfaLogTest, DwarfCfaLogTestTypes);
 
 }  // namespace unwindstack
