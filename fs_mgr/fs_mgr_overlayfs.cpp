@@ -1252,6 +1252,27 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     return ret;
 }
 
+static bool GetAndMapScratchDeviceIfNeeded(std::string* device) {
+    *device = GetScratchDevice();
+    if (!device->empty()) {
+        return true;
+    }
+
+    auto strategy = GetScratchStrategy();
+    if (strategy == ScratchStrategy::kDynamicPartition) {
+        auto metadata_slot = fs_mgr_overlayfs_slot_number();
+        CreateLogicalPartitionParams params = {
+                .block_device = fs_mgr_overlayfs_super_device(metadata_slot),
+                .metadata_slot = metadata_slot,
+                .partition_name = android::base::Basename(kScratchMountPoint),
+                .force_writable = true,
+                .timeout_ms = 10s,
+        };
+        return CreateLogicalPartition(params, device);
+    }
+    return false;
+}
+
 // Returns false if teardown not permitted, errno set to last error.
 // If something is altered, set *change.
 bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
@@ -1261,20 +1282,11 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     // specific override entries.
     auto mount_scratch = false;
     if ((mount_point != nullptr) && !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
-        auto scratch_device = fs_mgr_overlayfs_scratch_device();
-        if (scratch_device.empty()) {
-            auto metadata_slot = fs_mgr_overlayfs_slot_number();
-            CreateLogicalPartitionParams params = {
-                    .block_device = fs_mgr_overlayfs_super_device(metadata_slot),
-                    .metadata_slot = metadata_slot,
-                    .partition_name = android::base::Basename(kScratchMountPoint),
-                    .force_writable = true,
-                    .timeout_ms = 10s,
-            };
-            CreateLogicalPartition(params, &scratch_device);
+        std::string scratch_device;
+        if (GetAndMapScratchDeviceIfNeeded(&scratch_device)) {
+            mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,
+                                                           fs_mgr_overlayfs_scratch_mount_type());
         }
-        mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,
-                                                       fs_mgr_overlayfs_scratch_mount_type());
     }
     for (const auto& overlay_mount_point : kOverlayMountPoints) {
         ret &= fs_mgr_overlayfs_teardown_one(
