@@ -512,8 +512,22 @@ void HandleKeychord(const std::vector<int>& keycodes) {
 
 static void UmountDebugRamdisk() {
     if (umount("/debug_ramdisk") != 0) {
-        LOG(ERROR) << "Failed to umount /debug_ramdisk";
+        PLOG(ERROR) << "Failed to umount /debug_ramdisk";
     }
+}
+
+static void MountExtraFilesystems() {
+#define CHECKCALL(x) \
+    if ((x) != 0) PLOG(FATAL) << #x " failed.";
+
+    // /apex is used to mount APEXes
+    CHECKCALL(mount("tmpfs", "/apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                    "mode=0755,uid=0,gid=0"));
+
+    // /linkerconfig is used to keep generated linker configuration
+    CHECKCALL(mount("tmpfs", "/linkerconfig", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                    "mode=0755,uid=0,gid=0"));
+#undef CHECKCALL
 }
 
 static void RecordStageBoottimes(const boot_clock::time_point& second_stage_start_time) {
@@ -655,6 +669,9 @@ int SecondStageMain(int argc, char** argv) {
     if (load_debug_prop) {
         UmountDebugRamdisk();
     }
+
+    // Mount extra filesystems required during second stage init
+    MountExtraFilesystems();
 
     // Now set up SELinux for second stage.
     SelinuxSetupKernelLogging();
