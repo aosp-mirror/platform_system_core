@@ -349,8 +349,15 @@ static __inline__ bool adb_is_separator(char c) {
     return c == '/';
 }
 
+static __inline__ int get_fd_flags(borrowed_fd fd) {
+    return fcntl(fd.get(), F_GETFD);
+}
+
 static __inline__ void close_on_exec(borrowed_fd fd) {
-    fcntl(fd.get(), F_SETFD, FD_CLOEXEC);
+    int flags = get_fd_flags(fd);
+    if (flags >= 0 && (flags & FD_CLOEXEC) == 0) {
+        fcntl(fd.get(), F_SETFD, flags | FD_CLOEXEC);
+    }
 }
 
 // Open a file and return a file descriptor that may be used with unix_read(),
