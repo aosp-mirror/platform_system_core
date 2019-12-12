@@ -24,7 +24,6 @@
 #include <android/set_abort_message.h>
 #endif
 
-#include <log/event_tag_map.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
@@ -107,18 +106,10 @@ static void __android_log_cache_available(struct android_log_transport_write* no
   }
 }
 
-#if defined(__ANDROID__)
-static atomic_uintptr_t tagMap;
-#endif
-
 /*
  * Release any logger resources. A new log write will immediately re-acquire.
  */
 void __android_log_close() {
-#if defined(__ANDROID__)
-  EventTagMap* m;
-#endif
-
   __android_log_lock();
 
   write_to_log = __write_to_log_init;
@@ -141,27 +132,7 @@ void __android_log_close() {
     android_log_persist_write->close();
   }
 
-#if defined(__ANDROID__)
-  /*
-   * Additional risk here somewhat mitigated by immediately unlock flushing
-   * the processor cache. The multi-threaded race that we choose to accept,
-   * to minimize locking, is an atomic_load in a writer picking up a value
-   * just prior to entering this routine. There will be an use after free.
-   *
-   * Again, anyone calling this is doing so to release the logging resources
-   * is most probably going to quiesce then shut down; or to restart after
-   * a fork so the risk should be non-existent. For this reason we
-   * choose a mitigation stance for efficiency instead of incuring the cost
-   * of a lock for every log write.
-   */
-  m = (EventTagMap*)atomic_exchange(&tagMap, (uintptr_t)0);
-#endif
-
   __android_log_unlock();
-
-#if defined(__ANDROID__)
-  if (m != (EventTagMap*)(uintptr_t)-1LL) android_closeEventTagMap(m);
-#endif
 }
 
 static bool transport_initialize(android_log_transport_write* transport) {
@@ -219,48 +190,9 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
       return -EPERM;
     }
   } else if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
-    const char* tag;
-    size_t len;
-    EventTagMap *m, *f;
-
     if (vec[0].iov_len < 4) {
       errno = save_errno;
       return -EINVAL;
-    }
-
-    tag = NULL;
-    len = 0;
-    f = NULL;
-    m = (EventTagMap*)atomic_load(&tagMap);
-
-    if (!m) {
-      ret = __android_log_trylock();
-      m = (EventTagMap*)atomic_load(&tagMap); /* trylock flush cache */
-      if (!m) {
-        m = android_openEventTagMap(NULL);
-        if (ret) { /* trylock failed, use local copy, mark for close */
-          f = m;
-        } else {
-          if (!m) { /* One chance to open map file */
-            m = (EventTagMap*)(uintptr_t)-1LL;
-          }
-          atomic_store(&tagMap, (uintptr_t)m);
-        }
-      }
-      if (!ret) { /* trylock succeeded, unlock */
-        __android_log_unlock();
-      }
-    }
-    if (m && (m != (EventTagMap*)(uintptr_t)-1LL)) {
-      tag = android_lookupEventTag_len(m, &len, *static_cast<uint32_t*>(vec[0].iov_base));
-    }
-    ret = __android_log_is_loggable_len(ANDROID_LOG_INFO, tag, len, ANDROID_LOG_VERBOSE);
-    if (f) { /* local copy marked for close */
-      android_closeEventTagMap(f);
-    }
-    if (!ret) {
-      errno = save_errno;
-      return -EPERM;
     }
   } else {
     int prio = *static_cast<int*>(vec[0].iov_base);
