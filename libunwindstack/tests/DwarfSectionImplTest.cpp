@@ -583,6 +583,6 @@ REGISTER_TYPED_TEST_SUITE_P(DwarfSectionImplTest, GetCieFromOffset_fail_should_n
                             GetCfaLocationInfo_cie_not_cached, GetCfaLocationInfo_cie_cached, Log);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfSectionImplTestTypes;
-INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfSectionImplTest, DwarfSectionImplTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfSectionImplTest, DwarfSectionImplTestTypes);
 
 }  // namespace unwindstack
