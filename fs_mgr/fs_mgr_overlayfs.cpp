@@ -1178,8 +1178,7 @@ std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab* fstab) {
 
 // Returns false if setup not permitted, errno set to last error.
 // If something is altered, set *change.
-bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* change,
-                            bool force) {
+bool fs_mgr_overlayfs_setup(const char* mount_point, bool* change, bool force) {
     if (change) *change = false;
     auto ret = false;
     if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) return ret;
@@ -1216,7 +1215,6 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
 
     std::string dir;
     for (const auto& overlay_mount_point : kOverlayMountPoints) {
-        if (backing && backing[0] && (overlay_mount_point != backing)) continue;
         if (overlay_mount_point == kScratchMountPoint) {
             if (!fs_mgr_overlayfs_setup_scratch(fstab, change)) continue;
         } else {
