@@ -22,7 +22,7 @@
 
 #include <android/os/BnPullAtomCallback.h>
 #include <android/os/IPullAtomResultReceiver.h>
-#include <android/os/IStatsManager.h>
+#include <android/os/IStatsd.h>
 #include <android/util/StatsEventParcel.h>
 #include <binder/IServiceManager.h>
 #include "include/stats_pull_atom_callback.h"
@@ -90,10 +90,10 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
 };
 
 static std::mutex pullAtomMutex;
-static android::sp<android::os::IStatsManager> sStatsd = nullptr;
+static android::sp<android::os::IStatsd> sStatsd = nullptr;
 
 static std::map<int32_t, android::sp<StatsPullAtomCallbackInternal>> mPullers;
-static android::sp<android::os::IStatsManager> getStatsServiceLocked();
+static android::sp<android::os::IStatsd> getStatsServiceLocked();
 
 class StatsDeathRecipient : public android::IBinder::DeathRecipient {
   public:
@@ -106,7 +106,7 @@ class StatsDeathRecipient : public android::IBinder::DeathRecipient {
         if (sStatsd) {
             sStatsd = nullptr;
         }
-        android::sp<android::os::IStatsManager> statsService = getStatsServiceLocked();
+        android::sp<android::os::IStatsd> statsService = getStatsServiceLocked();
         if (statsService == nullptr) {
             return;
         }
@@ -120,7 +120,7 @@ class StatsDeathRecipient : public android::IBinder::DeathRecipient {
 
 static android::sp<StatsDeathRecipient> statsDeathRecipient = new StatsDeathRecipient();
 
-static android::sp<android::os::IStatsManager> getStatsServiceLocked() {
+static android::sp<android::os::IStatsd> getStatsServiceLocked() {
     if (!sStatsd) {
         // Fetch statsd.
         const android::sp<android::IBinder> binder =
@@ -129,7 +129,7 @@ static android::sp<android::os::IStatsManager> getStatsServiceLocked() {
             return nullptr;
         }
         binder->linkToDeath(statsDeathRecipient);
-        sStatsd = android::interface_cast<android::os::IStatsManager>(binder);
+        sStatsd = android::interface_cast<android::os::IStatsd>(binder);
     }
     return sStatsd;
 }
@@ -146,7 +146,7 @@ void register_stats_pull_atom_callback(int32_t atom_tag, stats_pull_atom_callbac
     }
 
     std::lock_guard<std::mutex> lg(pullAtomMutex);
-    const android::sp<android::os::IStatsManager> statsService = getStatsServiceLocked();
+    const android::sp<android::os::IStatsd> statsService = getStatsServiceLocked();
     if (statsService == nullptr) {
         // Error - statsd not available
         return;
