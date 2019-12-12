@@ -372,7 +372,7 @@ TEST_F(LiblpTest, TooManyPartitions) {
     // Compute the maximum number of partitions we can fit in 512 bytes of
     // metadata. By default there is the header, one partition group, and a
     // block device entry.
-    static const size_t kMaxPartitionTableSize = kMetadataSize - sizeof(LpMetadataHeader) -
+    static const size_t kMaxPartitionTableSize = kMetadataSize - sizeof(LpMetadataHeaderV1_0) -
                                                  sizeof(LpMetadataPartitionGroup) -
                                                  sizeof(LpMetadataBlockDevice);
     size_t max_partitions = kMaxPartitionTableSize / sizeof(LpMetadataPartition);
@@ -741,4 +741,29 @@ TEST_F(LiblpTest, UpdateVirtualAB) {
     ASSERT_EQ(metadata->header.minor_version, 1);
     ASSERT_GE(metadata->partitions.size(), 1);
     ASSERT_NE(metadata->partitions[0].attributes & LP_PARTITION_ATTR_UPDATED, 0);
+}
+
+TEST_F(LiblpTest, ReadExpandedHeader) {
+    unique_ptr<MetadataBuilder> builder = CreateDefaultBuilder();
+    ASSERT_NE(builder, nullptr);
+    ASSERT_TRUE(AddDefaultPartitions(builder.get()));
+
+    builder->RequireExpandedMetadataHeader();
+
+    unique_fd fd = CreateFakeDisk();
+    ASSERT_GE(fd, 0);
+
+    DefaultPartitionOpener opener(fd);
+
+    // Export and flash.
+    unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    exported->header.flags = 0x5e5e5e5e;
+    ASSERT_TRUE(FlashPartitionTable(opener, "super", *exported.get()));
+
+    unique_ptr<LpMetadata> imported = ReadMetadata(opener, "super", 0);
+    ASSERT_NE(imported, nullptr);
+    EXPECT_EQ(imported->header.header_size, sizeof(LpMetadataHeaderV1_2));
+    EXPECT_EQ(imported->header.header_size, exported->header.header_size);
+    EXPECT_EQ(imported->header.flags, exported->header.flags);
 }
