@@ -139,7 +139,7 @@ static bool do_lstat_v1(int s, const char* path) {
     lstat(path, &st);
     msg.stat_v1.mode = st.st_mode;
     msg.stat_v1.size = st.st_size;
-    msg.stat_v1.time = st.st_mtime;
+    msg.stat_v1.mtime = st.st_mtime;
     return WriteFdExactly(s, &msg.stat_v1, sizeof(msg.stat_v1));
 }
 
@@ -174,40 +174,73 @@ static bool do_stat_v2(int s, uint32_t id, const char* path) {
     return WriteFdExactly(s, &msg.stat_v2, sizeof(msg.stat_v2));
 }
 
+template <bool v2>
 static bool do_list(int s, const char* path) {
     dirent* de;
 
-    syncmsg msg;
-    msg.dent.id = ID_DENT;
+    using MessageType =
+            std::conditional_t<v2, decltype(syncmsg::dent_v2), decltype(syncmsg::dent_v1)>;
+    MessageType msg;
+    uint32_t msg_id;
+    if constexpr (v2) {
+        msg_id = ID_DENT_V2;
+    } else {
+        msg_id = ID_DENT_V1;
+    }
 
     std::unique_ptr<DIR, int(*)(DIR*)> d(opendir(path), closedir);
     if (!d) goto done;
 
     while ((de = readdir(d.get()))) {
+        memset(&msg, 0, sizeof(msg));
+        msg.id = msg_id;
+
         std::string filename(StringPrintf("%s/%s", path, de->d_name));
 
         struct stat st;
         if (lstat(filename.c_str(), &st) == 0) {
-            size_t d_name_length = strlen(de->d_name);
-            msg.dent.mode = st.st_mode;
-            msg.dent.size = st.st_size;
-            msg.dent.time = st.st_mtime;
-            msg.dent.namelen = d_name_length;
+            msg.mode = st.st_mode;
+            msg.size = st.st_size;
+            msg.mtime = st.st_mtime;
 
-            if (!WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ||
-                    !WriteFdExactly(s, de->d_name, d_name_length)) {
-                return false;
+            if constexpr (v2) {
+                msg.dev = st.st_dev;
+                msg.ino = st.st_ino;
+                msg.nlink = st.st_nlink;
+                msg.uid = st.st_uid;
+                msg.gid = st.st_gid;
+                msg.atime = st.st_atime;
+                msg.ctime = st.st_ctime;
             }
+        } else {
+            if constexpr (v2) {
+                msg.error = errno;
+            } else {
+                continue;
+            }
+        }
+
+        size_t d_name_length = strlen(de->d_name);
+        msg.namelen = d_name_length;
+
+        if (!WriteFdExactly(s, &msg, sizeof(msg)) ||
+            !WriteFdExactly(s, de->d_name, d_name_length)) {
+            return false;
         }
     }
 
 done:
-    msg.dent.id = ID_DONE;
-    msg.dent.mode = 0;
-    msg.dent.size = 0;
-    msg.dent.time = 0;
-    msg.dent.namelen = 0;
-    return WriteFdExactly(s, &msg.dent, sizeof(msg.dent));
+    memset(&msg, 0, sizeof(msg));
+    msg.id = ID_DONE;
+    return WriteFdExactly(s, &msg, sizeof(msg));
+}
+
+static bool do_list_v1(int s, const char* path) {
+    return do_list<false>(s, path);
+}
+
+static bool do_list_v2(int s, const char* path) {
+    return do_list<true>(s, path);
 }
 
 // Make sure that SendFail from adb_io.cpp isn't accidentally used in this file.
@@ -499,8 +532,10 @@ static const char* sync_id_to_name(uint32_t id) {
       return "lstat_v2";
     case ID_STAT_V2:
       return "stat_v2";
-    case ID_LIST:
-      return "list";
+    case ID_LIST_V1:
+      return "list_v1";
+    case ID_LIST_V2:
+      return "list_v2";
     case ID_SEND:
       return "send";
     case ID_RECV:
@@ -546,8 +581,11 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
         case ID_STAT_V2:
             if (!do_stat_v2(fd, request.id, name)) return false;
             break;
-        case ID_LIST:
-            if (!do_list(fd, name)) return false;
+        case ID_LIST_V1:
+            if (!do_list_v1(fd, name)) return false;
+            break;
+        case ID_LIST_V2:
+            if (!do_list_v2(fd, name)) return false;
             break;
         case ID_SEND:
             if (!do_send(fd, name, buffer)) return false;
