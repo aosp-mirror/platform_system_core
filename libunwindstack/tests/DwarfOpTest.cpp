@@ -1581,6 +1581,6 @@ REGISTER_TYPED_TEST_SUITE_P(DwarfOpTest, decode, eval, illegal_opcode, not_imple
                             is_dex_pc);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfOpTestTypes;
-INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfOpTest, DwarfOpTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfOpTest, DwarfOpTestTypes);
 
 }  // namespace unwindstack
