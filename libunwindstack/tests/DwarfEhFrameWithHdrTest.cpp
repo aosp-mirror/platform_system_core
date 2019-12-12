@@ -552,6 +552,6 @@ REGISTER_TYPED_TEST_SUITE_P(DwarfEhFrameWithHdrTest, Init, Init_non_zero_load_bi
                             GetCieFde32, GetCieFde64, GetFdeFromPc_fde_not_found);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfEhFrameWithHdrTestTypes;
-INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfEhFrameWithHdrTest, DwarfEhFrameWithHdrTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfEhFrameWithHdrTest, DwarfEhFrameWithHdrTestTypes);
 
 }  // namespace unwindstack
