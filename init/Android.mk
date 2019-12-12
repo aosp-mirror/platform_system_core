@@ -75,7 +75,6 @@ LOCAL_REQUIRED_MODULES := \
 
 # Set up the directories that first stage init mounts on.
 LOCAL_POST_INSTALL_CMD := mkdir -p \
-    $(TARGET_RAMDISK_OUT)/apex \
     $(TARGET_RAMDISK_OUT)/debug_ramdisk \
     $(TARGET_RAMDISK_OUT)/dev \
     $(TARGET_RAMDISK_OUT)/mnt \

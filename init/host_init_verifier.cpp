@@ -191,7 +191,7 @@ void HandlePropertyContexts(const std::string& filename,
     }
 
     auto errors = std::vector<std::string>{};
-    ParsePropertyInfoFile(file_contents, property_infos, &errors);
+    ParsePropertyInfoFile(file_contents, true, property_infos, &errors);
     for (const auto& error : errors) {
         LOG(ERROR) << "Could not read line from '" << filename << "': " << error;
     }

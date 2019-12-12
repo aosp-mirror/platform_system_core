@@ -925,7 +925,8 @@ bool LoadPropertyInfoFromFile(const std::string& filename,
     }
 
     auto errors = std::vector<std::string>{};
-    ParsePropertyInfoFile(file_contents, property_infos, &errors);
+    bool require_prefix_or_exact = SelinuxGetVendorAndroidVersion() >= __ANDROID_API_R__;
+    ParsePropertyInfoFile(file_contents, require_prefix_or_exact, property_infos, &errors);
     // Individual parsing errors are reported but do not cause a failed boot, which is what
     // returning false would do here.
     for (const auto& error : errors) {
