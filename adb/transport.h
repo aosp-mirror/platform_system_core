@@ -266,7 +266,7 @@ class atransport {
     usb_handle* GetUsbHandle() { return usb_handle_; }
 
     const TransportId id;
-    size_t ref_count = 0;
+
     bool online = false;
     TransportType type = kTransportAny;
 
