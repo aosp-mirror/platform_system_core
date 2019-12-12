@@ -55,7 +55,7 @@
 using android::base::ScopedLockAssertion;
 
 static void remove_transport(atransport* transport);
-static void transport_unref(atransport* transport);
+static void transport_destroy(atransport* transport);
 
 // TODO: unordered_map<TransportId, atransport*>
 static auto& transport_list = *new std::list<atransport*>();
@@ -676,7 +676,6 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
     if (t->GetConnectionState() != kCsNoPerm) {
         // The connection gets a reference to the atransport. It will release it
         // upon a read/write error.
-        t->ref_count++;
         t->connection()->SetTransportName(t->serial_name());
         t->connection()->SetReadCallback([t](Connection*, std::unique_ptr<apacket> p) {
             if (!check_header(p.get(), t)) {
@@ -695,7 +694,7 @@ static void transport_registration_func(int _fd, unsigned ev, void*) {
             LOG(INFO) << t->serial_name() << ": connection terminated: " << error;
             fdevent_run_on_main_thread([t]() {
                 handle_offline(t);
-                transport_unref(t);
+                transport_destroy(t);
             });
         });
 
@@ -771,36 +770,27 @@ static void remove_transport(atransport* transport) {
     }
 }
 
-static void transport_unref(atransport* t) {
+static void transport_destroy(atransport* t) {
     check_main_thread();
     CHECK(t != nullptr);
 
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
-    CHECK_GT(t->ref_count, 0u);
-    t->ref_count--;
-    if (t->ref_count == 0) {
-        LOG(INFO) << "destroying transport " << t->serial_name();
-        t->connection()->Stop();
+    LOG(INFO) << "destroying transport " << t->serial_name();
+    t->connection()->Stop();
 #if ADB_HOST
-        if (t->IsTcpDevice() && !t->kicked()) {
-            D("transport: %s unref (attempting reconnection)", t->serial.c_str());
+    if (t->IsTcpDevice() && !t->kicked()) {
+        D("transport: %s destroy (attempting reconnection)", t->serial.c_str());
 
-            // We need to clear the transport's keys, so that on the next connection, it tries
-            // again from the beginning.
-            t->ResetKeys();
-            reconnect_handler.TrackTransport(t);
-        } else {
-            D("transport: %s unref (kicking and closing)", t->serial.c_str());
-            remove_transport(t);
-        }
-#else
-        D("transport: %s unref (kicking and closing)", t->serial.c_str());
-        remove_transport(t);
+        // We need to clear the transport's keys, so that on the next connection, it tries
+        // again from the beginning.
+        t->ResetKeys();
+        reconnect_handler.TrackTransport(t);
+        return;
+    }
 #endif
 
-    } else {
-        D("transport: %s unref (count=%zu)", t->serial.c_str(), t->ref_count);
-    }
+    D("transport: %s destroy (kicking and closing)", t->serial.c_str());
+    remove_transport(t);
 }
 
 static int qual_match(const std::string& to_test, const char* prefix, const std::string& qual,
