@@ -582,8 +582,7 @@ bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
 }  // namespace
 
 void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_partitions) {
-    static constexpr char kGsiKeys[] =
-            "/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey";
+    static constexpr char kDsuKeysDir[] = "/avb";
     // Convert userdata
     // Inherit fstab properties for userdata.
     FstabEntry userdata;
@@ -629,29 +628,18 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
                     .fs_type = "ext4",
                     .flags = MS_RDONLY,
                     .fs_options = "barrier=1",
-                    .avb_keys = kGsiKeys,
+                    .avb_keys = kDsuKeysDir,
             };
             entry.fs_mgr_flags.wait = true;
             entry.fs_mgr_flags.logical = true;
             entry.fs_mgr_flags.first_stage_mount = true;
-            // Use the system key which may be in the vbmeta or vbmeta_system
-            // TODO: b/141284191
-            entry.vbmeta_partition = "vbmeta";
-            fstab->emplace_back(entry);
-            entry.vbmeta_partition = "vbmeta_system";
-            fstab->emplace_back(entry);
         } else {
             // If the corresponding partition exists, transform all its Fstab
             // by pointing .blk_device to the DSU partition.
             for (auto&& entry : entries) {
                 entry->blk_device = partition;
-                if (entry->avb_keys.size() > 0) {
-                    entry->avb_keys += ":";
-                }
-                // If the DSU is signed by OEM, the original Fstab already has the information
-                // required by avb, otherwise the DSU is GSI and will need the avb_keys as listed
-                // below.
-                entry->avb_keys += kGsiKeys;
+                // AVB keys for DSU should always be under kDsuKeysDir.
+                entry->avb_keys += kDsuKeysDir;
             }
             // Make sure the ext4 is included to support GSI.
             auto partition_ext4 =
