@@ -367,6 +367,6 @@ REGISTER_TYPED_TEST_SUITE_P(SymbolsTest, function_bounds_check, no_symbol, multi
                             symtab_read_cached, get_global);
 
 typedef ::testing::Types<Elf32_Sym, Elf64_Sym> SymbolsTestTypes;
-INSTANTIATE_TYPED_TEST_SUITE_P(, SymbolsTest, SymbolsTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, SymbolsTest, SymbolsTestTypes);
 
 }  // namespace unwindstack
