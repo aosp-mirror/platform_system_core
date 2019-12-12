@@ -650,11 +650,34 @@ on post-fs-data
 
     mkdir /data/user 0711 system system encryption=None
     mkdir /data/user_de 0711 system system encryption=None
-    symlink /data/data /data/user/0
+
+    # Unlink /data/user/0 if we previously symlink it to /data/data
+    rm /data/user/0
+
+    # Bind mount /data/user/0 to /data/data
+    mkdir /data/user/0 0700 system system encryption=None
+    mount none /data/data /data/user/0 bind rec
 
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
+
+    # A tmpfs directory, which will contain all apps CE DE data directory that
+    # bind mount from the original source.
+    chown root root /data_mirror
+    chmod 0700 /data_mirror
+    mount tmpfs tmpfs /data_mirror mode=0700,uid=0,gid=1000 nodev noexec nosuid
+    restorecon /data_mirror
+    mkdir /data_mirror/data_ce 0700 root root
+    mkdir /data_mirror/data_de 0700 root root
+
+    # Create CE and DE data directory for default volume
+    mkdir /data_mirror/data_ce/null 0700 root root
+    mkdir /data_mirror/data_de/null 0700 root root
+
+    # Bind mount CE and DE data directory to mirror's default volume directory
+    mount none /data/user /data_mirror/data_ce/null bind rec
+    mount none /data/user_de /data_mirror/data_de/null bind rec
 
     mkdir /data/cache 0770 system cache encryption=Require
     mkdir /data/cache/recovery 0770 system cache
