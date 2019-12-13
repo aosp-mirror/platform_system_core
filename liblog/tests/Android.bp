@@ -62,6 +62,7 @@ cc_defaults {
         "log_time_test.cpp",
         "log_wrap_test.cpp",
         "logprint_test.cpp",
+        "rwlock_test.cpp",
     ],
     shared_libs: [
         "libcutils",
