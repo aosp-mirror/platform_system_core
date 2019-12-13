@@ -51,6 +51,7 @@
 
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
+#include <bionic/reserved_signals.h>
 #include <cutils/properties.h>
 
 #include <libdebuggerd/utility.h>
@@ -175,7 +176,7 @@ static void log_signal_summary(const siginfo_t* info) {
     thread_name[MAX_TASK_NAME_LEN] = 0;
   }
 
-  if (info->si_signo == DEBUGGER_SIGNAL) {
+  if (info->si_signo == BIONIC_SIGNAL_DEBUGGER) {
     async_safe_format_log(ANDROID_LOG_INFO, "libc", "Requested dump for tid %d (%s)", __gettid(),
                           thread_name);
     return;
@@ -307,7 +308,7 @@ struct debugger_thread_info {
 static void* pseudothread_stack;
 
 static DebuggerdDumpType get_dump_type(const debugger_thread_info* thread_info) {
-  if (thread_info->siginfo->si_signo == DEBUGGER_SIGNAL &&
+  if (thread_info->siginfo->si_signo == BIONIC_SIGNAL_DEBUGGER &&
       thread_info->siginfo->si_value.sival_int) {
     return kDebuggerdNativeBacktrace;
   }
@@ -429,7 +430,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper crashed or stopped");
   }
 
-  if (thread_info->siginfo->si_signo != DEBUGGER_SIGNAL) {
+  if (thread_info->siginfo->si_signo != BIONIC_SIGNAL_DEBUGGER) {
     // For crashes, we don't need to minimize pause latency.
     // Wait for the dump to complete before having the process exit, to avoid being murdered by
     // ActivityManager or init.
@@ -446,7 +447,7 @@ static void resend_signal(siginfo_t* info) {
   // exited with the correct exit status (e.g. so that sh will report
   // "Segmentation fault" instead of "Killed"). For this to work, we need
   // to deregister our signal handler for that signal before continuing.
-  if (info->si_signo != DEBUGGER_SIGNAL) {
+  if (info->si_signo != BIONIC_SIGNAL_DEBUGGER) {
     signal(info->si_signo, SIG_DFL);
     int rc = syscall(SYS_rt_tgsigqueueinfo, __getpid(), __gettid(), info->si_signo, info);
     if (rc != 0) {
@@ -485,7 +486,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
 
   void* abort_message = nullptr;
   uintptr_t si_val = reinterpret_cast<uintptr_t>(info->si_ptr);
-  if (signal_number == DEBUGGER_SIGNAL) {
+  if (signal_number == BIONIC_SIGNAL_DEBUGGER) {
     if (info->si_code == SI_QUEUE && info->si_pid == __getpid()) {
       // Allow for the abort message to be explicitly specified via the sigqueue value.
       // Keep the bottom bit intact for representing whether we want a backtrace or a tombstone.
@@ -576,7 +577,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     fatal_errno("failed to restore traceable");
   }
 
-  if (info->si_signo == DEBUGGER_SIGNAL) {
+  if (info->si_signo == BIONIC_SIGNAL_DEBUGGER) {
     // If the signal is fatal, don't unlock the mutex to prevent other crashing threads from
     // starting to dump right before our death.
     pthread_mutex_unlock(&crash_mutex);
