@@ -53,30 +53,34 @@ class CapturedStdout : public CapturedStdFd {
   CapturedStdout() : CapturedStdFd(STDOUT_FILENO) {}
 };
 
-#define ASSERT_MATCH(str, pattern)                                             \
-  do {                                                                         \
-    if (!std::regex_search((str), std::regex((pattern)))) {                    \
-      FAIL() << "regex mismatch: expected " << (pattern) << " in:\n" << (str); \
-    }                                                                          \
+#define ASSERT_MATCH(str, pattern)                                           \
+  do {                                                                       \
+    auto __s = (str);                                                        \
+    if (!std::regex_search(__s, std::regex((pattern)))) {                    \
+      FAIL() << "regex mismatch: expected " << (pattern) << " in:\n" << __s; \
+    }                                                                        \
   } while (0)
 
-#define ASSERT_NOT_MATCH(str, pattern)                                                     \
-  do {                                                                                     \
-    if (std::regex_search((str), std::regex((pattern)))) {                                 \
-      FAIL() << "regex mismatch: expected to not find " << (pattern) << " in:\n" << (str); \
-    }                                                                                      \
+#define ASSERT_NOT_MATCH(str, pattern)                                                   \
+  do {                                                                                   \
+    auto __s = (str);                                                                    \
+    if (std::regex_search(__s, std::regex((pattern)))) {                                 \
+      FAIL() << "regex mismatch: expected to not find " << (pattern) << " in:\n" << __s; \
+    }                                                                                    \
   } while (0)
 
-#define EXPECT_MATCH(str, pattern)                                                    \
-  do {                                                                                \
-    if (!std::regex_search((str), std::regex((pattern)))) {                           \
-      ADD_FAILURE() << "regex mismatch: expected " << (pattern) << " in:\n" << (str); \
-    }                                                                                 \
+#define EXPECT_MATCH(str, pattern)                                                  \
+  do {                                                                              \
+    auto __s = (str);                                                               \
+    if (!std::regex_search(__s, std::regex((pattern)))) {                           \
+      ADD_FAILURE() << "regex mismatch: expected " << (pattern) << " in:\n" << __s; \
+    }                                                                               \
   } while (0)
 
-#define EXPECT_NOT_MATCH(str, pattern)                                                            \
-  do {                                                                                            \
-    if (std::regex_search((str), std::regex((pattern)))) {                                        \
-      ADD_FAILURE() << "regex mismatch: expected to not find " << (pattern) << " in:\n" << (str); \
-    }                                                                                             \
+#define EXPECT_NOT_MATCH(str, pattern)                                                          \
+  do {                                                                                          \
+    auto __s = (str);                                                                           \
+    if (std::regex_search(__s, std::regex((pattern)))) {                                        \
+      ADD_FAILURE() << "regex mismatch: expected to not find " << (pattern) << " in:\n" << __s; \
+    }                                                                                           \
   } while (0)
