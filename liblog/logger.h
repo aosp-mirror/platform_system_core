@@ -26,20 +26,7 @@
 
 __BEGIN_DECLS
 
-/* Union, sock or fd of zero is not allowed unless static initialized */
-union android_log_context_union {
-  void* priv;
-  atomic_int sock;
-  atomic_int fd;
-};
-
 struct android_log_transport_write {
-  const char* name;                  /* human name to describe the transport */
-  unsigned logMask;                  /* mask cache of available() success */
-  union android_log_context_union context; /* Initialized by static allocation */
-
-  int (*available)(log_id_t logId); /* Does not cause resources to be taken */
-  int (*open)();   /* can be called multiple times, reusing current resources */
   void (*close)(); /* free up resources */
   /* write log to transport, returns number of bytes propagated, or -errno */
   int (*write)(log_id_t logId, struct timespec* ts, struct iovec* vec,
@@ -82,9 +69,5 @@ static inline uid_t __android_log_uid() {
   return getuid();
 }
 #endif
-
-void __android_log_lock();
-int __android_log_trylock();
-void __android_log_unlock();
 
 __END_DECLS
