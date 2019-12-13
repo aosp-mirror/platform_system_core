@@ -68,6 +68,6 @@ TYPED_TEST_P(DwarfOpLogTest, multiple_ops) {
 REGISTER_TYPED_TEST_SUITE_P(DwarfOpLogTest, multiple_ops);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfOpLogTestTypes;
-INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfOpLogTest, DwarfOpLogTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfOpLogTest, DwarfOpLogTestTypes);
 
 }  // namespace unwindstack

@@ -57,6 +57,7 @@ extern const char* const kFeatureShell2;
 // The 'cmd' command is available
 extern const char* const kFeatureCmd;
 extern const char* const kFeatureStat2;
+extern const char* const kFeatureLs2;
 // The server is running with libusb enabled.
 extern const char* const kFeatureLibusb;
 // adbd supports `push --sync`.
@@ -266,7 +267,7 @@ class atransport {
     usb_handle* GetUsbHandle() { return usb_handle_; }
 
     const TransportId id;
-    size_t ref_count = 0;
+
     bool online = false;
     TransportType type = kTransportAny;
 
