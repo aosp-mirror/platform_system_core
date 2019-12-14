@@ -154,6 +154,9 @@ struct stats_event_api_table {
     uint32_t (*get_errors)(struct stats_event*);
 };
 
+// exposed for benchmarking only
+void stats_event_truncate_buffer(struct stats_event* event, bool truncate);
+
 #ifdef __cplusplus
 }
 #endif  // __CPLUSPLUS

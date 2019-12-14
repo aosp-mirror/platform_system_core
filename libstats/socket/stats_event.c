@@ -20,7 +20,6 @@
 #include <time.h>
 #include "stats_buffer_writer.h"
 
-#define STATS_EVENT_TAG 1937006964
 #define LOGGER_ENTRY_MAX_PAYLOAD 4068
 // Max payload size is 4 bytes less as 4 bytes are reserved for stats_eventTag.
 // See android_util_Stats_Log.cpp
@@ -39,13 +38,13 @@
 // The stats_event struct holds the serialized encoding of an event
 // within a buf. Also includes other required fields.
 struct stats_event {
-    uint8_t buf[MAX_EVENT_PAYLOAD];
+    uint8_t* buf;
     size_t lastFieldPos;  // location of last field within the buf
     size_t size;          // number of valid bytes within buffer
     uint32_t numElements;
     uint32_t atomId;
     uint32_t errors;
-    uint32_t tag;
+    bool truncate;
     bool built;
 };
 
@@ -58,12 +57,11 @@ static int64_t get_elapsed_realtime_ns() {
 
 struct stats_event* stats_event_obtain() {
     struct stats_event* event = malloc(sizeof(struct stats_event));
-
-    memset(event->buf, 0, MAX_EVENT_PAYLOAD);
+    event->buf = (uint8_t*)calloc(MAX_EVENT_PAYLOAD, 1);
     event->buf[0] = OBJECT_TYPE;
     event->atomId = 0;
     event->errors = 0;
-    event->tag = STATS_EVENT_TAG;
+    event->truncate = true;  // truncate for both pulled and pushed atoms
     event->built = false;
 
     // place the timestamp
@@ -79,6 +77,7 @@ struct stats_event* stats_event_obtain() {
 }
 
 void stats_event_release(struct stats_event* event) {
+    free(event->buf);
     free(event);
 }
 
@@ -297,6 +296,10 @@ uint32_t stats_event_get_errors(struct stats_event* event) {
     return event->errors;
 }
 
+void stats_event_truncate_buffer(struct stats_event* event, bool truncate) {
+    event->truncate = truncate;
+}
+
 void stats_event_build(struct stats_event* event) {
     if (event->built) return;
 
@@ -316,6 +319,10 @@ void stats_event_build(struct stats_event* event) {
                sizeof(event->errors));
         event->size = POS_FIRST_FIELD + sizeof(uint8_t) + sizeof(uint32_t);
     }
+
+    // Truncate the buffer to the appropriate length in order to limit our
+    // memory usage.
+    if (event->truncate) event->buf = (uint8_t*)realloc(event->buf, event->size);
 
     event->built = true;
 }
