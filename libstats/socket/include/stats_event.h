@@ -85,7 +85,7 @@ struct stats_event* stats_event_obtain();
 // The build function can be called multiple times without error. If the event
 // has been built before, this function is a no-op.
 void stats_event_build(struct stats_event* event);
-void stats_event_write(struct stats_event* event);
+int stats_event_write(struct stats_event* event);
 void stats_event_release(struct stats_event* event);
 
 void stats_event_set_atom_id(struct stats_event* event, uint32_t atomId);
@@ -98,7 +98,7 @@ void stats_event_write_bool(struct stats_event* event, bool value);
 void stats_event_write_byte_array(struct stats_event* event, const uint8_t* buf, size_t numBytes);
 
 // Buf must be null-terminated.
-void stats_event_write_string8(struct stats_event* event, const char* buf);
+void stats_event_write_string8(struct stats_event* event, const char* value);
 
 // Tags must be null-terminated.
 void stats_event_write_attribution_chain(struct stats_event* event, const uint32_t* uids,
@@ -127,8 +127,35 @@ void stats_event_add_int32_annotation(struct stats_event* event, uint8_t annotat
                                       int32_t value);
 
 uint32_t stats_event_get_atom_id(struct stats_event* event);
+// Size is an output parameter.
 uint8_t* stats_event_get_buffer(struct stats_event* event, size_t* size);
 uint32_t stats_event_get_errors(struct stats_event* event);
+
+// This table is used by StatsEventCompat to access the stats_event API.
+struct stats_event_api_table {
+    struct stats_event* (*obtain)(void);
+    void (*build)(struct stats_event*);
+    int (*write)(struct stats_event*);
+    void (*release)(struct stats_event*);
+    void (*set_atom_id)(struct stats_event*, uint32_t);
+    void (*write_int32)(struct stats_event*, int32_t);
+    void (*write_int64)(struct stats_event*, int64_t);
+    void (*write_float)(struct stats_event*, float);
+    void (*write_bool)(struct stats_event*, bool);
+    void (*write_byte_array)(struct stats_event*, const uint8_t*, size_t);
+    void (*write_string8)(struct stats_event*, const char*);
+    void (*write_attribution_chain)(struct stats_event*, const uint32_t*, const char* const*,
+                                    uint8_t);
+    void (*write_key_value_pairs)(struct stats_event*, struct key_value_pair*, uint8_t);
+    void (*add_bool_annotation)(struct stats_event*, uint8_t, bool);
+    void (*add_int32_annotation)(struct stats_event*, uint8_t, int32_t);
+    uint32_t (*get_atom_id)(struct stats_event*);
+    uint8_t* (*get_buffer)(struct stats_event*, size_t*);
+    uint32_t (*get_errors)(struct stats_event*);
+};
+
+// exposed for benchmarking only
+void stats_event_truncate_buffer(struct stats_event* event, bool truncate);
 
 #ifdef __cplusplus
 }
