@@ -198,3 +198,15 @@ cc_fuzz {
     host_supported: true,
     corpus: ["testdata/*"],
 }
+
+sh_test {
+    name: "ziptool-tests",
+    src: "run-ziptool-tests-on-android.sh",
+    filename: "run-ziptool-tests-on-android.sh",
+    test_suites: ["general-tests"],
+    host_supported: true,
+    device_supported: false,
+    test_config: "ziptool-tests.xml",
+    data: ["cli-tests/**/*"],
+    target_required: ["cli-test", "ziptool"],
+}
