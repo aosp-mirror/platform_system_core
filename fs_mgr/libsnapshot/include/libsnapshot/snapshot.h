@@ -155,6 +155,7 @@ class SnapshotManager final {
     // Mark snapshot writes as having completed. After this, new snapshots cannot
     // be created, and the device must either cancel the OTA (either before
     // rebooting or after rolling back), or merge the OTA.
+    // Before calling this function, all snapshots must be mapped.
     bool FinishedSnapshotWrites();
 
   private:
@@ -489,6 +490,11 @@ class SnapshotManager final {
     // Unmap all partitions that were mapped by CreateLogicalAndSnapshotPartitions.
     // This should only be called in recovery.
     bool UnmapAllPartitions();
+
+    // Sanity check no snapshot overflows. Note that this returns false negatives if the snapshot
+    // overflows, then is remapped and not written afterwards. Hence, the function may only serve
+    // as a sanity check.
+    bool EnsureNoOverflowSnapshot(LockedFile* lock);
 
     std::string gsid_dir_;
     std::string metadata_dir_;
