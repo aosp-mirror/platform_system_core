@@ -74,6 +74,7 @@ using namespace std::chrono_literals;
 using namespace std::string_literals;
 
 static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
+static constexpr auto kUpdateStateCheckInterval = 2s;
 
 // Note: IImageManager is an incomplete type in the header, so the default
 // destructor doesn't work.
@@ -731,7 +732,7 @@ UpdateState SnapshotManager::ProcessUpdateState(const std::function<void()>& cal
 
         // This wait is not super time sensitive, so we have a relatively
         // low polling frequency.
-        std::this_thread::sleep_for(2s);
+        std::this_thread::sleep_for(kUpdateStateCheckInterval);
     }
 }
 
@@ -2239,6 +2240,21 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
 
     LOG(INFO) << "Merge finished with state \"" << state << "\".";
     return state;
+}
+
+bool SnapshotManager::WaitForMerge() {
+    LOG(INFO) << "Waiting for any previous merge request to complete. "
+              << "This can take up to several minutes.";
+    while (true) {
+        auto state = ProcessUpdateState();
+        if (state == UpdateState::Unverified && GetCurrentSlot() == Slot::Target) {
+            LOG(INFO) << "Wait for merge to be initiated.";
+            std::this_thread::sleep_for(kUpdateStateCheckInterval);
+            continue;
+        }
+        LOG(INFO) << "Wait for merge exits with state " << state;
+        return state == UpdateState::None || state == UpdateState::MergeCompleted;
+    }
 }
 
 bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callback) {
