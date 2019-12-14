@@ -205,6 +205,8 @@ class DeviceMapper final {
         TargetInfo() {}
         TargetInfo(const struct dm_target_spec& spec, const std::string& data)
             : spec(spec), data(data) {}
+
+        bool IsOverflowSnapshot() const;
     };
     bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table);
 

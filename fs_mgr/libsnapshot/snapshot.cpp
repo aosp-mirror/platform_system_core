@@ -214,6 +214,11 @@ bool SnapshotManager::FinishedSnapshotWrites() {
         return false;
     }
 
+    if (!EnsureNoOverflowSnapshot(lock.get())) {
+        LOG(ERROR) << "Cannot ensure there are no overflow snapshots.";
+        return false;
+    }
+
     // This file acts as both a quick indicator for init (it can use access(2)
     // to decide how to do first-stage mounts), and it stores the old slot, so
     // we can tell whether or not we performed a rollback.
@@ -2300,6 +2305,37 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
     if (!UnmapAllPartitions()) {
         LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
     }
+    return true;
+}
+
+bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
+    CHECK(lock);
+
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock, &snapshots)) {
+        LOG(ERROR) << "Could not list snapshots.";
+        return false;
+    }
+
+    auto& dm = DeviceMapper::Instance();
+    for (const auto& snapshot : snapshots) {
+        std::vector<DeviceMapper::TargetInfo> targets;
+        if (!dm.GetTableStatus(snapshot, &targets)) {
+            LOG(ERROR) << "Could not read snapshot device table: " << snapshot;
+            return false;
+        }
+        if (targets.size() != 1) {
+            LOG(ERROR) << "Unexpected device-mapper table for snapshot: " << snapshot
+                       << ", size = " << targets.size();
+            return false;
+        }
+        if (targets[0].IsOverflowSnapshot()) {
+            LOG(ERROR) << "Detected overflow in snapshot " << snapshot
+                       << ", CoW device size computation is wrong!";
+            return false;
+        }
+    }
+
     return true;
 }
 
