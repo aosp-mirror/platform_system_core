@@ -177,7 +177,7 @@ cc_benchmark {
 cc_binary {
     name: "ziptool",
     defaults: ["libziparchive_flags"],
-    srcs: ["unzip.cpp"],
+    srcs: ["ziptool.cpp"],
     shared_libs: [
         "libbase",
         "libziparchive",
