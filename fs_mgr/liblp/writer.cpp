@@ -74,10 +74,10 @@ std::string SerializeMetadata(const LpMetadata& input) {
 
     // Compute header checksum.
     memset(header.header_checksum, 0, sizeof(header.header_checksum));
-    SHA256(&header, sizeof(header), header.header_checksum);
+    SHA256(&header, header.header_size, header.header_checksum);
 
     std::string header_blob =
-            std::string(reinterpret_cast<const char*>(&metadata.header), sizeof(metadata.header));
+            std::string(reinterpret_cast<const char*>(&header), header.header_size);
     return header_blob + tables;
 }
 

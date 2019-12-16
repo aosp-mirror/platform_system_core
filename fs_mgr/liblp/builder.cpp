@@ -253,7 +253,7 @@ MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
     header_.magic = LP_METADATA_HEADER_MAGIC;
     header_.major_version = LP_METADATA_MAJOR_VERSION;
     header_.minor_version = LP_METADATA_MINOR_VERSION_MIN;
-    header_.header_size = sizeof(header_);
+    header_.header_size = sizeof(LpMetadataHeaderV1_0);
     header_.partitions.entry_size = sizeof(LpMetadataPartition);
     header_.extents.entry_size = sizeof(LpMetadataExtent);
     header_.groups.entry_size = sizeof(LpMetadataPartitionGroup);
@@ -263,6 +263,12 @@ MetadataBuilder::MetadataBuilder() : auto_slot_suffixing_(false) {
 bool MetadataBuilder::Init(const LpMetadata& metadata) {
     geometry_ = metadata.geometry;
     block_devices_ = metadata.block_devices;
+
+    // Bump the version as necessary to copy any newer fields.
+    if (metadata.header.minor_version >= LP_METADATA_VERSION_FOR_EXPANDED_HEADER) {
+        RequireExpandedMetadataHeader();
+        header_.flags = metadata.header.flags;
+    }
 
     for (const auto& group : metadata.groups) {
         std::string group_name = GetPartitionGroupName(group);
@@ -881,6 +887,14 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
     metadata->header.block_devices.num_entries =
             static_cast<uint32_t>(metadata->block_devices.size());
     return metadata;
+}
+
+void MetadataBuilder::RequireExpandedMetadataHeader() {
+    if (header_.minor_version >= LP_METADATA_VERSION_FOR_EXPANDED_HEADER) {
+        return;
+    }
+    header_.minor_version = LP_METADATA_VERSION_FOR_EXPANDED_HEADER;
+    header_.header_size = sizeof(LpMetadataHeaderV1_2);
 }
 
 uint64_t MetadataBuilder::AllocatableSpace() const {
