@@ -325,6 +325,10 @@ class MetadataBuilder {
     bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
 
+    // Require the expanded metadata header. This is exposed for testing, and
+    // is normally only called as needed by other methods.
+    void RequireExpandedMetadataHeader();
+
     // Attempt to preserve the named partitions from an older metadata. If this
     // is not possible (for example, the block device list has changed) then
     // false is returned.
