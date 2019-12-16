@@ -71,6 +71,7 @@ cc_defaults {
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
         "libsnapshot_init",
+        "lib_apex_manifest_proto_lite",
     ],
     shared_libs: [
         "libbacktrace",
