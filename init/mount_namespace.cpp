@@ -27,6 +27,7 @@
 #include <android-base/properties.h>
 #include <android-base/result.h>
 #include <android-base/unique_fd.h>
+#include <apex_manifest.pb.h>
 
 #include "util.h"
 
@@ -90,6 +91,19 @@ static Result<void> MountDir(const std::string& path, const std::string& mount_p
     return {};
 }
 
+static Result<std::string> GetApexName(const std::string& apex_dir) {
+    const std::string manifest_path = apex_dir + "/apex_manifest.pb";
+    std::string content;
+    if (!android::base::ReadFileToString(manifest_path, &content)) {
+        return Error() << "Failed to read manifest file: " << manifest_path;
+    }
+    apex::proto::ApexManifest manifest;
+    if (!manifest.ParseFromString(content)) {
+        return Error() << "Can't parse manifest file: " << manifest_path;
+    }
+    return manifest.name();
+}
+
 static Result<void> ActivateFlattenedApexesFrom(const std::string& from_dir,
                                                 const std::string& to_dir) {
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(from_dir.c_str()), closedir);
@@ -101,7 +115,12 @@ static Result<void> ActivateFlattenedApexesFrom(const std::string& from_dir,
         if (entry->d_name[0] == '.') continue;
         if (entry->d_type == DT_DIR) {
             const std::string apex_path = from_dir + "/" + entry->d_name;
-            const std::string mount_path = to_dir + "/" + entry->d_name;
+            const auto apex_name = GetApexName(apex_path);
+            if (!apex_name) {
+                LOG(ERROR) << apex_path << " is not an APEX directory: " << apex_name.error();
+                continue;
+            }
+            const std::string mount_path = to_dir + "/" + (*apex_name);
             if (auto result = MountDir(apex_path, mount_path); !result) {
                 return result;
             }
@@ -129,26 +148,7 @@ static bool ActivateFlattenedApexesIfPossible() {
             return false;
         }
     }
-    // Special casing for the ART APEX
-    constexpr const char kArtApexMountPath[] = "/apex/com.android.art";
-    static const std::vector<std::string> kArtApexDirNames = {"com.android.art.release",
-                                                              "com.android.art.debug"};
-    bool success = false;
-    for (const auto& name : kArtApexDirNames) {
-        std::string path = kApexTop + "/" + name;
-        if (access(path.c_str(), F_OK) == 0) {
-            if (auto result = MountDir(path, kArtApexMountPath); !result) {
-                LOG(ERROR) << result.error();
-                return false;
-            }
-            success = true;
-            break;
-        }
-    }
-    if (!success) {
-        PLOG(ERROR) << "Failed to bind mount the ART APEX to " << kArtApexMountPath;
-    }
-    return success;
+    return true;
 }
 
 static android::base::unique_fd bootstrap_ns_fd;
