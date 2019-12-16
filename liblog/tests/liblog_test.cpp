@@ -160,7 +160,6 @@ static std::string popenToString(const std::string& command) {
   return ret;
 }
 
-#ifndef NO_PSTORE
 static bool isPmsgActive() {
   pid_t pid = getpid();
 
@@ -170,7 +169,6 @@ static bool isPmsgActive() {
 
   return std::string::npos != myPidFds.find(" -> /dev/pmsg0");
 }
-#endif /* NO_PSTORE */
 
 static bool isLogdwActive() {
   std::string logdwSignature =
@@ -222,16 +220,18 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
   log_time ts(CLOCK_MONOTONIC);
   log_time ts1(ts);
 
+  bool has_pstore = access("/dev/pmsg0", W_OK) == 0;
+
   auto write_function = [&] {
     EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
     // Check that we can close and reopen the logger
     bool logdwActiveAfter__android_log_btwrite;
     if (getuid() == AID_ROOT) {
       tested__android_log_close = true;
-#ifndef NO_PSTORE
-      bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-      EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
-#endif /* NO_PSTORE */
+      if (has_pstore) {
+        bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+        EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+      }
       logdwActiveAfter__android_log_btwrite = isLogdwActive();
       EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
     } else if (!tested__android_log_close) {
@@ -239,10 +239,10 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     }
     __android_log_close();
     if (getuid() == AID_ROOT) {
-#ifndef NO_PSTORE
-      bool pmsgActiveAfter__android_log_close = isPmsgActive();
-      EXPECT_FALSE(pmsgActiveAfter__android_log_close);
-#endif /* NO_PSTORE */
+      if (has_pstore) {
+        bool pmsgActiveAfter__android_log_close = isPmsgActive();
+        EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+      }
       bool logdwActiveAfter__android_log_close = isLogdwActive();
       EXPECT_FALSE(logdwActiveAfter__android_log_close);
     }
@@ -250,10 +250,10 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     ts1 = log_time(CLOCK_MONOTONIC);
     EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
     if (getuid() == AID_ROOT) {
-#ifndef NO_PSTORE
-      bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-      EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
-#endif /* NO_PSTORE */
+      if (has_pstore) {
+        bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+        EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+      }
       logdwActiveAfter__android_log_btwrite = isLogdwActive();
       EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
     }
