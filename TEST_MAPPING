@@ -25,6 +25,9 @@
       "name": "libcutils_test"
     },
     {
+      "name": "libmodprobe_tests"
+    },
+    {
       "name": "libprocinfo_test"
     },
     {
