@@ -277,7 +277,7 @@ static int do_remount(int argc, char* argv[]) {
 
         auto change = false;
         errno = 0;
-        if (fs_mgr_overlayfs_setup(mount_point.c_str(), &change, just_disabled_verity)) {
+        if (fs_mgr_overlayfs_setup(nullptr, mount_point.c_str(), &change, just_disabled_verity)) {
             if (change) {
                 LOG(INFO) << "Using overlayfs for " << mount_point;
                 reboot_later = can_reboot;
