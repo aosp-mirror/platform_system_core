@@ -72,13 +72,17 @@ extern "C" {
  */
 #define LP_PARTITION_ATTR_UPDATED (1 << 2)
 
+/* This flag marks a partition as disabled. It should not be used or mapped. */
+#define LP_PARTITION_ATTR_DISABLED (1 << 3)
+
 /* Mask that defines all valid attributes. When changing this, make sure to
  * update ParseMetadata().
  */
 #define LP_PARTITION_ATTRIBUTE_MASK_V0 \
     (LP_PARTITION_ATTR_READONLY | LP_PARTITION_ATTR_SLOT_SUFFIXED)
-#define LP_PARTITION_ATTRIBUTE_MASK_V1 (LP_PARTITION_ATTRIBUTE_MASK_V0 | LP_PARTITION_ATTR_UPDATED)
-#define LP_PARTITION_ATTRIBUTE_MASK LP_PARTITION_ATTRIBUTE_MASK_V1
+#define LP_PARTITION_ATTRIBUTE_MASK_V1 (LP_PARTITION_ATTR_UPDATED | LP_PARTITION_ATTR_DISABLED)
+#define LP_PARTITION_ATTRIBUTE_MASK \
+    (LP_PARTITION_ATTRIBUTE_MASK_V0 | LP_PARTITION_ATTRIBUTE_MASK_V1)
 
 /* Default name of the physical partition that holds logical partition entries.
  * The layout of this partition will look like:

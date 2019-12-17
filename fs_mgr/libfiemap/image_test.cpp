@@ -112,6 +112,14 @@ TEST_F(NativeTest, CreateAndMap) {
     ASSERT_EQ(android::base::GetProperty(PropertyName(), ""), "");
 }
 
+TEST_F(NativeTest, DisableImage) {
+    ASSERT_TRUE(manager_->CreateBackingImage(base_name_, kTestImageSize, false, nullptr));
+    ASSERT_TRUE(manager_->BackingImageExists(base_name_));
+    ASSERT_TRUE(manager_->DisableImage(base_name_));
+    ASSERT_TRUE(manager_->RemoveDisabledImages());
+    ASSERT_TRUE(!manager_->BackingImageExists(base_name_));
+}
+
 // This fixture is for tests against a simulated device environment. Rather
 // than use /data, we create an image and then layer a new filesystem within
 // it. Each test then decides how to mount and create layered images. This
