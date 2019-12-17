@@ -47,8 +47,7 @@ Result<uid_t> DecodeUid(const std::string& name);
 
 bool mkdir_recursive(const std::string& pathname, mode_t mode);
 int wait_for_file(const char *filename, std::chrono::nanoseconds timeout);
-void import_kernel_cmdline(bool in_qemu,
-                           const std::function<void(const std::string&, const std::string&, bool)>&);
+void ImportKernelCmdline(const std::function<void(const std::string&, const std::string&)>&);
 bool make_dir(const std::string& path, mode_t mode);
 bool is_dir(const char* pathname);
 Result<std::string> ExpandProps(const std::string& src);

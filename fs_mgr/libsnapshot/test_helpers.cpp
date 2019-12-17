@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "test_helpers.h"
+#include <libsnapshot/test_helpers.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -62,24 +62,6 @@ std::string TestPartitionOpener::GetDeviceString(const std::string& partition_na
     return PartitionOpener::GetDeviceString(partition_name);
 }
 
-bool WriteRandomData(const std::string& path) {
-    unique_fd rand(open("/dev/urandom", O_RDONLY));
-    unique_fd fd(open(path.c_str(), O_WRONLY));
-
-    char buf[4096];
-    while (true) {
-        ssize_t n = TEMP_FAILURE_RETRY(read(rand.get(), buf, sizeof(buf)));
-        if (n <= 0) return false;
-        if (!WriteFully(fd.get(), buf, n)) {
-            if (errno == ENOSPC) {
-                return true;
-            }
-            PLOG(ERROR) << "Cannot write " << path;
-            return false;
-        }
-    }
-}
-
 std::string ToHexString(const uint8_t* buf, size_t len) {
     char lookup[] = "0123456789abcdef";
     std::string out(len * 2 + 1, '\0');
@@ -89,6 +71,47 @@ std::string ToHexString(const uint8_t* buf, size_t len) {
         *outp++ = (char)lookup[*buf & 0xf];
     }
     return out;
+}
+
+bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size,
+                     std::string* hash) {
+    unique_fd rand(open("/dev/urandom", O_RDONLY));
+    unique_fd fd(open(path.c_str(), O_WRONLY));
+
+    SHA256_CTX ctx;
+    if (hash) {
+        SHA256_Init(&ctx);
+    }
+
+    char buf[4096];
+    size_t total_written = 0;
+    while (!expect_size || total_written < *expect_size) {
+        ssize_t n = TEMP_FAILURE_RETRY(read(rand.get(), buf, sizeof(buf)));
+        if (n <= 0) return false;
+        if (!WriteFully(fd.get(), buf, n)) {
+            if (errno == ENOSPC) {
+                break;
+            }
+            PLOG(ERROR) << "Cannot write " << path;
+            return false;
+        }
+        total_written += n;
+        if (hash) {
+            SHA256_Update(&ctx, buf, n);
+        }
+    }
+
+    if (expect_size && total_written != *expect_size) {
+        PLOG(ERROR) << "Written " << total_written << " bytes, expected " << *expect_size;
+        return false;
+    }
+
+    if (hash) {
+        uint8_t out[32];
+        SHA256_Final(out, &ctx);
+        *hash = ToHexString(out, sizeof(out));
+    }
+    return true;
 }
 
 std::optional<std::string> GetHash(const std::string& path) {

@@ -234,15 +234,14 @@ int wait_for_file(const char* filename, std::chrono::nanoseconds timeout) {
     return -1;
 }
 
-void import_kernel_cmdline(bool in_qemu,
-                           const std::function<void(const std::string&, const std::string&, bool)>& fn) {
+void ImportKernelCmdline(const std::function<void(const std::string&, const std::string&)>& fn) {
     std::string cmdline;
     android::base::ReadFileToString("/proc/cmdline", &cmdline);
 
     for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
         std::vector<std::string> pieces = android::base::Split(entry, "=");
         if (pieces.size() == 2) {
-            fn(pieces[0], pieces[1], in_qemu);
+            fn(pieces[0], pieces[1]);
         }
     }
 }
@@ -359,12 +358,11 @@ static std::string init_android_dt_dir() {
     // Use the standard procfs-based path by default
     std::string android_dt_dir = kDefaultAndroidDtDir;
     // The platform may specify a custom Android DT path in kernel cmdline
-    import_kernel_cmdline(false,
-                          [&](const std::string& key, const std::string& value, bool in_qemu) {
-                              if (key == "androidboot.android_dt_dir") {
-                                  android_dt_dir = value;
-                              }
-                          });
+    ImportKernelCmdline([&](const std::string& key, const std::string& value) {
+        if (key == "androidboot.android_dt_dir") {
+            android_dt_dir = value;
+        }
+    });
     LOG(INFO) << "Using Android DT directory " << android_dt_dir;
     return android_dt_dir;
 }

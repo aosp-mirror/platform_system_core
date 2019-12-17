@@ -72,6 +72,8 @@ class SnapshotStatus;
 
 static constexpr const std::string_view kCowGroupName = "cow";
 
+bool SourceCopyOperationIsClone(const chromeos_update_engine::InstallOperation& operation);
+
 enum class UpdateState : unsigned int {
     // No update or merge is in progress.
     None,
@@ -153,6 +155,7 @@ class SnapshotManager final {
     // Mark snapshot writes as having completed. After this, new snapshots cannot
     // be created, and the device must either cancel the OTA (either before
     // rebooting or after rolling back), or merge the OTA.
+    // Before calling this function, all snapshots must be mapped.
     bool FinishedSnapshotWrites();
 
   private:
@@ -275,6 +278,7 @@ class SnapshotManager final {
     friend class SnapshotTest;
     friend class SnapshotUpdateTest;
     friend class FlashAfterUpdateTest;
+    friend class LockTestConsumer;
     friend struct AutoDeleteCowImage;
     friend struct AutoDeleteSnapshot;
     friend struct PartitionCowCreator;
@@ -302,9 +306,6 @@ class SnapshotManager final {
         LockedFile(const std::string& path, android::base::unique_fd&& fd, int lock_mode)
             : path_(path), fd_(std::move(fd)), lock_mode_(lock_mode) {}
         ~LockedFile();
-
-        const std::string& path() const { return path_; }
-        int fd() const { return fd_; }
         int lock_mode() const { return lock_mode_; }
 
       private:
@@ -312,8 +313,7 @@ class SnapshotManager final {
         android::base::unique_fd fd_;
         int lock_mode_;
     };
-    std::unique_ptr<LockedFile> OpenFile(const std::string& file, int open_flags, int lock_flags);
-    bool Truncate(LockedFile* file);
+    static std::unique_ptr<LockedFile> OpenFile(const std::string& file, int lock_flags);
 
     // Create a new snapshot record. This creates the backing COW store and
     // persists information needed to map the device. The device can be mapped
@@ -379,10 +379,13 @@ class SnapshotManager final {
     // set the update state to None.
     bool RemoveAllUpdateState(LockedFile* lock);
 
-    // Interact with /metadata/ota/state.
-    std::unique_ptr<LockedFile> OpenStateFile(int open_flags, int lock_flags);
+    // Interact with /metadata/ota.
+    std::unique_ptr<LockedFile> OpenLock(int lock_flags);
     std::unique_ptr<LockedFile> LockShared();
     std::unique_ptr<LockedFile> LockExclusive();
+    std::string GetLockPath() const;
+
+    // Interact with /metadata/ota/state.
     UpdateState ReadUpdateState(LockedFile* file);
     bool WriteUpdateState(LockedFile* file, UpdateState state);
     std::string GetStateFilePath() const;
@@ -487,6 +490,11 @@ class SnapshotManager final {
     // Unmap all partitions that were mapped by CreateLogicalAndSnapshotPartitions.
     // This should only be called in recovery.
     bool UnmapAllPartitions();
+
+    // Sanity check no snapshot overflows. Note that this returns false negatives if the snapshot
+    // overflows, then is remapped and not written afterwards. Hence, the function may only serve
+    // as a sanity check.
+    bool EnsureNoOverflowSnapshot(LockedFile* lock);
 
     std::string gsid_dir_;
     std::string metadata_dir_;

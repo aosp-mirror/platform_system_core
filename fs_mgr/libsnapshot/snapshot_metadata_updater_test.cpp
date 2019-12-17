@@ -24,7 +24,7 @@
 #include <liblp/builder.h>
 #include <storage_literals/storage_literals.h>
 
-#include "test_helpers.h"
+#include <libsnapshot/test_helpers.h>
 
 using namespace android::storage_literals;
 using android::fs_mgr::LpMetadata;

@@ -19,7 +19,9 @@ service adbd /system/bin/adbd --root_seclabel=u:r:su:s0
     updatable
     seclabel u:r:adbd:s0
 
-on boot
+# Set default value on sys.usb.configfs early in boot sequence. It will be
+# overridden in `on boot` action of init.hardware.rc.
+on init
     setprop sys.usb.configfs 0
 
 # Used to disable USB when switching states
@@ -133,3 +135,8 @@ on property:sys.usb.typec.power_role=source
 on property:sys.usb.typec.power_role=sink
     write /sys/class/dual_role_usb/otg_default/power_role ${sys.usb.typec.power_role}
     setprop sys.usb.typec.state ${sys.usb.typec.power_role}
+
+on userspace-reboot-requested
+  setprop sys.usb.config ""
+  setprop sys.usb.configfs ""
+  setprop sys.usb.state ""

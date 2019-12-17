@@ -24,7 +24,6 @@
 #include <android/set_abort_message.h>
 #endif
 
-#include <log/event_tag_map.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
@@ -47,11 +46,8 @@ android_log_transport_write* android_log_write = &fakeLoggerWrite;
 android_log_transport_write* android_log_persist_write = nullptr;
 #endif
 
-static int __write_to_log_init(log_id_t, struct iovec* vec, size_t nr);
-static int (*write_to_log)(log_id_t, struct iovec* vec, size_t nr) = __write_to_log_init;
-
-static int check_log_uid_permissions() {
 #if defined(__ANDROID__)
+static int check_log_uid_permissions() {
   uid_t uid = __android_log_uid();
 
   /* Matches clientHasLogCredentials() in logd */
@@ -88,51 +84,14 @@ static int check_log_uid_permissions() {
       }
     }
   }
-#endif
   return 0;
 }
-
-static void __android_log_cache_available(struct android_log_transport_write* node) {
-  uint32_t i;
-
-  if (node->logMask) {
-    return;
-  }
-
-  for (i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
-    if (i != LOG_ID_KERNEL && (i != LOG_ID_SECURITY || check_log_uid_permissions() == 0) &&
-        (*node->available)(static_cast<log_id_t>(i)) >= 0) {
-      node->logMask |= 1 << i;
-    }
-  }
-}
-
-#if defined(__ANDROID__)
-static atomic_uintptr_t tagMap;
 #endif
 
 /*
  * Release any logger resources. A new log write will immediately re-acquire.
  */
 void __android_log_close() {
-#if defined(__ANDROID__)
-  EventTagMap* m;
-#endif
-
-  __android_log_lock();
-
-  write_to_log = __write_to_log_init;
-
-  /*
-   * Threads that are actively writing at this point are not held back
-   * by a lock and are at risk of dropping the messages with a return code
-   * -EBADF. Prefer to return error code than add the overhead of a lock to
-   * each log writing call to guarantee delivery. In addition, anyone
-   * calling this is doing so to release the logging resources and shut down,
-   * for them to do so with outstanding log requests in other threads is a
-   * disengenuous use of this function.
-   */
-
   if (android_log_write != nullptr) {
     android_log_write->close();
   }
@@ -141,64 +100,18 @@ void __android_log_close() {
     android_log_persist_write->close();
   }
 
-#if defined(__ANDROID__)
-  /*
-   * Additional risk here somewhat mitigated by immediately unlock flushing
-   * the processor cache. The multi-threaded race that we choose to accept,
-   * to minimize locking, is an atomic_load in a writer picking up a value
-   * just prior to entering this routine. There will be an use after free.
-   *
-   * Again, anyone calling this is doing so to release the logging resources
-   * is most probably going to quiesce then shut down; or to restart after
-   * a fork so the risk should be non-existent. For this reason we
-   * choose a mitigation stance for efficiency instead of incuring the cost
-   * of a lock for every log write.
-   */
-  m = (EventTagMap*)atomic_exchange(&tagMap, (uintptr_t)0);
-#endif
-
-  __android_log_unlock();
-
-#if defined(__ANDROID__)
-  if (m != (EventTagMap*)(uintptr_t)-1LL) android_closeEventTagMap(m);
-#endif
 }
 
-static bool transport_initialize(android_log_transport_write* transport) {
-  if (transport == nullptr) {
-    return false;
-  }
-
-  __android_log_cache_available(transport);
-  if (!transport->logMask) {
-    return false;
-  }
-
-  // TODO: Do we actually need to call close() if open() fails?
-  if (transport->open() < 0) {
-    transport->close();
-    return false;
-  }
-
-  return true;
-}
-
-/* log_init_lock assumed */
-static int __write_to_log_initialize() {
-  if (!transport_initialize(android_log_write)) {
-    return -ENODEV;
-  }
-
-  transport_initialize(android_log_persist_write);
-
-  return 1;
-}
-
-static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) {
+static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
   int ret, save_errno;
   struct timespec ts;
 
   save_errno = errno;
+
+  if (log_id == LOG_ID_KERNEL) {
+    return -EINVAL;
+  }
+
 #if defined(__ANDROID__)
   clock_gettime(android_log_clockid(), &ts);
 
@@ -219,48 +132,9 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
       return -EPERM;
     }
   } else if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
-    const char* tag;
-    size_t len;
-    EventTagMap *m, *f;
-
     if (vec[0].iov_len < 4) {
       errno = save_errno;
       return -EINVAL;
-    }
-
-    tag = NULL;
-    len = 0;
-    f = NULL;
-    m = (EventTagMap*)atomic_load(&tagMap);
-
-    if (!m) {
-      ret = __android_log_trylock();
-      m = (EventTagMap*)atomic_load(&tagMap); /* trylock flush cache */
-      if (!m) {
-        m = android_openEventTagMap(NULL);
-        if (ret) { /* trylock failed, use local copy, mark for close */
-          f = m;
-        } else {
-          if (!m) { /* One chance to open map file */
-            m = (EventTagMap*)(uintptr_t)-1LL;
-          }
-          atomic_store(&tagMap, (uintptr_t)m);
-        }
-      }
-      if (!ret) { /* trylock succeeded, unlock */
-        __android_log_unlock();
-      }
-    }
-    if (m && (m != (EventTagMap*)(uintptr_t)-1LL)) {
-      tag = android_lookupEventTag_len(m, &len, *static_cast<uint32_t*>(vec[0].iov_base));
-    }
-    ret = __android_log_is_loggable_len(ANDROID_LOG_INFO, tag, len, ANDROID_LOG_VERBOSE);
-    if (f) { /* local copy marked for close */
-      android_closeEventTagMap(f);
-    }
-    if (!ret) {
-      errno = save_errno;
-      return -EPERM;
     }
   } else {
     int prio = *static_cast<int*>(vec[0].iov_base);
@@ -283,9 +157,8 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
 #endif
 
   ret = 0;
-  size_t i = 1 << log_id;
 
-  if (android_log_write != nullptr && (android_log_write->logMask & i)) {
+  if (android_log_write != nullptr) {
     ssize_t retval;
     retval = android_log_write->write(log_id, &ts, vec, nr);
     if (ret >= 0) {
@@ -293,33 +166,10 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec* vec, size_t nr) 
     }
   }
 
-  if (android_log_persist_write != nullptr && (android_log_persist_write->logMask & i)) {
+  if (android_log_persist_write != nullptr) {
     android_log_persist_write->write(log_id, &ts, vec, nr);
   }
 
-  errno = save_errno;
-  return ret;
-}
-
-static int __write_to_log_init(log_id_t log_id, struct iovec* vec, size_t nr) {
-  int ret, save_errno = errno;
-
-  __android_log_lock();
-
-  if (write_to_log == __write_to_log_init) {
-    ret = __write_to_log_initialize();
-    if (ret < 0) {
-      __android_log_unlock();
-      errno = save_errno;
-      return ret;
-    }
-
-    write_to_log = __write_to_log_daemon;
-  }
-
-  __android_log_unlock();
-
-  ret = write_to_log(log_id, vec, nr);
   errno = save_errno;
   return ret;
 }

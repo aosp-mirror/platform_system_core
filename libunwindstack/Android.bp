@@ -77,6 +77,7 @@ cc_library {
     ],
 
     cflags: [
+        "-DDEXFILE_SUPPORT",
         "-Wexit-time-destructors",
     ],
 
@@ -89,20 +90,18 @@ cc_library {
             ],
         },
         vendor: {
-            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+            cflags: ["-UDEXFILE_SUPPORT"],
             exclude_srcs: [
                 "DexFile.cpp",
-                "DexFiles.cpp",
             ],
             exclude_shared_libs: [
                 "libdexfile_support",
             ],
         },
         recovery: {
-            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+            cflags: ["-UDEXFILE_SUPPORT"],
             exclude_srcs: [
                 "DexFile.cpp",
-                "DexFiles.cpp",
             ],
             exclude_shared_libs: [
                 "libdexfile_support",
@@ -252,6 +251,7 @@ cc_defaults {
         "tests/files/offline/shared_lib_in_apk_arm64/*",
         "tests/files/offline/shared_lib_in_apk_memory_only_arm64/*",
         "tests/files/offline/shared_lib_in_apk_single_map_arm64/*",
+        "tests/files/offline/signal_load_bias_arm/*",
         "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
     ],

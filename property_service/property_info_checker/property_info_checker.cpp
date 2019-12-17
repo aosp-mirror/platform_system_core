@@ -153,7 +153,7 @@ int main(int argc, char** argv) {
     }
 
     auto errors = std::vector<std::string>{};
-    ParsePropertyInfoFile(file_contents, &property_info_entries, &errors);
+    ParsePropertyInfoFile(file_contents, true, &property_info_entries, &errors);
     if (!errors.empty()) {
       for (const auto& error : errors) {
         std::cerr << "Could not read line from '" << filename << "': " << error << std::endl;

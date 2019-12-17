@@ -42,9 +42,10 @@
 
 #if defined(__ANDROID__)
 #include <ApexProperties.sysprop.h>
+#include <android/api-level.h>
 
 #include "mount_namespace.h"
-#include "property_service.h"
+#include "selinux.h"
 #else
 #include "host_init_stubs.h"
 #endif
@@ -53,6 +54,7 @@ using android::base::boot_clock;
 using android::base::GetProperty;
 using android::base::Join;
 using android::base::make_scope_guard;
+using android::base::SetProperty;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
@@ -129,13 +131,13 @@ unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
-                 const std::vector<std::string>& args)
-    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, args) {}
+                 const std::vector<std::string>& args, bool from_apex)
+    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, args, from_apex) {}
 
 Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  const std::vector<gid_t>& supp_gids, int namespace_flags,
                  const std::string& seclabel, Subcontext* subcontext_for_restart_commands,
-                 const std::vector<std::string>& args)
+                 const std::vector<std::string>& args, bool from_apex)
     : name_(name),
       classnames_({"default"}),
       flags_(flags),
@@ -153,7 +155,8 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  "onrestart", {}),
       oom_score_adjust_(DEFAULT_OOM_SCORE_ADJUST),
       start_order_(0),
-      args_(args) {}
+      args_(args),
+      from_apex_(from_apex) {}
 
 void Service::NotifyStateChange(const std::string& new_state) const {
     if ((flags_ & SVC_TEMPORARY) != 0) {
@@ -162,13 +165,13 @@ void Service::NotifyStateChange(const std::string& new_state) const {
     }
 
     std::string prop_name = "init.svc." + name_;
-    property_set(prop_name, new_state);
+    SetProperty(prop_name, new_state);
 
     if (new_state == "running") {
         uint64_t start_ns = time_started_.time_since_epoch().count();
         std::string boottime_property = "ro.boottime." + name_;
         if (GetProperty(boottime_property, "").empty()) {
-            property_set(boottime_property, std::to_string(start_ns));
+            SetProperty(boottime_property, std::to_string(start_ns));
         }
     }
 
@@ -176,13 +179,13 @@ void Service::NotifyStateChange(const std::string& new_state) const {
     // on device for security checks.
     std::string pid_property = "init.svc_debug_pid." + name_;
     if (new_state == "running") {
-        property_set(pid_property, std::to_string(pid_));
+        SetProperty(pid_property, std::to_string(pid_));
     } else if (new_state == "stopped") {
-        property_set(pid_property, "");
+        SetProperty(pid_property, "");
     }
 }
 
-void Service::KillProcessGroup(int signal) {
+void Service::KillProcessGroup(int signal, bool report_oneshot) {
     // If we've already seen a successful result from killProcessGroup*(), then we have removed
     // the cgroup already and calling these functions a second time will simply result in an error.
     // This is true regardless of which signal was sent.
@@ -190,11 +193,20 @@ void Service::KillProcessGroup(int signal) {
     if (!process_cgroup_empty_) {
         LOG(INFO) << "Sending signal " << signal << " to service '" << name_ << "' (pid " << pid_
                   << ") process group...";
+        int max_processes = 0;
         int r;
         if (signal == SIGTERM) {
-            r = killProcessGroupOnce(proc_attr_.uid, pid_, signal);
+            r = killProcessGroupOnce(proc_attr_.uid, pid_, signal, &max_processes);
         } else {
-            r = killProcessGroup(proc_attr_.uid, pid_, signal);
+            r = killProcessGroup(proc_attr_.uid, pid_, signal, &max_processes);
+        }
+
+        if (report_oneshot && max_processes > 0) {
+            LOG(WARNING)
+                    << "Killed " << max_processes
+                    << " additional processes from a oneshot process group for service '" << name_
+                    << "'. This is new behavior, previously child processes would not be killed in "
+                       "this case.";
         }
 
         if (r == 0) process_cgroup_empty_ = true;
@@ -244,7 +256,16 @@ void Service::SetProcessAttributesAndCaps() {
 
 void Service::Reap(const siginfo_t& siginfo) {
     if (!(flags_ & SVC_ONESHOT) || (flags_ & SVC_RESTART)) {
-        KillProcessGroup(SIGKILL);
+        KillProcessGroup(SIGKILL, false);
+    } else {
+        // Legacy behavior from ~2007 until Android R: this else branch did not exist and we did not
+        // kill the process group in this case.
+        if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_R__) {
+            // The new behavior in Android R is to kill these process groups in all cases.  The
+            // 'true' parameter instructions KillProcessGroup() to report a warning message where it
+            // detects a difference in behavior has occurred.
+            KillProcessGroup(SIGKILL, true);
+        }
     }
 
     // Remove any socket resources we may have created.
@@ -304,7 +325,8 @@ void Service::Reap(const siginfo_t& siginfo) {
                     LOG(ERROR) << "updatable process '" << name_ << "' exited 4 times "
                                << (boot_completed ? "in 4 minutes" : "before boot completed");
                     // Notifies update_verifier and apexd
-                    property_set("sys.init.updatable_crashing", "1");
+                    SetProperty("sys.init.updatable_crashing", "1");
+                    SetProperty("sys.init.updatable_crashing_process_name", name_);
                 }
             }
         } else {
@@ -743,7 +765,7 @@ Result<std::unique_ptr<Service>> Service::MakeTemporaryOneshotService(
     }
 
     return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, namespace_flags, seclabel,
-                                     nullptr, str_args);
+                                     nullptr, str_args, false);
 }
 
 }  // namespace init

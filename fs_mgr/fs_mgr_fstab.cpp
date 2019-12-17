@@ -40,6 +40,7 @@ using android::base::EndsWith;
 using android::base::ParseByteCount;
 using android::base::ParseInt;
 using android::base::ReadFileToString;
+using android::base::Readlink;
 using android::base::Split;
 using android::base::StartsWith;
 
@@ -581,8 +582,7 @@ bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
 }  // namespace
 
 void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_partitions) {
-    static constexpr char kGsiKeys[] =
-            "/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey";
+    static constexpr char kDsuKeysDir[] = "/avb";
     // Convert userdata
     // Inherit fstab properties for userdata.
     FstabEntry userdata;
@@ -628,29 +628,18 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
                     .fs_type = "ext4",
                     .flags = MS_RDONLY,
                     .fs_options = "barrier=1",
-                    .avb_keys = kGsiKeys,
+                    .avb_keys = kDsuKeysDir,
             };
             entry.fs_mgr_flags.wait = true;
             entry.fs_mgr_flags.logical = true;
             entry.fs_mgr_flags.first_stage_mount = true;
-            // Use the system key which may be in the vbmeta or vbmeta_system
-            // TODO: b/141284191
-            entry.vbmeta_partition = "vbmeta";
-            fstab->emplace_back(entry);
-            entry.vbmeta_partition = "vbmeta_system";
-            fstab->emplace_back(entry);
         } else {
             // If the corresponding partition exists, transform all its Fstab
             // by pointing .blk_device to the DSU partition.
             for (auto&& entry : entries) {
                 entry->blk_device = partition;
-                if (entry->avb_keys.size() > 0) {
-                    entry->avb_keys += ":";
-                }
-                // If the DSU is signed by OEM, the original Fstab already has the information
-                // required by avb, otherwise the DSU is GSI and will need the avb_keys as listed
-                // below.
-                entry->avb_keys += kGsiKeys;
+                // AVB keys for DSU should always be under kDsuKeysDir.
+                entry->avb_keys += kDsuKeysDir;
             }
             // Make sure the ext4 is included to support GSI.
             auto partition_ext4 =
@@ -807,6 +796,89 @@ std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string
     }
 
     return entries;
+}
+
+static std::string ResolveBlockDevice(const std::string& block_device) {
+    if (!StartsWith(block_device, "/dev/block/")) {
+        LWARNING << block_device << " is not a block device";
+        return block_device;
+    }
+    std::string name = block_device.substr(5);
+    if (!StartsWith(name, "block/dm-")) {
+        // Not a dm-device, but might be a symlink. Optimistically try to readlink.
+        std::string result;
+        if (Readlink(block_device, &result)) {
+            return result;
+        } else if (errno == EINVAL) {
+            // After all, it wasn't a symlink.
+            return block_device;
+        } else {
+            LERROR << "Failed to readlink " << block_device;
+            return "";
+        }
+    }
+    // It's a dm-device, let's find what's inside!
+    std::string sys_dir = "/sys/" + name;
+    while (true) {
+        std::string slaves_dir = sys_dir + "/slaves";
+        std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(slaves_dir.c_str()), closedir);
+        if (!dir) {
+            LERROR << "Failed to open " << slaves_dir;
+            return "";
+        }
+        std::string sub_device_name = "";
+        for (auto entry = readdir(dir.get()); entry; entry = readdir(dir.get())) {
+            if (entry->d_type != DT_LNK) continue;
+            if (!sub_device_name.empty()) {
+                LERROR << "Too many slaves in " << slaves_dir;
+                return "";
+            }
+            sub_device_name = entry->d_name;
+        }
+        if (sub_device_name.empty()) {
+            LERROR << "No slaves in " << slaves_dir;
+            return "";
+        }
+        if (!StartsWith(sub_device_name, "dm-")) {
+            // Not a dm-device! We can stop now.
+            return "/dev/block/" + sub_device_name;
+        }
+        // Still a dm-device, keep digging.
+        sys_dir = "/sys/block/" + sub_device_name;
+    }
+}
+
+FstabEntry* GetMountedEntryForUserdata(Fstab* fstab) {
+    Fstab mounts;
+    if (!ReadFstabFromFile("/proc/mounts", &mounts)) {
+        LERROR << "Failed to read /proc/mounts";
+        return nullptr;
+    }
+    auto mounted_entry = GetEntryForMountPoint(&mounts, "/data");
+    if (mounted_entry == nullptr) {
+        LWARNING << "/data is not mounted";
+        return nullptr;
+    }
+    std::string resolved_block_device = ResolveBlockDevice(mounted_entry->blk_device);
+    if (resolved_block_device.empty()) {
+        return nullptr;
+    }
+    LINFO << "/data is mounted on " << resolved_block_device;
+    for (auto& entry : *fstab) {
+        if (entry.mount_point != "/data") {
+            continue;
+        }
+        std::string block_device;
+        if (!Readlink(entry.blk_device, &block_device)) {
+            LWARNING << "Failed to readlink " << entry.blk_device;
+            block_device = entry.blk_device;
+        }
+        if (block_device == resolved_block_device) {
+            return &entry;
+        }
+    }
+    LERROR << "Didn't find entry that was used to mount /data";
+    return nullptr;
 }
 
 std::set<std::string> GetBootDevices() {

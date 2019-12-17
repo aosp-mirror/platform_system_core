@@ -352,6 +352,7 @@ TEST_F(BuilderTest, BuilderExport) {
     EXPECT_EQ(header.magic, LP_METADATA_HEADER_MAGIC);
     EXPECT_EQ(header.major_version, LP_METADATA_MAJOR_VERSION);
     EXPECT_EQ(header.minor_version, LP_METADATA_MINOR_VERSION_MIN);
+    EXPECT_EQ(header.header_size, sizeof(LpMetadataHeaderV1_0));
 
     ASSERT_EQ(exported->partitions.size(), 2);
     ASSERT_EQ(exported->extents.size(), 3);
@@ -916,4 +917,23 @@ TEST_F(BuilderTest, Interval) {
     EXPECT_EQ(0u, Interval::Intersect(std::vector<Interval>{Interval(0, 0, 50)},
                                       std::vector<Interval>{Interval(0, 100, 150)})
                           .size());
+}
+
+TEST_F(BuilderTest, ExpandedHeader) {
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(1024 * 1024, 1024, 2);
+    ASSERT_NE(builder, nullptr);
+
+    builder->RequireExpandedMetadataHeader();
+
+    unique_ptr<LpMetadata> exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    EXPECT_EQ(exported->header.header_size, sizeof(LpMetadataHeaderV1_2));
+
+    exported->header.flags = 0x5e5e5e5e;
+
+    builder = MetadataBuilder::New(*exported.get());
+    exported = builder->Export();
+    ASSERT_NE(exported, nullptr);
+    EXPECT_EQ(exported->header.header_size, sizeof(LpMetadataHeaderV1_2));
+    EXPECT_EQ(exported->header.flags, 0x5e5e5e5e);
 }

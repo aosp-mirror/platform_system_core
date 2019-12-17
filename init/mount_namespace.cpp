@@ -25,7 +25,9 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/result.h>
 #include <android-base/unique_fd.h>
+#include <apex_manifest.pb.h>
 
 #include "util.h"
 
@@ -79,36 +81,74 @@ static bool IsApexUpdatable() {
     return updatable;
 }
 
+static Result<void> MountDir(const std::string& path, const std::string& mount_path) {
+    if (int ret = mkdir(mount_path.c_str(), 0755); ret != 0 && ret != EEXIST) {
+        return ErrnoError() << "Could not create mount point " << mount_path;
+    }
+    if (mount(path.c_str(), mount_path.c_str(), nullptr, MS_BIND, nullptr) != 0) {
+        return ErrnoError() << "Could not bind mount " << path << " to " << mount_path;
+    }
+    return {};
+}
+
+static Result<std::string> GetApexName(const std::string& apex_dir) {
+    const std::string manifest_path = apex_dir + "/apex_manifest.pb";
+    std::string content;
+    if (!android::base::ReadFileToString(manifest_path, &content)) {
+        return Error() << "Failed to read manifest file: " << manifest_path;
+    }
+    apex::proto::ApexManifest manifest;
+    if (!manifest.ParseFromString(content)) {
+        return Error() << "Can't parse manifest file: " << manifest_path;
+    }
+    return manifest.name();
+}
+
+static Result<void> ActivateFlattenedApexesFrom(const std::string& from_dir,
+                                                const std::string& to_dir) {
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(from_dir.c_str()), closedir);
+    if (!dir) {
+        return {};
+    }
+    dirent* entry;
+    while ((entry = readdir(dir.get())) != nullptr) {
+        if (entry->d_name[0] == '.') continue;
+        if (entry->d_type == DT_DIR) {
+            const std::string apex_path = from_dir + "/" + entry->d_name;
+            const auto apex_name = GetApexName(apex_path);
+            if (!apex_name) {
+                LOG(ERROR) << apex_path << " is not an APEX directory: " << apex_name.error();
+                continue;
+            }
+            const std::string mount_path = to_dir + "/" + (*apex_name);
+            if (auto result = MountDir(apex_path, mount_path); !result) {
+                return result;
+            }
+        }
+    }
+    return {};
+}
+
 static bool ActivateFlattenedApexesIfPossible() {
     if (IsRecoveryMode() || IsApexUpdatable()) {
         return true;
     }
 
-    constexpr const char kSystemApex[] = "/system/apex";
-    constexpr const char kApexTop[] = "/apex";
-    if (mount(kSystemApex, kApexTop, nullptr, MS_BIND, nullptr) != 0) {
-        PLOG(ERROR) << "Could not bind mount " << kSystemApex << " to " << kApexTop;
-        return false;
-    }
+    const std::string kApexTop = "/apex";
+    const std::vector<std::string> kBuiltinDirsForApexes = {
+            "/system/apex",
+            "/system_ext/apex",
+            "/product/apex",
+            "/vendor/apex",
+    };
 
-    // Special casing for the ART APEX
-    constexpr const char kArtApexMountPath[] = "/system/apex/com.android.art";
-    static const std::vector<std::string> kArtApexDirNames = {"com.android.art.release",
-                                                              "com.android.art.debug"};
-    bool success = false;
-    for (const auto& name : kArtApexDirNames) {
-        std::string path = std::string(kSystemApex) + "/" + name;
-        if (access(path.c_str(), F_OK) == 0) {
-            if (mount(path.c_str(), kArtApexMountPath, nullptr, MS_BIND, nullptr) == 0) {
-                success = true;
-                break;
-            }
+    for (const auto& dir : kBuiltinDirsForApexes) {
+        if (auto result = ActivateFlattenedApexesFrom(dir, kApexTop); !result) {
+            LOG(ERROR) << result.error();
+            return false;
         }
     }
-    if (!success) {
-        PLOG(ERROR) << "Failed to bind mount the ART APEX to " << kArtApexMountPath;
-    }
-    return success;
+    return true;
 }
 
 static android::base::unique_fd bootstrap_ns_fd;
@@ -131,6 +171,11 @@ bool SetupMountNamespaces() {
     // the bootstrap and default mount namespaces. The processes running with
     // the bootstrap namespace get APEXes from the read-only partition.
     if (!(MakePrivate("/apex"))) return false;
+
+    // /linkerconfig is a private mountpoint to give a different linker configuration
+    // based on the mount namespace. Subdirectory will be bind-mounted based on current mount
+    // namespace
+    if (!(MakePrivate("/linkerconfig"))) return false;
 
     bootstrap_ns_fd.reset(OpenMountNamespace());
     bootstrap_ns_id = GetMountNamespaceId();

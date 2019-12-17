@@ -59,7 +59,6 @@
 #include "builtin_arguments.h"
 #include "init.h"
 #include "mount_namespace.h"
-#include "property_service.h"
 #include "reboot_utils.h"
 #include "service.h"
 #include "service_list.h"
@@ -186,17 +185,17 @@ static void TurnOffBacklight() {
     }
 }
 
-static Result<void> ShutdownVold() {
-    const char* vdc_argv[] = {"/system/bin/vdc", "volume", "shutdown"};
+static Result<void> CallVdc(const std::string& system, const std::string& cmd) {
+    const char* vdc_argv[] = {"/system/bin/vdc", system.c_str(), cmd.c_str()};
     int status;
     if (logwrap_fork_execvp(arraysize(vdc_argv), vdc_argv, &status, false, LOG_KLOG, true,
                             nullptr) != 0) {
-        return ErrnoError() << "Failed to call 'vdc volume shutdown'";
+        return ErrnoError() << "Failed to call '/system/bin/vdc " << system << " " << cmd << "'";
     }
     if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
         return {};
     }
-    return Error() << "'vdc volume shutdown' failed : " << status;
+    return Error() << "'/system/bin/vdc " << system << " " << cmd << "' failed : " << status;
 }
 
 static void LogShutdownTime(UmountStat stat, Timer* t) {
@@ -548,7 +547,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
          reasons[1] == "hard" || reasons[1] == "warm")) {
         skip = strlen("reboot,");
     }
-    property_set(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
+    SetProperty(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
     sync();
 
     bool is_thermal_shutdown = cmd == ANDROID_RB_THERMOFF;
@@ -619,7 +618,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
         bool do_shutdown_animation = GetBoolProperty("ro.init.shutdown_animation", false);
 
         if (do_shutdown_animation) {
-            property_set("service.bootanim.exit", "0");
+            SetProperty("service.bootanim.exit", "0");
             // Could be in the middle of animation. Stop and start so that it can pick
             // up the right mode.
             boot_anim->Stop();
@@ -658,7 +657,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // 3. send volume shutdown to vold
     Service* vold_service = ServiceList::GetInstance().FindService("vold");
     if (vold_service != nullptr && vold_service->IsRunning()) {
-        ShutdownVold();
+        CallVdc("volume", "shutdown");
         vold_service->Stop();
     } else {
         LOG(INFO) << "vold not running, skipping vold shutdown";
@@ -733,8 +732,8 @@ static Result<void> UnmountAllApexes() {
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
     boot_clock::time_point now = boot_clock::now();
-    property_set("sys.init.userspace_reboot.last_started",
-                 std::to_string(now.time_since_epoch().count()));
+    SetProperty("sys.init.userspace_reboot.last_started",
+                std::to_string(now.time_since_epoch().count()));
     auto guard = android::base::make_scope_guard([] {
         // Leave shutdown so that we can handle a full reboot.
         LeaveShutdown();
@@ -774,8 +773,12 @@ static Result<void> DoUserspaceReboot() {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
-    // TODO(b/143970043): in case of ext4 we probably we will need to restart vold and kill zram
-    //  backing device.
+    if (auto result = KillZramBackingDevice(); !result) {
+        return result;
+    }
+    if (auto result = CallVdc("volume", "reset"); !result) {
+        return result;
+    }
     if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */), 5s,
                                              false /* SIGKILL */);
         r > 0) {
@@ -794,6 +797,14 @@ static Result<void> DoUserspaceReboot() {
     if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
         return Error() << "Failed to switch to bootstrap namespace";
     }
+    // Remove services that were defined in an APEX.
+    ServiceList::GetInstance().RemoveServiceIf([](const std::unique_ptr<Service>& s) -> bool {
+        if (s->is_from_apex()) {
+            LOG(INFO) << "Removing service '" << s->name() << "' because it's defined in an APEX";
+            return true;
+        }
+        return false;
+    });
     // Re-enable services
     for (const auto& s : were_enabled) {
         LOG(INFO) << "Re-enabling service '" << s->name() << "'";
@@ -806,7 +817,7 @@ static Result<void> DoUserspaceReboot() {
 }
 
 static void UserspaceRebootWatchdogThread() {
-    if (!WaitForProperty("sys.init.userspace_reboot_in_progress", "1", 20s)) {
+    if (!WaitForProperty("sys.init.userspace_reboot.in_progress", "1", 20s)) {
         // TODO(b/135984674): should we reboot instead?
         LOG(WARNING) << "Userspace reboot didn't start in 20 seconds. Stopping watchdog";
         return;

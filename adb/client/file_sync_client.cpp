@@ -52,6 +52,8 @@
 #include <android-base/strings.h>
 #include <android-base/stringprintf.h>
 
+typedef void(sync_ls_cb)(unsigned mode, uint64_t size, uint64_t time, const char* name);
+
 struct syncsendbuf {
     unsigned id;
     unsigned size;
@@ -210,6 +212,7 @@ class SyncConnection {
             Error("failed to get feature set: %s", error.c_str());
         } else {
             have_stat_v2_ = CanUseFeature(features_, kFeatureStat2);
+            have_ls_v2_ = CanUseFeature(features_, kFeatureLs2);
             fd.reset(adb_connect("sync:", &error));
             if (fd < 0) {
                 Error("connect failed: %s", error.c_str());
@@ -357,7 +360,7 @@ class SyncConnection {
                             << msg.stat_v1.id;
             }
 
-            if (msg.stat_v1.mode == 0 && msg.stat_v1.size == 0 && msg.stat_v1.time == 0) {
+            if (msg.stat_v1.mode == 0 && msg.stat_v1.size == 0 && msg.stat_v1.mtime == 0) {
                 // There's no way for us to know what the error was.
                 errno = ENOPROTOOPT;
                 return false;
@@ -365,11 +368,50 @@ class SyncConnection {
 
             st->st_mode = msg.stat_v1.mode;
             st->st_size = msg.stat_v1.size;
-            st->st_ctime = msg.stat_v1.time;
-            st->st_mtime = msg.stat_v1.time;
+            st->st_ctime = msg.stat_v1.mtime;
+            st->st_mtime = msg.stat_v1.mtime;
         }
 
         return true;
+    }
+
+    bool SendLs(const char* path) {
+        return SendRequest(have_ls_v2_ ? ID_LIST_V2 : ID_LIST_V1, path);
+    }
+
+  private:
+    template <bool v2>
+    static bool FinishLsImpl(borrowed_fd fd, const std::function<sync_ls_cb>& callback) {
+        using dent_type =
+                std::conditional_t<v2, decltype(syncmsg::dent_v2), decltype(syncmsg::dent_v1)>;
+
+        while (true) {
+            dent_type dent;
+            if (!ReadFdExactly(fd, &dent, sizeof(dent))) return false;
+
+            uint32_t expected_id = v2 ? ID_DENT_V2 : ID_DENT_V1;
+            if (dent.id == ID_DONE) return true;
+            if (dent.id != expected_id) return false;
+
+            // Maximum length of a file name excluding null terminator (NAME_MAX) on Linux is 255.
+            char buf[256];
+            size_t len = dent.namelen;
+            if (len > 255) return false;
+
+            if (!ReadFdExactly(fd, buf, len)) return false;
+            buf[len] = 0;
+
+            callback(dent.mode, dent.size, dent.mtime, buf);
+        }
+    }
+
+  public:
+    bool FinishLs(const std::function<sync_ls_cb>& callback) {
+        if (have_ls_v2_) {
+            return FinishLsImpl<true>(this->fd, callback);
+        } else {
+            return FinishLsImpl<false>(this->fd, callback);
+        }
     }
 
     // Sending header, payload, and footer in a single write makes a huge
@@ -578,6 +620,7 @@ class SyncConnection {
     bool expect_done_;
     FeatureSet features_;
     bool have_stat_v2_;
+    bool have_ls_v2_;
 
     TransferLedger global_ledger_;
     TransferLedger current_ledger_;
@@ -609,28 +652,9 @@ class SyncConnection {
     }
 };
 
-typedef void (sync_ls_cb)(unsigned mode, unsigned size, unsigned time, const char* name);
-
 static bool sync_ls(SyncConnection& sc, const char* path,
                     const std::function<sync_ls_cb>& func) {
-    if (!sc.SendRequest(ID_LIST, path)) return false;
-
-    while (true) {
-        syncmsg msg;
-        if (!ReadFdExactly(sc.fd, &msg.dent, sizeof(msg.dent))) return false;
-
-        if (msg.dent.id == ID_DONE) return true;
-        if (msg.dent.id != ID_DENT) return false;
-
-        size_t len = msg.dent.namelen;
-        if (len > 256) return false; // TODO: resize buffer? continue?
-
-        char buf[257];
-        if (!ReadFdExactly(sc.fd, buf, len)) return false;
-        buf[len] = 0;
-
-        func(msg.dent.mode, msg.dent.size, msg.dent.time, buf);
-    }
+    return sc.SendLs(path) && sc.FinishLs(func);
 }
 
 static bool sync_stat(SyncConnection& sc, const char* path, struct stat* st) {
@@ -787,9 +811,8 @@ bool do_sync_ls(const char* path) {
     SyncConnection sc;
     if (!sc.IsValid()) return false;
 
-    return sync_ls(sc, path, [](unsigned mode, unsigned size, unsigned time,
-                                const char* name) {
-        printf("%08x %08x %08x %s\n", mode, size, time, name);
+    return sync_ls(sc, path, [](unsigned mode, uint64_t size, uint64_t time, const char* name) {
+        printf("%08x %08" PRIx64 " %08" PRIx64 " %s\n", mode, size, time, name);
     });
 }
 
@@ -1062,7 +1085,7 @@ static bool remote_build_list(SyncConnection& sc, std::vector<copyinfo>* file_li
     file_list->push_back(ci);
 
     // Put the files/dirs in rpath on the lists.
-    auto callback = [&](unsigned mode, unsigned size, unsigned time, const char* name) {
+    auto callback = [&](unsigned mode, uint64_t size, uint64_t time, const char* name) {
         if (IsDotOrDotDot(name)) {
             return;
         }

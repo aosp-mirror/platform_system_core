@@ -113,6 +113,10 @@ int string_to_ip(const char *string, struct sockaddr_storage *ss) {
     if (ret == 0) {
         memcpy(ss, ai->ai_addr, ai->ai_addrlen);
         freeaddrinfo(ai);
+    } else {
+        // Getaddrinfo has its own error codes. Convert to negative errno.
+        // There, the only thing that can reasonably happen is that the passed-in string is invalid.
+        ret = (ret == EAI_SYSTEM) ? -errno : -EINVAL;
     }
 
     return ret;
@@ -263,19 +267,13 @@ int ifc_act_on_address(int action, const char *name, const char *address,
     struct {
         struct nlmsghdr n;
         struct ifaddrmsg r;
-        // Allow for IPv6 address, headers, IPv4 broadcast addr and padding.
-        char attrbuf[NLMSG_ALIGN(sizeof(struct nlmsghdr)) +
-                     NLMSG_ALIGN(sizeof(struct rtattr)) +
-                     NLMSG_ALIGN(INET6_ADDRLEN) +
-                     NLMSG_ALIGN(sizeof(struct rtattr)) +
-                     NLMSG_ALIGN(INET_ADDRLEN)];
+        // Allow for IPv4 or IPv6 address, headers, IPv4 broadcast address and padding.
+        char attrbuf[NLMSG_ALIGN(sizeof(struct rtattr)) + NLMSG_ALIGN(INET6_ADDRLEN) +
+                     NLMSG_ALIGN(sizeof(struct rtattr)) + NLMSG_ALIGN(INET_ADDRLEN)];
     } req;
     struct rtattr *rta;
     struct nlmsghdr *nh;
     struct nlmsgerr *err;
-    char buf[NLMSG_ALIGN(sizeof(struct nlmsghdr)) +
-             NLMSG_ALIGN(sizeof(struct nlmsgerr)) +
-             NLMSG_ALIGN(sizeof(struct nlmsghdr))];
 
     // Get interface ID.
     ifindex = if_nametoindex(name);
@@ -344,6 +342,7 @@ int ifc_act_on_address(int action, const char *name, const char *address,
         return -saved_errno;
     }
 
+    char buf[NLMSG_ALIGN(sizeof(struct nlmsgerr)) + sizeof(req)];
     len = recv(s, buf, sizeof(buf), 0);
     saved_errno = errno;
     close(s);

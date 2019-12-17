@@ -122,26 +122,54 @@ public:
         return o != *this;
     }
 
-private:    
+private:
     template<typename Y> friend class sp;
     template<typename Y> friend class wp;
     void set_pointer(T* ptr);
+    static inline void check_not_on_stack(const void* ptr);
     T* m_ptr;
 };
 
-// For code size reasons, we do not want this inlined or templated.
+// For code size reasons, we do not want these inlined or templated.
 void sp_report_race();
+void sp_report_stack_pointer();
 
 #undef COMPARE
 
 // ---------------------------------------------------------------------------
 // No user serviceable parts below here.
 
+// Check whether address is definitely on the calling stack.  We actually check whether it is on
+// the same 4K page as the frame pointer.
+//
+// Assumptions:
+// - Pages are never smaller than 4K (MIN_PAGE_SIZE)
+// - Malloced memory never shares a page with a stack.
+//
+// It does not appear safe to broaden this check to include adjacent pages; apparently this code
+// is used in environments where there may not be a guard page below (at higher addresses than)
+// the bottom of the stack.
+//
+// TODO: Consider adding make_sp<T>() to allocate an object and wrap the resulting pointer safely
+// without checking overhead.
+template <typename T>
+void sp<T>::check_not_on_stack(const void* ptr) {
+    static constexpr int MIN_PAGE_SIZE = 0x1000;  // 4K. Safer than including sys/user.h.
+    static constexpr uintptr_t MIN_PAGE_MASK = ~static_cast<uintptr_t>(MIN_PAGE_SIZE - 1);
+    uintptr_t my_frame_address =
+            reinterpret_cast<uintptr_t>(__builtin_frame_address(0 /* this frame */));
+    if (((reinterpret_cast<uintptr_t>(ptr) ^ my_frame_address) & MIN_PAGE_MASK) == 0) {
+        sp_report_stack_pointer();
+    }
+}
+
 template<typename T>
 sp<T>::sp(T* other)
         : m_ptr(other) {
-    if (other)
+    if (other) {
+        check_not_on_stack(other);
         other->incStrong(this);
+    }
 }
 
 template<typename T>
@@ -159,8 +187,10 @@ sp<T>::sp(sp<T>&& other) noexcept : m_ptr(other.m_ptr) {
 template<typename T> template<typename U>
 sp<T>::sp(U* other)
         : m_ptr(other) {
-    if (other)
+    if (other) {
+        check_not_on_stack(other);
         (static_cast<T*>(other))->incStrong(this);
+    }
 }
 
 template<typename T> template<typename U>
@@ -207,7 +237,10 @@ sp<T>& sp<T>::operator=(sp<T>&& other) noexcept {
 template<typename T>
 sp<T>& sp<T>::operator =(T* other) {
     T* oldPtr(*const_cast<T* volatile*>(&m_ptr));
-    if (other) other->incStrong(this);
+    if (other) {
+        check_not_on_stack(other);
+        other->incStrong(this);
+    }
     if (oldPtr) oldPtr->decStrong(this);
     if (oldPtr != *const_cast<T* volatile*>(&m_ptr)) sp_report_race();
     m_ptr = other;
