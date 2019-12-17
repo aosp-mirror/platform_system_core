@@ -31,7 +31,6 @@
 #include <cutils/android_reboot.h>
 #include <ext4_utils/wipe.h>
 #include <fs_mgr.h>
-#include <fs_mgr/roots.h>
 #include <libgsi/libgsi.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
@@ -549,42 +548,6 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
     bool wipe = (args.size() >= 3 && args[2] == "wipe");
     return UpdateSuper(device, args[1], wipe);
 }
-
-class AutoMountMetadata {
-  public:
-    AutoMountMetadata() {
-        android::fs_mgr::Fstab proc_mounts;
-        if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
-            LOG(ERROR) << "Could not read /proc/mounts";
-            return;
-        }
-
-        auto iter = std::find_if(proc_mounts.begin(), proc_mounts.end(),
-                [](const auto& entry) { return entry.mount_point == "/metadata"; });
-        if (iter != proc_mounts.end()) {
-            mounted_ = true;
-            return;
-        }
-
-        if (!ReadDefaultFstab(&fstab_)) {
-            LOG(ERROR) << "Could not read default fstab";
-            return;
-        }
-        mounted_ = EnsurePathMounted(&fstab_, "/metadata");
-        should_unmount_ = true;
-    }
-    ~AutoMountMetadata() {
-        if (mounted_ && should_unmount_) {
-            EnsurePathUnmounted(&fstab_, "/metadata");
-        }
-    }
-    explicit operator bool() const { return mounted_; }
-
-  private:
-    android::fs_mgr::Fstab fstab_;
-    bool mounted_ = false;
-    bool should_unmount_ = false;
-};
 
 bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() != 2) {
