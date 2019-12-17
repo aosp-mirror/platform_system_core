@@ -101,7 +101,7 @@ static bool set_verity_enabled_state(const char* block_device, const char* mount
   auto change = false;
   errno = 0;
   if (enable ? fs_mgr_overlayfs_teardown(mount_point, &change)
-             : fs_mgr_overlayfs_setup(mount_point, &change)) {
+             : fs_mgr_overlayfs_setup(nullptr, mount_point, &change)) {
     if (change) {
       printf("%s overlayfs for %s\n", enable ? "disabling" : "using", mount_point);
     }
@@ -132,7 +132,7 @@ static bool overlayfs_setup(bool enable) {
   auto change = false;
   errno = 0;
   if (enable ? fs_mgr_overlayfs_teardown(nullptr, &change)
-             : fs_mgr_overlayfs_setup(nullptr, &change)) {
+             : fs_mgr_overlayfs_setup(nullptr, nullptr, &change)) {
     if (change) {
       printf("%s overlayfs\n", enable ? "disabling" : "using");
     }
