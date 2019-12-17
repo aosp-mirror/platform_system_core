@@ -1358,24 +1358,17 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
     return ret;
 }
 
-static std::string GetBlockDeviceForMountPoint(const std::string& mount_point) {
-    Fstab mounts;
-    if (!ReadFstabFromFile("/proc/mounts", &mounts)) {
-        LERROR << "Can't read /proc/mounts";
-        return "";
-    }
-    auto entry = GetEntryForMountPoint(&mounts, mount_point);
-    if (entry == nullptr) {
-        LWARNING << mount_point << " is not mounted";
-        return "";
-    }
-    return entry->blk_device;
-}
-
 // TODO(b/143970043): return different error codes based on which step failed.
 int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
-    std::string block_device = GetBlockDeviceForMountPoint("/data");
-    if (block_device.empty()) {
+    Fstab proc_mounts;
+    if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
+        LERROR << "Can't read /proc/mounts";
+        return -1;
+    }
+    std::string block_device;
+    if (auto entry = GetEntryForMountPoint(&proc_mounts, "/data"); entry != nullptr) {
+        block_device = entry->blk_device;
+    } else {
         LERROR << "/data is not mounted";
         return -1;
     }
@@ -1408,6 +1401,15 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
         }
     } else {
         LINFO << "Unmounting /data before remounting into checkpointing mode";
+        // First make sure that all the bind-mounts on top of /data are unmounted.
+        for (const auto& entry : proc_mounts) {
+            if (entry.blk_device == block_device && entry.mount_point != "/data") {
+                LINFO << "Unmounting bind-mount " << entry.mount_point;
+                if (umount2(entry.mount_point.c_str(), UMOUNT_NOFOLLOW) != 0) {
+                    PWARNING << "Failed to unmount " << entry.mount_point;
+                }
+            }
+        }
         if (umount2("/data", UMOUNT_NOFOLLOW) != 0) {
             PERROR << "Failed to umount /data";
             return -1;
