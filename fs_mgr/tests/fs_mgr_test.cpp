@@ -969,3 +969,14 @@ TEST(fs_mgr, DefaultFstabContainsUserdata) {
     ASSERT_NE(nullptr, GetEntryForMountPoint(&fstab, "/data"))
             << "Default fstab doesn't contain /data entry";
 }
+
+TEST(fs_mgr, UserdataMountedFromDefaultFstab) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
+    Fstab fstab;
+    ASSERT_TRUE(ReadDefaultFstab(&fstab)) << "Failed to read default fstab";
+    ASSERT_NE(nullptr, GetMountedEntryForUserdata(&fstab))
+            << "/data wasn't mounted from default fstab";
+}

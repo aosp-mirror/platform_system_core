@@ -52,7 +52,6 @@ LOCAL_SRC_FILES := \
     first_stage_init.cpp \
     first_stage_main.cpp \
     first_stage_mount.cpp \
-    mount_namespace.cpp \
     reboot_utils.cpp \
     selabel.cpp \
     selinux.cpp \
@@ -73,9 +72,8 @@ LOCAL_UNSTRIPPED_PATH := $(TARGET_RAMDISK_OUT_UNSTRIPPED)
 LOCAL_REQUIRED_MODULES := \
    adb_debug.prop \
 
-# Set up the same mount points on the ramdisk that system-as-root contains.
+# Set up the directories that first stage init mounts on.
 LOCAL_POST_INSTALL_CMD := mkdir -p \
-    $(TARGET_RAMDISK_OUT)/apex \
     $(TARGET_RAMDISK_OUT)/debug_ramdisk \
     $(TARGET_RAMDISK_OUT)/dev \
     $(TARGET_RAMDISK_OUT)/mnt \

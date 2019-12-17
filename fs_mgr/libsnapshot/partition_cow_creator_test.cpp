@@ -18,9 +18,10 @@
 #include <liblp/builder.h>
 #include <liblp/property_fetcher.h>
 
+#include <libsnapshot/test_helpers.h>
+
 #include "dm_snapshot_internals.h"
 #include "partition_cow_creator.h"
-#include "test_helpers.h"
 #include "utility.h"
 
 using namespace android::fs_mgr;

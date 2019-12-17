@@ -19,6 +19,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <math.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
@@ -186,14 +187,26 @@ CommandListener::GetStatisticsCmd::GetStatisticsCmd(LogBuffer* buf)
     : LogCommand("getStatistics"), mBuf(*buf) {
 }
 
-static std::string package_string(const std::string& str) {
-    // Calculate total buffer size prefix, count is the string length w/o nul
-    char fmt[32];
-    for (size_t l = str.length(), y = 0, x = 6; y != x;
-         y = x, x = strlen(fmt) - 2) {
-        snprintf(fmt, sizeof(fmt), "%zu\n%%s\n\f", l + x);
+// This returns a string with a length prefix with the format <length>\n<data>\n\f.  The length
+// prefix includes the length of the prefix itself.
+static std::string PackageString(const std::string& str) {
+    size_t overhead_length = 3;  // \n \n \f.
+
+    // Number of digits needed to represent length(str + overhead_length).
+    size_t str_size_digits = 1 + static_cast<size_t>(log10(str.size() + overhead_length));
+    // Number of digits needed to represent the total size.
+    size_t total_size_digits =
+            1 + static_cast<size_t>(log10(str.size() + overhead_length + str_size_digits));
+
+    // If adding the size prefix causes a new digit to be required to represent the new total
+    // size, add it to the 'overhead_length'.  This can only happen once, since each new digit
+    // allows for 10x the previous size to be recorded.
+    if (total_size_digits != str_size_digits) {
+        overhead_length++;
     }
-    return android::base::StringPrintf(fmt, str.c_str());
+
+    size_t total_size = str.size() + overhead_length + str_size_digits;
+    return android::base::StringPrintf("%zu\n%s\n\f", total_size, str.c_str());
 }
 
 int CommandListener::GetStatisticsCmd::runCommand(SocketClient* cli, int argc,
@@ -228,8 +241,7 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient* cli, int argc,
         }
     }
 
-    cli->sendMsg(
-        package_string(mBuf.formatStatistics(uid, pid, logMask)).c_str());
+    cli->sendMsg(PackageString(mBuf.formatStatistics(uid, pid, logMask)).c_str());
     return 0;
 }
 
@@ -240,7 +252,7 @@ CommandListener::GetPruneListCmd::GetPruneListCmd(LogBuffer* buf)
 int CommandListener::GetPruneListCmd::runCommand(SocketClient* cli,
                                                  int /*argc*/, char** /*argv*/) {
     setname();
-    cli->sendMsg(package_string(mBuf.formatPrune()).c_str());
+    cli->sendMsg(PackageString(mBuf.formatPrune()).c_str());
     return 0;
 }
 
@@ -316,12 +328,11 @@ int CommandListener::GetEventTagCmd::runCommand(SocketClient* cli, int argc,
             cli->sendMsg("can not mix id= with either format= or name=");
             return 0;
         }
-        cli->sendMsg(package_string(mBuf.formatEntry(atoi(id), uid)).c_str());
+        cli->sendMsg(PackageString(mBuf.formatEntry(atoi(id), uid)).c_str());
         return 0;
     }
 
-    cli->sendMsg(
-        package_string(mBuf.formatGetEventTag(uid, name, format)).c_str());
+    cli->sendMsg(PackageString(mBuf.formatGetEventTag(uid, name, format)).c_str());
 
     return 0;
 }

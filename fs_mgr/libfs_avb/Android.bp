@@ -37,10 +37,8 @@ cc_library_static {
         "libfstab",
     ],
     shared_libs: [
+        "libbase",
         "libcrypto",
-    ],
-    header_libs: [
-        "libbase_headers",
     ],
     target: {
         darwin: {
@@ -123,6 +121,7 @@ cc_test_host {
 cc_test {
     name: "libfs_avb_device_test",
     test_suites: ["device-tests"],
+    require_root: true,
     static_libs: [
         "libavb",
         "libdm",

@@ -91,6 +91,7 @@
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 using android::base::Basename;
+using android::base::GetBoolProperty;
 using android::base::Realpath;
 using android::base::StartsWith;
 using android::base::unique_fd;
@@ -1118,6 +1119,12 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             continue;
         }
 
+        // Terrible hack to make it possible to remount /data.
+        // TODO: refact fs_mgr_mount_all and get rid of this.
+        if (mount_mode == MOUNT_MODE_ONLY_USERDATA && current_entry.mount_point != "/data") {
+            continue;
+        }
+
         // Translate LABEL= file system labels into block devices.
         if (is_extfs(current_entry.fs_type)) {
             if (!TranslateExtLabels(&current_entry)) {
@@ -1351,42 +1358,26 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
     return ret;
 }
 
-static std::string GetUserdataBlockDevice() {
-    Fstab fstab;
-    if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
-        LERROR << "Failed to read /proc/mounts";
-        return "";
-    }
-    auto entry = GetEntryForMountPoint(&fstab, "/data");
-    if (entry == nullptr) {
-        LERROR << "Didn't find /data mount point in /proc/mounts";
-        return "";
-    }
-    return entry->blk_device;
-}
-
+// TODO(b/143970043): return different error codes based on which step failed.
 int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
-    const std::string& block_device = GetUserdataBlockDevice();
-    LINFO << "Userdata is mounted on " << block_device;
-    auto entry = std::find_if(fstab->begin(), fstab->end(), [&block_device](const FstabEntry& e) {
-        if (e.mount_point != "/data") {
-            return false;
-        }
-        if (e.blk_device == block_device) {
-            return true;
-        }
-        DeviceMapper& dm = DeviceMapper::Instance();
-        std::string path;
-        if (!dm.GetDmDevicePathByName("userdata", &path)) {
-            return false;
-        }
-        return path == block_device;
-    });
-    if (entry == fstab->end()) {
+    Fstab proc_mounts;
+    if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
+        LERROR << "Can't read /proc/mounts";
+        return -1;
+    }
+    std::string block_device;
+    if (auto entry = GetEntryForMountPoint(&proc_mounts, "/data"); entry != nullptr) {
+        block_device = entry->blk_device;
+    } else {
+        LERROR << "/data is not mounted";
+        return -1;
+    }
+    auto fstab_entry = GetMountedEntryForUserdata(fstab);
+    if (fstab_entry == nullptr) {
         LERROR << "Can't find /data in fstab";
         return -1;
     }
-    if (!entry->fs_mgr_flags.checkpoint_blk && !entry->fs_mgr_flags.checkpoint_fs) {
+    if (!fstab_entry->fs_mgr_flags.checkpoint_blk && !fstab_entry->fs_mgr_flags.checkpoint_fs) {
         LINFO << "Userdata doesn't support checkpointing. Nothing to do";
         return 0;
     }
@@ -1395,20 +1386,55 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
         LINFO << "Checkpointing not needed. Don't remount";
         return 0;
     }
-    if (entry->fs_mgr_flags.checkpoint_fs) {
+    bool force_umount_for_f2fs =
+            GetBoolProperty("sys.init.userdata_remount.force_umount_f2fs", false);
+    if (fstab_entry->fs_mgr_flags.checkpoint_fs && !force_umount_for_f2fs) {
         // Userdata is f2fs, simply remount it.
-        if (!checkpoint_manager.Update(&(*entry))) {
+        if (!checkpoint_manager.Update(fstab_entry)) {
             LERROR << "Failed to remount userdata in checkpointing mode";
             return -1;
         }
-        if (mount(entry->blk_device.c_str(), entry->mount_point.c_str(), "none",
-                  MS_REMOUNT | entry->flags, entry->fs_options.c_str()) != 0) {
-            LERROR << "Failed to remount userdata in checkpointing mode";
+        if (mount(block_device.c_str(), fstab_entry->mount_point.c_str(), "none",
+                  MS_REMOUNT | fstab_entry->flags, fstab_entry->fs_options.c_str()) != 0) {
+            PERROR << "Failed to remount userdata in checkpointing mode";
             return -1;
         }
     } else {
-        // STOPSHIP(b/143970043): support remounting for ext4.
-        LWARNING << "Remounting into checkpointing is not supported for ex4. Proceed with caution";
+        LINFO << "Unmounting /data before remounting into checkpointing mode";
+        // First make sure that all the bind-mounts on top of /data are unmounted.
+        for (const auto& entry : proc_mounts) {
+            if (entry.blk_device == block_device && entry.mount_point != "/data") {
+                LINFO << "Unmounting bind-mount " << entry.mount_point;
+                if (umount2(entry.mount_point.c_str(), UMOUNT_NOFOLLOW) != 0) {
+                    PWARNING << "Failed to unmount " << entry.mount_point;
+                }
+            }
+        }
+        if (umount2("/data", UMOUNT_NOFOLLOW) != 0) {
+            PERROR << "Failed to umount /data";
+            return -1;
+        }
+        DeviceMapper& dm = DeviceMapper::Instance();
+        while (dm.IsDmBlockDevice(block_device)) {
+            auto next_device = dm.GetParentBlockDeviceByPath(block_device);
+            auto name = dm.GetDmDeviceNameByPath(block_device);
+            if (!name) {
+                LERROR << "Failed to get dm-name for " << block_device;
+                return -1;
+            }
+            LINFO << "Deleting " << block_device << " named " << *name;
+            if (!dm.DeleteDevice(*name, 3s)) {
+                return -1;
+            }
+            if (!next_device) {
+                LERROR << "Failed to find parent device for " << block_device;
+            }
+            block_device = *next_device;
+        }
+        LINFO << "Remounting /data";
+        // TODO(b/143970043): remove this hack after fs_mgr_mount_all is refactored.
+        int result = fs_mgr_mount_all(fstab, MOUNT_MODE_ONLY_USERDATA);
+        return result == FS_MGR_MNTALL_FAIL ? -1 : 0;
     }
     return 0;
 }

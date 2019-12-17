@@ -84,6 +84,7 @@
 using namespace std::literals::string_literals;
 
 using android::base::Basename;
+using android::base::SetProperty;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
@@ -359,55 +360,59 @@ static Result<void> do_interface_stop(const BuiltinArguments& args) {
     return {};
 }
 
-// mkdir <path> [mode] [owner] [group] [<option> ...]
-static Result<void> do_mkdir(const BuiltinArguments& args) {
-    auto options = ParseMkdir(args.args);
-    if (!options) return options.error();
+static Result<void> make_dir_with_options(const MkdirOptions& options) {
     std::string ref_basename;
-    if (options->ref_option == "ref") {
+    if (options.ref_option == "ref") {
         ref_basename = fscrypt_key_ref;
-    } else if (options->ref_option == "per_boot_ref") {
+    } else if (options.ref_option == "per_boot_ref") {
         ref_basename = fscrypt_key_per_boot_ref;
     } else {
-        return Error() << "Unknown key option: '" << options->ref_option << "'";
+        return Error() << "Unknown key option: '" << options.ref_option << "'";
     }
 
     struct stat mstat;
-    if (lstat(options->target.c_str(), &mstat) != 0) {
+    if (lstat(options.target.c_str(), &mstat) != 0) {
         if (errno != ENOENT) {
-            return ErrnoError() << "lstat() failed on " << options->target;
+            return ErrnoError() << "lstat() failed on " << options.target;
         }
-        if (!make_dir(options->target, options->mode)) {
-            return ErrnoErrorIgnoreEnoent() << "mkdir() failed on " << options->target;
+        if (!make_dir(options.target, options.mode)) {
+            return ErrnoErrorIgnoreEnoent() << "mkdir() failed on " << options.target;
         }
-        if (lstat(options->target.c_str(), &mstat) != 0) {
-            return ErrnoError() << "lstat() failed on new " << options->target;
+        if (lstat(options.target.c_str(), &mstat) != 0) {
+            return ErrnoError() << "lstat() failed on new " << options.target;
         }
     }
     if (!S_ISDIR(mstat.st_mode)) {
-        return Error() << "Not a directory on " << options->target;
+        return Error() << "Not a directory on " << options.target;
     }
-    bool needs_chmod = (mstat.st_mode & ~S_IFMT) != options->mode;
-    if ((options->uid != static_cast<uid_t>(-1) && options->uid != mstat.st_uid) ||
-        (options->gid != static_cast<gid_t>(-1) && options->gid != mstat.st_gid)) {
-        if (lchown(options->target.c_str(), options->uid, options->gid) == -1) {
-            return ErrnoError() << "lchown failed on " << options->target;
+    bool needs_chmod = (mstat.st_mode & ~S_IFMT) != options.mode;
+    if ((options.uid != static_cast<uid_t>(-1) && options.uid != mstat.st_uid) ||
+        (options.gid != static_cast<gid_t>(-1) && options.gid != mstat.st_gid)) {
+        if (lchown(options.target.c_str(), options.uid, options.gid) == -1) {
+            return ErrnoError() << "lchown failed on " << options.target;
         }
         // chown may have cleared S_ISUID and S_ISGID, chmod again
         needs_chmod = true;
     }
     if (needs_chmod) {
-        if (fchmodat(AT_FDCWD, options->target.c_str(), options->mode, AT_SYMLINK_NOFOLLOW) == -1) {
-            return ErrnoError() << "fchmodat() failed on " << options->target;
+        if (fchmodat(AT_FDCWD, options.target.c_str(), options.mode, AT_SYMLINK_NOFOLLOW) == -1) {
+            return ErrnoError() << "fchmodat() failed on " << options.target;
         }
     }
     if (fscrypt_is_native()) {
-        if (!FscryptSetDirectoryPolicy(ref_basename, options->fscrypt_action, options->target)) {
+        if (!FscryptSetDirectoryPolicy(ref_basename, options.fscrypt_action, options.target)) {
             return reboot_into_recovery(
-                    {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + options->target});
+                    {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + options.target});
         }
     }
     return {};
+}
+
+// mkdir <path> [mode] [owner] [group] [<option> ...]
+static Result<void> do_mkdir(const BuiltinArguments& args) {
+    auto options = ParseMkdir(args.args);
+    if (!options) return options.error();
+    return make_dir_with_options(*options);
 }
 
 /* umount <path> */
@@ -561,16 +566,16 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             LOG(ERROR) << "Userdata remount is not supported on FDE devices. How did you get here?";
             trigger_shutdown("reboot,requested-userdata-remount-on-fde-device");
         }
-        property_set("ro.crypto.state", "encrypted");
-        property_set("ro.crypto.type", "block");
+        SetProperty("ro.crypto.state", "encrypted");
+        SetProperty("ro.crypto.type", "block");
         ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
-        property_set("ro.crypto.state", "unencrypted");
+        SetProperty("ro.crypto.state", "unencrypted");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
-        property_set("ro.crypto.state", "unsupported");
+        SetProperty("ro.crypto.state", "unsupported");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
@@ -583,33 +588,33 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
         return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
-        if (!userdata_remount && !FscryptInstallKeyring()) {
+        if (!FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
-        property_set("ro.crypto.state", "encrypted");
-        property_set("ro.crypto.type", "file");
+        SetProperty("ro.crypto.state", "encrypted");
+        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
-        if (!userdata_remount && !FscryptInstallKeyring()) {
+        if (!FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
-        property_set("ro.crypto.state", "encrypted");
-        property_set("ro.crypto.type", "file");
+        SetProperty("ro.crypto.state", "encrypted");
+        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
-        if (!userdata_remount && !FscryptInstallKeyring()) {
+        if (!FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
-        property_set("ro.crypto.state", "encrypted");
-        property_set("ro.crypto.type", "file");
+        SetProperty("ro.crypto.state", "encrypted");
+        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.
@@ -662,7 +667,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     }
 
     auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_mode);
-    property_set(prop_name, std::to_string(t.duration().count()));
+    SetProperty(prop_name, std::to_string(t.duration().count()));
 
     if (import_rc && SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
         /* Paths of .rc files are specified at the 2nd argument and beyond */
@@ -718,7 +723,7 @@ static Result<void> do_setprop(const BuiltinArguments& args) {
                        << "' from init; use the restorecon builtin directly";
     }
 
-    property_set(args[1], args[2]);
+    SetProperty(args[1], args[2]);
     return {};
 }
 
@@ -832,7 +837,7 @@ static Result<void> do_verity_update_state(const BuiltinArguments& args) {
         // To be consistent in vboot 1.0 and vboot 2.0 (AVB), use "system" for the partition even
         // for system as root, so it has property [partition.system.verified].
         std::string partition = entry.mount_point == "/" ? "system" : Basename(entry.mount_point);
-        property_set("partition." + partition + ".verified", std::to_string(mode));
+        SetProperty("partition." + partition + ".verified", std::to_string(mode));
     }
 
     return {};
@@ -1171,7 +1176,7 @@ static Result<void> do_mark_post_data(const BuiltinArguments& args) {
     return {};
 }
 
-static Result<void> do_parse_apex_configs(const BuiltinArguments& args) {
+static Result<void> parse_apex_configs() {
     glob_t glob_result;
     static constexpr char glob_pattern[] = "/apex/*/etc/*.rc";
     const int ret = glob(glob_pattern, GLOB_MARK, nullptr, &glob_result);
@@ -1180,7 +1185,7 @@ static Result<void> do_parse_apex_configs(const BuiltinArguments& args) {
         return Error() << "glob pattern '" << glob_pattern << "' failed";
     }
     std::vector<std::string> configs;
-    Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance());
+    Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance(), true);
     for (size_t i = 0; i < glob_result.gl_pathc; i++) {
         std::string path = glob_result.gl_pathv[i];
         // Filter-out /apex/<name>@<ver> paths. The paths are bind-mounted to
@@ -1210,6 +1215,45 @@ static Result<void> do_parse_apex_configs(const BuiltinArguments& args) {
     }
 }
 
+/*
+ * Creates a directory under /data/misc/apexdata/ for each APEX.
+ */
+static Result<void> create_apex_data_dirs() {
+    auto dirp = std::unique_ptr<DIR, int (*)(DIR*)>(opendir("/apex"), closedir);
+    if (!dirp) {
+        return ErrnoError() << "Unable to open apex directory";
+    }
+    struct dirent* entry;
+    while ((entry = readdir(dirp.get())) != nullptr) {
+        if (entry->d_type != DT_DIR) continue;
+
+        const char* name = entry->d_name;
+        // skip any starting with "."
+        if (name[0] == '.') continue;
+
+        if (strchr(name, '@') != nullptr) continue;
+
+        auto path = "/data/misc/apexdata/" + std::string(name);
+        auto system_uid = DecodeUid("system");
+        auto options =
+                MkdirOptions{path, 0700, *system_uid, *system_uid, FscryptAction::kNone, "ref"};
+        make_dir_with_options(options);
+    }
+    return {};
+}
+
+static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
+    auto create_dirs = create_apex_data_dirs();
+    if (!create_dirs) {
+        return create_dirs.error();
+    }
+    auto parse_configs = parse_apex_configs();
+    if (!parse_configs) {
+        return parse_configs.error();
+    }
+    return {};
+}
+
 static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
     if (SwitchToDefaultMountNamespace()) {
         return {};
@@ -1221,8 +1265,8 @@ static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
 static Result<void> do_finish_userspace_reboot(const BuiltinArguments&) {
     LOG(INFO) << "Userspace reboot successfully finished";
     boot_clock::time_point now = boot_clock::now();
-    property_set("sys.init.userspace_reboot.last_finished",
-                 std::to_string(now.time_since_epoch().count()));
+    SetProperty("sys.init.userspace_reboot.last_finished",
+                std::to_string(now.time_since_epoch().count()));
     if (!android::sysprop::InitProperties::userspace_reboot_in_progress(false)) {
         return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
     }
@@ -1270,7 +1314,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         // mount and umount are run in the same context as mount_all for symmetry.
         {"mount_all",               {1,     kMax, {false,  do_mount_all}}},
         {"mount",                   {3,     kMax, {false,  do_mount}}},
-        {"parse_apex_configs",      {0,     0,    {false,  do_parse_apex_configs}}},
+        {"perform_apex_config",     {0,     0,    {false,  do_perform_apex_config}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
         {"umount_all",              {1,     1,    {false,  do_umount_all}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},

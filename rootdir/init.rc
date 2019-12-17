@@ -38,12 +38,9 @@ on early-init
     # Allow up to 32K FDs per process
     setrlimit nofile 32768 32768
 
-    # Create directory to keep ld.config.txt
-    mkdir /dev/linkerconfig 0755
-
     # Generate ld.config.txt for early executed processes
-    exec -- /system/bin/linkerconfig --target /dev/linkerconfig/ld.config.txt
-    chmod 444 /dev/linkerconfig/ld.config.txt
+    exec -- /system/bin/linkerconfig --target /linkerconfig/ld.config.txt
+    chmod 444 /linkerconfig/ld.config.txt
 
     start ueventd
 
@@ -546,6 +543,7 @@ on post-fs-data
     mkdir /data/misc/sms 0770 system radio
     mkdir /data/misc/carrierid 0770 system radio
     mkdir /data/misc/apns 0770 system radio
+    mkdir /data/misc/emergencynumberdb 0770 system radio
     mkdir /data/misc/zoneinfo 0775 system system
     mkdir /data/misc/network_watchlist 0774 system system
     mkdir /data/misc/textclassifier 0771 system system
@@ -578,6 +576,8 @@ on post-fs-data
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
     mkdir /data/misc/installd 0700 root root
+    mkdir /data/misc/apexdata 0700 root root
+    mkdir /data/misc/apexrollback 0700 root root
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -650,11 +650,34 @@ on post-fs-data
 
     mkdir /data/user 0711 system system encryption=None
     mkdir /data/user_de 0711 system system encryption=None
-    symlink /data/data /data/user/0
+
+    # Unlink /data/user/0 if we previously symlink it to /data/data
+    rm /data/user/0
+
+    # Bind mount /data/user/0 to /data/data
+    mkdir /data/user/0 0700 system system encryption=None
+    mount none /data/data /data/user/0 bind rec
 
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
+
+    # A tmpfs directory, which will contain all apps CE DE data directory that
+    # bind mount from the original source.
+    chown root root /data_mirror
+    chmod 0700 /data_mirror
+    mount tmpfs tmpfs /data_mirror mode=0700,uid=0,gid=1000 nodev noexec nosuid
+    restorecon /data_mirror
+    mkdir /data_mirror/data_ce 0700 root root
+    mkdir /data_mirror/data_de 0700 root root
+
+    # Create CE and DE data directory for default volume
+    mkdir /data_mirror/data_ce/null 0700 root root
+    mkdir /data_mirror/data_de/null 0700 root root
+
+    # Bind mount CE and DE data directory to mirror's default volume directory
+    mount none /data/user /data_mirror/data_ce/null bind rec
+    mount none /data/user_de /data_mirror/data_de/null bind rec
 
     mkdir /data/cache 0770 system cache encryption=Require
     mkdir /data/cache/recovery 0770 system cache
@@ -667,7 +690,9 @@ on post-fs-data
 
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready
-    parse_apex_configs
+    perform_apex_config
+
+    exec_start derive_sdk
 
     init_user0
 
@@ -700,8 +725,6 @@ on zygote-start && property:persist.sys.fuse=true
   # Mount default storage into root namespace
   mount none /mnt/user/0 /storage bind rec
   mount none none /storage slave rec
-  # Bootstrap the emulated volume for the pass_through directory for user 0
-  mount none /data/media /mnt/pass_through/0/emulated bind rec
 on zygote-start && property:persist.sys.fuse=false
   # Mount default storage into root namespace
   mount none /mnt/runtime/default /storage bind rec
@@ -769,6 +792,11 @@ on boot
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
     write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
     write /sys/fs/f2fs/${dev.mnt.blk.data}/gc_urgent_sleep_time 50
+
+    # limit discard size to 128MB in order to avoid long IO latency
+    # for filesystem tuning first (dm or sda)
+    # Note that, if dm-<num> is used, sda/mmcblk0 should be tuned in vendor/init.rc
+    write /sys/devices/virtual/block/${dev.mnt.blk.data}/queue/discard_max_bytes 134217728
 
     # Permissions for System Server and daemons.
     chown system system /sys/power/autosleep

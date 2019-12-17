@@ -23,18 +23,20 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#if !defined(_WIN32)
-#include <pthread.h>
-#endif
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
+#include <mutex>
+
 #include <android/log.h>
+#include <log/log_id.h>
+#include <log/logprint.h>
 
 #include "log_portability.h"
+#include "logger.h"
 
 #define kMaxTagLen 16 /* from the long-dead utils/Log.cpp */
 
@@ -46,37 +48,21 @@
 #define TRACE(...) ((void)0)
 #endif
 
-/* from the long-dead utils/Log.cpp */
-typedef enum {
-  FORMAT_OFF = 0,
-  FORMAT_BRIEF,
-  FORMAT_PROCESS,
-  FORMAT_TAG,
-  FORMAT_THREAD,
-  FORMAT_RAW,
-  FORMAT_TIME,
-  FORMAT_THREADTIME,
-  FORMAT_LONG
-} LogFormat;
+static void FakeClose();
+static int FakeWrite(log_id_t log_id, struct timespec* ts, struct iovec* vec, size_t nr);
 
-/*
- * Log driver state.
- */
+struct android_log_transport_write fakeLoggerWrite = {
+    .close = FakeClose,
+    .write = FakeWrite,
+};
+
 typedef struct LogState {
-  /* the fake fd that's seen by the user */
-  int fakeFd;
-
-  /* a printable name for this fake device */
-  char debugName[sizeof("/dev/log/security")];
-
-  /* nonzero if this is a binary log */
-  int isBinary;
-
+  bool initialized = false;
   /* global minimum priority */
-  int globalMinPriority;
+  int global_min_priority;
 
   /* output format */
-  LogFormat outputFormat;
+  AndroidLogPrintFormat output_format;
 
   /* tags and priorities */
   struct {
@@ -85,82 +71,8 @@ typedef struct LogState {
   } tagSet[kTagSetSize];
 } LogState;
 
-#if !defined(_WIN32)
-/*
- * Locking.  Since we're emulating a device, we need to be prepared
- * to have multiple callers at the same time.  This lock is used
- * to both protect the fd list and to prevent LogStates from being
- * freed out from under a user.
- */
-static pthread_mutex_t fakeLogDeviceLock = PTHREAD_MUTEX_INITIALIZER;
-
-static void lock() {
-  /*
-   * If we trigger a signal handler in the middle of locked activity and the
-   * signal handler logs a message, we could get into a deadlock state.
-   */
-  pthread_mutex_lock(&fakeLogDeviceLock);
-}
-
-static void unlock() {
-  pthread_mutex_unlock(&fakeLogDeviceLock);
-}
-
-#else  // !defined(_WIN32)
-
-#define lock() ((void)0)
-#define unlock() ((void)0)
-
-#endif  // !defined(_WIN32)
-
-/*
- * File descriptor management.
- */
-#define FAKE_FD_BASE 10000
-#define MAX_OPEN_LOGS 8
-static LogState openLogTable[MAX_OPEN_LOGS];
-
-/*
- * Allocate an fd and associate a new LogState with it.
- * The fd is available via the fakeFd field of the return value.
- */
-static LogState* createLogState() {
-  size_t i;
-
-  for (i = 0; i < (sizeof(openLogTable) / sizeof(openLogTable[0])); i++) {
-    if (openLogTable[i].fakeFd == 0) {
-      openLogTable[i].fakeFd = FAKE_FD_BASE + i;
-      return &openLogTable[i];
-    }
-  }
-  return NULL;
-}
-
-/*
- * Translate an fd to a LogState.
- */
-static LogState* fdToLogState(int fd) {
-  if (fd >= FAKE_FD_BASE && fd < FAKE_FD_BASE + MAX_OPEN_LOGS) {
-    return &openLogTable[fd - FAKE_FD_BASE];
-  }
-  return NULL;
-}
-
-/*
- * Unregister the fake fd and free the memory it pointed to.
- */
-static void deleteFakeFd(int fd) {
-  LogState* ls;
-
-  lock();
-
-  ls = fdToLogState(fd);
-  if (ls != NULL) {
-    memset(&openLogTable[fd - FAKE_FD_BASE], 0, sizeof(openLogTable[0]));
-  }
-
-  unlock();
-}
+static LogState log_state;
+static std::mutex fake_log_mutex;
 
 /*
  * Configure logging based on ANDROID_LOG_TAGS environment variable.  We
@@ -175,19 +87,11 @@ static void deleteFakeFd(int fd) {
  * We also want to check ANDROID_PRINTF_LOG to determine how the output
  * will look.
  */
-static void configureInitialState(const char* pathName, LogState* logState) {
-  static const int kDevLogLen = sizeof("/dev/log/") - 1;
-
-  strncpy(logState->debugName, pathName, sizeof(logState->debugName));
-  logState->debugName[sizeof(logState->debugName) - 1] = '\0';
-
-  /* identify binary logs */
-  if (!strcmp(pathName + kDevLogLen, "events") || !strcmp(pathName + kDevLogLen, "security")) {
-    logState->isBinary = 1;
-  }
+void InitializeLogStateLocked() {
+  log_state.initialized = true;
 
   /* global min priority defaults to "info" level */
-  logState->globalMinPriority = ANDROID_LOG_INFO;
+  log_state.global_min_priority = ANDROID_LOG_INFO;
 
   /*
    * This is based on the the long-dead utils/Log.cpp code.
@@ -265,11 +169,11 @@ static void configureInitialState(const char* pathName, LogState* logState) {
       }
 
       if (tagName[0] == 0) {
-        logState->globalMinPriority = minPrio;
+        log_state.global_min_priority = minPrio;
         TRACE("+++ global min prio %d\n", logState->globalMinPriority);
       } else {
-        logState->tagSet[entry].minPriority = minPrio;
-        strcpy(logState->tagSet[entry].tag, tagName);
+        log_state.tagSet[entry].minPriority = minPrio;
+        strcpy(log_state.tagSet[entry].tag, tagName);
         TRACE("+++ entry %d: %s:%d\n", entry, logState->tagSet[entry].tag,
               logState->tagSet[entry].minPriority);
         entry++;
@@ -281,7 +185,7 @@ static void configureInitialState(const char* pathName, LogState* logState) {
    * Taken from the long-dead utils/Log.cpp
    */
   const char* fstr = getenv("ANDROID_PRINTF_LOG");
-  LogFormat format;
+  AndroidLogPrintFormat format;
   if (fstr == NULL) {
     format = FORMAT_BRIEF;
   } else {
@@ -300,10 +204,10 @@ static void configureInitialState(const char* pathName, LogState* logState) {
     else if (strcmp(fstr, "long") == 0)
       format = FORMAT_PROCESS;
     else
-      format = (LogFormat)atoi(fstr);  // really?!
+      format = (AndroidLogPrintFormat)atoi(fstr);  // really?!
   }
 
-  logState->outputFormat = format;
+  log_state.output_format = format;
 }
 
 /*
@@ -348,7 +252,7 @@ static ssize_t fake_writev(int fd, const struct iovec* iov, int iovcnt) {
  *
  * Log format parsing taken from the long-dead utils/Log.cpp.
  */
-static void showLog(LogState* state, int logPrio, const char* tag, const char* msg) {
+static void ShowLog(int logPrio, const char* tag, const char* msg) {
 #if !defined(_WIN32)
   struct tm tmBuf;
 #endif
@@ -391,7 +295,7 @@ static void showLog(LogState* state, int logPrio, const char* tag, const char* m
    */
   size_t prefixLen, suffixLen;
 
-  switch (state->outputFormat) {
+  switch (log_state.output_format) {
     case FORMAT_TAG:
       prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "%c/%-8s: ", priChar, tag);
       strcpy(suffixBuf, "\n");
@@ -548,35 +452,28 @@ static void showLog(LogState* state, int logPrio, const char* tag, const char* m
  *  tag (N bytes -- null-terminated ASCII string)
  *  message (N bytes -- null-terminated ASCII string)
  */
-ssize_t fakeLogWritev(int fd, const struct iovec* vector, int count) {
-  LogState* state;
-
+static int FakeWrite(log_id_t log_id, struct timespec*, struct iovec* vector, size_t count) {
   /* Make sure that no-one frees the LogState while we're using it.
    * Also guarantees that only one thread is in showLog() at a given
    * time (if it matters).
    */
-  lock();
+  auto lock = std::lock_guard{fake_log_mutex};
 
-  state = fdToLogState(fd);
-  if (state == NULL) {
-    errno = EBADF;
-    unlock();
-    return -1;
+  if (!log_state.initialized) {
+    InitializeLogStateLocked();
   }
 
-  if (state->isBinary) {
-    TRACE("%s: ignoring binary log\n", state->debugName);
-    unlock();
+  if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS || log_id == LOG_ID_SECURITY) {
+    TRACE("%s: ignoring binary log\n", android_log_id_to_name(log_id));
     int len = 0;
-    for (int i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count; ++i) {
       len += vector[i].iov_len;
     }
     return len;
   }
 
   if (count != 3) {
-    TRACE("%s: writevLog with count=%d not expected\n", state->debugName, count);
-    unlock();
+    TRACE("%s: writevLog with count=%d not expected\n", android_log_id_to_name(log_id), count);
     return -1;
   }
 
@@ -586,32 +483,30 @@ ssize_t fakeLogWritev(int fd, const struct iovec* vector, int count) {
   const char* msg = (const char*)vector[2].iov_base;
 
   /* see if this log tag is configured */
-  int i;
-  int minPrio = state->globalMinPriority;
-  for (i = 0; i < kTagSetSize; i++) {
-    if (state->tagSet[i].minPriority == ANDROID_LOG_UNKNOWN)
+  int minPrio = log_state.global_min_priority;
+  for (size_t i = 0; i < kTagSetSize; i++) {
+    if (log_state.tagSet[i].minPriority == ANDROID_LOG_UNKNOWN)
       break; /* reached end of configured values */
 
-    if (strcmp(state->tagSet[i].tag, tag) == 0) {
-      minPrio = state->tagSet[i].minPriority;
+    if (strcmp(log_state.tagSet[i].tag, tag) == 0) {
+      minPrio = log_state.tagSet[i].minPriority;
       break;
     }
   }
 
   if (logPrio >= minPrio) {
-    showLog(state, logPrio, tag, msg);
+    ShowLog(logPrio, tag, msg);
   }
 
-  unlock();
   int len = 0;
-  for (i = 0; i < count; ++i) {
+  for (size_t i = 0; i < count; ++i) {
     len += vector[i].iov_len;
   }
   return len;
 }
 
 /*
- * Free up our state and close the fake descriptor.
+ * Reset out state.
  *
  * The logger API has no means or need to 'stop' or 'close' using the logs,
  * and as such, there is no way for that 'stop' or 'close' to translate into
@@ -623,31 +518,10 @@ ssize_t fakeLogWritev(int fd, const struct iovec* vector, int count) {
  * call is in the exit handler. Logging can continue in the exit handler to
  * help debug HOST tools ...
  */
-int fakeLogClose(int fd) {
-  deleteFakeFd(fd);
-  return 0;
-}
+static void FakeClose() {
+  auto lock = std::lock_guard{fake_log_mutex};
 
-/*
- * Open a log output device and return a fake fd.
- */
-int fakeLogOpen(const char* pathName) {
-  LogState* logState;
-  int fd = -1;
-
-  lock();
-
-  logState = createLogState();
-  if (logState != NULL) {
-    configureInitialState(pathName, logState);
-    fd = logState->fakeFd;
-  } else {
-    errno = ENFILE;
-  }
-
-  unlock();
-
-  return fd;
+  memset(&log_state, 0, sizeof(log_state));
 }
 
 int __android_log_is_loggable(int prio, const char*, int def) {

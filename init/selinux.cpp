@@ -88,12 +88,11 @@ enum EnforcingStatus { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
 EnforcingStatus StatusFromCmdline() {
     EnforcingStatus status = SELINUX_ENFORCING;
 
-    import_kernel_cmdline(false,
-                          [&](const std::string& key, const std::string& value, bool in_qemu) {
-                              if (key == "androidboot.selinux" && value == "permissive") {
-                                  status = SELINUX_PERMISSIVE;
-                              }
-                          });
+    ImportKernelCmdline([&](const std::string& key, const std::string& value) {
+        if (key == "androidboot.selinux" && value == "permissive") {
+            status = SELINUX_PERMISSIVE;
+        }
+    });
 
     return status;
 }
@@ -532,6 +531,8 @@ void SelinuxRestoreContext() {
     selinux_android_restorecon("/dev/device-mapper", 0);
 
     selinux_android_restorecon("/apex", 0);
+
+    selinux_android_restorecon("/linkerconfig", 0);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {

@@ -74,17 +74,18 @@ std::string SerializeMetadata(const LpMetadata& input) {
 
     // Compute header checksum.
     memset(header.header_checksum, 0, sizeof(header.header_checksum));
-    SHA256(&header, sizeof(header), header.header_checksum);
+    SHA256(&header, header.header_size, header.header_checksum);
 
     std::string header_blob =
-            std::string(reinterpret_cast<const char*>(&metadata.header), sizeof(metadata.header));
+            std::string(reinterpret_cast<const char*>(&header), header.header_size);
     return header_blob + tables;
 }
 
 // Perform sanity checks so we don't accidentally overwrite valid metadata
 // with potentially invalid metadata, or random partition data with metadata.
-static bool ValidateAndSerializeMetadata(const IPartitionOpener& opener, const LpMetadata& metadata,
-                                         const std::string& slot_suffix, std::string* blob) {
+static bool ValidateAndSerializeMetadata([[maybe_unused]] const IPartitionOpener& opener,
+                                         const LpMetadata& metadata, const std::string& slot_suffix,
+                                         std::string* blob) {
     const LpMetadataGeometry& geometry = metadata.geometry;
 
     *blob = SerializeMetadata(metadata);
@@ -128,6 +129,10 @@ static bool ValidateAndSerializeMetadata(const IPartitionOpener& opener, const L
                    << block_device.first_logical_sector << " for size " << block_device.size;
             return false;
         }
+
+        // When flashing on the device, check partition sizes. Don't do this on
+        // the host since there is no way to verify.
+#if defined(__ANDROID__)
         BlockDeviceInfo info;
         if (!opener.GetInfo(partition_name, &info)) {
             PERROR << partition_name << ": ioctl";
@@ -138,6 +143,7 @@ static bool ValidateAndSerializeMetadata(const IPartitionOpener& opener, const L
                    << block_device.size << ", got " << info.size << ")";
             return false;
         }
+#endif
     }
 
     // Make sure all partition entries reference valid extents.

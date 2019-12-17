@@ -176,11 +176,6 @@ int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map
 
     SelabelInitialize();
 
-    property_set = [](const std::string& key, const std::string& value) -> uint32_t {
-        android::base::SetProperty(key, value);
-        return 0;
-    };
-
     trigger_shutdown = [](const std::string& command) { shutdown_command = command; };
 
     auto subcontext_process = SubcontextProcess(function_map, context, init_fd);
@@ -209,8 +204,12 @@ void Subcontext::Fork() {
             PLOG(FATAL) << "Could not dup child_fd";
         }
 
-        if (setexeccon(context_.c_str()) < 0) {
-            PLOG(FATAL) << "Could not set execcon for '" << context_ << "'";
+        // We don't switch contexts if we're running the unit tests.  We don't use std::optional,
+        // since we still need a real context string to pass to the builtin functions.
+        if (context_ != kTestContext) {
+            if (setexeccon(context_.c_str()) < 0) {
+                PLOG(FATAL) << "Could not set execcon for '" << context_ << "'";
+            }
         }
 
         auto init_path = GetExecutablePath();

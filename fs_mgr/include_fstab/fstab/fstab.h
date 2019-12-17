@@ -102,6 +102,7 @@ bool SkipMountingPartitions(Fstab* fstab);
 FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
 // The Fstab can contain multiple entries for the same mount point with different configurations.
 std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path);
+FstabEntry* GetMountedEntryForUserdata(Fstab* fstab);
 
 // This method builds DSU fstab entries and transfer the fstab.
 //
