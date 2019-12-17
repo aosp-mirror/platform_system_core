@@ -421,9 +421,6 @@ on post-fs
     # Once everything is setup, no need to modify /.
     # The bind+remount combination allows this to work in containers.
     mount rootfs rootfs / remount bind ro nodev
-    # Mount default storage into root namespace
-    mount none /mnt/runtime/default /storage bind rec
-    mount none none /storage slave rec
 
     # Make sure /sys/kernel/debug (if present) is labeled properly
     # Note that tracefs may be mounted under debug, so we need to cross filesystems
@@ -720,6 +717,22 @@ on post-fs-data
     # Set fscklog permission
     chown root system /dev/fscklogs/log
     chmod 0770 /dev/fscklogs/log
+
+# Switch between sdcardfs and FUSE depending on persist property
+# TODO: Move this to ro property before launch because FDE devices
+# interact with persistent properties differently during boot
+on zygote-start && property:persist.sys.fuse=true
+  # Mount default storage into root namespace
+  mount none /mnt/user/0 /storage bind rec
+  mount none none /storage slave rec
+on zygote-start && property:persist.sys.fuse=false
+  # Mount default storage into root namespace
+  mount none /mnt/runtime/default /storage bind rec
+  mount none none /storage slave rec
+on zygote-start && property:persist.sys.fuse=""
+  # Mount default storage into root namespace
+  mount none /mnt/runtime/default /storage bind rec
+  mount none none /storage slave rec
 
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
