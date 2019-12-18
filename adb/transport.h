@@ -38,6 +38,7 @@
 
 #include "adb.h"
 #include "adb_unique_fd.h"
+#include "types.h"
 #include "usb.h"
 
 typedef std::unordered_set<std::string> FeatureSet;
@@ -223,7 +224,7 @@ enum class ReconnectResult {
     Abort,
 };
 
-class atransport {
+class atransport : public enable_weak_from_this<atransport> {
   public:
     // TODO(danalbert): We expose waaaaaaay too much stuff because this was
     // historically just a struct, but making the whole thing a more idiomatic
@@ -246,7 +247,7 @@ class atransport {
     }
     atransport(ConnectionState state = kCsOffline)
         : atransport([](atransport*) { return ReconnectResult::Abort; }, state) {}
-    virtual ~atransport();
+    ~atransport();
 
     int Write(apacket* p);
     void Reset();

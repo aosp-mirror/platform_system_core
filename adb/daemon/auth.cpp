@@ -16,35 +16,71 @@
 
 #define TRACE_TAG AUTH
 
-#include "adb.h"
-#include "adb_auth.h"
-#include "adb_io.h"
-#include "fdevent/fdevent.h"
 #include "sysdeps.h"
-#include "transport.h"
 
 #include <resolv.h>
 #include <stdio.h>
 #include <string.h>
-#include <iomanip>
 
 #include <algorithm>
+#include <iomanip>
+#include <map>
 #include <memory>
 
 #include <adbd_auth.h>
 #include <android-base/file.h>
+#include <android-base/no_destructor.h>
 #include <android-base/strings.h>
 #include <crypto_utils/android_pubkey.h>
 #include <openssl/obj_mac.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 
+#include "adb.h"
+#include "adb_auth.h"
+#include "adb_io.h"
+#include "fdevent/fdevent.h"
+#include "transport.h"
+#include "types.h"
+
 static AdbdAuthContext* auth_ctx;
 
 static void adb_disconnected(void* unused, atransport* t);
 static struct adisconnect adb_disconnect = {adb_disconnected, nullptr};
 
+static android::base::NoDestructor<std::map<uint32_t, weak_ptr<atransport>>> transports;
+static uint32_t transport_auth_id = 0;
+
 bool auth_required = true;
+
+static void* transport_to_callback_arg(atransport* transport) {
+    uint32_t id = transport_auth_id++;
+    (*transports)[id] = transport->weak();
+    return reinterpret_cast<void*>(id);
+}
+
+static atransport* transport_from_callback_arg(void* id) {
+    uint64_t id_u64 = reinterpret_cast<uint64_t>(id);
+    if (id_u64 > std::numeric_limits<uint32_t>::max()) {
+        LOG(FATAL) << "transport_from_callback_arg called on out of range value: " << id_u64;
+    }
+
+    uint32_t id_u32 = static_cast<uint32_t>(id_u64);
+    auto it = transports->find(id_u32);
+    if (it == transports->end()) {
+        LOG(ERROR) << "transport_from_callback_arg failed to find transport for id " << id_u32;
+        return nullptr;
+    }
+
+    atransport* t = it->second.get();
+    if (!t) {
+        LOG(WARNING) << "transport_from_callback_arg found already destructed transport";
+        return nullptr;
+    }
+
+    transports->erase(it);
+    return t;
+}
 
 static void IteratePublicKeys(std::function<bool(std::string_view public_key)> f) {
     adbd_auth_get_public_keys(
@@ -111,9 +147,16 @@ void adbd_cloexec_auth_socket() {
 
 static void adbd_auth_key_authorized(void* arg, uint64_t id) {
     LOG(INFO) << "adb client authorized";
-    auto* transport = static_cast<atransport*>(arg);
-    transport->auth_id = id;
-    adbd_auth_verified(transport);
+    fdevent_run_on_main_thread([=]() {
+        LOG(INFO) << "arg = " << reinterpret_cast<uintptr_t>(arg);
+        auto* transport = transport_from_callback_arg(arg);
+        if (!transport) {
+            LOG(ERROR) << "authorization received for deleted transport, ignoring";
+            return;
+        }
+        transport->auth_id = id;
+        adbd_auth_verified(transport);
+    });
 }
 
 void adbd_auth_init(void) {
@@ -158,7 +201,8 @@ static void adb_disconnected(void* unused, atransport* t) {
 void adbd_auth_confirm_key(atransport* t) {
     LOG(INFO) << "prompting user to authorize key";
     t->AddDisconnect(&adb_disconnect);
-    adbd_auth_prompt_user(auth_ctx, t->auth_key.data(), t->auth_key.size(), t);
+    adbd_auth_prompt_user(auth_ctx, t->auth_key.data(), t->auth_key.size(),
+                          transport_to_callback_arg(t));
 }
 
 void adbd_notify_framework_connected_key(atransport* t) {
