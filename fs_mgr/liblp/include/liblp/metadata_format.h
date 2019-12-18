@@ -224,14 +224,17 @@ typedef struct LpMetadataHeader {
     /* 128: See LP_HEADER_FLAG_ constants for possible values. Header flags are
      * independent of the version number and intended to be informational only.
      * New flags can be added without bumping the version.
-     *
-     * (Note there are no flags currently defined.)
      */
     uint32_t flags;
 
     /* 132: Reserved (zero), pad to 256 bytes. */
     uint8_t reserved[124];
 } __attribute__((packed)) LpMetadataHeader;
+
+/* This device uses Virtual A/B. Note that on retrofit devices, the expanded
+ * header may not be present.
+ */
+#define LP_HEADER_FLAG_VIRTUAL_AB_DEVICE 0x1
 
 /* This struct defines a logical partition entry, similar to what would be
  * present in a GUID Partition Table.
