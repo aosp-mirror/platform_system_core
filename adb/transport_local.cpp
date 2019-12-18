@@ -85,22 +85,6 @@ bool local_connect(int port) {
     return local_connect_arbitrary_ports(port - 1, port, &dummy) == 0;
 }
 
-std::tuple<unique_fd, int, std::string> tcp_connect(const std::string& address,
-                                                    std::string* response) {
-    unique_fd fd;
-    int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
-    std::string serial;
-    std::string prefix_addr = address.starts_with("vsock:") ? address : "tcp:" + address;
-    if (socket_spec_connect(&fd, prefix_addr, &port, &serial, response)) {
-        close_on_exec(fd);
-        if (!set_tcp_keepalive(fd, 1)) {
-            D("warning: failed to configure TCP keepalives (%s)", strerror(errno));
-        }
-        return std::make_tuple(std::move(fd), port, serial);
-    }
-    return std::make_tuple(unique_fd(), 0, serial);
-}
-
 void connect_device(const std::string& address, std::string* response) {
     if (address.empty()) {
         *response = "empty address";
@@ -110,17 +94,25 @@ void connect_device(const std::string& address, std::string* response) {
     D("connection requested to '%s'", address.c_str());
     unique_fd fd;
     int port;
-    std::string serial;
-    std::tie(fd, port, serial) = tcp_connect(address, response);
+    std::string serial, prefix_addr;
+
+    // If address does not match any socket type, it should default to TCP.
+    if (address.starts_with("vsock:") || address.starts_with("localfilesystem:")) {
+        prefix_addr = address;
+    } else {
+        prefix_addr = "tcp:" + address;
+    }
+
+    socket_spec_connect(&fd, prefix_addr, &port, &serial, response);
     if (fd.get() == -1) {
         return;
     }
-    auto reconnect = [address](atransport* t) {
+    auto reconnect = [prefix_addr](atransport* t) {
         std::string response;
         unique_fd fd;
         int port;
         std::string serial;
-        std::tie(fd, port, serial) = tcp_connect(address, &response);
+        socket_spec_connect(&fd, prefix_addr, &port, &serial, &response);
         if (fd == -1) {
             D("reconnect failed: %s", response.c_str());
             return ReconnectResult::Retry;
@@ -203,7 +195,7 @@ static std::vector<RetryPort>& retry_ports = *new std::vector<RetryPort>;
 std::mutex &retry_ports_lock = *new std::mutex;
 std::condition_variable &retry_ports_cond = *new std::condition_variable;
 
-static void client_socket_thread(int) {
+static void client_socket_thread(std::string_view) {
     adb_thread_setname("client_socket_thread");
     D("transport: client_socket_thread() starting");
     PollAllLocalPortsForEmulator();
@@ -248,7 +240,8 @@ static void client_socket_thread(int) {
 
 #else  // !ADB_HOST
 
-void server_socket_thread(std::function<unique_fd(int, std::string*)> listen_func, int port) {
+void server_socket_thread(std::function<unique_fd(std::string_view, std::string*)> listen_func,
+                          std::string_view addr) {
     adb_thread_setname("server socket");
 
     unique_fd serverfd;
@@ -256,7 +249,7 @@ void server_socket_thread(std::function<unique_fd(int, std::string*)> listen_fun
 
     while (serverfd == -1) {
         errno = 0;
-        serverfd = listen_func(port, &error);
+        serverfd = listen_func(addr, &error);
         if (errno == EAFNOSUPPORT || errno == EINVAL || errno == EPROTONOSUPPORT) {
             D("unrecoverable error: '%s'", error.c_str());
             return;
@@ -276,7 +269,9 @@ void server_socket_thread(std::function<unique_fd(int, std::string*)> listen_fun
             close_on_exec(fd.get());
             disable_tcp_nagle(fd.get());
             std::string serial = android::base::StringPrintf("host-%d", fd.get());
-            register_socket_transport(std::move(fd), std::move(serial), port, 1,
+            // We don't care about port value in "register_socket_transport" as it is used
+            // only from ADB_HOST. "server_socket_thread" is never called from ADB_HOST.
+            register_socket_transport(std::move(fd), std::move(serial), 0, 1,
                                       [](atransport*) { return ReconnectResult::Abort; });
         }
     }
@@ -285,38 +280,30 @@ void server_socket_thread(std::function<unique_fd(int, std::string*)> listen_fun
 
 #endif
 
-unique_fd tcp_listen_inaddr_any(int port, std::string* error) {
-    return unique_fd{network_inaddr_any_server(port, SOCK_STREAM, error)};
-}
-
 #if !ADB_HOST
-static unique_fd vsock_listen(int port, std::string* error) {
-    return unique_fd{
-        socket_spec_listen(android::base::StringPrintf("vsock:%d", port), error, nullptr)
-    };
+unique_fd adb_listen(std::string_view addr, std::string* error) {
+    return unique_fd{socket_spec_listen(addr, error, nullptr)};
 }
 #endif
 
-void local_init(int port) {
+void local_init(const std::string& addr) {
 #if ADB_HOST
     D("transport: local client init");
-    std::thread(client_socket_thread, port).detach();
+    std::thread(client_socket_thread, addr).detach();
     adb_local_transport_max_port_env_override();
 #elif !defined(__ANDROID__)
     // Host adbd.
     D("transport: local server init");
-    std::thread(server_socket_thread, tcp_listen_inaddr_any, port).detach();
-    std::thread(server_socket_thread, vsock_listen, port).detach();
+    std::thread(server_socket_thread, adb_listen, addr).detach();
 #else
     D("transport: local server init");
     // For the adbd daemon in the system image we need to distinguish
     // between the device, and the emulator.
-    if (use_qemu_goldfish()) {
-        std::thread(qemu_socket_thread, port).detach();
+    if (addr.starts_with("tcp:") && use_qemu_goldfish()) {
+        std::thread(qemu_socket_thread, addr).detach();
     } else {
-        std::thread(server_socket_thread, tcp_listen_inaddr_any, port).detach();
+        std::thread(server_socket_thread, adb_listen, addr).detach();
     }
-    std::thread(server_socket_thread, vsock_listen, port).detach();
 #endif // !ADB_HOST
 }
 
