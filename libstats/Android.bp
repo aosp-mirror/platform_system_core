@@ -22,7 +22,7 @@ cc_library {
     srcs: [
         "stats_event_list.c",
         "statsd_writer.c",
-	"stats_event.c",
+        "stats_event.c",
     ],
     host_supported: true,
     cflags: [
