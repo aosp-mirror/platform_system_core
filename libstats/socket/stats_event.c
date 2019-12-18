@@ -142,7 +142,7 @@ static void append_byte_array(struct stats_event* event, uint8_t* buf, size_t si
 // Side-effect: modifies event->errors if buf is not properly null-terminated
 static void append_string(struct stats_event* event, const char* buf) {
     size_t size = strnlen(buf, MAX_EVENT_PAYLOAD);
-    if (event->errors) {
+    if (size == MAX_EVENT_PAYLOAD) {
         event->errors |= ERROR_STRING_NOT_NULL_TERMINATED;
         return;
     }
