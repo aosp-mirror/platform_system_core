@@ -42,6 +42,7 @@ static const char* kErrorMessages[] = {
     "Invalid entry name",
     "I/O error",
     "File mapping failed",
+    "Allocation failed",
 };
 
 enum ErrorCodes : int32_t {
@@ -87,7 +88,10 @@ enum ErrorCodes : int32_t {
   // We were not able to mmap the central directory or entry contents.
   kMmapFailed = -12,
 
-  kLastErrorCode = kMmapFailed,
+  // An allocation failed.
+  kAllocationFailed = -13,
+
+  kLastErrorCode = kAllocationFailed,
 };
 
 class MappedZipFile {
