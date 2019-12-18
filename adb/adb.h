@@ -200,7 +200,7 @@ void put_apacket(apacket* p);
 #define ADB_SUBCLASS 0x42
 #define ADB_PROTOCOL 0x1
 
-void local_init(int port);
+void local_init(const std::string& addr);
 bool local_connect(int port);
 int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* error);
 
