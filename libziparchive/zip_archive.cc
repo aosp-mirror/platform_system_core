@@ -265,14 +265,10 @@ static int32_t MapCentralDirectory0(const char* debug_file_name, ZipArchive* arc
   ALOGV("+++ num_entries=%" PRIu32 " dir_size=%" PRIu32 " dir_offset=%" PRIu32, eocd->num_records,
         eocd->cd_size, eocd->cd_start_offset);
 
-  /*
-   * It all looks good.  Create a mapping for the CD, and set the fields
-   * in archive.
-   */
-
+  // It all looks good.  Create a mapping for the CD, and set the fields
+  // in archive.
   if (!archive->InitializeCentralDirectory(static_cast<off64_t>(eocd->cd_start_offset),
                                            static_cast<size_t>(eocd->cd_size))) {
-    ALOGE("Zip: failed to intialize central directory.\n");
     return kMmapFailed;
   }
 
@@ -354,7 +350,7 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
   if (archive->hash_table == nullptr) {
     ALOGW("Zip: unable to allocate the %u-entry hash_table, entry size: %zu",
           archive->hash_table_size, sizeof(ZipStringOffset));
-    return -1;
+    return kAllocationFailed;
   }
 
   /*
@@ -365,24 +361,25 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
   const uint8_t* ptr = cd_ptr;
   for (uint16_t i = 0; i < num_entries; i++) {
     if (ptr > cd_end - sizeof(CentralDirectoryRecord)) {
-      ALOGW("Zip: ran off the end (at %" PRIu16 ")", i);
+      ALOGW("Zip: ran off the end (item #%" PRIu16 ", %zu bytes of central directory)", i,
+            cd_length);
 #if defined(__ANDROID__)
       android_errorWriteLog(0x534e4554, "36392138");
 #endif
-      return -1;
+      return kInvalidFile;
     }
 
     const CentralDirectoryRecord* cdr = reinterpret_cast<const CentralDirectoryRecord*>(ptr);
     if (cdr->record_signature != CentralDirectoryRecord::kSignature) {
       ALOGW("Zip: missed a central dir sig (at %" PRIu16 ")", i);
-      return -1;
+      return kInvalidFile;
     }
 
     const off64_t local_header_offset = cdr->local_file_header_offset;
     if (local_header_offset >= archive->directory_offset) {
       ALOGW("Zip: bad LFH offset %" PRId64 " at entry %" PRIu16,
             static_cast<int64_t>(local_header_offset), i);
-      return -1;
+      return kInvalidFile;
     }
 
     const uint16_t file_name_length = cdr->file_name_length;
@@ -394,12 +391,12 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
       ALOGW("Zip: file name for entry %" PRIu16
             " exceeds the central directory range, file_name_length: %" PRIu16 ", cd_length: %zu",
             i, file_name_length, cd_length);
-      return -1;
+      return kInvalidEntryName;
     }
     // Check that file name is valid UTF-8 and doesn't contain NUL (U+0000) characters.
     if (!IsValidEntryName(file_name, file_name_length)) {
       ALOGW("Zip: invalid file name at entry %" PRIu16, i);
-      return -1;
+      return kInvalidEntryName;
     }
 
     // Add the CDE filename to the hash table.
@@ -414,7 +411,7 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
     ptr += sizeof(CentralDirectoryRecord) + file_name_length + extra_length + comment_length;
     if ((ptr - cd_ptr) > static_cast<int64_t>(cd_length)) {
       ALOGW("Zip: bad CD advance (%tu vs %zu) at entry %" PRIu16, ptr - cd_ptr, cd_length, i);
-      return -1;
+      return kInvalidFile;
     }
   }
 
@@ -422,7 +419,7 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
   if (!archive->mapped_zip.ReadAtOffset(reinterpret_cast<uint8_t*>(&lfh_start_bytes),
                                         sizeof(uint32_t), 0)) {
     ALOGW("Zip: Unable to read header for entry at offset == 0.");
-    return -1;
+    return kInvalidFile;
   }
 
   if (lfh_start_bytes != LocalFileHeader::kSignature) {
@@ -430,7 +427,7 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
 #if defined(__ANDROID__)
     android_errorWriteLog(0x534e4554, "64211847");
 #endif
-    return -1;
+    return kInvalidFile;
   }
 
   ALOGV("+++ zip good scan %" PRIu16 " entries", num_entries);
@@ -439,16 +436,8 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
 }
 
 static int32_t OpenArchiveInternal(ZipArchive* archive, const char* debug_file_name) {
-  int32_t result = -1;
-  if ((result = MapCentralDirectory(debug_file_name, archive)) != 0) {
-    return result;
-  }
-
-  if ((result = ParseZipArchive(archive))) {
-    return result;
-  }
-
-  return 0;
+  int32_t result = MapCentralDirectory(debug_file_name, archive);
+  return result != 0 ? result : ParseZipArchive(archive);
 }
 
 int32_t OpenArchiveFd(int fd, const char* debug_file_name, ZipArchiveHandle* handle,
@@ -1185,7 +1174,7 @@ off64_t MappedZipFile::GetFileLength() const {
     return result;
   } else {
     if (base_ptr_ == nullptr) {
-      ALOGE("Zip: invalid file map\n");
+      ALOGE("Zip: invalid file map");
       return -1;
     }
     return static_cast<off64_t>(data_length_);
@@ -1196,12 +1185,12 @@ off64_t MappedZipFile::GetFileLength() const {
 bool MappedZipFile::ReadAtOffset(uint8_t* buf, size_t len, off64_t off) const {
   if (has_fd_) {
     if (!android::base::ReadFullyAtOffset(fd_, buf, len, off)) {
-      ALOGE("Zip: failed to read at offset %" PRId64 "\n", off);
+      ALOGE("Zip: failed to read at offset %" PRId64, off);
       return false;
     }
   } else {
     if (off < 0 || off > static_cast<off64_t>(data_length_)) {
-      ALOGE("Zip: invalid offset: %" PRId64 ", data length: %" PRId64 "\n", off, data_length_);
+      ALOGE("Zip: invalid offset: %" PRId64 ", data length: %" PRId64, off, data_length_);
       return false;
     }
     memcpy(buf, static_cast<const uint8_t*>(base_ptr_) + off, len);
@@ -1219,13 +1208,17 @@ bool ZipArchive::InitializeCentralDirectory(off64_t cd_start_offset, size_t cd_s
   if (mapped_zip.HasFd()) {
     directory_map = android::base::MappedFile::FromFd(mapped_zip.GetFileDescriptor(),
                                                       cd_start_offset, cd_size, PROT_READ);
-    if (!directory_map) return false;
+    if (!directory_map) {
+      ALOGE("Zip: failed to map central directory (offset %" PRId64 ", size %zu): %s",
+            cd_start_offset, cd_size, strerror(errno));
+      return false;
+    }
 
     CHECK_EQ(directory_map->size(), cd_size);
     central_directory.Initialize(directory_map->data(), 0 /*offset*/, cd_size);
   } else {
     if (mapped_zip.GetBasePtr() == nullptr) {
-      ALOGE("Zip: Failed to map central directory, bad mapped_zip base pointer\n");
+      ALOGE("Zip: Failed to map central directory, bad mapped_zip base pointer");
       return false;
     }
     if (static_cast<off64_t>(cd_start_offset) + static_cast<off64_t>(cd_size) >

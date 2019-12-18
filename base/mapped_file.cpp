@@ -38,15 +38,14 @@ static off64_t InitPageSize() {
 std::unique_ptr<MappedFile> MappedFile::FromFd(borrowed_fd fd, off64_t offset, size_t length,
                                                int prot) {
 #if defined(_WIN32)
-  auto file =
-      FromOsHandle(reinterpret_cast<HANDLE>(_get_osfhandle(fd.get())), offset, length, prot);
+  return FromOsHandle(reinterpret_cast<HANDLE>(_get_osfhandle(fd.get())), offset, length, prot);
 #else
-  auto file = FromOsHandle(fd.get(), offset, length, prot);
+  return FromOsHandle(fd.get(), offset, length, prot);
 #endif
-  return file ? std::make_unique<MappedFile>(std::move(file)) : std::unique_ptr<MappedFile>{};
 }
 
-MappedFile MappedFile::FromOsHandle(os_handle h, off64_t offset, size_t length, int prot) {
+std::unique_ptr<MappedFile> MappedFile::FromOsHandle(os_handle h, off64_t offset, size_t length,
+                                                     int prot) {
   static const off64_t page_size = InitPageSize();
   size_t slop = offset % page_size;
   off64_t file_offset = offset - slop;
@@ -59,28 +58,30 @@ MappedFile MappedFile::FromOsHandle(os_handle h, off64_t offset, size_t length, 
     // http://b/119818070 "app crashes when reading asset of zero length".
     // Return a MappedFile that's only valid for reading the size.
     if (length == 0 && ::GetLastError() == ERROR_FILE_INVALID) {
-      return MappedFile{const_cast<char*>(kEmptyBuffer), 0, 0, nullptr};
+      return std::unique_ptr<MappedFile>(
+          new MappedFile(const_cast<char*>(kEmptyBuffer), 0, 0, nullptr));
     }
-    return MappedFile(nullptr, 0, 0, nullptr);
+    return nullptr;
   }
   void* base = MapViewOfFile(handle, (prot & PROT_WRITE) ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ, 0,
                              file_offset, file_length);
   if (base == nullptr) {
     CloseHandle(handle);
-    return MappedFile(nullptr, 0, 0, nullptr);
+    return nullptr;
   }
-  return MappedFile{static_cast<char*>(base), length, slop, handle};
+  return std::unique_ptr<MappedFile>(
+      new MappedFile(static_cast<char*>(base), length, slop, handle));
 #else
   void* base = mmap(nullptr, file_length, prot, MAP_SHARED, h, file_offset);
   if (base == MAP_FAILED) {
     // http://b/119818070 "app crashes when reading asset of zero length".
     // mmap fails with EINVAL for a zero length region.
     if (errno == EINVAL && length == 0) {
-      return MappedFile{const_cast<char*>(kEmptyBuffer), 0, 0};
+      return std::unique_ptr<MappedFile>(new MappedFile(const_cast<char*>(kEmptyBuffer), 0, 0));
     }
-    return MappedFile(nullptr, 0, 0);
+    return nullptr;
   }
-  return MappedFile{static_cast<char*>(base), length, slop};
+  return std::unique_ptr<MappedFile>(new MappedFile(static_cast<char*>(base), length, slop));
 #endif
 }
 
