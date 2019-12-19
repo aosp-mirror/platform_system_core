@@ -26,9 +26,7 @@
 
 #include <initializer_list>
 
-__attribute__((weak)) extern "C" android_namespace_t* android_get_exported_namespace(const char*);
-__attribute__((weak)) extern "C" void* android_dlopen_ext(const char*, int,
-                                                          const android_dlextinfo*);
+extern "C" android_namespace_t* android_get_exported_namespace(const char*);
 
 namespace {
 
@@ -42,10 +40,8 @@ struct VendorNamespace {
 static VendorNamespace get_vendor_namespace() {
     static VendorNamespace result = ([] {
         for (const char* name : {"sphal", "default"}) {
-            if (android_get_exported_namespace != nullptr) {
-                if (android_namespace_t* ns = android_get_exported_namespace(name)) {
-                    return VendorNamespace{ns, name};
-                }
+            if (android_namespace_t* ns = android_get_exported_namespace(name)) {
+                return VendorNamespace{ns, name};
             }
         }
         return VendorNamespace{};
@@ -57,10 +53,6 @@ int android_is_in_vendor_process() {
     // Special case init, since when init runs, ld.config.<ver>.txt hasn't been
     // loaded (sysprop service isn't up for init to know <ver>).
     if (getpid() == 1) {
-        return 0;
-    }
-    if (android_get_exported_namespace == nullptr) {
-        ALOGD("android_get_exported_namespace() not available. Assuming system process.");
         return 0;
     }
 
@@ -76,10 +68,7 @@ void* android_load_sphal_library(const char* name, int flag) {
                 .flags = ANDROID_DLEXT_USE_NAMESPACE,
                 .library_namespace = vendor_namespace.ptr,
         };
-        void* handle = nullptr;
-        if (android_dlopen_ext != nullptr) {
-            handle = android_dlopen_ext(name, flag, &dlextinfo);
-        }
+        void* handle = android_dlopen_ext(name, flag, &dlextinfo);
         if (!handle) {
             ALOGE("Could not load %s from %s namespace: %s.", name, vendor_namespace.name,
                   dlerror());

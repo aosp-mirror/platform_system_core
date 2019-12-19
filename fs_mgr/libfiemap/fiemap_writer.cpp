@@ -386,43 +386,12 @@ static bool PinFile(int file_fd, const std::string& file_path, uint32_t fs_type)
     return true;
 }
 
-// Reserve space for the file on the file system and write it out to make sure the extents
-// don't come back unwritten. Return from this function with the kernel file offset set to 0.
-// If the filesystem is f2fs, then we also PIN the file on disk to make sure the blocks
-// aren't moved around.
-static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blocksz,
-                         uint64_t file_size, unsigned int fs_type,
-                         std::function<bool(uint64_t, uint64_t)> on_progress) {
-    switch (fs_type) {
-        case EXT4_SUPER_MAGIC:
-            break;
-        case F2FS_SUPER_MAGIC: {
-            bool supported;
-            if (!F2fsPinBeforeAllocate(file_fd, &supported)) {
-                return false;
-            }
-            if (supported && !PinFile(file_fd, file_path, fs_type)) {
-                return false;
-            }
-            break;
-        }
-        case MSDOS_SUPER_MAGIC:
-            // fallocate() is not supported, and not needed, since VFAT does not support holes.
-            // Instead we can perform a much faster allocation.
-            return FallocateFallback(file_fd, blocksz, file_size, file_path, on_progress);
-        default:
-            LOG(ERROR) << "Missing fallocate() support for file system " << fs_type;
-            return false;
-    }
-
-    if (fallocate(file_fd, FALLOC_FL_ZERO_RANGE, 0, file_size)) {
-        PLOG(ERROR) << "Failed to allocate space for file: " << file_path << " size: " << file_size;
-        return false;
-    }
-
-    // write zeroes in 'blocksz' byte increments until we reach file_size to make sure the data
-    // blocks are actually written to by the file system and thus getting rid of the holes in the
-    // file.
+// write zeroes in 'blocksz' byte increments until we reach file_size to make sure the data
+// blocks are actually written to by the file system and thus getting rid of the holes in the
+// file.
+static bool WriteZeroes(int file_fd, const std::string& file_path, size_t blocksz,
+                        uint64_t file_size,
+                        const std::function<bool(uint64_t, uint64_t)>& on_progress) {
     auto buffer = std::unique_ptr<void, decltype(&free)>(calloc(1, blocksz), free);
     if (buffer == nullptr) {
         LOG(ERROR) << "failed to allocate memory for writing file";
@@ -458,6 +427,50 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
 
     if (lseek64(file_fd, 0, SEEK_SET) < 0) {
         PLOG(ERROR) << "Failed to reset offset at the beginning of : " << file_path;
+        return false;
+    }
+    return true;
+}
+
+// Reserve space for the file on the file system and write it out to make sure the extents
+// don't come back unwritten. Return from this function with the kernel file offset set to 0.
+// If the filesystem is f2fs, then we also PIN the file on disk to make sure the blocks
+// aren't moved around.
+static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blocksz,
+                         uint64_t file_size, unsigned int fs_type,
+                         std::function<bool(uint64_t, uint64_t)> on_progress) {
+    bool need_explicit_writes = true;
+    switch (fs_type) {
+        case EXT4_SUPER_MAGIC:
+            break;
+        case F2FS_SUPER_MAGIC: {
+            bool supported;
+            if (!F2fsPinBeforeAllocate(file_fd, &supported)) {
+                return false;
+            }
+            if (supported) {
+                if (!PinFile(file_fd, file_path, fs_type)) {
+                    return false;
+                }
+                need_explicit_writes = false;
+            }
+            break;
+        }
+        case MSDOS_SUPER_MAGIC:
+            // fallocate() is not supported, and not needed, since VFAT does not support holes.
+            // Instead we can perform a much faster allocation.
+            return FallocateFallback(file_fd, blocksz, file_size, file_path, on_progress);
+        default:
+            LOG(ERROR) << "Missing fallocate() support for file system " << fs_type;
+            return false;
+    }
+
+    if (fallocate(file_fd, 0, 0, file_size)) {
+        PLOG(ERROR) << "Failed to allocate space for file: " << file_path << " size: " << file_size;
+        return false;
+    }
+
+    if (need_explicit_writes && !WriteZeroes(file_fd, file_path, blocksz, file_size, on_progress)) {
         return false;
     }
 

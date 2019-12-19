@@ -36,7 +36,7 @@ struct FileRegion {
     FileRegion(borrowed_fd fd, off64_t offset, size_t length)
         : mapped_(android::base::MappedFile::FromOsHandle(adb_get_os_handle(fd), offset, length,
                                                           PROT_READ)) {
-        if (mapped_.data() != nullptr) {
+        if (mapped_ != nullptr) {
             return;
         }
 
@@ -50,14 +50,14 @@ struct FileRegion {
         }
     }
 
-    const char* data() const { return mapped_.data() ? mapped_.data() : buffer_.data(); }
-    size_t size() const { return mapped_.data() ? mapped_.size() : buffer_.size(); }
+    const char* data() const { return mapped_ ? mapped_->data() : buffer_.data(); }
+    size_t size() const { return mapped_ ? mapped_->size() : buffer_.size(); }
 
   private:
     FileRegion() = default;
     DISALLOW_COPY_AND_ASSIGN(FileRegion);
 
-    android::base::MappedFile mapped_;
+    std::unique_ptr<android::base::MappedFile> mapped_;
     std::string buffer_;
 };
 }  // namespace
