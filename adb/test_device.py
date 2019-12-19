@@ -536,6 +536,36 @@ class ShellTest(DeviceTest):
         for i, success in result.iteritems():
             self.assertTrue(success)
 
+    def disabled_test_parallel(self):
+        """Spawn a bunch of `adb shell` instances in parallel.
+
+        This was broken historically due to the use of select, which only works
+        for fds that are numerically less than 1024.
+
+        Bug: http://b/141955761"""
+
+        n_procs = 2048
+        procs = dict()
+        for i in xrange(0, n_procs):
+            procs[i] = subprocess.Popen(
+                ['adb', 'shell', 'read foo; echo $foo; read rc; exit $rc'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE
+            )
+
+        for i in xrange(0, n_procs):
+            procs[i].stdin.write("%d\n" % i)
+
+        for i in xrange(0, n_procs):
+            response = procs[i].stdout.readline()
+            assert(response == "%d\n" % i)
+
+        for i in xrange(0, n_procs):
+            procs[i].stdin.write("%d\n" % (i % 256))
+
+        for i in xrange(0, n_procs):
+            assert(procs[i].wait() == i % 256)
+
 
 class ArgumentEscapingTest(DeviceTest):
     def test_shell_escaping(self):
