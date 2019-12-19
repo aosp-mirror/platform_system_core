@@ -21,17 +21,22 @@
 // =========================================================================
 cc_defaults {
     name: "libstatspush_compat_defaults",
-    srcs: ["StatsEventCompat.cpp"],
+    srcs: [
+        "statsd_writer.c",
+        "stats_event_list.c",
+        "StatsEventCompat.cpp"
+    ],
     cflags: [
         "-Wall",
         "-Werror",
+        "-DWRITE_TO_STATSD=1",
+        "-DWRITE_TO_LOGD=0",
     ],
     header_libs: ["libstatssocket_headers"],
     static_libs: [
         "libbase",
         "liblog",
-        "libstatssocket_q",
-        "libutils"
+        "libutils",
     ],
 }
 
