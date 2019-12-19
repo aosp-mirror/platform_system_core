@@ -101,7 +101,7 @@ static int statsdOpen() {
             strcpy(un.sun_path, "/dev/socket/statsdw");
 
             if (TEMP_FAILURE_RETRY(
-                    connect(sock, (struct sockaddr*)&un, sizeof(struct sockaddr_un))) < 0) {
+                        connect(sock, (struct sockaddr*)&un, sizeof(struct sockaddr_un))) < 0) {
                 ret = -errno;
                 switch (ret) {
                     case -ENOTCONN:
