@@ -921,6 +921,25 @@ class SnapshotUpdateTest : public SnapshotTest {
         return AssertionSuccess();
     }
 
+    // Create fake install operations to grow the COW device size.
+    void AddOperation(PartitionUpdate* partition_update, uint64_t size_bytes = 0) {
+        auto e = partition_update->add_operations()->add_dst_extents();
+        e->set_start_block(0);
+        if (size_bytes == 0) {
+            size_bytes = GetSize(partition_update);
+        }
+        e->set_num_blocks(size_bytes / manifest_.block_size());
+    }
+
+    void AddOperationForPartitions(std::vector<PartitionUpdate*> partitions = {}) {
+        if (partitions.empty()) {
+            partitions = {sys_, vnd_, prd_};
+        }
+        for (auto* partition : partitions) {
+            AddOperation(partition);
+        }
+    }
+
     std::unique_ptr<TestPartitionOpener> opener_;
     DeltaArchiveManifest manifest_;
     std::unique_ptr<MetadataBuilder> src_;
@@ -948,12 +967,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     SetSize(vnd_, partition_size);
     SetSize(prd_, partition_size);
 
-    // Create fake install operations to grow the COW device size.
-    for (auto& partition : {sys_, vnd_, prd_}) {
-        auto e = partition->add_operations()->add_dst_extents();
-        e->set_start_block(0);
-        e->set_num_blocks(GetSize(partition) / manifest_.block_size());
-    }
+    AddOperationForPartitions();
 
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -1089,12 +1103,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->UnmapUpdateSnapshot("sys_b"));
 
-    // Create fake install operations to grow the COW device size.
-    for (auto& partition : {sys_, vnd_, prd_}) {
-        auto e = partition->add_operations()->add_dst_extents();
-        e->set_start_block(0);
-        e->set_num_blocks(GetSize(partition) / manifest_.block_size());
-    }
+    AddOperationForPartitions();
 
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
@@ -1239,10 +1248,8 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
     group_->set_size(kRetrofitGroupSize);
     for (auto* partition : {sys_, vnd_, prd_}) {
         SetSize(partition, 2_MiB);
-        auto* e = partition->add_operations()->add_dst_extents();
-        e->set_start_block(0);
-        e->set_num_blocks(2_MiB / manifest_.block_size());
     }
+    AddOperationForPartitions();
 
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
@@ -1285,9 +1292,7 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     }
 
     // Add operations for sys. The whole device is written.
-    auto e = sys_->add_operations()->add_dst_extents();
-    e->set_start_block(0);
-    e->set_num_blocks(GetSize(sys_) / manifest_.block_size());
+    AddOperation(sys_);
 
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -1477,10 +1482,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
     const auto block_size = manifest_.block_size();
     SetSize(sys_, partition_size);
-
-    auto e = sys_->add_operations()->add_dst_extents();
-    e->set_start_block(0);
-    e->set_num_blocks(data_size / block_size);
+    AddOperation(sys_, data_size);
 
     // Set hastree extents.
     sys_->mutable_hash_tree_data_extent()->set_start_block(0);
@@ -1525,9 +1527,7 @@ TEST_F(SnapshotUpdateTest, Overflow) {
     const auto actual_write_size = GetSize(sys_);
     const auto declared_write_size = actual_write_size - 1_MiB;
 
-    auto e = sys_->add_operations()->add_dst_extents();
-    e->set_start_block(0);
-    e->set_num_blocks(declared_write_size / manifest_.block_size());
+    AddOperation(sys_, declared_write_size);
 
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -1544,6 +1544,45 @@ TEST_F(SnapshotUpdateTest, Overflow) {
 
     ASSERT_FALSE(sm->FinishedSnapshotWrites())
             << "FinishedSnapshotWrites should detect overflow of CoW device.";
+}
+
+TEST_F(SnapshotUpdateTest, WaitForMerge) {
+    AddOperationForPartitions();
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    // Write some data to target partitions.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
+    }
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    {
+        auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+        ASSERT_NE(nullptr, init);
+        ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    }
+
+    auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_NE(nullptr, new_sm);
+
+    auto waiter = std::async(std::launch::async, [&new_sm] { return new_sm->WaitForMerge(); });
+    ASSERT_EQ(std::future_status::timeout, waiter.wait_for(1s))
+            << "WaitForMerge should block when not initiated";
+
+    auto merger =
+            std::async(std::launch::async, [&new_sm] { return new_sm->InitiateMergeAndWait(); });
+    // Small images, so should be merged pretty quickly.
+    ASSERT_EQ(std::future_status::ready, waiter.wait_for(3s)) << "WaitForMerge did not finish";
+    ASSERT_TRUE(waiter.get());
+    ASSERT_THAT(merger.get(), AnyOf(UpdateState::None, UpdateState::MergeCompleted));
 }
 
 class FlashAfterUpdateTest : public SnapshotUpdateTest,

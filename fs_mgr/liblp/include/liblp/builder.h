@@ -318,6 +318,8 @@ class MetadataBuilder {
 
     // Set the LP_METADATA_AUTO_SLOT_SUFFIXING flag.
     void SetAutoSlotSuffixing();
+    // Set the LP_HEADER_FLAG_VIRTUAL_AB_DEVICE flag.
+    void SetVirtualABDeviceFlag();
 
     // If set, checks for slot suffixes will be ignored internally.
     void IgnoreSlotSuffixing();

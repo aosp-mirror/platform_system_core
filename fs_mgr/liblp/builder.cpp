@@ -1125,6 +1125,11 @@ void MetadataBuilder::SetAutoSlotSuffixing() {
     auto_slot_suffixing_ = true;
 }
 
+void MetadataBuilder::SetVirtualABDeviceFlag() {
+    RequireExpandedMetadataHeader();
+    header_.flags |= LP_HEADER_FLAG_VIRTUAL_AB_DEVICE;
+}
+
 bool MetadataBuilder::IsABDevice() {
     return !IPropertyFetcher::GetInstance()->GetProperty("ro.boot.slot_suffix", "").empty();
 }

@@ -25,6 +25,7 @@
 
 #include <android-base/logging.h>
 
+#include "fdevent/fdevent.h"
 #include "sysdeps/uio.h"
 
 // Essentially std::vector<char>, except without zero initialization or reallocation.
@@ -244,4 +245,98 @@ struct IOVector {
     size_t begin_offset_ = 0;
     size_t start_index_ = 0;
     std::vector<block_type> chain_;
+};
+
+// An implementation of weak pointers tied to the fdevent run loop.
+//
+// This allows for code to submit a request for an object, and upon receiving
+// a response, know whether the object is still alive, or has been destroyed
+// because of other reasons. We keep a list of living weak_ptrs in each object,
+// and clear the weak_ptrs when the object is destroyed. This is safe, because
+// we require that both the destructor of the referent and the get method on
+// the weak_ptr are executed on the main thread.
+template <typename T>
+struct enable_weak_from_this;
+
+template <typename T>
+struct weak_ptr {
+    weak_ptr() = default;
+    explicit weak_ptr(T* ptr) { reset(ptr); }
+    weak_ptr(const weak_ptr& copy) { reset(copy.get()); }
+
+    weak_ptr(weak_ptr&& move) {
+        reset(move.get());
+        move.reset();
+    }
+
+    ~weak_ptr() { reset(); }
+
+    weak_ptr& operator=(const weak_ptr& copy) {
+        if (&copy == this) {
+            return *this;
+        }
+
+        reset(copy.get());
+        return *this;
+    }
+
+    weak_ptr& operator=(weak_ptr&& move) {
+        if (&move == this) {
+            return *this;
+        }
+
+        reset(move.get());
+        move.reset();
+        return *this;
+    }
+
+    T* get() {
+        check_main_thread();
+        return ptr_;
+    }
+
+    void reset(T* ptr = nullptr) {
+        check_main_thread();
+
+        if (ptr == ptr_) {
+            return;
+        }
+
+        if (ptr_) {
+            ptr_->weak_ptrs_.erase(
+                    std::remove(ptr_->weak_ptrs_.begin(), ptr_->weak_ptrs_.end(), this));
+        }
+
+        ptr_ = ptr;
+        if (ptr_) {
+            ptr_->weak_ptrs_.push_back(this);
+        }
+    }
+
+  private:
+    friend struct enable_weak_from_this<T>;
+    T* ptr_ = nullptr;
+};
+
+template <typename T>
+struct enable_weak_from_this {
+    ~enable_weak_from_this() {
+        if (!weak_ptrs_.empty()) {
+            check_main_thread();
+            for (auto& weak : weak_ptrs_) {
+                weak->ptr_ = nullptr;
+            }
+            weak_ptrs_.clear();
+        }
+    }
+
+    weak_ptr<T> weak() { return weak_ptr<T>(static_cast<T*>(this)); }
+
+    void schedule_deletion() {
+        fdevent_run_on_main_thread([this]() { delete this; });
+    }
+
+  private:
+    friend struct weak_ptr<T>;
+    std::vector<weak_ptr<T>*> weak_ptrs_;
 };
