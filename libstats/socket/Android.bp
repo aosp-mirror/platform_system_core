@@ -20,7 +20,10 @@
 cc_library {
     name: "libstatssocket",
     srcs: [
+        "stats_buffer_writer.c",
         "stats_event.c",
+        // TODO(b/145573568): Remove stats_event_list once stats_event
+        // migration is complete.
         "stats_event_list.c",
         "statsd_writer.c",
     ],
@@ -36,5 +39,31 @@ cc_library {
     shared_libs: [
         "libcutils",
         "liblog",
+    ],
+}
+
+cc_library_headers {
+    name: "libstatssocket_headers",
+    export_include_dirs: ["include"],
+    host_supported: true,
+}
+
+cc_benchmark {
+    name: "libstatssocket_benchmark",
+    srcs: [
+        "benchmark/main.cpp",
+        "benchmark/stats_event_benchmark.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: [
+        "libstatssocket",
+    ],
+    shared_libs: [
+        "libcutils",
+        "liblog",
+        "libgtest_prod",
     ],
 }

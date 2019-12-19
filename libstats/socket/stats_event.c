@@ -18,9 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "include/stats_event_list.h"
+#include "stats_buffer_writer.h"
 
-#define STATS_EVENT_TAG 1937006964
 #define LOGGER_ENTRY_MAX_PAYLOAD 4068
 // Max payload size is 4 bytes less as 4 bytes are reserved for stats_eventTag.
 // See android_util_Stats_Log.cpp
@@ -39,13 +38,13 @@
 // The stats_event struct holds the serialized encoding of an event
 // within a buf. Also includes other required fields.
 struct stats_event {
-    uint8_t buf[MAX_EVENT_PAYLOAD];
+    uint8_t* buf;
     size_t lastFieldPos;  // location of last field within the buf
     size_t size;          // number of valid bytes within buffer
     uint32_t numElements;
     uint32_t atomId;
     uint32_t errors;
-    uint32_t tag;
+    bool truncate;
     bool built;
 };
 
@@ -58,12 +57,11 @@ static int64_t get_elapsed_realtime_ns() {
 
 struct stats_event* stats_event_obtain() {
     struct stats_event* event = malloc(sizeof(struct stats_event));
-
-    memset(event->buf, 0, MAX_EVENT_PAYLOAD);
+    event->buf = (uint8_t*)calloc(MAX_EVENT_PAYLOAD, 1);
     event->buf[0] = OBJECT_TYPE;
     event->atomId = 0;
     event->errors = 0;
-    event->tag = STATS_EVENT_TAG;
+    event->truncate = true;  // truncate for both pulled and pushed atoms
     event->built = false;
 
     // place the timestamp
@@ -79,6 +77,7 @@ struct stats_event* stats_event_obtain() {
 }
 
 void stats_event_release(struct stats_event* event) {
+    free(event->buf);
     free(event);
 }
 
@@ -132,7 +131,7 @@ static void append_float(struct stats_event* event, float value) {
     }
 }
 
-static void append_byte_array(struct stats_event* event, uint8_t* buf, size_t size) {
+static void append_byte_array(struct stats_event* event, const uint8_t* buf, size_t size) {
     if (!overflows(event, size)) {
         memcpy(&event->buf[event->size], buf, size);
         event->size += size;
@@ -185,7 +184,7 @@ void stats_event_write_bool(struct stats_event* event, bool value) {
     append_bool(event, value);
 }
 
-void stats_event_write_byte_array(struct stats_event* event, uint8_t* buf, size_t numBytes) {
+void stats_event_write_byte_array(struct stats_event* event, const uint8_t* buf, size_t numBytes) {
     if (event->errors) return;
 
     start_field(event, BYTE_ARRAY_TYPE);
@@ -193,17 +192,17 @@ void stats_event_write_byte_array(struct stats_event* event, uint8_t* buf, size_
     append_byte_array(event, buf, numBytes);
 }
 
-// Buf is assumed to be encoded using UTF8
-void stats_event_write_string8(struct stats_event* event, const char* buf) {
+// Value is assumed to be encoded using UTF8
+void stats_event_write_string8(struct stats_event* event, const char* value) {
     if (event->errors) return;
 
     start_field(event, STRING_TYPE);
-    append_string(event, buf);
+    append_string(event, value);
 }
 
 // Tags are assumed to be encoded using UTF8
-void stats_event_write_attribution_chain(struct stats_event* event, uint32_t* uids,
-                                         const char** tags, uint8_t numNodes) {
+void stats_event_write_attribution_chain(struct stats_event* event, const uint32_t* uids,
+                                         const char* const* tags, uint8_t numNodes) {
     if (numNodes > MAX_BYTE_VALUE) event->errors |= ERROR_ATTRIBUTION_CHAIN_TOO_LONG;
     if (event->errors) return;
 
@@ -297,6 +296,10 @@ uint32_t stats_event_get_errors(struct stats_event* event) {
     return event->errors;
 }
 
+void stats_event_truncate_buffer(struct stats_event* event, bool truncate) {
+    event->truncate = truncate;
+}
+
 void stats_event_build(struct stats_event* event) {
     if (event->built) return;
 
@@ -317,17 +320,35 @@ void stats_event_build(struct stats_event* event) {
         event->size = POS_FIRST_FIELD + sizeof(uint8_t) + sizeof(uint32_t);
     }
 
+    // Truncate the buffer to the appropriate length in order to limit our
+    // memory usage.
+    if (event->truncate) event->buf = (uint8_t*)realloc(event->buf, event->size);
+
     event->built = true;
 }
 
-void stats_event_write(struct stats_event* event) {
+int stats_event_write(struct stats_event* event) {
     stats_event_build(event);
-
-    // Prepare iovecs for write to statsd.
-    struct iovec vecs[2];
-    vecs[0].iov_base = &event->tag;
-    vecs[0].iov_len = sizeof(event->tag);
-    vecs[1].iov_base = &event->buf;
-    vecs[1].iov_len = event->size;
-    write_to_statsd(vecs, 2);
+    return write_buffer_to_statsd(&event->buf, event->size, event->atomId);
 }
+
+struct stats_event_api_table table = {
+        stats_event_obtain,
+        stats_event_build,
+        stats_event_write,
+        stats_event_release,
+        stats_event_set_atom_id,
+        stats_event_write_int32,
+        stats_event_write_int64,
+        stats_event_write_float,
+        stats_event_write_bool,
+        stats_event_write_byte_array,
+        stats_event_write_string8,
+        stats_event_write_attribution_chain,
+        stats_event_write_key_value_pairs,
+        stats_event_add_bool_annotation,
+        stats_event_add_int32_annotation,
+        stats_event_get_atom_id,
+        stats_event_get_buffer,
+        stats_event_get_errors,
+};
