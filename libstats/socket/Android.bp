@@ -40,6 +40,14 @@ cc_library {
         "libcutils",
         "liblog",
     ],
+
+    // enumerate stable entry points for APEX use
+    stubs: {
+        symbol_file: "libstatssocket.map.txt",
+        versions: [
+            "1",
+        ],
+    }
 }
 
 cc_library_headers {
