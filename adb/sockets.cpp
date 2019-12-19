@@ -625,7 +625,8 @@ bool parse_host_service(std::string_view* out_serial, std::string_view* out_comm
         return true;
     };
 
-    static constexpr std::string_view prefixes[] = {"usb:", "product:", "model:", "device:"};
+    static constexpr std::string_view prefixes[] = {
+            "usb:", "product:", "model:", "device:", "localfilesystem:"};
     for (std::string_view prefix : prefixes) {
         if (command.starts_with(prefix)) {
             consume(prefix.size());
