@@ -455,6 +455,7 @@ private:
 };
 
 #undef COMPARE_WEAK
+#undef COMPARE_WEAK_FUNCTIONAL
 
 // ---------------------------------------------------------------------------
 // No user serviceable parts below here.
