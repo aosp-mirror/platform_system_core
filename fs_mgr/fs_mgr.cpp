@@ -34,6 +34,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
@@ -42,6 +43,7 @@
 #include <utility>
 #include <vector>
 
+#include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -94,6 +96,7 @@ using android::base::Basename;
 using android::base::GetBoolProperty;
 using android::base::Realpath;
 using android::base::StartsWith;
+using android::base::Timer;
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
@@ -1358,6 +1361,36 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
     return ret;
 }
 
+static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
+    Timer t;
+    // TODO(b/135984674): should be configured via a read-only property.
+    std::chrono::milliseconds timeout = 5s;
+    while (true) {
+        bool umount_done = true;
+        Fstab proc_mounts;
+        if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
+            LERROR << "Can't read /proc/mounts";
+            return -1;
+        }
+        // Now proceed with other bind mounts on top of /data.
+        for (const auto& entry : proc_mounts) {
+            if (entry.blk_device == block_device) {
+                if (umount2(entry.mount_point.c_str(), 0) != 0) {
+                    umount_done = false;
+                }
+            }
+        }
+        if (umount_done) {
+            LINFO << "Unmounting /data took " << t;
+            return true;
+        }
+        if (t.duration() > timeout) {
+            return false;
+        }
+        std::this_thread::sleep_for(50ms);
+    }
+}
+
 // TODO(b/143970043): return different error codes based on which step failed.
 int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
     Fstab proc_mounts;
@@ -1401,17 +1434,8 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
         }
     } else {
         LINFO << "Unmounting /data before remounting into checkpointing mode";
-        // First make sure that all the bind-mounts on top of /data are unmounted.
-        for (const auto& entry : proc_mounts) {
-            if (entry.blk_device == block_device && entry.mount_point != "/data") {
-                LINFO << "Unmounting bind-mount " << entry.mount_point;
-                if (umount2(entry.mount_point.c_str(), UMOUNT_NOFOLLOW) != 0) {
-                    PWARNING << "Failed to unmount " << entry.mount_point;
-                }
-            }
-        }
-        if (umount2("/data", UMOUNT_NOFOLLOW) != 0) {
-            PERROR << "Failed to umount /data";
+        if (!fs_mgr_unmount_all_data_mounts(block_device)) {
+            LERROR << "Failed to umount /data";
             return -1;
         }
         DeviceMapper& dm = DeviceMapper::Instance();
