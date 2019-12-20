@@ -47,3 +47,23 @@ cc_library_headers {
     export_include_dirs: ["include"],
     host_supported: true,
 }
+
+cc_benchmark {
+    name: "libstatssocket_benchmark",
+    srcs: [
+        "benchmark/main.cpp",
+        "benchmark/stats_event_benchmark.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: [
+        "libstatssocket",
+    ],
+    shared_libs: [
+        "libcutils",
+        "liblog",
+        "libgtest_prod",
+    ],
+}
