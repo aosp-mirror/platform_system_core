@@ -193,12 +193,12 @@ void stats_event_write_byte_array(struct stats_event* event, const uint8_t* buf,
     append_byte_array(event, buf, numBytes);
 }
 
-// Buf is assumed to be encoded using UTF8
-void stats_event_write_string8(struct stats_event* event, const char* buf) {
+// Value is assumed to be encoded using UTF8
+void stats_event_write_string8(struct stats_event* event, const char* value) {
     if (event->errors) return;
 
     start_field(event, STRING_TYPE);
-    append_string(event, buf);
+    append_string(event, value);
 }
 
 // Tags are assumed to be encoded using UTF8
@@ -320,8 +320,28 @@ void stats_event_build(struct stats_event* event) {
     event->built = true;
 }
 
-void stats_event_write(struct stats_event* event) {
+int stats_event_write(struct stats_event* event) {
     stats_event_build(event);
-
-    write_buffer_to_statsd(&event->buf, event->size, event->atomId);
+    return write_buffer_to_statsd(&event->buf, event->size, event->atomId);
 }
+
+struct stats_event_api_table table = {
+        stats_event_obtain,
+        stats_event_build,
+        stats_event_write,
+        stats_event_release,
+        stats_event_set_atom_id,
+        stats_event_write_int32,
+        stats_event_write_int64,
+        stats_event_write_float,
+        stats_event_write_bool,
+        stats_event_write_byte_array,
+        stats_event_write_string8,
+        stats_event_write_attribution_chain,
+        stats_event_write_key_value_pairs,
+        stats_event_add_bool_annotation,
+        stats_event_add_int32_annotation,
+        stats_event_get_atom_id,
+        stats_event_get_buffer,
+        stats_event_get_errors,
+};
