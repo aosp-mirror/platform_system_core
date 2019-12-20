@@ -95,14 +95,14 @@ void stats_event_write_int64(struct stats_event* event, int64_t value);
 void stats_event_write_float(struct stats_event* event, float value);
 void stats_event_write_bool(struct stats_event* event, bool value);
 
-void stats_event_write_byte_array(struct stats_event* event, uint8_t* buf, size_t numBytes);
+void stats_event_write_byte_array(struct stats_event* event, const uint8_t* buf, size_t numBytes);
 
 // Buf must be null-terminated.
 void stats_event_write_string8(struct stats_event* event, const char* buf);
 
 // Tags must be null-terminated.
-void stats_event_write_attribution_chain(struct stats_event* event, uint32_t* uids,
-                                         const char** tags, uint8_t numNodes);
+void stats_event_write_attribution_chain(struct stats_event* event, const uint32_t* uids,
+                                         const char* const* tags, uint8_t numNodes);
 
 /* key_value_pair struct can be constructed as follows:
  *    struct key_value_pair pair = {.key = key, .valueType = STRING_TYPE,

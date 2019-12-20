@@ -132,7 +132,7 @@ static void append_float(struct stats_event* event, float value) {
     }
 }
 
-static void append_byte_array(struct stats_event* event, uint8_t* buf, size_t size) {
+static void append_byte_array(struct stats_event* event, const uint8_t* buf, size_t size) {
     if (!overflows(event, size)) {
         memcpy(&event->buf[event->size], buf, size);
         event->size += size;
@@ -185,7 +185,7 @@ void stats_event_write_bool(struct stats_event* event, bool value) {
     append_bool(event, value);
 }
 
-void stats_event_write_byte_array(struct stats_event* event, uint8_t* buf, size_t numBytes) {
+void stats_event_write_byte_array(struct stats_event* event, const uint8_t* buf, size_t numBytes) {
     if (event->errors) return;
 
     start_field(event, BYTE_ARRAY_TYPE);
@@ -202,8 +202,8 @@ void stats_event_write_string8(struct stats_event* event, const char* buf) {
 }
 
 // Tags are assumed to be encoded using UTF8
-void stats_event_write_attribution_chain(struct stats_event* event, uint32_t* uids,
-                                         const char** tags, uint8_t numNodes) {
+void stats_event_write_attribution_chain(struct stats_event* event, const uint32_t* uids,
+                                         const char* const* tags, uint8_t numNodes) {
     if (numNodes > MAX_BYTE_VALUE) event->errors |= ERROR_ATTRIBUTION_CHAIN_TOO_LONG;
     if (event->errors) return;
 
