@@ -1944,4 +1944,23 @@ TEST_F(ElfInterfaceTest, get_load_bias_exec_negative_64) {
   CheckLoadBiasInFirstExecPhdr<Elf64_Ehdr, Elf64_Phdr, ElfInterface64>(0x5000, 0x1000, -0x4000);
 }
 
+TEST_F(ElfInterfaceTest, huge_gnu_debugdata_size) {
+  ElfInterfaceFake interface(nullptr);
+
+  interface.FakeSetGnuDebugdataOffset(0x1000);
+  interface.FakeSetGnuDebugdataSize(0xffffffffffffffffUL);
+  ASSERT_TRUE(interface.CreateGnuDebugdataMemory() == nullptr);
+
+  interface.FakeSetGnuDebugdataSize(0x4000000000000UL);
+  ASSERT_TRUE(interface.CreateGnuDebugdataMemory() == nullptr);
+
+  // This should exceed the size_t value of the first allocation.
+#if defined(__LP64__)
+  interface.FakeSetGnuDebugdataSize(0x3333333333333334ULL);
+#else
+  interface.FakeSetGnuDebugdataSize(0x33333334);
+#endif
+  ASSERT_TRUE(interface.CreateGnuDebugdataMemory() == nullptr);
+}
+
 }  // namespace unwindstack
