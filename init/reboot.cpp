@@ -834,7 +834,7 @@ static void UserspaceRebootWatchdogThread() {
 }
 
 static void HandleUserspaceReboot() {
-    if (!android::sysprop::InitProperties::userspace_reboot_in_progress().value_or(false)) {
+    if (!android::sysprop::InitProperties::is_userspace_reboot_supported().value_or(false)) {
         LOG(ERROR) << "Attempted a userspace reboot on a device that doesn't support it";
         return;
     }
