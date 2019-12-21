@@ -151,6 +151,20 @@ static bool ActivateFlattenedApexesIfPossible() {
     return true;
 }
 
+static Result<void> MountLinkerConfigForDefaultNamespace() {
+    // No need to mount linkerconfig for default mount namespace if the path does not exist (which
+    // would mean it is already mounted)
+    if (access("/linkerconfig/default", 0) != 0) {
+        return {};
+    }
+
+    if (mount("/linkerconfig/default", "/linkerconfig", nullptr, MS_BIND | MS_REC, nullptr) != 0) {
+        return ErrnoError() << "Failed to mount linker configuration for default mount namespace.";
+    }
+
+    return {};
+}
+
 static android::base::unique_fd bootstrap_ns_fd;
 static android::base::unique_fd default_ns_fd;
 
@@ -220,6 +234,11 @@ bool SwitchToDefaultMountNamespace() {
     if (default_ns_id != GetMountNamespaceId()) {
         if (setns(default_ns_fd.get(), CLONE_NEWNS) == -1) {
             PLOG(ERROR) << "Failed to switch back to the default mount namespace.";
+            return false;
+        }
+
+        if (auto result = MountLinkerConfigForDefaultNamespace(); !result) {
+            LOG(ERROR) << result.error();
             return false;
         }
     }

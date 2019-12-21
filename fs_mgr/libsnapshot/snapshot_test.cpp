@@ -606,17 +606,17 @@ enum class Request { UNKNOWN, LOCK_SHARED, LOCK_EXCLUSIVE, UNLOCK, EXIT };
 std::ostream& operator<<(std::ostream& os, Request request) {
     switch (request) {
         case Request::LOCK_SHARED:
-            return os << "LOCK_SHARED";
+            return os << "Shared";
         case Request::LOCK_EXCLUSIVE:
-            return os << "LOCK_EXCLUSIVE";
+            return os << "Exclusive";
         case Request::UNLOCK:
-            return os << "UNLOCK";
+            return os << "Unlock";
         case Request::EXIT:
-            return os << "EXIT";
+            return os << "Exit";
         case Request::UNKNOWN:
             [[fallthrough]];
         default:
-            return os << "UNKNOWN";
+            return os << "Unknown";
     }
 }
 
@@ -746,7 +746,7 @@ INSTANTIATE_TEST_SUITE_P(
                         LockTestParam{Request::LOCK_SHARED, Request::LOCK_EXCLUSIVE}),
         [](const testing::TestParamInfo<LockTestP::ParamType>& info) {
             std::stringstream ss;
-            ss << info.param.first << "_" << info.param.second;
+            ss << info.param.first << info.param.second;
             return ss.str();
         });
 

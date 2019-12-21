@@ -834,6 +834,10 @@ static void UserspaceRebootWatchdogThread() {
 }
 
 static void HandleUserspaceReboot() {
+    if (!android::sysprop::InitProperties::is_userspace_reboot_supported().value_or(false)) {
+        LOG(ERROR) << "Attempted a userspace reboot on a device that doesn't support it";
+        return;
+    }
     // Spinnig up a separate thread will fail the setns call later in the boot sequence.
     // Fork a new process to monitor userspace reboot while we are investigating a better solution.
     pid_t pid = fork();
