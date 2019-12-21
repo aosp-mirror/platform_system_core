@@ -29,18 +29,27 @@ namespace unwindstack {
 class MemoryBuffer : public Memory {
  public:
   MemoryBuffer() = default;
-  virtual ~MemoryBuffer() = default;
+  virtual ~MemoryBuffer() { free(raw_); }
 
   size_t Read(uint64_t addr, void* dst, size_t size) override;
 
   uint8_t* GetPtr(size_t offset);
 
-  void Resize(size_t size) { raw_.resize(size); }
+  bool Resize(size_t size) {
+    raw_ = reinterpret_cast<uint8_t*>(realloc(raw_, size));
+    if (raw_ == nullptr) {
+      size_ = 0;
+      return false;
+    }
+    size_ = size;
+    return true;
+  }
 
-  uint64_t Size() { return raw_.size(); }
+  uint64_t Size() { return size_; }
 
  private:
-  std::vector<uint8_t> raw_;
+  uint8_t* raw_ = nullptr;
+  size_t size_ = 0;
 };
 
 }  // namespace unwindstack
