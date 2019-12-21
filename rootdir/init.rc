@@ -978,9 +978,11 @@ on init && property:ro.debuggable=1
 
 on userspace-reboot-requested
   # TODO(b/135984674): reset all necessary properties here.
-  setprop sys.boot_completed 0
-  setprop sys.init.updatable_crashing 0
+  setprop sys.boot_completed ""
+  setprop sys.init.updatable_crashing ""
+  setprop sys.init.updatable_crashing_process_name ""
   setprop apexd.status ""
+  setprop sys.user.0.ce_available ""
 
 on userspace-reboot-fs-remount
   # Make sure that vold is running.
