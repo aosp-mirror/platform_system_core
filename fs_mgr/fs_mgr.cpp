@@ -1370,7 +1370,7 @@ static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
         Fstab proc_mounts;
         if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
             LERROR << "Can't read /proc/mounts";
-            return -1;
+            return false;
         }
         // Now proceed with other bind mounts on top of /data.
         for (const auto& entry : proc_mounts) {
