@@ -88,7 +88,7 @@ endif # ifneq ($(lib_list_from_prebuilts),true)
 # $(2): output file with the filtered list of lib names
 $(LOCAL_BUILT_MODULE): private-filter-out-private-libs = \
   paste -sd ":" $(1) > $(2) && \
-  cat $(PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE) | xargs -n 1 -I privatelib bash -c "sed -i.bak 's/privatelib//' $(2)" && \
+  while read -r privatelib; do sed -i.bak "s/$$privatelib//" $(2) ; done < $(PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE) && \
   sed -i.bak -e 's/::\+/:/g ; s/^:\+// ; s/:\+$$//' $(2) && \
   rm -f $(2).bak
 $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES_FILE := $(llndk_libraries_file)
@@ -139,8 +139,9 @@ else
 endif
 
 	$(hide) echo -n > $(PRIVATE_INTERMEDIATES_DIR)/private_llndk && \
-	cat $(PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE) | \
-	xargs -n 1 -I privatelib bash -c "(grep privatelib $(PRIVATE_LLNDK_LIBRARIES_FILE) || true) >> $(PRIVATE_INTERMEDIATES_DIR)/private_llndk" && \
+	while read -r privatelib; \
+	do (grep $$privatelib $(PRIVATE_LLNDK_LIBRARIES_FILE) || true) >> $(PRIVATE_INTERMEDIATES_DIR)/private_llndk ; \
+	done < $(PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE) && \
 	paste -sd ":" $(PRIVATE_INTERMEDIATES_DIR)/private_llndk | \
 	sed -i.bak -e "s?%PRIVATE_LLNDK_LIBRARIES%?$$(cat -)?g" $@
 

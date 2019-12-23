@@ -143,6 +143,7 @@ namespace.default.link.runtime.shared_libs += libandroidicu.so
 
 # TODO(b/122876336): Remove libpac.so once it's migrated to Webview
 namespace.default.link.runtime.shared_libs += libpac.so
+namespace.default.link.runtime.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 # When libnetd_resolv.so can't be found in the default namespace, search for it
 # in the resolv namespace. Don't allow any other libraries from the resolv namespace
@@ -363,13 +364,15 @@ namespace.vndk.asan.permitted.paths +=           /system/${LIB}/vndk-sp%VNDK_VER
 # The "vndk" namespace links to "default" namespace for LLNDK libs and links to
 # "sphal" namespace for vendor libs.  The ordering matters.  The "default"
 # namespace has higher priority than the "sphal" namespace.
-namespace.vndk.links = default,sphal
+namespace.vndk.links = default,sphal,runtime
 
 # When these NDK libs are required inside this namespace, then it is redirected
 # to the default namespace. This is possible since their ABI is stable across
 # Android releases.
 namespace.vndk.link.default.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.default.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
+
+namespace.vndk.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
 
 # Allow VNDK-SP extensions to use vendor libraries
 namespace.vndk.link.sphal.allow_all_shared_libs = true
@@ -423,8 +426,10 @@ namespace.default.asan.permitted.paths +=           /odm
 namespace.default.asan.permitted.paths += /data/asan/vendor
 namespace.default.asan.permitted.paths +=           /vendor
 
-namespace.default.links = system,vndk%VNDK_IN_SYSTEM_NS%
-namespace.default.link.system.shared_libs = %LLNDK_LIBRARIES%
+namespace.default.links = system,vndk%VNDK_IN_SYSTEM_NS%,runtime
+namespace.default.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
+namespace.default.link.system.shared_libs  = %LLNDK_LIBRARIES%
+namespace.default.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 namespace.default.link.vndk_in_system.shared_libs = %VNDK_USING_CORE_VARIANT_LIBRARIES%
 namespace.default.link.vndk.shared_libs  = %VNDK_SAMEPROCESS_LIBRARIES%
 namespace.default.link.vndk.shared_libs += %VNDK_CORE_LIBRARIES%
@@ -477,12 +482,14 @@ namespace.vndk.asan.search.paths +=           /system/${LIB}/vndk%VNDK_VER%
 # Android releases.  The links here should be identical to that of the
 # 'vndk_in_system' namespace, except for the link between 'vndk' and
 # 'vndk_in_system'.
-namespace.vndk.links = system,default%VNDK_IN_SYSTEM_NS%
+namespace.vndk.links = system,default%VNDK_IN_SYSTEM_NS%,runtime
 
 namespace.vndk.link.system.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.vndk.link.default.allow_all_shared_libs = true
+
+namespace.vndk.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.vndk.link.vndk_in_system.shared_libs = %VNDK_USING_CORE_VARIANT_LIBRARIES%
 
@@ -515,6 +522,7 @@ namespace.system.link.runtime.shared_libs += libnativehelper.so
 namespace.system.link.runtime.shared_libs += libnativeloader.so
 # Workaround for b/124772622
 namespace.system.link.runtime.shared_libs += libandroidicu.so
+namespace.system.link.runtime.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 ###############################################################################
 # "vndk_in_system" namespace
@@ -553,7 +561,8 @@ namespace.vndk_in_system.whitelisted = %VNDK_USING_CORE_VARIANT_LIBRARIES%
 #   1. 'vndk_in_system' needs to be freely linked back to 'vndk'.
 #   2. 'vndk_in_system' does not need to link to 'default', as any library that
 #      requires anything vendor would not be a vndk_in_system library.
-namespace.vndk_in_system.links = vndk,system
+namespace.vndk_in_system.links = vndk,system,runtime
+namespace.vndk_in_system.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.vndk_in_system.link.system.shared_libs  = %LLNDK_LIBRARIES%
 namespace.vndk_in_system.link.system.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
@@ -596,6 +605,7 @@ namespace.default.link.runtime.shared_libs += libandroidicu.so
 
 # TODO(b/122876336): Remove libpac.so once it's migrated to Webview
 namespace.default.link.runtime.shared_libs += libpac.so
+namespace.default.link.runtime.shared_libs += %SANITIZER_RUNTIME_LIBRARIES%
 
 namespace.default.link.resolv.shared_libs = libnetd_resolv.so
 
@@ -684,3 +694,5 @@ namespace.default.isolated = false
 namespace.default.search.paths  = /system/${LIB}
 namespace.default.search.paths += /%PRODUCT%/${LIB}
 namespace.default.search.paths += /%PRODUCT_SERVICES%/${LIB}
+
+namespace.default.link.runtime.shared_libs = %SANITIZER_RUNTIME_LIBRARIES%
