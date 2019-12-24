@@ -30,7 +30,6 @@ cc_defaults {
     static_libs: [
         "libcutils",
         "libdm",
-        "libfs_mgr",
         "libfstab",
         "liblp",
         "update_metadata-protos",
@@ -93,8 +92,8 @@ cc_library_static {
         "libsnapshot_hal_deps",
     ],
     srcs: [":libsnapshot_sources"],
-    whole_static_libs: [
-        "libfiemap_binder",
+    static_libs: [
+        "libfs_mgr_binder"
     ],
 }
 
@@ -103,8 +102,8 @@ cc_library_static {
     defaults: ["libsnapshot_defaults"],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
-    whole_static_libs: [
-        "libfiemap_passthrough",
+    static_libs: [
+        "libfs_mgr",
     ],
 }
 
@@ -116,8 +115,8 @@ cc_library_static {
     ],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
-    whole_static_libs: [
-        "libfiemap_passthrough",
+    static_libs: [
+        "libfs_mgr",
     ],
 }
 
@@ -144,6 +143,7 @@ cc_library_static {
         "libstorage_literals_headers",
     ],
     static_libs: [
+        "libfs_mgr",
         "libgtest",
         "libgmock",
     ],
@@ -170,6 +170,7 @@ cc_test {
         "android.hardware.boot@1.1",
         "libfs_mgr",
         "libgmock",
+        "libgsi",
         "liblp",
         "libsnapshot",
         "libsnapshot_test_helpers",
@@ -189,7 +190,6 @@ cc_binary {
     static_libs: [
         "libdm",
         "libext2_uuid",
-        "libfiemap_binder",
         "libfstab",
         "libsnapshot",
     ],
@@ -200,7 +200,7 @@ cc_binary {
         "libbinder",
         "libbinderthreadstate",
         "libext4_utils",
-        "libfs_mgr",
+        "libfs_mgr_binder",
         "libhidlbase",
         "liblog",
         "liblp",

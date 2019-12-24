@@ -20,15 +20,8 @@ cc_library_headers {
     export_include_dirs: ["include"],
 }
 
-cc_defaults {
-    name: "libfiemap_defaults",
-    defaults: ["fs_mgr_defaults"],
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-
+filegroup {
+    name: "libfiemap_srcs",
     srcs: [
         "fiemap_writer.cpp",
         "image_manager.cpp",
@@ -36,55 +29,32 @@ cc_defaults {
         "split_fiemap_writer.cpp",
         "utility.cpp",
     ],
-
-    static_libs: [
-        "libdm",
-        "libext2_uuid",
-        "libext4_utils",
-        "liblp",
-        "libfs_mgr",
-    ],
-
-    shared_libs: [
-        "libbase",
-    ],
-
-    header_libs: [
-        "libfiemap_headers",
-        "liblog_headers",
-    ],
-
-    export_shared_lib_headers: [
-        "libbase",
-    ],
-
-    export_header_lib_headers: [
-        "libfiemap_headers",
-    ],
 }
 
-// Open up a binder IImageManager interface.
-cc_library_static {
-    name: "libfiemap_binder",
-    defaults: ["libfiemap_defaults"],
+filegroup {
+    name: "libfiemap_binder_srcs",
     srcs: [
         "binder.cpp",
     ],
+}
+
+cc_defaults {
+    name: "libfiemap_binder_defaults",
+    srcs: [":libfiemap_binder_srcs"],
     whole_static_libs: [
         "gsi_aidl_interface-cpp",
         "libgsi",
     ],
     shared_libs: [
         "libbinder",
+        "libutils",
     ],
 }
 
 // Open up a passthrough IImageManager interface. Use libfiemap_binder whenever
 // possible. This should only be used when binder is not available.
-cc_library_static {
-    name: "libfiemap_passthrough",
-    defaults: ["libfiemap_defaults"],
-    recovery_available: true,
+filegroup {
+    name: "libfiemap_passthrough_srcs",
     srcs: [
         "passthrough.cpp",
     ],
@@ -92,10 +62,10 @@ cc_library_static {
 
 cc_test {
     name: "fiemap_writer_test",
-    defaults: ["libfiemap_defaults"],
     static_libs: [
         "libbase",
         "libdm",
+        "libfs_mgr",
         "liblog",
     ],
 
@@ -112,7 +82,6 @@ cc_test {
 
 cc_test {
     name: "fiemap_image_test",
-    defaults: ["libfiemap_defaults"],
     static_libs: [
         "libdm",
         "libext4_utils",
@@ -120,6 +89,7 @@ cc_test {
         "liblp",
     ],
     shared_libs: [
+        "libbase",
         "libcrypto",
         "libcrypto_utils",
         "libcutils",
