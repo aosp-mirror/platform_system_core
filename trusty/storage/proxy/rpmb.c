@@ -361,6 +361,15 @@ int rpmb_open(const char* rpmb_devname, enum dev_type open_dev_type) {
             return rc;
         }
         rpmb_fd = rc;
+
+        /* For UFS, it is prudent to check we have a sg device by calling an ioctl */
+        if (dev_type == UFS_RPMB) {
+            if ((ioctl(rpmb_fd, SG_GET_VERSION_NUM, &sg_version_num) < 0) ||
+                (sg_version_num < RPMB_MIN_SG_VERSION_NUM)) {
+                ALOGE("%s is not a sg device, or old sg driver\n", rpmb_devname);
+                return -1;
+            }
+        }
     } else {
         struct sockaddr_un unaddr;
         struct sockaddr *addr = (struct sockaddr *)&unaddr;
@@ -382,15 +391,6 @@ int rpmb_open(const char* rpmb_devname, enum dev_type open_dev_type) {
         }
     }
 
-    /* For UFS, it is prudent to check we hava a sg device by calling an ioctl */
-    if (dev_type == UFS_RPMB) {
-        if ((ioctl(rc, SG_GET_VERSION_NUM, &sg_version_num) < 0) ||
-            (sg_version_num < RPMB_MIN_SG_VERSION_NUM)) {
-            ALOGE("%s is not a sg device, or old sg driver\n", rpmb_devname);
-            return -1;
-        }
-    }
-    rpmb_fd = rc;
     return 0;
 }
 
