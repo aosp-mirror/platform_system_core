@@ -84,6 +84,11 @@ class IImageManager {
     virtual bool MapImageWithDeviceMapper(const IPartitionOpener& opener, const std::string& name,
                                           std::string* dev) = 0;
 
+    // If an image was mapped, return the path to its device. Otherwise, return
+    // false. Errors are not reported in this case, calling IsImageMapped is
+    // not necessary.
+    virtual bool GetMappedImageDevice(const std::string& name, std::string* device) = 0;
+
     // Mark an image as disabled. This is useful for marking an image as
     // will-be-deleted in recovery, since recovery cannot mount /data.
     //
@@ -131,6 +136,7 @@ class ImageManager final : public IImageManager {
     bool RemoveAllImages() override;
     bool DisableImage(const std::string& name) override;
     bool RemoveDisabledImages() override;
+    bool GetMappedImageDevice(const std::string& name, std::string* device) override;
 
     std::vector<std::string> GetAllBackingImages();
     // Same as CreateBackingImage, but provides a progress notification.

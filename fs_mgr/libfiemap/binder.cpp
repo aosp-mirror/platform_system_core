@@ -45,6 +45,7 @@ class ImageManagerBinder final : public IImageManager {
     bool RemoveAllImages() override;
     bool DisableImage(const std::string& name) override;
     bool RemoveDisabledImages() override;
+    bool GetMappedImageDevice(const std::string& name, std::string* device) override;
 
     std::vector<std::string> GetAllBackingImages() override;
 
@@ -178,6 +179,16 @@ bool ImageManagerBinder::RemoveDisabledImages() {
         return false;
     }
     return true;
+}
+
+bool ImageManagerBinder::GetMappedImageDevice(const std::string& name, std::string* device) {
+    auto status = manager_->getMappedImageDevice(name, device);
+    if (!status.isOk()) {
+        LOG(ERROR) << __PRETTY_FUNCTION__
+                   << " binder returned: " << status.exceptionMessage().string();
+        return false;
+    }
+    return !device->empty();
 }
 
 static android::sp<IGsid> AcquireIGsid(const std::chrono::milliseconds& timeout_ms) {

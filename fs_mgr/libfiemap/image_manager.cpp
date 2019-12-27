@@ -648,9 +648,25 @@ bool ImageManager::RemoveDisabledImages() {
 
     bool ok = true;
     for (const auto& partition : metadata->partitions) {
-        ok &= DeleteBackingImage(GetPartitionName(partition));
+        if (partition.attributes & LP_PARTITION_ATTR_DISABLED) {
+            ok &= DeleteBackingImage(GetPartitionName(partition));
+        }
     }
     return ok;
+}
+
+bool ImageManager::GetMappedImageDevice(const std::string& name, std::string* device) {
+    auto prop_name = GetStatusPropertyName(name);
+    *device = android::base::GetProperty(prop_name, "");
+    if (!device->empty()) {
+        return true;
+    }
+
+    auto& dm = DeviceMapper::Instance();
+    if (dm.GetState(name) == DmDeviceState::INVALID) {
+        return false;
+    }
+    return dm.GetDmDevicePathByName(name, device);
 }
 
 std::unique_ptr<MappedDevice> MappedDevice::Open(IImageManager* manager,
