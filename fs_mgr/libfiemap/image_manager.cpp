@@ -632,6 +632,27 @@ bool ImageManager::Validate() {
     return true;
 }
 
+bool ImageManager::DisableImage(const std::string& name) {
+    return AddAttributes(metadata_dir_, name, LP_PARTITION_ATTR_DISABLED);
+}
+
+bool ImageManager::RemoveDisabledImages() {
+    if (!MetadataExists(metadata_dir_)) {
+        return true;
+    }
+
+    auto metadata = OpenMetadata(metadata_dir_);
+    if (!metadata) {
+        return false;
+    }
+
+    bool ok = true;
+    for (const auto& partition : metadata->partitions) {
+        ok &= DeleteBackingImage(GetPartitionName(partition));
+    }
+    return ok;
+}
+
 std::unique_ptr<MappedDevice> MappedDevice::Open(IImageManager* manager,
                                                  const std::chrono::milliseconds& timeout_ms,
                                                  const std::string& name) {

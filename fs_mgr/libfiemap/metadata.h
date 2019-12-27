@@ -29,6 +29,8 @@ bool MetadataExists(const std::string& metadata_dir);
 std::unique_ptr<android::fs_mgr::LpMetadata> OpenMetadata(const std::string& metadata_dir);
 bool UpdateMetadata(const std::string& metadata_dir, const std::string& partition_name,
                     SplitFiemap* file, uint64_t partition_size, bool readonly);
+bool AddAttributes(const std::string& metadata_dir, const std::string& partition_name,
+                   uint32_t attributes);
 bool RemoveImageMetadata(const std::string& metadata_dir, const std::string& partition_name);
 bool RemoveAllMetadata(const std::string& dir);
 
