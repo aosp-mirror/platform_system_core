@@ -120,6 +120,17 @@ TEST_F(NativeTest, DisableImage) {
     ASSERT_TRUE(!manager_->BackingImageExists(base_name_));
 }
 
+TEST_F(NativeTest, GetMappedImageDevice) {
+    ASSERT_TRUE(manager_->CreateBackingImage(base_name_, kTestImageSize, false, nullptr));
+
+    std::string path1, path2;
+    ASSERT_TRUE(manager_->MapImageDevice(base_name_, 5s, &path1));
+    ASSERT_TRUE(manager_->GetMappedImageDevice(base_name_, &path2));
+    EXPECT_EQ(path1, path2);
+
+    ASSERT_TRUE(manager_->UnmapImageDevice(base_name_));
+}
+
 // This fixture is for tests against a simulated device environment. Rather
 // than use /data, we create an image and then layer a new filesystem within
 // it. Each test then decides how to mount and create layered images. This
