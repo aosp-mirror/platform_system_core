@@ -31,6 +31,7 @@
 
 #include <mutex>
 
+#include <android-base/no_destructor.h>
 #include <android/log.h>
 #include <log/log_id.h>
 #include <log/logprint.h>
@@ -72,7 +73,7 @@ typedef struct LogState {
 } LogState;
 
 static LogState log_state;
-static std::mutex fake_log_mutex;
+static android::base::NoDestructor<std::mutex> fake_log_mutex;
 
 /*
  * Configure logging based on ANDROID_LOG_TAGS environment variable.  We
@@ -457,7 +458,7 @@ static int FakeWrite(log_id_t log_id, struct timespec*, struct iovec* vector, si
    * Also guarantees that only one thread is in showLog() at a given
    * time (if it matters).
    */
-  auto lock = std::lock_guard{fake_log_mutex};
+  auto lock = std::lock_guard{*fake_log_mutex};
 
   if (!log_state.initialized) {
     InitializeLogStateLocked();
@@ -519,7 +520,7 @@ static int FakeWrite(log_id_t log_id, struct timespec*, struct iovec* vector, si
  * help debug HOST tools ...
  */
 static void FakeClose() {
-  auto lock = std::lock_guard{fake_log_mutex};
+  auto lock = std::lock_guard{*fake_log_mutex};
 
   memset(&log_state, 0, sizeof(log_state));
 }
