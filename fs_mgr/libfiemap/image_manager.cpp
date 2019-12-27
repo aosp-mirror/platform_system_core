@@ -42,7 +42,10 @@ using android::dm::DmTargetLinear;
 using android::dm::LoopControl;
 using android::fs_mgr::CreateLogicalPartition;
 using android::fs_mgr::CreateLogicalPartitionParams;
+using android::fs_mgr::CreateLogicalPartitions;
 using android::fs_mgr::DestroyLogicalPartition;
+using android::fs_mgr::GetBlockDevicePartitionName;
+using android::fs_mgr::GetBlockDevicePartitionNames;
 using android::fs_mgr::GetPartitionName;
 
 static constexpr char kTestImageMetadataDir[] = "/metadata/gsi/test";
@@ -667,6 +670,29 @@ bool ImageManager::GetMappedImageDevice(const std::string& name, std::string* de
         return false;
     }
     return dm.GetDmDevicePathByName(name, device);
+}
+
+bool ImageManager::MapAllImages(const std::function<bool(std::set<std::string>)>& init) {
+    if (!MetadataExists(metadata_dir_)) {
+        return true;
+    }
+
+    auto metadata = OpenMetadata(metadata_dir_);
+    if (!metadata) {
+        return false;
+    }
+
+    std::set<std::string> devices;
+    for (const auto& name : GetBlockDevicePartitionNames(*metadata.get())) {
+        devices.emplace(name);
+    }
+    if (!init(std::move(devices))) {
+        return false;
+    }
+
+    auto data_device = GetMetadataSuperBlockDevice(*metadata.get());
+    auto data_partition_name = GetBlockDevicePartitionName(*data_device);
+    return CreateLogicalPartitions(*metadata.get(), data_partition_name);
 }
 
 std::unique_ptr<MappedDevice> MappedDevice::Open(IImageManager* manager,
