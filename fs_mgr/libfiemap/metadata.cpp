@@ -192,5 +192,23 @@ bool UpdateMetadata(const std::string& metadata_dir, const std::string& partitio
     return SaveMetadata(builder.get(), metadata_dir);
 }
 
+bool AddAttributes(const std::string& metadata_dir, const std::string& partition_name,
+                   uint32_t attributes) {
+    auto metadata = OpenMetadata(metadata_dir);
+    if (!metadata) {
+        return false;
+    }
+    auto builder = MetadataBuilder::New(*metadata.get());
+    if (!builder) {
+        return false;
+    }
+    auto partition = builder->FindPartition(partition_name);
+    if (!partition) {
+        return false;
+    }
+    partition->set_attributes(partition->attributes() | attributes);
+    return SaveMetadata(builder.get(), metadata_dir);
+}
+
 }  // namespace fiemap
 }  // namespace android
