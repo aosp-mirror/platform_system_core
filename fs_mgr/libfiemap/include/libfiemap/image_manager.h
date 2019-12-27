@@ -84,6 +84,16 @@ class IImageManager {
     virtual bool MapImageWithDeviceMapper(const IPartitionOpener& opener, const std::string& name,
                                           std::string* dev) = 0;
 
+    // Mark an image as disabled. This is useful for marking an image as
+    // will-be-deleted in recovery, since recovery cannot mount /data.
+    //
+    // This is not available in binder, since it is intended for recovery.
+    // When binder is available, images can simply be removed.
+    virtual bool DisableImage(const std::string& name) = 0;
+
+    // Remove all images that been marked as disabled.
+    virtual bool RemoveDisabledImages() = 0;
+
     // Get all backing image names.
     virtual std::vector<std::string> GetAllBackingImages() = 0;
 
@@ -119,6 +129,8 @@ class ImageManager final : public IImageManager {
     bool MapImageWithDeviceMapper(const IPartitionOpener& opener, const std::string& name,
                                   std::string* dev) override;
     bool RemoveAllImages() override;
+    bool DisableImage(const std::string& name) override;
+    bool RemoveDisabledImages() override;
 
     std::vector<std::string> GetAllBackingImages();
     // Same as CreateBackingImage, but provides a progress notification.

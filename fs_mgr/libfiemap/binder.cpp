@@ -43,6 +43,8 @@ class ImageManagerBinder final : public IImageManager {
                                   std::string* dev) override;
     bool ZeroFillNewImage(const std::string& name, uint64_t bytes) override;
     bool RemoveAllImages() override;
+    bool DisableImage(const std::string& name) override;
+    bool RemoveDisabledImages() override;
 
     std::vector<std::string> GetAllBackingImages() override;
 
@@ -155,6 +157,21 @@ bool ImageManagerBinder::ZeroFillNewImage(const std::string& name, uint64_t byte
 
 bool ImageManagerBinder::RemoveAllImages() {
     auto status = manager_->removeAllImages();
+    if (!status.isOk()) {
+        LOG(ERROR) << __PRETTY_FUNCTION__
+                   << " binder returned: " << status.exceptionMessage().string();
+        return false;
+    }
+    return true;
+}
+
+bool ImageManagerBinder::DisableImage(const std::string&) {
+    LOG(ERROR) << __PRETTY_FUNCTION__ << " is not available over binder";
+    return false;
+}
+
+bool ImageManagerBinder::RemoveDisabledImages() {
+    auto status = manager_->removeDisabledImages();
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
                    << " binder returned: " << status.exceptionMessage().string();
