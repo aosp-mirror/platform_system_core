@@ -34,6 +34,7 @@
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
 #include <fs_mgr_overlayfs.h>
+#include <libfiemap/image_manager.h>
 #include <libgsi/libgsi.h>
 #include <liblp/liblp.h>
 #include <libsnapshot/snapshot.h>
@@ -46,6 +47,7 @@
 
 using android::base::Split;
 using android::base::Timer;
+using android::fiemap::IImageManager;
 using android::fs_mgr::AvbHandle;
 using android::fs_mgr::AvbHandleStatus;
 using android::fs_mgr::AvbHashtreeResult;
@@ -93,7 +95,7 @@ class FirstStageMount {
     bool IsDmLinearEnabled();
     void GetDmLinearMetadataDevice(std::set<std::string>* devices);
     bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
-    void UseGsiIfPresent();
+    void UseDsuIfPresent();
 
     ListenerAction UeventCallback(const Uevent& uevent, std::set<std::string>* required_devices);
 
@@ -102,7 +104,7 @@ class FirstStageMount {
     virtual bool SetUpDmVerity(FstabEntry* fstab_entry) = 0;
 
     bool need_dm_verity_;
-    bool gsi_not_on_userdata_ = false;
+    bool dsu_not_on_userdata_ = false;
 
     Fstab fstab_;
     std::string lp_metadata_partition_;
@@ -511,7 +513,7 @@ bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_sa
 // this case, we mount system first then pivot to it.  From that point on,
 // we are effectively identical to a system-as-root device.
 bool FirstStageMount::TrySwitchSystemAsRoot() {
-    UseGsiIfPresent();
+    UseDsuIfPresent();
 
     auto system_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
         return entry.mount_point == "/system";
@@ -520,7 +522,7 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
     if (system_partition == fstab_.end()) return true;
 
     if (MountPartition(system_partition, false /* erase_same_mounts */)) {
-        if (gsi_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {
+        if (dsu_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {
             LOG(ERROR) << "check_most_at_once forbidden on external media";
             return false;
         }
@@ -596,49 +598,40 @@ bool FirstStageMount::MountPartitions() {
     return true;
 }
 
-void FirstStageMount::UseGsiIfPresent() {
+void FirstStageMount::UseDsuIfPresent() {
     std::string error;
 
     if (!android::gsi::CanBootIntoGsi(&error)) {
-        LOG(INFO) << "GSI " << error << ", proceeding with normal boot";
+        LOG(INFO) << "DSU " << error << ", proceeding with normal boot";
         return;
     }
 
-    auto metadata = android::fs_mgr::ReadFromImageFile(gsi::kDsuLpMetadataFile);
-    if (!metadata) {
-        LOG(ERROR) << "GSI partition layout could not be read";
-        return;
-    }
-
-    if (!InitDmLinearBackingDevices(*metadata.get())) {
-        return;
-    }
-
-    // Find the super name. PartitionOpener will ensure this translates to the
-    // correct block device path.
-    auto super = GetMetadataSuperBlockDevice(*metadata.get());
-    auto super_name = android::fs_mgr::GetBlockDevicePartitionName(*super);
-    if (!android::fs_mgr::CreateLogicalPartitions(*metadata.get(), super_name)) {
-        LOG(ERROR) << "GSI partition layout could not be instantiated";
+    auto init_devices = [this](std::set<std::string> devices) -> bool {
+        if (devices.count("userdata") == 0 || devices.size() > 1) {
+            dsu_not_on_userdata_ = true;
+        }
+        return InitRequiredDevices(std::move(devices));
+    };
+    auto images = IImageManager::Open("dsu", 0ms);
+    if (!images || !images->MapAllImages(init_devices)) {
+        LOG(ERROR) << "DSU partition layout could not be instantiated";
         return;
     }
 
     if (!android::gsi::MarkSystemAsGsi()) {
-        PLOG(ERROR) << "GSI indicator file could not be written";
+        PLOG(ERROR) << "DSU indicator file could not be written";
         return;
     }
 
     std::string lp_names = "";
     std::vector<std::string> dsu_partitions;
-    for (auto&& partition : metadata->partitions) {
-        auto name = fs_mgr::GetPartitionName(partition);
+    for (auto&& name : images->GetAllBackingImages()) {
         dsu_partitions.push_back(name);
         lp_names += name + ",";
     }
     // Publish the logical partition names for TransformFstabForDsu
     WriteFile(gsi::kGsiLpNamesFile, lp_names);
     TransformFstabForDsu(&fstab_, dsu_partitions);
-    gsi_not_on_userdata_ = (super_name != "userdata");
 }
 
 bool FirstStageMountVBootV1::GetDmVerityDevices(std::set<std::string>* devices) {
