@@ -95,7 +95,10 @@ cc_library {
         },
     },
 
-    header_libs: ["liblog_headers"],
+    header_libs: [
+        "libbase_headers",
+        "liblog_headers",
+    ],
     export_header_lib_headers: ["liblog_headers"],
 
     stubs: {
