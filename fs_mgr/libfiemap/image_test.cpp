@@ -239,9 +239,19 @@ TEST_F(ImageTest, IndirectMount) {
 
     ASSERT_TRUE(submanager_->CreateBackingImage(test_image_name_, kTestImageSize, false, nullptr));
 
+    std::set<std::string> backing_devices;
+    auto init = [&](std::set<std::string> devices) -> bool {
+        backing_devices = std::move(devices);
+        return true;
+    };
+
     std::string path;
     ASSERT_TRUE(submanager_->MapImageDevice(test_image_name_, 5s, &path));
     ASSERT_TRUE(android::base::StartsWith(path, "/dev/block/dm-"));
+    ASSERT_TRUE(submanager_->UnmapImageDevice(test_image_name_));
+    ASSERT_TRUE(submanager_->MapAllImages(init));
+    ASSERT_FALSE(backing_devices.empty());
+    ASSERT_TRUE(submanager_->UnmapImageDevice(test_image_name_));
 }
 
 bool Mkdir(const std::string& path) {
