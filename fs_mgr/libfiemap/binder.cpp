@@ -43,6 +43,10 @@ class ImageManagerBinder final : public IImageManager {
                                   std::string* dev) override;
     bool ZeroFillNewImage(const std::string& name, uint64_t bytes) override;
     bool RemoveAllImages() override;
+    bool DisableImage(const std::string& name) override;
+    bool RemoveDisabledImages() override;
+    bool GetMappedImageDevice(const std::string& name, std::string* device) override;
+    bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) override;
 
     std::vector<std::string> GetAllBackingImages() override;
 
@@ -161,6 +165,36 @@ bool ImageManagerBinder::RemoveAllImages() {
         return false;
     }
     return true;
+}
+
+bool ImageManagerBinder::DisableImage(const std::string&) {
+    LOG(ERROR) << __PRETTY_FUNCTION__ << " is not available over binder";
+    return false;
+}
+
+bool ImageManagerBinder::RemoveDisabledImages() {
+    auto status = manager_->removeDisabledImages();
+    if (!status.isOk()) {
+        LOG(ERROR) << __PRETTY_FUNCTION__
+                   << " binder returned: " << status.exceptionMessage().string();
+        return false;
+    }
+    return true;
+}
+
+bool ImageManagerBinder::GetMappedImageDevice(const std::string& name, std::string* device) {
+    auto status = manager_->getMappedImageDevice(name, device);
+    if (!status.isOk()) {
+        LOG(ERROR) << __PRETTY_FUNCTION__
+                   << " binder returned: " << status.exceptionMessage().string();
+        return false;
+    }
+    return !device->empty();
+}
+
+bool ImageManagerBinder::MapAllImages(const std::function<bool(std::set<std::string>)>&) {
+    LOG(ERROR) << __PRETTY_FUNCTION__ << " not available over binder";
+    return false;
 }
 
 static android::sp<IGsid> AcquireIGsid(const std::chrono::milliseconds& timeout_ms) {

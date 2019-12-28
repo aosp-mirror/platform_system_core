@@ -280,11 +280,9 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
         return nullptr;
     }
 
-    uint32_t valid_attributes = 0;
+    uint32_t valid_attributes = LP_PARTITION_ATTRIBUTE_MASK_V0;
     if (metadata->header.minor_version >= LP_METADATA_VERSION_FOR_UPDATED_ATTR) {
-        valid_attributes = LP_PARTITION_ATTRIBUTE_MASK_V1;
-    } else {
-        valid_attributes = LP_PARTITION_ATTRIBUTE_MASK_V0;
+        valid_attributes |= LP_PARTITION_ATTRIBUTE_MASK_V1;
     }
 
     // ValidateTableSize ensured that |cursor| is valid for the number of

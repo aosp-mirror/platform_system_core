@@ -21,6 +21,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 
 #include <android-base/unique_fd.h>
@@ -84,6 +85,29 @@ class IImageManager {
     virtual bool MapImageWithDeviceMapper(const IPartitionOpener& opener, const std::string& name,
                                           std::string* dev) = 0;
 
+    // If an image was mapped, return the path to its device. Otherwise, return
+    // false. Errors are not reported in this case, calling IsImageMapped is
+    // not necessary.
+    virtual bool GetMappedImageDevice(const std::string& name, std::string* device) = 0;
+
+    // Map all images owned by this manager. This is only intended to be used
+    // during first-stage init, and as such, it does not provide a timeout
+    // (meaning libdm races can't be resolved, as ueventd is not available),
+    // and is not available over binder.
+    //
+    // The callback provided is given the list of dependent block devices.
+    virtual bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) = 0;
+
+    // Mark an image as disabled. This is useful for marking an image as
+    // will-be-deleted in recovery, since recovery cannot mount /data.
+    //
+    // This is not available in binder, since it is intended for recovery.
+    // When binder is available, images can simply be removed.
+    virtual bool DisableImage(const std::string& name) = 0;
+
+    // Remove all images that been marked as disabled.
+    virtual bool RemoveDisabledImages() = 0;
+
     // Get all backing image names.
     virtual std::vector<std::string> GetAllBackingImages() = 0;
 
@@ -119,6 +143,10 @@ class ImageManager final : public IImageManager {
     bool MapImageWithDeviceMapper(const IPartitionOpener& opener, const std::string& name,
                                   std::string* dev) override;
     bool RemoveAllImages() override;
+    bool DisableImage(const std::string& name) override;
+    bool RemoveDisabledImages() override;
+    bool GetMappedImageDevice(const std::string& name, std::string* device) override;
+    bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) override;
 
     std::vector<std::string> GetAllBackingImages();
     // Same as CreateBackingImage, but provides a progress notification.

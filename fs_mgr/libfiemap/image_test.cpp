@@ -112,6 +112,25 @@ TEST_F(NativeTest, CreateAndMap) {
     ASSERT_EQ(android::base::GetProperty(PropertyName(), ""), "");
 }
 
+TEST_F(NativeTest, DisableImage) {
+    ASSERT_TRUE(manager_->CreateBackingImage(base_name_, kTestImageSize, false, nullptr));
+    ASSERT_TRUE(manager_->BackingImageExists(base_name_));
+    ASSERT_TRUE(manager_->DisableImage(base_name_));
+    ASSERT_TRUE(manager_->RemoveDisabledImages());
+    ASSERT_TRUE(!manager_->BackingImageExists(base_name_));
+}
+
+TEST_F(NativeTest, GetMappedImageDevice) {
+    ASSERT_TRUE(manager_->CreateBackingImage(base_name_, kTestImageSize, false, nullptr));
+
+    std::string path1, path2;
+    ASSERT_TRUE(manager_->MapImageDevice(base_name_, 5s, &path1));
+    ASSERT_TRUE(manager_->GetMappedImageDevice(base_name_, &path2));
+    EXPECT_EQ(path1, path2);
+
+    ASSERT_TRUE(manager_->UnmapImageDevice(base_name_));
+}
+
 // This fixture is for tests against a simulated device environment. Rather
 // than use /data, we create an image and then layer a new filesystem within
 // it. Each test then decides how to mount and create layered images. This
@@ -220,9 +239,19 @@ TEST_F(ImageTest, IndirectMount) {
 
     ASSERT_TRUE(submanager_->CreateBackingImage(test_image_name_, kTestImageSize, false, nullptr));
 
+    std::set<std::string> backing_devices;
+    auto init = [&](std::set<std::string> devices) -> bool {
+        backing_devices = std::move(devices);
+        return true;
+    };
+
     std::string path;
     ASSERT_TRUE(submanager_->MapImageDevice(test_image_name_, 5s, &path));
     ASSERT_TRUE(android::base::StartsWith(path, "/dev/block/dm-"));
+    ASSERT_TRUE(submanager_->UnmapImageDevice(test_image_name_));
+    ASSERT_TRUE(submanager_->MapAllImages(init));
+    ASSERT_FALSE(backing_devices.empty());
+    ASSERT_TRUE(submanager_->UnmapImageDevice(test_image_name_));
 }
 
 bool Mkdir(const std::string& path) {
