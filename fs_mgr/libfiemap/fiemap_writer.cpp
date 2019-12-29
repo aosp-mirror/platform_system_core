@@ -233,8 +233,7 @@ static uint64_t GetFileSize(const std::string& file_path) {
     return sb.st_size;
 }
 
-static bool PerformFileChecks(const std::string& file_path, uint64_t file_size, uint64_t* blocksz,
-                              uint32_t* fs_type) {
+static bool PerformFileChecks(const std::string& file_path, uint64_t* blocksz, uint32_t* fs_type) {
     struct statfs64 sfs;
     if (statfs64(file_path.c_str(), &sfs)) {
         PLOG(ERROR) << "Failed to read file system status at: " << file_path;
@@ -256,12 +255,6 @@ static bool PerformFileChecks(const std::string& file_path, uint64_t file_size, 
         default:
             LOG(ERROR) << "Unsupported file system type: 0x" << std::hex << sfs.f_type;
             return false;
-    }
-
-    uint64_t available_bytes = sfs.f_bsize * sfs.f_bavail;
-    if (access(file_path.c_str(), F_OK) != 0 && available_bytes <= file_size) {
-        LOG(ERROR) << "Not enough free space in file system to create file of size : " << file_size;
-        return false;
     }
 
     *blocksz = sfs.f_bsize;
@@ -732,7 +725,7 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
 
     uint64_t blocksz;
     uint32_t fs_type;
-    if (!PerformFileChecks(abs_path, file_size, &blocksz, &fs_type)) {
+    if (!PerformFileChecks(abs_path, &blocksz, &fs_type)) {
         LOG(ERROR) << "Failed to validate file or file system for file:" << abs_path;
         cleanup(abs_path, create);
         return nullptr;
