@@ -811,66 +811,48 @@ std::string fs_mgr_overlayfs_scratch_mount_type() {
     return "auto";
 }
 
-enum class ScratchStrategy {
-    kNone,
-    // DAP device, use logical partitions.
-    kDynamicPartition,
-    // Retrofit DAP device, use super_<other>.
-    kSuperOther,
-    // Pre-DAP device, uses the other slot.
-    kSystemOther
-};
-
-// Return the strategy this device must use for creating a scratch partition.
-static ScratchStrategy GetScratchStrategy(std::string* backing_device = nullptr) {
+// Note: we do not check access() here except for the super partition, since
+// in first-stage init we wouldn't have registed by-name symlinks for "other"
+// partitions that won't be mounted.
+static std::string GetPhysicalScratchDevice() {
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
     auto path = fs_mgr_overlayfs_super_device(slot_number == 0);
     if (super_device != path) {
-        // Note: we do not check access() here, since in first-stage init we
-        // wouldn't have registed by-name symlinks for the device as it's
-        // normally not needed. The access checks elsewhere in this function
-        // are safe because system/super are always required.
-        if (backing_device) *backing_device = path;
-        return ScratchStrategy::kSuperOther;
+        return path;
     }
     if (fs_mgr_access(super_device)) {
-        if (backing_device) *backing_device = super_device;
-        return ScratchStrategy::kDynamicPartition;
+        // Do not try to use system_other on a DAP device.
+        return "";
     }
 
     auto other_slot = fs_mgr_get_other_slot_suffix();
     if (!other_slot.empty()) {
-        path = kPhysicalDevice + "system" + other_slot;
-        if (fs_mgr_access(path)) {
-            if (backing_device) *backing_device = path;
-            return ScratchStrategy::kSystemOther;
-        }
+        return kPhysicalDevice + "system" + other_slot;
     }
-    return ScratchStrategy::kNone;
+    return "";
 }
 
-// Return the scratch device if it exists.
-static std::string GetScratchDevice() {
-    std::string device;
-    ScratchStrategy strategy = GetScratchStrategy(&device);
+// This returns the scratch device that was detected during early boot (first-
+// stage init). If the device was created later, for example during setup for
+// the adb remount command, it can return an empty string since it does not
+// query ImageManager.
+static std::string GetBootScratchDevice() {
+    auto& dm = DeviceMapper::Instance();
 
-    switch (strategy) {
-        case ScratchStrategy::kSuperOther:
-        case ScratchStrategy::kSystemOther:
-            return device;
-        case ScratchStrategy::kDynamicPartition: {
-            auto& dm = DeviceMapper::Instance();
-            auto partition_name = android::base::Basename(kScratchMountPoint);
-            if (dm.GetState(partition_name) != DmDeviceState::INVALID &&
-                dm.GetDmDevicePathByName(partition_name, &device)) {
-                return device;
-            }
-            return "";
-        }
-        default:
-            return "";
+    // If there is a scratch partition allocated in /data or on super, we
+    // automatically prioritize that over super_other or system_other.
+    // Some devices, for example, have a write-protected eMMC and the
+    // super partition cannot be used even if it exists.
+    std::string device;
+    auto partition_name = android::base::Basename(kScratchMountPoint);
+    if (dm.GetState(partition_name) != DmDeviceState::INVALID &&
+        dm.GetDmDevicePathByName(partition_name, &device)) {
+        return device;
     }
+
+    // There is no dynamic scratch, so try and find a physical one.
+    return GetPhysicalScratchDevice();
 }
 
 bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std::string& mnt_type) {
@@ -915,8 +897,8 @@ static void TruncatePartitionsWithSuffix(MetadataBuilder* builder, const std::st
 }
 
 // Create or update a scratch partition within super.
-static bool CreateDynamicScratch(const Fstab& fstab, std::string* scratch_device,
-                                 bool* partition_exists, bool* change) {
+static bool CreateDynamicScratch(std::string* scratch_device, bool* partition_exists,
+                                 bool* change) {
     const auto partition_name = android::base::Basename(kScratchMountPoint);
 
     auto& dm = DeviceMapper::Instance();
@@ -925,8 +907,6 @@ static bool CreateDynamicScratch(const Fstab& fstab, std::string* scratch_device
     auto partition_create = !*partition_exists;
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
-    if (!fs_mgr_rw_access(super_device)) return false;
-    if (!fs_mgr_overlayfs_has_logical(fstab)) return false;
     auto builder = MetadataBuilder::New(super_device, slot_number);
     if (!builder) {
         LERROR << "open " << super_device << " metadata";
@@ -1012,23 +992,31 @@ static bool CreateDynamicScratch(const Fstab& fstab, std::string* scratch_device
     return true;
 }
 
-bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_device,
-                                     bool* partition_exists, bool* change) {
-    auto strategy = GetScratchStrategy();
-    if (strategy == ScratchStrategy::kDynamicPartition) {
-        return CreateDynamicScratch(fstab, scratch_device, partition_exists, change);
-    }
-
-    // The scratch partition can only be landed on a physical partition if we
-    // get here. If there are no viable candidates that are R/W, just return
-    // that there is no device.
-    *scratch_device = GetScratchDevice();
-    if (scratch_device->empty()) {
-        errno = ENXIO;
+static bool CanUseSuperPartition(const Fstab& fstab) {
+    auto slot_number = fs_mgr_overlayfs_slot_number();
+    auto super_device = fs_mgr_overlayfs_super_device(slot_number);
+    if (!fs_mgr_rw_access(super_device) || !fs_mgr_overlayfs_has_logical(fstab)) {
         return false;
     }
-    *partition_exists = true;
     return true;
+}
+
+bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_device,
+                                     bool* partition_exists, bool* change) {
+    // Try a physical partition first.
+    *scratch_device = GetPhysicalScratchDevice();
+    if (!scratch_device->empty() && fs_mgr_rw_access(*scratch_device)) {
+        *partition_exists = true;
+        return true;
+    }
+
+    // If that fails, see if we can land on super.
+    if (CanUseSuperPartition(fstab)) {
+        return CreateDynamicScratch(scratch_device, partition_exists, change);
+    }
+
+    errno = ENXIO;
+    return false;
 }
 
 // Create and mount kScratchMountPoint storage if we have logical partitions
@@ -1120,7 +1108,12 @@ Fstab fs_mgr_overlayfs_candidate_list(const Fstab& fstab) {
 }
 
 static void TryMountScratch() {
-    auto scratch_device = GetScratchDevice();
+    // Note we get the boot scratch device here, which means if scratch was
+    // just created through ImageManager, this could fail. In practice this
+    // should not happen because "remount" detects this scenario (by checking
+    // if verity is still disabled, i.e. no reboot occurred), and skips calling
+    // fs_mgr_overlayfs_mount_all().
+    auto scratch_device = GetBootScratchDevice();
     if (!fs_mgr_overlayfs_scratch_can_be_mounted(scratch_device)) {
         return;
     }
@@ -1166,11 +1159,23 @@ std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab* fstab) {
         return {};
     }
 
+    bool want_scratch = false;
     for (const auto& entry : fs_mgr_overlayfs_candidate_list(*fstab)) {
-        if (fs_mgr_is_verity_enabled(entry)) continue;
-        if (fs_mgr_overlayfs_already_mounted(fs_mgr_mount_point(entry.mount_point))) continue;
-        auto device = GetScratchDevice();
-        if (!fs_mgr_overlayfs_scratch_can_be_mounted(device)) break;
+        if (fs_mgr_is_verity_enabled(entry)) {
+            continue;
+        }
+        if (fs_mgr_overlayfs_already_mounted(fs_mgr_mount_point(entry.mount_point))) {
+            continue;
+        }
+        want_scratch = true;
+        break;
+    }
+    if (!want_scratch) {
+        return {};
+    }
+
+    auto device = GetBootScratchDevice();
+    if (!device.empty()) {
         return {device};
     }
     return {};
@@ -1241,25 +1246,39 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     return ret;
 }
 
-static bool GetAndMapScratchDeviceIfNeeded(std::string* device) {
-    *device = GetScratchDevice();
+static bool GetAndMapScratchDeviceIfNeeded(std::string* device, bool* mapped) {
+    *mapped = false;
+    *device = GetBootScratchDevice();
     if (!device->empty()) {
         return true;
     }
 
-    auto strategy = GetScratchStrategy();
-    if (strategy == ScratchStrategy::kDynamicPartition) {
-        auto metadata_slot = fs_mgr_overlayfs_slot_number();
-        CreateLogicalPartitionParams params = {
-                .block_device = fs_mgr_overlayfs_super_device(metadata_slot),
-                .metadata_slot = metadata_slot,
-                .partition_name = android::base::Basename(kScratchMountPoint),
-                .force_writable = true,
-                .timeout_ms = 10s,
-        };
-        return CreateLogicalPartition(params, device);
+    // Avoid uart spam by first checking for a scratch partition.
+    auto metadata_slot = fs_mgr_overlayfs_slot_number();
+    auto super_device = fs_mgr_overlayfs_super_device(metadata_slot);
+    auto metadata = ReadCurrentMetadata(super_device);
+    if (!metadata) {
+        return false;
     }
-    return false;
+
+    auto partition_name = android::base::Basename(kScratchMountPoint);
+    auto partition = FindPartition(*metadata.get(), partition_name);
+    if (!partition) {
+        return false;
+    }
+
+    CreateLogicalPartitionParams params = {
+            .block_device = super_device,
+            .metadata = metadata.get(),
+            .partition = partition,
+            .force_writable = true,
+            .timeout_ms = 10s,
+    };
+    if (!CreateLogicalPartition(params, device)) {
+        return false;
+    }
+    *mapped = true;
+    return true;
 }
 
 // Returns false if teardown not permitted, errno set to last error.
@@ -1267,12 +1286,14 @@ static bool GetAndMapScratchDeviceIfNeeded(std::string* device) {
 bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if (change) *change = false;
     auto ret = true;
+
     // If scratch exists, but is not mounted, lets gain access to clean
     // specific override entries.
     auto mount_scratch = false;
+    bool unmap = false;
     if ((mount_point != nullptr) && !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
         std::string scratch_device;
-        if (GetAndMapScratchDeviceIfNeeded(&scratch_device)) {
+        if (GetAndMapScratchDeviceIfNeeded(&scratch_device, &unmap)) {
             mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,
                                                            fs_mgr_overlayfs_scratch_mount_type());
         }
@@ -1294,8 +1315,12 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
         PERROR << "teardown";
         ret = false;
     }
-    if (mount_scratch) fs_mgr_overlayfs_umount_scratch();
-
+    if (mount_scratch) {
+        fs_mgr_overlayfs_umount_scratch();
+    }
+    if (unmap) {
+        DestroyLogicalPartition(android::base::Basename(kScratchMountPoint));
+    }
     return ret;
 }
 
