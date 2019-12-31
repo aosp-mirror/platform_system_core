@@ -983,6 +983,7 @@ on userspace-reboot-requested
   setprop sys.init.updatable_crashing_process_name ""
   setprop apexd.status ""
   setprop sys.user.0.ce_available ""
+  setprop sys.shutdown.requested ""
 
 on userspace-reboot-fs-remount
   # Make sure that vold is running.
