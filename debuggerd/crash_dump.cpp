@@ -40,6 +40,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <bionic/reserved_signals.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
@@ -511,13 +512,13 @@ int main(int argc, char** argv) {
 
   // Defer the message until later, for readability.
   bool wait_for_gdb = android::base::GetBoolProperty("debug.debuggerd.wait_for_gdb", false);
-  if (siginfo.si_signo == DEBUGGER_SIGNAL) {
+  if (siginfo.si_signo == BIONIC_SIGNAL_DEBUGGER) {
     wait_for_gdb = false;
   }
 
   // Detach from all of our attached threads before resuming.
   for (const auto& [tid, thread] : thread_info) {
-    int resume_signal = thread.signo == DEBUGGER_SIGNAL ? 0 : thread.signo;
+    int resume_signal = thread.signo == BIONIC_SIGNAL_DEBUGGER ? 0 : thread.signo;
     if (wait_for_gdb) {
       resume_signal = 0;
       if (tgkill(target_process, tid, SIGSTOP) != 0) {
@@ -555,10 +556,10 @@ int main(int argc, char** argv) {
             << " (target tid = " << g_target_thread << ")";
 
   int signo = siginfo.si_signo;
-  bool fatal_signal = signo != DEBUGGER_SIGNAL;
+  bool fatal_signal = signo != BIONIC_SIGNAL_DEBUGGER;
   bool backtrace = false;
 
-  // si_value is special when used with DEBUGGER_SIGNAL.
+  // si_value is special when used with BIONIC_SIGNAL_DEBUGGER.
   //   0: dump tombstone
   //   1: dump backtrace
   if (!fatal_signal) {
