@@ -1179,17 +1179,12 @@ static Result<void> do_mark_post_data(const BuiltinArguments& args) {
 
 static Result<void> GenerateLinkerConfiguration() {
     const char* linkerconfig_binary = "/system/bin/linkerconfig";
-    const char* linkerconfig_target = "/linkerconfig/ld.config.txt";
+    const char* linkerconfig_target = "/linkerconfig";
     const char* arguments[] = {linkerconfig_binary, "--target", linkerconfig_target};
 
     if (logwrap_fork_execvp(arraysize(arguments), arguments, nullptr, false, LOG_KLOG, false,
                             nullptr) != 0) {
         return ErrnoError() << "failed to execute linkerconfig";
-    }
-
-    mode_t mode = get_mode("0444");
-    if (fchmodat(AT_FDCWD, linkerconfig_target, mode, AT_SYMLINK_NOFOLLOW) < 0) {
-        return ErrnoErrorIgnoreEnoent() << "fchmodat() failed";
     }
 
     LOG(INFO) << "linkerconfig generated " << linkerconfig_target
