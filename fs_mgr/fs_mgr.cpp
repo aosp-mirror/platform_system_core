@@ -253,15 +253,19 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
             }
         }
     } else if (is_f2fs(fs_type)) {
-        const char* f2fs_fsck_argv[] = {F2FS_FSCK_BIN, "-a", blk_device.c_str()};
-        const char* f2fs_fsck_forced_argv[] = {F2FS_FSCK_BIN, "-f", blk_device.c_str()};
+        const char* f2fs_fsck_argv[] = {F2FS_FSCK_BIN,     "-a", "-c", "10000", "--debug-cache",
+                                        blk_device.c_str()};
+        const char* f2fs_fsck_forced_argv[] = {
+                F2FS_FSCK_BIN, "-f", "-c", "10000", "--debug-cache", blk_device.c_str()};
 
         if (should_force_check(*fs_stat)) {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -f " << realpath(blk_device);
+            LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache"
+                  << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
                                       &status, false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
         } else {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -a " << realpath(blk_device);
+            LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache"
+                  << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
                                       LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
         }
