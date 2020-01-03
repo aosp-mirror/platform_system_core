@@ -52,9 +52,6 @@
 #include <unwindstack/Regs.h>
 #include <unwindstack/Unwinder.h>
 
-// Needed to get DEBUGGER_SIGNAL.
-#include "debuggerd/handler.h"
-
 #include "libdebuggerd/backtrace.h"
 #include "libdebuggerd/open_files_list.h"
 #include "libdebuggerd/utility.h"
