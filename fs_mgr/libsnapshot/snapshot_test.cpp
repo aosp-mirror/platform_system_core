@@ -1586,6 +1586,29 @@ TEST_F(SnapshotUpdateTest, WaitForMerge) {
     ASSERT_THAT(merger.get(), AnyOf(UpdateState::None, UpdateState::MergeCompleted));
 }
 
+TEST_F(SnapshotUpdateTest, LowSpace) {
+    static constexpr auto kMaxFree = 10_MiB;
+    auto userdata = std::make_unique<LowSpaceUserdata>();
+    ASSERT_TRUE(userdata->Init(kMaxFree));
+
+    // Grow all partitions to 5_MiB, total 15_MiB. This requires 15 MiB of CoW space. After
+    // using the empty space in super (< 1 MiB), it uses at least 14 MiB of /userdata space.
+    constexpr uint64_t partition_size = 5_MiB;
+    SetSize(sys_, partition_size);
+    SetSize(vnd_, partition_size);
+    SetSize(prd_, partition_size);
+
+    AddOperationForPartitions();
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    auto res = sm->CreateUpdateSnapshots(manifest_);
+    ASSERT_FALSE(res);
+    ASSERT_EQ(SnapshotManager::Return::ErrorCode::NO_SPACE, res.error_code());
+    ASSERT_GE(res.required_size(), 14_MiB);
+    ASSERT_LT(res.required_size(), 15_MiB);
+}
+
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
                              public WithParamInterface<std::tuple<uint32_t, bool>> {
   public:

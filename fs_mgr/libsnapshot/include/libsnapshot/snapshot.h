@@ -116,8 +116,30 @@ class SnapshotManager final {
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
     using DeltaArchiveManifest = chromeos_update_engine::DeltaArchiveManifest;
     using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
+    using FiemapStatus = android::fiemap::FiemapStatus;
 
   public:
+    // SnapshotManager functions return either bool or Return objects. "Return" types provides
+    // more information about the reason of the failure.
+    class Return : public FiemapStatus {
+      public:
+        // Total required size on /userdata.
+        uint64_t required_size() const { return required_size_; }
+
+        static Return Ok() { return Return(FiemapStatus::ErrorCode::SUCCESS); }
+        static Return Error() { return Return(FiemapStatus::ErrorCode::ERROR); }
+        static Return NoSpace(uint64_t size) {
+            return Return(FiemapStatus::ErrorCode::NO_SPACE, size);
+        }
+        // Does not set required_size_ properly even when status.error_code() == NO_SPACE.
+        explicit Return(const FiemapStatus& status) : Return(status.error_code()) {}
+
+      private:
+        uint64_t required_size_;
+        Return(FiemapStatus::ErrorCode code, uint64_t required_size = 0)
+            : FiemapStatus(code), required_size_(required_size) {}
+    };
+
     // Dependency injection for testing.
     class IDeviceInfo {
       public:
@@ -222,7 +244,7 @@ class SnapshotManager final {
     // Create necessary COW device / files for OTA clients. New logical partitions will be added to
     // group "cow" in target_metadata. Regions of partitions of current_metadata will be
     // "write-protected" and snapshotted.
-    bool CreateUpdateSnapshots(const DeltaArchiveManifest& manifest);
+    Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest);
 
     // Map a snapshotted partition for OTA clients to write to. Write-protected regions are
     // determined previously in CreateSnapshots.
@@ -359,7 +381,7 @@ class SnapshotManager final {
 
     // |name| should be the base partition name (e.g. "system_a"). Create the
     // backing COW image using the size previously passed to CreateSnapshot().
-    bool CreateCowImage(LockedFile* lock, const std::string& name);
+    Return CreateCowImage(LockedFile* lock, const std::string& name);
 
     // Map a snapshot device that was previously created with CreateSnapshot.
     // If a merge was previously initiated, the device-mapper table will have a
@@ -499,14 +521,14 @@ class SnapshotManager final {
 
     // Helper for CreateUpdateSnapshots.
     // Creates all underlying images, COW partitions and snapshot files. Does not initialize them.
-    bool CreateUpdateSnapshotsInternal(LockedFile* lock, const DeltaArchiveManifest& manifest,
-                                       PartitionCowCreator* cow_creator,
-                                       AutoDeviceList* created_devices,
-                                       std::map<std::string, SnapshotStatus>* all_snapshot_status);
+    Return CreateUpdateSnapshotsInternal(
+            LockedFile* lock, const DeltaArchiveManifest& manifest,
+            PartitionCowCreator* cow_creator, AutoDeviceList* created_devices,
+            std::map<std::string, SnapshotStatus>* all_snapshot_status);
 
     // Initialize snapshots so that they can be mapped later.
     // Map the COW partition and zero-initialize the header.
-    bool InitializeUpdateSnapshots(
+    Return InitializeUpdateSnapshots(
             LockedFile* lock, MetadataBuilder* target_metadata,
             const LpMetadata* exported_target_metadata, const std::string& target_suffix,
             const std::map<std::string, SnapshotStatus>& all_snapshot_status);

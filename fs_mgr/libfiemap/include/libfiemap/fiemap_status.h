@@ -56,10 +56,12 @@ class FiemapStatus {
     // For logging and debugging only.
     std::string string() const;
 
+  protected:
+    FiemapStatus(ErrorCode code) : error_code_(code) {}
+
   private:
     ErrorCode error_code_;
 
-    FiemapStatus(ErrorCode code) : error_code_(code) {}
     static ErrorCode CastErrorCode(int error);
 };
 
