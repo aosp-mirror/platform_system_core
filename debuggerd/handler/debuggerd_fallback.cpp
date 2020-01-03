@@ -42,6 +42,7 @@
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
+#include <bionic/reserved_signals.h>
 #include <unwindstack/DexFiles.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
@@ -272,7 +273,7 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
         siginfo.si_pid = getpid();
         siginfo.si_uid = getuid();
 
-        if (syscall(__NR_rt_tgsigqueueinfo, getpid(), tid, DEBUGGER_SIGNAL, &siginfo) != 0) {
+        if (syscall(__NR_rt_tgsigqueueinfo, getpid(), tid, BIONIC_SIGNAL_DEBUGGER, &siginfo) != 0) {
           async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to send trace signal to %d: %s",
                                 tid, strerror(errno));
           return false;
@@ -340,7 +341,7 @@ static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_mes
 
 extern "C" void debuggerd_fallback_handler(siginfo_t* info, ucontext_t* ucontext,
                                            void* abort_message) {
-  if (info->si_signo == DEBUGGER_SIGNAL && info->si_value.sival_ptr != nullptr) {
+  if (info->si_signo == BIONIC_SIGNAL_DEBUGGER && info->si_value.sival_ptr != nullptr) {
     return trace_handler(info, ucontext);
   } else {
     return crash_handler(info, ucontext, abort_message);
