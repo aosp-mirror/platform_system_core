@@ -680,6 +680,7 @@ on boot
     # to make it too large, since it may bring userdata loss, if they
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
     write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
+    write /sys/fs/f2fs/${dev.mnt.blk.data}/gc_urgent_sleep_time 50
 
     # Permissions for System Server and daemons.
     chown radio system /sys/android_power/state
@@ -796,6 +797,9 @@ on property:vold.decrypt=trigger_shutdown_framework
 
 on property:sys.boot_completed=1
     bootchart stop
+    # Setup per_boot directory so other .rc could start to use it on boot_completed
+    exec - system system -- /bin/rm -rf /data/per_boot
+    mkdir /data/per_boot 0700 system system
 
 # system server cannot write to /proc/sys files,
 # and chown/chmod does not work for /proc/sys/ entries.

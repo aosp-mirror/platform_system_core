@@ -348,7 +348,7 @@ int main(int argc, char* argv[]) {
     auto rss_sort = [](ProcessRecord& a, ProcessRecord& b) {
         MemUsage stats_a = show_wss ? a.Wss() : a.Usage();
         MemUsage stats_b = show_wss ? b.Wss() : b.Usage();
-        return reverse_sort ? stats_a.rss < stats_b.pss : stats_a.pss > stats_b.pss;
+        return reverse_sort ? stats_a.rss < stats_b.rss : stats_a.rss > stats_b.rss;
     };
 
     auto vss_sort = [](ProcessRecord& a, ProcessRecord& b) {

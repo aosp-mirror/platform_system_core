@@ -24,6 +24,7 @@
         <option name="binary-test-source" value="_32bit::DATA/nativetest/vts_meminfo_test/vts_meminfo_test" />
         <option name="binary-test-source" value="_64bit::DATA/nativetest64/vts_meminfo_test/vts_meminfo_test" />
         <option name="binary-test-type" value="gtest"/>
+        <option name="precondition-first-api-level" value="29" />
         <option name="test-timeout" value="10m"/>
     </test>
 </configuration>

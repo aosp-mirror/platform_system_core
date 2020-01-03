@@ -24,8 +24,6 @@
 
 #include <hidl/HidlTransportSupport.h>
 
-#define PERSISTENT_USB_CONFIG "persist.sys.usb.config"
-
 using android::base::GetProperty;
 using android::base::SetProperty;
 using android::hardware::configureRpcThreadpool;
@@ -34,14 +32,15 @@ using android::hardware::usb::gadget::V1_0::IUsbGadget;
 using android::hardware::Return;
 
 int main(int /*argc*/, char** /*argv*/) {
-    configureRpcThreadpool(1, true /*callerWillJoin*/);
+    if (GetProperty("ro.bootmode", "") == "charger") exit(0);
 
+    configureRpcThreadpool(1, true /*callerWillJoin*/);
     android::sp<IUsbGadget> gadget = IUsbGadget::getService();
     Return<void> ret;
 
     if (gadget != nullptr) {
         LOG(INFO) << "Usb HAL found.";
-        std::string function = GetProperty(PERSISTENT_USB_CONFIG, "");
+        std::string function = GetProperty("persist.sys.usb.config", "");
         if (function == "adb") {
             LOG(INFO) << "peristent prop is adb";
             SetProperty("ctl.start", "adbd");
