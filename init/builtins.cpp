@@ -60,6 +60,7 @@
 #include <fscrypt/fscrypt.h>
 #include <libgsi/libgsi.h>
 #include <logwrap/logwrap.h>
+#include <private/android_filesystem_config.h>
 #include <selinux/android.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
@@ -1266,9 +1267,7 @@ static Result<void> create_apex_data_dirs() {
         if (strchr(name, '@') != nullptr) continue;
 
         auto path = "/data/misc/apexdata/" + std::string(name);
-        auto system_uid = DecodeUid("system");
-        auto options =
-                MkdirOptions{path, 0700, *system_uid, *system_uid, FscryptAction::kNone, "ref"};
+        auto options = MkdirOptions{path, 0770, AID_ROOT, AID_SYSTEM, FscryptAction::kNone, "ref"};
         make_dir_with_options(options);
     }
     return {};
