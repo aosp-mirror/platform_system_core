@@ -5,22 +5,14 @@
 dir.adbd = /apex/com.android.adbd/bin/
 
 [adbd]
-additional.namespaces = platform,art,adbd
+additional.namespaces = platform,art
 
 namespace.default.isolated = true
-namespace.default.links = art,adbd,platform
+namespace.default.search.paths = /apex/com.android.adbd/${LIB}
+namespace.default.asan.search.paths = /apex/com.android.adbd/${LIB}
+namespace.default.links = art,platform
 namespace.default.link.art.shared_libs = libadbconnection_server.so
-namespace.default.link.platform.allow_all_shared_libs = true
-namespace.default.link.adbd.allow_all_shared_libs = true
-
-###############################################################################
-# "adbd" APEX namespace
-###############################################################################
-namespace.adbd.isolated = true
-namespace.adbd.search.paths = /apex/com.android.adbd/${LIB}
-namespace.adbd.asan.search.paths = /apex/com.android.adbd/${LIB}
-namespace.adbd.links = platform
-namespace.adbd.link.platform.allow_all_shared_libs = true
+namespace.default.link.platform.shared_libs = libc.so:libdl.so:libm.so:libclang_rt.hwasan-aarch64-android.so
 
 ###############################################################################
 # "art" APEX namespace: used for libadbdconnection_server
