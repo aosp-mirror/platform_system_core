@@ -22,7 +22,8 @@ static struct stats_event* constructStatsEvent() {
     stats_event_set_atom_id(event, 100);
 
     // randomly sample atom size
-    for (int i = 0; i < rand() % 800; i++) {
+    int numElements = rand() % 800;
+    for (int i = 0; i < numElements; i++) {
         stats_event_write_int32(event, i);
     }
 
