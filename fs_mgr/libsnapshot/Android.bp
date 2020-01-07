@@ -127,6 +127,7 @@ cc_library_static {
         "include_test",
     ],
     srcs: [
+        "android/snapshot/snapshot.proto",
         "test_helpers.cpp",
     ],
     shared_libs: [
