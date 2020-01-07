@@ -1249,15 +1249,45 @@ UpdateState SnapshotManager::GetUpdateState(double* progress) {
         return UpdateState::None;
     }
 
-    auto state = ReadUpdateState(lock.get());
-    if (progress) {
-        *progress = 0.0;
-        if (state == UpdateState::Merging) {
-            // :TODO: When merging is implemented, set progress_val.
-        } else if (state == UpdateState::MergeCompleted) {
-            *progress = 100.0;
-        }
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock.get());
+    auto state = update_status.state();
+    if (progress == nullptr) {
+        return state;
     }
+
+    if (state == UpdateState::MergeCompleted) {
+        *progress = 100.0;
+        return state;
+    }
+
+    *progress = 0.0;
+    if (state != UpdateState::Merging) {
+        return state;
+    }
+
+    // Sum all the snapshot states as if the system consists of a single huge
+    // snapshots device, then compute the merge completion percentage of that
+    // device.
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock.get(), &snapshots)) {
+        LOG(ERROR) << "Could not list snapshots";
+        return state;
+    }
+
+    DmTargetSnapshot::Status fake_snapshots_status = {};
+    for (const auto& snapshot : snapshots) {
+        DmTargetSnapshot::Status current_status;
+
+        if (!QuerySnapshotStatus(snapshot, nullptr, &current_status)) continue;
+
+        fake_snapshots_status.sectors_allocated += current_status.sectors_allocated;
+        fake_snapshots_status.total_sectors += current_status.total_sectors;
+        fake_snapshots_status.metadata_sectors += current_status.metadata_sectors;
+    }
+
+    *progress = DmTargetSnapshot::MergePercent(fake_snapshots_status,
+                                               update_status.sectors_allocated());
+
     return state;
 }
 
@@ -2286,9 +2316,19 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
         }
     }
 
+    unsigned int last_progress = 0;
+    auto callback = [&]() -> void {
+        double progress;
+        GetUpdateState(&progress);
+        if (last_progress < static_cast<unsigned int>(progress)) {
+            last_progress = progress;
+            LOG(INFO) << "Waiting for merge to complete: " << last_progress << "%.";
+        }
+    };
+
     LOG(INFO) << "Waiting for any previous merge request to complete. "
               << "This can take up to several minutes.";
-    auto state = ProcessUpdateState();
+    auto state = ProcessUpdateState(callback);
     if (state == UpdateState::None) {
         LOG(INFO) << "Can't find any snapshot to merge.";
         return state;
@@ -2300,7 +2340,8 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
         }
         // All other states can be handled by ProcessUpdateState.
         LOG(INFO) << "Waiting for merge to complete. This can take up to several minutes.";
-        state = ProcessUpdateState();
+        last_progress = 0;
+        state = ProcessUpdateState(callback);
     }
 
     LOG(INFO) << "Merge finished with state \"" << state << "\".";
