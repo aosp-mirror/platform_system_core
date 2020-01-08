@@ -1612,7 +1612,7 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "connect")) {
-        if (argc != 2) error_exit("usage: adb connect HOST[:PORT>]");
+        if (argc != 2) error_exit("usage: adb connect HOST[:PORT]");
 
         std::string query = android::base::StringPrintf("host:connect:%s", argv[1]);
         return adb_query_command(query);
