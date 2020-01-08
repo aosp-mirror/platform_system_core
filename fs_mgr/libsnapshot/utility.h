@@ -26,6 +26,7 @@
 #include <update_engine/update_metadata.pb.h>
 
 #include <libsnapshot/auto_device.h>
+#include <libsnapshot/snapshot.h>
 
 namespace android {
 namespace snapshot {
@@ -110,7 +111,7 @@ std::vector<android::fs_mgr::Partition*> ListPartitionsWithSuffix(
         android::fs_mgr::MetadataBuilder* builder, const std::string& suffix);
 
 // Initialize a device before using it as the COW device for a dm-snapshot device.
-bool InitializeCow(const std::string& device);
+SnapshotManager::Return InitializeCow(const std::string& device);
 
 // "Atomically" write string to file. This is done by a series of actions:
 // 1. Write to path + ".tmp"
