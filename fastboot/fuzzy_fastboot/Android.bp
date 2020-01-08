@@ -40,5 +40,13 @@ cc_test_host {
           "-framework IOKit",
       ],
     },
-  }
+  },
+
+  // Disable auto-generation of test config as this binary itself is not a test in the test suites,
+  // rather it is used by other tests.
+  auto_gen_config: false,
+  test_suites: [
+    "general-tests",
+    "vts-core",
+  ],
 }

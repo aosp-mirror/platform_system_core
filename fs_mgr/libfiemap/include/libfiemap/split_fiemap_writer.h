@@ -25,7 +25,8 @@
 
 #include <android-base/unique_fd.h>
 
-#include "fiemap_writer.h"
+#include <libfiemap/fiemap_status.h>
+#include <libfiemap/fiemap_writer.h>
 
 namespace android {
 namespace fiemap {
@@ -43,6 +44,9 @@ class SplitFiemap final {
     static std::unique_ptr<SplitFiemap> Create(const std::string& file_path, uint64_t file_size,
                                                uint64_t max_piece_size,
                                                ProgressCallback progress = {});
+    static FiemapStatus Create(const std::string& file_path, uint64_t file_size,
+                               uint64_t max_piece_size, std::unique_ptr<SplitFiemap>* out_val,
+                               ProgressCallback progress = {});
 
     // Open an existing split fiemap file.
     static std::unique_ptr<SplitFiemap> Open(const std::string& file_path);
