@@ -116,7 +116,6 @@ void DefaultAborter(const char* abort_message);
 std::string GetDefaultTag();
 void SetDefaultTag(const std::string& tag);
 
-#ifdef __ANDROID__
 // We expose this even though it is the default because a user that wants to
 // override the default log buffer will have to construct this themselves.
 class LogdLogger {
@@ -129,7 +128,6 @@ class LogdLogger {
  private:
   LogId default_log_id_;
 };
-#endif
 
 // Configure logging based on ANDROID_LOG_TAGS environment variable.
 // We need to parse a string that looks like
