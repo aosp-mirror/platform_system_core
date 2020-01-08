@@ -37,29 +37,30 @@ using android::base::unique_fd;
 
 static constexpr char kUserdataDevice[] = "/dev/block/by-name/userdata";
 
-uint64_t DetermineMaximumFileSize(const std::string& file_path) {
+FiemapStatus DetermineMaximumFileSize(const std::string& file_path, uint64_t* result) {
     // Create the smallest file possible (one block).
-    auto writer = FiemapWriter::Open(file_path, 1);
-    if (!writer) {
-        return 0;
+    FiemapUniquePtr writer;
+    auto status = FiemapWriter::Open(file_path, 1, &writer);
+    if (!status.is_ok()) {
+        return status;
     }
 
-    uint64_t result = 0;
+    *result = 0;
     switch (writer->fs_type()) {
         case EXT4_SUPER_MAGIC:
             // The minimum is 16GiB, so just report that. If we wanted we could parse the
             // superblock and figure out if 64-bit support is enabled.
-            result = 17179869184ULL;
+            *result = 17179869184ULL;
             break;
         case F2FS_SUPER_MAGIC:
             // Formula is from https://www.kernel.org/doc/Documentation/filesystems/f2fs.txt
             // 4KB * (923 + 2 * 1018 + 2 * 1018 * 1018 + 1018 * 1018 * 1018) := 3.94TB.
-            result = 4329690886144ULL;
+            *result = 4329690886144ULL;
             break;
         case MSDOS_SUPER_MAGIC:
             // 4GB-1, which we want aligned to the block size.
-            result = 4294967295;
-            result -= (result % writer->block_size());
+            *result = 4294967295;
+            *result -= (*result % writer->block_size());
             break;
         default:
             LOG(ERROR) << "Unknown file system type: " << writer->fs_type();
@@ -70,7 +71,7 @@ uint64_t DetermineMaximumFileSize(const std::string& file_path) {
     writer = nullptr;
     unlink(file_path.c_str());
 
-    return result;
+    return FiemapStatus::Ok();
 }
 
 // Given a SplitFiemap, this returns a device path that will work during first-
