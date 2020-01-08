@@ -1074,7 +1074,6 @@ TEST(liblog, too_big_payload) {
 
     // Once we've found our expected entry, break.
     if (len == LOGGER_ENTRY_MAX_PAYLOAD - sizeof(big_payload_tag)) {
-      EXPECT_EQ(ret, len + static_cast<ssize_t>(sizeof(big_payload_tag)));
       *found = true;
     }
   };

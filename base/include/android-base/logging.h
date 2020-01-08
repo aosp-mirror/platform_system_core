@@ -93,6 +93,8 @@ enum LogId {
   DEFAULT,
   MAIN,
   SYSTEM,
+  RADIO,
+  CRASH,
 };
 
 using LogFunction = std::function<void(LogId, LogSeverity, const char*, const char*,

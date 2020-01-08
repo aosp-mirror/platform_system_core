@@ -55,6 +55,7 @@
  */
 
 #include <stdarg.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -152,6 +153,12 @@ typedef enum log_id {
 } log_id_t;
 
 /**
+ * Let the logging function choose the best log target.
+ * This is not part of the enum since adding either -1 or 0xFFFFFFFF forces the enum to be signed or
+ * unsigned, which breaks unfortunately common arithmetic against LOG_ID_MIN and LOG_ID_MAX. */
+#define LOG_ID_DEFAULT -1
+
+/**
  * Writes the constant string `text` to the log buffer `id`,
  * with priority `prio` and tag `tag`.
  *
@@ -169,6 +176,73 @@ int __android_log_buf_write(int bufID, int prio, const char* tag, const char* te
  */
 int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...)
     __attribute__((__format__(printf, 4, 5)));
+
+/**
+ * Logger data struct used for writing log messages to liblog via __android_log_write_logger_data()
+ * and sending log messages to user defined loggers specified in __android_log_set_logger().
+ */
+struct __android_logger_data {
+  size_t struct_size; /* Must be set to sizeof(__android_logger_data) and is used for versioning. */
+  int buffer_id;      /* log_id_t or -1 to represent 'default'. */
+  int priority;       /* android_LogPriority values. */
+  const char* tag;
+  const char* file;  /* Optional file name, may be set to nullptr. */
+  unsigned int line; /* Optional line number, ignore if file is nullptr. */
+};
+
+/**
+ * Writes the log message specified with logger_data and msg to the log.  logger_data includes
+ * additional file name and line number information that a logger may use.  logger_data is versioned
+ * for backwards compatibility.
+ */
+void __android_log_write_logger_data(struct __android_logger_data* logger_data, const char* msg);
+
+/**
+ * Prototype for the 'logger' function that is called for every log message.
+ */
+typedef void (*__android_logger_function)(const struct __android_logger_data* logger_data,
+                                          const char* message);
+
+/**
+ * Sets a user defined logger function.  All log messages sent to liblog will be set to the
+ * function pointer specified by logger for processing.
+ */
+void __android_log_set_logger(__android_logger_function logger);
+
+/**
+ * Writes the log message to logd.  This is an __android_logger_function and can be provided to
+ * __android_log_set_logger().  It is the default logger when running liblog on a device.
+ */
+void __android_log_logd_logger(const struct __android_logger_data* logger_data, const char* msg);
+
+/**
+ * Writes the log message to stderr.  This is an __android_logger_function and can be provided to
+ * __android_log_set_logger().  It is the default logger when running liblog on host.
+ */
+void __android_log_stderr_logger(const struct __android_logger_data* logger_data,
+                                 const char* message);
+
+/**
+ * Prototype for the 'abort' function that is called when liblog will abort due to
+ * __android_log_assert() failures.
+ */
+typedef void (*__android_aborter_function)(const char* abort_message);
+
+/**
+ * Sets a user defined aborter function that is called for __android_log_assert() failures.
+ */
+void __android_log_set_aborter(__android_aborter_function aborter);
+
+/**
+ * Calls the stored aborter function.  This allows for other logging libraries to use the same
+ * aborter function by calling this function in liblog.
+ */
+void __android_log_call_aborter(const char* abort_message);
+
+/**
+ * Sets android_set_abort_message() on device then aborts().  This is the default aborter.
+ */
+void __android_log_default_aborter(const char* abort_message);
 
 #ifdef __cplusplus
 }
