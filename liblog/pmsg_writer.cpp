@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-/*
- * pmsg write handler
- */
+#include "pmsg_writer.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -36,14 +34,6 @@
 #include "rwlock.h"
 #include "uio.h"
 
-static void PmsgClose();
-static int PmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
-
-struct android_log_transport_write pmsgLoggerWrite = {
-    .close = PmsgClose,
-    .write = PmsgWrite,
-};
-
 static int pmsg_fd;
 static RwLock pmsg_fd_lock;
 
@@ -57,7 +47,7 @@ static void PmsgOpen() {
   pmsg_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
 }
 
-static void PmsgClose() {
+void PmsgClose() {
   auto lock = std::unique_lock{pmsg_fd_lock};
   if (pmsg_fd > 0) {
     close(pmsg_fd);
@@ -65,7 +55,7 @@ static void PmsgClose() {
   pmsg_fd = 0;
 }
 
-static int PmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr) {
+int PmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr) {
   static const unsigned headerLength = 2;
   struct iovec newVec[nr + headerLength];
   android_log_header_t header;

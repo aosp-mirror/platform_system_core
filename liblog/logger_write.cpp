@@ -31,20 +31,14 @@
 #include "logger.h"
 #include "uio.h"
 
-#define LOG_BUF_SIZE 1024
-
 #if (FAKE_LOG_DEVICE == 0)
-extern struct android_log_transport_write logdLoggerWrite;
-extern struct android_log_transport_write pmsgLoggerWrite;
-
-android_log_transport_write* android_log_write = &logdLoggerWrite;
-android_log_transport_write* android_log_persist_write = &pmsgLoggerWrite;
+#include "logd_writer.h"
+#include "pmsg_writer.h"
 #else
-extern android_log_transport_write fakeLoggerWrite;
-
-android_log_transport_write* android_log_write = &fakeLoggerWrite;
-android_log_transport_write* android_log_persist_write = nullptr;
+#include "fake_log_device.h"
 #endif
+
+#define LOG_BUF_SIZE 1024
 
 #if defined(__ANDROID__)
 static int check_log_uid_permissions() {
@@ -92,14 +86,12 @@ static int check_log_uid_permissions() {
  * Release any logger resources. A new log write will immediately re-acquire.
  */
 void __android_log_close() {
-  if (android_log_write != nullptr) {
-    android_log_write->close();
-  }
-
-  if (android_log_persist_write != nullptr) {
-    android_log_persist_write->close();
-  }
-
+#if (FAKE_LOG_DEVICE == 0)
+  LogdClose();
+  PmsgClose();
+#else
+  FakeClose();
+#endif
 }
 
 static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
@@ -158,17 +150,12 @@ static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
 
   ret = 0;
 
-  if (android_log_write != nullptr) {
-    ssize_t retval;
-    retval = android_log_write->write(log_id, &ts, vec, nr);
-    if (ret >= 0) {
-      ret = retval;
-    }
-  }
-
-  if (android_log_persist_write != nullptr) {
-    android_log_persist_write->write(log_id, &ts, vec, nr);
-  }
+#if (FAKE_LOG_DEVICE == 0)
+  ret = LogdWrite(log_id, &ts, vec, nr);
+  PmsgWrite(log_id, &ts, vec, nr);
+#else
+  ret = FakeWrite(log_id, &ts, vec, nr);
+#endif
 
   errno = save_errno;
   return ret;

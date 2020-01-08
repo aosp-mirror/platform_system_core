@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "logd_writer.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -40,14 +42,6 @@
 #include "logger.h"
 #include "rwlock.h"
 #include "uio.h"
-
-static int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
-static void LogdClose();
-
-struct android_log_transport_write logdLoggerWrite = {
-    .close = LogdClose,
-    .write = LogdWrite,
-};
 
 static int logd_socket;
 static RwLock logd_socket_lock;
@@ -90,7 +84,7 @@ static void ResetSocket(int old_socket) {
   OpenSocketLocked();
 }
 
-static void LogdClose() {
+void LogdClose() {
   auto lock = std::unique_lock{logd_socket_lock};
   if (logd_socket > 0) {
     close(logd_socket);
@@ -98,7 +92,7 @@ static void LogdClose() {
   logd_socket = 0;
 }
 
-static int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr) {
+int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr) {
   ssize_t ret;
   static const unsigned headerLength = 1;
   struct iovec newVec[nr + headerLength];

@@ -26,13 +26,6 @@
 
 __BEGIN_DECLS
 
-struct android_log_transport_write {
-  void (*close)(); /* free up resources */
-  /* write log to transport, returns number of bytes propagated, or -errno */
-  int (*write)(log_id_t logId, struct timespec* ts, struct iovec* vec,
-               size_t nr);
-};
-
 struct logger_list {
   atomic_int fd;
   int mode;
