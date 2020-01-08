@@ -14,12 +14,15 @@
 
 #include "utility.h"
 
+#include <errno.h>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <fs_mgr/roots.h>
 
 using android::dm::kSectorSize;
+using android::fiemap::FiemapStatus;
 using android::fs_mgr::EnsurePathMounted;
 using android::fs_mgr::EnsurePathUnmounted;
 using android::fs_mgr::Fstab;
@@ -83,7 +86,9 @@ AutoDeleteSnapshot::~AutoDeleteSnapshot() {
     }
 }
 
-bool InitializeCow(const std::string& device) {
+SnapshotManager::Return InitializeCow(const std::string& device) {
+    using Return = SnapshotManager::Return;
+
     // When the kernel creates a persistent dm-snapshot, it requires a CoW file
     // to store the modifications. The kernel interface does not specify how
     // the CoW is used, and there is no standard associated.
@@ -103,15 +108,15 @@ bool InitializeCow(const std::string& device) {
     android::base::unique_fd fd(open(device.c_str(), O_WRONLY | O_BINARY));
     if (fd < 0) {
         PLOG(ERROR) << "Can't open COW device: " << device;
-        return false;
+        return Return(FiemapStatus::FromErrno(errno));
     }
 
     LOG(INFO) << "Zero-filling COW device: " << device;
     if (!android::base::WriteFully(fd, zeros.data(), kDmSnapZeroFillSize)) {
         PLOG(ERROR) << "Can't zero-fill COW device for " << device;
-        return false;
+        return Return(FiemapStatus::FromErrno(errno));
     }
-    return true;
+    return Return::Ok();
 }
 
 std::unique_ptr<AutoUnmountDevice> AutoUnmountDevice::New(const std::string& path) {
