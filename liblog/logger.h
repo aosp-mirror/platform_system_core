@@ -18,7 +18,6 @@
 
 #include <stdatomic.h>
 
-#include <cutils/list.h>
 #include <log/log.h>
 
 #include "log_portability.h"
@@ -48,19 +47,5 @@ struct logger_list {
 inline bool android_logger_is_logd(struct logger* logger) {
   return reinterpret_cast<uintptr_t>(logger) & LOGGER_LOGD;
 }
-
-/* OS specific dribs and drabs */
-
-#if defined(_WIN32)
-#include <private/android_filesystem_config.h>
-typedef uint32_t uid_t;
-static inline uid_t __android_log_uid() {
-  return AID_SYSTEM;
-}
-#else
-static inline uid_t __android_log_uid() {
-  return getuid();
-}
-#endif
 
 __END_DECLS
