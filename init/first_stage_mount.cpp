@@ -558,6 +558,14 @@ bool FirstStageMount::MountPartitions() {
             continue;
         }
 
+        // Skip raw partition entries such as boot, dtbo, etc.
+        // Having emmc fstab entries allows us to probe current->vbmeta_partition
+        // in InitDevices() when they are AVB chained partitions.
+        if (current->fs_type == "emmc") {
+            ++current;
+            continue;
+        }
+
         Fstab::iterator end;
         if (!MountPartition(current, false /* erase_same_mounts */, &end)) {
             if (current->fs_mgr_flags.no_fail) {
