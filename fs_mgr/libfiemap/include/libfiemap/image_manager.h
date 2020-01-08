@@ -25,6 +25,7 @@
 #include <string>
 
 #include <android-base/unique_fd.h>
+#include <libfiemap/fiemap_status.h>
 #include <liblp/partition_opener.h>
 
 namespace android {
@@ -52,7 +53,9 @@ class IImageManager {
     // of the image is undefined. If zero-fill is requested, and the operation
     // cannot be completed, the image will be deleted and this function will
     // return false.
-    virtual bool CreateBackingImage(const std::string& name, uint64_t size, int flags) = 0;
+    virtual FiemapStatus CreateBackingImage(
+            const std::string& name, uint64_t size, int flags,
+            std::function<bool(uint64_t, uint64_t)>&& on_progress = nullptr) = 0;
 
     // Delete an image created with CreateBackingImage. Its entry will be
     // removed from the associated lp_metadata file.
@@ -113,7 +116,7 @@ class IImageManager {
 
     // Writes |bytes| zeros to |name| file. If |bytes| is 0, then the
     // whole file if filled with zeros.
-    virtual bool ZeroFillNewImage(const std::string& name, uint64_t bytes) = 0;
+    virtual FiemapStatus ZeroFillNewImage(const std::string& name, uint64_t bytes) = 0;
 
     // Find and remove all images and metadata for this manager.
     virtual bool RemoveAllImages() = 0;
@@ -133,7 +136,8 @@ class ImageManager final : public IImageManager {
     static std::unique_ptr<ImageManager> Open(const std::string& dir_prefix);
 
     // Methods that must be implemented from IImageManager.
-    bool CreateBackingImage(const std::string& name, uint64_t size, int flags) override;
+    FiemapStatus CreateBackingImage(const std::string& name, uint64_t size, int flags,
+                                    std::function<bool(uint64_t, uint64_t)>&& on_progress) override;
     bool DeleteBackingImage(const std::string& name) override;
     bool MapImageDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms,
                         std::string* path) override;
@@ -149,9 +153,6 @@ class ImageManager final : public IImageManager {
     bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) override;
 
     std::vector<std::string> GetAllBackingImages();
-    // Same as CreateBackingImage, but provides a progress notification.
-    bool CreateBackingImage(const std::string& name, uint64_t size, int flags,
-                            std::function<bool(uint64_t, uint64_t)>&& on_progress);
 
     // Returns true if the named partition exists. This does not check the
     // consistency of the backing image/data file.
@@ -164,7 +165,7 @@ class ImageManager final : public IImageManager {
     void set_partition_opener(std::unique_ptr<IPartitionOpener>&& opener);
 
     // Writes |bytes| zeros at the beginning of the passed image
-    bool ZeroFillNewImage(const std::string& name, uint64_t bytes);
+    FiemapStatus ZeroFillNewImage(const std::string& name, uint64_t bytes);
 
   private:
     ImageManager(const std::string& metadata_dir, const std::string& data_dir);

@@ -37,6 +37,12 @@ class FiemapStatus {
     // Create from a given errno (specified in errno,h)
     static FiemapStatus FromErrno(int error_num) { return FiemapStatus(CastErrorCode(-error_num)); }
 
+    // Create from an integer error code that is expected to be an ErrorCode
+    // value. If it isn't, Error() is returned.
+    static FiemapStatus FromErrorCode(int32_t error_code) {
+        return FiemapStatus(CastErrorCode(error_code));
+    }
+
     // Generic error.
     static FiemapStatus Error() { return FiemapStatus(ErrorCode::ERROR); }
 
