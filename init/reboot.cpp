@@ -860,6 +860,30 @@ static void HandleUserspaceReboot() {
     am.QueueBuiltinAction(handler, "userspace-reboot");
 }
 
+/**
+ * Check if "command" field is set in bootloader message.
+ *
+ * If "command" field is broken (contains non-printable characters prior to
+ * terminating zero), it will be zeroed.
+ *
+ * @param[in,out] boot Bootloader message (BCB) structure
+ * @return true if "command" field is already set, and false if it's empty
+ */
+static bool CommandIsPresent(bootloader_message* boot) {
+    if (boot->command[0] == '\0')
+        return false;
+
+    for (size_t i = 0; i < arraysize(boot->command); ++i) {
+        if (boot->command[i] == '\0')
+            return true;
+        if (!isprint(boot->command[i]))
+            break;
+    }
+
+    memset(boot->command, 0, sizeof(boot->command));
+    return false;
+}
+
 void HandlePowerctlMessage(const std::string& command) {
     unsigned int cmd = 0;
     std::vector<std::string> cmd_params = Split(command, ",");
@@ -912,7 +936,7 @@ void HandlePowerctlMessage(const std::string& command) {
                 }
                 // Update the boot command field if it's empty, and preserve
                 // the other arguments in the bootloader message.
-                if (boot.command[0] == '\0') {
+                if (!CommandIsPresent(&boot)) {
                     strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
                     if (std::string err; !write_bootloader_message(boot, &err)) {
                         LOG(ERROR) << "Failed to set bootloader message: " << err;
