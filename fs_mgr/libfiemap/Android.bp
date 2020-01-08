@@ -24,6 +24,7 @@ filegroup {
     name: "libfiemap_srcs",
     srcs: [
         "fiemap_writer.cpp",
+        "fiemap_status.cpp",
         "image_manager.cpp",
         "metadata.cpp",
         "split_fiemap_writer.cpp",
