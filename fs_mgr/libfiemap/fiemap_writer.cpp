@@ -262,9 +262,9 @@ static bool PerformFileChecks(const std::string& file_path, uint64_t* blocksz, u
     return true;
 }
 
-static bool FallocateFallback(int file_fd, uint64_t block_size, uint64_t file_size,
-                              const std::string& file_path,
-                              const std::function<bool(uint64_t, uint64_t)>& on_progress) {
+static FiemapStatus FallocateFallback(int file_fd, uint64_t block_size, uint64_t file_size,
+                                      const std::string& file_path,
+                                      const std::function<bool(uint64_t, uint64_t)>& on_progress) {
     // Even though this is much faster than writing zeroes, it is still slow
     // enough that we need to fire the progress callback periodically. To
     // easily achieve this, we seek in chunks. We use 1000 chunks since
@@ -280,22 +280,22 @@ static bool FallocateFallback(int file_fd, uint64_t block_size, uint64_t file_si
         auto rv = TEMP_FAILURE_RETRY(lseek(file_fd, cursor - 1, SEEK_SET));
         if (rv < 0) {
             PLOG(ERROR) << "Failed to lseek " << file_path;
-            return false;
+            return FiemapStatus::FromErrno(errno);
         }
         if (rv != cursor - 1) {
             LOG(ERROR) << "Seek returned wrong offset " << rv << " for file " << file_path;
-            return false;
+            return FiemapStatus::Error();
         }
         char buffer[] = {0};
         if (!android::base::WriteFully(file_fd, buffer, 1)) {
             PLOG(ERROR) << "Write failed: " << file_path;
-            return false;
+            return FiemapStatus::FromErrno(errno);
         }
         if (on_progress && !on_progress(cursor, file_size)) {
-            return false;
+            return FiemapStatus::Error();
         }
     }
-    return true;
+    return FiemapStatus::Ok();
 }
 
 // F2FS-specific ioctl
@@ -382,19 +382,19 @@ static bool PinFile(int file_fd, const std::string& file_path, uint32_t fs_type)
 // write zeroes in 'blocksz' byte increments until we reach file_size to make sure the data
 // blocks are actually written to by the file system and thus getting rid of the holes in the
 // file.
-static bool WriteZeroes(int file_fd, const std::string& file_path, size_t blocksz,
-                        uint64_t file_size,
-                        const std::function<bool(uint64_t, uint64_t)>& on_progress) {
+static FiemapStatus WriteZeroes(int file_fd, const std::string& file_path, size_t blocksz,
+                                uint64_t file_size,
+                                const std::function<bool(uint64_t, uint64_t)>& on_progress) {
     auto buffer = std::unique_ptr<void, decltype(&free)>(calloc(1, blocksz), free);
     if (buffer == nullptr) {
         LOG(ERROR) << "failed to allocate memory for writing file";
-        return false;
+        return FiemapStatus::Error();
     }
 
     off64_t offset = lseek64(file_fd, 0, SEEK_SET);
     if (offset < 0) {
         PLOG(ERROR) << "Failed to seek at the beginning of : " << file_path;
-        return false;
+        return FiemapStatus::FromErrno(errno);
     }
 
     int permille = -1;
@@ -402,7 +402,7 @@ static bool WriteZeroes(int file_fd, const std::string& file_path, size_t blocks
         if (!::android::base::WriteFully(file_fd, buffer.get(), blocksz)) {
             PLOG(ERROR) << "Failed to write" << blocksz << " bytes at offset" << offset
                         << " in file " << file_path;
-            return false;
+            return FiemapStatus::FromErrno(errno);
         }
 
         offset += blocksz;
@@ -412,7 +412,7 @@ static bool WriteZeroes(int file_fd, const std::string& file_path, size_t blocks
         int new_permille = (static_cast<uint64_t>(offset) * 1000) / file_size;
         if (new_permille != permille && static_cast<uint64_t>(offset) != file_size) {
             if (on_progress && !on_progress(offset, file_size)) {
-                return false;
+                return FiemapStatus::Error();
             }
             permille = new_permille;
         }
@@ -420,18 +420,18 @@ static bool WriteZeroes(int file_fd, const std::string& file_path, size_t blocks
 
     if (lseek64(file_fd, 0, SEEK_SET) < 0) {
         PLOG(ERROR) << "Failed to reset offset at the beginning of : " << file_path;
-        return false;
+        return FiemapStatus::FromErrno(errno);
     }
-    return true;
+    return FiemapStatus::Ok();
 }
 
 // Reserve space for the file on the file system and write it out to make sure the extents
 // don't come back unwritten. Return from this function with the kernel file offset set to 0.
 // If the filesystem is f2fs, then we also PIN the file on disk to make sure the blocks
 // aren't moved around.
-static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blocksz,
-                         uint64_t file_size, unsigned int fs_type,
-                         std::function<bool(uint64_t, uint64_t)> on_progress) {
+static FiemapStatus AllocateFile(int file_fd, const std::string& file_path, uint64_t blocksz,
+                                 uint64_t file_size, unsigned int fs_type,
+                                 std::function<bool(uint64_t, uint64_t)> on_progress) {
     bool need_explicit_writes = true;
     switch (fs_type) {
         case EXT4_SUPER_MAGIC:
@@ -439,11 +439,11 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
         case F2FS_SUPER_MAGIC: {
             bool supported;
             if (!F2fsPinBeforeAllocate(file_fd, &supported)) {
-                return false;
+                return FiemapStatus::Error();
             }
             if (supported) {
                 if (!PinFile(file_fd, file_path, fs_type)) {
-                    return false;
+                    return FiemapStatus::Error();
                 }
                 need_explicit_writes = false;
             }
@@ -455,29 +455,32 @@ static bool AllocateFile(int file_fd, const std::string& file_path, uint64_t blo
             return FallocateFallback(file_fd, blocksz, file_size, file_path, on_progress);
         default:
             LOG(ERROR) << "Missing fallocate() support for file system " << fs_type;
-            return false;
+            return FiemapStatus::Error();
     }
 
     if (fallocate(file_fd, 0, 0, file_size)) {
         PLOG(ERROR) << "Failed to allocate space for file: " << file_path << " size: " << file_size;
-        return false;
+        return FiemapStatus::FromErrno(errno);
     }
 
-    if (need_explicit_writes && !WriteZeroes(file_fd, file_path, blocksz, file_size, on_progress)) {
-        return false;
+    if (need_explicit_writes) {
+        auto status = WriteZeroes(file_fd, file_path, blocksz, file_size, on_progress);
+        if (!status.is_ok()) {
+            return status;
+        }
     }
 
     // flush all writes here ..
     if (fsync(file_fd)) {
         PLOG(ERROR) << "Failed to synchronize written file:" << file_path;
-        return false;
+        return FiemapStatus::FromErrno(errno);
     }
 
     // Send one last progress notification.
     if (on_progress && !on_progress(file_size, file_size)) {
-        return false;
+        return FiemapStatus::Error();
     }
-    return true;
+    return FiemapStatus::Ok();
 }
 
 bool FiemapWriter::HasPinnedExtents(const std::string& file_path) {
@@ -671,6 +674,18 @@ static bool ReadFibmap(int file_fd, const std::string& file_path,
 
 FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_size, bool create,
                                    std::function<bool(uint64_t, uint64_t)> progress) {
+    FiemapUniquePtr ret;
+    if (!Open(file_path, file_size, &ret, create, progress).is_ok()) {
+        return nullptr;
+    }
+    return ret;
+}
+
+FiemapStatus FiemapWriter::Open(const std::string& file_path, uint64_t file_size,
+                                FiemapUniquePtr* out, bool create,
+                                std::function<bool(uint64_t, uint64_t)> progress) {
+    out->reset();
+
     // if 'create' is false, open an existing file and do not truncate.
     int open_flags = O_RDWR | O_CLOEXEC;
     if (create) {
@@ -683,43 +698,46 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
             TEMP_FAILURE_RETRY(open(file_path.c_str(), open_flags, S_IRUSR | S_IWUSR)));
     if (file_fd < 0) {
         PLOG(ERROR) << "Failed to create file at: " << file_path;
-        return nullptr;
+        return FiemapStatus::FromErrno(errno);
     }
 
     std::string abs_path;
     if (!::android::base::Realpath(file_path, &abs_path)) {
+        int saved_errno = errno;
         PLOG(ERROR) << "Invalid file path: " << file_path;
         cleanup(file_path, create);
-        return nullptr;
+        return FiemapStatus::FromErrno(saved_errno);
     }
 
     std::string bdev_path;
     if (!GetBlockDeviceForFile(abs_path, &bdev_path)) {
         LOG(ERROR) << "Failed to get block dev path for file: " << file_path;
         cleanup(abs_path, create);
-        return nullptr;
+        return FiemapStatus::Error();
     }
 
     ::android::base::unique_fd bdev_fd(
             TEMP_FAILURE_RETRY(open(bdev_path.c_str(), O_RDONLY | O_CLOEXEC)));
     if (bdev_fd < 0) {
+        int saved_errno = errno;
         PLOG(ERROR) << "Failed to open block device: " << bdev_path;
         cleanup(file_path, create);
-        return nullptr;
+        return FiemapStatus::FromErrno(saved_errno);
     }
 
     uint64_t bdevsz;
     if (!GetBlockDeviceSize(bdev_fd, bdev_path, &bdevsz)) {
+        int saved_errno = errno;
         LOG(ERROR) << "Failed to get block device size for : " << bdev_path;
         cleanup(file_path, create);
-        return nullptr;
+        return FiemapStatus::FromErrno(saved_errno);
     }
 
     if (!create) {
         file_size = GetFileSize(abs_path);
         if (file_size == 0) {
             LOG(ERROR) << "Invalid file size of zero bytes for file: " << abs_path;
-            return nullptr;
+            return FiemapStatus::FromErrno(errno);
         }
     }
 
@@ -728,7 +746,7 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     if (!PerformFileChecks(abs_path, &blocksz, &fs_type)) {
         LOG(ERROR) << "Failed to validate file or file system for file:" << abs_path;
         cleanup(abs_path, create);
-        return nullptr;
+        return FiemapStatus::Error();
     }
 
     // Align up to the nearest block size.
@@ -737,11 +755,13 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     }
 
     if (create) {
-        if (!AllocateFile(file_fd, abs_path, blocksz, file_size, fs_type, std::move(progress))) {
+        auto status =
+                AllocateFile(file_fd, abs_path, blocksz, file_size, fs_type, std::move(progress));
+        if (!status.is_ok()) {
             LOG(ERROR) << "Failed to allocate file: " << abs_path << " of size: " << file_size
                        << " bytes";
             cleanup(abs_path, create);
-            return nullptr;
+            return status;
         }
     }
 
@@ -749,7 +769,7 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
     if (!PinFile(file_fd, abs_path, fs_type)) {
         cleanup(abs_path, create);
         LOG(ERROR) << "Failed to pin the file in storage";
-        return nullptr;
+        return FiemapStatus::Error();
     }
 
     // now allocate the FiemapWriter and start setting it up
@@ -760,14 +780,14 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
             if (!ReadFiemap(file_fd, abs_path, &fmap->extents_)) {
                 LOG(ERROR) << "Failed to read fiemap of file: " << abs_path;
                 cleanup(abs_path, create);
-                return nullptr;
+                return FiemapStatus::Error();
             }
             break;
         case MSDOS_SUPER_MAGIC:
             if (!ReadFibmap(file_fd, abs_path, &fmap->extents_)) {
                 LOG(ERROR) << "Failed to read fibmap of file: " << abs_path;
                 cleanup(abs_path, create);
-                return nullptr;
+                return FiemapStatus::Error();
             }
             break;
     }
@@ -781,7 +801,8 @@ FiemapUniquePtr FiemapWriter::Open(const std::string& file_path, uint64_t file_s
 
     LOG(VERBOSE) << "Successfully created FiemapWriter for file " << abs_path << " on block device "
                  << bdev_path;
-    return fmap;
+    *out = std::move(fmap);
+    return FiemapStatus::Ok();
 }
 
 }  // namespace fiemap
