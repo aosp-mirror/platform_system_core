@@ -54,6 +54,7 @@ using android::dm::DmTargetLinear;
 using android::dm::DmTargetSnapshot;
 using android::dm::kSectorSize;
 using android::dm::SnapshotStorageMode;
+using android::fiemap::FiemapStatus;
 using android::fiemap::IImageManager;
 using android::fs_mgr::CreateDmTable;
 using android::fs_mgr::CreateLogicalPartition;
@@ -289,14 +290,14 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
     return true;
 }
 
-bool SnapshotManager::CreateCowImage(LockedFile* lock, const std::string& name) {
+SnapshotManager::Return SnapshotManager::CreateCowImage(LockedFile* lock, const std::string& name) {
     CHECK(lock);
     CHECK(lock->lock_mode() == LOCK_EX);
-    if (!EnsureImageManager()) return false;
+    if (!EnsureImageManager()) return Return::Error();
 
     SnapshotStatus status;
     if (!ReadSnapshotStatus(lock, name, &status)) {
-        return false;
+        return Return::Error();
     }
 
     // The COW file size should have been rounded up to the nearest sector in CreateSnapshot.
@@ -304,12 +305,12 @@ bool SnapshotManager::CreateCowImage(LockedFile* lock, const std::string& name) 
     if (status.cow_file_size() % kSectorSize != 0) {
         LOG(ERROR) << "Snapshot " << name << " COW file size is not a multiple of the sector size: "
                    << status.cow_file_size();
-        return false;
+        return Return::Error();
     }
 
     std::string cow_image_name = GetCowImageDeviceName(name);
     int cow_flags = IImageManager::CREATE_IMAGE_DEFAULT;
-    return images_->CreateBackingImage(cow_image_name, status.cow_file_size(), cow_flags);
+    return Return(images_->CreateBackingImage(cow_image_name, status.cow_file_size(), cow_flags));
 }
 
 bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
@@ -1844,9 +1845,23 @@ static void UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata) {
     }
 }
 
-bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) {
+static SnapshotManager::Return AddRequiredSpace(
+        SnapshotManager::Return orig,
+        const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
+    if (orig.error_code() != SnapshotManager::Return::ErrorCode::NO_SPACE) {
+        return orig;
+    }
+    uint64_t sum = 0;
+    for (auto&& [name, status] : all_snapshot_status) {
+        sum += status.cow_file_size();
+    }
+    return SnapshotManager::Return::NoSpace(sum);
+}
+
+SnapshotManager::Return SnapshotManager::CreateUpdateSnapshots(
+        const DeltaArchiveManifest& manifest) {
     auto lock = LockExclusive();
-    if (!lock) return false;
+    if (!lock) return Return::Error();
 
     // TODO(b/134949511): remove this check. Right now, with overlayfs mounted, the scratch
     // partition takes up a big chunk of space in super, causing COW images to be created on
@@ -1854,7 +1869,7 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
     if (device_->IsOverlayfsSetup()) {
         LOG(ERROR) << "Cannot create update snapshots with overlayfs setup. Run `adb enable-verity`"
                    << ", reboot, then try again.";
-        return false;
+        return Return::Error();
     }
 
     const auto& opener = device_->GetPartitionOpener();
@@ -1879,7 +1894,7 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
     SnapshotMetadataUpdater metadata_updater(target_metadata.get(), target_slot, manifest);
     if (!metadata_updater.Update()) {
         LOG(ERROR) << "Cannot calculate new metadata.";
-        return false;
+        return Return::Error();
     }
 
     // Delete previous COW partitions in current_metadata so that PartitionCowCreator marks those as
@@ -1911,36 +1926,34 @@ bool SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest
             .extra_extents = {},
     };
 
-    if (!CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
-                                       &all_snapshot_status)) {
-        return false;
-    }
+    auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
+                                             &all_snapshot_status);
+    if (!ret.is_ok()) return ret;
 
     auto exported_target_metadata = target_metadata->Export();
     if (exported_target_metadata == nullptr) {
         LOG(ERROR) << "Cannot export target metadata";
-        return false;
+        return Return::Error();
     }
 
-    if (!InitializeUpdateSnapshots(lock.get(), target_metadata.get(),
-                                   exported_target_metadata.get(), target_suffix,
-                                   all_snapshot_status)) {
-        return false;
-    }
+    ret = InitializeUpdateSnapshots(lock.get(), target_metadata.get(),
+                                    exported_target_metadata.get(), target_suffix,
+                                    all_snapshot_status);
+    if (!ret.is_ok()) return ret;
 
     if (!UpdatePartitionTable(opener, device_->GetSuperDevice(target_slot),
                               *exported_target_metadata, target_slot)) {
         LOG(ERROR) << "Cannot write target metadata";
-        return false;
+        return Return::Error();
     }
 
     created_devices.Release();
     LOG(INFO) << "Successfully created all snapshots for target slot " << target_suffix;
 
-    return true;
+    return Return::Ok();
 }
 
-bool SnapshotManager::CreateUpdateSnapshotsInternal(
+SnapshotManager::Return SnapshotManager::CreateUpdateSnapshotsInternal(
         LockedFile* lock, const DeltaArchiveManifest& manifest, PartitionCowCreator* cow_creator,
         AutoDeviceList* created_devices,
         std::map<std::string, SnapshotStatus>* all_snapshot_status) {
@@ -1951,7 +1964,7 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
 
     if (!target_metadata->AddGroup(kCowGroupName, 0)) {
         LOG(ERROR) << "Cannot add group " << kCowGroupName;
-        return false;
+        return Return::Error();
     }
 
     std::map<std::string, const RepeatedPtrField<InstallOperation>*> install_operation_map;
@@ -1963,7 +1976,7 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
         if (!inserted) {
             LOG(ERROR) << "Duplicated partition " << partition_update.partition_name()
                        << " in update manifest.";
-            return false;
+            return Return::Error();
         }
 
         auto& extra_extents = extra_extents_map[suffixed_name];
@@ -1992,7 +2005,7 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
         // Compute the device sizes for the partition.
         auto cow_creator_ret = cow_creator->Run();
         if (!cow_creator_ret.has_value()) {
-            return false;
+            return Return::Error();
         }
 
         LOG(INFO) << "For partition " << target_partition->name()
@@ -2006,7 +2019,7 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
         if (!DeleteSnapshot(lock, target_partition->name())) {
             LOG(ERROR) << "Cannot delete existing snapshot before creating a new one for partition "
                        << target_partition->name();
-            return false;
+            return Return::Error();
         }
 
         // It is possible that the whole partition uses free space in super, and snapshot / COW
@@ -2024,7 +2037,7 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
 
         // Store these device sizes to snapshot status file.
         if (!CreateSnapshot(lock, &cow_creator_ret->snapshot_status)) {
-            return false;
+            return Return::Error();
         }
         created_devices->EmplaceBack<AutoDeleteSnapshot>(this, lock, target_partition->name());
 
@@ -2038,7 +2051,7 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
             auto cow_partition = target_metadata->AddPartition(GetCowName(target_partition->name()),
                                                                kCowGroupName, 0 /* flags */);
             if (cow_partition == nullptr) {
-                return false;
+                return Return::Error();
             }
 
             if (!target_metadata->ResizePartition(
@@ -2046,28 +2059,34 @@ bool SnapshotManager::CreateUpdateSnapshotsInternal(
                         cow_creator_ret->cow_partition_usable_regions)) {
                 LOG(ERROR) << "Cannot create COW partition on metadata with size "
                            << cow_creator_ret->snapshot_status.cow_partition_size();
-                return false;
+                return Return::Error();
             }
             // Only the in-memory target_metadata is modified; nothing to clean up if there is an
             // error in the future.
         }
 
-        // Create the backing COW image if necessary.
-        if (cow_creator_ret->snapshot_status.cow_file_size() > 0) {
-            if (!CreateCowImage(lock, target_partition->name())) {
-                return false;
-            }
-        }
-
         all_snapshot_status->emplace(target_partition->name(),
                                      std::move(cow_creator_ret->snapshot_status));
 
-        LOG(INFO) << "Successfully created snapshot for " << target_partition->name();
+        LOG(INFO) << "Successfully created snapshot partition for " << target_partition->name();
     }
-    return true;
+
+    LOG(INFO) << "Allocating CoW images.";
+
+    for (auto&& [name, snapshot_status] : *all_snapshot_status) {
+        // Create the backing COW image if necessary.
+        if (snapshot_status.cow_file_size() > 0) {
+            auto ret = CreateCowImage(lock, name);
+            if (!ret.is_ok()) return AddRequiredSpace(ret, *all_snapshot_status);
+        }
+
+        LOG(INFO) << "Successfully created snapshot for " << name;
+    }
+
+    return Return::Ok();
 }
 
-bool SnapshotManager::InitializeUpdateSnapshots(
+SnapshotManager::Return SnapshotManager::InitializeUpdateSnapshots(
         LockedFile* lock, MetadataBuilder* target_metadata,
         const LpMetadata* exported_target_metadata, const std::string& target_suffix,
         const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
@@ -2086,7 +2105,7 @@ bool SnapshotManager::InitializeUpdateSnapshots(
         if (!UnmapPartitionWithSnapshot(lock, target_partition->name())) {
             LOG(ERROR) << "Cannot unmap existing COW devices before re-mapping them for zero-fill: "
                        << target_partition->name();
-            return false;
+            return Return::Error();
         }
 
         auto it = all_snapshot_status.find(target_partition->name());
@@ -2094,23 +2113,24 @@ bool SnapshotManager::InitializeUpdateSnapshots(
         cow_params.partition_name = target_partition->name();
         std::string cow_name;
         if (!MapCowDevices(lock, cow_params, it->second, &created_devices_for_cow, &cow_name)) {
-            return false;
+            return Return::Error();
         }
 
         std::string cow_path;
         if (!dm.GetDmDevicePathByName(cow_name, &cow_path)) {
             LOG(ERROR) << "Cannot determine path for " << cow_name;
-            return false;
+            return Return::Error();
         }
 
-        if (!InitializeCow(cow_path)) {
+        auto ret = InitializeCow(cow_path);
+        if (!ret.is_ok()) {
             LOG(ERROR) << "Can't zero-fill COW device for " << target_partition->name() << ": "
                        << cow_path;
-            return false;
+            return AddRequiredSpace(ret, all_snapshot_status);
         }
         // Let destructor of created_devices_for_cow to unmap the COW devices.
     };
-    return true;
+    return Return::Ok();
 }
 
 bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& params,

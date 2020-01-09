@@ -47,6 +47,7 @@ namespace snapshot {
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
+using android::fiemap::FiemapStatus;
 using android::fiemap::IImageManager;
 using android::fs_mgr::BlockDeviceInfo;
 using android::fs_mgr::CreateLogicalPartitionParams;
@@ -1585,6 +1586,29 @@ TEST_F(SnapshotUpdateTest, WaitForMerge) {
     ASSERT_THAT(merger.get(), AnyOf(UpdateState::None, UpdateState::MergeCompleted));
 }
 
+TEST_F(SnapshotUpdateTest, LowSpace) {
+    static constexpr auto kMaxFree = 10_MiB;
+    auto userdata = std::make_unique<LowSpaceUserdata>();
+    ASSERT_TRUE(userdata->Init(kMaxFree));
+
+    // Grow all partitions to 5_MiB, total 15_MiB. This requires 15 MiB of CoW space. After
+    // using the empty space in super (< 1 MiB), it uses at least 14 MiB of /userdata space.
+    constexpr uint64_t partition_size = 5_MiB;
+    SetSize(sys_, partition_size);
+    SetSize(vnd_, partition_size);
+    SetSize(prd_, partition_size);
+
+    AddOperationForPartitions();
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    auto res = sm->CreateUpdateSnapshots(manifest_);
+    ASSERT_FALSE(res);
+    ASSERT_EQ(SnapshotManager::Return::ErrorCode::NO_SPACE, res.error_code());
+    ASSERT_GE(res.required_size(), 14_MiB);
+    ASSERT_LT(res.required_size(), 15_MiB);
+}
+
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
                              public WithParamInterface<std::tuple<uint32_t, bool>> {
   public:
@@ -1699,6 +1723,55 @@ INSTANTIATE_TEST_SUITE_P(Snapshot, FlashAfterUpdateTest, Combine(Values(0, 1), B
                                     "Slot"s + (std::get<1>(info.param) ? "After"s : "Before"s) +
                                     "Merge"s;
                          });
+
+// Test behavior of ImageManager::Create on low space scenario. These tests assumes image manager
+// uses /data as backup device.
+class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t> {
+  public:
+    void SetUp() override {
+        SnapshotTest::SetUp();
+        userdata_ = std::make_unique<LowSpaceUserdata>();
+        ASSERT_TRUE(userdata_->Init(GetParam()));
+    }
+    void TearDown() override {
+        EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
+                    image_manager_->DeleteBackingImage(kImageName));
+    }
+    static constexpr const char* kImageName = "my_image";
+    std::unique_ptr<LowSpaceUserdata> userdata_;
+};
+
+TEST_P(ImageManagerTest, CreateImageEnoughAvailSpace) {
+    if (userdata_->available_space() == 0) {
+        GTEST_SKIP() << "/data is full (" << userdata_->available_space()
+                     << " bytes available), skipping";
+    }
+    ASSERT_TRUE(image_manager_->CreateBackingImage(kImageName, userdata_->available_space(),
+                                                   IImageManager::CREATE_IMAGE_DEFAULT))
+            << "Should be able to create image with size = " << userdata_->available_space()
+            << " bytes";
+    ASSERT_TRUE(image_manager_->DeleteBackingImage(kImageName))
+            << "Should be able to delete created image";
+}
+
+TEST_P(ImageManagerTest, CreateImageNoSpace) {
+    uint64_t to_allocate = userdata_->free_space() + userdata_->bsize();
+    auto res = image_manager_->CreateBackingImage(kImageName, to_allocate,
+                                                  IImageManager::CREATE_IMAGE_DEFAULT);
+    ASSERT_FALSE(res) << "Should not be able to create image with size = " << to_allocate
+                      << " bytes because only " << userdata_->free_space() << " bytes are free";
+    ASSERT_EQ(FiemapStatus::ErrorCode::NO_SPACE, res.error_code()) << res.string();
+}
+
+std::vector<uint64_t> ImageManagerTestParams() {
+    std::vector<uint64_t> ret;
+    for (uint64_t size = 1_MiB; size <= 512_MiB; size *= 2) {
+        ret.push_back(size);
+    }
+    return ret;
+}
+
+INSTANTIATE_TEST_SUITE_P(ImageManagerTest, ImageManagerTest, ValuesIn(ImageManagerTestParams()));
 
 }  // namespace snapshot
 }  // namespace android
