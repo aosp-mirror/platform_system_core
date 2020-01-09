@@ -49,14 +49,6 @@
 #define TRACE(...) ((void)0)
 #endif
 
-static void FakeClose();
-static int FakeWrite(log_id_t log_id, struct timespec* ts, struct iovec* vec, size_t nr);
-
-struct android_log_transport_write fakeLoggerWrite = {
-    .close = FakeClose,
-    .write = FakeWrite,
-};
-
 typedef struct LogState {
   bool initialized = false;
   /* global minimum priority */
@@ -453,7 +445,7 @@ static void ShowLog(int logPrio, const char* tag, const char* msg) {
  *  tag (N bytes -- null-terminated ASCII string)
  *  message (N bytes -- null-terminated ASCII string)
  */
-static int FakeWrite(log_id_t log_id, struct timespec*, struct iovec* vector, size_t count) {
+int FakeWrite(log_id_t log_id, struct timespec*, struct iovec* vector, size_t count) {
   /* Make sure that no-one frees the LogState while we're using it.
    * Also guarantees that only one thread is in showLog() at a given
    * time (if it matters).
@@ -519,7 +511,7 @@ static int FakeWrite(log_id_t log_id, struct timespec*, struct iovec* vector, si
  * call is in the exit handler. Logging can continue in the exit handler to
  * help debug HOST tools ...
  */
-static void FakeClose() {
+void FakeClose() {
   auto lock = std::lock_guard{*fake_log_mutex};
 
   memset(&log_state, 0, sizeof(log_state));
