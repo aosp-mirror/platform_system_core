@@ -23,7 +23,7 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include <private/android_filesystem_config.h>
+#include <cutils/list.h>
 #include <private/android_logger.h>
 
 #include "logger.h"

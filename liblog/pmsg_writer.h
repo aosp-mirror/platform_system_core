@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,9 @@
 
 #pragma once
 
-#include <sys/types.h>
+#include <stddef.h>
 
 #include <android/log.h>
 
-#include "log_portability.h"
-
-__BEGIN_DECLS
-
-void FakeClose();
-int FakeWrite(log_id_t log_id, struct timespec* ts, struct iovec* vec, size_t nr);
-
-int __android_log_is_loggable(int prio, const char*, int def);
-int __android_log_is_loggable_len(int prio, const char*, size_t, int def);
-int __android_log_is_debuggable();
-
-__END_DECLS
+int PmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
+void PmsgClose();

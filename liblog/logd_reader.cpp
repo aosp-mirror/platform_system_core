@@ -35,8 +35,6 @@
 
 #include <string>
 
-#include <cutils/sockets.h>
-#include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
 #include "logger.h"
