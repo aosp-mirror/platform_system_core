@@ -42,7 +42,7 @@ static const int64_t DEFAULT_TIMEOUT_NS = 10000000000LL;   // 10 seconds.
 
 class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
   public:
-    StatsPullAtomCallbackInternal(const stats_pull_atom_callback_t* callback, const void* cookie,
+    StatsPullAtomCallbackInternal(const stats_pull_atom_callback_t callback, const void* cookie,
                                   const int64_t coolDownNs, const int64_t timeoutNs,
                                   const std::vector<int32_t> additiveFields)
         : mCallback(callback),
@@ -55,7 +55,7 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
             int32_t atomTag,
             const ::android::sp<::android::os::IPullAtomResultReceiver>& resultReceiver) override {
         pulled_stats_event_list statsEventList;
-        bool success = (*mCallback)(atomTag, &statsEventList, mCookie);
+        bool success = mCallback(atomTag, &statsEventList, mCookie);
 
         // Convert stats_events into StatsEventParcels.
         std::vector<android::util::StatsEventParcel> parcels;
@@ -82,7 +82,7 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
     const std::vector<int32_t>& getAdditiveFields() const { return mAdditiveFields; }
 
   private:
-    const stats_pull_atom_callback_t* mCallback;
+    const stats_pull_atom_callback_t mCallback;
     const void* mCookie;
     const int64_t mCoolDownNs;
     const int64_t mTimeoutNs;
@@ -134,7 +134,7 @@ static android::sp<android::os::IStatsd> getStatsServiceLocked() {
     return sStatsd;
 }
 
-void register_stats_pull_atom_callback(int32_t atom_tag, stats_pull_atom_callback_t* callback,
+void register_stats_pull_atom_callback(int32_t atom_tag, stats_pull_atom_callback_t callback,
                                        pull_atom_metadata* metadata, void* cookie) {
     int64_t coolDownNs = metadata == nullptr ? DEFAULT_COOL_DOWN_NS : metadata->cool_down_ns;
     int64_t timeoutNs = metadata == nullptr ? DEFAULT_TIMEOUT_NS : metadata->timeout_ns;

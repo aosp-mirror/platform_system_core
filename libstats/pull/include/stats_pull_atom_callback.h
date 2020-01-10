@@ -38,7 +38,7 @@ typedef bool (*stats_pull_atom_callback_t)(int32_t atom_tag, pulled_stats_event_
                                            const void* cookie);
 
 struct stats_event* add_stats_event_to_pull_data(pulled_stats_event_list* pull_data);
-void register_stats_pull_atom_callback(int32_t atom_tag, stats_pull_atom_callback_t* callback,
+void register_stats_pull_atom_callback(int32_t atom_tag, stats_pull_atom_callback_t callback,
                                        pull_atom_metadata* metadata, void* cookie);
 
 #ifdef __cplusplus
