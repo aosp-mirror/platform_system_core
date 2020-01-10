@@ -75,3 +75,22 @@ cc_benchmark {
         "libgtest_prod",
     ],
 }
+
+cc_test {
+    name: "libstatssocket_test",
+    srcs: ["tests/stats_event_test.cpp"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: [
+        "libgmock",
+        "libstatssocket",
+    ],
+    shared_libs: [
+        "libcutils",
+        "liblog",
+        "libutils",
+    ],
+    test_suites: ["device_tests"],
+}
