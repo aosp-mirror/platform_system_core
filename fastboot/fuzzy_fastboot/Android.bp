@@ -31,6 +31,8 @@ cc_test_host {
     "libext4_utils",
   ],
 
+  stl: "libc++_static",
+
   // Static libs (libfastboot2) shared library dependencies are not transitively included
   // This is needed to avoid link time errors when building for mac
   target: {
