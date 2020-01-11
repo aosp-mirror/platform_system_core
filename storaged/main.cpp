@@ -51,7 +51,7 @@ void* storaged_main(void* /* unused */) {
     storaged_sp->init();
     storaged_sp->report_storage_info();
 
-    LOG_TO(SYSTEM, INFO) << "storaged: Start";
+    LOG(INFO) << "storaged: Start";
 
     for (;;) {
         storaged_sp->event_checked();
@@ -75,6 +75,8 @@ int main(int argc, char** argv) {
     bool flag_dump_task = false;
     bool flag_dump_perf = false;
     int opt;
+
+    android::base::InitLogging(argv, android::base::LogdLogger(android::base::SYSTEM));
 
     for (;;) {
         int opt_idx = 0;
@@ -124,13 +126,13 @@ int main(int argc, char** argv) {
         pthread_t storaged_main_thread;
         errno = pthread_create(&storaged_main_thread, NULL, storaged_main, NULL);
         if (errno != 0) {
-            PLOG_TO(SYSTEM, ERROR) << "Failed to create main thread";
+            PLOG(ERROR) << "Failed to create main thread";
             return -1;
         }
 
         if (StoragedService::start() != android::OK ||
             StoragedPrivateService::start() != android::OK) {
-            PLOG_TO(SYSTEM, ERROR) << "Failed to start storaged service";
+            PLOG(ERROR) << "Failed to start storaged service";
             return -1;
         }
 
