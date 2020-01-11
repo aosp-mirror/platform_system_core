@@ -350,11 +350,10 @@ void SetAborter(AbortFunction&& aborter) {
 // checks/logging in a function.
 class LogMessageData {
  public:
-  LogMessageData(const char* file, unsigned int line, LogId id, LogSeverity severity,
-                 const char* tag, int error)
+  LogMessageData(const char* file, unsigned int line, LogSeverity severity, const char* tag,
+                 int error)
       : file_(GetFileBasename(file)),
         line_number_(line),
-        id_(id),
         severity_(severity),
         tag_(tag),
         error_(error) {}
@@ -373,10 +372,6 @@ class LogMessageData {
 
   const char* GetTag() const { return tag_; }
 
-  LogId GetId() const {
-    return id_;
-  }
-
   int GetError() const {
     return error_;
   }
@@ -393,7 +388,6 @@ class LogMessageData {
   std::ostringstream buffer_;
   const char* const file_;
   const unsigned int line_number_;
-  const LogId id_;
   const LogSeverity severity_;
   const char* const tag_;
   const int error_;
@@ -401,9 +395,13 @@ class LogMessageData {
   DISALLOW_COPY_AND_ASSIGN(LogMessageData);
 };
 
-LogMessage::LogMessage(const char* file, unsigned int line, LogId id, LogSeverity severity,
+LogMessage::LogMessage(const char* file, unsigned int line, LogId, LogSeverity severity,
                        const char* tag, int error)
-    : data_(new LogMessageData(file, line, id, severity, tag, error)) {}
+    : LogMessage(file, line, severity, tag, error) {}
+
+LogMessage::LogMessage(const char* file, unsigned int line, LogSeverity severity, const char* tag,
+                       int error)
+    : data_(new LogMessageData(file, line, severity, tag, error)) {}
 
 LogMessage::~LogMessage() {
   // Check severity again. This is duplicate work wrt/ LOG macros, but not LOG_STREAM.
@@ -429,16 +427,16 @@ LogMessage::~LogMessage() {
     // Do the actual logging with the lock held.
     std::lock_guard<std::mutex> lock(LoggingLock());
     if (msg.find('\n') == std::string::npos) {
-      LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(), data_->GetSeverity(),
-              data_->GetTag(), msg.c_str());
+      LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetSeverity(), data_->GetTag(),
+              msg.c_str());
     } else {
       msg += '\n';
       size_t i = 0;
       while (i < msg.size()) {
         size_t nl = msg.find('\n', i);
         msg[nl] = '\0';
-        LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(), data_->GetSeverity(),
-                data_->GetTag(), &msg[i]);
+        LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetSeverity(), data_->GetTag(),
+                &msg[i]);
         // Undo the zero-termination so we can give the complete message to the aborter.
         msg[nl] = '\n';
         i = nl + 1;
@@ -456,16 +454,16 @@ std::ostream& LogMessage::stream() {
   return data_->GetBuffer();
 }
 
-void LogMessage::LogLine(const char* file, unsigned int line, LogId id, LogSeverity severity,
-                         const char* tag, const char* message) {
+void LogMessage::LogLine(const char* file, unsigned int line, LogSeverity severity, const char* tag,
+                         const char* message) {
   if (tag == nullptr) {
     std::lock_guard<std::recursive_mutex> lock(TagLock());
     if (gDefaultTag == nullptr) {
       gDefaultTag = new std::string(getprogname());
     }
-    Logger()(id, severity, gDefaultTag->c_str(), file, line, message);
+    Logger()(DEFAULT, severity, gDefaultTag->c_str(), file, line, message);
   } else {
-    Logger()(id, severity, tag, file, line, message);
+    Logger()(DEFAULT, severity, tag, file, line, message);
   }
 }
 
