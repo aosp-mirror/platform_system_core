@@ -1380,8 +1380,8 @@ static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
         // Now proceed with other bind mounts on top of /data.
         for (const auto& entry : proc_mounts) {
             if (entry.blk_device == block_device) {
-                LINFO << __FUNCTION__ << "(): Umount " << entry.mount_point;
                 if (umount2(entry.mount_point.c_str(), 0) != 0) {
+                    PERROR << __FUNCTION__ << "(): Failed to umount " << entry.mount_point;
                     umount_done = false;
                 }
             }
