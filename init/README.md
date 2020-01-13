@@ -487,6 +487,25 @@ Commands
   -f: force installation of the module even if the version of the running kernel
   and the version of the kernel for which the module was compiled do not match.
 
+`interface_start <name>` \
+`interface_restart <name>` \
+`interface_stop <name>`
+> Find the service that provides the interface _name_ if it exists and run the `start`, `restart`,
+or `stop` commands on it respectively.  _name_ may be either a fully qualified HIDL name, in which
+case it is specified as `<interface>/<instance>`, or an AIDL name, in which case it is specified as
+`aidl/<interface>` for example `android.hardware.secure_element@1.1::ISecureElement/eSE1` or
+`aidl/aidl_lazy_test_1`.
+
+> Note that these commands only act on interfaces specified by the `interface` service option, not
+on interfaces registered at runtime.
+
+> Example usage of these commands: \
+`interface_start android.hardware.secure_element@1.1::ISecureElement/eSE1`
+will start the HIDL Service that provides the `android.hardware.secure_element@1.1` and `eSI1`
+instance. \
+`interface_start aidl/aidl_lazy_test_1` will start the AIDL service that
+provides the `aidl_lazy_test_1` interface.
+
 `load_system_props`
 > (This action is deprecated and no-op.)
 
@@ -700,6 +719,26 @@ Init provides state information with the following properties.
   `/sys/fs/ext4/${dev.mnt.blk.<mount_point>}/` to tune the block device
   characteristics in a device agnostic manner.
 
+Init responds to properties that begin with `ctl.`.  These properties take the format of
+`ctl.<command>` and the _value_ of the system property is used as a parameter, for example:
+`SetProperty("ctl.start", "logd")` will run the `start` command on `logd`.  Note that these
+properties are only settable; they will have no value when read.
+
+`ctl.start` \
+`ctl.restart` \
+`ctl.stop`
+> These are equivalent to using the `start`, `restart`, and `stop` commands on the service specified
+by the _value_ of the property.
+
+`ctl.interface_start` \
+`ctl.interface_restart` \
+`ctl.interface_stop`
+> These are equivalent to using the `interface_start`, `interface_restart`, and `interface_stop`
+commands on the interface specified by the _value_ of the property.
+
+`ctl.sigstop_on` and `ctl.sigstop_off` will turn on or off the _sigstop_ feature for the service
+specified by the _value_ of the property.  See the _Debugging init_ section below for more details
+about this feature.
 
 Boot timing
 -----------
