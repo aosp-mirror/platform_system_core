@@ -185,14 +185,7 @@ void put_apacket(apacket* p);
     } while (0)
 #endif
 
-#if ADB_HOST_ON_TARGET
-/* adb and adbd are coexisting on the target, so use 5038 for adb
- * to avoid conflicting with adbd's usage of 5037
- */
-#define DEFAULT_ADB_PORT 5038
-#else
 #define DEFAULT_ADB_PORT 5037
-#endif
 
 #define DEFAULT_ADB_LOCAL_TRANSPORT_PORT 5555
 
