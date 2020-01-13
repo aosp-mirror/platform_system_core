@@ -35,6 +35,19 @@ namespace android {
 namespace init {
 namespace {
 
+static bool BindMount(const std::string& source, const std::string& mount_point,
+                      bool recursive = false) {
+    unsigned long mountflags = MS_BIND;
+    if (recursive) {
+        mountflags |= MS_REC;
+    }
+    if (mount(source.c_str(), mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
+        PLOG(ERROR) << "Failed to bind mount " << source;
+        return false;
+    }
+    return true;
+}
+
 static bool MakeShared(const std::string& mount_point, bool recursive = false) {
     unsigned long mountflags = MS_SHARED;
     if (recursive) {
@@ -42,6 +55,18 @@ static bool MakeShared(const std::string& mount_point, bool recursive = false) {
     }
     if (mount(nullptr, mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
         PLOG(ERROR) << "Failed to change propagation type to shared";
+        return false;
+    }
+    return true;
+}
+
+static bool MakeSlave(const std::string& mount_point, bool recursive = false) {
+    unsigned long mountflags = MS_SLAVE;
+    if (recursive) {
+        mountflags |= MS_REC;
+    }
+    if (mount(nullptr, mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
+        PLOG(ERROR) << "Failed to change propagation type to slave";
         return false;
     }
     return true;
@@ -190,6 +215,39 @@ bool SetupMountNamespaces() {
     // based on the mount namespace. Subdirectory will be bind-mounted based on current mount
     // namespace
     if (!(MakePrivate("/linkerconfig"))) return false;
+
+    // The two mount namespaces present challenges for scoped storage, because
+    // vold, which is responsible for most of the mounting, lives in the
+    // bootstrap mount namespace, whereas most other daemons and all apps live
+    // in the default namespace.  Scoped storage has a need for a
+    // /mnt/installer view that is a slave bind mount of /mnt/user - in other
+    // words, all mounts under /mnt/user should automatically show up under
+    // /mnt/installer. However, additional mounts done under /mnt/installer
+    // should not propagate back to /mnt/user. In a single mount namespace
+    // this is easy to achieve, by simply marking the /mnt/installer a slave
+    // bind mount. Unfortunately, if /mnt/installer is only created and
+    // bind mounted after the two namespaces are created below, we end up
+    // with the following situation:
+    // /mnt/user and /mnt/installer share the same peer group in both the
+    // bootstrap and default namespaces. Marking /mnt/installer slave in either
+    // namespace means that it won't propagate events to the /mnt/installer in
+    // the other namespace, which is still something we require - vold is the
+    // one doing the mounting under /mnt/installer, and those mounts should
+    // show up in the default namespace as well.
+    //
+    // The simplest solution is to do the bind mount before the two namespaces
+    // are created: the effect is that in both namespaces, /mnt/installer is a
+    // slave to the /mnt/user mount, and at the same time /mnt/installer in the
+    // bootstrap namespace shares a peer group with /mnt/installer in the
+    // default namespace.
+    if (!mkdir_recursive("/mnt/user", 0755)) return false;
+    if (!mkdir_recursive("/mnt/installer", 0755)) return false;
+    if (!(BindMount("/mnt/user", "/mnt/installer", true))) return false;
+    // First, make /mnt/installer a slave bind mount
+    if (!(MakeSlave("/mnt/installer"))) return false;
+    // Then, make it shared again - effectively creating a new peer group, that
+    // will be inherited by new mount namespaces.
+    if (!(MakeShared("/mnt/installer"))) return false;
 
     bootstrap_ns_fd.reset(OpenMountNamespace());
     bootstrap_ns_id = GetMountNamespaceId();
