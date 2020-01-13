@@ -910,6 +910,10 @@ bool fs_mgr_update_logical_partition(FstabEntry* entry) {
     return true;
 }
 
+static bool SupportsCheckpoint(FstabEntry* entry) {
+    return entry->fs_mgr_flags.checkpoint_blk || entry->fs_mgr_flags.checkpoint_fs;
+}
+
 class CheckpointManager {
   public:
     CheckpointManager(int needs_checkpoint = -1) : needs_checkpoint_(needs_checkpoint) {}
@@ -926,7 +930,7 @@ class CheckpointManager {
     }
 
     bool Update(FstabEntry* entry, const std::string& block_device = std::string()) {
-        if (!entry->fs_mgr_flags.checkpoint_blk && !entry->fs_mgr_flags.checkpoint_fs) {
+        if (!SupportsCheckpoint(entry)) {
             return true;
         }
 
@@ -947,7 +951,7 @@ class CheckpointManager {
     }
 
     bool Revert(FstabEntry* entry) {
-        if (!entry->fs_mgr_flags.checkpoint_blk && !entry->fs_mgr_flags.checkpoint_fs) {
+        if (!SupportsCheckpoint(entry)) {
             return true;
         }
 
@@ -1362,6 +1366,7 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
 }
 
 static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
+    LINFO << __FUNCTION__ << "(): about to umount everything on top of " << block_device;
     Timer t;
     // TODO(b/135984674): should be configured via a read-only property.
     std::chrono::milliseconds timeout = 5s;
@@ -1369,22 +1374,34 @@ static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
         bool umount_done = true;
         Fstab proc_mounts;
         if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
-            LERROR << "Can't read /proc/mounts";
+            LERROR << __FUNCTION__ << "(): Can't read /proc/mounts";
             return false;
         }
         // Now proceed with other bind mounts on top of /data.
         for (const auto& entry : proc_mounts) {
             if (entry.blk_device == block_device) {
+                LINFO << __FUNCTION__ << "(): Umount " << entry.mount_point;
                 if (umount2(entry.mount_point.c_str(), 0) != 0) {
                     umount_done = false;
                 }
             }
         }
         if (umount_done) {
-            LINFO << "Unmounting /data took " << t;
+            LINFO << __FUNCTION__ << "(): Unmounting /data took " << t;
             return true;
         }
         if (t.duration() > timeout) {
+            LERROR << __FUNCTION__ << "(): Timed out unmounting all mounts on " << block_device;
+            Fstab remaining_mounts;
+            if (!ReadFstabFromFile("/proc/mounts", &remaining_mounts)) {
+                LERROR << __FUNCTION__ << "(): Can't read /proc/mounts";
+            } else {
+                LERROR << __FUNCTION__ << "(): Following mounts remaining";
+                for (const auto& e : remaining_mounts) {
+                    LERROR << __FUNCTION__ << "(): mount point: " << e.mount_point
+                           << " block device: " << e.blk_device;
+                }
+            }
             return false;
         }
         std::this_thread::sleep_for(50ms);
@@ -1410,18 +1427,20 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
         LERROR << "Can't find /data in fstab";
         return -1;
     }
-    if (!fstab_entry->fs_mgr_flags.checkpoint_blk && !fstab_entry->fs_mgr_flags.checkpoint_fs) {
+    bool force_umount = GetBoolProperty("sys.init.userdata_remount.force_umount", false);
+    if (force_umount) {
+        LINFO << "Will force an umount of userdata even if it's not required";
+    }
+    if (!force_umount && !SupportsCheckpoint(fstab_entry)) {
         LINFO << "Userdata doesn't support checkpointing. Nothing to do";
         return 0;
     }
     CheckpointManager checkpoint_manager;
-    if (!checkpoint_manager.NeedsCheckpoint()) {
+    if (!force_umount && !checkpoint_manager.NeedsCheckpoint()) {
         LINFO << "Checkpointing not needed. Don't remount";
         return 0;
     }
-    bool force_umount_for_f2fs =
-            GetBoolProperty("sys.init.userdata_remount.force_umount_f2fs", false);
-    if (fstab_entry->fs_mgr_flags.checkpoint_fs && !force_umount_for_f2fs) {
+    if (!force_umount && fstab_entry->fs_mgr_flags.checkpoint_fs) {
         // Userdata is f2fs, simply remount it.
         if (!checkpoint_manager.Update(fstab_entry)) {
             LERROR << "Failed to remount userdata in checkpointing mode";
