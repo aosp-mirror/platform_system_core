@@ -36,7 +36,6 @@
 #include <log/log_id.h>
 #include <log/logprint.h>
 
-#include "log_portability.h"
 #include "logger.h"
 
 #define kMaxTagLen 16 /* from the long-dead utils/Log.cpp */

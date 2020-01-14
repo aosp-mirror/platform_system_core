@@ -19,8 +19,6 @@
 
 #include <log/log.h>
 
-#include "log_portability.h"
-
 /* In the future, we would like to make this list extensible */
 static const char* LOG_NAME[LOG_ID_MAX] = {
     /* clang-format off */
