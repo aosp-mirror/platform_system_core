@@ -1,0 +1,205 @@
+# Copyright 2017 ublox Lahore Ltd.  All rights reserved.
+#
+############################################ READ ME ###############################################
+################################ TO ADD CUSTOMIZE FILE IN init.rc ##################################
+# Usage:                                                                                           #
+#   To use this file in android AOSP.                                                              #
+#       1. Copy "init.ublox.rc" to system/core/rootdir                                             #   
+#       2. Add "import /init.ublox.rc" in init.rc file at path system/core/rootdir/init.rc         #
+#       3. Refer "Section-B" of RIL App Note for other OS related changes.                         #
+#       4. Recompile android to make changes effective.                                            #
+#                                                                                                  #
+#   This file is distributed in following sections:                                                #
+#       >> Section-1 is related to actions on trigger post-fs-data                                 #
+#       >> Section-2 is related to actions on trigger boot                                         #
+#       >> Section-3 is related to Data Call servcices                                             #
+#       >> Section-4 is related to GSM MUX service                                                 #
+#       >> Section-5 is related to Old RIL releases (deprecated)                                   #
+#       >> Section-6 is related to Remote testing (u-blox internal)                                #
+#                                                                                                  #
+#                                                                                                  #
+# NOTE: For GSMMUX Service configuration [Section-4], carefully read notes inside the section.     #
+#                                                                                                  #
+# NOTE: For Android 9.X and above, see below instructions:                                         #
+#       1. Section-1 "on post-fs-data" required changes:                                           #
+#          >> Comment "mkdir /data/vendor 0770 root radio"                                         #
+#                                                                                                  #
+#       2. Section-3 "Data Call Services" required changes:                                        #
+#          >> Comment "service pppd_data0 /system/bin/init.gprs-pppd"                              #
+#          >> Add     "service pppd_data0 /vendor/bin/init.gprs-pppd"                              #
+#          >> Comment "service pppd_data1 /system/bin/init.gprs-pppd"                              #
+#          >> Add     "service pppd_data1 /vendor/bin/init.gprs-pppd"                              #
+#          >> Comment "service pppd_data2 /system/bin/init.gprs-pppd"                              #
+#          >> Add     "service pppd_data2 /vendor/bin/init.gprs-pppd"                              #
+#          >> Comment "service pppd_data3 /system/bin/init.gprs-pppd"                              #
+#          >> Add     "service pppd_data3 /vendor/bin/init.gprs-pppd"                              #
+#          >> Comment "service pppd_term /system/bin/stop_pppd 15"                                 #
+#          >> Add     "service pppd_term /vendor/bin/stop_pppd 15"                                 #
+#          >> Comment "service pppd_kill /system/bin/stop_pppd 9"                                  #
+#          >> Add     "service pppd_kill /vendor/bin/stop_pppd 9"                                  #
+#          >> Comment "service netd_ena /system/bin/init_data"                                     #
+#          >> Add     "service netd_ena /vendor/bin/init_data"                                     #
+#          >> Comment "service netd_dis /system/bin/stop_data"                                     #
+#          >> Add     "service netd_dis /vendor/bin/stop_data"                                     #
+#                                                                                                  #
+#                                                                                                  #
+####################################################################################################
+
+
+################################# [Section-1] on post-fs-data ######################################
+on post-fs-data
+    # Create Directory for data/vendor/uril
+
+    mkdir /data/vendor/uril 0770 root radio
+    # Copies the repository.txt file
+    copy /etc/uril/repository.txt /data/vendor/uril/repository.txt
+    chmod 660 /data/vendor/uril/repository.txt
+    chown root radio /data/vendor/uril/repository.txt
+
+
+################################# [Section-2] on boot ##############################################
+on boot   
+    setprop "net.uril.repository" "ready"
+
+    # Set default Interface for u-blox RIL:
+    #    >> For CDC-ACM Mode = ttyACM  (default mode is usb "ttyACM")
+    #    >> For GSMMUX Mode  = pts     (use "pts" for ttyS/ttyUSB serial interface)
+    #    >> For remote Mode  = remote  (ublox internal)
+    setprop persist.radio.uril.modInf ttyACM
+
+    # Customization for logging (Can be commented if not required)    
+    # Increase default log buffer size
+    setprop persist.logd.size 16777216
+    setprop service.adb.tcp.port 5555
+
+
+############################################ SERVICES ##############################################
+
+################################# [Section-3] Data Call Services ###################################
+service pppd_data0 /vendor/bin/init.gprs-pppd
+    user radio
+    group radio cache inet misc
+    disabled
+    capabilities NET_ADMIN    
+    oneshot    
+
+service pppd_data1 /vendor/bin/init.gprs-pppd
+    user radio
+    group radio cache inet misc
+    disabled
+    capabilities NET_ADMIN    
+    oneshot    
+
+service pppd_data2 /vendor/bin/init.gprs-pppd
+    user radio
+    group radio cache inet misc
+    disabled
+    capabilities NET_ADMIN        
+    oneshot    
+
+service pppd_data3 /vendor/bin/init.gprs-pppd
+    user radio
+    group radio cache inet misc
+    disabled
+    capabilities NET_ADMIN        
+    oneshot    
+
+service pppd_term /vendor/bin/stop_pppd 15
+    user radio
+    group radio cache inet misc
+    disabled
+    capabilities NET_ADMIN       
+    oneshot
+
+service pppd_kill /vendor/bin/stop_pppd 9
+    user radio
+    group radio cache inet misc
+    disabled
+    capabilities NET_ADMIN        
+    oneshot
+
+service netd_ena /vendor/bin/init_data
+    user radio
+    group radio cache inet misc
+    disabled
+    capabilities NET_ADMIN        
+    oneshot
+
+service netd_dis /vendor/bin/stop_data
+    user radio
+    group radio cache inet misc
+    disabled
+    capabilities NET_ADMIN        
+    oneshot
+
+
+################################# [Section-4] GSMMUX Service  ######################################
+# UnComment this section if GSMMUX package needs to be used.
+#
+# NOTE: For Android 6.X and previous versions, uncomment below line: 	
+#service gsmmuxd /system/bin/logwrapper /system/bin/gsm0710muxd -s /dev/ttyUSB0 -n3 -v7 -mbasic
+#
+# NOTE: For Android 7.X and 8.X, uncomment below line:
+#service gsmmuxd /system/bin/gsm0710muxd -s /dev/ttyUSB0 -n3 -v7 -mbasic
+#
+# NOTE: For Android 9.X and later, uncomment below line:			  				
+#service gsmmuxd /vendor/bin/gsm0710muxd -s /dev/ttyUSB0 -n3 -v7 -mbasic
+#    class main
+#    user radio
+#    group radio cache inet misc
+#    disabled
+#    oneshot
+#
+# NOTE: For Android 8.X and older versions, uncomment below line:
+#service mux_stop /system/bin/stop_muxd 15
+#
+# NOTE: For Android 9.X and later, uncomment below line:			  				
+#service mux_stop /vendor/bin/stop_muxd 15
+#    class main
+#    user radio      
+#    group radio cache inet misc
+#    disabled
+#    oneshot
+#
+
+
+################################# [Section-5] (deprecated) #########################################
+# Prepare u-blox RIL repository
+# UnComment "uril-repo" service only for RIL Release RIL_SW_08.XX and below [Old Releases]
+#service uril-repo /system/bin/uril-repo.sh
+#    class main
+#    user radio
+#    group radio
+#    disabled
+#    oneshot
+
+
+################################# [Section-6] [u-blox internal only] ###############################
+#service gsmmuxd /system/bin/logwrapper /system/bin/gsm0710muxd -s /data/vendor/uril/ttyUBX0 -n3 -v7 -mbasic
+#    class main
+#    user radio
+#    group radio cache inet misc
+#    disabled
+#    oneshot
+#
+#service ril-daemon /system/bin/rild -l /system/lib/librapid-ril-core.so -- -a /data/vendor/uril/ttyUBX0
+#    class main
+#    socket rild stream 660 root radio
+#    socket rild-debug stream 660 radio system
+#    user root
+#    group radio cache inet misc audio sdcard_r sdcard_rw log
+#
+# NOTE: For Android 7.X and above, remove "/system/bin/logwrapper" from below ubxvclient service   
+#service ubxvclient /system/bin/logwrapper /system/bin/ubxvclient -p 9000 -i 10.11.1.108 -d /data/vendor/uril/ttyUBX0
+#    class main
+#    user radio
+#    group radio cache inet misc
+#    
+# NOTE: For Android 7.X and above, remove "/system/bin/logwrapper" from below ubxvclient_data service  
+#service ubxvclient_data /system/bin/logwrapper /system/bin/ubxvclient_data -p 9001 -i 10.11.1.108 -d /data/vendor/uril/ttyUBX1
+#    class main
+#    user radio
+#    group radio cache inet misc
+#    disabled
+
+############################################ SERVICES ##############################################

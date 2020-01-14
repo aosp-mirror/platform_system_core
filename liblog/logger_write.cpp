@@ -444,6 +444,15 @@ int __android_log_buf_write(int bufID, int prio, const char* tag, const char* ms
       case 'C':
         if (strcmp(tag + 1, "CDMA" + 1)) break;
         goto inform;
+      case 'M':
+        if (strcmp(tag + 1, "MUXD" + 1)) break;
+        goto inform;
+      case 'p':
+        if (strncmp(tag + 1, "ppp" + 1, strlen("ppp") - 1)) break;
+        goto inform;
+      case 'i':
+        if (strncmp(tag + 1, "init.gprs" + 1, strlen("init.gprs") - 1)) break;
+        goto inform;
       case 'P':
         if (strcmp(tag + 1, "PHONE" + 1)) break;
       /* FALLTHRU */
