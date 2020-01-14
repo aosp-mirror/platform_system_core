@@ -222,20 +222,16 @@ struct LogAbortAfterFullExpr {
 // 1) This will not check whether the severity is high enough. One should use WOULD_LOG to filter
 //    usage manually.
 // 2) This does not save and restore errno.
-#define LOG_STREAM(severity) LOG_STREAM_TO(DEFAULT, severity)
-
-// Get an ostream that can be used for logging at the given severity and to the
-// given destination. The same notes as for LOG_STREAM apply.
-#define LOG_STREAM_TO(dest, severity)                                           \
-  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::dest,        \
-                              SEVERITY_LAMBDA(severity), _LOG_TAG_INTERNAL, -1) \
+#define LOG_STREAM(severity)                                                                    \
+  ::android::base::LogMessage(__FILE__, __LINE__, SEVERITY_LAMBDA(severity), _LOG_TAG_INTERNAL, \
+                              -1)                                                               \
       .stream()
 
 // Logs a message to logcat on Android otherwise to stderr. If the severity is
 // FATAL it also causes an abort. For example:
 //
 //     LOG(FATAL) << "We didn't expect to reach here";
-#define LOG(severity) LOG_TO(DEFAULT, severity)
+#define LOG(severity) LOGGING_PREAMBLE(severity) && LOG_STREAM(severity)
 
 // Checks if we want to log something, and sets up appropriate RAII objects if
 // so.
@@ -245,21 +241,12 @@ struct LogAbortAfterFullExpr {
    ABORT_AFTER_LOG_EXPR_IF((SEVERITY_LAMBDA(severity)) == ::android::base::FATAL, true) && \
    ::android::base::ErrnoRestorer())
 
-// Logs a message to logcat with the specified log ID on Android otherwise to
-// stderr. If the severity is FATAL it also causes an abort.
-// Use an expression here so we can support the << operator following the macro,
-// like "LOG(DEBUG) << xxx;".
-#define LOG_TO(dest, severity) LOGGING_PREAMBLE(severity) && LOG_STREAM_TO(dest, severity)
-
 // A variant of LOG that also logs the current errno value. To be used when
 // library calls fail.
-#define PLOG(severity) PLOG_TO(DEFAULT, severity)
-
-// Behaves like PLOG, but logs to the specified log ID.
-#define PLOG_TO(dest, severity)                                                        \
-  LOGGING_PREAMBLE(severity) &&                                                        \
-      ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::dest,           \
-                                  SEVERITY_LAMBDA(severity), _LOG_TAG_INTERNAL, errno) \
+#define PLOG(severity)                                                           \
+  LOGGING_PREAMBLE(severity) &&                                                  \
+      ::android::base::LogMessage(__FILE__, __LINE__, SEVERITY_LAMBDA(severity), \
+                                  _LOG_TAG_INTERNAL, errno)                      \
           .stream()
 
 // Marker that code is yet to be implemented.
@@ -272,24 +259,23 @@ struct LogAbortAfterFullExpr {
 //
 //     CHECK(false == true) results in a log message of
 //       "Check failed: false == true".
-#define CHECK(x)                                                                 \
-  LIKELY((x)) || ABORT_AFTER_LOG_FATAL_EXPR(false) ||                            \
-      ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::DEFAULT,  \
-                                  ::android::base::FATAL, _LOG_TAG_INTERNAL, -1) \
-              .stream()                                                          \
+#define CHECK(x)                                                                                 \
+  LIKELY((x)) || ABORT_AFTER_LOG_FATAL_EXPR(false) ||                                            \
+      ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::FATAL, _LOG_TAG_INTERNAL, \
+                                  -1)                                                            \
+              .stream()                                                                          \
           << "Check failed: " #x << " "
 
 // clang-format off
 // Helper for CHECK_xx(x,y) macros.
-#define CHECK_OP(LHS, RHS, OP)                                                                 \
-  for (auto _values = ::android::base::MakeEagerEvaluator(LHS, RHS);                           \
-       UNLIKELY(!(_values.lhs OP _values.rhs));                                                \
-       /* empty */)                                                                            \
-  ABORT_AFTER_LOG_FATAL                                                                        \
-  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::DEFAULT,                    \
-                              ::android::base::FATAL, _LOG_TAG_INTERNAL, -1)                   \
-          .stream()                                                                            \
-      << "Check failed: " << #LHS << " " << #OP << " " << #RHS << " (" #LHS "=" << _values.lhs \
+#define CHECK_OP(LHS, RHS, OP)                                                                   \
+  for (auto _values = ::android::base::MakeEagerEvaluator(LHS, RHS);                             \
+       UNLIKELY(!(_values.lhs OP _values.rhs));                                                  \
+       /* empty */)                                                                              \
+  ABORT_AFTER_LOG_FATAL                                                                          \
+  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::FATAL, _LOG_TAG_INTERNAL, -1) \
+          .stream()                                                                              \
+      << "Check failed: " << #LHS << " " << #OP << " " << #RHS << " (" #LHS "=" << _values.lhs   \
       << ", " #RHS "=" << _values.rhs << ") "
 // clang-format on
 
@@ -311,8 +297,8 @@ struct LogAbortAfterFullExpr {
 #define CHECK_STROP(s1, s2, sense)                                             \
   while (UNLIKELY((strcmp(s1, s2) == 0) != (sense)))                           \
     ABORT_AFTER_LOG_FATAL                                                      \
-    ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::DEFAULT,  \
-                                ::android::base::FATAL, _LOG_TAG_INTERNAL, -1) \
+    ::android::base::LogMessage(__FILE__, __LINE__,  ::android::base::FATAL,   \
+                                 _LOG_TAG_INTERNAL, -1)                        \
         .stream()                                                              \
         << "Check failed: " << "\"" << (s1) << "\""                            \
         << ((sense) ? " == " : " != ") << "\"" << (s2) << "\""
@@ -431,8 +417,10 @@ class LogMessageData;
 // of a CHECK. The destructor will abort if the severity is FATAL.
 class LogMessage {
  public:
-  LogMessage(const char* file, unsigned int line, LogId id, LogSeverity severity, const char* tag,
+  // LogId has been deprecated, but this constructor must exist for prebuilts.
+  LogMessage(const char* file, unsigned int line, LogId, LogSeverity severity, const char* tag,
              int error);
+  LogMessage(const char* file, unsigned int line, LogSeverity severity, const char* tag, int error);
 
   ~LogMessage();
 
@@ -441,8 +429,8 @@ class LogMessage {
   std::ostream& stream();
 
   // The routine that performs the actual logging.
-  static void LogLine(const char* file, unsigned int line, LogId id, LogSeverity severity,
-                      const char* tag, const char* msg);
+  static void LogLine(const char* file, unsigned int line, LogSeverity severity, const char* tag,
+                      const char* msg);
 
  private:
   const std::unique_ptr<LogMessageData> data_;
