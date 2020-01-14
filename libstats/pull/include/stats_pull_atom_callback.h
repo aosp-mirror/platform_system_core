@@ -23,7 +23,6 @@ extern "C" {
 #endif
 /*
  * Metadata for registering a stats_pull_atom_callback.
- * All fields are optional, and defaults will be used for unspecified fields.
  */
 typedef struct pull_atom_metadata {
     int64_t cool_down_ns;
@@ -34,12 +33,23 @@ typedef struct pull_atom_metadata {
 
 typedef struct pulled_stats_event_list pulled_stats_event_list;
 
-typedef bool (*stats_pull_atom_callback_t)(int32_t atom_tag, pulled_stats_event_list* data,
-                                           const void* cookie);
+typedef int32_t status_pull_atom_return_t;
+
+enum {
+    STATS_PULL_SUCCESS = 0,
+    STATS_PULL_SKIP = 1,
+};
+
+typedef status_pull_atom_return_t (*stats_pull_atom_callback_t)(int32_t atom_tag,
+                                                                pulled_stats_event_list* data,
+                                                                void* cookie);
 
 struct stats_event* add_stats_event_to_pull_data(pulled_stats_event_list* pull_data);
+
 void register_stats_pull_atom_callback(int32_t atom_tag, stats_pull_atom_callback_t callback,
                                        pull_atom_metadata* metadata, void* cookie);
+
+void unregister_stats_pull_atom_callback(int32_t atom_tag);
 
 #ifdef __cplusplus
 }
