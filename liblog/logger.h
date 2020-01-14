@@ -21,7 +21,6 @@
 
 #include <log/log.h>
 
-#include "log_portability.h"
 #include "uio.h"
 
 __BEGIN_DECLS
