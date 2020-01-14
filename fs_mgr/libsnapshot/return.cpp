@@ -24,6 +24,8 @@ std::string Return::string() const {
     switch (error_code()) {
         case ErrorCode::ERROR:
             return "Error";
+        case ErrorCode::NEEDS_REBOOT:
+            return "Retry after reboot";
         case ErrorCode::SUCCESS:
             [[fallthrough]];
         case ErrorCode::NO_SPACE:
