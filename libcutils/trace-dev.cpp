@@ -37,12 +37,39 @@ static void atrace_init_once()
     } else {
       atrace_enabled_tags = atrace_get_property();
     }
+#if !ATRACE_SHMEM
     atomic_store_explicit(&atrace_is_ready, true, memory_order_release);
+#endif
+}
+
+static void atrace_seq_number_changed(uint32_t prev_seq_no, uint32_t seq_no) {
+    if (!atomic_load_explicit(&atrace_is_enabled, memory_order_acquire)) {
+        return;
+    }
+
+    // Someone raced us.
+    if (!atomic_compare_exchange_strong(&last_sequence_number, &prev_seq_no, seq_no)) {
+        return;
+    }
+
+    if (CC_UNLIKELY(prev_seq_no == kSeqNoNotInit)) {
+#if defined(__BIONIC__)
+        const prop_info* new_pi = __system_property_find("debug.atrace.tags.enableflags");
+        if (new_pi) atrace_property_info = new_pi;
+#endif
+        pthread_once(&atrace_once_control, atrace_init_once);
+    }
+
+    atrace_update_tags();
 }
 
 void atrace_setup()
 {
+#if ATRACE_SHMEM
+    atrace_init();
+#else
     pthread_once(&atrace_once_control, atrace_init_once);
+#endif
 }
 
 void atrace_begin_body(const char* name)
