@@ -409,21 +409,21 @@ std::string ReadFstabFromDt() {
 
         file_name = android::base::StringPrintf("%s/%s/type", fstabdir_name.c_str(), dp->d_name);
         if (!ReadDtFile(file_name, &value)) {
-            LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
+            LERROR << "dt_fstab: Failed to find 'type' for partition " << dp->d_name;
             return {};
         }
         fstab_entry.push_back(value);
 
         file_name = android::base::StringPrintf("%s/%s/mnt_flags", fstabdir_name.c_str(), dp->d_name);
         if (!ReadDtFile(file_name, &value)) {
-            LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
+            LERROR << "dt_fstab: Failed to find 'mnt_flags' for partition " << dp->d_name;
             return {};
         }
         fstab_entry.push_back(value);
 
         file_name = android::base::StringPrintf("%s/%s/fsmgr_flags", fstabdir_name.c_str(), dp->d_name);
         if (!ReadDtFile(file_name, &value)) {
-            LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
+            LERROR << "dt_fstab: Failed to find 'fsmgr_flags' for partition " << dp->d_name;
             return {};
         }
         fstab_entry.push_back(value);
