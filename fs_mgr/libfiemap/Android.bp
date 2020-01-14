@@ -79,6 +79,11 @@ cc_test {
     srcs: [
         "fiemap_writer_test.cpp",
     ],
+
+    test_suites: ["vts-core", "device-tests"],
+    auto_gen_config: true,
+    test_min_api_level: 29,
+    require_root: true,
 }
 
 cc_test {
@@ -99,8 +104,4 @@ cc_test {
     srcs: [
         "image_test.cpp",
     ],
-}
-
-vts_config {
-    name: "VtsFiemapWriterTest",
 }
