@@ -20,8 +20,6 @@
 #include <log/log.h>
 #include <log/log_event_list.h>
 
-#include "log_portability.h"
-
 #define MAX_SUBTAG_LEN 32
 
 int __android_log_error_write(int tag, const char* subTag, int32_t uid, const char* data,

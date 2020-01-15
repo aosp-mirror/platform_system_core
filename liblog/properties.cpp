@@ -26,8 +26,6 @@
 
 #include <private/android_logger.h>
 
-#include "log_portability.h"
-
 static pthread_mutex_t lock_loggable = PTHREAD_MUTEX_INITIALIZER;
 
 static int lock() {
