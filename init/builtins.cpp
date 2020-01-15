@@ -1119,19 +1119,28 @@ static Result<void> ExecWithFunctionOnFailure(const std::vector<std::string>& ar
 }
 
 static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
+    bool should_reboot_into_recovery = true;
     auto reboot_reason = vdc_arg + "_failed";
+    if (android::sysprop::InitProperties::userspace_reboot_in_progress().value_or(false)) {
+        should_reboot_into_recovery = false;
+    }
 
-    auto reboot = [reboot_reason](const std::string& message) {
+    auto reboot = [reboot_reason, should_reboot_into_recovery](const std::string& message) {
         // TODO (b/122850122): support this in gsi
-        if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
-            LOG(ERROR) << message << ": Rebooting into recovery, reason: " << reboot_reason;
-            if (auto result = reboot_into_recovery(
-                        {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
-                !result) {
-                LOG(FATAL) << "Could not reboot into recovery: " << result.error();
+        if (should_reboot_into_recovery) {
+            if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
+                LOG(ERROR) << message << ": Rebooting into recovery, reason: " << reboot_reason;
+                if (auto result = reboot_into_recovery(
+                            {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+                    !result) {
+                    LOG(FATAL) << "Could not reboot into recovery: " << result.error();
+                }
+            } else {
+                LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
             }
         } else {
-            LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
+            LOG(ERROR) << message << ": rebooting, reason: " << reboot_reason;
+            trigger_shutdown("reboot," + reboot_reason);
         }
     };
 
