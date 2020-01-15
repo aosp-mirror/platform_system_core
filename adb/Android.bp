@@ -217,6 +217,7 @@ cc_test_host {
         "libcutils",
         "libcrypto_utils",
         "libcrypto",
+        "liblog",
         "libmdnssd",
         "libdiagnose_usb",
         "libusb",
