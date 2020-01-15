@@ -701,7 +701,7 @@ on post-fs-data
     mkdir /data/rollback-observer 0700 system system encryption=DeleteIfNecessary
 
     # Create root dir for Incremental Service
-    mkdir /data/incremental 0770 system system encryption=None
+    mkdir /data/incremental 0771 system system encryption=Require
 
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready
