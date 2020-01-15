@@ -37,6 +37,7 @@ cc_library {
 cc_test_host {
     name: "libvbmeta_test",
     static_libs: [
+        "liblog",
         "libsparse",
         "libvbmeta",
         "libz",
