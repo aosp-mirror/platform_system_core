@@ -560,9 +560,26 @@ bool SnapshotManager::InitiateMerge() {
         }
     }
 
+    DmTargetSnapshot::Status initial_target_values = {};
+    for (const auto& snapshot : snapshots) {
+        DmTargetSnapshot::Status current_status;
+        if (!QuerySnapshotStatus(snapshot, nullptr, &current_status)) {
+            return false;
+        }
+        initial_target_values.sectors_allocated += current_status.sectors_allocated;
+        initial_target_values.total_sectors += current_status.total_sectors;
+        initial_target_values.metadata_sectors += current_status.metadata_sectors;
+    }
+
+    SnapshotUpdateStatus initial_status;
+    initial_status.set_state(UpdateState::Merging);
+    initial_status.set_sectors_allocated(initial_target_values.sectors_allocated);
+    initial_status.set_total_sectors(initial_target_values.total_sectors);
+    initial_status.set_metadata_sectors(initial_target_values.metadata_sectors);
+
     // Point of no return - mark that we're starting a merge. From now on every
     // snapshot must be a merge target.
-    if (!WriteUpdateState(lock.get(), UpdateState::Merging)) {
+    if (!WriteSnapshotUpdateStatus(lock.get(), initial_status)) {
         return false;
     }
 
@@ -1643,15 +1660,7 @@ std::unique_ptr<SnapshotManager::LockedFile> SnapshotManager::LockExclusive() {
     return OpenLock(LOCK_EX);
 }
 
-UpdateState SnapshotManager::ReadUpdateState(LockedFile* lock) {
-    CHECK(lock);
-
-    std::string contents;
-    if (!android::base::ReadFileToString(GetStateFilePath(), &contents)) {
-        PLOG(ERROR) << "Read state file failed";
-        return UpdateState::None;
-    }
-
+static UpdateState UpdateStateFromString(const std::string& contents) {
     if (contents.empty() || contents == "none") {
         return UpdateState::None;
     } else if (contents == "initiated") {
@@ -1694,18 +1703,54 @@ std::ostream& operator<<(std::ostream& os, UpdateState state) {
     }
 }
 
+UpdateState SnapshotManager::ReadUpdateState(LockedFile* lock) {
+    SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock);
+    return status.state();
+}
+
+SnapshotUpdateStatus SnapshotManager::ReadSnapshotUpdateStatus(LockedFile* lock) {
+    CHECK(lock);
+
+    SnapshotUpdateStatus status = {};
+    std::string contents;
+    if (!android::base::ReadFileToString(GetStateFilePath(), &contents)) {
+        PLOG(ERROR) << "Read state file failed";
+        status.set_state(UpdateState::None);
+        return status;
+    }
+
+    if (!status.ParseFromString(contents)) {
+        LOG(WARNING) << "Unable to parse state file as SnapshotUpdateStatus, using the old format";
+
+        // Try to rollback to legacy file to support devices that are
+        // currently using the old file format.
+        // TODO(b/147409432)
+        status.set_state(UpdateStateFromString(contents));
+    }
+
+    return status;
+}
+
 bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state) {
+    SnapshotUpdateStatus status = {};
+    status.set_state(state);
+    return WriteSnapshotUpdateStatus(lock, status);
+}
+
+bool SnapshotManager::WriteSnapshotUpdateStatus(LockedFile* lock,
+                                                const SnapshotUpdateStatus& status) {
     CHECK(lock);
     CHECK(lock->lock_mode() == LOCK_EX);
 
-    std::stringstream ss;
-    ss << state;
-    std::string contents = ss.str();
-    if (contents.empty()) return false;
+    std::string contents;
+    if (!status.SerializeToString(&contents)) {
+        LOG(ERROR) << "Unable to serialize SnapshotUpdateStatus.";
+        return false;
+    }
 
 #ifdef LIBSNAPSHOT_USE_HAL
     auto merge_status = MergeStatus::UNKNOWN;
-    switch (state) {
+    switch (status.state()) {
         // The needs-reboot and completed cases imply that /data and /metadata
         // can be safely wiped, so we don't report a merge status.
         case UpdateState::None:
@@ -1724,7 +1769,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state) {
         default:
             // Note that Cancelled flows to here - it is never written, since
             // it only communicates a transient state to the caller.
-            LOG(ERROR) << "Unexpected update status: " << state;
+            LOG(ERROR) << "Unexpected update status: " << status.state();
             break;
     }
 
