@@ -40,8 +40,6 @@
 #include <log/logprint.h>
 #include <private/android_logger.h>
 
-#include "log_portability.h"
-
 #define MS_PER_NSEC 1000000
 #define US_PER_NSEC 1000
 
