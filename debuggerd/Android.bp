@@ -355,7 +355,3 @@ cc_binary {
 
     init_rc: ["tombstoned/tombstoned.rc"],
 }
-
-subdirs = [
-    "crasher",
-]
