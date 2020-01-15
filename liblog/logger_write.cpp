@@ -23,10 +23,10 @@
 #include <android/set_abort_message.h>
 #endif
 
+#include <android-base/macros.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "log_portability.h"
 #include "logger.h"
 #include "uio.h"
 
