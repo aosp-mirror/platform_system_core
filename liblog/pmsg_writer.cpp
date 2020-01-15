@@ -28,7 +28,6 @@
 #include <log/log_properties.h>
 #include <private/android_logger.h>
 
-#include "log_portability.h"
 #include "logger.h"
 #include "rwlock.h"
 #include "uio.h"

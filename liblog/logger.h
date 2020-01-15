@@ -17,6 +17,7 @@
 #pragma once
 
 #include <stdatomic.h>
+#include <sys/cdefs.h>
 
 #include <log/log.h>
 
