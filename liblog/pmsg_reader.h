@@ -16,10 +16,10 @@
 
 #pragma once
 
+#include <sys/cdefs.h>
 #include <unistd.h>
 
 #include "log/log_read.h"
-#include "log_portability.h"
 
 __BEGIN_DECLS
 
