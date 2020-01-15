@@ -26,6 +26,7 @@
 #include <vector>
 
 #include <android-base/unique_fd.h>
+#include <android/snapshot/snapshot.pb.h>
 #include <fs_mgr_dm_linear.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
@@ -79,35 +80,6 @@ enum class CreateResult : unsigned int {
     CREATED,
     NOT_CREATED,
 };
-
-enum class UpdateState : unsigned int {
-    // No update or merge is in progress.
-    None,
-
-    // An update is applying; snapshots may already exist.
-    Initiated,
-
-    // An update is pending, but has not been successfully booted yet.
-    Unverified,
-
-    // The kernel is merging in the background.
-    Merging,
-
-    // Post-merge cleanup steps could not be completed due to a transient
-    // error, but the next reboot will finish any pending operations.
-    MergeNeedsReboot,
-
-    // Merging is complete, and needs to be acknowledged.
-    MergeCompleted,
-
-    // Merging failed due to an unrecoverable error.
-    MergeFailed,
-
-    // The update was implicitly cancelled, either by a rollback or a flash
-    // operation via fastboot. This state can only be returned by WaitForMerge.
-    Cancelled
-};
-std::ostream& operator<<(std::ostream& os, UpdateState state);
 
 class SnapshotManager final {
     using CreateLogicalPartitionParams = android::fs_mgr::CreateLogicalPartitionParams;
@@ -433,7 +405,9 @@ class SnapshotManager final {
 
     // Interact with /metadata/ota/state.
     UpdateState ReadUpdateState(LockedFile* file);
+    SnapshotUpdateStatus ReadSnapshotUpdateStatus(LockedFile* file);
     bool WriteUpdateState(LockedFile* file, UpdateState state);
+    bool WriteSnapshotUpdateStatus(LockedFile* file, const SnapshotUpdateStatus& status);
     std::string GetStateFilePath() const;
 
     // Helpers for merging.
