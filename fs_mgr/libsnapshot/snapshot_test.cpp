@@ -1604,7 +1604,7 @@ TEST_F(SnapshotUpdateTest, LowSpace) {
     ASSERT_TRUE(sm->BeginUpdate());
     auto res = sm->CreateUpdateSnapshots(manifest_);
     ASSERT_FALSE(res);
-    ASSERT_EQ(SnapshotManager::Return::ErrorCode::NO_SPACE, res.error_code());
+    ASSERT_EQ(Return::ErrorCode::NO_SPACE, res.error_code());
     ASSERT_GE(res.required_size(), 14_MiB);
     ASSERT_LT(res.required_size(), 15_MiB);
 }

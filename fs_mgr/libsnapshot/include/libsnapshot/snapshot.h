@@ -35,6 +35,7 @@
 #include <update_engine/update_metadata.pb.h>
 
 #include <libsnapshot/auto_device.h>
+#include <libsnapshot/return.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -91,27 +92,6 @@ class SnapshotManager final {
     using FiemapStatus = android::fiemap::FiemapStatus;
 
   public:
-    // SnapshotManager functions return either bool or Return objects. "Return" types provides
-    // more information about the reason of the failure.
-    class Return : public FiemapStatus {
-      public:
-        // Total required size on /userdata.
-        uint64_t required_size() const { return required_size_; }
-
-        static Return Ok() { return Return(FiemapStatus::ErrorCode::SUCCESS); }
-        static Return Error() { return Return(FiemapStatus::ErrorCode::ERROR); }
-        static Return NoSpace(uint64_t size) {
-            return Return(FiemapStatus::ErrorCode::NO_SPACE, size);
-        }
-        // Does not set required_size_ properly even when status.error_code() == NO_SPACE.
-        explicit Return(const FiemapStatus& status) : Return(status.error_code()) {}
-
-      private:
-        uint64_t required_size_;
-        Return(FiemapStatus::ErrorCode code, uint64_t required_size = 0)
-            : FiemapStatus(code), required_size_(required_size) {}
-    };
-
     // Dependency injection for testing.
     class IDeviceInfo {
       public:

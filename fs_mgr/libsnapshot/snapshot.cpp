@@ -290,7 +290,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
     return true;
 }
 
-SnapshotManager::Return SnapshotManager::CreateCowImage(LockedFile* lock, const std::string& name) {
+Return SnapshotManager::CreateCowImage(LockedFile* lock, const std::string& name) {
     CHECK(lock);
     CHECK(lock->lock_mode() == LOCK_EX);
     if (!EnsureImageManager()) return Return::Error();
@@ -1890,21 +1890,19 @@ static void UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata) {
     }
 }
 
-static SnapshotManager::Return AddRequiredSpace(
-        SnapshotManager::Return orig,
-        const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
-    if (orig.error_code() != SnapshotManager::Return::ErrorCode::NO_SPACE) {
+static Return AddRequiredSpace(Return orig,
+                               const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
+    if (orig.error_code() != Return::ErrorCode::NO_SPACE) {
         return orig;
     }
     uint64_t sum = 0;
     for (auto&& [name, status] : all_snapshot_status) {
         sum += status.cow_file_size();
     }
-    return SnapshotManager::Return::NoSpace(sum);
+    return Return::NoSpace(sum);
 }
 
-SnapshotManager::Return SnapshotManager::CreateUpdateSnapshots(
-        const DeltaArchiveManifest& manifest) {
+Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) {
     auto lock = LockExclusive();
     if (!lock) return Return::Error();
 
@@ -1998,7 +1996,7 @@ SnapshotManager::Return SnapshotManager::CreateUpdateSnapshots(
     return Return::Ok();
 }
 
-SnapshotManager::Return SnapshotManager::CreateUpdateSnapshotsInternal(
+Return SnapshotManager::CreateUpdateSnapshotsInternal(
         LockedFile* lock, const DeltaArchiveManifest& manifest, PartitionCowCreator* cow_creator,
         AutoDeviceList* created_devices,
         std::map<std::string, SnapshotStatus>* all_snapshot_status) {
@@ -2131,7 +2129,7 @@ SnapshotManager::Return SnapshotManager::CreateUpdateSnapshotsInternal(
     return Return::Ok();
 }
 
-SnapshotManager::Return SnapshotManager::InitializeUpdateSnapshots(
+Return SnapshotManager::InitializeUpdateSnapshots(
         LockedFile* lock, MetadataBuilder* target_metadata,
         const LpMetadata* exported_target_metadata, const std::string& target_suffix,
         const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
