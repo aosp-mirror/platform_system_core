@@ -58,7 +58,6 @@ using android::fs_mgr::ReadDefaultFstab;
 using android::fs_mgr::ReadFstabFromDt;
 using android::fs_mgr::SkipMountingPartitions;
 using android::fs_mgr::TransformFstabForDsu;
-using android::init::WriteFile;
 using android::snapshot::SnapshotManager;
 
 using namespace std::literals;
@@ -620,7 +619,13 @@ void FirstStageMount::UseDsuIfPresent() {
         }
         return InitRequiredDevices(std::move(devices));
     };
-    auto images = IImageManager::Open("dsu", 0ms);
+    std::string active_dsu;
+    if (!gsi::GetActiveDsu(&active_dsu)) {
+        LOG(ERROR) << "Failed to GetActiveDsu";
+        return;
+    }
+    LOG(INFO) << "DSU slot: " << active_dsu;
+    auto images = IImageManager::Open("dsu/" + active_dsu, 0ms);
     if (!images || !images->MapAllImages(init_devices)) {
         LOG(ERROR) << "DSU partition layout could not be instantiated";
         return;
