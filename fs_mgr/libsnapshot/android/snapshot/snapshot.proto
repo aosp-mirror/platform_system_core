@@ -85,3 +85,49 @@ message SnapshotStatus {
     // This is non-zero when |state| == MERGING or MERGE_COMPLETED.
     uint64 metadata_sectors = 8;
 }
+
+// Next: 8
+enum UpdateState {
+    // No update or merge is in progress.
+    None = 0;
+
+    // An update is applying; snapshots may already exist.
+    Initiated = 1;
+
+    // An update is pending, but has not been successfully booted yet.
+    Unverified = 2;
+
+    // The kernel is merging in the background.
+    Merging = 3;
+
+    // Post-merge cleanup steps could not be completed due to a transient
+    // error, but the next reboot will finish any pending operations.
+    MergeNeedsReboot = 4;
+
+    // Merging is complete, and needs to be acknowledged.
+    MergeCompleted = 5;
+
+    // Merging failed due to an unrecoverable error.
+    MergeFailed = 6;
+
+    // The update was implicitly cancelled, either by a rollback or a flash
+    // operation via fastboot. This state can only be returned by WaitForMerge.
+    Cancelled = 7;
+};
+
+// Next: 5
+message SnapshotUpdateStatus {
+    UpdateState state = 1;
+
+    // Total number of sectors allocated in the COW files before performing the
+    // merge operation.  This field is used to keep track of the total number
+    // of sectors modified to monitor and show the progress of the merge during
+    // an update.
+    uint64 sectors_allocated = 2;
+
+    // Total number of sectors of all the snapshot devices.
+    uint64 total_sectors = 3;
+
+    // Sectors allocated for metadata in all the snapshot devices.
+    uint64 metadata_sectors = 4;
+}

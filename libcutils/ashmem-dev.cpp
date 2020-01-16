@@ -203,19 +203,23 @@ static int __ashmem_open_locked()
 {
     static const std::string ashmem_device_path = get_ashmem_device_path();
 
-    int ret;
-    struct stat st;
-
     if (ashmem_device_path.empty()) {
         return -1;
     }
 
     int fd = TEMP_FAILURE_RETRY(open(ashmem_device_path.c_str(), O_RDWR | O_CLOEXEC));
+
+    // fallback for APEX w/ use_vendor on Q, which would have still used /dev/ashmem
+    if (fd < 0) {
+        fd = TEMP_FAILURE_RETRY(open("/dev/ashmem", O_RDWR | O_CLOEXEC));
+    }
+
     if (fd < 0) {
         return fd;
     }
 
-    ret = TEMP_FAILURE_RETRY(fstat(fd, &st));
+    struct stat st;
+    int ret = TEMP_FAILURE_RETRY(fstat(fd, &st));
     if (ret < 0) {
         int save_errno = errno;
         close(fd);
