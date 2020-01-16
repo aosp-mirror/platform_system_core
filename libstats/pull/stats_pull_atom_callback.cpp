@@ -42,7 +42,7 @@ static const int64_t DEFAULT_TIMEOUT_NS = 10000000000LL;   // 10 seconds.
 
 class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
   public:
-    StatsPullAtomCallbackInternal(const stats_pull_atom_callback_t callback, const void* cookie,
+    StatsPullAtomCallbackInternal(const stats_pull_atom_callback_t callback, void* cookie,
                                   const int64_t coolDownNs, const int64_t timeoutNs,
                                   const std::vector<int32_t> additiveFields)
         : mCallback(callback),
@@ -55,7 +55,8 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
             int32_t atomTag,
             const ::android::sp<::android::os::IPullAtomResultReceiver>& resultReceiver) override {
         pulled_stats_event_list statsEventList;
-        bool success = mCallback(atomTag, &statsEventList, mCookie);
+        int successInt = mCallback(atomTag, &statsEventList, mCookie);
+        bool success = successInt == STATS_PULL_SUCCESS;
 
         // Convert stats_events into StatsEventParcels.
         std::vector<android::util::StatsEventParcel> parcels;
@@ -83,7 +84,7 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
 
   private:
     const stats_pull_atom_callback_t mCallback;
-    const void* mCookie;
+    void* mCookie;
     const int64_t mCoolDownNs;
     const int64_t mTimeoutNs;
     const std::vector<int32_t> mAdditiveFields;
@@ -146,15 +147,31 @@ void register_stats_pull_atom_callback(int32_t atom_tag, stats_pull_atom_callbac
     }
 
     std::lock_guard<std::mutex> lg(pullAtomMutex);
-    const android::sp<android::os::IStatsd> statsService = getStatsServiceLocked();
-    if (statsService == nullptr) {
-        // Error - statsd not available
-        return;
-    }
 
+    // Always add to the map. If statsd is dead, we will add them when it comes back.
     android::sp<StatsPullAtomCallbackInternal> callbackBinder = new StatsPullAtomCallbackInternal(
             callback, cookie, coolDownNs, timeoutNs, additiveFields);
     mPullers[atom_tag] = callbackBinder;
+
+    const android::sp<android::os::IStatsd> statsService = getStatsServiceLocked();
+    if (statsService == nullptr) {
+        // Statsd not available
+        return;
+    }
+
     statsService->registerNativePullAtomCallback(atom_tag, coolDownNs, timeoutNs, additiveFields,
                                                  callbackBinder);
+}
+
+void unregister_stats_pull_atom_callback(int32_t atom_tag) {
+    std::lock_guard<std::mutex> lg(pullAtomMutex);
+    // Always remove the puller from our map.
+    // If statsd is down, we will not register it when it comes back.
+    mPullers.erase(atom_tag);
+    const android::sp<android::os::IStatsd> statsService = getStatsServiceLocked();
+    if (statsService == nullptr) {
+        // Statsd not available
+        return;
+    }
+    statsService->unregisterNativePullAtomCallback(atom_tag);
 }
