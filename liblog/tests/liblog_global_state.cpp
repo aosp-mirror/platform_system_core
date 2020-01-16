@@ -18,6 +18,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android/log.h>
 
 #include <gtest/gtest.h>
@@ -152,4 +153,91 @@ TEST(liblog_global_state, SetAborter_with_liblog) {
   LOG(FATAL) << expected_message_static;
   EXPECT_TRUE(message_seen);
   message_seen = false;
+}
+
+TEST(liblog_global_state, is_loggable_both_default) {
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+}
+
+TEST(liblog_global_state, is_loggable_minimum_log_priority_only) {
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  EXPECT_EQ(ANDROID_LOG_DEFAULT, __android_log_set_minimum_priority(ANDROID_LOG_DEBUG));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  EXPECT_EQ(ANDROID_LOG_DEBUG, __android_log_set_minimum_priority(ANDROID_LOG_WARN));
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  EXPECT_EQ(android::base::WARNING, android::base::SetMinimumLogSeverity(android::base::DEBUG));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  EXPECT_EQ(android::base::DEBUG, android::base::SetMinimumLogSeverity(android::base::WARNING));
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+}
+
+TEST(liblog_global_state, is_loggable_tag_log_priority_only) {
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  auto log_tag_property = std::string("log.tag.") + LOG_TAG;
+  android::base::SetProperty(log_tag_property, "d");
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  android::base::SetProperty(log_tag_property, "w");
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  android::base::SetProperty(log_tag_property, "");
+}
+
+TEST(liblog_global_state, is_loggable_both_set) {
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  // When both a tag and a minimum priority are set, we use the lower value of the two.
+
+  // tag = warning, minimum_priority = debug, expect 'debug'
+  auto log_tag_property = std::string("log.tag.") + LOG_TAG;
+  android::base::SetProperty(log_tag_property, "w");
+  EXPECT_EQ(ANDROID_LOG_DEFAULT, __android_log_set_minimum_priority(ANDROID_LOG_DEBUG));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  // tag = warning, minimum_priority = warning, expect 'warning'
+  EXPECT_EQ(ANDROID_LOG_DEBUG, __android_log_set_minimum_priority(ANDROID_LOG_WARN));
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  // tag = debug, minimum_priority = warning, expect 'debug'
+  android::base::SetProperty(log_tag_property, "d");
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  // tag = debug, minimum_priority = debug, expect 'debug'
+  EXPECT_EQ(ANDROID_LOG_WARN, __android_log_set_minimum_priority(ANDROID_LOG_DEBUG));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_INFO, LOG_TAG, ANDROID_LOG_INFO));
+  EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
+
+  android::base::SetProperty(log_tag_property, "");
 }

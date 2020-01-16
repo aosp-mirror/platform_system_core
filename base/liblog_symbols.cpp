@@ -48,6 +48,8 @@ const std::optional<LibLogFunctions>& GetLibLogFunctions() {
     DLSYM(__android_log_set_aborter)
     DLSYM(__android_log_call_aborter)
     DLSYM(__android_log_default_aborter)
+    DLSYM(__android_log_set_minimum_priority);
+    DLSYM(__android_log_get_minimum_priority);
 #undef DLSYM
 
     return real_liblog_functions;
@@ -68,6 +70,8 @@ const std::optional<LibLogFunctions>& GetLibLogFunctions() {
         .__android_log_set_aborter = __android_log_set_aborter,
         .__android_log_call_aborter = __android_log_call_aborter,
         .__android_log_default_aborter = __android_log_default_aborter,
+        .__android_log_set_minimum_priority = __android_log_set_minimum_priority,
+        .__android_log_get_minimum_priority = __android_log_get_minimum_priority,
     };
   }();
   return liblog_functions;

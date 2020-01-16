@@ -244,6 +244,34 @@ void __android_log_call_aborter(const char* abort_message);
  */
 void __android_log_default_aborter(const char* abort_message);
 
+/**
+ * Use the per-tag properties "log.tag.<tagname>" along with the minimum priority from
+ * __android_log_set_minimum_priority() to determine if a log message with a given prio and tag will
+ * be printed.  A non-zero result indicates yes, zero indicates false.
+ *
+ * If both a priority for a tag and a minimum priority are set by
+ * __android_log_set_minimum_priority(), then the lowest of the two values are to determine the
+ * minimum priority needed to log.  If only one is set, then that value is used to determine the
+ * minimum priority needed.  If none are set, then default_priority is used.
+ *
+ * prio is ANDROID_LOG_VERBOSE to ANDROID_LOG_FATAL.
+ */
+int __android_log_is_loggable(int prio, const char* tag, int default_prio);
+int __android_log_is_loggable_len(int prio, const char* tag, size_t len, int default_prio);
+
+/**
+ * Sets the minimum priority that will be logged for this process.
+ *
+ * This returns the previous set minimum priority, or ANDROID_LOG_DEFAULT if none was set.
+ */
+int __android_log_set_minimum_priority(int priority);
+
+/**
+ * Gets the minimum priority that will be logged for this process.  If none has been set by a
+ * previous __android_log_set_minimum_priority() call, this returns ANDROID_LOG_DEFAULT.
+ */
+int __android_log_get_minimum_priority();
+
 #ifdef __cplusplus
 }
 #endif

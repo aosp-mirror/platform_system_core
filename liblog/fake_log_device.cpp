@@ -517,13 +517,16 @@ void FakeClose() {
 }
 
 int __android_log_is_loggable(int prio, const char*, int def) {
-  int logLevel = def;
-  return logLevel >= 0 && prio >= logLevel;
+  int minimum_priority = __android_log_get_minimum_priority();
+  if (minimum_priority == ANDROID_LOG_DEFAULT) {
+    return prio >= def;
+  } else {
+    return prio >= minimum_priority;
+  }
 }
 
 int __android_log_is_loggable_len(int prio, const char*, size_t, int def) {
-  int logLevel = def;
-  return logLevel >= 0 && prio >= logLevel;
+  return __android_log_is_loggable(prio, nullptr, def);
 }
 
 int __android_log_is_debuggable() {

@@ -36,6 +36,8 @@ struct LibLogFunctions {
   void (*__android_log_set_aborter)(__android_aborter_function aborter);
   void (*__android_log_call_aborter)(const char* abort_message);
   void (*__android_log_default_aborter)(const char* abort_message);
+  int (*__android_log_set_minimum_priority)(int priority);
+  int (*__android_log_get_minimum_priority)();
 };
 
 const std::optional<LibLogFunctions>& GetLibLogFunctions();

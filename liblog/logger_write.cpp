@@ -106,6 +106,17 @@ void __android_log_close() {
 #endif
 }
 
+static int minimum_log_priority = ANDROID_LOG_DEFAULT;
+int __android_log_set_minimum_priority(int priority) {
+  int old_minimum_log_priority = minimum_log_priority;
+  minimum_log_priority = priority;
+  return old_minimum_log_priority;
+}
+
+int __android_log_get_minimum_priority() {
+  return minimum_log_priority;
+}
+
 #ifdef __ANDROID__
 static __android_logger_function logger_function = __android_log_logd_logger;
 #else

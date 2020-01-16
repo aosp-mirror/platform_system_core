@@ -152,6 +152,8 @@ static int LogIdTolog_id_t(LogId log_id) {
 
 static LogSeverity PriorityToLogSeverity(int priority) {
   switch (priority) {
+    case ANDROID_LOG_DEFAULT:
+      return INFO;
     case ANDROID_LOG_VERBOSE:
       return VERBOSE;
     case ANDROID_LOG_DEBUG:
@@ -233,6 +235,8 @@ void SetDefaultTag(const std::string& tag) {
 }
 
 static bool gInitialized = false;
+
+// Only used for Q fallback.
 static LogSeverity gMinimumLogSeverity = INFO;
 
 #if defined(__linux__)
@@ -381,27 +385,27 @@ void InitLogging(char* argv[], LogFunction&& logger, AbortFunction&& aborter) {
     if (spec.size() == 3 && StartsWith(spec, "*:")) {
       switch (spec[2]) {
         case 'v':
-          gMinimumLogSeverity = VERBOSE;
+          SetMinimumLogSeverity(VERBOSE);
           continue;
         case 'd':
-          gMinimumLogSeverity = DEBUG;
+          SetMinimumLogSeverity(DEBUG);
           continue;
         case 'i':
-          gMinimumLogSeverity = INFO;
+          SetMinimumLogSeverity(INFO);
           continue;
         case 'w':
-          gMinimumLogSeverity = WARNING;
+          SetMinimumLogSeverity(WARNING);
           continue;
         case 'e':
-          gMinimumLogSeverity = ERROR;
+          SetMinimumLogSeverity(ERROR);
           continue;
         case 'f':
-          gMinimumLogSeverity = FATAL_WITHOUT_ABORT;
+          SetMinimumLogSeverity(FATAL_WITHOUT_ABORT);
           continue;
         // liblog will even suppress FATAL if you say 's' for silent, but that's
         // crazy!
         case 's':
-          gMinimumLogSeverity = FATAL_WITHOUT_ABORT;
+          SetMinimumLogSeverity(FATAL_WITHOUT_ABORT);
           continue;
       }
     }
@@ -595,13 +599,38 @@ void LogMessage::LogLine(const char* file, unsigned int line, LogSeverity severi
 }
 
 LogSeverity GetMinimumLogSeverity() {
+  static auto& liblog_functions = GetLibLogFunctions();
+  if (liblog_functions) {
+    return PriorityToLogSeverity(liblog_functions->__android_log_get_minimum_priority());
+  } else {
     return gMinimumLogSeverity;
+  }
+}
+
+bool ShouldLog(LogSeverity severity, const char* tag) {
+  static auto& liblog_functions = GetLibLogFunctions();
+  // Even though we're not using the R liblog functions in this function, if we're running on Q,
+  // we need to fall back to using gMinimumLogSeverity, since __android_log_is_loggable() will not
+  // take into consideration the value from SetMinimumLogSeverity().
+  if (liblog_functions) {
+    // TODO: It is safe to pass nullptr for tag, but it will be better to use the default log tag.
+    int priority = LogSeverityToPriority(severity);
+    return __android_log_is_loggable(priority, tag, ANDROID_LOG_INFO);
+  } else {
+    return severity >= gMinimumLogSeverity;
+  }
 }
 
 LogSeverity SetMinimumLogSeverity(LogSeverity new_severity) {
-  LogSeverity old_severity = gMinimumLogSeverity;
-  gMinimumLogSeverity = new_severity;
-  return old_severity;
+  static auto& liblog_functions = GetLibLogFunctions();
+  if (liblog_functions) {
+    auto priority = LogSeverityToPriority(new_severity);
+    return PriorityToLogSeverity(liblog_functions->__android_log_set_minimum_priority(priority));
+  } else {
+    LogSeverity old_severity = gMinimumLogSeverity;
+    gMinimumLogSeverity = new_severity;
+    return old_severity;
+  }
 }
 
 ScopedLogSeverity::ScopedLogSeverity(LogSeverity new_severity) {
