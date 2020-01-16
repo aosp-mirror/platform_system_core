@@ -29,6 +29,7 @@ cc_defaults {
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION=1",
     ],
     cpp_std: "experimental",
+    stl: "libc++_static",
 
     use_version_lib: true,
     compile_multilib: "first",
@@ -359,8 +360,6 @@ cc_binary_host {
         "libz",
     ],
 
-    stl: "libc++_static",
-
     // Don't add anything here, we don't want additional shared dependencies
     // on the host adb tool, and shared libraries that link against libc++
     // will violate ODR
@@ -553,11 +552,9 @@ cc_binary {
         keep_symbols: true,
     },
 
-    stl: "libc++_static",
     static_libs: [
         "libadbconnection_server",
         "libadbd",
-        "libadbd_auth",
         "libadbd_services",
         "libasyncio",
         "libbase",
@@ -572,6 +569,7 @@ cc_binary {
     ],
 
     shared_libs: [
+        "libadbd_auth",
         "libcrypto",
     ],
 }
@@ -580,7 +578,6 @@ phony {
     name: "adbd_system_binaries",
     required: [
         "abb",
-        "libadbd_auth",
         "reboot",
         "set-verity-state",
     ]
@@ -734,7 +731,6 @@ cc_library_host_static {
         "libziparchive",
         "libz",
     ],
-    stl: "libc++_static",
     proto: {
         type: "lite",
         export_proto_headers: true,
