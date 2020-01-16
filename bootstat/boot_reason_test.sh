@@ -636,7 +636,7 @@ test_ota() {
   rm -r ${ANDROID_PRODUCT_OUT}/obj/ETC/system_build_prop_intermediates ||
     true
   pushd ${ANDROID_BUILD_TOP} >&2
-  make -j50 >&2
+  build/soong/soong_ui.bash --make-mode >&2
   if [ ${?} != 0 ]; then
     popd >&2
     return 1
