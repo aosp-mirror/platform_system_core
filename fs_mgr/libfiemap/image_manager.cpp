@@ -26,6 +26,7 @@
 #include <fs_mgr_dm_linear.h>
 #include <libdm/loop_control.h>
 #include <libfiemap/split_fiemap_writer.h>
+#include <libgsi/libgsi.h>
 
 #include "metadata.h"
 #include "utility.h"
@@ -34,6 +35,7 @@ namespace android {
 namespace fiemap {
 
 using namespace std::literals;
+using android::base::ReadFileToString;
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
@@ -53,6 +55,11 @@ static constexpr char kTestImageMetadataDir[] = "/metadata/gsi/test";
 std::unique_ptr<ImageManager> ImageManager::Open(const std::string& dir_prefix) {
     auto metadata_dir = "/metadata/gsi/" + dir_prefix;
     auto data_dir = "/data/gsi/" + dir_prefix;
+    auto install_dir_file = gsi::DsuInstallDirFile(gsi::GetDsuSlot(dir_prefix));
+    std::string path;
+    if (ReadFileToString(install_dir_file, &path)) {
+        data_dir = path;
+    }
     return Open(metadata_dir, data_dir);
 }
 
