@@ -41,7 +41,7 @@ cc_defaults {
                 "-UALLOW_PERMISSIVE_SELINUX",
                 "-DALLOW_PERMISSIVE_SELINUX=1",
                 "-UREBOOT_BOOTLOADER_ON_PANIC",
-                "-DREBOOT_BOOTLOADER_ON_PANIC=0",
+                "-DREBOOT_BOOTLOADER_ON_PANIC=1",
                 "-UWORLD_WRITABLE_KMSG",
                 "-DWORLD_WRITABLE_KMSG=1",
                 "-UDUMP_ON_UMOUNT_FAILURE",
