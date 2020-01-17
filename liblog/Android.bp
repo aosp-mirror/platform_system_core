@@ -103,7 +103,7 @@ cc_library {
 
     stubs: {
         symbol_file: "liblog.map.txt",
-        versions: ["10000"],
+        versions: ["29", "30"],
     },
 
     // TODO(tomcherry): Renable this before release branch is cut
