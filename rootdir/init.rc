@@ -551,6 +551,7 @@ on post-fs-data
     chown bluetooth bluetooth /data/misc/bluedroid/bt_config.conf
     mkdir /data/misc/bluetooth 0770 bluetooth bluetooth
     mkdir /data/misc/bluetooth/logs 0770 bluetooth bluetooth
+    mkdir /data/misc/credstore 0700 credstore credstore
     mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/gatekeeper 0700 system system
     mkdir /data/misc/keychain 0771 system system
