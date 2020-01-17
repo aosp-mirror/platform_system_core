@@ -304,10 +304,13 @@ struct proc {
     bool cmdlineValid;             // cmdline has been cached
     bool updated;                  // cleared before monitoring pass.
     bool killed;                   // sent a kill to this thread, next panic...
+    bool frozen;                   // process is in frozen cgroup.
 
     void setComm(const char* _comm) { strncpy(comm + 1, _comm, sizeof(comm) - 2); }
 
-    proc(pid_t tid, pid_t pid, pid_t ppid, const char* _comm, int time, char state)
+    void setFrozen(bool _frozen) { frozen = _frozen; }
+
+    proc(pid_t tid, pid_t pid, pid_t ppid, const char* _comm, int time, char state, bool frozen)
         : tid(tid),
           schedUpdate(0),
           nrSwitches(0),
@@ -327,7 +330,8 @@ struct proc {
           exeMissingValid(false),
           cmdlineValid(false),
           updated(true),
-          killed(!llkTestWithKill) {
+          killed(!llkTestWithKill),
+          frozen(frozen) {
         memset(comm, '\0', sizeof(comm));
         setComm(_comm);
     }
@@ -372,6 +376,8 @@ struct proc {
         }
         return uid;
     }
+
+    bool isFrozen() { return frozen; }
 
     void reset(void) {  // reset cache, if we detected pid rollover
         uid = -1;
@@ -592,8 +598,9 @@ void llkTidRemove(pid_t tid) {
     tids.erase(tid);
 }
 
-proc* llkTidAlloc(pid_t tid, pid_t pid, pid_t ppid, const char* comm, int time, char state) {
-    auto it = tids.emplace(std::make_pair(tid, proc(tid, pid, ppid, comm, time, state)));
+proc* llkTidAlloc(pid_t tid, pid_t pid, pid_t ppid, const char* comm, int time, char state,
+                  bool frozen) {
+    auto it = tids.emplace(std::make_pair(tid, proc(tid, pid, ppid, comm, time, state, frozen)));
     return &it.first->second;
 }
 
@@ -1039,12 +1046,18 @@ milliseconds llkCheck(bool checkRunning) {
                 continue;
             }
 
+            // Get the process cgroup
+            auto cgroup = ReadFile(piddir + "/cgroup");
+            auto frozen = cgroup.find(":freezer:/frozen") != std::string::npos;
+
             auto procp = llkTidLookup(tid);
             if (procp == nullptr) {
-                procp = llkTidAlloc(tid, pid, ppid, pdir, utime + stime, state);
+                procp = llkTidAlloc(tid, pid, ppid, pdir, utime + stime, state, frozen);
             } else {
                 // comm can change ...
                 procp->setComm(pdir);
+                // frozen can change, too...
+                procp->setFrozen(frozen);
                 procp->updated = true;
                 // pid/ppid/tid wrap?
                 if (((procp->update != prevUpdate) && (procp->update != llkUpdate)) ||
@@ -1084,6 +1097,9 @@ milliseconds llkCheck(bool checkRunning) {
             if ((tid == myTid) || llkSkipPid(tid)) {
                 continue;
             }
+            if (procp->isFrozen()) {
+                break;
+            }
             if (llkSkipPpid(ppid)) {
                 break;
             }
@@ -1101,7 +1117,7 @@ milliseconds llkCheck(bool checkRunning) {
 
             auto pprocp = llkTidLookup(ppid);
             if (pprocp == nullptr) {
-                pprocp = llkTidAlloc(ppid, ppid, 0, "", 0, '?');
+                pprocp = llkTidAlloc(ppid, ppid, 0, "", 0, '?', false);
             }
             if (pprocp) {
                 if (llkSkipPproc(pprocp, procp)) break;
