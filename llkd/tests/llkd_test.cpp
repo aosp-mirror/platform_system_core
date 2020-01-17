@@ -89,7 +89,8 @@ seconds llkdSleepPeriod(char state) {
         rest();
         std::string setprop("setprop ");
         // Manually check that SyS_openat is _added_ to the list when restarted
-        execute((setprop + LLK_CHECK_STACK_PROPERTY + " ,SyS_openat").c_str());
+        // 4.19+ kernels report __arm64_sys_openat b/147486902
+        execute((setprop + LLK_CHECK_STACK_PROPERTY + " ,SyS_openat,__arm64_sys_openat").c_str());
         rest();
         execute((setprop + LLK_ENABLE_WRITEABLE_PROPERTY + " false").c_str());
         rest();
