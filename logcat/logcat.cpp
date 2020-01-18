@@ -110,7 +110,7 @@ class Logcat {
 #endif
 
 static int openLogFile(const char* pathname, size_t sizeKB) {
-    int fd = open(pathname, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR);
+    int fd = open(pathname, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP);
     if (fd < 0) {
         return fd;
     }
