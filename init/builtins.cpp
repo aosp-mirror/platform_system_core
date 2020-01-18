@@ -1276,7 +1276,7 @@ static Result<void> create_apex_data_dirs() {
         if (strchr(name, '@') != nullptr) continue;
 
         auto path = "/data/misc/apexdata/" + std::string(name);
-        auto options = MkdirOptions{path, 0770, AID_ROOT, AID_SYSTEM, FscryptAction::kNone, "ref"};
+        auto options = MkdirOptions{path, 0771, AID_ROOT, AID_SYSTEM, FscryptAction::kNone, "ref"};
         make_dir_with_options(options);
     }
     return {};

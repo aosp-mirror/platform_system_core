@@ -54,16 +54,20 @@ LIBLOG_O {
     __android_log_is_debuggable; # apex llndk
 };
 
-LIBLOG_Q {
+LIBLOG_Q { # introduced=29
   global:
     __android_log_bswrite; # apex
     __android_log_btwrite; # apex
     __android_log_bwrite; # apex
     __android_log_close; # apex
     __android_log_security; # apex
-    __android_log_security_bswrite; # apex
     android_log_reset; # llndk
     android_log_parser_reset; # llndk
+};
+
+LIGLOG_R { # introduced=30
+  global:
+    __android_log_security_bswrite; # apex
 };
 
 LIBLOG_PRIVATE {

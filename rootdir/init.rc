@@ -551,6 +551,7 @@ on post-fs-data
     chown bluetooth bluetooth /data/misc/bluedroid/bt_config.conf
     mkdir /data/misc/bluetooth 0770 bluetooth bluetooth
     mkdir /data/misc/bluetooth/logs 0770 bluetooth bluetooth
+    mkdir /data/misc/credstore 0700 credstore credstore
     mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/gatekeeper 0700 system system
     mkdir /data/misc/keychain 0771 system system
@@ -592,7 +593,7 @@ on post-fs-data
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
     mkdir /data/misc/installd 0700 root root
-    mkdir /data/misc/apexdata 0700 root root
+    mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
 
     mkdir /data/preloads 0775 system system encryption=None
