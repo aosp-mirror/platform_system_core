@@ -107,7 +107,7 @@ static bool IsApexUpdatable() {
 }
 
 static Result<void> MountDir(const std::string& path, const std::string& mount_path) {
-    if (int ret = mkdir(mount_path.c_str(), 0755); ret != 0 && ret != EEXIST) {
+    if (int ret = mkdir(mount_path.c_str(), 0755); ret != 0 && errno != EEXIST) {
         return ErrnoError() << "Could not create mount point " << mount_path;
     }
     if (mount(path.c_str(), mount_path.c_str(), nullptr, MS_BIND, nullptr) != 0) {
