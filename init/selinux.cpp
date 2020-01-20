@@ -65,6 +65,7 @@
 #include <android-base/parseint.h>
 #include <android-base/unique_fd.h>
 #include <fs_avb/fs_avb.h>
+#include <libgsi/libgsi.h>
 #include <selinux/android.h>
 
 #include "debug_ramdisk.h"
@@ -533,6 +534,8 @@ void SelinuxRestoreContext() {
     selinux_android_restorecon("/apex", 0);
 
     selinux_android_restorecon("/linkerconfig", 0);
+
+    selinux_android_restorecon(gsi::kDsuAvbKeyDir, SELINUX_ANDROID_RESTORECON_RECURSE);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {
