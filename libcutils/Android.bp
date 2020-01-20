@@ -250,9 +250,8 @@ cc_test {
     require_root: true,
 }
 
-cc_test {
-    name: "libcutils_test_static",
-    test_suites: ["device-tests"],
+cc_defaults {
+    name: "libcutils_test_static_defaults",
     defaults: ["libcutils_test_default"],
     static_libs: [
         "libc",
@@ -271,4 +270,17 @@ cc_test {
             enabled: true,
         },
     },
+}
+
+cc_test {
+    name: "libcutils_test_static",
+    test_suites: ["device-tests"],
+    defaults: ["libcutils_test_static_defaults"],
+}
+
+cc_test {
+    name: "KernelLibcutilsTest",
+    test_suites: ["general-tests", "vts-core"],
+    defaults: ["libcutils_test_static_defaults"],
+    test_config: "KernelLibcutilsTest.xml",
 }
