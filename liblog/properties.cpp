@@ -24,6 +24,8 @@
 #include <sys/_system_properties.h>
 #include <unistd.h>
 
+#include <algorithm>
+
 #include <private/android_logger.h>
 
 static pthread_mutex_t lock_loggable = PTHREAD_MUTEX_INITIALIZER;
@@ -87,7 +89,7 @@ static void refresh_cache(struct cache_char* cache, const char* key) {
   }
 }
 
-static int __android_log_level(const char* tag, size_t len, int default_prio) {
+static int __android_log_level(const char* tag, size_t len) {
   /* sizeof() is used on this array below */
   static const char log_namespace[] = "persist.log.tag.";
   static const size_t base_offset = 8; /* skip "persist." */
@@ -256,20 +258,30 @@ static int __android_log_level(const char* tag, size_t len, int default_prio) {
     case 'F': /* FALLTHRU */ /* Not officially supported */
     case 'A': return ANDROID_LOG_FATAL;
     case BOOLEAN_FALSE: /* FALLTHRU */ /* Not Officially supported */
-    case 'S': return -1; /* ANDROID_LOG_SUPPRESS */
+    case 'S': return ANDROID_LOG_SILENT;
       /* clang-format on */
   }
-  return default_prio;
+  return -1;
 }
 
 int __android_log_is_loggable_len(int prio, const char* tag, size_t len, int default_prio) {
-  int logLevel = __android_log_level(tag, len, default_prio);
-  return logLevel >= 0 && prio >= logLevel;
+  int minimum_log_priority = __android_log_get_minimum_priority();
+  int property_log_level = __android_log_level(tag, len);
+
+  if (property_log_level >= 0 && minimum_log_priority != ANDROID_LOG_DEFAULT) {
+    return prio >= std::min(property_log_level, minimum_log_priority);
+  } else if (property_log_level >= 0) {
+    return prio >= property_log_level;
+  } else if (minimum_log_priority != ANDROID_LOG_DEFAULT) {
+    return prio >= minimum_log_priority;
+  } else {
+    return prio >= default_prio;
+  }
 }
 
 int __android_log_is_loggable(int prio, const char* tag, int default_prio) {
-  int logLevel = __android_log_level(tag, (tag && *tag) ? strlen(tag) : 0, default_prio);
-  return logLevel >= 0 && prio >= logLevel;
+  auto len = tag ? strlen(tag) : 0;
+  return __android_log_is_loggable_len(prio, tag, len, default_prio);
 }
 
 int __android_log_is_debuggable() {

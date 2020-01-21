@@ -85,7 +85,7 @@ enum LogSeverity {
   INFO,
   WARNING,
   ERROR,
-  FATAL_WITHOUT_ABORT,
+  FATAL_WITHOUT_ABORT,  // For loggability tests, this is considered identical to FATAL.
   FATAL,
 };
 
@@ -93,6 +93,8 @@ enum LogId {
   DEFAULT,
   MAIN,
   SYSTEM,
+  RADIO,
+  CRASH,
 };
 
 using LogFunction = std::function<void(LogId, LogSeverity, const char*, const char*,
@@ -209,8 +211,8 @@ struct LogAbortAfterFullExpr {
 #define ABORT_AFTER_LOG_FATAL_EXPR(x) ABORT_AFTER_LOG_EXPR_IF(true, x)
 
 // Defines whether the given severity will be logged or silently swallowed.
-#define WOULD_LOG(severity) \
-  (UNLIKELY((SEVERITY_LAMBDA(severity)) >= ::android::base::GetMinimumLogSeverity()) || \
+#define WOULD_LOG(severity)                                                              \
+  (UNLIKELY(::android::base::ShouldLog(SEVERITY_LAMBDA(severity), _LOG_TAG_INTERNAL)) || \
    MUST_LOG_MESSAGE(severity))
 
 // Get an ostream that can be used for logging at the given severity and to the default
@@ -441,6 +443,9 @@ LogSeverity GetMinimumLogSeverity();
 
 // Set the minimum severity level for logging, returning the old severity.
 LogSeverity SetMinimumLogSeverity(LogSeverity new_severity);
+
+// Return whether or not a log message with the associated tag should be logged.
+bool ShouldLog(LogSeverity severity, const char* tag);
 
 // Allows to temporarily change the minimum severity level for logging.
 class ScopedLogSeverity {
