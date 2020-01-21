@@ -54,6 +54,7 @@ cc_defaults {
     ],
     srcs: [
         "libc_test.cpp",
+        "liblog_global_state.cpp",
         "liblog_test.cpp",
         "log_id_test.cpp",
         "log_radio_test.cpp",

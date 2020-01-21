@@ -67,7 +67,16 @@ LIBLOG_Q { # introduced=29
 
 LIGLOG_R { # introduced=30
   global:
+    __android_log_call_aborter;
+    __android_log_default_aborter;
+    __android_log_get_minimum_priority;
+    __android_log_logd_logger;
     __android_log_security_bswrite; # apex
+    __android_log_set_aborter;
+    __android_log_set_logger;
+    __android_log_set_minimum_priority;
+    __android_log_stderr_logger;
+    __android_log_write_logger_data;
 };
 
 LIBLOG_PRIVATE {

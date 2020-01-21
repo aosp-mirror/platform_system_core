@@ -1074,7 +1074,6 @@ TEST(liblog, too_big_payload) {
 
     // Once we've found our expected entry, break.
     if (len == LOGGER_ENTRY_MAX_PAYLOAD - sizeof(big_payload_tag)) {
-      EXPECT_EQ(ret, len + static_cast<ssize_t>(sizeof(big_payload_tag)));
       *found = true;
     }
   };
@@ -1259,14 +1258,10 @@ TEST(liblog, is_loggable) {
     int level;
     char type;
   } levels[] = {
-    { ANDROID_LOG_VERBOSE, 'v' },
-    { ANDROID_LOG_DEBUG, 'd' },
-    { ANDROID_LOG_INFO, 'i' },
-    { ANDROID_LOG_WARN, 'w' },
-    { ANDROID_LOG_ERROR, 'e' },
-    { ANDROID_LOG_FATAL, 'a' },
-    { -1, 's' },
-    { -2, 'g' },  // Illegal value, resort to default
+      {ANDROID_LOG_VERBOSE, 'v'}, {ANDROID_LOG_DEBUG, 'd'},
+      {ANDROID_LOG_INFO, 'i'},    {ANDROID_LOG_WARN, 'w'},
+      {ANDROID_LOG_ERROR, 'e'},   {ANDROID_LOG_FATAL, 'a'},
+      {ANDROID_LOG_SILENT, 's'},  {-2, 'g'},  // Illegal value, resort to default
   };
 
   // Set up initial test condition
