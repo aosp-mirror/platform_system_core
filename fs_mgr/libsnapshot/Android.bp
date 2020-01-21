@@ -230,6 +230,7 @@ cc_binary {
         "liblog",
         "liblp",
         "libprotobuf-cpp-lite",
+        "libstatslog",
         "libutils",
 
         // TODO(b/148818798): remove when parent bug is fixed.
