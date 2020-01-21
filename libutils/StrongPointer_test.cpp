@@ -56,3 +56,18 @@ TEST(StrongPointer, move) {
     }
     ASSERT_TRUE(isDeleted) << "foo was leaked!";
 }
+
+TEST(StrongPointer, NullptrComparison) {
+    sp<SPFoo> foo;
+    ASSERT_EQ(foo, nullptr);
+    ASSERT_EQ(nullptr, foo);
+}
+
+TEST(StrongPointer, PointerComparison) {
+    bool isDeleted;
+    sp<SPFoo> foo = new SPFoo(&isDeleted);
+    ASSERT_EQ(foo.get(), foo);
+    ASSERT_EQ(foo, foo.get());
+    ASSERT_NE(nullptr, foo);
+    ASSERT_NE(foo, nullptr);
+}
