@@ -91,6 +91,8 @@ class SnapshotManager final {
     using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
     using FiemapStatus = android::fiemap::FiemapStatus;
 
+    friend class SnapshotMergeStats;
+
   public:
     // Dependency injection for testing.
     class IDeviceInfo {
