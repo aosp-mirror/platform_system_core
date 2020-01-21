@@ -30,6 +30,9 @@
 #include <string>
 
 #include <adb/crypto/rsa_2048_key.h>
+#include <adb/crypto/x509_generator.h>
+#include <adb/tls/adb_ca_list.h>
+#include <adb/tls/tls_connection.h>
 #include <android-base/errors.h>
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
@@ -55,6 +58,7 @@ static std::map<std::string, std::shared_ptr<RSA>>& g_keys =
 static std::map<int, std::string>& g_monitored_paths = *new std::map<int, std::string>;
 
 using namespace adb::crypto;
+using namespace adb::tls;
 
 static bool generate_key(const std::string& file) {
     LOG(INFO) << "generate_key(" << file << ")...";
@@ -144,6 +148,7 @@ static bool load_key(const std::string& file) {
     if (g_keys.find(fingerprint) != g_keys.end()) {
         LOG(INFO) << "ignoring already-loaded key: " << file;
     } else {
+        LOG(INFO) << "Loaded fingerprint=[" << SHA256BitsToHexString(fingerprint) << "]";
         g_keys[fingerprint] = std::move(key);
     }
     return true;
@@ -474,4 +479,73 @@ void send_auth_response(const char* token, size_t token_size, atransport* t) {
     p->payload.assign(result.begin(), result.end());
     p->msg.data_length = p->payload.size();
     send_packet(p, t);
+}
+
+void adb_auth_tls_handshake(atransport* t) {
+    std::thread([t]() {
+        std::shared_ptr<RSA> key = t->Key();
+        if (key == nullptr) {
+            // Can happen if !auth_required
+            LOG(INFO) << "t->auth_key not set before handshake";
+            key = t->NextKey();
+            CHECK(key);
+        }
+
+        LOG(INFO) << "Attempting to TLS handshake";
+        bool success = t->connection()->DoTlsHandshake(key.get());
+        if (success) {
+            LOG(INFO) << "Handshake succeeded. Waiting for CNXN packet...";
+        } else {
+            LOG(INFO) << "Handshake failed. Kicking transport";
+            t->Kick();
+        }
+    }).detach();
+}
+
+int adb_tls_set_certificate(SSL* ssl) {
+    LOG(INFO) << __func__;
+
+    const STACK_OF(X509_NAME)* ca_list = SSL_get_client_CA_list(ssl);
+    if (ca_list == nullptr) {
+        // Either the device doesn't know any keys, or !auth_required.
+        // So let's just try with the default certificate and see what happens.
+        LOG(INFO) << "No client CA list. Trying with default certificate.";
+        return 1;
+    }
+
+    const size_t num_cas = sk_X509_NAME_num(ca_list);
+    for (size_t i = 0; i < num_cas; ++i) {
+        auto* x509_name = sk_X509_NAME_value(ca_list, i);
+        auto adbFingerprint = ParseEncodedKeyFromCAIssuer(x509_name);
+        if (!adbFingerprint.has_value()) {
+            // This could be a real CA issuer. Unfortunately, we don't support
+            // it ATM.
+            continue;
+        }
+
+        LOG(INFO) << "Checking for fingerprint match [" << *adbFingerprint << "]";
+        auto encoded_key = SHA256HexStringToBits(*adbFingerprint);
+        if (!encoded_key.has_value()) {
+            continue;
+        }
+        // Check against our list of encoded keys for a match
+        std::lock_guard<std::mutex> lock(g_keys_mutex);
+        auto rsa_priv_key = g_keys.find(*encoded_key);
+        if (rsa_priv_key != g_keys.end()) {
+            LOG(INFO) << "Got SHA256 match on a key";
+            bssl::UniquePtr<EVP_PKEY> evp_pkey(EVP_PKEY_new());
+            CHECK(EVP_PKEY_set1_RSA(evp_pkey.get(), rsa_priv_key->second.get()));
+            auto x509 = GenerateX509Certificate(evp_pkey.get());
+            auto x509_str = X509ToPEMString(x509.get());
+            auto evp_str = Key::ToPEMString(evp_pkey.get());
+            TlsConnection::SetCertAndKey(ssl, x509_str, evp_str);
+            return 1;
+        } else {
+            LOG(INFO) << "No match for [" << *adbFingerprint << "]";
+        }
+    }
+
+    // Let's just try with the default certificate anyways, because daemon might
+    // not require auth, even though it has a list of keys.
+    return 1;
 }

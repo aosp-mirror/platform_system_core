@@ -105,8 +105,9 @@ void qemu_socket_thread(std::string_view addr) {
                  * exchange. */
                 std::string serial = android::base::StringPrintf("host-%d", fd.get());
                 WriteFdExactly(fd.get(), _start_req, strlen(_start_req));
-                register_socket_transport(std::move(fd), std::move(serial), port, 1,
-                                          [](atransport*) { return ReconnectResult::Abort; });
+                register_socket_transport(
+                        std::move(fd), std::move(serial), port, 1,
+                        [](atransport*) { return ReconnectResult::Abort; }, false);
             }
 
             /* Prepare for accepting of the next ADB host connection. */

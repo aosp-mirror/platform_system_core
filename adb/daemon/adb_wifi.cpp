@@ -142,9 +142,9 @@ void TlsServer::OnFdEvent(int fd, unsigned ev) {
         close_on_exec(new_fd.get());
         disable_tcp_nagle(new_fd.get());
         std::string serial = android::base::StringPrintf("host-%d", new_fd.get());
-        // TODO: register a tls transport
-        //        register_socket_transport(std::move(new_fd), std::move(serial), port_, 1,
-        //                                  [](atransport*) { return ReconnectResult::Abort; });
+        register_socket_transport(
+                std::move(new_fd), std::move(serial), port_, 1,
+                [](atransport*) { return ReconnectResult::Abort; }, true);
     }
 }
 
@@ -224,4 +224,5 @@ void adbd_wifi_secure_connect(atransport* t) {
     t->auth_id = adbd_auth_tls_device_connected(auth_ctx, kAdbTransportTypeWifi, t->auth_key.data(),
                                                 t->auth_key.size());
 }
+
 #endif /* !HOST */
