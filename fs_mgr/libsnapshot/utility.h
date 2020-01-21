@@ -111,7 +111,7 @@ std::vector<android::fs_mgr::Partition*> ListPartitionsWithSuffix(
         android::fs_mgr::MetadataBuilder* builder, const std::string& suffix);
 
 // Initialize a device before using it as the COW device for a dm-snapshot device.
-SnapshotManager::Return InitializeCow(const std::string& device);
+Return InitializeCow(const std::string& device);
 
 // "Atomically" write string to file. This is done by a series of actions:
 // 1. Write to path + ".tmp"

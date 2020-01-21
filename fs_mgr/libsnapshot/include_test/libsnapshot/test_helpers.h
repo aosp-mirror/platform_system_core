@@ -42,7 +42,6 @@ using chromeos_update_engine::PartitionUpdate;
 using testing::_;
 using testing::AssertionResult;
 using testing::NiceMock;
-using testing::Return;
 
 using namespace android::storage_literals;
 using namespace std::string_literals;
@@ -117,6 +116,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
 class SnapshotTestPropertyFetcher : public android::fs_mgr::testing::MockPropertyFetcher {
   public:
     SnapshotTestPropertyFetcher(const std::string& slot_suffix) {
+        using testing::Return;
         ON_CALL(*this, GetProperty("ro.boot.slot_suffix", _)).WillByDefault(Return(slot_suffix));
         ON_CALL(*this, GetBoolProperty("ro.boot.dynamic_partitions", _))
                 .WillByDefault(Return(true));
