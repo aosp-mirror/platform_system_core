@@ -109,6 +109,7 @@ class UdpTransport : public Transport {
     ssize_t Read(void* data, size_t length) override;
     ssize_t Write(const void* data, size_t length) override;
     int Close() override;
+    int Reset() override;
 
   private:
     explicit UdpTransport(std::unique_ptr<Socket> socket) : socket_(std::move(socket)) {}
@@ -368,6 +369,10 @@ int UdpTransport::Close() {
     int result = socket_->Close();
     socket_.reset();
     return result;
+}
+
+int UdpTransport::Reset() {
+    return 0;
 }
 
 std::unique_ptr<Transport> Connect(const std::string& hostname, int port, std::string* error) {

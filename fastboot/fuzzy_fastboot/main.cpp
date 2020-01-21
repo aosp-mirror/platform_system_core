@@ -54,7 +54,7 @@
 #include "extensions.h"
 #include "fixtures.h"
 #include "test_utils.h"
-#include "usb_transport_sniffer.h"
+#include "transport_sniffer.h"
 
 namespace fastboot {
 
@@ -1756,16 +1756,19 @@ int main(int argc, char** argv) {
     }
 
     setbuf(stdout, NULL);  // no buffering
-    printf("<Waiting for Device>\n");
-    const auto matcher = [](usb_ifc_info* info) -> int {
-        return fastboot::FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
-    };
-    Transport* transport = nullptr;
-    while (!transport) {
-        transport = usb_open(matcher);
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    if (!fastboot::FastBootTest::IsFastbootOverTcp()) {
+        printf("<Waiting for Device>\n");
+        const auto matcher = [](usb_ifc_info* info) -> int {
+            return fastboot::FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
+        };
+        Transport* transport = nullptr;
+        while (!transport) {
+            transport = usb_open(matcher);
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        transport->Close();
     }
-    transport->Close();
 
     if (args.find("serial_port") != args.end()) {
         fastboot::FastBootTest::serial_port = fastboot::ConfigureSerial(args.at("serial_port"));
