@@ -27,43 +27,6 @@ template<typename T> class wp;
 
 // ---------------------------------------------------------------------------
 
-// TODO: Maybe remove sp<> ? wp<> comparison? These are dangerous: If the wp<>
-// was created before the sp<>, and they point to different objects, they may
-// compare equal even if they are entirely unrelated. E.g. CameraService
-// currently performa such comparisons.
-
-#define COMPARE_STRONG(_op_)                                           \
-template<typename U>                                            \
-inline bool operator _op_ (const sp<U>& o) const {              \
-    return m_ptr _op_ o.m_ptr;                                  \
-}                                                               \
-template<typename U>                                            \
-inline bool operator _op_ (const U* o) const {                  \
-    return m_ptr _op_ o;                                        \
-}                                                               \
-/* Needed to handle type inference for nullptr: */              \
-inline bool operator _op_ (const T* o) const {                  \
-    return m_ptr _op_ o;                                        \
-}
-
-template<template<typename C> class comparator, typename T, typename U>
-static inline bool _sp_compare_(T* a, U* b) {
-    return comparator<typename std::common_type<T*, U*>::type>()(a, b);
-}
-
-// Use std::less and friends to avoid undefined behavior when ordering pointers
-// to different objects.
-#define COMPARE_STRONG_FUNCTIONAL(_op_, _compare_)               \
-template<typename U>                                             \
-inline bool operator _op_ (const sp<U>& o) const {               \
-    return _sp_compare_<_compare_>(m_ptr, o.m_ptr);              \
-}                                                                \
-template<typename U>                                             \
-inline bool operator _op_ (const U* o) const {                   \
-    return _sp_compare_<_compare_>(m_ptr, o);                    \
-}
-// ---------------------------------------------------------------------------
-
 template<typename T>
 class sp {
 public:
@@ -102,15 +65,6 @@ public:
     inline T*       get() const            { return m_ptr; }
     inline explicit operator bool () const { return m_ptr != nullptr; }
 
-    // Operators
-
-    COMPARE_STRONG(==)
-    COMPARE_STRONG(!=)
-    COMPARE_STRONG_FUNCTIONAL(>, std::greater)
-    COMPARE_STRONG_FUNCTIONAL(<, std::less)
-    COMPARE_STRONG_FUNCTIONAL(<=, std::less_equal)
-    COMPARE_STRONG_FUNCTIONAL(>=, std::greater_equal)
-
     // Punt these to the wp<> implementation.
     template<typename U>
     inline bool operator == (const wp<U>& o) const {
@@ -130,12 +84,68 @@ private:
     T* m_ptr;
 };
 
-// For code size reasons, we do not want these inlined or templated.
-void sp_report_race();
-void sp_report_stack_pointer();
+#define COMPARE_STRONG(_op_)                                           \
+    template <typename T, typename U>                                  \
+    static inline bool operator _op_(const sp<T>& t, const sp<U>& u) { \
+        return t.get() _op_ u.get();                                   \
+    }                                                                  \
+    template <typename T, typename U>                                  \
+    static inline bool operator _op_(const T* t, const sp<U>& u) {     \
+        return t _op_ u.get();                                         \
+    }                                                                  \
+    template <typename T, typename U>                                  \
+    static inline bool operator _op_(const sp<T>& t, const U* u) {     \
+        return t.get() _op_ u;                                         \
+    }                                                                  \
+    template <typename T>                                              \
+    static inline bool operator _op_(const sp<T>& t, std::nullptr_t) { \
+        return t.get() _op_ nullptr;                                   \
+    }                                                                  \
+    template <typename T>                                              \
+    static inline bool operator _op_(std::nullptr_t, const sp<T>& t) { \
+        return nullptr _op_ t.get();                                   \
+    }
+
+template <template <typename C> class comparator, typename T, typename U>
+static inline bool _sp_compare_(T* a, U* b) {
+    return comparator<typename std::common_type<T*, U*>::type>()(a, b);
+}
+
+#define COMPARE_STRONG_FUNCTIONAL(_op_, _compare_)                     \
+    template <typename T, typename U>                                  \
+    static inline bool operator _op_(const sp<T>& t, const sp<U>& u) { \
+        return _sp_compare_<_compare_>(t.get(), u.get());              \
+    }                                                                  \
+    template <typename T, typename U>                                  \
+    static inline bool operator _op_(const T* t, const sp<U>& u) {     \
+        return _sp_compare_<_compare_>(t, u.get());                    \
+    }                                                                  \
+    template <typename T, typename U>                                  \
+    static inline bool operator _op_(const sp<T>& t, const U* u) {     \
+        return _sp_compare_<_compare_>(t.get(), u);                    \
+    }                                                                  \
+    template <typename T>                                              \
+    static inline bool operator _op_(const sp<T>& t, std::nullptr_t) { \
+        return _sp_compare_<_compare_>(t.get(), nullptr);              \
+    }                                                                  \
+    template <typename T>                                              \
+    static inline bool operator _op_(std::nullptr_t, const sp<T>& t) { \
+        return _sp_compare_<_compare_>(nullptr, t.get());              \
+    }
+
+COMPARE_STRONG(==)
+COMPARE_STRONG(!=)
+COMPARE_STRONG_FUNCTIONAL(>, std::greater)
+COMPARE_STRONG_FUNCTIONAL(<, std::less)
+COMPARE_STRONG_FUNCTIONAL(<=, std::less_equal)
+COMPARE_STRONG_FUNCTIONAL(>=, std::greater_equal)
 
 #undef COMPARE_STRONG
 #undef COMPARE_STRONG_FUNCTIONAL
+
+// For code size reasons, we do not want these inlined or templated.
+void sp_report_race();
+void sp_report_stack_pointer();
 
 // ---------------------------------------------------------------------------
 // No user serviceable parts below here.
