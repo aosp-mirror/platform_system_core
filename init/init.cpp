@@ -730,8 +730,8 @@ int SecondStageMain(int argc, char** argv) {
     }
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
-
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
+    am.QueueBuiltinAction(TestPerfEventSelinuxAction, "TestPerfEventSelinux");
     am.QueueEventTrigger("early-init");
 
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
