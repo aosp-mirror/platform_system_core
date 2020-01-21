@@ -945,14 +945,33 @@ on property:sys.sysctl.extra_free_kbytes=*
 on property:sys.sysctl.tcp_def_init_rwnd=*
     write /proc/sys/net/ipv4/tcp_default_init_rwnd ${sys.sysctl.tcp_def_init_rwnd}
 
-on property:security.perf_harden=0
+# perf_event_open syscall security:
+# Newer kernels have the ability to control the use of the syscall via SELinux
+# hooks. init tests for this, and sets sys_init.perf_lsm_hooks to 1 if the
+# kernel has the hooks. In this case, the system-wide perf_event_paranoid
+# sysctl is set to -1 (unrestricted use), and the SELinux policy is used for
+# controlling access. On older kernels, the paranoid value is the only means of
+# controlling access. It is normally 3 (allow only root), but the shell user
+# can lower it to 1 (allowing thread-scoped pofiling) via security.perf_harden.
+on property:sys.init.perf_lsm_hooks=1
+    write /proc/sys/kernel/perf_event_paranoid -1
+on property:security.perf_harden=0 && property:sys.init.perf_lsm_hooks=""
     write /proc/sys/kernel/perf_event_paranoid 1
+on property:security.perf_harden=1 && property:sys.init.perf_lsm_hooks=""
+    write /proc/sys/kernel/perf_event_paranoid 3
+
+# Additionally, simpleperf profiler uses debug.* and security.perf_harden
+# sysprops to be able to indirectly set these sysctls.
+on property:security.perf_harden=0
     write /proc/sys/kernel/perf_event_max_sample_rate ${debug.perf_event_max_sample_rate:-100000}
     write /proc/sys/kernel/perf_cpu_time_max_percent ${debug.perf_cpu_time_max_percent:-25}
     write /proc/sys/kernel/perf_event_mlock_kb ${debug.perf_event_mlock_kb:-516}
-
+# Default values.
 on property:security.perf_harden=1
-    write /proc/sys/kernel/perf_event_paranoid 3
+    write /proc/sys/kernel/perf_event_max_sample_rate 100000
+    write /proc/sys/kernel/perf_cpu_time_max_percent 25
+    write /proc/sys/kernel/perf_event_mlock_kb 516
+
 
 # on shutdown
 # In device's init.rc, this trigger can be used to do device-specific actions
