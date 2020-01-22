@@ -67,6 +67,11 @@ ifeq ($(NATIVE_COVERAGE),true)
   EXPORT_GLOBAL_GCOV_OPTIONS := export GCOV_PREFIX /data/misc/trace
 endif
 
+EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS :=
+ifeq ($(CLANG_COVERAGE),true)
+  EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang-%p-%m.profraw
+endif
+
 # Put it here instead of in init.rc module definition,
 # because init.rc is conditionally included.
 #
@@ -147,6 +152,7 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	$(hide) sed -i -e 's?%SYSTEMSERVERCLASSPATH%?$(PRODUCT_SYSTEM_SERVER_CLASSPATH)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_ASAN_OPTIONS%?$(EXPORT_GLOBAL_ASAN_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_GCOV_OPTIONS%?$(EXPORT_GLOBAL_GCOV_OPTIONS)?g' $@
+	$(hide) sed -i -e 's?%EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS%?$(EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_HWASAN_OPTIONS%?$(EXPORT_GLOBAL_HWASAN_OPTIONS)?g' $@
 
 # Append PLATFORM_VNDK_VERSION to base name.
