@@ -1092,7 +1092,9 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
         return FS_MGR_MNTALL_FAIL;
     }
 
-    for (size_t i = 0; i < fstab->size(); i++) {
+    // Keep i int to prevent unsigned integer overflow from (i = top_idx - 1),
+    // where top_idx is 0. It will give SIGABRT
+    for (int i = 0; i < static_cast<int>(fstab->size()); i++) {
         auto& current_entry = (*fstab)[i];
 
         // If a filesystem should have been mounted in the first stage, we
