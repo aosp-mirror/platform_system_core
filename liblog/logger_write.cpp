@@ -16,6 +16,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
@@ -31,6 +32,7 @@
 #include <private/android_logger.h>
 
 #include "android/log.h"
+#include "log/log_read.h"
 #include "logger.h"
 #include "rwlock.h"
 #include "uio.h"
@@ -104,6 +106,45 @@ void __android_log_close() {
 #else
   FakeClose();
 #endif
+}
+
+#if defined(__GLIBC__) || defined(_WIN32)
+static const char* getprogname() {
+#if defined(__GLIBC__)
+  return program_invocation_short_name;
+#elif defined(_WIN32)
+  static bool first = true;
+  static char progname[MAX_PATH] = {};
+
+  if (first) {
+    char path[PATH_MAX + 1];
+    DWORD result = GetModuleFileName(nullptr, path, sizeof(path) - 1);
+    if (result == 0 || result == sizeof(path) - 1) return "";
+    path[PATH_MAX - 1] = 0;
+
+    char* path_basename = basename(path);
+
+    snprintf(progname, sizeof(progname), "%s", path_basename);
+    first = false;
+  }
+
+  return progname;
+#endif
+}
+#endif
+
+// It's possible for logging to happen during static initialization before our globals are
+// initialized, so we place this std::string in a function such that it is initialized on the first
+// call.
+static std::string& GetDefaultTag() {
+  static std::string default_tag = getprogname();
+  return default_tag;
+}
+static RwLock default_tag_lock;
+
+void __android_log_set_default_tag(const char* tag) {
+  auto lock = std::unique_lock{default_tag_lock};
+  GetDefaultTag().assign(tag, 0, LOGGER_ENTRY_MAX_PAYLOAD);
 }
 
 static int minimum_log_priority = ANDROID_LOG_DEFAULT;
@@ -270,7 +311,11 @@ int __android_log_write(int prio, const char* tag, const char* msg) {
 }
 
 void __android_log_write_logger_data(__android_logger_data* logger_data, const char* msg) {
-  if (logger_data->tag == nullptr) logger_data->tag = "";
+  auto tag_lock = std::shared_lock{default_tag_lock, std::defer_lock};
+  if (logger_data->tag == nullptr) {
+    tag_lock.lock();
+    logger_data->tag = GetDefaultTag().c_str();
+  }
 
 #if __BIONIC__
   if (logger_data->priority == ANDROID_LOG_FATAL) {
