@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright 2020, The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,24 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_SECURITY_H
-#define _INIT_SECURITY_H
+#pragma once
 
-#include <string>
-#include <vector>
-
-#include "builtin_arguments.h"
-#include "result.h"
+#include <android/hardware/confirmationui/1.0/IConfirmationUI.h>
 
 namespace android {
-namespace init {
+namespace hardware {
+namespace confirmationui {
+namespace V1_0 {
+namespace implementation {
 
-Result<void> MixHwrngIntoLinuxRngAction(const BuiltinArguments&);
-Result<void> SetMmapRndBitsAction(const BuiltinArguments&);
-Result<void> SetKptrRestrictAction(const BuiltinArguments&);
-Result<void> TestPerfEventSelinuxAction(const BuiltinArguments&);
+android::sp<IConfirmationUI> createTrustyConfirmationUI();
 
-}  // namespace init
+}  // namespace implementation
+}  // namespace V1_0
+}  // namespace confirmationui
+}  // namespace hardware
 }  // namespace android
-
-#endif

@@ -56,6 +56,7 @@ cc_defaults {
         "chrono_utils.cpp",
         "cmsg.cpp",
         "file.cpp",
+        "liblog_symbols.cpp",
         "logging.cpp",
         "mapped_file.cpp",
         "parsebool.cpp",
@@ -67,6 +68,10 @@ cc_defaults {
         "threads.cpp",
         "test_utils.cpp",
     ],
+
+    static: {
+        cflags: ["-DNO_LIBLOG_DLSYM"],
+    },
 
     cppflags: ["-Wexit-time-destructors"],
     shared_libs: ["liblog"],

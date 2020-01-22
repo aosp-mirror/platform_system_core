@@ -1,0 +1,20 @@
+## Secure UI Architecture
+
+To implement confirmationui a secure UI architecture is required. This entails a way
+to display the confirmation dialog driven by a reduced trusted computing base, typically
+a trusted execution environment (TEE), without having to rely on Linux and the Android
+system for integrity and authenticity of input events. This implementation provides
+neither. But it provides most of the functionlity required to run a full Android Protected
+Confirmation feature when integrated into a secure UI architecture.
+
+## Secure input (NotSoSecureInput)
+
+This implementation does not provide any security guaranties.
+The input method (NotSoSecureInput) runs a cryptographic protocols that is
+sufficiently secure IFF the end point is implemented on a trustworthy
+secure input device. But since the endpoint is currently in the HAL
+service itself this implementation is not secure.
+
+NOTE that a secure input device end point needs a good source of entropy
+for generating nonces. The current implementation (NotSoSecureInput.cpp#generateNonce)
+uses a constant nonce.

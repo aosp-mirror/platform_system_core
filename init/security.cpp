@@ -18,14 +18,19 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/perf_event.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #include <fstream>
 
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/unique_fd.h>
 
 using android::base::unique_fd;
+using android::base::SetProperty;
 
 namespace android {
 namespace init {
@@ -194,6 +199,62 @@ Result<void> SetKptrRestrictAction(const BuiltinArguments&) {
         LOG(FATAL) << "Unable to set adequate kptr_restrict value!";
         return Error();
     }
+    return {};
+}
+
+// Test for whether the kernel has SELinux hooks for the perf_event_open()
+// syscall. If the hooks are present, we can stop using the other permission
+// mechanism (perf_event_paranoid sysctl), and use only the SELinux policy to
+// control access to the syscall. The hooks are expected on all Android R
+// release kernels, but might be absent on devices that upgrade while keeping an
+// older kernel.
+//
+// There is no direct/synchronous way of finding out that a syscall failed due
+// to SELinux. Therefore we test for a combination of a success and a failure
+// that are explained by the platform's SELinux policy for the "init" domain:
+// * cpu-scoped perf_event is allowed
+// * ioctl() on the event fd is disallowed with EACCES
+//
+// Since init has CAP_SYS_ADMIN, these tests are not affected by the system-wide
+// perf_event_paranoid sysctl.
+//
+// If the SELinux hooks are detected, a special sysprop
+// (sys.init.perf_lsm_hooks) is set, which translates to a modification of
+// perf_event_paranoid (through init.rc sysprop actions).
+//
+// TODO(b/137092007): this entire test can be removed once the platform stops
+// supporting kernels that precede the perf_event_open hooks (Android common
+// kernels 4.4 and 4.9).
+Result<void> TestPerfEventSelinuxAction(const BuiltinArguments&) {
+    // Use a trivial event that will be configured, but not started.
+    struct perf_event_attr pe = {
+            .type = PERF_TYPE_SOFTWARE,
+            .size = sizeof(struct perf_event_attr),
+            .config = PERF_COUNT_SW_TASK_CLOCK,
+            .disabled = 1,
+            .exclude_kernel = 1,
+    };
+
+    // Open the above event targeting cpu 0. (EINTR not possible.)
+    unique_fd fd(static_cast<int>(syscall(__NR_perf_event_open, &pe, /*pid=*/-1,
+                                          /*cpu=*/0,
+                                          /*group_fd=*/-1, /*flags=*/0)));
+    if (fd == -1) {
+        PLOG(ERROR) << "Unexpected perf_event_open error";
+        return {};
+    }
+
+    int ioctl_ret = ioctl(fd, PERF_EVENT_IOC_RESET);
+    if (ioctl_ret != -1) {
+        // Success implies that the kernel doesn't have the hooks.
+        return {};
+    } else if (errno != EACCES) {
+        PLOG(ERROR) << "Unexpected perf_event ioctl error";
+        return {};
+    }
+
+    // Conclude that the SELinux hooks are present.
+    SetProperty("sys.init.perf_lsm_hooks", "1");
     return {};
 }
 

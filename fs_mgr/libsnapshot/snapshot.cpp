@@ -290,7 +290,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
     return true;
 }
 
-SnapshotManager::Return SnapshotManager::CreateCowImage(LockedFile* lock, const std::string& name) {
+Return SnapshotManager::CreateCowImage(LockedFile* lock, const std::string& name) {
     CHECK(lock);
     CHECK(lock->lock_mode() == LOCK_EX);
     if (!EnsureImageManager()) return Return::Error();
@@ -1249,15 +1249,45 @@ UpdateState SnapshotManager::GetUpdateState(double* progress) {
         return UpdateState::None;
     }
 
-    auto state = ReadUpdateState(lock.get());
-    if (progress) {
-        *progress = 0.0;
-        if (state == UpdateState::Merging) {
-            // :TODO: When merging is implemented, set progress_val.
-        } else if (state == UpdateState::MergeCompleted) {
-            *progress = 100.0;
-        }
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock.get());
+    auto state = update_status.state();
+    if (progress == nullptr) {
+        return state;
     }
+
+    if (state == UpdateState::MergeCompleted) {
+        *progress = 100.0;
+        return state;
+    }
+
+    *progress = 0.0;
+    if (state != UpdateState::Merging) {
+        return state;
+    }
+
+    // Sum all the snapshot states as if the system consists of a single huge
+    // snapshots device, then compute the merge completion percentage of that
+    // device.
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock.get(), &snapshots)) {
+        LOG(ERROR) << "Could not list snapshots";
+        return state;
+    }
+
+    DmTargetSnapshot::Status fake_snapshots_status = {};
+    for (const auto& snapshot : snapshots) {
+        DmTargetSnapshot::Status current_status;
+
+        if (!QuerySnapshotStatus(snapshot, nullptr, &current_status)) continue;
+
+        fake_snapshots_status.sectors_allocated += current_status.sectors_allocated;
+        fake_snapshots_status.total_sectors += current_status.total_sectors;
+        fake_snapshots_status.metadata_sectors += current_status.metadata_sectors;
+    }
+
+    *progress = DmTargetSnapshot::MergePercent(fake_snapshots_status,
+                                               update_status.sectors_allocated());
+
     return state;
 }
 
@@ -1890,21 +1920,19 @@ static void UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata) {
     }
 }
 
-static SnapshotManager::Return AddRequiredSpace(
-        SnapshotManager::Return orig,
-        const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
-    if (orig.error_code() != SnapshotManager::Return::ErrorCode::NO_SPACE) {
+static Return AddRequiredSpace(Return orig,
+                               const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
+    if (orig.error_code() != Return::ErrorCode::NO_SPACE) {
         return orig;
     }
     uint64_t sum = 0;
     for (auto&& [name, status] : all_snapshot_status) {
         sum += status.cow_file_size();
     }
-    return SnapshotManager::Return::NoSpace(sum);
+    return Return::NoSpace(sum);
 }
 
-SnapshotManager::Return SnapshotManager::CreateUpdateSnapshots(
-        const DeltaArchiveManifest& manifest) {
+Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) {
     auto lock = LockExclusive();
     if (!lock) return Return::Error();
 
@@ -1998,7 +2026,7 @@ SnapshotManager::Return SnapshotManager::CreateUpdateSnapshots(
     return Return::Ok();
 }
 
-SnapshotManager::Return SnapshotManager::CreateUpdateSnapshotsInternal(
+Return SnapshotManager::CreateUpdateSnapshotsInternal(
         LockedFile* lock, const DeltaArchiveManifest& manifest, PartitionCowCreator* cow_creator,
         AutoDeviceList* created_devices,
         std::map<std::string, SnapshotStatus>* all_snapshot_status) {
@@ -2131,7 +2159,7 @@ SnapshotManager::Return SnapshotManager::CreateUpdateSnapshotsInternal(
     return Return::Ok();
 }
 
-SnapshotManager::Return SnapshotManager::InitializeUpdateSnapshots(
+Return SnapshotManager::InitializeUpdateSnapshots(
         LockedFile* lock, MetadataBuilder* target_metadata,
         const LpMetadata* exported_target_metadata, const std::string& target_suffix,
         const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
@@ -2286,9 +2314,19 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
         }
     }
 
+    unsigned int last_progress = 0;
+    auto callback = [&]() -> void {
+        double progress;
+        GetUpdateState(&progress);
+        if (last_progress < static_cast<unsigned int>(progress)) {
+            last_progress = progress;
+            LOG(INFO) << "Waiting for merge to complete: " << last_progress << "%.";
+        }
+    };
+
     LOG(INFO) << "Waiting for any previous merge request to complete. "
               << "This can take up to several minutes.";
-    auto state = ProcessUpdateState();
+    auto state = ProcessUpdateState(callback);
     if (state == UpdateState::None) {
         LOG(INFO) << "Can't find any snapshot to merge.";
         return state;
@@ -2300,7 +2338,8 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
         }
         // All other states can be handled by ProcessUpdateState.
         LOG(INFO) << "Waiting for merge to complete. This can take up to several minutes.";
-        state = ProcessUpdateState();
+        last_progress = 0;
+        state = ProcessUpdateState(callback);
     }
 
     LOG(INFO) << "Merge finished with state \"" << state << "\".";
