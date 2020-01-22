@@ -185,15 +185,6 @@ static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
       errno = save_errno;
       return -EINVAL;
     }
-  } else {
-    int prio = *static_cast<int*>(vec[0].iov_base);
-    const char* tag = static_cast<const char*>(vec[1].iov_base);
-    size_t len = vec[1].iov_len;
-
-    if (!__android_log_is_loggable_len(prio, tag, len - 1, ANDROID_LOG_VERBOSE)) {
-      errno = save_errno;
-      return -EPERM;
-    }
   }
 
   ret = LogdWrite(log_id, &ts, vec, nr);
@@ -292,20 +283,35 @@ void __android_log_write_logger_data(__android_logger_data* logger_data, const c
 }
 
 int __android_log_buf_write(int bufID, int prio, const char* tag, const char* msg) {
+  if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+    return 0;
+  }
+
   __android_logger_data logger_data = {sizeof(__android_logger_data), bufID, prio, tag, nullptr, 0};
   __android_log_write_logger_data(&logger_data, msg);
   return 1;
 }
 
 int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap) {
+  if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+    return 0;
+  }
+
   char buf[LOG_BUF_SIZE];
 
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
 
-  return __android_log_write(prio, tag, buf);
+  __android_logger_data logger_data = {
+      sizeof(__android_logger_data), LOG_ID_MAIN, prio, tag, nullptr, 0};
+  __android_log_write_logger_data(&logger_data, buf);
+  return 1;
 }
 
 int __android_log_print(int prio, const char* tag, const char* fmt, ...) {
+  if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+    return 0;
+  }
+
   va_list ap;
   char buf[LOG_BUF_SIZE];
 
@@ -313,10 +319,17 @@ int __android_log_print(int prio, const char* tag, const char* fmt, ...) {
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
   va_end(ap);
 
-  return __android_log_write(prio, tag, buf);
+  __android_logger_data logger_data = {
+      sizeof(__android_logger_data), LOG_ID_MAIN, prio, tag, nullptr, 0};
+  __android_log_write_logger_data(&logger_data, buf);
+  return 1;
 }
 
 int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...) {
+  if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+    return 0;
+  }
+
   va_list ap;
   char buf[LOG_BUF_SIZE];
 
@@ -324,7 +337,9 @@ int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fm
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
   va_end(ap);
 
-  return __android_log_buf_write(bufID, prio, tag, buf);
+  __android_logger_data logger_data = {sizeof(__android_logger_data), bufID, prio, tag, nullptr, 0};
+  __android_log_write_logger_data(&logger_data, buf);
+  return 1;
 }
 
 void __android_log_assert(const char* cond, const char* tag, const char* fmt, ...) {
