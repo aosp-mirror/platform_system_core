@@ -194,6 +194,10 @@ struct __android_logger_data {
  * Writes the log message specified with logger_data and msg to the log.  logger_data includes
  * additional file name and line number information that a logger may use.  logger_data is versioned
  * for backwards compatibility.
+ * This assumes that loggability has already been checked through __android_log_is_loggable().
+ * Higher level logging libraries, such as libbase, first check loggability, then format their
+ * buffers, then pass the message to liblog via this function, and therefore we do not want to
+ * duplicate the loggability check here.
  */
 void __android_log_write_logger_data(struct __android_logger_data* logger_data, const char* msg);
 
