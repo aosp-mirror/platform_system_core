@@ -1125,8 +1125,8 @@ static bool adb_root(const char* command) {
         return false;
     }
 
+    fwrite(buf, 1, sizeof(buf) - bytes_left, stdout);
     fflush(stdout);
-    WriteFdExactly(STDOUT_FILENO, buf, sizeof(buf) - bytes_left);
     if (cur != buf && strstr(buf, "restarting") == nullptr) {
         return true;
     }
