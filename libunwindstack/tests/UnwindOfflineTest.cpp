@@ -169,15 +169,18 @@ std::unordered_map<std::string, uint32_t> UnwindOfflineTest::arm_regs_ = {
 };
 
 std::unordered_map<std::string, uint32_t> UnwindOfflineTest::arm64_regs_ = {
-    {"x0", ARM64_REG_R0},   {"x1", ARM64_REG_R1},   {"x2", ARM64_REG_R2},   {"x3", ARM64_REG_R3},
-    {"x4", ARM64_REG_R4},   {"x5", ARM64_REG_R5},   {"x6", ARM64_REG_R6},   {"x7", ARM64_REG_R7},
-    {"x8", ARM64_REG_R8},   {"x9", ARM64_REG_R9},   {"x10", ARM64_REG_R10}, {"x11", ARM64_REG_R11},
-    {"x12", ARM64_REG_R12}, {"x13", ARM64_REG_R13}, {"x14", ARM64_REG_R14}, {"x15", ARM64_REG_R15},
-    {"x16", ARM64_REG_R16}, {"x17", ARM64_REG_R17}, {"x18", ARM64_REG_R18}, {"x19", ARM64_REG_R19},
-    {"x20", ARM64_REG_R20}, {"x21", ARM64_REG_R21}, {"x22", ARM64_REG_R22}, {"x23", ARM64_REG_R23},
-    {"x24", ARM64_REG_R24}, {"x25", ARM64_REG_R25}, {"x26", ARM64_REG_R26}, {"x27", ARM64_REG_R27},
-    {"x28", ARM64_REG_R28}, {"x29", ARM64_REG_R29}, {"sp", ARM64_REG_SP},   {"lr", ARM64_REG_LR},
-    {"pc", ARM64_REG_PC},
+    {"x0", ARM64_REG_R0},      {"x1", ARM64_REG_R1},   {"x2", ARM64_REG_R2},
+    {"x3", ARM64_REG_R3},      {"x4", ARM64_REG_R4},   {"x5", ARM64_REG_R5},
+    {"x6", ARM64_REG_R6},      {"x7", ARM64_REG_R7},   {"x8", ARM64_REG_R8},
+    {"x9", ARM64_REG_R9},      {"x10", ARM64_REG_R10}, {"x11", ARM64_REG_R11},
+    {"x12", ARM64_REG_R12},    {"x13", ARM64_REG_R13}, {"x14", ARM64_REG_R14},
+    {"x15", ARM64_REG_R15},    {"x16", ARM64_REG_R16}, {"x17", ARM64_REG_R17},
+    {"x18", ARM64_REG_R18},    {"x19", ARM64_REG_R19}, {"x20", ARM64_REG_R20},
+    {"x21", ARM64_REG_R21},    {"x22", ARM64_REG_R22}, {"x23", ARM64_REG_R23},
+    {"x24", ARM64_REG_R24},    {"x25", ARM64_REG_R25}, {"x26", ARM64_REG_R26},
+    {"x27", ARM64_REG_R27},    {"x28", ARM64_REG_R28}, {"x29", ARM64_REG_R29},
+    {"sp", ARM64_REG_SP},      {"lr", ARM64_REG_LR},   {"pc", ARM64_REG_PC},
+    {"pst", ARM64_REG_PSTATE},
 };
 
 std::unordered_map<std::string, uint32_t> UnwindOfflineTest::x86_regs_ = {
@@ -1695,6 +1698,42 @@ TEST_F(UnwindOfflineTest, signal_load_bias_arm) {
   EXPECT_EQ(0xffe67bd0ULL, unwinder.frames()[15].sp);
   EXPECT_EQ(0xf23fe155ULL, unwinder.frames()[16].pc);
   EXPECT_EQ(0xffe67d10ULL, unwinder.frames()[16].sp);
+}
+
+TEST_F(UnwindOfflineTest, empty_arm64) {
+  ASSERT_NO_FATAL_FAILURE(Init("empty_arm64/", ARCH_ARM64));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(7U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 00000000000963a4  libc.so (__ioctl+4)\n"
+      "  #01 pc 000000000005344c  libc.so (ioctl+140)\n"
+      "  #02 pc 0000000000050ce4  libbinder.so "
+      "(android::IPCThreadState::talkWithDriver(bool)+308)\n"
+      "  #03 pc 0000000000050e98  libbinder.so "
+      "(android::IPCThreadState::getAndExecuteCommand()+24)\n"
+      "  #04 pc 00000000000516ac  libbinder.so (android::IPCThreadState::joinThreadPool(bool)+60)\n"
+      "  #05 pc 00000000000443b0  netd (main+1056)\n"
+      "  #06 pc 0000000000045594  libc.so (__libc_init+108)\n",
+      frame_info);
+
+  EXPECT_EQ(0x72a02203a4U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x7ffb6c0b50U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x72a01dd44cU, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x7ffb6c0b50U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x729f759ce4U, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7ffb6c0c50U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x729f759e98U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x7ffb6c0ce0U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x729f75a6acU, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x7ffb6c0d10U, unwinder.frames()[4].sp);
+  EXPECT_EQ(0x5d478af3b0U, unwinder.frames()[5].pc);
+  EXPECT_EQ(0x7ffb6c0d40U, unwinder.frames()[5].sp);
+  EXPECT_EQ(0x72a01cf594U, unwinder.frames()[6].pc);
+  EXPECT_EQ(0x7ffb6c0f30U, unwinder.frames()[6].sp);
 }
 
 }  // namespace unwindstack
