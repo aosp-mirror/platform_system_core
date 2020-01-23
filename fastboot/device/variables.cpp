@@ -62,6 +62,18 @@ bool GetBasebandVersion(FastbootDevice* /* device */, const std::vector<std::str
     return true;
 }
 
+bool GetOsVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                  std::string* message) {
+    *message = android::base::GetProperty("ro.build.version.release", "");
+    return true;
+}
+
+bool GetVndkVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                    std::string* message) {
+    *message = android::base::GetProperty("ro.vndk.version", "");
+    return true;
+}
+
 bool GetProduct(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
                 std::string* message) {
     *message = android::base::GetProperty("ro.product.device", "");
@@ -456,5 +468,44 @@ bool GetSnapshotUpdateStatus(FastbootDevice* device, const std::vector<std::stri
 bool GetCpuAbi(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
                std::string* message) {
     *message = android::base::GetProperty("ro.product.cpu.abi", "");
+    return true;
+}
+
+bool GetSystemFingerprint(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                          std::string* message) {
+    *message = android::base::GetProperty("ro.system.build.fingerprint", "");
+    if (message->empty()) {
+        *message = android::base::GetProperty("ro.build.fingerprint", "");
+    }
+    return true;
+}
+
+bool GetVendorFingerprint(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                          std::string* message) {
+    *message = android::base::GetProperty("ro.vendor.build.fingerprint", "");
+    return true;
+}
+
+bool GetDynamicPartition(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                         std::string* message) {
+    *message = android::base::GetProperty("ro.boot.dynamic_partitions", "");
+    return true;
+}
+
+bool GetFirstApiLevel(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                      std::string* message) {
+    *message = android::base::GetProperty("ro.product.first_api_level", "");
+    return true;
+}
+
+bool GetSecurityPatchLevel(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                           std::string* message) {
+    *message = android::base::GetProperty("ro.build.version.security_patch", "");
+    return true;
+}
+
+bool GetTrebleEnabled(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                      std::string* message) {
+    *message = android::base::GetProperty("ro.treble.enabled", "");
     return true;
 }
