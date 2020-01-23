@@ -730,39 +730,3 @@ cc_test_host {
         "fastdeploy/testdata/sample.cd",
     ],
 }
-
-prebuilt_etc {
-    name: "com.android.adbd.ld.config.txt",
-    src: "apex/ld.config.txt",
-    filename: "ld.config.txt",
-    installable: false,
-}
-
-apex {
-    name: "com.android.adbd",
-    manifest: "apex/apex_manifest.json",
-
-    binaries: ["adbd"],
-    prebuilts: ["com.android.adbd.init.rc", "com.android.adbd.ld.config.txt"],
-
-    key: "com.android.adbd.key",
-    certificate: ":com.android.adbd.certificate",
-}
-
-apex_key {
-    name: "com.android.adbd.key",
-    public_key: "apex/com.android.adbd.avbpubkey",
-    private_key: "apex/com.android.adbd.pem",
-}
-
-android_app_certificate {
-    name: "com.android.adbd.certificate",
-    certificate: "apex/com.android.adbd",
-}
-
-prebuilt_etc {
-    name: "com.android.adbd.init.rc",
-    src: "apex/adbd.rc",
-    filename: "init.rc",
-    installable: false,
-}
