@@ -465,9 +465,6 @@ namespace std {  // NOLINT(cert-dcl58-cpp)
 // Emit a warning of ostream<< with std::string*. The intention was most likely to print *string.
 //
 // Note: for this to work, we need to have this in a namespace.
-// Note: lots of ifdef magic to make this work with Clang (platform) vs GCC (windows tools)
-// Note: using diagnose_if(true) under Clang and nothing under GCC/mingw as there is no common
-//       attribute support.
 // Note: using a pragma because "-Wgcc-compat" (included in "-Weverything") complains about
 //       diagnose_if.
 // Note: to print the pointer, use "<< static_cast<const void*>(string_pointer)" instead.
@@ -477,8 +474,8 @@ namespace std {  // NOLINT(cert-dcl58-cpp)
 #pragma clang diagnostic ignored "-Wgcc-compat"
 #define OSTREAM_STRING_POINTER_USAGE_WARNING \
     __attribute__((diagnose_if(true, "Unexpected logging of string pointer", "warning")))
-inline std::ostream& operator<<(std::ostream& stream, const std::string* string_pointer)
-    OSTREAM_STRING_POINTER_USAGE_WARNING {
+inline OSTREAM_STRING_POINTER_USAGE_WARNING
+std::ostream& operator<<(std::ostream& stream, const std::string* string_pointer) {
   return stream << static_cast<const void*>(string_pointer);
 }
 #pragma clang diagnostic pop

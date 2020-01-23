@@ -64,7 +64,11 @@ class DexFilesTest : public ::testing::Test {
                        "f000-11000 r--p 00000000 00:00 0 /fake/elf3\n"
                        "100000-110000 rw-p 00f1000 00:00 0 /fake/elf3\n"
                        "200000-210000 rw-p 0002000 00:00 0 /fake/elf3\n"
-                       "300000-400000 rw-p 0003000 00:00 0 /fake/elf3\n"));
+                       "300000-400000 rw-p 0003000 00:00 0 /fake/elf3\n"
+                       "500000-501000 r--p 0000000 00:00 0 /fake/elf4\n"
+                       "501000-502000 ---p 0000000 00:00 0\n"
+                       "503000-510000 rw-p 0003000 00:00 0 /fake/elf4\n"
+                       "510000-520000 rw-p 0010000 00:00 0 /fake/elf4\n"));
     ASSERT_TRUE(maps_->Parse());
 
     // Global variable in a section that is not readable.
@@ -81,6 +85,11 @@ class DexFilesTest : public ::testing::Test {
     map_info = maps_->Get(kMapGlobal);
     ASSERT_TRUE(map_info != nullptr);
     CreateFakeElf(map_info, 0xf1800, 0xf1000, 0xf1000, 0x10000);
+
+    // Global variable set in this map, but there is an empty map before rw map.
+    map_info = maps_->Get(kMapGlobalAfterEmpty);
+    ASSERT_TRUE(map_info != nullptr);
+    CreateFakeElf(map_info, 0x3800, 0x3000, 0x3000, 0xd000);
   }
 
   void SetUp() override {
@@ -102,6 +111,8 @@ class DexFilesTest : public ::testing::Test {
   static constexpr size_t kMapGlobalRw = 6;
   static constexpr size_t kMapDexFileEntries = 7;
   static constexpr size_t kMapDexFiles = 8;
+  static constexpr size_t kMapGlobalAfterEmpty = 9;
+  static constexpr size_t kMapDexFilesAfterEmpty = 12;
 
   std::shared_ptr<Memory> process_memory_;
   MemoryFake* memory_;
@@ -326,6 +337,20 @@ TEST_F(DexFilesTest, get_method_information_global_skip_zero_64) {
   dex_files_->GetMethodInformation(maps_.get(), info, 0x300100, &method_name, &method_offset);
   EXPECT_EQ("fail", method_name);
   EXPECT_EQ(0x123U, method_offset);
+}
+
+TEST_F(DexFilesTest, get_method_information_with_empty_map) {
+  std::string method_name = "nothing";
+  uint64_t method_offset = 0x124;
+  MapInfo* info = maps_->Get(kMapDexFilesAfterEmpty);
+
+  WriteDescriptor32(0x503800, 0x506000);
+  WriteEntry32(0x506000, 0, 0, 0x510000);
+  WriteDex(0x510000);
+
+  dex_files_->GetMethodInformation(maps_.get(), info, 0x510100, &method_name, &method_offset);
+  EXPECT_EQ("Main.<init>", method_name);
+  EXPECT_EQ(0U, method_offset);
 }
 
 }  // namespace unwindstack
