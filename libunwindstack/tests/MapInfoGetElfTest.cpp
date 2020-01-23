@@ -68,7 +68,7 @@ class MapInfoGetElfTest : public ::testing::Test {
 };
 
 TEST_F(MapInfoGetElfTest, invalid) {
-  MapInfo info(nullptr, 0x1000, 0x2000, 0, PROT_READ, "");
+  MapInfo info(nullptr, nullptr, 0x1000, 0x2000, 0, PROT_READ, "");
 
   // The map is empty, but this should still create an invalid elf object.
   Elf* elf = info.GetElf(process_memory_, ARCH_ARM);
@@ -77,7 +77,7 @@ TEST_F(MapInfoGetElfTest, invalid) {
 }
 
 TEST_F(MapInfoGetElfTest, valid32) {
-  MapInfo info(nullptr, 0x3000, 0x4000, 0, PROT_READ, "");
+  MapInfo info(nullptr, nullptr, 0x3000, 0x4000, 0, PROT_READ, "");
 
   Elf32_Ehdr ehdr;
   TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
@@ -97,7 +97,7 @@ TEST_F(MapInfoGetElfTest, valid32) {
 }
 
 TEST_F(MapInfoGetElfTest, valid64) {
-  MapInfo info(nullptr, 0x8000, 0x9000, 0, PROT_READ, "");
+  MapInfo info(nullptr, nullptr, 0x8000, 0x9000, 0, PROT_READ, "");
 
   Elf64_Ehdr ehdr;
   TestInitEhdr<Elf64_Ehdr>(&ehdr, ELFCLASS64, EM_AARCH64);
@@ -111,7 +111,7 @@ TEST_F(MapInfoGetElfTest, valid64) {
 }
 
 TEST_F(MapInfoGetElfTest, invalid_arch_mismatch) {
-  MapInfo info(nullptr, 0x3000, 0x4000, 0, PROT_READ, "");
+  MapInfo info(nullptr, nullptr, 0x3000, 0x4000, 0, PROT_READ, "");
 
   Elf32_Ehdr ehdr;
   TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
@@ -123,7 +123,7 @@ TEST_F(MapInfoGetElfTest, invalid_arch_mismatch) {
 }
 
 TEST_F(MapInfoGetElfTest, gnu_debugdata_init32) {
-  MapInfo info(nullptr, 0x2000, 0x3000, 0, PROT_READ, "");
+  MapInfo info(nullptr, nullptr, 0x2000, 0x3000, 0, PROT_READ, "");
 
   TestInitGnuDebugdata<Elf32_Ehdr, Elf32_Shdr>(ELFCLASS32, EM_ARM, true,
                                                [&](uint64_t offset, const void* ptr, size_t size) {
@@ -139,7 +139,7 @@ TEST_F(MapInfoGetElfTest, gnu_debugdata_init32) {
 }
 
 TEST_F(MapInfoGetElfTest, gnu_debugdata_init64) {
-  MapInfo info(nullptr, 0x5000, 0x8000, 0, PROT_READ, "");
+  MapInfo info(nullptr, nullptr, 0x5000, 0x8000, 0, PROT_READ, "");
 
   TestInitGnuDebugdata<Elf64_Ehdr, Elf64_Shdr>(ELFCLASS64, EM_AARCH64, true,
                                                [&](uint64_t offset, const void* ptr, size_t size) {
@@ -155,7 +155,7 @@ TEST_F(MapInfoGetElfTest, gnu_debugdata_init64) {
 }
 
 TEST_F(MapInfoGetElfTest, end_le_start) {
-  MapInfo info(nullptr, 0x1000, 0x1000, 0, PROT_READ, elf_.path);
+  MapInfo info(nullptr, nullptr, 0x1000, 0x1000, 0, PROT_READ, elf_.path);
 
   Elf32_Ehdr ehdr;
   TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
@@ -182,7 +182,7 @@ TEST_F(MapInfoGetElfTest, end_le_start) {
 // Verify that if the offset is non-zero but there is no elf at the offset,
 // that the full file is used.
 TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_full_file) {
-  MapInfo info(nullptr, 0x1000, 0x2000, 0x100, PROT_READ, elf_.path);
+  MapInfo info(nullptr, nullptr, 0x1000, 0x2000, 0x100, PROT_READ, elf_.path);
 
   std::vector<uint8_t> buffer(0x1000);
   memset(buffer.data(), 0, buffer.size());
@@ -211,7 +211,7 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_full_file) {
 // Verify that if the offset is non-zero and there is an elf at that
 // offset, that only part of the file is used.
 TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file) {
-  MapInfo info(nullptr, 0x1000, 0x2000, 0x2000, PROT_READ, elf_.path);
+  MapInfo info(nullptr, nullptr, 0x1000, 0x2000, 0x2000, PROT_READ, elf_.path);
 
   std::vector<uint8_t> buffer(0x4000);
   memset(buffer.data(), 0, buffer.size());
@@ -241,7 +241,7 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file) {
 // embedded elf is bigger than the initial map, the new object is larger
 // than the original map size. Do this for a 32 bit elf and a 64 bit elf.
 TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf32) {
-  MapInfo info(nullptr, 0x5000, 0x6000, 0x1000, PROT_READ, elf_.path);
+  MapInfo info(nullptr, nullptr, 0x5000, 0x6000, 0x1000, PROT_READ, elf_.path);
 
   std::vector<uint8_t> buffer(0x4000);
   memset(buffer.data(), 0, buffer.size());
@@ -269,7 +269,7 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf32) 
 }
 
 TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf64) {
-  MapInfo info(nullptr, 0x7000, 0x8000, 0x1000, PROT_READ, elf_.path);
+  MapInfo info(nullptr, nullptr, 0x7000, 0x8000, 0x1000, PROT_READ, elf_.path);
 
   std::vector<uint8_t> buffer(0x4000);
   memset(buffer.data(), 0, buffer.size());
@@ -297,7 +297,7 @@ TEST_F(MapInfoGetElfTest, file_backed_non_zero_offset_partial_file_whole_elf64) 
 }
 
 TEST_F(MapInfoGetElfTest, check_device_maps) {
-  MapInfo info(nullptr, 0x7000, 0x8000, 0x1000, PROT_READ | MAPS_FLAGS_DEVICE_MAP,
+  MapInfo info(nullptr, nullptr, 0x7000, 0x8000, 0x1000, PROT_READ | MAPS_FLAGS_DEVICE_MAP,
                "/dev/something");
 
   // Create valid elf data in process memory for this to verify that only
@@ -343,7 +343,7 @@ TEST_F(MapInfoGetElfTest, multiple_thread_get_elf) {
   wait = true;
   // Create all of the threads and have them do the GetElf at the same time
   // to make it likely that a race will occur.
-  MapInfo info(nullptr, 0x7000, 0x8000, 0x1000, PROT_READ, "");
+  MapInfo info(nullptr, nullptr, 0x7000, 0x8000, 0x1000, PROT_READ, "");
   for (size_t i = 0; i < kNumConcurrentThreads; i++) {
     std::thread* thread = new std::thread([i, this, &wait, &info, &elf_in_threads]() {
       while (wait)
@@ -373,8 +373,8 @@ TEST_F(MapInfoGetElfTest, multiple_thread_get_elf) {
 
 // Verify that previous maps don't automatically get the same elf object.
 TEST_F(MapInfoGetElfTest, prev_map_elf_not_set) {
-  MapInfo info1(nullptr, 0x1000, 0x2000, 0, PROT_READ, "/not/present");
-  MapInfo info2(&info1, 0x2000, 0x3000, 0, PROT_READ, elf_.path);
+  MapInfo info1(nullptr, nullptr, 0x1000, 0x2000, 0, PROT_READ, "/not/present");
+  MapInfo info2(&info1, &info1, 0x2000, 0x3000, 0, PROT_READ, elf_.path);
 
   Elf32_Ehdr ehdr;
   TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
@@ -389,8 +389,25 @@ TEST_F(MapInfoGetElfTest, prev_map_elf_not_set) {
 // Verify that a read-only map followed by a read-execute map will result
 // in the same elf object in both maps.
 TEST_F(MapInfoGetElfTest, read_only_followed_by_read_exec_share_elf) {
-  MapInfo r_info(nullptr, 0x1000, 0x2000, 0, PROT_READ, elf_.path);
-  MapInfo rw_info(&r_info, 0x2000, 0x3000, 0x1000, PROT_READ | PROT_EXEC, elf_.path);
+  MapInfo r_info(nullptr, nullptr, 0x1000, 0x2000, 0, PROT_READ, elf_.path);
+  MapInfo rw_info(&r_info, &r_info, 0x2000, 0x3000, 0x1000, PROT_READ | PROT_EXEC, elf_.path);
+
+  Elf32_Ehdr ehdr;
+  TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
+  memory_->SetMemory(0x1000, &ehdr, sizeof(ehdr));
+  Elf* elf = rw_info.GetElf(process_memory_, ARCH_ARM);
+  ASSERT_TRUE(elf != nullptr);
+  ASSERT_TRUE(elf->valid());
+
+  ASSERT_EQ(elf, r_info.GetElf(process_memory_, ARCH_ARM));
+}
+
+// Verify that a read-only map followed by an empty map, then followed by
+// a read-execute map will result in the same elf object in both maps.
+TEST_F(MapInfoGetElfTest, read_only_followed_by_empty_then_read_exec_share_elf) {
+  MapInfo r_info(nullptr, nullptr, 0x1000, 0x2000, 0, PROT_READ, elf_.path);
+  MapInfo empty(&r_info, &r_info, 0x2000, 0x3000, 0, 0, "");
+  MapInfo rw_info(&empty, &r_info, 0x3000, 0x4000, 0x2000, PROT_READ | PROT_EXEC, elf_.path);
 
   Elf32_Ehdr ehdr;
   TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
