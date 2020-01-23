@@ -828,7 +828,8 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock) {
                 cancelled = true;
                 break;
             default:
-                LOG(ERROR) << "Unknown merge status: " << static_cast<uint32_t>(snapshot_state);
+                LOG(ERROR) << "Unknown merge status for \"" << snapshot << "\": "
+                           << "\"" << snapshot_state << "\"";
                 failed = true;
                 break;
         }
@@ -1706,7 +1707,7 @@ static UpdateState UpdateStateFromString(const std::string& contents) {
     } else if (contents == "merge-failed") {
         return UpdateState::MergeFailed;
     } else {
-        LOG(ERROR) << "Unknown merge state in update state file";
+        LOG(ERROR) << "Unknown merge state in update state file: \"" << contents << "\"";
         return UpdateState::None;
     }
 }
@@ -1728,7 +1729,7 @@ std::ostream& operator<<(std::ostream& os, UpdateState state) {
         case UpdateState::MergeFailed:
             return os << "merge-failed";
         default:
-            LOG(ERROR) << "Unknown update state";
+            LOG(ERROR) << "Unknown update state: " << static_cast<uint32_t>(state);
             return os;
     }
 }
