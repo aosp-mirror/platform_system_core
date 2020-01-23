@@ -126,6 +126,26 @@ BatteryStatus getBatteryStatus(const char* status) {
     return *ret;
 }
 
+BatteryCapacityLevel getBatteryCapacityLevel(const char* capacityLevel) {
+    static SysfsStringEnumMap<BatteryCapacityLevel> batteryCapacityLevelMap[] = {
+            {"Unknown", BatteryCapacityLevel::UNKNOWN},
+            {"Critical", BatteryCapacityLevel::CRITICAL},
+            {"Low", BatteryCapacityLevel::LOW},
+            {"Normal", BatteryCapacityLevel::NORMAL},
+            {"High", BatteryCapacityLevel::HIGH},
+            {"Full", BatteryCapacityLevel::FULL},
+            {NULL, BatteryCapacityLevel::UNKNOWN},
+    };
+
+    auto ret = mapSysfsString(capacityLevel, batteryCapacityLevelMap);
+    if (!ret) {
+        KLOG_WARNING(LOG_TAG, "Unknown battery capacity level '%s'\n", capacityLevel);
+        *ret = BatteryCapacityLevel::UNKNOWN;
+    }
+
+    return *ret;
+}
+
 BatteryHealth getBatteryHealth(const char* status) {
     static SysfsStringEnumMap<BatteryHealth> batteryHealthMap[] = {
             {"Unknown", BatteryHealth::UNKNOWN},
@@ -241,9 +261,10 @@ void BatteryMonitor::updateValues(void) {
         mHealthInfo->legacy.batteryCurrentAverage =
                 getIntField(mHealthdConfig->batteryCurrentAvgPath);
 
-    // TODO(b/142260281): Retrieve these values correctly.
-    mHealthInfo->batteryCapacityLevel = BatteryCapacityLevel::UNKNOWN;
-    mHealthInfo->batteryChargeTimeToFullNowSeconds = 0;
+    if (!mHealthdConfig->batteryChargeTimeToFullNowPath.isEmpty())
+        mHealthInfo->batteryChargeTimeToFullNowSeconds =
+                getIntField(mHealthdConfig->batteryChargeTimeToFullNowPath);
+
     mHealthInfo->batteryFullCapacityUah = props.batteryFullCharge;
 
     props.batteryTemperature = mBatteryFixedTemperature ?
@@ -251,6 +272,9 @@ void BatteryMonitor::updateValues(void) {
         getIntField(mHealthdConfig->batteryTemperaturePath);
 
     std::string buf;
+
+    if (readFromFile(mHealthdConfig->batteryCapacityLevelPath, &buf) > 0)
+        mHealthInfo->batteryCapacityLevel = getBatteryCapacityLevel(buf.c_str());
 
     if (readFromFile(mHealthdConfig->batteryStatusPath, &buf) > 0)
         props.batteryStatus = getBatteryStatus(buf.c_str());
@@ -585,6 +609,19 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                         mHealthdConfig->batteryCycleCountPath = path;
                 }
 
+                if (mHealthdConfig->batteryCapacityLevelPath.isEmpty()) {
+                    path.clear();
+                    path.appendFormat("%s/%s/capacity_level", POWER_SUPPLY_SYSFS_PATH, name);
+                    if (access(path, R_OK) == 0) mHealthdConfig->batteryCapacityLevelPath = path;
+                }
+
+                if (mHealthdConfig->batteryChargeTimeToFullNowPath.isEmpty()) {
+                    path.clear();
+                    path.appendFormat("%s/%s/time_to_full_now", POWER_SUPPLY_SYSFS_PATH, name);
+                    if (access(path, R_OK) == 0)
+                        mHealthdConfig->batteryChargeTimeToFullNowPath = path;
+                }
+
                 if (mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
                     path.clear();
                     path.appendFormat("%s/%s/current_avg",
@@ -653,6 +690,10 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             KLOG_WARNING(LOG_TAG, "BatteryFullChargePath not found\n");
         if (mHealthdConfig->batteryCycleCountPath.isEmpty())
             KLOG_WARNING(LOG_TAG, "BatteryCycleCountPath not found\n");
+        if (mHealthdConfig->batteryCapacityLevelPath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "batteryCapacityLevelPath not found\n");
+        if (mHealthdConfig->batteryChargeTimeToFullNowPath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "batteryChargeTimeToFullNowPath. not found\n");
     }
 
     if (property_get("ro.boot.fake_battery", pval, NULL) > 0
