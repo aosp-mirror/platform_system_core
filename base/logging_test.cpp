@@ -603,21 +603,6 @@ __attribute__((constructor)) void TestLoggingInConstructor() {
   LOG(ERROR) << "foobar";
 }
 
-TEST(logging, SetDefaultTag) {
-  constexpr const char* expected_tag = "test_tag";
-  constexpr const char* expected_msg = "foobar";
-  CapturedStderr cap;
-  {
-    std::string old_default_tag = android::base::GetDefaultTag();
-    android::base::SetDefaultTag(expected_tag);
-    android::base::ScopedLogSeverity sls(android::base::LogSeverity::INFO);
-    LOG(INFO) << expected_msg;
-    android::base::SetDefaultTag(old_default_tag);
-  }
-  ASSERT_NO_FATAL_FAILURE(
-      CheckMessage(cap, android::base::LogSeverity::INFO, expected_msg, expected_tag));
-}
-
 TEST(logging, StdioLogger) {
   CapturedStderr cap_err;
   CapturedStdout cap_out;
