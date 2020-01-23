@@ -115,7 +115,6 @@ void StdioLogger(LogId, LogSeverity, const char*, const char*, unsigned int, con
 
 void DefaultAborter(const char* abort_message);
 
-std::string GetDefaultTag();
 void SetDefaultTag(const std::string& tag);
 
 // We expose this even though it is the default because a user that wants to
