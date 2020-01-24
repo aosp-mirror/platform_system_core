@@ -106,6 +106,8 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_VERSION, {GetVersion, nullptr}},
             {FB_VAR_VERSION_BOOTLOADER, {GetBootloaderVersion, nullptr}},
             {FB_VAR_VERSION_BASEBAND, {GetBasebandVersion, nullptr}},
+            {FB_VAR_VERSION_OS, {GetOsVersion, nullptr}},
+            {FB_VAR_VERSION_VNDK, {GetVndkVersion, nullptr}},
             {FB_VAR_PRODUCT, {GetProduct, nullptr}},
             {FB_VAR_SERIALNO, {GetSerial, nullptr}},
             {FB_VAR_VARIANT, {GetVariant, nullptr}},
@@ -127,7 +129,13 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
             {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}},
             {FB_VAR_SNAPSHOT_UPDATE_STATUS, {GetSnapshotUpdateStatus, nullptr}},
-            {FB_VAR_CPU_ABI, {GetCpuAbi, nullptr}}};
+            {FB_VAR_CPU_ABI, {GetCpuAbi, nullptr}},
+            {FB_VAR_SYSTEM_FINGERPRINT, {GetSystemFingerprint, nullptr}},
+            {FB_VAR_VENDOR_FINGERPRINT, {GetVendorFingerprint, nullptr}},
+            {FB_VAR_DYNAMIC_PARTITION, {GetDynamicPartition, nullptr}},
+            {FB_VAR_FIRST_API_LEVEL, {GetFirstApiLevel, nullptr}},
+            {FB_VAR_SECURITY_PATCH_LEVEL, {GetSecurityPatchLevel, nullptr}},
+            {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}}};
 
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");

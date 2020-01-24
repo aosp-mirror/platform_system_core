@@ -1,0 +1,49 @@
+apex_defaults {
+    name: "com.android.adbd-defaults",
+
+    binaries: ["adbd"],
+    prebuilts: ["com.android.adbd.init.rc", "com.android.adbd.ld.config.txt"],
+
+    key: "com.android.adbd.key",
+    certificate: ":com.android.adbd.certificate",
+}
+
+apex {
+    name: "com.android.adbd",
+    defaults: ["com.android.adbd-defaults"],
+    manifest: "apex_manifest.json",
+}
+
+// adbd apex with INT_MAX version code, to allow for upgrade/rollback testing.
+apex {
+    name: "test_com.android.adbd",
+    defaults: ["com.android.adbd-defaults"],
+    manifest: "test_apex_manifest.json",
+    file_contexts: ":com.android.adbd-file_contexts",
+    installable: false,
+}
+
+prebuilt_etc {
+    name: "com.android.adbd.ld.config.txt",
+    src: "ld.config.txt",
+    filename: "ld.config.txt",
+    installable: false,
+}
+
+prebuilt_etc {
+    name: "com.android.adbd.init.rc",
+    src: "adbd.rc",
+    filename: "init.rc",
+    installable: false,
+}
+
+apex_key {
+    name: "com.android.adbd.key",
+    public_key: "com.android.adbd.avbpubkey",
+    private_key: "com.android.adbd.pem",
+}
+
+android_app_certificate {
+    name: "com.android.adbd.certificate",
+    certificate: "com.android.adbd",
+}
