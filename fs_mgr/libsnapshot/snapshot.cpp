@@ -1219,7 +1219,8 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
         if (!UnmapPartitionWithSnapshot(lock, name) || !DeleteSnapshot(lock, name)) {
             // Remember whether or not we were able to unmap the cow image.
             auto cow_image_device = GetCowImageDeviceName(name);
-            has_mapped_cow_images |= images_->IsImageMapped(cow_image_device);
+            has_mapped_cow_images |=
+                    (EnsureImageManager() && images_->IsImageMapped(cow_image_device));
 
             ok = false;
         }
