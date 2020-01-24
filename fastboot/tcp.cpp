@@ -64,6 +64,7 @@ class TcpTransport : public Transport {
     ssize_t Read(void* data, size_t length) override;
     ssize_t Write(const void* data, size_t length) override;
     int Close() override;
+    int Reset() override;
 
   private:
     explicit TcpTransport(std::unique_ptr<Socket> sock) : socket_(std::move(sock)) {}
@@ -176,6 +177,10 @@ int TcpTransport::Close() {
     int result = socket_->Close();
     socket_.reset();
     return result;
+}
+
+int TcpTransport::Reset() {
+    return 0;
 }
 
 std::unique_ptr<Transport> Connect(const std::string& hostname, int port, std::string* error) {

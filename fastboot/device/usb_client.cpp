@@ -297,3 +297,7 @@ int ClientUsbTransport::Close() {
     CloseFunctionFs(handle_.get());
     return 0;
 }
+
+int ClientUsbTransport::Reset() {
+    return 0;
+}
