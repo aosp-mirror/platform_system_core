@@ -95,6 +95,10 @@ cc_defaults {
     export_header_lib_headers: [
         "libfiemap_headers",
     ],
+    required: [
+        "e2freefrag",
+        "e2fsdroid",
+    ],
 }
 
 // Two variants of libfs_mgr are provided: libfs_mgr and libfs_mgr_binder.
