@@ -40,11 +40,9 @@
 #include "rwlock.h"
 #include "uio.h"
 
-#if (FAKE_LOG_DEVICE == 0)
+#ifdef __ANDROID__
 #include "logd_writer.h"
 #include "pmsg_writer.h"
-#else
-#include "fake_log_device.h"
 #endif
 
 #if defined(__APPLE__)
@@ -105,11 +103,9 @@ static int check_log_uid_permissions() {
  * Release any logger resources. A new log write will immediately re-acquire.
  */
 void __android_log_close() {
-#if (FAKE_LOG_DEVICE == 0)
+#ifdef __ANDROID__
   LogdClose();
   PmsgClose();
-#else
-  FakeClose();
 #endif
 }
 
