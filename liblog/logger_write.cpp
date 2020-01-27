@@ -29,6 +29,7 @@
 
 #include <shared_mutex>
 
+#include <android-base/errno_restorer.h>
 #include <android-base/macros.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
@@ -53,6 +54,8 @@
 #elif defined(_WIN32)
 #include <windows.h>
 #endif
+
+using android::base::ErrnoRestorer;
 
 #define LOG_BUF_SIZE 1024
 
@@ -196,10 +199,8 @@ void __android_log_call_aborter(const char* abort_message) {
 
 #ifdef __ANDROID__
 static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
-  int ret, save_errno;
+  int ret;
   struct timespec ts;
-
-  save_errno = errno;
 
   if (log_id == LOG_ID_KERNEL) {
     return -EINVAL;
@@ -209,23 +210,19 @@ static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
 
   if (log_id == LOG_ID_SECURITY) {
     if (vec[0].iov_len < 4) {
-      errno = save_errno;
       return -EINVAL;
     }
 
     ret = check_log_uid_permissions();
     if (ret < 0) {
-      errno = save_errno;
       return ret;
     }
     if (!__android_log_security()) {
       /* If only we could reset downstream logd counter */
-      errno = save_errno;
       return -EPERM;
     }
   } else if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
     if (vec[0].iov_len < 4) {
-      errno = save_errno;
       return -EINVAL;
     }
   }
@@ -233,7 +230,6 @@ static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
   ret = LogdWrite(log_id, &ts, vec, nr);
   PmsgWrite(log_id, &ts, vec, nr);
 
-  errno = save_errno;
   return ret;
 }
 #else
@@ -313,6 +309,8 @@ int __android_log_write(int prio, const char* tag, const char* msg) {
 }
 
 void __android_log_write_logger_data(__android_logger_data* logger_data, const char* msg) {
+  ErrnoRestorer errno_restorer;
+
   auto tag_lock = std::shared_lock{default_tag_lock, std::defer_lock};
   if (logger_data->tag == nullptr) {
     tag_lock.lock();
@@ -330,6 +328,8 @@ void __android_log_write_logger_data(__android_logger_data* logger_data, const c
 }
 
 int __android_log_buf_write(int bufID, int prio, const char* tag, const char* msg) {
+  ErrnoRestorer errno_restorer;
+
   if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
     return 0;
   }
@@ -340,6 +340,8 @@ int __android_log_buf_write(int bufID, int prio, const char* tag, const char* ms
 }
 
 int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap) {
+  ErrnoRestorer errno_restorer;
+
   if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
     return 0;
   }
@@ -355,6 +357,8 @@ int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap)
 }
 
 int __android_log_print(int prio, const char* tag, const char* fmt, ...) {
+  ErrnoRestorer errno_restorer;
+
   if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
     return 0;
   }
@@ -373,6 +377,8 @@ int __android_log_print(int prio, const char* tag, const char* fmt, ...) {
 }
 
 int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...) {
+  ErrnoRestorer errno_restorer;
+
   if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
     return 0;
   }
@@ -419,6 +425,8 @@ void __android_log_assert(const char* cond, const char* tag, const char* fmt, ..
 }
 
 int __android_log_bwrite(int32_t tag, const void* payload, size_t len) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[2];
 
   vec[0].iov_base = &tag;
@@ -430,6 +438,8 @@ int __android_log_bwrite(int32_t tag, const void* payload, size_t len) {
 }
 
 int __android_log_stats_bwrite(int32_t tag, const void* payload, size_t len) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[2];
 
   vec[0].iov_base = &tag;
@@ -441,6 +451,8 @@ int __android_log_stats_bwrite(int32_t tag, const void* payload, size_t len) {
 }
 
 int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[2];
 
   vec[0].iov_base = &tag;
@@ -457,6 +469,8 @@ int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len) 
  * handy if we just want to dump an integer into the log.
  */
 int __android_log_btwrite(int32_t tag, char type, const void* payload, size_t len) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[3];
 
   vec[0].iov_base = &tag;
@@ -474,6 +488,8 @@ int __android_log_btwrite(int32_t tag, char type, const void* payload, size_t le
  * event log.
  */
 int __android_log_bswrite(int32_t tag, const char* payload) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[4];
   char type = EVENT_TYPE_STRING;
   uint32_t len = strlen(payload);
@@ -495,6 +511,8 @@ int __android_log_bswrite(int32_t tag, const char* payload) {
  * security log.
  */
 int __android_log_security_bswrite(int32_t tag, const char* payload) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[4];
   char type = EVENT_TYPE_STRING;
   uint32_t len = strlen(payload);
