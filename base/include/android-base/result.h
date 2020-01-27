@@ -90,6 +90,7 @@ struct ResultError {
   ResultError(T&& message, int code) : message_(std::forward<T>(message)), code_(code) {}
 
   template <typename T>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   operator android::base::expected<T, ResultError>() {
     return android::base::unexpected(ResultError(message_, code_));
   }
@@ -118,9 +119,11 @@ inline std::ostream& operator<<(std::ostream& os, const ResultError& t) {
 class Error {
  public:
   Error() : errno_(0), append_errno_(false) {}
+  // NOLINTNEXTLINE(google-explicit-constructor)
   Error(int errno_to_append) : errno_(errno_to_append), append_errno_(true) {}
 
   template <typename T>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   operator android::base::expected<T, ResultError>() {
     return android::base::unexpected(ResultError(str(), errno_));
   }
