@@ -97,3 +97,47 @@ TEST(liblog_default_tag, liblog_sets_default_tag) {
   LOG(WARNING) << "message";
   EXPECT_TRUE(message_seen);
 }
+
+TEST(liblog_default_tag, default_tag_plus_log_severity) {
+  using namespace android::base;
+  bool message_seen = false;
+  std::string expected_tag = "liblog_test_tag";
+  SetLogger([&](LogId, LogSeverity, const char* tag, const char*, unsigned int, const char*) {
+    message_seen = true;
+    EXPECT_EQ(expected_tag, tag);
+  });
+  __android_log_set_default_tag(expected_tag.c_str());
+
+  auto log_tag_property = "log.tag." + expected_tag;
+  SetProperty(log_tag_property, "V");
+
+  __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_VERBOSE, nullptr, "message");
+  EXPECT_TRUE(message_seen);
+  message_seen = false;
+
+  LOG(VERBOSE) << "message";
+  EXPECT_TRUE(message_seen);
+}
+
+TEST(liblog_default_tag, generated_default_tag_plus_log_severity) {
+  using namespace android::base;
+  bool message_seen = false;
+  std::string expected_tag = getprogname();
+  SetLogger([&](LogId, LogSeverity, const char* tag, const char*, unsigned int, const char*) {
+    message_seen = true;
+    EXPECT_EQ(expected_tag, tag);
+  });
+
+  // Even without any calls to SetDefaultTag(), the first message that attempts to log, will
+  // generate a default tag from getprogname() and check log.tag.<default tag> for loggability. This
+  // case checks that we can log a Verbose message when log.tag.<getprogname()> is set to 'V'.
+  auto log_tag_property = "log.tag." + expected_tag;
+  SetProperty(log_tag_property, "V");
+
+  __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_VERBOSE, nullptr, "message");
+  EXPECT_TRUE(message_seen);
+  message_seen = false;
+
+  LOG(VERBOSE) << "message";
+  EXPECT_TRUE(message_seen);
+}
