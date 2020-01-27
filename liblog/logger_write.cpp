@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "logger_write.h"
+
 #include <errno.h>
 #include <inttypes.h>
 #include <libgen.h>
@@ -136,11 +138,11 @@ static const char* getprogname() {
 // It's possible for logging to happen during static initialization before our globals are
 // initialized, so we place this std::string in a function such that it is initialized on the first
 // call.
-static std::string& GetDefaultTag() {
+std::string& GetDefaultTag() {
   static std::string default_tag = getprogname();
   return default_tag;
 }
-static RwLock default_tag_lock;
+RwLock default_tag_lock;
 
 void __android_log_set_default_tag(const char* tag) {
   auto lock = std::unique_lock{default_tag_lock};
