@@ -608,7 +608,6 @@ bool ShouldLog(LogSeverity severity, const char* tag) {
   // we need to fall back to using gMinimumLogSeverity, since __android_log_is_loggable() will not
   // take into consideration the value from SetMinimumLogSeverity().
   if (liblog_functions) {
-    // TODO: It is safe to pass nullptr for tag, but it will be better to use the default log tag.
     int priority = LogSeverityToPriority(severity);
     return __android_log_is_loggable(priority, tag, ANDROID_LOG_INFO);
   } else {
