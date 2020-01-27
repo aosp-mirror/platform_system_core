@@ -165,7 +165,7 @@ on init
     mkdir /mnt/secure/asec 0700 root root
     mkdir /mnt/asec 0755 root system
     mkdir /mnt/obb 0755 root system
-    mkdir /mnt/media_rw 0750 root media_rw
+    mkdir /mnt/media_rw 0750 root external_storage
     mkdir /mnt/user 0755 root root
     mkdir /mnt/user/0 0755 root root
     mkdir /mnt/user/0/self 0755 root root
