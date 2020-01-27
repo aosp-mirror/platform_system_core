@@ -25,8 +25,11 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <shared_mutex>
 
 #include <private/android_logger.h>
+
+#include "logger_write.h"
 
 static pthread_mutex_t lock_loggable = PTHREAD_MUTEX_INITIALIZER;
 
@@ -93,10 +96,17 @@ static int __android_log_level(const char* tag, size_t len) {
   /* sizeof() is used on this array below */
   static const char log_namespace[] = "persist.log.tag.";
   static const size_t base_offset = 8; /* skip "persist." */
-  /* calculate the size of our key temporary buffer */
-  const size_t taglen = tag ? len : 0;
+
+  auto tag_lock = std::shared_lock{default_tag_lock, std::defer_lock};
+  if (tag == nullptr || len == 0) {
+    tag_lock.lock();
+    auto& tag_string = GetDefaultTag();
+    tag = tag_string.c_str();
+    len = tag_string.size();
+  }
+
   /* sizeof(log_namespace) = strlen(log_namespace) + 1 */
-  char key[sizeof(log_namespace) + taglen];
+  char key[sizeof(log_namespace) + len];
   char* kp;
   size_t i;
   char c = 0;
@@ -146,7 +156,7 @@ static int __android_log_level(const char* tag, size_t len) {
     }
   }
 
-  if (taglen) {
+  if (len) {
     int local_change_detected = change_detected;
     if (!not_locked) {
       if (!last_tag || !last_tag[0] || (last_tag[0] != tag[0]) ||
