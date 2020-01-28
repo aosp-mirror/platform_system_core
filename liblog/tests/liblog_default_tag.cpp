@@ -22,9 +22,16 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 #include <android/log.h>
 
 #include <gtest/gtest.h>
+
+#ifndef __ANDROID__
+static const char* getprogname() {
+  return program_invocation_short_name;
+}
+#endif
 
 TEST(liblog_default_tag, no_default_tag_libbase_write_first) {
   using namespace android::base;
@@ -99,6 +106,7 @@ TEST(liblog_default_tag, liblog_sets_default_tag) {
 }
 
 TEST(liblog_default_tag, default_tag_plus_log_severity) {
+#ifdef __ANDROID__
   using namespace android::base;
   bool message_seen = false;
   std::string expected_tag = "liblog_test_tag";
@@ -110,6 +118,7 @@ TEST(liblog_default_tag, default_tag_plus_log_severity) {
 
   auto log_tag_property = "log.tag." + expected_tag;
   SetProperty(log_tag_property, "V");
+  auto reset_tag_property_guard = make_scope_guard([=] { SetProperty(log_tag_property, ""); });
 
   __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_VERBOSE, nullptr, "message");
   EXPECT_TRUE(message_seen);
@@ -117,9 +126,13 @@ TEST(liblog_default_tag, default_tag_plus_log_severity) {
 
   LOG(VERBOSE) << "message";
   EXPECT_TRUE(message_seen);
+#else
+  GTEST_SKIP() << "No log tag properties on host";
+#endif
 }
 
 TEST(liblog_default_tag, generated_default_tag_plus_log_severity) {
+#ifdef __ANDROID__
   using namespace android::base;
   bool message_seen = false;
   std::string expected_tag = getprogname();
@@ -133,6 +146,7 @@ TEST(liblog_default_tag, generated_default_tag_plus_log_severity) {
   // case checks that we can log a Verbose message when log.tag.<getprogname()> is set to 'V'.
   auto log_tag_property = "log.tag." + expected_tag;
   SetProperty(log_tag_property, "V");
+  auto reset_tag_property_guard = make_scope_guard([=] { SetProperty(log_tag_property, ""); });
 
   __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_VERBOSE, nullptr, "message");
   EXPECT_TRUE(message_seen);
@@ -140,4 +154,7 @@ TEST(liblog_default_tag, generated_default_tag_plus_log_severity) {
 
   LOG(VERBOSE) << "message";
   EXPECT_TRUE(message_seen);
+#else
+  GTEST_SKIP() << "No log tag properties on host";
+#endif
 }
