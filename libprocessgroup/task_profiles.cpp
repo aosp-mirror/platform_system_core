@@ -288,6 +288,11 @@ bool ApplyProfileAction::ExecuteForTask(int tid) const {
     return true;
 }
 
+void TaskProfile::MoveTo(TaskProfile* profile) {
+    profile->elements_ = std::move(elements_);
+    profile->res_cached_ = res_cached_;
+}
+
 bool TaskProfile::ExecuteForProcess(uid_t uid, pid_t pid) const {
     for (const auto& element : elements_) {
         if (!element->ExecuteForProcess(uid, pid)) {
@@ -458,7 +463,15 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                 LOG(WARNING) << "Unknown profile action: " << action_name;
             }
         }
-        profiles_[profile_name] = profile;
+        auto iter = profiles_.find(profile_name);
+        if (iter == profiles_.end()) {
+            profiles_[profile_name] = profile;
+        } else {
+            // Move the content rather that replace the profile because old profile might be
+            // referenced from an aggregate profile if vendor overrides task profiles
+            profile->MoveTo(iter->second.get());
+            profile.reset();
+        }
     }
 
     const Json::Value& aggregateprofiles_val = root["AggregateProfiles"];
