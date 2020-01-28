@@ -130,6 +130,7 @@
 #define AID_GSID 1074            /* GSI service daemon */
 #define AID_FSVERITY_CERT 1075   /* fs-verity key ownership in keystore */
 #define AID_CREDSTORE 1076       /* identity credential manager service */
+#define AID_EXTERNAL_STORAGE 1077 /* Full external storage access including USB OTG volumes */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
