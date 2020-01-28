@@ -307,6 +307,12 @@ int __android_log_write(int prio, const char* tag, const char* msg) {
 void __android_log_write_logger_data(__android_logger_data* logger_data, const char* msg) {
   ErrnoRestorer errno_restorer;
 
+  if (logger_data->buffer_id != LOG_ID_DEFAULT && logger_data->buffer_id != LOG_ID_MAIN &&
+      logger_data->buffer_id != LOG_ID_SYSTEM && logger_data->buffer_id != LOG_ID_RADIO &&
+      logger_data->buffer_id != LOG_ID_CRASH) {
+    return;
+  }
+
   auto tag_lock = std::shared_lock{default_tag_lock, std::defer_lock};
   if (logger_data->tag == nullptr) {
     tag_lock.lock();
