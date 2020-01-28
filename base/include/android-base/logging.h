@@ -64,6 +64,7 @@
 #include <memory>
 #include <ostream>
 
+#include "android-base/errno_restorer.h"
 #include "android-base/macros.h"
 
 // Note: DO NOT USE DIRECTLY. Use LOG_TAG instead.
@@ -153,27 +154,6 @@ void SetLogger(LogFunction&& logger);
 
 // Replace the current aborter.
 void SetAborter(AbortFunction&& aborter);
-
-class ErrnoRestorer {
- public:
-  ErrnoRestorer()
-      : saved_errno_(errno) {
-  }
-
-  ~ErrnoRestorer() {
-    errno = saved_errno_;
-  }
-
-  // Allow this object to be used as part of && operation.
-  operator bool() const {
-    return true;
-  }
-
- private:
-  const int saved_errno_;
-
-  DISALLOW_COPY_AND_ASSIGN(ErrnoRestorer);
-};
 
 // A helper macro that produces an expression that accepts both a qualified name and an
 // unqualified name for a LogSeverity, and returns a LogSeverity value.
