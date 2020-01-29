@@ -20,8 +20,6 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
-#include <sys/_system_properties.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -30,6 +28,10 @@
 #include <private/android_logger.h>
 
 #include "logger_write.h"
+
+#ifdef __ANDROID__
+#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
+#include <sys/_system_properties.h>
 
 static pthread_mutex_t lock_loggable = PTHREAD_MUTEX_INITIALIZER;
 
@@ -647,3 +649,23 @@ unsigned long __android_logger_get_buffer_size(log_id_t logId) {
 
   return property_size;
 }
+
+#else
+
+int __android_log_is_loggable(int prio, const char*, int) {
+  int minimum_priority = __android_log_get_minimum_priority();
+  if (minimum_priority == ANDROID_LOG_DEFAULT) {
+    minimum_priority = ANDROID_LOG_INFO;
+  }
+  return prio >= minimum_priority;
+}
+
+int __android_log_is_loggable_len(int prio, const char*, size_t, int def) {
+  return __android_log_is_loggable(prio, nullptr, def);
+}
+
+int __android_log_is_debuggable() {
+  return 1;
+}
+
+#endif

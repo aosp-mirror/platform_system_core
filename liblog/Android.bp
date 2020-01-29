@@ -21,14 +21,11 @@ liblog_sources = [
     "logger_read.cpp",
     "logger_write.cpp",
     "logprint.cpp",
-]
-liblog_host_sources = [
-    "fake_log_device.cpp",
+    "properties.cpp",
 ]
 liblog_target_sources = [
     "event_tag_map.cpp",
     "log_time.cpp",
-    "properties.cpp",
     "pmsg_reader.cpp",
     "pmsg_writer.cpp",
     "logd_reader.cpp",
@@ -69,10 +66,6 @@ cc_library {
     srcs: liblog_sources,
 
     target: {
-        host: {
-            srcs: liblog_host_sources,
-            cflags: ["-DFAKE_LOG_DEVICE=1"],
-        },
         android: {
             version_script: "liblog.map.txt",
             srcs: liblog_target_sources,
