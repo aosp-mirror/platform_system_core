@@ -114,6 +114,61 @@ cc_defaults {
     },
 }
 
+// libadbconnection
+// =========================================================
+// libadbconnection_client/server implement the socket handling for jdwp
+// forwarding and the track-jdwp service.
+cc_library {
+    name: "libadbconnection_server",
+    srcs: ["adbconnection/adbconnection_server.cpp"],
+
+    export_include_dirs: ["adbconnection/include"],
+
+    stl: "libc++_static",
+    shared_libs: ["liblog"],
+    static_libs: ["libbase"],
+
+    defaults: ["adbd_defaults", "host_adbd_supported"],
+
+    // Avoid getting duplicate symbol of android::build::getbuildnumber().
+    use_version_lib: false,
+
+    recovery_available: true,
+    compile_multilib: "both",
+}
+
+cc_library {
+    name: "libadbconnection_client",
+    srcs: ["adbconnection/adbconnection_client.cpp"],
+
+    export_include_dirs: ["adbconnection/include"],
+
+    stl: "libc++_static",
+    shared_libs: ["liblog"],
+    static_libs: ["libbase"],
+
+    defaults: ["adbd_defaults"],
+    visibility: [
+        "//art:__subpackages__",
+        "//system/core/adb/apex:__subpackages__",
+    ],
+    apex_available: [
+        "com.android.adbd",
+        "test_com.android.adbd",
+    ],
+
+    // libadbconnection_client doesn't need an embedded build number.
+    use_version_lib: false,
+
+    stubs: {
+        symbol_file: "adbconnection/libadbconnection_client.map.txt",
+        versions: ["1"],
+    },
+
+    host_supported: true,
+    compile_multilib: "both",
+}
+
 // libadb
 // =========================================================
 // These files are compiled for both the host and the device.
@@ -358,11 +413,11 @@ cc_library_static {
     generated_headers: ["platform_tools_version"],
 
     static_libs: [
+        "libadbconnection_server",
         "libdiagnose_usb",
     ],
 
     shared_libs: [
-        "libadbconnection_server",
         "libadbd_auth",
         "libasyncio",
         "libbase",
@@ -411,12 +466,12 @@ cc_library {
     ],
 
     static_libs: [
+        "libadbconnection_server",
         "libadbd_core",
         "libdiagnose_usb",
     ],
 
     shared_libs: [
-        "libadbconnection_server",
         "libadbd_auth",
         "libasyncio",
         "libbase",
@@ -452,7 +507,7 @@ cc_library {
     defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
 
-    // Avoid getting duplicate symbol of android::build::GetBuildNumber().
+    // avoid getting duplicate symbol of android::build::getbuildnumber().
     use_version_lib: false,
 
     // libminadbd wants both, as it's used to build native tests.
@@ -460,11 +515,11 @@ cc_library {
 
     // libadbd doesn't build any additional source, but to expose libadbd_core as a shared library.
     whole_static_libs: [
+        "libadbconnection_server",
         "libadbd_core",
     ],
 
     shared_libs: [
-        "libadbconnection_server",
         "libadbd_auth",
         "libadbd_services",
         "libasyncio",
@@ -500,6 +555,7 @@ cc_binary {
 
     stl: "libc++_static",
     static_libs: [
+        "libadbconnection_server",
         "libadbd",
         "libadbd_auth",
         "libadbd_services",
@@ -516,7 +572,6 @@ cc_binary {
     ],
 
     shared_libs: [
-        "libadbconnection_server",
         "libcrypto",
     ],
 }
