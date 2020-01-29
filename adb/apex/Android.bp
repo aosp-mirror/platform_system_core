@@ -2,6 +2,12 @@ apex_defaults {
     name: "com.android.adbd-defaults",
 
     binaries: ["adbd"],
+    compile_multilib: "both",
+    multilib: {
+        both: {
+            native_shared_libs: ["libadbconnection_client"],
+        },
+    },
     prebuilts: ["com.android.adbd.init.rc", "com.android.adbd.ld.config.txt"],
 
     key: "com.android.adbd.key",
