@@ -17,8 +17,8 @@
 // =========================================================================
 // Native library to write stats log to statsd socket on Android R and later
 // =========================================================================
-cc_library {
-    name: "libstatssocket",
+cc_defaults {
+    name: "libstatssocket_defaults",
     srcs: [
         "stats_buffer_writer.c",
         "stats_event.c",
@@ -27,7 +27,10 @@ cc_library {
         "stats_event_list.c",
         "statsd_writer.c",
     ],
-    host_supported: true,
+    export_include_dirs: ["include"],
+    static_libs: [
+        "libcutils", // does not expose a stable C API
+    ],
     cflags: [
         "-Wall",
         "-Werror",
@@ -35,11 +38,28 @@ cc_library {
         "-DWRITE_TO_STATSD=1",
         "-DWRITE_TO_LOGD=0",
     ],
-    export_include_dirs: ["include"],
-    shared_libs: [
-        "libcutils",
-        "liblog",
+}
+
+
+cc_library {
+    name: "libstatssocket",
+    defaults: [
+        "libstatssocket_defaults",
     ],
+    host_supported: true,
+    target: {
+        // On android, libstatssocket should only be linked as a shared lib
+        android: {
+            static: {
+                enabled: false,
+            },
+        },
+        host: {
+            shared: {
+                enabled: false,
+            },
+        },
+    },
 
     // enumerate stable entry points for APEX use
     stubs: {
@@ -47,7 +67,23 @@ cc_library {
         versions: [
             "1",
         ],
-    }
+    },
+    apex_available: [
+        "com.android.os.statsd",
+        "test_com.android.os.statsd",
+    ],
+}
+
+//TODO (b/149842105): Figure out if there is a better solution for this.
+cc_test_library {
+    name: "libstatssocket_private",
+    defaults: [
+        "libstatssocket_defaults",
+    ],
+    visibility: [
+        "//frameworks/base/apex/statsd/tests/libstatspull",
+        "//frameworks/base/cmds/statsd",
+    ],
 }
 
 cc_library_headers {
@@ -69,7 +105,7 @@ cc_benchmark {
         "-Werror",
     ],
     static_libs: [
-        "libstatssocket",
+        "libstatssocket_private",
     ],
     shared_libs: [
         "libcutils",
@@ -87,7 +123,7 @@ cc_test {
     ],
     static_libs: [
         "libgmock",
-        "libstatssocket",
+        "libstatssocket_private",
     ],
     shared_libs: [
         "libcutils",
