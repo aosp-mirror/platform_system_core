@@ -20,15 +20,37 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <regex>
+#include <string>
+
+#include <android-base/logging.h>
+#include <android-base/macros.h>
 #include <android-base/stringprintf.h>
-#include <android-base/strings.h>
 #include <android-base/test_utils.h>
 #include <gtest/gtest.h>
 
+using android::base::InitLogging;
+using android::base::StderrLogger;
 using android::base::StringPrintf;
-using android::base::StringReplace;
 
-void GenerateLogContent() {
+static std::string MakeLogPattern(int priority, const char* tag, const char* message) {
+  static const char log_characters[] = "XXVDIWEF";
+  static_assert(arraysize(log_characters) - 1 == ANDROID_LOG_SILENT,
+                "Mismatch in size of log_characters and values in android_LogPriority");
+  priority = priority > ANDROID_LOG_SILENT ? ANDROID_LOG_FATAL : priority;
+  char log_char = log_characters[priority];
+
+  return StringPrintf("%s %c \\d+-\\d+ \\d+:\\d+:\\d+ \\s*\\d+ \\s*\\d+ %s", tag, log_char,
+                      message);
+}
+
+static void CheckMessage(bool expected, const std::string& output, int priority, const char* tag,
+                         const char* message) {
+  std::regex message_regex(MakeLogPattern(priority, tag, message));
+  EXPECT_EQ(expected, std::regex_search(output, message_regex)) << message;
+}
+
+static void GenerateLogContent() {
   __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_VERBOSE, "tag", "verbose main");
   __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO, "tag", "info main");
   __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_ERROR, "tag", "error main");
@@ -52,137 +74,86 @@ std::string GetPidString() {
 }
 
 TEST(liblog, default_write) {
-  setenv("ANDROID_PRINTF_LOG", "brief", true);
   CapturedStderr captured_stderr;
+  InitLogging(nullptr, StderrLogger);
 
   GenerateLogContent();
 
-  std::string expected_output = StringReplace(R"init(I/tag     (<pid>): info main
-E/tag     (<pid>): error main
-I/tag     (<pid>): info radio
-E/tag     (<pid>): error radio
-I/tag     (<pid>): info system
-E/tag     (<pid>): error system
-I/tag     (<pid>): info crash
-E/tag     (<pid>): error crash
-)init",
-                                              "<pid>", GetPidString(), true);
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose main");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info main");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error main");
 
-  EXPECT_EQ(expected_output, captured_stderr.str());
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose radio");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info radio");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error radio");
+
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose system");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info system");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error system");
+
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose crash");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info crash");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error crash");
 }
 
-TEST(liblog, format) {
-  setenv("ANDROID_PRINTF_LOG", "process", true);
+TEST(liblog, verbose_write) {
+  setenv("ANDROID_LOG_TAGS", "*:v", true);
   CapturedStderr captured_stderr;
+  InitLogging(nullptr, StderrLogger);
 
   GenerateLogContent();
 
-  std::string expected_output = StringReplace(R"init(I(<pid>) info main  (tag)
-E(<pid>) error main  (tag)
-I(<pid>) info radio  (tag)
-E(<pid>) error radio  (tag)
-I(<pid>) info system  (tag)
-E(<pid>) error system  (tag)
-I(<pid>) info crash  (tag)
-E(<pid>) error crash  (tag)
-)init",
-                                              "<pid>", GetPidString(), true);
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose main");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info main");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error main");
 
-  EXPECT_EQ(expected_output, captured_stderr.str());
-  captured_stderr.Stop();
-  captured_stderr.Reset();
-  captured_stderr.Start();
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose radio");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info radio");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error radio");
 
-  // Changing the environment after starting writing doesn't change the format.
-  setenv("ANDROID_PRINTF_LOG", "brief", true);
-  GenerateLogContent();
-  EXPECT_EQ(expected_output, captured_stderr.str());
-  captured_stderr.Stop();
-  captured_stderr.Reset();
-  captured_stderr.Start();
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose system");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info system");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error system");
 
-  // However calling __android_log_close() does reset logging and allow changing the format.
-  __android_log_close();
-  GenerateLogContent();
-
-  expected_output = StringReplace(R"init(I/tag     (<pid>): info main
-E/tag     (<pid>): error main
-I/tag     (<pid>): info radio
-E/tag     (<pid>): error radio
-I/tag     (<pid>): info system
-E/tag     (<pid>): error system
-I/tag     (<pid>): info crash
-E/tag     (<pid>): error crash
-)init",
-                                  "<pid>", GetPidString(), true);
-
-  EXPECT_EQ(expected_output, captured_stderr.str());
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose crash");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info crash");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error crash");
 }
 
-TEST(liblog, filter) {
-  setenv("ANDROID_PRINTF_LOG", "brief", true);
-  setenv("ANDROID_LOG_TAGS", "*:w verbose_tag:v debug_tag:d", true);
-  CapturedStderr captured_stderr;
-
-  auto generate_logs = [](log_id_t log_id) {
-    // Check that we show verbose logs when requesting for a given tag.
-    __android_log_buf_print(log_id, ANDROID_LOG_VERBOSE, "verbose_tag", "verbose verbose_tag");
-    __android_log_buf_print(log_id, ANDROID_LOG_ERROR, "verbose_tag", "error verbose_tag");
-
-    // Check that we don't show verbose logs when explicitly requesting debug+ for a given tag.
-    __android_log_buf_print(log_id, ANDROID_LOG_VERBOSE, "debug_tag", "verbose debug_tag");
-    __android_log_buf_print(log_id, ANDROID_LOG_DEBUG, "debug_tag", "debug debug_tag");
-    __android_log_buf_print(log_id, ANDROID_LOG_ERROR, "debug_tag", "error debug_tag");
-
-    // Check that we don't show info logs when requesting globally warn+.
-    __android_log_buf_print(log_id, ANDROID_LOG_INFO, "default_tag", "info default_tag");
-    __android_log_buf_print(log_id, ANDROID_LOG_WARN, "default_tag", "warn default_tag");
-    __android_log_buf_print(log_id, ANDROID_LOG_ERROR, "default_tag", "error default_tag");
-  };
-
-  auto expected_output = StringReplace(R"init(V/verbose_tag(<pid>): verbose verbose_tag
-E/verbose_tag(<pid>): error verbose_tag
-D/debug_tag(<pid>): debug debug_tag
-E/debug_tag(<pid>): error debug_tag
-W/default_tag(<pid>): warn default_tag
-E/default_tag(<pid>): error default_tag
-)init",
-                                       "<pid>", GetPidString(), true);
-
-  auto test_all_logs = [&] {
-    for (auto log_id : {LOG_ID_MAIN, LOG_ID_SYSTEM, LOG_ID_RADIO, LOG_ID_CRASH}) {
-      generate_logs(log_id);
-      EXPECT_EQ(expected_output, captured_stderr.str());
-      captured_stderr.Stop();
-      captured_stderr.Reset();
-      captured_stderr.Start();
-    }
-  };
-
-  test_all_logs();
-
-  // Changing the environment after starting writing doesn't change the filter.
+TEST(liblog, error_write) {
   setenv("ANDROID_LOG_TAGS", "*:e", true);
-  test_all_logs();
+  CapturedStderr captured_stderr;
+  InitLogging(nullptr, StderrLogger);
 
-  // However calling __android_log_close() does reset logging and allow changing the format.
-  __android_log_close();
-  expected_output = StringReplace(R"init(E/verbose_tag(<pid>): error verbose_tag
-E/debug_tag(<pid>): error debug_tag
-E/default_tag(<pid>): error default_tag
-)init",
-                                  "<pid>", GetPidString(), true);
-  test_all_logs();
+  GenerateLogContent();
+
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose main");
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info main");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error main");
+
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose radio");
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info radio");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error radio");
+
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose system");
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info system");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error system");
+
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_VERBOSE, "tag", "verbose crash");
+  CheckMessage(false, captured_stderr.str(), ANDROID_LOG_INFO, "tag", "info crash");
+  CheckMessage(true, captured_stderr.str(), ANDROID_LOG_ERROR, "tag", "error crash");
 }
 
 TEST(liblog, kernel_no_write) {
   CapturedStderr captured_stderr;
+  InitLogging(nullptr, StderrLogger);
   __android_log_buf_print(LOG_ID_KERNEL, ANDROID_LOG_ERROR, "tag", "kernel error");
   EXPECT_EQ("", captured_stderr.str());
 }
 
 TEST(liblog, binary_no_write) {
   CapturedStderr captured_stderr;
+  InitLogging(nullptr, StderrLogger);
   __android_log_buf_print(LOG_ID_EVENTS, ANDROID_LOG_ERROR, "tag", "error events");
   __android_log_buf_print(LOG_ID_STATS, ANDROID_LOG_ERROR, "tag", "error stats");
   __android_log_buf_print(LOG_ID_SECURITY, ANDROID_LOG_ERROR, "tag", "error security");
