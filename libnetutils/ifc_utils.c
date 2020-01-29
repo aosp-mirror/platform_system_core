@@ -257,8 +257,8 @@ int ifc_set_addr(const char *name, in_addr_t addr)
  *
  * Returns zero on success and negative errno on failure.
  */
-int ifc_act_on_address(int action, const char *name, const char *address,
-                       int prefixlen) {
+int ifc_act_on_address(int action, const char* name, const char* address, int prefixlen,
+                       bool nodad) {
     int ifindex, s, len, ret;
     struct sockaddr_storage ss;
     int saved_errno;
@@ -311,6 +311,7 @@ int ifc_act_on_address(int action, const char *name, const char *address,
 
     // Interface address message header.
     req.r.ifa_family = ss.ss_family;
+    req.r.ifa_flags = nodad ? IFA_F_NODAD : 0;
     req.r.ifa_prefixlen = prefixlen;
     req.r.ifa_index = ifindex;
 
@@ -363,12 +364,12 @@ int ifc_act_on_address(int action, const char *name, const char *address,
 
 // Returns zero on success and negative errno on failure.
 int ifc_add_address(const char *name, const char *address, int prefixlen) {
-    return ifc_act_on_address(RTM_NEWADDR, name, address, prefixlen);
+    return ifc_act_on_address(RTM_NEWADDR, name, address, prefixlen, /*nodad*/ false);
 }
 
 // Returns zero on success and negative errno on failure.
 int ifc_del_address(const char *name, const char * address, int prefixlen) {
-    return ifc_act_on_address(RTM_DELADDR, name, address, prefixlen);
+    return ifc_act_on_address(RTM_DELADDR, name, address, prefixlen, /*nodad*/ false);
 }
 
 /*
