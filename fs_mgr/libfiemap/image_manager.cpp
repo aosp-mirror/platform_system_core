@@ -124,7 +124,7 @@ std::vector<std::string> ImageManager::GetAllBackingImages() {
     return images;
 }
 
-bool ImageManager::PartitionExists(const std::string& name) {
+bool ImageManager::BackingImageExists(const std::string& name) {
     if (!MetadataExists(metadata_dir_)) {
         return false;
     }
@@ -133,11 +133,6 @@ bool ImageManager::PartitionExists(const std::string& name) {
         return false;
     }
     return !!FindPartition(*metadata.get(), name);
-}
-
-bool ImageManager::BackingImageExists(const std::string& name) {
-    auto header_file = GetImageHeaderPath(name);
-    return access(header_file.c_str(), F_OK) == 0;
 }
 
 static bool IsUnreliablePinningAllowed(const std::string& path) {
@@ -261,6 +256,10 @@ bool ImageManager::DeleteBackingImage(const std::string& name) {
         return false;
     }
 
+#if defined __ANDROID_RECOVERY__
+    LOG(ERROR) << "Cannot remove images backed by /data in recovery";
+    return false;
+#else
     std::string message;
     auto header_file = GetImageHeaderPath(name);
     if (!SplitFiemap::RemoveSplitFiles(header_file, &message)) {
@@ -274,6 +273,7 @@ bool ImageManager::DeleteBackingImage(const std::string& name) {
         LOG(ERROR) << "Error removing " << status_file << ": " << message;
     }
     return RemoveImageMetadata(metadata_dir_, name);
+#endif
 }
 
 // Create a block device for an image file, using its extents in its
@@ -507,6 +507,7 @@ bool ImageManager::MapImageDevice(const std::string& name,
 
     auto image_header = GetImageHeaderPath(name);
 
+#if !defined __ANDROID_RECOVERY__
     // If there is a device-mapper node wrapping the block device, then we're
     // able to create another node around it; the dm layer does not carry the
     // exclusion lock down the stack when a mount occurs.
@@ -530,6 +531,13 @@ bool ImageManager::MapImageDevice(const std::string& name,
     } else if (!MapWithLoopDevice(name, timeout_ms, path)) {
         return false;
     }
+#else
+    // In recovery, we can *only* use device-mapper, since partitions aren't
+    // mounted. That also means we cannot call GetBlockDeviceForFile.
+    if (!MapWithDmLinear(*partition_opener_.get(), name, timeout_ms, path)) {
+        return false;
+    }
+#endif
 
     // Set a property so we remember this is mapped.
     auto prop_name = GetStatusPropertyName(name);
