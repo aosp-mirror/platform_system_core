@@ -40,11 +40,9 @@
 #include "rwlock.h"
 #include "uio.h"
 
-#if (FAKE_LOG_DEVICE == 0)
+#ifdef __ANDROID__
 #include "logd_writer.h"
 #include "pmsg_writer.h"
-#else
-#include "fake_log_device.h"
 #endif
 
 #if defined(__APPLE__)
@@ -105,11 +103,9 @@ static int check_log_uid_permissions() {
  * Release any logger resources. A new log write will immediately re-acquire.
  */
 void __android_log_close() {
-#if (FAKE_LOG_DEVICE == 0)
+#ifdef __ANDROID__
   LogdClose();
   PmsgClose();
-#else
-  FakeClose();
 #endif
 }
 
@@ -310,6 +306,12 @@ int __android_log_write(int prio, const char* tag, const char* msg) {
 
 void __android_log_write_logger_data(__android_logger_data* logger_data, const char* msg) {
   ErrnoRestorer errno_restorer;
+
+  if (logger_data->buffer_id != LOG_ID_DEFAULT && logger_data->buffer_id != LOG_ID_MAIN &&
+      logger_data->buffer_id != LOG_ID_SYSTEM && logger_data->buffer_id != LOG_ID_RADIO &&
+      logger_data->buffer_id != LOG_ID_CRASH) {
+    return;
+  }
 
   auto tag_lock = std::shared_lock{default_tag_lock, std::defer_lock};
   if (logger_data->tag == nullptr) {
