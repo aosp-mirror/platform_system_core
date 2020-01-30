@@ -591,14 +591,18 @@ bool FirstStageMount::MountPartitions() {
     }
 
     // heads up for instantiating required device(s) for overlayfs logic
-    const auto devices = fs_mgr_overlayfs_required_devices(&fstab_);
-    for (auto const& device : devices) {
-        if (android::base::StartsWith(device, "/dev/block/by-name/")) {
-            InitRequiredDevices({basename(device.c_str())});
-        } else {
-            InitMappedDevice(device);
+    auto init_devices = [this](std::set<std::string> devices) -> bool {
+        for (auto iter = devices.begin(); iter != devices.end();) {
+            if (android::base::StartsWith(*iter, "/dev/block/dm-")) {
+                if (!InitMappedDevice(*iter)) return false;
+                iter = devices.erase(iter);
+            } else {
+                iter++;
+            }
         }
-    }
+        return InitRequiredDevices(std::move(devices));
+    };
+    MapScratchPartitionIfNeeded(&fstab_, init_devices);
 
     fs_mgr_overlayfs_mount_all(&fstab_);
 
