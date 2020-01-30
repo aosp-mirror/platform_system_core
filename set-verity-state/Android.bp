@@ -9,8 +9,9 @@ cc_binary {
         "libcrypto_utils",
         "libcutils",
         "libfec",
-        "libfs_mgr",
+        "libfs_mgr_binder",
         "liblog",
+        "libutils",
     ],
     static_libs: [
         "libavb_user",
