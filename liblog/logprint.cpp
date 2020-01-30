@@ -1520,12 +1520,7 @@ char* android_log_formatLogLine(AndroidLogFormat* p_format, char* defaultBuffer,
  * This code is Android specific, bionic guarantees that
  * calls to non-reentrant getpwuid() are thread safe.
  */
-#if !defined(__MINGW32__)
-#if (FAKE_LOG_DEVICE == 0)
-#ifndef __BIONIC__
-#warning "This code assumes that getpwuid is thread safe, only true with Bionic!"
-#endif
-#endif
+#ifdef __ANDROID__
       struct passwd* pwd = getpwuid(entry->uid);
       if (pwd && (strlen(pwd->pw_name) <= 5)) {
         snprintf(uid, sizeof(uid), "%5s:", pwd->pw_name);

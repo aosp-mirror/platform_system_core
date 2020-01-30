@@ -104,6 +104,11 @@ cc_test_host {
     name: "liblog-host-test",
     static_libs: ["liblog"],
     shared_libs: ["libbase"],
-    srcs: ["liblog_host_test.cpp"],
+    srcs: [
+        "liblog_host_test.cpp",
+        "liblog_default_tag.cpp",
+        "liblog_global_state.cpp",
+        "rwlock_test.cpp",
+    ],
     isolated: true,
 }
