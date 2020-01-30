@@ -76,7 +76,9 @@ class IImageManager {
     // Unmap a block device previously mapped with mapBackingImage.
     virtual bool UnmapImageDevice(const std::string& name) = 0;
 
-    // Returns true whether the named backing image exists.
+    // Returns true whether the named backing image exists. This does not check
+    // consistency with the /data partition, so that it can return true in
+    // recovery.
     virtual bool BackingImageExists(const std::string& name) = 0;
 
     // Returns true if the specified image is mapped to a device.
@@ -153,10 +155,6 @@ class ImageManager final : public IImageManager {
     bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) override;
 
     std::vector<std::string> GetAllBackingImages();
-
-    // Returns true if the named partition exists. This does not check the
-    // consistency of the backing image/data file.
-    bool PartitionExists(const std::string& name);
 
     // Validates that all images still have pinned extents. This will be removed
     // once b/134588268 is fixed.
