@@ -182,6 +182,7 @@ cc_test {
     header_libs: [
         "libstorage_literals_headers",
     ],
+    require_root: true,
 }
 
 cc_binary {
