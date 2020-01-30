@@ -651,7 +651,7 @@ cc_test {
         "libmdnssd",
         "libselinux",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["device-tests", "mts"],
     require_root: true,
 }
 
