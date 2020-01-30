@@ -78,7 +78,9 @@ void MountMetadata();
 
 class SnapshotTest : public ::testing::Test {
   public:
-    SnapshotTest() : dm_(DeviceMapper::Instance()) {}
+    SnapshotTest() : dm_(DeviceMapper::Instance()) {
+        is_virtual_ab_ = android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
+    }
 
     // This is exposed for main.
     void Cleanup() {
@@ -88,6 +90,8 @@ class SnapshotTest : public ::testing::Test {
 
   protected:
     void SetUp() override {
+        if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
+
         SnapshotTestPropertyFetcher::SetUp();
         InitializeState();
         CleanupTestArtifacts();
@@ -97,6 +101,8 @@ class SnapshotTest : public ::testing::Test {
     }
 
     void TearDown() override {
+        if (!is_virtual_ab_) return;
+
         lock_ = nullptr;
 
         CleanupTestArtifacts();
@@ -329,6 +335,7 @@ class SnapshotTest : public ::testing::Test {
         return AssertionSuccess();
     }
 
+    bool is_virtual_ab_;
     DeviceMapper& dm_;
     std::unique_ptr<SnapshotManager::LockedFile> lock_;
     android::fiemap::IImageManager* image_manager_ = nullptr;
@@ -754,6 +761,8 @@ INSTANTIATE_TEST_SUITE_P(
 class SnapshotUpdateTest : public SnapshotTest {
   public:
     void SetUp() override {
+        if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
+
         SnapshotTest::SetUp();
         Cleanup();
 
@@ -813,6 +822,8 @@ class SnapshotUpdateTest : public SnapshotTest {
         }
     }
     void TearDown() override {
+        if (!is_virtual_ab_) return;
+
         Cleanup();
         SnapshotTest::TearDown();
     }
@@ -1625,6 +1636,8 @@ class FlashAfterUpdateTest : public SnapshotUpdateTest,
 };
 
 TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
+    if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
+
     // OTA client blindly unmaps all partitions that are possibly mapped.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
         ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
@@ -1718,13 +1731,17 @@ INSTANTIATE_TEST_SUITE_P(Snapshot, FlashAfterUpdateTest, Combine(Values(0, 1), B
 // Test behavior of ImageManager::Create on low space scenario. These tests assumes image manager
 // uses /data as backup device.
 class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t> {
-  public:
+  protected:
     void SetUp() override {
+        if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
+
         SnapshotTest::SetUp();
         userdata_ = std::make_unique<LowSpaceUserdata>();
         ASSERT_TRUE(userdata_->Init(GetParam()));
     }
     void TearDown() override {
+        if (!is_virtual_ab_) return;
+
         EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
                     image_manager_->DeleteBackingImage(kImageName));
     }
