@@ -113,8 +113,8 @@ bool fs_mgr_overlayfs_is_setup() {
 namespace android {
 namespace fs_mgr {
 
-void MapScratchPartitionIfNeeded(Fstab*, const std::function<bool(const std::string&)>&) {}
-
+void MapScratchPartitionIfNeeded(Fstab*,
+                                 const std::function<bool(const std::set<std::string>&)>&) {}
 }  // namespace fs_mgr
 }  // namespace android
 
