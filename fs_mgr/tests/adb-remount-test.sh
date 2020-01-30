@@ -1160,13 +1160,16 @@ D=`adb_sh df -k </dev/null` &&
 ret=${?}
 uses_dynamic_scratch=false
 scratch_partition=
+virtual_ab=`get_property ro.virtual_ab.enabled`
 if ${overlayfs_needed}; then
   if [ ${ret} != 0 ]; then
     die -t ${T} "overlay takeover failed"
   fi
   echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
    echo "${ORANGE}[  WARNING ]${NORMAL} overlay takeover not complete" >&2
-  scratch_partition=scratch
+  if [ -z "${virtual_ab}" ]; then
+    scratch_partition=scratch
+  fi
   if echo "${D}" | grep " /mnt/scratch" >/dev/null; then
     echo "${BLUE}[     INFO ]${NORMAL} using ${scratch_partition} dynamic partition for overrides" >&2
   fi
