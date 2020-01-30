@@ -277,6 +277,9 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         } else if (StartsWith(flag, "keydirectory=")) {
             // The metadata flag is followed by an = and the directory for the keys.
             entry->metadata_key_dir = arg;
+        } else if (StartsWith(flag, "metadata_cipher=")) {
+            // Specify the cipher to use for metadata encryption
+            entry->metadata_cipher = arg;
         } else if (StartsWith(flag, "sysfs_path=")) {
             // The path to trigger device gc by idle-maint of vold.
             entry->sysfs_path = arg;
