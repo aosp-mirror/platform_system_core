@@ -1957,8 +1957,17 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     auto current_super = device_->GetSuperDevice(current_slot);
 
     auto current_metadata = MetadataBuilder::New(opener, current_super, current_slot);
+    if (current_metadata == nullptr) {
+        LOG(ERROR) << "Cannot create metadata builder.";
+        return Return::Error();
+    }
+
     auto target_metadata =
             MetadataBuilder::NewForUpdate(opener, current_super, current_slot, target_slot);
+    if (target_metadata == nullptr) {
+        LOG(ERROR) << "Cannot create target metadata builder.";
+        return Return::Error();
+    }
 
     // Delete partitions with target suffix in |current_metadata|. Otherwise,
     // partition_cow_creator recognizes these left-over partitions as used space.
