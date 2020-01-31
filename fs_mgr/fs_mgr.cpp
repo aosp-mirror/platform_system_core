@@ -887,7 +887,7 @@ static bool needs_block_encryption(const FstabEntry& entry) {
 }
 
 static bool should_use_metadata_encryption(const FstabEntry& entry) {
-    return !entry.key_dir.empty() &&
+    return !entry.metadata_key_dir.empty() &&
            (entry.fs_mgr_flags.file_encryption || entry.fs_mgr_flags.force_fde_or_fbe);
 }
 
@@ -1159,7 +1159,7 @@ static void WrapUserdata(FstabEntry* entry, dev_t dev, const std::string& block_
 static void WrapUserdataIfNeeded(FstabEntry* entry, const std::string& actual_block_device = {}) {
     const auto& block_device =
             actual_block_device.empty() ? entry->blk_device : actual_block_device;
-    if (entry->mount_point != "/data" || !entry->key_dir.empty() ||
+    if (entry->mount_point != "/data" || !entry->metadata_key_dir.empty() ||
         android::base::StartsWith(block_device, "/dev/block/dm-")) {
         return;
     }
