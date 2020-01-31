@@ -312,6 +312,11 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,unknown[0-9]*", 183},
     {"reboot,longkey,.*", 184},
     {"reboot,boringssl-self-check-failed", 185},
+    {"reboot,userspace_failed,shutdown_aborted", 186},
+    {"reboot,userspace_failed,watchdog_triggered", 187},
+    {"reboot,userspace_failed,watchdog_fork", 188},
+    {"reboot,userspace_failed,*", 189},
+    {"reboot,mount_userdata_failed", 190},
 };
 
 // Converts a string value representing the reason the system booted to an
