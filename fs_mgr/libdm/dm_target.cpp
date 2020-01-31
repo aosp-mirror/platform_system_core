@@ -244,8 +244,20 @@ std::string DmTargetCrypt::GetParameterString() const {
 }
 
 std::string DmTargetDefaultKey::GetParameterString() const {
-    return cipher_ + " " + key_ + " " + blockdev_ + " " + std::to_string(start_sector_) +
-           (set_dun_ ? " 1 set_dun" : "");
+    std::vector<std::string> argv;
+    argv.emplace_back(cipher_);
+    argv.emplace_back(key_);
+    argv.emplace_back(blockdev_);
+    argv.push_back(std::to_string(start_sector_));
+    std::vector<std::string> extra_argv;
+    if (set_dun_) {
+        extra_argv.emplace_back("set_dun");
+    }
+    if (!extra_argv.empty()) {
+        argv.emplace_back(std::to_string(extra_argv.size()));
+        argv.insert(argv.end(), extra_argv.begin(), extra_argv.end());
+    }
+    return android::base::Join(argv, " ");
 }
 
 }  // namespace dm
