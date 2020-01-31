@@ -24,14 +24,13 @@ cc_defaults {
     ],
     shared_libs: [
         "libbase",
+        "libcutils",
         "liblog",
         "liblp",
     ],
     static_libs: [
-        "libcutils",
         "libdm",
         "libfstab",
-        "liblp",
         "update_metadata-protos",
     ],
     whole_static_libs: [
@@ -146,8 +145,8 @@ cc_library_static {
     ],
     static_libs: [
         "libfs_mgr",
-        "libgtest",
         "libgmock",
+        "libgtest",
     ],
 }
 
@@ -155,33 +154,33 @@ cc_test {
     name: "libsnapshot_test",
     defaults: ["libsnapshot_defaults"],
     srcs: [
-        "snapshot_test.cpp",
         "partition_cow_creator_test.cpp",
         "snapshot_metadata_updater_test.cpp",
-        "test_helpers.cpp",
+        "snapshot_test.cpp",
     ],
     shared_libs: [
-        "libbinder",
-        "libcrypto",
-        "libhidlbase",
-        "libprotobuf-cpp-lite",
-        "libutils",
-    ],
-    static_libs: [
         "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
+        "libbinder",
+        "libcrypto",
         "libfs_mgr",
-        "libgmock",
         "libgsi",
+        "libhidlbase",
         "liblp",
+        "libprotobuf-cpp-lite",
+        "libsparse",
+        "libutils",
+        "libz",
+    ],
+    static_libs: [
+        "libgmock",
         "libsnapshot",
         "libsnapshot_test_helpers",
-        "libsparse",
-        "libz",
     ],
     header_libs: [
         "libstorage_literals_headers",
     ],
+    require_root: true,
 }
 
 cc_binary {
@@ -191,7 +190,6 @@ cc_binary {
     ],
     static_libs: [
         "libdm",
-        "libext2_uuid",
         "libfstab",
         "libsnapshot",
     ],
@@ -201,6 +199,7 @@ cc_binary {
         "libbase",
         "libbinder",
         "libbinderthreadstate",
+        "libext2_uuid",
         "libext4_utils",
         "libfs_mgr_binder",
         "libhidlbase",
