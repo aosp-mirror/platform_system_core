@@ -340,18 +340,18 @@ void LogdLogger::operator()(LogId id, LogSeverity severity, const char* tag,
 
   int lg_id = LogIdTolog_id_t(id);
 
-  char log_message[1024];
+  char log_message_with_file[4068];  // LOGGER_ENTRY_MAX_PAYLOAD, not available in the NDK.
   if (priority == ANDROID_LOG_FATAL && file != nullptr) {
-    snprintf(log_message, sizeof(log_message), "%s:%u] %s", file, line, message);
-  } else {
-    snprintf(log_message, sizeof(log_message), "%s", message);
+    snprintf(log_message_with_file, sizeof(log_message_with_file), "%s:%u] %s", file, line,
+             message);
+    message = log_message_with_file;
   }
 
   static auto& liblog_functions = GetLibLogFunctions();
   if (liblog_functions) {
     __android_logger_data logger_data = {sizeof(__android_logger_data),     lg_id, priority, tag,
                                          static_cast<const char*>(nullptr), 0};
-    liblog_functions->__android_log_logd_logger(&logger_data, log_message);
+    liblog_functions->__android_log_logd_logger(&logger_data, message);
   } else {
     __android_log_buf_print(lg_id, priority, tag, "%s", message);
   }
