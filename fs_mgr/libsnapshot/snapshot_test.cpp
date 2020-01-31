@@ -999,7 +999,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
 
     // Check that the target partitions have the same content.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1127,7 +1127,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
 
     // Check that the target partitions have the same content.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1139,7 +1139,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_a"));
     ASSERT_NE(init, nullptr);
     ASSERT_FALSE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
 
     // Assert that the source partitions aren't affected.
     for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
@@ -1516,7 +1516,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
 
     // Check that the target partition have the same content. Hashtree and FEC extents
     // should be accounted for.
@@ -1639,7 +1639,8 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
 
-    if (std::get<1>(GetParam()) /* merge */) {
+    bool after_merge = std::get<1>(GetParam());
+    if (after_merge) {
         ASSERT_TRUE(InitiateMerge("_b"));
         // Simulate shutting down the device after merge has initiated.
         ASSERT_TRUE(UnmapAll());
@@ -1688,21 +1689,11 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
     auto init = SnapshotManager::NewForFirstStageMount(
             new TestDeviceInfo(fake_super, flashed_slot_suffix));
     ASSERT_NE(init, nullptr);
-    if (init->NeedSnapshotsInFirstStageMount()) {
-        ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
-    } else {
-        for (const auto& name : {"sys", "vnd"}) {
-            ASSERT_TRUE(CreateLogicalPartition(
-                    CreateLogicalPartitionParams{
-                            .block_device = fake_super,
-                            .metadata_slot = flashed_slot,
-                            .partition_name = name + flashed_slot_suffix,
-                            .timeout_ms = 1s,
-                            .partition_opener = opener_.get(),
-                    },
-                    &path));
-        }
+
+    if (flashed_slot && after_merge) {
+        ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     }
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
 
     // Check that the target partitions have the same content.
     for (const auto& name : {"sys", "vnd"}) {

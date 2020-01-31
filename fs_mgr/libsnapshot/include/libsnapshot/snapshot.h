@@ -213,7 +213,8 @@ class SnapshotManager final {
 
     // Perform first-stage mapping of snapshot targets. This replaces init's
     // call to CreateLogicalPartitions when snapshots are present.
-    bool CreateLogicalAndSnapshotPartitions(const std::string& super_device);
+    bool CreateLogicalAndSnapshotPartitions(const std::string& super_device,
+                                            const std::chrono::milliseconds& timeout_ms = {});
 
     // This method should be called preceding any wipe or flash of metadata or
     // userdata. It is only valid in recovery or fastbootd, and it ensures that
