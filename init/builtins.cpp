@@ -1123,6 +1123,7 @@ static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
     auto reboot_reason = vdc_arg + "_failed";
     if (android::sysprop::InitProperties::userspace_reboot_in_progress().value_or(false)) {
         should_reboot_into_recovery = false;
+        reboot_reason = "userspace_failed," + vdc_arg;
     }
 
     auto reboot = [reboot_reason, should_reboot_into_recovery](const std::string& message) {
@@ -1159,7 +1160,7 @@ static Result<void> do_remount_userdata(const BuiltinArguments& args) {
     }
     // TODO(b/135984674): check that fstab contains /data.
     if (auto rc = fs_mgr_remount_userdata_into_checkpointing(&fstab); rc < 0) {
-        trigger_shutdown("reboot,mount-userdata-failed");
+        trigger_shutdown("reboot,mount_userdata_failed");
     }
     if (auto result = queue_fs_event(initial_mount_fstab_return_code, true); !result) {
         return Error() << "queue_fs_event() failed: " << result.error();
