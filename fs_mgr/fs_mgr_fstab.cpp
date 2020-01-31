@@ -276,7 +276,7 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             entry->vbmeta_partition = arg;
         } else if (StartsWith(flag, "keydirectory=")) {
             // The metadata flag is followed by an = and the directory for the keys.
-            entry->key_dir = arg;
+            entry->metadata_key_dir = arg;
         } else if (StartsWith(flag, "sysfs_path=")) {
             // The path to trigger device gc by idle-maint of vold.
             entry->sysfs_path = arg;
@@ -591,8 +591,8 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
         userdata.blk_device = "userdata_gsi";
         userdata.fs_mgr_flags.logical = true;
         userdata.fs_mgr_flags.formattable = true;
-        if (!userdata.key_dir.empty()) {
-            userdata.key_dir += "/gsi";
+        if (!userdata.metadata_key_dir.empty()) {
+            userdata.metadata_key_dir += "/gsi";
         }
     } else {
         userdata = BuildDsuUserdataFstabEntry();
