@@ -489,6 +489,7 @@ on post-fs
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
+    chmod 0755 /sys/kernel/tracing
     chmod 0755 /sys/kernel/debug/tracing
 
     # HALs required before storage encryption can get unlocked (FBE/FDE)
