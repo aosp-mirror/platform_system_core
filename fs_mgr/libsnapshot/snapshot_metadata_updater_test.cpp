@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 
+#include <android-base/properties.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
@@ -42,6 +43,10 @@ namespace snapshot {
 
 class SnapshotMetadataUpdaterTest : public ::testing::TestWithParam<uint32_t> {
   public:
+    SnapshotMetadataUpdaterTest() {
+        is_virtual_ab_ = android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
+    }
+
     void SetUp() override {
         target_slot_ = GetParam();
         target_suffix_ = SlotSuffixForSlotNumber(target_slot_);
@@ -122,6 +127,7 @@ class SnapshotMetadataUpdaterTest : public ::testing::TestWithParam<uint32_t> {
                                   << ".";
     }
 
+    bool is_virtual_ab_;
     std::unique_ptr<MetadataBuilder> builder_;
     uint32_t target_slot_;
     std::string target_suffix_;

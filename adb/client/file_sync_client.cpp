@@ -187,14 +187,13 @@ struct TransferLedger {
         const char* direction_str = (direction == TransferDirection::push) ? "pushed" : "pulled";
         std::stringstream ss;
         if (!name.empty()) {
-            ss << name << ": ";
+            std::string_view display_name(name);
+            char* out = getenv("ANDROID_PRODUCT_OUT");
+            if (out) android::base::ConsumePrefix(&display_name, out);
+            ss << display_name << ": ";
         }
         ss << files_transferred << " file" << ((files_transferred == 1) ? "" : "s") << " "
-           << direction_str << ".";
-        if (files_skipped > 0) {
-            ss << " " << files_skipped << " file" << ((files_skipped == 1) ? "" : "s")
-               << " skipped.";
-        }
+           << direction_str << ", " << files_skipped << " skipped.";
         ss << TransferRate();
 
         lp.Print(ss.str(), LinePrinter::LineType::INFO);
