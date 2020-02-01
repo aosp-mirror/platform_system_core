@@ -32,6 +32,10 @@ static void atrace_init_once()
 {
     atrace_marker_fd = open("/sys/kernel/debug/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
     if (atrace_marker_fd == -1) {
+        atrace_marker_fd = open("/sys/kernel/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
+    }
+
+    if (atrace_marker_fd == -1) {
         ALOGE("Error opening trace file: %s (%d)", strerror(errno), errno);
         atrace_enabled_tags = 0;
     } else {
