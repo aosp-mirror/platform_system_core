@@ -793,6 +793,7 @@ class SnapshotUpdateTest : public SnapshotTest {
 
         // Initialize source partition metadata using |manifest_|.
         src_ = MetadataBuilder::New(*opener_, "super", 0);
+        ASSERT_NE(src_, nullptr);
         ASSERT_TRUE(FillFakeMetadata(src_.get(), manifest_, "_a"));
         // Add sys_b which is like system_other.
         ASSERT_TRUE(src_->AddGroup("group_b", kGroupSize));
@@ -987,6 +988,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Test that partitions prioritize using space in super.
     auto tgt = MetadataBuilder::New(*opener_, "super", 1);
+    ASSERT_NE(tgt, nullptr);
     ASSERT_NE(nullptr, tgt->FindPartition("sys_b-cow"));
     ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
     ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
@@ -1200,7 +1202,9 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
 
     // Check that the old COW space is reclaimed and does not occupy space of mapped partitions.
     auto src = MetadataBuilder::New(*opener_, "super", 1);
+    ASSERT_NE(src, nullptr);
     auto tgt = MetadataBuilder::New(*opener_, "super", 0);
+    ASSERT_NE(tgt, nullptr);
     for (const auto& cow_part_name : {"sys_a-cow", "vnd_a-cow", "prd_a-cow"}) {
         auto* cow_part = tgt->FindPartition(cow_part_name);
         ASSERT_NE(nullptr, cow_part) << cow_part_name << " does not exist in target metadata";
@@ -1291,6 +1295,7 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     SetSize(vnd_, 5_MiB);
     SetSize(prd_, 5_MiB);
     src_ = MetadataBuilder::New(*opener_, "super", 0);
+    ASSERT_NE(src_, nullptr);
     src_->RemoveGroupAndPartitions(group_->name() + "_a");
     src_->RemoveGroupAndPartitions(group_->name() + "_b");
     ASSERT_TRUE(FillFakeMetadata(src_.get(), manifest_, "_a"));
@@ -1664,6 +1669,7 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
 
     // Simulate flashing |flashed_slot|. This clears the UPDATED flag.
     auto flashed_builder = MetadataBuilder::New(*opener_, "super", flashed_slot);
+    ASSERT_NE(flashed_builder, nullptr);
     flashed_builder->RemoveGroupAndPartitions(group_->name() + flashed_slot_suffix);
     flashed_builder->RemoveGroupAndPartitions(kCowGroupName);
     ASSERT_TRUE(FillFakeMetadata(flashed_builder.get(), manifest_, flashed_slot_suffix));
