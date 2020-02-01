@@ -32,6 +32,10 @@ on early-init
     # cgroup for system_server and surfaceflinger
     mkdir /dev/memcg/system 0550 system system
 
+    # symlink the Android specific /dev/tun to Linux expected /dev/net/tun
+    mkdir /dev/net 0755 root root
+    symlink ../tun /dev/net/tun
+
     # set RLIMIT_NICE to allow priorities from 19 to -20
     setrlimit nice 40 40
 
