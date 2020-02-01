@@ -160,8 +160,8 @@ cc_library_static {
     ],
 }
 
-cc_test {
-    name: "libsnapshot_test",
+cc_defaults {
+    name: "libsnapshot_test_defaults",
     defaults: ["libsnapshot_defaults"],
     srcs: [
         "partition_cow_creator_test.cpp",
@@ -173,10 +173,7 @@ cc_test {
         "android.hardware.boot@1.1",
         "libbinder",
         "libcrypto",
-        "libfs_mgr",
-        "libgsi",
         "libhidlbase",
-        "liblp",
         "libprotobuf-cpp-lite",
         "libsparse",
         "libutils",
@@ -186,14 +183,36 @@ cc_test {
         "libutilscallstack",
     ],
     static_libs: [
+        "libfs_mgr",
+        "libgsi",
         "libgmock",
+        "liblp",
         "libsnapshot",
         "libsnapshot_test_helpers",
     ],
     header_libs: [
         "libstorage_literals_headers",
     ],
+    test_suites: [
+        "vts-core",
+        "device-tests"
+    ],
+    test_min_api_level: 29,
+    auto_gen_config: true,
     require_root: true,
+}
+
+cc_test {
+    name: "vts_libsnapshot_test",
+    defaults: ["libsnapshot_test_defaults"],
+}
+
+cc_test {
+    name: "vts_libsnapshot_test_presubmit",
+    defaults: ["libsnapshot_test_defaults"],
+    cppflags: [
+        "-DSKIP_TEST_IN_PRESUBMIT",
+    ],
 }
 
 cc_binary {
