@@ -891,6 +891,23 @@ source none0       swap   defaults      keydirectory=/dir/key
     EXPECT_EQ("/dir/key", entry->metadata_key_dir);
 }
 
+TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MetadataCipher) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+source none0       swap   defaults      keydirectory=/dir/key,metadata_cipher=adiantum
+)fs";
+
+    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
+
+    Fstab fstab;
+    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
+    ASSERT_EQ(1U, fstab.size());
+
+    auto entry = fstab.begin();
+    EXPECT_EQ("adiantum", entry->metadata_cipher);
+}
+
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_SysfsPath) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);

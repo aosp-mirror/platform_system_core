@@ -32,6 +32,10 @@ on early-init
     # cgroup for system_server and surfaceflinger
     mkdir /dev/memcg/system 0550 system system
 
+    # symlink the Android specific /dev/tun to Linux expected /dev/net/tun
+    mkdir /dev/net 0755 root root
+    symlink ../tun /dev/net/tun
+
     # set RLIMIT_NICE to allow priorities from 19 to -20
     setrlimit nice 40 40
 
@@ -68,19 +72,6 @@ on early-init
     # These must already exist by the time boringssl_self_test32 / boringssl_self_test64 run.
     mkdir /dev/boringssl 0755 root root
     mkdir /dev/boringssl/selftest 0755 root root
-
-    # Mount binderfs
-    mkdir /dev/binderfs
-    mount binder binder /dev/binderfs stats=global
-    chmod 0755 /dev/binderfs
-
-    symlink /dev/binderfs/binder /dev/binder
-    symlink /dev/binderfs/hwbinder /dev/hwbinder
-    symlink /dev/binderfs/vndbinder /dev/vndbinder
-
-    chmod 0666 /dev/binderfs/hwbinder
-    chmod 0666 /dev/binderfs/binder
-    chmod 0666 /dev/binderfs/vndbinder
 
 # Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
 on early-init && property:ro.product.cpu.abilist32=*
