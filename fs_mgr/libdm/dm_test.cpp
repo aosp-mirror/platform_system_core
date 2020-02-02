@@ -533,7 +533,9 @@ TEST(libdm, DefaultKeyArgs) {
     if (is_legacy) {
         ASSERT_EQ(target.GetParameterString(), "AES-256-XTS abcdef0123456789 /dev/loop0 0");
     } else {
-        ASSERT_EQ(target.GetParameterString(), "AES-256-XTS abcdef0123456789 0 /dev/loop0 0");
+        ASSERT_EQ(target.GetParameterString(),
+                  "AES-256-XTS abcdef0123456789 0 /dev/loop0 0 3 allow_discards sector_size:4096 "
+                  "iv_large_sectors");
     }
 }
 
