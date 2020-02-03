@@ -725,6 +725,12 @@ on post-fs-data
 
     init_user0
 
+    # Allow apexd to snapshot and restore device encrypted apex data in the case
+    # of a rollback. This should be done immediately after DE_user data keys
+    # are loaded. APEXes should not access this data until this has been
+    # completed.
+    exec_start apexd-snapshotde
+
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
 
