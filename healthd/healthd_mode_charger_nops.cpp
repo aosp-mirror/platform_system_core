@@ -20,10 +20,10 @@
 
 #include "charger_utils.h"
 
-using android::hardware::health::GetPassthroughHealth;
+using android::hardware::health::GetHealthServiceOrDefault;
 using android::hardware::health::V2_1::implementation::HalHealthLoop;
 
 int healthd_charger_nops(int /* argc */, char** /* argv */) {
-    HalHealthLoop charger("charger", GetPassthroughHealth());
+    HalHealthLoop charger("charger", GetHealthServiceOrDefault());
     return charger.StartLoop();
 }
