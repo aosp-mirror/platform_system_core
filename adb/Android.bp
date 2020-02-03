@@ -160,6 +160,7 @@ cc_library {
     // libadbconnection_client doesn't need an embedded build number.
     use_version_lib: false,
 
+    version_script: "adbconnection/libadbconnection_client.map.txt",
     stubs: {
         symbol_file: "adbconnection/libadbconnection_client.map.txt",
         versions: ["1"],
