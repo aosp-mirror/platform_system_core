@@ -112,7 +112,9 @@ bool MergeCmdHandler(int argc, char** argv) {
 
     auto state = SnapshotManager::New()->InitiateMergeAndWait();
 
-    if (state == UpdateState::None) {
+    // We could wind up in the Unverified state if the device rolled back or
+    // hasn't fully rebooted. Ignore this.
+    if (state == UpdateState::None || state == UpdateState::Unverified) {
         return true;
     }
     if (state == UpdateState::MergeCompleted) {
