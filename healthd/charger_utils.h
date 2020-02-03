@@ -21,7 +21,9 @@
 namespace android {
 namespace hardware {
 namespace health {
-sp<V2_1::IHealth> GetPassthroughHealth();
+// Return health HAL service. If it is not supported on the device (with
+// VINTF checks), return a default passthrough implementation.
+sp<V2_1::IHealth> GetHealthServiceOrDefault();
 }  // namespace health
 }  // namespace hardware
 }  // namespace android
