@@ -54,29 +54,32 @@ filegroup {
 }
 
 cc_defaults {
-    name: "libdm_defaults",
+    name: "libdm_test_defaults",
     defaults: ["fs_mgr_defaults"],
     static_libs: [
         "libdm",
+    ],
+    shared_libs: [
         "libbase",
         "libext2_uuid",
         "libfs_mgr",
         "liblog",
     ],
     srcs: [":libdm_test_srcs"],
+    auto_gen_config: true,
+    require_root: true,
 }
 
 cc_test {
     name: "libdm_test",
-    defaults: ["libdm_defaults"],
+    defaults: ["libdm_test_defaults"],
+    test_suites: ["device-tests"],
 }
 
 cc_test {
     name: "vts_libdm_test",
-    defaults: ["libdm_defaults"],
+    defaults: ["libdm_test_defaults"],
     test_suites: ["vts-core"],
-    auto_gen_config: true,
-    require_root: true,
     test_min_api_level: 29,
 }
 
