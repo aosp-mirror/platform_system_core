@@ -1,2 +1,2 @@
 on property:sys.boot_completed=1
-    exec_background - root root -- /system/bin/snapshotctl merge --logcat
+    exec_background - root root -- /system/bin/snapshotctl merge --logcat --log-to-file

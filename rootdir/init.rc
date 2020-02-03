@@ -600,6 +600,7 @@ on post-fs-data
     mkdir /data/misc/installd 0700 root root
     mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
+    mkdir /data/misc/snapshotctl_log 0770 root root
 
     mkdir /data/preloads 0775 system system encryption=None
 

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <functional>
+#include <iostream>
 #include <string>
 
 #include <android-base/macros.h>
@@ -119,6 +120,10 @@ Return InitializeCow(const std::string& device);
 // Note that rename() is an atomic operation. This function may not work properly if there
 // is an open fd to |path|, because that fd has an old view of the file.
 bool WriteStringToFileAtomic(const std::string& content, const std::string& path);
+
+// Writes current time to a given stream.
+struct Now {};
+std::ostream& operator<<(std::ostream& os, const Now&);
 
 }  // namespace snapshot
 }  // namespace android

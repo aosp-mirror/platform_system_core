@@ -15,6 +15,10 @@
 #include "utility.h"
 
 #include <errno.h>
+#include <time.h>
+
+#include <iomanip>
+#include <sstream>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -153,6 +157,13 @@ bool WriteStringToFileAtomic(const std::string& content, const std::string& path
         return false;
     }
     return true;
+}
+
+std::ostream& operator<<(std::ostream& os, const Now&) {
+    struct tm now;
+    time_t t = time(nullptr);
+    localtime_r(&t, &now);
+    return os << std::put_time(&now, "%Y%m%d-%H%M%S");
 }
 
 }  // namespace snapshot
