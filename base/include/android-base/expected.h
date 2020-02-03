@@ -366,16 +366,6 @@ class _NODISCARD_ expected {
   template<class T1, class E1, class T2, class E2>
   friend constexpr bool operator!=(const expected<T1, E1>& x, const expected<T2, E2>& y);
 
-  // comparison with T
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator==(const expected<T1, E1>&, const T2&);
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator==(const T2&, const expected<T1, E1>&);
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator!=(const expected<T1, E1>&, const T2&);
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator!=(const T2&, const expected<T1, E1>&);
-
   // Comparison with unexpected<E>
   template<class T1, class E1, class E2>
   friend constexpr bool operator==(const expected<T1, E1>&, const unexpected<E2>&);
@@ -408,24 +398,6 @@ constexpr bool operator==(const expected<T1, E1>& x, const expected<T2, E2>& y) 
 template<class T1, class E1, class T2, class E2>
 constexpr bool operator!=(const expected<T1, E1>& x, const expected<T2, E2>& y) {
   return !(x == y);
-}
-
-// comparison with T
-template<class T1, class E1, class T2>
-constexpr bool operator==(const expected<T1, E1>& x, const T2& y) {
-  return x.has_value() && (*x == y);
-}
-template<class T1, class E1, class T2>
-constexpr bool operator==(const T2& x, const expected<T1, E1>& y) {
-  return y.has_value() && (x == *y);
-}
-template<class T1, class E1, class T2>
-constexpr bool operator!=(const expected<T1, E1>& x, const T2& y) {
-  return !x.has_value() || (*x != y);
-}
-template<class T1, class E1, class T2>
-constexpr bool operator!=(const T2& x, const expected<T1, E1>& y) {
-  return !y.has_value() || (x != *y);
 }
 
 // Comparison with unexpected<E>
