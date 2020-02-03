@@ -1709,6 +1709,8 @@ static UpdateState UpdateStateFromString(const std::string& contents) {
         return UpdateState::MergeNeedsReboot;
     } else if (contents == "merge-failed") {
         return UpdateState::MergeFailed;
+    } else if (contents == "cancelled") {
+        return UpdateState::Cancelled;
     } else {
         LOG(ERROR) << "Unknown merge state in update state file: \"" << contents << "\"";
         return UpdateState::None;
@@ -1731,6 +1733,8 @@ std::ostream& operator<<(std::ostream& os, UpdateState state) {
             return os << "merge-needs-reboot";
         case UpdateState::MergeFailed:
             return os << "merge-failed";
+        case UpdateState::Cancelled:
+            return os << "cancelled";
         default:
             LOG(ERROR) << "Unknown update state: " << static_cast<uint32_t>(state);
             return os;
