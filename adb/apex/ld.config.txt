@@ -5,16 +5,24 @@
 dir.adbd = /apex/com.android.adbd/bin/
 
 [adbd]
-additional.namespaces = platform,art
+additional.namespaces = apex,platform,art
 
 namespace.default.isolated = true
-namespace.default.search.paths = /apex/com.android.adbd/${LIB}
-namespace.default.asan.search.paths = /apex/com.android.adbd/${LIB}
 namespace.default.permitted.paths = /system/${LIB}
 namespace.default.asan.permitted.paths = /system/${LIB}
-namespace.default.links = art,platform
+namespace.default.links = apex,art,platform
+namespace.default.link.apex.shared_libs = libcrypto.so
 namespace.default.link.art.shared_libs = libadbconnection_server.so
-namespace.default.link.platform.shared_libs = libc.so:libdl.so:libm.so:libclang_rt.hwasan-aarch64-android.so
+
+# libcrypto.so in the APEX might be a symlink to /system, for APEXes bundled with the system image.
+# The dynamic linker works off of realpath, so we need to permit loading libcrypto.so from /system.
+namespace.default.link.platform.shared_libs = libc.so:libdl.so:libm.so:libclang_rt.hwasan-aarch64-android.so:liblog.so:libadbd_auth.so:libcrypto.so
+
+namespace.apex.isolated = true
+namespace.apex.search.paths = /apex/com.android.adbd/${LIB}
+namespace.apex.asan.search.paths = /apex/com.android.adbd/${LIB}
+namespace.apex.links = platform
+namespace.apex.link.platform.allow_all_shared_libs = true
 
 ###############################################################################
 # "art" APEX namespace: used for libadbdconnection_server
