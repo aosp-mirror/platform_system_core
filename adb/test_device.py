@@ -81,6 +81,13 @@ class DeviceTest(unittest.TestCase):
         self.device = adb.get_device()
 
 
+class AbbTest(DeviceTest):
+    def test_smoke(self):
+        result = subprocess.run(['adb', 'abb'], capture_output=True)
+        self.assertEqual(1, result.returncode)
+        expected_output = b"cmd: No service specified; use -l to list all services\n"
+        self.assertEqual(expected_output, result.stderr)
+
 class ForwardReverseTest(DeviceTest):
     def _test_no_rebind(self, description, direction_list, direction,
                        direction_no_rebind, direction_remove_all):
