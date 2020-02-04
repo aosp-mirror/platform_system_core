@@ -2,6 +2,9 @@
   "presubmit": [
     {
       "name": "libdm_test"
+    },
+    {
+      "name": "liblp_test"
     }
   ]
 }
