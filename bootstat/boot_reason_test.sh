@@ -230,16 +230,16 @@ wait_for_screen() {
       if [ -n "`get_property sys.boot.reason`" ]
       then
         vals=`get_property |
-              sed -n 's/[[]sys[.]\(boot_completed\|bootstat.first_boot_completed\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
-        if [ "${vals}" = "`echo boot_completed=1 ; echo bootstat.first_boot_completed=1`" ]
-        then
-          sleep 1
-          break
-        fi
-        if [ "${vals}" = "`echo bootstat.first_boot_completed=1 ; echo boot_completed=1`" ]
-        then
-          sleep 1
-          break
+              sed -n 's/[[]sys[.]\(boot_completed\|logbootcomplete\|bootstat[.]first_boot_completed\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
+        if [ X"${vals}" != X"${vals##*boot_completed=1}" ]; then
+          if [ X"${vals}" != X"${vals##*logbootcomple=1}" ]; then
+            sleep 1
+            break
+          fi
+          if [ X"${vals}" != X"${vals##*bootstat.first_boot_completed=1}" ]; then
+            sleep 1
+            break
+          fi
         fi
       fi
     fi
