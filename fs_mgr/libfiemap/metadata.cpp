@@ -39,7 +39,13 @@ std::string GetMetadataFile(const std::string& metadata_dir) {
 
 bool MetadataExists(const std::string& metadata_dir) {
     auto metadata_file = GetMetadataFile(metadata_dir);
-    return access(metadata_file.c_str(), F_OK) == 0;
+    if (access(metadata_file.c_str(), F_OK)) {
+        if (errno != ENOENT) {
+            PLOG(ERROR) << "Access " << metadata_file << " failed:";
+        }
+        return false;
+    }
+    return true;
 }
 
 std::unique_ptr<LpMetadata> OpenMetadata(const std::string& metadata_dir) {
@@ -61,7 +67,7 @@ std::unique_ptr<MetadataBuilder> OpenOrCreateMetadata(const std::string& metadat
     std::unique_ptr<MetadataBuilder> builder;
     if (access(metadata_file.c_str(), R_OK)) {
         if (errno != ENOENT) {
-            PLOG(ERROR) << "access " << metadata_file << " failed:";
+            PLOG(ERROR) << "Access " << metadata_file << " failed:";
             return nullptr;
         }
 
@@ -112,7 +118,12 @@ bool SaveMetadata(MetadataBuilder* builder, const std::string& metadata_dir) {
 
 bool RemoveAllMetadata(const std::string& dir) {
     auto metadata_file = GetMetadataFile(dir);
-    return android::base::RemoveFileIfExists(metadata_file);
+    std::string err;
+    if (!android::base::RemoveFileIfExists(metadata_file, &err)) {
+        LOG(ERROR) << "Could not remove metadata file: " << err;
+        return false;
+    }
+    return true;
 }
 
 bool FillPartitionExtents(MetadataBuilder* builder, Partition* partition, SplitFiemap* file,
