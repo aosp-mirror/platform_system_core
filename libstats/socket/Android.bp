@@ -92,5 +92,5 @@ cc_test {
         "liblog",
         "libutils",
     ],
-    test_suites: ["device_tests"],
+    test_suites: ["device-tests"],
 }
