@@ -104,4 +104,34 @@ cc_test {
     srcs: [
         "image_test.cpp",
     ],
+    test_suites: ["device-tests"],
+    auto_gen_config: true,
+    require_root: true,
+}
+
+/* BUG(148874852) temporary test */
+cc_test {
+    name: "fiemap_image_test_presubmit",
+    cppflags: [
+        "-DSKIP_TEST_IN_PRESUBMIT",
+    ],
+    static_libs: [
+        "libdm",
+        "libext4_utils",
+        "libfs_mgr",
+        "liblp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcrypto",
+        "libcrypto_utils",
+        "libcutils",
+        "liblog",
+    ],
+    srcs: [
+        "image_test.cpp",
+    ],
+    test_suites: ["device-tests"],
+    auto_gen_config: true,
+    require_root: true,
 }
