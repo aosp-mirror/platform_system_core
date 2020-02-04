@@ -252,7 +252,7 @@ bool ImageManager::DeleteBackingImage(const std::string& name) {
     // For dm-linear devices sitting on top of /data, we cannot risk deleting
     // the file. The underlying blocks could be reallocated by the filesystem.
     if (IsImageMapped(name)) {
-        LOG(ERROR) << "Backing image " << name << " is currently mapped to a block device";
+        LOG(ERROR) << "Cannot delete backing image " << name << " because mapped to a block device";
         return false;
     }
 
