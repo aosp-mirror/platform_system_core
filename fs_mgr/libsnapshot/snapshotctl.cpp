@@ -27,6 +27,8 @@
 #include <libsnapshot/snapshot.h>
 #include "utility.h"
 
+#include "utility.h"
+
 using namespace std::string_literals;
 
 int Usage() {
