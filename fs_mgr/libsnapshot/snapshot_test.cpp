@@ -335,6 +335,7 @@ class SnapshotTest : public ::testing::Test {
         return AssertionSuccess();
     }
 
+    static constexpr std::chrono::milliseconds snapshot_timeout_ = 5s;
     bool is_virtual_ab_;
     DeviceMapper& dm_;
     std::unique_ptr<SnapshotManager::LockedFile> lock_;
@@ -511,7 +512,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     ASSERT_TRUE(AcquireLock());
 
@@ -540,7 +541,7 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     ASSERT_TRUE(AcquireLock());
 
@@ -567,7 +568,7 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
     ASSERT_TRUE(init->InitiateMerge());
 
     // Now, reflash super. Note that we haven't called ProcessUpdateState, so the
@@ -577,7 +578,7 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     FormatFakeSuper();
     ASSERT_TRUE(CreatePartition("test_partition_b", kDeviceSize));
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Because the status is Merging, we must call ProcessUpdateState, which should
     // detect a cancelled update.
@@ -1012,7 +1013,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Check that the target partitions have the same content.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1140,7 +1141,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Check that the target partitions have the same content.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1152,7 +1153,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_a"));
     ASSERT_NE(init, nullptr);
     ASSERT_FALSE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Assert that the source partitions aren't affected.
     for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
@@ -1189,7 +1190,7 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
     init = nullptr;
 
     // Initiate the merge and wait for it to be completed.
@@ -1325,7 +1326,7 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     // won't be set.
     auto init = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Keep an open handle to the cow device. This should cause the merge to
     // be incomplete.
@@ -1341,7 +1342,7 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     ASSERT_TRUE(UnmapAll());
 
     // init does first stage mount again.
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // sys_b should be mapped as a dm-linear device directly.
     ASSERT_FALSE(sm->IsSnapshotDevice("sys_b", nullptr));
@@ -1427,7 +1428,7 @@ TEST_F(SnapshotUpdateTest, MergeInRecovery) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
     init = nullptr;
 
     // Initiate the merge and then immediately stop it to simulate a reboot.
@@ -1532,7 +1533,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
     auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Check that the target partition have the same content. Hashtree and FEC extents
     // should be accounted for.
@@ -1584,7 +1585,7 @@ TEST_F(SnapshotUpdateTest, WaitForMerge) {
     {
         auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
         ASSERT_NE(nullptr, init);
-        ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super"));
+        ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
     }
 
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
@@ -1630,7 +1631,7 @@ class FlashAfterUpdateTest : public SnapshotUpdateTest,
   public:
     AssertionResult InitiateMerge(const std::string& slot_suffix) {
         auto sm = SnapshotManager::New(new TestDeviceInfo(fake_super, slot_suffix));
-        if (!sm->CreateLogicalAndSnapshotPartitions("super")) {
+        if (!sm->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_)) {
             return AssertionFailure() << "Cannot CreateLogicalAndSnapshotPartitions";
         }
         if (!sm->InitiateMerge()) {
@@ -1712,7 +1713,7 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
     if (flashed_slot && after_merge) {
         ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     }
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", 1s));
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Check that the target partitions have the same content.
     for (const auto& name : {"sys", "vnd"}) {

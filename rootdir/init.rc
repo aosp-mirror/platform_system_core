@@ -165,6 +165,19 @@ on init
     chmod 0770 /config/sdcardfs
     chown system package_info /config/sdcardfs
 
+    # Mount binderfs
+    mkdir /dev/binderfs
+    mount binder binder /dev/binderfs stats=global
+    chmod 0755 /dev/binderfs
+
+    symlink /dev/binderfs/binder /dev/binder
+    symlink /dev/binderfs/hwbinder /dev/hwbinder
+    symlink /dev/binderfs/vndbinder /dev/vndbinder
+
+    chmod 0666 /dev/binderfs/hwbinder
+    chmod 0666 /dev/binderfs/binder
+    chmod 0666 /dev/binderfs/vndbinder
+
     mkdir /mnt/secure 0700 root root
     mkdir /mnt/secure/asec 0700 root root
     mkdir /mnt/asec 0755 root system
@@ -600,6 +613,7 @@ on post-fs-data
     mkdir /data/misc/installd 0700 root root
     mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
+    mkdir /data/misc/snapshotctl_log 0770 root root
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -680,10 +694,6 @@ on post-fs-data
     mkdir /data/user/0 0700 system system encryption=None
     mount none /data/data /data/user/0 bind rec
 
-    # Special-case /data/media/obb per b/64566063
-    mkdir /data/media 0770 media_rw media_rw encryption=None
-    mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
-
     # A tmpfs directory, which will contain all apps CE DE data directory that
     # bind mount from the original source.
     chown root root /data_mirror
@@ -720,6 +730,11 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready
     perform_apex_config
+
+    # Special-case /data/media/obb per b/64566063
+    mkdir /data/media 0770 media_rw media_rw encryption=None
+    exec - media_rw media_rw -- /system/bin/chattr +F /data/media
+    mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
 
     exec_start derive_sdk
 
