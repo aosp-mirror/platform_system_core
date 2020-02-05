@@ -477,7 +477,7 @@ void SelinuxInitialize() {
         }
     }
 
-    if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result) {
+    if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result.ok()) {
         LOG(FATAL) << "Unable to write to /sys/fs/selinux/checkreqprot: " << result.error();
     }
 }
