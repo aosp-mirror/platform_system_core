@@ -45,7 +45,7 @@ cc_library {
     stubs: {
         symbol_file: "libstatssocket.map.txt",
         versions: [
-            "1",
+            "30",
         ],
     }
 }
