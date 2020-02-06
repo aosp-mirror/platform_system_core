@@ -156,11 +156,11 @@ class Error {
   Error& operator=(const Error&) = delete;
   Error& operator=(Error&&) = delete;
 
-  template <typename... Args>
-  friend Error Errorf(const char* fmt, const Args&... args);
+  template <typename T, typename... Args>
+  friend Error ErrorfImpl(const T&& fmt, const Args&... args);
 
-  template <typename... Args>
-  friend Error ErrnoErrorf(const char* fmt, const Args&... args);
+  template <typename T, typename... Args>
+  friend Error ErrnoErrorfImpl(const T&& fmt, const Args&... args);
 
  private:
   Error(bool append_errno, int errno_to_append, const std::string& message)
@@ -191,15 +191,23 @@ inline int ErrorCode(int code, T&& t, const Args&... args) {
   return ErrorCode(code, args...);
 }
 
-template <typename... Args>
-inline Error Errorf(const char* fmt, const Args&... args) {
+// TODO(tomcherry): Remove this once we've removed all `using android::base::Errorf` and `using
+// android::base::ErrnoErrorf` lines.
+enum Errorf {};
+enum ErrnoErrorf {};
+
+template <typename T, typename... Args>
+inline Error ErrorfImpl(const T&& fmt, const Args&... args) {
   return Error(false, ErrorCode(0, args...), fmt::format(fmt, args...));
 }
 
-template <typename... Args>
-inline Error ErrnoErrorf(const char* fmt, const Args&... args) {
+template <typename T, typename... Args>
+inline Error ErrnoErrorfImpl(const T&& fmt, const Args&... args) {
   return Error(true, errno, fmt::format(fmt, args...));
 }
+
+#define Errorf(fmt, ...) android::base::ErrorfImpl(FMT_STRING(fmt), ##__VA_ARGS__)
+#define ErrnoErrorf(fmt, ...) android::base::ErrnoErrorfImpl(FMT_STRING(fmt), ##__VA_ARGS__)
 
 template <typename T>
 using Result = android::base::expected<T, ResultError>;
