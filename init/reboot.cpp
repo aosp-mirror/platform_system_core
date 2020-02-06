@@ -731,9 +731,6 @@ static Result<void> UnmountAllApexes() {
 
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
-    boot_clock::time_point now = boot_clock::now();
-    SetProperty("sys.init.userspace_reboot.last_started",
-                std::to_string(now.time_since_epoch().count()));
     auto guard = android::base::make_scope_guard([] {
         // Leave shutdown so that we can handle a full reboot.
         LeaveShutdown();

@@ -1058,4 +1058,4 @@ on userspace-reboot-resume
   trigger boot
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
-  finish_userspace_reboot
+  setprop sys.init.userspace_reboot.in_progress ""
