@@ -362,7 +362,7 @@ TEST(result, error_with_fmt) {
   result = Errorf("{} {}!", std::string("hello"), std::string("world"));
   EXPECT_EQ("hello world!", result.error().message());
 
-  result = Errorf("{h} {w}!", fmt::arg("w", "world"), fmt::arg("h", "hello"));
+  result = Errorf("{1} {0}!", "world", "hello");
   EXPECT_EQ("hello world!", result.error().message());
 
   result = Errorf("hello world!");
