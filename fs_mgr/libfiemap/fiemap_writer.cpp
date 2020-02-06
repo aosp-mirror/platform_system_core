@@ -526,11 +526,7 @@ static bool IsValidExtent(const fiemap_extent* extent, std::string_view file_pat
 }
 
 static bool IsLastExtent(const fiemap_extent* extent) {
-    if (!(extent->fe_flags & FIEMAP_EXTENT_LAST)) {
-        LOG(ERROR) << "Extents are being received out-of-order";
-        return false;
-    }
-    return true;
+    return !!(extent->fe_flags & FIEMAP_EXTENT_LAST);
 }
 
 static bool FiemapToExtents(struct fiemap* fiemap, std::vector<struct fiemap_extent>* extents,
@@ -552,7 +548,10 @@ static bool FiemapToExtents(struct fiemap* fiemap, std::vector<struct fiemap_ext
         fiemap_extent* next = &fiemap->fm_extents[i];
 
         // Make sure extents are returned in order
-        if (next != last_extent && IsLastExtent(next)) return false;
+        if (next != last_extent && IsLastExtent(next)) {
+            LOG(ERROR) << "Extents are being received out-of-order";
+            return false;
+        }
 
         // Check if extent's flags are valid
         if (!IsValidExtent(next, file_path)) return false;
@@ -592,8 +591,7 @@ static bool ReadFiemap(int file_fd, const std::string& file_path,
         return false;
     }
 
-    uint64_t fiemap_size =
-            sizeof(struct fiemap_extent) + num_extents * sizeof(struct fiemap_extent);
+    uint64_t fiemap_size = sizeof(struct fiemap) + num_extents * sizeof(struct fiemap_extent);
     auto buffer = std::unique_ptr<void, decltype(&free)>(calloc(1, fiemap_size), free);
     if (buffer == nullptr) {
         LOG(ERROR) << "Failed to allocate memory for fiemap";

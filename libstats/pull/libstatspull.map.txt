@@ -1,0 +1,13 @@
+LIBSTATSPULL {
+    global:
+        AStatsManager_PullAtomMetadata_obtain; # apex # introduced=30
+        AStatsManager_PullAtomMetadata_release; # apex # introduced=30
+        AStatsManager_PullAtomMetadata_setCoolDownNs; # apex # introduced=30
+        AStatsManager_PullAtomMetadata_setTimeoutNs; # apex # introduced=30
+        AStatsManager_PullAtomMetadata_setAdditiveFields; # apex # introduced=30
+        AStatsEventList_addStatsEvent; # apex # introduced=30
+        AStatsManager_registerPullAtomCallback; # apex # introduced=30
+        AStatsManager_unregisterPullAtomCallback; # apex # introduced=30
+    local:
+        *;
+};
