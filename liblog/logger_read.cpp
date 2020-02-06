@@ -109,8 +109,8 @@ int android_logger_list_read(struct logger_list* logger_list, struct log_msg* lo
     return ret;
   }
 
-  if (ret > (int)sizeof(*log_msg)) {
-    ret = sizeof(*log_msg);
+  if (ret > LOGGER_ENTRY_MAX_LEN) {
+    ret = LOGGER_ENTRY_MAX_LEN;
   }
 
   if (ret < static_cast<int>(sizeof(log_msg->entry))) {
@@ -118,13 +118,15 @@ int android_logger_list_read(struct logger_list* logger_list, struct log_msg* lo
   }
 
   if (log_msg->entry.hdr_size < sizeof(log_msg->entry) ||
-      log_msg->entry.hdr_size >= sizeof(struct log_msg) - sizeof(log_msg->entry)) {
+      log_msg->entry.hdr_size >= LOGGER_ENTRY_MAX_LEN - sizeof(log_msg->entry)) {
     return -EINVAL;
   }
 
   if (log_msg->entry.len > ret - log_msg->entry.hdr_size) {
     return -EINVAL;
   }
+
+  log_msg->buf[log_msg->entry.len + log_msg->entry.hdr_size] = '\0';
 
   return ret;
 }
