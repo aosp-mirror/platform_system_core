@@ -204,5 +204,28 @@ inline Error ErrnoErrorf(const char* fmt, const Args&... args) {
 template <typename T>
 using Result = android::base::expected<T, ResultError>;
 
+// Macros for testing the results of functions that return android::base::Result.
+// These also work with base::android::expected.
+
+#define CHECK_RESULT_OK(stmt)       \
+  do {                              \
+    const auto& tmp = (stmt);       \
+    CHECK(tmp.ok()) << tmp.error(); \
+  } while (0)
+
+#define ASSERT_RESULT_OK(stmt)            \
+  do {                                    \
+    const auto& tmp = (stmt);             \
+    ASSERT_TRUE(tmp.ok()) << tmp.error(); \
+  } while (0)
+
+#define EXPECT_RESULT_OK(stmt)            \
+  do {                                    \
+    auto tmp = (stmt);                    \
+    EXPECT_TRUE(tmp.ok()) << tmp.error(); \
+  } while (0)
+
+// TODO: Maybe add RETURN_IF_ERROR() and ASSIGN_OR_RETURN()
+
 }  // namespace base
 }  // namespace android
