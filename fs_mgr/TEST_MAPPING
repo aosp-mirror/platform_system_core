@@ -11,6 +11,9 @@
     },
     {
       "name": "fiemap_writer_test"
+    },
+    {
+      "name": "vts_libsnapshot_test_presubmit"
     }
   ]
 }
