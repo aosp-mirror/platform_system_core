@@ -331,6 +331,7 @@ class _NODISCARD_ expected {
 
   constexpr explicit operator bool() const noexcept { return has_value(); }
   constexpr bool has_value() const noexcept { return var_.index() == 0; }
+  constexpr bool ok() const noexcept { return has_value(); }
 
   constexpr const T& value() const& { return std::get<T>(var_); }
   constexpr T& value() & { return std::get<T>(var_); }
@@ -557,6 +558,7 @@ class _NODISCARD_ expected<void, E> {
   // observers
   constexpr explicit operator bool() const noexcept { return has_value(); }
   constexpr bool has_value() const noexcept { return var_.index() == 0; }
+  constexpr bool ok() const noexcept { return has_value(); }
 
   constexpr void value() const& { if (!has_value()) std::get<0>(var_); }
 
