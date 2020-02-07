@@ -29,7 +29,7 @@ void TestRlimitSuccess(std::vector<std::string> input,
     ASSERT_EQ(4U, input.size());
     auto result = ParseRlimit(input);
 
-    ASSERT_TRUE(result) << "input: " << input[1];
+    ASSERT_TRUE(result.ok()) << "input: " << input[1];
     const auto& [resource, rlimit] = *result;
     const auto& [expected_resource, expected_rlimit] = expected_result;
     EXPECT_EQ(expected_resource, resource);
@@ -42,7 +42,7 @@ void TestRlimitFailure(std::vector<std::string> input, const std::string& expect
     ASSERT_EQ(4U, input.size());
     auto result = ParseRlimit(input);
 
-    ASSERT_FALSE(result) << "input: " << input[1];
+    ASSERT_FALSE(result.ok()) << "input: " << input[1];
     EXPECT_EQ(expected_result, result.error().message());
     EXPECT_EQ(0, result.error().code());
 }

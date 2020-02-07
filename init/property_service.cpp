@@ -153,7 +153,7 @@ static void SendPropertyChanged(const std::string& name, const std::string& valu
     changed_message->set_name(name);
     changed_message->set_value(value);
 
-    if (auto result = SendMessage(init_socket, property_msg); !result) {
+    if (auto result = SendMessage(init_socket, property_msg); !result.ok()) {
         LOG(ERROR) << "Failed to send property changed message: " << result.error();
     }
 }
@@ -166,7 +166,7 @@ static uint32_t PropertySet(const std::string& name, const std::string& value, s
         return PROP_ERROR_INVALID_NAME;
     }
 
-    if (auto result = IsLegalPropertyValue(name, value); !result) {
+    if (auto result = IsLegalPropertyValue(name, value); !result.ok()) {
         *error = result.error().message();
         return PROP_ERROR_INVALID_VALUE;
     }
@@ -392,7 +392,7 @@ static uint32_t SendControlMessage(const std::string& msg, const std::string& na
         control_message->set_fd(fd);
     }
 
-    if (auto result = SendMessage(init_socket, property_msg); !result) {
+    if (auto result = SendMessage(init_socket, property_msg); !result.ok()) {
         // We've already released the fd above, so if we fail to send the message to init, we need
         // to manually free it here.
         if (fd != -1) {
@@ -670,7 +670,7 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
             std::string raw_filename(fn);
             auto expanded_filename = ExpandProps(raw_filename);
 
-            if (!expanded_filename) {
+            if (!expanded_filename.ok()) {
                 LOG(ERROR) << "Could not expand filename ': " << expanded_filename.error();
                 continue;
             }
@@ -726,7 +726,7 @@ static bool load_properties_from_file(const char* filename, const char* filter,
                                       std::map<std::string, std::string>* properties) {
     Timer t;
     auto file_contents = ReadFile(filename);
-    if (!file_contents) {
+    if (!file_contents.ok()) {
         PLOG(WARNING) << "Couldn't load property file '" << filename
                       << "': " << file_contents.error();
         return false;
@@ -1084,7 +1084,7 @@ void PropertyInit() {
 
 static void HandleInitSocket() {
     auto message = ReadMessage(init_socket);
-    if (!message) {
+    if (!message.ok()) {
         LOG(ERROR) << "Could not read message from init_dedicated_recv_socket: " << message.error();
         return;
     }
@@ -1123,21 +1123,22 @@ static void HandleInitSocket() {
 
 static void PropertyServiceThread() {
     Epoll epoll;
-    if (auto result = epoll.Open(); !result) {
+    if (auto result = epoll.Open(); !result.ok()) {
         LOG(FATAL) << result.error();
     }
 
-    if (auto result = epoll.RegisterHandler(property_set_fd, handle_property_set_fd); !result) {
+    if (auto result = epoll.RegisterHandler(property_set_fd, handle_property_set_fd);
+        !result.ok()) {
         LOG(FATAL) << result.error();
     }
 
-    if (auto result = epoll.RegisterHandler(init_socket, HandleInitSocket); !result) {
+    if (auto result = epoll.RegisterHandler(init_socket, HandleInitSocket); !result.ok()) {
         LOG(FATAL) << result.error();
     }
 
     while (true) {
         auto pending_functions = epoll.Wait(std::nullopt);
-        if (!pending_functions) {
+        if (!pending_functions.ok()) {
             LOG(ERROR) << pending_functions.error();
         } else {
             for (const auto& function : *pending_functions) {
@@ -1159,7 +1160,8 @@ void StartPropertyService(int* epoll_socket) {
     accept_messages = true;
 
     if (auto result = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-                                   false, 0666, 0, 0, {})) {
+                                   false, 0666, 0, 0, {});
+        result.ok()) {
         property_set_fd = *result;
     } else {
         LOG(FATAL) << "start_property_service socket creation failed: " << result.error();
