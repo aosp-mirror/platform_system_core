@@ -144,6 +144,14 @@ on init
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
 
+    # Create an stune group for NNAPI HAL processes
+    mkdir /dev/stune/nnapi-hal
+    chown system system /dev/stune/nnapi-hal
+    chown system system /dev/stune/nnapi-hal/tasks
+    chmod 0664 /dev/stune/nnapi-hal/tasks
+    write /dev/stune/nnapi-hal/schedtune.boost 1
+    write /dev/stune/nnapi-hal/schedtune.prefer_idle 1
+
     # Create blkio group and apply initial settings.
     # This feature needs kernel to support it, and the
     # device's init.rc must actually set the correct values.
