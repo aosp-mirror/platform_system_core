@@ -22,6 +22,7 @@ namespace android {
 namespace snapshot {
 
 #ifdef LIBSNAPSHOT_USE_HAL
+using android::hardware::boot::V1_0::BoolResult;
 using android::hardware::boot::V1_0::CommandResult;
 #endif
 
