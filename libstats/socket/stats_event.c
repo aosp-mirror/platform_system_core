@@ -324,5 +324,5 @@ void AStatsEvent_build(AStatsEvent* event) {
 
 int AStatsEvent_write(AStatsEvent* event) {
     AStatsEvent_build(event);
-    return write_buffer_to_statsd(&event->buf, event->size, event->atomId);
+    return write_buffer_to_statsd(event->buf, event->size, event->atomId);
 }
