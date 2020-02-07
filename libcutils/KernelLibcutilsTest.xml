@@ -13,7 +13,7 @@
      See the License for the specific language governing permissions and
      limitations under the License.
 -->
-<configuration description="Runs libcutils_test_static.">
+<configuration description="Runs KernelLibcutilsTest.">
     <option name="test-suite-tag" value="apct" />
     <option name="test-suite-tag" value="apct-native" />
 
@@ -22,12 +22,12 @@
 
     <target_preparer class="com.android.tradefed.targetprep.PushFilePreparer">
         <option name="cleanup" value="true" />
-        <option name="push" value="libcutils_test_static->/data/local/tmp/libcutils_test_static" />
+        <option name="push" value="KernelLibcutilsTest->/data/local/tmp/KernelLibcutilsTest" />
     </target_preparer>
 
     <test class="com.android.tradefed.testtype.GTest" >
         <option name="native-test-device-path" value="/data/local/tmp" />
-        <option name="module-name" value="libcutils_test_static" />
+        <option name="module-name" value="KernelLibcutilsTest" />
         <option name="include-filter" value="*AshmemTest*" />
     </test>
 </configuration>
