@@ -25,7 +25,16 @@
 namespace android {
 namespace init {
 
-using ServiceInterfacesMap = std::map<std::string, std::set<android::FqInstance>>;
+// this is service name -> interface declaration
+//
+// So, for:
+//     service foo ..
+//         interface aidl baz
+//         interface android.hardware.foo@1.0 IFoo
+//
+// We have:
+//     foo -> { aidl/baz, android.hardware.foo@1.0/IFoo }
+using ServiceInterfacesMap = std::map<std::string, std::set<std::string>>;
 android::base::Result<ServiceInterfacesMap> GetOnDeviceServiceInterfacesMap();
 
 }  // namespace init
