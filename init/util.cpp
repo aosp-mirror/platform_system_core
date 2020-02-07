@@ -497,14 +497,14 @@ Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args) {
                 break;
             case 3:
                 uid = DecodeUid(args[3]);
-                if (!uid) {
+                if (!uid.ok()) {
                     return Error()
                            << "Unable to decode UID for '" << args[3] << "': " << uid.error();
                 }
                 break;
             case 4:
                 gid = DecodeUid(args[4]);
-                if (!gid) {
+                if (!gid.ok()) {
                     return Error()
                            << "Unable to decode GID for '" << args[4] << "': " << gid.error();
                 }

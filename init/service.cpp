@@ -106,7 +106,7 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
     c_strings.push_back(const_cast<char*>(args[0].data()));
     for (std::size_t i = 1; i < args.size(); ++i) {
         auto expanded_arg = ExpandProps(args[i]);
-        if (!expanded_arg) {
+        if (!expanded_arg.ok()) {
             LOG(FATAL) << args[0] << ": cannot expand arguments': " << expanded_arg.error();
         }
         expanded_args[i] = *expanded_arg;
@@ -232,7 +232,7 @@ void Service::SetProcessAttributesAndCaps() {
         }
     }
 
-    if (auto result = SetProcessAttributes(proc_attr_); !result) {
+    if (auto result = SetProcessAttributes(proc_attr_); !result.ok()) {
         LOG(FATAL) << "cannot set attribute for " << name_ << ": " << result.error();
     }
 
@@ -374,7 +374,7 @@ Result<void> Service::ExecStart() {
 
     flags_ |= SVC_ONESHOT;
 
-    if (auto result = Start(); !result) {
+    if (auto result = Start(); !result.ok()) {
         return result;
     }
 
@@ -449,7 +449,7 @@ Result<void> Service::Start() {
         scon = seclabel_;
     } else {
         auto result = ComputeContextFromExecutable(args_[0]);
-        if (!result) {
+        if (!result.ok()) {
             return result.error();
         }
         scon = *result;
@@ -469,7 +469,7 @@ Result<void> Service::Start() {
 
     std::vector<Descriptor> descriptors;
     for (const auto& socket : sockets_) {
-        if (auto result = socket.Create(scon)) {
+        if (auto result = socket.Create(scon); result.ok()) {
             descriptors.emplace_back(std::move(*result));
         } else {
             LOG(INFO) << "Could not create socket '" << socket.name << "': " << result.error();
@@ -477,7 +477,7 @@ Result<void> Service::Start() {
     }
 
     for (const auto& file : files_) {
-        if (auto result = file.Create()) {
+        if (auto result = file.Create(); result.ok()) {
             descriptors.emplace_back(std::move(*result));
         } else {
             LOG(INFO) << "Could not open file '" << file.name << "': " << result.error();
@@ -494,7 +494,7 @@ Result<void> Service::Start() {
     if (pid == 0) {
         umask(077);
 
-        if (auto result = EnterNamespaces(namespaces_, name_, pre_apexd_); !result) {
+        if (auto result = EnterNamespaces(namespaces_, name_, pre_apexd_); !result.ok()) {
             LOG(FATAL) << "Service '" << name_
                        << "' failed to set up namespaces: " << result.error();
         }
@@ -507,7 +507,7 @@ Result<void> Service::Start() {
             descriptor.Publish();
         }
 
-        if (auto result = WritePidToFiles(&writepid_files_); !result) {
+        if (auto result = WritePidToFiles(&writepid_files_); !result.ok()) {
             LOG(ERROR) << "failed to write pid to files: " << result.error();
         }
 
@@ -669,7 +669,7 @@ void Service::Restart() {
         StopOrReset(SVC_RESTART);
     } else if (!(flags_ & SVC_RESTARTING)) {
         /* Just start the service since it's not running. */
-        if (auto result = Start(); !result) {
+        if (auto result = Start(); !result.ok()) {
             LOG(ERROR) << "Could not restart '" << name_ << "': " << result.error();
         }
     } /* else: Service is restarting anyways. */
@@ -742,7 +742,7 @@ Result<std::unique_ptr<Service>> Service::MakeTemporaryOneshotService(
     Result<uid_t> uid = 0;
     if (command_arg > 3) {
         uid = DecodeUid(args[2]);
-        if (!uid) {
+        if (!uid.ok()) {
             return Error() << "Unable to decode UID for '" << args[2] << "': " << uid.error();
         }
     }
@@ -750,13 +750,13 @@ Result<std::unique_ptr<Service>> Service::MakeTemporaryOneshotService(
     std::vector<gid_t> supp_gids;
     if (command_arg > 4) {
         gid = DecodeUid(args[3]);
-        if (!gid) {
+        if (!gid.ok()) {
             return Error() << "Unable to decode GID for '" << args[3] << "': " << gid.error();
         }
         std::size_t nr_supp_gids = command_arg - 1 /* -- */ - 4 /* exec SECLABEL UID GID */;
         for (size_t i = 0; i < nr_supp_gids; ++i) {
             auto supp_gid = DecodeUid(args[4 + i]);
-            if (!supp_gid) {
+            if (!supp_gid.ok()) {
                 return Error() << "Unable to decode GID for '" << args[4 + i]
                                << "': " << supp_gid.error();
             }
