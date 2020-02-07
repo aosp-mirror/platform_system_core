@@ -33,7 +33,7 @@ TEST(util, ReadFile_ENOENT) {
     errno = 0;
     auto file_contents = ReadFile("/proc/does-not-exist");
     EXPECT_EQ(ENOENT, errno);
-    ASSERT_FALSE(file_contents);
+    ASSERT_FALSE(file_contents.ok());
     EXPECT_EQ("open() failed: No such file or directory", file_contents.error().message());
 }
 
@@ -41,10 +41,10 @@ TEST(util, ReadFileGroupWriteable) {
     std::string s("hello");
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
-    EXPECT_TRUE(WriteFile(tf.path, s)) << strerror(errno);
+    EXPECT_RESULT_OK(WriteFile(tf.path, s));
     EXPECT_NE(-1, fchmodat(AT_FDCWD, tf.path, 0620, AT_SYMLINK_NOFOLLOW)) << strerror(errno);
     auto file_contents = ReadFile(tf.path);
-    ASSERT_FALSE(file_contents) << strerror(errno);
+    ASSERT_FALSE(file_contents.ok()) << strerror(errno);
     EXPECT_EQ("Skipping insecure file", file_contents.error().message());
 }
 
@@ -52,10 +52,10 @@ TEST(util, ReadFileWorldWiteable) {
     std::string s("hello");
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
-    EXPECT_TRUE(WriteFile(tf.path, s)) << strerror(errno);
+    EXPECT_RESULT_OK(WriteFile(tf.path, s));
     EXPECT_NE(-1, fchmodat(AT_FDCWD, tf.path, 0602, AT_SYMLINK_NOFOLLOW)) << strerror(errno);
     auto file_contents = ReadFile(tf.path);
-    ASSERT_FALSE(file_contents) << strerror(errno);
+    ASSERT_FALSE(file_contents.ok());
     EXPECT_EQ("Skipping insecure file", file_contents.error().message());
 }
 
@@ -64,14 +64,14 @@ TEST(util, ReadFileSymbolicLink) {
     // lrw------- 1 root root 23 2008-12-31 19:00 default.prop -> system/etc/prop.default
     auto file_contents = ReadFile("/default.prop");
     EXPECT_EQ(ELOOP, errno);
-    ASSERT_FALSE(file_contents);
+    ASSERT_FALSE(file_contents.ok());
     EXPECT_EQ("open() failed: Too many symbolic links encountered",
               file_contents.error().message());
 }
 
 TEST(util, ReadFileSuccess) {
     auto file_contents = ReadFile("/proc/version");
-    ASSERT_TRUE(file_contents);
+    ASSERT_TRUE(file_contents.ok());
     EXPECT_GT(file_contents->length(), 6U);
     EXPECT_EQ('\n', file_contents->at(file_contents->length() - 1));
     (*file_contents)[5] = 0;
@@ -87,10 +87,10 @@ TEST(util, WriteFileBinary) {
 
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
-    EXPECT_TRUE(WriteFile(tf.path, contents)) << strerror(errno);
+    EXPECT_RESULT_OK(WriteFile(tf.path, contents));
 
     auto read_back_contents = ReadFile(tf.path);
-    ASSERT_TRUE(read_back_contents) << strerror(errno);
+    ASSERT_RESULT_OK(read_back_contents);
     EXPECT_EQ(contents, *read_back_contents);
     EXPECT_EQ(10u, read_back_contents->size());
 }
@@ -99,14 +99,15 @@ TEST(util, WriteFileNotExist) {
     std::string s("hello");
     TemporaryDir test_dir;
     std::string path = android::base::StringPrintf("%s/does-not-exist", test_dir.path);
-    EXPECT_TRUE(WriteFile(path, s));
+    EXPECT_RESULT_OK(WriteFile(path, s));
     auto file_contents = ReadFile(path);
-    ASSERT_TRUE(file_contents);
+    ASSERT_RESULT_OK(file_contents);
     EXPECT_EQ(s, *file_contents);
     struct stat sb;
     int fd = open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
     EXPECT_NE(-1, fd);
     EXPECT_EQ(0, fstat(fd, &sb));
+    EXPECT_EQ(0, close(fd));
     EXPECT_EQ((const unsigned int)(S_IRUSR | S_IWUSR), sb.st_mode & 0777);
     EXPECT_EQ(0, unlink(path.c_str()));
 }
@@ -114,27 +115,27 @@ TEST(util, WriteFileNotExist) {
 TEST(util, WriteFileExist) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
-    EXPECT_TRUE(WriteFile(tf.path, "1hello1")) << strerror(errno);
+    EXPECT_RESULT_OK(WriteFile(tf.path, "1hello1"));
     auto file_contents = ReadFile(tf.path);
-    ASSERT_TRUE(file_contents);
+    ASSERT_RESULT_OK(file_contents);
     EXPECT_EQ("1hello1", *file_contents);
-    EXPECT_TRUE(WriteFile(tf.path, "2ll2"));
+    EXPECT_RESULT_OK(WriteFile(tf.path, "2ll2"));
     file_contents = ReadFile(tf.path);
-    ASSERT_TRUE(file_contents);
+    ASSERT_RESULT_OK(file_contents);
     EXPECT_EQ("2ll2", *file_contents);
 }
 
 TEST(util, DecodeUid) {
     auto decoded_uid = DecodeUid("root");
-    EXPECT_TRUE(decoded_uid);
+    EXPECT_TRUE(decoded_uid.ok());
     EXPECT_EQ(0U, *decoded_uid);
 
     decoded_uid = DecodeUid("toot");
-    EXPECT_FALSE(decoded_uid);
+    EXPECT_FALSE(decoded_uid.ok());
     EXPECT_EQ("getpwnam failed: No such file or directory", decoded_uid.error().message());
 
     decoded_uid = DecodeUid("123");
-    EXPECT_TRUE(decoded_uid);
+    EXPECT_RESULT_OK(decoded_uid);
     EXPECT_EQ(123U, *decoded_uid);
 }
 
