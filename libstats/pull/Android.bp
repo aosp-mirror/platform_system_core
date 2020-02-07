@@ -23,7 +23,6 @@ cc_library_shared {
         include_dirs: ["frameworks/base/core/java"],
     },
     srcs: [
-        ":statsd_aidl",
         "stats_pull_atom_callback.cpp",
     ],
     cflags: [
@@ -36,6 +35,7 @@ cc_library_shared {
         "libbinder",
         "libstatssocket",
         "libservices",
+        "statsd-aidl-cpp",
     ],
     static_libs: [
         "liblog",
