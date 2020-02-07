@@ -180,7 +180,7 @@ static void TurnOffBacklight() {
         LOG(WARNING) << "cannot find blank_screen in TurnOffBacklight";
         return;
     }
-    if (auto result = service->Start(); !result) {
+    if (auto result = service->Start(); !result.ok()) {
         LOG(WARNING) << "Could not start blank_screen service: " << result.error();
     }
 }
@@ -591,14 +591,14 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
             // keep debugging tools until non critical ones are all gone.
             s->SetShutdownCritical();
         } else if (to_starts.count(s->name())) {
-            if (auto result = s->Start(); !result) {
+            if (auto result = s->Start(); !result.ok()) {
                 LOG(ERROR) << "Could not start shutdown 'to_start' service '" << s->name()
                            << "': " << result.error();
             }
             s->SetShutdownCritical();
         } else if (s->IsShutdownCritical()) {
             // Start shutdown critical service if not started.
-            if (auto result = s->Start(); !result) {
+            if (auto result = s->Start(); !result.ok()) {
                 LOG(ERROR) << "Could not start shutdown critical service '" << s->name()
                            << "': " << result.error();
             }
@@ -776,10 +776,10 @@ static Result<void> DoUserspaceReboot() {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
-    if (auto result = KillZramBackingDevice(); !result) {
+    if (auto result = KillZramBackingDevice(); !result.ok()) {
         return result;
     }
-    if (auto result = CallVdc("volume", "reset"); !result) {
+    if (auto result = CallVdc("volume", "reset"); !result.ok()) {
         return result;
     }
     if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */), 5s,
@@ -794,7 +794,7 @@ static Result<void> DoUserspaceReboot() {
         sync();
         LOG(INFO) << "sync() took " << sync_timer;
     }
-    if (auto result = UnmountAllApexes(); !result) {
+    if (auto result = UnmountAllApexes(); !result.ok()) {
         return result;
     }
     if (!SwitchToBootstrapMountNamespaceIfNeeded()) {

@@ -329,7 +329,7 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const FstabEntry& fstab_entry,
         // or a string indicating multiple keys separated by ':'.
         std::vector<std::string> allowed_avb_keys;
         auto list_avb_keys_in_dir = ListFiles(fstab_entry.avb_keys);
-        if (list_avb_keys_in_dir) {
+        if (list_avb_keys_in_dir.ok()) {
             std::sort(list_avb_keys_in_dir->begin(), list_avb_keys_in_dir->end());
             allowed_avb_keys = *list_avb_keys_in_dir;
         } else {

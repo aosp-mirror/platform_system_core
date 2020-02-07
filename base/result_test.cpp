@@ -30,7 +30,7 @@ namespace base {
 
 TEST(result, result_accessors) {
   Result<std::string> result = "success";
-  ASSERT_TRUE(result);
+  ASSERT_RESULT_OK(result);
   ASSERT_TRUE(result.has_value());
 
   EXPECT_EQ("success", *result);
@@ -40,7 +40,7 @@ TEST(result, result_accessors) {
 }
 
 TEST(result, result_accessors_rvalue) {
-  ASSERT_TRUE(Result<std::string>("success"));
+  ASSERT_TRUE(Result<std::string>("success").ok());
   ASSERT_TRUE(Result<std::string>("success").has_value());
 
   EXPECT_EQ("success", *Result<std::string>("success"));
@@ -51,12 +51,12 @@ TEST(result, result_accessors_rvalue) {
 
 TEST(result, result_void) {
   Result<void> ok = {};
-  EXPECT_TRUE(ok);
+  EXPECT_RESULT_OK(ok);
   ok.value();  // should not crash
   ASSERT_DEATH(ok.error(), "");
 
   Result<void> fail = Error() << "failure" << 1;
-  EXPECT_FALSE(fail);
+  EXPECT_FALSE(fail.ok());
   EXPECT_EQ("failure1", fail.error().message());
   EXPECT_EQ(0, fail.error().code());
   EXPECT_TRUE(ok != fail);
@@ -66,8 +66,8 @@ TEST(result, result_void) {
     if (ok) return {};
     else return Error() << "failure" << 1;
   };
-  EXPECT_TRUE(test(true));
-  EXPECT_FALSE(test(false));
+  EXPECT_TRUE(test(true).ok());
+  EXPECT_FALSE(test(false).ok());
   test(true).value();  // should not crash
   ASSERT_DEATH(test(true).error(), "");
   ASSERT_DEATH(test(false).value(), "");
@@ -76,7 +76,7 @@ TEST(result, result_void) {
 
 TEST(result, result_error) {
   Result<void> result = Error() << "failure" << 1;
-  ASSERT_FALSE(result);
+  ASSERT_FALSE(result.ok());
   ASSERT_FALSE(result.has_value());
 
   EXPECT_EQ(0, result.error().code());
@@ -85,7 +85,7 @@ TEST(result, result_error) {
 
 TEST(result, result_error_empty) {
   Result<void> result = Error();
-  ASSERT_FALSE(result);
+  ASSERT_FALSE(result.ok());
   ASSERT_FALSE(result.has_value());
 
   EXPECT_EQ(0, result.error().code());
@@ -100,7 +100,7 @@ TEST(result, result_error_rvalue) {
   // create is.
 
   auto MakeRvalueErrorResult = []() -> Result<void> { return Error() << "failure" << 1; };
-  ASSERT_FALSE(MakeRvalueErrorResult());
+  ASSERT_FALSE(MakeRvalueErrorResult().ok());
   ASSERT_FALSE(MakeRvalueErrorResult().has_value());
 
   EXPECT_EQ(0, MakeRvalueErrorResult().error().code());
@@ -112,7 +112,7 @@ TEST(result, result_errno_error) {
   errno = test_errno;
   Result<void> result = ErrnoError() << "failure" << 1;
 
-  ASSERT_FALSE(result);
+  ASSERT_FALSE(result.ok());
   ASSERT_FALSE(result.has_value());
 
   EXPECT_EQ(test_errno, result.error().code());
@@ -124,7 +124,7 @@ TEST(result, result_errno_error_no_text) {
   errno = test_errno;
   Result<void> result = ErrnoError();
 
-  ASSERT_FALSE(result);
+  ASSERT_FALSE(result.ok());
   ASSERT_FALSE(result.has_value());
 
   EXPECT_EQ(test_errno, result.error().code());
@@ -135,12 +135,12 @@ TEST(result, result_error_from_other_result) {
   auto error_text = "test error"s;
   Result<void> result = Error() << error_text;
 
-  ASSERT_FALSE(result);
+  ASSERT_FALSE(result.ok());
   ASSERT_FALSE(result.has_value());
 
   Result<std::string> result2 = result.error();
 
-  ASSERT_FALSE(result2);
+  ASSERT_FALSE(result2.ok());
   ASSERT_FALSE(result2.has_value());
 
   EXPECT_EQ(0, result2.error().code());
@@ -151,12 +151,12 @@ TEST(result, result_error_through_ostream) {
   auto error_text = "test error"s;
   Result<void> result = Error() << error_text;
 
-  ASSERT_FALSE(result);
+  ASSERT_FALSE(result.ok());
   ASSERT_FALSE(result.has_value());
 
   Result<std::string> result2 = Error() << result.error();
 
-  ASSERT_FALSE(result2);
+  ASSERT_FALSE(result2.ok());
   ASSERT_FALSE(result2.has_value());
 
   EXPECT_EQ(0, result2.error().code());
@@ -171,12 +171,12 @@ TEST(result, result_errno_error_through_ostream) {
 
   errno = 0;
 
-  ASSERT_FALSE(result);
+  ASSERT_FALSE(result.ok());
   ASSERT_FALSE(result.has_value());
 
   Result<std::string> result2 = Error() << result.error();
 
-  ASSERT_FALSE(result2);
+  ASSERT_FALSE(result2.ok());
   ASSERT_FALSE(result2.has_value());
 
   EXPECT_EQ(test_errno, result2.error().code());
@@ -186,7 +186,7 @@ TEST(result, result_errno_error_through_ostream) {
 TEST(result, constructor_forwarding) {
   auto result = Result<std::string>(std::in_place, 5, 'a');
 
-  ASSERT_TRUE(result);
+  ASSERT_RESULT_OK(result);
   ASSERT_TRUE(result.has_value());
 
   EXPECT_EQ("aaaaa", *result);
@@ -254,7 +254,7 @@ TEST(result, no_copy_on_return) {
   // are called.
 
   auto result1 = ReturnConstructorTracker("");
-  ASSERT_TRUE(result1);
+  ASSERT_RESULT_OK(result1);
   EXPECT_EQ("literal string", result1->string);
   EXPECT_EQ(1U, ConstructorTracker::constructor_called);
   EXPECT_EQ(0U, ConstructorTracker::copy_constructor_called);
@@ -263,7 +263,7 @@ TEST(result, no_copy_on_return) {
   EXPECT_EQ(0U, ConstructorTracker::move_assignment_called);
 
   auto result2 = ReturnConstructorTracker("test2");
-  ASSERT_TRUE(result2);
+  ASSERT_RESULT_OK(result2);
   EXPECT_EQ("test2test22", result2->string);
   EXPECT_EQ(2U, ConstructorTracker::constructor_called);
   EXPECT_EQ(0U, ConstructorTracker::copy_constructor_called);
@@ -272,7 +272,7 @@ TEST(result, no_copy_on_return) {
   EXPECT_EQ(0U, ConstructorTracker::move_assignment_called);
 
   auto result3 = ReturnConstructorTracker("test3");
-  ASSERT_TRUE(result3);
+  ASSERT_RESULT_OK(result3);
   EXPECT_EQ("test3 test3", result3->string);
   EXPECT_EQ(3U, ConstructorTracker::constructor_called);
   EXPECT_EQ(0U, ConstructorTracker::copy_constructor_called);
@@ -287,11 +287,11 @@ TEST(result, no_copy_on_return) {
 TEST(result, result_result_with_success) {
   auto return_result_result_with_success = []() -> Result<Result<void>> { return Result<void>(); };
   auto result = return_result_result_with_success();
-  ASSERT_TRUE(result);
-  ASSERT_TRUE(*result);
+  ASSERT_RESULT_OK(result);
+  ASSERT_RESULT_OK(*result);
 
   auto inner_result = result.value();
-  ASSERT_TRUE(inner_result);
+  ASSERT_RESULT_OK(inner_result);
 }
 
 TEST(result, result_result_with_failure) {
@@ -299,8 +299,8 @@ TEST(result, result_result_with_failure) {
     return Result<void>(ResultError("failure string", 6));
   };
   auto result = return_result_result_with_error();
-  ASSERT_TRUE(result);
-  ASSERT_FALSE(*result);
+  ASSERT_RESULT_OK(result);
+  ASSERT_FALSE(result->ok());
   EXPECT_EQ("failure string", (*result).error().message());
   EXPECT_EQ(6, (*result).error().code());
 }
@@ -320,7 +320,7 @@ TEST(result, result_two_parameter_constructor_same_type) {
   };
 
   auto result = return_test_struct();
-  ASSERT_TRUE(result);
+  ASSERT_RESULT_OK(result);
   EXPECT_EQ(36, result->value_);
 }
 
@@ -344,13 +344,13 @@ TEST(result, preserve_errno) {
   errno = 1;
   int old_errno = errno;
   Result<int> result = Error() << "Failed" << SetErrnoToTwo<char>;
-  ASSERT_FALSE(result);
+  ASSERT_FALSE(result.ok());
   EXPECT_EQ(old_errno, errno);
 
   errno = 1;
   old_errno = errno;
   Result<int> result2 = ErrnoError() << "Failed" << SetErrnoToTwo<char>;
-  ASSERT_FALSE(result2);
+  ASSERT_FALSE(result2.ok());
   EXPECT_EQ(old_errno, errno);
   EXPECT_EQ(old_errno, result2.error().code());
 }

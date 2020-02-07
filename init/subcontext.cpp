@@ -80,13 +80,13 @@ void SubcontextProcess::RunCommand(const SubcontextCommand::ExecuteCommand& exec
 
     auto map_result = function_map_->Find(args);
     Result<void> result;
-    if (!map_result) {
+    if (!map_result.ok()) {
         result = Error() << "Cannot find command: " << map_result.error();
     } else {
         result = RunBuiltinFunction(map_result->function, args, context_);
     }
 
-    if (result) {
+    if (result.ok()) {
         reply->set_success(true);
     } else {
         auto* failure = reply->mutable_failure();
@@ -99,7 +99,7 @@ void SubcontextProcess::ExpandArgs(const SubcontextCommand::ExpandArgsCommand& e
                                    SubcontextReply* reply) const {
     for (const auto& arg : expand_args_command.args()) {
         auto expanded_arg = ExpandProps(arg);
-        if (!expanded_arg) {
+        if (!expanded_arg.ok()) {
             auto* failure = reply->mutable_failure();
             failure->set_error_string(expanded_arg.error().message());
             failure->set_error_errno(0);
@@ -125,7 +125,7 @@ void SubcontextProcess::MainLoop() {
         }
 
         auto init_message = ReadMessage(init_fd_);
-        if (!init_message) {
+        if (!init_message.ok()) {
             if (init_message.error().code() == 0) {
                 // If the init file descriptor was closed, let's exit quietly. If
                 // this was accidental, init will restart us. If init died, this
@@ -160,7 +160,7 @@ void SubcontextProcess::MainLoop() {
             shutdown_command.clear();
         }
 
-        if (auto result = SendMessage(init_fd_, reply); !result) {
+        if (auto result = SendMessage(init_fd_, reply); !result.ok()) {
             LOG(FATAL) << "Failed to send message to init: " << result.error();
         }
     }
@@ -246,13 +246,13 @@ bool Subcontext::PathMatchesSubcontext(const std::string& path) {
 }
 
 Result<SubcontextReply> Subcontext::TransmitMessage(const SubcontextCommand& subcontext_command) {
-    if (auto result = SendMessage(socket_, subcontext_command); !result) {
+    if (auto result = SendMessage(socket_, subcontext_command); !result.ok()) {
         Restart();
         return ErrnoError() << "Failed to send message to subcontext";
     }
 
     auto subcontext_message = ReadMessage(socket_);
-    if (!subcontext_message) {
+    if (!subcontext_message.ok()) {
         Restart();
         return Error() << "Failed to receive result from subcontext: " << subcontext_message.error();
     }
@@ -277,7 +277,7 @@ Result<void> Subcontext::Execute(const std::vector<std::string>& args) {
         RepeatedPtrFieldBackInserter(subcontext_command.mutable_execute_command()->mutable_args()));
 
     auto subcontext_reply = TransmitMessage(subcontext_command);
-    if (!subcontext_reply) {
+    if (!subcontext_reply.ok()) {
         return subcontext_reply.error();
     }
 
@@ -301,7 +301,7 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
                   subcontext_command.mutable_expand_args_command()->mutable_args()));
 
     auto subcontext_reply = TransmitMessage(subcontext_command);
-    if (!subcontext_reply) {
+    if (!subcontext_reply.ok()) {
         return subcontext_reply.error();
     }
 
