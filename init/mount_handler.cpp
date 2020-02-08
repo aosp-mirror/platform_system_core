@@ -116,7 +116,7 @@ MountHandler::MountHandler(Epoll* epoll) : epoll_(epoll), fp_(fopen("/proc/mount
     if (!fp_) PLOG(FATAL) << "Could not open /proc/mounts";
     auto result = epoll->RegisterHandler(
             fileno(fp_.get()), [this]() { this->MountHandlerFunction(); }, EPOLLERR | EPOLLPRI);
-    if (!result) LOG(FATAL) << result.error();
+    if (!result.ok()) LOG(FATAL) << result.error();
 }
 
 MountHandler::~MountHandler() {
