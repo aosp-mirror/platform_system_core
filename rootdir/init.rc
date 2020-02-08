@@ -1033,6 +1033,7 @@ on init && property:ro.debuggable=1
 on userspace-reboot-requested
   # TODO(b/135984674): reset all necessary properties here.
   setprop sys.boot_completed ""
+  setprop dev.bootcomplete ""
   setprop sys.init.updatable_crashing ""
   setprop sys.init.updatable_crashing_process_name ""
   setprop apexd.status ""
