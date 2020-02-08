@@ -26,17 +26,17 @@
  * This code defines and encapsulates the socket protocol.
  *
  * Usage:
- *      struct stats_event* event = stats_event_obtain();
+ *      AStatsEvent* event = AStatsEvent_obtain();
  *
- *      stats_event_set_atom_id(event, atomId);
- *      stats_event_write_int32(event, 24);
- *      stats_event_add_bool_annotation(event, 1, true); // annotations apply to the previous field
- *      stats_event_add_int32_annotation(event, 2, 128);
- *      stats_event_write_float(event, 2.0);
+ *      AStatsEvent_setAtomId(event, atomId);
+ *      AStatsEvent_writeInt32(event, 24);
+ *      AStatsEvent_addBoolAnnotation(event, 1, true); // annotations apply to the previous field
+ *      AStatsEvent_addInt32Annotation(event, 2, 128);
+ *      AStatsEvent_writeFloat(event, 2.0);
  *
- *      stats_event_build(event);
- *      stats_event_write(event);
- *      stats_event_release(event);
+ *      AStatsEvent_build(event);
+ *      AStatsEvent_write(event);
+ *      AStatsEvent_release(event);
  *
  * Notes:
  *    (a) write_<type>() and add_<type>_annotation() should be called in the order that fields
@@ -47,115 +47,118 @@
  *    (e) All strings should be encoded using UTF8.
  */
 
-/* ERRORS */
-#define ERROR_NO_TIMESTAMP 0x1
-#define ERROR_NO_ATOM_ID 0x2
-#define ERROR_OVERFLOW 0x4
-#define ERROR_ATTRIBUTION_CHAIN_TOO_LONG 0x8
-#define ERROR_TOO_MANY_KEY_VALUE_PAIRS 0x10
-#define ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD 0x20
-#define ERROR_INVALID_ANNOTATION_ID 0x40
-#define ERROR_ANNOTATION_ID_TOO_LARGE 0x80
-#define ERROR_TOO_MANY_ANNOTATIONS 0x100
-#define ERROR_TOO_MANY_FIELDS 0x200
-#define ERROR_INVALID_VALUE_TYPE 0x400
-#define ERROR_STRING_NOT_NULL_TERMINATED 0x800
-
-/* TYPE IDS */
-#define INT32_TYPE 0x00
-#define INT64_TYPE 0x01
-#define STRING_TYPE 0x02
-#define LIST_TYPE 0x03
-#define FLOAT_TYPE 0x04
-#define BOOL_TYPE 0x05
-#define BYTE_ARRAY_TYPE 0x06
-#define OBJECT_TYPE 0x07
-#define KEY_VALUE_PAIRS_TYPE 0x08
-#define ATTRIBUTION_CHAIN_TYPE 0x09
-#define ERROR_TYPE 0x0F
-
 #ifdef __cplusplus
 extern "C" {
 #endif  // __CPLUSPLUS
 
-struct stats_event;
-
-/* SYSTEM API */
-struct stats_event* stats_event_obtain();
-// The build function can be called multiple times without error. If the event
-// has been built before, this function is a no-op.
-void stats_event_build(struct stats_event* event);
-int stats_event_write(struct stats_event* event);
-void stats_event_release(struct stats_event* event);
-
-void stats_event_set_atom_id(struct stats_event* event, uint32_t atomId);
-
-void stats_event_write_int32(struct stats_event* event, int32_t value);
-void stats_event_write_int64(struct stats_event* event, int64_t value);
-void stats_event_write_float(struct stats_event* event, float value);
-void stats_event_write_bool(struct stats_event* event, bool value);
-
-void stats_event_write_byte_array(struct stats_event* event, const uint8_t* buf, size_t numBytes);
-
-// Buf must be null-terminated.
-void stats_event_write_string8(struct stats_event* event, const char* value);
-
-// Tags must be null-terminated.
-void stats_event_write_attribution_chain(struct stats_event* event, const uint32_t* uids,
-                                         const char* const* tags, uint8_t numNodes);
-
-/* key_value_pair struct can be constructed as follows:
- *    struct key_value_pair pair = {.key = key, .valueType = STRING_TYPE,
- *                                  .stringValue = buf};
+/**
+ * Opaque struct use to represent a StatsEvent. It builds and stores the data that is sent to
+ * statsd.
  */
-struct key_value_pair {
-    int32_t key;
-    uint8_t valueType;  // expected to be INT32_TYPE, INT64_TYPE, FLOAT_TYPE, or STRING_TYPE
-    union {
-        int32_t int32Value;
-        int64_t int64Value;
-        float floatValue;
-        const char* stringValue;  // must be null terminated
-    };
-};
+struct AStatsEvent;
+typedef struct AStatsEvent AStatsEvent;
 
-void stats_event_write_key_value_pairs(struct stats_event* event, struct key_value_pair* pairs,
-                                       uint8_t numPairs);
+/**
+ * Returns a new AStatsEvent. If you call this function, you must call AStatsEvent_release to free
+ * the allocated memory.
+ */
+AStatsEvent* AStatsEvent_obtain();
 
-void stats_event_add_bool_annotation(struct stats_event* event, uint8_t annotationId, bool value);
-void stats_event_add_int32_annotation(struct stats_event* event, uint8_t annotationId,
-                                      int32_t value);
+/**
+ * Builds and finalizes the StatsEvent.
+ *
+ * After this function, the StatsEvent must not be modified in any way other than calling release or
+ * write. Build must be always be called before AStatsEvent_write.
+ *
+ * Build can be called multiple times without error.
+ * If the event has been built before, this function is a no-op.
+ */
+void AStatsEvent_build(AStatsEvent* event);
 
-uint32_t stats_event_get_atom_id(struct stats_event* event);
+/**
+ * Writes the StatsEvent to the stats log.
+ *
+ * After calling this, AStatsEvent_release must be called,
+ * and is the only function that can be safely called.
+ */
+int AStatsEvent_write(AStatsEvent* event);
+
+/**
+ * Frees the memory held by this StatsEvent
+ *
+ * After calling this, the StatsEvent must not be used or modified in any way.
+ */
+void AStatsEvent_release(AStatsEvent* event);
+
+/**
+ * Sets the atom id for this StatsEvent.
+ **/
+void AStatsEvent_setAtomId(AStatsEvent* event, uint32_t atomId);
+
+/**
+ * Writes an int32_t field to this StatsEvent.
+ **/
+void AStatsEvent_writeInt32(AStatsEvent* event, int32_t value);
+
+/**
+ * Writes an int64_t field to this StatsEvent.
+ **/
+void AStatsEvent_writeInt64(AStatsEvent* event, int64_t value);
+
+/**
+ * Writes a float field to this StatsEvent.
+ **/
+void AStatsEvent_writeFloat(AStatsEvent* event, float value);
+
+/**
+ * Write a bool field to this StatsEvent.
+ **/
+void AStatsEvent_writeBool(AStatsEvent* event, bool value);
+
+/**
+ * Write a byte array field to this StatsEvent.
+ **/
+void AStatsEvent_writeByteArray(AStatsEvent* event, const uint8_t* buf, size_t numBytes);
+
+/**
+ * Write a string field to this StatsEvent.
+ *
+ * The string must be null-terminated.
+ **/
+void AStatsEvent_writeString(AStatsEvent* event, const char* value);
+
+/**
+ * Write an attribution chain field to this StatsEvent.
+ *
+ * The sizes of uids and tags must be equal. The AttributionNode at position i is
+ * made up of uids[i] and tags[i].
+ *
+ * \param uids array of uids in the attribution chain.
+ * \param tags array of tags in the attribution chain. Each tag must be null-terminated.
+ * \param numNodes the number of AttributionNodes in the attribution chain. This is the length of
+ *                 the uids and the tags.
+ **/
+void AStatsEvent_writeAttributionChain(AStatsEvent* event, const uint32_t* uids,
+                                       const char* const* tags, uint8_t numNodes);
+
+/**
+ * Write a bool annotation for the previous field written.
+ **/
+void AStatsEvent_addBoolAnnotation(AStatsEvent* event, uint8_t annotationId, bool value);
+
+/**
+ * Write an integer annotation for the previous field written.
+ **/
+void AStatsEvent_addInt32Annotation(AStatsEvent* event, uint8_t annotationId, int32_t value);
+
+// Internal/test APIs. Should not be exposed outside of the APEX.
+uint32_t AStatsEvent_getAtomId(AStatsEvent* event);
 // Size is an output parameter.
-uint8_t* stats_event_get_buffer(struct stats_event* event, size_t* size);
-uint32_t stats_event_get_errors(struct stats_event* event);
-
-// This table is used by StatsEventCompat to access the stats_event API.
-struct stats_event_api_table {
-    struct stats_event* (*obtain)(void);
-    void (*build)(struct stats_event*);
-    int (*write)(struct stats_event*);
-    void (*release)(struct stats_event*);
-    void (*set_atom_id)(struct stats_event*, uint32_t);
-    void (*write_int32)(struct stats_event*, int32_t);
-    void (*write_int64)(struct stats_event*, int64_t);
-    void (*write_float)(struct stats_event*, float);
-    void (*write_bool)(struct stats_event*, bool);
-    void (*write_byte_array)(struct stats_event*, const uint8_t*, size_t);
-    void (*write_string8)(struct stats_event*, const char*);
-    void (*write_attribution_chain)(struct stats_event*, const uint32_t*, const char* const*,
-                                    uint8_t);
-    void (*write_key_value_pairs)(struct stats_event*, struct key_value_pair*, uint8_t);
-    void (*add_bool_annotation)(struct stats_event*, uint8_t, bool);
-    void (*add_int32_annotation)(struct stats_event*, uint8_t, int32_t);
-    uint32_t (*get_atom_id)(struct stats_event*);
-    uint8_t* (*get_buffer)(struct stats_event*, size_t*);
-    uint32_t (*get_errors)(struct stats_event*);
-};
+uint8_t* AStatsEvent_getBuffer(AStatsEvent* event, size_t* size);
+uint32_t AStatsEvent_getErrors(AStatsEvent* event);
 
 // exposed for benchmarking only
-void stats_event_truncate_buffer(struct stats_event* event, bool truncate);
+void AStatsEvent_truncateBuffer(struct AStatsEvent* event, bool truncate);
 
 #ifdef __cplusplus
 }

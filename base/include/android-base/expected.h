@@ -331,6 +331,7 @@ class _NODISCARD_ expected {
 
   constexpr explicit operator bool() const noexcept { return has_value(); }
   constexpr bool has_value() const noexcept { return var_.index() == 0; }
+  constexpr bool ok() const noexcept { return has_value(); }
 
   constexpr const T& value() const& { return std::get<T>(var_); }
   constexpr T& value() & { return std::get<T>(var_); }
@@ -366,16 +367,6 @@ class _NODISCARD_ expected {
   template<class T1, class E1, class T2, class E2>
   friend constexpr bool operator!=(const expected<T1, E1>& x, const expected<T2, E2>& y);
 
-  // comparison with T
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator==(const expected<T1, E1>&, const T2&);
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator==(const T2&, const expected<T1, E1>&);
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator!=(const expected<T1, E1>&, const T2&);
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator!=(const T2&, const expected<T1, E1>&);
-
   // Comparison with unexpected<E>
   template<class T1, class E1, class E2>
   friend constexpr bool operator==(const expected<T1, E1>&, const unexpected<E2>&);
@@ -408,24 +399,6 @@ constexpr bool operator==(const expected<T1, E1>& x, const expected<T2, E2>& y) 
 template<class T1, class E1, class T2, class E2>
 constexpr bool operator!=(const expected<T1, E1>& x, const expected<T2, E2>& y) {
   return !(x == y);
-}
-
-// comparison with T
-template<class T1, class E1, class T2>
-constexpr bool operator==(const expected<T1, E1>& x, const T2& y) {
-  return x.has_value() && (*x == y);
-}
-template<class T1, class E1, class T2>
-constexpr bool operator==(const T2& x, const expected<T1, E1>& y) {
-  return y.has_value() && (x == *y);
-}
-template<class T1, class E1, class T2>
-constexpr bool operator!=(const expected<T1, E1>& x, const T2& y) {
-  return !x.has_value() || (*x != y);
-}
-template<class T1, class E1, class T2>
-constexpr bool operator!=(const T2& x, const expected<T1, E1>& y) {
-  return !y.has_value() || (x != *y);
 }
 
 // Comparison with unexpected<E>
@@ -585,6 +558,7 @@ class _NODISCARD_ expected<void, E> {
   // observers
   constexpr explicit operator bool() const noexcept { return has_value(); }
   constexpr bool has_value() const noexcept { return var_.index() == 0; }
+  constexpr bool ok() const noexcept { return has_value(); }
 
   constexpr void value() const& { if (!has_value()) std::get<0>(var_); }
 

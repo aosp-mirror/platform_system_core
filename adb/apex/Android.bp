@@ -21,7 +21,7 @@ apex {
 }
 
 // adbd apex with INT_MAX version code, to allow for upgrade/rollback testing.
-apex {
+apex_test {
     name: "test_com.android.adbd",
     defaults: ["com.android.adbd-defaults"],
     manifest: "test_apex_manifest.json",
