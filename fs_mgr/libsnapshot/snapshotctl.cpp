@@ -61,7 +61,16 @@ class FileLogger {
         ss << kLogFilePath << "snapshotctl." << Now() << ".log";
         fd_.reset(TEMP_FAILURE_RETRY(
                 open(ss.str().c_str(),
-                     O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_SYNC, 0660)));
+                     O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_SYNC, 0644)));
+        if (fd_ == -1) {
+            PLOG(ERROR) << "Cannot open persistent log " << ss.str();
+            return;
+        }
+        // Explicitly chmod again because mode in open() may be masked by umask.
+        if (fchmod(fd_.get(), 0644) == -1) {
+            PLOG(ERROR) << "Cannot chmod 0644 persistent log " << ss.str();
+            return;
+        }
     }
     // Copy-contuctor needed to be converted to std::function.
     FileLogger(const FileLogger& other) { fd_.reset(dup(other.fd_)); }
@@ -108,7 +117,8 @@ bool MergeCmdHandler(int argc, char** argv) {
 
     // 'snapshotctl merge' is stripped away from arguments to
     // Logger.
-    android::base::InitLogging(argv, MergeCmdLogger(argc - 2, argv + 2));
+    android::base::InitLogging(argv);
+    android::base::SetLogger(MergeCmdLogger(argc - 2, argv + 2));
 
     auto state = SnapshotManager::New()->InitiateMergeAndWait();
 
