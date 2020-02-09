@@ -232,7 +232,12 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock) {
     LOG(WARNING) << callstack_str.c_str();
     std::stringstream path;
     path << "/data/misc/snapshotctl_log/libsnapshot." << Now() << ".log";
-    android::base::WriteStringToFile(callstack_str.c_str(), path.str());
+    std::string path_str = path.str();
+    android::base::WriteStringToFile(callstack_str.c_str(), path_str);
+    if (chmod(path_str.c_str(), 0644) == -1) {
+        PLOG(WARNING) << "Unable to chmod 0644 "
+                      << ", file maybe dropped from bugreport:" << path_str;
+    }
 #endif
 
     if (!RemoveAllSnapshots(lock)) {
