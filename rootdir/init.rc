@@ -117,9 +117,6 @@ on init
     symlink /system/bin /bin
     symlink /system/etc /etc
 
-    # Backward compatibility.
-    symlink /sys/kernel/debug /d
-
     # Link /vendor to /system/vendor for devices without a vendor partition.
     symlink /system/vendor /vendor
 
