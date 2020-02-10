@@ -768,6 +768,9 @@ on post-fs-data
     chown root system /dev/fscklogs/log
     chmod 0770 /dev/fscklogs/log
 
+    # Enable FUSE by default
+    setprop persist.sys.fuse true
+
 # Switch between sdcardfs and FUSE depending on persist property
 # TODO: Move this to ro property before launch because FDE devices
 # interact with persistent properties differently during boot
