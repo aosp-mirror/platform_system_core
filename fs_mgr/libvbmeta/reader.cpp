@@ -64,7 +64,7 @@ Result<void> ReadVBMetaTable(int fd, uint64_t offset, VBMetaTable* table) {
     }
 
     Result<void> rv_header = LoadAndVerifySuperVBMetaHeader(header_buffer.get(), &table->header);
-    if (!rv_header) {
+    if (!rv_header.ok()) {
         return rv_header;
     }
 
@@ -104,7 +104,7 @@ Result<std::string> ReadVBMetaImage(int fd, int slot) {
 Result<void> ValidateVBMetaImage(int super_vbmeta_fd, int vbmeta_index,
                                  const std::string& vbmeta_image) {
     Result<std::string> content = ReadVBMetaImage(super_vbmeta_fd, vbmeta_index);
-    if (!content) {
+    if (!content.ok()) {
         return content.error();
     }
 
