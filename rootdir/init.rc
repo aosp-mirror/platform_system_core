@@ -114,15 +114,6 @@ on init
     symlink /proc/self/fd/1 /dev/stdout
     symlink /proc/self/fd/2 /dev/stderr
 
-    symlink /system/bin /bin
-    symlink /system/etc /etc
-
-    # Backward compatibility.
-    symlink /sys/kernel/debug /d
-
-    # Link /vendor to /system/vendor for devices without a vendor partition.
-    symlink /system/vendor /vendor
-
     # Create energy-aware scheduler tuning nodes
     mkdir /dev/stune/foreground
     mkdir /dev/stune/background
@@ -219,7 +210,6 @@ on init
     mkdir /mnt/runtime/full/self 0755 root root
 
     # Symlink to keep legacy apps working in multi-user world
-    symlink /storage/self/primary /sdcard
     symlink /storage/self/primary /mnt/sdcard
     symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
 
