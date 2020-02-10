@@ -1309,17 +1309,6 @@ static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
     }
 }
 
-static Result<void> do_finish_userspace_reboot(const BuiltinArguments&) {
-    LOG(INFO) << "Userspace reboot successfully finished";
-    boot_clock::time_point now = boot_clock::now();
-    SetProperty("sys.init.userspace_reboot.last_finished",
-                std::to_string(now.time_since_epoch().count()));
-    if (!android::sysprop::InitProperties::userspace_reboot_in_progress(false)) {
-        return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
-    }
-    return {};
-}
-
 // Builtin-function-map start
 const BuiltinFunctionMap& GetBuiltinFunctionMap() {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
@@ -1341,7 +1330,6 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"exec_background",         {1,     kMax, {false,  do_exec_background}}},
         {"exec_start",              {1,     1,    {false,  do_exec_start}}},
         {"export",                  {2,     2,    {false,  do_export}}},
-        {"finish_userspace_reboot", {0,     0,    {false,  do_finish_userspace_reboot}}},
         {"hostname",                {1,     1,    {true,   do_hostname}}},
         {"ifup",                    {1,     1,    {true,   do_ifup}}},
         {"init_user0",              {0,     0,    {false,  do_init_user0}}},
