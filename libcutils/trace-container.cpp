@@ -87,24 +87,28 @@ void atrace_set_tracing_enabled(bool enabled)
 
 static void atrace_init_once()
 {
-    atrace_marker_fd = open("/sys/kernel/debug/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
+    atrace_marker_fd = open("/sys/kernel/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
     if (atrace_marker_fd < 0) {
-        // We're in container, ftrace may be disabled. In such case, we use the
-        // socket to write trace event.
+        // try debugfs
+        atrace_marker_fd = open("/sys/kernel/debug/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
+        if (atrace_marker_fd < 0) {
+            // We're in container, ftrace may be disabled. In such case, we use the
+            // socket to write trace event.
 
-        // Protect the initialization of container socket from
-        // atrace_set_tracing_enabled.
-        pthread_mutex_lock(&atrace_enabling_mutex);
-        atrace_use_container_sock = true;
-        bool success = false;
-        if (atomic_load_explicit(&atrace_is_enabled, memory_order_acquire)) {
-            success = atrace_init_container_sock();
-        }
-        pthread_mutex_unlock(&atrace_enabling_mutex);
+            // Protect the initialization of container socket from
+            // atrace_set_tracing_enabled.
+            pthread_mutex_lock(&atrace_enabling_mutex);
+            atrace_use_container_sock = true;
+            bool success = false;
+            if (atomic_load_explicit(&atrace_is_enabled, memory_order_acquire)) {
+                success = atrace_init_container_sock();
+            }
+            pthread_mutex_unlock(&atrace_enabling_mutex);
 
-        if (!success) {
-            atrace_enabled_tags = 0;
-            goto done;
+            if (!success) {
+                atrace_enabled_tags = 0;
+                goto done;
+            }
         }
     }
     atrace_enabled_tags = atrace_get_property();
