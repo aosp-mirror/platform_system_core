@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2015 The Android Open Source Project
@@ -80,6 +80,13 @@ class DeviceTest(unittest.TestCase):
     def setUp(self):
         self.device = adb.get_device()
 
+
+class AbbTest(DeviceTest):
+    def test_smoke(self):
+        result = subprocess.run(['adb', 'abb'], capture_output=True)
+        self.assertEqual(1, result.returncode)
+        expected_output = b"cmd: No service specified; use -l to list all services\n"
+        self.assertEqual(expected_output, result.stderr)
 
 class ForwardReverseTest(DeviceTest):
     def _test_no_rebind(self, description, direction_list, direction,
@@ -246,7 +253,7 @@ class ForwardReverseTest(DeviceTest):
                     # Accept the client connection.
                     accepted_connection, addr = listener.accept()
                     with contextlib.closing(accepted_connection) as server:
-                        data = 'hello'
+                        data = b'hello'
 
                         # Send data into the port setup by adb forward.
                         client.sendall(data)
@@ -254,7 +261,7 @@ class ForwardReverseTest(DeviceTest):
                         client.close()
 
                         # Verify that the data came back via adb reverse.
-                        self.assertEqual(data, server.makefile().read())
+                        self.assertEqual(data, server.makefile().read().encode("utf8"))
         finally:
             if reverse_setup:
                 self.device.reverse_remove(forward_spec)
@@ -268,7 +275,7 @@ class ShellTest(DeviceTest):
 
         Args:
           shell_args: List of string arguments to `adb shell`.
-          input: String input to send to the interactive shell.
+          input: bytes input to send to the interactive shell.
 
         Returns:
           The remote exit code.
@@ -286,7 +293,7 @@ class ShellTest(DeviceTest):
         # Closing host-side stdin doesn't trigger a PTY shell to exit so we need
         # to explicitly add an exit command to close the session from the device
         # side, plus the necessary newline to complete the interactive command.
-        proc.communicate(input + '; exit\n')
+        proc.communicate(input + b'; exit\n')
         return proc.returncode
 
     def test_cat(self):
@@ -419,7 +426,7 @@ class ShellTest(DeviceTest):
         self.assertEqual('foo' + self.device.linesep, result[1])
         self.assertEqual('bar' + self.device.linesep, result[2])
 
-        self.assertEqual(17, self._interactive_shell([], 'exit 17'))
+        self.assertEqual(17, self._interactive_shell([], b'exit 17'))
 
         # -x flag should disable shell protocol.
         result = self.device.shell_nocheck(
@@ -428,7 +435,7 @@ class ShellTest(DeviceTest):
         self.assertEqual('foo{0}bar{0}'.format(self.device.linesep), result[1])
         self.assertEqual('', result[2])
 
-        self.assertEqual(0, self._interactive_shell(['-x'], 'exit 17'))
+        self.assertEqual(0, self._interactive_shell(['-x'], b'exit 17'))
 
     def test_non_interactive_sigint(self):
         """Tests that SIGINT in a non-interactive shell kills the process.
@@ -447,7 +454,7 @@ class ShellTest(DeviceTest):
                 self.device.adb_cmd + shlex.split('shell echo $$; sleep 60'),
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
-        remote_pid = sleep_proc.stdout.readline().strip()
+        remote_pid = sleep_proc.stdout.readline().strip().decode("utf8")
         self.assertIsNone(sleep_proc.returncode, 'subprocess terminated early')
         proc_query = shlex.split('ps {0} | grep {0}'.format(remote_pid))
 
@@ -469,9 +476,10 @@ class ShellTest(DeviceTest):
                                     'on this device')
 
         # Test both small and large inputs.
-        small_input = 'foo'
-        large_input = '\n'.join(c * 100 for c in (string.ascii_letters +
-                                                  string.digits))
+        small_input = b'foo'
+        characters = [c.encode("utf8") for c in string.ascii_letters + string.digits]
+        large_input = b'\n'.join(characters)
+
 
         for input in (small_input, large_input):
             proc = subprocess.Popen(self.device.adb_cmd + ['shell', 'cat'],
@@ -480,7 +488,7 @@ class ShellTest(DeviceTest):
                                     stderr=subprocess.PIPE)
             stdout, stderr = proc.communicate(input)
             self.assertEqual(input.splitlines(), stdout.splitlines())
-            self.assertEqual('', stderr)
+            self.assertEqual(b'', stderr)
 
     def test_sighup(self):
         """Ensure that SIGHUP gets sent upon non-interactive ctrl-c"""
@@ -502,7 +510,7 @@ class ShellTest(DeviceTest):
                                           stdin=subprocess.PIPE,
                                           stdout=subprocess.PIPE)
 
-        self.assertEqual("Waiting\n", process.stdout.readline())
+        self.assertEqual(b"Waiting\n", process.stdout.readline())
         process.send_signal(signal.SIGINT)
         process.wait()
 
@@ -533,7 +541,7 @@ class ShellTest(DeviceTest):
             threads.append(thread)
         for thread in threads:
             thread.join()
-        for i, success in result.iteritems():
+        for i, success in result.items():
             self.assertTrue(success)
 
     def disabled_test_parallel(self):
@@ -546,24 +554,24 @@ class ShellTest(DeviceTest):
 
         n_procs = 2048
         procs = dict()
-        for i in xrange(0, n_procs):
+        for i in range(0, n_procs):
             procs[i] = subprocess.Popen(
                 ['adb', 'shell', 'read foo; echo $foo; read rc; exit $rc'],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE
             )
 
-        for i in xrange(0, n_procs):
+        for i in range(0, n_procs):
             procs[i].stdin.write("%d\n" % i)
 
-        for i in xrange(0, n_procs):
+        for i in range(0, n_procs):
             response = procs[i].stdout.readline()
             assert(response == "%d\n" % i)
 
-        for i in xrange(0, n_procs):
+        for i in range(0, n_procs):
             procs[i].stdin.write("%d\n" % (i % 256))
 
-        for i in xrange(0, n_procs):
+        for i in range(0, n_procs):
             assert(procs[i].wait() == i % 256)
 
 
@@ -602,14 +610,14 @@ class ArgumentEscapingTest(DeviceTest):
     def test_install_argument_escaping(self):
         """Make sure that install argument escaping works."""
         # http://b/20323053, http://b/3090932.
-        for file_suffix in ('-text;ls;1.apk', "-Live Hold'em.apk"):
+        for file_suffix in (b'-text;ls;1.apk', b"-Live Hold'em.apk"):
             tf = tempfile.NamedTemporaryFile('wb', suffix=file_suffix,
                                              delete=False)
             tf.close()
 
             # Installing bogus .apks fails if the device supports exit codes.
             try:
-                output = self.device.install(tf.name)
+                output = self.device.install(tf.name.decode("utf8"))
             except subprocess.CalledProcessError as e:
                 output = e.output
 
@@ -712,7 +720,7 @@ def make_random_host_files(in_dir, num_files):
     max_size = 16 * (1 << 10)
 
     files = []
-    for _ in xrange(num_files):
+    for _ in range(num_files):
         file_handle = tempfile.NamedTemporaryFile(dir=in_dir, delete=False)
 
         size = random.randrange(min_size, max_size, 1024)
@@ -731,7 +739,7 @@ def make_random_device_files(device, in_dir, num_files, prefix='device_tmpfile')
     max_size = 16 * (1 << 10)
 
     files = []
-    for file_num in xrange(num_files):
+    for file_num in range(num_files):
         size = random.randrange(min_size, max_size, 1024)
 
         base_name = prefix + str(file_num)
@@ -878,7 +886,7 @@ class FileOperationsTest(DeviceTest):
             subdir_temp_files = make_random_host_files(in_dir=subdir,
                                                        num_files=4)
 
-            paths = map(lambda temp_file: temp_file.full_path, temp_files)
+            paths = [x.full_path for x in temp_files]
             paths.append(subdir)
             self.device._simple_call(['push'] + paths + [self.DEVICE_TEMP_DIR])
 
@@ -907,7 +915,7 @@ class FileOperationsTest(DeviceTest):
         Bug: http://b/26816782
         """
         with tempfile.NamedTemporaryFile() as tmp_file:
-            tmp_file.write('\0' * 1024 * 1024)
+            tmp_file.write(b'\0' * 1024 * 1024)
             tmp_file.flush()
             try:
                 self.device.push(local=tmp_file.name, remote='/system/')
@@ -915,8 +923,8 @@ class FileOperationsTest(DeviceTest):
             except subprocess.CalledProcessError as e:
                 output = e.output
 
-            self.assertTrue('Permission denied' in output or
-                            'Read-only file system' in output)
+            self.assertTrue(b'Permission denied' in output or
+                            b'Read-only file system' in output)
 
     @requires_non_root
     def test_push_directory_creation(self):
@@ -925,7 +933,7 @@ class FileOperationsTest(DeviceTest):
         Bug: http://b/110953234
         """
         with tempfile.NamedTemporaryFile() as tmp_file:
-            tmp_file.write('\0' * 1024 * 1024)
+            tmp_file.write(b'\0' * 1024 * 1024)
             tmp_file.flush()
             remote_path = self.DEVICE_TEMP_DIR + '/test_push_directory_creation'
             self.device.shell(['rm', '-rf', remote_path])
@@ -967,7 +975,7 @@ class FileOperationsTest(DeviceTest):
         except subprocess.CalledProcessError as e:
             output = e.output
 
-        self.assertIn('Permission denied', output)
+        self.assertIn(b'Permission denied', output)
 
         self.device.shell(['rm', '-f', self.DEVICE_TEMP_FILE])
 
@@ -1166,7 +1174,7 @@ class FileOperationsTest(DeviceTest):
             subdir_temp_files = make_random_device_files(
                 self.device, in_dir=subdir, num_files=4, prefix='subdir_')
 
-            paths = map(lambda temp_file: temp_file.full_path, temp_files)
+            paths = [x.full_path for x in temp_files]
             paths.append(subdir)
             self.device._simple_call(['pull'] + paths + [host_dir])
 
@@ -1355,7 +1363,7 @@ class DeviceOfflineTest(DeviceTest):
         """
         # The values that trigger things are 507 (512 - 5 bytes from shell protocol) + 1024*n
         # Probe some surrounding values as well, for the hell of it.
-        for base in [512] + range(1024, 1024 * 16, 1024):
+        for base in [512] + list(range(1024, 1024 * 16, 1024)):
             for offset in [-6, -5, -4]:
                 length = base + offset
                 cmd = ['dd', 'if=/dev/zero', 'bs={}'.format(length), 'count=1', '2>/dev/null;'
@@ -1390,10 +1398,10 @@ class DeviceOfflineTest(DeviceTest):
 
                 sock = socket.create_connection(("localhost", local_port))
                 with contextlib.closing(sock):
-                    bytesWritten = sock.send("a" * size)
+                    bytesWritten = sock.send(b"a" * size)
                     self.assertEqual(size, bytesWritten)
                     readBytes = sock.recv(4096)
-                    self.assertEqual("foo\n", readBytes)
+                    self.assertEqual(b"foo\n", readBytes)
 
                 thread.join()
         finally:
@@ -1424,13 +1432,13 @@ class SocketTest(DeviceTest):
 
         s.sendall(adb_length_prefixed(transport_string))
         response = s.recv(4)
-        self.assertEquals(b"OKAY", response)
+        self.assertEqual(b"OKAY", response)
 
         shell_string = "shell:sleep 0.5; dd if=/dev/zero bs=1m count=1 status=none; echo foo"
         s.sendall(adb_length_prefixed(shell_string))
 
         response = s.recv(4)
-        self.assertEquals(b"OKAY", response)
+        self.assertEqual(b"OKAY", response)
 
         # Spawn a thread that dumps garbage into the socket until failure.
         def spam():
@@ -1453,7 +1461,7 @@ class SocketTest(DeviceTest):
                 break
             received += read
 
-        self.assertEquals(1024 * 1024 + len("foo\n"), len(received))
+        self.assertEqual(1024 * 1024 + len("foo\n"), len(received))
         thread.join()
 
 
