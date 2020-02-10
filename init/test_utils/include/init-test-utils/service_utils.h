@@ -20,7 +20,6 @@
 #include <set>
 
 #include <android-base/result.h>
-#include <hidl-util/FqInstance.h>
 
 namespace android {
 namespace init {
