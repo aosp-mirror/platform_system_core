@@ -90,19 +90,6 @@ String16::String16()
 {
 }
 
-String16::String16(StaticLinkage)
-    : mString(nullptr)
-{
-    // this constructor is used when we can't rely on the static-initializers
-    // having run. In this case we always allocate an empty string. It's less
-    // efficient than using getEmptyString(), but we assume it's uncommon.
-
-    SharedBuffer* buf = static_cast<SharedBuffer*>(alloc(sizeof(char16_t)));
-    char16_t* data = static_cast<char16_t*>(buf->data());
-    data[0] = 0;
-    mString = data;
-}
-
 String16::String16(const String16& o)
     : mString(o.mString)
 {

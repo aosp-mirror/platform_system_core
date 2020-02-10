@@ -39,16 +39,7 @@ class String16;
 class String8
 {
 public:
-    /* use String8(StaticLinkage) if you're statically linking against
-     * libutils and declaring an empty static String8, e.g.:
-     *
-     *   static String8 sAStaticEmptyString(String8::kEmptyString);
-     *   static String8 sAnotherStaticEmptyString(sAStaticEmptyString);
-     */
-    enum StaticLinkage { kEmptyString };
-
                                 String8();
-    explicit                    String8(StaticLinkage);
                                 String8(const String8& o);
     explicit                    String8(const char* o);
     explicit                    String8(const char* o, size_t numChars);

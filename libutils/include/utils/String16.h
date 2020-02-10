@@ -46,17 +46,7 @@ class StaticString16;
 class String16
 {
 public:
-    /*
-     * Use String16(StaticLinkage) if you're statically linking against
-     * libutils and declaring an empty static String16, e.g.:
-     *
-     *   static String16 sAStaticEmptyString(String16::kEmptyString);
-     *   static String16 sAnotherStaticEmptyString(sAStaticEmptyString);
-     */
-    enum StaticLinkage { kEmptyString };
-
                                 String16();
-    explicit                    String16(StaticLinkage);
                                 String16(const String16& o);
                                 String16(const String16& o,
                                          size_t len,
