@@ -18,8 +18,8 @@
 #define LOG_TAG "libutils.threads"
 
 #include <assert.h>
-#include <utils/Thread.h>
 #include <utils/AndroidThreads.h>
+#include <utils/Thread.h>
 
 #if !defined(_WIN32)
 # include <sys/resource.h>
@@ -36,7 +36,10 @@
 
 #include <utils/Log.h>
 
+#if defined(__ANDROID__)
+#include <processgroup/processgroup.h>
 #include <processgroup/sched_policy.h>
+#endif
 
 #if defined(__ANDROID__)
 # define __android_unused
@@ -64,6 +67,7 @@ using namespace android;
 
 typedef void* (*android_pthread_entry)(void*);
 
+#if defined(__ANDROID__)
 struct thread_data_t {
     thread_func_t   entryFunction;
     void*           userData;
@@ -79,10 +83,11 @@ struct thread_data_t {
         char * name = t->threadName;
         delete t;
         setpriority(PRIO_PROCESS, 0, prio);
+
+        // A new thread will be in its parent's sched group by default,
+        // so we just need to handle the background case.
         if (prio >= ANDROID_PRIORITY_BACKGROUND) {
-            set_sched_policy(0, SP_BACKGROUND);
-        } else {
-            set_sched_policy(0, SP_FOREGROUND);
+            SetTaskProfiles(0, {"SCHED_SP_BACKGROUND"}, true);
         }
 
         if (name) {
@@ -92,6 +97,7 @@ struct thread_data_t {
         return f(u);
     }
 };
+#endif
 
 void androidSetThreadName(const char* name) {
 #if defined(__linux__)
@@ -300,11 +306,19 @@ int androidSetThreadPriority(pid_t tid, int pri)
 {
     int rc = 0;
     int lasterr = 0;
+    int curr_pri = getpriority(PRIO_PROCESS, tid);
+
+    if (curr_pri == pri) {
+        return rc;
+    }
 
     if (pri >= ANDROID_PRIORITY_BACKGROUND) {
-        rc = set_sched_policy(tid, SP_BACKGROUND);
-    } else if (getpriority(PRIO_PROCESS, tid) >= ANDROID_PRIORITY_BACKGROUND) {
-        rc = set_sched_policy(tid, SP_FOREGROUND);
+        rc = SetTaskProfiles(tid, {"SCHED_SP_BACKGROUND"}, true) ? 0 : -1;
+    } else if (curr_pri >= ANDROID_PRIORITY_BACKGROUND) {
+        SchedPolicy policy = SP_FOREGROUND;
+        // Change to the sched policy group of the process.
+        get_sched_policy(getpid(), &policy);
+        rc = SetTaskProfiles(tid, {get_sched_policy_profile_name(policy)}, true) ? 0 : -1;
     }
 
     if (rc) {
