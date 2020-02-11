@@ -114,15 +114,6 @@ on init
     symlink /proc/self/fd/1 /dev/stdout
     symlink /proc/self/fd/2 /dev/stderr
 
-    symlink /system/bin /bin
-    symlink /system/etc /etc
-
-    # Backward compatibility.
-    symlink /sys/kernel/debug /d
-
-    # Link /vendor to /system/vendor for devices without a vendor partition.
-    symlink /system/vendor /vendor
-
     # Create energy-aware scheduler tuning nodes
     mkdir /dev/stune/foreground
     mkdir /dev/stune/background
@@ -143,6 +134,14 @@ on init
     chmod 0664 /dev/stune/background/tasks
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
+
+    # Create an stune group for NNAPI HAL processes
+    mkdir /dev/stune/nnapi-hal
+    chown system system /dev/stune/nnapi-hal
+    chown system system /dev/stune/nnapi-hal/tasks
+    chmod 0664 /dev/stune/nnapi-hal/tasks
+    write /dev/stune/nnapi-hal/schedtune.boost 1
+    write /dev/stune/nnapi-hal/schedtune.prefer_idle 1
 
     # Create blkio group and apply initial settings.
     # This feature needs kernel to support it, and the
@@ -211,7 +210,6 @@ on init
     mkdir /mnt/runtime/full/self 0755 root root
 
     # Symlink to keep legacy apps working in multi-user world
-    symlink /storage/self/primary /sdcard
     symlink /storage/self/primary /mnt/sdcard
     symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
 
@@ -1059,4 +1057,4 @@ on userspace-reboot-resume
   trigger boot
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
-  finish_userspace_reboot
+  setprop sys.init.userspace_reboot.in_progress ""

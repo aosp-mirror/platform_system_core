@@ -232,8 +232,7 @@ TEST(BasicUtilTest, ListFiles) {
 
     // List files for comparison.
     auto result = ListFiles(test_dir.value());
-    ASSERT_TRUE(result);
-    ASSERT_TRUE(result.has_value());
+    ASSERT_RESULT_OK(result);
     auto files = result.value();
     EXPECT_EQ(3UL, files.size());
     // Sort them offline for comparison.
@@ -266,8 +265,7 @@ TEST(BasicUtilTest, ListFilesShouldDiscardSymlink) {
 
     // List files for comparison.
     auto result = ListFiles(test_dir.value());
-    ASSERT_TRUE(result);
-    ASSERT_TRUE(result.has_value());
+    ASSERT_RESULT_OK(result);
     auto files = result.value();
     EXPECT_EQ(2UL, files.size());  // Should not include the symlink file.
     // Sort them offline for comparison.
@@ -287,7 +285,7 @@ TEST(BasicUtilTest, ListFilesOpenDirFailure) {
     base::FilePath no_such_dir = tmp_dir.Append("not_such_dir");
 
     auto fail = ListFiles(no_such_dir.value());
-    ASSERT_FALSE(fail);
+    ASSERT_FALSE(fail.ok());
     EXPECT_EQ(ENOENT, fail.error().code());
     EXPECT_TRUE(android::base::StartsWith(fail.error().message(), "Failed to opendir: "));
 }
@@ -303,8 +301,7 @@ TEST(BasicUtilTest, ListFilesEmptyDir) {
 
     // List files without sorting.
     auto result = ListFiles(test_dir.value());
-    ASSERT_TRUE(result);
-    ASSERT_TRUE(result.has_value());
+    ASSERT_RESULT_OK(result);
     auto files = result.value();
     EXPECT_EQ(0UL, files.size());
 
