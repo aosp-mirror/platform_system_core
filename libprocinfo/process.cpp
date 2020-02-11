@@ -59,7 +59,6 @@ static ProcessState parse_state(const char* state) {
     case 'Z':
       return kProcessStateZombie;
     default:
-      LOG(ERROR) << "unknown process state: " << *state;
       return kProcessStateUnknown;
   }
 }

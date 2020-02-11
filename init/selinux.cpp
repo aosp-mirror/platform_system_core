@@ -88,12 +88,11 @@ enum EnforcingStatus { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
 EnforcingStatus StatusFromCmdline() {
     EnforcingStatus status = SELINUX_ENFORCING;
 
-    import_kernel_cmdline(false,
-                          [&](const std::string& key, const std::string& value, bool in_qemu) {
-                              if (key == "androidboot.selinux" && value == "permissive") {
-                                  status = SELINUX_PERMISSIVE;
-                              }
-                          });
+    ImportKernelCmdline([&](const std::string& key, const std::string& value) {
+        if (key == "androidboot.selinux" && value == "permissive") {
+            status = SELINUX_PERMISSIVE;
+        }
+    });
 
     return status;
 }
@@ -478,7 +477,7 @@ void SelinuxInitialize() {
         }
     }
 
-    if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result) {
+    if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result.ok()) {
         LOG(FATAL) << "Unable to write to /sys/fs/selinux/checkreqprot: " << result.error();
     }
 }
@@ -514,9 +513,6 @@ void SelinuxAvcLog(char* buf, size_t buf_len) {
 
 }  // namespace
 
-// The files and directories that were created before initial sepolicy load or
-// files on ramdisk need to have their security context restored to the proper
-// value. This must happen before /dev is populated by ueventd.
 void SelinuxRestoreContext() {
     LOG(INFO) << "Running restorecon...";
     selinux_android_restorecon("/dev", 0);
@@ -535,6 +531,8 @@ void SelinuxRestoreContext() {
     selinux_android_restorecon("/dev/device-mapper", 0);
 
     selinux_android_restorecon("/apex", 0);
+
+    selinux_android_restorecon("/linkerconfig", 0);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {
@@ -560,15 +558,12 @@ int SelinuxKlogCallback(int type, const char* fmt, ...) {
     return 0;
 }
 
-// This function sets up SELinux logging to be written to kmsg, to match init's logging.
 void SelinuxSetupKernelLogging() {
     selinux_callback cb;
     cb.func_log = SelinuxKlogCallback;
     selinux_set_callback(SELINUX_CB_LOG, cb);
 }
 
-// This function returns the Android version with which the vendor SEPolicy was compiled.
-// It is used for version checks such as whether or not vendor_init should be used
 int SelinuxGetVendorAndroidVersion() {
     static int vendor_android_version = [] {
         if (!IsSplitPolicyDevice()) {
@@ -594,7 +589,6 @@ int SelinuxGetVendorAndroidVersion() {
     return vendor_android_version;
 }
 
-// This function initializes SELinux then execs init to run in the init SELinux context.
 int SetupSelinux(char** argv) {
     SetStdioToDevNull(argv);
     InitKernelLogging(argv);

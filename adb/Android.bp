@@ -114,6 +114,66 @@ cc_defaults {
     },
 }
 
+// libadbconnection
+// =========================================================
+// libadbconnection_client/server implement the socket handling for jdwp
+// forwarding and the track-jdwp service.
+cc_library {
+    name: "libadbconnection_server",
+    srcs: ["adbconnection/adbconnection_server.cpp"],
+
+    export_include_dirs: ["adbconnection/include"],
+
+    stl: "libc++_static",
+    shared_libs: ["liblog"],
+    static_libs: ["libbase"],
+
+    defaults: ["adbd_defaults", "host_adbd_supported"],
+
+    // Avoid getting duplicate symbol of android::build::getbuildnumber().
+    use_version_lib: false,
+
+    recovery_available: true,
+    compile_multilib: "both",
+}
+
+cc_library {
+    name: "libadbconnection_client",
+    srcs: ["adbconnection/adbconnection_client.cpp"],
+
+    export_include_dirs: ["adbconnection/include"],
+
+    stl: "libc++_static",
+    shared_libs: ["liblog"],
+    static_libs: ["libbase"],
+
+    defaults: ["adbd_defaults"],
+    visibility: [
+        "//art:__subpackages__",
+        "//system/core/adb/apex:__subpackages__",
+    ],
+    apex_available: [
+        "com.android.adbd",
+        "test_com.android.adbd",
+    ],
+
+    // libadbconnection_client doesn't need an embedded build number.
+    use_version_lib: false,
+
+    target: {
+        linux: {
+            version_script: "adbconnection/libadbconnection_client.map.txt",
+        },
+    },
+    stubs: {
+        symbol_file: "adbconnection/libadbconnection_client.map.txt",
+        versions: ["1"],
+    },
+
+    host_supported: true,
+    compile_multilib: "both",
+}
+
 // libadb
 // =========================================================
 // These files are compiled for both the host and the device.
@@ -134,6 +194,7 @@ libadb_srcs = [
     "transport_fd.cpp",
     "transport_local.cpp",
     "transport_usb.cpp",
+    "types.cpp",
 ]
 
 libadb_posix_srcs = [
@@ -216,6 +277,7 @@ cc_test_host {
         "libcutils",
         "libcrypto_utils",
         "libcrypto",
+        "liblog",
         "libmdnssd",
         "libdiagnose_usb",
         "libusb",
@@ -262,6 +324,7 @@ cc_benchmark {
 cc_binary_host {
     name: "adb",
 
+    stl: "libc++_static",
     defaults: ["adb_defaults"],
 
     srcs: [
@@ -301,8 +364,6 @@ cc_binary_host {
         "libziparchive",
         "libz",
     ],
-
-    stl: "libc++_static",
 
     // Don't add anything here, we don't want additional shared dependencies
     // on the host adb tool, and shared libraries that link against libc++
@@ -361,6 +422,7 @@ cc_library_static {
     ],
 
     shared_libs: [
+        "libadbd_auth",
         "libasyncio",
         "libbase",
         "libcrypto",
@@ -414,6 +476,7 @@ cc_library {
     ],
 
     shared_libs: [
+        "libadbd_auth",
         "libasyncio",
         "libbase",
         "libcrypto",
@@ -428,18 +491,10 @@ cc_library {
                 "daemon/abb_service.cpp",
                 "daemon/framebuffer_service.cpp",
                 "daemon/mdns.cpp",
-                "daemon/reboot_service.cpp",
                 "daemon/restart_service.cpp",
-                "daemon/set_verity_enable_state_service.cpp",
-            ],
-            static_libs: [
-                "libavb_user",
             ],
             shared_libs: [
-                "libbootloader_message",
                 "libmdnssd",
-                "libfec",
-                "libfs_mgr",
                 "libselinux",
             ],
         },
@@ -456,7 +511,7 @@ cc_library {
     defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
 
-    // Avoid getting duplicate symbol of android::build::GetBuildNumber().
+    // avoid getting duplicate symbol of android::build::getbuildnumber().
     use_version_lib: false,
 
     // libminadbd wants both, as it's used to build native tests.
@@ -464,10 +519,12 @@ cc_library {
 
     // libadbd doesn't build any additional source, but to expose libadbd_core as a shared library.
     whole_static_libs: [
+        "libadbconnection_server",
         "libadbd_core",
     ],
 
     shared_libs: [
+        "libadbd_auth",
         "libadbd_services",
         "libasyncio",
         "libbase",
@@ -485,41 +542,8 @@ cc_library {
 cc_binary {
     name: "adbd",
     defaults: ["adbd_defaults", "host_adbd_supported"],
+    stl: "libc++_static",
     recovery_available: true,
-
-    srcs: [
-        "daemon/main.cpp",
-    ],
-
-    cflags: [
-        "-D_GNU_SOURCE",
-        "-Wno-deprecated-declarations",
-    ],
-
-    strip: {
-        keep_symbols: true,
-    },
-
-    shared_libs: [
-        "libadbd",
-        "libadbd_services",
-        "libbase",
-        "libcap",
-        "libcrypto",
-        "libcutils",
-        "liblog",
-        "libminijail",
-        "libselinux",
-    ],
-}
-
-cc_binary {
-    name: "static_adbd",
-    defaults: ["adbd_defaults", "host_adbd_supported"],
-
-    recovery_available: false,
-    static_executable: true,
-    host_supported: false,
 
     srcs: [
         "daemon/main.cpp",
@@ -539,24 +563,38 @@ cc_binary {
         "libadbd",
         "libadbd_services",
         "libasyncio",
-        "libavb_user",
         "libbase",
-        "libbootloader_message",
         "libcap",
-        "libcrypto_static",
         "libcrypto_utils",
         "libcutils",
         "libdiagnose_usb",
-        "libext4_utils",
-        "libfec",
-        "libfec_rs",
-        "libfs_mgr",
         "liblog",
-        "liblp",
         "libmdnssd",
         "libminijail",
         "libselinux",
-        "libsquashfs_utils",
+    ],
+
+    shared_libs: [
+        "libadbd_auth",
+        "libcrypto",
+    ],
+
+    required: ["libadbd_auth"],
+}
+
+phony {
+    name: "adbd_system_binaries",
+    required: [
+        "abb",
+        "reboot",
+        "set-verity-state",
+    ]
+}
+
+phony {
+    name: "adbd_system_binaries_recovery",
+    required: [
+        "reboot.recovery",
     ],
 }
 
@@ -564,6 +602,7 @@ cc_binary {
     name: "abb",
 
     defaults: ["adbd_defaults"],
+    stl: "libc++",
     recovery_available: false,
 
     srcs: [
@@ -596,7 +635,11 @@ cc_binary {
 
 cc_test {
     name: "adbd_test",
+
     defaults: ["adbd_defaults"],
+    stl: "libc++_static",
+
+    recovery_available: false,
     srcs: libadb_test_srcs + [
         "daemon/services.cpp",
         "daemon/shell_service.cpp",
@@ -607,8 +650,8 @@ cc_test {
 
     static_libs: [
         "libadbd",
+        "libadbd_auth",
         "libbase",
-        "libbootloader_message",
         "libcutils",
         "libcrypto_utils",
         "libcrypto_static",
@@ -618,7 +661,7 @@ cc_test {
         "libmdnssd",
         "libselinux",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["device-tests", "mts"],
     require_root: true,
 }
 
@@ -653,10 +696,10 @@ python_test_host {
     test_suites: ["general-tests"],
     version: {
         py2: {
-            enabled: true,
+            enabled: false,
         },
         py3: {
-            enabled: false,
+            enabled: true,
         },
     },
 }
@@ -701,7 +744,6 @@ cc_library_host_static {
         "libziparchive",
         "libz",
     ],
-    stl: "libc++_static",
     proto: {
         type: "lite",
         export_proto_headers: true,

@@ -14,12 +14,26 @@
 
 #include "utility.h"
 
+#include <errno.h>
+#include <time.h>
+
+#include <iomanip>
+#include <sstream>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
+#include <fs_mgr/roots.h>
 
+using android::dm::kSectorSize;
+using android::fiemap::FiemapStatus;
+using android::fs_mgr::EnsurePathMounted;
+using android::fs_mgr::EnsurePathUnmounted;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::GetEntryForPath;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::Partition;
+using android::fs_mgr::ReadDefaultFstab;
 
 namespace android {
 namespace snapshot {
@@ -76,7 +90,7 @@ AutoDeleteSnapshot::~AutoDeleteSnapshot() {
     }
 }
 
-bool InitializeCow(const std::string& device) {
+Return InitializeCow(const std::string& device) {
     // When the kernel creates a persistent dm-snapshot, it requires a CoW file
     // to store the modifications. The kernel interface does not specify how
     // the CoW is used, and there is no standard associated.
@@ -88,25 +102,68 @@ bool InitializeCow(const std::string& device) {
     // so it can be used to resume the last state of a snapshot device;
     // - an _INVALID_ snapshot otherwise.
     // To avoid zero-filling the whole CoW file when a new dm-snapshot is
-    // created, here we zero-fill only the first 32 bits. This is a temporary
-    // workaround that will be discussed again when the kernel API gets
-    // consolidated.
-    // TODO(b/139202197): Remove this hack once the kernel API is consolidated.
-    constexpr ssize_t kDmSnapZeroFillSize = 4;  // 32-bit
+    // created, here we zero-fill only the first chunk to be compliant with
+    // lvm.
+    constexpr ssize_t kDmSnapZeroFillSize = kSectorSize * kSnapshotChunkSize;
 
-    char zeros[kDmSnapZeroFillSize] = {0};
+    std::vector<uint8_t> zeros(kDmSnapZeroFillSize, 0);
     android::base::unique_fd fd(open(device.c_str(), O_WRONLY | O_BINARY));
     if (fd < 0) {
         PLOG(ERROR) << "Can't open COW device: " << device;
-        return false;
+        return Return(FiemapStatus::FromErrno(errno));
     }
 
     LOG(INFO) << "Zero-filling COW device: " << device;
-    if (!android::base::WriteFully(fd, zeros, kDmSnapZeroFillSize)) {
+    if (!android::base::WriteFully(fd, zeros.data(), kDmSnapZeroFillSize)) {
         PLOG(ERROR) << "Can't zero-fill COW device for " << device;
+        return Return(FiemapStatus::FromErrno(errno));
+    }
+    return Return::Ok();
+}
+
+std::unique_ptr<AutoUnmountDevice> AutoUnmountDevice::New(const std::string& path) {
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        LOG(ERROR) << "Cannot read default fstab";
+        return nullptr;
+    }
+
+    if (GetEntryForPath(&fstab, path) == nullptr) {
+        LOG(INFO) << "EnsureMetadataMounted can't find entry for " << path << ", skipping";
+        return std::unique_ptr<AutoUnmountDevice>(new AutoUnmountDevice("", {}));
+    }
+
+    if (!EnsurePathMounted(&fstab, path)) {
+        LOG(ERROR) << "Cannot mount " << path;
+        return nullptr;
+    }
+    return std::unique_ptr<AutoUnmountDevice>(new AutoUnmountDevice(path, std::move(fstab)));
+}
+
+AutoUnmountDevice::~AutoUnmountDevice() {
+    if (name_.empty()) return;
+    if (!EnsurePathUnmounted(&fstab_, name_)) {
+        LOG(ERROR) << "Cannot unmount " << name_;
+    }
+}
+
+bool WriteStringToFileAtomic(const std::string& content, const std::string& path) {
+    std::string tmp_path = path + ".tmp";
+    if (!android::base::WriteStringToFile(content, tmp_path)) {
+        return false;
+    }
+    if (rename(tmp_path.c_str(), path.c_str()) == -1) {
+        PLOG(ERROR) << "rename failed from " << tmp_path << " to " << path;
         return false;
     }
     return true;
+}
+
+std::ostream& operator<<(std::ostream& os, const Now&) {
+    struct tm now;
+    time_t t = time(nullptr);
+    localtime_r(&t, &now);
+    return os << std::put_time(&now, "%Y%m%d-%H%M%S");
 }
 
 }  // namespace snapshot

@@ -36,13 +36,9 @@
 
 static std::string test_data_dir = android::base::GetExecutableDirectory() + "/testdata";
 
-static const std::string kMissingZip = "missing.zip";
 static const std::string kValidZip = "valid.zip";
 static const std::string kLargeZip = "large.zip";
 static const std::string kBadCrcZip = "bad_crc.zip";
-static const std::string kCrashApk = "crash.apk";
-static const std::string kBadFilenameZip = "bad_filename.zip";
-static const std::string kUpdateZip = "dummy-update.zip";
 
 static const std::vector<uint8_t> kATxtContents{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'a',
                                                 'b', 'c', 'd', 'e', 'f', 'g', 'h', '\n'};
@@ -51,13 +47,6 @@ static const std::vector<uint8_t> kATxtContentsCompressed{'K', 'L', 'J', 'N', 'I
                                                           207, 'H', 132, 210, '\\', '\0'};
 
 static const std::vector<uint8_t> kBTxtContents{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', '\n'};
-
-static const std::string kATxtName("a.txt");
-static const std::string kBTxtName("b.txt");
-static const std::string kNonexistentTxtName("nonexistent.txt");
-static const std::string kEmptyTxtName("empty.txt");
-static const std::string kLargeCompressTxtName("compress.txt");
-static const std::string kLargeUncompressTxtName("uncompress.txt");
 
 static int32_t OpenArchiveWrapper(const std::string& name, ZipArchiveHandle* handle) {
   const std::string abs_path = test_data_dir + "/" + name;
@@ -69,19 +58,31 @@ TEST(ziparchive, Open) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
   CloseArchive(handle);
 
-  ASSERT_EQ(-1, OpenArchiveWrapper(kBadFilenameZip, &handle));
+  ASSERT_EQ(kInvalidEntryName, OpenArchiveWrapper("bad_filename.zip", &handle));
   CloseArchive(handle);
 }
 
 TEST(ziparchive, OutOfBound) {
   ZipArchiveHandle handle;
-  ASSERT_EQ(-8, OpenArchiveWrapper(kCrashApk, &handle));
+  ASSERT_EQ(kInvalidOffset, OpenArchiveWrapper("crash.apk", &handle));
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, EmptyArchive) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(kEmptyArchive, OpenArchiveWrapper("empty.zip", &handle));
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, ZeroSizeCentralDirectory) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(kInvalidFile, OpenArchiveWrapper("zero-size-cd.zip", &handle));
   CloseArchive(handle);
 }
 
 TEST(ziparchive, OpenMissing) {
   ZipArchiveHandle handle;
-  ASSERT_NE(0, OpenArchiveWrapper(kMissingZip, &handle));
+  ASSERT_NE(0, OpenArchiveWrapper("missing.zip", &handle));
 
   // Confirm the file descriptor is not going to be mistaken for a valid one.
   ASSERT_EQ(-1, GetFileDescriptor(handle));
@@ -200,7 +201,7 @@ TEST(ziparchive, FindEntry) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, kATxtName, &data));
+  ASSERT_EQ(0, FindEntry(handle, "a.txt", &data));
 
   // Known facts about a.txt, from zipinfo -v.
   ASSERT_EQ(63, data.offset);
@@ -211,7 +212,7 @@ TEST(ziparchive, FindEntry) {
   ASSERT_EQ(static_cast<uint32_t>(0x438a8005), data.mod_time);
 
   // An entry that doesn't exist. Should be a negative return code.
-  ASSERT_LT(FindEntry(handle, kNonexistentTxtName, &data), 0);
+  ASSERT_LT(FindEntry(handle, "this file does not exist", &data), 0);
 
   CloseArchive(handle);
 }
@@ -259,7 +260,7 @@ TEST(ziparchive, ExtractToMemory) {
 
   // An entry that's deflated.
   ZipEntry data;
-  ASSERT_EQ(0, FindEntry(handle, kATxtName, &data));
+  ASSERT_EQ(0, FindEntry(handle, "a.txt", &data));
   const uint32_t a_size = data.uncompressed_length;
   ASSERT_EQ(a_size, kATxtContents.size());
   uint8_t* buffer = new uint8_t[a_size];
@@ -268,7 +269,7 @@ TEST(ziparchive, ExtractToMemory) {
   delete[] buffer;
 
   // An entry that's stored.
-  ASSERT_EQ(0, FindEntry(handle, kBTxtName, &data));
+  ASSERT_EQ(0, FindEntry(handle, "b.txt", &data));
   const uint32_t b_size = data.uncompressed_length;
   ASSERT_EQ(b_size, kBTxtContents.size());
   buffer = new uint8_t[b_size];
@@ -323,7 +324,7 @@ TEST(ziparchive, EmptyEntries) {
   ASSERT_EQ(0, OpenArchiveFd(tmp_file.fd, "EmptyEntriesTest", &handle, false));
 
   ZipEntry entry;
-  ASSERT_EQ(0, FindEntry(handle, kEmptyTxtName, &entry));
+  ASSERT_EQ(0, FindEntry(handle, "empty.txt", &entry));
   ASSERT_EQ(static_cast<uint32_t>(0), entry.uncompressed_length);
   uint8_t buffer[1];
   ASSERT_EQ(0, ExtractToMemory(handle, &entry, buffer, 1));
@@ -403,7 +404,7 @@ TEST(ziparchive, ExtractToFile) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   ZipEntry entry;
-  ASSERT_EQ(0, FindEntry(handle, kATxtName, &entry));
+  ASSERT_EQ(0, FindEntry(handle, "a.txt", &entry));
   ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, tmp_file.fd));
 
   // Assert that the first 8 bytes of the file haven't been clobbered.
@@ -425,7 +426,7 @@ TEST(ziparchive, ExtractToFile) {
 
 #if !defined(_WIN32)
 TEST(ziparchive, OpenFromMemory) {
-  const std::string zip_path = test_data_dir + "/" + kUpdateZip;
+  const std::string zip_path = test_data_dir + "/dummy-update.zip";
   android::base::unique_fd fd(open(zip_path.c_str(), O_RDONLY | O_BINARY));
   ASSERT_NE(-1, fd);
   struct stat sb;
@@ -510,27 +511,27 @@ static void ZipArchiveStreamTestUsingMemory(const std::string& zip_file,
 }
 
 TEST(ziparchive, StreamCompressed) {
-  ZipArchiveStreamTestUsingContents(kValidZip, kATxtName, kATxtContents, false);
+  ZipArchiveStreamTestUsingContents(kValidZip, "a.txt", kATxtContents, false);
 }
 
 TEST(ziparchive, StreamUncompressed) {
-  ZipArchiveStreamTestUsingContents(kValidZip, kBTxtName, kBTxtContents, false);
+  ZipArchiveStreamTestUsingContents(kValidZip, "b.txt", kBTxtContents, false);
 }
 
 TEST(ziparchive, StreamRawCompressed) {
-  ZipArchiveStreamTestUsingContents(kValidZip, kATxtName, kATxtContentsCompressed, true);
+  ZipArchiveStreamTestUsingContents(kValidZip, "a.txt", kATxtContentsCompressed, true);
 }
 
 TEST(ziparchive, StreamRawUncompressed) {
-  ZipArchiveStreamTestUsingContents(kValidZip, kBTxtName, kBTxtContents, true);
+  ZipArchiveStreamTestUsingContents(kValidZip, "b.txt", kBTxtContents, true);
 }
 
 TEST(ziparchive, StreamLargeCompressed) {
-  ZipArchiveStreamTestUsingMemory(kLargeZip, kLargeCompressTxtName);
+  ZipArchiveStreamTestUsingMemory(kLargeZip, "compress.txt");
 }
 
 TEST(ziparchive, StreamLargeUncompressed) {
-  ZipArchiveStreamTestUsingMemory(kLargeZip, kLargeUncompressTxtName);
+  ZipArchiveStreamTestUsingMemory(kLargeZip, "uncompress.txt");
 }
 
 TEST(ziparchive, StreamCompressedBadCrc) {
@@ -539,7 +540,7 @@ TEST(ziparchive, StreamCompressedBadCrc) {
 
   ZipEntry entry;
   std::vector<uint8_t> read_data;
-  ZipArchiveStreamTest(handle, kATxtName, false, false, &entry, &read_data);
+  ZipArchiveStreamTest(handle, "a.txt", false, false, &entry, &read_data);
 
   CloseArchive(handle);
 }
@@ -550,7 +551,7 @@ TEST(ziparchive, StreamUncompressedBadCrc) {
 
   ZipEntry entry;
   std::vector<uint8_t> read_data;
-  ZipArchiveStreamTest(handle, kBTxtName, false, false, &entry, &read_data);
+  ZipArchiveStreamTest(handle, "b.txt", false, false, &entry, &read_data);
 
   CloseArchive(handle);
 }
@@ -647,7 +648,8 @@ TEST(ziparchive, ErrorCodeString) {
 
   // Out of bounds.
   ASSERT_STREQ("Unknown return code", ErrorCodeString(1));
-  ASSERT_STREQ("Unknown return code", ErrorCodeString(-13));
+  ASSERT_STRNE("Unknown return code", ErrorCodeString(kLastErrorCode));
+  ASSERT_STREQ("Unknown return code", ErrorCodeString(kLastErrorCode - 1));
 
   ASSERT_STREQ("I/O error", ErrorCodeString(kIoError));
 }
@@ -698,7 +700,7 @@ TEST(ziparchive, BrokenLfhSignature) {
   ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, &kZipFileWithBrokenLfhSignature[0],
                                         kZipFileWithBrokenLfhSignature.size()));
   ZipArchiveHandle handle;
-  ASSERT_EQ(-1, OpenArchiveFd(tmp_file.fd, "LeadingNonZipBytes", &handle, false));
+  ASSERT_EQ(kInvalidFile, OpenArchiveFd(tmp_file.fd, "LeadingNonZipBytes", &handle, false));
 }
 
 class VectorReader : public zip_archive::Reader {

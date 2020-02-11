@@ -385,7 +385,7 @@ static void bswrite_test(const char* message) {
         fprintf(stderr, "Expect \"Binary log entry conversion failed\"\n");
       }
       int processBinaryLogBuffer = android_log_processBinaryLogBuffer(
-          &log_msg.entry_v1, &entry, NULL, msgBuf, sizeof(msgBuf));
+          &log_msg.entry, &entry, nullptr, msgBuf, sizeof(msgBuf));
       EXPECT_EQ((length == total) ? 0 : -1, processBinaryLogBuffer);
       if ((processBinaryLogBuffer == 0) || entry.message) {
         size_t line_overhead = 20;
@@ -469,8 +469,7 @@ static void buf_write_test(const char* message) {
     AndroidLogFormat* logformat = android_log_format_new();
     EXPECT_TRUE(NULL != logformat);
     AndroidLogEntry entry;
-    int processLogBuffer =
-        android_log_processLogBuffer(&log_msg.entry_v1, &entry);
+    int processLogBuffer = android_log_processLogBuffer(&log_msg.entry, &entry);
     EXPECT_EQ(0, processLogBuffer);
     if (processLogBuffer == 0) {
       size_t line_overhead = 11;
@@ -1013,8 +1012,7 @@ TEST(liblog, __android_log_buf_print__maxtag) {
     AndroidLogFormat* logformat = android_log_format_new();
     EXPECT_TRUE(NULL != logformat);
     AndroidLogEntry entry;
-    int processLogBuffer =
-        android_log_processLogBuffer(&log_msg.entry_v1, &entry);
+    int processLogBuffer = android_log_processLogBuffer(&log_msg.entry, &entry);
     EXPECT_EQ(0, processLogBuffer);
     if (processLogBuffer == 0) {
       fflush(stderr);
@@ -1076,7 +1074,6 @@ TEST(liblog, too_big_payload) {
 
     // Once we've found our expected entry, break.
     if (len == LOGGER_ENTRY_MAX_PAYLOAD - sizeof(big_payload_tag)) {
-      EXPECT_EQ(ret, len + static_cast<ssize_t>(sizeof(big_payload_tag)));
       *found = true;
     }
   };
@@ -1261,14 +1258,10 @@ TEST(liblog, is_loggable) {
     int level;
     char type;
   } levels[] = {
-    { ANDROID_LOG_VERBOSE, 'v' },
-    { ANDROID_LOG_DEBUG, 'd' },
-    { ANDROID_LOG_INFO, 'i' },
-    { ANDROID_LOG_WARN, 'w' },
-    { ANDROID_LOG_ERROR, 'e' },
-    { ANDROID_LOG_FATAL, 'a' },
-    { -1, 's' },
-    { -2, 'g' },  // Illegal value, resort to default
+      {ANDROID_LOG_VERBOSE, 'v'}, {ANDROID_LOG_DEBUG, 'd'},
+      {ANDROID_LOG_INFO, 'i'},    {ANDROID_LOG_WARN, 'w'},
+      {ANDROID_LOG_ERROR, 'e'},   {ANDROID_LOG_FATAL, 'a'},
+      {ANDROID_LOG_SILENT, 's'},  {-2, 'g'},  // Illegal value, resort to default
   };
 
   // Set up initial test condition
@@ -2507,8 +2500,8 @@ static void create_android_logger(const char* (*fn)(uint32_t tag,
     EXPECT_TRUE(NULL != logformat);
     AndroidLogEntry entry;
     char msgBuf[1024];
-    int processBinaryLogBuffer = android_log_processBinaryLogBuffer(
-        &log_msg.entry_v1, &entry, NULL, msgBuf, sizeof(msgBuf));
+    int processBinaryLogBuffer =
+        android_log_processBinaryLogBuffer(&log_msg.entry, &entry, nullptr, msgBuf, sizeof(msgBuf));
     EXPECT_EQ(0, processBinaryLogBuffer);
     if (processBinaryLogBuffer == 0) {
       int line_overhead = 20;

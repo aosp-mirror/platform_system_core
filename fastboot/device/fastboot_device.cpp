@@ -54,12 +54,17 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_UPDATE_SUPER, UpdateSuperHandler},
               {FB_CMD_OEM, OemCmdHandler},
               {FB_CMD_GSI, GsiHandler},
+              {FB_CMD_SNAPSHOT_UPDATE, SnapshotUpdateHandler},
       }),
       transport_(std::make_unique<ClientUsbTransport>()),
       boot_control_hal_(IBootControl::getService()),
       health_hal_(get_health_service()),
       fastboot_hal_(IFastboot::getService()),
-      active_slot_("") {}
+      active_slot_("") {
+    if (boot_control_hal_) {
+        boot1_1_ = android::hardware::boot::V1_1::IBootControl::castFrom(boot_control_hal_);
+    }
+}
 
 FastbootDevice::~FastbootDevice() {
     CloseDevice();

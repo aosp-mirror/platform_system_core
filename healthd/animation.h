@@ -75,7 +75,7 @@ struct animation {
 
     bool run;
 
-    frame* frames;
+    frame* frames = nullptr;
     int cur_frame;
     int num_frames;
     int first_frame_repeats;  // Number of times to repeat the first frame in the current cycle
@@ -85,6 +85,8 @@ struct animation {
 
     int cur_level;  // current battery level being animated (0-100)
     int cur_status;  // current battery status - see BatteryService.h for BATTERY_STATUS_*
+
+    ~animation() { delete frames; }
 };
 
 }

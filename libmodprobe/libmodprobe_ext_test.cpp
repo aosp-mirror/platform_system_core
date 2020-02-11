@@ -29,6 +29,10 @@
 
 #include "libmodprobe_test.h"
 
+std::string Modprobe::GetKernelCmdline(void) {
+    return kernel_cmdline;
+}
+
 bool Modprobe::Insmod(const std::string& path_name, const std::string& parameters) {
     auto deps = GetDependencies(MakeCanonical(path_name));
     if (deps.empty()) {
@@ -57,7 +61,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
 
 bool Modprobe::Rmmod(const std::string& module_name) {
     for (auto it = modules_loaded.begin(); it != modules_loaded.end(); it++) {
-        if (*it == module_name) {
+        if (*it == module_name || android::base::StartsWith(*it, module_name + " ")) {
             modules_loaded.erase(it);
             return true;
         }

@@ -169,15 +169,18 @@ std::unordered_map<std::string, uint32_t> UnwindOfflineTest::arm_regs_ = {
 };
 
 std::unordered_map<std::string, uint32_t> UnwindOfflineTest::arm64_regs_ = {
-    {"x0", ARM64_REG_R0},   {"x1", ARM64_REG_R1},   {"x2", ARM64_REG_R2},   {"x3", ARM64_REG_R3},
-    {"x4", ARM64_REG_R4},   {"x5", ARM64_REG_R5},   {"x6", ARM64_REG_R6},   {"x7", ARM64_REG_R7},
-    {"x8", ARM64_REG_R8},   {"x9", ARM64_REG_R9},   {"x10", ARM64_REG_R10}, {"x11", ARM64_REG_R11},
-    {"x12", ARM64_REG_R12}, {"x13", ARM64_REG_R13}, {"x14", ARM64_REG_R14}, {"x15", ARM64_REG_R15},
-    {"x16", ARM64_REG_R16}, {"x17", ARM64_REG_R17}, {"x18", ARM64_REG_R18}, {"x19", ARM64_REG_R19},
-    {"x20", ARM64_REG_R20}, {"x21", ARM64_REG_R21}, {"x22", ARM64_REG_R22}, {"x23", ARM64_REG_R23},
-    {"x24", ARM64_REG_R24}, {"x25", ARM64_REG_R25}, {"x26", ARM64_REG_R26}, {"x27", ARM64_REG_R27},
-    {"x28", ARM64_REG_R28}, {"x29", ARM64_REG_R29}, {"sp", ARM64_REG_SP},   {"lr", ARM64_REG_LR},
-    {"pc", ARM64_REG_PC},
+    {"x0", ARM64_REG_R0},      {"x1", ARM64_REG_R1},   {"x2", ARM64_REG_R2},
+    {"x3", ARM64_REG_R3},      {"x4", ARM64_REG_R4},   {"x5", ARM64_REG_R5},
+    {"x6", ARM64_REG_R6},      {"x7", ARM64_REG_R7},   {"x8", ARM64_REG_R8},
+    {"x9", ARM64_REG_R9},      {"x10", ARM64_REG_R10}, {"x11", ARM64_REG_R11},
+    {"x12", ARM64_REG_R12},    {"x13", ARM64_REG_R13}, {"x14", ARM64_REG_R14},
+    {"x15", ARM64_REG_R15},    {"x16", ARM64_REG_R16}, {"x17", ARM64_REG_R17},
+    {"x18", ARM64_REG_R18},    {"x19", ARM64_REG_R19}, {"x20", ARM64_REG_R20},
+    {"x21", ARM64_REG_R21},    {"x22", ARM64_REG_R22}, {"x23", ARM64_REG_R23},
+    {"x24", ARM64_REG_R24},    {"x25", ARM64_REG_R25}, {"x26", ARM64_REG_R26},
+    {"x27", ARM64_REG_R27},    {"x28", ARM64_REG_R28}, {"x29", ARM64_REG_R29},
+    {"sp", ARM64_REG_SP},      {"lr", ARM64_REG_LR},   {"pc", ARM64_REG_PC},
+    {"pst", ARM64_REG_PSTATE},
 };
 
 std::unordered_map<std::string, uint32_t> UnwindOfflineTest::x86_regs_ = {
@@ -1581,6 +1584,156 @@ TEST_F(UnwindOfflineTest, load_bias_different_section_bias_arm64) {
   EXPECT_EQ(0x7fdd4a4130ULL, unwinder.frames()[10].sp);
   EXPECT_EQ(0x71115a6a34ULL, unwinder.frames()[11].pc);
   EXPECT_EQ(0x7fdd4a4170ULL, unwinder.frames()[11].sp);
+}
+
+TEST_F(UnwindOfflineTest, eh_frame_bias_x86) {
+  ASSERT_NO_FATAL_FAILURE(Init("eh_frame_bias_x86/", ARCH_X86));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(11U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc ffffe430  vdso.so (__kernel_vsyscall+16)\n"
+      "  #01 pc 00082a4b  libc.so (__epoll_pwait+43)\n"
+      "  #02 pc 000303a3  libc.so (epoll_pwait+115)\n"
+      "  #03 pc 000303ed  libc.so (epoll_wait+45)\n"
+      "  #04 pc 00010ea2  tombstoned (epoll_dispatch+226)\n"
+      "  #05 pc 0000c5e7  tombstoned (event_base_loop+1095)\n"
+      "  #06 pc 0000c193  tombstoned (event_base_dispatch+35)\n"
+      "  #07 pc 00005c77  tombstoned (main+884)\n"
+      "  #08 pc 00015f66  libc.so (__libc_init+102)\n"
+      "  #09 pc 0000360e  tombstoned (_start+98)\n"
+      "  #10 pc 00000001  <unknown>\n",
+      frame_info);
+
+  EXPECT_EQ(0xffffe430ULL, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xfffe1a30ULL, unwinder.frames()[0].sp);
+  EXPECT_EQ(0xeb585a4bULL, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xfffe1a40ULL, unwinder.frames()[1].sp);
+  EXPECT_EQ(0xeb5333a3ULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xfffe1a60ULL, unwinder.frames()[2].sp);
+  EXPECT_EQ(0xeb5333edULL, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xfffe1ab0ULL, unwinder.frames()[3].sp);
+  EXPECT_EQ(0xeb841ea2ULL, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xfffe1ae0ULL, unwinder.frames()[4].sp);
+  EXPECT_EQ(0xeb83d5e7ULL, unwinder.frames()[5].pc);
+  EXPECT_EQ(0xfffe1b30ULL, unwinder.frames()[5].sp);
+  EXPECT_EQ(0xeb83d193ULL, unwinder.frames()[6].pc);
+  EXPECT_EQ(0xfffe1bd0ULL, unwinder.frames()[6].sp);
+  EXPECT_EQ(0xeb836c77ULL, unwinder.frames()[7].pc);
+  EXPECT_EQ(0xfffe1c00ULL, unwinder.frames()[7].sp);
+  EXPECT_EQ(0xeb518f66ULL, unwinder.frames()[8].pc);
+  EXPECT_EQ(0xfffe1d00ULL, unwinder.frames()[8].sp);
+  EXPECT_EQ(0xeb83460eULL, unwinder.frames()[9].pc);
+  EXPECT_EQ(0xfffe1d40ULL, unwinder.frames()[9].sp);
+  EXPECT_EQ(0x00000001ULL, unwinder.frames()[10].pc);
+  EXPECT_EQ(0xfffe1d74ULL, unwinder.frames()[10].sp);
+}
+
+TEST_F(UnwindOfflineTest, signal_load_bias_arm) {
+  ASSERT_NO_FATAL_FAILURE(Init("signal_load_bias_arm/", ARCH_ARM));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(17U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 0029ef9e  libunwindstack_unit_test (SignalInnerFunction+10)\n"
+      "  #01 pc 0029efa7  libunwindstack_unit_test (SignalMiddleFunction+2)\n"
+      "  #02 pc 0029efaf  libunwindstack_unit_test (SignalOuterFunction+2)\n"
+      "  #03 pc 002a280b  libunwindstack_unit_test (unwindstack::SignalCallerHandler(int, "
+      "siginfo*, void*)+10)\n"
+      "  #04 pc 00058bd4  libc.so (__restore)\n"
+      "  #05 pc 0029f01e  libunwindstack_unit_test (InnerFunction+106)\n"
+      "  #06 pc 0029f633  libunwindstack_unit_test (MiddleFunction+16)\n"
+      "  #07 pc 0029f64b  libunwindstack_unit_test (OuterFunction+16)\n"
+      "  #08 pc 002a1711  libunwindstack_unit_test (unwindstack::RemoteThroughSignal(int, unsigned "
+      "int)+260)\n"
+      "  #09 pc 002a1603  libunwindstack_unit_test "
+      "(unwindstack::UnwindTest_remote_through_signal_Test::TestBody()+10)\n"
+      "  #10 pc 002c8fe3  libunwindstack_unit_test (testing::Test::Run()+130)\n"
+      "  #11 pc 002c9b25  libunwindstack_unit_test (testing::TestInfo::Run()+184)\n"
+      "  #12 pc 002c9e27  libunwindstack_unit_test (testing::TestSuite::Run()+202)\n"
+      "  #13 pc 002d193d  libunwindstack_unit_test "
+      "(testing::internal::UnitTestImpl::RunAllTests()+660)\n"
+      "  #14 pc 002d160b  libunwindstack_unit_test (testing::UnitTest::Run()+134)\n"
+      "  #15 pc 002de035  libunwindstack_unit_test (IsolateMain+680)\n"
+      "  #16 pc 00058155  libc.so (__libc_init+68)\n",
+      frame_info);
+
+  EXPECT_EQ(0xb6955f9eULL, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xf2790ce8ULL, unwinder.frames()[0].sp);
+  EXPECT_EQ(0xb6955fa7ULL, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xf2790ce8ULL, unwinder.frames()[1].sp);
+  EXPECT_EQ(0xb6955fafULL, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xf2790cf0ULL, unwinder.frames()[2].sp);
+  EXPECT_EQ(0xb695980bULL, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xf2790cf8ULL, unwinder.frames()[3].sp);
+  EXPECT_EQ(0xf23febd4ULL, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xf2790d10ULL, unwinder.frames()[4].sp);
+  EXPECT_EQ(0xb695601eULL, unwinder.frames()[5].pc);
+  EXPECT_EQ(0xffe67798ULL, unwinder.frames()[5].sp);
+  EXPECT_EQ(0xb6956633ULL, unwinder.frames()[6].pc);
+  EXPECT_EQ(0xffe67890ULL, unwinder.frames()[6].sp);
+  EXPECT_EQ(0xb695664bULL, unwinder.frames()[7].pc);
+  EXPECT_EQ(0xffe678a0ULL, unwinder.frames()[7].sp);
+  EXPECT_EQ(0xb6958711ULL, unwinder.frames()[8].pc);
+  EXPECT_EQ(0xffe678b0ULL, unwinder.frames()[8].sp);
+  EXPECT_EQ(0xb6958603ULL, unwinder.frames()[9].pc);
+  EXPECT_EQ(0xffe67ac8ULL, unwinder.frames()[9].sp);
+  EXPECT_EQ(0xb697ffe3ULL, unwinder.frames()[10].pc);
+  EXPECT_EQ(0xffe67ad8ULL, unwinder.frames()[10].sp);
+  EXPECT_EQ(0xb6980b25ULL, unwinder.frames()[11].pc);
+  EXPECT_EQ(0xffe67ae8ULL, unwinder.frames()[11].sp);
+  EXPECT_EQ(0xb6980e27ULL, unwinder.frames()[12].pc);
+  EXPECT_EQ(0xffe67b18ULL, unwinder.frames()[12].sp);
+  EXPECT_EQ(0xb698893dULL, unwinder.frames()[13].pc);
+  EXPECT_EQ(0xffe67b48ULL, unwinder.frames()[13].sp);
+  EXPECT_EQ(0xb698860bULL, unwinder.frames()[14].pc);
+  EXPECT_EQ(0xffe67bb0ULL, unwinder.frames()[14].sp);
+  EXPECT_EQ(0xb6995035ULL, unwinder.frames()[15].pc);
+  EXPECT_EQ(0xffe67bd0ULL, unwinder.frames()[15].sp);
+  EXPECT_EQ(0xf23fe155ULL, unwinder.frames()[16].pc);
+  EXPECT_EQ(0xffe67d10ULL, unwinder.frames()[16].sp);
+}
+
+TEST_F(UnwindOfflineTest, empty_arm64) {
+  ASSERT_NO_FATAL_FAILURE(Init("empty_arm64/", ARCH_ARM64));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(7U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 00000000000963a4  libc.so (__ioctl+4)\n"
+      "  #01 pc 000000000005344c  libc.so (ioctl+140)\n"
+      "  #02 pc 0000000000050ce4  libbinder.so "
+      "(android::IPCThreadState::talkWithDriver(bool)+308)\n"
+      "  #03 pc 0000000000050e98  libbinder.so "
+      "(android::IPCThreadState::getAndExecuteCommand()+24)\n"
+      "  #04 pc 00000000000516ac  libbinder.so (android::IPCThreadState::joinThreadPool(bool)+60)\n"
+      "  #05 pc 00000000000443b0  netd (main+1056)\n"
+      "  #06 pc 0000000000045594  libc.so (__libc_init+108)\n",
+      frame_info);
+
+  EXPECT_EQ(0x72a02203a4U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x7ffb6c0b50U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x72a01dd44cU, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x7ffb6c0b50U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x729f759ce4U, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x7ffb6c0c50U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x729f759e98U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x7ffb6c0ce0U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x729f75a6acU, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x7ffb6c0d10U, unwinder.frames()[4].sp);
+  EXPECT_EQ(0x5d478af3b0U, unwinder.frames()[5].pc);
+  EXPECT_EQ(0x7ffb6c0d40U, unwinder.frames()[5].sp);
+  EXPECT_EQ(0x72a01cf594U, unwinder.frames()[6].pc);
+  EXPECT_EQ(0x7ffb6c0f30U, unwinder.frames()[6].sp);
 }
 
 }  // namespace unwindstack

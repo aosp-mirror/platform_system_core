@@ -15,33 +15,25 @@
 #pragma once
 
 #include <functional>
+#include <iostream>
 #include <string>
 
 #include <android-base/macros.h>
+#include <fstab/fstab.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
 #include <libsnapshot/snapshot.h>
 #include <update_engine/update_metadata.pb.h>
 
+#include <libsnapshot/auto_device.h>
+#include <libsnapshot/snapshot.h>
+
 namespace android {
 namespace snapshot {
 
 // Unit is sectors, this is a 4K chunk.
 static constexpr uint32_t kSnapshotChunkSize = 8;
-
-struct AutoDevice {
-    virtual ~AutoDevice(){};
-    void Release();
-
-  protected:
-    AutoDevice(const std::string& name) : name_(name) {}
-    std::string name_;
-
-  private:
-    DISALLOW_COPY_AND_ASSIGN(AutoDevice);
-    AutoDevice(AutoDevice&& other) = delete;
-};
 
 // A list of devices we created along the way.
 // - Whenever a device is created that is subject to GC'ed at the end of
@@ -103,12 +95,35 @@ struct AutoDeleteSnapshot : AutoDevice {
     SnapshotManager::LockedFile* lock_ = nullptr;
 };
 
+struct AutoUnmountDevice : AutoDevice {
+    // Empty object that does nothing.
+    AutoUnmountDevice() : AutoDevice("") {}
+    static std::unique_ptr<AutoUnmountDevice> New(const std::string& path);
+    ~AutoUnmountDevice();
+
+  private:
+    AutoUnmountDevice(const std::string& path, android::fs_mgr::Fstab&& fstab)
+        : AutoDevice(path), fstab_(std::move(fstab)) {}
+    android::fs_mgr::Fstab fstab_;
+};
+
 // Return a list of partitions in |builder| with the name ending in |suffix|.
 std::vector<android::fs_mgr::Partition*> ListPartitionsWithSuffix(
         android::fs_mgr::MetadataBuilder* builder, const std::string& suffix);
 
 // Initialize a device before using it as the COW device for a dm-snapshot device.
-bool InitializeCow(const std::string& device);
+Return InitializeCow(const std::string& device);
+
+// "Atomically" write string to file. This is done by a series of actions:
+// 1. Write to path + ".tmp"
+// 2. Move temporary file to path using rename()
+// Note that rename() is an atomic operation. This function may not work properly if there
+// is an open fd to |path|, because that fd has an old view of the file.
+bool WriteStringToFileAtomic(const std::string& content, const std::string& path);
+
+// Writes current time to a given stream.
+struct Now {};
+std::ostream& operator<<(std::ostream& os, const Now&);
 
 }  // namespace snapshot
 }  // namespace android

@@ -204,10 +204,6 @@ int FirstStageMain(int argc, char** argv) {
     // part of the product partition, e.g. because they are mounted read-write.
     CHECKCALL(mkdir("/mnt/product", 0755));
 
-    // /apex is used to mount APEXes
-    CHECKCALL(mount("tmpfs", "/apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
-                    "mode=0755,uid=0,gid=0"));
-
     // /debug_ramdisk is used to preserve additional files from the debug ramdisk
     CHECKCALL(mount("tmpfs", "/debug_ramdisk", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
@@ -239,11 +235,16 @@ int FirstStageMain(int argc, char** argv) {
     }
 
     Modprobe m({"/lib/modules"});
-    if (!m.LoadListedModules()) {
-        LOG(FATAL) << "Failed to load kernel modules";
+    auto want_console = ALLOW_FIRST_STAGE_CONSOLE && FirstStageConsole(cmdline);
+    if (!m.LoadListedModules(!want_console)) {
+        if (want_console) {
+            LOG(ERROR) << "Failed to load kernel modules, starting console";
+        } else {
+            LOG(FATAL) << "Failed to load kernel modules";
+        }
     }
 
-    if (ALLOW_FIRST_STAGE_CONSOLE && FirstStageConsole(cmdline)) {
+    if (want_console) {
         StartConsole();
     }
 

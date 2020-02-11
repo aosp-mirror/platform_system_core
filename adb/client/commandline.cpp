@@ -107,6 +107,7 @@ static void help() {
         "       localfilesystem:<unix domain socket name>\n"
         "       dev:<character device name>\n"
         "       jdwp:<process pid> (remote only)\n"
+        "       acceptfd:<fd> (listen only)\n"
         " forward --remove LOCAL   remove specific forward socket connection\n"
         " forward --remove-all     remove all forward socket connections\n"
         " ppp TTY [PARAMETER...]   run PPP over USB\n"
@@ -136,8 +137,8 @@ static void help() {
         "     run remote shell command (interactive shell if no command given)\n"
         "     -e: choose escape character, or \"none\"; default '~'\n"
         "     -n: don't read from stdin\n"
-        "     -T: disable PTY allocation\n"
-        "     -t: force PTY allocation\n"
+        "     -T: disable pty allocation\n"
+        "     -t: allocate a pty if on a tty (-tt: force pty allocation)\n"
         "     -x: disable remote exit codes and stdout/stderr separation\n"
         " emu COMMAND              run emulator console command\n"
         "\n"
@@ -351,7 +352,8 @@ static void stdinout_raw_epilogue(int inFd, int outFd, int old_stdin_mode, int o
 #endif
 }
 
-void copy_to_file(int inFd, int outFd) {
+bool copy_to_file(int inFd, int outFd) {
+    bool result = true;
     std::vector<char> buf(64 * 1024);
     int len;
     long total = 0;
@@ -374,6 +376,7 @@ void copy_to_file(int inFd, int outFd) {
         }
         if (len < 0) {
             D("copy_to_file(): read failed: %s", strerror(errno));
+            result = false;
             break;
         }
         if (outFd == STDOUT_FILENO) {
@@ -387,7 +390,8 @@ void copy_to_file(int inFd, int outFd) {
 
     stdinout_raw_epilogue(inFd, outFd, old_stdin_mode, old_stdout_mode);
 
-    D("copy_to_file() finished after %lu bytes", total);
+    D("copy_to_file() finished with %s after %lu bytes", result ? "success" : "failure", total);
+    return result;
 }
 
 static void send_window_size_change(int fd, std::unique_ptr<ShellProtocol>& shell) {
@@ -789,6 +793,15 @@ static int adb_abb(int argc, const char** argv) {
                        service_string);
 }
 
+static int adb_shell_noinput(int argc, const char** argv) {
+#if !defined(_WIN32)
+    unique_fd fd(adb_open("/dev/null", O_RDONLY));
+    CHECK_NE(STDIN_FILENO, fd.get());
+    dup2(fd.get(), STDIN_FILENO);
+#endif
+    return adb_shell(argc, argv);
+}
+
 static int adb_sideload_legacy(const char* filename, int in_fd, int size) {
     std::string error;
     unique_fd out_fd(adb_connect(android::base::StringPrintf("sideload:%d", size), &error));
@@ -1115,8 +1128,8 @@ static bool adb_root(const char* command) {
         return false;
     }
 
+    fwrite(buf, 1, sizeof(buf) - bytes_left, stdout);
     fflush(stdout);
-    WriteFdExactly(STDOUT_FILENO, buf, sizeof(buf) - bytes_left);
     if (cur != buf && strstr(buf, "restarting") == nullptr) {
         return true;
     }
@@ -1611,7 +1624,7 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "connect")) {
-        if (argc != 2) error_exit("usage: adb connect HOST[:PORT>]");
+        if (argc != 2) error_exit("usage: adb connect HOST[:PORT]");
 
         std::string query = android::base::StringPrintf("host:connect:%s", argv[1]);
         return adb_query_command(query);
@@ -1710,7 +1723,7 @@ int adb_commandline(int argc, const char** argv) {
         if (CanUseFeature(features, kFeatureRemountShell)) {
             std::vector<const char*> args = {"shell"};
             args.insert(args.cend(), argv, argv + argc);
-            return adb_shell(args.size(), args.data());
+            return adb_shell_noinput(args.size(), args.data());
         } else if (argc > 1) {
             auto command = android::base::StringPrintf("%s:%s", argv[0], argv[1]);
             return adb_connect_command(command);

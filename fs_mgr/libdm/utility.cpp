@@ -52,5 +52,15 @@ bool WaitForFile(const std::string& path, const std::chrono::milliseconds& timeo
     return WaitForCondition(condition, timeout_ms);
 }
 
+bool WaitForFileDeleted(const std::string& path, const std::chrono::milliseconds& timeout_ms) {
+    auto condition = [&]() -> WaitResult {
+        if (access(path.c_str(), F_OK) == 0 || errno != ENOENT) {
+            return WaitResult::Wait;
+        }
+        return WaitResult::Done;
+    };
+    return WaitForCondition(condition, timeout_ms);
+}
+
 }  // namespace dm
 }  // namespace android

@@ -53,7 +53,8 @@ class MappedFile {
   /**
    * Same thing, but using the raw OS file handle instead of a CRT wrapper.
    */
-  static MappedFile FromOsHandle(os_handle h, off64_t offset, size_t length, int prot);
+  static std::unique_ptr<MappedFile> FromOsHandle(os_handle h, off64_t offset, size_t length,
+                                                  int prot);
 
   /**
    * Removes the mapping.
@@ -68,10 +69,6 @@ class MappedFile {
 
   char* data() const { return base_ + offset_; }
   size_t size() const { return size_; }
-
-  bool isValid() const { return base_ != nullptr; }
-
-  explicit operator bool() const { return isValid(); }
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(MappedFile);

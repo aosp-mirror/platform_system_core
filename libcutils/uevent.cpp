@@ -60,7 +60,7 @@ ssize_t uevent_kernel_recv(int socket, void* buffer, size_t length, bool require
     struct ucred* cred;
 
     *uid = -1;
-    ssize_t n = recvmsg(socket, &hdr, 0);
+    ssize_t n = TEMP_FAILURE_RETRY(recvmsg(socket, &hdr, 0));
     if (n <= 0) {
         return n;
     }

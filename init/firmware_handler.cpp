@@ -165,7 +165,7 @@ std::string FirmwareHandler::GetFirmwarePath(const Uevent& uevent) const {
 
             auto result =
                     RunExternalHandler(external_handler.handler_path, external_handler.uid, uevent);
-            if (!result) {
+            if (!result.ok()) {
                 LOG(ERROR) << "Using default firmware; External firmware handler failed: "
                            << result.error();
                 return uevent.firmware;

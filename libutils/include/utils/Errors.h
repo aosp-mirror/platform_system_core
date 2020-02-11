@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <string>
 
 namespace android {
 
@@ -71,6 +72,9 @@ enum {
     FDS_NOT_ALLOWED     = (UNKNOWN_ERROR + 7),
     UNEXPECTED_NULL     = (UNKNOWN_ERROR + 8),
 };
+
+// Human readable name of error
+std::string statusToString(status_t status);
 
 // Restore define; enumeration is in "android" namespace, so the value defined
 // there won't work for Win32 code in a different namespace.

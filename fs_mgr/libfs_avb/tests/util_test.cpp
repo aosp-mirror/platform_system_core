@@ -16,10 +16,12 @@
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <future>
 #include <string>
 #include <thread>
 
+#include <android-base/strings.h>
 #include <base/files/file_util.h>
 
 #include "fs_avb_test_util.h"
@@ -29,6 +31,7 @@
 using android::fs_mgr::BytesToHex;
 using android::fs_mgr::FileWaitMode;
 using android::fs_mgr::HexToBytes;
+using android::fs_mgr::ListFiles;
 using android::fs_mgr::NibbleValue;
 using android::fs_mgr::WaitForFile;
 
@@ -208,6 +211,101 @@ TEST(BasicUtilTest, WaitForFileDeferCreationFailure) {
 
     // Removes the wait_path.
     ASSERT_TRUE(base::DeleteFile(wait_path, false /* resursive */));
+}
+
+TEST(BasicUtilTest, ListFiles) {
+    // Gets system tmp dir.
+    base::FilePath tmp_dir;
+    ASSERT_TRUE(GetTempDir(&tmp_dir));
+
+    // Creates a test dir for ListFiles testing.
+    base::FilePath test_dir;
+    ASSERT_TRUE(base::CreateTemporaryDirInDir(tmp_dir, "list-file-tests.", &test_dir));
+
+    // Generates dummy files to list.
+    base::FilePath file_path_1 = test_dir.Append("1.txt");
+    ASSERT_TRUE(base::WriteFile(file_path_1, "1", 1));
+    base::FilePath file_path_2 = test_dir.Append("2.txt");
+    ASSERT_TRUE(base::WriteFile(file_path_2, "22", 2));
+    base::FilePath file_path_3 = test_dir.Append("3.txt");
+    ASSERT_TRUE(base::WriteFile(file_path_3, "333", 3));
+
+    // List files for comparison.
+    auto result = ListFiles(test_dir.value());
+    ASSERT_RESULT_OK(result);
+    auto files = result.value();
+    EXPECT_EQ(3UL, files.size());
+    // Sort them offline for comparison.
+    std::sort(files.begin(), files.end());
+    EXPECT_EQ(file_path_1.value(), files[0]);
+    EXPECT_EQ(file_path_2.value(), files[1]);
+    EXPECT_EQ(file_path_3.value(), files[2]);
+
+    ASSERT_TRUE(base::DeleteFile(test_dir, true /* resursive */));
+}
+
+TEST(BasicUtilTest, ListFilesShouldDiscardSymlink) {
+    // Gets system tmp dir.
+    base::FilePath tmp_dir;
+    ASSERT_TRUE(GetTempDir(&tmp_dir));
+
+    // Creates a test dir for ListFiles testing.
+    base::FilePath test_dir;
+    ASSERT_TRUE(base::CreateTemporaryDirInDir(tmp_dir, "list-file-tests.", &test_dir));
+
+    // Generates dummy files to list.
+    base::FilePath file_path_1 = test_dir.Append("1.txt");
+    ASSERT_TRUE(base::WriteFile(file_path_1, "1", 1));
+    base::FilePath file_path_2 = test_dir.Append("2.txt");
+    ASSERT_TRUE(base::WriteFile(file_path_2, "22", 2));
+    // Creates a symlink and checks it won't be returned by ListFiles.
+    base::FilePath file_path_3 = test_dir.Append("3.txt");
+    base::FilePath non_existent_target = test_dir.Append("non_existent_target.txt");
+    ASSERT_TRUE(base::CreateSymbolicLink(non_existent_target, file_path_3));
+
+    // List files for comparison.
+    auto result = ListFiles(test_dir.value());
+    ASSERT_RESULT_OK(result);
+    auto files = result.value();
+    EXPECT_EQ(2UL, files.size());  // Should not include the symlink file.
+    // Sort them offline for comparison.
+    std::sort(files.begin(), files.end());
+    EXPECT_EQ(file_path_1.value(), files[0]);
+    EXPECT_EQ(file_path_2.value(), files[1]);
+
+    ASSERT_TRUE(base::DeleteFile(test_dir, true /* resursive */));
+}
+
+TEST(BasicUtilTest, ListFilesOpenDirFailure) {
+    // Gets system tmp dir.
+    base::FilePath tmp_dir;
+    ASSERT_TRUE(GetTempDir(&tmp_dir));
+
+    // Generates dummy files to list.
+    base::FilePath no_such_dir = tmp_dir.Append("not_such_dir");
+
+    auto fail = ListFiles(no_such_dir.value());
+    ASSERT_FALSE(fail.ok());
+    EXPECT_EQ(ENOENT, fail.error().code());
+    EXPECT_TRUE(android::base::StartsWith(fail.error().message(), "Failed to opendir: "));
+}
+
+TEST(BasicUtilTest, ListFilesEmptyDir) {
+    // Gets system tmp dir.
+    base::FilePath tmp_dir;
+    ASSERT_TRUE(GetTempDir(&tmp_dir));
+
+    // Creates a test dir for ListFiles testing.
+    base::FilePath test_dir;
+    ASSERT_TRUE(base::CreateTemporaryDirInDir(tmp_dir, "list-file-tests.", &test_dir));
+
+    // List files without sorting.
+    auto result = ListFiles(test_dir.value());
+    ASSERT_RESULT_OK(result);
+    auto files = result.value();
+    EXPECT_EQ(0UL, files.size());
+
+    ASSERT_TRUE(base::DeleteFile(test_dir, true /* resursive */));
 }
 
 }  // namespace fs_avb_host_test

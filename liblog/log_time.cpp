@@ -21,8 +21,6 @@
 
 #include <private/android_logger.h>
 
-#include "log_portability.h"
-
 const char log_time::default_format[] = "%m-%d %H:%M:%S.%q";
 const timespec log_time::EPOCH = {0, 0};
 

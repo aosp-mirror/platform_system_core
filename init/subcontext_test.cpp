@@ -26,6 +26,7 @@
 #include <selinux/selinux.h>
 
 #include "builtin_arguments.h"
+#include "util.h"
 
 using namespace std::literals;
 
@@ -38,24 +39,12 @@ using android::base::WaitForProperty;
 namespace android {
 namespace init {
 
-// I would use test fixtures, but I cannot skip the test if not root with them, so instead we have
-// this test runner.
 template <typename F>
 void RunTest(F&& test_function) {
-    if (getuid() != 0) {
-        GTEST_SKIP() << "Skipping test, must be run as root.";
-        return;
-    }
-
-    char* context;
-    ASSERT_EQ(0, getcon(&context));
-    auto context_string = std::string(context);
-    free(context);
-
-    auto subcontext = Subcontext({"dummy_path"}, context_string);
+    auto subcontext = Subcontext({"dummy_path"}, kTestContext);
     ASSERT_NE(0, subcontext.pid());
 
-    test_function(subcontext, context_string);
+    test_function(subcontext);
 
     if (subcontext.pid() > 0) {
         kill(subcontext.pid(), SIGTERM);
@@ -64,9 +53,9 @@ void RunTest(F&& test_function) {
 }
 
 TEST(subcontext, CheckDifferentPid) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto result = subcontext.Execute(std::vector<std::string>{"return_pids_as_error"});
-        ASSERT_FALSE(result);
+        ASSERT_FALSE(result.ok());
 
         auto pids = Split(result.error().message(), " ");
         ASSERT_EQ(2U, pids.size());
@@ -77,7 +66,12 @@ TEST(subcontext, CheckDifferentPid) {
 }
 
 TEST(subcontext, SetProp) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Skipping test, must be run as root.";
+        return;
+    }
+
+    RunTest([](auto& subcontext) {
         SetProperty("init.test.subcontext", "fail");
         WaitForProperty("init.test.subcontext", "fail");
 
@@ -87,14 +81,14 @@ TEST(subcontext, SetProp) {
             "success",
         };
         auto result = subcontext.Execute(args);
-        ASSERT_TRUE(result) << result.error();
+        ASSERT_RESULT_OK(result);
 
         EXPECT_TRUE(WaitForProperty("init.test.subcontext", "success", 10s));
     });
 }
 
 TEST(subcontext, MultipleCommands) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto first_pid = subcontext.pid();
 
         auto expected_words = std::vector<std::string>{
@@ -110,47 +104,59 @@ TEST(subcontext, MultipleCommands) {
                 word,
             };
             auto result = subcontext.Execute(args);
-            ASSERT_TRUE(result) << result.error();
+            ASSERT_RESULT_OK(result);
         }
 
         auto result = subcontext.Execute(std::vector<std::string>{"return_words_as_error"});
-        ASSERT_FALSE(result);
+        ASSERT_FALSE(result.ok());
         EXPECT_EQ(Join(expected_words, " "), result.error().message());
         EXPECT_EQ(first_pid, subcontext.pid());
     });
 }
 
 TEST(subcontext, RecoverAfterAbort) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto first_pid = subcontext.pid();
 
         auto result = subcontext.Execute(std::vector<std::string>{"cause_log_fatal"});
-        ASSERT_FALSE(result);
+        ASSERT_FALSE(result.ok());
 
         auto result2 = subcontext.Execute(std::vector<std::string>{"generate_sane_error"});
-        ASSERT_FALSE(result2);
+        ASSERT_FALSE(result2.ok());
         EXPECT_EQ("Sane error!", result2.error().message());
         EXPECT_NE(subcontext.pid(), first_pid);
     });
 }
 
 TEST(subcontext, ContextString) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto result = subcontext.Execute(std::vector<std::string>{"return_context_as_error"});
-        ASSERT_FALSE(result);
-        ASSERT_EQ(context_string, result.error().message());
+        ASSERT_FALSE(result.ok());
+        ASSERT_EQ(kTestContext, result.error().message());
     });
 }
 
+TEST(subcontext, TriggerShutdown) {
+    static constexpr const char kTestShutdownCommand[] = "reboot,test-shutdown-command";
+    static std::string trigger_shutdown_command;
+    trigger_shutdown = [](const std::string& command) { trigger_shutdown_command = command; };
+    RunTest([](auto& subcontext) {
+        auto result = subcontext.Execute(
+                std::vector<std::string>{"trigger_shutdown", kTestShutdownCommand});
+        ASSERT_RESULT_OK(result);
+    });
+    EXPECT_EQ(kTestShutdownCommand, trigger_shutdown_command);
+}
+
 TEST(subcontext, ExpandArgs) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto args = std::vector<std::string>{
             "first",
             "${ro.hardware}",
             "$$third",
         };
         auto result = subcontext.ExpandArgs(args);
-        ASSERT_TRUE(result) << result.error();
+        ASSERT_RESULT_OK(result);
         ASSERT_EQ(3U, result->size());
         EXPECT_EQ(args[0], result->at(0));
         EXPECT_EQ(GetProperty("ro.hardware", ""), result->at(1));
@@ -159,13 +165,13 @@ TEST(subcontext, ExpandArgs) {
 }
 
 TEST(subcontext, ExpandArgsFailure) {
-    RunTest([](auto& subcontext, auto& context_string) {
+    RunTest([](auto& subcontext) {
         auto args = std::vector<std::string>{
             "first",
             "${",
         };
         auto result = subcontext.ExpandArgs(args);
-        ASSERT_FALSE(result);
+        ASSERT_FALSE(result.ok());
         EXPECT_EQ("unexpected end of string in '" + args[1] + "', looking for }",
                   result.error().message());
     });
@@ -207,6 +213,11 @@ BuiltinFunctionMap BuildTestFunctionMap() {
         return Error() << args.context;
     };
 
+    auto do_trigger_shutdown = [](const BuiltinArguments& args) -> Result<void> {
+        trigger_shutdown(args[1]);
+        return {};
+    };
+
     // clang-format off
     BuiltinFunctionMap test_function_map = {
         {"return_pids_as_error",        {0,     0,      {true,  do_return_pids_as_error}}},
@@ -216,6 +227,7 @@ BuiltinFunctionMap BuildTestFunctionMap() {
         {"cause_log_fatal",             {0,     0,      {true,  do_cause_log_fatal}}},
         {"generate_sane_error",         {0,     0,      {true,  do_generate_sane_error}}},
         {"return_context_as_error",     {0,     0,      {true,  do_return_context_as_error}}},
+        {"trigger_shutdown",            {1,     1,      {true,  do_trigger_shutdown}}},
     };
     // clang-format on
     return test_function_map;

@@ -56,7 +56,7 @@ __BEGIN_DECLS
 /*
  * Use __VA_ARGS__ if running a static analyzer,
  * to avoid warnings of unused variables in __VA_ARGS__.
- * Use contexpr function in C++ mode, so these macros can be used
+ * Use constexpr function in C++ mode, so these macros can be used
  * in other constexpr functions without warning.
  */
 #ifdef __clang_analyzer__
@@ -131,10 +131,10 @@ extern int __fake_use_va_args(int, ...);
  * is -inverted- from the normal assert() semantics.
  */
 #ifndef LOG_ALWAYS_FATAL_IF
-#define LOG_ALWAYS_FATAL_IF(cond, ...)                              \
-  ((__predict_false(cond))                                          \
-       ? ((void)android_printAssert(#cond, LOG_TAG, ##__VA_ARGS__)) \
-       : __FAKE_USE_VA_ARGS(__VA_ARGS__))
+#define LOG_ALWAYS_FATAL_IF(cond, ...)                                                    \
+  ((__predict_false(cond)) ? (__FAKE_USE_VA_ARGS(__VA_ARGS__),                            \
+                              ((void)android_printAssert(#cond, LOG_TAG, ##__VA_ARGS__))) \
+                           : ((void)0))
 #endif
 
 #ifndef LOG_ALWAYS_FATAL
@@ -213,9 +213,10 @@ extern int __fake_use_va_args(int, ...);
 #if LOG_NDEBUG
 #define ALOGV_IF(cond, ...) __FAKE_USE_VA_ARGS(__VA_ARGS__)
 #else
-#define ALOGV_IF(cond, ...)                                                  \
-  ((__predict_false(cond)) ? ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
-                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
+#define ALOGV_IF(cond, ...)                                                               \
+  ((__predict_false(cond))                                                                \
+       ? (__FAKE_USE_VA_ARGS(__VA_ARGS__), (void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
+       : ((void)0))
 #endif
 #endif
 
@@ -227,9 +228,10 @@ extern int __fake_use_va_args(int, ...);
 #endif
 
 #ifndef ALOGD_IF
-#define ALOGD_IF(cond, ...)                                                \
-  ((__predict_false(cond)) ? ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
-                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
+#define ALOGD_IF(cond, ...)                                                             \
+  ((__predict_false(cond))                                                              \
+       ? (__FAKE_USE_VA_ARGS(__VA_ARGS__), (void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
+       : ((void)0))
 #endif
 
 /*
@@ -240,9 +242,10 @@ extern int __fake_use_va_args(int, ...);
 #endif
 
 #ifndef ALOGI_IF
-#define ALOGI_IF(cond, ...)                                               \
-  ((__predict_false(cond)) ? ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
-                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
+#define ALOGI_IF(cond, ...)                                                            \
+  ((__predict_false(cond))                                                             \
+       ? (__FAKE_USE_VA_ARGS(__VA_ARGS__), (void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
+       : ((void)0))
 #endif
 
 /*
@@ -253,9 +256,10 @@ extern int __fake_use_va_args(int, ...);
 #endif
 
 #ifndef ALOGW_IF
-#define ALOGW_IF(cond, ...)                                               \
-  ((__predict_false(cond)) ? ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
-                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
+#define ALOGW_IF(cond, ...)                                                            \
+  ((__predict_false(cond))                                                             \
+       ? (__FAKE_USE_VA_ARGS(__VA_ARGS__), (void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
+       : ((void)0))
 #endif
 
 /*
@@ -266,9 +270,10 @@ extern int __fake_use_va_args(int, ...);
 #endif
 
 #ifndef ALOGE_IF
-#define ALOGE_IF(cond, ...)                                                \
-  ((__predict_false(cond)) ? ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
-                           : __FAKE_USE_VA_ARGS(__VA_ARGS__))
+#define ALOGE_IF(cond, ...)                                                             \
+  ((__predict_false(cond))                                                              \
+       ? (__FAKE_USE_VA_ARGS(__VA_ARGS__), (void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
+       : ((void)0))
 #endif
 
 /* --------------------------------------------------------------------- */

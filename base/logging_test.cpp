@@ -140,10 +140,6 @@ TEST(logging, WOULD_LOG_FATAL) {
   CHECK_WOULD_LOG_ENABLED(FATAL);
 }
 
-TEST(logging, WOULD_LOG_FATAL_WITHOUT_ABORT_disabled) {
-  CHECK_WOULD_LOG_DISABLED(FATAL_WITHOUT_ABORT);
-}
-
 TEST(logging, WOULD_LOG_FATAL_WITHOUT_ABORT_enabled) {
   CHECK_WOULD_LOG_ENABLED(FATAL_WITHOUT_ABORT);
 }
@@ -266,10 +262,6 @@ static void CheckMessage(CapturedStderr& cap, android::base::LogSeverity severit
     CheckMessage(cap2, android::base::severity, "foobar"); \
   } \
 
-TEST(logging, LOG_STREAM_FATAL_WITHOUT_ABORT_disabled) {
-  CHECK_LOG_STREAM_DISABLED(FATAL_WITHOUT_ABORT);
-}
-
 TEST(logging, LOG_STREAM_FATAL_WITHOUT_ABORT_enabled) {
   ASSERT_NO_FATAL_FAILURE(CHECK_LOG_STREAM_ENABLED(FATAL_WITHOUT_ABORT));
 }
@@ -350,10 +342,6 @@ TEST(logging, LOG_STREAM_VERBOSE_enabled) {
 TEST(logging, LOG_FATAL) {
   ASSERT_DEATH({SuppressAbortUI(); LOG(FATAL) << "foobar";}, "foobar");
   ASSERT_DEATH({SuppressAbortUI(); LOG(::android::base::FATAL) << "foobar";}, "foobar");
-}
-
-TEST(logging, LOG_FATAL_WITHOUT_ABORT_disabled) {
-  CHECK_LOG_DISABLED(FATAL_WITHOUT_ABORT);
 }
 
 TEST(logging, LOG_FATAL_WITHOUT_ABORT_enabled) {
@@ -508,10 +496,6 @@ TEST(logging, PLOG_FATAL) {
   ASSERT_DEATH({SuppressAbortUI(); PLOG(::android::base::FATAL) << "foobar";}, "foobar");
 }
 
-TEST(logging, PLOG_FATAL_WITHOUT_ABORT_disabled) {
-  CHECK_PLOG_DISABLED(FATAL_WITHOUT_ABORT);
-}
-
 TEST(logging, PLOG_FATAL_WITHOUT_ABORT_enabled) {
   ASSERT_NO_FATAL_FAILURE(CHECK_PLOG_ENABLED(FATAL_WITHOUT_ABORT));
 }
@@ -617,21 +601,6 @@ TEST(logging, LOG_FATAL_ABORTER_MESSAGE) {
 
 __attribute__((constructor)) void TestLoggingInConstructor() {
   LOG(ERROR) << "foobar";
-}
-
-TEST(logging, SetDefaultTag) {
-  constexpr const char* expected_tag = "test_tag";
-  constexpr const char* expected_msg = "foobar";
-  CapturedStderr cap;
-  {
-    std::string old_default_tag = android::base::GetDefaultTag();
-    android::base::SetDefaultTag(expected_tag);
-    android::base::ScopedLogSeverity sls(android::base::LogSeverity::INFO);
-    LOG(INFO) << expected_msg;
-    android::base::SetDefaultTag(old_default_tag);
-  }
-  ASSERT_NO_FATAL_FAILURE(
-      CheckMessage(cap, android::base::LogSeverity::INFO, expected_msg, expected_tag));
 }
 
 TEST(logging, StdioLogger) {

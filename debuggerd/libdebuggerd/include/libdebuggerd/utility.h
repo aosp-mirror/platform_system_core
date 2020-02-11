@@ -20,6 +20,7 @@
 
 #include <inttypes.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <sys/types.h>
 
@@ -71,6 +72,7 @@ typedef uint32_t word_t;
 
 // Log information onto the tombstone.
 void _LOG(log_t* log, logtype ltype, const char* fmt, ...) __attribute__((format(printf, 3, 4)));
+void _VLOG(log_t* log, logtype ltype, const char* fmt, va_list ap);
 
 namespace unwindstack {
 class Unwinder;

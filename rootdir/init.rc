@@ -5,11 +5,11 @@
 #
 
 import /init.environ.rc
-import /init.usb.rc
+import /system/etc/init/hw/init.usb.rc
 import /init.${ro.hardware}.rc
 import /vendor/etc/init/hw/init.${ro.hardware}.rc
-import /init.usb.configfs.rc
-import /init.${ro.zygote}.rc
+import /system/etc/init/hw/init.usb.configfs.rc
+import /system/etc/init/hw/init.${ro.zygote}.rc
 
 # Cgroups are mounted right before early-init using list from /etc/cgroups.json
 on early-init
@@ -32,18 +32,32 @@ on early-init
     # cgroup for system_server and surfaceflinger
     mkdir /dev/memcg/system 0550 system system
 
+    # symlink the Android specific /dev/tun to Linux expected /dev/net/tun
+    mkdir /dev/net 0755 root root
+    symlink ../tun /dev/net/tun
+
     # set RLIMIT_NICE to allow priorities from 19 to -20
     setrlimit nice 40 40
 
     # Allow up to 32K FDs per process
     setrlimit nofile 32768 32768
 
-    # Create directory to keep ld.config.txt
-    mkdir /dev/linkerconfig 0755
+    # Set up linker config subdirectories based on mount namespaces
+    mkdir /linkerconfig/bootstrap 0755
+    mkdir /linkerconfig/default 0755
+
+    # Disable dm-verity hash prefetching, since it doesn't help performance
+    # Read more in b/136247322
+    write /sys/module/dm_verity/parameters/prefetch_cluster 0
 
     # Generate ld.config.txt for early executed processes
-    exec -- /system/bin/linkerconfig --target /dev/linkerconfig/ld.config.txt
-    chmod 444 /dev/linkerconfig/ld.config.txt
+    exec -- /system/bin/linkerconfig --target /linkerconfig/bootstrap
+    chmod 644 /linkerconfig/bootstrap/ld.config.txt
+    copy /linkerconfig/bootstrap/ld.config.txt /linkerconfig/default/ld.config.txt
+    chmod 644 /linkerconfig/default/ld.config.txt
+
+    # Mount bootstrap linker configuration as current
+    mount none /linkerconfig/bootstrap /linkerconfig bind rec
 
     start ueventd
 
@@ -51,6 +65,9 @@ on early-init
     # become available. Note that this is executed as exec_start to ensure that
     # the libraries are available to the processes started after this statement.
     exec_start apexd-bootstrap
+
+    # Generate linker config based on apex mounted in bootstrap namespace
+    update_linker_config
 
     # These must already exist by the time boringssl_self_test32 / boringssl_self_test64 run.
     mkdir /dev/boringssl 0755 root root
@@ -97,15 +114,6 @@ on init
     symlink /proc/self/fd/1 /dev/stdout
     symlink /proc/self/fd/2 /dev/stderr
 
-    symlink /system/bin /bin
-    symlink /system/etc /etc
-
-    # Backward compatibility.
-    symlink /sys/kernel/debug /d
-
-    # Link /vendor to /system/vendor for devices without a vendor partition.
-    symlink /system/vendor /vendor
-
     # Create energy-aware scheduler tuning nodes
     mkdir /dev/stune/foreground
     mkdir /dev/stune/background
@@ -126,6 +134,14 @@ on init
     chmod 0664 /dev/stune/background/tasks
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
+
+    # Create an stune group for NNAPI HAL processes
+    mkdir /dev/stune/nnapi-hal
+    chown system system /dev/stune/nnapi-hal
+    chown system system /dev/stune/nnapi-hal/tasks
+    chmod 0664 /dev/stune/nnapi-hal/tasks
+    write /dev/stune/nnapi-hal/schedtune.boost 1
+    write /dev/stune/nnapi-hal/schedtune.prefer_idle 1
 
     # Create blkio group and apply initial settings.
     # This feature needs kernel to support it, and the
@@ -148,11 +164,24 @@ on init
     chmod 0770 /config/sdcardfs
     chown system package_info /config/sdcardfs
 
+    # Mount binderfs
+    mkdir /dev/binderfs
+    mount binder binder /dev/binderfs stats=global
+    chmod 0755 /dev/binderfs
+
+    symlink /dev/binderfs/binder /dev/binder
+    symlink /dev/binderfs/hwbinder /dev/hwbinder
+    symlink /dev/binderfs/vndbinder /dev/vndbinder
+
+    chmod 0666 /dev/binderfs/hwbinder
+    chmod 0666 /dev/binderfs/binder
+    chmod 0666 /dev/binderfs/vndbinder
+
     mkdir /mnt/secure 0700 root root
     mkdir /mnt/secure/asec 0700 root root
     mkdir /mnt/asec 0755 root system
     mkdir /mnt/obb 0755 root system
-    mkdir /mnt/media_rw 0750 root media_rw
+    mkdir /mnt/media_rw 0750 root external_storage
     mkdir /mnt/user 0755 root root
     mkdir /mnt/user/0 0755 root root
     mkdir /mnt/user/0/self 0755 root root
@@ -160,11 +189,11 @@ on init
     mkdir /mnt/user/0/emulated/0 0755 root root
 
     # Prepare directories for pass through processes
-    mkdir /mnt/pass_through 0755 root root
-    mkdir /mnt/pass_through/0 0755 root root
-    mkdir /mnt/pass_through/0/self 0755 root root
-    mkdir /mnt/pass_through/0/emulated 0755 root root
-    mkdir /mnt/pass_through/0/emulated/0 0755 root root
+    mkdir /mnt/pass_through 0700 root root
+    mkdir /mnt/pass_through/0 0710 root media_rw
+    mkdir /mnt/pass_through/0/self 0710 root media_rw
+    mkdir /mnt/pass_through/0/emulated 0710 root media_rw
+    mkdir /mnt/pass_through/0/emulated/0 0710 root media_rw
 
     mkdir /mnt/expand 0771 system system
     mkdir /mnt/appfuse 0711 root root
@@ -181,7 +210,6 @@ on init
     mkdir /mnt/runtime/full/self 0755 root root
 
     # Symlink to keep legacy apps working in multi-user world
-    symlink /storage/self/primary /sdcard
     symlink /storage/self/primary /mnt/sdcard
     symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
 
@@ -283,6 +311,16 @@ on init
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
 
+    # freezer cgroup entries
+    mkdir /dev/freezer/frozen
+    write /dev/freezer/frozen/freezer.state FROZEN
+    chown system system /dev/freezer/cgroup.procs
+    chown system system /dev/freezer/frozen
+    chown system system /dev/freezer/frozen/freezer.state
+    chown system system /dev/freezer/frozen/cgroup.procs
+
+    chmod 0444 /dev/freezer/frozen/freezer.state
+
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
     chmod 0664 /proc/pressure/memory
@@ -347,6 +385,8 @@ on init
 
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
+    # Start lmkd before any other services run so that it can register them
+    start lmkd
 
     # Start essential services.
     start servicemanager
@@ -464,6 +504,7 @@ on post-fs
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
+    chmod 0755 /sys/kernel/tracing
     chmod 0755 /sys/kernel/debug/tracing
 
     # HALs required before storage encryption can get unlocked (FBE/FDE)
@@ -486,26 +527,26 @@ on post-fs-data
 
     # Start bootcharting as soon as possible after the data partition is
     # mounted to collect more data.
-    mkdir /data/bootchart 0755 shell shell
+    mkdir /data/bootchart 0755 shell shell encryption=Require
     bootchart start
 
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
 
     # /data/apex is now available. Start apexd to scan and activate APEXes.
-    mkdir /data/apex 0750 root system
+    mkdir /data/apex 0750 root system encryption=None
     mkdir /data/apex/active 0750 root system
     mkdir /data/apex/backup 0700 root system
     mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
-    mkdir /data/app-staging 0750 system system
+    mkdir /data/app-staging 0750 system system encryption=None
     start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
     copy /data/system/entropy.dat /dev/urandom
 
     # create basic filesystem structure
-    mkdir /data/misc 01771 system misc
+    mkdir /data/misc 01771 system misc encryption=Require
     mkdir /data/misc/recovery 0770 system log
     copy /data/misc/recovery/ro.build.fingerprint /data/misc/recovery/ro.build.fingerprint.1
     chmod 0440 /data/misc/recovery/ro.build.fingerprint.1
@@ -526,6 +567,7 @@ on post-fs-data
     chown bluetooth bluetooth /data/misc/bluedroid/bt_config.conf
     mkdir /data/misc/bluetooth 0770 bluetooth bluetooth
     mkdir /data/misc/bluetooth/logs 0770 bluetooth bluetooth
+    mkdir /data/misc/credstore 0700 credstore credstore
     mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/gatekeeper 0700 system system
     mkdir /data/misc/keychain 0771 system system
@@ -534,6 +576,7 @@ on post-fs-data
     mkdir /data/misc/sms 0770 system radio
     mkdir /data/misc/carrierid 0770 system radio
     mkdir /data/misc/apns 0770 system radio
+    mkdir /data/misc/emergencynumberdb 0770 system radio
     mkdir /data/misc/zoneinfo 0775 system system
     mkdir /data/misc/network_watchlist 0774 system system
     mkdir /data/misc/textclassifier 0771 system system
@@ -548,7 +591,7 @@ on post-fs-data
     mkdir /data/misc/user 0771 root root
     # give system access to wpa_supplicant.conf for backup and restore
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
-    mkdir /data/local 0751 root root
+    mkdir /data/local 0751 root root encryption=Require
     mkdir /data/misc/media 0700 media media
     mkdir /data/misc/audioserver 0700 audioserver audioserver
     mkdir /data/misc/cameraserver 0700 cameraserver cameraserver
@@ -562,100 +605,146 @@ on post-fs-data
     # profile file layout
     mkdir /data/misc/profiles 0771 system system
     mkdir /data/misc/profiles/cur 0771 system system
-    mkdir /data/misc/profiles/ref 0771 system system
+    mkdir /data/misc/profiles/ref 0770 system system
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
     mkdir /data/misc/installd 0700 root root
+    mkdir /data/misc/apexdata 0711 root root
+    mkdir /data/misc/apexrollback 0700 root root
+    mkdir /data/misc/snapshotctl_log 0770 root root
+    # create location to store pre-reboot information
+    mkdir /data/misc/prereboot 0700 system system
 
-    mkdir /data/preloads 0775 system system
+    mkdir /data/preloads 0775 system system encryption=None
 
-    mkdir /data/vendor 0771 root root
-    mkdir /data/vendor_ce 0771 root root
-    mkdir /data/vendor_de 0771 root root
+    mkdir /data/vendor 0771 root root encryption=Require
+    mkdir /data/vendor_ce 0771 root root encryption=None
+    mkdir /data/vendor_de 0771 root root encryption=None
     mkdir /data/vendor/hardware 0771 root root
 
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
     mkdir /data/local/tmp 0771 shell shell
     mkdir /data/local/traces 0777 shell shell
-    mkdir /data/data 0771 system system
-    mkdir /data/app-private 0771 system system
-    mkdir /data/app-ephemeral 0771 system system
-    mkdir /data/app-asec 0700 root root
-    mkdir /data/app-lib 0771 system system
-    mkdir /data/app 0771 system system
-    mkdir /data/property 0700 root root
-    mkdir /data/tombstones 0771 system system
+    mkdir /data/data 0771 system system encryption=None
+    mkdir /data/app-private 0771 system system encryption=Require
+    mkdir /data/app-ephemeral 0771 system system encryption=Require
+    mkdir /data/app-asec 0700 root root encryption=Require
+    mkdir /data/app-lib 0771 system system encryption=Require
+    mkdir /data/app 0771 system system encryption=Require
+    mkdir /data/property 0700 root root encryption=Require
+    mkdir /data/tombstones 0771 system system encryption=Require
     mkdir /data/vendor/tombstones 0771 root root
     mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
 
     # create dalvik-cache, so as to enforce our permissions
-    mkdir /data/dalvik-cache 0771 root root
+    mkdir /data/dalvik-cache 0771 root root encryption=Require
     # create the A/B OTA directory, so as to enforce our permissions
-    mkdir /data/ota 0771 root root
+    mkdir /data/ota 0771 root root encryption=Require
 
     # create the OTA package directory. It will be accessed by GmsCore (cache
     # group), update_engine and update_verifier.
-    mkdir /data/ota_package 0770 system cache
+    mkdir /data/ota_package 0770 system cache encryption=Require
 
     # create resource-cache and double-check the perms
-    mkdir /data/resource-cache 0771 system system
+    mkdir /data/resource-cache 0771 system system encryption=Require
     chown system system /data/resource-cache
     chmod 0771 /data/resource-cache
 
     # create the lost+found directories, so as to enforce our permissions
-    mkdir /data/lost+found 0770 root root
+    mkdir /data/lost+found 0770 root root encryption=None
 
     # create directory for DRM plug-ins - give drm the read/write access to
     # the following directory.
-    mkdir /data/drm 0770 drm drm
+    mkdir /data/drm 0770 drm drm encryption=Require
 
     # create directory for MediaDrm plug-ins - give drm the read/write access to
     # the following directory.
-    mkdir /data/mediadrm 0770 mediadrm mediadrm
+    mkdir /data/mediadrm 0770 mediadrm mediadrm encryption=Require
 
-    mkdir /data/anr 0775 system system
+    mkdir /data/anr 0775 system system encryption=Require
 
     # NFC: create data/nfc for nv storage
-    mkdir /data/nfc 0770 nfc nfc
+    mkdir /data/nfc 0770 nfc nfc encryption=Require
     mkdir /data/nfc/param 0770 nfc nfc
 
     # Create all remaining /data root dirs so that they are made through init
     # and get proper encryption policy installed
-    mkdir /data/backup 0700 system system
-    mkdir /data/ss 0700 system system
+    mkdir /data/backup 0700 system system encryption=Require
+    mkdir /data/ss 0700 system system encryption=Require
 
-    mkdir /data/system 0775 system system
+    mkdir /data/system 0775 system system encryption=Require
     mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
 
-    mkdir /data/system_de 0770 system system
-    mkdir /data/system_ce 0770 system system
+    mkdir /data/system_de 0770 system system encryption=None
+    mkdir /data/system_ce 0770 system system encryption=None
 
-    mkdir /data/misc_de 01771 system misc
-    mkdir /data/misc_ce 01771 system misc
+    mkdir /data/misc_de 01771 system misc encryption=None
+    mkdir /data/misc_ce 01771 system misc encryption=None
 
-    mkdir /data/user 0711 system system
-    mkdir /data/user_de 0711 system system
-    symlink /data/data /data/user/0
+    mkdir /data/user 0711 system system encryption=None
+    mkdir /data/user_de 0711 system system encryption=None
 
-    mkdir /data/media 0770 media_rw media_rw
-    mkdir /data/media/obb 0770 media_rw media_rw
+    # Unlink /data/user/0 if we previously symlink it to /data/data
+    rm /data/user/0
 
-    mkdir /data/cache 0770 system cache
+    # Bind mount /data/user/0 to /data/data
+    mkdir /data/user/0 0700 system system encryption=None
+    mount none /data/data /data/user/0 bind rec
+
+    # A tmpfs directory, which will contain all apps CE DE data directory that
+    # bind mount from the original source.
+    chown root root /data_mirror
+    chmod 0700 /data_mirror
+    mount tmpfs tmpfs /data_mirror mode=0700,uid=0,gid=1000 nodev noexec nosuid
+    restorecon /data_mirror
+    mkdir /data_mirror/data_ce 0700 root root
+    mkdir /data_mirror/data_de 0700 root root
+
+    # Create CE and DE data directory for default volume
+    mkdir /data_mirror/data_ce/null 0700 root root
+    mkdir /data_mirror/data_de/null 0700 root root
+
+    # Bind mount CE and DE data directory to mirror's default volume directory
+    mount none /data/user /data_mirror/data_ce/null bind rec
+    mount none /data/user_de /data_mirror/data_de/null bind rec
+
+    # Create mirror directory for jit profiles
+    mkdir /data_mirror/cur_profiles 0700 root root
+    mount none /data/misc/profiles/cur /data_mirror/cur_profiles bind rec
+
+    mkdir /data/cache 0770 system cache encryption=Require
     mkdir /data/cache/recovery 0770 system cache
     mkdir /data/cache/backup_stage 0700 system system
     mkdir /data/cache/backup 0700 system system
 
-    mkdir /data/rollback 0700 system system
-    mkdir /data/rollback-observer 0700 system system
+    # Delete these if need be, per b/139193659
+    mkdir /data/rollback 0700 system system encryption=DeleteIfNecessary
+    mkdir /data/rollback-observer 0700 system system encryption=DeleteIfNecessary
+
+    # Create root dir for Incremental Service
+    mkdir /data/incremental 0771 system system encryption=Require
 
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status ready
-    parse_apex_configs
+    perform_apex_config
+
+    # Special-case /data/media/obb per b/64566063
+    mkdir /data/media 0770 media_rw media_rw encryption=None
+    exec - media_rw media_rw -- /system/bin/chattr +F /data/media
+    mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
+
+    exec_start derive_sdk
 
     init_user0
+
+    # Allow apexd to snapshot and restore device encrypted apex data in the case
+    # of a rollback. This should be done immediately after DE_user data keys
+    # are loaded. APEXes should not access this data until this has been
+    # completed.
+    exec_start apexd-snapshotde
 
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
@@ -686,8 +775,6 @@ on zygote-start && property:persist.sys.fuse=true
   # Mount default storage into root namespace
   mount none /mnt/user/0 /storage bind rec
   mount none none /storage slave rec
-  # Bootstrap the emulated volume for the pass_through directory for user 0
-  mount none /data/media /mnt/pass_through/0/emulated bind rec
 on zygote-start && property:persist.sys.fuse=false
   # Mount default storage into root namespace
   mount none /mnt/runtime/default /storage bind rec
@@ -754,6 +841,12 @@ on boot
     # to make it too large, since it may bring userdata loss, if they
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
     write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
+    write /sys/fs/f2fs/${dev.mnt.blk.data}/gc_urgent_sleep_time 50
+
+    # limit discard size to 128MB in order to avoid long IO latency
+    # for filesystem tuning first (dm or sda)
+    # Note that, if dm-<num> is used, sda/mmcblk0 should be tuned in vendor/init.rc
+    write /sys/devices/virtual/block/${dev.mnt.blk.data}/queue/discard_max_bytes 134217728
 
     # Permissions for System Server and daemons.
     chown system system /sys/power/autosleep
@@ -866,7 +959,7 @@ on property:sys.boot_completed=1
     bootchart stop
     # Setup per_boot directory so other .rc could start to use it on boot_completed
     exec - system system -- /bin/rm -rf /data/per_boot
-    mkdir /data/per_boot 0700 system system
+    mkdir /data/per_boot 0700 system system encryption=Require key=per_boot_ref
 
 # system server cannot write to /proc/sys files,
 # and chown/chmod does not work for /proc/sys/ entries.
@@ -878,14 +971,33 @@ on property:sys.sysctl.extra_free_kbytes=*
 on property:sys.sysctl.tcp_def_init_rwnd=*
     write /proc/sys/net/ipv4/tcp_default_init_rwnd ${sys.sysctl.tcp_def_init_rwnd}
 
-on property:security.perf_harden=0
+# perf_event_open syscall security:
+# Newer kernels have the ability to control the use of the syscall via SELinux
+# hooks. init tests for this, and sets sys_init.perf_lsm_hooks to 1 if the
+# kernel has the hooks. In this case, the system-wide perf_event_paranoid
+# sysctl is set to -1 (unrestricted use), and the SELinux policy is used for
+# controlling access. On older kernels, the paranoid value is the only means of
+# controlling access. It is normally 3 (allow only root), but the shell user
+# can lower it to 1 (allowing thread-scoped pofiling) via security.perf_harden.
+on property:sys.init.perf_lsm_hooks=1
+    write /proc/sys/kernel/perf_event_paranoid -1
+on property:security.perf_harden=0 && property:sys.init.perf_lsm_hooks=""
     write /proc/sys/kernel/perf_event_paranoid 1
+on property:security.perf_harden=1 && property:sys.init.perf_lsm_hooks=""
+    write /proc/sys/kernel/perf_event_paranoid 3
+
+# Additionally, simpleperf profiler uses debug.* and security.perf_harden
+# sysprops to be able to indirectly set these sysctls.
+on property:security.perf_harden=0
     write /proc/sys/kernel/perf_event_max_sample_rate ${debug.perf_event_max_sample_rate:-100000}
     write /proc/sys/kernel/perf_cpu_time_max_percent ${debug.perf_cpu_time_max_percent:-25}
     write /proc/sys/kernel/perf_event_mlock_kb ${debug.perf_event_mlock_kb:-516}
-
+# Default values.
 on property:security.perf_harden=1
-    write /proc/sys/kernel/perf_event_paranoid 3
+    write /proc/sys/kernel/perf_event_max_sample_rate 100000
+    write /proc/sys/kernel/perf_cpu_time_max_percent 25
+    write /proc/sys/kernel/perf_event_mlock_kb 516
+
 
 # on shutdown
 # In device's init.rc, this trigger can be used to do device-specific actions
@@ -918,17 +1030,33 @@ on property:ro.debuggable=1
 on init && property:ro.debuggable=1
     start console
 
-on userspace-reboot
+on userspace-reboot-requested
   # TODO(b/135984674): reset all necessary properties here.
-  setprop sys.init.userspace_reboot_in_progress 1
-  setprop sys.boot_completed 0
-  setprop sys.init.updatable_crashing 0
-  setprop apexd.status 0
+  setprop sys.boot_completed ""
+  setprop dev.bootcomplete ""
+  setprop sys.init.updatable_crashing ""
+  setprop sys.init.updatable_crashing_process_name ""
+  setprop apexd.status ""
+  setprop sys.user.0.ce_available ""
+  setprop sys.shutdown.requested ""
+  setprop service.bootanim.exit ""
+
+on userspace-reboot-fs-remount
+  # Make sure that vold is running.
+  # This is mostly a precaution measure in case vold for some reason wasn't running when
+  # userspace reboot was initiated.
+  start vold
+  exec - system system -- /system/bin/vdc checkpoint resetCheckpoint
+  exec - system system -- /system/bin/vdc checkpoint markBootAttempt
+  remount_userdata
+  start bootanim
 
 on userspace-reboot-resume
-  # TODO(b/135984674): remount userdata and reset checkpointing
-  trigger nonencrypted
+  trigger userspace-reboot-fs-remount
   trigger post-fs-data
   trigger zygote-start
   trigger early-boot
   trigger boot
+
+on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
+  setprop sys.init.userspace_reboot.in_progress ""

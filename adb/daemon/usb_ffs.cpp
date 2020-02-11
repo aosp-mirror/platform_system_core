@@ -84,7 +84,7 @@ struct usb_os_desc_ext_prop {
 using usb_os_desc_guid_t = usb_os_desc_ext_prop<20, 39>;
 usb_os_desc_guid_t os_desc_guid = {
     .bPropertyName = "DeviceInterfaceGUID",
-    .bProperty = "{64379D6C-D531-4BED-BBEC-5A16FC07D6BC}",
+    .bProperty = "{F72FE0D4-CBCB-407D-8814-9ED673D0DD6B}",
 };
 
 struct usb_ext_prop_values {

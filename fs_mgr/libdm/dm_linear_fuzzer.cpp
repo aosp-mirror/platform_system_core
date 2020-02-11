@@ -76,7 +76,7 @@ void EXPECT_TRUE(const T& a) {
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     uint64_t val[6];
 
-    if (size != sizeof(*val)) {
+    if (size != sizeof(val)) {
         return 0;
     }
 

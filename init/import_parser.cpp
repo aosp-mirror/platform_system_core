@@ -30,7 +30,7 @@ Result<void> ImportParser::ParseSection(std::vector<std::string>&& args,
     }
 
     auto conf_file = ExpandProps(args[1]);
-    if (!conf_file) {
+    if (!conf_file.ok()) {
         return Error() << "Could not expand import: " << conf_file.error();
     }
 

@@ -19,9 +19,15 @@
 #include <chrono>
 #include <iostream>
 #include <map>
+#include <sstream>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/unique_fd.h>
 #include <libsnapshot/snapshot.h>
+#include "utility.h"
+
+#include "utility.h"
 
 using namespace std::string_literals;
 
@@ -31,9 +37,11 @@ int Usage() {
                  "Actions:\n"
                  "  dump\n"
                  "    Print snapshot states.\n"
-                 "  merge [--logcat]\n"
+                 "  merge [--logcat] [--log-to-file]\n"
                  "    Initialize merge and wait for it to be completed.\n"
-                 "    If --logcat is specified, log to logcat. Otherwise, log to stdout.\n";
+                 "    If --logcat is specified, log to logcat.\n"
+                 "    If --log-to-file is specified, log to /data/misc/snapshotctl_log/.\n"
+                 "    If both specified, log to both. If none specified, log to stdout.\n";
     return EX_USAGE;
 }
 
@@ -45,39 +53,70 @@ bool DumpCmdHandler(int /*argc*/, char** argv) {
     return SnapshotManager::New()->Dump(std::cout);
 }
 
+class FileLogger {
+  public:
+    FileLogger() {
+        static constexpr const char* kLogFilePath = "/data/misc/snapshotctl_log/";
+        std::stringstream ss;
+        ss << kLogFilePath << "snapshotctl." << Now() << ".log";
+        fd_.reset(TEMP_FAILURE_RETRY(
+                open(ss.str().c_str(),
+                     O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_SYNC, 0660)));
+    }
+    // Copy-contuctor needed to be converted to std::function.
+    FileLogger(const FileLogger& other) { fd_.reset(dup(other.fd_)); }
+    void operator()(android::base::LogId, android::base::LogSeverity, const char* /*tag*/,
+                    const char* /*file*/, unsigned int /*line*/, const char* message) {
+        if (fd_ == -1) return;
+        std::stringstream ss;
+        ss << Now() << ":" << message << "\n";
+        (void)android::base::WriteStringToFd(ss.str(), fd_);
+    }
+
+  private:
+    android::base::unique_fd fd_;
+};
+
+class MergeCmdLogger {
+  public:
+    MergeCmdLogger(int argc, char** argv) {
+        for (int i = 0; i < argc; ++i) {
+            if (argv[i] == "--logcat"s) {
+                loggers_.push_back(android::base::LogdLogger());
+            }
+            if (argv[i] == "--log-to-file"s) {
+                loggers_.push_back(std::move(FileLogger()));
+            }
+        }
+        if (loggers_.empty()) {
+            loggers_.push_back(&android::base::StdioLogger);
+        }
+    }
+    void operator()(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
+                    const char* file, unsigned int line, const char* message) {
+        for (auto&& logger : loggers_) {
+            logger(id, severity, tag, file, line, message);
+        }
+    }
+
+  private:
+    std::vector<android::base::LogFunction> loggers_;
+};
+
 bool MergeCmdHandler(int argc, char** argv) {
     auto begin = std::chrono::steady_clock::now();
 
-    bool log_to_logcat = false;
-    for (int i = 2; i < argc; ++i) {
-        if (argv[i] == "--logcat"s) {
-            log_to_logcat = true;
-        }
-    }
-    if (log_to_logcat) {
-        android::base::InitLogging(argv);
-    } else {
-        android::base::InitLogging(argv, &android::base::StdioLogger);
-    }
+    // 'snapshotctl merge' is stripped away from arguments to
+    // Logger.
+    android::base::InitLogging(argv, MergeCmdLogger(argc - 2, argv + 2));
 
-    auto sm = SnapshotManager::New();
+    auto state = SnapshotManager::New()->InitiateMergeAndWait();
 
-    auto state = sm->GetUpdateState();
-    if (state == UpdateState::None) {
-        LOG(INFO) << "Can't find any snapshot to merge.";
+    // We could wind up in the Unverified state if the device rolled back or
+    // hasn't fully rebooted. Ignore this.
+    if (state == UpdateState::None || state == UpdateState::Unverified) {
         return true;
     }
-    if (state == UpdateState::Unverified) {
-        if (!sm->InitiateMerge()) {
-            LOG(ERROR) << "Failed to initiate merge.";
-            return false;
-        }
-    }
-
-    // All other states can be handled by ProcessUpdateState.
-    LOG(INFO) << "Waiting for any merge to complete. This can take up to 1 minute.";
-    state = SnapshotManager::New()->ProcessUpdateState();
-
     if (state == UpdateState::MergeCompleted) {
         auto end = std::chrono::steady_clock::now();
         auto passed = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();

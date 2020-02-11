@@ -26,14 +26,14 @@ cc_defaults {
     ],
 }
 
-cc_library {
-    // Do not ever allow this library to be vendor_available as a shared library.
-    // It does not have a stable interface.
-    name: "libfs_mgr",
+cc_defaults {
+    name: "libfs_mgr_defaults",
     defaults: ["fs_mgr_defaults"],
-    recovery_available: true,
     export_include_dirs: ["include"],
     include_dirs: ["system/vold"],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+    ],
     srcs: [
         "file_wait.cpp",
         "fs_mgr.cpp",
@@ -43,6 +43,7 @@ cc_library {
         "fs_mgr_overlayfs.cpp",
         "fs_mgr_roots.cpp",
         "fs_mgr_vendor_overlay.cpp",
+        ":libfiemap_srcs",
     ],
     shared_libs: [
         "libbase",
@@ -74,6 +75,7 @@ cc_library {
         "liblogwrap",
         "libdm",
         "libext2_uuid",
+        "libfscrypt",
         "libfstab",
     ],
     cppflags: [
@@ -87,6 +89,47 @@ cc_library {
             ],
         },
     },
+    header_libs: [
+        "libfiemap_headers",
+        "libstorage_literals_headers",
+    ],
+    export_header_lib_headers: [
+        "libfiemap_headers",
+    ],
+    required: [
+        "e2freefrag",
+        "e2fsdroid",
+    ],
+}
+
+// Two variants of libfs_mgr are provided: libfs_mgr and libfs_mgr_binder.
+// Use libfs_mgr in recovery, first-stage-init, or when libfiemap or overlayfs
+// is not used.
+//
+// Use libfs_mgr_binder when not in recovery/first-stage init, or when overlayfs
+// or libfiemap is needed. In this case, libfiemap will proxy over binder to
+// gsid.
+cc_library {
+    // Do not ever allow this library to be vendor_available as a shared library.
+    // It does not have a stable interface.
+    name: "libfs_mgr",
+    recovery_available: true,
+    defaults: [
+        "libfs_mgr_defaults",
+    ],
+    srcs: [
+        ":libfiemap_passthrough_srcs",
+    ],
+}
+
+cc_library {
+    // Do not ever allow this library to be vendor_available as a shared library.
+    // It does not have a stable interface.
+    name: "libfs_mgr_binder",
+    defaults: [
+        "libfs_mgr_defaults",
+        "libfiemap_binder_defaults",
+    ],
 }
 
 cc_library_static {
@@ -127,7 +170,7 @@ cc_binary {
         "libcrypto",
         "libext4_utils",
         "libfec",
-        "libfs_mgr",
+        "libfs_mgr_binder",
         "liblog",
         "liblp",
         "libselinux",
@@ -146,6 +189,28 @@ cc_binary {
             cppflags: [
                 "-UALLOW_ADBD_DISABLE_VERITY",
                 "-DALLOW_ADBD_DISABLE_VERITY=1",
+            ],
+        },
+    },
+    required: [
+        "clean_scratch_files",
+    ],
+}
+
+cc_binary {
+    name: "clean_scratch_files",
+    defaults: ["fs_mgr_defaults"],
+    shared_libs: [
+        "libbase",
+        "libfs_mgr_binder",
+    ],
+    srcs: [
+        "clean_scratch_files.cpp",
+    ],
+    product_variables: {
+        debuggable: {
+            init_rc: [
+                "clean_scratch_files.rc",
             ],
         },
     },

@@ -167,7 +167,7 @@ void Descriptor::Publish() const {
 Result<Descriptor> SocketDescriptor::Create(const std::string& global_context) const {
     const auto& socket_context = context.empty() ? global_context : context;
     auto result = CreateSocket(name, type | SOCK_CLOEXEC, passcred, perm, uid, gid, socket_context);
-    if (!result) {
+    if (!result.ok()) {
         return result.error();
     }
 
@@ -196,7 +196,7 @@ Result<Descriptor> FileDescriptor::Create() const {
 
 Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name, bool pre_apexd) {
     for (const auto& [nstype, path] : info.namespaces_to_enter) {
-        if (auto result = EnterNamespace(nstype, path.c_str()); !result) {
+        if (auto result = EnterNamespace(nstype, path.c_str()); !result.ok()) {
             return result;
         }
     }
@@ -214,14 +214,14 @@ Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name,
         bool remount_sys =
                 std::any_of(info.namespaces_to_enter.begin(), info.namespaces_to_enter.end(),
                             [](const auto& entry) { return entry.first == CLONE_NEWNET; });
-        if (auto result = SetUpMountNamespace(remount_proc, remount_sys); !result) {
+        if (auto result = SetUpMountNamespace(remount_proc, remount_sys); !result.ok()) {
             return result;
         }
     }
 
     if (info.flags & CLONE_NEWPID) {
         // This will fork again to run an init process inside the PID namespace.
-        if (auto result = SetUpPidNamespace(name.c_str()); !result) {
+        if (auto result = SetUpPidNamespace(name.c_str()); !result.ok()) {
             return result;
         }
     }
@@ -249,9 +249,8 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
 
     for (const auto& rlimit : attr.rlimits) {
         if (setrlimit(rlimit.first, &rlimit.second) == -1) {
-            return ErrnoError() << StringPrintf(
-                           "setrlimit(%d, {rlim_cur=%ld, rlim_max=%ld}) failed", rlimit.first,
-                           rlimit.second.rlim_cur, rlimit.second.rlim_max);
+            return ErrnoErrorf("setrlimit({}, {{rlim_cur={}, rlim_max={}}}) failed", rlimit.first,
+                               rlimit.second.rlim_cur, rlimit.second.rlim_max);
         }
     }
 
