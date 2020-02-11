@@ -1026,6 +1026,8 @@ static bool CreateDynamicScratch(std::string* scratch_device, bool* partition_ex
         }
 
         if (change) *change = true;
+    } else if (scratch_device->empty()) {
+        *scratch_device = GetBootScratchDevice();
     }
     return true;
 }
