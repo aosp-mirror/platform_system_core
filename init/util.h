@@ -25,6 +25,7 @@
 
 #include <android-base/chrono_utils.h>
 
+#include "fscrypt_init_extensions.h"
 #include "result.h"
 
 using android::base::boot_clock;
@@ -33,6 +34,8 @@ namespace android {
 namespace init {
 
 static const char kColdBootDoneProp[] = "ro.cold_boot_done";
+
+extern void (*trigger_shutdown)(const std::string& command);
 
 Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_t perm, uid_t uid,
                          gid_t gid, const std::string& socketcon);
@@ -44,8 +47,7 @@ Result<uid_t> DecodeUid(const std::string& name);
 
 bool mkdir_recursive(const std::string& pathname, mode_t mode);
 int wait_for_file(const char *filename, std::chrono::nanoseconds timeout);
-void import_kernel_cmdline(bool in_qemu,
-                           const std::function<void(const std::string&, const std::string&, bool)>&);
+void ImportKernelCmdline(const std::function<void(const std::string&, const std::string&)>&);
 bool make_dir(const std::string& path, mode_t mode);
 bool is_dir(const char* pathname);
 Result<std::string> ExpandProps(const std::string& src);
@@ -59,6 +61,17 @@ bool is_android_dt_value_expected(const std::string& sub_path, const std::string
 
 bool IsLegalPropertyName(const std::string& name);
 Result<void> IsLegalPropertyValue(const std::string& name, const std::string& value);
+
+struct MkdirOptions {
+    std::string target;
+    mode_t mode;
+    uid_t uid;
+    gid_t gid;
+    FscryptAction fscrypt_action;
+    std::string ref_option;
+};
+
+Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args);
 
 Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
         const std::vector<std::string>& args);

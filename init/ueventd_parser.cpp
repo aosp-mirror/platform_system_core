@@ -209,7 +209,7 @@ Result<void> SubsystemParser::ParseLineSection(std::vector<std::string>&& args, 
 
     auto parser = parser_map.Find(args);
 
-    if (!parser) return Error() << parser.error();
+    if (!parser.ok()) return Error() << parser.error();
 
     return std::invoke(*parser, this, std::move(args));
 }

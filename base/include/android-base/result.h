@@ -90,6 +90,7 @@ struct ResultError {
   ResultError(T&& message, int code) : message_(std::forward<T>(message)), code_(code) {}
 
   template <typename T>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   operator android::base::expected<T, ResultError>() {
     return android::base::unexpected(ResultError(message_, code_));
   }
@@ -118,9 +119,11 @@ inline std::ostream& operator<<(std::ostream& os, const ResultError& t) {
 class Error {
  public:
   Error() : errno_(0), append_errno_(false) {}
+  // NOLINTNEXTLINE(google-explicit-constructor)
   Error(int errno_to_append) : errno_(errno_to_append), append_errno_(true) {}
 
   template <typename T>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   operator android::base::expected<T, ResultError>() {
     return android::base::unexpected(ResultError(str(), errno_));
   }
@@ -153,11 +156,11 @@ class Error {
   Error& operator=(const Error&) = delete;
   Error& operator=(Error&&) = delete;
 
-  template <typename... Args>
-  friend Error Errorf(const char* fmt, const Args&... args);
+  template <typename T, typename... Args>
+  friend Error ErrorfImpl(const T&& fmt, const Args&... args);
 
-  template <typename... Args>
-  friend Error ErrnoErrorf(const char* fmt, const Args&... args);
+  template <typename T, typename... Args>
+  friend Error ErrnoErrorfImpl(const T&& fmt, const Args&... args);
 
  private:
   Error(bool append_errno, int errno_to_append, const std::string& message)
@@ -188,18 +191,49 @@ inline int ErrorCode(int code, T&& t, const Args&... args) {
   return ErrorCode(code, args...);
 }
 
-template <typename... Args>
-inline Error Errorf(const char* fmt, const Args&... args) {
+// TODO(tomcherry): Remove this once we've removed all `using android::base::Errorf` and `using
+// android::base::ErrnoErrorf` lines.
+enum Errorf {};
+enum ErrnoErrorf {};
+
+template <typename T, typename... Args>
+inline Error ErrorfImpl(const T&& fmt, const Args&... args) {
   return Error(false, ErrorCode(0, args...), fmt::format(fmt, args...));
 }
 
-template <typename... Args>
-inline Error ErrnoErrorf(const char* fmt, const Args&... args) {
+template <typename T, typename... Args>
+inline Error ErrnoErrorfImpl(const T&& fmt, const Args&... args) {
   return Error(true, errno, fmt::format(fmt, args...));
 }
 
+#define Errorf(fmt, ...) android::base::ErrorfImpl(FMT_STRING(fmt), ##__VA_ARGS__)
+#define ErrnoErrorf(fmt, ...) android::base::ErrnoErrorfImpl(FMT_STRING(fmt), ##__VA_ARGS__)
+
 template <typename T>
 using Result = android::base::expected<T, ResultError>;
+
+// Macros for testing the results of functions that return android::base::Result.
+// These also work with base::android::expected.
+
+#define CHECK_RESULT_OK(stmt)       \
+  do {                              \
+    const auto& tmp = (stmt);       \
+    CHECK(tmp.ok()) << tmp.error(); \
+  } while (0)
+
+#define ASSERT_RESULT_OK(stmt)            \
+  do {                                    \
+    const auto& tmp = (stmt);             \
+    ASSERT_TRUE(tmp.ok()) << tmp.error(); \
+  } while (0)
+
+#define EXPECT_RESULT_OK(stmt)            \
+  do {                                    \
+    auto tmp = (stmt);                    \
+    EXPECT_TRUE(tmp.ok()) << tmp.error(); \
+  } while (0)
+
+// TODO: Maybe add RETURN_IF_ERROR() and ASSIGN_OR_RETURN()
 
 }  // namespace base
 }  // namespace android

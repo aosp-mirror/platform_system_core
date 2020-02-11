@@ -54,6 +54,8 @@ cc_defaults {
     ],
     srcs: [
         "libc_test.cpp",
+        "liblog_default_tag.cpp",
+        "liblog_global_state.cpp",
         "liblog_test.cpp",
         "log_id_test.cpp",
         "log_radio_test.cpp",
@@ -62,6 +64,7 @@ cc_defaults {
         "log_time_test.cpp",
         "log_wrap_test.cpp",
         "logprint_test.cpp",
+        "rwlock_test.cpp",
     ],
     shared_libs: [
         "libcutils",
@@ -95,4 +98,17 @@ cc_test {
         "cts",
         "vts",
     ],
+}
+
+cc_test_host {
+    name: "liblog-host-test",
+    static_libs: ["liblog"],
+    shared_libs: ["libbase"],
+    srcs: [
+        "liblog_host_test.cpp",
+        "liblog_default_tag.cpp",
+        "liblog_global_state.cpp",
+        "rwlock_test.cpp",
+    ],
+    isolated: true,
 }

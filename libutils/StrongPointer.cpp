@@ -21,4 +21,7 @@
 namespace android {
 
 void sp_report_race() { LOG_ALWAYS_FATAL("sp<> assignment detected data race"); }
+
+void sp_report_stack_pointer() { LOG_ALWAYS_FATAL("sp<> constructed with stack pointer argument"); }
+
 }

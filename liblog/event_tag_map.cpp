@@ -36,7 +36,6 @@
 #include <utils/FastStrcmp.h>
 #include <utils/RWLock.h>
 
-#include "log_portability.h"
 #include "logd_reader.h"
 
 #define OUT_TAG "EventTagMap"
@@ -494,7 +493,7 @@ void android_closeEventTagMap(EventTagMap* map) {
 
 // Cache miss, go to logd to acquire a public reference.
 // Because we lack access to a SHARED PUBLIC /dev/event-log-tags file map?
-static const TagFmt* __getEventTag(EventTagMap* map, unsigned int tag) {
+static const TagFmt* __getEventTag([[maybe_unused]] EventTagMap* map, unsigned int tag) {
   // call event tag service to arrange for a new tag
   char* buf = NULL;
   // Can not use android::base::StringPrintf, asprintf + free instead.
@@ -515,8 +514,9 @@ static const TagFmt* __getEventTag(EventTagMap* map, unsigned int tag) {
     } else {
       size = ret;
     }
+#ifdef __ANDROID__
     // Ask event log tag service for an existing entry
-    if (__send_log_msg(buf, size) >= 0) {
+    if (SendLogdControlMessage(buf, size) >= 0) {
       buf[size - 1] = '\0';
       char* ep;
       unsigned long val = strtoul(buf, &ep, 10);  // return size
@@ -529,6 +529,7 @@ static const TagFmt* __getEventTag(EventTagMap* map, unsigned int tag) {
         }
       }
     }
+#endif
     free(buf);
   }
   return NULL;
@@ -618,8 +619,9 @@ int android_lookupEventTagNum(EventTagMap* map, const char* tagname, const char*
     } else {
       size = ret;
     }
+#ifdef __ANDROID__
     // Ask event log tag service for an allocation
-    if (__send_log_msg(buf, size) >= 0) {
+    if (SendLogdControlMessage(buf, size) >= 0) {
       buf[size - 1] = '\0';
       unsigned long val = strtoul(buf, &cp, 10);        // return size
       if ((buf != cp) && (val > 0) && (*cp == '\n')) {  // truncation OK
@@ -635,6 +637,7 @@ int android_lookupEventTagNum(EventTagMap* map, const char* tagname, const char*
         }
       }
     }
+#endif
     free(buf);
   }
 

@@ -31,6 +31,9 @@
 namespace android {
 namespace fs_mgr {
 
+static_assert(sizeof(LpMetadataHeaderV1_0) == offsetof(LpMetadataHeader, flags),
+              "Incorrect LpMetadataHeader v0 size");
+
 // Helper class for reading descriptors and memory buffers in the same manner.
 class Reader {
   public:
@@ -161,30 +164,59 @@ static bool ValidateTableBounds(const LpMetadataHeader& header,
     return true;
 }
 
-static bool ValidateMetadataHeader(const LpMetadataHeader& header) {
-    // To compute the header's checksum, we have to temporarily set its checksum
-    // field to 0.
-    {
-        LpMetadataHeader temp = header;
-        memset(&temp.header_checksum, 0, sizeof(temp.header_checksum));
-        SHA256(&temp, sizeof(temp), temp.header_checksum);
-        if (memcmp(temp.header_checksum, header.header_checksum, sizeof(temp.header_checksum)) != 0) {
-            LERROR << "Logical partition metadata has invalid checksum.";
-            return false;
-        }
+static bool ReadMetadataHeader(Reader* reader, LpMetadata* metadata) {
+    // Note we zero the struct since older files will result in a partial read.
+    LpMetadataHeader& header = metadata->header;
+    memset(&header, 0, sizeof(header));
+
+    if (!reader->ReadFully(&header, sizeof(LpMetadataHeaderV1_0))) {
+        PERROR << __PRETTY_FUNCTION__ << " read failed";
+        return false;
     }
 
-    // Do basic validation of key metadata bits.
+    // Do basic sanity checks before computing the checksum.
     if (header.magic != LP_METADATA_HEADER_MAGIC) {
         LERROR << "Logical partition metadata has invalid magic value.";
         return false;
     }
-    // Check that the version is compatible.
     if (header.major_version != LP_METADATA_MAJOR_VERSION ||
         header.minor_version > LP_METADATA_MINOR_VERSION_MAX) {
         LERROR << "Logical partition metadata has incompatible version.";
         return false;
     }
+
+    // Validate the header struct size against the reported version.
+    uint32_t expected_struct_size = sizeof(header);
+    if (header.minor_version < LP_METADATA_VERSION_FOR_EXPANDED_HEADER) {
+        expected_struct_size = sizeof(LpMetadataHeaderV1_0);
+    }
+    if (header.header_size != expected_struct_size) {
+        LERROR << "Invalid partition metadata header struct size.";
+        return false;
+    }
+
+    // Read in any remaining fields, the last step needed before checksumming.
+    if (size_t remaining_bytes = header.header_size - sizeof(LpMetadataHeaderV1_0)) {
+        uint8_t* offset = reinterpret_cast<uint8_t*>(&header) + sizeof(LpMetadataHeaderV1_0);
+        if (!reader->ReadFully(offset, remaining_bytes)) {
+            PERROR << __PRETTY_FUNCTION__ << " read failed";
+            return false;
+        }
+    }
+
+    // To compute the header's checksum, we have to temporarily set its checksum
+    // field to 0. Note that we must only compute up to |header_size|.
+    {
+        LpMetadataHeader temp = header;
+        memset(&temp.header_checksum, 0, sizeof(temp.header_checksum));
+        SHA256(&temp, temp.header_size, temp.header_checksum);
+        if (memcmp(temp.header_checksum, header.header_checksum, sizeof(temp.header_checksum)) !=
+            0) {
+            LERROR << "Logical partition metadata has invalid checksum.";
+            return false;
+        }
+    }
+
     if (!ValidateTableBounds(header, header.partitions) ||
         !ValidateTableBounds(header, header.extents) ||
         !ValidateTableBounds(header, header.groups) ||
@@ -215,19 +247,22 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
                                                  Reader* reader) {
     // First read and validate the header.
     std::unique_ptr<LpMetadata> metadata = std::make_unique<LpMetadata>();
-    if (!reader->ReadFully(&metadata->header, sizeof(metadata->header))) {
-        PERROR << __PRETTY_FUNCTION__ << " read " << sizeof(metadata->header) << "bytes failed";
-        return nullptr;
-    }
-    if (!ValidateMetadataHeader(metadata->header)) {
-        return nullptr;
-    }
+
     metadata->geometry = geometry;
+    if (!ReadMetadataHeader(reader, metadata.get())) {
+        return nullptr;
+    }
 
     LpMetadataHeader& header = metadata->header;
 
-    // Read the metadata payload. Allocation is fallible in case the metadata is
-    // corrupt and has some huge value.
+    // Sanity check the table size.
+    if (header.tables_size > geometry.metadata_max_size) {
+        LERROR << "Invalid partition metadata header table size.";
+        return nullptr;
+    }
+
+    // Read the metadata payload. Allocation is fallible since the table size
+    // could be large.
     std::unique_ptr<uint8_t[]> buffer(new (std::nothrow) uint8_t[header.tables_size]);
     if (!buffer) {
         LERROR << "Out of memory reading logical partition tables.";
@@ -245,11 +280,9 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
         return nullptr;
     }
 
-    uint32_t valid_attributes = 0;
+    uint32_t valid_attributes = LP_PARTITION_ATTRIBUTE_MASK_V0;
     if (metadata->header.minor_version >= LP_METADATA_VERSION_FOR_UPDATED_ATTR) {
-        valid_attributes = LP_PARTITION_ATTRIBUTE_MASK_V1;
-    } else {
-        valid_attributes = LP_PARTITION_ATTRIBUTE_MASK_V0;
+        valid_attributes |= LP_PARTITION_ATTRIBUTE_MASK_V1;
     }
 
     // ValidateTableSize ensured that |cursor| is valid for the number of

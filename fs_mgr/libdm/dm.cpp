@@ -16,11 +16,14 @@
 
 #include "libdm/dm.h"
 
+#include <linux/dm-ioctl.h>
 #include <sys/ioctl.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 
+#include <chrono>
 #include <functional>
+#include <string_view>
 #include <thread>
 
 #include <android-base/file.h>
@@ -79,14 +82,24 @@ bool DeviceMapper::CreateDevice(const std::string& name, const std::string& uuid
     return true;
 }
 
-bool DeviceMapper::DeleteDeviceIfExists(const std::string& name) {
+bool DeviceMapper::DeleteDeviceIfExists(const std::string& name,
+                                        const std::chrono::milliseconds& timeout_ms) {
     if (GetState(name) == DmDeviceState::INVALID) {
         return true;
     }
-    return DeleteDevice(name);
+    return DeleteDevice(name, timeout_ms);
 }
 
-bool DeviceMapper::DeleteDevice(const std::string& name) {
+bool DeviceMapper::DeleteDeviceIfExists(const std::string& name) {
+    return DeleteDeviceIfExists(name, 0ms);
+}
+
+bool DeviceMapper::DeleteDevice(const std::string& name,
+                                const std::chrono::milliseconds& timeout_ms) {
+    std::string unique_path;
+    if (!GetDeviceUniquePath(name, &unique_path)) {
+        LOG(ERROR) << "Failed to get unique path for device " << name;
+    }
     struct dm_ioctl io;
     InitIo(&io, name);
 
@@ -100,7 +113,21 @@ bool DeviceMapper::DeleteDevice(const std::string& name) {
     CHECK(io.flags & DM_UEVENT_GENERATED_FLAG)
             << "Didn't generate uevent for [" << name << "] removal";
 
+    if (timeout_ms <= std::chrono::milliseconds::zero()) {
+        return true;
+    }
+    if (unique_path.empty()) {
+        return false;
+    }
+    if (!WaitForFileDeleted(unique_path, timeout_ms)) {
+        LOG(ERROR) << "Timeout out waiting for " << unique_path << " to be deleted";
+        return false;
+    }
     return true;
+}
+
+bool DeviceMapper::DeleteDevice(const std::string& name) {
+    return DeleteDevice(name, 0ms);
 }
 
 static std::string GenerateUuid() {
@@ -477,6 +504,79 @@ std::string DeviceMapper::GetTargetType(const struct dm_target_spec& spec) {
         return std::string{spec.target_type, static_cast<size_t>(length)};
     }
     return std::string{spec.target_type, sizeof(spec.target_type)};
+}
+
+static bool ExtractBlockDeviceName(const std::string& path, std::string* name) {
+    static constexpr std::string_view kDevBlockPrefix("/dev/block/");
+    if (android::base::StartsWith(path, kDevBlockPrefix)) {
+        *name = path.substr(kDevBlockPrefix.length());
+        return true;
+    }
+    return false;
+}
+
+bool DeviceMapper::IsDmBlockDevice(const std::string& path) {
+    std::string name;
+    if (!ExtractBlockDeviceName(path, &name)) {
+        return false;
+    }
+    return android::base::StartsWith(name, "dm-");
+}
+
+std::optional<std::string> DeviceMapper::GetDmDeviceNameByPath(const std::string& path) {
+    std::string name;
+    if (!ExtractBlockDeviceName(path, &name)) {
+        LOG(WARNING) << path << " is not a block device";
+        return std::nullopt;
+    }
+    if (!android::base::StartsWith(name, "dm-")) {
+        LOG(WARNING) << path << " is not a dm device";
+        return std::nullopt;
+    }
+    std::string dm_name_file = "/sys/block/" + name + "/dm/name";
+    std::string dm_name;
+    if (!android::base::ReadFileToString(dm_name_file, &dm_name)) {
+        PLOG(ERROR) << "Failed to read file " << dm_name_file;
+        return std::nullopt;
+    }
+    dm_name = android::base::Trim(dm_name);
+    return dm_name;
+}
+
+std::optional<std::string> DeviceMapper::GetParentBlockDeviceByPath(const std::string& path) {
+    std::string name;
+    if (!ExtractBlockDeviceName(path, &name)) {
+        LOG(WARNING) << path << " is not a block device";
+        return std::nullopt;
+    }
+    if (!android::base::StartsWith(name, "dm-")) {
+        // Reached bottom of the device mapper stack.
+        return std::nullopt;
+    }
+    auto slaves_dir = "/sys/block/" + name + "/slaves";
+    auto dir = std::unique_ptr<DIR, decltype(&closedir)>(opendir(slaves_dir.c_str()), closedir);
+    if (dir == nullptr) {
+        PLOG(ERROR) << "Failed to open: " << slaves_dir;
+        return std::nullopt;
+    }
+    std::string sub_device_name = "";
+    for (auto entry = readdir(dir.get()); entry; entry = readdir(dir.get())) {
+        if (entry->d_type != DT_LNK) continue;
+        if (!sub_device_name.empty()) {
+            LOG(ERROR) << "Too many slaves in " << slaves_dir;
+            return std::nullopt;
+        }
+        sub_device_name = entry->d_name;
+    }
+    if (sub_device_name.empty()) {
+        LOG(ERROR) << "No slaves in " << slaves_dir;
+        return std::nullopt;
+    }
+    return "/dev/block/" + sub_device_name;
+}
+
+bool DeviceMapper::TargetInfo::IsOverflowSnapshot() const {
+    return spec.target_type == "snapshot"s && data == "Overflow"s;
 }
 
 }  // namespace dm

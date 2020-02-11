@@ -16,11 +16,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <scsi/sg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #include <linux/major.h>
@@ -49,6 +52,50 @@
 
 #define MMC_BLOCK_SIZE 512
 
+/*
+ * There should be no timeout for security protocol ioctl call, so we choose a
+ * large number for timeout.
+ * 20000 millisecs == 20 seconds
+ */
+#define TIMEOUT 20000
+
+/*
+ * The sg device driver that supports new interface has a major version number of "3".
+ * SG_GET_VERSION_NUM ioctl() will yield a number greater than or 30000.
+ */
+#define RPMB_MIN_SG_VERSION_NUM 30000
+
+/*
+ * CDB format of SECURITY PROTOCOL IN/OUT commands
+ * (JEDEC Standard No. 220D, Page 264)
+ */
+struct sec_proto_cdb {
+    /*
+     * OPERATION CODE = A2h for SECURITY PROTOCOL IN command,
+     * OPERATION CODE = B5h for SECURITY PROTOCOL OUT command.
+     */
+    uint8_t opcode;
+    /* SECURITY PROTOCOL = ECh (JEDEC Universal Flash Storage) */
+    uint8_t sec_proto;
+    /*
+     * The SECURITY PROTOCOL SPECIFIC field specifies the RPMB Protocol ID.
+     * CDB Byte 2 = 00h and CDB Byte 3 = 01h for RPMB Region 0.
+     */
+    uint8_t cdb_byte_2;
+    uint8_t cdb_byte_3;
+    /*
+     * Byte 4 and 5 are reserved.
+     */
+    uint8_t cdb_byte_4;
+    uint8_t cdb_byte_5;
+    /* ALLOCATION/TRANSFER LENGTH in big-endian */
+    uint32_t length;
+    /* Byte 9 is reserved. */
+    uint8_t cdb_byte_10;
+    /* CONTROL = 00h. */
+    uint8_t ctrl;
+} __packed;
+
 static int rpmb_fd = -1;
 static uint8_t read_buf[4096];
 static enum dev_type dev_type = UNKNOWN_RPMB;
@@ -68,6 +115,21 @@ static void print_buf(const char* prefix, const uint8_t* buf, size_t size) {
 }
 
 #endif
+
+static void set_sg_io_hdr(sg_io_hdr_t* io_hdrp, int dxfer_direction, unsigned char cmd_len,
+                          unsigned char mx_sb_len, unsigned int dxfer_len, void* dxferp,
+                          unsigned char* cmdp, void* sbp) {
+    memset(io_hdrp, 0, sizeof(sg_io_hdr_t));
+    io_hdrp->interface_id = 'S';
+    io_hdrp->dxfer_direction = dxfer_direction;
+    io_hdrp->cmd_len = cmd_len;
+    io_hdrp->mx_sb_len = mx_sb_len;
+    io_hdrp->dxfer_len = dxfer_len;
+    io_hdrp->dxferp = dxferp;
+    io_hdrp->cmdp = cmdp;
+    io_hdrp->sbp = sbp;
+    io_hdrp->timeout = TIMEOUT;
+}
 
 static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req) {
     struct {
@@ -126,6 +188,57 @@ static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req
     rc = ioctl(mmc_fd, MMC_IOC_MULTI_CMD, &mmc.multi);
     if (rc < 0) {
         ALOGE("%s: mmc ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
+    }
+    return rc;
+}
+
+static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req) {
+    int rc;
+    const uint8_t* write_buf = req->payload;
+    /*
+     * Meaning of member values are stated on the definition of struct sec_proto_cdb.
+     */
+    struct sec_proto_cdb in_cdb = {0xA2, 0xEC, 0x00, 0x01, 0x00, 0x00, 0, 0x00, 0x00};
+    struct sec_proto_cdb out_cdb = {0xB5, 0xEC, 0x00, 0x01, 0x00, 0x00, 0, 0x00, 0x00};
+    unsigned char sense_buffer[32];
+
+    if (req->reliable_write_size) {
+        /* Prepare SECURITY PROTOCOL OUT command. */
+        out_cdb.length = __builtin_bswap32(req->reliable_write_size);
+        sg_io_hdr_t io_hdr;
+        set_sg_io_hdr(&io_hdr, SG_DXFER_TO_DEV, sizeof(out_cdb), sizeof(sense_buffer),
+                      req->reliable_write_size, (void*)write_buf, (unsigned char*)&out_cdb,
+                      sense_buffer);
+        rc = ioctl(sg_fd, SG_IO, &io_hdr);
+        if (rc < 0) {
+            ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
+        }
+        write_buf += req->reliable_write_size;
+    }
+
+    if (req->write_size) {
+        /* Prepare SECURITY PROTOCOL OUT command. */
+        out_cdb.length = __builtin_bswap32(req->write_size);
+        sg_io_hdr_t io_hdr;
+        set_sg_io_hdr(&io_hdr, SG_DXFER_TO_DEV, sizeof(out_cdb), sizeof(sense_buffer),
+                      req->write_size, (void*)write_buf, (unsigned char*)&out_cdb, sense_buffer);
+        rc = ioctl(sg_fd, SG_IO, &io_hdr);
+        if (rc < 0) {
+            ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
+        }
+        write_buf += req->write_size;
+    }
+
+    if (req->read_size) {
+        /* Prepare SECURITY PROTOCOL IN command. */
+        out_cdb.length = __builtin_bswap32(req->read_size);
+        sg_io_hdr_t io_hdr;
+        set_sg_io_hdr(&io_hdr, SG_DXFER_FROM_DEV, sizeof(in_cdb), sizeof(sense_buffer),
+                      req->read_size, read_buf, (unsigned char*)&in_cdb, sense_buffer);
+        rc = ioctl(sg_fd, SG_IO, &io_hdr);
+        if (rc < 0) {
+            ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
+        }
     }
     return rc;
 }
@@ -192,7 +305,14 @@ int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len) {
             msg->result = STORAGE_ERR_GENERIC;
             goto err_response;
         }
-    } else if (dev_type == VIRT_RPMB) {
+    } else if (dev_type == UFS_RPMB) {
+        rc = send_ufs_rpmb_req(rpmb_fd, req);
+        if (rc < 0) {
+            ALOGE("send_ufs_rpmb_req failed: %d, %s\n", rc, strerror(errno));
+            msg->result = STORAGE_ERR_GENERIC;
+            goto err_response;
+        }
+    } else if ((dev_type == VIRT_RPMB) || (dev_type == SOCK_RPMB)) {
         size_t payload_size = req->reliable_write_size + req->write_size;
         rc = send_virt_rpmb_req(rpmb_fd, read_buf, req->read_size, req->payload, payload_size);
         if (rc < 0) {
@@ -231,15 +351,46 @@ err_response:
 }
 
 int rpmb_open(const char* rpmb_devname, enum dev_type open_dev_type) {
-    int rc;
+    int rc, sg_version_num;
     dev_type = open_dev_type;
 
-    rc = open(rpmb_devname, O_RDWR, 0);
-    if (rc < 0) {
-        ALOGE("unable (%d) to open rpmb device '%s': %s\n", errno, rpmb_devname, strerror(errno));
-        return rc;
+    if (dev_type != SOCK_RPMB) {
+        rc = open(rpmb_devname, O_RDWR, 0);
+        if (rc < 0) {
+            ALOGE("unable (%d) to open rpmb device '%s': %s\n", errno, rpmb_devname, strerror(errno));
+            return rc;
+        }
+        rpmb_fd = rc;
+
+        /* For UFS, it is prudent to check we have a sg device by calling an ioctl */
+        if (dev_type == UFS_RPMB) {
+            if ((ioctl(rpmb_fd, SG_GET_VERSION_NUM, &sg_version_num) < 0) ||
+                (sg_version_num < RPMB_MIN_SG_VERSION_NUM)) {
+                ALOGE("%s is not a sg device, or old sg driver\n", rpmb_devname);
+                return -1;
+            }
+        }
+    } else {
+        struct sockaddr_un unaddr;
+        struct sockaddr *addr = (struct sockaddr *)&unaddr;
+        rc = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (rc < 0) {
+            ALOGE("unable (%d) to create socket: %s\n", errno, strerror(errno));
+            return rc;
+        }
+        rpmb_fd = rc;
+
+        memset(&unaddr, 0, sizeof(unaddr));
+        unaddr.sun_family = AF_UNIX;
+        // TODO if it overflowed, bail rather than connecting?
+        strncpy(unaddr.sun_path, rpmb_devname, sizeof(unaddr.sun_path)-1);
+        rc = connect(rpmb_fd, addr, sizeof(unaddr));
+        if (rc < 0) {
+            ALOGE("unable (%d) to connect to rpmb socket '%s': %s\n", errno, rpmb_devname, strerror(errno));
+            return rc;
+        }
     }
-    rpmb_fd = rc;
+
     return 0;
 }
 

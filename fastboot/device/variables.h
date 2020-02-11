@@ -26,6 +26,10 @@ bool GetBootloaderVersion(FastbootDevice* device, const std::vector<std::string>
                           std::string* message);
 bool GetBasebandVersion(FastbootDevice* device, const std::vector<std::string>& args,
                         std::string* message);
+bool GetOsVersion(FastbootDevice* device, const std::vector<std::string>& args,
+                  std::string* message);
+bool GetVndkVersion(FastbootDevice* device, const std::vector<std::string>& args,
+                    std::string* message);
 bool GetProduct(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
 bool GetSerial(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
 bool GetSecure(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
@@ -61,6 +65,21 @@ bool GetBatterySoCOk(FastbootDevice* device, const std::vector<std::string>& arg
                      std::string* message);
 bool GetSuperPartitionName(FastbootDevice* device, const std::vector<std::string>& args,
                            std::string* message);
+bool GetSnapshotUpdateStatus(FastbootDevice* device, const std::vector<std::string>& args,
+                             std::string* message);
+bool GetCpuAbi(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
+bool GetSystemFingerprint(FastbootDevice* device, const std::vector<std::string>& args,
+                          std::string* message);
+bool GetVendorFingerprint(FastbootDevice* device, const std::vector<std::string>& args,
+                          std::string* message);
+bool GetDynamicPartition(FastbootDevice* device, const std::vector<std::string>& args,
+                         std::string* message);
+bool GetFirstApiLevel(FastbootDevice* device, const std::vector<std::string>& args,
+                      std::string* message);
+bool GetSecurityPatchLevel(FastbootDevice* device, const std::vector<std::string>& args,
+                           std::string* message);
+bool GetTrebleEnabled(FastbootDevice* device, const std::vector<std::string>& args,
+                      std::string* message);
 
 // Helpers for getvar all.
 std::vector<std::vector<std::string>> GetAllPartitionArgsWithSlot(FastbootDevice* device);

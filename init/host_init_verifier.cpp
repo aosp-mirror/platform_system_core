@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include "host_init_verifier.h"
+
 #include <errno.h>
 #include <getopt.h>
 #include <pwd.h>
@@ -30,6 +32,8 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
+#include <hidl/metadata.h>
+#include <property_info_serializer/property_info_serializer.h>
 
 #include "action.h"
 #include "action_manager.h"
@@ -52,6 +56,10 @@ using namespace std::literals;
 using android::base::ParseInt;
 using android::base::ReadFileToString;
 using android::base::Split;
+using android::properties::BuildTrie;
+using android::properties::ParsePropertyInfoFile;
+using android::properties::PropertyInfoArea;
+using android::properties::PropertyInfoEntry;
 
 static std::vector<std::string> passwd_files;
 
@@ -142,42 +150,88 @@ static Result<void> check_stub(const BuiltinArguments& args) {
 #include "generated_stub_builtin_function_map.h"
 
 void PrintUsage() {
-    std::cout << "usage: host_init_verifier [-p FILE] -i FILE <init rc file>\n"
+    std::cout << "usage: host_init_verifier [options] <init rc file>\n"
                  "\n"
                  "Tests an init script for correctness\n"
                  "\n"
                  "-p FILE\tSearch this passwd file for users and groups\n"
-                 "-i FILE\tParse this JSON file for the HIDL interface inheritance hierarchy\n"
+                 "--property_contexts=FILE\t Use this file for property_contexts\n"
               << std::endl;
+}
+
+Result<InterfaceInheritanceHierarchyMap> ReadInterfaceInheritanceHierarchy() {
+    InterfaceInheritanceHierarchyMap result;
+    for (const HidlInterfaceMetadata& iface : HidlInterfaceMetadata::all()) {
+        std::set<FQName> inherited_interfaces;
+        for (const std::string& intf : iface.inherited) {
+            FQName fqname;
+            if (!fqname.setTo(intf)) {
+                return Error() << "Unable to parse interface '" << intf << "'";
+            }
+            inherited_interfaces.insert(fqname);
+        }
+        FQName fqname;
+        if (!fqname.setTo(iface.name)) {
+            return Error() << "Unable to parse interface '" << iface.name << "'";
+        }
+        result[fqname] = inherited_interfaces;
+    }
+
+    return result;
+}
+
+const PropertyInfoArea* property_info_area;
+
+void HandlePropertyContexts(const std::string& filename,
+                            std::vector<PropertyInfoEntry>* property_infos) {
+    auto file_contents = std::string();
+    if (!ReadFileToString(filename, &file_contents)) {
+        PLOG(ERROR) << "Could not read properties from '" << filename << "'";
+        exit(EXIT_FAILURE);
+    }
+
+    auto errors = std::vector<std::string>{};
+    ParsePropertyInfoFile(file_contents, true, property_infos, &errors);
+    for (const auto& error : errors) {
+        LOG(ERROR) << "Could not read line from '" << filename << "': " << error;
+    }
+    if (!errors.empty()) {
+        exit(EXIT_FAILURE);
+    }
 }
 
 int main(int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::StdioLogger);
     android::base::SetMinimumLogSeverity(android::base::ERROR);
 
-    std::string interface_inheritance_hierarchy_file;
+    auto property_infos = std::vector<PropertyInfoEntry>();
 
     while (true) {
+        static const char kPropertyContexts[] = "property-contexts=";
         static const struct option long_options[] = {
                 {"help", no_argument, nullptr, 'h'},
+                {kPropertyContexts, required_argument, nullptr, 0},
                 {nullptr, 0, nullptr, 0},
         };
 
-        int arg = getopt_long(argc, argv, "p:i:", long_options, nullptr);
+        int option_index;
+        int arg = getopt_long(argc, argv, "p:", long_options, &option_index);
 
         if (arg == -1) {
             break;
         }
 
         switch (arg) {
+            case 0:
+                if (long_options[option_index].name == kPropertyContexts) {
+                    HandlePropertyContexts(optarg, &property_infos);
+                }
+                break;
             case 'h':
                 PrintUsage();
                 return EXIT_FAILURE;
             case 'p':
                 passwd_files.emplace_back(optarg);
-                break;
-            case 'i':
-                interface_inheritance_hierarchy_file = optarg;
                 break;
             default:
                 std::cerr << "getprop: getopt returned invalid result: " << arg << std::endl;
@@ -188,18 +242,27 @@ int main(int argc, char** argv) {
     argc -= optind;
     argv += optind;
 
-    if (argc != 1 || interface_inheritance_hierarchy_file.empty()) {
+    if (argc != 1) {
         PrintUsage();
         return EXIT_FAILURE;
     }
 
-    auto interface_inheritance_hierarchy_map =
-            ReadInterfaceInheritanceHierarchy(interface_inheritance_hierarchy_file);
-    if (!interface_inheritance_hierarchy_map) {
+    auto interface_inheritance_hierarchy_map = ReadInterfaceInheritanceHierarchy();
+    if (!interface_inheritance_hierarchy_map.ok()) {
         LOG(ERROR) << interface_inheritance_hierarchy_map.error();
         return EXIT_FAILURE;
     }
     SetKnownInterfaces(*interface_inheritance_hierarchy_map);
+
+    std::string serialized_contexts;
+    std::string trie_error;
+    if (!BuildTrie(property_infos, "u:object_r:default_prop:s0", "string", &serialized_contexts,
+                   &trie_error)) {
+        LOG(ERROR) << "Unable to serialize property contexts: " << trie_error;
+        return EXIT_FAILURE;
+    }
+
+    property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_contexts.c_str());
 
     const BuiltinFunctionMap& function_map = GetBuiltinFunctionMap();
     Action::set_function_map(&function_map);

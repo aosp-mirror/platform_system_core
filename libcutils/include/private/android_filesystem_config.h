@@ -129,6 +129,10 @@
 #define AID_NETWORK_STACK 1073   /* network stack service */
 #define AID_GSID 1074            /* GSI service daemon */
 #define AID_FSVERITY_CERT 1075   /* fs-verity key ownership in keystore */
+#define AID_CREDSTORE 1076       /* identity credential manager service */
+#define AID_EXTERNAL_STORAGE 1077 /* Full external storage access including USB OTG volumes */
+#define AID_EXT_DATA_RW 1078      /* GID for app-private data directories on external storage */
+#define AID_EXT_OBB_RW 1079       /* GID for OBB directories on external storage */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */

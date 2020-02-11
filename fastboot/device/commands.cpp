@@ -19,19 +19,22 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#include <unordered_set>
+
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <android/hardware/boot/1.1/IBootControl.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/wipe.h>
 #include <fs_mgr.h>
-#include <fs_mgr/roots.h>
 #include <libgsi/libgsi.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
+#include <libsnapshot/snapshot.h>
 #include <uuid/uuid.h>
 
 #include "constants.h"
@@ -44,8 +47,11 @@ using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::BoolResult;
 using ::android::hardware::boot::V1_0::CommandResult;
 using ::android::hardware::boot::V1_0::Slot;
+using ::android::hardware::boot::V1_1::MergeStatus;
 using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
+using android::snapshot::SnapshotManager;
+using IBootControl1_1 = ::android::hardware::boot::V1_1::IBootControl;
 
 struct VariableHandlers {
     // Callback to retrieve the value of a single variable.
@@ -53,6 +59,24 @@ struct VariableHandlers {
     // Callback to retrieve all possible argument combinations, for getvar all.
     std::function<std::vector<std::vector<std::string>>(FastbootDevice*)> get_all_args;
 };
+
+static bool IsSnapshotUpdateInProgress(FastbootDevice* device) {
+    auto hal = device->boot1_1();
+    if (!hal) {
+        return false;
+    }
+    auto merge_status = hal->getSnapshotMergeStatus();
+    return merge_status == MergeStatus::SNAPSHOTTED || merge_status == MergeStatus::MERGING;
+}
+
+static bool IsProtectedPartitionDuringMerge(FastbootDevice* device, const std::string& name) {
+    static const std::unordered_set<std::string> ProtectedPartitionsDuringMerge = {
+            "userdata", "metadata", "misc"};
+    if (ProtectedPartitionsDuringMerge.count(name) == 0) {
+        return false;
+    }
+    return IsSnapshotUpdateInProgress(device);
+}
 
 static void GetAllVars(FastbootDevice* device, const std::string& name,
                        const VariableHandlers& handlers) {
@@ -82,6 +106,8 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_VERSION, {GetVersion, nullptr}},
             {FB_VAR_VERSION_BOOTLOADER, {GetBootloaderVersion, nullptr}},
             {FB_VAR_VERSION_BASEBAND, {GetBasebandVersion, nullptr}},
+            {FB_VAR_VERSION_OS, {GetOsVersion, nullptr}},
+            {FB_VAR_VERSION_VNDK, {GetVndkVersion, nullptr}},
             {FB_VAR_PRODUCT, {GetProduct, nullptr}},
             {FB_VAR_SERIALNO, {GetSerial, nullptr}},
             {FB_VAR_VARIANT, {GetVariant, nullptr}},
@@ -101,7 +127,15 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
             {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
             {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
-            {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}}};
+            {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}},
+            {FB_VAR_SNAPSHOT_UPDATE_STATUS, {GetSnapshotUpdateStatus, nullptr}},
+            {FB_VAR_CPU_ABI, {GetCpuAbi, nullptr}},
+            {FB_VAR_SYSTEM_FINGERPRINT, {GetSystemFingerprint, nullptr}},
+            {FB_VAR_VENDOR_FINGERPRINT, {GetVendorFingerprint, nullptr}},
+            {FB_VAR_DYNAMIC_PARTITION, {GetDynamicPartition, nullptr}},
+            {FB_VAR_FIRST_API_LEVEL, {GetFirstApiLevel, nullptr}},
+            {FB_VAR_SECURITY_PATCH_LEVEL, {GetSecurityPatchLevel, nullptr}},
+            {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}}};
 
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");
@@ -138,8 +172,14 @@ bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) 
         return device->WriteStatus(FastbootResult::FAIL, "Erase is not allowed on locked devices");
     }
 
+    const auto& partition_name = args[1];
+    if (IsProtectedPartitionDuringMerge(device, partition_name)) {
+        auto message = "Cannot erase " + partition_name + " while a snapshot update is in progress";
+        return device->WriteFail(message);
+    }
+
     PartitionHandle handle;
-    if (!OpenPartition(device, args[1], &handle)) {
+    if (!OpenPartition(device, partition_name, &handle)) {
         return device->WriteStatus(FastbootResult::FAIL, "Partition doesn't exist");
     }
     if (wipe_block_device(handle.fd(), get_block_device_size(handle.fd())) == 0) {
@@ -204,9 +244,9 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
                                    "set_active command is not allowed on locked devices");
     }
 
-    // Slot suffix needs to be between 'a' and 'z'.
     Slot slot;
     if (!GetSlotNumber(args[1], &slot)) {
+        // Slot suffix needs to be between 'a' and 'z'.
         return device->WriteStatus(FastbootResult::FAIL, "Bad slot suffix");
     }
 
@@ -219,6 +259,32 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
     if (slot >= boot_control_hal->getNumberSlots()) {
         return device->WriteStatus(FastbootResult::FAIL, "Slot out of range");
     }
+
+    // If the slot is not changing, do nothing.
+    if (slot == boot_control_hal->getCurrentSlot()) {
+        return device->WriteOkay("");
+    }
+
+    // Check how to handle the current snapshot state.
+    if (auto hal11 = device->boot1_1()) {
+        auto merge_status = hal11->getSnapshotMergeStatus();
+        if (merge_status == MergeStatus::MERGING) {
+            return device->WriteFail("Cannot change slots while a snapshot update is in progress");
+        }
+        // Note: we allow the slot change if the state is SNAPSHOTTED. First-
+        // stage init does not have access to the HAL, and uses the slot number
+        // and /metadata OTA state to determine whether a slot change occurred.
+        // Booting into the old slot would erase the OTA, and switching A->B->A
+        // would simply resume it if no boots occur in between. Re-flashing
+        // partitions implicitly cancels the OTA, so leaving the state as-is is
+        // safe.
+        if (merge_status == MergeStatus::SNAPSHOTTED) {
+            device->WriteInfo(
+                    "Changing the active slot with a snapshot applied may cancel the"
+                    " update.");
+        }
+    }
+
     CommandResult ret;
     auto cb = [&ret](CommandResult result) { ret = result; };
     auto result = boot_control_hal->setActiveBootSlot(slot, cb);
@@ -462,6 +528,11 @@ bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) 
     }
 
     const auto& partition_name = args[1];
+    if (IsProtectedPartitionDuringMerge(device, partition_name)) {
+        auto message = "Cannot flash " + partition_name + " while a snapshot update is in progress";
+        return device->WriteFail(message);
+    }
+
     if (LogicalPartitionExists(device, partition_name)) {
         CancelPartitionSnapshot(device, partition_name);
     }
@@ -486,42 +557,6 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
     return UpdateSuper(device, args[1], wipe);
 }
 
-class AutoMountMetadata {
-  public:
-    AutoMountMetadata() {
-        android::fs_mgr::Fstab proc_mounts;
-        if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
-            LOG(ERROR) << "Could not read /proc/mounts";
-            return;
-        }
-
-        auto iter = std::find_if(proc_mounts.begin(), proc_mounts.end(),
-                [](const auto& entry) { return entry.mount_point == "/metadata"; });
-        if (iter != proc_mounts.end()) {
-            mounted_ = true;
-            return;
-        }
-
-        if (!ReadDefaultFstab(&fstab_)) {
-            LOG(ERROR) << "Could not read default fstab";
-            return;
-        }
-        mounted_ = EnsurePathMounted(&fstab_, "/metadata");
-        should_unmount_ = true;
-    }
-    ~AutoMountMetadata() {
-        if (mounted_ && should_unmount_) {
-            EnsurePathUnmounted(&fstab_, "/metadata");
-        }
-    }
-    explicit operator bool() const { return mounted_; }
-
-  private:
-    android::fs_mgr::Fstab fstab_;
-    bool mounted_ = false;
-    bool should_unmount_ = false;
-};
-
 bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() != 2) {
         return device->WriteFail("Invalid arguments");
@@ -544,6 +579,56 @@ bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
         if (!android::gsi::DisableGsi()) {
             return device->WriteStatus(FastbootResult::FAIL, strerror(errno));
         }
+    }
+    return device->WriteStatus(FastbootResult::OKAY, "Success");
+}
+
+bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    // Note that we use the HAL rather than mounting /metadata, since we want
+    // our results to match the bootloader.
+    auto hal = device->boot1_1();
+    if (!hal) return device->WriteFail("Not supported");
+
+    // If no arguments, return the same thing as a getvar. Note that we get the
+    // HAL first so we can return "not supported" before we return the less
+    // specific error message below.
+    if (args.size() < 2 || args[1].empty()) {
+        std::string message;
+        if (!GetSnapshotUpdateStatus(device, {}, &message)) {
+            return device->WriteFail("Could not determine update status");
+        }
+        device->WriteInfo(message);
+        return device->WriteOkay("");
+    }
+
+    MergeStatus status = hal->getSnapshotMergeStatus();
+
+    if (args.size() != 2) {
+        return device->WriteFail("Invalid arguments");
+    }
+    if (args[1] == "cancel") {
+        switch (status) {
+            case MergeStatus::SNAPSHOTTED:
+            case MergeStatus::MERGING:
+                hal->setSnapshotMergeStatus(MergeStatus::CANCELLED);
+                break;
+            default:
+                break;
+        }
+    } else if (args[1] == "merge") {
+        if (status != MergeStatus::MERGING) {
+            return device->WriteFail("No snapshot merge is in progress");
+        }
+
+        auto sm = SnapshotManager::NewForFirstStageMount();
+        if (!sm) {
+            return device->WriteFail("Unable to create SnapshotManager");
+        }
+        if (!sm->HandleImminentDataWipe()) {
+            return device->WriteFail("Unable to finish snapshot merge");
+        }
+    } else {
+        return device->WriteFail("Invalid parameter to snapshot-update");
     }
     return device->WriteStatus(FastbootResult::OKAY, "Success");
 }

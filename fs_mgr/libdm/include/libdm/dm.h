@@ -90,6 +90,10 @@ class DeviceMapper final {
     // Returns 'true' on success, false otherwise.
     bool DeleteDevice(const std::string& name);
     bool DeleteDeviceIfExists(const std::string& name);
+    // Removes a device mapper device with the given name and waits for |timeout_ms| milliseconds
+    // for the corresponding block device to be deleted.
+    bool DeleteDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms);
+    bool DeleteDeviceIfExists(const std::string& name, const std::chrono::milliseconds& timeout_ms);
 
     // Fetches and returns the complete state of the underlying device mapper
     // device with given name.
@@ -201,6 +205,8 @@ class DeviceMapper final {
         TargetInfo() {}
         TargetInfo(const struct dm_target_spec& spec, const std::string& data)
             : spec(spec), data(data) {}
+
+        bool IsOverflowSnapshot() const;
     };
     bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table);
 
@@ -209,6 +215,19 @@ class DeviceMapper final {
     bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table);
 
     static std::string GetTargetType(const struct dm_target_spec& spec);
+
+    // Returns true if given path is a path to a dm block device.
+    bool IsDmBlockDevice(const std::string& path);
+
+    // Returns name of a dm-device with the given path, or std::nulloptr if given path is not a
+    // dm-device.
+    std::optional<std::string> GetDmDeviceNameByPath(const std::string& path);
+
+    // Returns a parent block device of a dm device with the given path, or std::nullopt if:
+    //  * Given path doesn't correspond to a dm device.
+    //  * A dm device is based on top of more than one block devices.
+    //  * A failure occurred.
+    std::optional<std::string> GetParentBlockDeviceByPath(const std::string& path);
 
   private:
     // Maximum possible device mapper targets registered in the kernel.

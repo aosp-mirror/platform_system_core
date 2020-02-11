@@ -23,6 +23,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android/hardware/boot/1.1/IBootControl.h>
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr.h>
 #include <healthhalutils/HealthHalUtils.h>
@@ -34,9 +35,11 @@
 
 using ::android::hardware::boot::V1_0::BoolResult;
 using ::android::hardware::boot::V1_0::Slot;
+using ::android::hardware::boot::V1_1::MergeStatus;
 using ::android::hardware::fastboot::V1_0::FileSystemType;
 using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
+using IBootControl1_1 = ::android::hardware::boot::V1_1::IBootControl;
 using namespace android::fs_mgr;
 
 constexpr char kFastbootProtocolVersion[] = "0.4";
@@ -56,6 +59,18 @@ bool GetBootloaderVersion(FastbootDevice* /* device */, const std::vector<std::s
 bool GetBasebandVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
                         std::string* message) {
     *message = android::base::GetProperty("ro.build.expect.baseband", "");
+    return true;
+}
+
+bool GetOsVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                  std::string* message) {
+    *message = android::base::GetProperty("ro.build.version.release", "");
+    return true;
+}
+
+bool GetVndkVersion(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                    std::string* message) {
+    *message = android::base::GetProperty("ro.vndk.version", "");
     return true;
 }
 
@@ -422,5 +437,75 @@ bool GetSuperPartitionName(FastbootDevice* device, const std::vector<std::string
                            std::string* message) {
     uint32_t slot_number = SlotNumberForSlotSuffix(device->GetCurrentSlot());
     *message = fs_mgr_get_super_partition_name(slot_number);
+    return true;
+}
+
+bool GetSnapshotUpdateStatus(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                             std::string* message) {
+    // Note that we use the HAL rather than mounting /metadata, since we want
+    // our results to match the bootloader.
+    auto hal = device->boot1_1();
+    if (!hal) {
+        *message = "not supported";
+        return false;
+    }
+
+    MergeStatus status = hal->getSnapshotMergeStatus();
+    switch (status) {
+        case MergeStatus::SNAPSHOTTED:
+            *message = "snapshotted";
+            break;
+        case MergeStatus::MERGING:
+            *message = "merging";
+            break;
+        default:
+            *message = "none";
+            break;
+    }
+    return true;
+}
+
+bool GetCpuAbi(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+               std::string* message) {
+    *message = android::base::GetProperty("ro.product.cpu.abi", "");
+    return true;
+}
+
+bool GetSystemFingerprint(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                          std::string* message) {
+    *message = android::base::GetProperty("ro.system.build.fingerprint", "");
+    if (message->empty()) {
+        *message = android::base::GetProperty("ro.build.fingerprint", "");
+    }
+    return true;
+}
+
+bool GetVendorFingerprint(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                          std::string* message) {
+    *message = android::base::GetProperty("ro.vendor.build.fingerprint", "");
+    return true;
+}
+
+bool GetDynamicPartition(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                         std::string* message) {
+    *message = android::base::GetProperty("ro.boot.dynamic_partitions", "");
+    return true;
+}
+
+bool GetFirstApiLevel(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                      std::string* message) {
+    *message = android::base::GetProperty("ro.product.first_api_level", "");
+    return true;
+}
+
+bool GetSecurityPatchLevel(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                           std::string* message) {
+    *message = android::base::GetProperty("ro.build.version.security_patch", "");
+    return true;
+}
+
+bool GetTrebleEnabled(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                      std::string* message) {
+    *message = android::base::GetProperty("ro.treble.enabled", "");
     return true;
 }

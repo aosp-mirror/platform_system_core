@@ -34,6 +34,7 @@
 #define FB_CMD_UPDATE_SUPER "update-super"
 #define FB_CMD_OEM "oem"
 #define FB_CMD_GSI "gsi"
+#define FB_CMD_SNAPSHOT_UPDATE "snapshot-update"
 
 #define RESPONSE_OKAY "OKAY"
 #define RESPONSE_FAIL "FAIL"
@@ -41,11 +42,13 @@
 #define RESPONSE_INFO "INFO"
 
 #define FB_COMMAND_SZ 64
-#define FB_RESPONSE_SZ 64
+#define FB_RESPONSE_SZ 256
 
 #define FB_VAR_VERSION "version"
 #define FB_VAR_VERSION_BOOTLOADER "version-bootloader"
 #define FB_VAR_VERSION_BASEBAND "version-baseband"
+#define FB_VAR_VERSION_OS "version-os"
+#define FB_VAR_VERSION_VNDK "version-vndk"
 #define FB_VAR_PRODUCT "product"
 #define FB_VAR_SERIALNO "serialno"
 #define FB_VAR_SECURE "secure"
@@ -66,3 +69,11 @@
 #define FB_VAR_BATTERY_VOLTAGE "battery-voltage"
 #define FB_VAR_BATTERY_SOC_OK "battery-soc-ok"
 #define FB_VAR_SUPER_PARTITION_NAME "super-partition-name"
+#define FB_VAR_SNAPSHOT_UPDATE_STATUS "snapshot-update-status"
+#define FB_VAR_CPU_ABI "cpu-abi"
+#define FB_VAR_SYSTEM_FINGERPRINT "system-fingerprint"
+#define FB_VAR_VENDOR_FINGERPRINT "vendor-fingerprint"
+#define FB_VAR_DYNAMIC_PARTITION "dynamic-partition"
+#define FB_VAR_FIRST_API_LEVEL "first-api-level"
+#define FB_VAR_SECURITY_PATCH_LEVEL "security-patch-level"
+#define FB_VAR_TREBLE_ENABLED "treble-enabled"

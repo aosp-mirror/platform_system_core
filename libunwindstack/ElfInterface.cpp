@@ -78,10 +78,31 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
   CrcGenerateTable();
   Crc64GenerateTable();
 
-  std::vector<uint8_t> src(gnu_debugdata_size_);
-  if (!memory_->ReadFully(gnu_debugdata_offset_, src.data(), gnu_debugdata_size_)) {
-    gnu_debugdata_offset_ = 0;
-    gnu_debugdata_size_ = static_cast<uint64_t>(-1);
+  // Verify the request is not larger than the max size_t value.
+  if (gnu_debugdata_size_ > SIZE_MAX) {
+    return nullptr;
+  }
+  size_t initial_buffer_size;
+  if (__builtin_mul_overflow(5, gnu_debugdata_size_, &initial_buffer_size)) {
+    return nullptr;
+  }
+
+  size_t buffer_increment;
+  if (__builtin_mul_overflow(2, gnu_debugdata_size_, &buffer_increment)) {
+    return nullptr;
+  }
+
+  std::unique_ptr<uint8_t[]> src(new (std::nothrow) uint8_t[gnu_debugdata_size_]);
+  if (src.get() == nullptr) {
+    return nullptr;
+  }
+
+  std::unique_ptr<MemoryBuffer> dst(new MemoryBuffer);
+  if (!dst->Resize(initial_buffer_size)) {
+    return nullptr;
+  }
+
+  if (!memory_->ReadFully(gnu_debugdata_offset_, src.get(), gnu_debugdata_size_)) {
     return nullptr;
   }
 
@@ -89,21 +110,23 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
   CXzUnpacker state;
   alloc.Alloc = [](ISzAllocPtr, size_t size) { return malloc(size); };
   alloc.Free = [](ISzAllocPtr, void* ptr) { return free(ptr); };
-
   XzUnpacker_Construct(&state, &alloc);
 
-  std::unique_ptr<MemoryBuffer> dst(new MemoryBuffer);
   int return_val;
   size_t src_offset = 0;
   size_t dst_offset = 0;
   ECoderStatus status;
-  dst->Resize(5 * gnu_debugdata_size_);
   do {
-    size_t src_remaining = src.size() - src_offset;
+    size_t src_remaining = gnu_debugdata_size_ - src_offset;
     size_t dst_remaining = dst->Size() - dst_offset;
-    if (dst_remaining < 2 * gnu_debugdata_size_) {
-      dst->Resize(dst->Size() + 2 * gnu_debugdata_size_);
-      dst_remaining += 2 * gnu_debugdata_size_;
+    if (dst_remaining < buffer_increment) {
+      size_t new_size;
+      if (__builtin_add_overflow(dst->Size(), buffer_increment, &new_size) ||
+          !dst->Resize(new_size)) {
+        XzUnpacker_Free(&state);
+        return nullptr;
+      }
+      dst_remaining += buffer_increment;
     }
     return_val = XzUnpacker_Code(&state, dst->GetPtr(dst_offset), &dst_remaining, &src[src_offset],
                                  &src_remaining, true, CODER_FINISH_ANY, &status);
@@ -112,13 +135,13 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
   } while (return_val == SZ_OK && status == CODER_STATUS_NOT_FINISHED);
   XzUnpacker_Free(&state);
   if (return_val != SZ_OK || !XzUnpacker_IsStreamWasFinished(&state)) {
-    gnu_debugdata_offset_ = 0;
-    gnu_debugdata_size_ = static_cast<uint64_t>(-1);
     return nullptr;
   }
 
   // Shrink back down to the exact size.
-  dst->Resize(dst_offset);
+  if (!dst->Resize(dst_offset)) {
+    return nullptr;
+  }
 
   return dst.release();
 }
@@ -126,8 +149,10 @@ Memory* ElfInterface::CreateGnuDebugdataMemory() {
 template <typename AddressType>
 void ElfInterface::InitHeadersWithTemplate() {
   if (eh_frame_hdr_offset_ != 0) {
-    eh_frame_.reset(new DwarfEhFrameWithHdr<AddressType>(memory_));
-    if (!eh_frame_->Init(eh_frame_hdr_offset_, eh_frame_hdr_size_, eh_frame_hdr_section_bias_)) {
+    DwarfEhFrameWithHdr<AddressType>* eh_frame_hdr = new DwarfEhFrameWithHdr<AddressType>(memory_);
+    eh_frame_.reset(eh_frame_hdr);
+    if (!eh_frame_hdr->EhFrameInit(eh_frame_offset_, eh_frame_size_, eh_frame_section_bias_) ||
+        !eh_frame_->Init(eh_frame_hdr_offset_, eh_frame_hdr_size_, eh_frame_hdr_section_bias_)) {
       eh_frame_.reset(nullptr);
     }
   }
@@ -228,14 +253,18 @@ void ElfInterface::ReadProgramHeaders(const EhdrType& ehdr, int64_t* load_bias) 
     case PT_GNU_EH_FRAME:
       // This is really the pointer to the .eh_frame_hdr section.
       eh_frame_hdr_offset_ = phdr.p_offset;
-      eh_frame_hdr_section_bias_ = static_cast<uint64_t>(phdr.p_paddr) - phdr.p_offset;
+      eh_frame_hdr_section_bias_ = static_cast<uint64_t>(phdr.p_vaddr) - phdr.p_offset;
       eh_frame_hdr_size_ = phdr.p_memsz;
       break;
 
     case PT_DYNAMIC:
       dynamic_offset_ = phdr.p_offset;
-      dynamic_vaddr_ = phdr.p_vaddr;
-      dynamic_size_ = phdr.p_memsz;
+      dynamic_vaddr_start_ = phdr.p_vaddr;
+      if (__builtin_add_overflow(dynamic_vaddr_start_, phdr.p_memsz, &dynamic_vaddr_end_)) {
+        dynamic_offset_ = 0;
+        dynamic_vaddr_start_ = 0;
+        dynamic_vaddr_end_ = 0;
+      }
       break;
 
     default:
@@ -358,6 +387,14 @@ void ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
             eh_frame_hdr_offset_ = shdr.sh_offset;
             eh_frame_hdr_section_bias_ = static_cast<uint64_t>(shdr.sh_addr) - shdr.sh_offset;
             eh_frame_hdr_size_ = shdr.sh_size;
+          } else if (name == ".data") {
+            data_offset_ = shdr.sh_offset;
+            data_vaddr_start_ = shdr.sh_addr;
+            if (__builtin_add_overflow(data_vaddr_start_, shdr.sh_size, &data_vaddr_end_)) {
+              data_offset_ = 0;
+              data_vaddr_start_ = 0;
+              data_vaddr_end_ = 0;
+            }
           }
         }
       }
@@ -396,7 +433,7 @@ std::string ElfInterface::GetSonameWithTemplate() {
   // Find the soname location from the dynamic headers section.
   DynType dyn;
   uint64_t offset = dynamic_offset_;
-  uint64_t max_offset = offset + dynamic_size_;
+  uint64_t max_offset = offset + dynamic_vaddr_end_ - dynamic_vaddr_start_;
   for (uint64_t offset = dynamic_offset_; offset < max_offset; offset += sizeof(DynType)) {
     if (!memory_->ReadFully(offset, &dyn, sizeof(dyn))) {
       last_error_.code = ERROR_MEMORY_INVALID;

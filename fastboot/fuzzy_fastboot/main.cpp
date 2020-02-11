@@ -54,7 +54,7 @@
 #include "extensions.h"
 #include "fixtures.h"
 #include "test_utils.h"
-#include "usb_transport_sniffer.h"
+#include "transport_sniffer.h"
 
 namespace fastboot {
 
@@ -227,13 +227,6 @@ TEST_F(LogicalPartitionCompliance, GetVarIsLogical) {
 
 TEST_F(LogicalPartitionCompliance, FastbootRebootTest) {
     ASSERT_TRUE(UserSpaceFastboot());
-    GTEST_LOG_(INFO) << "Rebooting to bootloader mode";
-    // Test 'fastboot reboot bootloader' from fastbootd
-    fb->RebootTo("bootloader");
-
-    // Test fastboot reboot fastboot from bootloader
-    ReconnectFastbootDevice();
-    ASSERT_FALSE(UserSpaceFastboot());
     GTEST_LOG_(INFO) << "Rebooting back to fastbootd mode";
     fb->RebootTo("fastboot");
 
@@ -268,23 +261,6 @@ TEST_F(LogicalPartitionCompliance, CreateResizeDeleteLP) {
     GTEST_LOG_(INFO) << "Flashing a logical partition..";
     EXPECT_EQ(fb->FlashPartition(test_partition_name, buf), SUCCESS)
             << "flash logical -partition failed";
-    GTEST_LOG_(INFO) << "Rebooting to bootloader mode";
-    // Reboot to bootloader mode and attempt to flash the logical partitions
-    fb->RebootTo("bootloader");
-
-    ReconnectFastbootDevice();
-    ASSERT_FALSE(UserSpaceFastboot());
-    GTEST_LOG_(INFO) << "Attempt to flash a logical partition..";
-    EXPECT_EQ(fb->FlashPartition(test_partition_name, buf), DEVICE_FAIL)
-            << "flash logical partition must fail in bootloader";
-    GTEST_LOG_(INFO) << "Rebooting back to fastbootd mode";
-    fb->RebootTo("fastboot");
-
-    ReconnectFastbootDevice();
-    ASSERT_TRUE(UserSpaceFastboot());
-    GTEST_LOG_(INFO) << "Testing 'fastboot delete-logical-partition' command";
-    EXPECT_EQ(fb->DeletePartition(test_partition_name), SUCCESS)
-            << "delete logical-partition failed";
 }
 
 // Conformance tests
@@ -1756,16 +1732,19 @@ int main(int argc, char** argv) {
     }
 
     setbuf(stdout, NULL);  // no buffering
-    printf("<Waiting for Device>\n");
-    const auto matcher = [](usb_ifc_info* info) -> int {
-        return fastboot::FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
-    };
-    Transport* transport = nullptr;
-    while (!transport) {
-        transport = usb_open(matcher);
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    if (!fastboot::FastBootTest::IsFastbootOverTcp()) {
+        printf("<Waiting for Device>\n");
+        const auto matcher = [](usb_ifc_info* info) -> int {
+            return fastboot::FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
+        };
+        Transport* transport = nullptr;
+        while (!transport) {
+            transport = usb_open(matcher);
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        transport->Close();
     }
-    transport->Close();
 
     if (args.find("serial_port") != args.end()) {
         fastboot::FastBootTest::serial_port = fastboot::ConfigureSerial(args.at("serial_port"));

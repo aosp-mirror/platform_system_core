@@ -300,6 +300,7 @@ static void handle_new_connection(atransport* t, apacket* p) {
     handle_online(t);
 #else
     if (!auth_required) {
+        LOG(INFO) << "authentication not required";
         handle_online(t);
         send_connect(t);
     } else {
@@ -1166,7 +1167,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
         std::string host;
         int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
         std::string error;
-        if (address.starts_with("vsock:")) {
+        if (address.starts_with("vsock:") || address.starts_with("localfilesystem:")) {
             serial = address;
         } else if (!android::base::ParseNetAddress(address, &host, &port, &serial, &error)) {
             SendFail(reply_fd, android::base::StringPrintf("couldn't parse '%s': %s",

@@ -408,11 +408,11 @@ TEST(Expected, testDereference) {
 
 TEST(Expected, testTest) {
   exp_int e = 10;
-  EXPECT_TRUE(e);
+  EXPECT_TRUE(e.ok());
   EXPECT_TRUE(e.has_value());
 
   exp_int e2 = unexpected(10);
-  EXPECT_FALSE(e2);
+  EXPECT_FALSE(e2.ok());
   EXPECT_FALSE(e2.has_value());
 }
 
@@ -499,24 +499,6 @@ TEST(Expected, testDifferentErrors) {
   EXPECT_TRUE(e4 != e3);
 }
 
-TEST(Expected, testCompareWithSameValue) {
-  exp_int e = 10;
-  int value = 10;
-  EXPECT_TRUE(e == value);
-  EXPECT_TRUE(value == e);
-  EXPECT_FALSE(e != value);
-  EXPECT_FALSE(value != e);
-}
-
-TEST(Expected, testCompareWithDifferentValue) {
-  exp_int e = 10;
-  int value = 20;
-  EXPECT_FALSE(e == value);
-  EXPECT_FALSE(value == e);
-  EXPECT_TRUE(e != value);
-  EXPECT_TRUE(value != e);
-}
-
 TEST(Expected, testCompareWithSameError) {
   exp_int e = unexpected(10);
   exp_int::unexpected_type error = 10;
@@ -589,12 +571,12 @@ TEST(Expected, testDivideExample) {
     }
   };
 
-  EXPECT_FALSE(divide(10, 0));
+  EXPECT_FALSE(divide(10, 0).ok());
   EXPECT_EQ("divide by zero", divide(10, 0).error().message);
   EXPECT_EQ(-1, divide(10, 0).error().cause);
 
-  EXPECT_TRUE(divide(10, 3));
-  EXPECT_EQ(QR(3, 1), divide(10, 3));
+  EXPECT_TRUE(divide(10, 3).ok());
+  EXPECT_EQ(QR(3, 1), *divide(10, 3));
 }
 
 TEST(Expected, testPair) {
@@ -607,7 +589,7 @@ TEST(Expected, testPair) {
   };
 
   auto r = test(true);
-  EXPECT_TRUE(r);
+  EXPECT_TRUE(r.ok());
   EXPECT_EQ("yes", r->first);
 }
 
@@ -621,9 +603,9 @@ TEST(Expected, testVoid) {
   };
 
   auto r = test(true);
-  EXPECT_TRUE(r);
+  EXPECT_TRUE(r.ok());
   r = test(false);
-  EXPECT_FALSE(r);
+  EXPECT_FALSE(r.ok());
   EXPECT_EQ(10, r.error());
 }
 
@@ -772,7 +754,7 @@ TEST(Expected, testNoCopyOnReturn) {
 
   ConstructorTracker::Reset();
   auto result1 = test("");
-  ASSERT_TRUE(result1);
+  ASSERT_TRUE(result1.ok());
   EXPECT_EQ("literal string", result1->string);
   EXPECT_EQ(1U, ConstructorTracker::constructor_called);
   EXPECT_EQ(0U, ConstructorTracker::copy_constructor_called);
@@ -782,7 +764,7 @@ TEST(Expected, testNoCopyOnReturn) {
 
   ConstructorTracker::Reset();
   auto result2 = test("test2");
-  ASSERT_TRUE(result2);
+  ASSERT_TRUE(result2.ok());
   EXPECT_EQ("test2test22", result2->string);
   EXPECT_EQ(1U, ConstructorTracker::constructor_called);
   EXPECT_EQ(0U, ConstructorTracker::copy_constructor_called);
@@ -792,7 +774,7 @@ TEST(Expected, testNoCopyOnReturn) {
 
   ConstructorTracker::Reset();
   auto result3 = test("test3");
-  ASSERT_TRUE(result3);
+  ASSERT_TRUE(result3.ok());
   EXPECT_EQ("test3 test3", result3->string);
   EXPECT_EQ(1U, ConstructorTracker::constructor_called);
   EXPECT_EQ(0U, ConstructorTracker::copy_constructor_called);
@@ -804,22 +786,22 @@ TEST(Expected, testNoCopyOnReturn) {
 TEST(Expected, testNested) {
   expected<exp_string, std::string> e = "hello";
 
+  EXPECT_TRUE(e.ok());
   EXPECT_TRUE(e.has_value());
   EXPECT_TRUE(e.value().has_value());
-  EXPECT_TRUE(e);
-  EXPECT_TRUE(*e);
+  EXPECT_TRUE(e->ok());
   EXPECT_EQ("hello", e.value().value());
 
   expected<exp_string, std::string> e2 = unexpected("world");
   EXPECT_FALSE(e2.has_value());
-  EXPECT_FALSE(e2);
+  EXPECT_FALSE(e2.ok());
   EXPECT_EQ("world", e2.error());
 
   expected<exp_string, std::string> e3 = exp_string(unexpected("world"));
   EXPECT_TRUE(e3.has_value());
   EXPECT_FALSE(e3.value().has_value());
-  EXPECT_TRUE(e3);
-  EXPECT_FALSE(*e3);
+  EXPECT_TRUE(e3.ok());
+  EXPECT_FALSE(e3->ok());
   EXPECT_EQ("world", e3.value().error());
 }
 

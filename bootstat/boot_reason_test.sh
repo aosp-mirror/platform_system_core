@@ -7,7 +7,7 @@
 # - watch adb logcat -b all -d -s bootstat
 # - watch adb logcat -b all -d | audit2allow
 # - wait until screen is up, boot has completed, can mean wait for
-#   sys.boot_completed=1 and sys.logbootcomplete=1 to be true
+#   sys.boot_completed=1 and sys.bootstat.first_boot_completed=1 to be true
 #
 # All test frames, and nothing else, must be function names prefixed and
 # specifiged with the pattern 'test_<test>() {' as this is also how the
@@ -230,16 +230,16 @@ wait_for_screen() {
       if [ -n "`get_property sys.boot.reason`" ]
       then
         vals=`get_property |
-              sed -n 's/[[]sys[.]\(boot_completed\|logbootcomplete\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
-        if [ "${vals}" = "`echo boot_completed=1 ; echo logbootcomplete=1`" ]
-        then
-          sleep 1
-          break
-        fi
-        if [ "${vals}" = "`echo logbootcomplete=1 ; echo boot_completed=1`" ]
-        then
-          sleep 1
-          break
+              sed -n 's/[[]sys[.]\(boot_completed\|logbootcomplete\|bootstat[.]first_boot_completed\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
+        if [ X"${vals}" != X"${vals##*boot_completed=1}" ]; then
+          if [ X"${vals}" != X"${vals##*logbootcomple=1}" ]; then
+            sleep 1
+            break
+          fi
+          if [ X"${vals}" != X"${vals##*bootstat.first_boot_completed=1}" ]; then
+            sleep 1
+            break
+          fi
         fi
       fi
     fi
@@ -384,15 +384,15 @@ init    : processing action (post-fs-data) from (/system/etc/init/bootstat.rc
 init    : processing action (boot) from (/system/etc/init/bootstat.rc
 init    : processing action (ro.boot.bootreason=*) from (/system/etc/init/bootstat.rc
 init    : processing action (ro.boot.bootreason=* && post-fs) from (/system/etc/init/bootstat.rc
-init    : processing action (zygote-start) from (/system/etc/init/bootstat.rc
-init    : processing action (sys.boot_completed=1 && sys.logbootcomplete=1) from (/system/etc/init/bootstat.rc
+init    : processing action (sys.bootstat.first_zygote_start=0 && zygote-start) from (/system/etc/init/bootstat.rc
+init    : processing action (sys.boot_completed=1 && sys.bootstat.first_boot_completed=0) from (/system/etc/init/bootstat.rc
  (/system/bin/bootstat --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l)'
  (/system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l)'
  (/system/bin/bootstat -r post_decrypt_time_elapsed)'
-init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_complete' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
-init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_reason' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
-init    : Command 'exec - system log -- /system/bin/bootstat --record_time_since_factory_reset' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc:
-init    : Command 'exec_background - system log -- /system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l' action=sys.boot_completed=1 && sys.logbootcomplete=1 (/system/etc/init/bootstat.rc
+init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_complete' action=sys.boot_completed=1 && sys.bootstat.first_boot_completed=0 (/system/etc/init/bootstat.rc:
+init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_reason' action=sys.boot_completed=1 && sys.bootstat.first_boot_completed=0 (/system/etc/init/bootstat.rc:
+init    : Command 'exec - system log -- /system/bin/bootstat --record_time_since_factory_reset' action=sys.boot_completed=1 && sys.bootstat.first_boot_completed=0 (/system/etc/init/bootstat.rc:
+init    : Command 'exec_background - system log -- /system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l' action=sys.boot_completed=1 && sys.bootstat.first_boot_completed=0 (/system/etc/init/bootstat.rc
  (/system/bin/bootstat --record_boot_complete)'...
  (/system/bin/bootstat --record_boot_complete)' (pid${SPACE}
  (/system/bin/bootstat --record_boot_reason)'...
@@ -636,7 +636,7 @@ test_ota() {
   rm -r ${ANDROID_PRODUCT_OUT}/obj/ETC/system_build_prop_intermediates ||
     true
   pushd ${ANDROID_BUILD_TOP} >&2
-  make -j50 >&2
+  build/soong/soong_ui.bash --make-mode >&2
   if [ ${?} != 0 ]; then
     popd >&2
     return 1

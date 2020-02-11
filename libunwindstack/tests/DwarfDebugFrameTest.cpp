@@ -825,6 +825,6 @@ REGISTER_TYPED_TEST_SUITE_P(
     GetFdeFromOffset64_lsda_address, GetFdeFromPc_interleaved);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfDebugFrameTestTypes;
-INSTANTIATE_TYPED_TEST_SUITE_P(, DwarfDebugFrameTest, DwarfDebugFrameTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfDebugFrameTest, DwarfDebugFrameTestTypes);
 
 }  // namespace unwindstack

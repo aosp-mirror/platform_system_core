@@ -97,25 +97,23 @@ void storaged_t::init_health_service() {
 
     health = get_health_service();
     if (health == NULL) {
-        LOG_TO(SYSTEM, WARNING) << "health: failed to find IHealth service";
+        LOG(WARNING) << "health: failed to find IHealth service";
         return;
     }
 
     BatteryStatus status = BatteryStatus::UNKNOWN;
     auto ret = health->getChargeStatus([&](Result r, BatteryStatus v) {
         if (r != Result::SUCCESS) {
-            LOG_TO(SYSTEM, WARNING)
-                << "health: cannot get battery status " << toString(r);
+            LOG(WARNING) << "health: cannot get battery status " << toString(r);
             return;
         }
         if (v == BatteryStatus::UNKNOWN) {
-            LOG_TO(SYSTEM, WARNING) << "health: invalid battery status";
+            LOG(WARNING) << "health: invalid battery status";
         }
         status = v;
     });
     if (!ret.isOk()) {
-        LOG_TO(SYSTEM, WARNING) << "health: get charge status transaction error "
-            << ret.description();
+        LOG(WARNING) << "health: get charge status transaction error " << ret.description();
     }
 
     mUidm.init(is_charger_on(status));
@@ -126,11 +124,11 @@ void storaged_t::init_health_service() {
 
 void storaged_t::serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who) {
     if (health != NULL && interfacesEqual(health, who.promote())) {
-        LOG_TO(SYSTEM, ERROR) << "health service died, exiting";
+        LOG(ERROR) << "health service died, exiting";
         android::hardware::IPCThreadState::self()->stopProcess();
         exit(1);
     } else {
-        LOG_TO(SYSTEM, ERROR) << "unknown service died";
+        LOG(ERROR) << "unknown service died";
     }
 }
 
@@ -192,7 +190,7 @@ void storaged_t::load_proto(userid_t user_id) {
         reinterpret_cast<const Bytef*>(uid_io_usage.SerializeAsString().c_str()),
         uid_io_usage.ByteSize());
     if (proto.crc() != computed_crc) {
-        LOG_TO(SYSTEM, WARNING) << "CRC mismatch in " << proto_file;
+        LOG(WARNING) << "CRC mismatch in " << proto_file;
         return;
     }
 
@@ -228,8 +226,7 @@ char* storaged_t:: prepare_proto(userid_t user_id, StoragedProto* proto) {
     char* data = nullptr;
     if (posix_memalign(reinterpret_cast<void**>(&data),
                        pagesize, proto->ByteSize())) {
-        PLOG_TO(SYSTEM, ERROR) << "Faied to alloc aligned buffer (size: "
-                               << proto->ByteSize() << ")";
+        PLOG(ERROR) << "Faied to alloc aligned buffer (size: " << proto->ByteSize() << ")";
         return data;
     }
 
@@ -246,7 +243,7 @@ void storaged_t::flush_proto_data(userid_t user_id,
                     (user_id == USER_SYSTEM ? O_DIRECT : 0),
                  S_IRUSR | S_IWUSR)));
     if (fd == -1) {
-        PLOG_TO(SYSTEM, ERROR) << "Faied to open tmp file: " << tmp_file;
+        PLOG(ERROR) << "Faied to open tmp file: " << tmp_file;
         return;
     }
 
@@ -261,7 +258,7 @@ void storaged_t::flush_proto_data(userid_t user_id,
             start = steady_clock::now();
             ret = write(fd, data, MIN(benchmark_unit_size, size));
             if (ret <= 0) {
-                PLOG_TO(SYSTEM, ERROR) << "Faied to write tmp file: " << tmp_file;
+                PLOG(ERROR) << "Faied to write tmp file: " << tmp_file;
                 return;
             }
             end = steady_clock::now();
@@ -284,7 +281,7 @@ void storaged_t::flush_proto_data(userid_t user_id,
         }
     } else {
         if (!WriteFully(fd, data, size)) {
-            PLOG_TO(SYSTEM, ERROR) << "Faied to write tmp file: " << tmp_file;
+            PLOG(ERROR) << "Faied to write tmp file: " << tmp_file;
             return;
         }
     }
@@ -343,22 +340,21 @@ void storaged_t::event_checked(void) {
     if (mConfig.event_time_check_usec &&
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_ts) < 0) {
         check_time = false;
-        PLOG_TO(SYSTEM, ERROR) << "clock_gettime() failed";
+        PLOG(ERROR) << "clock_gettime() failed";
     }
 
     event();
 
     if (mConfig.event_time_check_usec && check_time) {
         if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_ts) < 0) {
-            PLOG_TO(SYSTEM, ERROR) << "clock_gettime() failed";
+            PLOG(ERROR) << "clock_gettime() failed";
             return;
         }
         int64_t cost = (end_ts.tv_sec - start_ts.tv_sec) * SEC_TO_USEC +
                        (end_ts.tv_nsec - start_ts.tv_nsec) / USEC_TO_NSEC;
         if (cost > mConfig.event_time_check_usec) {
-            LOG_TO(SYSTEM, ERROR)
-                << "event loop spent " << cost << " usec, threshold "
-                << mConfig.event_time_check_usec << " usec";
+            LOG(ERROR) << "event loop spent " << cost << " usec, threshold "
+                       << mConfig.event_time_check_usec << " usec";
         }
     }
 }

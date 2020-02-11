@@ -18,6 +18,7 @@
 #include <qemu_pipe.h>
 
 #define TRACE_TAG TRANSPORT
+#include "socket_spec.h"
 #include "sysdeps.h"
 #include "transport.h"
 
@@ -55,7 +56,7 @@
  *   the transport registration is completed. That's why we need to send the
  *   'start' request after the transport is registered.
  */
-void qemu_socket_thread(int port) {
+void qemu_socket_thread(std::string_view addr) {
     /* 'accept' request to the adb QEMUD service. */
     static const char _accept_req[] = "accept";
     /* 'start' request to the adb QEMUD service. */
@@ -69,6 +70,12 @@ void qemu_socket_thread(int port) {
     adb_thread_setname("qemu socket");
     D("transport: qemu_socket_thread() starting");
 
+    std::string error;
+    int port = get_host_socket_spec_port(addr, &error);
+    if (port == -1) {
+        port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
+    }
+
     /* adb QEMUD service connection request. */
     snprintf(con_name, sizeof(con_name), "pipe:qemud:adb:%d", port);
 
@@ -78,7 +85,7 @@ void qemu_socket_thread(int port) {
         /* This could be an older version of the emulator, that doesn't
          * implement adb QEMUD service. Fall back to the old TCP way. */
         D("adb service is not available. Falling back to TCP socket.");
-        std::thread(server_socket_thread, tcp_listen_inaddr_any, port).detach();
+        std::thread(server_socket_thread, adb_listen, addr).detach();
         return;
     }
 

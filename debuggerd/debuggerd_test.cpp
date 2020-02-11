@@ -31,6 +31,7 @@
 
 #include <android/fdsan.h>
 #include <android/set_abort_message.h>
+#include <bionic/reserved_signals.h>
 
 #include <android-base/cmsg.h>
 #include <android-base/file.h>
@@ -398,7 +399,7 @@ TEST_F(CrasherTest, abort_message_backtrace) {
   unique_fd output_fd;
   StartProcess([]() {
     android_set_abort_message("not actually aborting");
-    raise(DEBUGGER_SIGNAL);
+    raise(BIONIC_SIGNAL_DEBUGGER);
     exit(0);
   });
   StartIntercept(&output_fd);
@@ -466,7 +467,7 @@ TEST_F(CrasherTest, backtrace) {
 
   sigval val;
   val.sival_int = 1;
-  ASSERT_EQ(0, sigqueue(crasher_pid, DEBUGGER_SIGNAL, val)) << strerror(errno);
+  ASSERT_EQ(0, sigqueue(crasher_pid, BIONIC_SIGNAL_DEBUGGER, val)) << strerror(errno);
   FinishIntercept(&intercept_result);
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
   ConsumeFd(std::move(output_fd), &result);
@@ -734,7 +735,7 @@ __attribute__((noinline)) extern "C" bool raise_debugger_signal(DebuggerdDumpTyp
 
   siginfo.si_value.sival_int = dump_type == kDebuggerdNativeBacktrace;
 
-  if (syscall(__NR_rt_tgsigqueueinfo, getpid(), gettid(), DEBUGGER_SIGNAL, &siginfo) != 0) {
+  if (syscall(__NR_rt_tgsigqueueinfo, getpid(), gettid(), BIONIC_SIGNAL_DEBUGGER, &siginfo) != 0) {
     PLOG(ERROR) << "libdebuggerd_client: failed to send signal to self";
     return false;
   }
@@ -887,7 +888,7 @@ TEST(crash_dump, zombie) {
       errx(2, "first waitpid returned %d (%s), expected failure with ECHILD", rc, strerror(errno));
     }
 
-    raise(DEBUGGER_SIGNAL);
+    raise(BIONIC_SIGNAL_DEBUGGER);
 
     errno = 0;
     rc = TEMP_FAILURE_RETRY(waitpid(-1, &status, __WALL | __WNOTHREAD));

@@ -31,3 +31,5 @@ int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_
 
 bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* port,
                            std::string* serial, std::string* error);
+
+int get_host_socket_spec_port(std::string_view spec, std::string* error);

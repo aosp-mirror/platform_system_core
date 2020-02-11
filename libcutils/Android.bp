@@ -197,7 +197,10 @@ cc_library {
 
 cc_defaults {
     name: "libcutils_test_default",
-    srcs: ["sockets_test.cpp"],
+    srcs: [
+        "native_handle_test.cpp",
+        "sockets_test.cpp",
+    ],
 
     target: {
         android: {
@@ -244,17 +247,18 @@ cc_test {
     defaults: ["libcutils_test_default"],
     host_supported: true,
     shared_libs: test_libraries,
+    require_root: true,
 }
 
-cc_test {
-    name: "libcutils_test_static",
-    test_suites: ["device-tests"],
+cc_defaults {
+    name: "libcutils_test_static_defaults",
     defaults: ["libcutils_test_default"],
     static_libs: [
         "libc",
         "libcgrouprc_format",
     ] + test_libraries,
     stl: "libc++_static",
+    require_root: true,
 
     target: {
         android: {
@@ -266,4 +270,17 @@ cc_test {
             enabled: true,
         },
     },
+}
+
+cc_test {
+    name: "libcutils_test_static",
+    test_suites: ["device-tests"],
+    defaults: ["libcutils_test_static_defaults"],
+}
+
+cc_test {
+    name: "KernelLibcutilsTest",
+    test_suites: ["general-tests", "vts-core"],
+    defaults: ["libcutils_test_static_defaults"],
+    test_config: "KernelLibcutilsTest.xml",
 }

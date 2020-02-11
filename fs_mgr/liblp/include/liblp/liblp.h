@@ -76,12 +76,15 @@ std::unique_ptr<LpMetadata> ReadMetadata(const std::string& super_partition, uin
 // supported). It is a format specifically for storing only metadata.
 bool IsEmptySuperImage(const std::string& file);
 
-// Read/Write logical partition metadata to an image file, for diagnostics or
-// flashing. If no partition images are specified, the file will be in the
-// empty format.
+// Read/Write logical partition metadata and contents to an image file, for
+// flashing.
 bool WriteToImageFile(const std::string& file, const LpMetadata& metadata, uint32_t block_size,
                       const std::map<std::string, std::string>& images, bool sparsify);
+
+// Read/Write logical partition metadata to an image file, for producing a
+// super_empty.img (for fastboot wipe-super/update-super) or for diagnostics.
 bool WriteToImageFile(const std::string& file, const LpMetadata& metadata);
+bool WriteToImageFile(android::base::borrowed_fd fd, const LpMetadata& metadata);
 std::unique_ptr<LpMetadata> ReadFromImageFile(const std::string& image_file);
 std::unique_ptr<LpMetadata> ReadFromImageBlob(const void* data, size_t bytes);
 

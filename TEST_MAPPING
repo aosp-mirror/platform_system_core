@@ -10,7 +10,7 @@
       "name": "debuggerd_test"
     },
     {
-      "name": "fs_mgr_unit_test"
+      "name": "CtsFsMgrTestCases"
     },
     {
       "name": "fs_mgr_vendor_overlay_test"
@@ -20,6 +20,12 @@
     },
     {
       "name": "libpackagelistparser_test"
+    },
+    {
+      "name": "libcutils_test"
+    },
+    {
+      "name": "libmodprobe_tests"
     },
     {
       "name": "libprocinfo_test"

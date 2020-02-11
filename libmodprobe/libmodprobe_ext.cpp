@@ -17,10 +17,19 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 
 #include <modprobe/modprobe.h>
+
+std::string Modprobe::GetKernelCmdline(void) {
+    std::string cmdline;
+    if (!android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
+        return "";
+    }
+    return cmdline;
+}
 
 bool Modprobe::Insmod(const std::string& path_name, const std::string& parameters) {
     android::base::unique_fd fd(
@@ -30,8 +39,9 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
         return false;
     }
 
+    auto canonical_name = MakeCanonical(path_name);
     std::string options = "";
-    auto options_iter = module_options_.find(MakeCanonical(path_name));
+    auto options_iter = module_options_.find(canonical_name);
     if (options_iter != module_options_.end()) {
         options = options_iter->second;
     }
@@ -44,6 +54,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
     if (ret != 0) {
         if (errno == EEXIST) {
             // Module already loaded
+            module_loaded_.emplace(canonical_name);
             return true;
         }
         LOG(ERROR) << "Failed to insmod '" << path_name << "' with args '" << options << "'";
@@ -51,15 +62,18 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
     }
 
     LOG(INFO) << "Loaded kernel module " << path_name;
+    module_loaded_.emplace(canonical_name);
     return true;
 }
 
 bool Modprobe::Rmmod(const std::string& module_name) {
-    int ret = syscall(__NR_delete_module, MakeCanonical(module_name).c_str(), O_NONBLOCK);
+    auto canonical_name = MakeCanonical(module_name);
+    int ret = syscall(__NR_delete_module, canonical_name.c_str(), O_NONBLOCK);
     if (ret != 0) {
         PLOG(ERROR) << "Failed to remove module '" << module_name << "'";
         return false;
     }
+    module_loaded_.erase(canonical_name);
     return true;
 }
 

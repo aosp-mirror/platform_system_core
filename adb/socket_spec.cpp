@@ -16,6 +16,7 @@
 
 #include "socket_spec.h"
 
+#include <limits>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -28,10 +29,12 @@
 #include <cutils/sockets.h>
 
 #include "adb.h"
+#include "adb_utils.h"
 #include "sysdeps.h"
 
 using namespace std::string_literals;
 
+using android::base::ConsumePrefix;
 using android::base::StringPrintf;
 
 #if defined(__linux__)
@@ -119,6 +122,41 @@ bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* po
     return true;
 }
 
+int get_host_socket_spec_port(std::string_view spec, std::string* error) {
+    int port;
+    if (spec.starts_with("tcp:")) {
+        if (!parse_tcp_socket_spec(spec, nullptr, &port, nullptr, error)) {
+            return -1;
+        }
+    } else if (spec.starts_with("vsock:")) {
+#if ADB_LINUX
+        std::string spec_str(spec);
+        std::vector<std::string> fragments = android::base::Split(spec_str, ":");
+        if (fragments.size() != 2) {
+            *error = "given vsock server socket string was invalid";
+            return -1;
+        }
+        if (!android::base::ParseInt(fragments[1], &port)) {
+            *error = "could not parse vsock port";
+            errno = EINVAL;
+            return -1;
+        }
+        if (port < 0) {
+            *error = "vsock port was negative.";
+            errno = EINVAL;
+            return -1;
+        }
+#else   // ADB_LINUX
+        *error = "vsock is only supported on linux";
+        return -1;
+#endif  // ADB_LINUX
+    } else {
+        *error = "given socket spec string was invalid";
+        return -1;
+    }
+    return port;
+}
+
 static bool tcp_host_is_local(std::string_view hostname) {
     // FIXME
     return hostname.empty() || hostname == "localhost";
@@ -131,7 +169,7 @@ bool is_socket_spec(std::string_view spec) {
             return true;
         }
     }
-    return spec.starts_with("tcp:");
+    return spec.starts_with("tcp:") || spec.starts_with("acceptfd:");
 }
 
 bool is_local_socket_spec(std::string_view spec) {
@@ -235,6 +273,9 @@ bool socket_spec_connect(unique_fd* fd, std::string_view address, int* port, std
         *error = "vsock is only supported on linux";
         return false;
 #endif  // ADB_LINUX
+    } else if (address.starts_with("acceptfd:")) {
+        *error = "cannot connect to acceptfd";
+        return false;
     }
 
     for (const auto& it : kLocalSocketTypes) {
@@ -248,6 +289,14 @@ bool socket_spec_connect(unique_fd* fd, std::string_view address, int* port, std
 
             fd->reset(network_local_client(&address[prefix.length()], it.second.socket_namespace,
                                            SOCK_STREAM, error));
+
+            if (fd->get() < 0) {
+                *error =
+                        android::base::StringPrintf("could not connect to %s address '%s'",
+                                                    it.first.c_str(), std::string(address).c_str());
+                return false;
+            }
+
             if (serial) {
                 *serial = address;
             }
@@ -269,10 +318,16 @@ int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_
         }
 
         int result;
+#if ADB_HOST
         if (hostname.empty() && gListenAll) {
+#else
+        if (hostname.empty()) {
+#endif
             result = network_inaddr_any_server(port, SOCK_STREAM, error);
         } else if (tcp_host_is_local(hostname)) {
-            result = network_loopback_server(port, SOCK_STREAM, error);
+            result = network_loopback_server(port, SOCK_STREAM, error, true);
+        } else if (hostname == "::1") {
+            result = network_loopback_server(port, SOCK_STREAM, error, false);
         } else {
             // TODO: Implement me.
             *error = "listening on specified hostname currently unsupported";
@@ -332,6 +387,46 @@ int socket_spec_listen(std::string_view spec, std::string* error, int* resolved_
         *error = "vsock is only supported on linux";
         return -1;
 #endif  // ADB_LINUX
+    } else if (ConsumePrefix(&spec, "acceptfd:")) {
+#if ADB_WINDOWS
+        *error = "socket activation not supported under Windows";
+        return -1;
+#else
+        // We inherited the socket from some kind of launcher. It's already bound and
+        // listening. Return a copy of the FD instead of the FD itself so we implement the
+        // normal "listen" contract and can succeed more than once.
+        unsigned int fd_u;
+        if (!ParseUint(&fd_u, spec) || fd_u > std::numeric_limits<int>::max()) {
+            *error = "invalid fd";
+            return -1;
+        }
+        int fd = static_cast<int>(fd_u);
+        int flags = get_fd_flags(fd);
+        if (flags < 0) {
+            *error = android::base::StringPrintf("could not get flags of inherited fd %d: '%s'", fd,
+                                                 strerror(errno));
+            return -1;
+        }
+        if (flags & FD_CLOEXEC) {
+            *error = android::base::StringPrintf("fd %d was not inherited from parent", fd);
+            return -1;
+        }
+
+        int dummy_sock_type;
+        socklen_t dummy_sock_type_size = sizeof(dummy_sock_type);
+        if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &dummy_sock_type, &dummy_sock_type_size)) {
+            *error = android::base::StringPrintf("fd %d does not refer to a socket", fd);
+            return -1;
+        }
+
+        int new_fd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+        if (new_fd < 0) {
+            *error = android::base::StringPrintf("could not dup inherited fd %d: '%s'", fd,
+                                                 strerror(errno));
+            return -1;
+        }
+        return new_fd;
+#endif
     }
 
     for (const auto& it : kLocalSocketTypes) {

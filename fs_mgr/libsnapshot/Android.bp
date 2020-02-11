@@ -24,15 +24,13 @@ cc_defaults {
     ],
     shared_libs: [
         "libbase",
+        "libcutils",
         "liblog",
         "liblp",
     ],
     static_libs: [
-        "libcutils",
         "libdm",
-        "libfs_mgr",
         "libfstab",
-        "liblp",
         "update_metadata-protos",
     ],
     whole_static_libs: [
@@ -72,9 +70,11 @@ filegroup {
     name: "libsnapshot_sources",
     srcs: [
         "android/snapshot/snapshot.proto",
+        "device_info.cpp",
         "snapshot.cpp",
         "snapshot_metadata_updater.cpp",
         "partition_cow_creator.cpp",
+        "return.cpp",
         "utility.cpp",
     ],
 }
@@ -92,8 +92,18 @@ cc_library_static {
         "libsnapshot_hal_deps",
     ],
     srcs: [":libsnapshot_sources"],
-    whole_static_libs: [
-        "libfiemap_binder",
+    static_libs: [
+        "libfs_mgr_binder"
+    ],
+
+    shared_libs: [
+        // TODO(b/148818798): remove when parent bug is fixed
+        "libutilscallstack",
+    ],
+    cflags: [
+        "-g",
+        "-O0",
+        "-DLIBSNAPSHOT_USE_CALLSTACK",
     ],
 }
 
@@ -102,8 +112,8 @@ cc_library_static {
     defaults: ["libsnapshot_defaults"],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
-    whole_static_libs: [
-        "libfiemap_passthrough",
+    static_libs: [
+        "libfs_mgr",
     ],
 }
 
@@ -115,39 +125,93 @@ cc_library_static {
     ],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
-    whole_static_libs: [
-        "libfiemap_passthrough",
+    static_libs: [
+        "libfs_mgr",
     ],
 }
 
-cc_test {
-    name: "libsnapshot_test",
+cc_library_static {
+    name: "libsnapshot_test_helpers",
     defaults: ["libsnapshot_defaults"],
+    export_include_dirs: [
+        "include_test",
+    ],
     srcs: [
-        "snapshot_test.cpp",
-        "partition_cow_creator_test.cpp",
-        "snapshot_metadata_updater_test.cpp",
+        "android/snapshot/snapshot.proto",
         "test_helpers.cpp",
     ],
     shared_libs: [
-        "libbinder",
-        "libhidlbase",
-        "libprotobuf-cpp-lite",
-        "libutils",
-    ],
-    static_libs: [
-        "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
-        "libcrypto_static",
-        "libfs_mgr",
-        "libgmock",
-        "liblp",
-        "libsnapshot",
-        "libsparse",
-        "libz",
+        "libcrypto",
+    ],
+    export_shared_lib_headers: [
+        "android.hardware.boot@1.1",
     ],
     header_libs: [
         "libstorage_literals_headers",
+    ],
+    export_header_lib_headers: [
+        "libstorage_literals_headers",
+    ],
+    static_libs: [
+        "libfs_mgr",
+        "libgmock",
+        "libgtest",
+    ],
+}
+
+cc_defaults {
+    name: "libsnapshot_test_defaults",
+    defaults: ["libsnapshot_defaults"],
+    srcs: [
+        "partition_cow_creator_test.cpp",
+        "snapshot_metadata_updater_test.cpp",
+        "snapshot_test.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.boot@1.0",
+        "android.hardware.boot@1.1",
+        "libbinder",
+        "libcrypto",
+        "libhidlbase",
+        "libprotobuf-cpp-lite",
+        "libsparse",
+        "libutils",
+        "libz",
+
+        // TODO(b/148818798): remove when parent bug is fixed
+        "libutilscallstack",
+    ],
+    static_libs: [
+        "libfs_mgr",
+        "libgsi",
+        "libgmock",
+        "liblp",
+        "libsnapshot",
+        "libsnapshot_test_helpers",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    test_suites: [
+        "vts-core",
+        "device-tests"
+    ],
+    test_min_api_level: 29,
+    auto_gen_config: true,
+    require_root: true,
+}
+
+cc_test {
+    name: "vts_libsnapshot_test",
+    defaults: ["libsnapshot_test_defaults"],
+}
+
+cc_test {
+    name: "vts_libsnapshot_test_presubmit",
+    defaults: ["libsnapshot_test_defaults"],
+    cppflags: [
+        "-DSKIP_TEST_IN_PRESUBMIT",
     ],
 }
 
@@ -158,8 +222,6 @@ cc_binary {
     ],
     static_libs: [
         "libdm",
-        "libext2_uuid",
-        "libfiemap_binder",
         "libfstab",
         "libsnapshot",
     ],
@@ -168,14 +230,17 @@ cc_binary {
         "android.hardware.boot@1.1",
         "libbase",
         "libbinder",
-        "libbinderthreadstate",
+        "libext2_uuid",
         "libext4_utils",
-        "libfs_mgr",
+        "libfs_mgr_binder",
         "libhidlbase",
         "liblog",
         "liblp",
         "libprotobuf-cpp-lite",
         "libutils",
+
+        // TODO(b/148818798): remove when parent bug is fixed.
+        "libutilscallstack",
     ],
     init_rc: [
         "snapshotctl.rc",

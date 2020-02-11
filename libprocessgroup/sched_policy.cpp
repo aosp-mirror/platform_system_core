@@ -138,8 +138,17 @@ bool cpusets_enabled() {
     return enabled;
 }
 
+static bool schedtune_enabled() {
+    return (CgroupMap::GetInstance().FindController("schedtune").IsUsable());
+}
+
+static bool cpuctl_enabled() {
+    return (CgroupMap::GetInstance().FindController("cpu").IsUsable());
+}
+
 bool schedboost_enabled() {
-    static bool enabled = (CgroupMap::GetInstance().FindController("schedtune").IsUsable());
+    static bool enabled = schedtune_enabled() || cpuctl_enabled();
+
     return enabled;
 }
 
@@ -162,7 +171,9 @@ int get_sched_policy(int tid, SchedPolicy* policy) {
 
     std::string group;
     if (schedboost_enabled()) {
-        if (getCGroupSubsys(tid, "schedtune", group) < 0) return -1;
+        if ((getCGroupSubsys(tid, "schedtune", group) < 0) &&
+            (getCGroupSubsys(tid, "cpu", group) < 0))
+		return -1;
     }
     if (group.empty() && cpusets_enabled()) {
         if (getCGroupSubsys(tid, "cpuset", group) < 0) return -1;

@@ -16,10 +16,13 @@
 
 #include "util.h"
 
+#include <dirent.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
 
 #include <thread>
 
+#include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <linux/fs.h>
 
@@ -120,6 +123,24 @@ bool SetBlockDeviceReadOnly(const std::string& blockdev) {
 
     int ON = 1;
     return ioctl(fd, BLKROSET, &ON) == 0;
+}
+
+Result<std::vector<std::string>> ListFiles(const std::string& dir) {
+    struct dirent* de;
+    std::vector<std::string> files;
+
+    std::unique_ptr<DIR, int (*)(DIR*)> dirp(opendir(dir.c_str()), closedir);
+    if (!dirp) {
+        return ErrnoError() << "Failed to opendir: " << dir;
+    }
+
+    while ((de = readdir(dirp.get()))) {
+        if (de->d_type != DT_REG) continue;
+        std::string full_path = android::base::StringPrintf("%s/%s", dir.c_str(), de->d_name);
+        files.emplace_back(std::move(full_path));
+    }
+
+    return files;
 }
 
 }  // namespace fs_mgr

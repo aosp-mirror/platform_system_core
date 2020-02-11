@@ -474,20 +474,9 @@ wait_for_screen() {
       if [ 0 != ${counter} ]; then
         adb_wait
       fi
-      if [ -n "`get_property sys.boot.reason`" ]
-      then
-        vals=`get_property |
-              sed -n 's/[[]sys[.]\(boot_completed\|logbootcomplete\)[]]: [[]\([01]\)[]]$/\1=\2/p'`
-        if [ "${vals}" = "`echo boot_completed=1 ; echo logbootcomplete=1`" ]
-        then
-          sleep 1
-          break
-        fi
-        if [ "${vals}" = "`echo logbootcomplete=1 ; echo boot_completed=1`" ]
-        then
-          sleep 1
-          break
-        fi
+      if [ "1" = "`get_property sys.boot_completed`" ]; then
+        sleep 1
+        break
       fi
     fi
     counter=`expr ${counter} + 1`
@@ -858,7 +847,7 @@ D=`get_property ro.serialno`
 USB_SERIAL=
 [ -z "${ANDROID_SERIAL}" ] || USB_SERIAL=`find /sys/devices -name serial |
                                           grep usb |
-                                          xargs grep -l ${ANDROID_SERIAL}`
+                                          xargs -r grep -l ${ANDROID_SERIAL}`
 USB_ADDRESS=
 if [ -n "${USB_SERIAL}" ]; then
   USB_ADDRESS=${USB_SERIAL%/serial}
@@ -1160,13 +1149,16 @@ D=`adb_sh df -k </dev/null` &&
 ret=${?}
 uses_dynamic_scratch=false
 scratch_partition=
+virtual_ab=`get_property ro.virtual_ab.enabled`
 if ${overlayfs_needed}; then
   if [ ${ret} != 0 ]; then
     die -t ${T} "overlay takeover failed"
   fi
   echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
    echo "${ORANGE}[  WARNING ]${NORMAL} overlay takeover not complete" >&2
-  scratch_partition=scratch
+  if [ -z "${virtual_ab}" ]; then
+    scratch_partition=scratch
+  fi
   if echo "${D}" | grep " /mnt/scratch" >/dev/null; then
     echo "${BLUE}[     INFO ]${NORMAL} using ${scratch_partition} dynamic partition for overrides" >&2
   fi

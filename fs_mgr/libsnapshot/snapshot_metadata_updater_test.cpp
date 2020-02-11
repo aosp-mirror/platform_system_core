@@ -19,12 +19,13 @@
 #include <memory>
 #include <string>
 
+#include <android-base/properties.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
 #include <storage_literals/storage_literals.h>
 
-#include "test_helpers.h"
+#include <libsnapshot/test_helpers.h>
 
 using namespace android::storage_literals;
 using android::fs_mgr::LpMetadata;
@@ -42,6 +43,10 @@ namespace snapshot {
 
 class SnapshotMetadataUpdaterTest : public ::testing::TestWithParam<uint32_t> {
   public:
+    SnapshotMetadataUpdaterTest() {
+        is_virtual_ab_ = android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
+    }
+
     void SetUp() override {
         target_slot_ = GetParam();
         target_suffix_ = SlotSuffixForSlotNumber(target_slot_);
@@ -122,6 +127,7 @@ class SnapshotMetadataUpdaterTest : public ::testing::TestWithParam<uint32_t> {
                                   << ".";
     }
 
+    bool is_virtual_ab_;
     std::unique_ptr<MetadataBuilder> builder_;
     uint32_t target_slot_;
     std::string target_suffix_;
@@ -325,7 +331,7 @@ TEST_P(SnapshotMetadataUpdaterTest, DeleteAndAddGroup) {
     EXPECT_TRUE(CheckGroupName("product", "another_group"));
 }
 
-INSTANTIATE_TEST_SUITE_P(, SnapshotMetadataUpdaterTest, testing::Values(0, 1));
+INSTANTIATE_TEST_SUITE_P(Snapshot, SnapshotMetadataUpdaterTest, testing::Values(0, 1));
 
 }  // namespace snapshot
 }  // namespace android

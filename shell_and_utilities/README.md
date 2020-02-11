@@ -218,25 +218,28 @@ BSD: fsck\_msdos newfs\_msdos
 
 bzip2: bzcat bzip2 bunzip2
 
+gavinhoward/bc: bc
+
 one-true-awk: awk
 
 toolbox: getevent getprop setprop start stop
 
-toybox: acpi base64 basename bc blkid blockdev cal cat chattr chcon chgrp
-chmod chown chroot chrt cksum clear cmp comm cp cpio cut date dd df
-diff dirname dmesg dos2unix du echo egrep env expand expr fallocate
-false fgrep file find flock fmt free freeramdisk fsfreeze getconf
-getenforce getfattr grep groups gunzip gzip head help hostname hwclock
-i2cdetect i2cdump i2cget i2cset iconv id ifconfig inotifyd insmod
-install ionice iorenice iotop kill killall ln load\_policy log logname
-losetup ls lsattr lsmod lsof lspci lsusb makedevs md5sum microcom
+toybox: acpi base64 basename blkid blockdev cal cat chattr chcon chgrp chmod
+chown chroot chrt cksum clear cmp comm cp cpio cut date dd devmem
+df diff dirname dmesg dos2unix du echo egrep env expand expr fallocate
+false fgrep file find flock fmt free freeramdisk fsfreeze fsync getconf
+getenforce getfattr getopt grep groups gunzip gzip head help hostname
+hwclock i2cdetect i2cdump i2cget i2cset iconv id ifconfig inotifyd
+insmod install ionice iorenice iotop kill killall ln load\_policy log
+logname losetup ls lsattr lsmod lsof lspci lsusb makedevs md5sum microcom
 mkdir mkfifo mknod mkswap mktemp modinfo modprobe more mount mountpoint
 mv nbd-client nc netcat netstat nice nl nohup nproc nsenter od partprobe
 paste patch pgrep pidof ping ping6 pivot\_root pkill pmap printenv
-printf prlimit ps pwd pwdx readlink realpath renice restorecon rev
-rfkill rm rmdir rmmod runcon sed sendevent seq setenforce setfattr
-setsid sha1sum sha224sum sha256sum sha384sum sha512sum sleep sort split
-stat strings stty swapoff swapon sync sysctl tac tail tar taskset tee
-time timeout top touch tr traceroute traceroute6 true truncate tty tunctl
-ulimit umount uname uniq unix2dos unlink unshare uptime usleep uudecode
-uuencode uuidgen vconfig vmstat watch wc which whoami xargs xxd yes zcat
+printf prlimit ps pwd pwdx readelf readlink realpath renice restorecon
+rev rfkill rm rmdir rmmod runcon sed sendevent seq setenforce setfattr
+setsid sha1sum sha224sum sha256sum sha384sum sha512sum sleep sort
+split stat strings stty swapoff swapon sync sysctl tac tail tar taskset
+tee time timeout top touch tr traceroute traceroute6 true truncate
+tty tunctl ulimit umount uname uniq unix2dos unlink unshare uptime
+usleep uudecode uuencode uuidgen vconfig vi vmstat watch wc which
+whoami xargs xxd yes zcat

@@ -103,14 +103,6 @@ cutils_socket_t socket_inaddr_any_server(int port, int type);
 int socket_close(cutils_socket_t sock);
 
 /*
- * Sets socket receive timeout using SO_RCVTIMEO. Setting |timeout_ms| to 0
- * disables receive timeouts.
- *
- * Return 0 on success.
- */
-int socket_set_receive_timeout(cutils_socket_t sock, int timeout_ms);
-
-/*
  * Returns the local port the socket is bound to or -1 on error.
  */
 int socket_get_local_port(cutils_socket_t sock);

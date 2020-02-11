@@ -52,9 +52,6 @@
 #include <unwindstack/Regs.h>
 #include <unwindstack/Unwinder.h>
 
-// Needed to get DEBUGGER_SIGNAL.
-#include "debuggerd/handler.h"
-
 #include "libdebuggerd/backtrace.h"
 #include "libdebuggerd/open_files_list.h"
 #include "libdebuggerd/utility.h"
@@ -189,106 +186,6 @@ static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
   _LOG(log, logtype::HEADER, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", thread_info.pid,
        thread_info.tid, thread_info.thread_name.c_str(), thread_info.process_name.c_str());
   _LOG(log, logtype::HEADER, "uid: %d\n", thread_info.uid);
-}
-
-static void dump_stack_segment(log_t* log, unwindstack::Maps* maps, unwindstack::Memory* memory,
-                               uint64_t* sp, size_t words, int label) {
-  // Read the data all at once.
-  word_t stack_data[words];
-
-  // TODO: Do we need to word align this for crashes caused by a misaligned sp?
-  //       The process_vm_readv implementation of Memory should handle this appropriately?
-  size_t bytes_read = memory->Read(*sp, stack_data, sizeof(word_t) * words);
-  words = bytes_read / sizeof(word_t);
-  std::string line;
-  for (size_t i = 0; i < words; i++) {
-    line = "    ";
-    if (i == 0 && label >= 0) {
-      // Print the label once.
-      line += StringPrintf("#%02d  ", label);
-    } else {
-      line += "     ";
-    }
-    line += StringPrintf("%" PRIPTR "  %" PRIPTR, *sp, static_cast<uint64_t>(stack_data[i]));
-
-    unwindstack::MapInfo* map_info = maps->Find(stack_data[i]);
-    if (map_info != nullptr && !map_info->name.empty()) {
-      line += "  " + map_info->name;
-      std::string func_name;
-      uint64_t func_offset = 0;
-      if (map_info->GetFunctionName(stack_data[i], &func_name, &func_offset)) {
-        line += " (" + func_name;
-        if (func_offset) {
-          line += StringPrintf("+%" PRIu64, func_offset);
-        }
-        line += ')';
-      }
-    }
-    _LOG(log, logtype::STACK, "%s\n", line.c_str());
-
-    *sp += sizeof(word_t);
-  }
-}
-
-static void dump_stack(log_t* log, const std::vector<unwindstack::FrameData>& frames,
-                       unwindstack::Maps* maps, unwindstack::Memory* memory) {
-  size_t first = 0, last;
-  for (size_t i = 0; i < frames.size(); i++) {
-    if (frames[i].sp) {
-      if (!first) {
-        first = i+1;
-      }
-      last = i;
-    }
-  }
-
-  if (!first) {
-    return;
-  }
-  first--;
-
-  // Dump a few words before the first frame.
-  uint64_t sp = frames[first].sp - STACK_WORDS * sizeof(word_t);
-  dump_stack_segment(log, maps, memory, &sp, STACK_WORDS, -1);
-
-#if defined(__LP64__)
-  static constexpr const char delimiter[] = "         ................  ................\n";
-#else
-  static constexpr const char delimiter[] = "         ........  ........\n";
-#endif
-
-  // Dump a few words from all successive frames.
-  for (size_t i = first; i <= last; i++) {
-    auto* frame = &frames[i];
-    if (sp != frame->sp) {
-      _LOG(log, logtype::STACK, delimiter);
-      sp = frame->sp;
-    }
-    if (i != last) {
-      // Print stack data up to the stack from the next frame.
-      size_t words;
-      uint64_t next_sp = frames[i + 1].sp;
-      if (next_sp < sp) {
-        // The next frame is probably using a completely different stack,
-        // so dump the max from this stack.
-        words = STACK_WORDS;
-      } else {
-        words = (next_sp - sp) / sizeof(word_t);
-        if (words == 0) {
-          // The sp is the same as the next frame, print at least
-          // one line for this frame.
-          words = 1;
-        } else if (words > STACK_WORDS) {
-          words = STACK_WORDS;
-        }
-      }
-      dump_stack_segment(log, maps, memory, &sp, words, i);
-    } else {
-      // Print some number of words past the last stack frame since we
-      // don't know how large the stack is.
-      dump_stack_segment(log, maps, memory, &sp, STACK_WORDS, i);
-    }
-  }
 }
 
 static std::string get_addr_string(uint64_t addr) {
@@ -428,7 +325,7 @@ void dump_registers(log_t* log, unwindstack::Regs* regs) {
   std::vector<std::pair<std::string, uint64_t>> special_row;
 
 #if defined(__arm__) || defined(__aarch64__)
-  static constexpr const char* special_registers[] = {"ip", "lr", "sp", "pc"};
+  static constexpr const char* special_registers[] = {"ip", "lr", "sp", "pc", "pst"};
 #elif defined(__i386__)
   static constexpr const char* special_registers[] = {"ebp", "esp", "eip"};
 #elif defined(__x86_64__)
@@ -502,9 +399,6 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
   } else {
     _LOG(log, logtype::BACKTRACE, "\nbacktrace:\n");
     log_backtrace(log, unwinder, "    ");
-
-    _LOG(log, logtype::STACK, "\nstack:\n");
-    dump_stack(log, unwinder->frames(), unwinder->GetMaps(), unwinder->GetProcessMemory().get());
   }
 
   if (primary_thread) {
@@ -595,7 +489,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename, unsigned 
       }
       AndroidLogEntry e;
       char buf[512];
-      if (android_log_processBinaryLogBuffer(&log_entry.entry_v1, &e, g_eventTagMap, buf,
+      if (android_log_processBinaryLogBuffer(&log_entry.entry, &e, g_eventTagMap, buf,
                                              sizeof(buf)) == 0) {
         _LOG(log, logtype::LOGS, "%s.%03d %5d %5d %c %-8.*s: %s\n", timeBuf,
              log_entry.entry.nsec / 1000000, log_entry.entry.pid, log_entry.entry.tid, 'I',

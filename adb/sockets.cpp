@@ -125,8 +125,7 @@ static SocketFlushResult local_socket_flush_incoming(asocket* s) {
         if (rc > 0 && static_cast<size_t>(rc) == s->packet_queue.size()) {
             s->packet_queue.clear();
         } else if (rc > 0) {
-            // TODO: Implement a faster drop_front?
-            s->packet_queue.take_front(rc);
+            s->packet_queue.drop_front(rc);
             fdevent_add(s->fde, FDE_WRITE);
             return SocketFlushResult::TryAgain;
         } else if (rc == -1 && errno == EAGAIN) {
@@ -626,7 +625,8 @@ bool parse_host_service(std::string_view* out_serial, std::string_view* out_comm
         return true;
     };
 
-    static constexpr std::string_view prefixes[] = {"usb:", "product:", "model:", "device:"};
+    static constexpr std::string_view prefixes[] = {
+            "usb:", "product:", "model:", "device:", "localfilesystem:"};
     for (std::string_view prefix : prefixes) {
         if (command.starts_with(prefix)) {
             consume(prefix.size());

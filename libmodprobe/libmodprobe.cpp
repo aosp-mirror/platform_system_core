@@ -238,6 +238,80 @@ void Modprobe::ParseCfg(const std::string& cfg,
     return;
 }
 
+void Modprobe::AddOption(const std::string& module_name, const std::string& option_name,
+                         const std::string& value) {
+    auto canonical_name = MakeCanonical(module_name);
+    auto options_iter = module_options_.find(canonical_name);
+    auto option_str = option_name + "=" + value;
+    if (options_iter != module_options_.end()) {
+        options_iter->second = options_iter->second + " " + option_str;
+    } else {
+        module_options_.emplace(canonical_name, option_str);
+    }
+}
+
+void Modprobe::ParseKernelCmdlineOptions(void) {
+    std::string cmdline = GetKernelCmdline();
+    std::string module_name = "";
+    std::string option_name = "";
+    std::string value = "";
+    bool in_module = true;
+    bool in_option = false;
+    bool in_value = false;
+    bool in_quotes = false;
+    int start = 0;
+
+    for (int i = 0; i < cmdline.size(); i++) {
+        if (cmdline[i] == '"') {
+            in_quotes = !in_quotes;
+        }
+
+        if (in_quotes) continue;
+
+        if (cmdline[i] == ' ') {
+            if (in_value) {
+                value = cmdline.substr(start, i - start);
+                if (!module_name.empty() && !option_name.empty()) {
+                    AddOption(module_name, option_name, value);
+                }
+            }
+            module_name = "";
+            option_name = "";
+            value = "";
+            in_value = false;
+            start = i + 1;
+            in_module = true;
+            continue;
+        }
+
+        if (cmdline[i] == '.') {
+            if (in_module) {
+                module_name = cmdline.substr(start, i - start);
+                start = i + 1;
+                in_module = false;
+            }
+            in_option = true;
+            continue;
+        }
+
+        if (cmdline[i] == '=') {
+            if (in_option) {
+                option_name = cmdline.substr(start, i - start);
+                start = i + 1;
+                in_option = false;
+            }
+            in_value = true;
+            continue;
+        }
+    }
+    if (in_value && !in_quotes) {
+        value = cmdline.substr(start, cmdline.size() - start);
+        if (!module_name.empty() && !option_name.empty()) {
+            AddOption(module_name, option_name, value);
+        }
+    }
+}
+
 Modprobe::Modprobe(const std::vector<std::string>& base_paths) {
     using namespace std::placeholders;
 
@@ -261,6 +335,7 @@ Modprobe::Modprobe(const std::vector<std::string>& base_paths) {
         ParseCfg(base_path + "/modules.blacklist", blacklist_callback);
     }
 
+    ParseKernelCmdlineOptions();
     android::base::SetMinimumLogSeverity(android::base::INFO);
 }
 
@@ -330,7 +405,12 @@ bool Modprobe::InsmodWithDeps(const std::string& module_name, const std::string&
 
 bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict,
                                const std::string& parameters) {
-    std::set<std::string> modules_to_load = {MakeCanonical(module_name)};
+    auto canonical_name = MakeCanonical(module_name);
+    if (module_loaded_.count(canonical_name)) {
+        return true;
+    }
+
+    std::set<std::string> modules_to_load = {canonical_name};
     bool module_loaded = false;
 
     // use aliases to expand list of modules to load (multiple modules
@@ -338,6 +418,7 @@ bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict,
     for (const auto& [alias, aliased_module] : module_aliases_) {
         if (fnmatch(alias.c_str(), module_name.c_str(), 0) != 0) continue;
         LOG(VERBOSE) << "Found alias for '" << module_name << "': '" << aliased_module;
+        if (module_loaded_.count(MakeCanonical(aliased_module))) continue;
         modules_to_load.emplace(aliased_module);
     }
 
@@ -354,13 +435,15 @@ bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict,
     return true;
 }
 
-bool Modprobe::LoadListedModules() {
+bool Modprobe::LoadListedModules(bool strict) {
+    auto ret = true;
     for (const auto& module : module_load_) {
         if (!LoadWithAliases(module, true)) {
-            return false;
+            ret = false;
+            if (strict) break;
         }
     }
-    return true;
+    return ret;
 }
 
 bool Modprobe::Remove(const std::string& module_name) {

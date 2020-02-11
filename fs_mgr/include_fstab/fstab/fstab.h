@@ -37,7 +37,8 @@ struct FstabEntry {
     unsigned long flags = 0;
     std::string fs_options;
     std::string key_loc;
-    std::string key_dir;
+    std::string metadata_key_dir;
+    std::string metadata_cipher;
     off64_t length = 0;
     std::string label;
     int partnum = -1;
@@ -45,9 +46,7 @@ struct FstabEntry {
     int max_comp_streams = 0;
     off64_t zram_size = 0;
     off64_t reserved_size = 0;
-    std::string file_contents_mode;
-    std::string file_names_mode;
-    int file_policy_version = 0;
+    std::string encryption_options;
     off64_t erase_blk_size = 0;
     off64_t logical_blk_size = 0;
     std::string sysfs_path;
@@ -104,6 +103,7 @@ bool SkipMountingPartitions(Fstab* fstab);
 FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
 // The Fstab can contain multiple entries for the same mount point with different configurations.
 std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path);
+FstabEntry* GetMountedEntryForUserdata(Fstab* fstab);
 
 // This method builds DSU fstab entries and transfer the fstab.
 //

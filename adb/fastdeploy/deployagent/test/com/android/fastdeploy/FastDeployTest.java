@@ -20,7 +20,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.android.compatibility.common.tradefed.build.CompatibilityBuildHelper;
+import com.android.ddmlib.Log.LogLevel;
 import com.android.tradefed.device.DeviceNotAvailableException;
+import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.testtype.DeviceJUnit4ClassRunner;
 import com.android.tradefed.testtype.junit4.BaseHostJUnit4Test;
 
@@ -68,17 +70,19 @@ public class FastDeployTest extends BaseHostJUnit4Test {
     }
 
     private boolean isAppInstalled(String packageName) throws DeviceNotAvailableException {
-        final String commandResult = getDevice().executeShellCommand("pm list packages");
+        final String result = getDevice().executeShellCommand("pm list packages");
+        CLog.logAndDisplay(LogLevel.INFO, result);
         final int prefixLength = "package:".length();
-        return Arrays.stream(commandResult.split("\\r?\\n"))
+        return Arrays.stream(result.split("\\r?\\n"))
                 .anyMatch(line -> line.substring(prefixLength).equals(packageName));
     }
 
     // Mostly copied from PkgInstallSignatureVerificationTest.java.
-    private String fastInstallPackage(String apkPath)
+    private void fastInstallPackage(String apkPath)
             throws IOException, DeviceNotAvailableException {
-        return getDevice().executeAdbCommand("install", "-t", "--fastdeploy", "--force-agent",
+        String result = getDevice().executeAdbCommand("install", "-t", "--fastdeploy", "--force-agent",
                 apkPath);
+        CLog.logAndDisplay(LogLevel.INFO, result);
     }
 }
 
