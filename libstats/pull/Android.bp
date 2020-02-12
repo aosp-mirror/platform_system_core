@@ -19,9 +19,6 @@
 // ==========================================================
 cc_library_shared {
     name: "libstatspull",
-    aidl: {
-        include_dirs: ["frameworks/base/core/java"],
-    },
     srcs: [
         "stats_pull_atom_callback.cpp",
     ],
@@ -31,11 +28,9 @@ cc_library_shared {
     ],
     export_include_dirs: ["include"],
     shared_libs: [
-        //TODO: use libbinder_ndk. Remove libservices.
-        "libbinder",
+        "libbinder_ndk",
         "libstatssocket",
-        "libservices",
-        "statsd-aidl-cpp",
+        "statsd-aidl-ndk_platform",
     ],
     static_libs: [
         "liblog",

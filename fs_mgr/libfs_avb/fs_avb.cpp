@@ -33,6 +33,7 @@
 #include <android-base/strings.h>
 #include <libavb/libavb.h>
 #include <libdm/dm.h>
+#include <libgsi/libgsi.h>
 
 #include "avb_ops.h"
 #include "avb_util.h"
@@ -266,6 +267,18 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
     return avb_handle;
 }
 
+static bool IsAvbPermissive() {
+    if (IsDeviceUnlocked()) {
+        // Manually putting a file under metadata partition can enforce AVB verification.
+        if (!access(DSU_METADATA_PREFIX "avb_enforce", F_OK)) {
+            LINFO << "Enforcing AVB verification when the device is unlocked";
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
 AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const FstabEntry& fstab_entry,
                                             const std::vector<std::string>& preload_avb_key_blobs) {
     // At least one of the following should be provided for public key matching.
@@ -275,7 +288,7 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const FstabEntry& fstab_entry,
     }
 
     // Binds allow_verification_error and rollback_protection to device unlock state.
-    bool allow_verification_error = IsDeviceUnlocked();
+    bool allow_verification_error = IsAvbPermissive();
     bool rollback_protection = !allow_verification_error;
 
     std::string public_key_data;
@@ -364,15 +377,15 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta() {
     return LoadAndVerifyVbmeta("vbmeta", fs_mgr_get_slot_suffix(), fs_mgr_get_other_slot_suffix(),
                                {} /* expected_public_key, already checked by bootloader */,
                                HashAlgorithm::kSHA256,
-                               IsDeviceUnlocked(), /* allow_verification_error */
-                               true,               /* load_chained_vbmeta */
+                               IsAvbPermissive(), /* allow_verification_error */
+                               true,              /* load_chained_vbmeta */
                                false, /* rollback_protection, already checked by bootloader */
                                nullptr /* custom_device_path */);
 }
 
 // TODO(b/128807537): removes this function.
 AvbUniquePtr AvbHandle::Open() {
-    bool is_device_unlocked = IsDeviceUnlocked();
+    bool allow_verification_error = IsAvbPermissive();
 
     AvbUniquePtr avb_handle(new AvbHandle());
     if (!avb_handle) {
@@ -381,8 +394,9 @@ AvbUniquePtr AvbHandle::Open() {
     }
 
     FsManagerAvbOps avb_ops;
-    AvbSlotVerifyFlags flags = is_device_unlocked ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
-                                                  : AVB_SLOT_VERIFY_FLAGS_NONE;
+    AvbSlotVerifyFlags flags = allow_verification_error
+                                       ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
+                                       : AVB_SLOT_VERIFY_FLAGS_NONE;
     AvbSlotVerifyResult verify_result =
             avb_ops.AvbSlotVerify(fs_mgr_get_slot_suffix(), flags, &avb_handle->vbmeta_images_);
 
@@ -405,9 +419,8 @@ AvbUniquePtr AvbHandle::Open() {
             break;
         case AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION:
         case AVB_SLOT_VERIFY_RESULT_ERROR_PUBLIC_KEY_REJECTED:
-            if (!is_device_unlocked) {
-                LERROR << "ERROR_VERIFICATION / PUBLIC_KEY_REJECTED isn't allowed "
-                       << "if the device is LOCKED";
+            if (!allow_verification_error) {
+                LERROR << "ERROR_VERIFICATION / PUBLIC_KEY_REJECTED isn't allowed ";
                 return nullptr;
             }
             avb_handle->status_ = AvbHandleStatus::kVerificationError;

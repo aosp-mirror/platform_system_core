@@ -31,6 +31,7 @@ cc_library_static {
     static_libs: [
         "libavb",
         "libdm",
+        "libgsi",
         "libfstab",
     ],
     export_static_lib_headers: [
