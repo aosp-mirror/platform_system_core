@@ -355,3 +355,49 @@ cc_binary {
 
     init_rc: ["tombstoned/tombstoned.rc"],
 }
+
+prebuilt_etc {
+    name: "crash_dump.policy",
+    sub_dir: "seccomp_policy",
+    filename_from_src: true,
+    arch: {
+        arm: {
+            src: "seccomp_policy/crash_dump.arm.policy",
+        },
+        arm64: {
+            src: "seccomp_policy/crash_dump.arm64.policy",
+        },
+        x86: {
+            src: "seccomp_policy/crash_dump.x86.policy",
+        },
+        x86_64: {
+            src: "seccomp_policy/crash_dump.x86_64.policy",
+        },
+    },
+    required: [
+        "crash_dump.policy_other",
+    ],
+}
+
+
+// NB -- this installs "the other" architecture. (puts 32 bit config in on 64 bit device)
+// or at least that is the intention so that we get both of them populated
+prebuilt_etc {
+    name: "crash_dump.policy_other",
+    sub_dir: "seccomp_policy",
+    filename_from_src: true,
+    arch: {
+        arm: {
+            src: "seccomp_policy/crash_dump.arm64.policy",
+        },
+        arm64: {
+            src: "seccomp_policy/crash_dump.arm.policy",
+        },
+        x86: {
+            src: "seccomp_policy/crash_dump.x86_64.policy",
+        },
+        x86_64: {
+            src: "seccomp_policy/crash_dump.x86.policy",
+        },
+    },
+}
