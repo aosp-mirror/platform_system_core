@@ -21,7 +21,6 @@
 #include <sys/unistd.h>
 
 #include <optional>
-#include <sstream>
 #include <thread>
 #include <unordered_set>
 
@@ -37,10 +36,6 @@
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/liblp.h>
-
-#ifdef LIBSNAPSHOT_USE_CALLSTACK
-#include <utils/CallStack.h>
-#endif
 
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/snapshot_stats.h>
@@ -227,20 +222,6 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
     }
 
     LOG(INFO) << "Removing all update state.";
-
-#ifdef LIBSNAPSHOT_USE_CALLSTACK
-    LOG(WARNING) << "Logging stack; see b/148818798.";
-    // Do not use CallStack's log functions because snapshotctl relies on
-    // android-base/logging to save log to files.
-    // TODO(b/148818798): remove this before we ship.
-    CallStack callstack;
-    callstack.update();
-    auto callstack_str = callstack.toString();
-    LOG(WARNING) << callstack_str.c_str();
-    std::stringstream path;
-    path << "/data/misc/snapshotctl_log/libsnapshot." << Now() << ".log";
-    android::base::WriteStringToFile(callstack_str.c_str(), path.str());
-#endif
 
     if (!RemoveAllSnapshots(lock)) {
         LOG(ERROR) << "Could not remove all snapshots";
