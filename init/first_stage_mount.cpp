@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -29,6 +30,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr.h>
@@ -45,7 +47,9 @@
 #include "uevent_listener.h"
 #include "util.h"
 
+using android::base::ReadFileToString;
 using android::base::Split;
+using android::base::StringPrintf;
 using android::base::Timer;
 using android::fiemap::IImageManager;
 using android::fs_mgr::AvbHandle;
@@ -95,6 +99,7 @@ class FirstStageMount {
     void GetDmLinearMetadataDevice(std::set<std::string>* devices);
     bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
     void UseDsuIfPresent();
+    void PreloadAvbKeys();
 
     ListenerAction UeventCallback(const Uevent& uevent, std::set<std::string>* required_devices);
 
@@ -110,6 +115,9 @@ class FirstStageMount {
     std::string super_partition_name_;
     std::unique_ptr<DeviceHandler> device_handler_;
     UeventListener uevent_listener_;
+    // Reads all AVB keys before chroot into /system, as they might be used
+    // later when mounting other partitions, e.g., /vendor and /product.
+    std::map<std::string, std::vector<std::string>> preload_avb_key_blobs_;
 };
 
 class FirstStageMountVBootV1 : public FirstStageMount {
@@ -508,11 +516,57 @@ bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_sa
     return mounted;
 }
 
+void FirstStageMount::PreloadAvbKeys() {
+    for (const auto& entry : fstab_) {
+        // No need to cache the key content if it's empty, or is already cached.
+        if (entry.avb_keys.empty() || preload_avb_key_blobs_.count(entry.avb_keys)) {
+            continue;
+        }
+
+        // Determines all key paths first.
+        std::vector<std::string> key_paths;
+        if (is_dir(entry.avb_keys.c_str())) {  // fstab_keys might be a dir, e.g., /avb.
+            const char* avb_key_dir = entry.avb_keys.c_str();
+            std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(avb_key_dir), closedir);
+            if (!dir) {
+                LOG(ERROR) << "Failed to opendir: " << dir;
+                continue;
+            }
+            // Gets all key pathes under the dir.
+            struct dirent* de;
+            while ((de = readdir(dir.get()))) {
+                if (de->d_type != DT_REG) continue;
+                std::string full_path = StringPrintf("%s/%s", avb_key_dir, de->d_name);
+                key_paths.emplace_back(std::move(full_path));
+            }
+            std::sort(key_paths.begin(), key_paths.end());
+        } else {
+            // avb_keys are key paths separated by ":", if it's not a dir.
+            key_paths = Split(entry.avb_keys, ":");
+        }
+
+        // Reads the key content then cache it.
+        std::vector<std::string> key_blobs;
+        for (const auto& path : key_paths) {
+            std::string key_value;
+            if (!ReadFileToString(path, &key_value)) {
+                continue;
+            }
+            key_blobs.emplace_back(std::move(key_value));
+        }
+
+        // Maps entry.avb_keys to actual key blobs.
+        preload_avb_key_blobs_[entry.avb_keys] = std::move(key_blobs);
+    }
+}
+
 // If system is in the fstab then we're not a system-as-root device, and in
 // this case, we mount system first then pivot to it.  From that point on,
 // we are effectively identical to a system-as-root device.
 bool FirstStageMount::TrySwitchSystemAsRoot() {
     UseDsuIfPresent();
+    // Preloading all AVB keys from the ramdisk before switching root to /system.
+    PreloadAvbKeys();
 
     auto system_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
         return entry.mount_point == "/system";
@@ -776,7 +830,8 @@ bool FirstStageMountVBootV2::SetUpDmVerity(FstabEntry* fstab_entry) {
                        << fstab_entry->mount_point;
             return true;  // Returns true to mount the partition directly.
         } else {
-            auto avb_standalone_handle = AvbHandle::LoadAndVerifyVbmeta(*fstab_entry);
+            auto avb_standalone_handle = AvbHandle::LoadAndVerifyVbmeta(
+                    *fstab_entry, preload_avb_key_blobs_[fstab_entry->avb_keys]);
             if (!avb_standalone_handle) {
                 LOG(ERROR) << "Failed to load offline vbmeta for " << fstab_entry->mount_point;
                 // Fallbacks to built-in hashtree if fs_mgr_flags.avb is set.

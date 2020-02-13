@@ -499,24 +499,6 @@ TEST(Expected, testDifferentErrors) {
   EXPECT_TRUE(e4 != e3);
 }
 
-TEST(Expected, testCompareWithSameValue) {
-  exp_int e = 10;
-  int value = 10;
-  EXPECT_TRUE(e == value);
-  EXPECT_TRUE(value == e);
-  EXPECT_FALSE(e != value);
-  EXPECT_FALSE(value != e);
-}
-
-TEST(Expected, testCompareWithDifferentValue) {
-  exp_int e = 10;
-  int value = 20;
-  EXPECT_FALSE(e == value);
-  EXPECT_FALSE(value == e);
-  EXPECT_TRUE(e != value);
-  EXPECT_TRUE(value != e);
-}
-
 TEST(Expected, testCompareWithSameError) {
   exp_int e = unexpected(10);
   exp_int::unexpected_type error = 10;
@@ -594,7 +576,7 @@ TEST(Expected, testDivideExample) {
   EXPECT_EQ(-1, divide(10, 0).error().cause);
 
   EXPECT_TRUE(divide(10, 3));
-  EXPECT_EQ(QR(3, 1), divide(10, 3));
+  EXPECT_EQ(QR(3, 1), *divide(10, 3));
 }
 
 TEST(Expected, testPair) {

@@ -249,9 +249,8 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
 
     for (const auto& rlimit : attr.rlimits) {
         if (setrlimit(rlimit.first, &rlimit.second) == -1) {
-            return ErrnoError() << StringPrintf(
-                           "setrlimit(%d, {rlim_cur=%ld, rlim_max=%ld}) failed", rlimit.first,
-                           rlimit.second.rlim_cur, rlimit.second.rlim_max);
+            return ErrnoErrorf("setrlimit({}, {{rlim_cur={}, rlim_max={}}}) failed", rlimit.first,
+                               rlimit.second.rlim_cur, rlimit.second.rlim_max);
         }
     }
 

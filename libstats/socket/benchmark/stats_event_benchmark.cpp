@@ -17,14 +17,14 @@
 #include "benchmark/benchmark.h"
 #include "stats_event.h"
 
-static struct stats_event* constructStatsEvent() {
-    struct stats_event* event = stats_event_obtain();
-    stats_event_set_atom_id(event, 100);
+static AStatsEvent* constructStatsEvent() {
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, 100);
 
     // randomly sample atom size
     int numElements = rand() % 800;
     for (int i = 0; i < numElements; i++) {
-        stats_event_write_int32(event, i);
+        AStatsEvent_writeInt32(event, i);
     }
 
     return event;
@@ -32,10 +32,10 @@ static struct stats_event* constructStatsEvent() {
 
 static void BM_stats_event_truncate_buffer(benchmark::State& state) {
     while (state.KeepRunning()) {
-        struct stats_event* event = constructStatsEvent();
-        stats_event_build(event);
-        stats_event_write(event);
-        stats_event_release(event);
+        AStatsEvent* event = constructStatsEvent();
+        AStatsEvent_build(event);
+        AStatsEvent_write(event);
+        AStatsEvent_release(event);
     }
 }
 
@@ -43,11 +43,11 @@ BENCHMARK(BM_stats_event_truncate_buffer);
 
 static void BM_stats_event_full_buffer(benchmark::State& state) {
     while (state.KeepRunning()) {
-        struct stats_event* event = constructStatsEvent();
-        stats_event_truncate_buffer(event, false);
-        stats_event_build(event);
-        stats_event_write(event);
-        stats_event_release(event);
+        AStatsEvent* event = constructStatsEvent();
+        AStatsEvent_truncateBuffer(event, false);
+        AStatsEvent_build(event);
+        AStatsEvent_write(event);
+        AStatsEvent_release(event);
     }
 }
 

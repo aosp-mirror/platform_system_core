@@ -208,7 +208,7 @@ Result<void> ServiceParser::ParseKeycodes(std::vector<std::string>&& args) {
 
         // If the property is not set, it defaults to none, in which case there are no keycodes
         // for this service.
-        if (expanded == "none") {
+        if (*expanded == "none") {
             return {};
         }
 

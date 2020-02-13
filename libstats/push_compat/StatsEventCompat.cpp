@@ -38,7 +38,7 @@ const bool StatsEventCompat::mPlatformAtLeastR =
 
 // definitions of static class variables
 bool StatsEventCompat::mAttemptedLoad = false;
-struct stats_event_api_table* StatsEventCompat::mStatsEventApi = nullptr;
+void* StatsEventCompat::mStatsEventApi = nullptr;
 std::mutex StatsEventCompat::mLoadLock;
 
 StatsEventCompat::StatsEventCompat() : mEventQ(kStatsEventTag) {
@@ -49,7 +49,8 @@ StatsEventCompat::StatsEventCompat() : mEventQ(kStatsEventTag) {
         if (!mAttemptedLoad) {
             void* handle = dlopen("libstatssocket.so", RTLD_NOW);
             if (handle) {
-                mStatsEventApi = (struct stats_event_api_table*)dlsym(handle, "table");
+                //                mStatsEventApi = (struct AStatsEvent_apiTable*)dlsym(handle,
+                //                "table");
             } else {
                 ALOGE("dlopen failed: %s\n", dlerror());
             }
@@ -58,19 +59,19 @@ StatsEventCompat::StatsEventCompat() : mEventQ(kStatsEventTag) {
     }
 
     if (mStatsEventApi) {
-        mEventR = mStatsEventApi->obtain();
+        //        mEventR = mStatsEventApi->obtain();
     } else if (!mPlatformAtLeastR) {
         mEventQ << android::elapsedRealtimeNano();
     }
 }
 
 StatsEventCompat::~StatsEventCompat() {
-    if (mStatsEventApi) mStatsEventApi->release(mEventR);
+    //    if (mStatsEventApi) mStatsEventApi->release(mEventR);
 }
 
 void StatsEventCompat::setAtomId(int32_t atomId) {
     if (mStatsEventApi) {
-        mStatsEventApi->set_atom_id(mEventR, (uint32_t)atomId);
+        //        mStatsEventApi->setAtomId(mEventR, (uint32_t)atomId);
     } else if (!mPlatformAtLeastR) {
         mEventQ << atomId;
     }
@@ -78,7 +79,7 @@ void StatsEventCompat::setAtomId(int32_t atomId) {
 
 void StatsEventCompat::writeInt32(int32_t value) {
     if (mStatsEventApi) {
-        mStatsEventApi->write_int32(mEventR, value);
+        //        mStatsEventApi->writeInt32(mEventR, value);
     } else if (!mPlatformAtLeastR) {
         mEventQ << value;
     }
@@ -86,7 +87,7 @@ void StatsEventCompat::writeInt32(int32_t value) {
 
 void StatsEventCompat::writeInt64(int64_t value) {
     if (mStatsEventApi) {
-        mStatsEventApi->write_int64(mEventR, value);
+        //        mStatsEventApi->writeInt64(mEventR, value);
     } else if (!mPlatformAtLeastR) {
         mEventQ << value;
     }
@@ -94,7 +95,7 @@ void StatsEventCompat::writeInt64(int64_t value) {
 
 void StatsEventCompat::writeFloat(float value) {
     if (mStatsEventApi) {
-        mStatsEventApi->write_float(mEventR, value);
+        //        mStatsEventApi->writeFloat(mEventR, value);
     } else if (!mPlatformAtLeastR) {
         mEventQ << value;
     }
@@ -102,7 +103,7 @@ void StatsEventCompat::writeFloat(float value) {
 
 void StatsEventCompat::writeBool(bool value) {
     if (mStatsEventApi) {
-        mStatsEventApi->write_bool(mEventR, value);
+        //        mStatsEventApi->writeBool(mEventR, value);
     } else if (!mPlatformAtLeastR) {
         mEventQ << value;
     }
@@ -110,7 +111,7 @@ void StatsEventCompat::writeBool(bool value) {
 
 void StatsEventCompat::writeByteArray(const char* buffer, size_t length) {
     if (mStatsEventApi) {
-        mStatsEventApi->write_byte_array(mEventR, (const uint8_t*)buffer, length);
+        //        mStatsEventApi->writeByteArray(mEventR, (const uint8_t*)buffer, length);
     } else if (!mPlatformAtLeastR) {
         mEventQ.AppendCharArray(buffer, length);
     }
@@ -120,7 +121,7 @@ void StatsEventCompat::writeString(const char* value) {
     if (value == nullptr) value = "";
 
     if (mStatsEventApi) {
-        mStatsEventApi->write_string8(mEventR, value);
+        //        mStatsEventApi->writeString(mEventR, value);
     } else if (!mPlatformAtLeastR) {
         mEventQ << value;
     }
@@ -129,8 +130,8 @@ void StatsEventCompat::writeString(const char* value) {
 void StatsEventCompat::writeAttributionChain(const int32_t* uids, size_t numUids,
                                              const vector<const char*>& tags) {
     if (mStatsEventApi) {
-        mStatsEventApi->write_attribution_chain(mEventR, (const uint32_t*)uids, tags.data(),
-                                                (uint8_t)numUids);
+        //        mStatsEventApi->writeAttributionChain(mEventR, (const uint32_t*)uids, tags.data(),
+        //                                                (uint8_t)numUids);
     } else if (!mPlatformAtLeastR) {
         mEventQ.begin();
         for (size_t i = 0; i < numUids; i++) {
@@ -148,26 +149,8 @@ void StatsEventCompat::writeKeyValuePairs(const map<int, int32_t>& int32Map,
                                           const map<int, int64_t>& int64Map,
                                           const map<int, const char*>& stringMap,
                                           const map<int, float>& floatMap) {
-    if (mStatsEventApi) {
-        vector<struct key_value_pair> pairs;
-
-        for (const auto& it : int32Map) {
-            pairs.push_back({.key = it.first, .valueType = INT32_TYPE, .int32Value = it.second});
-        }
-        for (const auto& it : int64Map) {
-            pairs.push_back({.key = it.first, .valueType = INT64_TYPE, .int64Value = it.second});
-        }
-        for (const auto& it : stringMap) {
-            pairs.push_back({.key = it.first, .valueType = STRING_TYPE, .stringValue = it.second});
-        }
-        for (const auto& it : floatMap) {
-            pairs.push_back({.key = it.first, .valueType = FLOAT_TYPE, .floatValue = it.second});
-        }
-
-        mStatsEventApi->write_key_value_pairs(mEventR, pairs.data(), (uint8_t)pairs.size());
-    }
-
-    else if (!mPlatformAtLeastR) {
+    // Key value pairs are not supported with AStatsEvent.
+    if (!mPlatformAtLeastR) {
         mEventQ.begin();
         writeKeyValuePairMap(int32Map);
         writeKeyValuePairMap(int64Map);
@@ -194,19 +177,25 @@ template void StatsEventCompat::writeKeyValuePairMap<float>(const map<int, float
 template void StatsEventCompat::writeKeyValuePairMap<const char*>(const map<int, const char*>&);
 
 void StatsEventCompat::addBoolAnnotation(uint8_t annotationId, bool value) {
-    if (mStatsEventApi) mStatsEventApi->add_bool_annotation(mEventR, annotationId, value);
+    // Workaround for unused params.
+    (void)annotationId;
+    (void)value;
+    //    if (mStatsEventApi) mStatsEventApi->addBoolAnnotation(mEventR, annotationId, value);
     // Don't do anything if on Q.
 }
 
 void StatsEventCompat::addInt32Annotation(uint8_t annotationId, int32_t value) {
-    if (mStatsEventApi) mStatsEventApi->add_int32_annotation(mEventR, annotationId, value);
+    // Workaround for unused params.
+    (void)annotationId;
+    (void)value;
+    //    if (mStatsEventApi) mStatsEventApi->addInt32Annotation(mEventR, annotationId, value);
     // Don't do anything if on Q.
 }
 
 int StatsEventCompat::writeToSocket() {
     if (mStatsEventApi) {
-        mStatsEventApi->build(mEventR);
-        return mStatsEventApi->write(mEventR);
+        //        mStatsEventApi->build(mEventR);
+        //        return mStatsEventApi->write(mEventR);
     }
 
     if (!mPlatformAtLeastR) return mEventQ.write(LOG_ID_STATS);

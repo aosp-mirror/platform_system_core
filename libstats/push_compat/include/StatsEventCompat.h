@@ -57,10 +57,11 @@ class StatsEventCompat {
     const static bool mPlatformAtLeastR;
     static bool mAttemptedLoad;
     static std::mutex mLoadLock;
-    static struct stats_event_api_table* mStatsEventApi;
+    //    static struct AStatsEvent_apiTable* mStatsEventApi;
+    static void* mStatsEventApi;
 
     // non-static member variables
-    struct stats_event* mEventR = nullptr;
+    AStatsEvent* mEventR = nullptr;
     stats_event_list mEventQ;
 
     template <class T>

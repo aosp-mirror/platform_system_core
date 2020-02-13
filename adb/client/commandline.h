@@ -100,7 +100,7 @@ extern DefaultStandardStreamsCallback DEFAULT_STANDARD_STREAMS_CALLBACK;
 
 int adb_commandline(int argc, const char** argv);
 
-void copy_to_file(int inFd, int outFd);
+bool copy_to_file(int inFd, int outFd);
 
 // Connects to the device "shell" service with |command| and prints the
 // resulting output.

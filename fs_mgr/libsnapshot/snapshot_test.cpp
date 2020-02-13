@@ -447,6 +447,9 @@ TEST_F(SnapshotTest, FirstStageMountAfterRollback) {
     auto sm = SnapshotManager::NewForFirstStageMount(info);
     ASSERT_NE(sm, nullptr);
     ASSERT_FALSE(sm->NeedSnapshotsInFirstStageMount());
+
+    auto indicator = sm->GetRollbackIndicatorPath();
+    ASSERT_EQ(access(indicator.c_str(), R_OK), 0);
 }
 
 TEST_F(SnapshotTest, Merge) {
@@ -503,6 +506,9 @@ TEST_F(SnapshotTest, Merge) {
 }
 
 TEST_F(SnapshotTest, FirstStageMountAndMerge) {
+#ifdef SKIP_TEST_IN_PRESUBMIT
+    GTEST_SKIP() << "WIP failure b/148889015";
+#endif
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -559,6 +565,9 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
 }
 
 TEST_F(SnapshotTest, FlashSuperDuringMerge) {
+#ifdef SKIP_TEST_IN_PRESUBMIT
+    GTEST_SKIP() << "WIP failure b/148889015";
+#endif
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -970,6 +979,9 @@ class SnapshotUpdateTest : public SnapshotTest {
 // Also test UnmapUpdateSnapshot unmaps everything.
 // Also test first stage mount and merge after this.
 TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
+#ifdef SKIP_TEST_IN_PRESUBMIT
+    GTEST_SKIP() << "WIP failure b/148889015";
+#endif
     // OTA client blindly unmaps all partitions that are possibly mapped.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
         ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
@@ -1014,6 +1026,9 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+
+    auto indicator = sm->GetRollbackIndicatorPath();
+    ASSERT_NE(access(indicator.c_str(), R_OK), 0);
 
     // Check that the target partitions have the same content.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1114,6 +1129,9 @@ TEST_F(SnapshotUpdateTest, SnapshotStatusFileWithoutCow) {
 
 // Test that the old partitions are not modified.
 TEST_F(SnapshotUpdateTest, TestRollback) {
+#ifdef SKIP_TEST_IN_PRESUBMIT
+    GTEST_SKIP() << "WIP failure b/148889015";
+#endif
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->UnmapUpdateSnapshot("sys_b"));
@@ -1291,6 +1309,9 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
 }
 
 TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
+#ifdef SKIP_TEST_IN_PRESUBMIT
+    GTEST_SKIP() << "WIP failure b/148889015";
+#endif
     // Make source partitions as big as possible to force COW image to be created.
     SetSize(sys_, 5_MiB);
     SetSize(vnd_, 5_MiB);
@@ -1565,6 +1586,9 @@ TEST_F(SnapshotUpdateTest, Overflow) {
 }
 
 TEST_F(SnapshotUpdateTest, WaitForMerge) {
+#ifdef SKIP_TEST_IN_PRESUBMIT
+    GTEST_SKIP() << "WIP failure b/148889015";
+#endif
     AddOperationForPartitions();
 
     // Execute the update.
@@ -1681,9 +1705,11 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
     ASSERT_NE(nullptr, flashed_builder->FindPartition("prd" + flashed_slot_suffix));
     flashed_builder->RemovePartition("prd" + flashed_slot_suffix);
 
+    // Note that fastbootd always updates the partition table of both slots.
     auto flashed_metadata = flashed_builder->Export();
     ASSERT_NE(nullptr, flashed_metadata);
-    ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *flashed_metadata, flashed_slot));
+    ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *flashed_metadata, 0));
+    ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *flashed_metadata, 1));
 
     std::string path;
     for (const auto& name : {"sys", "vnd"}) {
@@ -1782,6 +1808,10 @@ std::vector<uint64_t> ImageManagerTestParams() {
     std::vector<uint64_t> ret;
     for (uint64_t size = 1_MiB; size <= 512_MiB; size *= 2) {
         ret.push_back(size);
+#ifdef SKIP_TEST_IN_PRESUBMIT
+        // BUG(148889015);
+        break;
+#endif
     }
     return ret;
 }

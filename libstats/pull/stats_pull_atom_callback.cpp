@@ -28,12 +28,12 @@
 
 #include <thread>
 
-struct pulled_stats_event_list {
-    std::vector<stats_event*> data;
+struct AStatsEventList {
+    std::vector<AStatsEvent*> data;
 };
 
-struct stats_event* add_stats_event_to_pull_data(pulled_stats_event_list* pull_data) {
-    struct stats_event* event = stats_event_obtain();
+AStatsEvent* AStatsEventList_addStatsEvent(AStatsEventList* pull_data) {
+    AStatsEvent* event = AStatsEvent_obtain();
     pull_data->data.push_back(event);
     return event;
 }
@@ -41,9 +41,42 @@ struct stats_event* add_stats_event_to_pull_data(pulled_stats_event_list* pull_d
 static const int64_t DEFAULT_COOL_DOWN_NS = 1000000000LL;  // 1 second.
 static const int64_t DEFAULT_TIMEOUT_NS = 10000000000LL;   // 10 seconds.
 
+struct AStatsManager_PullAtomMetadata {
+    int64_t cool_down_ns;
+    int64_t timeout_ns;
+    std::vector<int32_t> additive_fields;
+};
+
+AStatsManager_PullAtomMetadata* AStatsManager_PullAtomMetadata_obtain() {
+    AStatsManager_PullAtomMetadata* metadata = new AStatsManager_PullAtomMetadata();
+    metadata->cool_down_ns = DEFAULT_COOL_DOWN_NS;
+    metadata->timeout_ns = DEFAULT_TIMEOUT_NS;
+    metadata->additive_fields = std::vector<int32_t>();
+    return metadata;
+}
+
+void AStatsManager_PullAtomMetadata_release(AStatsManager_PullAtomMetadata* metadata) {
+    delete metadata;
+}
+
+void AStatsManager_PullAtomMetadata_setCoolDownNs(AStatsManager_PullAtomMetadata* metadata,
+                                                  int64_t cool_down_ns) {
+    metadata->cool_down_ns = cool_down_ns;
+}
+
+void AStatsManager_PullAtomMetadata_setTimeoutNs(AStatsManager_PullAtomMetadata* metadata,
+                                                 int64_t timeout_ns) {
+    metadata->timeout_ns = timeout_ns;
+}
+
+void AStatsManager_PullAtomMetadata_setAdditiveFields(AStatsManager_PullAtomMetadata* metadata,
+                                                      int* additive_fields, int num_fields) {
+    metadata->additive_fields.assign(additive_fields, additive_fields + num_fields);
+}
+
 class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
   public:
-    StatsPullAtomCallbackInternal(const stats_pull_atom_callback_t callback, void* cookie,
+    StatsPullAtomCallbackInternal(const AStatsManager_PullAtomCallback callback, void* cookie,
                                   const int64_t coolDownNs, const int64_t timeoutNs,
                                   const std::vector<int32_t> additiveFields)
         : mCallback(callback),
@@ -55,15 +88,16 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
     ::android::binder::Status onPullAtom(
             int32_t atomTag,
             const ::android::sp<::android::os::IPullAtomResultReceiver>& resultReceiver) override {
-        pulled_stats_event_list statsEventList;
+        AStatsEventList statsEventList;
+        statsEventList.data.clear();
         int successInt = mCallback(atomTag, &statsEventList, mCookie);
-        bool success = successInt == STATS_PULL_SUCCESS;
+        bool success = successInt == AStatsManager_PULL_SUCCESS;
 
         // Convert stats_events into StatsEventParcels.
         std::vector<android::util::StatsEventParcel> parcels;
         for (int i = 0; i < statsEventList.data.size(); i++) {
             size_t size;
-            uint8_t* buffer = stats_event_get_buffer(statsEventList.data[i], &size);
+            uint8_t* buffer = AStatsEvent_getBuffer(statsEventList.data[i], &size);
 
             android::util::StatsEventParcel p;
             // vector.assign() creates a copy, but this is inevitable unless
@@ -74,7 +108,7 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
 
         resultReceiver->pullFinished(atomTag, success, parcels);
         for (int i = 0; i < statsEventList.data.size(); i++) {
-            stats_event_release(statsEventList.data[i]);
+            AStatsEvent_release(statsEventList.data[i]);
         }
         return android::binder::Status::ok();
     }
@@ -84,7 +118,7 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
     const std::vector<int32_t>& getAdditiveFields() const { return mAdditiveFields; }
 
   private:
-    const stats_pull_atom_callback_t mCallback;
+    const AStatsManager_PullAtomCallback mCallback;
     void* mCookie;
     const int64_t mCoolDownNs;
     const int64_t mTimeoutNs;
@@ -165,15 +199,16 @@ void unregisterStatsPullAtomCallbackBlocking(int32_t atomTag) {
     statsService->unregisterNativePullAtomCallback(atomTag);
 }
 
-void register_stats_pull_atom_callback(int32_t atom_tag, stats_pull_atom_callback_t callback,
-                                       pull_atom_metadata* metadata, void* cookie) {
+void AStatsManager_registerPullAtomCallback(int32_t atom_tag,
+                                            AStatsManager_PullAtomCallback callback,
+                                            AStatsManager_PullAtomMetadata* metadata,
+                                            void* cookie) {
     int64_t coolDownNs = metadata == nullptr ? DEFAULT_COOL_DOWN_NS : metadata->cool_down_ns;
     int64_t timeoutNs = metadata == nullptr ? DEFAULT_TIMEOUT_NS : metadata->timeout_ns;
 
     std::vector<int32_t> additiveFields;
-    if (metadata != nullptr && metadata->additive_fields != nullptr) {
-        additiveFields.assign(metadata->additive_fields,
-                              metadata->additive_fields + metadata->additive_fields_size);
+    if (metadata != nullptr) {
+        additiveFields = metadata->additive_fields;
     }
 
     android::sp<StatsPullAtomCallbackInternal> callbackBinder = new StatsPullAtomCallbackInternal(
@@ -189,7 +224,7 @@ void register_stats_pull_atom_callback(int32_t atom_tag, stats_pull_atom_callbac
     registerThread.detach();
 }
 
-void unregister_stats_pull_atom_callback(int32_t atom_tag) {
+void AStatsManager_unregisterPullAtomCallback(int32_t atom_tag) {
     {
         std::lock_guard<std::mutex> lg(pullAtomMutex);
         // Always remove the puller from our map.

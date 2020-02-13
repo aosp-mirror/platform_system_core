@@ -227,16 +227,20 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
         return 1;
     }
 
-    copy_to_file(local_fd.get(), remote_fd.get());
+    if (!copy_to_file(local_fd.get(), remote_fd.get())) {
+        fprintf(stderr, "adb: failed to install: copy_to_file: %s: %s", file, strerror(errno));
+        return 1;
+    }
 
     char buf[BUFSIZ];
     read_status_line(remote_fd.get(), buf, sizeof(buf));
-    if (!strncmp("Success", buf, 7)) {
-        fputs(buf, stdout);
-        return 0;
+    if (strncmp("Success", buf, 7) != 0) {
+        fprintf(stderr, "adb: failed to install %s: %s", file, buf);
+        return 1;
     }
-    fprintf(stderr, "adb: failed to install %s: %s", file, buf);
-    return 1;
+
+    fputs(buf, stdout);
+    return 0;
 }
 
 static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy) {
@@ -455,7 +459,12 @@ int install_multiple_app(int argc, const char** argv) {
             goto finalize_session;
         }
 
-        copy_to_file(local_fd.get(), remote_fd.get());
+        if (!copy_to_file(local_fd.get(), remote_fd.get())) {
+            fprintf(stderr, "adb: failed to write \"%s\": %s\n", file, strerror(errno));
+            success = false;
+            goto finalize_session;
+        }
+
         read_status_line(remote_fd.get(), buf, sizeof(buf));
 
         if (strncmp("Success", buf, 7)) {
@@ -634,7 +643,11 @@ int install_multi_package(int argc, const char** argv) {
                 goto finalize_multi_package_session;
             }
 
-            copy_to_file(local_fd.get(), remote_fd.get());
+            if (!copy_to_file(local_fd.get(), remote_fd.get())) {
+                fprintf(stderr, "adb: failed to write %s: %s\n", split.c_str(), strerror(errno));
+                goto finalize_multi_package_session;
+            }
+
             read_status_line(remote_fd.get(), buf, sizeof(buf));
 
             if (strncmp("Success", buf, 7)) {

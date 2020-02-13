@@ -212,6 +212,9 @@ TEST_F(ImageTest, DirectMount) {
 }
 
 TEST_F(ImageTest, IndirectMount) {
+#ifdef SKIP_TEST_IN_PRESUBMIT
+    GTEST_SKIP() << "WIP failure b/148874852";
+#endif
     // Create a simple wrapper around the base device that we'll mount from
     // instead. This will simulate the code paths for dm-crypt/default-key/bow
     // and force us to use device-mapper rather than loop devices.

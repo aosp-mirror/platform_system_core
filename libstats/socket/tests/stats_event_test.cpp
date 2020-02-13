@@ -18,6 +18,34 @@
 #include <gtest/gtest.h>
 #include <utils/SystemClock.h>
 
+// Keep in sync stats_event.c. Consider moving to separate header file to avoid duplication.
+/* ERRORS */
+#define ERROR_NO_TIMESTAMP 0x1
+#define ERROR_NO_ATOM_ID 0x2
+#define ERROR_OVERFLOW 0x4
+#define ERROR_ATTRIBUTION_CHAIN_TOO_LONG 0x8
+#define ERROR_TOO_MANY_KEY_VALUE_PAIRS 0x10
+#define ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD 0x20
+#define ERROR_INVALID_ANNOTATION_ID 0x40
+#define ERROR_ANNOTATION_ID_TOO_LARGE 0x80
+#define ERROR_TOO_MANY_ANNOTATIONS 0x100
+#define ERROR_TOO_MANY_FIELDS 0x200
+#define ERROR_INVALID_VALUE_TYPE 0x400
+#define ERROR_STRING_NOT_NULL_TERMINATED 0x800
+
+/* TYPE IDS */
+#define INT32_TYPE 0x00
+#define INT64_TYPE 0x01
+#define STRING_TYPE 0x02
+#define LIST_TYPE 0x03
+#define FLOAT_TYPE 0x04
+#define BOOL_TYPE 0x05
+#define BYTE_ARRAY_TYPE 0x06
+#define OBJECT_TYPE 0x07
+#define KEY_VALUE_PAIRS_TYPE 0x08
+#define ATTRIBUTION_CHAIN_TYPE 0x09
+#define ERROR_TYPE 0x0F
+
 using std::string;
 using std::vector;
 
@@ -88,17 +116,17 @@ TEST(StatsEventTest, TestScalars) {
     bool boolValue = false;
 
     int64_t startTime = android::elapsedRealtimeNano();
-    struct stats_event* event = stats_event_obtain();
-    stats_event_set_atom_id(event, atomId);
-    stats_event_write_int32(event, int32Value);
-    stats_event_write_int64(event, int64Value);
-    stats_event_write_float(event, floatValue);
-    stats_event_write_bool(event, boolValue);
-    stats_event_build(event);
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, atomId);
+    AStatsEvent_writeInt32(event, int32Value);
+    AStatsEvent_writeInt64(event, int64Value);
+    AStatsEvent_writeFloat(event, floatValue);
+    AStatsEvent_writeBool(event, boolValue);
+    AStatsEvent_build(event);
     int64_t endTime = android::elapsedRealtimeNano();
 
     size_t bufferSize;
-    uint8_t* buffer = stats_event_get_buffer(event, &bufferSize);
+    uint8_t* buffer = AStatsEvent_getBuffer(event, &bufferSize);
     uint8_t* bufferEnd = buffer + bufferSize;
 
     checkMetadata(&buffer, /*numElements=*/4, startTime, endTime, atomId);
@@ -120,8 +148,8 @@ TEST(StatsEventTest, TestScalars) {
     checkScalar(&buffer, boolValue);
 
     EXPECT_EQ(buffer, bufferEnd);  // ensure that we have read the entire buffer
-    EXPECT_EQ(stats_event_get_errors(event), 0);
-    stats_event_release(event);
+    EXPECT_EQ(AStatsEvent_getErrors(event), 0);
+    AStatsEvent_release(event);
 }
 
 TEST(StatsEventTest, TestStrings) {
@@ -129,14 +157,14 @@ TEST(StatsEventTest, TestStrings) {
     string str = "test_string";
 
     int64_t startTime = android::elapsedRealtimeNano();
-    struct stats_event* event = stats_event_obtain();
-    stats_event_set_atom_id(event, atomId);
-    stats_event_write_string8(event, str.c_str());
-    stats_event_build(event);
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, atomId);
+    AStatsEvent_writeString(event, str.c_str());
+    AStatsEvent_build(event);
     int64_t endTime = android::elapsedRealtimeNano();
 
     size_t bufferSize;
-    uint8_t* buffer = stats_event_get_buffer(event, &bufferSize);
+    uint8_t* buffer = AStatsEvent_getBuffer(event, &bufferSize);
     uint8_t* bufferEnd = buffer + bufferSize;
 
     checkMetadata(&buffer, /*numElements=*/1, startTime, endTime, atomId);
@@ -145,8 +173,8 @@ TEST(StatsEventTest, TestStrings) {
     checkString(&buffer, str);
 
     EXPECT_EQ(buffer, bufferEnd);  // ensure that we have read the entire buffer
-    EXPECT_EQ(stats_event_get_errors(event), 0);
-    stats_event_release(event);
+    EXPECT_EQ(AStatsEvent_getErrors(event), 0);
+    AStatsEvent_release(event);
 }
 
 TEST(StatsEventTest, TestByteArrays) {
@@ -154,14 +182,14 @@ TEST(StatsEventTest, TestByteArrays) {
     vector<uint8_t> message = {'b', 'y', 't', '\0', 'e', 's'};
 
     int64_t startTime = android::elapsedRealtimeNano();
-    struct stats_event* event = stats_event_obtain();
-    stats_event_set_atom_id(event, atomId);
-    stats_event_write_byte_array(event, message.data(), message.size());
-    stats_event_build(event);
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, atomId);
+    AStatsEvent_writeByteArray(event, message.data(), message.size());
+    AStatsEvent_build(event);
     int64_t endTime = android::elapsedRealtimeNano();
 
     size_t bufferSize;
-    uint8_t* buffer = stats_event_get_buffer(event, &bufferSize);
+    uint8_t* buffer = AStatsEvent_getBuffer(event, &bufferSize);
     uint8_t* bufferEnd = buffer + bufferSize;
 
     checkMetadata(&buffer, /*numElements=*/1, startTime, endTime, atomId);
@@ -170,8 +198,8 @@ TEST(StatsEventTest, TestByteArrays) {
     checkByteArray(&buffer, message);
 
     EXPECT_EQ(buffer, bufferEnd);  // ensure that we have read the entire buffer
-    EXPECT_EQ(stats_event_get_errors(event), 0);
-    stats_event_release(event);
+    EXPECT_EQ(AStatsEvent_getErrors(event), 0);
+    AStatsEvent_release(event);
 }
 
 TEST(StatsEventTest, TestAttributionChains) {
@@ -188,14 +216,14 @@ TEST(StatsEventTest, TestAttributionChains) {
     }
 
     int64_t startTime = android::elapsedRealtimeNano();
-    struct stats_event* event = stats_event_obtain();
-    stats_event_set_atom_id(event, atomId);
-    stats_event_write_attribution_chain(event, uids, cTags, numNodes);
-    stats_event_build(event);
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, atomId);
+    AStatsEvent_writeAttributionChain(event, uids, cTags, numNodes);
+    AStatsEvent_build(event);
     int64_t endTime = android::elapsedRealtimeNano();
 
     size_t bufferSize;
-    uint8_t* buffer = stats_event_get_buffer(event, &bufferSize);
+    uint8_t* buffer = AStatsEvent_getBuffer(event, &bufferSize);
     uint8_t* bufferEnd = buffer + bufferSize;
 
     checkMetadata(&buffer, /*numElements=*/1, startTime, endTime, atomId);
@@ -208,60 +236,8 @@ TEST(StatsEventTest, TestAttributionChains) {
     }
 
     EXPECT_EQ(buffer, bufferEnd);  // ensure that we have read the entire buffer
-    EXPECT_EQ(stats_event_get_errors(event), 0);
-    stats_event_release(event);
-}
-
-TEST(StatsEventTest, TestKeyValuePairs) {
-    uint32_t atomId = 100;
-
-    uint8_t numPairs = 4;
-    struct key_value_pair pairs[numPairs];
-    pairs[0] = {.key = 0, .valueType = INT32_TYPE, .int32Value = -1};
-    pairs[1] = {.key = 1, .valueType = INT64_TYPE, .int64Value = 0x123456789};
-    pairs[2] = {.key = 2, .valueType = FLOAT_TYPE, .floatValue = 5.5};
-    string str = "test_key_value_pair_string";
-    pairs[3] = {.key = 3, .valueType = STRING_TYPE, .stringValue = str.c_str()};
-
-    int64_t startTime = android::elapsedRealtimeNano();
-    struct stats_event* event = stats_event_obtain();
-    stats_event_set_atom_id(event, atomId);
-    stats_event_write_key_value_pairs(event, pairs, numPairs);
-    stats_event_build(event);
-    int64_t endTime = android::elapsedRealtimeNano();
-
-    size_t bufferSize;
-    uint8_t* buffer = stats_event_get_buffer(event, &bufferSize);
-    uint8_t* bufferEnd = buffer + bufferSize;
-
-    checkMetadata(&buffer, /*numElements=*/1, startTime, endTime, atomId);
-
-    checkTypeHeader(&buffer, KEY_VALUE_PAIRS_TYPE);
-    checkScalar(&buffer, numPairs);
-
-    // first pair
-    checkScalar(&buffer, pairs[0].key);
-    checkTypeHeader(&buffer, pairs[0].valueType);
-    checkScalar(&buffer, pairs[0].int32Value);
-
-    // second pair
-    checkScalar(&buffer, pairs[1].key);
-    checkTypeHeader(&buffer, pairs[1].valueType);
-    checkScalar(&buffer, pairs[1].int64Value);
-
-    // third pair
-    checkScalar(&buffer, pairs[2].key);
-    checkTypeHeader(&buffer, pairs[2].valueType);
-    checkScalar(&buffer, pairs[2].floatValue);
-
-    // fourth pair
-    checkScalar(&buffer, pairs[3].key);
-    checkTypeHeader(&buffer, pairs[3].valueType);
-    checkString(&buffer, str);
-
-    EXPECT_EQ(buffer, bufferEnd);  // ensure that we have read the entire buffer
-    EXPECT_EQ(stats_event_get_errors(event), 0);
-    stats_event_release(event);
+    EXPECT_EQ(AStatsEvent_getErrors(event), 0);
+    AStatsEvent_release(event);
 }
 
 TEST(StatsEventTest, TestAnnotations) {
@@ -282,19 +258,19 @@ TEST(StatsEventTest, TestAnnotations) {
     bool floatAnnotation2Value = false;
 
     int64_t startTime = android::elapsedRealtimeNano();
-    struct stats_event* event = stats_event_obtain();
-    stats_event_set_atom_id(event, 100);
-    stats_event_write_bool(event, boolValue);
-    stats_event_add_bool_annotation(event, boolAnnotation1Id, boolAnnotation1Value);
-    stats_event_add_int32_annotation(event, boolAnnotation2Id, boolAnnotation2Value);
-    stats_event_write_float(event, floatValue);
-    stats_event_add_int32_annotation(event, floatAnnotation1Id, floatAnnotation1Value);
-    stats_event_add_bool_annotation(event, floatAnnotation2Id, floatAnnotation2Value);
-    stats_event_build(event);
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, 100);
+    AStatsEvent_writeBool(event, boolValue);
+    AStatsEvent_addBoolAnnotation(event, boolAnnotation1Id, boolAnnotation1Value);
+    AStatsEvent_addInt32Annotation(event, boolAnnotation2Id, boolAnnotation2Value);
+    AStatsEvent_writeFloat(event, floatValue);
+    AStatsEvent_addInt32Annotation(event, floatAnnotation1Id, floatAnnotation1Value);
+    AStatsEvent_addBoolAnnotation(event, floatAnnotation2Id, floatAnnotation2Value);
+    AStatsEvent_build(event);
     int64_t endTime = android::elapsedRealtimeNano();
 
     size_t bufferSize;
-    uint8_t* buffer = stats_event_get_buffer(event, &bufferSize);
+    uint8_t* buffer = AStatsEvent_getBuffer(event, &bufferSize);
     uint8_t* bufferEnd = buffer + bufferSize;
 
     checkMetadata(&buffer, /*numElements=*/2, startTime, endTime, atomId);
@@ -312,33 +288,33 @@ TEST(StatsEventTest, TestAnnotations) {
     checkAnnotation(&buffer, floatAnnotation2Id, BOOL_TYPE, floatAnnotation2Value);
 
     EXPECT_EQ(buffer, bufferEnd);  // ensure that we have read the entire buffer
-    EXPECT_EQ(stats_event_get_errors(event), 0);
-    stats_event_release(event);
+    EXPECT_EQ(AStatsEvent_getErrors(event), 0);
+    AStatsEvent_release(event);
 }
 
 TEST(StatsEventTest, TestNoAtomIdError) {
-    struct stats_event* event = stats_event_obtain();
+    AStatsEvent* event = AStatsEvent_obtain();
     // Don't set the atom id in order to trigger the error.
-    stats_event_build(event);
+    AStatsEvent_build(event);
 
-    uint32_t errors = stats_event_get_errors(event);
+    uint32_t errors = AStatsEvent_getErrors(event);
     EXPECT_NE(errors | ERROR_NO_ATOM_ID, 0);
 
-    stats_event_release(event);
+    AStatsEvent_release(event);
 }
 
 TEST(StatsEventTest, TestOverflowError) {
-    struct stats_event* event = stats_event_obtain();
-    stats_event_set_atom_id(event, 100);
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, 100);
     // Add 1000 int32s to the event. Each int32 takes 5 bytes so this will
     // overflow the 4068 byte buffer.
     for (int i = 0; i < 1000; i++) {
-        stats_event_write_int32(event, 0);
+        AStatsEvent_writeInt32(event, 0);
     }
-    stats_event_build(event);
+    AStatsEvent_build(event);
 
-    uint32_t errors = stats_event_get_errors(event);
+    uint32_t errors = AStatsEvent_getErrors(event);
     EXPECT_NE(errors | ERROR_OVERFLOW, 0);
 
-    stats_event_release(event);
+    AStatsEvent_release(event);
 }
