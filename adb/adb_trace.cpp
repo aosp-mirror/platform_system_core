@@ -118,22 +118,22 @@ static void setup_trace_mask() {
         return;
     }
 
-    std::unordered_map<std::string, int> trace_flags = {
-        {"1", -1},
-        {"all", -1},
-        {"adb", ADB},
-        {"sockets", SOCKETS},
-        {"packets", PACKETS},
-        {"rwx", RWX},
-        {"usb", USB},
-        {"sync", SYNC},
-        {"sysdeps", SYSDEPS},
-        {"transport", TRANSPORT},
-        {"jdwp", JDWP},
-        {"services", SERVICES},
-        {"auth", AUTH},
-        {"fdevent", FDEVENT},
-        {"shell", SHELL}};
+    std::unordered_map<std::string, int> trace_flags = {{"1", -1},
+                                                        {"all", -1},
+                                                        {"adb", ADB},
+                                                        {"sockets", SOCKETS},
+                                                        {"packets", PACKETS},
+                                                        {"rwx", RWX},
+                                                        {"usb", USB},
+                                                        {"sync", SYNC},
+                                                        {"sysdeps", SYSDEPS},
+                                                        {"transport", TRANSPORT},
+                                                        {"jdwp", JDWP},
+                                                        {"services", SERVICES},
+                                                        {"auth", AUTH},
+                                                        {"fdevent", FDEVENT},
+                                                        {"shell", SHELL},
+                                                        {"incremental", INCREMENTAL}};
 
     std::vector<std::string> elements = android::base::Split(trace_setting, " ");
     for (const auto& elem : elements) {
