@@ -159,6 +159,11 @@ cc_library {
             ],
         },
     },
+
+    apex_available: [
+        "//apex_available:anyapex",
+        "//apex_available:platform",
+    ],
 }
 
 cc_library {
