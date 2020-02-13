@@ -611,7 +611,7 @@ on post-fs-data
     mkdir /data/misc/installd 0700 root root
     mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
-    mkdir /data/misc/snapshotctl_log 0770 root root
+    mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system
 
@@ -770,6 +770,9 @@ on post-fs-data
     # Set fscklog permission
     chown root system /dev/fscklogs/log
     chmod 0770 /dev/fscklogs/log
+
+    # Enable FUSE by default
+    setprop persist.sys.fuse true
 
 # Switch between sdcardfs and FUSE depending on persist property
 # TODO: Move this to ro property before launch because FDE devices
