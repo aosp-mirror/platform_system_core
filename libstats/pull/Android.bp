@@ -29,12 +29,14 @@ cc_library_shared {
     export_include_dirs: ["include"],
     shared_libs: [
         "libbinder_ndk",
-        "libstatssocket",
+        "liblog",
         "statsd-aidl-ndk_platform",
     ],
     static_libs: [
-        "liblog",
         "libutils",
+        // TODO(b/149340100): Clean this up when libstatssocket is moved to the apex.
+        "libstatssocket",
+        "libcutils",
     ],
     // enumerate stable entry points for APEX use
     stubs: {
@@ -43,4 +45,8 @@ cc_library_shared {
             "30",
         ],
     },
+    apex_available: [
+        "com.android.os.statsd",
+        "test_com.android.os.statsd",
+    ],
 }
