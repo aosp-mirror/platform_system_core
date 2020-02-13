@@ -902,7 +902,11 @@ adb_sh ls -l /dev/block/by-name/ /dev/block/mapper/ </dev/null 2>/dev/null |
   done
 
 # If reboot too soon after fresh flash, could trip device update failure logic
-wait_for_screen
+if ! wait_for_screen && ${screen_wait}; then
+  screen_wait=false
+  echo "${ORANGE}[  WARNING ]${NORMAL} not healthy, no launcher, skipping wait for screen" >&2
+fi
+
 # Can we test remount -R command?
 OVERLAYFS_BACKING="cache mnt/scratch"
 overlayfs_supported=true
