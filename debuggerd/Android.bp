@@ -171,6 +171,7 @@ cc_library_static {
 
     srcs: [
         "libdebuggerd/backtrace.cpp",
+        "libdebuggerd/gwp_asan.cpp",
         "libdebuggerd/open_files_list.cpp",
         "libdebuggerd/tombstone.cpp",
         "libdebuggerd/utility.cpp",
@@ -181,7 +182,10 @@ cc_library_static {
 
     // Needed for private/bionic_fdsan.h
     include_dirs: ["bionic/libc"],
-    header_libs: ["bionic_libc_platform_headers"],
+    header_libs: [
+        "bionic_libc_platform_headers",
+        "gwp_asan_headers",
+    ],
 
     static_libs: [
         "libdexfile_support_static",  // libunwindstack dependency
@@ -191,6 +195,8 @@ cc_library_static {
         "libcutils",
         "liblog",
     ],
+
+    whole_static_libs: ["gwp_asan_crash_handler"],
 
     target: {
         recovery: {
@@ -246,10 +252,12 @@ cc_test {
 
     static_libs: [
         "libdebuggerd",
+        "libgmock",
     ],
 
     header_libs: [
         "bionic_libc_platform_headers",
+        "gwp_asan_headers",
     ],
 
     local_include_dirs: [
