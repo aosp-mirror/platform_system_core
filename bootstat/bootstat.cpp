@@ -870,6 +870,7 @@ bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
 
 const char system_reboot_reason_property[] = "sys.boot.reason";
 const char last_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY;
+const char last_reboot_reason_file[] = LAST_REBOOT_REASON_FILE;
 const char last_last_reboot_reason_property[] = "sys.boot.reason.last";
 constexpr size_t history_reboot_reason_size = 4;
 const char history_reboot_reason_property[] = LAST_REBOOT_REASON_PROPERTY ".history";
@@ -1059,7 +1060,9 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
     if (isBluntRebootReason(ret)) {
       // Content buffer no longer will have console data. Beware if more
       // checks added below, that depend on parsing console content.
-      content = android::base::GetProperty(last_reboot_reason_property, "");
+      if (!android::base::ReadFileToString(last_reboot_reason_file, &content)) {
+        content = android::base::GetProperty(last_reboot_reason_property, "");
+      }
       transformReason(content);
 
       // Anything in last is better than 'super-blunt' reboot or shutdown.
@@ -1233,7 +1236,10 @@ void SetSystemBootReason() {
   // Record the scrubbed system_boot_reason to the property
   BootReasonAddToHistory(system_boot_reason);
   // Shift last_reboot_reason_property to last_last_reboot_reason_property
-  auto last_boot_reason = android::base::GetProperty(last_reboot_reason_property, "");
+  std::string last_boot_reason;
+  if (!android::base::ReadFileToString(last_reboot_reason_file, &last_boot_reason)) {
+    last_boot_reason = android::base::GetProperty(last_reboot_reason_property, "");
+  }
   if (last_boot_reason.empty() || isKernelRebootReason(system_boot_reason)) {
     last_boot_reason = system_boot_reason;
   } else {
@@ -1241,6 +1247,7 @@ void SetSystemBootReason() {
   }
   android::base::SetProperty(last_last_reboot_reason_property, last_boot_reason);
   android::base::SetProperty(last_reboot_reason_property, "");
+  unlink(last_reboot_reason_file);
 }
 
 // Gets the boot time offset. This is useful when Android is running in a
