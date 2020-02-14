@@ -121,6 +121,10 @@ cc_library {
     ],
     logtags: ["event.logtags"],
     compile_multilib: "both",
+    apex_available: [
+        "//apex_available:anyapex",
+        "//apex_available:platform",
+    ],
 }
 
 ndk_headers {
