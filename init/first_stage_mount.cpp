@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <set>
@@ -99,7 +100,11 @@ class FirstStageMount {
     void GetDmLinearMetadataDevice(std::set<std::string>* devices);
     bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
     void UseDsuIfPresent();
+    // Reads all fstab.avb_keys from the ramdisk for first-stage mount.
     void PreloadAvbKeys();
+    // Copies /avb/*.avbpubkey used for DSU from the ramdisk to /metadata for key
+    // revocation check by DSU installation service.
+    void CopyDsuAvbKeys();
 
     ListenerAction UeventCallback(const Uevent& uevent, std::set<std::string>* required_devices);
 
@@ -595,7 +600,12 @@ bool FirstStageMount::MountPartitions() {
         return entry.mount_point == "/metadata";
     });
     if (metadata_partition != fstab_.end()) {
-        MountPartition(metadata_partition, true /* erase_same_mounts */);
+        if (MountPartition(metadata_partition, true /* erase_same_mounts */)) {
+            // Copies DSU AVB keys from the ramdisk to /metadata.
+            // Must be done before the following TrySwitchSystemAsRoot().
+            // Otherwise, ramdisk will be inaccessible after switching root.
+            CopyDsuAvbKeys();
+        }
     }
 
     if (!CreateLogicalPartitions()) return false;
@@ -661,6 +671,27 @@ bool FirstStageMount::MountPartitions() {
     fs_mgr_overlayfs_mount_all(&fstab_);
 
     return true;
+}
+
+// Preserves /avb/*.avbpubkey to /metadata/gsi/dsu/avb/, so they can be used for
+// key revocation check by DSU installation service.  Note that failing to
+// copy files to /metadata is NOT fatal, because it is auxiliary to perform
+// public key matching before booting into DSU images on next boot. The actual
+// public key matching will still be done on next boot to DSU.
+void FirstStageMount::CopyDsuAvbKeys() {
+    std::error_code ec;
+    // Removing existing keys in gsi::kDsuAvbKeyDir as they might be stale.
+    std::filesystem::remove_all(gsi::kDsuAvbKeyDir, ec);
+    if (ec) {
+        LOG(ERROR) << "Failed to remove directory " << gsi::kDsuAvbKeyDir << ": " << ec.message();
+    }
+    // Copy keys from the ramdisk /avb/* to gsi::kDsuAvbKeyDir.
+    static constexpr char kRamdiskAvbKeyDir[] = "/avb";
+    std::filesystem::copy(kRamdiskAvbKeyDir, gsi::kDsuAvbKeyDir, ec);
+    if (ec) {
+        LOG(ERROR) << "Failed to copy " << kRamdiskAvbKeyDir << " into " << gsi::kDsuAvbKeyDir
+                   << ": " << ec.message();
+    }
 }
 
 void FirstStageMount::UseDsuIfPresent() {
