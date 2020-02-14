@@ -1129,7 +1129,7 @@ int Logcat::Run(int argc, char** argv) {
         if (!ret) {
             error(EXIT_FAILURE, 0, R"init(Unexpected EOF!
 
-This means that either logd crashed, or more likely, this instance of logcat was unable to read log
+This means that either the device shut down, logd crashed, or this instance of logcat was unable to read log
 messages as quickly as they were being produced.
 
 If you have enabled significant logging, look into using the -G option to increase log buffer sizes.)init");
