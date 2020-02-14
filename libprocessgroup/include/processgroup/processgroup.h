@@ -30,8 +30,7 @@ bool CgroupGetAttributePath(const std::string& attr_name, std::string* path);
 bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::string* path);
 
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache = false);
-bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles,
-                        bool use_fd_cache = false);
+bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
 
 #ifndef __ANDROID_VNDK__
 
