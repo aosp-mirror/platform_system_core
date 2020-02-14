@@ -14,6 +14,7 @@ LIBSTATSSOCKET {
         AStatsEvent_writeAttributionChain; # apex # introduced=30
         AStatsEvent_addBoolAnnotation; # apex # introduced=30
         AStatsEvent_addInt32Annotation; # apex # introduced=30
+        AStatsSocket_close; # apex # introduced=30
     local:
         *;
 };
