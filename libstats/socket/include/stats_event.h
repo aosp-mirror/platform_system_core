@@ -152,6 +152,7 @@ void AStatsEvent_addBoolAnnotation(AStatsEvent* event, uint8_t annotationId, boo
 void AStatsEvent_addInt32Annotation(AStatsEvent* event, uint8_t annotationId, int32_t value);
 
 // Internal/test APIs. Should not be exposed outside of the APEX.
+void AStatsEvent_overwriteTimestamp(AStatsEvent* event, uint64_t timestampNs);
 uint32_t AStatsEvent_getAtomId(AStatsEvent* event);
 // Size is an output parameter.
 uint8_t* AStatsEvent_getBuffer(AStatsEvent* event, size_t* size);
