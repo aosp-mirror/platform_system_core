@@ -31,6 +31,7 @@ __BEGIN_DECLS
 
 /* Android reboot reason stored in this property */
 #define LAST_REBOOT_REASON_PROPERTY "persist.sys.boot.reason"
+#define LAST_REBOOT_REASON_FILE "/metadata/bootstat/" LAST_REBOOT_REASON_PROPERTY
 
 /* Reboot or shutdown the system.
  * This call uses ANDROID_RB_PROPERTY to request reboot to init process.
