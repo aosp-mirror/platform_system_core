@@ -4,6 +4,12 @@
       "name": "adbd_test"
     },
     {
+      "name": "adb_crypto_test"
+    },
+    {
+      "name": "adb_tls_connection_test"
+    },
+    {
       "name": "CtsInitTestCases"
     },
     {

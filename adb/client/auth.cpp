@@ -29,6 +29,7 @@
 #include <set>
 #include <string>
 
+#include <adb/crypto/rsa_2048_key.h>
 #include <android-base/errors.h>
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
@@ -53,100 +54,50 @@ static std::map<std::string, std::shared_ptr<RSA>>& g_keys =
     *new std::map<std::string, std::shared_ptr<RSA>>;
 static std::map<int, std::string>& g_monitored_paths = *new std::map<int, std::string>;
 
-static std::string get_user_info() {
-    std::string hostname;
-    if (getenv("HOSTNAME")) hostname = getenv("HOSTNAME");
-#if !defined(_WIN32)
-    char buf[64];
-    if (hostname.empty() && gethostname(buf, sizeof(buf)) != -1) hostname = buf;
-#endif
-    if (hostname.empty()) hostname = "unknown";
+using namespace adb::crypto;
 
-    std::string username;
-    if (getenv("LOGNAME")) username = getenv("LOGNAME");
-#if !defined(_WIN32)
-    if (username.empty() && getlogin()) username = getlogin();
-#endif
-    if (username.empty()) hostname = "unknown";
-
-    return " " + username + "@" + hostname;
-}
-
-static bool calculate_public_key(std::string* out, RSA* private_key) {
-    uint8_t binary_key_data[ANDROID_PUBKEY_ENCODED_SIZE];
-    if (!android_pubkey_encode(private_key, binary_key_data, sizeof(binary_key_data))) {
-        LOG(ERROR) << "Failed to convert to public key";
-        return false;
-    }
-
-    size_t expected_length;
-    if (!EVP_EncodedLength(&expected_length, sizeof(binary_key_data))) {
-        LOG(ERROR) << "Public key too large to base64 encode";
-        return false;
-    }
-
-    out->resize(expected_length);
-    size_t actual_length = EVP_EncodeBlock(reinterpret_cast<uint8_t*>(out->data()), binary_key_data,
-                                           sizeof(binary_key_data));
-    out->resize(actual_length);
-    out->append(get_user_info());
-    return true;
-}
-
-static int generate_key(const std::string& file) {
+static bool generate_key(const std::string& file) {
     LOG(INFO) << "generate_key(" << file << ")...";
 
-    mode_t old_mask;
-    FILE *f = nullptr;
-    int ret = 0;
+    auto rsa_2048 = CreateRSA2048Key();
+    if (!rsa_2048) {
+        LOG(ERROR) << "Unable to create key";
+        return false;
+    }
     std::string pubkey;
 
-    EVP_PKEY* pkey = EVP_PKEY_new();
-    BIGNUM* exponent = BN_new();
-    RSA* rsa = RSA_new();
-    if (!pkey || !exponent || !rsa) {
-        LOG(ERROR) << "Failed to allocate key";
-        goto out;
-    }
+    RSA* rsa = EVP_PKEY_get0_RSA(rsa_2048->GetEvpPkey());
+    CHECK(rsa);
 
-    BN_set_word(exponent, RSA_F4);
-    RSA_generate_key_ex(rsa, 2048, exponent, nullptr);
-    EVP_PKEY_set1_RSA(pkey, rsa);
-
-    if (!calculate_public_key(&pubkey, rsa)) {
+    if (!CalculatePublicKey(&pubkey, rsa)) {
         LOG(ERROR) << "failed to calculate public key";
-        goto out;
+        return false;
     }
 
-    old_mask = umask(077);
+    mode_t old_mask = umask(077);
 
-    f = fopen(file.c_str(), "w");
+    std::unique_ptr<FILE, decltype(&fclose)> f(nullptr, &fclose);
+    f.reset(fopen(file.c_str(), "w"));
     if (!f) {
         PLOG(ERROR) << "Failed to open " << file;
         umask(old_mask);
-        goto out;
+        return false;
     }
 
     umask(old_mask);
 
-    if (!PEM_write_PrivateKey(f, pkey, nullptr, nullptr, 0, nullptr, nullptr)) {
+    if (!PEM_write_PrivateKey(f.get(), rsa_2048->GetEvpPkey(), nullptr, nullptr, 0, nullptr,
+                              nullptr)) {
         LOG(ERROR) << "Failed to write key";
-        goto out;
+        return false;
     }
 
     if (!android::base::WriteStringToFile(pubkey, file + ".pub")) {
         PLOG(ERROR) << "failed to write public key";
-        goto out;
+        return false;
     }
 
-    ret = 1;
-
-out:
-    if (f) fclose(f);
-    EVP_PKEY_free(pkey);
-    RSA_free(rsa);
-    BN_free(exponent);
-    return ret;
+    return true;
 }
 
 static std::string hash_key(RSA* key) {
@@ -325,7 +276,7 @@ static bool pubkey_from_privkey(std::string* out, const std::string& path) {
     if (!privkey) {
         return false;
     }
-    return calculate_public_key(out, privkey.get());
+    return CalculatePublicKey(out, privkey.get());
 }
 
 std::string adb_auth_get_userkey() {
@@ -343,7 +294,7 @@ std::string adb_auth_get_userkey() {
 }
 
 int adb_auth_keygen(const char* filename) {
-    return (generate_key(filename) == 0);
+    return !generate_key(filename);
 }
 
 int adb_auth_pubkey(const char* filename) {
