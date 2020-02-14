@@ -764,9 +764,6 @@ on post-fs-data
     # IOCTLs on ashmem fds any more.
     setprop sys.use_memfd false
 
-    # Explicitly disable FUSE
-    setprop persist.sys.fuse false
-
     # Set fscklog permission
     chown root system /dev/fscklogs/log
     chmod 0770 /dev/fscklogs/log
