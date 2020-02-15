@@ -110,14 +110,14 @@ Result<void> ParseTriggers(const std::vector<std::string>& args, Subcontext* sub
 
         if (!args[i].compare(0, prop_str.length(), prop_str)) {
             if (auto result = ParsePropertyTrigger(args[i], subcontext, property_triggers);
-                !result) {
+                !result.ok()) {
                 return result;
             }
         } else {
             if (!event_trigger->empty()) {
                 return Error() << "multiple event triggers are not allowed";
             }
-            if (auto result = ValidateEventTrigger(args[i]); !result) {
+            if (auto result = ValidateEventTrigger(args[i]); !result.ok()) {
                 return result;
             }
 
@@ -145,8 +145,9 @@ Result<void> ActionParser::ParseSection(std::vector<std::string>&& args,
     std::string event_trigger;
     std::map<std::string, std::string> property_triggers;
 
-    if (auto result = ParseTriggers(triggers, action_subcontext, &event_trigger, &property_triggers);
-        !result) {
+    if (auto result =
+                ParseTriggers(triggers, action_subcontext, &event_trigger, &property_triggers);
+        !result.ok()) {
         return Error() << "ParseTriggers() failed: " << result.error();
     }
 

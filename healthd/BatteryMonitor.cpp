@@ -265,7 +265,9 @@ void BatteryMonitor::updateValues(void) {
         mHealthInfo->batteryChargeTimeToFullNowSeconds =
                 getIntField(mHealthdConfig->batteryChargeTimeToFullNowPath);
 
-    mHealthInfo->batteryFullCapacityUah = props.batteryFullCharge;
+    if (!mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty())
+        mHealthInfo->batteryFullChargeDesignCapacityUah =
+                getIntField(mHealthdConfig->batteryFullChargeDesignCapacityUahPath);
 
     props.batteryTemperature = mBatteryFixedTemperature ?
         mBatteryFixedTemperature :
@@ -622,6 +624,13 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                         mHealthdConfig->batteryChargeTimeToFullNowPath = path;
                 }
 
+                if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty()) {
+                    path.clear();
+                    path.appendFormat("%s/%s/charge_full_design", POWER_SUPPLY_SYSFS_PATH, name);
+                    if (access(path, R_OK) == 0)
+                        mHealthdConfig->batteryFullChargeDesignCapacityUahPath = path;
+                }
+
                 if (mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
                     path.clear();
                     path.appendFormat("%s/%s/current_avg",
@@ -694,6 +703,8 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             KLOG_WARNING(LOG_TAG, "batteryCapacityLevelPath not found\n");
         if (mHealthdConfig->batteryChargeTimeToFullNowPath.isEmpty())
             KLOG_WARNING(LOG_TAG, "batteryChargeTimeToFullNowPath. not found\n");
+        if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "batteryFullChargeDesignCapacityUahPath. not found\n");
     }
 
     if (property_get("ro.boot.fake_battery", pval, NULL) > 0

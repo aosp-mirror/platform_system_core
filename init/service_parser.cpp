@@ -119,14 +119,14 @@ Result<void> ServiceParser::ParseEnterNamespace(std::vector<std::string>&& args)
 
 Result<void> ServiceParser::ParseGroup(std::vector<std::string>&& args) {
     auto gid = DecodeUid(args[1]);
-    if (!gid) {
+    if (!gid.ok()) {
         return Error() << "Unable to decode GID for '" << args[1] << "': " << gid.error();
     }
     service_->proc_attr_.gid = *gid;
 
     for (std::size_t n = 2; n < args.size(); n++) {
         gid = DecodeUid(args[n]);
-        if (!gid) {
+        if (!gid.ok()) {
             return Error() << "Unable to decode GID for '" << args[n] << "': " << gid.error();
         }
         service_->proc_attr_.supp_gids.emplace_back(*gid);
@@ -202,7 +202,7 @@ Result<void> ServiceParser::ParseKeycodes(std::vector<std::string>&& args) {
     auto it = args.begin() + 1;
     if (args.size() == 2 && StartsWith(args[1], "$")) {
         auto expanded = ExpandProps(args[1]);
-        if (!expanded) {
+        if (!expanded.ok()) {
             return expanded.error();
         }
 
@@ -240,7 +240,7 @@ Result<void> ServiceParser::ParseOneshot(std::vector<std::string>&& args) {
 Result<void> ServiceParser::ParseOnrestart(std::vector<std::string>&& args) {
     args.erase(args.begin());
     int line = service_->onrestart_.NumCommands() + 1;
-    if (auto result = service_->onrestart_.AddCommand(std::move(args), line); !result) {
+    if (auto result = service_->onrestart_.AddCommand(std::move(args), line); !result.ok()) {
         return Error() << "cannot add Onrestart command: " << result.error();
     }
     return {};
@@ -310,7 +310,7 @@ Result<void> ServiceParser::ParseMemcgSoftLimitInBytes(std::vector<std::string>&
 
 Result<void> ServiceParser::ParseProcessRlimit(std::vector<std::string>&& args) {
     auto rlimit = ParseRlimit(args);
-    if (!rlimit) return rlimit.error();
+    if (!rlimit.ok()) return rlimit.error();
 
     service_->proc_attr_.rlimits.emplace_back(*rlimit);
     return {};
@@ -407,7 +407,7 @@ Result<void> ServiceParser::ParseSocket(std::vector<std::string>&& args) {
 
     if (args.size() > 4) {
         auto uid = DecodeUid(args[4]);
-        if (!uid) {
+        if (!uid.ok()) {
             return Error() << "Unable to find UID for '" << args[4] << "': " << uid.error();
         }
         socket.uid = *uid;
@@ -415,7 +415,7 @@ Result<void> ServiceParser::ParseSocket(std::vector<std::string>&& args) {
 
     if (args.size() > 5) {
         auto gid = DecodeUid(args[5]);
-        if (!gid) {
+        if (!gid.ok()) {
             return Error() << "Unable to find GID for '" << args[5] << "': " << gid.error();
         }
         socket.gid = *gid;
@@ -453,7 +453,7 @@ Result<void> ServiceParser::ParseFile(std::vector<std::string>&& args) {
     file.type = args[2];
 
     auto file_name = ExpandProps(args[1]);
-    if (!file_name) {
+    if (!file_name.ok()) {
         return Error() << "Could not expand file path ': " << file_name.error();
     }
     file.name = *file_name;
@@ -475,7 +475,7 @@ Result<void> ServiceParser::ParseFile(std::vector<std::string>&& args) {
 
 Result<void> ServiceParser::ParseUser(std::vector<std::string>&& args) {
     auto uid = DecodeUid(args[1]);
-    if (!uid) {
+    if (!uid.ok()) {
         return Error() << "Unable to find UID for '" << args[1] << "': " << uid.error();
     }
     service_->proc_attr_.uid = *uid;
@@ -580,7 +580,7 @@ Result<void> ServiceParser::ParseLineSection(std::vector<std::string>&& args, in
 
     auto parser = GetParserMap().Find(args);
 
-    if (!parser) return parser.error();
+    if (!parser.ok()) return parser.error();
 
     return std::invoke(*parser, this, std::move(args));
 }
@@ -593,7 +593,7 @@ Result<void> ServiceParser::EndSection() {
     if (interface_inheritance_hierarchy_) {
         if (const auto& check_hierarchy_result = CheckInterfaceInheritanceHierarchy(
                     service_->interfaces(), *interface_inheritance_hierarchy_);
-            !check_hierarchy_result) {
+            !check_hierarchy_result.ok()) {
             return Error() << check_hierarchy_result.error();
         }
     }

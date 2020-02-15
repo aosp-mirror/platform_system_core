@@ -25,6 +25,7 @@ cc_library {
         // TODO(b/145573568): Remove stats_event_list once stats_event
         // migration is complete.
         "stats_event_list.c",
+        "stats_socket.c",
         "statsd_writer.c",
     ],
     host_supported: true,
@@ -47,7 +48,13 @@ cc_library {
         versions: [
             "30",
         ],
-    }
+    },
+    apex_available: [
+        "com.android.os.statsd",
+        "test_com.android.os.statsd",
+        //TODO(b/149340100): Remove this once libstatssocket is only linked as shared.
+        "//apex_available:platform",
+    ],
 }
 
 cc_library_headers {

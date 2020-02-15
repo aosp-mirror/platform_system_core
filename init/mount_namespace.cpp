@@ -141,12 +141,12 @@ static Result<void> ActivateFlattenedApexesFrom(const std::string& from_dir,
         if (entry->d_type == DT_DIR) {
             const std::string apex_path = from_dir + "/" + entry->d_name;
             const auto apex_name = GetApexName(apex_path);
-            if (!apex_name) {
+            if (!apex_name.ok()) {
                 LOG(ERROR) << apex_path << " is not an APEX directory: " << apex_name.error();
                 continue;
             }
             const std::string mount_path = to_dir + "/" + (*apex_name);
-            if (auto result = MountDir(apex_path, mount_path); !result) {
+            if (auto result = MountDir(apex_path, mount_path); !result.ok()) {
                 return result;
             }
         }
@@ -168,7 +168,7 @@ static bool ActivateFlattenedApexesIfPossible() {
     };
 
     for (const auto& dir : kBuiltinDirsForApexes) {
-        if (auto result = ActivateFlattenedApexesFrom(dir, kApexTop); !result) {
+        if (auto result = ActivateFlattenedApexesFrom(dir, kApexTop); !result.ok()) {
             LOG(ERROR) << result.error();
             return false;
         }
@@ -295,7 +295,7 @@ bool SwitchToDefaultMountNamespace() {
             return false;
         }
 
-        if (auto result = MountLinkerConfigForDefaultNamespace(); !result) {
+        if (auto result = MountLinkerConfigForDefaultNamespace(); !result.ok()) {
             LOG(ERROR) << result.error();
             return false;
         }

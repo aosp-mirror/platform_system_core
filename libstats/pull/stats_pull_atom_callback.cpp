@@ -15,18 +15,26 @@
  */
 
 #include <map>
+#include <thread>
 #include <vector>
 
 #include <stats_event.h>
 #include <stats_pull_atom_callback.h>
 
-#include <android/os/BnPullAtomCallback.h>
-#include <android/os/IPullAtomResultReceiver.h>
-#include <android/os/IStatsd.h>
-#include <android/util/StatsEventParcel.h>
-#include <binder/IServiceManager.h>
+#include <aidl/android/os/BnPullAtomCallback.h>
+#include <aidl/android/os/IPullAtomResultReceiver.h>
+#include <aidl/android/os/IStatsd.h>
+#include <aidl/android/util/StatsEventParcel.h>
+#include <android/binder_auto_utils.h>
+#include <android/binder_ibinder.h>
+#include <android/binder_manager.h>
 
-#include <thread>
+using Status = ::ndk::ScopedAStatus;
+using aidl::android::os::BnPullAtomCallback;
+using aidl::android::os::IPullAtomResultReceiver;
+using aidl::android::os::IStatsd;
+using aidl::android::util::StatsEventParcel;
+using ::ndk::SharedRefBase;
 
 struct AStatsEventList {
     std::vector<AStatsEvent*> data;
@@ -74,7 +82,7 @@ void AStatsManager_PullAtomMetadata_setAdditiveFields(AStatsManager_PullAtomMeta
     metadata->additive_fields.assign(additive_fields, additive_fields + num_fields);
 }
 
-class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
+class StatsPullAtomCallbackInternal : public BnPullAtomCallback {
   public:
     StatsPullAtomCallbackInternal(const AStatsManager_PullAtomCallback callback, void* cookie,
                                   const int64_t coolDownNs, const int64_t timeoutNs,
@@ -85,21 +93,19 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
           mTimeoutNs(timeoutNs),
           mAdditiveFields(additiveFields) {}
 
-    ::android::binder::Status onPullAtom(
-            int32_t atomTag,
-            const ::android::sp<::android::os::IPullAtomResultReceiver>& resultReceiver) override {
+    Status onPullAtom(int32_t atomTag,
+                      const std::shared_ptr<IPullAtomResultReceiver>& resultReceiver) override {
         AStatsEventList statsEventList;
-        statsEventList.data.clear();
         int successInt = mCallback(atomTag, &statsEventList, mCookie);
         bool success = successInt == AStatsManager_PULL_SUCCESS;
 
         // Convert stats_events into StatsEventParcels.
-        std::vector<android::util::StatsEventParcel> parcels;
+        std::vector<StatsEventParcel> parcels;
         for (int i = 0; i < statsEventList.data.size(); i++) {
             size_t size;
             uint8_t* buffer = AStatsEvent_getBuffer(statsEventList.data[i], &size);
 
-            android::util::StatsEventParcel p;
+            StatsEventParcel p;
             // vector.assign() creates a copy, but this is inevitable unless
             // stats_event.h/c uses a vector as opposed to a buffer.
             p.buffer.assign(buffer, buffer + size);
@@ -110,7 +116,7 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
         for (int i = 0; i < statsEventList.data.size(); i++) {
             AStatsEvent_release(statsEventList.data[i]);
         }
-        return android::binder::Status::ok();
+        return Status::ok();
     }
 
     const int64_t& getCoolDownNs() const { return mCoolDownNs; }
@@ -126,60 +132,55 @@ class StatsPullAtomCallbackInternal : public android::os::BnPullAtomCallback {
 };
 
 static std::mutex pullAtomMutex;
-static android::sp<android::os::IStatsd> sStatsd = nullptr;
+static std::shared_ptr<IStatsd> sStatsd = nullptr;
 
-static std::map<int32_t, android::sp<StatsPullAtomCallbackInternal>> mPullers;
-static android::sp<android::os::IStatsd> getStatsService();
+static std::map<int32_t, std::shared_ptr<StatsPullAtomCallbackInternal>> mPullers;
+static std::shared_ptr<IStatsd> getStatsService();
 
-class StatsDeathRecipient : public android::IBinder::DeathRecipient {
-  public:
-    StatsDeathRecipient() = default;
-    ~StatsDeathRecipient() override = default;
-
-    // android::IBinder::DeathRecipient override:
-    void binderDied(const android::wp<android::IBinder>& /* who */) override {
-        {
-            std::lock_guard<std::mutex> lock(pullAtomMutex);
-            sStatsd = nullptr;
-        }
-        android::sp<android::os::IStatsd> statsService = getStatsService();
-        if (statsService == nullptr) {
-            return;
-        }
-
-        std::map<int32_t, android::sp<StatsPullAtomCallbackInternal>> pullersCopy;
-        {
-            std::lock_guard<std::mutex> lock(pullAtomMutex);
-            pullersCopy = mPullers;
-        }
-        for (auto it : pullersCopy) {
-            statsService->registerNativePullAtomCallback(it.first, it.second->getCoolDownNs(),
-                                                         it.second->getTimeoutNs(),
-                                                         it.second->getAdditiveFields(), it.second);
-        }
+static void binderDied(void* /*cookie*/) {
+    {
+        std::lock_guard<std::mutex> lock(pullAtomMutex);
+        sStatsd = nullptr;
     }
-};
 
-static android::sp<StatsDeathRecipient> statsDeathRecipient = new StatsDeathRecipient();
+    std::shared_ptr<IStatsd> statsService = getStatsService();
+    if (statsService == nullptr) {
+        return;
+    }
 
-static android::sp<android::os::IStatsd> getStatsService() {
+    // Since we do not want to make an IPC with the lock held, we first create a
+    // copy of the data with the lock held before iterating through the map.
+    std::map<int32_t, std::shared_ptr<StatsPullAtomCallbackInternal>> pullersCopy;
+    {
+        std::lock_guard<std::mutex> lock(pullAtomMutex);
+        pullersCopy = mPullers;
+    }
+    for (const auto& it : pullersCopy) {
+        statsService->registerNativePullAtomCallback(it.first, it.second->getCoolDownNs(),
+                                                     it.second->getTimeoutNs(),
+                                                     it.second->getAdditiveFields(), it.second);
+    }
+}
+
+static ::ndk::ScopedAIBinder_DeathRecipient sDeathRecipient(
+        AIBinder_DeathRecipient_new(binderDied));
+
+static std::shared_ptr<IStatsd> getStatsService() {
     std::lock_guard<std::mutex> lock(pullAtomMutex);
     if (!sStatsd) {
-        // Fetch statsd.
-        const android::sp<android::IBinder> binder =
-                android::defaultServiceManager()->getService(android::String16("stats"));
-        if (!binder) {
-            return nullptr;
+        // Fetch statsd
+        ::ndk::SpAIBinder binder(AServiceManager_getService("stats"));
+        sStatsd = IStatsd::fromBinder(binder);
+        if (sStatsd) {
+            AIBinder_linkToDeath(binder.get(), sDeathRecipient.get(), /*cookie=*/nullptr);
         }
-        binder->linkToDeath(statsDeathRecipient);
-        sStatsd = android::interface_cast<android::os::IStatsd>(binder);
     }
     return sStatsd;
 }
 
 void registerStatsPullAtomCallbackBlocking(int32_t atomTag,
-                                           android::sp<StatsPullAtomCallbackInternal> cb) {
-    const android::sp<android::os::IStatsd> statsService = getStatsService();
+                                           std::shared_ptr<StatsPullAtomCallbackInternal> cb) {
+    const std::shared_ptr<IStatsd> statsService = getStatsService();
     if (statsService == nullptr) {
         // Statsd not available
         return;
@@ -190,7 +191,7 @@ void registerStatsPullAtomCallbackBlocking(int32_t atomTag,
 }
 
 void unregisterStatsPullAtomCallbackBlocking(int32_t atomTag) {
-    const android::sp<android::os::IStatsd> statsService = getStatsService();
+    const std::shared_ptr<IStatsd> statsService = getStatsService();
     if (statsService == nullptr) {
         // Statsd not available
         return;
@@ -211,8 +212,9 @@ void AStatsManager_registerPullAtomCallback(int32_t atom_tag,
         additiveFields = metadata->additive_fields;
     }
 
-    android::sp<StatsPullAtomCallbackInternal> callbackBinder = new StatsPullAtomCallbackInternal(
-            callback, cookie, coolDownNs, timeoutNs, additiveFields);
+    std::shared_ptr<StatsPullAtomCallbackInternal> callbackBinder =
+            SharedRefBase::make<StatsPullAtomCallbackInternal>(callback, cookie, coolDownNs,
+                                                               timeoutNs, additiveFields);
 
     {
         std::lock_guard<std::mutex> lg(pullAtomMutex);

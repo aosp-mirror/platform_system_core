@@ -77,7 +77,7 @@ std::string ReadVBMetaImageFromFile(const std::string& file) {
     android::base::unique_fd fd(open(file.c_str(), O_RDONLY | O_CLOEXEC));
     EXPECT_GT(fd, 0);
     Result<uint64_t> file_size = GetFileSize(fd);
-    EXPECT_TRUE(file_size);
+    EXPECT_RESULT_OK(file_size);
     std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(VBMETA_IMAGE_MAX_SIZE);
     EXPECT_TRUE(android::base::ReadFully(fd, buffer.get(), file_size.value()));
     return std::string(reinterpret_cast<char*>(buffer.get()), VBMETA_IMAGE_MAX_SIZE);
@@ -138,15 +138,15 @@ TEST(VBMetaTableTest, VBMetaTableBasic) {
 
     // Check the size of vbmeta table
     Result<uint64_t> super_vbmeta_size = GetFileSize(fd);
-    EXPECT_TRUE(super_vbmeta_size);
+    EXPECT_RESULT_OK(super_vbmeta_size);
     EXPECT_EQ(super_vbmeta_size.value(),
               SUPER_VBMETA_TABLE_MAX_SIZE * 2 + VBMETA_IMAGE_MAX_SIZE * 3);
 
     // Check Primary vbmeta table is equal to Backup one
     VBMetaTable table;
-    EXPECT_TRUE(android::fs_mgr::ReadPrimaryVBMetaTable(fd, &table));
+    EXPECT_RESULT_OK(android::fs_mgr::ReadPrimaryVBMetaTable(fd, &table));
     VBMetaTable table_backup;
-    EXPECT_TRUE(android::fs_mgr::ReadBackupVBMetaTable(fd, &table_backup));
+    EXPECT_RESULT_OK(android::fs_mgr::ReadBackupVBMetaTable(fd, &table_backup));
     EXPECT_EQ(android::fs_mgr::SerializeVBMetaTable(table),
               android::fs_mgr::SerializeVBMetaTable(table_backup));
 
@@ -167,21 +167,21 @@ TEST(VBMetaTableTest, VBMetaTableBasic) {
     EXPECT_EQ(table.descriptors[0].vbmeta_name_length, 14);
     EXPECT_EQ(table.descriptors[0].vbmeta_name, "vbmeta_product");
     Result<std::string> vbmeta_product_content = ReadVBMetaImage(fd, 0);
-    EXPECT_TRUE(vbmeta_product_content);
+    EXPECT_RESULT_OK(vbmeta_product_content);
     EXPECT_EQ(ReadVBMetaImageFromFile(vbmeta_product_path), vbmeta_product_content.value());
 
     EXPECT_EQ(table.descriptors[1].vbmeta_index, 1);
     EXPECT_EQ(table.descriptors[1].vbmeta_name_length, 13);
     EXPECT_EQ(table.descriptors[1].vbmeta_name, "vbmeta_system");
     Result<std::string> vbmeta_system_content = ReadVBMetaImage(fd, 1);
-    EXPECT_TRUE(vbmeta_system_content);
+    EXPECT_RESULT_OK(vbmeta_system_content);
     EXPECT_EQ(ReadVBMetaImageFromFile(vbmeta_system_path), vbmeta_system_content.value());
 
     EXPECT_EQ(table.descriptors[2].vbmeta_index, 2);
     EXPECT_EQ(table.descriptors[2].vbmeta_name_length, 13);
     EXPECT_EQ(table.descriptors[2].vbmeta_name, "vbmeta_vendor");
     Result<std::string> vbmeta_vendor_content = ReadVBMetaImage(fd, 2);
-    EXPECT_TRUE(vbmeta_vendor_content);
+    EXPECT_RESULT_OK(vbmeta_vendor_content);
     EXPECT_EQ(ReadVBMetaImageFromFile(vbmeta_vendor_path), vbmeta_vendor_content.value());
 }
 
