@@ -255,6 +255,8 @@ cc_library_host_static {
     },
 
     static_libs: [
+        "libadb_crypto",
+        "libadb_protos",
         "libbase",
         "libcrypto_utils",
         "libcrypto",
@@ -272,6 +274,7 @@ cc_test_host {
     defaults: ["adb_defaults"],
     srcs: libadb_test_srcs,
     static_libs: [
+        "libadb_crypto",
         "libadb_host",
         "libbase",
         "libcutils",
@@ -347,6 +350,7 @@ cc_binary_host {
     ],
 
     static_libs: [
+        "libadb_crypto",
         "libadb_host",
         "libandroidfw",
         "libbase",
@@ -422,6 +426,7 @@ cc_library_static {
     ],
 
     shared_libs: [
+        "libadb_crypto",
         "libadbd_auth",
         "libasyncio",
         "libbase",
@@ -765,6 +770,7 @@ cc_test_host {
         "fastdeploy/deploypatchgenerator/patch_utils_test.cpp",
     ],
     static_libs: [
+        "libadb_crypto",
         "libadb_host",
         "libandroidfw",
         "libbase",

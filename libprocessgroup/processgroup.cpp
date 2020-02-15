@@ -115,9 +115,8 @@ void DropTaskProfilesResourceCaching() {
     TaskProfiles::GetInstance().DropResourceCaching();
 }
 
-bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles,
-                        bool use_fd_cache) {
-    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, use_fd_cache);
+bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles) {
+    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles);
 }
 
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache) {
