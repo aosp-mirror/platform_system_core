@@ -1739,6 +1739,10 @@ std::string SnapshotManager::GetStateFilePath() const {
     return metadata_dir_ + "/state"s;
 }
 
+std::string SnapshotManager::GetMergeStateFilePath() const {
+    return metadata_dir_ + "/merge_state"s;
+}
+
 std::string SnapshotManager::GetLockPath() const {
     return metadata_dir_;
 }
