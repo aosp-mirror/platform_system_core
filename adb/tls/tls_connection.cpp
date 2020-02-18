@@ -61,6 +61,7 @@ class TlsConnectionImpl : public TlsConnection {
     static const char* SSLErrorString();
     void Invalidate();
     TlsError GetFailureReason(int err);
+    const char* RoleToString() { return role_ == Role::Server ? kServerRoleStr : kClientRoleStr; }
 
     Role role_;
     bssl::UniquePtr<EVP_PKEY> priv_key_;
@@ -75,15 +76,19 @@ class TlsConnectionImpl : public TlsConnection {
     CertVerifyCb cert_verify_cb_;
     SetCertCb set_cert_cb_;
     borrowed_fd fd_;
+    static constexpr char kClientRoleStr[] = "[client]: ";
+    static constexpr char kServerRoleStr[] = "[server]: ";
 };  // TlsConnectionImpl
 
 TlsConnectionImpl::TlsConnectionImpl(Role role, std::string_view cert, std::string_view priv_key,
                                      borrowed_fd fd)
     : role_(role), fd_(fd) {
     CHECK(!cert.empty() && !priv_key.empty());
-    LOG(INFO) << "Initializing adbwifi TlsConnection";
+    LOG(INFO) << RoleToString() << "Initializing adbwifi TlsConnection";
     cert_ = BufferFromPEM(cert);
+    CHECK(cert_);
     priv_key_ = EvpPkeyFromPEM(priv_key);
+    CHECK(priv_key_);
 }
 
 TlsConnectionImpl::~TlsConnectionImpl() {
@@ -149,7 +154,7 @@ bool TlsConnectionImpl::AddTrustedCertificate(std::string_view cert) {
     // Create X509 buffer from the certificate string
     auto buf = X509FromBuffer(BufferFromPEM(cert));
     if (buf == nullptr) {
-        LOG(ERROR) << "Failed to create a X509 buffer for the certificate.";
+        LOG(ERROR) << RoleToString() << "Failed to create a X509 buffer for the certificate.";
         return false;
     }
     known_certificates_.push_back(std::move(buf));
@@ -205,8 +210,7 @@ TlsConnection::TlsError TlsConnectionImpl::GetFailureReason(int err) {
 }
 
 TlsConnection::TlsError TlsConnectionImpl::DoHandshake() {
-    int err = -1;
-    LOG(INFO) << "Starting adbwifi tls handshake";
+    LOG(INFO) << RoleToString() << "Starting adbwifi tls handshake";
     ssl_ctx_.reset(SSL_CTX_new(TLS_method()));
     // TODO: Remove set_max_proto_version() once external/boringssl is updated
     // past
@@ -214,14 +218,14 @@ TlsConnection::TlsError TlsConnectionImpl::DoHandshake() {
     if (ssl_ctx_.get() == nullptr ||
         !SSL_CTX_set_min_proto_version(ssl_ctx_.get(), TLS1_3_VERSION) ||
         !SSL_CTX_set_max_proto_version(ssl_ctx_.get(), TLS1_3_VERSION)) {
-        LOG(ERROR) << "Failed to create SSL context";
+        LOG(ERROR) << RoleToString() << "Failed to create SSL context";
         return TlsError::UnknownFailure;
     }
 
     // Register user-supplied known certificates
     for (auto const& cert : known_certificates_) {
         if (X509_STORE_add_cert(SSL_CTX_get_cert_store(ssl_ctx_.get()), cert.get()) == 0) {
-            LOG(ERROR) << "Unable to add certificates into the X509_STORE";
+            LOG(ERROR) << RoleToString() << "Unable to add certificates into the X509_STORE";
             return TlsError::UnknownFailure;
         }
     }
@@ -248,7 +252,8 @@ TlsConnection::TlsError TlsConnectionImpl::DoHandshake() {
     };
     if (!SSL_CTX_set_chain_and_key(ssl_ctx_.get(), cert_chain.data(), cert_chain.size(),
                                    priv_key_.get(), nullptr)) {
-        LOG(ERROR) << "Unable to register the certificate chain file and private key ["
+        LOG(ERROR) << RoleToString()
+                   << "Unable to register the certificate chain file and private key ["
                    << SSLErrorString() << "]";
         Invalidate();
         return TlsError::UnknownFailure;
@@ -259,19 +264,21 @@ TlsConnection::TlsError TlsConnectionImpl::DoHandshake() {
     // Okay! Let's try to do the handshake!
     ssl_.reset(SSL_new(ssl_ctx_.get()));
     if (!SSL_set_fd(ssl_.get(), fd_.get())) {
-        LOG(ERROR) << "SSL_set_fd failed. [" << SSLErrorString() << "]";
+        LOG(ERROR) << RoleToString() << "SSL_set_fd failed. [" << SSLErrorString() << "]";
         return TlsError::UnknownFailure;
     }
+
     switch (role_) {
         case Role::Server:
-            err = SSL_accept(ssl_.get());
+            SSL_set_accept_state(ssl_.get());
             break;
         case Role::Client:
-            err = SSL_connect(ssl_.get());
+            SSL_set_connect_state(ssl_.get());
             break;
     }
-    if (err != 1) {
-        LOG(ERROR) << "Handshake failed in SSL_accept/SSL_connect [" << SSLErrorString() << "]";
+    if (SSL_do_handshake(ssl_.get()) != 1) {
+        LOG(ERROR) << RoleToString() << "Handshake failed in SSL_accept/SSL_connect ["
+                   << SSLErrorString() << "]";
         auto sslerr = ERR_get_error();
         Invalidate();
         return GetFailureReason(sslerr);
@@ -281,16 +288,16 @@ TlsConnection::TlsError TlsConnectionImpl::DoHandshake() {
         uint8_t check;
         // Try to peek one byte for any failures. This assumes on success that
         // the server actually sends something.
-        err = SSL_peek(ssl_.get(), &check, 1);
-        if (err <= 0) {
-            LOG(ERROR) << "Post-handshake SSL_peek failed [" << SSLErrorString() << "]";
+        if (SSL_peek(ssl_.get(), &check, 1) <= 0) {
+            LOG(ERROR) << RoleToString() << "Post-handshake SSL_peek failed [" << SSLErrorString()
+                       << "]";
             auto sslerr = ERR_get_error();
             Invalidate();
             return GetFailureReason(sslerr);
         }
     }
 
-    LOG(INFO) << "Handshake succeeded.";
+    LOG(INFO) << RoleToString() << "Handshake succeeded.";
     return TlsError::Success;
 }
 
@@ -311,7 +318,7 @@ std::vector<uint8_t> TlsConnectionImpl::ReadFully(size_t size) {
 bool TlsConnectionImpl::ReadFully(void* buf, size_t size) {
     CHECK_GT(size, 0U);
     if (!ssl_) {
-        LOG(ERROR) << "Tried to read on a null SSL connection";
+        LOG(ERROR) << RoleToString() << "Tried to read on a null SSL connection";
         return false;
     }
 
@@ -321,7 +328,7 @@ bool TlsConnectionImpl::ReadFully(void* buf, size_t size) {
         int bytes_read =
                 SSL_read(ssl_.get(), p8 + offset, std::min(static_cast<size_t>(INT_MAX), size));
         if (bytes_read <= 0) {
-            LOG(WARNING) << "SSL_read failed [" << SSLErrorString() << "]";
+            LOG(ERROR) << RoleToString() << "SSL_read failed [" << SSLErrorString() << "]";
             return false;
         }
         size -= bytes_read;
@@ -333,7 +340,7 @@ bool TlsConnectionImpl::ReadFully(void* buf, size_t size) {
 bool TlsConnectionImpl::WriteFully(std::string_view data) {
     CHECK(!data.empty());
     if (!ssl_) {
-        LOG(ERROR) << "Tried to read on a null SSL connection";
+        LOG(ERROR) << RoleToString() << "Tried to read on a null SSL connection";
         return false;
     }
 
@@ -341,7 +348,7 @@ bool TlsConnectionImpl::WriteFully(std::string_view data) {
         int bytes_out = SSL_write(ssl_.get(), data.data(),
                                   std::min(static_cast<size_t>(INT_MAX), data.size()));
         if (bytes_out <= 0) {
-            LOG(WARNING) << "SSL_write failed [" << SSLErrorString() << "]";
+            LOG(ERROR) << RoleToString() << "SSL_write failed [" << SSLErrorString() << "]";
             return false;
         }
         data = data.substr(bytes_out);

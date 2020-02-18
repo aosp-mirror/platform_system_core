@@ -55,16 +55,15 @@ class TlsConnection {
 
     // Adds a trusted certificate to the list for the SSL connection.
     // During the handshake phase, it will check the list of trusted certificates.
-    // The connection will fail if the peer's certificate is not in the list. Use
-    // |EnableCertificateVerification(false)| to disable certificate
-    // verification.
+    // The connection will fail if the peer's certificate is not in the list. If
+    // you would like to accept any certificate, use #SetCertVerifyCallback and
+    // set your callback to always return 1.
     //
     // Returns true if |cert| was successfully added, false otherwise.
     virtual bool AddTrustedCertificate(std::string_view cert) = 0;
 
     // Sets a custom certificate verify callback. |cb| must return 1 if the
-    // certificate is trusted. Otherwise, return 0 if not. Note that |cb| is
-    // only used if EnableCertificateVerification(false).
+    // certificate is trusted. Otherwise, return 0 if not.
     virtual void SetCertVerifyCallback(CertVerifyCb cb) = 0;
 
     // Configures a client |ca_list| that the server sends to the client in the

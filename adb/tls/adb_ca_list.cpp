@@ -32,13 +32,13 @@ namespace {
 // CA issuer identifier to distinguished embedded keys. Also has version
 // information appended to the end of the string (e.g. "AdbKey-0").
 static constexpr int kAdbKeyIdentifierNid = NID_organizationName;
-static constexpr char kAdbKeyIdentifierPrefix[] = "AdbKey-";
-static constexpr int kAdbKeyVersion = 0;
+static constexpr char kAdbKeyIdentifierV0[] = "AdbKey-0";
 
 // Where we store the actual data
 static constexpr int kAdbKeyValueNid = NID_commonName;
 
 // TODO: Remove this once X509_NAME_add_entry_by_NID is fixed to use const unsigned char*
+// https://boringssl-review.googlesource.com/c/boringssl/+/39764
 int X509_NAME_add_entry_by_NID_const(X509_NAME* name, int nid, int type, const unsigned char* bytes,
                                      int len, int loc, int set) {
     return X509_NAME_add_entry_by_NID(name, nid, type, const_cast<unsigned char*>(bytes), len, loc,
@@ -55,13 +55,13 @@ std::optional<std::string> GetX509NameTextByNid(X509_NAME* name, int nid) {
     // |len| is the len of the text excluding the final null
     int len = X509_NAME_get_text_by_NID(name, nid, nullptr, -1);
     if (len <= 0) {
-        return {};
+        return std::nullopt;
     }
 
     // Include the space for the final null byte
     std::vector<char> buf(len + 1, '\0');
     CHECK(X509_NAME_get_text_by_NID(name, nid, buf.data(), buf.size()));
-    return buf.data();
+    return std::make_optional(std::string(buf.data()));
 }
 
 }  // namespace
@@ -73,8 +73,7 @@ bssl::UniquePtr<X509_NAME> CreateCAIssuerFromEncodedKey(std::string_view key) {
     // "O=AdbKey-0;CN=<key>;"
     CHECK(!key.empty());
 
-    std::string identifier = kAdbKeyIdentifierPrefix;
-    identifier += std::to_string(kAdbKeyVersion);
+    std::string identifier = kAdbKeyIdentifierV0;
     bssl::UniquePtr<X509_NAME> name(X509_NAME_new());
     CHECK(X509_NAME_add_entry_by_NID_const(name.get(), kAdbKeyIdentifierNid, MBSTRING_ASC,
                                            reinterpret_cast<const uint8_t*>(identifier.data()),
@@ -91,27 +90,34 @@ std::optional<std::string> ParseEncodedKeyFromCAIssuer(X509_NAME* issuer) {
     CHECK(issuer);
 
     auto buf = GetX509NameTextByNid(issuer, kAdbKeyIdentifierNid);
-    if (!buf || !android::base::StartsWith(*buf, kAdbKeyIdentifierPrefix)) {
-        return {};
+    if (!buf) {
+        return std::nullopt;
     }
 
-    return GetX509NameTextByNid(issuer, kAdbKeyValueNid);
+    // Check for supported versions
+    if (*buf == kAdbKeyIdentifierV0) {
+        return GetX509NameTextByNid(issuer, kAdbKeyValueNid);
+    }
+    return std::nullopt;
 }
 
 std::string SHA256BitsToHexString(std::string_view sha256) {
     CHECK_EQ(sha256.size(), static_cast<size_t>(SHA256_DIGEST_LENGTH));
     std::stringstream ss;
+    auto* u8 = reinterpret_cast<const uint8_t*>(sha256.data());
     ss << std::uppercase << std::setfill('0') << std::hex;
     // Convert to hex-string representation
     for (size_t i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
-        ss << std::setw(2) << (0x00FF & sha256[i]);
+        // Need to cast to something bigger than one byte, or
+        // stringstream will interpret it as a char value.
+        ss << std::setw(2) << static_cast<uint16_t>(u8[i]);
     }
     return ss.str();
 }
 
 std::optional<std::string> SHA256HexStringToBits(std::string_view sha256_str) {
     if (sha256_str.size() != SHA256_DIGEST_LENGTH * 2) {
-        return {};
+        return std::nullopt;
     }
 
     std::string result;
@@ -119,7 +125,7 @@ std::optional<std::string> SHA256HexStringToBits(std::string_view sha256_str) {
         auto bytestr = std::string(sha256_str.substr(i * 2, 2));
         if (!IsHexDigit(bytestr[0]) || !IsHexDigit(bytestr[1])) {
             LOG(ERROR) << "SHA256 string has invalid non-hex chars";
-            return {};
+            return std::nullopt;
         }
         result += static_cast<char>(std::stol(bytestr, nullptr, 16));
     }
