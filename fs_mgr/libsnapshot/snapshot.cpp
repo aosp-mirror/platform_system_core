@@ -46,6 +46,7 @@
 #include "device_info.h"
 #include "partition_cow_creator.h"
 #include "snapshot_metadata_updater.h"
+#include "snapshot_stats.h"
 #include "utility.h"
 
 namespace android {
@@ -2387,7 +2388,7 @@ std::unique_ptr<AutoDevice> SnapshotManager::EnsureMetadataMounted() {
     return AutoUnmountDevice::New(device_->GetMetadataDir());
 }
 
-UpdateState SnapshotManager::InitiateMergeAndWait() {
+UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_report) {
     {
         auto lock = LockExclusive();
         // Sync update state from file with bootloader.
@@ -2396,6 +2397,8 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
                          << "reject / accept wipes incorrectly!";
         }
     }
+
+    SnapshotMergeStats merge_stats(*this);
 
     unsigned int last_progress = 0;
     auto callback = [&]() -> void {
@@ -2409,7 +2412,9 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
 
     LOG(INFO) << "Waiting for any previous merge request to complete. "
               << "This can take up to several minutes.";
+    merge_stats.Resume();
     auto state = ProcessUpdateState(callback);
+    merge_stats.set_state(state);
     if (state == UpdateState::None) {
         LOG(INFO) << "Can't find any snapshot to merge.";
         return state;
@@ -2419,6 +2424,11 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
             LOG(INFO) << "Cannot merge until device reboots.";
             return state;
         }
+
+        // This is the first snapshot merge that is requested after OTA. We can
+        // initialize the merge duration statistics.
+        merge_stats.Start();
+
         if (!InitiateMerge()) {
             LOG(ERROR) << "Failed to initiate merge.";
             return state;
@@ -2427,9 +2437,13 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
         LOG(INFO) << "Waiting for merge to complete. This can take up to several minutes.";
         last_progress = 0;
         state = ProcessUpdateState(callback);
+        merge_stats.set_state(state);
     }
 
     LOG(INFO) << "Merge finished with state \"" << state << "\".";
+    if (stats_report) {
+        *stats_report = merge_stats.GetReport();
+    }
     return state;
 }
 
