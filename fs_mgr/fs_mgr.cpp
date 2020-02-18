@@ -234,10 +234,11 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
             LINFO << "Running " << E2FSCK_BIN << " on " << realpath(blk_device);
             if (should_force_check(*fs_stat)) {
                 ret = logwrap_fork_execvp(ARRAY_SIZE(e2fsck_forced_argv), e2fsck_forced_argv,
-                                          &status, false, LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
+                                          &status, false, LOG_KLOG | LOG_FILE, false,
+                                          FSCK_LOG_FILE);
             } else {
                 ret = logwrap_fork_execvp(ARRAY_SIZE(e2fsck_argv), e2fsck_argv, &status, false,
-                                          LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
+                                          LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
             }
 
             if (ret < 0) {
@@ -256,11 +257,11 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
         if (should_force_check(*fs_stat)) {
             LINFO << "Running " << F2FS_FSCK_BIN << " -f " << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
-                                      &status, false, LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
+                                      &status, false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
         } else {
             LINFO << "Running " << F2FS_FSCK_BIN << " -a " << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
-                                      LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
+                                      LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
         }
         if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
@@ -338,7 +339,7 @@ static bool tune2fs_available(void) {
 static bool run_tune2fs(const char* argv[], int argc) {
     int ret;
 
-    ret = logwrap_fork_execvp(argc, argv, nullptr, false, LOG_KLOG, true, nullptr);
+    ret = logwrap_fork_execvp(argc, argv, nullptr, false, LOG_KLOG, false, nullptr);
     return ret == 0;
 }
 

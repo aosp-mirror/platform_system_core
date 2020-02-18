@@ -395,6 +395,10 @@ class SnapshotManager final {
     bool WriteSnapshotUpdateStatus(LockedFile* file, const SnapshotUpdateStatus& status);
     std::string GetStateFilePath() const;
 
+    // Interact with /metadata/ota/merge_state.
+    // This file contains information related to the snapshot merge process.
+    std::string GetMergeStateFilePath() const;
+
     // Helpers for merging.
     bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
     bool RewriteSnapshotDeviceTable(const std::string& dm_name);
