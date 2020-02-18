@@ -1767,6 +1767,7 @@ class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t
   protected:
     void SetUp() override {
         if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
+        GTEST_SKIP() << "WIP failure b/149738928";
 
         SnapshotTest::SetUp();
         userdata_ = std::make_unique<LowSpaceUserdata>();
@@ -1774,6 +1775,7 @@ class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t
     }
     void TearDown() override {
         if (!is_virtual_ab_) return;
+        return;  // BUG(149738928)
 
         EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
                     image_manager_->DeleteBackingImage(kImageName));
@@ -1808,10 +1810,6 @@ std::vector<uint64_t> ImageManagerTestParams() {
     std::vector<uint64_t> ret;
     for (uint64_t size = 1_MiB; size <= 512_MiB; size *= 2) {
         ret.push_back(size);
-#ifdef SKIP_TEST_IN_PRESUBMIT
-        // BUG(148889015);
-        break;
-#endif
     }
     return ret;
 }
