@@ -25,17 +25,33 @@
 #endif
 
 #include <thread>
+#include <vector>
 
 #include <android-base/stringprintf.h>
 #include <dns_sd.h>
 
+#include "adb_client.h"
 #include "adb_mdns.h"
 #include "adb_trace.h"
 #include "fdevent/fdevent.h"
 #include "sysdeps.h"
 
-static DNSServiceRef service_ref;
-static fdevent* service_ref_fde;
+static DNSServiceRef service_refs[kNumADBDNSServices];
+static fdevent* service_ref_fdes[kNumADBDNSServices];
+
+static int adb_DNSServiceIndexByName(const char* regType) {
+    for (int i = 0; i < kNumADBDNSServices; ++i) {
+        if (!strncmp(regType, kADBDNSServices[i], strlen(kADBDNSServices[i]))) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static bool adb_DNSServiceShouldConnect(const char* regType) {
+    int index = adb_DNSServiceIndexByName(regType);
+    return index == kADBTransportServiceRefIndex;
+}
 
 // Use adb_DNSServiceRefSockFD() instead of calling DNSServiceRefSockFD()
 // directly so that the socket is put through the appropriate compatibility
@@ -94,10 +110,16 @@ class ResolvedService : public AsyncServiceRef {
   public:
     virtual ~ResolvedService() = default;
 
-    ResolvedService(std::string name, uint32_t interfaceIndex,
-                    const char* hosttarget, uint16_t port) :
-            name_(name),
-            port_(port) {
+    ResolvedService(std::string serviceName, std::string regType, uint32_t interfaceIndex,
+                    const char* hosttarget, uint16_t port, int version)
+        : serviceName_(serviceName),
+          regType_(regType),
+          hosttarget_(hosttarget),
+          port_(port),
+          sa_family_(0),
+          ip_addr_data_(NULL),
+          serviceVersion_(version) {
+        memset(ip_addr_, 0, sizeof(ip_addr_));
 
         /* TODO: We should be able to get IPv6 support by adding
          * kDNSServiceProtocol_IPv6 to the flags below. However, when we do
@@ -116,44 +138,134 @@ class ResolvedService : public AsyncServiceRef {
         } else {
             Initialize();
         }
+
+        D("Client version: %d Service version: %d\n", clientVersion_, serviceVersion_);
     }
 
     void Connect(const sockaddr* address) {
-        char ip_addr[INET6_ADDRSTRLEN];
-        const void* ip_addr_data;
+        sa_family_ = address->sa_family;
         const char* addr_format;
 
-        if (address->sa_family == AF_INET) {
-            ip_addr_data =
-                &reinterpret_cast<const sockaddr_in*>(address)->sin_addr;
+        if (sa_family_ == AF_INET) {
+            ip_addr_data_ = &reinterpret_cast<const sockaddr_in*>(address)->sin_addr;
             addr_format = "%s:%hu";
-        } else if (address->sa_family == AF_INET6) {
-            ip_addr_data =
-                &reinterpret_cast<const sockaddr_in6*>(address)->sin6_addr;
+        } else if (sa_family_ == AF_INET6) {
+            ip_addr_data_ = &reinterpret_cast<const sockaddr_in6*>(address)->sin6_addr;
             addr_format = "[%s]:%hu";
-        } else { // Should be impossible
+        } else {  // Should be impossible
             D("mDNS resolved non-IP address.");
             return;
         }
 
         // Winsock version requires the const cast Because Microsoft.
-        if (!inet_ntop(address->sa_family, const_cast<void*>(ip_addr_data),
-                       ip_addr, INET6_ADDRSTRLEN)) {
+        if (!inet_ntop(sa_family_, const_cast<void*>(ip_addr_data_), ip_addr_, sizeof(ip_addr_))) {
             D("Could not convert IP address to string.");
             return;
         }
 
-        std::string response;
-        connect_device(android::base::StringPrintf(addr_format, ip_addr, port_),
-                       &response);
-        D("Connect to %s (%s:%hu) : %s", name_.c_str(), ip_addr, port_,
-          response.c_str());
+        // adb secure service needs to do something different from just
+        // connecting here.
+        if (adb_DNSServiceShouldConnect(regType_.c_str())) {
+            std::string response;
+            connect_device(android::base::StringPrintf(addr_format, ip_addr_, port_), &response);
+            D("Connect to %s regtype %s (%s:%hu) : %s", serviceName_.c_str(), regType_.c_str(),
+              ip_addr_, port_, response.c_str());
+        } else {
+            D("Not immediately connecting to serviceName=[%s], regtype=[%s] ipaddr=(%s:%hu)",
+              serviceName_.c_str(), regType_.c_str(), ip_addr_, port_);
+        }
+
+        int adbSecureServiceType = serviceIndex();
+        switch (adbSecureServiceType) {
+            case kADBSecurePairingServiceRefIndex:
+                sAdbSecurePairingServices->push_back(this);
+                break;
+            case kADBSecureConnectServiceRefIndex:
+                sAdbSecureConnectServices->push_back(this);
+                break;
+            default:
+                break;
+        }
     }
 
+    int serviceIndex() const { return adb_DNSServiceIndexByName(regType_.c_str()); }
+
+    std::string hostTarget() const { return hosttarget_; }
+
+    std::string ipAddress() const { return ip_addr_; }
+
+    uint16_t port() const { return port_; }
+
+    using ServiceRegistry = std::vector<ResolvedService*>;
+
+    static ServiceRegistry* sAdbSecurePairingServices;
+    static ServiceRegistry* sAdbSecureConnectServices;
+
+    static void initAdbSecure();
+
+    static void forEachService(const ServiceRegistry& services, const std::string& hostname,
+                               adb_secure_foreach_service_callback cb);
+
   private:
-    std::string name_;
+    int clientVersion_ = ADB_SECURE_CLIENT_VERSION;
+    std::string serviceName_;
+    std::string regType_;
+    std::string hosttarget_;
     const uint16_t port_;
+    int sa_family_;
+    const void* ip_addr_data_;
+    char ip_addr_[INET6_ADDRSTRLEN];
+    int serviceVersion_;
 };
+
+// static
+std::vector<ResolvedService*>* ResolvedService::sAdbSecurePairingServices = NULL;
+
+// static
+std::vector<ResolvedService*>* ResolvedService::sAdbSecureConnectServices = NULL;
+
+// static
+void ResolvedService::initAdbSecure() {
+    if (!sAdbSecurePairingServices) {
+        sAdbSecurePairingServices = new ServiceRegistry;
+    }
+    if (!sAdbSecureConnectServices) {
+        sAdbSecureConnectServices = new ServiceRegistry;
+    }
+}
+
+// static
+void ResolvedService::forEachService(const ServiceRegistry& services,
+                                     const std::string& wanted_host,
+                                     adb_secure_foreach_service_callback cb) {
+    initAdbSecure();
+
+    for (auto service : services) {
+        auto hostname = service->hostTarget();
+        auto ip = service->ipAddress();
+        auto port = service->port();
+
+        if (wanted_host == "") {
+            cb(hostname.c_str(), ip.c_str(), port);
+        } else if (hostname == wanted_host) {
+            cb(hostname.c_str(), ip.c_str(), port);
+        }
+    }
+}
+
+// static
+void adb_secure_foreach_pairing_service(const char* host_name,
+                                        adb_secure_foreach_service_callback cb) {
+    ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices,
+                                    host_name ? host_name : "", cb);
+}
+
+// static
+void adb_secure_foreach_connect_service(const char* host_name,
+                                        adb_secure_foreach_service_callback cb) {
+    ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices,
+                                    host_name ? host_name : "", cb);
+}
 
 static void DNSSD_API register_service_ip(DNSServiceRef /*sdRef*/,
                                           DNSServiceFlags /*flags*/,
@@ -167,6 +279,12 @@ static void DNSSD_API register_service_ip(DNSServiceRef /*sdRef*/,
     std::unique_ptr<ResolvedService> data(
         reinterpret_cast<ResolvedService*>(context));
     data->Connect(address);
+
+    // For ADB Secure services, keep those ResolvedService's around
+    // for later processing with secure connection establishment.
+    if (data->serviceIndex() != kADBTransportServiceRefIndex) {
+        data.release();
+    }
 }
 
 static void DNSSD_API register_resolved_mdns_service(DNSServiceRef sdRef,
@@ -182,18 +300,23 @@ static void DNSSD_API register_resolved_mdns_service(DNSServiceRef sdRef,
 
 class DiscoveredService : public AsyncServiceRef {
   public:
-    DiscoveredService(uint32_t interfaceIndex, const char* serviceName,
-                      const char* regtype, const char* domain)
-        : serviceName_(serviceName) {
-
+    DiscoveredService(uint32_t interfaceIndex, const char* serviceName, const char* regtype,
+                      const char* domain)
+        : serviceName_(serviceName), regType_(regtype) {
         DNSServiceErrorType ret =
             DNSServiceResolve(&sdRef_, 0, interfaceIndex, serviceName, regtype,
                               domain, register_resolved_mdns_service,
                               reinterpret_cast<void*>(this));
 
-        if (ret != kDNSServiceErr_NoError) {
-            D("Got %d from DNSServiceResolve.", ret);
-        } else {
+        D("DNSServiceResolve for "
+          "interfaceIndex %u "
+          "serviceName %s "
+          "regtype %s "
+          "domain %s "
+          ": %d",
+          interfaceIndex, serviceName, regtype, domain, ret);
+
+        if (ret == kDNSServiceErr_NoError) {
             Initialize();
         }
     }
@@ -202,20 +325,62 @@ class DiscoveredService : public AsyncServiceRef {
         return serviceName_.c_str();
     }
 
+    const char* RegType() { return regType_.c_str(); }
+
   private:
     std::string serviceName_;
+    std::string regType_;
 };
 
-static void DNSSD_API register_resolved_mdns_service(DNSServiceRef sdRef,
-                                                     DNSServiceFlags flags,
-                                                     uint32_t interfaceIndex,
-                                                     DNSServiceErrorType errorCode,
-                                                     const char* fullname,
-                                                     const char* hosttarget,
-                                                     uint16_t port,
-                                                     uint16_t /*txtLen*/,
-                                                     const unsigned char* /*txtRecord*/,
-                                                     void* context) {
+// Returns the version the device wanted to advertise,
+// or -1 if parsing fails.
+static int parse_version_from_txt_record(uint16_t txtLen, const unsigned char* txtRecord) {
+    if (!txtLen) return -1;
+    if (!txtRecord) return -1;
+
+    // https://tools.ietf.org/html/rfc6763
+    // """
+    // 6.1.  General Format Rules for DNS TXT Records
+    //
+    // A DNS TXT record can be up to 65535 (0xFFFF) bytes long.  The total
+    // length is indicated by the length given in the resource record header
+    // in the DNS message.  There is no way to tell directly from the data
+    // alone how long it is (e.g., there is no length count at the start, or
+    // terminating NULL byte at the end).
+    // """
+
+    // Let's trust the TXT record's length byte
+    // Worst case, it wastes 255 bytes
+    std::vector<char> recordAsString(txtLen + 1, '\0');
+    char* str = recordAsString.data();
+
+    memcpy(str, txtRecord + 1 /* skip the length byte */, txtLen);
+
+    // Check if it's the version key
+    static const char* versionKey = "v=";
+    size_t versionKeyLen = strlen(versionKey);
+
+    if (strncmp(versionKey, str, versionKeyLen)) return -1;
+
+    auto valueStart = str + versionKeyLen;
+
+    long parsedNumber = strtol(valueStart, 0, 10);
+
+    // No valid conversion. Also, 0
+    // is not a valid version.
+    if (!parsedNumber) return -1;
+
+    // Outside bounds of long.
+    if (parsedNumber == LONG_MIN || parsedNumber == LONG_MAX) return -1;
+
+    // Possibly valid version
+    return static_cast<int>(parsedNumber);
+}
+
+static void DNSSD_API register_resolved_mdns_service(
+        DNSServiceRef sdRef, DNSServiceFlags flags, uint32_t interfaceIndex,
+        DNSServiceErrorType errorCode, const char* fullname, const char* hosttarget, uint16_t port,
+        uint16_t txtLen, const unsigned char* txtRecord, void* context) {
     D("Resolved a service.");
     std::unique_ptr<DiscoveredService> discovered(
         reinterpret_cast<DiscoveredService*>(context));
@@ -225,10 +390,14 @@ static void DNSSD_API register_resolved_mdns_service(DNSServiceRef sdRef,
         return;
     }
 
+    // TODO: Reject certain combinations of invalid or mismatched client and
+    // service versions here before creating anything.
+    // At the moment, there is nothing to reject, so accept everything
+    // as an optimistic default.
+    auto serviceVersion = parse_version_from_txt_record(txtLen, txtRecord);
 
-    auto resolved =
-        new ResolvedService(discovered->ServiceName(),
-                            interfaceIndex, hosttarget, ntohs(port));
+    auto resolved = new ResolvedService(discovered->ServiceName(), discovered->RegType(),
+                                        interfaceIndex, hosttarget, ntohs(port), serviceVersion);
 
     if (! resolved->Initialized()) {
         delete resolved;
@@ -239,19 +408,18 @@ static void DNSSD_API register_resolved_mdns_service(DNSServiceRef sdRef,
     }
 }
 
-static void DNSSD_API register_mdns_transport(DNSServiceRef sdRef,
-                                              DNSServiceFlags flags,
-                                              uint32_t interfaceIndex,
-                                              DNSServiceErrorType errorCode,
-                                              const char* serviceName,
-                                              const char* regtype,
-                                              const char* domain,
-                                              void*  /*context*/) {
+static void DNSSD_API on_service_browsed(DNSServiceRef sdRef, DNSServiceFlags flags,
+                                         uint32_t interfaceIndex, DNSServiceErrorType errorCode,
+                                         const char* serviceName, const char* regtype,
+                                         const char* domain, void* /*context*/) {
     D("Registering a transport.");
     if (errorCode != kDNSServiceErr_NoError) {
         D("Got error %d during mDNS browse.", errorCode);
         DNSServiceRefDeallocate(sdRef);
-        fdevent_destroy(service_ref_fde);
+        int serviceIndex = adb_DNSServiceIndexByName(regtype);
+        if (serviceIndex != -1) {
+            fdevent_destroy(service_ref_fdes[serviceIndex]);
+        }
         return;
     }
 
@@ -262,21 +430,27 @@ static void DNSSD_API register_mdns_transport(DNSServiceRef sdRef,
 }
 
 void init_mdns_transport_discovery_thread(void) {
-    DNSServiceErrorType errorCode = DNSServiceBrowse(&service_ref, 0, 0, kADBServiceType, nullptr,
-                                                     register_mdns_transport, nullptr);
+    int errorCodes[kNumADBDNSServices];
 
-    if (errorCode != kDNSServiceErr_NoError) {
-        D("Got %d initiating mDNS browse.", errorCode);
-        return;
+    for (int i = 0; i < kNumADBDNSServices; ++i) {
+        errorCodes[i] = DNSServiceBrowse(&service_refs[i], 0, 0, kADBDNSServices[i], nullptr,
+                                         on_service_browsed, nullptr);
+
+        if (errorCodes[i] != kDNSServiceErr_NoError) {
+            D("Got %d browsing for mDNS service %s.", errorCodes[i], kADBDNSServices[i]);
+        }
+
+        if (errorCodes[i] == kDNSServiceErr_NoError) {
+            fdevent_run_on_main_thread([i]() {
+                service_ref_fdes[i] = fdevent_create(adb_DNSServiceRefSockFD(service_refs[i]),
+                                                     pump_service_ref, &service_refs[i]);
+                fdevent_set(service_ref_fdes[i], FDE_READ);
+            });
+        }
     }
-
-    fdevent_run_on_main_thread([]() {
-        service_ref_fde =
-            fdevent_create(adb_DNSServiceRefSockFD(service_ref), pump_service_ref, &service_ref);
-        fdevent_set(service_ref_fde, FDE_READ);
-    });
 }
 
 void init_mdns_transport_discovery(void) {
+    ResolvedService::initAdbSecure();
     std::thread(init_mdns_transport_discovery_thread).detach();
 }
