@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -86,3 +87,16 @@ std::optional<std::string> adb_get_server_executable_path();
 // Globally acccesible argv/envp, for the purpose of re-execing adb.
 extern const char* _Nullable * _Nullable __adb_argv;
 extern const char* _Nullable * _Nullable __adb_envp;
+
+// ADB Secure DNS service interface. Used to query what ADB Secure DNS services have been
+// resolved, and to run some kind of callback for each one.
+using adb_secure_foreach_service_callback = std::function<void(
+        const char* _Nonnull host_name, const char* _Nonnull ip_address, uint16_t port)>;
+
+// Queries pairing/connect services that have been discovered and resolved.
+// If |host_name| is not null, run |cb| only for services
+// matching |host_name|. Otherwise, run for all services.
+void adb_secure_foreach_pairing_service(const char* _Nullable host_name,
+                                        adb_secure_foreach_service_callback cb);
+void adb_secure_foreach_connect_service(const char* _Nullable host_name,
+                                        adb_secure_foreach_service_callback cb);
