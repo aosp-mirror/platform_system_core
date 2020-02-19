@@ -60,6 +60,7 @@
 #include "client/file_sync_client.h"
 #include "commandline.h"
 #include "fastdeploy.h"
+#include "incremental_server.h"
 #include "services.h"
 #include "shell_protocol.h"
 #include "sysdeps/chrono.h"
@@ -1959,6 +1960,18 @@ int adb_commandline(int argc, const char** argv) {
                 error_exit("usage: adb reconnect [device|offline]");
             }
         }
+    } else if (!strcmp(argv[0], "inc-server")) {
+        if (argc < 3) {
+            error_exit("usage: adb inc-server FD FILE1 FILE2 ...");
+        }
+        int fd = atoi(argv[1]);
+        if (fd < 3) {
+            // Disallow invalid FDs and stdin/out/err as well.
+            error_exit("Invalid fd number given: %d", fd);
+        }
+        fd = adb_register_socket(fd);
+        close_on_exec(fd);
+        return incremental::serve(fd, argc - 2, argv + 2);
     }
 
     error_exit("unknown command %s", argv[0]);
