@@ -280,6 +280,7 @@ std::string DmTargetDefaultKey::GetParameterString() const {
         extra_argv.emplace_back("allow_discards");
         extra_argv.emplace_back("sector_size:4096");
         extra_argv.emplace_back("iv_large_sectors");
+        if (is_hw_wrapped_) extra_argv.emplace_back("wrappedkey_v0");
     }
     if (!extra_argv.empty()) {
         argv.emplace_back(std::to_string(extra_argv.size()));
