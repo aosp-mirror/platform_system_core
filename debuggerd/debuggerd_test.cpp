@@ -176,7 +176,7 @@ CrasherTest::~CrasherTest() {
   if (crasher_pid != -1) {
     kill(crasher_pid, SIGKILL);
     int status;
-    waitpid(crasher_pid, &status, WUNTRACED);
+    TEMP_FAILURE_RETRY(waitpid(crasher_pid, &status, WUNTRACED));
   }
 
   android::base::SetProperty(kWaitForGdbKey, previous_wait_for_gdb ? "1" : "0");
@@ -195,8 +195,7 @@ void CrasherTest::StartIntercept(unique_fd* output_fd, DebuggerdDumpType interce
 void CrasherTest::FinishIntercept(int* result) {
   InterceptResponse response;
 
-  // Timeout for tombstoned intercept is 10 seconds.
-  ssize_t rc = TIMEOUT(20, read(intercept_fd.get(), &response, sizeof(response)));
+  ssize_t rc = TIMEOUT(30, read(intercept_fd.get(), &response, sizeof(response)));
   if (rc == -1) {
     FAIL() << "failed to read response from tombstoned: " << strerror(errno);
   } else if (rc == 0) {
@@ -233,7 +232,7 @@ void CrasherTest::FinishCrasher() {
     FAIL() << "crasher pipe uninitialized";
   }
 
-  ssize_t rc = write(crasher_pipe.get(), "\n", 1);
+  ssize_t rc = TEMP_FAILURE_RETRY(write(crasher_pipe.get(), "\n", 1));
   if (rc == -1) {
     FAIL() << "failed to write to crasher pipe: " << strerror(errno);
   } else if (rc == 0) {
@@ -243,9 +242,10 @@ void CrasherTest::FinishCrasher() {
 
 void CrasherTest::AssertDeath(int signo) {
   int status;
-  pid_t pid = TIMEOUT(5, waitpid(crasher_pid, &status, 0));
+  pid_t pid = TIMEOUT(30, waitpid(crasher_pid, &status, 0));
   if (pid != crasher_pid) {
-    printf("failed to wait for crasher (pid %d)\n", crasher_pid);
+    printf("failed to wait for crasher (expected pid %d, return value %d): %s\n", crasher_pid, pid,
+           strerror(errno));
     sleep(100);
     FAIL() << "failed to wait for crasher: " << strerror(errno);
   }
@@ -440,7 +440,7 @@ TEST_F(CrasherTest, wait_for_gdb) {
   FinishCrasher();
 
   int status;
-  ASSERT_EQ(crasher_pid, waitpid(crasher_pid, &status, WUNTRACED));
+  ASSERT_EQ(crasher_pid, TEMP_FAILURE_RETRY(waitpid(crasher_pid, &status, WUNTRACED)));
   ASSERT_TRUE(WIFSTOPPED(status));
   ASSERT_EQ(SIGSTOP, WSTOPSIG(status));
 
@@ -608,7 +608,7 @@ static pid_t seccomp_fork_impl(void (*prejail)()) {
     PLOG(FATAL) << "tmpfile failed";
   }
 
-  unique_fd tmp_fd(dup(fileno(tmp_file)));
+  unique_fd tmp_fd(TEMP_FAILURE_RETRY(dup(fileno(tmp_file))));
   if (!android::base::WriteStringToFd(policy, tmp_fd.get())) {
     PLOG(FATAL) << "failed to write policy to tmpfile";
   }
@@ -821,7 +821,7 @@ TEST_F(CrasherTest, competing_tracer) {
   FinishCrasher();
 
   int status;
-  ASSERT_EQ(crasher_pid, waitpid(crasher_pid, &status, 0));
+  ASSERT_EQ(crasher_pid, TEMP_FAILURE_RETRY(waitpid(crasher_pid, &status, 0)));
   ASSERT_TRUE(WIFSTOPPED(status));
   ASSERT_EQ(SIGABRT, WSTOPSIG(status));
 
@@ -836,7 +836,7 @@ TEST_F(CrasherTest, competing_tracer) {
   regex += R"( \(.+debuggerd_test)";
   ASSERT_MATCH(result, regex.c_str());
 
-  ASSERT_EQ(crasher_pid, waitpid(crasher_pid, &status, 0));
+  ASSERT_EQ(crasher_pid, TEMP_FAILURE_RETRY(waitpid(crasher_pid, &status, 0)));
   ASSERT_TRUE(WIFSTOPPED(status));
   ASSERT_EQ(SIGABRT, WSTOPSIG(status));
 
@@ -850,7 +850,7 @@ TEST_F(CrasherTest, fdsan_warning_abort_message) {
 
   StartProcess([]() {
     android_fdsan_set_error_level(ANDROID_FDSAN_ERROR_LEVEL_WARN_ONCE);
-    unique_fd fd(open("/dev/null", O_RDONLY | O_CLOEXEC));
+    unique_fd fd(TEMP_FAILURE_RETRY(open("/dev/null", O_RDONLY | O_CLOEXEC)));
     if (fd == -1) {
       abort();
     }
@@ -885,13 +885,13 @@ TEST(crash_dump, zombie) {
     raise(DEBUGGER_SIGNAL);
 
     errno = 0;
-    rc = waitpid(-1, &status, __WALL | __WNOTHREAD);
+    rc = TEMP_FAILURE_RETRY(waitpid(-1, &status, __WALL | __WNOTHREAD));
     if (rc != -1 || errno != ECHILD) {
       errx(2, "second waitpid returned %d (%s), expected failure with ECHILD", rc, strerror(errno));
     }
     _exit(0);
   } else {
-    rc = waitpid(forkpid, &status, 0);
+    rc = TEMP_FAILURE_RETRY(waitpid(forkpid, &status, 0));
     ASSERT_EQ(forkpid, rc);
     ASSERT_TRUE(WIFEXITED(status));
     ASSERT_EQ(0, WEXITSTATUS(status));
