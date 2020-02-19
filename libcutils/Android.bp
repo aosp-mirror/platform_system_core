@@ -21,11 +21,6 @@ libcutils_nonwindows_sources = [
     "fs.cpp",
     "hashmap.cpp",
     "multiuser.cpp",
-    "socket_inaddr_any_server_unix.cpp",
-    "socket_local_client_unix.cpp",
-    "socket_local_server_unix.cpp",
-    "socket_network_client_unix.cpp",
-    "sockets_unix.cpp",
     "str_parms.cpp",
 ]
 
@@ -49,6 +44,90 @@ cc_library_headers {
     },
 }
 
+// Socket specific parts of libcutils that are safe to statically link into an APEX.
+cc_library_static {
+    name: "libcutils_sockets",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
+    recovery_available: true,
+    host_supported: true,
+    native_bridge_supported: true,
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
+
+    export_include_dirs: ["include"],
+
+    srcs: ["sockets.cpp"],
+    target: {
+        linux_bionic: {
+            enabled: true,
+        },
+
+        not_windows: {
+            srcs: [
+                "socket_inaddr_any_server_unix.cpp",
+                "socket_local_client_unix.cpp",
+                "socket_local_server_unix.cpp",
+                "socket_network_client_unix.cpp",
+                "sockets_unix.cpp",
+            ],
+        },
+
+        // "not_windows" means "non-Windows host".
+        android: {
+            srcs: [
+                "android_get_control_file.cpp",
+                "socket_inaddr_any_server_unix.cpp",
+                "socket_local_client_unix.cpp",
+                "socket_local_server_unix.cpp",
+                "socket_network_client_unix.cpp",
+                "sockets_unix.cpp",
+            ],
+            static_libs: ["libbase"],
+        },
+
+        windows: {
+            host_ldlibs: ["-lws2_32"],
+            srcs: [
+                "socket_inaddr_any_server_windows.cpp",
+                "socket_network_client_windows.cpp",
+                "sockets_windows.cpp",
+            ],
+
+            enabled: true,
+            cflags: [
+                "-D_GNU_SOURCE",
+            ],
+        },
+    },
+}
+
+cc_test {
+    name: "libcutils_sockets_test",
+    test_suites: ["device-tests"],
+    static_libs: ["libbase", "libcutils_sockets"],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
+
+    srcs: ["sockets_test.cpp"],
+    target: {
+        android: {
+            srcs: [
+                "android_get_control_file_test.cpp",
+                "android_get_control_socket_test.cpp",
+            ],
+        },
+    },
+}
+
 cc_library {
     name: "libcutils",
     vendor_available: true,
@@ -66,7 +145,6 @@ cc_library {
         "load_file.cpp",
         "native_handle.cpp",
         "record_stream.cpp",
-        "sockets.cpp",
         "strlcpy.c",
         "threads.cpp",
     ],
@@ -86,9 +164,6 @@ cc_library {
             host_ldlibs: ["-lws2_32"],
 
             srcs: [
-                "socket_inaddr_any_server_windows.cpp",
-                "socket_network_client_windows.cpp",
-                "sockets_windows.cpp",
                 "trace-host.cpp",
             ],
 
@@ -97,10 +172,8 @@ cc_library {
                 "-D_GNU_SOURCE",
             ],
         },
-
         android: {
             srcs: libcutils_nonwindows_sources + [
-                "android_get_control_file.cpp",
                 "android_reboot.cpp",
                 "ashmem-dev.cpp",
                 "fs_config.cpp",
@@ -149,6 +222,7 @@ cc_library {
         }
     },
 
+    whole_static_libs: ["libcutils_sockets"],
     shared_libs: [
         "liblog",
         "libbase",
