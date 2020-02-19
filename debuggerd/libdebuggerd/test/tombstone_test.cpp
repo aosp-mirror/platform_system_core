@@ -23,6 +23,7 @@
 
 #include <android-base/file.h>
 #include <android-base/properties.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "libdebuggerd/utility.h"
@@ -31,7 +32,12 @@
 #include "host_signal_fixup.h"
 #include "log_fake.h"
 
+// Include tombstone.cpp to define log_tag before GWP-ASan includes log.
 #include "tombstone.cpp"
+
+#include "gwp_asan.cpp"
+
+using ::testing::MatchesRegex;
 
 class TombstoneTest : public ::testing::Test {
  protected:
@@ -359,3 +365,131 @@ TEST_F(TombstoneTest, dump_timestamp) {
   dump_timestamp(&log_, 0);
   ASSERT_STREQ("Timestamp: 1970-01-01 00:00:00+0000\n", amfd_data_.c_str());
 }
+
+class GwpAsanCrashDataTest : public GwpAsanCrashData {
+public:
+  GwpAsanCrashDataTest(
+      gwp_asan::Error error,
+      const gwp_asan::AllocationMetadata *responsible_allocation) :
+      GwpAsanCrashData(nullptr, 0u, 0u, ThreadInfo{}) {
+    is_gwp_asan_responsible_ = true;
+    error_ = error;
+    responsible_allocation_ = responsible_allocation;
+    error_string_ = gwp_asan::ErrorToString(error_);
+  }
+
+  void SetCrashAddress(uintptr_t crash_address) {
+    crash_address_ = crash_address;
+  }
+};
+
+TEST_F(TombstoneTest, gwp_asan_cause_uaf_exact) {
+  gwp_asan::AllocationMetadata meta;
+  meta.Addr = 0x1000;
+  meta.Size = 32;
+
+  GwpAsanCrashDataTest crash_data(gwp_asan::Error::USE_AFTER_FREE, &meta);
+  crash_data.SetCrashAddress(0x1000);
+
+  crash_data.DumpCause(&log_);
+  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
+  std::string tombstone_contents;
+  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
+  ASSERT_THAT(tombstone_contents,
+              MatchesRegex("Cause: \\[GWP-ASan\\]: Use After Free on a 32-byte "
+                           "allocation at 0x[a-fA-F0-9]+\n"));
+}
+
+TEST_F(TombstoneTest, gwp_asan_cause_double_free) {
+  gwp_asan::AllocationMetadata meta;
+  meta.Addr = 0x1000;
+  meta.Size = 32;
+
+  GwpAsanCrashDataTest crash_data(gwp_asan::Error::DOUBLE_FREE, &meta);
+  crash_data.SetCrashAddress(0x1000);
+
+  crash_data.DumpCause(&log_);
+  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
+  std::string tombstone_contents;
+  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
+  ASSERT_THAT(tombstone_contents,
+              MatchesRegex("Cause: \\[GWP-ASan\\]: Double Free on a 32-byte "
+                           "allocation at 0x[a-fA-F0-9]+\n"));
+}
+
+TEST_F(TombstoneTest, gwp_asan_cause_overflow) {
+  gwp_asan::AllocationMetadata meta;
+  meta.Addr = 0x1000;
+  meta.Size = 32;
+
+  GwpAsanCrashDataTest crash_data(gwp_asan::Error::BUFFER_OVERFLOW, &meta);
+  crash_data.SetCrashAddress(0x1025);
+
+  crash_data.DumpCause(&log_);
+  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
+  std::string tombstone_contents;
+  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
+  ASSERT_THAT(
+      tombstone_contents,
+      MatchesRegex(
+          "Cause: \\[GWP-ASan\\]: Buffer Overflow, 5 bytes right of a 32-byte "
+          "allocation at 0x[a-fA-F0-9]+\n"));
+}
+
+TEST_F(TombstoneTest, gwp_asan_cause_underflow) {
+  gwp_asan::AllocationMetadata meta;
+  meta.Addr = 0x1000;
+  meta.Size = 32;
+
+  GwpAsanCrashDataTest crash_data(gwp_asan::Error::BUFFER_UNDERFLOW, &meta);
+  crash_data.SetCrashAddress(0xffe);
+
+  crash_data.DumpCause(&log_);
+  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
+  std::string tombstone_contents;
+  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
+  ASSERT_THAT(
+      tombstone_contents,
+      MatchesRegex(
+          "Cause: \\[GWP-ASan\\]: Buffer Underflow, 2 bytes left of a 32-byte "
+          "allocation at 0x[a-fA-F0-9]+\n"));
+}
+
+TEST_F(TombstoneTest, gwp_asan_cause_invalid_free_inside) {
+  gwp_asan::AllocationMetadata meta;
+  meta.Addr = 0x1000;
+  meta.Size = 32;
+
+  GwpAsanCrashDataTest crash_data(gwp_asan::Error::INVALID_FREE, &meta);
+  crash_data.SetCrashAddress(0x1001);
+
+  crash_data.DumpCause(&log_);
+  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
+  std::string tombstone_contents;
+  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
+  ASSERT_THAT(
+      tombstone_contents,
+      MatchesRegex(
+          "Cause: \\[GWP-ASan\\]: Invalid \\(Wild\\) Free, 1 byte into a 32-byte "
+          "allocation at 0x[a-fA-F0-9]+\n"));
+}
+
+TEST_F(TombstoneTest, gwp_asan_cause_invalid_free_outside) {
+  gwp_asan::AllocationMetadata meta;
+  meta.Addr = 0x1000;
+  meta.Size = 32;
+
+  GwpAsanCrashDataTest crash_data(gwp_asan::Error::INVALID_FREE, &meta);
+  crash_data.SetCrashAddress(0x1021);
+
+  crash_data.DumpCause(&log_);
+  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
+  std::string tombstone_contents;
+  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
+  ASSERT_THAT(
+      tombstone_contents,
+      MatchesRegex(
+          "Cause: \\[GWP-ASan\\]: Invalid \\(Wild\\) Free, 33 bytes right of a 32-byte "
+          "allocation at 0x[a-fA-F0-9]+\n"));
+}
+
