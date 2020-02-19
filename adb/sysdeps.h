@@ -267,6 +267,39 @@ inline void seekdir(DIR*, long) {
 
 #define getcwd adb_getcwd
 
+// A very simple wrapper over a launched child process
+class Process {
+  public:
+    constexpr explicit Process(HANDLE h = nullptr) : h_(h) {}
+    ~Process() { close(); }
+    constexpr explicit operator bool() const { return h_ != nullptr; }
+
+    void wait() {
+        if (*this) {
+            ::WaitForSingleObject(h_, INFINITE);
+            close();
+        }
+    }
+    void kill() {
+        if (*this) {
+            ::TerminateProcess(h_, -1);
+        }
+    }
+
+  private:
+    void close() {
+        if (*this) {
+            ::CloseHandle(h_);
+            h_ = nullptr;
+        }
+    }
+
+    HANDLE h_;
+};
+
+Process adb_launch_process(std::string_view executable, std::vector<std::string> args,
+                           std::initializer_list<int> fds_to_inherit = {});
+
 // Helper class to convert UTF-16 argv from wmain() to UTF-8 args that can be
 // passed to main().
 class NarrowArgs {
@@ -432,11 +465,11 @@ static __inline__ int adb_read(borrowed_fd fd, void* buf, size_t len) {
     return TEMP_FAILURE_RETRY(read(fd.get(), buf, len));
 }
 
-static __inline__ int adb_pread(int fd, void* buf, size_t len, off64_t offset) {
+static __inline__ int adb_pread(borrowed_fd fd, void* buf, size_t len, off64_t offset) {
 #if defined(__APPLE__)
-    return TEMP_FAILURE_RETRY(pread(fd, buf, len, offset));
+    return TEMP_FAILURE_RETRY(pread(fd.get(), buf, len, offset));
 #else
-    return TEMP_FAILURE_RETRY(pread64(fd, buf, len, offset));
+    return TEMP_FAILURE_RETRY(pread64(fd.get(), buf, len, offset));
 #endif
 }
 
@@ -611,6 +644,32 @@ static __inline__ int adb_is_absolute_host_path(const char* path) {
 static __inline__ int adb_get_os_handle(borrowed_fd fd) {
     return fd.get();
 }
+
+// A very simple wrapper over a launched child process
+class Process {
+  public:
+    constexpr explicit Process(pid_t pid) : pid_(pid) {}
+    constexpr explicit operator bool() const { return pid_ >= 0; }
+
+    void wait() {
+        if (*this) {
+            int status;
+            ::waitpid(pid_, &status, 0);
+            pid_ = -1;
+        }
+    }
+    void kill() {
+        if (*this) {
+            ::kill(pid_, SIGTERM);
+        }
+    }
+
+  private:
+    pid_t pid_;
+};
+
+Process adb_launch_process(std::string_view executable, std::vector<std::string> args,
+                           std::initializer_list<int> fds_to_inherit = {});
 
 #endif /* !_WIN32 */
 

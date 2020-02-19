@@ -25,19 +25,20 @@
  * the adb_trace_init() function implemented in adb_trace.cpp.
  */
 enum AdbTrace {
-    ADB = 0,   /* 0x001 */
+    ADB = 0, /* 0x001 */
     SOCKETS,
     PACKETS,
     TRANSPORT,
-    RWX,       /* 0x010 */
+    RWX, /* 0x010 */
     USB,
     SYNC,
     SYSDEPS,
-    JDWP,      /* 0x100 */
+    JDWP, /* 0x100 */
     SERVICES,
     AUTH,
     FDEVENT,
-    SHELL
+    SHELL,
+    INCREMENTAL,
 };
 
 #define VLOG_IS_ON(TAG) \
