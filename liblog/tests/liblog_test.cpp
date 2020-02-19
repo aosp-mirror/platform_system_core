@@ -1637,7 +1637,7 @@ TEST(liblog, enoent) {
 TEST(liblog, __security) {
 #ifdef __ANDROID__
   static const char persist_key[] = "persist.logd.security";
-  static const char readonly_key[] = "ro.device_owner";
+  static const char readonly_key[] = "ro.organization_owned";
   // A silly default value that can never be in readonly_key so
   // that it can be determined the property is not set.
   static const char nothing_val[] = "_NOTHING_TO_SEE_HERE_";
@@ -1657,7 +1657,7 @@ TEST(liblog, __security) {
   if (!strcmp(readonly, nothing_val)) {
     // Lets check if we can set the value (we should not be allowed to do so)
     EXPECT_FALSE(__android_log_security());
-    fprintf(stderr, "WARNING: setting ro.device_owner to a domain\n");
+    fprintf(stderr, "WARNING: setting ro.organization_owned to a domain\n");
     static const char domain[] = "com.google.android.SecOps.DeviceOwner";
     EXPECT_NE(0, property_set(readonly_key, domain));
     useconds_t total_time = 0;
