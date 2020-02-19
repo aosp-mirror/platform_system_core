@@ -2771,6 +2771,66 @@ char* adb_getcwd(char* buf, int size) {
     return buf;
 }
 
+void enable_inherit(borrowed_fd fd) {
+    auto osh = adb_get_os_handle(fd);
+    const auto h = reinterpret_cast<HANDLE>(osh);
+    ::SetHandleInformation(h, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+}
+
+void disable_inherit(borrowed_fd fd) {
+    auto osh = adb_get_os_handle(fd);
+    const auto h = reinterpret_cast<HANDLE>(osh);
+    ::SetHandleInformation(h, HANDLE_FLAG_INHERIT, 0);
+}
+
+Process adb_launch_process(std::string_view executable, std::vector<std::string> args,
+                           std::initializer_list<int> fds_to_inherit) {
+    std::wstring wexe;
+    if (!android::base::UTF8ToWide(executable.data(), executable.size(), &wexe)) {
+        return Process();
+    }
+
+    std::wstring wargs = L"\"" + wexe + L"\"";
+    std::wstring warg;
+    for (auto arg : args) {
+        warg.clear();
+        if (!android::base::UTF8ToWide(arg.data(), arg.size(), &warg)) {
+            return Process();
+        }
+        wargs += L" \"";
+        wargs += warg;
+        wargs += L'\"';
+    }
+
+    STARTUPINFOW sinfo = {sizeof(sinfo)};
+    PROCESS_INFORMATION pinfo = {};
+
+    // TODO: use the Vista+ API to pass the list of inherited handles explicitly;
+    // see http://blogs.msdn.com/b/oldnewthing/archive/2011/12/16/10248328.aspx
+    for (auto fd : fds_to_inherit) {
+        enable_inherit(fd);
+    }
+    const auto created = CreateProcessW(wexe.c_str(), wargs.data(),
+                                        nullptr,                    // process attributes
+                                        nullptr,                    // thread attributes
+                                        fds_to_inherit.size() > 0,  // inherit any handles?
+                                        0,                          // flags
+                                        nullptr,                    // environment
+                                        nullptr,                    // current directory
+                                        &sinfo,                     // startup info
+                                        &pinfo);
+    for (auto fd : fds_to_inherit) {
+        disable_inherit(fd);
+    }
+
+    if (!created) {
+        return Process();
+    }
+
+    ::CloseHandle(pinfo.hThread);
+    return Process(pinfo.hProcess);
+}
+
 // The SetThreadDescription API was brought in version 1607 of Windows 10.
 typedef HRESULT(WINAPI* SetThreadDescription)(HANDLE hThread, PCWSTR lpThreadDescription);
 
