@@ -49,6 +49,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <android-base/macros.h>
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
 #include <bionic/reserved_signals.h>
@@ -298,6 +299,8 @@ struct debugger_thread_info {
   void* ucontext;
   uintptr_t abort_msg;
   uintptr_t fdsan_table;
+  uintptr_t gwp_asan_state;
+  uintptr_t gwp_asan_metadata;
 };
 
 // Logging and contacting debuggerd requires free file descriptors, which we might not have.
@@ -342,23 +345,25 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   }
 
   // ucontext_t is absurdly large on AArch64, so piece it together manually with writev.
-  uint32_t version = 2;
-  constexpr size_t expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV2);
+  uint32_t version = 3;
+  constexpr size_t expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV3);
 
   errno = 0;
   if (fcntl(output_write.get(), F_SETPIPE_SZ, expected) < static_cast<int>(expected)) {
     fatal_errno("failed to set pipe buffer size");
   }
 
-  struct iovec iovs[5] = {
+  struct iovec iovs[] = {
       {.iov_base = &version, .iov_len = sizeof(version)},
       {.iov_base = thread_info->siginfo, .iov_len = sizeof(siginfo_t)},
       {.iov_base = thread_info->ucontext, .iov_len = sizeof(ucontext_t)},
       {.iov_base = &thread_info->abort_msg, .iov_len = sizeof(uintptr_t)},
       {.iov_base = &thread_info->fdsan_table, .iov_len = sizeof(uintptr_t)},
+      {.iov_base = &thread_info->gwp_asan_state, .iov_len = sizeof(uintptr_t)},
+      {.iov_base = &thread_info->gwp_asan_metadata, .iov_len = sizeof(uintptr_t)},
   };
 
-  ssize_t rc = TEMP_FAILURE_RETRY(writev(output_write.get(), iovs, 5));
+  ssize_t rc = TEMP_FAILURE_RETRY(writev(output_write.get(), iovs, arraysize(iovs)));
   if (rc == -1) {
     fatal_errno("failed to write crash info");
   } else if (rc != expected) {
@@ -485,6 +490,8 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   }
 
   void* abort_message = nullptr;
+  const gwp_asan::AllocatorState* gwp_asan_state = nullptr;
+  const gwp_asan::AllocationMetadata* gwp_asan_metadata = nullptr;
   uintptr_t si_val = reinterpret_cast<uintptr_t>(info->si_ptr);
   if (signal_number == BIONIC_SIGNAL_DEBUGGER) {
     if (info->si_code == SI_QUEUE && info->si_pid == __getpid()) {
@@ -498,6 +505,12 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   } else {
     if (g_callbacks.get_abort_message) {
       abort_message = g_callbacks.get_abort_message();
+    }
+    if (g_callbacks.get_gwp_asan_state) {
+      gwp_asan_state = g_callbacks.get_gwp_asan_state();
+    }
+    if (g_callbacks.get_gwp_asan_metadata) {
+      gwp_asan_metadata = g_callbacks.get_gwp_asan_metadata();
     }
   }
 
@@ -532,6 +545,8 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
       .ucontext = context,
       .abort_msg = reinterpret_cast<uintptr_t>(abort_message),
       .fdsan_table = reinterpret_cast<uintptr_t>(android_fdsan_get_fd_table()),
+      .gwp_asan_state = reinterpret_cast<uintptr_t>(gwp_asan_state),
+      .gwp_asan_metadata = reinterpret_cast<uintptr_t>(gwp_asan_metadata),
   };
 
   // Set PR_SET_DUMPABLE to 1, so that crash_dump can ptrace us.
