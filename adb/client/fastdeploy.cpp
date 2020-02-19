@@ -81,17 +81,21 @@ struct FileDeleter {
 }  // namespace
 
 int get_device_api_level() {
-    REPORT_FUNC_TIME();
-    std::vector<char> sdk_version_output_buffer;
-    std::vector<char> sdk_version_error_buffer;
-    int api_level = -1;
+    static const int api_level = [] {
+        REPORT_FUNC_TIME();
+        std::vector<char> sdk_version_output_buffer;
+        std::vector<char> sdk_version_error_buffer;
+        int api_level = -1;
 
-    int statusCode = capture_shell_command("getprop ro.build.version.sdk",
-                                           &sdk_version_output_buffer, &sdk_version_error_buffer);
-    if (statusCode == 0 && sdk_version_output_buffer.size() > 0) {
-        api_level = strtol((char*)sdk_version_output_buffer.data(), NULL, 10);
-    }
+        int status_code =
+                capture_shell_command("getprop ro.build.version.sdk", &sdk_version_output_buffer,
+                                      &sdk_version_error_buffer);
+        if (status_code == 0 && sdk_version_output_buffer.size() > 0) {
+            api_level = strtol((char*)sdk_version_output_buffer.data(), nullptr, 10);
+        }
 
+        return api_level;
+    }();
     return api_level;
 }
 
