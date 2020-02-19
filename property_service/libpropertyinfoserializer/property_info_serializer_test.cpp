@@ -317,7 +317,7 @@ TEST(propertyinfoserializer, RealProperties) {
       {"ro.boot.bootreason", "u:object_r:bootloader_boot_reason_prop:s0", "string", false},
       {"persist.sys.boot.reason", "u:object_r:last_boot_reason_prop:s0", "string", false},
       {"sys.boot.reason", "u:object_r:system_boot_reason_prop:s0", "string", false},
-      {"ro.device_owner", "u:object_r:device_logging_prop:s0", "string", false},
+      {"ro.organization_owned", "u:object_r:device_logging_prop:s0", "string", false},
 
       {"selinux.restorecon_recursive", "u:object_r:restorecon_prop:s0", "string", false},
 
@@ -669,7 +669,7 @@ TEST(propertyinfoserializer, RealProperties) {
       {"ro.crypto.type", "u:object_r:vold_prop:s0"},
       {"ro.dalvik.vm.native.bridge", "u:object_r:dalvik_prop:s0"},
       {"ro.debuggable", "u:object_r:default_prop:s0"},
-      {"ro.device_owner", "u:object_r:device_logging_prop:s0"},
+      {"ro.organization_owned", "u:object_r:device_logging_prop:s0"},
       {"ro.expect.recovery_id", "u:object_r:default_prop:s0"},
       {"ro.frp.pst", "u:object_r:default_prop:s0"},
       {"ro.hardware", "u:object_r:default_prop:s0"},
