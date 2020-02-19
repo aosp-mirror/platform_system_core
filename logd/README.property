@@ -6,7 +6,7 @@ ro.logd.auditd.dmesg       bool   true   selinux audit messages sent to dmesg.
 ro.logd.auditd.main        bool   true   selinux audit messages sent to main.
 ro.logd.auditd.events      bool   true   selinux audit messages sent to events.
 persist.logd.security      bool   false  Enable security buffer.
-ro.device_owner            bool   false  Override persist.logd.security to false
+ro.organization_owned      bool   false  Override persist.logd.security to false
 ro.logd.kernel             bool+ svelte+ Enable klogd daemon
 ro.logd.statistics         bool+ svelte+ Enable logcat -S statistics.
 ro.debuggable              number        if not "1", logd.statistics &
