@@ -73,8 +73,8 @@ TEST(debuggerd_client, race) {
   unique_fd pipe_read, pipe_write;
   ASSERT_TRUE(Pipe(&pipe_read, &pipe_write));
 
-  // 64 MiB should be enough for everyone.
-  constexpr int PIPE_SIZE = 64 * 1024 * 1024;
+  // 16 MiB should be enough for everyone.
+  constexpr int PIPE_SIZE = 16 * 1024 * 1024;
   ASSERT_EQ(PIPE_SIZE, fcntl(pipe_read.get(), F_SETPIPE_SZ, PIPE_SIZE));
 
   // Wait for a bit to let the child spawn all of its threads.
