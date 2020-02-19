@@ -131,3 +131,13 @@ message SnapshotUpdateStatus {
     // Sectors allocated for metadata in all the snapshot devices.
     uint64 metadata_sectors = 4;
 }
+
+// Next: 2
+message SnapshotMergeReport {
+    // Status of the update after the merge attempts.
+    UpdateState state = 1;
+
+    // Number of reboots that occurred after issuing and before completeing the
+    // merge of all the snapshot devices.
+    int32 resume_count = 2;
+}

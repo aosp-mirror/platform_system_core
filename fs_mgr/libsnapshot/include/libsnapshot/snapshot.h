@@ -91,6 +91,8 @@ class SnapshotManager final {
     using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
     using FiemapStatus = android::fiemap::FiemapStatus;
 
+    friend class SnapshotMergeStats;
+
   public:
     // Dependency injection for testing.
     class IDeviceInfo {
@@ -177,7 +179,7 @@ class SnapshotManager final {
     //   - Unverified if called on the source slot
     //   - MergeCompleted if merge is completed
     //   - other states indicating an error has occurred
-    UpdateState InitiateMergeAndWait();
+    UpdateState InitiateMergeAndWait(SnapshotMergeReport* report = nullptr);
 
     // Wait for the merge if rebooted into the new slot. Does NOT initiate a
     // merge. If the merge has not been initiated (but should be), wait.
