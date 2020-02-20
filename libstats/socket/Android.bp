@@ -43,10 +43,10 @@ cc_library {
         ],
     },
     apex_available: [
-        "com.android.os.statsd",
-        "test_com.android.os.statsd",
         //TODO(b/149340100): Remove this once libstatssocket is only linked as shared.
         "//apex_available:platform",
+        "com.android.os.statsd",
+        "test_com.android.os.statsd",
     ],
 }
 
