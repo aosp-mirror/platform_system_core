@@ -96,6 +96,11 @@ static std::vector<Service*> GetDebuggingServices(bool only_post_data) {
     return ret;
 }
 
+static void PersistRebootReason(const char* reason) {
+    SetProperty(LAST_REBOOT_REASON_PROPERTY, reason);
+    WriteStringToFile(reason, LAST_REBOOT_REASON_FILE);
+}
+
 // represents umount status during reboot / shutdown.
 enum UmountStat {
     /* umount succeeded. */
@@ -547,8 +552,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
          reasons[1] == "hard" || reasons[1] == "warm")) {
         skip = strlen("reboot,");
     }
-    SetProperty(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
-    WriteStringToFile(reason.c_str() + skip, LAST_REBOOT_REASON_FILE);
+    PersistRebootReason(reason.c_str() + skip);
     sync();
 
     bool is_thermal_shutdown = cmd == ANDROID_RB_THERMOFF;
@@ -829,6 +833,7 @@ static void UserspaceRebootWatchdogThread() {
     if (!WaitForProperty("sys.boot_completed", "1", timeout)) {
         LOG(ERROR) << "Failed to boot in " << timeout.count() << "ms. Switching to full reboot";
         // In this case device is in a boot loop. Only way to recover is to do dirty reboot.
+        PersistRebootReason("userspace_failed,watchdog_triggered");
         RebootSystem(ANDROID_RB_RESTART2, "userspace_failed,watchdog_triggered");
     }
     LOG(INFO) << "Device booted, stopping userspace reboot watchdog";
