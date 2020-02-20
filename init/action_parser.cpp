@@ -21,7 +21,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 
-#if defined(__ANDROID__)
+#ifdef INIT_FULL_SOURCES
 #include "property_service.h"
 #include "selinux.h"
 #else
