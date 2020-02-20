@@ -891,11 +891,11 @@ source none0       swap   defaults      keydirectory=/dir/key
     EXPECT_EQ("/dir/key", entry->metadata_key_dir);
 }
 
-TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MetadataCipher) {
+TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MetadataEncryption) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source none0       swap   defaults      keydirectory=/dir/key,metadata_cipher=adiantum
+source none0       swap   defaults      keydirectory=/dir/key,metadata_encryption=adiantum
 )fs";
 
     ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
@@ -905,7 +905,28 @@ source none0       swap   defaults      keydirectory=/dir/key,metadata_cipher=ad
     ASSERT_EQ(1U, fstab.size());
 
     auto entry = fstab.begin();
-    EXPECT_EQ("adiantum", entry->metadata_cipher);
+    EXPECT_EQ("adiantum", entry->metadata_encryption);
+}
+
+TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MetadataEncryption_WrappedKey) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+source none0       swap   defaults      keydirectory=/dir/key,metadata_encryption=aes-256-xts:wrappedkey_v0
+)fs";
+
+    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
+
+    Fstab fstab;
+    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
+    ASSERT_EQ(1U, fstab.size());
+
+    auto entry = fstab.begin();
+    EXPECT_EQ("aes-256-xts:wrappedkey_v0", entry->metadata_encryption);
+    auto parts = android::base::Split(entry->metadata_encryption, ":");
+    EXPECT_EQ(2U, parts.size());
+    EXPECT_EQ("aes-256-xts", parts[0]);
+    EXPECT_EQ("wrappedkey_v0", parts[1]);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_SysfsPath) {
