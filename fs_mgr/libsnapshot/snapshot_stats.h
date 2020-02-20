@@ -32,6 +32,9 @@ class SnapshotMergeStats {
     SnapshotMergeReport GetReport();
 
   private:
+    bool ReadState();
+    bool WriteState();
+
     const SnapshotManager& parent_;
     SnapshotMergeReport report_;
     std::chrono::time_point<std::chrono::steady_clock> init_time_;
