@@ -40,7 +40,7 @@
 #include "service_list.h"
 #include "util.h"
 
-#if defined(__ANDROID__)
+#ifdef INIT_FULL_SOURCES
 #include <ApexProperties.sysprop.h>
 #include <android/api-level.h>
 
@@ -303,7 +303,7 @@ void Service::Reap(const siginfo_t& siginfo) {
         return;
     }
 
-#if defined(__ANDROID__)
+#if INIT_FULL_SOURCES
     static bool is_apex_updatable = android::sysprop::ApexProperties::updatable().value_or(false);
 #else
     static bool is_apex_updatable = false;
