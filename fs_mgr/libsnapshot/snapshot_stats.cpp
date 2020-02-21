@@ -36,36 +36,45 @@ SnapshotMergeStats::~SnapshotMergeStats() {
     }
 }
 
-void SnapshotMergeStats::Start() {
-    SnapshotMergeReport report;
-    report.set_resume_count(0);
-    report.set_state(UpdateState::None);
-
+bool SnapshotMergeStats::ReadState() {
     std::string contents;
-    if (!report.SerializeToString(&contents)) {
+    if (!android::base::ReadFileToString(parent_.GetMergeStateFilePath(), &contents)) {
+        PLOG(INFO) << "Read merge statistics file failed";
+        return false;
+    }
+    if (!report_.ParseFromString(contents)) {
+        LOG(ERROR) << "Unable to parse merge statistics file as SnapshotMergeReport";
+        return false;
+    }
+    return true;
+}
+
+bool SnapshotMergeStats::WriteState() {
+    std::string contents;
+    if (!report_.SerializeToString(&contents)) {
         LOG(ERROR) << "Unable to serialize SnapshotMergeStats.";
-        return;
+        return false;
     }
     auto file_path = parent_.GetMergeStateFilePath();
     if (!WriteStringToFileAtomic(contents, file_path)) {
         PLOG(ERROR) << "Could not write to merge statistics file";
-        return;
+        return false;
     }
+    return true;
+}
+
+void SnapshotMergeStats::Start() {
+    report_.set_resume_count(0);
+    report_.set_state(UpdateState::None);
+    WriteState();
 }
 
 void SnapshotMergeStats::Resume() {
-    std::string contents;
-    if (!android::base::ReadFileToString(parent_.GetMergeStateFilePath(), &contents)) {
-        PLOG(INFO) << "Read merge statistics file failed";
+    if (!ReadState()) {
         return;
     }
-
-    if (!report_.ParseFromString(contents)) {
-        LOG(ERROR) << "Unable to parse merge statistics file as SnapshotMergeReport";
-        return;
-    }
-
     report_.set_resume_count(report_.resume_count() + 1);
+    WriteState();
 }
 
 void SnapshotMergeStats::set_state(android::snapshot::UpdateState state) {

@@ -24,9 +24,11 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
+#include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/snapshot.h>
-#include "utility.h"
+#include <statslog.h>
 
+#include "snapshot_stats.h"
 #include "utility.h"
 
 using namespace std::string_literals;
@@ -37,16 +39,28 @@ int Usage() {
                  "Actions:\n"
                  "  dump\n"
                  "    Print snapshot states.\n"
-                 "  merge [--logcat] [--log-to-file]\n"
+                 "  merge [--logcat] [--log-to-file] [--report] [--dry-run]\n"
                  "    Initialize merge and wait for it to be completed.\n"
                  "    If --logcat is specified, log to logcat.\n"
                  "    If --log-to-file is specified, log to /data/misc/snapshotctl_log/.\n"
-                 "    If both specified, log to both. If none specified, log to stdout.\n";
+                 "    If both specified, log to both. If none specified, log to stdout.\n"
+                 "    If --report is specified, send merge statistics to statsd.\n"
+                 "    If --dry-run flag, no real merge operation is is triggered, and\n"
+                 "      sample statistics are sent to statsd for testing purpose.\n";
     return EX_USAGE;
 }
 
 namespace android {
 namespace snapshot {
+
+static SnapshotMergeReport GetDummySnapshotMergeReport() {
+    SnapshotMergeReport fake_report;
+
+    fake_report.set_state(UpdateState::MergeCompleted);
+    fake_report.set_resume_count(56);
+
+    return fake_report;
+}
 
 bool DumpCmdHandler(int /*argc*/, char** argv) {
     android::base::InitLogging(argv, &android::base::StderrLogger);
@@ -113,24 +127,53 @@ class MergeCmdLogger {
 };
 
 bool MergeCmdHandler(int argc, char** argv) {
-    auto begin = std::chrono::steady_clock::now();
+    std::chrono::milliseconds passed_ms;
+
+    bool report_to_statsd = false;
+    bool dry_run = false;
+    for (int i = 2; i < argc; ++i) {
+        if (argv[i] == "--report"s) {
+            report_to_statsd = true;
+        } else if (argv[i] == "--dry-run"s) {
+            dry_run = true;
+        }
+    }
 
     // 'snapshotctl merge' is stripped away from arguments to
     // Logger.
     android::base::InitLogging(argv);
     android::base::SetLogger(MergeCmdLogger(argc - 2, argv + 2));
 
-    auto state = SnapshotManager::New()->InitiateMergeAndWait();
+    UpdateState state;
+    SnapshotMergeReport merge_report;
+    if (dry_run) {
+        merge_report = GetDummySnapshotMergeReport();
+        state = merge_report.state();
+        passed_ms = std::chrono::milliseconds(1234);
+    } else {
+        auto begin = std::chrono::steady_clock::now();
 
-    // We could wind up in the Unverified state if the device rolled back or
-    // hasn't fully rebooted. Ignore this.
-    if (state == UpdateState::None || state == UpdateState::Unverified) {
-        return true;
-    }
-    if (state == UpdateState::MergeCompleted) {
+        state = SnapshotManager::New()->InitiateMergeAndWait(&merge_report);
+
+        // We could wind up in the Unverified state if the device rolled back or
+        // hasn't fully rebooted. Ignore this.
+        if (state == UpdateState::None || state == UpdateState::Unverified) {
+            return true;
+        }
+
         auto end = std::chrono::steady_clock::now();
-        auto passed = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-        LOG(INFO) << "Snapshot merged in " << passed << " ms.";
+        passed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin);
+    }
+
+    if (report_to_statsd) {
+        android::util::stats_write(android::util::SNAPSHOT_MERGE_REPORTED,
+                                   static_cast<int32_t>(merge_report.state()),
+                                   static_cast<int64_t>(passed_ms.count()),
+                                   static_cast<int32_t>(merge_report.resume_count()));
+    }
+
+    if (state == UpdateState::MergeCompleted) {
+        LOG(INFO) << "Snapshot merged in " << passed_ms.count() << " ms.";
         return true;
     }
 

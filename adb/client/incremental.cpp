@@ -54,6 +54,13 @@ static inline int32_t read_be_int32(borrowed_fd fd) {
     return int32_t(be32toh(read_int32(fd)));
 }
 
+static inline void append_int(borrowed_fd fd, std::vector<char>* bytes) {
+    int32_t be_val = read_int32(fd);
+    auto old_size = bytes->size();
+    bytes->resize(old_size + sizeof(be_val));
+    memcpy(bytes->data() + old_size, &be_val, sizeof(be_val));
+}
+
 static inline void append_bytes_with_size(borrowed_fd fd, std::vector<char>* bytes) {
     int32_t be_size = read_int32(fd);
     int32_t size = int32_t(be32toh(be_size));
@@ -65,6 +72,7 @@ static inline void append_bytes_with_size(borrowed_fd fd, std::vector<char>* byt
 
 static inline std::pair<std::vector<char>, int32_t> read_id_sig_headers(borrowed_fd fd) {
     std::vector<char> result;
+    append_int(fd, &result);              // version
     append_bytes_with_size(fd, &result);  // verityRootHash
     append_bytes_with_size(fd, &result);  // v3Digest
     append_bytes_with_size(fd, &result);  // pkcs7SignatureBlock
