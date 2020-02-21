@@ -199,24 +199,10 @@ using CAIssuer = std::vector<CAIssuerField>;
 static std::vector<CAIssuer> kCAIssuers = {
         {
                 {NID_commonName, {'a', 'b', 'c', 'd', 'e'}},
-                {NID_organizationName,
-                 {
-                         'd',
-                         'e',
-                         'f',
-                         'g',
-                 }},
+                {NID_organizationName, {'d', 'e', 'f', 'g'}},
         },
         {
-                {NID_commonName,
-                 {
-                         'h',
-                         'i',
-                         'j',
-                         'k',
-                         'l',
-                         'm',
-                 }},
+                {NID_commonName, {'h', 'i', 'j', 'k', 'l', 'm'}},
                 {NID_countryName, {'n', 'o'}},
         },
 };
@@ -224,8 +210,6 @@ static std::vector<CAIssuer> kCAIssuers = {
 class AdbWifiTlsConnectionTest : public testing::Test {
   protected:
     virtual void SetUp() override {
-        // TODO: move client code in each test into its own thread, as the
-        // socket pair buffer is limited.
         android::base::Socketpair(SOCK_STREAM, &server_fd_, &client_fd_);
         server_ = TlsConnection::Create(TlsConnection::Role::Server, kTestRsa2048ServerCert,
                                         kTestRsa2048ServerPrivKey, server_fd_);
@@ -257,14 +241,8 @@ class AdbWifiTlsConnectionTest : public testing::Test {
         return ret;
     }
 
-    void StartClientHandshakeAsync(bool expect_success) {
-        client_thread_ = std::thread([=]() {
-            if (expect_success) {
-                EXPECT_EQ(client_->DoHandshake(), TlsError::Success);
-            } else {
-                EXPECT_NE(client_->DoHandshake(), TlsError::Success);
-            }
-        });
+    void StartClientHandshakeAsync(TlsError expected) {
+        client_thread_ = std::thread([=]() { EXPECT_EQ(client_->DoHandshake(), expected); });
     }
 
     void WaitForClientConnection() {
@@ -313,45 +291,52 @@ TEST_F(AdbWifiTlsConnectionTest, NoCertificateVerification) {
     // Allow any certificate
     server_->SetCertVerifyCallback([](X509_STORE_CTX*) { return 1; });
     client_->SetCertVerifyCallback([](X509_STORE_CTX*) { return 1; });
-    StartClientHandshakeAsync(true);
+    StartClientHandshakeAsync(TlsError::Success);
 
     // Handshake should succeed
-    EXPECT_EQ(server_->DoHandshake(), TlsError::Success);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::Success);
     WaitForClientConnection();
 
-    // Client write, server read
-    EXPECT_TRUE(client_->WriteFully(
-            std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+    // Test client/server read and writes
+    client_thread_ = std::thread([&]() {
+        EXPECT_TRUE(client_->WriteFully(
+                std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+        // Try with overloaded ReadFully
+        std::vector<uint8_t> buf(msg_.size());
+        ASSERT_TRUE(client_->ReadFully(buf.data(), msg_.size()));
+        EXPECT_EQ(buf, msg_);
+    });
+
     auto data = server_->ReadFully(msg_.size());
     EXPECT_EQ(data, msg_);
-
-    // Client read, server write
     EXPECT_TRUE(server_->WriteFully(
             std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
-    // Try with overloaded ReadFully
-    std::vector<uint8_t> buf(msg_.size());
-    ASSERT_TRUE(client_->ReadFully(buf.data(), msg_.size()));
-    EXPECT_EQ(buf, msg_);
+
+    WaitForClientConnection();
 }
 
 TEST_F(AdbWifiTlsConnectionTest, NoTrustedCertificates) {
-    StartClientHandshakeAsync(false);
+    StartClientHandshakeAsync(TlsError::CertificateRejected);
 
     // Handshake should not succeed
-    EXPECT_NE(server_->DoHandshake(), TlsError::Success);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::PeerRejectedCertificate);
     WaitForClientConnection();
 
-    // Client write, server read should fail
-    EXPECT_FALSE(client_->WriteFully(
-            std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+    // All writes and reads should fail
+    client_thread_ = std::thread([&]() {
+        // Client write, server read should fail
+        EXPECT_FALSE(client_->WriteFully(
+                std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+        auto data = client_->ReadFully(msg_.size());
+        EXPECT_EQ(data.size(), 0);
+    });
+
     auto data = server_->ReadFully(msg_.size());
     EXPECT_EQ(data.size(), 0);
-
-    // Client read, server write should fail
     EXPECT_FALSE(server_->WriteFully(
             std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
-    data = client_->ReadFully(msg_.size());
-    EXPECT_EQ(data.size(), 0);
+
+    WaitForClientConnection();
 }
 
 TEST_F(AdbWifiTlsConnectionTest, AddTrustedCertificates) {
@@ -359,23 +344,26 @@ TEST_F(AdbWifiTlsConnectionTest, AddTrustedCertificates) {
     EXPECT_TRUE(client_->AddTrustedCertificate(kTestRsa2048ServerCert));
     EXPECT_TRUE(server_->AddTrustedCertificate(kTestRsa2048ClientCert));
 
-    StartClientHandshakeAsync(true);
+    StartClientHandshakeAsync(TlsError::Success);
 
     // Handshake should succeed
-    EXPECT_EQ(server_->DoHandshake(), TlsError::Success);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::Success);
     WaitForClientConnection();
 
-    // Client write, server read
-    EXPECT_TRUE(client_->WriteFully(
-            std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+    // All read writes should succeed
+    client_thread_ = std::thread([&]() {
+        EXPECT_TRUE(client_->WriteFully(
+                std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+        auto data = client_->ReadFully(msg_.size());
+        EXPECT_EQ(data, msg_);
+    });
+
     auto data = server_->ReadFully(msg_.size());
     EXPECT_EQ(data, msg_);
-
-    // Client read, server write
     EXPECT_TRUE(server_->WriteFully(
             std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
-    data = client_->ReadFully(msg_.size());
-    EXPECT_EQ(data, msg_);
+
+    WaitForClientConnection();
 }
 
 TEST_F(AdbWifiTlsConnectionTest, AddTrustedCertificates_ClientWrongCert) {
@@ -387,23 +375,26 @@ TEST_F(AdbWifiTlsConnectionTest, AddTrustedCertificates_ClientWrongCert) {
     // Without enabling EnableClientPostHandshakeCheck(), DoHandshake() will
     // succeed, because in TLS 1.3, the client doesn't get notified if the
     // server rejected the certificate until a read operation is called.
-    StartClientHandshakeAsync(true);
+    StartClientHandshakeAsync(TlsError::Success);
 
     // Handshake should fail for server, succeed for client
-    EXPECT_NE(server_->DoHandshake(), TlsError::Success);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::CertificateRejected);
     WaitForClientConnection();
 
-    // Client write succeeds, server read should fail
-    EXPECT_TRUE(client_->WriteFully(
-            std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+    // Client writes will succeed, everything else will fail.
+    client_thread_ = std::thread([&]() {
+        EXPECT_TRUE(client_->WriteFully(
+                std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+        auto data = client_->ReadFully(msg_.size());
+        EXPECT_EQ(data.size(), 0);
+    });
+
     auto data = server_->ReadFully(msg_.size());
     EXPECT_EQ(data.size(), 0);
-
-    // Client read, server write should fail
     EXPECT_FALSE(server_->WriteFully(
             std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
-    data = client_->ReadFully(msg_.size());
-    EXPECT_EQ(data.size(), 0);
+
+    WaitForClientConnection();
 }
 
 TEST_F(AdbWifiTlsConnectionTest, ExportKeyingMaterial) {
@@ -415,10 +406,10 @@ TEST_F(AdbWifiTlsConnectionTest, ExportKeyingMaterial) {
     EXPECT_TRUE(client_->AddTrustedCertificate(kTestRsa2048ServerCert));
     EXPECT_TRUE(server_->AddTrustedCertificate(kTestRsa2048ClientCert));
 
-    StartClientHandshakeAsync(true);
+    StartClientHandshakeAsync(TlsError::Success);
 
     // Handshake should succeed
-    EXPECT_EQ(server_->DoHandshake(), TlsError::Success);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::Success);
     WaitForClientConnection();
 
     // Verify the client and server's exported key material match.
@@ -439,10 +430,10 @@ TEST_F(AdbWifiTlsConnectionTest, SetCertVerifyCallback_ClientAcceptsServerReject
     // Client handshake should succeed, because in TLS 1.3, client does not
     // realize that the peer rejected the certificate until after a read
     // operation.
-    client_thread_ = std::thread([&]() { EXPECT_EQ(client_->DoHandshake(), TlsError::Success); });
+    StartClientHandshakeAsync(TlsError::Success);
 
     // Server handshake should fail
-    EXPECT_EQ(server_->DoHandshake(), TlsError::CertificateRejected);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::CertificateRejected);
     WaitForClientConnection();
 }
 
@@ -455,11 +446,10 @@ TEST_F(AdbWifiTlsConnectionTest, SetCertVerifyCallback_ClientAcceptsServerReject
     server_->SetCertVerifyCallback([](X509_STORE_CTX*) { return 0; });
 
     // Client handshake should fail because server rejects everything
-    client_thread_ = std::thread(
-            [&]() { EXPECT_EQ(client_->DoHandshake(), TlsError::PeerRejectedCertificate); });
+    StartClientHandshakeAsync(TlsError::PeerRejectedCertificate);
 
     // Server handshake should fail
-    EXPECT_EQ(server_->DoHandshake(), TlsError::CertificateRejected);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::CertificateRejected);
     WaitForClientConnection();
 }
 
@@ -469,11 +459,10 @@ TEST_F(AdbWifiTlsConnectionTest, SetCertVerifyCallback_ClientRejectsServerAccept
     // Server accepts all
     server_->SetCertVerifyCallback([](X509_STORE_CTX*) { return 1; });
     // Client handshake should fail
-    client_thread_ = std::thread(
-            [&]() { EXPECT_EQ(client_->DoHandshake(), TlsError::CertificateRejected); });
+    StartClientHandshakeAsync(TlsError::CertificateRejected);
 
     // Server handshake should fail
-    EXPECT_EQ(server_->DoHandshake(), TlsError::PeerRejectedCertificate);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::PeerRejectedCertificate);
     WaitForClientConnection();
 }
 
@@ -488,15 +477,15 @@ TEST_F(AdbWifiTlsConnectionTest, SetCertVerifyCallback_ClientRejectsServerAccept
     server_->SetCertVerifyCallback([](X509_STORE_CTX*) { return 1; });
 
     // Client handshake should fail
-    client_thread_ = std::thread(
-            [&]() { EXPECT_EQ(client_->DoHandshake(), TlsError::CertificateRejected); });
+    StartClientHandshakeAsync(TlsError::CertificateRejected);
 
     // Server handshake should fail
-    EXPECT_EQ(server_->DoHandshake(), TlsError::PeerRejectedCertificate);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::PeerRejectedCertificate);
     WaitForClientConnection();
 }
 
 TEST_F(AdbWifiTlsConnectionTest, EnableClientPostHandshakeCheck_ClientWrongCert) {
+    client_->AddTrustedCertificate(kTestRsa2048ServerCert);
     // client's DoHandshake() will fail if the server rejected the certificate
     client_->EnableClientPostHandshakeCheck(true);
 
@@ -504,23 +493,26 @@ TEST_F(AdbWifiTlsConnectionTest, EnableClientPostHandshakeCheck_ClientWrongCert)
     EXPECT_TRUE(server_->AddTrustedCertificate(kTestRsa2048UnknownCert));
 
     // Handshake should fail for client
-    StartClientHandshakeAsync(false);
+    StartClientHandshakeAsync(TlsError::PeerRejectedCertificate);
 
     // Handshake should fail for server
-    EXPECT_NE(server_->DoHandshake(), TlsError::Success);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::CertificateRejected);
     WaitForClientConnection();
 
-    // Client write fails, server read should fail
-    EXPECT_FALSE(client_->WriteFully(
-            std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+    // All read writes should fail
+    client_thread_ = std::thread([&]() {
+        EXPECT_FALSE(client_->WriteFully(
+                std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
+        auto data = client_->ReadFully(msg_.size());
+        EXPECT_EQ(data.size(), 0);
+    });
+
     auto data = server_->ReadFully(msg_.size());
     EXPECT_EQ(data.size(), 0);
-
-    // Client read, server write should fail
     EXPECT_FALSE(server_->WriteFully(
             std::string_view(reinterpret_cast<const char*>(msg_.data()), msg_.size())));
-    data = client_->ReadFully(msg_.size());
-    EXPECT_EQ(data.size(), 0);
+
+    WaitForClientConnection();
 }
 
 TEST_F(AdbWifiTlsConnectionTest, SetClientCAList_Empty) {
@@ -569,12 +561,12 @@ TEST_F(AdbWifiTlsConnectionTest, SetClientCAList_Smoke) {
             return 1;
         });
         // Client handshake should succeed
-        EXPECT_EQ(client_->DoHandshake(), TlsError::Success);
+        ASSERT_EQ(client_->DoHandshake(), TlsError::Success);
     });
 
     EXPECT_TRUE(server_->AddTrustedCertificate(kTestRsa2048UnknownCert));
     // Server handshake should succeed
-    EXPECT_EQ(server_->DoHandshake(), TlsError::Success);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::Success);
     client_thread_.join();
 }
 
@@ -604,12 +596,12 @@ TEST_F(AdbWifiTlsConnectionTest, SetClientCAList_AdbCAList) {
             return 1;
         });
         // Client handshake should succeed
-        EXPECT_EQ(client_->DoHandshake(), TlsError::Success);
+        ASSERT_EQ(client_->DoHandshake(), TlsError::Success);
     });
 
     server_->SetCertVerifyCallback([](X509_STORE_CTX*) { return 1; });
     // Server handshake should succeed
-    EXPECT_EQ(server_->DoHandshake(), TlsError::Success);
+    ASSERT_EQ(server_->DoHandshake(), TlsError::Success);
     client_thread_.join();
 }
 }  // namespace tls

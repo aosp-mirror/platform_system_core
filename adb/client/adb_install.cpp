@@ -36,8 +36,10 @@
 #include "client/file_sync_client.h"
 #include "commandline.h"
 #include "fastdeploy.h"
+#include "incremental.h"
 
 static constexpr int kFastDeployMinApi = 24;
+static constexpr int kIncrementalMinApi = 29;
 
 namespace {
 
@@ -45,8 +47,8 @@ enum InstallMode {
     INSTALL_DEFAULT,
     INSTALL_PUSH,
     INSTALL_STREAM,
+    INSTALL_INCREMENTAL,
 };
-
 }
 
 static bool can_use_feature(const char* feature) {
@@ -68,6 +70,10 @@ static InstallMode best_install_mode() {
 
 static bool is_apex_supported() {
     return can_use_feature(kFeatureApex);
+}
+
+static bool is_abb_exec_supported() {
+    return can_use_feature(kFeatureAbbExec);
 }
 
 static int pm_command(int argc, const char** argv) {
@@ -193,14 +199,14 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
     posix_fadvise(local_fd.get(), 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE);
 #endif
 
-    const bool use_abb = can_use_feature(kFeatureAbbExec);
+    const bool use_abb_exec = is_abb_exec_supported();
     std::string error;
-    std::vector<std::string> cmd_args = {use_abb ? "package" : "exec:cmd package"};
+    std::vector<std::string> cmd_args = {use_abb_exec ? "package" : "exec:cmd package"};
     cmd_args.reserve(argc + 3);
 
     // don't copy the APK name, but, copy the rest of the arguments as-is
     while (argc-- > 1) {
-        if (use_abb) {
+        if (use_abb_exec) {
             cmd_args.push_back(*argv++);
         } else {
             cmd_args.push_back(escape_arg(*argv++));
@@ -217,7 +223,7 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
     }
 
     unique_fd remote_fd;
-    if (use_abb) {
+    if (use_abb_exec) {
         remote_fd = send_abb_exec_command(cmd_args, &error);
     } else {
         remote_fd.reset(adb_connect(android::base::Join(cmd_args, " "), &error));
@@ -287,8 +293,60 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy) 
     return result;
 }
 
+template <class TimePoint>
+static int msBetween(TimePoint start, TimePoint end) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+}
+
+static int install_app_incremental(int argc, const char** argv) {
+    printf("Performing Incremental Install\n");
+    using clock = std::chrono::high_resolution_clock;
+    const auto start = clock::now();
+    int first_apk = -1;
+    int last_apk = -1;
+    std::string cert_path;
+    bool wait = false;
+    std::vector<std::string_view> args = {"package"};
+    for (int i = 0; i < argc; ++i) {
+        const auto arg = std::string_view(argv[i]);
+        if (android::base::EndsWithIgnoreCase(arg, ".apk")) {
+            last_apk = i;
+            if (first_apk == -1) {
+                first_apk = i;
+            }
+        } else if (arg == "--wait") {
+            wait = true;
+        } else if (arg.starts_with("install-")) {
+            // incremental installation command on the device is the same for all its variations in
+            // the adb, e.g. install-multiple or install-multi-package
+            args.push_back("install");
+        } else {
+            args.push_back(arg);
+        }
+    }
+
+    if (first_apk == -1) error_exit("Need at least one APK file on command line");
+
+    const auto afterApk = clock::now();
+
+    auto server_process = incremental::install({argv + first_apk, argv + last_apk + 1});
+    if (!server_process) {
+        return -1;
+    }
+
+    const auto end = clock::now();
+    printf("Install command complete (ms: %d total, %d apk prep, %d install)\n",
+           msBetween(start, end), msBetween(start, afterApk), msBetween(afterApk, end));
+
+    if (wait) {
+        (*server_process).wait();
+    }
+
+    return 0;
+}
+
 int install_app(int argc, const char** argv) {
-    std::vector<int> processedArgIndicies;
+    std::vector<int> processedArgIndices;
     InstallMode installMode = INSTALL_DEFAULT;
     bool use_fastdeploy = false;
     bool is_reinstall = false;
@@ -296,30 +354,42 @@ int install_app(int argc, const char** argv) {
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--streaming")) {
-            processedArgIndicies.push_back(i);
+            processedArgIndices.push_back(i);
             installMode = INSTALL_STREAM;
         } else if (!strcmp(argv[i], "--no-streaming")) {
-            processedArgIndicies.push_back(i);
+            processedArgIndices.push_back(i);
             installMode = INSTALL_PUSH;
         } else if (!strcmp(argv[i], "-r")) {
-            // Note that this argument is not added to processedArgIndicies because it
+            // Note that this argument is not added to processedArgIndices because it
             // must be passed through to pm
             is_reinstall = true;
         } else if (!strcmp(argv[i], "--fastdeploy")) {
-            processedArgIndicies.push_back(i);
+            processedArgIndices.push_back(i);
             use_fastdeploy = true;
         } else if (!strcmp(argv[i], "--no-fastdeploy")) {
-            processedArgIndicies.push_back(i);
+            processedArgIndices.push_back(i);
             use_fastdeploy = false;
         } else if (!strcmp(argv[i], "--force-agent")) {
-            processedArgIndicies.push_back(i);
+            processedArgIndices.push_back(i);
             agent_update_strategy = FastDeploy_AgentUpdateAlways;
         } else if (!strcmp(argv[i], "--date-check-agent")) {
-            processedArgIndicies.push_back(i);
+            processedArgIndices.push_back(i);
             agent_update_strategy = FastDeploy_AgentUpdateNewerTimeStamp;
         } else if (!strcmp(argv[i], "--version-check-agent")) {
-            processedArgIndicies.push_back(i);
+            processedArgIndices.push_back(i);
             agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
+        } else if (!strcmp(argv[i], "--incremental")) {
+            processedArgIndices.push_back(i);
+            installMode = INSTALL_INCREMENTAL;
+        } else if (!strcmp(argv[i], "--no-incremental")) {
+            processedArgIndices.push_back(i);
+            installMode = INSTALL_DEFAULT;
+        }
+    }
+
+    if (installMode == INSTALL_INCREMENTAL) {
+        if (get_device_api_level() < kIncrementalMinApi || !is_abb_exec_supported()) {
+            error_exit("Attempting to use incremental install on unsupported device");
         }
     }
 
@@ -341,8 +411,8 @@ int install_app(int argc, const char** argv) {
 
     std::vector<const char*> passthrough_argv;
     for (int i = 0; i < argc; i++) {
-        if (std::find(processedArgIndicies.begin(), processedArgIndicies.end(), i) ==
-            processedArgIndicies.end()) {
+        if (std::find(processedArgIndices.begin(), processedArgIndices.end(), i) ==
+            processedArgIndices.end()) {
             passthrough_argv.push_back(argv[i]);
         }
     }
@@ -357,6 +427,8 @@ int install_app(int argc, const char** argv) {
         case INSTALL_STREAM:
             return install_app_streamed(passthrough_argv.size(), passthrough_argv.data(),
                                         use_fastdeploy);
+        case INSTALL_INCREMENTAL:
+            return install_app_incremental(passthrough_argv.size(), passthrough_argv.data());
         case INSTALL_DEFAULT:
         default:
             return 1;
