@@ -225,9 +225,11 @@ cc_library_host_static {
 
     srcs: libadb_srcs + [
         "client/auth.cpp",
+        "client/adb_wifi.cpp",
         "client/usb_libusb.cpp",
         "client/usb_dispatch.cpp",
         "client/transport_mdns.cpp",
+        "client/pairing/pairing_client.cpp",
     ],
 
     generated_headers: ["platform_tools_version"],
@@ -257,6 +259,8 @@ cc_library_host_static {
     static_libs: [
         "libadb_crypto",
         "libadb_protos",
+        "libadb_pairing_connection",
+        "libadb_tls_connection",
         "libbase",
         "libcrypto_utils",
         "libcrypto",
@@ -266,6 +270,7 @@ cc_library_host_static {
         "libutils",
         "liblog",
         "libcutils",
+        "libprotobuf-cpp-lite",
     ],
 }
 
@@ -274,8 +279,12 @@ cc_test_host {
     defaults: ["adb_defaults"],
     srcs: libadb_test_srcs,
     static_libs: [
-        "libadb_crypto",
+        "libadb_crypto_static",
         "libadb_host",
+        "libadb_pairing_auth_static",
+        "libadb_pairing_connection_static",
+        "libadb_protos_static",
+        "libadb_tls_connection_static",
         "libbase",
         "libcutils",
         "libcrypto_utils",
@@ -283,6 +292,8 @@ cc_test_host {
         "liblog",
         "libmdnssd",
         "libdiagnose_usb",
+        "libprotobuf-cpp-lite",
+        "libssl",
         "libusb",
     ],
 
@@ -314,12 +325,16 @@ cc_benchmark {
     },
 
     static_libs: [
+        "libadb_crypto_static",
+        "libadb_tls_connection_static",
+        "libadbd_auth",
         "libbase",
         "libcutils",
         "libcrypto_utils",
         "libcrypto_static",
         "libdiagnose_usb",
         "liblog",
+        "libssl",
         "libusb",
     ],
 }
@@ -354,6 +369,10 @@ cc_binary_host {
     static_libs: [
         "libadb_crypto",
         "libadb_host",
+	"libadb_pairing_auth",
+	"libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libandroidfw",
         "libbase",
         "libcutils",
@@ -365,6 +384,7 @@ cc_binary_host {
         "liblz4",
         "libmdnssd",
         "libprotobuf-cpp-lite",
+        "libssl",
         "libusb",
         "libutils",
         "liblog",
@@ -415,6 +435,7 @@ cc_library_static {
     srcs: libadb_srcs + libadb_linux_srcs + libadb_posix_srcs + [
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
+	"daemon/adb_wifi.cpp",
     ],
 
     local_include_dirs: [
@@ -430,6 +451,9 @@ cc_library_static {
 
     shared_libs: [
         "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libadbd_auth",
         "libasyncio",
         "libbase",
@@ -484,6 +508,10 @@ cc_library {
     ],
 
     shared_libs: [
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libadbd_auth",
         "libasyncio",
         "libbase",
@@ -532,6 +560,9 @@ cc_library {
     ],
 
     shared_libs: [
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_tls_connection",
         "libadbd_auth",
         "libadbd_services",
         "libasyncio",
@@ -580,9 +611,14 @@ cc_binary {
         "libmdnssd",
         "libminijail",
         "libselinux",
+        "libssl",
     ],
 
     shared_libs: [
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libadbd_auth",
         "libcrypto",
     ],
@@ -659,6 +695,9 @@ cc_test {
     static_libs: [
         "libadbd",
         "libadbd_auth",
+        "libadb_crypto_static",
+        "libadb_pairing_connection_static",
+        "libadb_tls_connection_static",
         "libbase",
         "libcutils",
         "libcrypto_utils",
@@ -773,8 +812,12 @@ cc_test_host {
         "fastdeploy/deploypatchgenerator/patch_utils_test.cpp",
     ],
     static_libs: [
-        "libadb_crypto",
+        "libadb_crypto_static",
         "libadb_host",
+        "libadb_pairing_auth_static",
+        "libadb_pairing_connection_static",
+        "libadb_protos_static",
+        "libadb_tls_connection_static",
         "libandroidfw",
         "libbase",
         "libcutils",
@@ -785,6 +828,7 @@ cc_test_host {
         "liblog",
         "libmdnssd",
         "libprotobuf-cpp-lite",
+        "libssl",
         "libusb",
         "libutils",
         "libziparchive",

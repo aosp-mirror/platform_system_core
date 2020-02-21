@@ -53,6 +53,7 @@
 #include "adb_auth.h"
 #include "adb_listeners.h"
 #include "adb_utils.h"
+#include "adb_wifi.h"
 #include "socket_spec.h"
 #include "transport.h"
 
@@ -196,6 +197,7 @@ static void setup_adb(const std::vector<std::string>& addrs) {
     if (port == -1) {
         port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
     }
+    LOG(INFO) << "Setup mdns on port= " << port;
     setup_mdns(port);
 #endif
     for (const auto& addr : addrs) {
@@ -317,9 +319,10 @@ int main(int argc, char** argv) {
 
     while (true) {
         static struct option opts[] = {
-            {"root_seclabel", required_argument, nullptr, 's'},
-            {"device_banner", required_argument, nullptr, 'b'},
-            {"version", no_argument, nullptr, 'v'},
+                {"root_seclabel", required_argument, nullptr, 's'},
+                {"device_banner", required_argument, nullptr, 'b'},
+                {"version", no_argument, nullptr, 'v'},
+                {"logpostfsdata", no_argument, nullptr, 'l'},
         };
 
         int option_index = 0;
@@ -340,6 +343,9 @@ int main(int argc, char** argv) {
             case 'v':
                 printf("Android Debug Bridge Daemon version %d.%d.%d\n", ADB_VERSION_MAJOR,
                        ADB_VERSION_MINOR, ADB_SERVER_VERSION);
+                return 0;
+            case 'l':
+                LOG(ERROR) << "post-fs-data triggered";
                 return 0;
             default:
                 // getopt already prints "adbd: invalid option -- %c" for us.
