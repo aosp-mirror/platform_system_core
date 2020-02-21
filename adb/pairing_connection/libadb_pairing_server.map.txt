@@ -1,0 +1,10 @@
+LIBADB_PAIRING_SERVER {
+  global:
+    pairing_server_start; # apex introduced=30
+    pairing_server_new; # apex introduced=30
+    pairing_server_new_no_cert; # apex introduced=30
+    pairing_server_destroy; # apex introduced=30
+
+  local:
+    *;
+};
