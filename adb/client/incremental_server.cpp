@@ -146,7 +146,7 @@ class File {
     const unique_fd& RawFd() const { return fd_; }
 
     std::vector<bool> sentBlocks;
-    NumBlocks sentBlocksCount;
+    NumBlocks sentBlocksCount = 0;
 
     const char* const filepath;
     const FileId id;
