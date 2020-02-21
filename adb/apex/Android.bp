@@ -5,7 +5,12 @@ apex_defaults {
     compile_multilib: "both",
     multilib: {
         both: {
-            native_shared_libs: ["libadbconnection_client"],
+            native_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+                "libadb_pairing_server",
+                "libadbconnection_client",
+            ],
         },
     },
     prebuilts: ["com.android.adbd.init.rc"],

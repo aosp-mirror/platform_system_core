@@ -171,6 +171,12 @@ bool UsbConnection::Write(apacket* packet) {
     return true;
 }
 
+bool UsbConnection::DoTlsHandshake(RSA* key, std::string* auth_key) {
+    // TODO: support TLS for usb connections
+    LOG(FATAL) << "Not supported yet.";
+    return false;
+}
+
 void UsbConnection::Reset() {
     usb_reset(handle_);
     usb_kick(handle_);
