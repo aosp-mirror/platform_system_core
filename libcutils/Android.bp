@@ -126,19 +126,6 @@ cc_library {
             },
         },
 
-        android_mips: {
-            srcs: ["arch-mips/android_memset.c"],
-            sanitize: {
-                misc_undefined: ["integer"],
-            },
-        },
-        android_mips64: {
-            srcs: ["arch-mips/android_memset.c"],
-            sanitize: {
-                misc_undefined: ["integer"],
-            },
-        },
-
         android_x86: {
             srcs: [
                 "arch-x86/android_memset16.S",
