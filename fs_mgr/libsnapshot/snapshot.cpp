@@ -1387,12 +1387,14 @@ bool SnapshotManager::NeedSnapshotsInFirstStageMount() {
     auto slot = GetCurrentSlot();
 
     if (slot != Slot::Target) {
-        if (slot == Slot::Source && !device_->IsRecovery()) {
+        if (slot == Slot::Source) {
             // Device is rebooting into the original slot, so mark this as a
             // rollback.
             auto path = GetRollbackIndicatorPath();
             if (!android::base::WriteStringToFile("1", path)) {
                 PLOG(ERROR) << "Unable to write rollback indicator: " << path;
+            } else {
+                LOG(INFO) << "Rollback detected, writing rollback indicator to " << path;
             }
         }
         LOG(INFO) << "Not booting from new slot. Will not mount snapshots.";
