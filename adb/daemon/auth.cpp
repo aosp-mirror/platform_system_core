@@ -85,8 +85,8 @@ static atransport* transport_from_callback_arg(void* id) {
 static void IteratePublicKeys(std::function<bool(std::string_view public_key)> f) {
     adbd_auth_get_public_keys(
             auth_ctx,
-            [](const char* public_key, size_t len, void* arg) {
-                return (*static_cast<decltype(f)*>(arg))(std::string_view(public_key, len));
+            [](void* opaque, const char* public_key, size_t len) {
+                return (*static_cast<decltype(f)*>(opaque))(std::string_view(public_key, len));
             },
             &f);
 }
@@ -160,9 +160,9 @@ static void adbd_auth_key_authorized(void* arg, uint64_t id) {
 }
 
 void adbd_auth_init(void) {
-    AdbdAuthCallbacks cb;
+    AdbdAuthCallbacksV1 cb;
     cb.version = 1;
-    cb.callbacks.v1.key_authorized = adbd_auth_key_authorized;
+    cb.key_authorized = adbd_auth_key_authorized;
     auth_ctx = adbd_auth_new(&cb);
     std::thread([]() {
         adb_thread_setname("adbd auth");
