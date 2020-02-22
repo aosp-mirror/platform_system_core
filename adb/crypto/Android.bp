@@ -64,10 +64,6 @@ cc_library {
         "com.android.adbd",
         "test_com.android.adbd",
     ],
-
-    static_libs: [
-        "libadb_protos",
-    ],
 }
 
 // For running atest (b/147158681)

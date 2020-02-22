@@ -30,6 +30,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <iostream>
 
 #include <memory>
 #include <string>
@@ -97,8 +98,10 @@ static void help() {
         " version                  show version num\n"
         "\n"
         "networking:\n"
-        " connect HOST[:PORT]      connect to a device via TCP/IP\n"
-        " disconnect [[HOST]:PORT] disconnect from given TCP/IP device, or all\n"
+        " connect HOST[:PORT]      connect to a device via TCP/IP [default port=5555]\n"
+        " disconnect [HOST[:PORT]]\n"
+        "     disconnect from given TCP/IP device [default port=5555], or all\n"
+        " pair HOST[:PORT]         pair with a device for secure TCP/IP communication\n"
         " forward --list           list all forward socket connections\n"
         " forward [--no-rebind] LOCAL REMOTE\n"
         "     forward socket connection using:\n"
@@ -1638,6 +1641,19 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command(query);
     } else if (!strcmp(argv[0], "abb")) {
         return adb_abb(argc, argv);
+    } else if (!strcmp(argv[0], "pair")) {
+        if (argc != 2) error_exit("usage: adb pair <host>[:<port>]");
+
+        std::string password;
+        printf("Enter pairing code: ");
+        fflush(stdout);
+        if (!std::getline(std::cin, password) || password.empty()) {
+            error_exit("No pairing code provided");
+        }
+        std::string query =
+                android::base::StringPrintf("host:pair:%s:%s", password.c_str(), argv[1]);
+
+        return adb_query_command(query);
     } else if (!strcmp(argv[0], "emu")) {
         return adb_send_emulator_command(argc, argv, serial);
     } else if (!strcmp(argv[0], "shell")) {

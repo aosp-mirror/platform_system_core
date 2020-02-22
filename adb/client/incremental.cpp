@@ -16,6 +16,7 @@
 
 #include "incremental.h"
 
+#include <android-base/endian.h>
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <openssl/base64.h>
@@ -25,12 +26,6 @@
 #include "adb_utils.h"
 #include "commandline.h"
 #include "sysdeps.h"
-
-#ifndef _WIN32
-#include <endian.h>
-#else
-#define be32toh(x) _byteswap_ulong(x)
-#endif
 
 using namespace std::literals;
 
