@@ -18,6 +18,8 @@
 
 #include "apk_archive.h"
 
+#include <inttypes.h>
+
 #include "adb_trace.h"
 #include "sysdeps.h"
 
