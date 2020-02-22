@@ -259,7 +259,7 @@ bool IncrementalServer::SkipToRequest(void* buffer, size_t* size, bool blocking)
 
         if (r == -1) {
             fprintf(stderr, "Failed to read from fd %d: %d. Exit\n", adb_fd_.get(), errno);
-            return true;
+            return false;
         }
 
         // socket is closed
