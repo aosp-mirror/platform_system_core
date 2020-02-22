@@ -754,16 +754,24 @@ TYPED_TEST_P(DwarfDebugFrameTest, GetFdeFromPc_interleaved) {
   SetFde32(&this->memory_, 0x5400, 0xfc, 0, 0xa00, 0x100);
   // FDE 4 (0x100 - 0xb00)
   SetFde32(&this->memory_, 0x5500, 0xfc, 0, 0x150, 0xa00);
-  // FDE 5 (0x0 - 0x50)
-  SetFde32(&this->memory_, 0x5600, 0xfc, 0, 0, 0x50);
+  // FDE 5 (0x50 - 0xa0)
+  SetFde32(&this->memory_, 0x5600, 0xfc, 0, 0x50, 0x50);
+  // FDE 6 (0x0 - 0x50)
+  SetFde32(&this->memory_, 0x5700, 0xfc, 0, 0, 0x50);
 
-  this->debug_frame_->Init(0x5000, 0x700, 0);
+  this->debug_frame_->Init(0x5000, 0x800, 0);
 
   // Force reading all entries so no entries are found.
   const DwarfFde* fde = this->debug_frame_->GetFdeFromPc(0xfffff);
   ASSERT_TRUE(fde == nullptr);
 
-  //   0x0   - 0x50   FDE 5
+  //   0x50  - 0xa0  FDE 5
+  fde = this->debug_frame_->GetFdeFromPc(0x60);
+  ASSERT_TRUE(fde != nullptr);
+  EXPECT_EQ(0x50U, fde->pc_start);
+  EXPECT_EQ(0xa0U, fde->pc_end);
+
+  //   0x0   - 0x50   FDE 6
   fde = this->debug_frame_->GetFdeFromPc(0x10);
   ASSERT_TRUE(fde != nullptr);
   EXPECT_EQ(0U, fde->pc_start);
@@ -812,6 +820,56 @@ TYPED_TEST_P(DwarfDebugFrameTest, GetFdeFromPc_interleaved) {
   EXPECT_EQ(0xb50U, fde->pc_end);
 }
 
+TYPED_TEST_P(DwarfDebugFrameTest, GetFdeFromPc_overlap) {
+  SetCie32(&this->memory_, 0x5000, 0xfc, std::vector<uint8_t>{1, '\0', 0, 0, 1});
+
+  // FDE 0 (0x100 - 0x200)
+  SetFde32(&this->memory_, 0x5100, 0xfc, 0, 0x100, 0x100);
+  // FDE 1 (0x50 - 0x550)
+  SetFde32(&this->memory_, 0x5200, 0xfc, 0, 0x50, 0x500);
+  // FDE 2 (0x00 - 0x800)
+  SetFde32(&this->memory_, 0x5300, 0xfc, 0, 0x0, 0x800);
+
+  this->debug_frame_->Init(0x5000, 0x400, 0);
+
+  // Force reading all entries so no entries are found.
+  const DwarfFde* fde = this->debug_frame_->GetFdeFromPc(0xfffff);
+  ASSERT_TRUE(fde == nullptr);
+
+  //   0x0  - 0x50  FDE 2
+  fde = this->debug_frame_->GetFdeFromPc(0x10);
+  ASSERT_TRUE(fde != nullptr);
+  EXPECT_EQ(0x0U, fde->pc_start);
+  EXPECT_EQ(0x800U, fde->pc_end);
+
+  //   0x50  - 0x100  FDE 1
+  fde = this->debug_frame_->GetFdeFromPc(0x60);
+  ASSERT_TRUE(fde != nullptr);
+  EXPECT_EQ(0x50U, fde->pc_start);
+  EXPECT_EQ(0x550U, fde->pc_end);
+
+  //   0x100 - 0x200  FDE 0
+  fde = this->debug_frame_->GetFdeFromPc(0x170);
+  ASSERT_TRUE(fde != nullptr);
+  EXPECT_EQ(0x100U, fde->pc_start);
+  EXPECT_EQ(0x200U, fde->pc_end);
+
+  //   0x200 - 0x550  FDE 1
+  fde = this->debug_frame_->GetFdeFromPc(0x210);
+  ASSERT_TRUE(fde != nullptr);
+  EXPECT_EQ(0x50U, fde->pc_start);
+  EXPECT_EQ(0x550U, fde->pc_end);
+
+  //   0x550 - 0x800  FDE 2
+  fde = this->debug_frame_->GetFdeFromPc(0x580);
+  ASSERT_TRUE(fde != nullptr);
+  EXPECT_EQ(0x0U, fde->pc_start);
+  EXPECT_EQ(0x800U, fde->pc_end);
+
+  fde = this->debug_frame_->GetFdeFromPc(0x810);
+  ASSERT_TRUE(fde == nullptr);
+}
+
 REGISTER_TYPED_TEST_SUITE_P(
     DwarfDebugFrameTest, GetFdes32, GetFdes32_after_GetFdeFromPc, GetFdes32_not_in_section,
     GetFdeFromPc32, GetFdeFromPc32_reverse, GetFdeFromPc32_not_in_section, GetFdes64,
@@ -822,7 +880,7 @@ REGISTER_TYPED_TEST_SUITE_P(
     GetCieFromOffset64_version4, GetCieFromOffset32_version5, GetCieFromOffset64_version5,
     GetCieFromOffset_version_invalid, GetCieFromOffset32_augment, GetCieFromOffset64_augment,
     GetFdeFromOffset32_augment, GetFdeFromOffset64_augment, GetFdeFromOffset32_lsda_address,
-    GetFdeFromOffset64_lsda_address, GetFdeFromPc_interleaved);
+    GetFdeFromOffset64_lsda_address, GetFdeFromPc_interleaved, GetFdeFromPc_overlap);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfDebugFrameTestTypes;
 INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfDebugFrameTest, DwarfDebugFrameTestTypes);
