@@ -35,6 +35,7 @@
 #include "adb_client.h"
 #include "adb_listeners.h"
 #include "adb_utils.h"
+#include "adb_wifi.h"
 #include "commandline.h"
 #include "sysdeps/chrono.h"
 #include "transport.h"
@@ -118,6 +119,7 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     init_transport_registration();
     init_reconnect_handler();
 
+    adb_wifi_init();
     if (!getenv("ADB_MDNS") || strcmp(getenv("ADB_MDNS"), "0") != 0) {
         init_mdns_transport_discovery();
     }

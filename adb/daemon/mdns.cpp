@@ -24,6 +24,7 @@
 
 #include <chrono>
 #include <mutex>
+#include <random>
 #include <thread>
 
 #include <android-base/logging.h>
@@ -36,7 +37,7 @@ static int port;
 static DNSServiceRef mdns_refs[kNumADBDNSServices];
 static bool mdns_registered[kNumADBDNSServices];
 
-static void start_mdns() {
+void start_mdnsd() {
     if (android::base::GetProperty("init.svc.mdnsd", "") == "running") {
         return;
     }
@@ -61,11 +62,9 @@ static void mdns_callback(DNSServiceRef /*ref*/,
     }
 }
 
-static void register_mdns_service(int index, int port) {
+static void register_mdns_service(int index, int port, const std::string service_name) {
     std::lock_guard<std::mutex> lock(mdns_lock);
 
-    std::string hostname = "adb-";
-    hostname += android::base::GetProperty("ro.serialno", "unidentified");
 
     // https://tools.ietf.org/html/rfc6763
     // """
@@ -95,7 +94,7 @@ static void register_mdns_service(int index, int port) {
     }
 
     auto error = DNSServiceRegister(
-            &mdns_refs[index], 0, 0, hostname.c_str(), kADBDNSServices[index], nullptr, nullptr,
+            &mdns_refs[index], 0, 0, service_name.c_str(), kADBDNSServices[index], nullptr, nullptr,
             htobe16((uint16_t)port), (uint16_t)txtRecord.size(),
             txtRecord.empty() ? nullptr : txtRecord.data(), mdns_callback, nullptr);
 
@@ -120,11 +119,13 @@ static void unregister_mdns_service(int index) {
 }
 
 static void register_base_mdns_transport() {
-    register_mdns_service(kADBTransportServiceRefIndex, port);
+    std::string hostname = "adb-";
+    hostname += android::base::GetProperty("ro.serialno", "unidentified");
+    register_mdns_service(kADBTransportServiceRefIndex, port, hostname);
 }
 
 static void setup_mdns_thread() {
-    start_mdns();
+    start_mdnsd();
 
     // We will now only set up the normal transport mDNS service
     // instead of registering all the adb secure mDNS services
@@ -139,9 +140,57 @@ static void teardown_mdns() {
     }
 }
 
+static std::string RandomAlphaNumString(size_t len) {
+    std::string ret;
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    // Generate values starting with zero and then up to enough to cover numeric
+    // digits, small letters and capital letters (26 each).
+    std::uniform_int_distribution<uint8_t> dist(0, 61);
+    for (size_t i = 0; i < len; ++i) {
+        uint8_t val = dist(mt);
+        if (val < 10) {
+            ret += '0' + val;
+        } else if (val < 36) {
+            ret += 'A' + (val - 10);
+        } else {
+            ret += 'a' + (val - 36);
+        }
+    }
+    return ret;
+}
+
+static std::string GenerateDeviceGuid() {
+    // The format is adb-<serial_no>-<six-random-alphanum>
+    std::string guid = "adb-";
+
+    std::string serial = android::base::GetProperty("ro.serialno", "");
+    if (serial.empty()) {
+        // Generate 16-bytes of random alphanum string
+        serial = RandomAlphaNumString(16);
+    }
+    guid += serial + '-';
+    // Random six-char suffix
+    guid += RandomAlphaNumString(6);
+    return guid;
+}
+
+static std::string ReadDeviceGuid() {
+    std::string guid = android::base::GetProperty("persist.adb.wifi.guid", "");
+    if (guid.empty()) {
+        guid = GenerateDeviceGuid();
+        CHECK(!guid.empty());
+        android::base::SetProperty("persist.adb.wifi.guid", guid);
+    }
+    return guid;
+}
+
 // Public interface/////////////////////////////////////////////////////////////
 
 void setup_mdns(int port_in) {
+    // Make sure the adb wifi guid is generated.
+    std::string guid = ReadDeviceGuid();
+    CHECK(!guid.empty());
     port = port_in;
     std::thread(setup_mdns_thread).detach();
 
@@ -149,24 +198,14 @@ void setup_mdns(int port_in) {
     atexit(teardown_mdns);
 }
 
-void register_adb_secure_pairing_service(int port) {
-    std::thread([port]() {
-        register_mdns_service(kADBSecurePairingServiceRefIndex, port);
-    }).detach();
-}
-
-void unregister_adb_secure_pairing_service() {
-    std::thread([]() { unregister_mdns_service(kADBSecurePairingServiceRefIndex); }).detach();
-}
-
-bool is_adb_secure_pairing_service_registered() {
-    std::lock_guard<std::mutex> lock(mdns_lock);
-    return mdns_registered[kADBSecurePairingServiceRefIndex];
-}
-
 void register_adb_secure_connect_service(int port) {
     std::thread([port]() {
-        register_mdns_service(kADBSecureConnectServiceRefIndex, port);
+        auto service_name = ReadDeviceGuid();
+        if (service_name.empty()) {
+            return;
+        }
+        LOG(INFO) << "Registering secure_connect service (" << service_name << ")";
+        register_mdns_service(kADBSecureConnectServiceRefIndex, port, service_name);
     }).detach();
 }
 
