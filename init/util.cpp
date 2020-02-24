@@ -41,7 +41,7 @@
 #include <cutils/sockets.h>
 #include <selinux/android.h>
 
-#if defined(__ANDROID__)
+#ifdef INIT_FULL_SOURCES
 #include <android/api-level.h>
 #include <sys/system_properties.h>
 
