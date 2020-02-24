@@ -36,10 +36,8 @@ private:
 
 TEST(StrongPointer, move) {
     bool isDeleted;
-    SPFoo* foo = new SPFoo(&isDeleted);
-    ASSERT_EQ(0, foo->getStrongCount());
-    ASSERT_FALSE(isDeleted) << "Already deleted...?";
-    sp<SPFoo> sp1(foo);
+    sp<SPFoo> sp1 = sp<SPFoo>::make(&isDeleted);
+    SPFoo* foo = sp1.get();
     ASSERT_EQ(1, foo->getStrongCount());
     {
         sp<SPFoo> sp2 = std::move(sp1);
@@ -65,7 +63,7 @@ TEST(StrongPointer, NullptrComparison) {
 
 TEST(StrongPointer, PointerComparison) {
     bool isDeleted;
-    sp<SPFoo> foo = new SPFoo(&isDeleted);
+    sp<SPFoo> foo = sp<SPFoo>::make(&isDeleted);
     ASSERT_EQ(foo.get(), foo);
     ASSERT_EQ(foo, foo.get());
     ASSERT_NE(nullptr, foo);
