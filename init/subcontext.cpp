@@ -31,7 +31,7 @@
 #include "proto_utils.h"
 #include "util.h"
 
-#if defined(__ANDROID__)
+#ifdef INIT_FULL_SOURCES
 #include <android/api-level.h>
 #include "property_service.h"
 #include "selabel.h"
