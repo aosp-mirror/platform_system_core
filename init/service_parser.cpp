@@ -34,7 +34,7 @@
 #include "service_utils.h"
 #include "util.h"
 
-#if defined(__ANDROID__)
+#ifdef INIT_FULL_SOURCES
 #include <android/api-level.h>
 #include <sys/system_properties.h>
 
