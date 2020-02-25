@@ -40,13 +40,10 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
-#include <adbd_fs.h>
-
-// Needed for __android_log_security_bswrite.
+#include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
 #if defined(__ANDROID__)
-#include <linux/capability.h>
 #include <selinux/android.h>
 #include <sys/xattr.h>
 #endif
@@ -101,7 +98,7 @@ static bool secure_mkdirs(const std::string& path) {
     for (const auto& path_component : path_components) {
         uid_t uid = -1;
         gid_t gid = -1;
-        mode_t mode = 0775;
+        unsigned int mode = 0775;
         uint64_t capabilities = 0;
 
         if (path_component.empty()) {
@@ -114,7 +111,7 @@ static bool secure_mkdirs(const std::string& path) {
         partial_path += path_component;
 
         if (should_use_fs_config(partial_path)) {
-            adbd_fs_config(partial_path.c_str(), 1, nullptr, &uid, &gid, &mode, &capabilities);
+            fs_config(partial_path.c_str(), 1, nullptr, &uid, &gid, &mode, &capabilities);
         }
         if (adb_mkdir(partial_path.c_str(), mode) == -1) {
             if (errno != EEXIST) {
@@ -471,7 +468,9 @@ static bool do_send(int s, const std::string& spec, std::vector<char>& buffer) {
         gid_t gid = -1;
         uint64_t capabilities = 0;
         if (should_use_fs_config(path)) {
-            adbd_fs_config(path.c_str(), 0, nullptr, &uid, &gid, &mode, &capabilities);
+            unsigned int broken_api_hack = mode;
+            fs_config(path.c_str(), 0, nullptr, &uid, &gid, &broken_api_hack, &capabilities);
+            mode = broken_api_hack;
         }
 
         result = handle_send_file(s, path.c_str(), &timestamp, uid, gid, capabilities, mode, buffer,
@@ -551,6 +550,7 @@ static const char* sync_id_to_name(uint32_t id) {
 static bool handle_sync_command(int fd, std::vector<char>& buffer) {
     D("sync: waiting for request");
 
+    ATRACE_CALL();
     SyncRequest request;
     if (!ReadFdExactly(fd, &request, sizeof(request))) {
         SendSyncFail(fd, "command read failure");
@@ -569,6 +569,8 @@ static bool handle_sync_command(int fd, std::vector<char>& buffer) {
     name[path_length] = 0;
 
     std::string id_name = sync_id_to_name(request.id);
+    std::string trace_name = StringPrintf("%s(%s)", id_name.c_str(), name);
+    ATRACE_NAME(trace_name.c_str());
 
     D("sync: %s('%s')", id_name.c_str(), name);
     switch (request.id) {
