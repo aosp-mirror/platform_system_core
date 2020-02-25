@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,25 @@
 
 #pragma once
 
-#include <sys/socket.h>
+#include <mutex>
 
-#include <string>
-
-#include "epoll.h"
+#include <android-base/thread_annotations.h>
 
 namespace android {
 namespace init {
 
-static constexpr const char kRestoreconProperty[] = "selinux.restorecon_recursive";
+// This class exists to add thread annotations, since they're absent from std::recursive_mutex.
 
-bool CanReadProperty(const std::string& source_context, const std::string& name);
+class CAPABILITY("mutex") RecursiveMutex {
+  public:
+    void lock() ACQUIRE() { mutex_.lock(); }
+    void unlock() RELEASE() { mutex_.unlock(); }
 
-void PropertyInit();
-void StartPropertyService(int* epoll_socket);
-void ResumePropertyService();
-void PausePropertyService();
+  private:
+    std::recursive_mutex mutex_;
+};
+
+extern RecursiveMutex service_lock;
 
 }  // namespace init
 }  // namespace android
