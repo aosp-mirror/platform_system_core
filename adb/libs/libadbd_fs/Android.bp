@@ -1,0 +1,30 @@
+// libadbd_fs
+// =========================================================
+cc_library {
+    name: "libadbd_fs",
+    defaults: ["adbd_defaults"],
+
+    srcs: ["adbd_fs.cpp"],
+    static_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+    ],
+    export_include_dirs: ["include"],
+
+    version_script: "libadbd_fs.map.txt",
+    stubs: {
+        versions: ["1"],
+        symbol_file: "libadbd_fs.map.txt",
+    },
+
+    host_supported: true,
+    recovery_available: true,
+    compile_multilib: "both",
+
+    target: {
+        darwin: {
+            enabled: false,
+        }
+    },
+}

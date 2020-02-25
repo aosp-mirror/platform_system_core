@@ -27,6 +27,7 @@
 
 #include <android-base/endian.h>
 #include <android-base/strings.h>
+#include <inttypes.h>
 #include <lz4.h>
 #include <stdio.h>
 #include <stdlib.h>
