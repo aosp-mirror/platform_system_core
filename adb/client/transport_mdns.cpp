@@ -409,9 +409,9 @@ static void adb_RemoveDNSService(const char* regType, const char* serviceName) {
     }
 
     std::string sName(serviceName);
-    std::remove_if(services->begin(), services->end(), [&sName](ResolvedService* service) {
-        return (sName == service->serviceName());
-    });
+    services->erase(std::remove_if(
+            services->begin(), services->end(),
+            [&sName](ResolvedService* service) { return (sName == service->serviceName()); }));
 }
 
 // Returns the version the device wanted to advertise,
