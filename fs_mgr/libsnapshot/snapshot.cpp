@@ -43,10 +43,10 @@
 #endif
 
 #include <android/snapshot/snapshot.pb.h>
+#include <libsnapshot/snapshot_stats.h>
 #include "device_info.h"
 #include "partition_cow_creator.h"
 #include "snapshot_metadata_updater.h"
-#include "snapshot_stats.h"
 #include "utility.h"
 
 namespace android {
