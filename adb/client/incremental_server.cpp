@@ -27,6 +27,7 @@
 
 #include <android-base/endian.h>
 #include <android-base/strings.h>
+#include <inttypes.h>
 #include <lz4.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -258,7 +259,7 @@ bool IncrementalServer::SkipToRequest(void* buffer, size_t* size, bool blocking)
 
         if (r == -1) {
             fprintf(stderr, "Failed to read from fd %d: %d. Exit\n", adb_fd_.get(), errno);
-            return true;
+            return false;
         }
 
         // socket is closed
