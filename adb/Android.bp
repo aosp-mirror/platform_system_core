@@ -114,66 +114,6 @@ cc_defaults {
     },
 }
 
-// libadbconnection
-// =========================================================
-// libadbconnection_client/server implement the socket handling for jdwp
-// forwarding and the track-jdwp service.
-cc_library {
-    name: "libadbconnection_server",
-    srcs: ["adbconnection/adbconnection_server.cpp"],
-
-    export_include_dirs: ["adbconnection/include"],
-
-    stl: "libc++_static",
-    shared_libs: ["liblog"],
-    static_libs: ["libbase"],
-
-    defaults: ["adbd_defaults", "host_adbd_supported"],
-
-    // Avoid getting duplicate symbol of android::build::getbuildnumber().
-    use_version_lib: false,
-
-    recovery_available: true,
-    compile_multilib: "both",
-}
-
-cc_library {
-    name: "libadbconnection_client",
-    srcs: ["adbconnection/adbconnection_client.cpp"],
-
-    export_include_dirs: ["adbconnection/include"],
-
-    stl: "libc++_static",
-    shared_libs: ["liblog"],
-    static_libs: ["libbase"],
-
-    defaults: ["adbd_defaults"],
-    visibility: [
-        "//art:__subpackages__",
-        "//system/core/adb/apex:__subpackages__",
-    ],
-    apex_available: [
-        "com.android.adbd",
-        "test_com.android.adbd",
-    ],
-
-    // libadbconnection_client doesn't need an embedded build number.
-    use_version_lib: false,
-
-    target: {
-        linux: {
-            version_script: "adbconnection/libadbconnection_client.map.txt",
-        },
-    },
-    stubs: {
-        symbol_file: "adbconnection/libadbconnection_client.map.txt",
-        versions: ["1"],
-    },
-
-    host_supported: true,
-    compile_multilib: "both",
-}
-
 // libadb
 // =========================================================
 // These files are compiled for both the host and the device.
@@ -435,7 +375,7 @@ cc_library_static {
     srcs: libadb_srcs + libadb_linux_srcs + libadb_posix_srcs + [
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
-	"daemon/adb_wifi.cpp",
+        "daemon/adb_wifi.cpp",
     ],
 
     local_include_dirs: [
@@ -459,7 +399,6 @@ cc_library_static {
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
         "liblog",
     ],
 
@@ -483,7 +422,7 @@ cc_library_static {
     },
 }
 
-cc_library {
+cc_library_static {
     name: "libadbd_services",
     defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
@@ -513,11 +452,11 @@ cc_library {
         "libadb_protos",
         "libadb_tls_connection",
         "libadbd_auth",
+        "libadbd_fs",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
         "liblog",
     ],
 
@@ -564,13 +503,20 @@ cc_library {
         "libadb_pairing_connection",
         "libadb_tls_connection",
         "libadbd_auth",
-        "libadbd_services",
+        "libadbd_fs",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
         "liblog",
+        "libselinux",
+    ],
+
+    static_libs: [
+        "libadbd_services",
+        "libcutils_sockets",
+        "libdiagnose_usb",
+        "libmdnssd",
     ],
 
     export_include_dirs: [
@@ -605,7 +551,7 @@ cc_binary {
         "libbase",
         "libcap",
         "libcrypto_utils",
-        "libcutils",
+        "libcutils_sockets",
         "libdiagnose_usb",
         "liblog",
         "libmdnssd",
@@ -620,10 +566,14 @@ cc_binary {
         "libadb_protos",
         "libadb_tls_connection",
         "libadbd_auth",
+        "libadbd_fs",
         "libcrypto",
     ],
 
-    required: ["libadbd_auth"],
+    required: [
+        "libadbd_auth",
+        "libadbd_fs",
+    ],
 }
 
 phony {
@@ -699,9 +649,9 @@ cc_test {
         "libadb_pairing_connection_static",
         "libadb_tls_connection_static",
         "libbase",
-        "libcutils",
         "libcrypto_utils",
         "libcrypto_static",
+        "libcutils_sockets",
         "libdiagnose_usb",
         "liblog",
         "libusb",
