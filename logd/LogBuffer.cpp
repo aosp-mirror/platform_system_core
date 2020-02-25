@@ -207,31 +207,37 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
     // exact entry with time specified in ms or us precision.
     if ((realtime.tv_nsec % 1000) == 0) ++realtime.tv_nsec;
 
-    LogBufferElement* elem =
-        new LogBufferElement(log_id, realtime, uid, pid, tid, msg, len);
-    if (log_id != LOG_ID_SECURITY) {
-        int prio = ANDROID_LOG_INFO;
-        const char* tag = nullptr;
-        size_t tag_len = 0;
-        if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
-            tag = tagToName(elem->getTag());
-            if (tag) {
-                tag_len = strlen(tag);
-            }
-        } else {
-            prio = *msg;
-            tag = msg + 1;
-            tag_len = strnlen(tag, len - 1);
+    LogBufferElement* elem = new LogBufferElement(log_id, realtime, uid, pid, tid, msg, len);
+
+    // b/137093665: don't coalesce security messages.
+    if (log_id == LOG_ID_SECURITY) {
+        wrlock();
+        log(elem);
+        unlock();
+
+        return len;
+    }
+
+    int prio = ANDROID_LOG_INFO;
+    const char* tag = nullptr;
+    size_t tag_len = 0;
+    if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
+        tag = tagToName(elem->getTag());
+        if (tag) {
+            tag_len = strlen(tag);
         }
-        if (!__android_log_is_loggable_len(prio, tag, tag_len,
-                                           ANDROID_LOG_VERBOSE)) {
-            // Log traffic received to total
-            wrlock();
-            stats.addTotal(elem);
-            unlock();
-            delete elem;
-            return -EACCES;
-        }
+    } else {
+        prio = *msg;
+        tag = msg + 1;
+        tag_len = strnlen(tag, len - 1);
+    }
+    if (!__android_log_is_loggable_len(prio, tag, tag_len, ANDROID_LOG_VERBOSE)) {
+        // Log traffic received to total
+        wrlock();
+        stats.addTotal(elem);
+        unlock();
+        delete elem;
+        return -EACCES;
     }
 
     wrlock();
