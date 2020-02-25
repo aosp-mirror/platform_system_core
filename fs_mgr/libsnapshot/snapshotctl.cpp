@@ -26,9 +26,9 @@
 #include <android-base/unique_fd.h>
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/snapshot.h>
+#include <libsnapshot/snapshot_stats.h>
 #include <statslog.h>
 
-#include "snapshot_stats.h"
 #include "utility.h"
 
 using namespace std::string_literals;

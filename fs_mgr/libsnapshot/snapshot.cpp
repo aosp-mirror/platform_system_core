@@ -2501,7 +2501,7 @@ UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_rep
         }
     }
 
-    SnapshotMergeStats merge_stats(*this);
+    auto merge_stats = SnapshotMergeStats::GetInstance(*this);
 
     unsigned int last_progress = 0;
     auto callback = [&]() -> bool {
@@ -2516,9 +2516,9 @@ UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_rep
 
     LOG(INFO) << "Waiting for any previous merge request to complete. "
               << "This can take up to several minutes.";
-    merge_stats.Resume();
+    merge_stats->Start();
     auto state = ProcessUpdateState(callback, before_cancel);
-    merge_stats.set_state(state);
+    merge_stats->set_state(state);
     if (state == UpdateState::None) {
         LOG(INFO) << "Can't find any snapshot to merge.";
         return state;
@@ -2529,10 +2529,6 @@ UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_rep
             return state;
         }
 
-        // This is the first snapshot merge that is requested after OTA. We can
-        // initialize the merge duration statistics.
-        merge_stats.Start();
-
         if (!InitiateMerge()) {
             LOG(ERROR) << "Failed to initiate merge.";
             return state;
@@ -2541,12 +2537,17 @@ UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_rep
         LOG(INFO) << "Waiting for merge to complete. This can take up to several minutes.";
         last_progress = 0;
         state = ProcessUpdateState(callback, before_cancel);
-        merge_stats.set_state(state);
+        merge_stats->set_state(state);
     }
 
     LOG(INFO) << "Merge finished with state \"" << state << "\".";
     if (stats_report) {
-        *stats_report = merge_stats.GetReport();
+        auto result = merge_stats->Finish();
+        if (result) {
+            *stats_report = result->report();
+        } else {
+            LOG(WARNING) << "SnapshotMergeStatus::Finish failed.";
+        }
     }
     return state;
 }
