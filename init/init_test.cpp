@@ -167,6 +167,7 @@ service A something
 
     ServiceList service_list;
     TestInitText(init_script, BuiltinFunctionMap(), {}, &service_list);
+    auto lock = std::lock_guard{service_lock};
     ASSERT_EQ(1, std::distance(service_list.begin(), service_list.end()));
 
     auto service = service_list.begin()->get();

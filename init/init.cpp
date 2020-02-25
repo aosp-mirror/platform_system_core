@@ -33,7 +33,9 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <thread>
 #include <vector>
 
 #include <android-base/chrono_utils.h>
@@ -95,15 +97,148 @@ static int property_triggers_enabled = 0;
 static int signal_fd = -1;
 static int property_fd = -1;
 
-static std::unique_ptr<Timer> waiting_for_prop(nullptr);
-static std::string wait_prop_name;
-static std::string wait_prop_value;
-static std::string shutdown_command;
-static bool do_shutdown = false;
-
 static std::unique_ptr<Subcontext> subcontext;
 
+// Init epolls various FDs to wait for various inputs.  It previously waited on property changes
+// with a blocking socket that contained the information related to the change, however, it was easy
+// to fill that socket and deadlock the system.  Now we use locks to handle the property changes
+// directly in the property thread, however we still must wake the epoll to inform init that there
+// is a change to process, so we use this FD.  It is non-blocking, since we do not care how many
+// times WakeEpoll() is called, only that the epoll will wake.
+static int wake_epoll_fd = -1;
+static void InstallInitNotifier(Epoll* epoll) {
+    int sockets[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0, sockets) != 0) {
+        PLOG(FATAL) << "Failed to socketpair() between property_service and init";
+    }
+    int epoll_fd = sockets[0];
+    wake_epoll_fd = sockets[1];
+
+    auto drain_socket = [epoll_fd] {
+        char buf[512];
+        while (read(epoll_fd, buf, sizeof(buf)) > 0) {
+        }
+    };
+
+    if (auto result = epoll->RegisterHandler(epoll_fd, drain_socket); !result) {
+        LOG(FATAL) << result.error();
+    }
+}
+
+static void WakeEpoll() {
+    constexpr char value[] = "1";
+    write(wake_epoll_fd, value, sizeof(value));
+}
+
+static class PropWaiterState {
+  public:
+    bool StartWaiting(const char* name, const char* value) {
+        auto lock = std::lock_guard{lock_};
+        if (waiting_for_prop_) {
+            return false;
+        }
+        if (GetProperty(name, "") != value) {
+            // Current property value is not equal to expected value
+            wait_prop_name_ = name;
+            wait_prop_value_ = value;
+            waiting_for_prop_.reset(new Timer());
+        } else {
+            LOG(INFO) << "start_waiting_for_property(\"" << name << "\", \"" << value
+                      << "\"): already set";
+        }
+        return true;
+    }
+
+    void ResetWaitForProp() {
+        auto lock = std::lock_guard{lock_};
+        ResetWaitForPropLocked();
+    }
+
+    void CheckAndResetWait(const std::string& name, const std::string& value) {
+        auto lock = std::lock_guard{lock_};
+        // We always record how long init waited for ueventd to tell us cold boot finished.
+        // If we aren't waiting on this property, it means that ueventd finished before we even
+        // started to wait.
+        if (name == kColdBootDoneProp) {
+            auto time_waited = waiting_for_prop_ ? waiting_for_prop_->duration().count() : 0;
+            std::thread([time_waited] {
+                SetProperty("ro.boottime.init.cold_boot_wait", std::to_string(time_waited));
+            }).detach();
+        }
+
+        if (waiting_for_prop_) {
+            if (wait_prop_name_ == name && wait_prop_value_ == value) {
+                LOG(INFO) << "Wait for property '" << wait_prop_name_ << "=" << wait_prop_value_
+                          << "' took " << *waiting_for_prop_;
+                ResetWaitForPropLocked();
+                WakeEpoll();
+            }
+        }
+    }
+
+    // This is not thread safe because it releases the lock when it returns, so the waiting state
+    // may change.  However, we only use this function to prevent running commands in the main
+    // thread loop when we are waiting, so we do not care about false positives; only false
+    // negatives.  StartWaiting() and this function are always called from the same thread, so false
+    // negatives are not possible and therefore we're okay.
+    bool MightBeWaiting() {
+        auto lock = std::lock_guard{lock_};
+        return static_cast<bool>(waiting_for_prop_);
+    }
+
+  private:
+    void ResetWaitForPropLocked() {
+        wait_prop_name_.clear();
+        wait_prop_value_.clear();
+        waiting_for_prop_.reset();
+    }
+
+    std::mutex lock_;
+    std::unique_ptr<Timer> waiting_for_prop_{nullptr};
+    std::string wait_prop_name_;
+    std::string wait_prop_value_;
+
+} prop_waiter_state;
+
+bool start_waiting_for_property(const char* name, const char* value) {
+    return prop_waiter_state.StartWaiting(name, value);
+}
+
+void ResetWaitForProp() {
+    prop_waiter_state.ResetWaitForProp();
+}
+
+static class ShutdownState {
+  public:
+    void TriggerShutdown(const std::string& command) {
+        // We can't call HandlePowerctlMessage() directly in this function,
+        // because it modifies the contents of the action queue, which can cause the action queue
+        // to get into a bad state if this function is called from a command being executed by the
+        // action queue.  Instead we set this flag and ensure that shutdown happens before the next
+        // command is run in the main init loop.
+        auto lock = std::lock_guard{shutdown_command_lock_};
+        shutdown_command_ = command;
+        do_shutdown_ = true;
+        WakeEpoll();
+    }
+
+    std::optional<std::string> CheckShutdown() {
+        auto lock = std::lock_guard{shutdown_command_lock_};
+        if (do_shutdown_ && !IsShuttingDown()) {
+            do_shutdown_ = false;
+            return shutdown_command_;
+        }
+        return {};
+    }
+
+  private:
+    std::mutex shutdown_command_lock_;
+    std::string shutdown_command_;
+    bool do_shutdown_ = false;
+} shutdown_state;
+
 void DumpState() {
+    auto lock = std::lock_guard{service_lock};
     ServiceList::GetInstance().DumpState();
     ActionManager::GetInstance().DumpState();
 }
@@ -156,40 +291,7 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
     }
 }
 
-bool start_waiting_for_property(const char *name, const char *value)
-{
-    if (waiting_for_prop) {
-        return false;
-    }
-    if (GetProperty(name, "") != value) {
-        // Current property value is not equal to expected value
-        wait_prop_name = name;
-        wait_prop_value = value;
-        waiting_for_prop.reset(new Timer());
-    } else {
-        LOG(INFO) << "start_waiting_for_property(\""
-                  << name << "\", \"" << value << "\"): already set";
-    }
-    return true;
-}
-
-void ResetWaitForProp() {
-    wait_prop_name.clear();
-    wait_prop_value.clear();
-    waiting_for_prop.reset();
-}
-
-static void TriggerShutdown(const std::string& command) {
-    // We can't call HandlePowerctlMessage() directly in this function,
-    // because it modifies the contents of the action queue, which can cause the action queue
-    // to get into a bad state if this function is called from a command being executed by the
-    // action queue.  Instead we set this flag and ensure that shutdown happens before the next
-    // command is run in the main init loop.
-    shutdown_command = command;
-    do_shutdown = true;
-}
-
-void property_changed(const std::string& name, const std::string& value) {
+void PropertyChanged(const std::string& name, const std::string& value) {
     // If the property is sys.powerctl, we bypass the event queue and immediately handle it.
     // This is to ensure that init will always and immediately shutdown/reboot, regardless of
     // if there are other pending events to process or if init is waiting on an exec service or
@@ -197,30 +299,20 @@ void property_changed(const std::string& name, const std::string& value) {
     // In non-thermal-shutdown case, 'shutdown' trigger will be fired to let device specific
     // commands to be executed.
     if (name == "sys.powerctl") {
-        TriggerShutdown(value);
+        trigger_shutdown(value);
     }
 
-    if (property_triggers_enabled) ActionManager::GetInstance().QueuePropertyChange(name, value);
-
-    // We always record how long init waited for ueventd to tell us cold boot finished.
-    // If we aren't waiting on this property, it means that ueventd finished before we even started
-    // to wait.
-    if (name == kColdBootDoneProp) {
-        auto time_waited = waiting_for_prop ? waiting_for_prop->duration().count() : 0;
-        SetProperty("ro.boottime.init.cold_boot_wait", std::to_string(time_waited));
+    if (property_triggers_enabled) {
+        ActionManager::GetInstance().QueuePropertyChange(name, value);
+        WakeEpoll();
     }
 
-    if (waiting_for_prop) {
-        if (wait_prop_name == name && wait_prop_value == value) {
-            LOG(INFO) << "Wait for property '" << wait_prop_name << "=" << wait_prop_value
-                      << "' took " << *waiting_for_prop;
-            ResetWaitForProp();
-        }
-    }
+    prop_waiter_state.CheckAndResetWait(name, value);
 }
 
 static std::optional<boot_clock::time_point> HandleProcessActions() {
     std::optional<boot_clock::time_point> next_process_action_time;
+    auto lock = std::lock_guard{service_lock};
     for (const auto& s : ServiceList::GetInstance()) {
         if ((s->flags() & SVC_RUNNING) && s->timeout_period()) {
             auto timeout_time = s->time_started() + *s->timeout_period();
@@ -249,7 +341,7 @@ static std::optional<boot_clock::time_point> HandleProcessActions() {
     return next_process_action_time;
 }
 
-static Result<void> DoControlStart(Service* service) {
+static Result<void> DoControlStart(Service* service) REQUIRES(service_lock) {
     return service->Start();
 }
 
@@ -258,7 +350,7 @@ static Result<void> DoControlStop(Service* service) {
     return {};
 }
 
-static Result<void> DoControlRestart(Service* service) {
+static Result<void> DoControlRestart(Service* service) REQUIRES(service_lock) {
     service->Restart();
     return {};
 }
@@ -292,7 +384,7 @@ static const std::map<std::string, ControlMessageFunction>& get_control_message_
     return control_message_functions;
 }
 
-bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t pid) {
+bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t from_pid) {
     const auto& map = get_control_message_map();
     const auto it = map.find(msg);
 
@@ -301,7 +393,7 @@ bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t
         return false;
     }
 
-    std::string cmdline_path = StringPrintf("proc/%d/cmdline", pid);
+    std::string cmdline_path = StringPrintf("proc/%d/cmdline", from_pid);
     std::string process_cmdline;
     if (ReadFileToString(cmdline_path, &process_cmdline)) {
         std::replace(process_cmdline.begin(), process_cmdline.end(), '\0', ' ');
@@ -311,6 +403,8 @@ bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t
     }
 
     const ControlMessageFunction& function = it->second;
+
+    auto lock = std::lock_guard{service_lock};
 
     Service* svc = nullptr;
 
@@ -329,23 +423,24 @@ bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t
 
     if (svc == nullptr) {
         LOG(ERROR) << "Control message: Could not find '" << name << "' for ctl." << msg
-                   << " from pid: " << pid << " (" << process_cmdline << ")";
+                   << " from pid: " << from_pid << " (" << process_cmdline << ")";
         return false;
     }
 
     if (auto result = function.action(svc); !result.ok()) {
         LOG(ERROR) << "Control message: Could not ctl." << msg << " for '" << name
-                   << "' from pid: " << pid << " (" << process_cmdline << "): " << result.error();
+                   << "' from pid: " << from_pid << " (" << process_cmdline
+                   << "): " << result.error();
         return false;
     }
 
     LOG(INFO) << "Control message: Processed ctl." << msg << " for '" << name
-              << "' from pid: " << pid << " (" << process_cmdline << ")";
+              << "' from pid: " << from_pid << " (" << process_cmdline << ")";
     return true;
 }
 
 static Result<void> wait_for_coldboot_done_action(const BuiltinArguments& args) {
-    if (!start_waiting_for_property(kColdBootDoneProp, "true")) {
+    if (!prop_waiter_state.StartWaiting(kColdBootDoneProp, "true")) {
         LOG(FATAL) << "Could not wait for '" << kColdBootDoneProp << "'";
     }
 
@@ -493,6 +588,7 @@ void HandleKeychord(const std::vector<int>& keycodes) {
     }
 
     auto found = false;
+    auto lock = std::lock_guard{service_lock};
     for (const auto& service : ServiceList::GetInstance()) {
         auto svc = service.get();
         if (svc->keycodes() == keycodes) {
@@ -579,44 +675,6 @@ void SendStartSendingMessagesMessage() {
     }
 }
 
-static void HandlePropertyFd() {
-    auto message = ReadMessage(property_fd);
-    if (!message.ok()) {
-        LOG(ERROR) << "Could not read message from property service: " << message.error();
-        return;
-    }
-
-    auto property_message = PropertyMessage{};
-    if (!property_message.ParseFromString(*message)) {
-        LOG(ERROR) << "Could not parse message from property service";
-        return;
-    }
-
-    switch (property_message.msg_case()) {
-        case PropertyMessage::kControlMessage: {
-            auto& control_message = property_message.control_message();
-            bool success = HandleControlMessage(control_message.msg(), control_message.name(),
-                                                control_message.pid());
-
-            uint32_t response = success ? PROP_SUCCESS : PROP_ERROR_HANDLE_CONTROL_MESSAGE;
-            if (control_message.has_fd()) {
-                int fd = control_message.fd();
-                TEMP_FAILURE_RETRY(send(fd, &response, sizeof(response), 0));
-                close(fd);
-            }
-            break;
-        }
-        case PropertyMessage::kChangedMessage: {
-            auto& changed_message = property_message.changed_message();
-            property_changed(changed_message.name(), changed_message.value());
-            break;
-        }
-        default:
-            LOG(ERROR) << "Unknown message type from property service: "
-                       << property_message.msg_case();
-    }
-}
-
 int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
@@ -624,7 +682,7 @@ int SecondStageMain(int argc, char** argv) {
 
     boot_clock::time_point start_time = boot_clock::now();
 
-    trigger_shutdown = TriggerShutdown;
+    trigger_shutdown = [](const std::string& command) { shutdown_state.TriggerShutdown(command); };
 
     SetStdioToDevNull(argv);
     InitKernelLogging(argv);
@@ -684,11 +742,8 @@ int SecondStageMain(int argc, char** argv) {
     }
 
     InstallSignalFdHandler(&epoll);
-
+    InstallInitNotifier(&epoll);
     StartPropertyService(&property_fd);
-    if (auto result = epoll.RegisterHandler(property_fd, HandlePropertyFd); !result.ok()) {
-        LOG(FATAL) << "Could not register epoll handler for property fd: " << result.error();
-    }
 
     // Make the time that init stages started available for bootstat to log.
     RecordStageBoottimes(start_time);
@@ -742,6 +797,7 @@ int SecondStageMain(int argc, char** argv) {
     Keychords keychords;
     am.QueueBuiltinAction(
             [&epoll, &keychords](const BuiltinArguments& args) -> Result<void> {
+                auto lock = std::lock_guard{service_lock};
                 for (const auto& svc : ServiceList::GetInstance()) {
                     keychords.Register(svc->keycodes());
                 }
@@ -772,12 +828,12 @@ int SecondStageMain(int argc, char** argv) {
         // By default, sleep until something happens.
         auto epoll_timeout = std::optional<std::chrono::milliseconds>{};
 
-        if (do_shutdown && !IsShuttingDown()) {
-            do_shutdown = false;
-            HandlePowerctlMessage(shutdown_command);
+        auto shutdown_command = shutdown_state.CheckShutdown();
+        if (shutdown_command) {
+            HandlePowerctlMessage(*shutdown_command);
         }
 
-        if (!(waiting_for_prop || Service::is_exec_service_running())) {
+        if (!(prop_waiter_state.MightBeWaiting() || Service::is_exec_service_running())) {
             am.ExecuteOneCommand();
         }
         if (!IsShuttingDown()) {
@@ -791,7 +847,7 @@ int SecondStageMain(int argc, char** argv) {
             }
         }
 
-        if (!(waiting_for_prop || Service::is_exec_service_running())) {
+        if (!(prop_waiter_state.MightBeWaiting() || Service::is_exec_service_running())) {
             // If there's more work to do, wake up again immediately.
             if (am.HasMoreCommands()) epoll_timeout = 0ms;
         }
