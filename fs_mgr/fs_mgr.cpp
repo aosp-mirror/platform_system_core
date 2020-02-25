@@ -573,9 +573,8 @@ static void tune_metadata_csum(const std::string& blk_device, const FstabEntry& 
 
     // requires to give last_fsck_time to current to avoid insane time.
     // otherwise, tune2fs won't enable metadata_csum.
-    std::string now = std::to_string(time(0));
     const char* tune2fs_args[] = {TUNE2FS_BIN, "-O",        "metadata_csum,64bit,extent",
-                                  "-T",        now.c_str(), blk_device.c_str()};
+                                  "-T",        "now", blk_device.c_str()};
     const char* resize2fs_args[] = {RESIZE2FS_BIN, "-b", blk_device.c_str()};
 
     if (!run_command(tune2fs_args, ARRAY_SIZE(tune2fs_args))) {
