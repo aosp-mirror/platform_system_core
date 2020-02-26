@@ -1,5 +1,6 @@
 apex_defaults {
     name: "com.android.adbd-defaults",
+    updatable: true,
 
     binaries: ["adbd"],
     compile_multilib: "both",
