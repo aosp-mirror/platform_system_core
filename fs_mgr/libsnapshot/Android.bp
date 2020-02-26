@@ -208,14 +208,6 @@ cc_test {
     defaults: ["libsnapshot_test_defaults"],
 }
 
-cc_test {
-    name: "vts_libsnapshot_test_presubmit",
-    defaults: ["libsnapshot_test_defaults"],
-    cppflags: [
-        "-DSKIP_TEST_IN_PRESUBMIT",
-    ],
-}
-
 cc_binary {
     name: "snapshotctl",
     srcs: [
