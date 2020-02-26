@@ -45,8 +45,6 @@ cc_defaults {
     host_supported: true,
     recovery_available: true,
 
-    stl: "libc++_static",
-
     shared_libs: [
         "libadb_protos",
         "libbase",
