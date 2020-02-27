@@ -187,7 +187,7 @@ public:
 ANDROID_TRIVIAL_MOVE_TRAIT(String16)
 
 static inline std::ostream& operator<<(std::ostream& os, const String16& str) {
-    os << String8(str).c_str();
+    os << String8(str);
     return os;
 }
 
