@@ -33,6 +33,11 @@ import time
 import unittest
 import warnings
 
+def find_open_port():
+    # Find an open port.
+    with socket.socket() as s:
+        s.bind(("localhost", 0))
+        return s.getsockname()[1]
 
 @contextlib.contextmanager
 def fake_adbd(protocol=socket.AF_INET, port=0):
@@ -126,10 +131,7 @@ def adb_server():
     This creates an ADB server and returns the port it's listening on.
     """
 
-    port = 5038
-    # Kill any existing server on this non-default port.
-    subprocess.check_output(["adb", "-P", str(port), "kill-server"],
-                            stderr=subprocess.STDOUT)
+    port = find_open_port()
     read_pipe, write_pipe = os.pipe()
 
     if sys.platform == "win32":
@@ -224,10 +226,7 @@ class ServerTest(unittest.TestCase):
         # adb server, this also tests whether multiple instances of the adb
         # server conflict on adb.log.
 
-        port = 5038
-        # Kill any existing server on this non-default port.
-        subprocess.check_output(["adb", "-P", str(port), "kill-server"],
-                                stderr=subprocess.STDOUT)
+        port = find_open_port()
 
         try:
             # We get warnings for unclosed files for the subprocess's pipes,
@@ -289,12 +288,8 @@ class ServerTest(unittest.TestCase):
         """
         Tests that the server can start up on ::1 and that it's accessible
         """
-        server_port = 5037
-        # Kill any existing server on this non-default port.
-        subprocess.check_output(
-            ["adb", "-P", str(server_port), "kill-server"],
-            stderr=subprocess.STDOUT,
-        )
+
+        server_port = find_open_port()
         try:
             subprocess.check_output(
                 ["adb", "-L", "tcp:[::1]:{}".format(server_port), "server"],
