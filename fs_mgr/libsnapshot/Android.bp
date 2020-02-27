@@ -222,7 +222,6 @@ cc_binary {
         "snapshotctl.cpp",
     ],
     static_libs: [
-        "libdm",
         "libfstab",
         "libsnapshot",
     ],
