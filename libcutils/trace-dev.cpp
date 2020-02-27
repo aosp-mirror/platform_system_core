@@ -41,9 +41,6 @@ static void atrace_init_once()
     } else {
       atrace_enabled_tags = atrace_get_property();
     }
-#if !ATRACE_SHMEM
-    atomic_store_explicit(&atrace_is_ready, true, memory_order_release);
-#endif
 }
 
 static void atrace_seq_number_changed(uint32_t prev_seq_no, uint32_t seq_no) {
@@ -69,11 +66,7 @@ static void atrace_seq_number_changed(uint32_t prev_seq_no, uint32_t seq_no) {
 
 void atrace_setup()
 {
-#if ATRACE_SHMEM
     atrace_init();
-#else
-    pthread_once(&atrace_once_control, atrace_init_once);
-#endif
 }
 
 void atrace_begin_body(const char* name)
