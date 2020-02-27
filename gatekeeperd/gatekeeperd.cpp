@@ -159,8 +159,8 @@ public:
 
 #define GK_ERROR *gkResponse = GKResponse::error(), Status::ok()
 
-    Status enroll(int32_t uid, const std::unique_ptr<std::vector<uint8_t>>& currentPasswordHandle,
-                  const std::unique_ptr<std::vector<uint8_t>>& currentPassword,
+    Status enroll(int32_t uid, const std::optional<std::vector<uint8_t>>& currentPasswordHandle,
+                  const std::optional<std::vector<uint8_t>>& currentPassword,
                   const std::vector<uint8_t>& desiredPassword, GKResponse* gkResponse) override {
         IPCThreadState* ipc = IPCThreadState::self();
         const int calling_pid = ipc->getCallingPid();
