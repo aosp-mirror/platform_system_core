@@ -16,8 +16,11 @@
 
 #pragma once
 
+#include <mutex>
 #include <string>
 #include <vector>
+
+#include <android-base/thread_annotations.h>
 
 #include "action.h"
 #include "builtins.h"
@@ -48,7 +51,9 @@ class ActionManager {
     void operator=(ActionManager const&) = delete;
 
     std::vector<std::unique_ptr<Action>> actions_;
-    std::queue<std::variant<EventTrigger, PropertyChange, BuiltinAction>> event_queue_;
+    std::queue<std::variant<EventTrigger, PropertyChange, BuiltinAction>> event_queue_
+            GUARDED_BY(event_queue_lock_);
+    mutable std::mutex event_queue_lock_;
     std::queue<const Action*> current_executing_actions_;
     std::size_t current_command_;
 };

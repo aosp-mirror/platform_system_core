@@ -4,6 +4,18 @@
       "name": "adbd_test"
     },
     {
+      "name": "adb_crypto_test"
+    },
+    {
+      "name": "adb_pairing_auth_test"
+    },
+    {
+      "name": "adb_pairing_connection_test"
+    },
+    {
+      "name": "adb_tls_connection_test"
+    },
+    {
       "name": "CtsInitTestCases"
     },
     {

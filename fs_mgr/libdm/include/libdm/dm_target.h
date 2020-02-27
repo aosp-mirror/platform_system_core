@@ -280,20 +280,20 @@ class DmTargetCrypt final : public DmTarget {
 class DmTargetDefaultKey final : public DmTarget {
   public:
     DmTargetDefaultKey(uint64_t start, uint64_t length, const std::string& cipher,
-                       const std::string& key, const std::string& blockdev, uint64_t start_sector,
-                       bool is_legacy, bool set_dun)
+                       const std::string& key, const std::string& blockdev, uint64_t start_sector)
         : DmTarget(start, length),
           cipher_(cipher),
           key_(key),
           blockdev_(blockdev),
-          start_sector_(start_sector),
-          is_legacy_(is_legacy),
-          set_dun_(set_dun) {}
+          start_sector_(start_sector) {}
 
     std::string name() const override { return name_; }
     bool Valid() const override;
     std::string GetParameterString() const override;
     static bool IsLegacy(bool* result);
+    void SetIsLegacy() { is_legacy_ = true; }
+    void SetSetDun() { set_dun_ = true; }
+    void SetWrappedKeyV0() { is_hw_wrapped_ = true; }
 
   private:
     static const std::string name_;
@@ -301,8 +301,9 @@ class DmTargetDefaultKey final : public DmTarget {
     std::string key_;
     std::string blockdev_;
     uint64_t start_sector_;
-    bool is_legacy_;
-    bool set_dun_;
+    bool is_legacy_ = false;
+    bool set_dun_ = false;
+    bool is_hw_wrapped_ = false;
 };
 
 }  // namespace dm

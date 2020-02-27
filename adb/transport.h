@@ -43,6 +43,14 @@
 
 typedef std::unordered_set<std::string> FeatureSet;
 
+namespace adb {
+namespace tls {
+
+class TlsConnection;
+
+}  // namespace tls
+}  // namespace adb
+
 const FeatureSet& supported_features();
 
 // Encodes and decodes FeatureSet objects into human-readable strings.
@@ -104,6 +112,8 @@ struct Connection {
     virtual void Start() = 0;
     virtual void Stop() = 0;
 
+    virtual bool DoTlsHandshake(RSA* key, std::string* auth_key = nullptr) = 0;
+
     // Stop, and reset the device if it's a USB connection.
     virtual void Reset();
 
@@ -128,6 +138,8 @@ struct BlockingConnection {
     virtual bool Read(apacket* packet) = 0;
     virtual bool Write(apacket* packet) = 0;
 
+    virtual bool DoTlsHandshake(RSA* key, std::string* auth_key = nullptr) = 0;
+
     // Terminate a connection.
     // This method must be thread-safe, and must cause concurrent Reads/Writes to terminate.
     // Formerly known as 'Kick' in atransport.
@@ -146,9 +158,12 @@ struct BlockingConnectionAdapter : public Connection {
 
     virtual void Start() override final;
     virtual void Stop() override final;
+    virtual bool DoTlsHandshake(RSA* key, std::string* auth_key) override final;
 
     virtual void Reset() override final;
 
+  private:
+    void StartReadThread() REQUIRES(mutex_);
     bool started_ GUARDED_BY(mutex_) = false;
     bool stopped_ GUARDED_BY(mutex_) = false;
 
@@ -164,16 +179,22 @@ struct BlockingConnectionAdapter : public Connection {
 };
 
 struct FdConnection : public BlockingConnection {
-    explicit FdConnection(unique_fd fd) : fd_(std::move(fd)) {}
+    explicit FdConnection(unique_fd fd);
+    ~FdConnection();
 
     bool Read(apacket* packet) override final;
     bool Write(apacket* packet) override final;
+    bool DoTlsHandshake(RSA* key, std::string* auth_key) override final;
 
     void Close() override;
     virtual void Reset() override final { Close(); }
 
   private:
+    bool DispatchRead(void* buf, size_t len);
+    bool DispatchWrite(void* buf, size_t len);
+
     unique_fd fd_;
+    std::unique_ptr<adb::tls::TlsConnection> tls_;
 };
 
 struct UsbConnection : public BlockingConnection {
@@ -182,6 +203,7 @@ struct UsbConnection : public BlockingConnection {
 
     bool Read(apacket* packet) override final;
     bool Write(apacket* packet) override final;
+    bool DoTlsHandshake(RSA* key, std::string* auth_key) override final;
 
     void Close() override final;
     virtual void Reset() override final;
@@ -279,6 +301,12 @@ class atransport : public enable_weak_from_this<atransport> {
     std::string device;
     std::string devpath;
 
+    // If this is set, the transport will initiate the connection with a
+    // START_TLS command, instead of AUTH.
+    bool use_tls = false;
+    int tls_version = A_STLS_VERSION;
+    int get_tls_version() const;
+
 #if !ADB_HOST
     // Used to provide the key to the framework.
     std::string auth_key;
@@ -288,6 +316,8 @@ class atransport : public enable_weak_from_this<atransport> {
     bool IsTcpDevice() const { return type == kTransportLocal; }
 
 #if ADB_HOST
+    // The current key being authorized.
+    std::shared_ptr<RSA> Key();
     std::shared_ptr<RSA> NextKey();
     void ResetKeys();
 #endif
@@ -400,6 +430,10 @@ std::string list_transports(bool long_listing);
 atransport* find_transport(const char* serial);
 void kick_all_tcp_devices();
 void kick_all_transports();
+void kick_all_tcp_tls_transports();
+#if !ADB_HOST
+void kick_all_transports_by_auth_key(std::string_view auth_key);
+#endif
 
 void register_transport(atransport* transport);
 void register_usb_transport(usb_handle* h, const char* serial,
@@ -410,7 +444,8 @@ void connect_device(const std::string& address, std::string* response);
 
 /* cause new transports to be init'd and added to the list */
 bool register_socket_transport(unique_fd s, std::string serial, int port, int local,
-                               atransport::ReconnectCallback reconnect, int* error = nullptr);
+                               atransport::ReconnectCallback reconnect, bool use_tls,
+                               int* error = nullptr);
 
 // This should only be used for transports with connection_state == kCsNoPerm.
 void unregister_usb_transport(usb_handle* usb);

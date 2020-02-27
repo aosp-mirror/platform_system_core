@@ -151,6 +151,7 @@ static Result<void> reboot_into_recovery(const std::vector<std::string>& options
 
 template <typename F>
 static void ForEachServiceInClass(const std::string& classname, F function) {
+    auto lock = std::lock_guard{service_lock};
     for (const auto& service : ServiceList::GetInstance()) {
         if (service->classnames().count(classname)) std::invoke(function, service);
     }
@@ -162,9 +163,10 @@ static Result<void> do_class_start(const BuiltinArguments& args) {
         return {};
     // Starting a class does not start services which are explicitly disabled.
     // They must  be started individually.
+    auto lock = std::lock_guard{service_lock};
     for (const auto& service : ServiceList::GetInstance()) {
         if (service->classnames().count(args[1])) {
-            if (auto result = service->StartIfNotDisabled(); !result) {
+            if (auto result = service->StartIfNotDisabled(); !result.ok()) {
                 LOG(ERROR) << "Could not start service '" << service->name()
                            << "' as part of class '" << args[1] << "': " << result.error();
             }
@@ -184,9 +186,10 @@ static Result<void> do_class_start_post_data(const BuiltinArguments& args) {
         // stopped either.
         return {};
     }
+    auto lock = std::lock_guard{service_lock};
     for (const auto& service : ServiceList::GetInstance()) {
         if (service->classnames().count(args[1])) {
-            if (auto result = service->StartIfPostData(); !result) {
+            if (auto result = service->StartIfPostData(); !result.ok()) {
                 LOG(ERROR) << "Could not start service '" << service->name()
                            << "' as part of class '" << args[1] << "': " << result.error();
             }
@@ -227,17 +230,18 @@ static Result<void> do_class_restart(const BuiltinArguments& args) {
 }
 
 static Result<void> do_domainname(const BuiltinArguments& args) {
-    if (auto result = WriteFile("/proc/sys/kernel/domainname", args[1]); !result) {
+    if (auto result = WriteFile("/proc/sys/kernel/domainname", args[1]); !result.ok()) {
         return Error() << "Unable to write to /proc/sys/kernel/domainname: " << result.error();
     }
     return {};
 }
 
 static Result<void> do_enable(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "Could not find service";
 
-    if (auto result = svc->Enable(); !result) {
+    if (auto result = svc->Enable(); !result.ok()) {
         return Error() << "Could not enable service: " << result.error();
     }
 
@@ -245,11 +249,12 @@ static Result<void> do_enable(const BuiltinArguments& args) {
 }
 
 static Result<void> do_exec(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     auto service = Service::MakeTemporaryOneshotService(args.args);
-    if (!service) {
+    if (!service.ok()) {
         return Error() << "Could not create exec service: " << service.error();
     }
-    if (auto result = (*service)->ExecStart(); !result) {
+    if (auto result = (*service)->ExecStart(); !result.ok()) {
         return Error() << "Could not start exec service: " << result.error();
     }
 
@@ -258,11 +263,12 @@ static Result<void> do_exec(const BuiltinArguments& args) {
 }
 
 static Result<void> do_exec_background(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     auto service = Service::MakeTemporaryOneshotService(args.args);
-    if (!service) {
+    if (!service.ok()) {
         return Error() << "Could not create exec background service: " << service.error();
     }
-    if (auto result = (*service)->Start(); !result) {
+    if (auto result = (*service)->Start(); !result.ok()) {
         return Error() << "Could not start exec background service: " << result.error();
     }
 
@@ -271,12 +277,13 @@ static Result<void> do_exec_background(const BuiltinArguments& args) {
 }
 
 static Result<void> do_exec_start(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* service = ServiceList::GetInstance().FindService(args[1]);
     if (!service) {
         return Error() << "Service not found";
     }
 
-    if (auto result = service->ExecStart(); !result) {
+    if (auto result = service->ExecStart(); !result.ok()) {
         return Error() << "Could not start exec service: " << result.error();
     }
 
@@ -291,7 +298,7 @@ static Result<void> do_export(const BuiltinArguments& args) {
 }
 
 static Result<void> do_hostname(const BuiltinArguments& args) {
-    if (auto result = WriteFile("/proc/sys/kernel/hostname", args[1]); !result) {
+    if (auto result = WriteFile("/proc/sys/kernel/hostname", args[1]); !result.ok()) {
         return Error() << "Unable to write to /proc/sys/kernel/hostname: " << result.error();
     }
     return {};
@@ -340,6 +347,7 @@ static Result<void> do_insmod(const BuiltinArguments& args) {
 }
 
 static Result<void> do_interface_restart(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
     if (!svc) return Error() << "interface " << args[1] << " not found";
     svc->Restart();
@@ -347,15 +355,17 @@ static Result<void> do_interface_restart(const BuiltinArguments& args) {
 }
 
 static Result<void> do_interface_start(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
     if (!svc) return Error() << "interface " << args[1] << " not found";
-    if (auto result = svc->Start(); !result) {
+    if (auto result = svc->Start(); !result.ok()) {
         return Error() << "Could not start interface: " << result.error();
     }
     return {};
 }
 
 static Result<void> do_interface_stop(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
     if (!svc) return Error() << "interface " << args[1] << " not found";
     svc->Stop();
@@ -413,7 +423,7 @@ static Result<void> make_dir_with_options(const MkdirOptions& options) {
 // mkdir <path> [mode] [owner] [group] [<option> ...]
 static Result<void> do_mkdir(const BuiltinArguments& args) {
     auto options = ParseMkdir(args.args);
-    if (!options) return options.error();
+    if (!options.ok()) return options.error();
     return make_dir_with_options(*options);
 }
 
@@ -681,7 +691,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
          * and return processed return code*/
         initial_mount_fstab_return_code = mount_fstab_return_code;
         auto queue_fs_result = queue_fs_event(mount_fstab_return_code, false);
-        if (!queue_fs_result) {
+        if (!queue_fs_result.ok()) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
     }
@@ -731,7 +741,7 @@ static Result<void> do_setprop(const BuiltinArguments& args) {
 
 static Result<void> do_setrlimit(const BuiltinArguments& args) {
     auto rlimit = ParseRlimit(args.args);
-    if (!rlimit) return rlimit.error();
+    if (!rlimit.ok()) return rlimit.error();
 
     if (setrlimit(rlimit->first, &rlimit->second) == -1) {
         return ErrnoError() << "setrlimit failed";
@@ -740,15 +750,17 @@ static Result<void> do_setrlimit(const BuiltinArguments& args) {
 }
 
 static Result<void> do_start(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
-    if (auto result = svc->Start(); !result) {
+    if (auto result = svc->Start(); !result.ok()) {
         return ErrorIgnoreEnoent() << "Could not start service: " << result.error();
     }
     return {};
 }
 
 static Result<void> do_stop(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
     svc->Stop();
@@ -756,6 +768,7 @@ static Result<void> do_stop(const BuiltinArguments& args) {
 }
 
 static Result<void> do_restart(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
     svc->Restart();
@@ -846,7 +859,7 @@ static Result<void> do_verity_update_state(const BuiltinArguments& args) {
 }
 
 static Result<void> do_write(const BuiltinArguments& args) {
-    if (auto result = WriteFile(args[1], args[2]); !result) {
+    if (auto result = WriteFile(args[1], args[2]); !result.ok()) {
         return ErrorIgnoreEnoent()
                << "Unable to write to file '" << args[1] << "': " << result.error();
     }
@@ -904,7 +917,7 @@ static Result<void> do_readahead(const BuiltinArguments& args) {
         }
         android::base::Timer t;
         if (S_ISREG(sb.st_mode)) {
-            if (auto result = readahead_file(args[1], readfully); !result) {
+            if (auto result = readahead_file(args[1], readfully); !result.ok()) {
                 LOG(WARNING) << "Unable to readahead '" << args[1] << "': " << result.error();
                 _exit(EXIT_FAILURE);
             }
@@ -921,7 +934,7 @@ static Result<void> do_readahead(const BuiltinArguments& args) {
                  ftsent = fts_read(fts.get())) {
                 if (ftsent->fts_info & FTS_F) {
                     const std::string filename = ftsent->fts_accpath;
-                    if (auto result = readahead_file(filename, readfully); !result) {
+                    if (auto result = readahead_file(filename, readfully); !result.ok()) {
                         LOG(WARNING)
                             << "Unable to readahead '" << filename << "': " << result.error();
                     }
@@ -938,10 +951,10 @@ static Result<void> do_readahead(const BuiltinArguments& args) {
 
 static Result<void> do_copy(const BuiltinArguments& args) {
     auto file_contents = ReadFile(args[1]);
-    if (!file_contents) {
+    if (!file_contents.ok()) {
         return Error() << "Could not read input file '" << args[1] << "': " << file_contents.error();
     }
-    if (auto result = WriteFile(args[2], *file_contents); !result) {
+    if (auto result = WriteFile(args[2], *file_contents); !result.ok()) {
         return Error() << "Could not write to output file '" << args[2] << "': " << result.error();
     }
 
@@ -950,7 +963,7 @@ static Result<void> do_copy(const BuiltinArguments& args) {
 
 static Result<void> do_chown(const BuiltinArguments& args) {
     auto uid = DecodeUid(args[1]);
-    if (!uid) {
+    if (!uid.ok()) {
         return Error() << "Unable to decode UID for '" << args[1] << "': " << uid.error();
     }
 
@@ -960,7 +973,7 @@ static Result<void> do_chown(const BuiltinArguments& args) {
 
     if (args.size() == 4) {
         gid = DecodeUid(args[2]);
-        if (!gid) {
+        if (!gid.ok()) {
             return Error() << "Unable to decode GID for '" << args[2] << "': " << gid.error();
         }
     }
@@ -995,7 +1008,7 @@ static Result<void> do_chmod(const BuiltinArguments& args) {
 
 static Result<void> do_restorecon(const BuiltinArguments& args) {
     auto restorecon_info = ParseRestorecon(args.args);
-    if (!restorecon_info) {
+    if (!restorecon_info.ok()) {
         return restorecon_info.error();
     }
 
@@ -1103,7 +1116,7 @@ static bool is_file_crypto() {
 static Result<void> ExecWithFunctionOnFailure(const std::vector<std::string>& args,
                                               std::function<void(const std::string&)> function) {
     auto service = Service::MakeTemporaryOneshotService(args);
-    if (!service) {
+    if (!service.ok()) {
         function("MakeTemporaryOneshotService failed: " + service.error().message());
     }
     (*service)->AddReapCallback([function](const siginfo_t& siginfo) {
@@ -1111,7 +1124,8 @@ static Result<void> ExecWithFunctionOnFailure(const std::vector<std::string>& ar
             function(StringPrintf("Exec service failed, status %d", siginfo.si_status));
         }
     });
-    if (auto result = (*service)->ExecStart(); !result) {
+    auto lock = std::lock_guard{service_lock};
+    if (auto result = (*service)->ExecStart(); !result.ok()) {
         function("ExecStart failed: " + result.error().message());
     }
     ServiceList::GetInstance().AddService(std::move(*service));
@@ -1133,7 +1147,7 @@ static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
                 LOG(ERROR) << message << ": Rebooting into recovery, reason: " << reboot_reason;
                 if (auto result = reboot_into_recovery(
                             {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
-                    !result) {
+                    !result.ok()) {
                     LOG(FATAL) << "Could not reboot into recovery: " << result.error();
                 }
             } else {
@@ -1162,7 +1176,7 @@ static Result<void> do_remount_userdata(const BuiltinArguments& args) {
     if (auto rc = fs_mgr_remount_userdata_into_checkpointing(&fstab); rc < 0) {
         trigger_shutdown("reboot,mount_userdata_failed");
     }
-    if (auto result = queue_fs_event(initial_mount_fstab_return_code, true); !result) {
+    if (auto result = queue_fs_event(initial_mount_fstab_return_code, true); !result.ok()) {
         return Error() << "queue_fs_event() failed: " << result.error();
     }
     return {};
@@ -1250,6 +1264,7 @@ static Result<void> parse_apex_configs() {
         }
         success &= parser.ParseConfigFile(c);
     }
+    auto lock = std::lock_guard{service_lock};
     ServiceList::GetInstance().MarkServicesUpdate();
     if (success) {
         return {};
@@ -1285,16 +1300,16 @@ static Result<void> create_apex_data_dirs() {
 
 static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
     auto create_dirs = create_apex_data_dirs();
-    if (!create_dirs) {
+    if (!create_dirs.ok()) {
         return create_dirs.error();
     }
     auto parse_configs = parse_apex_configs();
-    if (!parse_configs) {
+    if (!parse_configs.ok()) {
         return parse_configs.error();
     }
 
     auto update_linker_config = do_update_linker_config(args);
-    if (!update_linker_config) {
+    if (!update_linker_config.ok()) {
         return update_linker_config.error();
     }
 
@@ -1307,17 +1322,6 @@ static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
     } else {
         return Error() << "Failed to enter into default mount namespace";
     }
-}
-
-static Result<void> do_finish_userspace_reboot(const BuiltinArguments&) {
-    LOG(INFO) << "Userspace reboot successfully finished";
-    boot_clock::time_point now = boot_clock::now();
-    SetProperty("sys.init.userspace_reboot.last_finished",
-                std::to_string(now.time_since_epoch().count()));
-    if (!android::sysprop::InitProperties::userspace_reboot_in_progress(false)) {
-        return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
-    }
-    return {};
 }
 
 // Builtin-function-map start
@@ -1341,7 +1345,6 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"exec_background",         {1,     kMax, {false,  do_exec_background}}},
         {"exec_start",              {1,     1,    {false,  do_exec_start}}},
         {"export",                  {2,     2,    {false,  do_export}}},
-        {"finish_userspace_reboot", {0,     0,    {false,  do_finish_userspace_reboot}}},
         {"hostname",                {1,     1,    {true,   do_hostname}}},
         {"ifup",                    {1,     1,    {true,   do_ifup}}},
         {"init_user0",              {0,     0,    {false,  do_init_user0}}},

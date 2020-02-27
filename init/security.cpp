@@ -128,8 +128,7 @@ static bool SetHighestAvailableOptionValue(const std::string& path, int min, int
 #define MMAP_RND_PATH "/proc/sys/vm/mmap_rnd_bits"
 #define MMAP_RND_COMPAT_PATH "/proc/sys/vm/mmap_rnd_compat_bits"
 
-// __attribute__((unused)) due to lack of mips support: see mips block in SetMmapRndBitsAction
-static bool __attribute__((unused)) SetMmapRndBitsMin(int start, int min, bool compat) {
+static bool SetMmapRndBitsMin(int start, int min, bool compat) {
     std::string path;
     if (compat) {
         path = MMAP_RND_COMPAT_PATH;
@@ -174,9 +173,6 @@ Result<void> SetMmapRndBitsAction(const BuiltinArguments&) {
     if (SetMmapRndBitsMin(16, 16, h64)) {
         return {};
     }
-#elif defined(__mips__) || defined(__mips64__)
-    // TODO: add mips support b/27788820
-    return {};
 #else
     LOG(ERROR) << "Unknown architecture";
 #endif

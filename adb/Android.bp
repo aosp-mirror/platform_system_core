@@ -114,66 +114,6 @@ cc_defaults {
     },
 }
 
-// libadbconnection
-// =========================================================
-// libadbconnection_client/server implement the socket handling for jdwp
-// forwarding and the track-jdwp service.
-cc_library {
-    name: "libadbconnection_server",
-    srcs: ["adbconnection/adbconnection_server.cpp"],
-
-    export_include_dirs: ["adbconnection/include"],
-
-    stl: "libc++_static",
-    shared_libs: ["liblog"],
-    static_libs: ["libbase"],
-
-    defaults: ["adbd_defaults", "host_adbd_supported"],
-
-    // Avoid getting duplicate symbol of android::build::getbuildnumber().
-    use_version_lib: false,
-
-    recovery_available: true,
-    compile_multilib: "both",
-}
-
-cc_library {
-    name: "libadbconnection_client",
-    srcs: ["adbconnection/adbconnection_client.cpp"],
-
-    export_include_dirs: ["adbconnection/include"],
-
-    stl: "libc++_static",
-    shared_libs: ["liblog"],
-    static_libs: ["libbase"],
-
-    defaults: ["adbd_defaults"],
-    visibility: [
-        "//art:__subpackages__",
-        "//system/core/adb/apex:__subpackages__",
-    ],
-    apex_available: [
-        "com.android.adbd",
-        "test_com.android.adbd",
-    ],
-
-    // libadbconnection_client doesn't need an embedded build number.
-    use_version_lib: false,
-
-    target: {
-        linux: {
-            version_script: "adbconnection/libadbconnection_client.map.txt",
-        },
-    },
-    stubs: {
-        symbol_file: "adbconnection/libadbconnection_client.map.txt",
-        versions: ["1"],
-    },
-
-    host_supported: true,
-    compile_multilib: "both",
-}
-
 // libadb
 // =========================================================
 // These files are compiled for both the host and the device.
@@ -225,9 +165,11 @@ cc_library_host_static {
 
     srcs: libadb_srcs + [
         "client/auth.cpp",
+        "client/adb_wifi.cpp",
         "client/usb_libusb.cpp",
         "client/usb_dispatch.cpp",
         "client/transport_mdns.cpp",
+        "client/pairing/pairing_client.cpp",
     ],
 
     generated_headers: ["platform_tools_version"],
@@ -255,6 +197,10 @@ cc_library_host_static {
     },
 
     static_libs: [
+        "libadb_crypto",
+        "libadb_protos",
+        "libadb_pairing_connection",
+        "libadb_tls_connection",
         "libbase",
         "libcrypto_utils",
         "libcrypto",
@@ -264,6 +210,7 @@ cc_library_host_static {
         "libutils",
         "liblog",
         "libcutils",
+        "libprotobuf-cpp-lite",
     ],
 }
 
@@ -272,7 +219,12 @@ cc_test_host {
     defaults: ["adb_defaults"],
     srcs: libadb_test_srcs,
     static_libs: [
+        "libadb_crypto_static",
         "libadb_host",
+        "libadb_pairing_auth_static",
+        "libadb_pairing_connection_static",
+        "libadb_protos_static",
+        "libadb_tls_connection_static",
         "libbase",
         "libcutils",
         "libcrypto_utils",
@@ -280,6 +232,8 @@ cc_test_host {
         "liblog",
         "libmdnssd",
         "libdiagnose_usb",
+        "libprotobuf-cpp-lite",
+        "libssl",
         "libusb",
     ],
 
@@ -311,12 +265,16 @@ cc_benchmark {
     },
 
     static_libs: [
+        "libadb_crypto_static",
+        "libadb_tls_connection_static",
+        "libadbd_auth",
         "libbase",
         "libcutils",
         "libcrypto_utils",
         "libcrypto_static",
         "libdiagnose_usb",
         "liblog",
+        "libssl",
         "libusb",
     ],
 }
@@ -338,6 +296,8 @@ cc_binary_host {
         "client/line_printer.cpp",
         "client/fastdeploy.cpp",
         "client/fastdeploycallbacks.cpp",
+        "client/incremental.cpp",
+        "client/incremental_server.cpp",
         "shell_service_protocol.cpp",
     ],
 
@@ -347,7 +307,12 @@ cc_binary_host {
     ],
 
     static_libs: [
+        "libadb_crypto",
         "libadb_host",
+	"libadb_pairing_auth",
+	"libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libandroidfw",
         "libbase",
         "libcutils",
@@ -356,8 +321,10 @@ cc_binary_host {
         "libfastdeploy_host",
         "libdiagnose_usb",
         "liblog",
+        "liblz4",
         "libmdnssd",
         "libprotobuf-cpp-lite",
+        "libssl",
         "libusb",
         "libutils",
         "liblog",
@@ -408,6 +375,7 @@ cc_library_static {
     srcs: libadb_srcs + libadb_linux_srcs + libadb_posix_srcs + [
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
+        "daemon/adb_wifi.cpp",
     ],
 
     local_include_dirs: [
@@ -422,12 +390,15 @@ cc_library_static {
     ],
 
     shared_libs: [
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libadbd_auth",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
         "liblog",
     ],
 
@@ -451,7 +422,7 @@ cc_library_static {
     },
 }
 
-cc_library {
+cc_library_static {
     name: "libadbd_services",
     defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
@@ -476,12 +447,16 @@ cc_library {
     ],
 
     shared_libs: [
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libadbd_auth",
+        "libadbd_fs",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
         "liblog",
     ],
 
@@ -524,14 +499,24 @@ cc_library {
     ],
 
     shared_libs: [
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_tls_connection",
         "libadbd_auth",
-        "libadbd_services",
+        "libadbd_fs",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
         "liblog",
+        "libselinux",
+    ],
+
+    static_libs: [
+        "libadbd_services",
+        "libcutils_sockets",
+        "libdiagnose_usb",
+        "libmdnssd",
     ],
 
     export_include_dirs: [
@@ -566,20 +551,29 @@ cc_binary {
         "libbase",
         "libcap",
         "libcrypto_utils",
-        "libcutils",
+        "libcutils_sockets",
         "libdiagnose_usb",
         "liblog",
         "libmdnssd",
         "libminijail",
         "libselinux",
+        "libssl",
     ],
 
     shared_libs: [
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libadbd_auth",
+        "libadbd_fs",
         "libcrypto",
     ],
 
-    required: ["libadbd_auth"],
+    required: [
+        "libadbd_auth",
+        "libadbd_fs",
+    ],
 }
 
 phony {
@@ -651,10 +645,13 @@ cc_test {
     static_libs: [
         "libadbd",
         "libadbd_auth",
+        "libadb_crypto_static",
+        "libadb_pairing_connection_static",
+        "libadb_tls_connection_static",
         "libbase",
-        "libcutils",
         "libcrypto_utils",
         "libcrypto_static",
+        "libcutils_sockets",
         "libdiagnose_usb",
         "liblog",
         "libusb",
@@ -696,10 +693,10 @@ python_test_host {
     test_suites: ["general-tests"],
     version: {
         py2: {
-            enabled: true,
+            enabled: false,
         },
         py3: {
-            enabled: false,
+            enabled: true,
         },
     },
 }
@@ -765,7 +762,12 @@ cc_test_host {
         "fastdeploy/deploypatchgenerator/patch_utils_test.cpp",
     ],
     static_libs: [
+        "libadb_crypto_static",
         "libadb_host",
+        "libadb_pairing_auth_static",
+        "libadb_pairing_connection_static",
+        "libadb_protos_static",
+        "libadb_tls_connection_static",
         "libandroidfw",
         "libbase",
         "libcutils",
@@ -776,6 +778,7 @@ cc_test_host {
         "liblog",
         "libmdnssd",
         "libprotobuf-cpp-lite",
+        "libssl",
         "libusb",
         "libutils",
         "libziparchive",

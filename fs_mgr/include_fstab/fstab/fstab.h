@@ -38,7 +38,7 @@ struct FstabEntry {
     std::string fs_options;
     std::string key_loc;
     std::string metadata_key_dir;
-    std::string metadata_cipher;
+    std::string metadata_encryption;
     off64_t length = 0;
     std::string label;
     int partnum = -1;
@@ -81,6 +81,7 @@ struct FstabEntry {
         bool first_stage_mount : 1;
         bool slot_select_other : 1;
         bool fs_verity : 1;
+        bool ext_meta_csum : 1;
     } fs_mgr_flags = {};
 
     bool is_encryptable() const {

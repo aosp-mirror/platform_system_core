@@ -318,3 +318,21 @@ TEST(StatsEventTest, TestOverflowError) {
 
     AStatsEvent_release(event);
 }
+
+TEST(StatsEventTest, TestOverwriteTimestamp) {
+    uint32_t atomId = 100;
+    int64_t expectedTimestamp = 0x123456789;
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, atomId);
+    AStatsEvent_overwriteTimestamp(event, expectedTimestamp);
+    AStatsEvent_build(event);
+
+    uint8_t* buffer = AStatsEvent_getBuffer(event, NULL);
+
+    // Make sure that the timestamp is being overwritten.
+    checkMetadata(&buffer, /*numElements=*/0, /*startTime=*/expectedTimestamp,
+                  /*endTime=*/expectedTimestamp, atomId);
+
+    EXPECT_EQ(AStatsEvent_getErrors(event), 0);
+    AStatsEvent_release(event);
+}

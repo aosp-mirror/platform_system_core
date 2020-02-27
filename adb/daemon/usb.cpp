@@ -19,6 +19,7 @@
 #include "sysdeps.h"
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -258,6 +259,12 @@ struct UsbFfsConnection : public Connection {
         }
 
         CHECK_EQ(static_cast<size_t>(rc), sizeof(notify));
+    }
+
+    virtual bool DoTlsHandshake(RSA* key, std::string* auth_key) override final {
+        // TODO: support TLS for usb connections.
+        LOG(FATAL) << "Not supported yet.";
+        return false;
     }
 
   private:

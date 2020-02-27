@@ -52,6 +52,7 @@
 #include "adb_listeners.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
+#include "adb_wifi.h"
 #include "sysdeps/chrono.h"
 #include "transport.h"
 
@@ -140,6 +141,9 @@ void print_packet(const char *label, apacket *p)
     case A_CLSE: tag = "CLSE"; break;
     case A_WRTE: tag = "WRTE"; break;
     case A_AUTH: tag = "AUTH"; break;
+    case A_STLS:
+        tag = "ATLS";
+        break;
     default: tag = "????"; break;
     }
 
@@ -207,6 +211,15 @@ std::string get_connection_string() {
     return android::base::StringPrintf(
         "%s::%s", adb_device_banner,
         android::base::Join(connection_properties, ';').c_str());
+}
+
+void send_tls_request(atransport* t) {
+    D("Calling send_tls_request");
+    apacket* p = get_apacket();
+    p->msg.command = A_STLS;
+    p->msg.arg0 = A_STLS_VERSION;
+    p->msg.data_length = 0;
+    send_packet(p, t);
 }
 
 void send_connect(atransport* t) {
@@ -299,7 +312,12 @@ static void handle_new_connection(atransport* t, apacket* p) {
 #if ADB_HOST
     handle_online(t);
 #else
-    if (!auth_required) {
+    if (t->use_tls) {
+        // We still handshake in TLS mode. If auth_required is disabled,
+        // we'll just not verify the client's certificate. This should be the
+        // first packet the client receives to indicate the new protocol.
+        send_tls_request(t);
+    } else if (!auth_required) {
         LOG(INFO) << "authentication not required";
         handle_online(t);
         send_connect(t);
@@ -324,8 +342,21 @@ void handle_packet(apacket *p, atransport *t)
     case A_CNXN:  // CONNECT(version, maxdata, "system-id-string")
         handle_new_connection(t, p);
         break;
+    case A_STLS:  // TLS(version, "")
+        t->use_tls = true;
+#if ADB_HOST
+        send_tls_request(t);
+        adb_auth_tls_handshake(t);
+#else
+        adbd_auth_tls_handshake(t);
+#endif
+        break;
 
     case A_AUTH:
+        // All AUTH commands are ignored in TLS mode
+        if (t->use_tls) {
+            break;
+        }
         switch (p->msg.arg0) {
 #if ADB_HOST
             case ADB_AUTH_TOKEN:

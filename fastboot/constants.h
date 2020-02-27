@@ -42,7 +42,7 @@
 #define RESPONSE_INFO "INFO"
 
 #define FB_COMMAND_SZ 64
-#define FB_RESPONSE_SZ 64
+#define FB_RESPONSE_SZ 256
 
 #define FB_VAR_VERSION "version"
 #define FB_VAR_VERSION_BOOTLOADER "version-bootloader"

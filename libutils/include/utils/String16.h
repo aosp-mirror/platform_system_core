@@ -17,7 +17,8 @@
 #ifndef ANDROID_STRING16_H
 #define ANDROID_STRING16_H
 
-#include <string> // for std::string
+#include <iostream>
+#include <string>
 
 #include <utils/Errors.h>
 #include <utils/String8.h>
@@ -25,17 +26,9 @@
 
 // ---------------------------------------------------------------------------
 
-extern "C" {
-
-}
-
-// ---------------------------------------------------------------------------
-
 namespace android {
 
 // ---------------------------------------------------------------------------
-
-class String8;
 
 template <size_t N>
 class StaticString16;
@@ -46,17 +39,7 @@ class StaticString16;
 class String16
 {
 public:
-    /*
-     * Use String16(StaticLinkage) if you're statically linking against
-     * libutils and declaring an empty static String16, e.g.:
-     *
-     *   static String16 sAStaticEmptyString(String16::kEmptyString);
-     *   static String16 sAnotherStaticEmptyString(sAStaticEmptyString);
-     */
-    enum StaticLinkage { kEmptyString };
-
                                 String16();
-    explicit                    String16(StaticLinkage);
                                 String16(const String16& o);
                                 String16(const String16& o,
                                          size_t len,
@@ -202,6 +185,11 @@ public:
 // String16 can be trivially moved using memcpy() because moving does not
 // require any change to the underlying SharedBuffer contents or reference count.
 ANDROID_TRIVIAL_MOVE_TRAIT(String16)
+
+static inline std::ostream& operator<<(std::ostream& os, const String16& str) {
+    os << String8(str).c_str();
+    return os;
+}
 
 // ---------------------------------------------------------------------------
 

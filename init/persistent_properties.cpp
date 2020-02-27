@@ -149,7 +149,7 @@ Result<std::string> ReadPersistentPropertyFile() {
         unlink(temp_filename.c_str());
     }
     auto file_contents = ReadFile(persistent_property_filename);
-    if (!file_contents) {
+    if (!file_contents.ok()) {
         return Error() << "Unable to read persistent property file: " << file_contents.error();
     }
     return *file_contents;
@@ -159,7 +159,7 @@ Result<std::string> ReadPersistentPropertyFile() {
 
 Result<PersistentProperties> LoadPersistentPropertyFile() {
     auto file_contents = ReadPersistentPropertyFile();
-    if (!file_contents) return file_contents.error();
+    if (!file_contents.ok()) return file_contents.error();
 
     PersistentProperties persistent_properties;
     if (persistent_properties.ParseFromString(*file_contents)) return persistent_properties;
@@ -212,7 +212,7 @@ Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_
 void WritePersistentProperty(const std::string& name, const std::string& value) {
     auto persistent_properties = LoadPersistentPropertyFile();
 
-    if (!persistent_properties) {
+    if (!persistent_properties.ok()) {
         LOG(ERROR) << "Recovering persistent properties from memory: "
                    << persistent_properties.error();
         persistent_properties = LoadPersistentPropertiesFromMemory();
@@ -227,7 +227,7 @@ void WritePersistentProperty(const std::string& name, const std::string& value) 
         AddPersistentProperty(name, value, &persistent_properties.value());
     }
 
-    if (auto result = WritePersistentPropertyFile(*persistent_properties); !result) {
+    if (auto result = WritePersistentPropertyFile(*persistent_properties); !result.ok()) {
         LOG(ERROR) << "Could not store persistent property: " << result.error();
     }
 }
@@ -235,16 +235,16 @@ void WritePersistentProperty(const std::string& name, const std::string& value) 
 PersistentProperties LoadPersistentProperties() {
     auto persistent_properties = LoadPersistentPropertyFile();
 
-    if (!persistent_properties) {
+    if (!persistent_properties.ok()) {
         LOG(ERROR) << "Could not load single persistent property file, trying legacy directory: "
                    << persistent_properties.error();
         persistent_properties = LoadLegacyPersistentProperties();
-        if (!persistent_properties) {
+        if (!persistent_properties.ok()) {
             LOG(ERROR) << "Unable to load legacy persistent properties: "
                        << persistent_properties.error();
             return {};
         }
-        if (auto result = WritePersistentPropertyFile(*persistent_properties); result) {
+        if (auto result = WritePersistentPropertyFile(*persistent_properties); result.ok()) {
             RemoveLegacyPersistentPropertyFiles();
         } else {
             LOG(ERROR) << "Unable to write single persistent property file: " << result.error();

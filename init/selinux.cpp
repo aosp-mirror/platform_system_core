@@ -65,6 +65,7 @@
 #include <android-base/parseint.h>
 #include <android-base/unique_fd.h>
 #include <fs_avb/fs_avb.h>
+#include <libgsi/libgsi.h>
 #include <selinux/android.h>
 
 #include "debug_ramdisk.h"
@@ -477,7 +478,7 @@ void SelinuxInitialize() {
         }
     }
 
-    if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result) {
+    if (auto result = WriteFile("/sys/fs/selinux/checkreqprot", "0"); !result.ok()) {
         LOG(FATAL) << "Unable to write to /sys/fs/selinux/checkreqprot: " << result.error();
     }
 }
@@ -533,6 +534,10 @@ void SelinuxRestoreContext() {
     selinux_android_restorecon("/apex", 0);
 
     selinux_android_restorecon("/linkerconfig", 0);
+
+    // adb remount, snapshot-based updates, and DSUs all create files during
+    // first-stage init.
+    selinux_android_restorecon("/metadata", SELINUX_ANDROID_RESTORECON_RECURSE);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {

@@ -47,14 +47,7 @@ android::base::Result<ServiceInterfacesMap> GetOnDeviceServiceInterfacesMap() {
     for (const auto& service : service_list.services()) {
         // Create an entry for all services, including services that may not
         // have any declared interfaces.
-        result[service->name()] = std::set<android::FqInstance>();
-        for (const auto& intf : service->interfaces()) {
-            android::FqInstance fqInstance;
-            if (!fqInstance.setTo(intf)) {
-                return android::base::Error() << "Unable to parse interface: '" << intf << "'";
-            }
-            result[service->name()].insert(fqInstance);
-        }
+        result[service->name()] = service->interfaces();
     }
     return result;
 }

@@ -31,6 +31,8 @@ bool CanReadProperty(const std::string& source_context, const std::string& name)
 
 void PropertyInit();
 void StartPropertyService(int* epoll_socket);
+void ResumePropertyService();
+void PausePropertyService();
 
 }  // namespace init
 }  // namespace android

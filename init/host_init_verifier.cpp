@@ -248,7 +248,7 @@ int main(int argc, char** argv) {
     }
 
     auto interface_inheritance_hierarchy_map = ReadInterfaceInheritanceHierarchy();
-    if (!interface_inheritance_hierarchy_map) {
+    if (!interface_inheritance_hierarchy_map.ok()) {
         LOG(ERROR) << interface_inheritance_hierarchy_map.error();
         return EXIT_FAILURE;
     }

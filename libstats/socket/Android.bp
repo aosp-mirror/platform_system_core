@@ -22,23 +22,17 @@ cc_library {
     srcs: [
         "stats_buffer_writer.c",
         "stats_event.c",
-        // TODO(b/145573568): Remove stats_event_list once stats_event
-        // migration is complete.
-        "stats_event_list.c",
+        "stats_socket.c",
         "statsd_writer.c",
     ],
     host_supported: true,
     cflags: [
         "-Wall",
         "-Werror",
-        "-DLIBLOG_LOG_TAG=1006",
-        "-DWRITE_TO_STATSD=1",
-        "-DWRITE_TO_LOGD=0",
     ],
     export_include_dirs: ["include"],
-    shared_libs: [
-        "libcutils",
-        "liblog",
+    static_libs: [
+        "libcutils", // does not expose a stable C API
     ],
 
     // enumerate stable entry points for APEX use
@@ -47,7 +41,13 @@ cc_library {
         versions: [
             "30",
         ],
-    }
+    },
+    apex_available: [
+        //TODO(b/149340100): Remove this once libstatssocket is only linked as shared.
+        "//apex_available:platform",
+        "com.android.os.statsd",
+        "test_com.android.os.statsd",
+    ],
 }
 
 cc_library_headers {
@@ -71,7 +71,6 @@ cc_benchmark {
     ],
     shared_libs: [
         "libcutils",
-        "liblog",
         "libgtest_prod",
     ],
 }
@@ -89,7 +88,6 @@ cc_test {
     ],
     shared_libs: [
         "libcutils",
-        "liblog",
         "libutils",
     ],
     test_suites: ["device-tests"],

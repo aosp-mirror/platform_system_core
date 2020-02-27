@@ -115,6 +115,14 @@ void AStatsEvent_setAtomId(AStatsEvent* event, uint32_t atomId) {
     event->numElements++;
 }
 
+// Overwrites the timestamp populated in AStatsEvent_obtain with a custom
+// timestamp. Should only be called from test code.
+void AStatsEvent_overwriteTimestamp(AStatsEvent* event, uint64_t timestampNs) {
+    memcpy(&event->buf[POS_TIMESTAMP + sizeof(uint8_t)], &timestampNs, sizeof(timestampNs));
+    // Do not increment numElements because we already accounted for the timestamp
+    // within AStatsEvent_obtain.
+}
+
 // Side-effect: modifies event->errors if the buffer would overflow
 static bool overflows(AStatsEvent* event, size_t size) {
     if (event->size + size > MAX_EVENT_PAYLOAD) {

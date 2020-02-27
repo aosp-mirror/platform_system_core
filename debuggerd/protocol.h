@@ -95,10 +95,16 @@ struct __attribute__((__packed__)) CrashInfoDataV2 : public CrashInfoDataV1 {
   uintptr_t fdsan_table_address;
 };
 
+struct __attribute__((__packed__)) CrashInfoDataV3 : public CrashInfoDataV2 {
+  uintptr_t gwp_asan_state;
+  uintptr_t gwp_asan_metadata;
+};
+
 struct __attribute__((__packed__)) CrashInfo {
   CrashInfoHeader header;
   union {
     CrashInfoDataV1 v1;
     CrashInfoDataV2 v2;
+    CrashInfoDataV3 v3;
   } data;
 };

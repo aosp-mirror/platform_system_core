@@ -53,8 +53,12 @@
 #include <unwindstack/Unwinder.h>
 
 #include "libdebuggerd/backtrace.h"
+#include "libdebuggerd/gwp_asan.h"
 #include "libdebuggerd/open_files_list.h"
 #include "libdebuggerd/utility.h"
+
+#include "gwp_asan/common.h"
+#include "gwp_asan/crash_handler.h"
 
 using android::base::GetBoolProperty;
 using android::base::GetProperty;
@@ -372,7 +376,8 @@ void dump_memory_and_code(log_t* log, unwindstack::Maps* maps, unwindstack::Memo
 }
 
 static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const ThreadInfo& thread_info,
-                        uint64_t abort_msg_address, bool primary_thread) {
+                        uint64_t abort_msg_address, bool primary_thread,
+                        const GwpAsanCrashData& gwp_asan_crash_data) {
   log->current_tid = thread_info.tid;
   if (!primary_thread) {
     _LOG(log, logtype::THREAD, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
@@ -381,7 +386,13 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
 
   if (thread_info.siginfo) {
     dump_signal_info(log, thread_info, unwinder->GetProcessMemory().get());
-    dump_probable_cause(log, thread_info.siginfo, unwinder->GetMaps(), thread_info.registers.get());
+  }
+
+  if (primary_thread && gwp_asan_crash_data.CrashIsMine()) {
+    gwp_asan_crash_data.DumpCause(log);
+  } else if (thread_info.siginfo) {
+    dump_probable_cause(log, thread_info.siginfo, unwinder->GetMaps(),
+                        thread_info.registers.get());
   }
 
   if (primary_thread) {
@@ -402,6 +413,14 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
   }
 
   if (primary_thread) {
+    if (gwp_asan_crash_data.HasDeallocationTrace()) {
+      gwp_asan_crash_data.DumpDeallocationTrace(log, unwinder);
+    }
+
+    if (gwp_asan_crash_data.HasAllocationTrace()) {
+      gwp_asan_crash_data.DumpAllocationTrace(log, unwinder);
+    }
+
     unwindstack::Maps* maps = unwinder->GetMaps();
     dump_memory_and_code(log, maps, unwinder->GetProcessMemory().get(),
                          thread_info.registers.get());
@@ -583,13 +602,14 @@ void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, si
   }
 
   engrave_tombstone(unique_fd(dup(tombstone_fd)), &unwinder, threads, tid, abort_msg_address,
-                    nullptr, nullptr);
+                    nullptr, nullptr, 0u, 0u);
 }
 
 void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
                        const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
                        uint64_t abort_msg_address, OpenFilesList* open_files,
-                       std::string* amfd_data) {
+                       std::string* amfd_data, uintptr_t gwp_asan_state_ptr,
+                       uintptr_t gwp_asan_metadata_ptr) {
   // don't copy log messages to tombstone unless this is a dev device
   bool want_logs = android::base::GetBoolProperty("ro.debuggable", false);
 
@@ -607,7 +627,13 @@ void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
   if (it == threads.end()) {
     LOG(FATAL) << "failed to find target thread";
   }
-  dump_thread(&log, unwinder, it->second, abort_msg_address, true);
+
+  GwpAsanCrashData gwp_asan_crash_data(unwinder->GetProcessMemory().get(),
+                                       gwp_asan_state_ptr,
+                                       gwp_asan_metadata_ptr, it->second);
+
+  dump_thread(&log, unwinder, it->second, abort_msg_address, true,
+              gwp_asan_crash_data);
 
   if (want_logs) {
     dump_logs(&log, it->second.pid, 50);
@@ -618,7 +644,7 @@ void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
       continue;
     }
 
-    dump_thread(&log, unwinder, thread_info, 0, false);
+    dump_thread(&log, unwinder, thread_info, 0, false, gwp_asan_crash_data);
   }
 
   if (open_files) {

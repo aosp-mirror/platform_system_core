@@ -176,6 +176,7 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         CheckFlag("first_stage_mount", first_stage_mount);
         CheckFlag("slotselect_other", slot_select_other);
         CheckFlag("fsverity", fs_verity);
+        CheckFlag("metadata_csum", ext_meta_csum);
 
 #undef CheckFlag
 
@@ -211,7 +212,7 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             }
         } else if (StartsWith(flag, "swapprio=")) {
             if (!ParseInt(arg, &entry->swap_prio)) {
-                LWARNING << "Warning: length= flag malformed: " << arg;
+                LWARNING << "Warning: swapprio= flag malformed: " << arg;
             }
         } else if (StartsWith(flag, "zramsize=")) {
             if (!arg.empty() && arg.back() == '%') {
@@ -277,9 +278,9 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         } else if (StartsWith(flag, "keydirectory=")) {
             // The metadata flag is followed by an = and the directory for the keys.
             entry->metadata_key_dir = arg;
-        } else if (StartsWith(flag, "metadata_cipher=")) {
-            // Specify the cipher to use for metadata encryption
-            entry->metadata_cipher = arg;
+        } else if (StartsWith(flag, "metadata_encryption=")) {
+            // Specify the cipher and flags to use for metadata encryption
+            entry->metadata_encryption = arg;
         } else if (StartsWith(flag, "sysfs_path=")) {
             // The path to trigger device gc by idle-maint of vold.
             entry->sysfs_path = arg;
