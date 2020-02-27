@@ -71,8 +71,6 @@ alignas(uint64_t) static char empty_pi[96];
 static const prop_info* atrace_property_info = reinterpret_cast<const prop_info*>(empty_pi);
 #endif
 
-#if ATRACE_SHMEM
-
 /**
  * This is called when the sequence number of debug.atrace.tags.enableflags
  * changes and we need to reload the enabled tags.
@@ -96,7 +94,6 @@ uint64_t atrace_get_enabled_tags()
     atrace_init();
     return atrace_enabled_tags;
 }
-#endif
 
 // Set whether this process is debuggable, which determines whether
 // application-level tracing is allowed when the ro.debuggable system property
@@ -186,19 +183,17 @@ static uint64_t atrace_get_property()
 void atrace_update_tags()
 {
     uint64_t tags;
-    if (ATRACE_SHMEM || CC_UNLIKELY(atomic_load_explicit(&atrace_is_ready, memory_order_acquire))) {
-        if (atomic_load_explicit(&atrace_is_enabled, memory_order_acquire)) {
-            tags = atrace_get_property();
-            pthread_mutex_lock(&atrace_tags_mutex);
-            atrace_enabled_tags = tags;
-            pthread_mutex_unlock(&atrace_tags_mutex);
-        } else {
-            // Tracing is disabled for this process, so we simply don't
-            // initialize the tags.
-            pthread_mutex_lock(&atrace_tags_mutex);
-            atrace_enabled_tags = ATRACE_TAG_NOT_READY;
-            pthread_mutex_unlock(&atrace_tags_mutex);
-        }
+    if (atomic_load_explicit(&atrace_is_enabled, memory_order_acquire)) {
+        tags = atrace_get_property();
+        pthread_mutex_lock(&atrace_tags_mutex);
+        atrace_enabled_tags = tags;
+        pthread_mutex_unlock(&atrace_tags_mutex);
+    } else {
+        // Tracing is disabled for this process, so we simply don't
+        // initialize the tags.
+        pthread_mutex_lock(&atrace_tags_mutex);
+        atrace_enabled_tags = ATRACE_TAG_NOT_READY;
+        pthread_mutex_unlock(&atrace_tags_mutex);
     }
 }
 
