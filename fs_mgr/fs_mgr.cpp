@@ -97,6 +97,7 @@
 using android::base::Basename;
 using android::base::GetBoolProperty;
 using android::base::Realpath;
+using android::base::SetProperty;
 using android::base::StartsWith;
 using android::base::Timer;
 using android::base::unique_fd;
@@ -178,6 +179,7 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
         return;
     }
 
+    Timer t;
     /* Check for the types of filesystems we know how to check */
     if (is_extfs(fs_type)) {
         /*
@@ -270,7 +272,8 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
             LERROR << "Failed trying to run " << F2FS_FSCK_BIN;
         }
     }
-
+    android::base::SetProperty("ro.boottime.init.fsck." + Basename(target),
+                               std::to_string(t.duration().count()));
     return;
 }
 
