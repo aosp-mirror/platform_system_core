@@ -88,12 +88,6 @@ __BEGIN_DECLS
 #error ATRACE_TAG must be defined to be one of the tags defined in cutils/trace.h
 #endif
 
-// Set this to 0 to revert to the old Binder-based atrace implementation.
-// This is only here in case rollbacks do not apply cleanly.
-// TODO(fmayer): Remove this once we are confident this won't need to be
-// rolled back, no later than 2020-03-01.
-#define ATRACE_SHMEM 1
-
 /**
  * Opens the trace file for writing and reads the property for initial tags.
  * The atrace.tags.enableflags property sets the tags to trace.
@@ -121,15 +115,11 @@ void atrace_set_debuggable(bool debuggable);
  * prevent tracing within the Zygote process.
  */
 void atrace_set_tracing_enabled(bool enabled);
+
 /**
- * If !ATRACE_SHMEM:
- *   Flag indicating whether setup has been completed, initialized to 0.
- *   Nonzero indicates setup has completed.
- *   Note: This does NOT indicate whether or not setup was successful.
- * If ATRACE_SHMEM:
- *   This is always set to false. This forces code that uses an old version
- *   of this header to always call into atrace_setup, in which we call
- *   atrace_init unconditionally.
+ * This is always set to false. This forces code that uses an old version
+ * of this header to always call into atrace_setup, in which we call
+ * atrace_init unconditionally.
  */
 extern atomic_bool atrace_is_ready;
 
@@ -154,28 +144,8 @@ extern int atrace_marker_fd;
 #define ATRACE_INIT() atrace_init()
 #define ATRACE_GET_ENABLED_TAGS() atrace_get_enabled_tags()
 
-#if ATRACE_SHMEM
 void atrace_init();
 uint64_t atrace_get_enabled_tags();
-#else
-static inline void atrace_init()
-{
-    if (CC_UNLIKELY(!atomic_load_explicit(&atrace_is_ready, memory_order_acquire))) {
-        atrace_setup();
-    }
-}
-
-/**
- * Get the mask of all tags currently enabled.
- * It can be used as a guard condition around more expensive trace calculations.
- * Every trace function calls this, which ensures atrace_init is run.
- */
-static inline uint64_t atrace_get_enabled_tags()
-{
-    atrace_init();
-    return atrace_enabled_tags;
-}
-#endif
 
 /**
  * Test if a given tag is currently enabled.
