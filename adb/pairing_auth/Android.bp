@@ -47,7 +47,7 @@ cc_defaults {
     use_version_lib: false,
 
     host_supported: true,
-    recovery_available: true,
+    recovery_available: false,
 
     stl: "libc++_static",
 
