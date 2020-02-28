@@ -512,8 +512,7 @@ static void tune_verity(const std::string& blk_device, const FstabEntry& entry,
 // Enable casefold if needed.
 static void tune_casefold(const std::string& blk_device, const struct ext4_super_block* sb,
                           int* fs_stat) {
-    bool has_casefold =
-            (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_CASEFOLD)) != 0;
+    bool has_casefold = (sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_CASEFOLD)) != 0;
     bool wants_casefold = android::base::GetBoolProperty("ro.emulated_storage.casefold", false);
 
     if (!wants_casefold || has_casefold) return;

@@ -30,10 +30,8 @@ void atrace_async_begin_body(const char* /*name*/, int32_t /*cookie*/) {}
 void atrace_async_end_body(const char* /*name*/, int32_t /*cookie*/) {}
 void atrace_int_body(const char* /*name*/, int32_t /*value*/) {}
 void atrace_int64_body(const char* /*name*/, int64_t /*value*/) {}
-#if ATRACE_SHMEM
 void atrace_init() {}
 uint64_t atrace_get_enabled_tags()
 {
     return ATRACE_TAG_NOT_READY;
 }
-#endif
