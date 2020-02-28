@@ -42,12 +42,8 @@ cc_defaults {
         "//system/core/adb:__subpackages__",
     ],
 
-    stl: "libc++_static",
-
-    static_libs: [
-        "libbase",
-    ],
     shared_libs: [
+        "libbase",
         "libcrypto",
         "liblog",
         "libssl",
