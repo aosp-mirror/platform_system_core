@@ -525,14 +525,16 @@ struct UsbFfsConnection : public Connection {
             }
 
             if (id.direction == TransferDirection::READ) {
-                HandleRead(id, event.res);
+                if (!HandleRead(id, event.res)) {
+                    return;
+                }
             } else {
                 HandleWrite(id);
             }
         }
     }
 
-    void HandleRead(TransferId id, int64_t size) {
+    bool HandleRead(TransferId id, int64_t size) {
         uint64_t read_idx = id.id % kUsbReadQueueDepth;
         IoReadBlock* block = &read_requests_[read_idx];
         block->pending = false;
@@ -542,7 +544,7 @@ struct UsbFfsConnection : public Connection {
         if (block->id().id != needed_read_id_) {
             LOG(VERBOSE) << "read " << block->id().id << " completed while waiting for "
                          << needed_read_id_;
-            return;
+            return true;
         }
 
         for (uint64_t id = needed_read_id_;; ++id) {
@@ -551,15 +553,22 @@ struct UsbFfsConnection : public Connection {
             if (current_block->pending) {
                 break;
             }
-            ProcessRead(current_block);
+            if (!ProcessRead(current_block)) {
+                return false;
+            }
             ++needed_read_id_;
         }
+
+        return true;
     }
 
-    void ProcessRead(IoReadBlock* block) {
+    bool ProcessRead(IoReadBlock* block) {
         if (!block->payload.empty()) {
             if (!incoming_header_.has_value()) {
-                CHECK_EQ(sizeof(amessage), block->payload.size());
+                if (block->payload.size() != sizeof(amessage)) {
+                    HandleError("received packet of unexpected length while reading header");
+                    return false;
+                }
                 amessage& msg = incoming_header_.emplace();
                 memcpy(&msg, block->payload.data(), sizeof(msg));
                 LOG(DEBUG) << "USB read:" << dump_header(&msg);
@@ -567,7 +576,10 @@ struct UsbFfsConnection : public Connection {
             } else {
                 size_t bytes_left = incoming_header_->data_length - incoming_payload_.size();
                 Block payload = std::move(block->payload);
-                CHECK_LE(payload.size(), bytes_left);
+                if (block->payload.size() > bytes_left) {
+                    HandleError("received too many bytes while waiting for payload");
+                    return false;
+                }
                 incoming_payload_.append(std::move(payload));
             }
 
@@ -590,6 +602,7 @@ struct UsbFfsConnection : public Connection {
 
         PrepareReadBlock(block, block->id().id + kUsbReadQueueDepth);
         SubmitRead(block);
+        return true;
     }
 
     bool SubmitRead(IoReadBlock* block) {
