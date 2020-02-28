@@ -813,7 +813,9 @@ static bool load_properties_from_file(const char* filename, const char* filter,
 static void update_sys_usb_config() {
     bool is_debuggable = android::base::GetBoolProperty("ro.debuggable", false);
     std::string config = android::base::GetProperty("persist.sys.usb.config", "");
-    if (config.empty()) {
+    // b/150130503, add (config == "none") condition here to prevent appending
+    // ",adb" if "none" is explicitly defined in default prop.
+    if (config.empty() || config == "none") {
         InitPropertySet("persist.sys.usb.config", is_debuggable ? "adb" : "none");
     } else if (is_debuggable && config.find("adb") == std::string::npos &&
                config.length() + 4 < PROP_VALUE_MAX) {
