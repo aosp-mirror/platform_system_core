@@ -418,6 +418,12 @@ cc_library_static {
             srcs: [
                 "daemon/usb_dummy.cpp",
             ]
+        },
+        recovery: {
+            exclude_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+            ],
         }
     },
 }
@@ -477,6 +483,10 @@ cc_library_static {
             exclude_srcs: [
                 "daemon/abb_service.cpp",
             ],
+            exclude_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+            ],
         },
     },
 }
@@ -512,6 +522,15 @@ cc_library {
         "libselinux",
     ],
 
+    target: {
+        recovery: {
+            exclude_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+            ],
+        }
+    },
+
     static_libs: [
         "libadbd_services",
         "libcutils_sockets",
@@ -544,6 +563,8 @@ cc_binary {
     },
 
     static_libs: [
+        "libadb_crypto",
+        "libadb_tls_connection",
         "libadbconnection_server",
         "libadbd",
         "libadbd_services",
@@ -561,14 +582,21 @@ cc_binary {
     ],
 
     shared_libs: [
-        "libadb_crypto",
         "libadb_pairing_connection",
         "libadb_protos",
-        "libadb_tls_connection",
         "libadbd_auth",
         "libadbd_fs",
         "libcrypto",
     ],
+
+    target: {
+        recovery: {
+            exclude_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+            ],
+        }
+    },
 
     required: [
         "libadbd_auth",

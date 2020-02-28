@@ -52,7 +52,7 @@ cc_defaults {
     stl: "libc++_static",
 
     host_supported: true,
-    recovery_available: true,
+    recovery_available: false,
 
     static_libs: [
         "libbase",
@@ -131,7 +131,7 @@ cc_defaults {
     ],
 
     host_supported: true,
-    recovery_available: true,
+    recovery_available: false,
 
     stl: "libc++_static",
 
