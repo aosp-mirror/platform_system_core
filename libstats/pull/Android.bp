@@ -17,8 +17,8 @@
 // ==========================================================
 // Native library to register a pull atom callback with statsd
 // ==========================================================
-cc_library_shared {
-    name: "libstatspull",
+cc_defaults {
+    name: "libstatspull_defaults",
     srcs: [
         "stats_pull_atom_callback.cpp",
     ],
@@ -31,12 +31,16 @@ cc_library_shared {
         "libbinder_ndk",
         "liblog",
         "statsd-aidl-ndk_platform",
+        "libstatssocket",
     ],
     static_libs: [
         "libutils",
-        // TODO(b/149340100): Clean this up when libstatssocket is moved to the apex.
-        "libstatssocket",
-        "libcutils",
+    ],
+}
+cc_library_shared {
+    name: "libstatspull",
+    defaults: [
+        "libstatspull_defaults"
     ],
     // enumerate stable entry points for APEX use
     stubs: {
@@ -48,5 +52,16 @@ cc_library_shared {
     apex_available: [
         "com.android.os.statsd",
         "test_com.android.os.statsd",
+    ],
+}
+
+// ONLY USE IN TESTS.
+cc_library_static {
+    name: "libstatspull_private",
+    defaults: [
+        "libstatspull_defaults",
+    ],
+    visibility: [
+        "//frameworks/base/apex/statsd/tests/libstatspull",
     ],
 }
