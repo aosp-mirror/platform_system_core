@@ -30,6 +30,7 @@
 
 #include <android-base/parsebool.h>
 #include <android-base/parseint.h>
+#include <android-base/strings.h>
 
 namespace android {
 namespace base {
@@ -193,6 +194,62 @@ bool WaitForPropertyCreation(const std::string& key,
                              std::chrono::milliseconds relative_timeout) {
   auto start_time = std::chrono::steady_clock::now();
   return (WaitForPropertyCreation(key, relative_timeout, start_time) != nullptr);
+}
+
+CachedProperty::CachedProperty(const char* property_name)
+    : property_name_(property_name),
+      prop_info_(nullptr),
+      cached_area_serial_(0),
+      cached_property_serial_(0),
+      is_read_only_(android::base::StartsWith(property_name, "ro.")),
+      read_only_property_(nullptr) {
+  static_assert(sizeof(cached_value_) == PROP_VALUE_MAX);
+}
+
+const char* CachedProperty::Get(bool* changed) {
+  std::optional<uint32_t> initial_property_serial_ = cached_property_serial_;
+
+  // Do we have a `struct prop_info` yet?
+  if (prop_info_ == nullptr) {
+    // `__system_property_find` is expensive, so only retry if a property
+    // has been created since last time we checked.
+    uint32_t property_area_serial = __system_property_area_serial();
+    if (property_area_serial != cached_area_serial_) {
+      prop_info_ = __system_property_find(property_name_.c_str());
+      cached_area_serial_ = property_area_serial;
+    }
+  }
+
+  if (prop_info_ != nullptr) {
+    // Only bother re-reading the property if it's actually changed since last time.
+    uint32_t property_serial = __system_property_serial(prop_info_);
+    if (property_serial != cached_property_serial_) {
+      __system_property_read_callback(
+          prop_info_,
+          [](void* data, const char*, const char* value, uint32_t serial) {
+            CachedProperty* instance = reinterpret_cast<CachedProperty*>(data);
+            instance->cached_property_serial_ = serial;
+            // Read only properties can be larger than PROP_VALUE_MAX, but also never change value
+            // or location, thus we return the pointer from the shared memory directly.
+            if (instance->is_read_only_) {
+              instance->read_only_property_ = value;
+            } else {
+              strlcpy(instance->cached_value_, value, PROP_VALUE_MAX);
+            }
+          },
+          this);
+    }
+  }
+
+  if (changed) {
+    *changed = cached_property_serial_ != initial_property_serial_;
+  }
+
+  if (is_read_only_) {
+    return read_only_property_;
+  } else {
+    return cached_value_;
+  }
 }
 
 #endif

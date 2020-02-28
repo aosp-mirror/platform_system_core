@@ -107,6 +107,7 @@
 #include "adb_trace.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
+#include "daemon/logging.h"
 #include "security_log_tags.h"
 #include "shell_protocol.h"
 
@@ -760,14 +761,14 @@ void Subprocess::WaitForExit() {
             D("post waitpid (pid=%d) status=%04x", pid_, status);
             if (WIFSIGNALED(status)) {
                 exit_code = 0x80 | WTERMSIG(status);
-                D("subprocess killed by signal %d", WTERMSIG(status));
+                ADB_LOG(Shell) << "subprocess " << pid_ << " killed by signal " << WTERMSIG(status);
                 break;
             } else if (!WIFEXITED(status)) {
                 D("subprocess didn't exit");
                 break;
             } else if (WEXITSTATUS(status) >= 0) {
                 exit_code = WEXITSTATUS(status);
-                D("subprocess exit code = %d", WEXITSTATUS(status));
+                ADB_LOG(Shell) << "subprocess " << pid_ << " exited with status " << exit_code;
                 break;
             }
         }
