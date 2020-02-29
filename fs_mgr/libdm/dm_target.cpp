@@ -243,12 +243,10 @@ std::string DmTargetCrypt::GetParameterString() const {
     return android::base::Join(argv, " ");
 }
 
-const std::string DmTargetDefaultKey::name_ = "default-key";
-
 bool DmTargetDefaultKey::IsLegacy(bool* result) {
     DeviceMapper& dm = DeviceMapper::Instance();
     DmTargetTypeInfo info;
-    if (!dm.GetTargetByName(name_, &info)) return false;
+    if (!dm.GetTargetByName(kName, &info)) return false;
     // dm-default-key was modified to be like dm-crypt with version 2
     *result = !info.IsAtLeast(2, 0, 0);
     return true;
