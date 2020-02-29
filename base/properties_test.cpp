@@ -230,3 +230,28 @@ TEST(properties, WaitForPropertyCreation_timeout) {
   GTEST_LOG_(INFO) << "This test does nothing on the host.\n";
 #endif
 }
+
+TEST(properties, CachedProperty) {
+#if defined(__BIONIC__)
+  android::base::CachedProperty cached_property("debug.libbase.CachedProperty_test");
+  bool changed;
+  cached_property.Get(&changed);
+
+  android::base::SetProperty("debug.libbase.CachedProperty_test", "foo");
+  ASSERT_STREQ("foo", cached_property.Get(&changed));
+  ASSERT_TRUE(changed);
+
+  ASSERT_STREQ("foo", cached_property.Get(&changed));
+  ASSERT_FALSE(changed);
+
+  android::base::SetProperty("debug.libbase.CachedProperty_test", "bar");
+  ASSERT_STREQ("bar", cached_property.Get(&changed));
+  ASSERT_TRUE(changed);
+
+  ASSERT_STREQ("bar", cached_property.Get(&changed));
+  ASSERT_FALSE(changed);
+
+#else
+  GTEST_LOG_(INFO) << "This test does nothing on the host.\n";
+#endif
+}
