@@ -282,6 +282,7 @@ struct UsbFfsConnection : public Connection {
 
         monitor_thread_ = std::thread([this]() {
             adb_thread_setname("UsbFfs-monitor");
+            LOG(INFO) << "UsbFfs-monitor thread spawned";
 
             bool bound = false;
             bool enabled = false;
@@ -427,6 +428,8 @@ struct UsbFfsConnection : public Connection {
         worker_started_ = true;
         worker_thread_ = std::thread([this]() {
             adb_thread_setname("UsbFfs-worker");
+            LOG(INFO) << "UsbFfs-worker thread spawned";
+
             for (size_t i = 0; i < kUsbReadQueueDepth; ++i) {
                 read_requests_[i] = CreateReadBlock(next_read_id_++);
                 if (!SubmitRead(&read_requests_[i])) {
