@@ -287,7 +287,7 @@ class DmTargetDefaultKey final : public DmTarget {
           blockdev_(blockdev),
           start_sector_(start_sector) {}
 
-    std::string name() const override { return name_; }
+    std::string name() const override { return kName; }
     bool Valid() const override;
     std::string GetParameterString() const override;
     static bool IsLegacy(bool* result);
@@ -296,7 +296,8 @@ class DmTargetDefaultKey final : public DmTarget {
     void SetWrappedKeyV0() { is_hw_wrapped_ = true; }
 
   private:
-    static const std::string name_;
+    inline static const std::string kName = "default-key";
+
     std::string cipher_;
     std::string key_;
     std::string blockdev_;
