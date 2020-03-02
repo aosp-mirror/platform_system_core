@@ -120,7 +120,7 @@ static void InstallInitNotifier(Epoll* epoll) {
         }
     };
 
-    if (auto result = epoll->RegisterHandler(epoll_fd, drain_socket); !result) {
+    if (auto result = epoll->RegisterHandler(epoll_fd, drain_socket); !result.ok()) {
         LOG(FATAL) << result.error();
     }
 }

@@ -34,6 +34,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -61,6 +62,8 @@
 #include <sys/mount.h>
 #include <android-base/properties.h>
 using namespace std::chrono_literals;
+
+#include "daemon/logging.h"
 #endif
 
 std::string adb_version() {
@@ -312,6 +315,9 @@ static void handle_new_connection(atransport* t, apacket* p) {
 #if ADB_HOST
     handle_online(t);
 #else
+    ADB_LOG(Connection) << "received CNXN: version=" << p->msg.arg0 << ", maxdata = " << p->msg.arg1
+                        << ", banner = '" << banner << "'";
+
     if (t->use_tls) {
         // We still handshake in TLS mode. If auth_required is disabled,
         // we'll just not verify the client's certificate. This should be the
