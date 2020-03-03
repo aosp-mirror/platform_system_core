@@ -85,7 +85,7 @@ static bool shutting_down = false;
 
 static const std::set<std::string> kDebuggingServices{"tombstoned", "logd", "adbd", "console"};
 
-static std::vector<Service*> GetDebuggingServices(bool only_post_data) {
+static std::vector<Service*> GetDebuggingServices(bool only_post_data) REQUIRES(service_lock) {
     std::vector<Service*> ret;
     ret.reserve(kDebuggingServices.size());
     for (const auto& s : ServiceList::GetInstance()) {
@@ -181,7 +181,7 @@ class MountEntry {
 };
 
 // Turn off backlight while we are performing power down cleanup activities.
-static void TurnOffBacklight() {
+static void TurnOffBacklight() REQUIRES(service_lock) {
     Service* service = ServiceList::GetInstance().FindService("blank_screen");
     if (service == nullptr) {
         LOG(WARNING) << "cannot find blank_screen in TurnOffBacklight";
@@ -589,6 +589,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // Start reboot monitor thread
     sem_post(&reboot_semaphore);
 
+    auto lock = std::lock_guard{service_lock};
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
     const std::set<std::string> to_starts{"watchdogd"};
     std::vector<Service*> stop_first;
@@ -708,6 +709,7 @@ static void EnterShutdown() {
     // Skip wait for prop if it is in progress
     ResetWaitForProp();
     // Clear EXEC flag if there is one pending
+    auto lock = std::lock_guard{service_lock};
     for (const auto& s : ServiceList::GetInstance()) {
         s->UnSetExec();
     }
@@ -751,6 +753,7 @@ static Result<void> DoUserspaceReboot() {
         return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
     }
     EnterShutdown();
+    auto lock = std::lock_guard{service_lock};
     if (!SetProperty("sys.powerctl", "")) {
         return Error() << "Failed to reset sys.powerctl property";
     }
@@ -911,6 +914,7 @@ void HandlePowerctlMessage(const std::string& command) {
                 run_fsck = true;
             } else if (cmd_params[1] == "thermal") {
                 // Turn off sources of heat immediately.
+                auto lock = std::lock_guard{service_lock};
                 TurnOffBacklight();
                 // run_fsck is false to avoid delay
                 cmd = ANDROID_RB_THERMOFF;
