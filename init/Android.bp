@@ -28,6 +28,7 @@ init_common_sources = [
     "rlimit_parser.cpp",
     "service.cpp",
     "service_list.cpp",
+    "service_lock.cpp",
     "service_parser.cpp",
     "service_utils.cpp",
     "subcontext.cpp",
@@ -81,6 +82,7 @@ cc_defaults {
         "-Wextra",
         "-Wno-unused-parameter",
         "-Werror",
+        "-Wthread-safety",
         "-DALLOW_FIRST_STAGE_CONSOLE=0",
         "-DALLOW_LOCAL_PROP_OVERRIDE=0",
         "-DALLOW_PERMISSIVE_SELINUX=0",
@@ -88,6 +90,7 @@ cc_defaults {
         "-DWORLD_WRITABLE_KMSG=0",
         "-DDUMP_ON_UMOUNT_FAILURE=0",
         "-DSHUTDOWN_ZERO_TIMEOUT=0",
+        "-DINIT_FULL_SOURCES",
     ],
     product_variables: {
         debuggable: {
@@ -265,6 +268,37 @@ cc_benchmark {
         "subcontext_benchmark.cpp",
     ],
     static_libs: ["libinit"],
+}
+
+cc_defaults {
+    name: "libinit_test_utils_libraries_defaults",
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libselinux",
+        "libhidl-gen-utils",
+        "liblog",
+        "libprocessgroup",
+        "libprotobuf-cpp-lite",
+    ],
+}
+
+cc_library_static {
+    name: "libinit_test_utils",
+    defaults: ["libinit_test_utils_libraries_defaults"],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Werror",
+    ],
+    srcs: init_common_sources + [
+        "test_utils/service_utils.cpp",
+    ],
+    whole_static_libs: [
+        "libcap",
+    ],
+    export_include_dirs: ["test_utils/include"], // for tests
 }
 
 // Host Verifier
