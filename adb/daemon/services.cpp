@@ -54,9 +54,9 @@
 
 #include "daemon/file_sync_service.h"
 #include "daemon/framebuffer_service.h"
+#include "daemon/logging.h"
 #include "daemon/restart_service.h"
 #include "daemon/shell_service.h"
-
 
 void reconnect_service(unique_fd fd, atransport* t) {
     WriteFdExactly(fd.get(), "done");
@@ -259,6 +259,8 @@ asocket* daemon_service_to_socket(std::string_view name) {
 }
 
 unique_fd daemon_service_to_fd(std::string_view name, atransport* transport) {
+    ADB_LOG(Service) << "transport " << transport->serial_name() << " opening service " << name;
+
 #if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)
     if (name.starts_with("abb:") || name.starts_with("abb_exec:")) {
         return execute_abb_command(name);
