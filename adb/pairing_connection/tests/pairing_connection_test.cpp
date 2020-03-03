@@ -440,7 +440,7 @@ TEST_F(AdbPairingConnectionTest, MultipleClientsAllFail) {
     EXPECT_FALSE(*(server_waiter.is_valid_));
 }
 
-TEST_F(AdbPairingConnectionTest, MultipleClientsOnePass) {
+TEST_F(AdbPairingConnectionTest, DISABLED_MultipleClientsOnePass) {
     // Send multiple clients with bad passwords, but send the last one with the
     // correct password.
     std::vector<uint8_t> pswd{0x01, 0x03, 0x05, 0x07};
