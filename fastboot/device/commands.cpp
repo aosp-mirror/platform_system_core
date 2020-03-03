@@ -261,7 +261,7 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
     }
 
     // If the slot is not changing, do nothing.
-    if (slot == boot_control_hal->getCurrentSlot()) {
+    if (args[1] == device->GetCurrentSlot()) {
         return device->WriteOkay("");
     }
 
