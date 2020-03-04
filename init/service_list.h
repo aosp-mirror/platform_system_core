@@ -17,9 +17,13 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <vector>
 
+#include <android-base/thread_annotations.h>
+
 #include "service.h"
+#include "service_lock.h"
 
 namespace android {
 namespace init {
@@ -32,16 +36,16 @@ class ServiceList {
     ServiceList();
     size_t CheckAllCommands();
 
-    void AddService(std::unique_ptr<Service> service);
-    void RemoveService(const Service& svc);
+    void AddService(std::unique_ptr<Service> service) REQUIRES(service_lock);
+    void RemoveService(const Service& svc) REQUIRES(service_lock);
     template <class UnaryPredicate>
-    void RemoveServiceIf(UnaryPredicate predicate) {
+    void RemoveServiceIf(UnaryPredicate predicate) REQUIRES(service_lock) {
         services_.erase(std::remove_if(services_.begin(), services_.end(), predicate),
                         services_.end());
     }
 
     template <typename T, typename F = decltype(&Service::name)>
-    Service* FindService(T value, F function = &Service::name) const {
+    Service* FindService(T value, F function = &Service::name) const REQUIRES(service_lock) {
         auto svc = std::find_if(services_.begin(), services_.end(),
                                 [&function, &value](const std::unique_ptr<Service>& s) {
                                     return std::invoke(function, s) == value;
@@ -52,7 +56,7 @@ class ServiceList {
         return nullptr;
     }
 
-    Service* FindInterface(const std::string& interface_name) {
+    Service* FindInterface(const std::string& interface_name) REQUIRES(service_lock) {
         for (const auto& svc : services_) {
             if (svc->interfaces().count(interface_name) > 0) {
                 return svc.get();
@@ -62,18 +66,20 @@ class ServiceList {
         return nullptr;
     }
 
-    void DumpState() const;
+    void DumpState() const REQUIRES(service_lock);
 
-    auto begin() const { return services_.begin(); }
-    auto end() const { return services_.end(); }
-    const std::vector<std::unique_ptr<Service>>& services() const { return services_; }
-    const std::vector<Service*> services_in_shutdown_order() const;
+    auto begin() const REQUIRES(service_lock) { return services_.begin(); }
+    auto end() const REQUIRES(service_lock) { return services_.end(); }
+    const std::vector<std::unique_ptr<Service>>& services() const REQUIRES(service_lock) {
+        return services_;
+    }
+    const std::vector<Service*> services_in_shutdown_order() const REQUIRES(service_lock);
 
     void MarkPostData();
     bool IsPostData();
-    void MarkServicesUpdate();
+    void MarkServicesUpdate() REQUIRES(service_lock);
     bool IsServicesUpdated() const { return services_update_finished_; }
-    void DelayService(const Service& service);
+    void DelayService(const Service& service) REQUIRES(service_lock);
 
     void ResetState() {
         post_data_ = false;
