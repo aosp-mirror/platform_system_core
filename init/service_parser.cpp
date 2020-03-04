@@ -34,7 +34,7 @@
 #include "service_utils.h"
 #include "util.h"
 
-#if defined(__ANDROID__)
+#ifdef INIT_FULL_SOURCES
 #include <android/api-level.h>
 #include <sys/system_properties.h>
 
@@ -168,6 +168,7 @@ Result<void> ServiceParser::ParseInterface(std::vector<std::string>&& args) {
 
     const std::string fullname = interface_name + "/" + instance_name;
 
+    auto lock = std::lock_guard{service_lock};
     for (const auto& svc : *service_list_) {
         if (svc->interfaces().count(fullname) > 0) {
             return Error() << "Interface '" << fullname << "' redefined in " << service_->name()
@@ -598,6 +599,7 @@ Result<void> ServiceParser::EndSection() {
         }
     }
 
+    auto lock = std::lock_guard{service_lock};
     Service* old_service = service_list_->FindService(service_->name());
     if (old_service) {
         if (!service_->is_override()) {
