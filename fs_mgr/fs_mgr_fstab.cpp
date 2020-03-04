@@ -798,7 +798,7 @@ FstabEntry BuildGsiSystemFstabEntry() {
                          // could add more keys separated by ':'.
                          .avb_keys =
                                  "/avb/q-gsi.avbpubkey:/avb/q-developer-gsi.avbpubkey:"
-                                 "/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey",
+                                 "/avb/r-developer-gsi.avbpubkey:/avb/s-developer-gsi.avbpubkey",
                          .logical_partition_name = "system"};
     system.fs_mgr_flags.wait = true;
     system.fs_mgr_flags.logical = true;
