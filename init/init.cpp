@@ -778,11 +778,10 @@ int SecondStageMain(int argc, char** argv) {
     if (false) DumpState();
 
     // Make the GSI status available before scripts start running.
-    if (android::gsi::IsGsiRunning()) {
-        SetProperty("ro.gsid.image_running", "1");
-    } else {
-        SetProperty("ro.gsid.image_running", "0");
-    }
+    auto is_running = android::gsi::IsGsiRunning() ? "1" : "0";
+    SetProperty(gsi::kGsiBootedProp, is_running);
+    auto is_installed = android::gsi::IsGsiInstalled() ? "1" : "0";
+    SetProperty(gsi::kGsiInstalledProp, is_installed);
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
