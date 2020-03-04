@@ -30,6 +30,7 @@
 
 #include <android-base/file.h>
 #include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <libgsi/libgsi.h>
@@ -176,6 +177,7 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         CheckFlag("first_stage_mount", first_stage_mount);
         CheckFlag("slotselect_other", slot_select_other);
         CheckFlag("fsverity", fs_verity);
+        CheckFlag("metadata_csum", ext_meta_csum);
 
 #undef CheckFlag
 
@@ -211,7 +213,7 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             }
         } else if (StartsWith(flag, "swapprio=")) {
             if (!ParseInt(arg, &entry->swap_prio)) {
-                LWARNING << "Warning: length= flag malformed: " << arg;
+                LWARNING << "Warning: swapprio= flag malformed: " << arg;
             }
         } else if (StartsWith(flag, "zramsize=")) {
             if (!arg.empty() && arg.back() == '%') {
@@ -277,9 +279,9 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         } else if (StartsWith(flag, "keydirectory=")) {
             // The metadata flag is followed by an = and the directory for the keys.
             entry->metadata_key_dir = arg;
-        } else if (StartsWith(flag, "metadata_cipher=")) {
-            // Specify the cipher to use for metadata encryption
-            entry->metadata_cipher = arg;
+        } else if (StartsWith(flag, "metadata_encryption=")) {
+            // Specify the cipher and flags to use for metadata encryption
+            entry->metadata_encryption = arg;
         } else if (StartsWith(flag, "sysfs_path=")) {
             // The path to trigger device gc by idle-maint of vold.
             entry->sysfs_path = arg;
@@ -658,6 +660,21 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
     }
 }
 
+void EnableMandatoryFlags(Fstab* fstab) {
+    // Devices launched in R and after should enable fs_verity on userdata. The flag causes tune2fs
+    // to enable the feature. A better alternative would be to enable on mkfs at the beginning.
+    if (android::base::GetIntProperty("ro.product.first_api_level", 0) >= 30) {
+        std::vector<FstabEntry*> data_entries = GetEntriesForMountPoint(fstab, "/data");
+        for (auto&& entry : data_entries) {
+            // Besides ext4, f2fs is also supported. But the image is already created with verity
+            // turned on when it was first introduced.
+            if (entry->fs_type == "ext4") {
+                entry->fs_mgr_flags.fs_verity = true;
+            }
+        }
+    }
+}
+
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
     auto fstab_file = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
     if (!fstab_file) {
@@ -678,6 +695,7 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
     }
 
     SkipMountingPartitions(fstab);
+    EnableMandatoryFlags(fstab);
 
     return true;
 }

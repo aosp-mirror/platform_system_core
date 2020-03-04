@@ -274,7 +274,7 @@ int __android_log_set_minimum_priority(int priority);
  * Gets the minimum priority that will be logged for this process.  If none has been set by a
  * previous __android_log_set_minimum_priority() call, this returns ANDROID_LOG_DEFAULT.
  */
-int __android_log_get_minimum_priority();
+int __android_log_get_minimum_priority(void);
 
 /**
  * Sets the default tag if no tag is provided when writing a log message.  Defaults to

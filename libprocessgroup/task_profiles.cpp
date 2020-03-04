@@ -201,22 +201,6 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
 }
 
 bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
-    std::lock_guard<std::mutex> lock(fd_mutex_);
-    if (IsFdValid()) {
-        // fd is cached, reuse it
-        if (!AddTidToCgroup(pid, fd_)) {
-            LOG(ERROR) << "Failed to add task into cgroup";
-            return false;
-        }
-        return true;
-    }
-
-    if (fd_ == FDS_INACCESSIBLE) {
-        // no permissions to access the file, ignore
-        return true;
-    }
-
-    // this is app-dependent path and fd is not cached or cached fd can't be used
     std::string procs_path = controller()->GetProcsFilePath(path_, uid, pid);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
@@ -270,7 +254,6 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
 
 bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     for (const auto& profile : profiles_) {
-        profile->EnableResourceCaching();
         if (!profile->ExecuteForProcess(uid, pid)) {
             PLOG(WARNING) << "ExecuteForProcess failed for aggregate profile";
         }
@@ -280,12 +263,23 @@ bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
 
 bool ApplyProfileAction::ExecuteForTask(int tid) const {
     for (const auto& profile : profiles_) {
-        profile->EnableResourceCaching();
         if (!profile->ExecuteForTask(tid)) {
             PLOG(WARNING) << "ExecuteForTask failed for aggregate profile";
         }
     }
     return true;
+}
+
+void ApplyProfileAction::EnableResourceCaching() {
+    for (const auto& profile : profiles_) {
+        profile->EnableResourceCaching();
+    }
+}
+
+void ApplyProfileAction::DropResourceCaching() {
+    for (const auto& profile : profiles_) {
+        profile->DropResourceCaching();
+    }
 }
 
 void TaskProfile::MoveTo(TaskProfile* profile) {
@@ -527,13 +521,10 @@ const ProfileAttribute* TaskProfiles::GetAttribute(const std::string& name) cons
 }
 
 bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
-                                      const std::vector<std::string>& profiles, bool use_fd_cache) {
+                                      const std::vector<std::string>& profiles) {
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
         if (profile != nullptr) {
-            if (use_fd_cache) {
-                profile->EnableResourceCaching();
-            }
             if (!profile->ExecuteForProcess(uid, pid)) {
                 PLOG(WARNING) << "Failed to apply " << name << " process profile";
             }

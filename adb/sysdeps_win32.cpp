@@ -18,8 +18,9 @@
 
 #include "sysdeps.h"
 
-#include <winsock2.h> /* winsock.h *must* be included before windows.h. */
+#include <lmcons.h>
 #include <windows.h>
+#include <winsock2.h> /* winsock.h *must* be included before windows.h. */
 
 #include <errno.h>
 #include <stdio.h>
@@ -1007,6 +1008,55 @@ int adb_register_socket(SOCKET s) {
     FH f = _fh_alloc(&_fh_socket_class);
     f->fh_socket = s;
     return _fh_to_int(f);
+}
+
+static bool isBlankStr(const char* str) {
+    for (; *str != '\0'; ++str) {
+        if (!isblank(*str)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int adb_gethostname(char* name, size_t len) {
+    const char* computerName = adb_getenv("COMPUTERNAME");
+    if (computerName && !isBlankStr(computerName)) {
+        strncpy(name, computerName, len);
+        name[len - 1] = '\0';
+        return 0;
+    }
+
+    wchar_t buffer[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD size = sizeof(buffer);
+    if (!GetComputerNameW(buffer, &size)) {
+        return -1;
+    }
+    std::string name_utf8;
+    if (!android::base::WideToUTF8(buffer, &name_utf8)) {
+        return -1;
+    }
+
+    strncpy(name, name_utf8.c_str(), len);
+    name[len - 1] = '\0';
+    return 0;
+}
+
+int adb_getlogin_r(char* buf, size_t bufsize) {
+    wchar_t buffer[UNLEN + 1];
+    DWORD len = sizeof(buffer);
+    if (!GetUserNameW(buffer, &len)) {
+        return -1;
+    }
+
+    std::string login;
+    if (!android::base::WideToUTF8(buffer, &login)) {
+        return -1;
+    }
+
+    strncpy(buf, login.c_str(), bufsize);
+    buf[bufsize - 1] = '\0';
+    return 0;
 }
 
 #undef accept
@@ -2342,6 +2392,20 @@ int adb_mkdir(const std::string& path, int mode) {
     return _wmkdir(path_wide.c_str());
 }
 
+int adb_rename(const char* oldpath, const char* newpath) {
+    std::wstring oldpath_wide, newpath_wide;
+    if (!android::base::UTF8ToWide(oldpath, &oldpath_wide)) {
+        return -1;
+    }
+    if (!android::base::UTF8ToWide(newpath, &newpath_wide)) {
+        return -1;
+    }
+
+    // MSDN just says the return value is non-zero on failure, make sure it
+    // returns -1 on failure so that it behaves the same as other systems.
+    return _wrename(oldpath_wide.c_str(), newpath_wide.c_str()) ? -1 : 0;
+}
+
 // Version of utime() that takes a UTF-8 path.
 int adb_utime(const char* path, struct utimbuf* u) {
     std::wstring path_wide;
@@ -2769,6 +2833,66 @@ char* adb_getcwd(char* buf, int size) {
     strcpy(buf, buf_utf8.c_str());
 
     return buf;
+}
+
+void enable_inherit(borrowed_fd fd) {
+    auto osh = adb_get_os_handle(fd);
+    const auto h = reinterpret_cast<HANDLE>(osh);
+    ::SetHandleInformation(h, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+}
+
+void disable_inherit(borrowed_fd fd) {
+    auto osh = adb_get_os_handle(fd);
+    const auto h = reinterpret_cast<HANDLE>(osh);
+    ::SetHandleInformation(h, HANDLE_FLAG_INHERIT, 0);
+}
+
+Process adb_launch_process(std::string_view executable, std::vector<std::string> args,
+                           std::initializer_list<int> fds_to_inherit) {
+    std::wstring wexe;
+    if (!android::base::UTF8ToWide(executable.data(), executable.size(), &wexe)) {
+        return Process();
+    }
+
+    std::wstring wargs = L"\"" + wexe + L"\"";
+    std::wstring warg;
+    for (auto arg : args) {
+        warg.clear();
+        if (!android::base::UTF8ToWide(arg.data(), arg.size(), &warg)) {
+            return Process();
+        }
+        wargs += L" \"";
+        wargs += warg;
+        wargs += L'\"';
+    }
+
+    STARTUPINFOW sinfo = {sizeof(sinfo)};
+    PROCESS_INFORMATION pinfo = {};
+
+    // TODO: use the Vista+ API to pass the list of inherited handles explicitly;
+    // see http://blogs.msdn.com/b/oldnewthing/archive/2011/12/16/10248328.aspx
+    for (auto fd : fds_to_inherit) {
+        enable_inherit(fd);
+    }
+    const auto created = CreateProcessW(wexe.c_str(), wargs.data(),
+                                        nullptr,                    // process attributes
+                                        nullptr,                    // thread attributes
+                                        fds_to_inherit.size() > 0,  // inherit any handles?
+                                        0,                          // flags
+                                        nullptr,                    // environment
+                                        nullptr,                    // current directory
+                                        &sinfo,                     // startup info
+                                        &pinfo);
+    for (auto fd : fds_to_inherit) {
+        disable_inherit(fd);
+    }
+
+    if (!created) {
+        return Process();
+    }
+
+    ::CloseHandle(pinfo.hThread);
+    return Process(pinfo.hProcess);
 }
 
 // The SetThreadDescription API was brought in version 1607 of Windows 10.

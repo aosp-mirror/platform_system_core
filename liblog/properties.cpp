@@ -405,7 +405,7 @@ int __android_log_security() {
   static struct cache2_char security = {
       PTHREAD_MUTEX_INITIALIZER, 0,
       "persist.logd.security",   {{NULL, 0xFFFFFFFF}, BOOLEAN_FALSE},
-      "ro.device_owner",         {{NULL, 0xFFFFFFFF}, BOOLEAN_FALSE},
+      "ro.organization_owned",   {{NULL, 0xFFFFFFFF}, BOOLEAN_FALSE},
       evaluate_security};
 
   return do_cache2_char(&security);

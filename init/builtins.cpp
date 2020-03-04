@@ -151,6 +151,7 @@ static Result<void> reboot_into_recovery(const std::vector<std::string>& options
 
 template <typename F>
 static void ForEachServiceInClass(const std::string& classname, F function) {
+    auto lock = std::lock_guard{service_lock};
     for (const auto& service : ServiceList::GetInstance()) {
         if (service->classnames().count(classname)) std::invoke(function, service);
     }
@@ -162,6 +163,7 @@ static Result<void> do_class_start(const BuiltinArguments& args) {
         return {};
     // Starting a class does not start services which are explicitly disabled.
     // They must  be started individually.
+    auto lock = std::lock_guard{service_lock};
     for (const auto& service : ServiceList::GetInstance()) {
         if (service->classnames().count(args[1])) {
             if (auto result = service->StartIfNotDisabled(); !result.ok()) {
@@ -184,6 +186,7 @@ static Result<void> do_class_start_post_data(const BuiltinArguments& args) {
         // stopped either.
         return {};
     }
+    auto lock = std::lock_guard{service_lock};
     for (const auto& service : ServiceList::GetInstance()) {
         if (service->classnames().count(args[1])) {
             if (auto result = service->StartIfPostData(); !result.ok()) {
@@ -234,6 +237,7 @@ static Result<void> do_domainname(const BuiltinArguments& args) {
 }
 
 static Result<void> do_enable(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "Could not find service";
 
@@ -245,6 +249,7 @@ static Result<void> do_enable(const BuiltinArguments& args) {
 }
 
 static Result<void> do_exec(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service.ok()) {
         return Error() << "Could not create exec service: " << service.error();
@@ -258,6 +263,7 @@ static Result<void> do_exec(const BuiltinArguments& args) {
 }
 
 static Result<void> do_exec_background(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     auto service = Service::MakeTemporaryOneshotService(args.args);
     if (!service.ok()) {
         return Error() << "Could not create exec background service: " << service.error();
@@ -271,6 +277,7 @@ static Result<void> do_exec_background(const BuiltinArguments& args) {
 }
 
 static Result<void> do_exec_start(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* service = ServiceList::GetInstance().FindService(args[1]);
     if (!service) {
         return Error() << "Service not found";
@@ -340,6 +347,7 @@ static Result<void> do_insmod(const BuiltinArguments& args) {
 }
 
 static Result<void> do_interface_restart(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
     if (!svc) return Error() << "interface " << args[1] << " not found";
     svc->Restart();
@@ -347,6 +355,7 @@ static Result<void> do_interface_restart(const BuiltinArguments& args) {
 }
 
 static Result<void> do_interface_start(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
     if (!svc) return Error() << "interface " << args[1] << " not found";
     if (auto result = svc->Start(); !result.ok()) {
@@ -356,6 +365,7 @@ static Result<void> do_interface_start(const BuiltinArguments& args) {
 }
 
 static Result<void> do_interface_stop(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindInterface(args[1]);
     if (!svc) return Error() << "interface " << args[1] << " not found";
     svc->Stop();
@@ -740,6 +750,7 @@ static Result<void> do_setrlimit(const BuiltinArguments& args) {
 }
 
 static Result<void> do_start(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
     if (auto result = svc->Start(); !result.ok()) {
@@ -749,6 +760,7 @@ static Result<void> do_start(const BuiltinArguments& args) {
 }
 
 static Result<void> do_stop(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
     svc->Stop();
@@ -756,6 +768,7 @@ static Result<void> do_stop(const BuiltinArguments& args) {
 }
 
 static Result<void> do_restart(const BuiltinArguments& args) {
+    auto lock = std::lock_guard{service_lock};
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
     svc->Restart();
@@ -1111,6 +1124,7 @@ static Result<void> ExecWithFunctionOnFailure(const std::vector<std::string>& ar
             function(StringPrintf("Exec service failed, status %d", siginfo.si_status));
         }
     });
+    auto lock = std::lock_guard{service_lock};
     if (auto result = (*service)->ExecStart(); !result.ok()) {
         function("ExecStart failed: " + result.error().message());
     }
@@ -1250,6 +1264,7 @@ static Result<void> parse_apex_configs() {
         }
         success &= parser.ParseConfigFile(c);
     }
+    auto lock = std::lock_guard{service_lock};
     ServiceList::GetInstance().MarkServicesUpdate();
     if (success) {
         return {};

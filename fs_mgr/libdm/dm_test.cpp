@@ -526,13 +526,18 @@ TEST(libdm, DefaultKeyArgs) {
     bool is_legacy;
     ASSERT_TRUE(DmTargetDefaultKey::IsLegacy(&is_legacy));
     // set_dun only in the non-is_legacy case
-    DmTargetDefaultKey target(0, 4096, "AES-256-XTS", "abcdef0123456789", "/dev/loop0", 0,
-                              is_legacy, !is_legacy);
+    DmTargetDefaultKey target(0, 4096, "AES-256-XTS", "abcdef0123456789", "/dev/loop0", 0);
+    if (is_legacy) {
+        target.SetIsLegacy();
+    } else {
+        target.SetSetDun();
+    }
     ASSERT_EQ(target.name(), "default-key");
     ASSERT_TRUE(target.Valid());
     if (is_legacy) {
         ASSERT_EQ(target.GetParameterString(), "AES-256-XTS abcdef0123456789 /dev/loop0 0");
     } else {
+        // TODO: Add case for wrapped key enabled
         ASSERT_EQ(target.GetParameterString(),
                   "AES-256-XTS abcdef0123456789 0 /dev/loop0 0 3 allow_discards sector_size:4096 "
                   "iv_large_sectors");

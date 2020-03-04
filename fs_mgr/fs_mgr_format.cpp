@@ -58,7 +58,7 @@ static int get_dev_sz(const std::string& fs_blkdev, uint64_t* dev_sz) {
 }
 
 static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_point,
-                       bool crypt_footer, bool needs_projid) {
+                       bool crypt_footer, bool needs_projid, bool needs_metadata_csum) {
     uint64_t dev_sz;
     int rc = 0;
 
@@ -83,11 +83,26 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
     }
     // casefolding is enabled via tune2fs during boot.
 
+    if (needs_metadata_csum) {
+        mke2fs_args.push_back("-O");
+        mke2fs_args.push_back("metadata_csum");
+        // tune2fs recommends to enable 64bit and extent:
+        //  Extents are not enabled.  The file extent tree can be checksummed,
+        //  whereas block maps cannot. Not enabling extents reduces the coverage
+        //  of metadata checksumming.  Re-run with -O extent to rectify.
+        //  64-bit filesystem support is not enabled.  The larger fields afforded
+        //  by this feature enable full-strength checksumming.  Run resize2fs -b to rectify.
+        mke2fs_args.push_back("-O");
+        mke2fs_args.push_back("64bit");
+        mke2fs_args.push_back("-O");
+        mke2fs_args.push_back("extent");
+    }
+
     mke2fs_args.push_back(fs_blkdev.c_str());
     mke2fs_args.push_back(size_str.c_str());
 
-    rc = logwrap_fork_execvp(mke2fs_args.size(), mke2fs_args.data(), nullptr, false, LOG_KLOG, true,
-                             nullptr);
+    rc = logwrap_fork_execvp(mke2fs_args.size(), mke2fs_args.data(), nullptr, false, LOG_KLOG,
+                             false, nullptr);
     if (rc) {
         LERROR << "mke2fs returned " << rc;
         return rc;
@@ -97,7 +112,7 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
             "/system/bin/e2fsdroid", "-e", "-a", fs_mnt_point.c_str(), fs_blkdev.c_str(), nullptr};
 
     rc = logwrap_fork_execvp(arraysize(e2fsdroid_args), e2fsdroid_args, nullptr, false, LOG_KLOG,
-                             true, nullptr);
+                             false, nullptr);
     if (rc) {
         LERROR << "e2fsdroid returned " << rc;
     }
@@ -135,7 +150,7 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool crypt
     args.push_back(fs_blkdev.c_str());
     args.push_back(size_str.c_str());
 
-    return logwrap_fork_execvp(args.size(), args.data(), nullptr, false, LOG_KLOG, true, nullptr);
+    return logwrap_fork_execvp(args.size(), args.data(), nullptr, false, LOG_KLOG, false, nullptr);
 }
 
 int fs_mgr_do_format(const FstabEntry& entry, bool crypt_footer) {
@@ -153,7 +168,8 @@ int fs_mgr_do_format(const FstabEntry& entry, bool crypt_footer) {
         return format_f2fs(entry.blk_device, entry.length, crypt_footer, needs_projid,
                            needs_casefold);
     } else if (entry.fs_type == "ext4") {
-        return format_ext4(entry.blk_device, entry.mount_point, crypt_footer, needs_projid);
+        return format_ext4(entry.blk_device, entry.mount_point, crypt_footer, needs_projid,
+                           entry.fs_mgr_flags.ext_meta_csum);
     } else {
         LERROR << "File system type '" << entry.fs_type << "' is not supported";
         return -EINVAL;

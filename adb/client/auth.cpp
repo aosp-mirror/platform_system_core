@@ -29,6 +29,10 @@
 #include <set>
 #include <string>
 
+#include <adb/crypto/rsa_2048_key.h>
+#include <adb/crypto/x509_generator.h>
+#include <adb/tls/adb_ca_list.h>
+#include <adb/tls/tls_connection.h>
 #include <android-base/errors.h>
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
@@ -53,100 +57,51 @@ static std::map<std::string, std::shared_ptr<RSA>>& g_keys =
     *new std::map<std::string, std::shared_ptr<RSA>>;
 static std::map<int, std::string>& g_monitored_paths = *new std::map<int, std::string>;
 
-static std::string get_user_info() {
-    std::string hostname;
-    if (getenv("HOSTNAME")) hostname = getenv("HOSTNAME");
-#if !defined(_WIN32)
-    char buf[64];
-    if (hostname.empty() && gethostname(buf, sizeof(buf)) != -1) hostname = buf;
-#endif
-    if (hostname.empty()) hostname = "unknown";
+using namespace adb::crypto;
+using namespace adb::tls;
 
-    std::string username;
-    if (getenv("LOGNAME")) username = getenv("LOGNAME");
-#if !defined(_WIN32)
-    if (username.empty() && getlogin()) username = getlogin();
-#endif
-    if (username.empty()) hostname = "unknown";
-
-    return " " + username + "@" + hostname;
-}
-
-static bool calculate_public_key(std::string* out, RSA* private_key) {
-    uint8_t binary_key_data[ANDROID_PUBKEY_ENCODED_SIZE];
-    if (!android_pubkey_encode(private_key, binary_key_data, sizeof(binary_key_data))) {
-        LOG(ERROR) << "Failed to convert to public key";
-        return false;
-    }
-
-    size_t expected_length;
-    if (!EVP_EncodedLength(&expected_length, sizeof(binary_key_data))) {
-        LOG(ERROR) << "Public key too large to base64 encode";
-        return false;
-    }
-
-    out->resize(expected_length);
-    size_t actual_length = EVP_EncodeBlock(reinterpret_cast<uint8_t*>(out->data()), binary_key_data,
-                                           sizeof(binary_key_data));
-    out->resize(actual_length);
-    out->append(get_user_info());
-    return true;
-}
-
-static int generate_key(const std::string& file) {
+static bool generate_key(const std::string& file) {
     LOG(INFO) << "generate_key(" << file << ")...";
 
-    mode_t old_mask;
-    FILE *f = nullptr;
-    int ret = 0;
+    auto rsa_2048 = CreateRSA2048Key();
+    if (!rsa_2048) {
+        LOG(ERROR) << "Unable to create key";
+        return false;
+    }
     std::string pubkey;
 
-    EVP_PKEY* pkey = EVP_PKEY_new();
-    BIGNUM* exponent = BN_new();
-    RSA* rsa = RSA_new();
-    if (!pkey || !exponent || !rsa) {
-        LOG(ERROR) << "Failed to allocate key";
-        goto out;
-    }
+    RSA* rsa = EVP_PKEY_get0_RSA(rsa_2048->GetEvpPkey());
+    CHECK(rsa);
 
-    BN_set_word(exponent, RSA_F4);
-    RSA_generate_key_ex(rsa, 2048, exponent, nullptr);
-    EVP_PKEY_set1_RSA(pkey, rsa);
-
-    if (!calculate_public_key(&pubkey, rsa)) {
+    if (!CalculatePublicKey(&pubkey, rsa)) {
         LOG(ERROR) << "failed to calculate public key";
-        goto out;
+        return false;
     }
 
-    old_mask = umask(077);
+    mode_t old_mask = umask(077);
 
-    f = fopen(file.c_str(), "w");
+    std::unique_ptr<FILE, decltype(&fclose)> f(nullptr, &fclose);
+    f.reset(fopen(file.c_str(), "w"));
     if (!f) {
         PLOG(ERROR) << "Failed to open " << file;
         umask(old_mask);
-        goto out;
+        return false;
     }
 
     umask(old_mask);
 
-    if (!PEM_write_PrivateKey(f, pkey, nullptr, nullptr, 0, nullptr, nullptr)) {
+    if (!PEM_write_PrivateKey(f.get(), rsa_2048->GetEvpPkey(), nullptr, nullptr, 0, nullptr,
+                              nullptr)) {
         LOG(ERROR) << "Failed to write key";
-        goto out;
+        return false;
     }
 
     if (!android::base::WriteStringToFile(pubkey, file + ".pub")) {
         PLOG(ERROR) << "failed to write public key";
-        goto out;
+        return false;
     }
 
-    ret = 1;
-
-out:
-    if (f) fclose(f);
-    EVP_PKEY_free(pkey);
-    RSA_free(rsa);
-    BN_free(exponent);
-    return ret;
+    return true;
 }
 
 static std::string hash_key(RSA* key) {
@@ -193,6 +148,7 @@ static bool load_key(const std::string& file) {
     if (g_keys.find(fingerprint) != g_keys.end()) {
         LOG(INFO) << "ignoring already-loaded key: " << file;
     } else {
+        LOG(INFO) << "Loaded fingerprint=[" << SHA256BitsToHexString(fingerprint) << "]";
         g_keys[fingerprint] = std::move(key);
     }
     return true;
@@ -325,7 +281,29 @@ static bool pubkey_from_privkey(std::string* out, const std::string& path) {
     if (!privkey) {
         return false;
     }
-    return calculate_public_key(out, privkey.get());
+    return CalculatePublicKey(out, privkey.get());
+}
+
+bssl::UniquePtr<EVP_PKEY> adb_auth_get_user_privkey() {
+    std::string path = get_user_key_path();
+    if (path.empty()) {
+        PLOG(ERROR) << "Error getting user key filename";
+        return nullptr;
+    }
+
+    std::shared_ptr<RSA> rsa_privkey = read_key_file(path);
+    if (!rsa_privkey) {
+        return nullptr;
+    }
+
+    bssl::UniquePtr<EVP_PKEY> pkey(EVP_PKEY_new());
+    if (!pkey) {
+        LOG(ERROR) << "Failed to allocate key";
+        return nullptr;
+    }
+
+    EVP_PKEY_set1_RSA(pkey.get(), rsa_privkey.get());
+    return pkey;
 }
 
 std::string adb_auth_get_userkey() {
@@ -343,7 +321,7 @@ std::string adb_auth_get_userkey() {
 }
 
 int adb_auth_keygen(const char* filename) {
-    return (generate_key(filename) == 0);
+    return !generate_key(filename);
 }
 
 int adb_auth_pubkey(const char* filename) {
@@ -501,4 +479,73 @@ void send_auth_response(const char* token, size_t token_size, atransport* t) {
     p->payload.assign(result.begin(), result.end());
     p->msg.data_length = p->payload.size();
     send_packet(p, t);
+}
+
+void adb_auth_tls_handshake(atransport* t) {
+    std::thread([t]() {
+        std::shared_ptr<RSA> key = t->Key();
+        if (key == nullptr) {
+            // Can happen if !auth_required
+            LOG(INFO) << "t->auth_key not set before handshake";
+            key = t->NextKey();
+            CHECK(key);
+        }
+
+        LOG(INFO) << "Attempting to TLS handshake";
+        bool success = t->connection()->DoTlsHandshake(key.get());
+        if (success) {
+            LOG(INFO) << "Handshake succeeded. Waiting for CNXN packet...";
+        } else {
+            LOG(INFO) << "Handshake failed. Kicking transport";
+            t->Kick();
+        }
+    }).detach();
+}
+
+int adb_tls_set_certificate(SSL* ssl) {
+    LOG(INFO) << __func__;
+
+    const STACK_OF(X509_NAME)* ca_list = SSL_get_client_CA_list(ssl);
+    if (ca_list == nullptr) {
+        // Either the device doesn't know any keys, or !auth_required.
+        // So let's just try with the default certificate and see what happens.
+        LOG(INFO) << "No client CA list. Trying with default certificate.";
+        return 1;
+    }
+
+    const size_t num_cas = sk_X509_NAME_num(ca_list);
+    for (size_t i = 0; i < num_cas; ++i) {
+        auto* x509_name = sk_X509_NAME_value(ca_list, i);
+        auto adbFingerprint = ParseEncodedKeyFromCAIssuer(x509_name);
+        if (!adbFingerprint.has_value()) {
+            // This could be a real CA issuer. Unfortunately, we don't support
+            // it ATM.
+            continue;
+        }
+
+        LOG(INFO) << "Checking for fingerprint match [" << *adbFingerprint << "]";
+        auto encoded_key = SHA256HexStringToBits(*adbFingerprint);
+        if (!encoded_key.has_value()) {
+            continue;
+        }
+        // Check against our list of encoded keys for a match
+        std::lock_guard<std::mutex> lock(g_keys_mutex);
+        auto rsa_priv_key = g_keys.find(*encoded_key);
+        if (rsa_priv_key != g_keys.end()) {
+            LOG(INFO) << "Got SHA256 match on a key";
+            bssl::UniquePtr<EVP_PKEY> evp_pkey(EVP_PKEY_new());
+            CHECK(EVP_PKEY_set1_RSA(evp_pkey.get(), rsa_priv_key->second.get()));
+            auto x509 = GenerateX509Certificate(evp_pkey.get());
+            auto x509_str = X509ToPEMString(x509.get());
+            auto evp_str = Key::ToPEMString(evp_pkey.get());
+            TlsConnection::SetCertAndKey(ssl, x509_str, evp_str);
+            return 1;
+        } else {
+            LOG(INFO) << "No match for [" << *adbFingerprint << "]";
+        }
+    }
+
+    // Let's just try with the default certificate anyways, because daemon might
+    // not require auth, even though it has a list of keys.
+    return 1;
 }

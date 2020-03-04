@@ -24,11 +24,20 @@
 
 __BEGIN_DECLS
 
+// Forward declare these classes so not everyone has to include GWP-ASan
+// headers.
+namespace gwp_asan {
+struct AllocatorState;
+struct AllocationMetadata;
+};  // namespace gwp_asan
+
 // These callbacks are called in a signal handler, and thus must be async signal safe.
 // If null, the callbacks will not be called.
 typedef struct {
   struct abort_msg_t* (*get_abort_message)();
   void (*post_dump)();
+  const struct gwp_asan::AllocatorState* (*get_gwp_asan_state)();
+  const struct gwp_asan::AllocationMetadata* (*get_gwp_asan_metadata)();
 } debuggerd_callbacks_t;
 
 void debuggerd_init(debuggerd_callbacks_t* callbacks);

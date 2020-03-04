@@ -91,6 +91,8 @@ class SnapshotManager final {
     using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
     using FiemapStatus = android::fiemap::FiemapStatus;
 
+    friend class SnapshotMergeStats;
+
   public:
     // Dependency injection for testing.
     class IDeviceInfo {
@@ -177,7 +179,7 @@ class SnapshotManager final {
     //   - Unverified if called on the source slot
     //   - MergeCompleted if merge is completed
     //   - other states indicating an error has occurred
-    UpdateState InitiateMergeAndWait();
+    UpdateState InitiateMergeAndWait(SnapshotMergeReport* report = nullptr);
 
     // Wait for the merge if rebooted into the new slot. Does NOT initiate a
     // merge. If the merge has not been initiated (but should be), wait.
@@ -394,6 +396,10 @@ class SnapshotManager final {
     bool WriteUpdateState(LockedFile* file, UpdateState state);
     bool WriteSnapshotUpdateStatus(LockedFile* file, const SnapshotUpdateStatus& status);
     std::string GetStateFilePath() const;
+
+    // Interact with /metadata/ota/merge_state.
+    // This file contains information related to the snapshot merge process.
+    std::string GetMergeStateFilePath() const;
 
     // Helpers for merging.
     bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);

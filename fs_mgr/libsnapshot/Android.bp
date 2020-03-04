@@ -72,6 +72,7 @@ filegroup {
         "android/snapshot/snapshot.proto",
         "device_info.cpp",
         "snapshot.cpp",
+        "snapshot_stats.cpp",
         "snapshot_metadata_updater.cpp",
         "partition_cow_creator.cpp",
         "return.cpp",
@@ -207,21 +208,12 @@ cc_test {
     defaults: ["libsnapshot_test_defaults"],
 }
 
-cc_test {
-    name: "vts_libsnapshot_test_presubmit",
-    defaults: ["libsnapshot_test_defaults"],
-    cppflags: [
-        "-DSKIP_TEST_IN_PRESUBMIT",
-    ],
-}
-
 cc_binary {
     name: "snapshotctl",
     srcs: [
         "snapshotctl.cpp",
     ],
     static_libs: [
-        "libdm",
         "libfstab",
         "libsnapshot",
     ],
@@ -237,6 +229,7 @@ cc_binary {
         "liblog",
         "liblp",
         "libprotobuf-cpp-lite",
+        "libstatslog",
         "libutils",
 
         // TODO(b/148818798): remove when parent bug is fixed.

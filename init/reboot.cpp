@@ -85,7 +85,7 @@ static bool shutting_down = false;
 
 static const std::set<std::string> kDebuggingServices{"tombstoned", "logd", "adbd", "console"};
 
-static std::vector<Service*> GetDebuggingServices(bool only_post_data) {
+static std::vector<Service*> GetDebuggingServices(bool only_post_data) REQUIRES(service_lock) {
     std::vector<Service*> ret;
     ret.reserve(kDebuggingServices.size());
     for (const auto& s : ServiceList::GetInstance()) {
@@ -94,6 +94,13 @@ static std::vector<Service*> GetDebuggingServices(bool only_post_data) {
         }
     }
     return ret;
+}
+
+static void PersistRebootReason(const char* reason, bool write_to_property) {
+    if (write_to_property) {
+        SetProperty(LAST_REBOOT_REASON_PROPERTY, reason);
+    }
+    WriteStringToFile(reason, LAST_REBOOT_REASON_FILE);
 }
 
 // represents umount status during reboot / shutdown.
@@ -174,7 +181,7 @@ class MountEntry {
 };
 
 // Turn off backlight while we are performing power down cleanup activities.
-static void TurnOffBacklight() {
+static void TurnOffBacklight() REQUIRES(service_lock) {
     Service* service = ServiceList::GetInstance().FindService("blank_screen");
     if (service == nullptr) {
         LOG(WARNING) << "cannot find blank_screen in TurnOffBacklight";
@@ -530,14 +537,6 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     Timer t;
     LOG(INFO) << "Reboot start, reason: " << reason << ", reboot_target: " << reboot_target;
 
-    // If /data isn't mounted then we can skip the extra reboot steps below, since we don't need to
-    // worry about unmounting it.
-    if (!IsDataMounted()) {
-        sync();
-        RebootSystem(cmd, reboot_target);
-        abort();
-    }
-
     // Ensure last reboot reason is reduced to canonical
     // alias reported in bootloader or system boot reason.
     size_t skip = 0;
@@ -547,8 +546,16 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
          reasons[1] == "hard" || reasons[1] == "warm")) {
         skip = strlen("reboot,");
     }
-    SetProperty(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
+    PersistRebootReason(reason.c_str() + skip, true);
     sync();
+
+    // If /data isn't mounted then we can skip the extra reboot steps below, since we don't need to
+    // worry about unmounting it.
+    if (!IsDataMounted()) {
+        sync();
+        RebootSystem(cmd, reboot_target);
+        abort();
+    }
 
     bool is_thermal_shutdown = cmd == ANDROID_RB_THERMOFF;
 
@@ -582,6 +589,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // Start reboot monitor thread
     sem_post(&reboot_semaphore);
 
+    auto lock = std::lock_guard{service_lock};
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
     const std::set<std::string> to_starts{"watchdogd"};
     std::vector<Service*> stop_first;
@@ -701,6 +709,7 @@ static void EnterShutdown() {
     // Skip wait for prop if it is in progress
     ResetWaitForProp();
     // Clear EXEC flag if there is one pending
+    auto lock = std::lock_guard{service_lock};
     for (const auto& s : ServiceList::GetInstance()) {
         s->UnSetExec();
     }
@@ -744,6 +753,7 @@ static Result<void> DoUserspaceReboot() {
         return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
     }
     EnterShutdown();
+    auto lock = std::lock_guard{service_lock};
     if (!SetProperty("sys.powerctl", "")) {
         return Error() << "Failed to reset sys.powerctl property";
     }
@@ -810,6 +820,7 @@ static Result<void> DoUserspaceReboot() {
         LOG(INFO) << "Re-enabling service '" << s->name() << "'";
         s->Enable();
     }
+    ServiceList::GetInstance().ResetState();
     LeaveShutdown();
     ActionManager::GetInstance().QueueEventTrigger("userspace-reboot-resume");
     guard.Disable();  // Go on with userspace reboot.
@@ -828,6 +839,8 @@ static void UserspaceRebootWatchdogThread() {
     if (!WaitForProperty("sys.boot_completed", "1", timeout)) {
         LOG(ERROR) << "Failed to boot in " << timeout.count() << "ms. Switching to full reboot";
         // In this case device is in a boot loop. Only way to recover is to do dirty reboot.
+        // Since init might be wedged, don't try to write reboot reason into a persistent property.
+        PersistRebootReason("userspace_failed,watchdog_triggered", false);
         RebootSystem(ANDROID_RB_RESTART2, "userspace_failed,watchdog_triggered");
     }
     LOG(INFO) << "Device booted, stopping userspace reboot watchdog";
@@ -901,6 +914,7 @@ void HandlePowerctlMessage(const std::string& command) {
                 run_fsck = true;
             } else if (cmd_params[1] == "thermal") {
                 // Turn off sources of heat immediately.
+                auto lock = std::lock_guard{service_lock};
                 TurnOffBacklight();
                 // run_fsck is false to avoid delay
                 cmd = ANDROID_RB_THERMOFF;

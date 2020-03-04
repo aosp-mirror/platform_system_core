@@ -80,9 +80,13 @@ const android::fs_mgr::FstabEntry* is_wrapped(const android::fs_mgr::Fstab& over
     return &(*it);
 }
 
+auto verbose = false;
+
 void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
               const char* file, unsigned int line, const char* message) {
-    fprintf(stderr, "%s\n", message);
+    if (verbose || severity == android::base::ERROR || message[0] != '[') {
+        fprintf(stderr, "%s\n", message);
+    }
     static auto logd = android::base::LogdLogger();
     logd(id, severity, tag, file, line, message);
 }
@@ -131,10 +135,14 @@ static int do_remount(int argc, char* argv[]) {
             {"fstab", required_argument, nullptr, 'T'},
             {"help", no_argument, nullptr, 'h'},
             {"reboot", no_argument, nullptr, 'R'},
+            {"verbose", no_argument, nullptr, 'v'},
             {0, 0, nullptr, 0},
     };
-    for (int opt; (opt = ::getopt_long(argc, argv, "hRT:", longopts, nullptr)) != -1;) {
+    for (int opt; (opt = ::getopt_long(argc, argv, "hRT:v", longopts, nullptr)) != -1;) {
         switch (opt) {
+            case 'h':
+                usage(SUCCESS);
+                break;
             case 'R':
                 can_reboot = true;
                 break;
@@ -145,12 +153,12 @@ static int do_remount(int argc, char* argv[]) {
                 }
                 fstab_file = optarg;
                 break;
+            case 'v':
+                verbose = true;
+                break;
             default:
                 LOG(ERROR) << "Bad Argument -" << char(opt);
                 usage(BADARG);
-                break;
-            case 'h':
-                usage(SUCCESS);
                 break;
         }
     }

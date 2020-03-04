@@ -88,6 +88,8 @@ extern int adb_mkdir(const std::string& path, int mode);
 #undef mkdir
 #define mkdir ___xxx_mkdir
 
+extern int adb_rename(const char* oldpath, const char* newpath);
+
 // See the comments for the !defined(_WIN32) versions of adb_*().
 extern int adb_open(const char* path, int options);
 extern int adb_creat(const char* path, int mode);
@@ -100,6 +102,9 @@ extern int adb_shutdown(borrowed_fd fd, int direction = SHUT_RDWR);
 extern int adb_close(int fd);
 extern int adb_register_socket(SOCKET s);
 extern HANDLE adb_get_os_handle(borrowed_fd fd);
+
+extern int adb_gethostname(char* name, size_t len);
+extern int adb_getlogin_r(char* buf, size_t bufsize);
 
 // See the comments for the !defined(_WIN32) version of unix_close().
 static __inline__ int unix_close(int fd) {
@@ -267,6 +272,39 @@ inline void seekdir(DIR*, long) {
 
 #define getcwd adb_getcwd
 
+// A very simple wrapper over a launched child process
+class Process {
+  public:
+    constexpr explicit Process(HANDLE h = nullptr) : h_(h) {}
+    ~Process() { close(); }
+    constexpr explicit operator bool() const { return h_ != nullptr; }
+
+    void wait() {
+        if (*this) {
+            ::WaitForSingleObject(h_, INFINITE);
+            close();
+        }
+    }
+    void kill() {
+        if (*this) {
+            ::TerminateProcess(h_, -1);
+        }
+    }
+
+  private:
+    void close() {
+        if (*this) {
+            ::CloseHandle(h_);
+            h_ = nullptr;
+        }
+    }
+
+    HANDLE h_;
+};
+
+Process adb_launch_process(std::string_view executable, std::vector<std::string> args,
+                           std::initializer_list<int> fds_to_inherit = {});
+
 // Helper class to convert UTF-16 argv from wmain() to UTF-8 args that can be
 // passed to main().
 class NarrowArgs {
@@ -428,15 +466,23 @@ __inline__ int adb_register_socket(int s) {
     return s;
 }
 
+static __inline__ int adb_gethostname(char* name, size_t len) {
+    return gethostname(name, len);
+}
+
+static __inline__ int adb_getlogin_r(char* buf, size_t bufsize) {
+    return getlogin_r(buf, bufsize);
+}
+
 static __inline__ int adb_read(borrowed_fd fd, void* buf, size_t len) {
     return TEMP_FAILURE_RETRY(read(fd.get(), buf, len));
 }
 
-static __inline__ int adb_pread(int fd, void* buf, size_t len, off64_t offset) {
+static __inline__ int adb_pread(borrowed_fd fd, void* buf, size_t len, off64_t offset) {
 #if defined(__APPLE__)
-    return TEMP_FAILURE_RETRY(pread(fd, buf, len, offset));
+    return TEMP_FAILURE_RETRY(pread(fd.get(), buf, len, offset));
 #else
-    return TEMP_FAILURE_RETRY(pread64(fd, buf, len, offset));
+    return TEMP_FAILURE_RETRY(pread64(fd.get(), buf, len, offset));
 #endif
 }
 
@@ -604,6 +650,10 @@ static __inline__ int adb_mkdir(const std::string& path, int mode) {
 #undef mkdir
 #define mkdir ___xxx_mkdir
 
+static __inline__ int adb_rename(const char* oldpath, const char* newpath) {
+    return rename(oldpath, newpath);
+}
+
 static __inline__ int adb_is_absolute_host_path(const char* path) {
     return path[0] == '/';
 }
@@ -611,6 +661,32 @@ static __inline__ int adb_is_absolute_host_path(const char* path) {
 static __inline__ int adb_get_os_handle(borrowed_fd fd) {
     return fd.get();
 }
+
+// A very simple wrapper over a launched child process
+class Process {
+  public:
+    constexpr explicit Process(pid_t pid) : pid_(pid) {}
+    constexpr explicit operator bool() const { return pid_ >= 0; }
+
+    void wait() {
+        if (*this) {
+            int status;
+            ::waitpid(pid_, &status, 0);
+            pid_ = -1;
+        }
+    }
+    void kill() {
+        if (*this) {
+            ::kill(pid_, SIGTERM);
+        }
+    }
+
+  private:
+    pid_t pid_;
+};
+
+Process adb_launch_process(std::string_view executable, std::vector<std::string> args,
+                           std::initializer_list<int> fds_to_inherit = {});
 
 #endif /* !_WIN32 */
 
