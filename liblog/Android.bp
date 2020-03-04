@@ -101,11 +101,6 @@ cc_library {
         versions: ["29", "30"],
     },
 
-    // TODO(tomcherry): Renable this before release branch is cut
-    header_abi_checker: {
-        enabled: false,
-    },
-
     cflags: [
         "-Wall",
         "-Werror",
@@ -121,6 +116,10 @@ cc_library {
     ],
     logtags: ["event.logtags"],
     compile_multilib: "both",
+    apex_available: [
+        "//apex_available:anyapex",
+        "//apex_available:platform",
+    ],
 }
 
 ndk_headers {

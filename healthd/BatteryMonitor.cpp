@@ -55,6 +55,7 @@ using HealthInfo_2_1 = android::hardware::health::V2_1::HealthInfo;
 using android::hardware::health::V1_0::BatteryHealth;
 using android::hardware::health::V1_0::BatteryStatus;
 using android::hardware::health::V2_1::BatteryCapacityLevel;
+using android::hardware::health::V2_1::Constants;
 
 namespace android {
 
@@ -79,6 +80,8 @@ static void initHealthInfo(HealthInfo_2_1* health_info_2_1) {
     // HIDL enum values are zero initialized, so they need to be initialized
     // properly.
     health_info_2_1->batteryCapacityLevel = BatteryCapacityLevel::UNKNOWN;
+    health_info_2_1->batteryChargeTimeToFullNowSeconds =
+            (int64_t)Constants::BATTERY_CHARGE_TIME_TO_FULL_NOW_SECONDS_UNSUPPORTED;
     auto* props = &health_info_2_1->legacy.legacy;
     props->batteryStatus = BatteryStatus::UNKNOWN;
     props->batteryHealth = BatteryHealth::UNKNOWN;
@@ -134,13 +137,13 @@ BatteryCapacityLevel getBatteryCapacityLevel(const char* capacityLevel) {
             {"Normal", BatteryCapacityLevel::NORMAL},
             {"High", BatteryCapacityLevel::HIGH},
             {"Full", BatteryCapacityLevel::FULL},
-            {NULL, BatteryCapacityLevel::UNKNOWN},
+            {NULL, BatteryCapacityLevel::UNSUPPORTED},
     };
 
     auto ret = mapSysfsString(capacityLevel, batteryCapacityLevelMap);
     if (!ret) {
-        KLOG_WARNING(LOG_TAG, "Unknown battery capacity level '%s'\n", capacityLevel);
-        *ret = BatteryCapacityLevel::UNKNOWN;
+        KLOG_WARNING(LOG_TAG, "Unsupported battery capacity level '%s'\n", capacityLevel);
+        *ret = BatteryCapacityLevel::UNSUPPORTED;
     }
 
     return *ret;
@@ -265,7 +268,9 @@ void BatteryMonitor::updateValues(void) {
         mHealthInfo->batteryChargeTimeToFullNowSeconds =
                 getIntField(mHealthdConfig->batteryChargeTimeToFullNowPath);
 
-    mHealthInfo->batteryFullCapacityUah = props.batteryFullCharge;
+    if (!mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty())
+        mHealthInfo->batteryFullChargeDesignCapacityUah =
+                getIntField(mHealthdConfig->batteryFullChargeDesignCapacityUahPath);
 
     props.batteryTemperature = mBatteryFixedTemperature ?
         mBatteryFixedTemperature :
@@ -622,6 +627,13 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                         mHealthdConfig->batteryChargeTimeToFullNowPath = path;
                 }
 
+                if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty()) {
+                    path.clear();
+                    path.appendFormat("%s/%s/charge_full_design", POWER_SUPPLY_SYSFS_PATH, name);
+                    if (access(path, R_OK) == 0)
+                        mHealthdConfig->batteryFullChargeDesignCapacityUahPath = path;
+                }
+
                 if (mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
                     path.clear();
                     path.appendFormat("%s/%s/current_avg",
@@ -694,6 +706,8 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             KLOG_WARNING(LOG_TAG, "batteryCapacityLevelPath not found\n");
         if (mHealthdConfig->batteryChargeTimeToFullNowPath.isEmpty())
             KLOG_WARNING(LOG_TAG, "batteryChargeTimeToFullNowPath. not found\n");
+        if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "batteryFullChargeDesignCapacityUahPath. not found\n");
     }
 
     if (property_get("ro.boot.fake_battery", pval, NULL) > 0

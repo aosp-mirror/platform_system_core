@@ -1,14 +1,20 @@
 apex_defaults {
     name: "com.android.adbd-defaults",
+    updatable: true,
 
     binaries: ["adbd"],
     compile_multilib: "both",
     multilib: {
         both: {
-            native_shared_libs: ["libadbconnection_client"],
+            native_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+                "libadb_pairing_server",
+                "libadbconnection_client",
+            ],
         },
     },
-    prebuilts: ["com.android.adbd.init.rc", "com.android.adbd.ld.config.txt"],
+    prebuilts: ["com.android.adbd.init.rc"],
 
     key: "com.android.adbd.key",
     certificate: ":com.android.adbd.certificate",
@@ -26,13 +32,6 @@ apex_test {
     defaults: ["com.android.adbd-defaults"],
     manifest: "test_apex_manifest.json",
     file_contexts: ":com.android.adbd-file_contexts",
-    installable: false,
-}
-
-prebuilt_etc {
-    name: "com.android.adbd.ld.config.txt",
-    src: "ld.config.txt",
-    filename: "ld.config.txt",
     installable: false,
 }
 

@@ -79,6 +79,14 @@ where systemtype is "bootloader", "device", or "host", serialno is some
 kind of unique ID (or empty), and banner is a human-readable version
 or identifier string.  The banner is used to transmit useful properties.
 
+--- STLS(type, version, "") --------------------------------------------
+
+Command constant: A_STLS
+
+The TLS message informs the recipient that the connection will be encrypted
+and will need to perform a TLS handshake. version is the current version of
+the protocol.
+
 
 --- AUTH(type, 0, "data") ----------------------------------------------
 
@@ -207,6 +215,7 @@ to send across the wire.
 #define A_OKAY 0x59414b4f
 #define A_CLSE 0x45534c43
 #define A_WRTE 0x45545257
+#define A_STLS 0x534C5453
 
 
 

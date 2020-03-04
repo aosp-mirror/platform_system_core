@@ -46,6 +46,7 @@
 #include "device_info.h"
 #include "partition_cow_creator.h"
 #include "snapshot_metadata_updater.h"
+#include "snapshot_stats.h"
 #include "utility.h"
 
 namespace android {
@@ -232,7 +233,12 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock) {
     LOG(WARNING) << callstack_str.c_str();
     std::stringstream path;
     path << "/data/misc/snapshotctl_log/libsnapshot." << Now() << ".log";
-    android::base::WriteStringToFile(callstack_str.c_str(), path.str());
+    std::string path_str = path.str();
+    android::base::WriteStringToFile(callstack_str.c_str(), path_str);
+    if (chmod(path_str.c_str(), 0644) == -1) {
+        PLOG(WARNING) << "Unable to chmod 0644 "
+                      << ", file maybe dropped from bugreport:" << path_str;
+    }
 #endif
 
     if (!RemoveAllSnapshots(lock)) {
@@ -1734,6 +1740,10 @@ std::string SnapshotManager::GetStateFilePath() const {
     return metadata_dir_ + "/state"s;
 }
 
+std::string SnapshotManager::GetMergeStateFilePath() const {
+    return metadata_dir_ + "/merge_state"s;
+}
+
 std::string SnapshotManager::GetLockPath() const {
     return metadata_dir_;
 }
@@ -2342,6 +2352,9 @@ bool SnapshotManager::Dump(std::ostream& os) {
 
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
+    ss << "Rollback indicator: "
+       << (access(GetRollbackIndicatorPath().c_str(), F_OK) == 0 ? "exists" : strerror(errno))
+       << std::endl;
 
     bool ok = true;
     std::vector<std::string> snapshots;
@@ -2378,7 +2391,7 @@ std::unique_ptr<AutoDevice> SnapshotManager::EnsureMetadataMounted() {
     return AutoUnmountDevice::New(device_->GetMetadataDir());
 }
 
-UpdateState SnapshotManager::InitiateMergeAndWait() {
+UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_report) {
     {
         auto lock = LockExclusive();
         // Sync update state from file with bootloader.
@@ -2387,6 +2400,8 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
                          << "reject / accept wipes incorrectly!";
         }
     }
+
+    SnapshotMergeStats merge_stats(*this);
 
     unsigned int last_progress = 0;
     auto callback = [&]() -> void {
@@ -2400,7 +2415,9 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
 
     LOG(INFO) << "Waiting for any previous merge request to complete. "
               << "This can take up to several minutes.";
+    merge_stats.Resume();
     auto state = ProcessUpdateState(callback);
+    merge_stats.set_state(state);
     if (state == UpdateState::None) {
         LOG(INFO) << "Can't find any snapshot to merge.";
         return state;
@@ -2410,6 +2427,11 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
             LOG(INFO) << "Cannot merge until device reboots.";
             return state;
         }
+
+        // This is the first snapshot merge that is requested after OTA. We can
+        // initialize the merge duration statistics.
+        merge_stats.Start();
+
         if (!InitiateMerge()) {
             LOG(ERROR) << "Failed to initiate merge.";
             return state;
@@ -2418,9 +2440,13 @@ UpdateState SnapshotManager::InitiateMergeAndWait() {
         LOG(INFO) << "Waiting for merge to complete. This can take up to several minutes.";
         last_progress = 0;
         state = ProcessUpdateState(callback);
+        merge_stats.set_state(state);
     }
 
     LOG(INFO) << "Merge finished with state \"" << state << "\".";
+    if (stats_report) {
+        *stats_report = merge_stats.GetReport();
+    }
     return state;
 }
 

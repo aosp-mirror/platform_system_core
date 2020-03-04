@@ -191,11 +191,6 @@ inline int ErrorCode(int code, T&& t, const Args&... args) {
   return ErrorCode(code, args...);
 }
 
-// TODO(tomcherry): Remove this once we've removed all `using android::base::Errorf` and `using
-// android::base::ErrnoErrorf` lines.
-enum Errorf {};
-enum ErrnoErrorf {};
-
 template <typename T, typename... Args>
 inline Error ErrorfImpl(const T&& fmt, const Args&... args) {
   return Error(false, ErrorCode(0, args...), fmt::format(fmt, args...));

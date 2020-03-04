@@ -32,6 +32,12 @@ class sp {
 public:
     inline sp() : m_ptr(nullptr) { }
 
+    // TODO: switch everyone to using this over new, and make RefBase operator
+    // new private to that class so that we can avoid RefBase being used with
+    // other memory management mechanisms.
+    template <typename... Args>
+    static inline sp<T> make(Args&&... args);
+
     sp(T* other);  // NOLINT(implicit)
     sp(const sp<T>& other);
     sp(sp<T>&& other) noexcept;
@@ -160,9 +166,6 @@ void sp_report_stack_pointer();
 // It does not appear safe to broaden this check to include adjacent pages; apparently this code
 // is used in environments where there may not be a guard page below (at higher addresses than)
 // the bottom of the stack.
-//
-// TODO: Consider adding make_sp<T>() to allocate an object and wrap the resulting pointer safely
-// without checking overhead.
 template <typename T>
 void sp<T>::check_not_on_stack(const void* ptr) {
     static constexpr int MIN_PAGE_SIZE = 0x1000;  // 4K. Safer than including sys/user.h.
@@ -172,6 +175,18 @@ void sp<T>::check_not_on_stack(const void* ptr) {
     if (((reinterpret_cast<uintptr_t>(ptr) ^ my_frame_address) & MIN_PAGE_MASK) == 0) {
         sp_report_stack_pointer();
     }
+}
+
+// TODO: Ideally we should find a way to increment the reference count before running the
+// constructor, so that generating an sp<> to this in the constructor is no longer dangerous.
+template <typename T>
+template <typename... Args>
+sp<T> sp<T>::make(Args&&... args) {
+    T* t = new T(std::forward<Args>(args)...);
+    sp<T> result;
+    result.m_ptr = t;
+    t->incStrong(t);  // bypass check_not_on_stack for heap allocation
+    return result;
 }
 
 template<typename T>
