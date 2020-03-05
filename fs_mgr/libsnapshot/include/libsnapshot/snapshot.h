@@ -140,7 +140,6 @@ class SnapshotManager final {
     // Before calling this function, all snapshots must be mapped.
     bool FinishedSnapshotWrites();
 
-  private:
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
     bool InitiateMerge();
@@ -149,7 +148,11 @@ class SnapshotManager final {
     // /data is mounted.
     //
     // If a merge is in progress, this function will block until the merge is
-    // completed. If a merge or update was cancelled, this will clean up any
+    // completed.
+    //    - Callback is called periodically during the merge. If callback()
+    //      returns false during the merge, ProcessUpdateState() will pause
+    //      and returns Merging.
+    // If a merge or update was cancelled, this will clean up any
     // update artifacts and return.
     //
     // Note that after calling this, GetUpdateState() may still return that a
@@ -169,9 +172,9 @@ class SnapshotManager final {
     //
     // The optional callback allows the caller to periodically check the
     // progress with GetUpdateState().
-    UpdateState ProcessUpdateState(const std::function<void()>& callback = {});
+    UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
+                                   const std::function<bool()>& before_cancel = {});
 
-  public:
     // Initiate the merge if necessary, then wait for the merge to finish.
     // See InitiateMerge() and ProcessUpdateState() for details.
     // Returns:
@@ -179,16 +182,8 @@ class SnapshotManager final {
     //   - Unverified if called on the source slot
     //   - MergeCompleted if merge is completed
     //   - other states indicating an error has occurred
-    UpdateState InitiateMergeAndWait(SnapshotMergeReport* report = nullptr);
-
-    // Wait for the merge if rebooted into the new slot. Does NOT initiate a
-    // merge. If the merge has not been initiated (but should be), wait.
-    // Returns:
-    //   - Return::Ok(): there is no merge or merge finishes
-    //   - Return::NeedsReboot(): merge finishes but need a reboot before
-    //     applying the next update.
-    //   - Return::Error(): other irrecoverable errors
-    Return WaitForMerge();
+    UpdateState InitiateMergeAndWait(SnapshotMergeReport* report = nullptr,
+                                     const std::function<bool()>& before_cancel = {});
 
     // Find the status of the current update, if any.
     //
@@ -375,14 +370,23 @@ class SnapshotManager final {
 
     // Check for a cancelled or rolled back merge, returning true if such a
     // condition was detected and handled.
-    bool HandleCancelledUpdate(LockedFile* lock);
+    bool HandleCancelledUpdate(LockedFile* lock, const std::function<bool()>& before_cancel);
 
     // Helper for HandleCancelledUpdate. Assumes booting from new slot.
     bool AreAllSnapshotsCancelled(LockedFile* lock);
 
+    // Determine whether partition names in |snapshots| have been flashed and
+    // store result to |out|.
+    // Return true if values are successfully retrieved and false on error
+    // (e.g. super partition metadata cannot be read). When it returns true,
+    // |out| stores true for partitions that have been flashed and false for
+    // partitions that have not been flashed.
+    bool GetSnapshotFlashingStatus(LockedFile* lock, const std::vector<std::string>& snapshots,
+                                   std::map<std::string, bool>* out);
+
     // Remove artifacts created by the update process, such as snapshots, and
     // set the update state to None.
-    bool RemoveAllUpdateState(LockedFile* lock);
+    bool RemoveAllUpdateState(LockedFile* lock, const std::function<bool()>& prolog = {});
 
     // Interact with /metadata/ota.
     std::unique_ptr<LockedFile> OpenLock(int lock_flags);
@@ -437,8 +441,8 @@ class SnapshotManager final {
     //   UpdateState::MergeCompleted
     //   UpdateState::MergeFailed
     //   UpdateState::MergeNeedsReboot
-    UpdateState CheckMergeState();
-    UpdateState CheckMergeState(LockedFile* lock);
+    UpdateState CheckMergeState(const std::function<bool()>& before_cancel);
+    UpdateState CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
     UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name);
 
     // Interact with status files under /metadata/ota/snapshots.
@@ -512,6 +516,11 @@ class SnapshotManager final {
     Slot GetCurrentSlot();
 
     std::string ReadUpdateSourceSlotSuffix();
+
+    // Helper for RemoveAllSnapshots.
+    // Check whether |name| should be deleted as a snapshot name.
+    bool ShouldDeleteSnapshot(LockedFile* lock, const std::map<std::string, bool>& flashing_status,
+                              Slot current_slot, const std::string& name);
 
     std::string gsid_dir_;
     std::string metadata_dir_;
