@@ -447,7 +447,7 @@ void SetAborter(AbortFunction&& aborter) {
     // See the comment in SetLogger().
     static std::atomic<AbortFunction*> abort_function(nullptr);
     auto* old_abort_function = abort_function.exchange(new AbortFunction(aborter));
-    __android_log_set_aborter([](const char* abort_message) {
+    liblog_functions->__android_log_set_aborter([](const char* abort_message) {
       auto& function = *abort_function.load(std::memory_order_acquire);
       function(abort_message);
     });
@@ -578,7 +578,7 @@ void LogMessage::LogLine(const char* file, unsigned int line, LogSeverity severi
   if (liblog_functions) {
     __android_logger_data logger_data = {
         sizeof(__android_logger_data), LOG_ID_DEFAULT, priority, tag, file, line};
-    __android_log_write_logger_data(&logger_data, message);
+    liblog_functions->__android_log_write_logger_data(&logger_data, message);
   } else {
     if (tag == nullptr) {
       std::lock_guard<std::recursive_mutex> lock(TagLock());
