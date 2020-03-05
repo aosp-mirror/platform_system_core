@@ -35,3 +35,10 @@ struct ThreadInfo {
   int signo = 0;
   siginfo_t* siginfo = nullptr;
 };
+
+struct ProcessInfo {
+  uintptr_t abort_msg_address = 0;
+  uintptr_t fdsan_table_address = 0;
+  uintptr_t gwp_asan_state = 0;
+  uintptr_t gwp_asan_metadata = 0;
+};
