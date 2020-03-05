@@ -15,6 +15,7 @@
 #pragma once
 
 #include <chrono>
+#include <memory>
 
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/snapshot.h>
@@ -24,21 +25,34 @@ namespace snapshot {
 
 class SnapshotMergeStats {
   public:
-    SnapshotMergeStats(SnapshotManager& parent);
-    ~SnapshotMergeStats();
-    void Start();
-    void Resume();
+    // Not thread safe.
+    static SnapshotMergeStats* GetInstance(SnapshotManager& manager);
+
+    // Called when merge starts or resumes.
+    bool Start();
     void set_state(android::snapshot::UpdateState state);
-    SnapshotMergeReport GetReport();
+
+    // Called when merge ends. Properly clean up permanent storage.
+    class Result {
+      public:
+        virtual ~Result() {}
+        virtual const SnapshotMergeReport& report() const = 0;
+        // Time between successful Start() / Resume() to Finish().
+        virtual std::chrono::steady_clock::duration merge_time() const = 0;
+    };
+    std::unique_ptr<Result> Finish();
 
   private:
     bool ReadState();
     bool WriteState();
+    bool DeleteState();
+    SnapshotMergeStats(const std::string& path);
 
-    const SnapshotManager& parent_;
+    std::string path_;
     SnapshotMergeReport report_;
-    std::chrono::time_point<std::chrono::steady_clock> init_time_;
-    std::chrono::time_point<std::chrono::steady_clock> end_time_;
+    // Time of the last successful Start() / Resume() call.
+    std::chrono::time_point<std::chrono::steady_clock> start_time_;
+    bool running_{false};
 };
 
 }  // namespace snapshot
