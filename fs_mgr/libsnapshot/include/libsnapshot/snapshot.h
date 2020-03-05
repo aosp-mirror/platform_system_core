@@ -148,7 +148,11 @@ class SnapshotManager final {
     // /data is mounted.
     //
     // If a merge is in progress, this function will block until the merge is
-    // completed. If a merge or update was cancelled, this will clean up any
+    // completed.
+    //    - Callback is called periodically during the merge. If callback()
+    //      returns false during the merge, ProcessUpdateState() will pause
+    //      and returns Merging.
+    // If a merge or update was cancelled, this will clean up any
     // update artifacts and return.
     //
     // Note that after calling this, GetUpdateState() may still return that a
@@ -168,7 +172,7 @@ class SnapshotManager final {
     //
     // The optional callback allows the caller to periodically check the
     // progress with GetUpdateState().
-    UpdateState ProcessUpdateState(const std::function<void()>& callback = {},
+    UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                    const std::function<bool()>& before_cancel = {});
 
     // Initiate the merge if necessary, then wait for the merge to finish.
