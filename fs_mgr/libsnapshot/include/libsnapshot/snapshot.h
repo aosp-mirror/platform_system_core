@@ -185,15 +185,6 @@ class SnapshotManager final {
     UpdateState InitiateMergeAndWait(SnapshotMergeReport* report = nullptr,
                                      const std::function<bool()>& before_cancel = {});
 
-    // Wait for the merge if rebooted into the new slot. Does NOT initiate a
-    // merge. If the merge has not been initiated (but should be), wait.
-    // Returns:
-    //   - Return::Ok(): there is no merge or merge finishes
-    //   - Return::NeedsReboot(): merge finishes but need a reboot before
-    //     applying the next update.
-    //   - Return::Error(): other irrecoverable errors
-    Return WaitForMerge();
-
     // Find the status of the current update, if any.
     //
     // |progress| depends on the returned status:

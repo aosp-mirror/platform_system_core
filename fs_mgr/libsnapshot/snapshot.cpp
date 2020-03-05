@@ -2554,32 +2554,6 @@ UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_rep
     return state;
 }
 
-Return SnapshotManager::WaitForMerge() {
-    LOG(INFO) << "Waiting for any previous merge request to complete. "
-              << "This can take up to several minutes.";
-    while (true) {
-        auto state = ProcessUpdateState();
-        if (state == UpdateState::Unverified && GetCurrentSlot() == Slot::Target) {
-            LOG(INFO) << "Wait for merge to be initiated.";
-            std::this_thread::sleep_for(kUpdateStateCheckInterval);
-            continue;
-        }
-        LOG(INFO) << "Wait for merge exits with state " << state;
-        switch (state) {
-            case UpdateState::None:
-                [[fallthrough]];
-            case UpdateState::MergeCompleted:
-                [[fallthrough]];
-            case UpdateState::Cancelled:
-                return Return::Ok();
-            case UpdateState::MergeNeedsReboot:
-                return Return::NeedsReboot();
-            default:
-                return Return::Error();
-        }
-    }
-}
-
 bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callback) {
     if (!device_->IsRecovery()) {
         LOG(ERROR) << "Data wipes are only allowed in recovery.";
