@@ -208,14 +208,6 @@ cc_test {
     defaults: ["libsnapshot_test_defaults"],
 }
 
-cc_test {
-    name: "vts_libsnapshot_test_presubmit",
-    defaults: ["libsnapshot_test_defaults"],
-    cppflags: [
-        "-DSKIP_TEST_IN_PRESUBMIT",
-    ],
-}
-
 cc_binary {
     name: "snapshotctl",
     srcs: [
@@ -242,8 +234,5 @@ cc_binary {
 
         // TODO(b/148818798): remove when parent bug is fixed.
         "libutilscallstack",
-    ],
-    init_rc: [
-        "snapshotctl.rc",
     ],
 }
