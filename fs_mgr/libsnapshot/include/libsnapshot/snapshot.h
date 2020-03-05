@@ -384,6 +384,15 @@ class SnapshotManager final {
     // Helper for HandleCancelledUpdate. Assumes booting from new slot.
     bool AreAllSnapshotsCancelled(LockedFile* lock);
 
+    // Determine whether partition names in |snapshots| have been flashed and
+    // store result to |out|.
+    // Return true if values are successfully retrieved and false on error
+    // (e.g. super partition metadata cannot be read). When it returns true,
+    // |out| stores true for partitions that have been flashed and false for
+    // partitions that have not been flashed.
+    bool GetSnapshotFlashingStatus(LockedFile* lock, const std::vector<std::string>& snapshots,
+                                   std::map<std::string, bool>* out);
+
     // Remove artifacts created by the update process, such as snapshots, and
     // set the update state to None.
     bool RemoveAllUpdateState(LockedFile* lock, const std::function<bool()>& prolog = {});
@@ -516,6 +525,11 @@ class SnapshotManager final {
     Slot GetCurrentSlot();
 
     std::string ReadUpdateSourceSlotSuffix();
+
+    // Helper for RemoveAllSnapshots.
+    // Check whether |name| should be deleted as a snapshot name.
+    bool ShouldDeleteSnapshot(LockedFile* lock, const std::map<std::string, bool>& flashing_status,
+                              Slot current_slot, const std::string& name);
 
     std::string gsid_dir_;
     std::string metadata_dir_;
