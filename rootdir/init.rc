@@ -701,9 +701,7 @@ on post-fs-data
 
     # A tmpfs directory, which will contain all apps CE DE data directory that
     # bind mount from the original source.
-    chown root root /data_mirror
-    chmod 0700 /data_mirror
-    mount tmpfs tmpfs /data_mirror mode=0700,uid=0,gid=1000 nodev noexec nosuid
+    mount tmpfs tmpfs /data_mirror nodev noexec nosuid mode=0700,uid=0,gid=1000
     restorecon /data_mirror
     mkdir /data_mirror/data_ce 0700 root root
     mkdir /data_mirror/data_de 0700 root root
