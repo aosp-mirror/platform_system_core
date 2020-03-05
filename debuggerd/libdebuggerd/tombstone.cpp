@@ -376,8 +376,7 @@ void dump_memory_and_code(log_t* log, unwindstack::Maps* maps, unwindstack::Memo
 }
 
 static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const ThreadInfo& thread_info,
-                        uint64_t abort_msg_address, bool primary_thread,
-                        const GwpAsanCrashData& gwp_asan_crash_data) {
+                        const ProcessInfo& process_info, bool primary_thread) {
   log->current_tid = thread_info.tid;
   if (!primary_thread) {
     _LOG(log, logtype::THREAD, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
@@ -388,15 +387,21 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
     dump_signal_info(log, thread_info, unwinder->GetProcessMemory().get());
   }
 
-  if (primary_thread && gwp_asan_crash_data.CrashIsMine()) {
-    gwp_asan_crash_data.DumpCause(log);
+  std::unique_ptr<GwpAsanCrashData> gwp_asan_crash_data;
+  if (primary_thread) {
+    gwp_asan_crash_data = std::make_unique<GwpAsanCrashData>(unwinder->GetProcessMemory().get(),
+                                                             process_info, thread_info);
+  }
+
+  if (primary_thread && gwp_asan_crash_data->CrashIsMine()) {
+    gwp_asan_crash_data->DumpCause(log);
   } else if (thread_info.siginfo) {
     dump_probable_cause(log, thread_info.siginfo, unwinder->GetMaps(),
                         thread_info.registers.get());
   }
 
   if (primary_thread) {
-    dump_abort_message(log, unwinder->GetProcessMemory().get(), abort_msg_address);
+    dump_abort_message(log, unwinder->GetProcessMemory().get(), process_info.abort_msg_address);
   }
 
   dump_registers(log, thread_info.registers.get());
@@ -413,12 +418,12 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
   }
 
   if (primary_thread) {
-    if (gwp_asan_crash_data.HasDeallocationTrace()) {
-      gwp_asan_crash_data.DumpDeallocationTrace(log, unwinder);
+    if (gwp_asan_crash_data->HasDeallocationTrace()) {
+      gwp_asan_crash_data->DumpDeallocationTrace(log, unwinder);
     }
 
-    if (gwp_asan_crash_data.HasAllocationTrace()) {
-      gwp_asan_crash_data.DumpAllocationTrace(log, unwinder);
+    if (gwp_asan_crash_data->HasAllocationTrace()) {
+      gwp_asan_crash_data->DumpAllocationTrace(log, unwinder);
     }
 
     unwindstack::Maps* maps = unwinder->GetMaps();
@@ -601,15 +606,16 @@ void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, si
     LOG(FATAL) << "Failed to init unwinder object.";
   }
 
-  engrave_tombstone(unique_fd(dup(tombstone_fd)), &unwinder, threads, tid, abort_msg_address,
-                    nullptr, nullptr, 0u, 0u);
+  ProcessInfo process_info;
+  process_info.abort_msg_address = abort_msg_address;
+  engrave_tombstone(unique_fd(dup(tombstone_fd)), &unwinder, threads, tid, process_info, nullptr,
+                    nullptr);
 }
 
 void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
                        const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
-                       uint64_t abort_msg_address, OpenFilesList* open_files,
-                       std::string* amfd_data, uintptr_t gwp_asan_state_ptr,
-                       uintptr_t gwp_asan_metadata_ptr) {
+                       const ProcessInfo& process_info, OpenFilesList* open_files,
+                       std::string* amfd_data) {
   // don't copy log messages to tombstone unless this is a dev device
   bool want_logs = android::base::GetBoolProperty("ro.debuggable", false);
 
@@ -628,12 +634,7 @@ void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
     LOG(FATAL) << "failed to find target thread";
   }
 
-  GwpAsanCrashData gwp_asan_crash_data(unwinder->GetProcessMemory().get(),
-                                       gwp_asan_state_ptr,
-                                       gwp_asan_metadata_ptr, it->second);
-
-  dump_thread(&log, unwinder, it->second, abort_msg_address, true,
-              gwp_asan_crash_data);
+  dump_thread(&log, unwinder, it->second, process_info, true);
 
   if (want_logs) {
     dump_logs(&log, it->second.pid, 50);
@@ -644,7 +645,7 @@ void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
       continue;
     }
 
-    dump_thread(&log, unwinder, thread_info, 0, false, gwp_asan_crash_data);
+    dump_thread(&log, unwinder, thread_info, process_info, false);
   }
 
   if (open_files) {
