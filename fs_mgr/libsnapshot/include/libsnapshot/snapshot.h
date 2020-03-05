@@ -169,7 +169,8 @@ class SnapshotManager final {
     //
     // The optional callback allows the caller to periodically check the
     // progress with GetUpdateState().
-    UpdateState ProcessUpdateState(const std::function<void()>& callback = {});
+    UpdateState ProcessUpdateState(const std::function<void()>& callback = {},
+                                   const std::function<bool()>& before_cancel = {});
 
   public:
     // Initiate the merge if necessary, then wait for the merge to finish.
@@ -179,7 +180,8 @@ class SnapshotManager final {
     //   - Unverified if called on the source slot
     //   - MergeCompleted if merge is completed
     //   - other states indicating an error has occurred
-    UpdateState InitiateMergeAndWait(SnapshotMergeReport* report = nullptr);
+    UpdateState InitiateMergeAndWait(SnapshotMergeReport* report = nullptr,
+                                     const std::function<bool()>& before_cancel = {});
 
     // Wait for the merge if rebooted into the new slot. Does NOT initiate a
     // merge. If the merge has not been initiated (but should be), wait.
@@ -375,14 +377,14 @@ class SnapshotManager final {
 
     // Check for a cancelled or rolled back merge, returning true if such a
     // condition was detected and handled.
-    bool HandleCancelledUpdate(LockedFile* lock);
+    bool HandleCancelledUpdate(LockedFile* lock, const std::function<bool()>& before_cancel);
 
     // Helper for HandleCancelledUpdate. Assumes booting from new slot.
     bool AreAllSnapshotsCancelled(LockedFile* lock);
 
     // Remove artifacts created by the update process, such as snapshots, and
     // set the update state to None.
-    bool RemoveAllUpdateState(LockedFile* lock);
+    bool RemoveAllUpdateState(LockedFile* lock, const std::function<bool()>& prolog = {});
 
     // Interact with /metadata/ota.
     std::unique_ptr<LockedFile> OpenLock(int lock_flags);
@@ -437,8 +439,8 @@ class SnapshotManager final {
     //   UpdateState::MergeCompleted
     //   UpdateState::MergeFailed
     //   UpdateState::MergeNeedsReboot
-    UpdateState CheckMergeState();
-    UpdateState CheckMergeState(LockedFile* lock);
+    UpdateState CheckMergeState(const std::function<bool()>& before_cancel);
+    UpdateState CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
     UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name);
 
     // Interact with status files under /metadata/ota/snapshots.
