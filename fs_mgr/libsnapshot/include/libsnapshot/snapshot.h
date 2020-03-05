@@ -140,7 +140,6 @@ class SnapshotManager final {
     // Before calling this function, all snapshots must be mapped.
     bool FinishedSnapshotWrites();
 
-  private:
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
     bool InitiateMerge();
@@ -172,7 +171,6 @@ class SnapshotManager final {
     UpdateState ProcessUpdateState(const std::function<void()>& callback = {},
                                    const std::function<bool()>& before_cancel = {});
 
-  public:
     // Initiate the merge if necessary, then wait for the merge to finish.
     // See InitiateMerge() and ProcessUpdateState() for details.
     // Returns:
