@@ -316,6 +316,7 @@ cc_binary_host {
         "libadb_tls_connection",
         "libandroidfw",
         "libbase",
+        "libbrotli",
         "libcutils",
         "libcrypto_utils",
         "libcrypto",
@@ -451,6 +452,7 @@ cc_library {
     static_libs: [
         "libadbconnection_server",
         "libadbd_core",
+        "libbrotli",
         "libdiagnose_usb",
     ],
 
@@ -536,6 +538,7 @@ cc_library {
     },
 
     static_libs: [
+        "libbrotli",
         "libcutils_sockets",
         "libdiagnose_usb",
         "libmdnssd",
@@ -573,6 +576,7 @@ cc_binary {
         "libadbd_services",
         "libasyncio",
         "libbase",
+        "libbrotli",
         "libcap",
         "libcrypto_utils",
         "libcutils_sockets",

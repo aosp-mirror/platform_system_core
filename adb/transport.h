@@ -81,7 +81,12 @@ extern const char* const kFeatureAbb;
 extern const char* const kFeatureAbbExec;
 // adbd properly updates symlink timestamps on push.
 extern const char* const kFeatureFixedPushSymlinkTimestamp;
+// Implement `adb remount` via shelling out to /system/bin/remount.
 extern const char* const kFeatureRemountShell;
+// adbd supports version 2 of send/recv.
+extern const char* const kFeatureSendRecv2;
+// adbd supports brotli for send/recv v2.
+extern const char* const kFeatureSendRecv2Brotli;
 
 TransportId NextTransportId();
 
