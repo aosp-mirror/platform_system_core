@@ -63,12 +63,11 @@ static const gwp_asan::AllocationMetadata* retrieve_gwp_asan_metadata(
 }
 
 GwpAsanCrashData::GwpAsanCrashData(unwindstack::Memory* process_memory,
-                                   uintptr_t gwp_asan_state_ptr, uintptr_t gwp_asan_metadata_ptr,
-                                   const ThreadInfo& thread_info) {
-  if (!process_memory || !gwp_asan_metadata_ptr || !gwp_asan_state_ptr) return;
+                                   const ProcessInfo& process_info, const ThreadInfo& thread_info) {
+  if (!process_memory || !process_info.gwp_asan_metadata || !process_info.gwp_asan_state) return;
   // Extract the GWP-ASan regions from the dead process.
-  if (!retrieve_gwp_asan_state(process_memory, gwp_asan_state_ptr, &state_)) return;
-  metadata_.reset(retrieve_gwp_asan_metadata(process_memory, state_, gwp_asan_metadata_ptr));
+  if (!retrieve_gwp_asan_state(process_memory, process_info.gwp_asan_state, &state_)) return;
+  metadata_.reset(retrieve_gwp_asan_metadata(process_memory, state_, process_info.gwp_asan_metadata));
   if (!metadata_.get()) return;
 
   // Get the external crash address from the thread info.
