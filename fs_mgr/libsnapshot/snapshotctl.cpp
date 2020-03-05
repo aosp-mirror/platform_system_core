@@ -178,6 +178,7 @@ bool MergeCmdHandler(int argc, char** argv) {
     }
 
     LOG(ERROR) << "Snapshot failed to merge with state \"" << state << "\".";
+
     return false;
 }
 

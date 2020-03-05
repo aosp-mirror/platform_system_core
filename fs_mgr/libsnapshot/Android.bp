@@ -235,7 +235,4 @@ cc_binary {
         // TODO(b/148818798): remove when parent bug is fixed.
         "libutilscallstack",
     ],
-    init_rc: [
-        "snapshotctl.rc",
-    ],
 }
