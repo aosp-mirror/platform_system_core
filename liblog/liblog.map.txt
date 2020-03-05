@@ -65,7 +65,7 @@ LIBLOG_Q { # introduced=29
     android_log_parser_reset; # llndk
 };
 
-LIGLOG_R { # introduced=30
+LIBLOG_R { # introduced=30
   global:
     __android_log_call_aborter;
     __android_log_default_aborter;
