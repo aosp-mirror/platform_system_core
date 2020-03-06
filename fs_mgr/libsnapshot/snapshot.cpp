@@ -219,7 +219,12 @@ static bool RemoveFileIfExists(const std::string& path) {
     return true;
 }
 
-bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock) {
+bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function<bool()>& prolog) {
+    if (prolog && !prolog()) {
+        LOG(WARNING) << "Can't RemoveAllUpdateState: prolog failed.";
+        return false;
+    }
+
     LOG(INFO) << "Removing all update state.";
 
 #ifdef LIBSNAPSHOT_USE_CALLSTACK
@@ -789,9 +794,10 @@ bool SnapshotManager::QuerySnapshotStatus(const std::string& dm_name, std::strin
 // Note that when a merge fails, we will *always* try again to complete the
 // merge each time the device boots. There is no harm in doing so, and if
 // the problem was transient, we might manage to get a new outcome.
-UpdateState SnapshotManager::ProcessUpdateState(const std::function<void()>& callback) {
+UpdateState SnapshotManager::ProcessUpdateState(const std::function<void()>& callback,
+                                                const std::function<bool()>& before_cancel) {
     while (true) {
-        UpdateState state = CheckMergeState();
+        UpdateState state = CheckMergeState(before_cancel);
         if (state == UpdateState::MergeFailed) {
             AcknowledgeMergeFailure();
         }
@@ -811,24 +817,25 @@ UpdateState SnapshotManager::ProcessUpdateState(const std::function<void()>& cal
     }
 }
 
-UpdateState SnapshotManager::CheckMergeState() {
+UpdateState SnapshotManager::CheckMergeState(const std::function<bool()>& before_cancel) {
     auto lock = LockExclusive();
     if (!lock) {
         return UpdateState::MergeFailed;
     }
 
-    UpdateState state = CheckMergeState(lock.get());
+    UpdateState state = CheckMergeState(lock.get(), before_cancel);
     if (state == UpdateState::MergeCompleted) {
         // Do this inside the same lock. Failures get acknowledged without the
         // lock, because flock() might have failed.
         AcknowledgeMergeSuccess(lock.get());
     } else if (state == UpdateState::Cancelled) {
-        RemoveAllUpdateState(lock.get());
+        RemoveAllUpdateState(lock.get(), before_cancel);
     }
     return state;
 }
 
-UpdateState SnapshotManager::CheckMergeState(LockedFile* lock) {
+UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
+                                             const std::function<bool()>& before_cancel) {
     UpdateState state = ReadUpdateState(lock);
     switch (state) {
         case UpdateState::None:
@@ -849,7 +856,7 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock) {
             // This is an edge case. Normally cancelled updates are detected
             // via the merge poll below, but if we never started a merge, we
             // need to also check here.
-            if (HandleCancelledUpdate(lock)) {
+            if (HandleCancelledUpdate(lock, before_cancel)) {
                 return UpdateState::Cancelled;
             }
             return state;
@@ -1169,7 +1176,8 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
     return true;
 }
 
-bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock) {
+bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock,
+                                            const std::function<bool()>& before_cancel) {
     auto slot = GetCurrentSlot();
     if (slot == Slot::Unknown) {
         return false;
@@ -1177,7 +1185,7 @@ bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock) {
 
     // If all snapshots were reflashed, then cancel the entire update.
     if (AreAllSnapshotsCancelled(lock)) {
-        RemoveAllUpdateState(lock);
+        RemoveAllUpdateState(lock, before_cancel);
         return true;
     }
 
@@ -2388,7 +2396,8 @@ std::unique_ptr<AutoDevice> SnapshotManager::EnsureMetadataMounted() {
     return AutoUnmountDevice::New(device_->GetMetadataDir());
 }
 
-UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_report) {
+UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_report,
+                                                  const std::function<bool()>& before_cancel) {
     {
         auto lock = LockExclusive();
         // Sync update state from file with bootloader.
@@ -2413,7 +2422,7 @@ UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_rep
     LOG(INFO) << "Waiting for any previous merge request to complete. "
               << "This can take up to several minutes.";
     merge_stats.Resume();
-    auto state = ProcessUpdateState(callback);
+    auto state = ProcessUpdateState(callback, before_cancel);
     merge_stats.set_state(state);
     if (state == UpdateState::None) {
         LOG(INFO) << "Can't find any snapshot to merge.";
@@ -2436,7 +2445,7 @@ UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_rep
         // All other states can be handled by ProcessUpdateState.
         LOG(INFO) << "Waiting for merge to complete. This can take up to several minutes.";
         last_progress = 0;
-        state = ProcessUpdateState(callback);
+        state = ProcessUpdateState(callback, before_cancel);
         merge_stats.set_state(state);
     }
 
