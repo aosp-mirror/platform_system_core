@@ -794,7 +794,7 @@ bool SnapshotManager::QuerySnapshotStatus(const std::string& dm_name, std::strin
 // Note that when a merge fails, we will *always* try again to complete the
 // merge each time the device boots. There is no harm in doing so, and if
 // the problem was transient, we might manage to get a new outcome.
-UpdateState SnapshotManager::ProcessUpdateState(const std::function<void()>& callback,
+UpdateState SnapshotManager::ProcessUpdateState(const std::function<bool()>& callback,
                                                 const std::function<bool()>& before_cancel) {
     while (true) {
         UpdateState state = CheckMergeState(before_cancel);
@@ -807,8 +807,8 @@ UpdateState SnapshotManager::ProcessUpdateState(const std::function<void()>& cal
             return state;
         }
 
-        if (callback) {
-            callback();
+        if (callback && !callback()) {
+            return state;
         }
 
         // This wait is not super time sensitive, so we have a relatively
@@ -2410,13 +2410,14 @@ UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_rep
     SnapshotMergeStats merge_stats(*this);
 
     unsigned int last_progress = 0;
-    auto callback = [&]() -> void {
+    auto callback = [&]() -> bool {
         double progress;
         GetUpdateState(&progress);
         if (last_progress < static_cast<unsigned int>(progress)) {
             last_progress = progress;
             LOG(INFO) << "Waiting for merge to complete: " << last_progress << "%.";
         }
+        return true;  // continue
     };
 
     LOG(INFO) << "Waiting for any previous merge request to complete. "
@@ -2512,7 +2513,10 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
         return false;
     }
 
-    UpdateState state = ProcessUpdateState(callback);
+    UpdateState state = ProcessUpdateState([&]() -> bool {
+        callback();
+        return true;
+    });
     LOG(INFO) << "Update state in recovery: " << state;
     switch (state) {
         case UpdateState::MergeFailed:
