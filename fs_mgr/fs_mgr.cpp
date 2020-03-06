@@ -96,6 +96,7 @@
 
 using android::base::Basename;
 using android::base::GetBoolProperty;
+using android::base::Readlink;
 using android::base::Realpath;
 using android::base::SetProperty;
 using android::base::StartsWith;
@@ -1587,6 +1588,79 @@ static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
     }
 }
 
+static std::string ResolveBlockDevice(const std::string& block_device) {
+    if (!StartsWith(block_device, "/dev/block/")) {
+        LWARNING << block_device << " is not a block device";
+        return block_device;
+    }
+    std::string name = block_device.substr(5);
+    if (!StartsWith(name, "block/dm-")) {
+        // Not a dm-device, but might be a symlink. Optimistically try to readlink.
+        std::string result;
+        if (Readlink(block_device, &result)) {
+            return result;
+        } else if (errno == EINVAL) {
+            // After all, it wasn't a symlink.
+            return block_device;
+        } else {
+            LERROR << "Failed to readlink " << block_device;
+            return "";
+        }
+    }
+    // It's a dm-device, let's find what's inside!
+    std::string sys_dir = "/sys/" + name;
+    while (true) {
+        std::string slaves_dir = sys_dir + "/slaves";
+        std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(slaves_dir.c_str()), closedir);
+        if (!dir) {
+            LERROR << "Failed to open " << slaves_dir;
+            return "";
+        }
+        std::string sub_device_name = "";
+        for (auto entry = readdir(dir.get()); entry; entry = readdir(dir.get())) {
+            if (entry->d_type != DT_LNK) continue;
+            if (!sub_device_name.empty()) {
+                LERROR << "Too many slaves in " << slaves_dir;
+                return "";
+            }
+            sub_device_name = entry->d_name;
+        }
+        if (sub_device_name.empty()) {
+            LERROR << "No slaves in " << slaves_dir;
+            return "";
+        }
+        if (!StartsWith(sub_device_name, "dm-")) {
+            // Not a dm-device! We can stop now.
+            return "/dev/block/" + sub_device_name;
+        }
+        // Still a dm-device, keep digging.
+        sys_dir = "/sys/block/" + sub_device_name;
+    }
+}
+
+FstabEntry* fs_mgr_get_mounted_entry_for_userdata(Fstab* fstab, const FstabEntry& mounted_entry) {
+    std::string resolved_block_device = ResolveBlockDevice(mounted_entry.blk_device);
+    if (resolved_block_device.empty()) {
+        return nullptr;
+    }
+    LINFO << "/data is mounted on " << resolved_block_device;
+    for (auto& entry : *fstab) {
+        if (entry.mount_point != "/data") {
+            continue;
+        }
+        std::string block_device;
+        if (!Readlink(entry.blk_device, &block_device)) {
+            LWARNING << "Failed to readlink " << entry.blk_device;
+            block_device = entry.blk_device;
+        }
+        if (block_device == resolved_block_device) {
+            return &entry;
+        }
+    }
+    LERROR << "Didn't find entry that was used to mount /data";
+    return nullptr;
+}
+
 // TODO(b/143970043): return different error codes based on which step failed.
 int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
     Fstab proc_mounts;
@@ -1595,16 +1669,13 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
         return -1;
     }
     std::string block_device;
-    if (auto entry = GetEntryForMountPoint(&proc_mounts, "/data"); entry != nullptr) {
-        // Note: we don't care about a userdata wrapper here, since it's safe
-        // to remount on top of the bow device instead, there will be no
-        // conflicts.
-        block_device = entry->blk_device;
-    } else {
+    auto mounted_entry = GetEntryForMountPoint(&proc_mounts, "/data");
+    if (mounted_entry == nullptr) {
         LERROR << "/data is not mounted";
         return -1;
     }
-    auto fstab_entry = GetMountedEntryForUserdata(fstab);
+    block_device = mounted_entry->blk_device;
+    auto fstab_entry = fs_mgr_get_mounted_entry_for_userdata(fstab, *mounted_entry);
     if (fstab_entry == nullptr) {
         LERROR << "Can't find /data in fstab";
         return -1;
