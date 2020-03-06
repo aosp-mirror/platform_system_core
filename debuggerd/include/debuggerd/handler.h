@@ -19,7 +19,9 @@
 #include <bionic/reserved_signals.h>
 #include <signal.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/cdefs.h>
+#include <sys/system_properties.h>
 #include <sys/types.h>
 
 __BEGIN_DECLS
@@ -50,16 +52,21 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks);
 #define DEBUGGER_SIGNAL BIONIC_SIGNAL_DEBUGGER
 
 static void __attribute__((__unused__)) debuggerd_register_handlers(struct sigaction* action) {
-  sigaction(SIGABRT, action, nullptr);
-  sigaction(SIGBUS, action, nullptr);
-  sigaction(SIGFPE, action, nullptr);
-  sigaction(SIGILL, action, nullptr);
-  sigaction(SIGSEGV, action, nullptr);
-#if defined(SIGSTKFLT)
-  sigaction(SIGSTKFLT, action, nullptr);
-#endif
-  sigaction(SIGSYS, action, nullptr);
-  sigaction(SIGTRAP, action, nullptr);
+  char value[PROP_VALUE_MAX] = "";
+  bool enabled =
+      !(__system_property_get("ro.debuggable", value) > 0 && !strcmp(value, "1") &&
+        __system_property_get("debug.debuggerd.disable", value) > 0 && !strcmp(value, "1"));
+  if (enabled) {
+    sigaction(SIGABRT, action, nullptr);
+    sigaction(SIGBUS, action, nullptr);
+    sigaction(SIGFPE, action, nullptr);
+    sigaction(SIGILL, action, nullptr);
+    sigaction(SIGSEGV, action, nullptr);
+    sigaction(SIGSTKFLT, action, nullptr);
+    sigaction(SIGSYS, action, nullptr);
+    sigaction(SIGTRAP, action, nullptr);
+  }
+
   sigaction(BIONIC_SIGNAL_DEBUGGER, action, nullptr);
 }
 
