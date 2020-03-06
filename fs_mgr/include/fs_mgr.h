@@ -107,6 +107,10 @@ enum FsMgrUmountStatus : int {
 // it destroys verity devices from device mapper after the device is unmounted.
 int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab);
 
+// Finds a entry in |fstab| that was used to mount a /data |mounted_entry| from
+// /proc/mounts.
+android::fs_mgr::FstabEntry* fs_mgr_get_mounted_entry_for_userdata(
+        android::fs_mgr::Fstab* fstab, const android::fs_mgr::FstabEntry& mounted_entry);
 int fs_mgr_remount_userdata_into_checkpointing(android::fs_mgr::Fstab* fstab);
 
 // Finds the dm_bow device on which this block device is stacked, or returns
