@@ -66,6 +66,7 @@
 #include <android-base/unique_fd.h>
 #include <fs_avb/fs_avb.h>
 #include <libgsi/libgsi.h>
+#include <libsnapshot/snapshot.h>
 #include <selinux/android.h>
 
 #include "debug_ramdisk.h"
@@ -78,6 +79,7 @@ using android::base::ParseInt;
 using android::base::Timer;
 using android::base::unique_fd;
 using android::fs_mgr::AvbHandle;
+using android::snapshot::SnapshotManager;
 
 namespace android {
 namespace init {
@@ -538,6 +540,8 @@ void SelinuxRestoreContext() {
     // adb remount, snapshot-based updates, and DSUs all create files during
     // first-stage init.
     selinux_android_restorecon("/metadata", SELINUX_ANDROID_RESTORECON_RECURSE);
+
+    selinux_android_restorecon(SnapshotManager::GetGlobalRollbackIndicatorPath().c_str(), 0);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {
