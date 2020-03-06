@@ -1185,15 +1185,32 @@ bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock,
 
     // If all snapshots were reflashed, then cancel the entire update.
     if (AreAllSnapshotsCancelled(lock)) {
+        LOG(WARNING) << "Detected re-flashing, cancelling unverified update.";
         RemoveAllUpdateState(lock, before_cancel);
         return true;
     }
 
-    // This unverified update might be rolled back, or it might not (b/147347110
-    // comment #77). Take no action, as update_engine is responsible for deciding
-    // whether to cancel.
-    LOG(ERROR) << "Update state is being processed before reboot, taking no action.";
-    return false;
+    // If update has been rolled back, then cancel the entire update.
+    // Client (update_engine) is responsible for doing additional cleanup work on its own states
+    // when ProcessUpdateState() returns UpdateState::Cancelled.
+    auto current_slot = GetCurrentSlot();
+    if (current_slot != Slot::Source) {
+        LOG(INFO) << "Update state is being processed while booting at " << current_slot
+                  << " slot, taking no action.";
+        return false;
+    }
+
+    // current_slot == Source. Attempt to detect rollbacks.
+    if (access(GetRollbackIndicatorPath().c_str(), F_OK) != 0) {
+        // This unverified update is not attempted. Take no action.
+        PLOG(INFO) << "Rollback indicator not detected. "
+                   << "Update state is being processed before reboot, taking no action.";
+        return false;
+    }
+
+    LOG(WARNING) << "Detected rollback, cancelling unverified update.";
+    RemoveAllUpdateState(lock, before_cancel);
+    return true;
 }
 
 std::unique_ptr<LpMetadata> SnapshotManager::ReadCurrentMetadata() {
