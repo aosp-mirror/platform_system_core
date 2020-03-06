@@ -125,6 +125,9 @@ class SnapshotManager final {
     // might be needed to perform first-stage mounts.
     static bool IsSnapshotManagerNeeded();
 
+    // Helper function for second stage init to restorecon on the rollback indicator.
+    static std::string GetGlobalRollbackIndicatorPath();
+
     // Begin an update. This must be called before creating any snapshots. It
     // will fail if GetUpdateState() != None.
     bool BeginUpdate();
