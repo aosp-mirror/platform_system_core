@@ -829,7 +829,9 @@ UpdateState SnapshotManager::CheckMergeState(const std::function<bool()>& before
         // lock, because flock() might have failed.
         AcknowledgeMergeSuccess(lock.get());
     } else if (state == UpdateState::Cancelled) {
-        RemoveAllUpdateState(lock.get(), before_cancel);
+        if (!RemoveAllUpdateState(lock.get(), before_cancel)) {
+            return ReadSnapshotUpdateStatus(lock.get()).state();
+        }
     }
     return state;
 }
@@ -1186,8 +1188,7 @@ bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock,
     // If all snapshots were reflashed, then cancel the entire update.
     if (AreAllSnapshotsCancelled(lock)) {
         LOG(WARNING) << "Detected re-flashing, cancelling unverified update.";
-        RemoveAllUpdateState(lock, before_cancel);
-        return true;
+        return RemoveAllUpdateState(lock, before_cancel);
     }
 
     // If update has been rolled back, then cancel the entire update.
@@ -1209,8 +1210,7 @@ bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock,
     }
 
     LOG(WARNING) << "Detected rollback, cancelling unverified update.";
-    RemoveAllUpdateState(lock, before_cancel);
-    return true;
+    return RemoveAllUpdateState(lock, before_cancel);
 }
 
 std::unique_ptr<LpMetadata> SnapshotManager::ReadCurrentMetadata() {
