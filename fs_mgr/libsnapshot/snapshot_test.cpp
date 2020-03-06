@@ -506,9 +506,6 @@ TEST_F(SnapshotTest, Merge) {
 }
 
 TEST_F(SnapshotTest, FirstStageMountAndMerge) {
-#ifdef SKIP_TEST_IN_PRESUBMIT
-    GTEST_SKIP() << "WIP failure b/148889015";
-#endif
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -565,9 +562,6 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
 }
 
 TEST_F(SnapshotTest, FlashSuperDuringMerge) {
-#ifdef SKIP_TEST_IN_PRESUBMIT
-    GTEST_SKIP() << "WIP failure b/148889015";
-#endif
     ASSERT_TRUE(AcquireLock());
 
     static const uint64_t kDeviceSize = 1024 * 1024;
@@ -979,9 +973,6 @@ class SnapshotUpdateTest : public SnapshotTest {
 // Also test UnmapUpdateSnapshot unmaps everything.
 // Also test first stage mount and merge after this.
 TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
-#ifdef SKIP_TEST_IN_PRESUBMIT
-    GTEST_SKIP() << "WIP failure b/148889015";
-#endif
     // OTA client blindly unmaps all partitions that are possibly mapped.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
         ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
@@ -1129,9 +1120,6 @@ TEST_F(SnapshotUpdateTest, SnapshotStatusFileWithoutCow) {
 
 // Test that the old partitions are not modified.
 TEST_F(SnapshotUpdateTest, TestRollback) {
-#ifdef SKIP_TEST_IN_PRESUBMIT
-    GTEST_SKIP() << "WIP failure b/148889015";
-#endif
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->UnmapUpdateSnapshot("sys_b"));
@@ -1309,9 +1297,6 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
 }
 
 TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
-#ifdef SKIP_TEST_IN_PRESUBMIT
-    GTEST_SKIP() << "WIP failure b/148889015";
-#endif
     // Make source partitions as big as possible to force COW image to be created.
     SetSize(sys_, 5_MiB);
     SetSize(vnd_, 5_MiB);
@@ -1583,48 +1568,6 @@ TEST_F(SnapshotUpdateTest, Overflow) {
 
     ASSERT_FALSE(sm->FinishedSnapshotWrites())
             << "FinishedSnapshotWrites should detect overflow of CoW device.";
-}
-
-TEST_F(SnapshotUpdateTest, WaitForMerge) {
-#ifdef SKIP_TEST_IN_PRESUBMIT
-    GTEST_SKIP() << "WIP failure b/148889015";
-#endif
-    AddOperationForPartitions();
-
-    // Execute the update.
-    ASSERT_TRUE(sm->BeginUpdate());
-    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
-
-    // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
-
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
-
-    // Simulate shutting down the device.
-    ASSERT_TRUE(UnmapAll());
-
-    // After reboot, init does first stage mount.
-    {
-        auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
-        ASSERT_NE(nullptr, init);
-        ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
-    }
-
-    auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
-    ASSERT_NE(nullptr, new_sm);
-
-    auto waiter = std::async(std::launch::async, [&new_sm] { return new_sm->WaitForMerge(); });
-    ASSERT_EQ(std::future_status::timeout, waiter.wait_for(1s))
-            << "WaitForMerge should block when not initiated";
-
-    auto merger =
-            std::async(std::launch::async, [&new_sm] { return new_sm->InitiateMergeAndWait(); });
-    // Small images, so should be merged pretty quickly.
-    ASSERT_EQ(std::future_status::ready, waiter.wait_for(3s)) << "WaitForMerge did not finish";
-    ASSERT_TRUE(waiter.get());
-    ASSERT_THAT(merger.get(), AnyOf(UpdateState::None, UpdateState::MergeCompleted));
 }
 
 TEST_F(SnapshotUpdateTest, LowSpace) {
