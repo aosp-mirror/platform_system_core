@@ -297,10 +297,7 @@ struct debugger_thread_info {
   pid_t pseudothread_tid;
   siginfo_t* siginfo;
   void* ucontext;
-  uintptr_t abort_msg;
-  uintptr_t fdsan_table;
-  uintptr_t gwp_asan_state;
-  uintptr_t gwp_asan_metadata;
+  debugger_process_info process_info;
 };
 
 // Logging and contacting debuggerd requires free file descriptors, which we might not have.
@@ -344,24 +341,35 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     fatal_errno("failed to create pipe");
   }
 
-  // ucontext_t is absurdly large on AArch64, so piece it together manually with writev.
-  uint32_t version = 3;
-  constexpr size_t expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV3);
+  uint32_t version;
+  ssize_t expected;
 
+  // ucontext_t is absurdly large on AArch64, so piece it together manually with writev.
+  struct iovec iovs[4] = {
+      {.iov_base = &version, .iov_len = sizeof(version)},
+      {.iov_base = thread_info->siginfo, .iov_len = sizeof(siginfo_t)},
+      {.iov_base = thread_info->ucontext, .iov_len = sizeof(ucontext_t)},
+  };
+
+  if (thread_info->process_info.fdsan_table) {
+    // Dynamic executables always use version 4. There is no need to increment the version number if
+    // the format changes, because the sender (linker) and receiver (crash_dump) are version locked.
+    version = 4;
+    expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic);
+
+    iovs[3] = {.iov_base = &thread_info->process_info,
+               .iov_len = sizeof(thread_info->process_info)};
+  } else {
+    // Static executables always use version 1.
+    version = 1;
+    expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic);
+
+    iovs[3] = {.iov_base = &thread_info->process_info.abort_msg, .iov_len = sizeof(uintptr_t)};
+  }
   errno = 0;
   if (fcntl(output_write.get(), F_SETPIPE_SZ, expected) < static_cast<int>(expected)) {
     fatal_errno("failed to set pipe buffer size");
   }
-
-  struct iovec iovs[] = {
-      {.iov_base = &version, .iov_len = sizeof(version)},
-      {.iov_base = thread_info->siginfo, .iov_len = sizeof(siginfo_t)},
-      {.iov_base = thread_info->ucontext, .iov_len = sizeof(ucontext_t)},
-      {.iov_base = &thread_info->abort_msg, .iov_len = sizeof(uintptr_t)},
-      {.iov_base = &thread_info->fdsan_table, .iov_len = sizeof(uintptr_t)},
-      {.iov_base = &thread_info->gwp_asan_state, .iov_len = sizeof(uintptr_t)},
-      {.iov_base = &thread_info->gwp_asan_metadata, .iov_len = sizeof(uintptr_t)},
-  };
 
   ssize_t rc = TEMP_FAILURE_RETRY(writev(output_write.get(), iovs, arraysize(iovs)));
   if (rc == -1) {
@@ -489,29 +497,19 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // check to allow all si_code values in calls coming from inside the house.
   }
 
-  void* abort_message = nullptr;
-  const gwp_asan::AllocatorState* gwp_asan_state = nullptr;
-  const gwp_asan::AllocationMetadata* gwp_asan_metadata = nullptr;
+  debugger_process_info process_info = {};
   uintptr_t si_val = reinterpret_cast<uintptr_t>(info->si_ptr);
   if (signal_number == BIONIC_SIGNAL_DEBUGGER) {
     if (info->si_code == SI_QUEUE && info->si_pid == __getpid()) {
       // Allow for the abort message to be explicitly specified via the sigqueue value.
       // Keep the bottom bit intact for representing whether we want a backtrace or a tombstone.
       if (si_val != kDebuggerdFallbackSivalUintptrRequestDump) {
-        abort_message = reinterpret_cast<void*>(si_val & ~1);
+        process_info.abort_msg = reinterpret_cast<void*>(si_val & ~1);
         info->si_ptr = reinterpret_cast<void*>(si_val & 1);
       }
     }
-  } else {
-    if (g_callbacks.get_abort_message) {
-      abort_message = g_callbacks.get_abort_message();
-    }
-    if (g_callbacks.get_gwp_asan_state) {
-      gwp_asan_state = g_callbacks.get_gwp_asan_state();
-    }
-    if (g_callbacks.get_gwp_asan_metadata) {
-      gwp_asan_metadata = g_callbacks.get_gwp_asan_metadata();
-    }
+  } else if (g_callbacks.get_process_info) {
+    process_info = g_callbacks.get_process_info();
   }
 
   // If sival_int is ~0, it means that the fallback handler has been called
@@ -524,7 +522,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // This check might be racy if another thread sets NO_NEW_PRIVS, but this should be unlikely,
     // you can only set NO_NEW_PRIVS to 1, and the effect should be at worst a single missing
     // ANR trace.
-    debuggerd_fallback_handler(info, static_cast<ucontext_t*>(context), abort_message);
+    debuggerd_fallback_handler(info, static_cast<ucontext_t*>(context), process_info.abort_msg);
     resend_signal(info);
     return;
   }
@@ -543,10 +541,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
       .pseudothread_tid = -1,
       .siginfo = info,
       .ucontext = context,
-      .abort_msg = reinterpret_cast<uintptr_t>(abort_message),
-      .fdsan_table = reinterpret_cast<uintptr_t>(android_fdsan_get_fd_table()),
-      .gwp_asan_state = reinterpret_cast<uintptr_t>(gwp_asan_state),
-      .gwp_asan_metadata = reinterpret_cast<uintptr_t>(gwp_asan_metadata),
+      .process_info = process_info,
   };
 
   // Set PR_SET_DUMPABLE to 1, so that crash_dump can ptrace us.
