@@ -1244,6 +1244,28 @@ bool SnapshotManager::AreAllSnapshotsCancelled(LockedFile* lock) {
         return true;
     }
 
+    std::map<std::string, bool> flashing_status;
+
+    if (!GetSnapshotFlashingStatus(lock, snapshots, &flashing_status)) {
+        LOG(WARNING) << "Failed to determine whether partitions have been flashed. Not"
+                     << "removing update states.";
+        return false;
+    }
+
+    bool all_snapshots_cancelled = std::all_of(flashing_status.begin(), flashing_status.end(),
+                                               [](const auto& pair) { return pair.second; });
+
+    if (all_snapshots_cancelled) {
+        LOG(WARNING) << "All partitions are re-flashed after update, removing all update states.";
+    }
+    return all_snapshots_cancelled;
+}
+
+bool SnapshotManager::GetSnapshotFlashingStatus(LockedFile* lock,
+                                                const std::vector<std::string>& snapshots,
+                                                std::map<std::string, bool>* out) {
+    CHECK(lock);
+
     auto source_slot_suffix = ReadUpdateSourceSlotSuffix();
     if (source_slot_suffix.empty()) {
         return false;
@@ -1269,20 +1291,17 @@ bool SnapshotManager::AreAllSnapshotsCancelled(LockedFile* lock) {
         return false;
     }
 
-    bool all_snapshots_cancelled = true;
     for (const auto& snapshot_name : snapshots) {
         if (GetMetadataPartitionState(*metadata, snapshot_name) ==
             MetadataPartitionState::Updated) {
-            all_snapshots_cancelled = false;
-            continue;
+            out->emplace(snapshot_name, false);
+        } else {
+            // Delete snapshots for partitions that are re-flashed after the update.
+            LOG(WARNING) << "Detected re-flashing of partition " << snapshot_name << ".";
+            out->emplace(snapshot_name, true);
         }
-        // Delete snapshots for partitions that are re-flashed after the update.
-        LOG(WARNING) << "Detected re-flashing of partition " << snapshot_name << ".";
     }
-    if (all_snapshots_cancelled) {
-        LOG(WARNING) << "All partitions are re-flashed after update, removing all update states.";
-    }
-    return all_snapshots_cancelled;
+    return true;
 }
 
 bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
@@ -1292,10 +1311,38 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
         return false;
     }
 
+    std::map<std::string, bool> flashing_status;
+    if (!GetSnapshotFlashingStatus(lock, snapshots, &flashing_status)) {
+        LOG(WARNING) << "Failed to get flashing status";
+    }
+
+    auto current_slot = GetCurrentSlot();
     bool ok = true;
     bool has_mapped_cow_images = false;
     for (const auto& name : snapshots) {
-        if (!UnmapPartitionWithSnapshot(lock, name) || !DeleteSnapshot(lock, name)) {
+        // If booting off source slot, it is okay to unmap and delete all the snapshots.
+        // If boot indicator is missing, update state is None or Initiated, so
+        //   it is also okay to unmap and delete all the snapshots.
+        // If booting off target slot,
+        //  - should not unmap because:
+        //    - In Android mode, snapshots are not mapped, but
+        //      filesystems are mounting off dm-linear targets directly.
+        //    - In recovery mode, assume nothing is mapped, so it is optional to unmap.
+        //  - If partition is flashed or unknown, it is okay to delete snapshots.
+        //    Otherwise (UPDATED flag), only delete snapshots if they are not mapped
+        //    as dm-snapshot (for example, after merge completes).
+        bool should_unmap = current_slot != Slot::Target;
+        bool should_delete = ShouldDeleteSnapshot(lock, flashing_status, current_slot, name);
+
+        bool partition_ok = true;
+        if (should_unmap && !UnmapPartitionWithSnapshot(lock, name)) {
+            partition_ok = false;
+        }
+        if (partition_ok && should_delete && !DeleteSnapshot(lock, name)) {
+            partition_ok = false;
+        }
+
+        if (!partition_ok) {
             // Remember whether or not we were able to unmap the cow image.
             auto cow_image_device = GetCowImageDeviceName(name);
             has_mapped_cow_images |=
@@ -1316,6 +1363,34 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
         }
     }
     return ok;
+}
+
+// See comments in RemoveAllSnapshots().
+bool SnapshotManager::ShouldDeleteSnapshot(LockedFile* lock,
+                                           const std::map<std::string, bool>& flashing_status,
+                                           Slot current_slot, const std::string& name) {
+    if (current_slot != Slot::Target) {
+        return true;
+    }
+    auto it = flashing_status.find(name);
+    if (it == flashing_status.end()) {
+        LOG(WARNING) << "Can't determine flashing status for " << name;
+        return true;
+    }
+    if (it->second) {
+        // partition flashed, okay to delete obsolete snapshots
+        return true;
+    }
+    // partition updated, only delete if not dm-snapshot
+    SnapshotStatus status;
+    if (!ReadSnapshotStatus(lock, name, &status)) {
+        LOG(WARNING) << "Unable to read snapshot status for " << name
+                     << ", guessing snapshot device name";
+        auto extra_name = GetSnapshotExtraDeviceName(name);
+        return !IsSnapshotDevice(name) && !IsSnapshotDevice(extra_name);
+    }
+    auto dm_name = GetSnapshotDeviceName(name, status);
+    return !IsSnapshotDevice(dm_name);
 }
 
 UpdateState SnapshotManager::GetUpdateState(double* progress) {
