@@ -44,6 +44,10 @@ cc_library_headers {
     recovery_available: true,
     native_bridge_supported: true,
     export_include_dirs: ["include"],
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
 }
 
 cc_defaults {
@@ -92,6 +96,10 @@ cc_library {
     name: "libbacktrace",
     vendor_available: false,
     recovery_available: true,
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
     vndk: {
         enabled: true,
         support_system_process: true,
