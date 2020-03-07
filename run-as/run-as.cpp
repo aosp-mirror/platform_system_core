@@ -247,12 +247,12 @@ int main(int argc, char* argv[]) {
 
   std::string seinfo = std::string(info.seinfo) + ":fromRunAs";
   if (selinux_android_setcontext(uid, 0, seinfo.c_str(), pkgname) < 0) {
-    error(1, errno, "couldn't set SELinux security context");
+    error(1, errno, "couldn't set SELinux security context '%s'", seinfo.c_str());
   }
 
   // cd into the data directory, and set $HOME correspondingly.
   if (TEMP_FAILURE_RETRY(chdir(info.data_dir)) == -1) {
-    error(1, errno, "couldn't chdir to package's data directory");
+    error(1, errno, "couldn't chdir to package's data directory '%s'", info.data_dir);
   }
   setenv("HOME", info.data_dir, 1);
 
