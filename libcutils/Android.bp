@@ -45,13 +45,9 @@ cc_library_headers {
 }
 
 // Socket specific parts of libcutils that are safe to statically link into an APEX.
-cc_library_static {
+cc_library {
     name: "libcutils_sockets",
     vendor_available: true,
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
     recovery_available: true,
     host_supported: true,
     native_bridge_supported: true,
@@ -62,6 +58,7 @@ cc_library_static {
 
     export_include_dirs: ["include"],
 
+    shared_libs: ["liblog"],
     srcs: ["sockets.cpp"],
     target: {
         linux_bionic: {
