@@ -82,6 +82,8 @@ extern const char* const kFeatureAbbExec;
 // adbd properly updates symlink timestamps on push.
 extern const char* const kFeatureFixedPushSymlinkTimestamp;
 extern const char* const kFeatureRemountShell;
+// adbd supports `track-app` service reporting debuggable/profileable apps.
+extern const char* const kFeatureTrackApp;
 
 TransportId NextTransportId();
 
