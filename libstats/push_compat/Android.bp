@@ -36,7 +36,6 @@ cc_defaults {
     static_libs: [
         "libbase",
         "liblog",
-        "libutils",
     ],
 }
 
