@@ -19,6 +19,8 @@
 
 #include <thread>
 
+#include <android-base/logging.h>
+
 using namespace std::literals;
 
 namespace android {
@@ -45,7 +47,11 @@ bool WaitForFile(const std::string& path, const std::chrono::milliseconds& timeo
         // If the file exists but returns EPERM or something, we consider the
         // condition met.
         if (access(path.c_str(), F_OK) != 0) {
-            if (errno == ENOENT) return WaitResult::Wait;
+            if (errno == ENOENT) {
+                return WaitResult::Wait;
+            }
+            PLOG(ERROR) << "access failed: " << path;
+            return WaitResult::Fail;
         }
         return WaitResult::Done;
     };
@@ -54,8 +60,12 @@ bool WaitForFile(const std::string& path, const std::chrono::milliseconds& timeo
 
 bool WaitForFileDeleted(const std::string& path, const std::chrono::milliseconds& timeout_ms) {
     auto condition = [&]() -> WaitResult {
-        if (access(path.c_str(), F_OK) == 0 || errno != ENOENT) {
+        if (access(path.c_str(), F_OK) == 0) {
             return WaitResult::Wait;
+        }
+        if (errno != ENOENT) {
+            PLOG(ERROR) << "access failed: " << path;
+            return WaitResult::Fail;
         }
         return WaitResult::Done;
     };
