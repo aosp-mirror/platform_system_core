@@ -15,12 +15,16 @@
  */
 
 #include "include/StatsEventCompat.h"
+
+#include <chrono>
+
+#include <android-base/chrono_utils.h>
 #include <android-base/properties.h>
 #include <android/api-level.h>
 #include <android/log.h>
 #include <dlfcn.h>
-#include <utils/SystemClock.h>
 
+using android::base::boot_clock;
 using android::base::GetProperty;
 
 const static int kStatsEventTag = 1937006964;
@@ -40,6 +44,12 @@ const bool StatsEventCompat::mPlatformAtLeastR =
 bool StatsEventCompat::mAttemptedLoad = false;
 void* StatsEventCompat::mStatsEventApi = nullptr;
 std::mutex StatsEventCompat::mLoadLock;
+
+static int64_t elapsedRealtimeNano() {
+    return std::chrono::time_point_cast<std::chrono::nanoseconds>(boot_clock::now())
+            .time_since_epoch()
+            .count();
+}
 
 StatsEventCompat::StatsEventCompat() : mEventQ(kStatsEventTag) {
     // guard loading because StatsEventCompat might be called from multithreaded
@@ -61,7 +71,7 @@ StatsEventCompat::StatsEventCompat() : mEventQ(kStatsEventTag) {
     if (mStatsEventApi) {
         //        mEventR = mStatsEventApi->obtain();
     } else if (!mPlatformAtLeastR) {
-        mEventQ << android::elapsedRealtimeNano();
+        mEventQ << elapsedRealtimeNano();
     }
 }
 
