@@ -50,6 +50,8 @@
 #include <unistd.h>
 #endif
 
+#include <google/protobuf/text_format.h>
+
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_client.h"
@@ -57,6 +59,7 @@
 #include "adb_io.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
+#include "app_processes.pb.h"
 #include "bugreport.h"
 #include "client/file_sync_client.h"
 #include "commandline.h"
@@ -1354,16 +1357,48 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
     }
 }
 
-static int adb_connect_command(const std::string& command, TransportId* transport = nullptr) {
+static int adb_connect_command(const std::string& command, TransportId* transport,
+                               StandardStreamsCallbackInterface* callback) {
     std::string error;
     unique_fd fd(adb_connect(transport, command, &error));
     if (fd < 0) {
         fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
-    read_and_dump(fd);
+    read_and_dump(fd, false, callback);
     return 0;
 }
+
+static int adb_connect_command(const std::string& command, TransportId* transport = nullptr) {
+    return adb_connect_command(command, transport, &DEFAULT_STANDARD_STREAMS_CALLBACK);
+}
+
+// A class that prints out human readable form of the protobuf message for "track-app" service
+// (received in binary format).
+class TrackAppStreamsCallback : public DefaultStandardStreamsCallback {
+  public:
+    TrackAppStreamsCallback() : DefaultStandardStreamsCallback(nullptr, nullptr) {}
+
+    // Assume the buffer contains at least 4 bytes of valid data.
+    void OnStdout(const char* buffer, int length) override {
+        if (length < 4) return;  // Unexpected length received. Do nothing.
+
+        adb::proto::AppProcesses binary_proto;
+        // The first 4 bytes are the length of remaining content in hexadecimal format.
+        binary_proto.ParseFromString(std::string(buffer + 4, length - 4));
+        char summary[24];  // The following string includes digits and 16 fixed characters.
+        int written = snprintf(summary, sizeof(summary), "Process count: %d\n",
+                               binary_proto.process_size());
+        OnStream(nullptr, stdout, summary, written);
+
+        std::string string_proto;
+        google::protobuf::TextFormat::PrintToString(binary_proto, &string_proto);
+        OnStream(nullptr, stdout, string_proto.data(), string_proto.length());
+    }
+
+  private:
+    DISALLOW_COPY_AND_ASSIGN(TrackAppStreamsCallback);
+};
 
 static int adb_connect_command_bidirectional(const std::string& command) {
     std::string error;
@@ -1925,6 +1960,18 @@ int adb_commandline(int argc, const char** argv) {
         return adb_connect_command("jdwp");
     } else if (!strcmp(argv[0], "track-jdwp")) {
         return adb_connect_command("track-jdwp");
+    } else if (!strcmp(argv[0], "track-app")) {
+        FeatureSet features;
+        std::string error;
+        if (!adb_get_feature_set(&features, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
+            return 1;
+        }
+        if (!CanUseFeature(features, kFeatureTrackApp)) {
+            error_exit("track-app is not supported by the device");
+        }
+        TrackAppStreamsCallback callback;
+        return adb_connect_command("track-app", nullptr, &callback);
     } else if (!strcmp(argv[0], "track-devices")) {
         if (argc > 2 || (argc == 2 && strcmp(argv[1], "-l"))) {
             error_exit("usage: adb track-devices [-l]");

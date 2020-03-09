@@ -29,6 +29,8 @@
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 
+#include "adbconnection/process_info.h"
+
 using android::base::unique_fd;
 
 static constexpr char kJdwpControlName[] = "\0jdwp-control";
@@ -60,6 +62,8 @@ AdbConnectionClientContext* adbconnection_client_new(
 
   std::optional<uint64_t> pid;
   std::optional<bool> debuggable;
+  std::optional<bool> profileable;
+  std::optional<std::string> architecture;
 
   for (size_t i = 0; i < info_count; ++i) {
     auto info = info_elems[i];
@@ -77,7 +81,23 @@ AdbConnectionClientContext* adbconnection_client_new(
           LOG(ERROR) << "multiple debuggable entries in AdbConnectionClientInfo, ignoring";
           continue;
         }
-        debuggable = info->data.pid;
+        debuggable = info->data.debuggable;
+        break;
+
+      case AdbConnectionClientInfoType::profileable:
+        if (profileable) {
+          LOG(ERROR) << "multiple profileable entries in AdbConnectionClientInfo, ignoring";
+          continue;
+        }
+        profileable = info->data.profileable;
+        break;
+
+      case AdbConnectionClientInfoType::architecture:
+        if (architecture) {
+          LOG(ERROR) << "multiple architecture entries in AdbConnectionClientInfo, ignoring";
+          continue;
+        }
+        architecture = std::string(info->data.architecture.name, info->data.architecture.size);
         break;
     }
   }
@@ -89,6 +109,16 @@ AdbConnectionClientContext* adbconnection_client_new(
 
   if (!debuggable) {
     LOG(ERROR) << "AdbConnectionClientInfo missing required field debuggable";
+    return nullptr;
+  }
+
+  if (!profileable) {
+    LOG(ERROR) << "AdbConnectionClientInfo missing required field profileable";
+    return nullptr;
+  }
+
+  if (!architecture) {
+    LOG(ERROR) << "AdbConnectionClientInfo missing required field architecture";
     return nullptr;
   }
 
@@ -120,10 +150,10 @@ AdbConnectionClientContext* adbconnection_client_new(
     return nullptr;
   }
 
-  uint32_t pid_u32 = static_cast<uint32_t>(*pid);
-  rc = TEMP_FAILURE_RETRY(write(ctx->control_socket_.get(), &pid_u32, sizeof(pid_u32)));
-  if (rc != sizeof(pid_u32)) {
-    PLOG(ERROR) << "failed to send JDWP process pid to adbd";
+  ProcessInfo process(*pid, *debuggable, *profileable, *architecture);
+  rc = TEMP_FAILURE_RETRY(write(ctx->control_socket_.get(), &process, sizeof(process)));
+  if (rc != sizeof(process)) {
+    PLOG(ERROR) << "failed to send JDWP process info to adbd";
   }
 
   return ctx.release();
