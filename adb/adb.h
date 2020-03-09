@@ -169,6 +169,7 @@ unique_fd execute_abb_command(std::string_view command);
 int init_jdwp(void);
 asocket* create_jdwp_service_socket();
 asocket* create_jdwp_tracker_service_socket();
+asocket* create_app_tracker_service_socket();
 unique_fd create_jdwp_connection_fd(int jdwp_pid);
 #endif
 

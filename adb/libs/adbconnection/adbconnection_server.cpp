@@ -28,6 +28,8 @@
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 
+#include "adbconnection/process_info.h"
+
 using android::base::unique_fd;
 
 #define JDWP_CONTROL_NAME "\0jdwp-control"
@@ -36,7 +38,7 @@ using android::base::unique_fd;
 static_assert(JDWP_CONTROL_NAME_LEN <= sizeof(reinterpret_cast<sockaddr_un*>(0)->sun_path));
 
 // Listen for incoming jdwp clients forever.
-void adbconnection_listen(void (*callback)(int fd, pid_t pid)) {
+void adbconnection_listen(void (*callback)(int fd, ProcessInfo process)) {
   sockaddr_un addr = {};
   socklen_t addrlen = JDWP_CONTROL_NAME_LEN + sizeof(addr.sun_family);
 
@@ -106,16 +108,13 @@ void adbconnection_listen(void (*callback)(int fd, pid_t pid)) {
                      << ") in pending connections";
         }
 
-        // Massively oversized buffer: we're expecting an int32_t from the other end.
-        char buf[32];
-        int rc = TEMP_FAILURE_RETRY(recv(it->get(), buf, sizeof(buf), MSG_DONTWAIT));
-        if (rc != 4) {
+        ProcessInfo process;
+        int rc = TEMP_FAILURE_RETRY(recv(it->get(), &process, sizeof(process), MSG_DONTWAIT));
+        if (rc != sizeof(process)) {
           LOG(ERROR) << "received data of incorrect size from JDWP client: read " << rc
-                     << ", expected 4";
+                     << ", expected " << sizeof(process);
         } else {
-          int32_t pid;
-          memcpy(&pid, buf, sizeof(pid));
-          callback(it->release(), static_cast<pid_t>(pid));
+          callback(it->release(), process);
         }
 
         if (epoll_ctl(epfd.get(), EPOLL_CTL_DEL, event.data.fd, nullptr) != 0) {

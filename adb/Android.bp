@@ -314,6 +314,7 @@ cc_binary_host {
         "libadb_protos",
         "libadb_tls_connection",
         "libandroidfw",
+        "libapp_processes_protos_full",
         "libbase",
         "libcutils",
         "libcrypto_utils",
@@ -323,7 +324,7 @@ cc_binary_host {
         "liblog",
         "liblz4",
         "libmdnssd",
-        "libprotobuf-cpp-lite",
+        "libprotobuf-cpp-full",
         "libssl",
         "libusb",
         "libutils",
@@ -387,6 +388,7 @@ cc_library_static {
 
     static_libs: [
         "libadbconnection_server",
+        "libapp_processes_protos_lite",
         "libdiagnose_usb",
     ],
 
@@ -402,6 +404,12 @@ cc_library_static {
         "libcrypto_utils",
         "liblog",
     ],
+
+    proto: {
+        type: "lite",
+        static: true,
+        export_proto_headers: true,
+    },
 
     target: {
         android: {
@@ -450,7 +458,9 @@ cc_library_static {
     static_libs: [
         "libadbconnection_server",
         "libadbd_core",
+        "libapp_processes_protos_lite",
         "libdiagnose_usb",
+        "libprotobuf-cpp-lite",
     ],
 
     shared_libs: [
@@ -507,6 +517,8 @@ cc_library {
     whole_static_libs: [
         "libadbconnection_server",
         "libadbd_core",
+        "libapp_processes_protos_lite",
+        "libprotobuf-cpp-lite",
     ],
 
     shared_libs: [
@@ -569,6 +581,7 @@ cc_binary {
         "libadbconnection_server",
         "libadbd",
         "libadbd_services",
+        "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
         "libcap",
@@ -578,6 +591,7 @@ cc_binary {
         "liblog",
         "libmdnssd",
         "libminijail",
+        "libprotobuf-cpp-lite",
         "libselinux",
         "libssl",
     ],
