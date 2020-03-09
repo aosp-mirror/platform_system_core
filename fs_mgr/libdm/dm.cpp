@@ -120,7 +120,7 @@ bool DeviceMapper::DeleteDevice(const std::string& name,
         return false;
     }
     if (!WaitForFileDeleted(unique_path, timeout_ms)) {
-        LOG(ERROR) << "Timeout out waiting for " << unique_path << " to be deleted";
+        LOG(ERROR) << "Failed waiting for " << unique_path << " to be deleted";
         return false;
     }
     return true;
@@ -161,7 +161,7 @@ bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, s
         return true;
     }
     if (!WaitForFile(unique_path, timeout_ms)) {
-        LOG(ERROR) << "Timed out waiting for device path: " << unique_path;
+        LOG(ERROR) << "Failed waiting for device path: " << unique_path;
         DeleteDevice(name);
         return false;
     }
