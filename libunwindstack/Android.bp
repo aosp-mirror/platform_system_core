@@ -116,12 +116,6 @@ cc_library {
         x86_64: {
             srcs: ["AsmGetRegsX86_64.S"],
         },
-        mips: {
-            srcs: ["AsmGetRegsMips.S"],
-        },
-        mips64: {
-            srcs: ["AsmGetRegsMips64.S"],
-        },
     },
 
     static_libs: [
