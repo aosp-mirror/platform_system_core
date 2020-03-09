@@ -28,6 +28,8 @@ struct AdbConnectionClientContext;
 enum AdbConnectionClientInfoType {
   pid,
   debuggable,
+  profileable,
+  architecture,
 };
 
 struct AdbConnectionClientInfo {
@@ -35,11 +37,17 @@ struct AdbConnectionClientInfo {
   union {
     uint64_t pid;
     bool debuggable;
+    bool profileable;
+    struct {
+      const char* name;
+      size_t size;
+    } architecture;
   } data;
 };
 
 // Construct a context and connect to adbd.
 // Returns null if we fail to connect to adbd.
+// Note this is an apex interface as it's loaded by ART.
 AdbConnectionClientContext* adbconnection_client_new(
     const AdbConnectionClientInfo* const* info_elems, size_t info_count);
 

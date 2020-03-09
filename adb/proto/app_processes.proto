@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,20 @@
  * limitations under the License.
  */
 
-#pragma once
+syntax = "proto3";
 
-#include <sys/types.h>
+option java_package = "com.android.server.adb.protos";
+option java_outer_classname = "AppProcessesProto";
 
-#include <android-base/unique_fd.h>
+package adb.proto;
 
-#include "adbconnection/process_info.h"
+message ProcessEntry {
+    int64 pid = 1;
+    bool debuggable = 2;
+    bool profileable = 3;
+    string architecture = 4;
+}
 
-// Note this is NOT an apex interface as it's linked only into adbd.
-void adbconnection_listen(void (*callback)(int fd, ProcessInfo process));
+message AppProcesses {
+  repeated ProcessEntry process = 1;
+}
