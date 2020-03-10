@@ -21,7 +21,6 @@
 #include <sys/unistd.h>
 
 #include <optional>
-#include <sstream>
 #include <thread>
 #include <unordered_set>
 
@@ -37,10 +36,6 @@
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/liblp.h>
-
-#ifdef LIBSNAPSHOT_USE_CALLSTACK
-#include <utils/CallStack.h>
-#endif
 
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/snapshot_stats.h>
@@ -227,25 +222,6 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
     }
 
     LOG(INFO) << "Removing all update state.";
-
-#ifdef LIBSNAPSHOT_USE_CALLSTACK
-    LOG(WARNING) << "Logging stack; see b/148818798.";
-    // Do not use CallStack's log functions because snapshotctl relies on
-    // android-base/logging to save log to files.
-    // TODO(b/148818798): remove this before we ship.
-    CallStack callstack;
-    callstack.update();
-    auto callstack_str = callstack.toString();
-    LOG(WARNING) << callstack_str.c_str();
-    std::stringstream path;
-    path << "/data/misc/snapshotctl_log/libsnapshot." << Now() << ".log";
-    std::string path_str = path.str();
-    android::base::WriteStringToFile(callstack_str.c_str(), path_str);
-    if (chmod(path_str.c_str(), 0644) == -1) {
-        PLOG(WARNING) << "Unable to chmod 0644 "
-                      << ", file maybe dropped from bugreport:" << path_str;
-    }
-#endif
 
     if (!RemoveAllSnapshots(lock)) {
         LOG(ERROR) << "Could not remove all snapshots";
@@ -2496,68 +2472,6 @@ std::unique_ptr<AutoDevice> SnapshotManager::EnsureMetadataMounted() {
         return std::unique_ptr<AutoUnmountDevice>(new AutoUnmountDevice());
     }
     return AutoUnmountDevice::New(device_->GetMetadataDir());
-}
-
-UpdateState SnapshotManager::InitiateMergeAndWait(SnapshotMergeReport* stats_report,
-                                                  const std::function<bool()>& before_cancel) {
-    {
-        auto lock = LockExclusive();
-        // Sync update state from file with bootloader.
-        if (!WriteUpdateState(lock.get(), ReadUpdateState(lock.get()))) {
-            LOG(WARNING) << "Unable to sync write update state, fastboot may "
-                         << "reject / accept wipes incorrectly!";
-        }
-    }
-
-    auto merge_stats = SnapshotMergeStats::GetInstance(*this);
-
-    unsigned int last_progress = 0;
-    auto callback = [&]() -> bool {
-        double progress;
-        GetUpdateState(&progress);
-        if (last_progress < static_cast<unsigned int>(progress)) {
-            last_progress = progress;
-            LOG(INFO) << "Waiting for merge to complete: " << last_progress << "%.";
-        }
-        return true;  // continue
-    };
-
-    LOG(INFO) << "Waiting for any previous merge request to complete. "
-              << "This can take up to several minutes.";
-    merge_stats->Start();
-    auto state = ProcessUpdateState(callback, before_cancel);
-    merge_stats->set_state(state);
-    if (state == UpdateState::None) {
-        LOG(INFO) << "Can't find any snapshot to merge.";
-        return state;
-    }
-    if (state == UpdateState::Unverified) {
-        if (GetCurrentSlot() != Slot::Target) {
-            LOG(INFO) << "Cannot merge until device reboots.";
-            return state;
-        }
-
-        if (!InitiateMerge()) {
-            LOG(ERROR) << "Failed to initiate merge.";
-            return state;
-        }
-        // All other states can be handled by ProcessUpdateState.
-        LOG(INFO) << "Waiting for merge to complete. This can take up to several minutes.";
-        last_progress = 0;
-        state = ProcessUpdateState(callback, before_cancel);
-        merge_stats->set_state(state);
-    }
-
-    LOG(INFO) << "Merge finished with state \"" << state << "\".";
-    if (stats_report) {
-        auto result = merge_stats->Finish();
-        if (result) {
-            *stats_report = result->report();
-        } else {
-            LOG(WARNING) << "SnapshotMergeStatus::Finish failed.";
-        }
-    }
-    return state;
 }
 
 bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callback) {
