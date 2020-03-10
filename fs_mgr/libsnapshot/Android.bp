@@ -96,16 +96,6 @@ cc_library_static {
     static_libs: [
         "libfs_mgr_binder"
     ],
-
-    shared_libs: [
-        // TODO(b/148818798): remove when parent bug is fixed
-        "libutilscallstack",
-    ],
-    cflags: [
-        "-g",
-        "-O0",
-        "-DLIBSNAPSHOT_USE_CALLSTACK",
-    ],
 }
 
 cc_library_static {
@@ -179,9 +169,6 @@ cc_defaults {
         "libsparse",
         "libutils",
         "libz",
-
-        // TODO(b/148818798): remove when parent bug is fixed
-        "libutilscallstack",
     ],
     static_libs: [
         "libfs_mgr",
@@ -231,8 +218,5 @@ cc_binary {
         "libprotobuf-cpp-lite",
         "libstatslog",
         "libutils",
-
-        // TODO(b/148818798): remove when parent bug is fixed.
-        "libutilscallstack",
     ],
 }
