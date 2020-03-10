@@ -84,17 +84,21 @@ cc_test {
 }
 
 cc_fuzz {
-  name: "dm_linear_table_fuzzer",
-  defaults: ["fs_mgr_defaults"],
-  srcs: [
-    "dm_linear_fuzzer.cpp",
-    "test_util.cpp",
-  ],
-  static_libs: [
+    name: "dm_linear_table_fuzzer",
+    defaults: ["fs_mgr_defaults"],
+    srcs: [
+        "dm_linear_fuzzer.cpp",
+        "test_util.cpp",
+    ],
+    static_libs: [
         "libdm",
         "libbase",
         "libext2_uuid",
         "libfs_mgr",
         "liblog",
-  ],
+    ],
+}
+
+vts_config {
+    name: "VtsKernelLibdmTest",
 }
