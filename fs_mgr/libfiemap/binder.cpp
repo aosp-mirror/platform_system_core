@@ -19,7 +19,6 @@
 #include <android-base/properties.h>
 #include <android/gsi/BnProgressCallback.h>
 #include <android/gsi/IGsiService.h>
-#include <android/gsi/IGsid.h>
 #include <binder/IServiceManager.h>
 #include <libfiemap/image_manager.h>
 #include <libgsi/libgsi.h>
@@ -225,54 +224,22 @@ bool ImageManagerBinder::MapAllImages(const std::function<bool(std::set<std::str
     return false;
 }
 
-static android::sp<IGsid> AcquireIGsid(const std::chrono::milliseconds& timeout_ms) {
-    if (android::base::GetProperty("init.svc.gsid", "") != "running") {
-        if (!android::base::SetProperty("ctl.start", "gsid") ||
-            !android::base::WaitForProperty("init.svc.gsid", "running", timeout_ms)) {
-            LOG(ERROR) << "Could not start the gsid service";
-            return nullptr;
-        }
-        // Sleep for 250ms to give the service time to register.
-        usleep(250 * 1000);
-    }
+static sp<IGsiService> GetGsiService() {
     auto sm = android::defaultServiceManager();
     auto name = android::String16(kGsiServiceName);
-    auto service = sm->checkService(name);
-    return android::interface_cast<IGsid>(service);
-}
-
-static android::sp<IGsid> GetGsiService(const std::chrono::milliseconds& timeout_ms) {
-    auto start_time = std::chrono::steady_clock::now();
-
-    std::chrono::milliseconds elapsed = std::chrono::milliseconds::zero();
-    do {
-        if (auto gsid = AcquireIGsid(timeout_ms - elapsed); gsid != nullptr) {
-            return gsid;
-        }
-        auto now = std::chrono::steady_clock::now();
-        elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
-    } while (elapsed <= timeout_ms);
-
-    LOG(ERROR) << "Timed out trying to acquire IGsid interface";
+    android::sp<android::IBinder> res = sm->waitForService(name);
+    if (res) {
+        return android::interface_cast<IGsiService>(res);
+    }
     return nullptr;
 }
 
-std::unique_ptr<IImageManager> IImageManager::Open(const std::string& dir,
-                                                   const std::chrono::milliseconds& timeout_ms) {
-    auto gsid = GetGsiService(timeout_ms);
-    if (!gsid) {
-        return nullptr;
-    }
-
-    android::sp<IGsiService> service;
-    auto status = gsid->getClient(&service);
-    if (!status.isOk() || !service) {
-        LOG(ERROR) << "Could not acquire IGsiService";
-        return nullptr;
-    }
-
+std::unique_ptr<IImageManager> IImageManager::Open(
+        const std::string& dir, const std::chrono::milliseconds& /*timeout_ms*/) {
+    android::sp<IGsiService> service = GetGsiService();
     android::sp<IImageService> manager;
-    status = service->openImageService(dir, &manager);
+
+    auto status = service->openImageService(dir, &manager);
     if (!status.isOk() || !manager) {
         LOG(ERROR) << "Could not acquire IImageManager: " << status.exceptionMessage().string();
         return nullptr;
