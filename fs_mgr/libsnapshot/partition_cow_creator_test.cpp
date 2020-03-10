@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <optional>
+#include <tuple>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
@@ -25,6 +28,13 @@
 #include "utility.h"
 
 using namespace android::fs_mgr;
+
+using chromeos_update_engine::InstallOperation;
+using UeExtent = chromeos_update_engine::Extent;
+using google::protobuf::RepeatedPtrField;
+using ::testing::Matches;
+using ::testing::Pointwise;
+using ::testing::Truly;
 
 namespace android {
 namespace snapshot {
@@ -212,6 +222,77 @@ TEST(DmSnapshotInternals, CowSizeCalculator) {
         ASSERT_EQ(cc.cow_size_sectors(), 40);
     }
 }
+
+void BlocksToExtents(const std::vector<uint64_t>& blocks,
+                     google::protobuf::RepeatedPtrField<UeExtent>* extents) {
+    for (uint64_t block : blocks) {
+        AppendExtent(extents, block, 1);
+    }
+}
+
+template <typename T>
+std::vector<uint64_t> ExtentsToBlocks(const T& extents) {
+    std::vector<uint64_t> blocks;
+    for (const auto& extent : extents) {
+        for (uint64_t offset = 0; offset < extent.num_blocks(); ++offset) {
+            blocks.push_back(extent.start_block() + offset);
+        }
+    }
+    return blocks;
+}
+
+InstallOperation CreateCopyOp(const std::vector<uint64_t>& src_blocks,
+                              const std::vector<uint64_t>& dst_blocks) {
+    InstallOperation op;
+    op.set_type(InstallOperation::SOURCE_COPY);
+    BlocksToExtents(src_blocks, op.mutable_src_extents());
+    BlocksToExtents(dst_blocks, op.mutable_dst_extents());
+    return op;
+}
+
+// ExtentEqual(tuple<UeExtent, UeExtent>)
+MATCHER(ExtentEqual, "") {
+    auto&& [a, b] = arg;
+    return a.start_block() == b.start_block() && a.num_blocks() == b.num_blocks();
+}
+
+struct OptimizeOperationTestParam {
+    InstallOperation input;
+    std::optional<InstallOperation> expected_output;
+};
+
+class OptimizeOperationTest : public ::testing::TestWithParam<OptimizeOperationTestParam> {};
+TEST_P(OptimizeOperationTest, Test) {
+    InstallOperation actual_output;
+    EXPECT_EQ(GetParam().expected_output.has_value(),
+              OptimizeSourceCopyOperation(GetParam().input, &actual_output))
+            << "OptimizeSourceCopyOperation should "
+            << (GetParam().expected_output.has_value() ? "succeed" : "fail");
+    if (!GetParam().expected_output.has_value()) return;
+    EXPECT_THAT(actual_output.src_extents(),
+                Pointwise(ExtentEqual(), GetParam().expected_output->src_extents()));
+    EXPECT_THAT(actual_output.dst_extents(),
+                Pointwise(ExtentEqual(), GetParam().expected_output->dst_extents()));
+}
+
+std::vector<OptimizeOperationTestParam> GetOptimizeOperationTestParams() {
+    return {
+            {CreateCopyOp({}, {}), CreateCopyOp({}, {})},
+            {CreateCopyOp({1, 2, 4}, {1, 2, 4}), CreateCopyOp({}, {})},
+            {CreateCopyOp({1, 2, 3}, {4, 5, 6}), std::nullopt},
+            {CreateCopyOp({3, 2}, {1, 2}), CreateCopyOp({3}, {1})},
+            {CreateCopyOp({5, 6, 3, 4, 1, 2}, {1, 2, 3, 4, 5, 6}),
+             CreateCopyOp({5, 6, 1, 2}, {1, 2, 5, 6})},
+            {CreateCopyOp({1, 2, 3, 5, 5, 6}, {5, 6, 3, 4, 1, 2}),
+             CreateCopyOp({1, 2, 5, 5, 6}, {5, 6, 4, 1, 2})},
+            {CreateCopyOp({1, 2, 5, 6, 9, 10}, {1, 4, 5, 6, 7, 8}),
+             CreateCopyOp({2, 9, 10}, {4, 7, 8})},
+            {CreateCopyOp({2, 3, 3, 4, 4}, {1, 2, 3, 4, 5}), CreateCopyOp({2, 3, 4}, {1, 2, 5})},
+    };
+}
+
+INSTANTIATE_TEST_CASE_P(Snapshot, OptimizeOperationTest,
+                        ::testing::ValuesIn(GetOptimizeOperationTestParams()));
 
 }  // namespace snapshot
 }  // namespace android
