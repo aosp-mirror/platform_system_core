@@ -26,6 +26,26 @@
 using std::map;
 using std::vector;
 
+struct AStatsEventApi {
+    // Indicates whether the below function pointers have been set using dlsym.
+    bool initialized = false;
+
+    AStatsEvent* (*obtain)(void);
+    void (*build)(AStatsEvent*);
+    int (*write)(AStatsEvent*);
+    void (*release)(AStatsEvent*);
+    void (*setAtomId)(AStatsEvent*, uint32_t);
+    void (*writeInt32)(AStatsEvent*, int32_t);
+    void (*writeInt64)(AStatsEvent*, int64_t);
+    void (*writeFloat)(AStatsEvent*, float);
+    void (*writeBool)(AStatsEvent*, bool);
+    void (*writeByteArray)(AStatsEvent*, const uint8_t*, size_t);
+    void (*writeString)(AStatsEvent*, const char*);
+    void (*writeAttributionChain)(AStatsEvent*, const uint32_t*, const char* const*, uint8_t);
+    void (*addBoolAnnotation)(AStatsEvent*, uint8_t, bool);
+    void (*addInt32Annotation)(AStatsEvent*, uint8_t, int32_t);
+};
+
 class StatsEventCompat {
   public:
     StatsEventCompat();
@@ -57,8 +77,7 @@ class StatsEventCompat {
     const static bool mPlatformAtLeastR;
     static bool mAttemptedLoad;
     static std::mutex mLoadLock;
-    //    static struct AStatsEvent_apiTable* mStatsEventApi;
-    static void* mStatsEventApi;
+    static AStatsEventApi mAStatsEventApi;
 
     // non-static member variables
     AStatsEvent* mEventR = nullptr;
@@ -67,6 +86,9 @@ class StatsEventCompat {
     template <class T>
     void writeKeyValuePairMap(const map<int, T>& keyValuePairMap);
 
-    bool usesNewSchema();
+    void initializeApiTableLocked(void* handle);
+    bool useRSchema();
+    bool useQSchema();
+
     FRIEND_TEST(StatsEventCompatTest, TestDynamicLoading);
 };
