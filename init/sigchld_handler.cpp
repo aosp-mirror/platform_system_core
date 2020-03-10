@@ -64,8 +64,6 @@ static pid_t ReapOneProcess() {
     std::string wait_string;
     Service* service = nullptr;
 
-    auto lock = std::lock_guard{service_lock};
-
     if (SubcontextChildReap(pid)) {
         name = "Subcontext";
     } else {
