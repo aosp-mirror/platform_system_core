@@ -437,7 +437,7 @@ cc_library_static {
     },
 }
 
-cc_library_static {
+cc_library {
     name: "libadbd_services",
     defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
@@ -474,6 +474,7 @@ cc_library_static {
         "libbase",
         "libcrypto",
         "libcrypto_utils",
+        "libcutils_sockets",
         "liblog",
     ],
 
@@ -527,6 +528,7 @@ cc_library {
         "libadb_tls_connection",
         "libadbd_auth",
         "libadbd_fs",
+        "libadbd_services",
         "libasyncio",
         "libbase",
         "libcrypto",
@@ -545,7 +547,6 @@ cc_library {
     },
 
     static_libs: [
-        "libadbd_services",
         "libcutils_sockets",
         "libdiagnose_usb",
         "libmdnssd",
