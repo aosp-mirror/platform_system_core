@@ -29,10 +29,10 @@ using android::base::GetProperty;
  *
  * TODO(b/146019024): migrate to android_get_device_api_level()
  */
-const static bool mPlatformAtLeastR = GetProperty("ro.build.version.release", "") == "R" ||
+const static bool mPlatformAtLeastR = GetProperty("ro.build.version.codename", "") == "R" ||
                                       android_get_device_api_level() > __ANDROID_API_Q__;
 
 TEST(StatsEventCompatTest, TestDynamicLoading) {
     StatsEventCompat event;
-    EXPECT_EQ(mPlatformAtLeastR, event.usesNewSchema());
+    EXPECT_EQ(mPlatformAtLeastR, event.useRSchema());
 }
