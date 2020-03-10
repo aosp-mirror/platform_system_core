@@ -18,6 +18,10 @@ cc_library_headers {
     recovery_available: true,
     host_supported: true,
     native_bridge_supported: true,
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
 
     header_libs: [
         "liblog_headers",
