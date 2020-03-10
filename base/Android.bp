@@ -47,6 +47,10 @@ cc_library_headers {
             enabled: true,
         },
     },
+    apex_available: [
+        "//apex_available:anyapex",
+        "//apex_available:platform",
+    ],
 }
 
 cc_defaults {
