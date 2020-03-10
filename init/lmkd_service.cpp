@@ -79,8 +79,7 @@ static bool UnregisterProcess(pid_t pid) {
 }
 
 static void RegisterServices(pid_t exclude_pid) {
-    auto lock = std::lock_guard{service_lock};
-    for (const auto& service : ServiceList::GetInstance()) {
+    for (const auto& service : ServiceList::GetInstance().services()) {
         auto svc = service.get();
         if (svc->oom_score_adjust() != DEFAULT_OOM_SCORE_ADJUST) {
             // skip if process is excluded or not yet forked (pid==0)
