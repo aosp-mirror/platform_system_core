@@ -27,6 +27,7 @@
 #include <android/set_abort_message.h>
 #endif
 
+#include <atomic>
 #include <shared_mutex>
 
 #include <android-base/errno_restorer.h>
@@ -148,11 +149,9 @@ void __android_log_set_default_tag(const char* tag) {
   GetDefaultTag().assign(tag, 0, LOGGER_ENTRY_MAX_PAYLOAD);
 }
 
-static int minimum_log_priority = ANDROID_LOG_DEFAULT;
+static std::atomic_int minimum_log_priority = ANDROID_LOG_DEFAULT;
 int __android_log_set_minimum_priority(int priority) {
-  int old_minimum_log_priority = minimum_log_priority;
-  minimum_log_priority = priority;
-  return old_minimum_log_priority;
+  return minimum_log_priority.exchange(priority, std::memory_order_relaxed);
 }
 
 int __android_log_get_minimum_priority() {
