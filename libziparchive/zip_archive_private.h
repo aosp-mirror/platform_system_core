@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "android-base/macros.h"
@@ -140,6 +141,28 @@ class CentralDirectory {
   size_t length_;
 };
 
+// This class is the interface of the central directory entries map. The map
+// helps to locate a particular cd entry based on the filename.
+class CdEntryMapInterface {
+ public:
+  virtual ~CdEntryMapInterface() = default;
+  // Adds an entry to the map. The |name| should internally points to the
+  // filename field of a cd entry. And |start| points to the beginning of the
+  // central directory. Returns 0 on success.
+  virtual int32_t AddToMap(std::string_view name, const uint8_t* start) = 0;
+  // For the zip entry |entryName|, finds the offset of its filename field in
+  // the central directory. Returns a pair of [status, offset]. The value of
+  // the status is 0 on success.
+  virtual std::pair<int32_t, uint64_t> GetCdEntryOffset(std::string_view name,
+                                                        const uint8_t* cd_start) const = 0;
+  // Resets the iterator to the beginning of the map.
+  virtual void ResetIteration() = 0;
+  // Returns the [name, cd offset] of the current element. Also increments the
+  // iterator to points to the next element. Returns an empty pair we have read
+  // past boundary.
+  virtual std::pair<std::string_view, uint64_t> Next(const uint8_t* cd_start) = 0;
+};
+
 /**
  * More space efficient string representation of strings in an mmaped zipped
  * file than std::string_view. Using std::string_view as an entry in the
@@ -160,6 +183,33 @@ struct ZipStringOffset {
   }
 };
 
+// This implementation of CdEntryMap uses an array hash table. It uses less
+// memory than std::map; and it's used as the default implementation for zip
+// archives without zip64 extension.
+class CdEntryMapZip32 : public CdEntryMapInterface {
+ public:
+  static std::unique_ptr<CdEntryMapInterface> Create(uint16_t num_entries);
+
+  int32_t AddToMap(std::string_view name, const uint8_t* start) override;
+  std::pair<int32_t, uint64_t> GetCdEntryOffset(std::string_view name,
+                                                const uint8_t* cd_start) const override;
+  void ResetIteration() override;
+  std::pair<std::string_view, uint64_t> Next(const uint8_t* cd_start) override;
+
+ private:
+  explicit CdEntryMapZip32(uint16_t num_entries);
+
+  // We know how many entries are in the Zip archive, so we can have a
+  // fixed-size hash table. We define a load factor of 0.75 and over
+  // allocate so the maximum number entries can never be higher than
+  // ((4 * UINT16_MAX) / 3 + 1) which can safely fit into a uint32_t.
+  uint32_t hash_table_size_{0};
+  std::unique_ptr<ZipStringOffset[], decltype(&free)> hash_table_{nullptr, free};
+
+  // The position of element for the current iteration.
+  uint32_t current_position_{0};
+};
+
 struct ZipArchive {
   // open Zip archive
   mutable MappedZipFile mapped_zip;
@@ -172,13 +222,7 @@ struct ZipArchive {
 
   // number of entries in the Zip archive
   uint16_t num_entries;
-
-  // We know how many entries are in the Zip archive, so we can have a
-  // fixed-size hash table. We define a load factor of 0.75 and over
-  // allocate so the maximum number entries can never be higher than
-  // ((4 * UINT16_MAX) / 3 + 1) which can safely fit into a uint32_t.
-  uint32_t hash_table_size;
-  ZipStringOffset* hash_table;
+  std::unique_ptr<CdEntryMapInterface> cd_entry_map;
 
   ZipArchive(const int fd, bool assume_ownership);
   ZipArchive(const void* address, size_t length);
