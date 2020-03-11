@@ -95,7 +95,7 @@ struct ZipArchive {
   std::unique_ptr<android::base::MappedFile> directory_map;
 
   // number of entries in the Zip archive
-  uint16_t num_entries;
+  uint64_t num_entries;
   std::unique_ptr<CdEntryMapInterface> cd_entry_map;
 
   ZipArchive(MappedZipFile&& map, bool assume_ownership);
