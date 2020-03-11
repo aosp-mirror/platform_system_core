@@ -16,14 +16,20 @@
 
 #include "liblog_symbols.h"
 
-#if defined(__ANDROID__) && !defined(NO_LIBLOG_DLSYM)
+#if defined(__ANDROID__)
+#if !defined(NO_LIBLOG_DLSYM) || defined(__ANDROID_APEX__)
+#define USE_DLSYM
+#endif
+#endif
+
+#ifdef USE_DLSYM
 #include <dlfcn.h>
 #endif
 
 namespace android {
 namespace base {
 
-#if defined(__ANDROID__) && !defined(NO_LIBLOG_DLSYM)
+#ifdef USE_DLSYM
 
 const std::optional<LibLogFunctions>& GetLibLogFunctions() {
   static std::optional<LibLogFunctions> liblog_functions = []() -> std::optional<LibLogFunctions> {
