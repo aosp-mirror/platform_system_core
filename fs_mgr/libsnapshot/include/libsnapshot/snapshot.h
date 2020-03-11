@@ -178,16 +178,6 @@ class SnapshotManager final {
     UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                    const std::function<bool()>& before_cancel = {});
 
-    // Initiate the merge if necessary, then wait for the merge to finish.
-    // See InitiateMerge() and ProcessUpdateState() for details.
-    // Returns:
-    //   - None if no merge to initiate
-    //   - Unverified if called on the source slot
-    //   - MergeCompleted if merge is completed
-    //   - other states indicating an error has occurred
-    UpdateState InitiateMergeAndWait(SnapshotMergeReport* report = nullptr,
-                                     const std::function<bool()>& before_cancel = {});
-
     // Find the status of the current update, if any.
     //
     // |progress| depends on the returned status:
