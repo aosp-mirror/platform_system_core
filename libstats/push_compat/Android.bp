@@ -35,6 +35,8 @@ cc_defaults {
     header_libs: ["libstatssocket_headers"],
     static_libs: [
         "libbase",
+    ],
+    shared_libs: [
         "liblog",
     ],
 }
