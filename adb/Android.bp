@@ -577,7 +577,6 @@ cc_binary {
         "libdiagnose_usb",
         "libmdnssd",
         "libminijail",
-        "libselinux",
         "libssl",
     ],
 
@@ -588,6 +587,7 @@ cc_binary {
         "libadbd_fs",
         "libcrypto",
         "liblog",
+        "libselinux",
     ],
 
     target: {
