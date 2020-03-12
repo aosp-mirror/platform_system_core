@@ -118,7 +118,7 @@ static int OpenKmsg() {
 }
 #endif
 
-static LogId log_id_tToLogId(int buffer_id) {
+static LogId log_id_tToLogId(int32_t buffer_id) {
   switch (buffer_id) {
     case LOG_ID_MAIN:
       return MAIN;
@@ -134,7 +134,7 @@ static LogId log_id_tToLogId(int buffer_id) {
   }
 }
 
-static int LogIdTolog_id_t(LogId log_id) {
+static int32_t LogIdTolog_id_t(LogId log_id) {
   switch (log_id) {
     case MAIN:
       return LOG_ID_MAIN;
@@ -171,7 +171,7 @@ static LogSeverity PriorityToLogSeverity(int priority) {
   }
 }
 
-static android_LogPriority LogSeverityToPriority(LogSeverity severity) {
+static int32_t LogSeverityToPriority(LogSeverity severity) {
   switch (severity) {
     case VERBOSE:
       return ANDROID_LOG_VERBOSE;
@@ -333,12 +333,12 @@ LogdLogger::LogdLogger(LogId default_log_id) : default_log_id_(default_log_id) {
 void LogdLogger::operator()(LogId id, LogSeverity severity, const char* tag,
                             const char* file, unsigned int line,
                             const char* message) {
-  android_LogPriority priority = LogSeverityToPriority(severity);
+  int32_t priority = LogSeverityToPriority(severity);
   if (id == DEFAULT) {
     id = default_log_id_;
   }
 
-  int lg_id = LogIdTolog_id_t(id);
+  int32_t lg_id = LogIdTolog_id_t(id);
 
   char log_message_with_file[4068];  // LOGGER_ENTRY_MAX_PAYLOAD, not available in the NDK.
   if (priority == ANDROID_LOG_FATAL && file != nullptr) {
@@ -574,7 +574,7 @@ std::ostream& LogMessage::stream() {
 void LogMessage::LogLine(const char* file, unsigned int line, LogSeverity severity, const char* tag,
                          const char* message) {
   static auto& liblog_functions = GetLibLogFunctions();
-  auto priority = LogSeverityToPriority(severity);
+  int32_t priority = LogSeverityToPriority(severity);
   if (liblog_functions) {
     __android_logger_data logger_data = {
         sizeof(__android_logger_data), LOG_ID_DEFAULT, priority, tag, file, line};
@@ -608,7 +608,7 @@ bool ShouldLog(LogSeverity severity, const char* tag) {
   // we need to fall back to using gMinimumLogSeverity, since __android_log_is_loggable() will not
   // take into consideration the value from SetMinimumLogSeverity().
   if (liblog_functions) {
-    int priority = LogSeverityToPriority(severity);
+    int32_t priority = LogSeverityToPriority(severity);
     return __android_log_is_loggable(priority, tag, ANDROID_LOG_INFO);
   } else {
     return severity >= gMinimumLogSeverity;
@@ -618,7 +618,7 @@ bool ShouldLog(LogSeverity severity, const char* tag) {
 LogSeverity SetMinimumLogSeverity(LogSeverity new_severity) {
   static auto& liblog_functions = GetLibLogFunctions();
   if (liblog_functions) {
-    auto priority = LogSeverityToPriority(new_severity);
+    int32_t priority = LogSeverityToPriority(new_severity);
     return PriorityToLogSeverity(liblog_functions->__android_log_set_minimum_priority(priority));
   } else {
     LogSeverity old_severity = gMinimumLogSeverity;
