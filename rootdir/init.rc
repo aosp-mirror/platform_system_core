@@ -332,7 +332,7 @@ on init
     chown system system /dev/freezer/frozen/freezer.state
     chown system system /dev/freezer/frozen/cgroup.procs
 
-    chmod 0444 /dev/freezer/frozen/freezer.state
+    chmod 0664 /dev/freezer/frozen/freezer.state
 
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
