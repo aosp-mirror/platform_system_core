@@ -89,6 +89,9 @@ cc_library {
         },
         android: {
             static_libs: ["libasync_safe"],
+            static: {
+                whole_static_libs: ["libasync_safe"],
+            },
         },
         vendor: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
