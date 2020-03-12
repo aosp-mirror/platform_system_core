@@ -19,9 +19,9 @@
 #include <android-base/properties.h>
 #include <android/gsi/BnProgressCallback.h>
 #include <android/gsi/IGsiService.h>
-#include <binder/IServiceManager.h>
 #include <libfiemap/image_manager.h>
 #include <libgsi/libgsi.h>
+#include <libgsi/libgsid.h>
 
 namespace android {
 namespace fiemap {
@@ -224,19 +224,9 @@ bool ImageManagerBinder::MapAllImages(const std::function<bool(std::set<std::str
     return false;
 }
 
-static sp<IGsiService> GetGsiService() {
-    auto sm = android::defaultServiceManager();
-    auto name = android::String16(kGsiServiceName);
-    android::sp<android::IBinder> res = sm->waitForService(name);
-    if (res) {
-        return android::interface_cast<IGsiService>(res);
-    }
-    return nullptr;
-}
-
 std::unique_ptr<IImageManager> IImageManager::Open(
         const std::string& dir, const std::chrono::milliseconds& /*timeout_ms*/) {
-    android::sp<IGsiService> service = GetGsiService();
+    android::sp<IGsiService> service = android::gsi::GetGsiService();
     android::sp<IImageService> manager;
 
     auto status = service->openImageService(dir, &manager);
