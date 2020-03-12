@@ -1097,14 +1097,14 @@ static bool remote_build_list(SyncConnection& sc, std::vector<copyinfo>* file_li
         }
     };
 
-    if (!sync_ls(sc, rpath.c_str(), callback)) {
+    if (!sync_ls(sc, rpath, callback)) {
         return false;
     }
 
     // Check each symlink we found to see whether it's a file or directory.
     for (copyinfo& link_ci : linklist) {
         struct stat st;
-        if (!sync_stat_fallback(sc, link_ci.rpath.c_str(), &st)) {
+        if (!sync_stat_fallback(sc, link_ci.rpath, &st)) {
             sc.Warning("stat failed for path %s: %s", link_ci.rpath.c_str(), strerror(errno));
             continue;
         }
