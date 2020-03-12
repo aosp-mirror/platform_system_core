@@ -96,6 +96,7 @@
 
 using android::base::Basename;
 using android::base::GetBoolProperty;
+using android::base::Readlink;
 using android::base::Realpath;
 using android::base::SetProperty;
 using android::base::StartsWith;
@@ -1587,6 +1588,61 @@ static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
     }
 }
 
+static bool UnwindDmDeviceStack(const std::string& block_device,
+                                std::vector<std::string>* dm_stack) {
+    if (!StartsWith(block_device, "/dev/block/")) {
+        LWARNING << block_device << " is not a block device";
+        return false;
+    }
+    std::string current = block_device;
+    DeviceMapper& dm = DeviceMapper::Instance();
+    while (true) {
+        dm_stack->push_back(current);
+        if (!dm.IsDmBlockDevice(current)) {
+            break;
+        }
+        auto parent = dm.GetParentBlockDeviceByPath(current);
+        if (!parent) {
+            return false;
+        }
+        current = *parent;
+    }
+    return true;
+}
+
+FstabEntry* fs_mgr_get_mounted_entry_for_userdata(Fstab* fstab, const FstabEntry& mounted_entry) {
+    if (mounted_entry.mount_point != "/data") {
+        LERROR << mounted_entry.mount_point << " is not /data";
+        return nullptr;
+    }
+    std::vector<std::string> dm_stack;
+    if (!UnwindDmDeviceStack(mounted_entry.blk_device, &dm_stack)) {
+        LERROR << "Failed to unwind dm-device stack for " << mounted_entry.blk_device;
+        return nullptr;
+    }
+    for (auto& entry : *fstab) {
+        if (entry.mount_point != "/data") {
+            continue;
+        }
+        std::string block_device;
+        if (entry.fs_mgr_flags.logical) {
+            if (!fs_mgr_update_logical_partition(&entry)) {
+                LERROR << "Failed to update logic partition " << entry.blk_device;
+                continue;
+            }
+            block_device = entry.blk_device;
+        } else if (!Readlink(entry.blk_device, &block_device)) {
+            PWARNING << "Failed to read link " << entry.blk_device;
+            block_device = entry.blk_device;
+        }
+        if (std::find(dm_stack.begin(), dm_stack.end(), block_device) != dm_stack.end()) {
+            return &entry;
+        }
+    }
+    LERROR << "Didn't find entry that was used to mount /data onto " << mounted_entry.blk_device;
+    return nullptr;
+}
+
 // TODO(b/143970043): return different error codes based on which step failed.
 int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
     Fstab proc_mounts;
@@ -1595,16 +1651,13 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
         return -1;
     }
     std::string block_device;
-    if (auto entry = GetEntryForMountPoint(&proc_mounts, "/data"); entry != nullptr) {
-        // Note: we don't care about a userdata wrapper here, since it's safe
-        // to remount on top of the bow device instead, there will be no
-        // conflicts.
-        block_device = entry->blk_device;
-    } else {
+    auto mounted_entry = GetEntryForMountPoint(&proc_mounts, "/data");
+    if (mounted_entry == nullptr) {
         LERROR << "/data is not mounted";
         return -1;
     }
-    auto fstab_entry = GetMountedEntryForUserdata(fstab);
+    block_device = mounted_entry->blk_device;
+    auto fstab_entry = fs_mgr_get_mounted_entry_for_userdata(fstab, *mounted_entry);
     if (fstab_entry == nullptr) {
         LERROR << "Can't find /data in fstab";
         return -1;

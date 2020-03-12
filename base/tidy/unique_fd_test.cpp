@@ -1,7 +1,5 @@
-#pragma once
-
 /*
- * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +14,19 @@
  * limitations under the License.
  */
 
-#include <memory>
-#include <string>
+#include "android-base/unique_fd.h"
 
-#include <unwindstack/Regs.h>
+#include <utility>
 
-struct ThreadInfo {
-  std::unique_ptr<unwindstack::Regs> registers;
+#include <gtest/gtest.h>
 
-  pid_t uid;
+extern void consume_unique_fd(android::base::unique_fd fd);
 
-  pid_t tid;
-  std::string thread_name;
-
-  pid_t pid;
-  std::string process_name;
-
-  int signo = 0;
-  siginfo_t* siginfo = nullptr;
-};
-
-struct ProcessInfo {
-  uintptr_t abort_msg_address = 0;
-  uintptr_t fdsan_table_address = 0;
-  uintptr_t gwp_asan_state = 0;
-  uintptr_t gwp_asan_metadata = 0;
-};
+TEST(unique_fd, bugprone_use_after_move) {
+  // Compile time test for clang-tidy's bugprone-use-after-move check.
+  android::base::unique_fd ufd(open("/dev/null", O_RDONLY | O_CLOEXEC));
+  consume_unique_fd(std::move(ufd));
+  ufd.reset(open("/dev/null", O_RDONLY | O_CLOEXEC));
+  ufd.get();
+  consume_unique_fd(std::move(ufd));
+}

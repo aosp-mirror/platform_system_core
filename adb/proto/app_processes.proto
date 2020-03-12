@@ -14,12 +14,20 @@
  * limitations under the License.
  */
 
-#include "service_lock.h"
+syntax = "proto3";
 
-namespace android {
-namespace init {
+option java_package = "com.android.server.adb.protos";
+option java_outer_classname = "AppProcessesProto";
 
-RecursiveMutex service_lock;
+package adb.proto;
 
-}  // namespace init
-}  // namespace android
+message ProcessEntry {
+    int64 pid = 1;
+    bool debuggable = 2;
+    bool profileable = 3;
+    string architecture = 4;
+}
+
+message AppProcesses {
+  repeated ProcessEntry process = 1;
+}

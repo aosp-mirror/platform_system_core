@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "snapshot_stats.h"
+#include <libsnapshot/snapshot_stats.h>
 
 #include <sstream>
 
@@ -23,22 +23,17 @@
 namespace android {
 namespace snapshot {
 
-SnapshotMergeStats::SnapshotMergeStats(SnapshotManager& parent) : parent_(parent) {
-    init_time_ = std::chrono::steady_clock::now();
+SnapshotMergeStats* SnapshotMergeStats::GetInstance(SnapshotManager& parent) {
+    static SnapshotMergeStats g_instance(parent.GetMergeStateFilePath());
+    CHECK(g_instance.path_ == parent.GetMergeStateFilePath());
+    return &g_instance;
 }
 
-SnapshotMergeStats::~SnapshotMergeStats() {
-    std::string error;
-    auto file_path = parent_.GetMergeStateFilePath();
-    if (!android::base::RemoveFileIfExists(file_path, &error)) {
-        LOG(ERROR) << "Failed to remove merge statistics file " << file_path << ": " << error;
-        return;
-    }
-}
+SnapshotMergeStats::SnapshotMergeStats(const std::string& path) : path_(path), running_(false) {}
 
 bool SnapshotMergeStats::ReadState() {
     std::string contents;
-    if (!android::base::ReadFileToString(parent_.GetMergeStateFilePath(), &contents)) {
+    if (!android::base::ReadFileToString(path_, &contents)) {
         PLOG(INFO) << "Read merge statistics file failed";
         return false;
     }
@@ -55,34 +50,73 @@ bool SnapshotMergeStats::WriteState() {
         LOG(ERROR) << "Unable to serialize SnapshotMergeStats.";
         return false;
     }
-    auto file_path = parent_.GetMergeStateFilePath();
-    if (!WriteStringToFileAtomic(contents, file_path)) {
+    if (!WriteStringToFileAtomic(contents, path_)) {
         PLOG(ERROR) << "Could not write to merge statistics file";
         return false;
     }
     return true;
 }
 
-void SnapshotMergeStats::Start() {
-    report_.set_resume_count(0);
-    report_.set_state(UpdateState::None);
-    WriteState();
+bool SnapshotMergeStats::DeleteState() {
+    std::string error;
+    if (!android::base::RemoveFileIfExists(path_, &error)) {
+        LOG(ERROR) << "Failed to remove merge statistics file " << path_ << ": " << error;
+        return false;
+    }
+    return true;
 }
 
-void SnapshotMergeStats::Resume() {
-    if (!ReadState()) {
-        return;
+bool SnapshotMergeStats::Start() {
+    if (running_) {
+        LOG(ERROR) << "SnapshotMergeStats running_ == " << running_;
+        return false;
     }
-    report_.set_resume_count(report_.resume_count() + 1);
-    WriteState();
+    running_ = true;
+
+    start_time_ = std::chrono::steady_clock::now();
+    if (ReadState()) {
+        report_.set_resume_count(report_.resume_count() + 1);
+    } else {
+        report_.set_resume_count(0);
+        report_.set_state(UpdateState::None);
+    }
+
+    return WriteState();
 }
 
 void SnapshotMergeStats::set_state(android::snapshot::UpdateState state) {
     report_.set_state(state);
 }
 
-SnapshotMergeReport SnapshotMergeStats::GetReport() {
-    return report_;
+class SnapshotMergeStatsResultImpl : public SnapshotMergeStats::Result {
+  public:
+    SnapshotMergeStatsResultImpl(const SnapshotMergeReport& report,
+                                 std::chrono::steady_clock::duration merge_time)
+        : report_(report), merge_time_(merge_time) {}
+    const SnapshotMergeReport& report() const override { return report_; }
+    std::chrono::steady_clock::duration merge_time() const override { return merge_time_; }
+
+  private:
+    SnapshotMergeReport report_;
+    std::chrono::steady_clock::duration merge_time_;
+};
+
+std::unique_ptr<SnapshotMergeStats::Result> SnapshotMergeStats::Finish() {
+    if (!running_) {
+        LOG(ERROR) << "SnapshotMergeStats running_ == " << running_;
+        return nullptr;
+    }
+    running_ = false;
+
+    auto result = std::make_unique<SnapshotMergeStatsResultImpl>(
+            report_, std::chrono::steady_clock::now() - start_time_);
+
+    // We still want to report result if state is not deleted. Just leave
+    // it there and move on. A side effect is that it may be reported over and
+    // over again in the future, but there is nothing we can do.
+    (void)DeleteState();
+
+    return result;
 }
 
 }  // namespace snapshot

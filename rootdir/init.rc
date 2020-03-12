@@ -16,6 +16,11 @@ on early-init
     # Disable sysrq from keyboard
     write /proc/sys/kernel/sysrq 0
 
+    # Android doesn't need kernel module autoloading, and it causes SELinux
+    # denials.  So disable it by setting modprobe to the empty string.  Note: to
+    # explicitly set a sysctl to an empty string, a trailing newline is needed.
+    write /proc/sys/kernel/modprobe \n
+
     # Set the security context of /adb_keys if present.
     restorecon /adb_keys
 
@@ -701,9 +706,7 @@ on post-fs-data
 
     # A tmpfs directory, which will contain all apps CE DE data directory that
     # bind mount from the original source.
-    chown root root /data_mirror
-    chmod 0700 /data_mirror
-    mount tmpfs tmpfs /data_mirror mode=0700,uid=0,gid=1000 nodev noexec nosuid
+    mount tmpfs tmpfs /data_mirror nodev noexec nosuid mode=0700,uid=0,gid=1000
     restorecon /data_mirror
     mkdir /data_mirror/data_ce 0700 root root
     mkdir /data_mirror/data_de 0700 root root
@@ -731,6 +734,13 @@ on post-fs-data
 
     # Create root dir for Incremental Service
     mkdir /data/incremental 0771 system system encryption=Require
+
+    # Create directories for statsd
+    mkdir /data/misc/stats-active-metric/ 0770 statsd system
+    mkdir /data/misc/stats-data/ 0770 statsd system
+    mkdir /data/misc/stats-metadata/ 0770 statsd system
+    mkdir /data/misc/stats-service/ 0770 statsd system
+    mkdir /data/misc/train-info/ 0770 statsd system
 
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status activated

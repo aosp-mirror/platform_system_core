@@ -14,27 +14,6 @@
  * limitations under the License.
  */
 
-#pragma once
+#include "android-base/unique_fd.h"
 
-#include <mutex>
-
-#include <android-base/thread_annotations.h>
-
-namespace android {
-namespace init {
-
-// This class exists to add thread annotations, since they're absent from std::recursive_mutex.
-
-class CAPABILITY("mutex") RecursiveMutex {
-  public:
-    void lock() ACQUIRE() { mutex_.lock(); }
-    void unlock() RELEASE() { mutex_.unlock(); }
-
-  private:
-    std::recursive_mutex mutex_;
-};
-
-extern RecursiveMutex service_lock;
-
-}  // namespace init
-}  // namespace android
+void consume_unique_fd(android::base::unique_fd) {}

@@ -45,6 +45,7 @@ cc_defaults {
     whole_static_libs: [
         "gsi_aidl_interface-cpp",
         "libgsi",
+        "libgsid",
     ],
     shared_libs: [
         "libbinder",
