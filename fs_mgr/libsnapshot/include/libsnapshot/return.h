@@ -30,7 +30,6 @@ class Return {
     enum class ErrorCode : int32_t {
         SUCCESS = static_cast<int32_t>(FiemapStatus::ErrorCode::SUCCESS),
         ERROR = static_cast<int32_t>(FiemapStatus::ErrorCode::ERROR),
-        NEEDS_REBOOT = ERROR + 1,
         NO_SPACE = static_cast<int32_t>(FiemapStatus::ErrorCode::NO_SPACE),
     };
     ErrorCode error_code() const { return error_code_; }
@@ -43,7 +42,6 @@ class Return {
     static Return Ok() { return Return(ErrorCode::SUCCESS); }
     static Return Error() { return Return(ErrorCode::ERROR); }
     static Return NoSpace(uint64_t size) { return Return(ErrorCode::NO_SPACE, size); }
-    static Return NeedsReboot() { return Return(ErrorCode::NEEDS_REBOOT); }
     // Does not set required_size_ properly even when status.error_code() == NO_SPACE.
     explicit Return(const FiemapStatus& status)
         : error_code_(FromFiemapStatusErrorCode(status.error_code())), required_size_(0) {}

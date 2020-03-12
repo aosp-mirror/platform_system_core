@@ -102,7 +102,7 @@ class unique_fd_impl final {
     return *this;
   }
 
-  void reset(int new_value = -1) { reset(new_value, nullptr); }
+  [[clang::reinitializes]] void reset(int new_value = -1) { reset(new_value, nullptr); }
 
   int get() const { return fd_; }
 

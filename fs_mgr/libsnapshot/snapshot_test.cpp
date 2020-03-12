@@ -1027,7 +1027,8 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     }
 
     // Initiate the merge and wait for it to be completed.
-    ASSERT_EQ(UpdateState::MergeCompleted, init->InitiateMergeAndWait());
+    ASSERT_TRUE(init->InitiateMerge());
+    ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 
     // Check that the target partitions have the same content after the merge.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1201,7 +1202,8 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
 
     // Initiate the merge and wait for it to be completed.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
-    ASSERT_EQ(UpdateState::MergeCompleted, new_sm->InitiateMergeAndWait());
+    ASSERT_TRUE(new_sm->InitiateMerge());
+    ASSERT_EQ(UpdateState::MergeCompleted, new_sm->ProcessUpdateState());
 
     // Execute the second update.
     ASSERT_TRUE(new_sm->BeginUpdate());
@@ -1341,7 +1343,8 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     ASSERT_GE(fd, 0);
 
     // COW cannot be removed due to open fd, so expect a soft failure.
-    ASSERT_EQ(UpdateState::MergeNeedsReboot, init->InitiateMergeAndWait());
+    ASSERT_TRUE(init->InitiateMerge());
+    ASSERT_EQ(UpdateState::MergeNeedsReboot, init->ProcessUpdateState());
 
     // Simulate shutting down the device.
     fd.reset();
@@ -1354,7 +1357,7 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     ASSERT_FALSE(sm->IsSnapshotDevice("sys_b", nullptr));
 
     // Merge should be able to complete now.
-    ASSERT_EQ(UpdateState::MergeCompleted, init->InitiateMergeAndWait());
+    ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 }
 
 class MetadataMountedTest : public SnapshotUpdateTest {
@@ -1570,45 +1573,6 @@ TEST_F(SnapshotUpdateTest, Overflow) {
             << "FinishedSnapshotWrites should detect overflow of CoW device.";
 }
 
-TEST_F(SnapshotUpdateTest, WaitForMerge) {
-    AddOperationForPartitions();
-
-    // Execute the update.
-    ASSERT_TRUE(sm->BeginUpdate());
-    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
-
-    // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
-
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
-
-    // Simulate shutting down the device.
-    ASSERT_TRUE(UnmapAll());
-
-    // After reboot, init does first stage mount.
-    {
-        auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
-        ASSERT_NE(nullptr, init);
-        ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
-    }
-
-    auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
-    ASSERT_NE(nullptr, new_sm);
-
-    auto waiter = std::async(std::launch::async, [&new_sm] { return new_sm->WaitForMerge(); });
-    ASSERT_EQ(std::future_status::timeout, waiter.wait_for(1s))
-            << "WaitForMerge should block when not initiated";
-
-    auto merger =
-            std::async(std::launch::async, [&new_sm] { return new_sm->InitiateMergeAndWait(); });
-    // Small images, so should be merged pretty quickly.
-    ASSERT_EQ(std::future_status::ready, waiter.wait_for(3s)) << "WaitForMerge did not finish";
-    ASSERT_TRUE(waiter.get());
-    ASSERT_THAT(merger.get(), AnyOf(UpdateState::None, UpdateState::MergeCompleted));
-}
-
 TEST_F(SnapshotUpdateTest, LowSpace) {
     static constexpr auto kMaxFree = 10_MiB;
     auto userdata = std::make_unique<LowSpaceUserdata>();
@@ -1730,7 +1694,8 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
 
     // There should be no snapshot to merge.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, flashed_slot_suffix));
-    ASSERT_EQ(UpdateState::Cancelled, new_sm->InitiateMergeAndWait());
+    // update_enigne calls ProcessUpdateState first -- should see Cancelled.
+    ASSERT_EQ(UpdateState::Cancelled, new_sm->ProcessUpdateState());
 
     // Next OTA calls CancelUpdate no matter what.
     ASSERT_TRUE(new_sm->CancelUpdate());

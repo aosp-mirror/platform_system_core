@@ -27,6 +27,7 @@
 #include <android-base/file.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <fs_mgr.h>
 #include <fstab/fstab.h>
 #include <gtest/gtest.h>
 
@@ -1015,6 +1016,10 @@ TEST(fs_mgr, UserdataMountedFromDefaultFstab) {
     }
     Fstab fstab;
     ASSERT_TRUE(ReadDefaultFstab(&fstab)) << "Failed to read default fstab";
-    ASSERT_NE(nullptr, GetMountedEntryForUserdata(&fstab))
+    Fstab proc_mounts;
+    ASSERT_TRUE(ReadFstabFromFile("/proc/mounts", &proc_mounts)) << "Failed to read /proc/mounts";
+    auto mounted_entry = GetEntryForMountPoint(&proc_mounts, "/data");
+    ASSERT_NE(mounted_entry, nullptr) << "/data is not mounted";
+    ASSERT_NE(nullptr, fs_mgr_get_mounted_entry_for_userdata(&fstab, *mounted_entry))
             << "/data wasn't mounted from default fstab";
 }

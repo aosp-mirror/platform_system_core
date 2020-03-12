@@ -93,23 +93,5 @@ cc_library {
                 "arch-arm64/t32cb16blend.S",
             ],
         },
-        mips: {
-            mips32r6: {
-                srcs: [
-                    "codeflinger/MIPSAssembler.cpp",
-                    "codeflinger/mips_disassem.c",
-                    "arch-mips/t32cb16blend.S",
-                ],
-            },
-        },
-        mips64: {
-            srcs: [
-                "codeflinger/MIPSAssembler.cpp",
-                "codeflinger/MIPS64Assembler.cpp",
-                "codeflinger/mips64_disassem.c",
-                "arch-mips64/col32cb16blend.S",
-                "arch-mips64/t32cb16blend.S",
-            ],
-        },
     },
 }

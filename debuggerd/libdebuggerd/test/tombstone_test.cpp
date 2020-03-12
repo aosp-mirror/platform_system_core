@@ -371,7 +371,7 @@ public:
   GwpAsanCrashDataTest(
       gwp_asan::Error error,
       const gwp_asan::AllocationMetadata *responsible_allocation) :
-      GwpAsanCrashData(nullptr, 0u, 0u, ThreadInfo{}) {
+      GwpAsanCrashData(nullptr, ProcessInfo{}, ThreadInfo{}) {
     is_gwp_asan_responsible_ = true;
     error_ = error;
     responsible_allocation_ = responsible_allocation;
