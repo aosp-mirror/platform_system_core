@@ -125,5 +125,9 @@ bool WriteStringToFileAtomic(const std::string& content, const std::string& path
 struct Now {};
 std::ostream& operator<<(std::ostream& os, const Now&);
 
+// Append to |extents|. Merged into the last element if possible.
+void AppendExtent(google::protobuf::RepeatedPtrField<chromeos_update_engine::Extent>* extents,
+                  uint64_t start_block, uint64_t num_blocks);
+
 }  // namespace snapshot
 }  // namespace android
