@@ -592,7 +592,6 @@ cc_binary {
         "libmdnssd",
         "libminijail",
         "libprotobuf-cpp-lite",
-        "libselinux",
         "libssl",
     ],
 
@@ -603,6 +602,7 @@ cc_binary {
         "libadbd_fs",
         "libcrypto",
         "liblog",
+        "libselinux",
     ],
 
     target: {
