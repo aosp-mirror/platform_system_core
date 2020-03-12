@@ -155,14 +155,11 @@ typedef enum log_id {
   /** The kernel log buffer. */
   LOG_ID_KERNEL = 7,
 
-  LOG_ID_MAX
-} log_id_t;
+  LOG_ID_MAX,
 
-/**
- * Let the logging function choose the best log target.
- * This is not part of the enum since adding either -1 or 0xFFFFFFFF forces the enum to be signed or
- * unsigned, which breaks unfortunately common arithmetic against LOG_ID_MIN and LOG_ID_MAX. */
-#define LOG_ID_DEFAULT (-1)
+  /** Let the logging function choose the best log target. */
+  LOG_ID_DEFAULT = 0x7FFFFFFF
+} log_id_t;
 
 /**
  * Writes the constant string `text` to the log buffer `id`,
