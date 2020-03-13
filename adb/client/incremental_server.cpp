@@ -39,6 +39,7 @@
 #include "adb_trace.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
+#include "incremental_utils.h"
 #include "sysdeps.h"
 
 namespace incremental {
@@ -136,6 +137,7 @@ class File {
     // Plain file
     File(const char* filepath, FileId id, int64_t size, unique_fd fd) : File(filepath, id, size) {
         this->fd_ = std::move(fd);
+        priority_blocks_ = PriorityBlocksForFile(filepath, fd_.get(), size);
     }
     int64_t ReadBlock(BlockIdx block_idx, void* buf, bool* is_zip_compressed,
                       std::string* error) const {
@@ -147,6 +149,7 @@ class File {
     }
 
     const unique_fd& RawFd() const { return fd_; }
+    const std::vector<BlockIdx>& PriorityBlocks() const { return priority_blocks_; }
 
     std::vector<bool> sentBlocks;
     NumBlocks sentBlocksCount = 0;
@@ -160,6 +163,7 @@ class File {
         sentBlocks.resize(numBytesToNumBlocks(size));
     }
     unique_fd fd_;
+    std::vector<BlockIdx> priority_blocks_;
 };
 
 class IncrementalServer {
@@ -176,14 +180,23 @@ class IncrementalServer {
         const File* file;
         BlockIdx overallIndex = 0;
         BlockIdx overallEnd = 0;
+        BlockIdx priorityIndex = 0;
 
-        PrefetchState(const File& f) : file(&f), overallEnd((BlockIdx)f.sentBlocks.size()) {}
-        PrefetchState(const File& f, BlockIdx start, int count)
+        explicit PrefetchState(const File& f, BlockIdx start, int count)
             : file(&f),
               overallIndex(start),
               overallEnd(std::min<BlockIdx>(start + count, f.sentBlocks.size())) {}
 
-        bool done() const { return overallIndex >= overallEnd; }
+        explicit PrefetchState(const File& f)
+            : PrefetchState(f, 0, (BlockIdx)f.sentBlocks.size()) {}
+
+        bool done() const {
+            const bool overallSent = (overallIndex >= overallEnd);
+            if (file->PriorityBlocks().empty()) {
+                return overallSent;
+            }
+            return overallSent && (priorityIndex >= (BlockIdx)file->PriorityBlocks().size());
+        }
     };
 
     bool SkipToRequest(void* buffer, size_t* size, bool blocking);
@@ -365,6 +378,17 @@ void IncrementalServer::RunPrefetching() {
     while (!prefetches_.empty() && blocksToSend > 0) {
         auto& prefetch = prefetches_.front();
         const auto& file = *prefetch.file;
+        const auto& priority_blocks = file.PriorityBlocks();
+        if (!priority_blocks.empty()) {
+            for (auto& i = prefetch.priorityIndex;
+                 blocksToSend > 0 && i < (BlockIdx)priority_blocks.size(); ++i) {
+                if (auto res = SendBlock(file.id, priority_blocks[i]); res == SendResult::Sent) {
+                    --blocksToSend;
+                } else if (res == SendResult::Error) {
+                    fprintf(stderr, "Failed to send priority block %" PRId32 "\n", i);
+                }
+            }
+        }
         for (auto& i = prefetch.overallIndex; blocksToSend > 0 && i < prefetch.overallEnd; ++i) {
             if (auto res = SendBlock(file.id, i); res == SendResult::Sent) {
                 --blocksToSend;
