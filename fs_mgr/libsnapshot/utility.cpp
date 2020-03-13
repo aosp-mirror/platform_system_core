@@ -34,6 +34,7 @@ using android::fs_mgr::GetEntryForPath;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::Partition;
 using android::fs_mgr::ReadDefaultFstab;
+using google::protobuf::RepeatedPtrField;
 
 namespace android {
 namespace snapshot {
@@ -164,6 +165,21 @@ std::ostream& operator<<(std::ostream& os, const Now&) {
     time_t t = time(nullptr);
     localtime_r(&t, &now);
     return os << std::put_time(&now, "%Y%m%d-%H%M%S");
+}
+
+void AppendExtent(RepeatedPtrField<chromeos_update_engine::Extent>* extents, uint64_t start_block,
+                  uint64_t num_blocks) {
+    if (extents->size() > 0) {
+        auto last_extent = extents->rbegin();
+        auto next_block = last_extent->start_block() + last_extent->num_blocks();
+        if (start_block == next_block) {
+            last_extent->set_num_blocks(last_extent->num_blocks() + num_blocks);
+            return;
+        }
+    }
+    auto* new_extent = extents->Add();
+    new_extent->set_start_block(start_block);
+    new_extent->set_num_blocks(num_blocks);
 }
 
 }  // namespace snapshot
