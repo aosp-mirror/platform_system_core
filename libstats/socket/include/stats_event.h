@@ -29,8 +29,9 @@
  *      AStatsEvent* event = AStatsEvent_obtain();
  *
  *      AStatsEvent_setAtomId(event, atomId);
+ *      AStatsEvent_addBoolAnnotation(event, 5, false); // atom-level annotation
  *      AStatsEvent_writeInt32(event, 24);
- *      AStatsEvent_addBoolAnnotation(event, 1, true); // annotations apply to the previous field
+ *      AStatsEvent_addBoolAnnotation(event, 1, true); // annotation for preceding atom field
  *      AStatsEvent_addInt32Annotation(event, 2, 128);
  *      AStatsEvent_writeFloat(event, 2.0);
  *
@@ -38,13 +39,8 @@
  *      AStatsEvent_write(event);
  *      AStatsEvent_release(event);
  *
- * Notes:
- *    (a) write_<type>() and add_<type>_annotation() should be called in the order that fields
- *        and annotations are defined in the atom.
- *    (b) set_atom_id() can be called anytime before stats_event_write().
- *    (c) add_<type>_annotation() calls apply to the previous field.
- *    (d) If errors occur, stats_event_write() will write a bitmask of the errors to the socket.
- *    (e) All strings should be encoded using UTF8.
+ * Note that calls to add atom fields and annotations should be made in the
+ * order that they are defined in the atom.
  */
 
 #ifdef __cplusplus
@@ -84,7 +80,7 @@ void AStatsEvent_build(AStatsEvent* event);
 int AStatsEvent_write(AStatsEvent* event);
 
 /**
- * Frees the memory held by this StatsEvent
+ * Frees the memory held by this StatsEvent.
  *
  * After calling this, the StatsEvent must not be used or modified in any way.
  */
@@ -92,6 +88,8 @@ void AStatsEvent_release(AStatsEvent* event);
 
 /**
  * Sets the atom id for this StatsEvent.
+ *
+ * This function should be called immediately after AStatsEvent_obtain.
  **/
 void AStatsEvent_setAtomId(AStatsEvent* event, uint32_t atomId);
 
