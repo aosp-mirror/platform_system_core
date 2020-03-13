@@ -45,33 +45,29 @@ static inline int32_t read_int32(borrowed_fd fd) {
     return result;
 }
 
-static inline int32_t read_be_int32(borrowed_fd fd) {
-    return int32_t(be32toh(read_int32(fd)));
-}
-
 static inline void append_int(borrowed_fd fd, std::vector<char>* bytes) {
-    int32_t be_val = read_int32(fd);
+    int32_t le_val = read_int32(fd);
     auto old_size = bytes->size();
-    bytes->resize(old_size + sizeof(be_val));
-    memcpy(bytes->data() + old_size, &be_val, sizeof(be_val));
+    bytes->resize(old_size + sizeof(le_val));
+    memcpy(bytes->data() + old_size, &le_val, sizeof(le_val));
 }
 
 static inline void append_bytes_with_size(borrowed_fd fd, std::vector<char>* bytes) {
-    int32_t be_size = read_int32(fd);
-    int32_t size = int32_t(be32toh(be_size));
+    int32_t le_size = read_int32(fd);
+    int32_t size = int32_t(le32toh(le_size));
     auto old_size = bytes->size();
-    bytes->resize(old_size + sizeof(be_size) + size);
-    memcpy(bytes->data() + old_size, &be_size, sizeof(be_size));
-    ReadFully(fd, bytes->data() + old_size + sizeof(be_size), size);
+    bytes->resize(old_size + sizeof(le_size) + size);
+    memcpy(bytes->data() + old_size, &le_size, sizeof(le_size));
+    ReadFully(fd, bytes->data() + old_size + sizeof(le_size), size);
 }
 
 static inline std::pair<std::vector<char>, int32_t> read_id_sig_headers(borrowed_fd fd) {
     std::vector<char> result;
     append_int(fd, &result);              // version
-    append_bytes_with_size(fd, &result);  // verityRootHash
-    append_bytes_with_size(fd, &result);  // v3Digest
-    append_bytes_with_size(fd, &result);  // pkcs7SignatureBlock
-    auto tree_size = read_be_int32(fd);   // size of the verity tree
+    append_bytes_with_size(fd, &result);  // hashingInfo
+    append_bytes_with_size(fd, &result);  // signingInfo
+    auto le_tree_size = read_int32(fd);
+    auto tree_size = int32_t(le32toh(le_tree_size));  // size of the verity tree
     return {std::move(result), tree_size};
 }
 
