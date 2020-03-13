@@ -74,7 +74,8 @@ class SnapshotStatus;
 
 static constexpr const std::string_view kCowGroupName = "cow";
 
-bool SourceCopyOperationIsClone(const chromeos_update_engine::InstallOperation& operation);
+bool OptimizeSourceCopyOperation(const chromeos_update_engine::InstallOperation& operation,
+                                 chromeos_update_engine::InstallOperation* optimized);
 
 enum class CreateResult : unsigned int {
     ERROR,
