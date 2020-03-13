@@ -59,6 +59,7 @@
 #include "builtin_arguments.h"
 #include "init.h"
 #include "mount_namespace.h"
+#include "property_service.h"
 #include "reboot_utils.h"
 #include "service.h"
 #include "service_list.h"
@@ -711,17 +712,12 @@ static void EnterShutdown() {
     for (const auto& s : ServiceList::GetInstance()) {
         s->UnSetExec();
     }
-    // We no longer process messages about properties changing coming from property service, so we
-    // need to tell property service to stop sending us these messages, otherwise it'll fill the
-    // buffers and block indefinitely, causing future property sets, including those that init makes
-    // during shutdown in Service::NotifyStateChange() to also block indefinitely.
-    SendStopSendingMessagesMessage();
 }
 
 static void LeaveShutdown() {
     LOG(INFO) << "Leaving shutdown mode";
     shutting_down = false;
-    SendStartSendingMessagesMessage();
+    StartSendingMessages();
 }
 
 static Result<void> UnmountAllApexes() {
@@ -980,6 +976,10 @@ void HandlePowerctlMessage(const std::string& command) {
         LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
         return;
     }
+
+    // We do not want to process any messages (queue'ing triggers, shutdown messages, control
+    // messages, etc) from properties during reboot.
+    StopSendingMessages();
 
     if (userspace_reboot) {
         HandleUserspaceReboot();

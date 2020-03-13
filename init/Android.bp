@@ -81,6 +81,7 @@ cc_defaults {
         "-Wextra",
         "-Wno-unused-parameter",
         "-Werror",
+        "-Wthread-safety",
         "-DALLOW_FIRST_STAGE_CONSOLE=0",
         "-DALLOW_LOCAL_PROP_OVERRIDE=0",
         "-DALLOW_PERMISSIVE_SELINUX=0",
