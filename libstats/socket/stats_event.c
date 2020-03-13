@@ -29,7 +29,6 @@
 #define POS_NUM_ELEMENTS 1
 #define POS_TIMESTAMP (POS_NUM_ELEMENTS + sizeof(uint8_t))
 #define POS_ATOM_ID (POS_TIMESTAMP + sizeof(uint8_t) + sizeof(uint64_t))
-#define POS_FIRST_FIELD (POS_ATOM_ID + sizeof(uint8_t) + sizeof(uint32_t))
 
 /* LIMITS */
 #define MAX_ANNOTATION_COUNT 15
@@ -66,8 +65,11 @@
 // within a buf. Also includes other required fields.
 struct AStatsEvent {
     uint8_t* buf;
-    size_t lastFieldPos;  // location of last field within the buf
-    size_t size;          // number of valid bytes within buffer
+    // Location of last field within the buf. Here, field denotes either a
+    // metadata field (e.g. timestamp) or an atom field.
+    size_t lastFieldPos;
+    // Number of valid bytes within the buffer.
+    size_t size;
     uint32_t numElements;
     uint32_t atomId;
     uint32_t errors;
@@ -85,20 +87,21 @@ static int64_t get_elapsed_realtime_ns() {
 AStatsEvent* AStatsEvent_obtain() {
     AStatsEvent* event = malloc(sizeof(AStatsEvent));
     event->buf = (uint8_t*)calloc(MAX_EVENT_PAYLOAD, 1);
-    event->buf[0] = OBJECT_TYPE;
+    event->lastFieldPos = 0;
+    event->size = 2;  // reserve first two bytes for outer event type and number of elements
+    event->numElements = 0;
     event->atomId = 0;
     event->errors = 0;
     event->truncate = true;  // truncate for both pulled and pushed atoms
     event->built = false;
 
-    // place the timestamp
-    uint64_t timestampNs = get_elapsed_realtime_ns();
-    event->buf[POS_TIMESTAMP] = INT64_TYPE;
-    memcpy(&event->buf[POS_TIMESTAMP + sizeof(uint8_t)], &timestampNs, sizeof(timestampNs));
+    event->buf[0] = OBJECT_TYPE;
+    AStatsEvent_writeInt64(event, get_elapsed_realtime_ns());  // write the timestamp
 
-    event->numElements = 1;
-    event->lastFieldPos = 0;  // 0 since we haven't written a field yet
-    event->size = POS_FIRST_FIELD;
+    // Force client to set atom id immediately (this is required for atom-level
+    // annotations to be written correctly). All atom field and annotation
+    // writes will fail until the atom id is set because event->errors != 0.
+    event->errors |= ERROR_NO_ATOM_ID;
 
     return event;
 }
@@ -109,10 +112,12 @@ void AStatsEvent_release(AStatsEvent* event) {
 }
 
 void AStatsEvent_setAtomId(AStatsEvent* event, uint32_t atomId) {
+    if ((event->errors & ERROR_NO_ATOM_ID) == 0) return;
+
+    // Clear the ERROR_NO_ATOM_ID bit.
+    event->errors &= ~ERROR_NO_ATOM_ID;
     event->atomId = atomId;
-    event->buf[POS_ATOM_ID] = INT32_TYPE;
-    memcpy(&event->buf[POS_ATOM_ID + sizeof(uint8_t)], &atomId, sizeof(atomId));
-    event->numElements++;
+    AStatsEvent_writeInt32(event, atomId);
 }
 
 // Overwrites the timestamp populated in AStatsEvent_obtain with a custom
@@ -306,22 +311,22 @@ void AStatsEvent_truncateBuffer(AStatsEvent* event, bool truncate) {
 void AStatsEvent_build(AStatsEvent* event) {
     if (event->built) return;
 
-    if (event->atomId == 0) event->errors |= ERROR_NO_ATOM_ID;
-
-    if (event->numElements > MAX_BYTE_VALUE) {
-        event->errors |= ERROR_TOO_MANY_FIELDS;
-    } else {
-        event->buf[POS_NUM_ELEMENTS] = event->numElements;
-    }
+    if (event->numElements > MAX_BYTE_VALUE) event->errors |= ERROR_TOO_MANY_FIELDS;
 
     // If there are errors, rewrite buffer.
     if (event->errors) {
-        event->buf[POS_NUM_ELEMENTS] = 3;
-        event->buf[POS_FIRST_FIELD] = ERROR_TYPE;
-        memcpy(&event->buf[POS_FIRST_FIELD + sizeof(uint8_t)], &event->errors,
-               sizeof(event->errors));
-        event->size = POS_FIRST_FIELD + sizeof(uint8_t) + sizeof(uint32_t);
+        // Discard everything after the atom id (including atom-level
+        // annotations). This leaves only two elements (timestamp and atom id).
+        event->numElements = 2;
+        // Reset number of atom-level annotations to 0.
+        event->buf[POS_ATOM_ID] = INT32_TYPE;
+        // Now, write errors to the buffer immediately after the atom id.
+        event->size = POS_ATOM_ID + sizeof(uint8_t) + sizeof(uint32_t);
+        start_field(event, ERROR_TYPE);
+        append_int32(event, event->errors);
     }
+
+    event->buf[POS_NUM_ELEMENTS] = event->numElements;
 
     // Truncate the buffer to the appropriate length in order to limit our
     // memory usage.
