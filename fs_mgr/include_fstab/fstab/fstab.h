@@ -36,6 +36,7 @@ struct FstabEntry {
     std::string fs_type;
     unsigned long flags = 0;
     std::string fs_options;
+    std::string fs_checkpoint_opts;
     std::string key_loc;
     std::string metadata_key_dir;
     std::string metadata_encryption;
