@@ -737,15 +737,33 @@ static int __mount(const std::string& source, const std::string& target, const F
     unsigned long mountflags = entry.flags;
     int ret = 0;
     int save_errno = 0;
+    int gc_allowance = 0;
+    std::string opts;
+    bool try_f2fs_gc_allowance = is_f2fs(entry.fs_type) && entry.fs_checkpoint_opts.length() > 0;
+    Timer t;
+
     do {
+        if (save_errno == EINVAL && try_f2fs_gc_allowance) {
+            PINFO << "Kernel does not support checkpoint=disable:[n]%, trying without.";
+            try_f2fs_gc_allowance = false;
+        }
+        if (try_f2fs_gc_allowance) {
+            opts = entry.fs_options + entry.fs_checkpoint_opts + ":" +
+                   std::to_string(gc_allowance) + "%";
+        } else {
+            opts = entry.fs_options;
+        }
         if (save_errno == EAGAIN) {
             PINFO << "Retrying mount (source=" << source << ",target=" << target
-                  << ",type=" << entry.fs_type << ")=" << ret << "(" << save_errno << ")";
+                  << ",type=" << entry.fs_type << ", gc_allowance=" << gc_allowance << "%)=" << ret
+                  << "(" << save_errno << ")";
         }
         ret = mount(source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
-                    entry.fs_options.c_str());
+                    opts.c_str());
         save_errno = errno;
-    } while (ret && save_errno == EAGAIN);
+        if (try_f2fs_gc_allowance) gc_allowance += 10;
+    } while ((ret && save_errno == EAGAIN && gc_allowance <= 100) ||
+             (ret && save_errno == EINVAL && try_f2fs_gc_allowance));
     const char* target_missing = "";
     const char* source_missing = "";
     if (save_errno == ENOENT) {
@@ -761,6 +779,8 @@ static int __mount(const std::string& source, const std::string& target, const F
     if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
         fs_mgr_set_blk_ro(source);
     }
+    android::base::SetProperty("ro.boottime.init.mount." + Basename(target),
+                               std::to_string(t.duration().count()));
     errno = save_errno;
     return ret;
 }
@@ -1075,7 +1095,7 @@ class CheckpointManager {
     bool UpdateCheckpointPartition(FstabEntry* entry, const std::string& block_device) {
         if (entry->fs_mgr_flags.checkpoint_fs) {
             if (is_f2fs(entry->fs_type)) {
-                entry->fs_options += ",checkpoint=disable";
+                entry->fs_checkpoint_opts = ",checkpoint=disable";
             } else {
                 LERROR << entry->fs_type << " does not implement checkpoints.";
             }
