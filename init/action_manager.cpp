@@ -41,10 +41,12 @@ void ActionManager::AddAction(std::unique_ptr<Action> action) {
 }
 
 void ActionManager::QueueEventTrigger(const std::string& trigger) {
+    auto lock = std::lock_guard{event_queue_lock_};
     event_queue_.emplace(trigger);
 }
 
 void ActionManager::QueuePropertyChange(const std::string& name, const std::string& value) {
+    auto lock = std::lock_guard{event_queue_lock_};
     event_queue_.emplace(std::make_pair(name, value));
 }
 
@@ -53,6 +55,7 @@ void ActionManager::QueueAllPropertyActions() {
 }
 
 void ActionManager::QueueBuiltinAction(BuiltinFunction func, const std::string& name) {
+    auto lock = std::lock_guard{event_queue_lock_};
     auto action = std::make_unique<Action>(true, nullptr, "<Builtin Action>", 0, name,
                                            std::map<std::string, std::string>{});
     action->AddCommand(std::move(func), {name}, 0);
@@ -62,15 +65,18 @@ void ActionManager::QueueBuiltinAction(BuiltinFunction func, const std::string& 
 }
 
 void ActionManager::ExecuteOneCommand() {
-    // Loop through the event queue until we have an action to execute
-    while (current_executing_actions_.empty() && !event_queue_.empty()) {
-        for (const auto& action : actions_) {
-            if (std::visit([&action](const auto& event) { return action->CheckEvent(event); },
-                           event_queue_.front())) {
-                current_executing_actions_.emplace(action.get());
+    {
+        auto lock = std::lock_guard{event_queue_lock_};
+        // Loop through the event queue until we have an action to execute
+        while (current_executing_actions_.empty() && !event_queue_.empty()) {
+            for (const auto& action : actions_) {
+                if (std::visit([&action](const auto& event) { return action->CheckEvent(event); },
+                               event_queue_.front())) {
+                    current_executing_actions_.emplace(action.get());
+                }
             }
+            event_queue_.pop();
         }
-        event_queue_.pop();
     }
 
     if (current_executing_actions_.empty()) {
@@ -103,6 +109,7 @@ void ActionManager::ExecuteOneCommand() {
 }
 
 bool ActionManager::HasMoreCommands() const {
+    auto lock = std::lock_guard{event_queue_lock_};
     return !current_executing_actions_.empty() || !event_queue_.empty();
 }
 
@@ -113,6 +120,7 @@ void ActionManager::DumpState() const {
 }
 
 void ActionManager::ClearQueue() {
+    auto lock = std::lock_guard{event_queue_lock_};
     // We are shutting down so don't claim the oneshot builtin actions back
     current_executing_actions_ = {};
     event_queue_ = {};
