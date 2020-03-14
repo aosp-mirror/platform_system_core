@@ -207,7 +207,7 @@ typedef void (*__android_logger_function)(const struct __android_logger_data* lo
  */
 typedef void (*__android_aborter_function)(const char* abort_message);
 
-#if __ANDROID_API__ >= 30 || !defined(__ANDROID__)
+#if !defined(__ANDROID__) || __ANDROID_API__ >= 30
 /**
  * Writes the log message specified with logger_data and msg to the log.  logger_data includes
  * additional file name and line number information that a logger may use.  logger_data is versioned
