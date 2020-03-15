@@ -117,8 +117,12 @@ cc_library {
     logtags: ["event.logtags"],
     compile_multilib: "both",
     apex_available: [
-        "//apex_available:anyapex",
         "//apex_available:platform",
+        // liblog is exceptionally available to the runtime APEX
+        // because the dynamic linker has to use it statically.
+        // See b/151051671
+        "com.android.runtime",
+        // DO NOT add more apex names here
     ],
 }
 

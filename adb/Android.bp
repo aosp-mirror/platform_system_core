@@ -576,10 +576,8 @@ cc_binary {
         "libcrypto_utils",
         "libcutils_sockets",
         "libdiagnose_usb",
-        "liblog",
         "libmdnssd",
         "libminijail",
-        "libselinux",
         "libssl",
     ],
 
@@ -589,6 +587,8 @@ cc_binary {
         "libadbd_auth",
         "libadbd_fs",
         "libcrypto",
+        "liblog",
+        "libselinux",
     ],
 
     target: {

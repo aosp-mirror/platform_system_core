@@ -56,6 +56,7 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/cdefs.h>
 
 #if !defined(__BIONIC__) && !defined(__INTRODUCED_IN)
@@ -154,14 +155,11 @@ typedef enum log_id {
   /** The kernel log buffer. */
   LOG_ID_KERNEL = 7,
 
-  LOG_ID_MAX
-} log_id_t;
+  LOG_ID_MAX,
 
-/**
- * Let the logging function choose the best log target.
- * This is not part of the enum since adding either -1 or 0xFFFFFFFF forces the enum to be signed or
- * unsigned, which breaks unfortunately common arithmetic against LOG_ID_MIN and LOG_ID_MAX. */
-#define LOG_ID_DEFAULT -1
+  /** Let the logging function choose the best log target. */
+  LOG_ID_DEFAULT = 0x7FFFFFFF
+} log_id_t;
 
 /**
  * Writes the constant string `text` to the log buffer `id`,
@@ -188,11 +186,11 @@ int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fm
  */
 struct __android_logger_data {
   size_t struct_size; /* Must be set to sizeof(__android_logger_data) and is used for versioning. */
-  int buffer_id;      /* log_id_t or -1 to represent 'default'. */
-  int priority;       /* android_LogPriority values. */
+  int32_t buffer_id;  /* log_id_t or -1 to represent 'default'. */
+  int32_t priority;   /* android_LogPriority values. */
   const char* tag;
   const char* file;  /* Optional file name, may be set to nullptr. */
-  unsigned int line; /* Optional line number, ignore if file is nullptr. */
+  uint32_t line;     /* Optional line number, ignore if file is nullptr. */
 };
 
 /**
@@ -206,7 +204,7 @@ typedef void (*__android_logger_function)(const struct __android_logger_data* lo
  */
 typedef void (*__android_aborter_function)(const char* abort_message);
 
-#if __ANDROID_API__ >= 30 || !defined(__ANDROID__)
+#if !defined(__ANDROID__) || __ANDROID_API__ >= 30
 /**
  * Writes the log message specified with logger_data and msg to the log.  logger_data includes
  * additional file name and line number information that a logger may use.  logger_data is versioned
@@ -276,13 +274,13 @@ int __android_log_is_loggable_len(int prio, const char* tag, size_t len, int def
  *
  * This returns the previous set minimum priority, or ANDROID_LOG_DEFAULT if none was set.
  */
-int __android_log_set_minimum_priority(int priority) __INTRODUCED_IN(30);
+int32_t __android_log_set_minimum_priority(int32_t priority) __INTRODUCED_IN(30);
 
 /**
  * Gets the minimum priority that will be logged for this process.  If none has been set by a
  * previous __android_log_set_minimum_priority() call, this returns ANDROID_LOG_DEFAULT.
  */
-int __android_log_get_minimum_priority(void) __INTRODUCED_IN(30);
+int32_t __android_log_get_minimum_priority(void) __INTRODUCED_IN(30);
 
 /**
  * Sets the default tag if no tag is provided when writing a log message.  Defaults to
