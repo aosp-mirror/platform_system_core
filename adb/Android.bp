@@ -387,17 +387,17 @@ cc_library_static {
     generated_headers: ["platform_tools_version"],
 
     static_libs: [
-        "libadbconnection_server",
-        "libapp_processes_protos_lite",
         "libdiagnose_usb",
     ],
 
     shared_libs: [
+        "libadbconnection_server",
         "libadb_crypto",
         "libadb_pairing_connection",
         "libadb_protos",
         "libadb_tls_connection",
         "libadbd_auth",
+        "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
         "libcrypto",
@@ -432,6 +432,7 @@ cc_library_static {
             exclude_shared_libs: [
                 "libadb_pairing_auth",
                 "libadb_pairing_connection",
+                "libapp_processes_protos_lite",
             ],
         }
     },
@@ -458,9 +459,7 @@ cc_library {
     static_libs: [
         "libadbconnection_server",
         "libadbd_core",
-        "libapp_processes_protos_lite",
         "libdiagnose_usb",
-        "libprotobuf-cpp-lite",
     ],
 
     shared_libs: [
@@ -470,12 +469,14 @@ cc_library {
         "libadb_tls_connection",
         "libadbd_auth",
         "libadbd_fs",
+        "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
         "libcutils_sockets",
         "liblog",
+        "libprotobuf-cpp-lite",
     ],
 
     target: {
@@ -514,15 +515,14 @@ cc_library {
     // libminadbd wants both, as it's used to build native tests.
     compile_multilib: "both",
 
-    // libadbd doesn't build any additional source, but to expose libadbd_core as a shared library.
     whole_static_libs: [
-        "libadbconnection_server",
         "libadbd_core",
-        "libapp_processes_protos_lite",
-        "libprotobuf-cpp-lite",
     ],
 
     shared_libs: [
+        "libadbconnection_server",
+        "libapp_processes_protos_lite",
+        "libprotobuf-cpp-lite",
         "libadb_crypto",
         "libadb_pairing_connection",
         "libadb_tls_connection",
