@@ -29,7 +29,6 @@
 #include <android-base/unique_fd.h>
 #include <apex_manifest.pb.h>
 
-#include "property_service.h"
 #include "util.h"
 
 namespace android {
@@ -291,14 +290,6 @@ bool SwitchToDefaultMountNamespace() {
         return true;
     }
     if (default_ns_id != GetMountNamespaceId()) {
-        // The property service thread and its descendent threads must be in the correct mount
-        // namespace to call Service::Start(), however setns() only operates on a single thread and
-        // fails when secondary threads attempt to join the same mount namespace.  Therefore, we
-        // must join the property service thread and its descendents before the setns() call.  Those
-        // threads are then started again after the setns() call, and they'll be in the proper
-        // namespace.
-        PausePropertyService();
-
         if (setns(default_ns_fd.get(), CLONE_NEWNS) == -1) {
             PLOG(ERROR) << "Failed to switch back to the default mount namespace.";
             return false;
@@ -308,8 +299,6 @@ bool SwitchToDefaultMountNamespace() {
             LOG(ERROR) << result.error();
             return false;
         }
-
-        ResumePropertyService();
     }
 
     LOG(INFO) << "Switched to default mount namespace";
