@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <map>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -46,7 +47,9 @@ static const char* kErrorMessages[] = {
     "Allocation failed",
 };
 
-enum ErrorCodes : int32_t {
+enum ZipError : int32_t {
+  kSuccess = 0,
+
   kIterationEnd = -1,
 
   // We encountered a Zlib error when inflating a stream from this file.
@@ -149,12 +152,12 @@ class CdEntryMapInterface {
   // Adds an entry to the map. The |name| should internally points to the
   // filename field of a cd entry. And |start| points to the beginning of the
   // central directory. Returns 0 on success.
-  virtual int32_t AddToMap(std::string_view name, const uint8_t* start) = 0;
+  virtual ZipError AddToMap(std::string_view name, const uint8_t* start) = 0;
   // For the zip entry |entryName|, finds the offset of its filename field in
   // the central directory. Returns a pair of [status, offset]. The value of
   // the status is 0 on success.
-  virtual std::pair<int32_t, uint64_t> GetCdEntryOffset(std::string_view name,
-                                                        const uint8_t* cd_start) const = 0;
+  virtual std::pair<ZipError, uint64_t> GetCdEntryOffset(std::string_view name,
+                                                         const uint8_t* cd_start) const = 0;
   // Resets the iterator to the beginning of the map.
   virtual void ResetIteration() = 0;
   // Returns the [name, cd offset] of the current element. Also increments the
@@ -190,9 +193,9 @@ class CdEntryMapZip32 : public CdEntryMapInterface {
  public:
   static std::unique_ptr<CdEntryMapInterface> Create(uint16_t num_entries);
 
-  int32_t AddToMap(std::string_view name, const uint8_t* start) override;
-  std::pair<int32_t, uint64_t> GetCdEntryOffset(std::string_view name,
-                                                const uint8_t* cd_start) const override;
+  ZipError AddToMap(std::string_view name, const uint8_t* start) override;
+  std::pair<ZipError, uint64_t> GetCdEntryOffset(std::string_view name,
+                                                 const uint8_t* cd_start) const override;
   void ResetIteration() override;
   std::pair<std::string_view, uint64_t> Next(const uint8_t* cd_start) override;
 
@@ -208,6 +211,25 @@ class CdEntryMapZip32 : public CdEntryMapInterface {
 
   // The position of element for the current iteration.
   uint32_t current_position_{0};
+};
+
+// This implementation of CdEntryMap uses a std::map
+class CdEntryMapZip64 : public CdEntryMapInterface {
+ public:
+  static std::unique_ptr<CdEntryMapInterface> Create();
+
+  ZipError AddToMap(std::string_view name, const uint8_t* start) override;
+  std::pair<ZipError, uint64_t> GetCdEntryOffset(std::string_view name,
+                                                 const uint8_t* cd_start) const override;
+  void ResetIteration() override;
+  std::pair<std::string_view, uint64_t> Next(const uint8_t* cd_start) override;
+
+ private:
+  CdEntryMapZip64() = default;
+
+  std::map<std::string_view, uint64_t> entry_table_;
+
+  std::map<std::string_view, uint64_t>::iterator iterator_;
 };
 
 struct ZipArchive {
