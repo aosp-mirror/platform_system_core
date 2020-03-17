@@ -83,7 +83,7 @@ using unique_fd = android::base::unique_fd_impl<FdsanBypassCloser>;
 #define CRASH_DUMP_NAME "crash_dump32"
 #endif
 
-#define CRASH_DUMP_PATH "/system/bin/" CRASH_DUMP_NAME
+#define CRASH_DUMP_PATH "/apex/com.android.runtime/bin/" CRASH_DUMP_NAME
 
 // Wrappers that directly invoke the respective syscalls, in case the cached values are invalid.
 #pragma GCC poison getpid gettid
