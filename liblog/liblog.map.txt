@@ -77,7 +77,7 @@ LIBLOG_R { # introduced=30
     __android_log_set_logger;
     __android_log_set_minimum_priority;
     __android_log_stderr_logger;
-    __android_log_write_logger_data;
+    __android_log_write_log_message;
 };
 
 LIBLOG_PRIVATE {
