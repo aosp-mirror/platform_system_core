@@ -59,16 +59,15 @@ TEST(liblog_global_state, libbase_logs_with_liblog_set_logger) {
   static unsigned int expected_line;
   static std::string expected_message = "libbase test message";
 
-  auto liblog_logger_function = [](const struct __android_logger_data* logger_data,
-                                   const char* message) {
+  auto liblog_logger_function = [](const struct __android_log_message* log_message) {
     message_seen = true;
-    EXPECT_EQ(sizeof(__android_logger_data), logger_data->struct_size);
-    EXPECT_EQ(LOG_ID_DEFAULT, logger_data->buffer_id);
-    EXPECT_EQ(ANDROID_LOG_WARN, logger_data->priority);
-    EXPECT_STREQ(LOG_TAG, logger_data->tag);
-    EXPECT_EQ(expected_file, logger_data->file);
-    EXPECT_EQ(expected_line, logger_data->line);
-    EXPECT_EQ(expected_message, message);
+    EXPECT_EQ(sizeof(__android_log_message), log_message->struct_size);
+    EXPECT_EQ(LOG_ID_DEFAULT, log_message->buffer_id);
+    EXPECT_EQ(ANDROID_LOG_WARN, log_message->priority);
+    EXPECT_STREQ(LOG_TAG, log_message->tag);
+    EXPECT_EQ(expected_file, log_message->file);
+    EXPECT_EQ(expected_line, log_message->line);
+    EXPECT_EQ(expected_message, log_message->message);
   };
 
   __android_log_set_logger(liblog_logger_function);
@@ -111,16 +110,15 @@ TEST(liblog_global_state, liblog_logs_with_liblog_set_logger) {
   static int expected_priority = ANDROID_LOG_WARN;
   static std::string expected_message = "libbase test message";
 
-  auto liblog_logger_function = [](const struct __android_logger_data* logger_data,
-                                   const char* message) {
+  auto liblog_logger_function = [](const struct __android_log_message* log_message) {
     message_seen = true;
-    EXPECT_EQ(sizeof(__android_logger_data), logger_data->struct_size);
-    EXPECT_EQ(expected_buffer_id, logger_data->buffer_id);
-    EXPECT_EQ(expected_priority, logger_data->priority);
-    EXPECT_STREQ(LOG_TAG, logger_data->tag);
-    EXPECT_STREQ(nullptr, logger_data->file);
-    EXPECT_EQ(0U, logger_data->line);
-    EXPECT_EQ(expected_message, message);
+    EXPECT_EQ(sizeof(__android_log_message), log_message->struct_size);
+    EXPECT_EQ(expected_buffer_id, log_message->buffer_id);
+    EXPECT_EQ(expected_priority, log_message->priority);
+    EXPECT_STREQ(LOG_TAG, log_message->tag);
+    EXPECT_STREQ(nullptr, log_message->file);
+    EXPECT_EQ(0U, log_message->line);
+    EXPECT_EQ(expected_message, log_message->message);
   };
 
   __android_log_set_logger(liblog_logger_function);
