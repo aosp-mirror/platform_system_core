@@ -349,9 +349,9 @@ void LogdLogger::operator()(LogId id, LogSeverity severity, const char* tag,
 
   static auto& liblog_functions = GetLibLogFunctions();
   if (liblog_functions) {
-    __android_logger_data logger_data = {sizeof(__android_logger_data),     lg_id, priority, tag,
-                                         static_cast<const char*>(nullptr), 0};
-    liblog_functions->__android_log_logd_logger(&logger_data, message);
+    __android_log_message log_message = {sizeof(__android_log_message),     lg_id, priority, tag,
+                                         static_cast<const char*>(nullptr), 0,     message};
+    liblog_functions->__android_log_logd_logger(&log_message);
   } else {
     __android_log_buf_print(lg_id, priority, tag, "%s", message);
   }
@@ -426,13 +426,13 @@ void SetLogger(LogFunction&& logger) {
     // std::function<>, which is the not-thread-safe alternative.
     static std::atomic<LogFunction*> logger_function(nullptr);
     auto* old_logger_function = logger_function.exchange(new LogFunction(logger));
-    liblog_functions->__android_log_set_logger([](const struct __android_logger_data* logger_data,
-                                                  const char* message) {
-      auto log_id = log_id_tToLogId(logger_data->buffer_id);
-      auto severity = PriorityToLogSeverity(logger_data->priority);
+    liblog_functions->__android_log_set_logger([](const struct __android_log_message* log_message) {
+      auto log_id = log_id_tToLogId(log_message->buffer_id);
+      auto severity = PriorityToLogSeverity(log_message->priority);
 
       auto& function = *logger_function.load(std::memory_order_acquire);
-      function(log_id, severity, logger_data->tag, logger_data->file, logger_data->line, message);
+      function(log_id, severity, log_message->tag, log_message->file, log_message->line,
+               log_message->message);
     });
     delete old_logger_function;
   } else {
@@ -576,9 +576,9 @@ void LogMessage::LogLine(const char* file, unsigned int line, LogSeverity severi
   static auto& liblog_functions = GetLibLogFunctions();
   int32_t priority = LogSeverityToPriority(severity);
   if (liblog_functions) {
-    __android_logger_data logger_data = {
-        sizeof(__android_logger_data), LOG_ID_DEFAULT, priority, tag, file, line};
-    liblog_functions->__android_log_write_logger_data(&logger_data, message);
+    __android_log_message log_message = {
+        sizeof(__android_log_message), LOG_ID_DEFAULT, priority, tag, file, line, message};
+    liblog_functions->__android_log_write_log_message(&log_message);
   } else {
     if (tag == nullptr) {
       std::lock_guard<std::recursive_mutex> lock(TagLock());
