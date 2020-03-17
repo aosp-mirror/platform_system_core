@@ -18,23 +18,6 @@
 
 #include <stdint.h>
 
-static const char* kErrorMessages[] = {
-    "Success",
-    "Iteration ended",
-    "Zlib error",
-    "Invalid file",
-    "Invalid handle",
-    "Duplicate entries in archive",
-    "Empty archive",
-    "Entry not found",
-    "Invalid offset",
-    "Inconsistent information",
-    "Invalid entry name",
-    "I/O error",
-    "File mapping failed",
-    "Allocation failed",
-};
-
 enum ZipError : int32_t {
   kSuccess = 0,
 
