@@ -250,8 +250,7 @@ static uint64_t GetThreadId() {
 #endif
 }
 
-void __android_log_stderr_logger(const struct __android_logger_data* logger_data,
-                                 const char* message) {
+void __android_log_stderr_logger(const struct __android_log_message* log_message) {
   struct tm now;
   time_t t = time(nullptr);
 
@@ -268,33 +267,32 @@ void __android_log_stderr_logger(const struct __android_logger_data* logger_data
   static_assert(arraysize(log_characters) - 1 == ANDROID_LOG_SILENT,
                 "Mismatch in size of log_characters and values in android_LogPriority");
   int32_t priority =
-      logger_data->priority > ANDROID_LOG_SILENT ? ANDROID_LOG_FATAL : logger_data->priority;
+      log_message->priority > ANDROID_LOG_SILENT ? ANDROID_LOG_FATAL : log_message->priority;
   char priority_char = log_characters[priority];
   uint64_t tid = GetThreadId();
 
-  if (logger_data->file != nullptr) {
+  if (log_message->file != nullptr) {
     fprintf(stderr, "%s %c %s %5d %5" PRIu64 " %s:%u] %s\n",
-            logger_data->tag ? logger_data->tag : "nullptr", priority_char, timestamp, getpid(),
-            tid, logger_data->file, logger_data->line, message);
+            log_message->tag ? log_message->tag : "nullptr", priority_char, timestamp, getpid(),
+            tid, log_message->file, log_message->line, log_message->message);
   } else {
     fprintf(stderr, "%s %c %s %5d %5" PRIu64 " %s\n",
-            logger_data->tag ? logger_data->tag : "nullptr", priority_char, timestamp, getpid(),
-            tid, message);
+            log_message->tag ? log_message->tag : "nullptr", priority_char, timestamp, getpid(),
+            tid, log_message->message);
   }
 }
 
-void __android_log_logd_logger(const struct __android_logger_data* logger_data,
-                               const char* message) {
-  int buffer_id = logger_data->buffer_id == LOG_ID_DEFAULT ? LOG_ID_MAIN : logger_data->buffer_id;
+void __android_log_logd_logger(const struct __android_log_message* log_message) {
+  int buffer_id = log_message->buffer_id == LOG_ID_DEFAULT ? LOG_ID_MAIN : log_message->buffer_id;
 
   struct iovec vec[3];
   vec[0].iov_base =
-      const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(&logger_data->priority));
+      const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(&log_message->priority));
   vec[0].iov_len = 1;
-  vec[1].iov_base = const_cast<void*>(static_cast<const void*>(logger_data->tag));
-  vec[1].iov_len = strlen(logger_data->tag) + 1;
-  vec[2].iov_base = const_cast<void*>(static_cast<const void*>(message));
-  vec[2].iov_len = strlen(message) + 1;
+  vec[1].iov_base = const_cast<void*>(static_cast<const void*>(log_message->tag));
+  vec[1].iov_len = strlen(log_message->tag) + 1;
+  vec[2].iov_base = const_cast<void*>(static_cast<const void*>(log_message->message));
+  vec[2].iov_len = strlen(log_message->message) + 1;
 
   write_to_log(static_cast<log_id_t>(buffer_id), vec, 3);
 }
@@ -303,29 +301,29 @@ int __android_log_write(int prio, const char* tag, const char* msg) {
   return __android_log_buf_write(LOG_ID_MAIN, prio, tag, msg);
 }
 
-void __android_log_write_logger_data(__android_logger_data* logger_data, const char* msg) {
+void __android_log_write_log_message(__android_log_message* log_message) {
   ErrnoRestorer errno_restorer;
 
-  if (logger_data->buffer_id != LOG_ID_DEFAULT && logger_data->buffer_id != LOG_ID_MAIN &&
-      logger_data->buffer_id != LOG_ID_SYSTEM && logger_data->buffer_id != LOG_ID_RADIO &&
-      logger_data->buffer_id != LOG_ID_CRASH) {
+  if (log_message->buffer_id != LOG_ID_DEFAULT && log_message->buffer_id != LOG_ID_MAIN &&
+      log_message->buffer_id != LOG_ID_SYSTEM && log_message->buffer_id != LOG_ID_RADIO &&
+      log_message->buffer_id != LOG_ID_CRASH) {
     return;
   }
 
   auto tag_lock = std::shared_lock{default_tag_lock, std::defer_lock};
-  if (logger_data->tag == nullptr) {
+  if (log_message->tag == nullptr) {
     tag_lock.lock();
-    logger_data->tag = GetDefaultTag().c_str();
+    log_message->tag = GetDefaultTag().c_str();
   }
 
 #if __BIONIC__
-  if (logger_data->priority == ANDROID_LOG_FATAL) {
-    android_set_abort_message(msg);
+  if (log_message->priority == ANDROID_LOG_FATAL) {
+    android_set_abort_message(log_message->message);
   }
 #endif
 
   auto lock = std::shared_lock{logger_function_lock};
-  logger_function(logger_data, msg);
+  logger_function(log_message);
 }
 
 int __android_log_buf_write(int bufID, int prio, const char* tag, const char* msg) {
@@ -335,8 +333,9 @@ int __android_log_buf_write(int bufID, int prio, const char* tag, const char* ms
     return 0;
   }
 
-  __android_logger_data logger_data = {sizeof(__android_logger_data), bufID, prio, tag, nullptr, 0};
-  __android_log_write_logger_data(&logger_data, msg);
+  __android_log_message log_message = {
+      sizeof(__android_log_message), bufID, prio, tag, nullptr, 0, msg};
+  __android_log_write_log_message(&log_message);
   return 1;
 }
 
@@ -351,9 +350,9 @@ int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap)
 
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
 
-  __android_logger_data logger_data = {
-      sizeof(__android_logger_data), LOG_ID_MAIN, prio, tag, nullptr, 0};
-  __android_log_write_logger_data(&logger_data, buf);
+  __android_log_message log_message = {
+      sizeof(__android_log_message), LOG_ID_MAIN, prio, tag, nullptr, 0, buf};
+  __android_log_write_log_message(&log_message);
   return 1;
 }
 
@@ -371,9 +370,9 @@ int __android_log_print(int prio, const char* tag, const char* fmt, ...) {
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
   va_end(ap);
 
-  __android_logger_data logger_data = {
-      sizeof(__android_logger_data), LOG_ID_MAIN, prio, tag, nullptr, 0};
-  __android_log_write_logger_data(&logger_data, buf);
+  __android_log_message log_message = {
+      sizeof(__android_log_message), LOG_ID_MAIN, prio, tag, nullptr, 0, buf};
+  __android_log_write_log_message(&log_message);
   return 1;
 }
 
@@ -391,8 +390,9 @@ int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fm
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
   va_end(ap);
 
-  __android_logger_data logger_data = {sizeof(__android_logger_data), bufID, prio, tag, nullptr, 0};
-  __android_log_write_logger_data(&logger_data, buf);
+  __android_log_message log_message = {
+      sizeof(__android_log_message), bufID, prio, tag, nullptr, 0, buf};
+  __android_log_write_log_message(&log_message);
   return 1;
 }
 
