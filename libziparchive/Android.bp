@@ -60,6 +60,7 @@ cc_defaults {
     srcs: [
         "zip_archive.cc",
         "zip_archive_stream_entry.cc",
+        "zip_cd_entry_map.cc",
         "zip_writer.cc",
     ],
 
