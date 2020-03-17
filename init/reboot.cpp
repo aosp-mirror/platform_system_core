@@ -59,6 +59,7 @@
 #include "builtin_arguments.h"
 #include "init.h"
 #include "mount_namespace.h"
+#include "property_service.h"
 #include "reboot_utils.h"
 #include "service.h"
 #include "service_list.h"
@@ -85,7 +86,7 @@ static bool shutting_down = false;
 
 static const std::set<std::string> kDebuggingServices{"tombstoned", "logd", "adbd", "console"};
 
-static std::vector<Service*> GetDebuggingServices(bool only_post_data) REQUIRES(service_lock) {
+static std::vector<Service*> GetDebuggingServices(bool only_post_data) {
     std::vector<Service*> ret;
     ret.reserve(kDebuggingServices.size());
     for (const auto& s : ServiceList::GetInstance()) {
@@ -181,7 +182,7 @@ class MountEntry {
 };
 
 // Turn off backlight while we are performing power down cleanup activities.
-static void TurnOffBacklight() REQUIRES(service_lock) {
+static void TurnOffBacklight() {
     Service* service = ServiceList::GetInstance().FindService("blank_screen");
     if (service == nullptr) {
         LOG(WARNING) << "cannot find blank_screen in TurnOffBacklight";
@@ -589,7 +590,6 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // Start reboot monitor thread
     sem_post(&reboot_semaphore);
 
-    auto lock = std::lock_guard{service_lock};
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
     const std::set<std::string> to_starts{"watchdogd"};
     std::vector<Service*> stop_first;
@@ -709,21 +709,15 @@ static void EnterShutdown() {
     // Skip wait for prop if it is in progress
     ResetWaitForProp();
     // Clear EXEC flag if there is one pending
-    auto lock = std::lock_guard{service_lock};
     for (const auto& s : ServiceList::GetInstance()) {
         s->UnSetExec();
     }
-    // We no longer process messages about properties changing coming from property service, so we
-    // need to tell property service to stop sending us these messages, otherwise it'll fill the
-    // buffers and block indefinitely, causing future property sets, including those that init makes
-    // during shutdown in Service::NotifyStateChange() to also block indefinitely.
-    SendStopSendingMessagesMessage();
 }
 
 static void LeaveShutdown() {
     LOG(INFO) << "Leaving shutdown mode";
     shutting_down = false;
-    SendStartSendingMessagesMessage();
+    StartSendingMessages();
 }
 
 static Result<void> UnmountAllApexes() {
@@ -753,7 +747,6 @@ static Result<void> DoUserspaceReboot() {
         return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
     }
     EnterShutdown();
-    auto lock = std::lock_guard{service_lock};
     if (!SetProperty("sys.powerctl", "")) {
         return Error() << "Failed to reset sys.powerctl property";
     }
@@ -914,7 +907,6 @@ void HandlePowerctlMessage(const std::string& command) {
                 run_fsck = true;
             } else if (cmd_params[1] == "thermal") {
                 // Turn off sources of heat immediately.
-                auto lock = std::lock_guard{service_lock};
                 TurnOffBacklight();
                 // run_fsck is false to avoid delay
                 cmd = ANDROID_RB_THERMOFF;
@@ -984,6 +976,10 @@ void HandlePowerctlMessage(const std::string& command) {
         LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
         return;
     }
+
+    // We do not want to process any messages (queue'ing triggers, shutdown messages, control
+    // messages, etc) from properties during reboot.
+    StopSendingMessages();
 
     if (userspace_reboot) {
         HandleUserspaceReboot();
