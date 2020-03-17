@@ -24,11 +24,14 @@
 #include <unistd.h>
 
 #include <memory>
+#include <set>
+#include <string_view>
 #include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/mapped_file.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <ziparchive/zip_archive.h>
@@ -51,6 +54,76 @@ static const std::vector<uint8_t> kBTxtContents{'a', 'b', 'c', 'd', 'e', 'f', 'g
 static int32_t OpenArchiveWrapper(const std::string& name, ZipArchiveHandle* handle) {
   const std::string abs_path = test_data_dir + "/" + name;
   return OpenArchive(abs_path.c_str(), handle);
+}
+
+class CdEntryMapTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    names_ = {
+        "a.txt", "b.txt", "b/", "b/c.txt", "b/d.txt",
+    };
+    separator_ = "separator";
+    header_ = "metadata";
+    joined_names_ = header_ + android::base::Join(names_, separator_);
+    base_ptr_ = reinterpret_cast<uint8_t*>(&joined_names_[0]);
+
+    entry_maps_.emplace_back(CdEntryMapZip32::Create(static_cast<uint16_t>(names_.size())));
+    entry_maps_.emplace_back(CdEntryMapZip64::Create());
+    for (auto& cd_map : entry_maps_) {
+      ASSERT_NE(nullptr, cd_map);
+      size_t offset = header_.size();
+      for (const auto& name : names_) {
+        auto status = cd_map->AddToMap(
+            std::string_view{joined_names_.c_str() + offset, name.size()}, base_ptr_);
+        ASSERT_EQ(0, status);
+        offset += name.size() + separator_.size();
+      }
+    }
+  }
+
+  std::vector<std::string> names_;
+  // A continuous region of memory serves as a mock of the central directory.
+  std::string joined_names_;
+  // We expect some metadata at the beginning of the central directory and between filenames.
+  std::string header_;
+  std::string separator_;
+
+  std::vector<std::unique_ptr<CdEntryMapInterface>> entry_maps_;
+  uint8_t* base_ptr_{nullptr};  // Points to the start of the central directory.
+};
+
+TEST_F(CdEntryMapTest, AddDuplicatedEntry) {
+  for (auto& cd_map : entry_maps_) {
+    std::string_view name = "b.txt";
+    ASSERT_NE(0, cd_map->AddToMap(name, base_ptr_));
+  }
+}
+
+TEST_F(CdEntryMapTest, FindEntry) {
+  for (auto& cd_map : entry_maps_) {
+    uint64_t expected_offset = header_.size();
+    for (const auto& name : names_) {
+      auto [status, offset] = cd_map->GetCdEntryOffset(name, base_ptr_);
+      ASSERT_EQ(status, kSuccess);
+      ASSERT_EQ(offset, expected_offset);
+      expected_offset += name.size() + separator_.size();
+    }
+  }
+}
+
+TEST_F(CdEntryMapTest, Iteration) {
+  std::set<std::string_view> expected(names_.begin(), names_.end());
+  for (auto& cd_map : entry_maps_) {
+    cd_map->ResetIteration();
+    std::set<std::string_view> entry_set;
+    auto ret = cd_map->Next(base_ptr_);
+    while (ret != std::pair<std::string_view, uint64_t>{}) {
+      auto [it, insert_status] = entry_set.insert(ret.first);
+      ASSERT_TRUE(insert_status);
+      ret = cd_map->Next(base_ptr_);
+    }
+    ASSERT_EQ(expected, entry_set);
+  }
 }
 
 TEST(ziparchive, Open) {
