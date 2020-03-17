@@ -28,7 +28,6 @@ init_common_sources = [
     "rlimit_parser.cpp",
     "service.cpp",
     "service_list.cpp",
-    "service_lock.cpp",
     "service_parser.cpp",
     "service_utils.cpp",
     "subcontext.cpp",
