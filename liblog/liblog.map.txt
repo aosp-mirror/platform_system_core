@@ -1,6 +1,6 @@
 LIBLOG {
   global:
-    android_name_to_log_id; # llndk
+    android_name_to_log_id; # apex llndk
     android_log_id_to_name; # llndk
     __android_log_assert;
     __android_log_buf_print;
@@ -22,7 +22,7 @@ LIBLOG_L {
     android_logger_list_alloc; # apex llndk
     android_logger_list_alloc_time; # apex llndk
     android_logger_list_free; # apex llndk
-    android_logger_list_open; # llndk
+    android_logger_list_open; # apex llndk
     android_logger_list_read; # apex llndk
     android_logger_open; # apex llndk
     android_logger_set_log_size; # llndk
