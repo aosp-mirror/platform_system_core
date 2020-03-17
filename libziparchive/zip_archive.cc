@@ -107,15 +107,15 @@ static uint32_t ComputeHash(std::string_view name) {
 }
 
 // Convert a ZipEntry to a hash table index, verifying that it's in a valid range.
-std::pair<int32_t, uint64_t> CdEntryMapZip32::GetCdEntryOffset(std::string_view name,
-                                                               const uint8_t* start) const {
+std::pair<ZipError, uint64_t> CdEntryMapZip32::GetCdEntryOffset(std::string_view name,
+                                                                const uint8_t* start) const {
   const uint32_t hash = ComputeHash(name);
 
   // NOTE: (hash_table_size - 1) is guaranteed to be non-negative.
   uint32_t ent = hash & (hash_table_size_ - 1);
   while (hash_table_[ent].name_offset != 0) {
     if (hash_table_[ent].ToStringView(start) == name) {
-      return {0, hash_table_[ent].name_offset};
+      return {kSuccess, hash_table_[ent].name_offset};
     }
     ent = (ent + 1) & (hash_table_size_ - 1);
   }
@@ -124,7 +124,7 @@ std::pair<int32_t, uint64_t> CdEntryMapZip32::GetCdEntryOffset(std::string_view 
   return {kEntryNotFound, 0};
 }
 
-int32_t CdEntryMapZip32::AddToMap(std::string_view name, const uint8_t* start) {
+ZipError CdEntryMapZip32::AddToMap(std::string_view name, const uint8_t* start) {
   const uint64_t hash = ComputeHash(name);
   uint32_t ent = hash & (hash_table_size_ - 1);
 
@@ -145,7 +145,7 @@ int32_t CdEntryMapZip32::AddToMap(std::string_view name, const uint8_t* start) {
   const char* start_char = reinterpret_cast<const char*>(start);
   hash_table_[ent].name_offset = static_cast<uint32_t>(name.data() - start_char);
   hash_table_[ent].name_length = static_cast<uint16_t>(name.size());
-  return 0;
+  return kSuccess;
 }
 
 void CdEntryMapZip32::ResetIteration() {
@@ -166,6 +166,11 @@ std::pair<std::string_view, uint64_t> CdEntryMapZip32::Next(const uint8_t* cd_st
 }
 
 CdEntryMapZip32::CdEntryMapZip32(uint16_t num_entries) {
+  /*
+   * Create hash table.  We have a minimum 75% load factor, possibly as
+   * low as 50% after we round off to a power of 2.  There must be at
+   * least one unused entry to avoid an infinite loop during creation.
+   */
   hash_table_size_ = RoundUpPower2(1 + (num_entries * 4) / 3);
   hash_table_ = {
       reinterpret_cast<ZipStringOffset*>(calloc(hash_table_size_, sizeof(ZipStringOffset))), free};
@@ -177,6 +182,43 @@ std::unique_ptr<CdEntryMapInterface> CdEntryMapZip32::Create(uint16_t num_entrie
       << "Zip: unable to allocate the " << entry_map->hash_table_size_
       << " entry hash_table, entry size: " << sizeof(ZipStringOffset);
   return std::unique_ptr<CdEntryMapInterface>(entry_map);
+}
+
+std::unique_ptr<CdEntryMapInterface> CdEntryMapZip64::Create() {
+  return std::unique_ptr<CdEntryMapInterface>(new CdEntryMapZip64());
+}
+
+ZipError CdEntryMapZip64::AddToMap(std::string_view name, const uint8_t* start) {
+  const auto [it, added] =
+      entry_table_.insert({name, name.data() - reinterpret_cast<const char*>(start)});
+  if (!added) {
+    ALOGW("Zip: Found duplicate entry %.*s", static_cast<int>(name.size()), name.data());
+    return kDuplicateEntry;
+  }
+  return kSuccess;
+}
+
+std::pair<ZipError, uint64_t> CdEntryMapZip64::GetCdEntryOffset(std::string_view name,
+                                                                const uint8_t* /*cd_start*/) const {
+  const auto it = entry_table_.find(name);
+  if (it == entry_table_.end()) {
+    ALOGV("Zip: Could not find entry %.*s", static_cast<int>(name.size()), name.data());
+    return {kEntryNotFound, 0};
+  }
+
+  return {kSuccess, it->second};
+}
+
+void CdEntryMapZip64::ResetIteration() {
+  iterator_ = entry_table_.begin();
+}
+
+std::pair<std::string_view, uint64_t> CdEntryMapZip64::Next(const uint8_t* /*cd_start*/) {
+  if (iterator_ == entry_table_.end()) {
+    return {};
+  }
+
+  return *iterator_++;
 }
 
 #if defined(__BIONIC__)
@@ -357,12 +399,12 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
   const size_t cd_length = archive->central_directory.GetMapLength();
   const uint16_t num_entries = archive->num_entries;
 
-  /*
-   * Create hash table.  We have a minimum 75% load factor, possibly as
-   * low as 50% after we round off to a power of 2.  There must be at
-   * least one unused entry to avoid an infinite loop during creation.
-   */
-  archive->cd_entry_map = CdEntryMapZip32::Create(num_entries);
+  // TODO(xunchang) parse the zip64 Eocd
+  if (num_entries > UINT16_MAX) {
+    archive->cd_entry_map = CdEntryMapZip64::Create();
+  } else {
+    archive->cd_entry_map = CdEntryMapZip32::Create(num_entries);
+  }
   if (archive->cd_entry_map == nullptr) {
     return kAllocationFailed;
   }
