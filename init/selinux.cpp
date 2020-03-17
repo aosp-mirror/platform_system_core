@@ -539,9 +539,9 @@ void SelinuxRestoreContext() {
 
     // adb remount, snapshot-based updates, and DSUs all create files during
     // first-stage init.
-    selinux_android_restorecon("/metadata", SELINUX_ANDROID_RESTORECON_RECURSE);
-
     selinux_android_restorecon(SnapshotManager::GetGlobalRollbackIndicatorPath().c_str(), 0);
+    selinux_android_restorecon("/metadata/gsi", SELINUX_ANDROID_RESTORECON_RECURSE |
+                                                        SELINUX_ANDROID_RESTORECON_SKIP_SEHASH);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {
