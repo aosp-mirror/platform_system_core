@@ -41,8 +41,7 @@ using Size = int64_t;
 
 static inline int32_t read_int32(borrowed_fd fd) {
     int32_t result;
-    ReadFully(fd, &result, sizeof(result));
-    return result;
+    return ReadFdExactly(fd, &result, sizeof(result)) ? result : -1;
 }
 
 static inline void append_int(borrowed_fd fd, std::vector<char>* bytes) {
@@ -54,11 +53,14 @@ static inline void append_int(borrowed_fd fd, std::vector<char>* bytes) {
 
 static inline void append_bytes_with_size(borrowed_fd fd, std::vector<char>* bytes) {
     int32_t le_size = read_int32(fd);
+    if (le_size < 0) {
+        return;
+    }
     int32_t size = int32_t(le32toh(le_size));
     auto old_size = bytes->size();
     bytes->resize(old_size + sizeof(le_size) + size);
     memcpy(bytes->data() + old_size, &le_size, sizeof(le_size));
-    ReadFully(fd, bytes->data() + old_size + sizeof(le_size), size);
+    ReadFdExactly(fd, bytes->data() + old_size + sizeof(le_size), size);
 }
 
 static inline std::pair<std::vector<char>, int32_t> read_id_sig_headers(borrowed_fd fd) {
@@ -200,7 +202,7 @@ std::optional<Process> install(std::vector<std::string> files) {
         return {};
     }
     auto [pipe_read_fd, pipe_write_fd] = print_fds;
-    auto pipe_write_fd_param = std::to_string(pipe_write_fd);
+    auto pipe_write_fd_param = std::to_string(intptr_t(adb_get_os_handle(pipe_write_fd)));
     close_on_exec(pipe_read_fd);
 
     std::vector<std::string> args(std::move(files));
