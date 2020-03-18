@@ -25,13 +25,10 @@ namespace base {
 
 struct LibLogFunctions {
   void (*__android_log_set_logger)(__android_logger_function logger);
-  void (*__android_log_write_logger_data)(struct __android_logger_data* logger_data,
-                                          const char* msg);
+  void (*__android_log_write_log_message)(struct __android_log_message* log_message);
 
-  void (*__android_log_logd_logger)(const struct __android_logger_data* logger_data,
-                                    const char* msg);
-  void (*__android_log_stderr_logger)(const struct __android_logger_data* logger_data,
-                                      const char* message);
+  void (*__android_log_logd_logger)(const struct __android_log_message* log_message);
+  void (*__android_log_stderr_logger)(const struct __android_log_message* log_message);
 
   void (*__android_log_set_aborter)(__android_aborter_function aborter);
   void (*__android_log_call_aborter)(const char* abort_message);

@@ -1,0 +1,7 @@
+cc_test {
+    name: "init_kill_services_test",
+    srcs: ["init_kill_services_test.cpp"],
+    shared_libs: ["libbase"],
+    test_suites: ["general-tests"],
+    require_root: true,
+}
