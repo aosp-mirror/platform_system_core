@@ -71,6 +71,7 @@ int main(int argc, char** argv) {
     bool flag_dump_perf = false;
     int opt;
 
+    signal(SIGPIPE, SIG_IGN);
     android::base::InitLogging(argv, android::base::LogdLogger(android::base::SYSTEM));
 
     for (;;) {
