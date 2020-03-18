@@ -16,10 +16,8 @@
 
 #include "liblog_symbols.h"
 
-#if defined(__ANDROID__)
-#if !defined(NO_LIBLOG_DLSYM) || defined(__ANDROID_APEX__)
+#if defined(__ANDROID_SDK_VERSION__) && (__ANDROID_SDK_VERSION__ <= 29)
 #define USE_DLSYM
-#endif
 #endif
 
 #ifdef USE_DLSYM
