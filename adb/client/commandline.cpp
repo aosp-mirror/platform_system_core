@@ -1443,6 +1443,26 @@ static bool _is_valid_ack_reply_fd(const int ack_reply_fd) {
 #endif
 }
 
+static bool _is_valid_fd(int fd) {
+    // Disallow invalid FDs and stdin/out/err as well.
+    if (fd < 3) {
+        return false;
+    }
+#ifdef _WIN32
+    HANDLE handle = adb_get_os_handle(fd);
+    DWORD info = 0;
+    if (GetHandleInformation(handle, &info) == 0) {
+        return false;
+    }
+#else
+    int flags = fcntl(fd, F_GETFD);
+    if (flags == -1) {
+        return false;
+    }
+#endif
+    return true;
+}
+
 int adb_commandline(int argc, const char** argv) {
     bool no_daemon = false;
     bool is_daemon = false;
@@ -2009,17 +2029,28 @@ int adb_commandline(int argc, const char** argv) {
             }
         }
     } else if (!strcmp(argv[0], "inc-server")) {
-        if (argc < 3) {
-            error_exit("usage: adb inc-server FD FILE1 FILE2 ...");
+        if (argc < 4) {
+#ifdef _WIN32
+            error_exit("usage: adb inc-server CONNECTION_HANDLE OUTPUT_HANDLE FILE1 FILE2 ...");
+#else
+            error_exit("usage: adb inc-server CONNECTION_FD OUTPUT_FD FILE1 FILE2 ...");
+#endif
         }
-        int fd = atoi(argv[1]);
-        if (fd < 3) {
-            // Disallow invalid FDs and stdin/out/err as well.
-            error_exit("Invalid fd number given: %d", fd);
+        int connection_fd = atoi(argv[1]);
+        if (!_is_valid_fd(connection_fd)) {
+            error_exit("Invalid connection_fd number given: %d", connection_fd);
         }
-        fd = adb_register_socket(fd);
-        close_on_exec(fd);
-        return incremental::serve(fd, argc - 2, argv + 2);
+
+        connection_fd = adb_register_socket(connection_fd);
+        close_on_exec(connection_fd);
+
+        int output_fd = atoi(argv[2]);
+        if (!_is_valid_fd(output_fd)) {
+            error_exit("Invalid output_fd number given: %d", output_fd);
+        }
+        output_fd = adb_register_socket(output_fd);
+        close_on_exec(output_fd);
+        return incremental::serve(connection_fd, output_fd, argc - 3, argv + 3);
     }
 
     error_exit("unknown command %s", argv[0]);
