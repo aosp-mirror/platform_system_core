@@ -447,8 +447,6 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
 // that don't match the specified pid, and writes them to the tombstone file.
 //
 // If "tail" is non-zero, log the last "tail" number of lines.
-static EventTagMap* g_eventTagMap = NULL;
-
 static void dump_log_file(log_t* log, pid_t pid, const char* filename, unsigned int tail) {
   bool first = true;
   logger_list* logger_list;
@@ -506,21 +504,6 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename, unsigned 
     struct tm* ptm;
     ptm = localtime_r(&sec, &tmBuf);
     strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
-
-    if (log_entry.id() == LOG_ID_EVENTS) {
-      if (!g_eventTagMap) {
-        g_eventTagMap = android_openEventTagMap(nullptr);
-      }
-      AndroidLogEntry e;
-      char buf[512];
-      if (android_log_processBinaryLogBuffer(&log_entry.entry, &e, g_eventTagMap, buf,
-                                             sizeof(buf)) == 0) {
-        _LOG(log, logtype::LOGS, "%s.%03d %5d %5d %c %-8.*s: %s\n", timeBuf,
-             log_entry.entry.nsec / 1000000, log_entry.entry.pid, log_entry.entry.tid, 'I',
-             (int)e.tagLen, e.tag, e.message);
-      }
-      continue;
-    }
 
     char* msg = log_entry.msg();
     if (msg == nullptr) {
