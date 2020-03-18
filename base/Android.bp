@@ -70,10 +70,6 @@ cc_defaults {
         "test_utils.cpp",
     ],
 
-    static: {
-        cflags: ["-DNO_LIBLOG_DLSYM"],
-    },
-
     cppflags: ["-Wexit-time-destructors"],
     shared_libs: ["liblog"],
     target: {
