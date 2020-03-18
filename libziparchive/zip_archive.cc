@@ -1026,20 +1026,6 @@ int32_t ExtractEntryToFile(ZipArchiveHandle archive, ZipEntry* entry, int fd) {
   return ExtractToWriter(archive, entry, &writer);
 }
 
-const char* ErrorCodeString(int32_t error_code) {
-  // Make sure that the number of entries in kErrorMessages and ErrorCodes
-  // match.
-  static_assert((-kLastErrorCode + 1) == arraysize(kErrorMessages),
-                "(-kLastErrorCode + 1) != arraysize(kErrorMessages)");
-
-  const uint32_t idx = -error_code;
-  if (idx < arraysize(kErrorMessages)) {
-    return kErrorMessages[idx];
-  }
-
-  return "Unknown return code";
-}
-
 int GetFileDescriptor(const ZipArchiveHandle archive) {
   return archive->mapped_zip.GetFileDescriptor();
 }
