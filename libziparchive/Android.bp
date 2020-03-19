@@ -61,6 +61,7 @@ cc_defaults {
         "zip_archive.cc",
         "zip_archive_stream_entry.cc",
         "zip_cd_entry_map.cc",
+        "zip_error.cpp",
         "zip_writer.cc",
     ],
 
