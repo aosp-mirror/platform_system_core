@@ -233,6 +233,15 @@ int BatteryMonitor::getIntField(const String8& path) {
     return value;
 }
 
+bool BatteryMonitor::isScopedPowerSupply(const char* name) {
+    constexpr char kScopeDevice[] = "Device";
+
+    String8 path;
+    path.appendFormat("%s/%s/scope", POWER_SUPPLY_SYSFS_PATH, name);
+    std::string scope;
+    return (readFromFile(path, &scope) > 0 && scope == kScopeDevice);
+}
+
 void BatteryMonitor::updateValues(void) {
     initHealthInfo(mHealthInfo.get());
 
@@ -547,6 +556,11 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                 break;
 
             case ANDROID_POWER_SUPPLY_TYPE_BATTERY:
+                // Some devices expose the battery status of sub-component like
+                // stylus. Such a device-scoped battery info needs to be skipped
+                // in BatteryMonitor, which is intended to report the status of
+                // the battery supplying the power to the whole system.
+                if (isScopedPowerSupply(name)) continue;
                 mBatteryDevicePresent = true;
 
                 if (mHealthdConfig->batteryStatusPath.isEmpty()) {
