@@ -464,7 +464,7 @@ static std::vector<char> LoadBootableImage(const std::string& kernel, const std:
     }
 
     // Is this actually a boot image?
-    if (kernel_data.size() < sizeof(boot_img_hdr_v2)) {
+    if (kernel_data.size() < sizeof(boot_img_hdr_v3)) {
         die("cannot load '%s': too short", kernel.c_str());
     }
     if (!memcmp(kernel_data.data(), BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
@@ -493,7 +493,7 @@ static std::vector<char> LoadBootableImage(const std::string& kernel, const std:
 
     std::vector<char> dtb_data;
     if (!g_dtb_path.empty()) {
-        if (g_boot_img_hdr.header_version < 2) {
+        if (g_boot_img_hdr.header_version != 2) {
                     die("Argument dtb not supported for boot image header version %d\n",
                         g_boot_img_hdr.header_version);
         }
