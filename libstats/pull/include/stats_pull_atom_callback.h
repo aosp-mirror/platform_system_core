@@ -112,6 +112,8 @@ typedef AStatsManager_PullAtomCallbackReturn (*AStatsManager_PullAtomCallback)(
  * invoke the callback when the stats service determines that this atom needs to be
  * pulled.
  *
+ * Requires the REGISTER_STATS_PULL_ATOM permission.
+ *
  * \param atom_tag          The tag of the atom for this pull atom callback.
  * \param metadata          Optional metadata specifying the timeout, cool down time, and
  *                          additive fields for mapping isolated to host uids.
@@ -127,6 +129,8 @@ void AStatsManager_registerPullAtomCallback(int32_t atom_tag,
 /**
  * Unregisters a callback for an atom when that atom is to be pulled. Note that any ongoing
  * pulls will still occur.
+ *
+ * Requires the REGISTER_STATS_PULL_ATOM permission.
  *
  * \param atomTag           The tag of the atom of which to unregister
  */
