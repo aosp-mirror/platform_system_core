@@ -298,6 +298,7 @@ cc_binary_host {
         "client/fastdeploycallbacks.cpp",
         "client/incremental.cpp",
         "client/incremental_server.cpp",
+        "client/incremental_utils.cpp",
         "shell_service_protocol.cpp",
     ],
 

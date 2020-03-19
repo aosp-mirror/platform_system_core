@@ -713,8 +713,15 @@ int SecondStageMain(int argc, char** argv) {
     InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
 
-    // Will handle EPIPE at the time of write by checking the errno
-    signal(SIGPIPE, SIG_IGN);
+    // Init should not crash because of a dependence on any other process, therefore we ignore
+    // SIGPIPE and handle EPIPE at the call site directly.  Note that setting a signal to SIG_IGN
+    // is inherited across exec, but custom signal handlers are not.  Since we do not want to
+    // ignore SIGPIPE for child processes, we set a no-op function for the signal handler instead.
+    {
+        struct sigaction action = {.sa_flags = SA_RESTART};
+        action.sa_handler = [](int) {};
+        sigaction(SIGPIPE, &action, nullptr);
+    }
 
     // Set init and its forked children's oom_adj.
     if (auto result =
