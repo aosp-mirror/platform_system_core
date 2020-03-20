@@ -76,7 +76,7 @@ void storage_info_t::load_perf_history_proto(const IOPerfHistory& perf_history)
     if (!perf_history.has_day_start_sec() ||
         perf_history.daily_perf_size() > (int)daily_perf.size() ||
         perf_history.weekly_perf_size() > (int)weekly_perf.size()) {
-        LOG_TO(SYSTEM, ERROR) << "Invalid IOPerfHistory proto";
+        LOG(ERROR) << "Invalid IOPerfHistory proto";
         return;
     }
 
@@ -114,7 +114,7 @@ void storage_info_t::refresh(IOPerfHistory* perf_history)
 {
     struct statvfs buf;
     if (statvfs(userdata_path.c_str(), &buf) != 0) {
-        PLOG_TO(SYSTEM, WARNING) << "Failed to get userdata info";
+        PLOG(WARNING) << "Failed to get userdata info";
         return;
     }
 
@@ -328,12 +328,12 @@ void ufs_info_t::report()
 void health_storage_info_t::report() {
     auto ret = mHealth->getStorageInfo([this](auto result, const auto& halInfos) {
         if (result == Result::NOT_SUPPORTED) {
-            LOG_TO(SYSTEM, DEBUG) << "getStorageInfo is not supported on health HAL.";
+            LOG(DEBUG) << "getStorageInfo is not supported on health HAL.";
             return;
         }
         if (result != Result::SUCCESS || halInfos.size() == 0) {
-            LOG_TO(SYSTEM, ERROR) << "getStorageInfo failed with result " << toString(result)
-                                  << " and size " << halInfos.size();
+            LOG(ERROR) << "getStorageInfo failed with result " << toString(result) << " and size "
+                       << halInfos.size();
             return;
         }
         set_values_from_hal_storage_info(halInfos[0]);
@@ -341,7 +341,7 @@ void health_storage_info_t::report() {
     });
 
     if (!ret.isOk()) {
-        LOG_TO(SYSTEM, ERROR) << "getStorageInfo failed with " << ret.description();
+        LOG(ERROR) << "getStorageInfo failed with " << ret.description();
     }
 }
 

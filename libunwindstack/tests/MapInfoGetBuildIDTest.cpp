@@ -50,7 +50,8 @@ class MapInfoGetBuildIDTest : public ::testing::Test {
     elf_interface_ = new ElfInterfaceFake(memory_);
     elf_->FakeSetInterface(elf_interface_);
     elf_container_.reset(elf_);
-    map_info_.reset(new MapInfo(nullptr, 0x1000, 0x20000, 0, PROT_READ | PROT_WRITE, tf_->path));
+    map_info_.reset(
+        new MapInfo(nullptr, nullptr, 0x1000, 0x20000, 0, PROT_READ | PROT_WRITE, tf_->path));
   }
 
   void MultipleThreadTest(std::string expected_build_id);
@@ -64,7 +65,7 @@ class MapInfoGetBuildIDTest : public ::testing::Test {
 };
 
 TEST_F(MapInfoGetBuildIDTest, no_elf_and_no_valid_elf_in_memory) {
-  MapInfo info(nullptr, 0x1000, 0x2000, 0, PROT_READ, "");
+  MapInfo info(nullptr, nullptr, 0x1000, 0x2000, 0, PROT_READ, "");
 
   EXPECT_EQ("", info.GetBuildID());
   EXPECT_EQ("", info.GetPrintableBuildID());

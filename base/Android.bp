@@ -33,6 +33,7 @@ cc_defaults {
 cc_library_headers {
     name: "libbase_headers",
     vendor_available: true,
+    ramdisk_available: true,
     recovery_available: true,
     host_supported: true,
     native_bridge_supported: true,
@@ -46,6 +47,10 @@ cc_library_headers {
             enabled: true,
         },
     },
+    apex_available: [
+        "//apex_available:anyapex",
+        "//apex_available:platform",
+    ],
 }
 
 cc_defaults {
@@ -56,6 +61,7 @@ cc_defaults {
         "chrono_utils.cpp",
         "cmsg.cpp",
         "file.cpp",
+        "liblog_symbols.cpp",
         "logging.cpp",
         "mapped_file.cpp",
         "parsebool.cpp",
@@ -107,6 +113,7 @@ cc_library {
     name: "libbase",
     defaults: ["libbase_defaults"],
     vendor_available: true,
+    ramdisk_available: true,
     recovery_available: true,
     host_supported: true,
     native_bridge_supported: true,
@@ -121,6 +128,10 @@ cc_library {
     static_libs: ["fmtlib"],
     whole_static_libs: ["fmtlib"],
     export_static_lib_headers: ["fmtlib"],
+    apex_available: [
+        "//apex_available:anyapex",
+        "//apex_available:platform",
+    ],
 }
 
 cc_library_static {
@@ -190,6 +201,23 @@ cc_test {
         },
     },
     test_suites: ["device-tests"],
+}
+
+cc_test {
+    name: "libbase_tidy_test",
+    defaults: ["libbase_cflags_defaults"],
+    host_supported: true,
+
+    tidy: true,
+    tidy_checks_as_errors: ["bugprone-use-after-move"],
+
+    srcs: [
+        "tidy/unique_fd_test.cpp",
+        "tidy/unique_fd_test2.cpp",
+    ],
+
+    shared_libs: ["libbase"],
+    test_suites: ["device_tests"],
 }
 
 cc_benchmark {

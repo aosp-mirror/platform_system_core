@@ -111,8 +111,8 @@ std::vector<Register> ExpectedRegisters<RegsArm64>() {
   result.push_back({"x27", ARM64_REG_R27});
   result.push_back({"x28", ARM64_REG_R28});
   result.push_back({"x29", ARM64_REG_R29});
-  result.push_back({"sp", ARM64_REG_SP});
   result.push_back({"lr", ARM64_REG_LR});
+  result.push_back({"sp", ARM64_REG_SP});
   result.push_back({"pc", ARM64_REG_PC});
   result.push_back({"pst", ARM64_REG_PSTATE});
   return result;

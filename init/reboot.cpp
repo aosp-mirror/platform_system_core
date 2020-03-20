@@ -59,6 +59,7 @@
 #include "builtin_arguments.h"
 #include "init.h"
 #include "mount_namespace.h"
+#include "property_service.h"
 #include "reboot_utils.h"
 #include "service.h"
 #include "service_list.h"
@@ -94,6 +95,13 @@ static std::vector<Service*> GetDebuggingServices(bool only_post_data) {
         }
     }
     return ret;
+}
+
+static void PersistRebootReason(const char* reason, bool write_to_property) {
+    if (write_to_property) {
+        SetProperty(LAST_REBOOT_REASON_PROPERTY, reason);
+    }
+    WriteStringToFile(reason, LAST_REBOOT_REASON_FILE);
 }
 
 // represents umount status during reboot / shutdown.
@@ -180,7 +188,7 @@ static void TurnOffBacklight() {
         LOG(WARNING) << "cannot find blank_screen in TurnOffBacklight";
         return;
     }
-    if (auto result = service->Start(); !result) {
+    if (auto result = service->Start(); !result.ok()) {
         LOG(WARNING) << "Could not start blank_screen service: " << result.error();
     }
 }
@@ -530,14 +538,6 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     Timer t;
     LOG(INFO) << "Reboot start, reason: " << reason << ", reboot_target: " << reboot_target;
 
-    // If /data isn't mounted then we can skip the extra reboot steps below, since we don't need to
-    // worry about unmounting it.
-    if (!IsDataMounted()) {
-        sync();
-        RebootSystem(cmd, reboot_target);
-        abort();
-    }
-
     // Ensure last reboot reason is reduced to canonical
     // alias reported in bootloader or system boot reason.
     size_t skip = 0;
@@ -547,8 +547,16 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
          reasons[1] == "hard" || reasons[1] == "warm")) {
         skip = strlen("reboot,");
     }
-    SetProperty(LAST_REBOOT_REASON_PROPERTY, reason.c_str() + skip);
+    PersistRebootReason(reason.c_str() + skip, true);
     sync();
+
+    // If /data isn't mounted then we can skip the extra reboot steps below, since we don't need to
+    // worry about unmounting it.
+    if (!IsDataMounted()) {
+        sync();
+        RebootSystem(cmd, reboot_target);
+        abort();
+    }
 
     bool is_thermal_shutdown = cmd == ANDROID_RB_THERMOFF;
 
@@ -591,14 +599,14 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
             // keep debugging tools until non critical ones are all gone.
             s->SetShutdownCritical();
         } else if (to_starts.count(s->name())) {
-            if (auto result = s->Start(); !result) {
+            if (auto result = s->Start(); !result.ok()) {
                 LOG(ERROR) << "Could not start shutdown 'to_start' service '" << s->name()
                            << "': " << result.error();
             }
             s->SetShutdownCritical();
         } else if (s->IsShutdownCritical()) {
             // Start shutdown critical service if not started.
-            if (auto result = s->Start(); !result) {
+            if (auto result = s->Start(); !result.ok()) {
                 LOG(ERROR) << "Could not start shutdown critical service '" << s->name()
                            << "': " << result.error();
             }
@@ -704,17 +712,12 @@ static void EnterShutdown() {
     for (const auto& s : ServiceList::GetInstance()) {
         s->UnSetExec();
     }
-    // We no longer process messages about properties changing coming from property service, so we
-    // need to tell property service to stop sending us these messages, otherwise it'll fill the
-    // buffers and block indefinitely, causing future property sets, including those that init makes
-    // during shutdown in Service::NotifyStateChange() to also block indefinitely.
-    SendStopSendingMessagesMessage();
 }
 
 static void LeaveShutdown() {
     LOG(INFO) << "Leaving shutdown mode";
     shutting_down = false;
-    SendStartSendingMessagesMessage();
+    StartSendingMessages();
 }
 
 static Result<void> UnmountAllApexes() {
@@ -731,22 +734,22 @@ static Result<void> UnmountAllApexes() {
 
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
-    boot_clock::time_point now = boot_clock::now();
-    SetProperty("sys.init.userspace_reboot.last_started",
-                std::to_string(now.time_since_epoch().count()));
     auto guard = android::base::make_scope_guard([] {
         // Leave shutdown so that we can handle a full reboot.
         LeaveShutdown();
-        trigger_shutdown("reboot,abort-userspace-reboot");
+        trigger_shutdown("reboot,userspace_failed,shutdown_aborted");
     });
     // Triggering userspace-reboot-requested will result in a bunch of setprop
     // actions. We should make sure, that all of them are propagated before
-    // proceeding with userspace reboot. Synchronously setting kUserspaceRebootInProgress property
-    // is not perfect, but it should do the trick.
+    // proceeding with userspace reboot. Synchronously setting sys.init.userspace_reboot.in_progress
+    // property is not perfect, but it should do the trick.
     if (!android::sysprop::InitProperties::userspace_reboot_in_progress(true)) {
         return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
     }
     EnterShutdown();
+    if (!SetProperty("sys.powerctl", "")) {
+        return Error() << "Failed to reset sys.powerctl property";
+    }
     std::vector<Service*> stop_first;
     // Remember the services that were enabled. We will need to manually enable them again otherwise
     // triggers like class_start won't restart them.
@@ -773,10 +776,10 @@ static Result<void> DoUserspaceReboot() {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
-    if (auto result = KillZramBackingDevice(); !result) {
+    if (auto result = KillZramBackingDevice(); !result.ok()) {
         return result;
     }
-    if (auto result = CallVdc("volume", "reset"); !result) {
+    if (auto result = CallVdc("volume", "reset"); !result.ok()) {
         return result;
     }
     if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */), 5s,
@@ -791,7 +794,7 @@ static Result<void> DoUserspaceReboot() {
         sync();
         LOG(INFO) << "sync() took " << sync_timer;
     }
-    if (auto result = UnmountAllApexes(); !result) {
+    if (auto result = UnmountAllApexes(); !result.ok()) {
         return result;
     }
     if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
@@ -810,6 +813,7 @@ static Result<void> DoUserspaceReboot() {
         LOG(INFO) << "Re-enabling service '" << s->name() << "'";
         s->Enable();
     }
+    ServiceList::GetInstance().ResetState();
     LeaveShutdown();
     ActionManager::GetInstance().QueueEventTrigger("userspace-reboot-resume");
     guard.Disable();  // Go on with userspace reboot.
@@ -828,19 +832,25 @@ static void UserspaceRebootWatchdogThread() {
     if (!WaitForProperty("sys.boot_completed", "1", timeout)) {
         LOG(ERROR) << "Failed to boot in " << timeout.count() << "ms. Switching to full reboot";
         // In this case device is in a boot loop. Only way to recover is to do dirty reboot.
-        RebootSystem(ANDROID_RB_RESTART2, "userspace-reboot-watchdog-triggered");
+        // Since init might be wedged, don't try to write reboot reason into a persistent property.
+        PersistRebootReason("userspace_failed,watchdog_triggered", false);
+        RebootSystem(ANDROID_RB_RESTART2, "userspace_failed,watchdog_triggered");
     }
     LOG(INFO) << "Device booted, stopping userspace reboot watchdog";
 }
 
 static void HandleUserspaceReboot() {
+    if (!android::sysprop::InitProperties::is_userspace_reboot_supported().value_or(false)) {
+        LOG(ERROR) << "Attempted a userspace reboot on a device that doesn't support it";
+        return;
+    }
     // Spinnig up a separate thread will fail the setns call later in the boot sequence.
     // Fork a new process to monitor userspace reboot while we are investigating a better solution.
     pid_t pid = fork();
     if (pid < 0) {
         PLOG(ERROR) << "Failed to fork process for userspace reboot watchdog. Switching to full "
                     << "reboot";
-        trigger_shutdown("reboot,userspace-reboot-failed-to-fork");
+        trigger_shutdown("reboot,userspace_failed,watchdog_fork");
         return;
     }
     if (pid == 0) {
@@ -854,6 +864,30 @@ static void HandleUserspaceReboot() {
     am.QueueEventTrigger("userspace-reboot-requested");
     auto handler = [](const BuiltinArguments&) { return DoUserspaceReboot(); };
     am.QueueBuiltinAction(handler, "userspace-reboot");
+}
+
+/**
+ * Check if "command" field is set in bootloader message.
+ *
+ * If "command" field is broken (contains non-printable characters prior to
+ * terminating zero), it will be zeroed.
+ *
+ * @param[in,out] boot Bootloader message (BCB) structure
+ * @return true if "command" field is already set, and false if it's empty
+ */
+static bool CommandIsPresent(bootloader_message* boot) {
+    if (boot->command[0] == '\0')
+        return false;
+
+    for (size_t i = 0; i < arraysize(boot->command); ++i) {
+        if (boot->command[i] == '\0')
+            return true;
+        if (!isprint(boot->command[i]))
+            break;
+    }
+
+    memset(boot->command, 0, sizeof(boot->command));
+    return false;
 }
 
 void HandlePowerctlMessage(const std::string& command) {
@@ -908,7 +942,7 @@ void HandlePowerctlMessage(const std::string& command) {
                 }
                 // Update the boot command field if it's empty, and preserve
                 // the other arguments in the bootloader message.
-                if (boot.command[0] == '\0') {
+                if (!CommandIsPresent(&boot)) {
                     strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
                     if (std::string err; !write_bootloader_message(boot, &err)) {
                         LOG(ERROR) << "Failed to set bootloader message: " << err;
@@ -942,6 +976,10 @@ void HandlePowerctlMessage(const std::string& command) {
         LOG(ERROR) << "powerctl: unrecognized command '" << command << "'";
         return;
     }
+
+    // We do not want to process any messages (queue'ing triggers, shutdown messages, control
+    // messages, etc) from properties during reboot.
+    StopSendingMessages();
 
     if (userspace_reboot) {
         HandleUserspaceReboot();

@@ -35,6 +35,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <bionic/reserved_signals.h>
 #include <cutils/sockets.h>
 #include <procinfo/process.h>
 
@@ -50,7 +51,7 @@ using android::base::unique_fd;
 using android::base::WriteStringToFd;
 
 static bool send_signal(pid_t pid, const DebuggerdDumpType dump_type) {
-  const int signal = (dump_type == kDebuggerdJavaBacktrace) ? SIGQUIT : DEBUGGER_SIGNAL;
+  const int signal = (dump_type == kDebuggerdJavaBacktrace) ? SIGQUIT : BIONIC_SIGNAL_DEBUGGER;
   sigval val;
   val.sival_int = (dump_type == kDebuggerdNativeBacktrace) ? 1 : 0;
 

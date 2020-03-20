@@ -852,7 +852,7 @@ std::unique_ptr<LpMetadata> MetadataBuilder::Export() {
             return nullptr;
         }
 
-        if (partition->attributes() & LP_PARTITION_ATTR_UPDATED) {
+        if (partition->attributes() & LP_PARTITION_ATTRIBUTE_MASK_V1) {
             static const uint16_t kMinVersion = LP_METADATA_VERSION_FOR_UPDATED_ATTR;
             metadata->header.minor_version = std::max(metadata->header.minor_version, kMinVersion);
         }

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <functional>
+#include <iostream>
 #include <string>
 
 #include <android-base/macros.h>
@@ -26,6 +27,7 @@
 #include <update_engine/update_metadata.pb.h>
 
 #include <libsnapshot/auto_device.h>
+#include <libsnapshot/snapshot.h>
 
 namespace android {
 namespace snapshot {
@@ -110,7 +112,7 @@ std::vector<android::fs_mgr::Partition*> ListPartitionsWithSuffix(
         android::fs_mgr::MetadataBuilder* builder, const std::string& suffix);
 
 // Initialize a device before using it as the COW device for a dm-snapshot device.
-bool InitializeCow(const std::string& device);
+Return InitializeCow(const std::string& device);
 
 // "Atomically" write string to file. This is done by a series of actions:
 // 1. Write to path + ".tmp"
@@ -118,6 +120,14 @@ bool InitializeCow(const std::string& device);
 // Note that rename() is an atomic operation. This function may not work properly if there
 // is an open fd to |path|, because that fd has an old view of the file.
 bool WriteStringToFileAtomic(const std::string& content, const std::string& path);
+
+// Writes current time to a given stream.
+struct Now {};
+std::ostream& operator<<(std::ostream& os, const Now&);
+
+// Append to |extents|. Merged into the last element if possible.
+void AppendExtent(google::protobuf::RepeatedPtrField<chromeos_update_engine::Extent>* extents,
+                  uint64_t start_block, uint64_t num_blocks);
 
 }  // namespace snapshot
 }  // namespace android

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <android-base/logging.h>
+
 #include "charger.sysprop.h"
 #include "healthd_mode_charger.h"
 #include "healthd_mode_charger_nops.h"
@@ -23,6 +25,7 @@
 #endif
 
 int main(int argc, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
     if (CHARGER_FORCE_NO_UI || android::sysprop::ChargerProperties::no_ui().value_or(false)) {
         return healthd_charger_nops(argc, argv);
     } else {

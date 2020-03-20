@@ -16,6 +16,11 @@ on early-init
     # Disable sysrq from keyboard
     write /proc/sys/kernel/sysrq 0
 
+    # Android doesn't need kernel module autoloading, and it causes SELinux
+    # denials.  So disable it by setting modprobe to the empty string.  Note: to
+    # explicitly set a sysctl to an empty string, a trailing newline is needed.
+    write /proc/sys/kernel/modprobe \n
+
     # Set the security context of /adb_keys if present.
     restorecon /adb_keys
 
@@ -32,15 +37,32 @@ on early-init
     # cgroup for system_server and surfaceflinger
     mkdir /dev/memcg/system 0550 system system
 
+    # symlink the Android specific /dev/tun to Linux expected /dev/net/tun
+    mkdir /dev/net 0755 root root
+    symlink ../tun /dev/net/tun
+
     # set RLIMIT_NICE to allow priorities from 19 to -20
     setrlimit nice 40 40
 
     # Allow up to 32K FDs per process
     setrlimit nofile 32768 32768
 
+    # Set up linker config subdirectories based on mount namespaces
+    mkdir /linkerconfig/bootstrap 0755
+    mkdir /linkerconfig/default 0755
+
+    # Disable dm-verity hash prefetching, since it doesn't help performance
+    # Read more in b/136247322
+    write /sys/module/dm_verity/parameters/prefetch_cluster 0
+
     # Generate ld.config.txt for early executed processes
-    exec -- /system/bin/linkerconfig --target /linkerconfig/ld.config.txt
-    chmod 444 /linkerconfig/ld.config.txt
+    exec -- /system/bin/linkerconfig --target /linkerconfig/bootstrap
+    chmod 644 /linkerconfig/bootstrap/ld.config.txt
+    copy /linkerconfig/bootstrap/ld.config.txt /linkerconfig/default/ld.config.txt
+    chmod 644 /linkerconfig/default/ld.config.txt
+
+    # Mount bootstrap linker configuration as current
+    mount none /linkerconfig/bootstrap /linkerconfig bind rec
 
     start ueventd
 
@@ -48,6 +70,9 @@ on early-init
     # become available. Note that this is executed as exec_start to ensure that
     # the libraries are available to the processes started after this statement.
     exec_start apexd-bootstrap
+
+    # Generate linker config based on apex mounted in bootstrap namespace
+    update_linker_config
 
     # These must already exist by the time boringssl_self_test32 / boringssl_self_test64 run.
     mkdir /dev/boringssl 0755 root root
@@ -94,15 +119,6 @@ on init
     symlink /proc/self/fd/1 /dev/stdout
     symlink /proc/self/fd/2 /dev/stderr
 
-    symlink /system/bin /bin
-    symlink /system/etc /etc
-
-    # Backward compatibility.
-    symlink /sys/kernel/debug /d
-
-    # Link /vendor to /system/vendor for devices without a vendor partition.
-    symlink /system/vendor /vendor
-
     # Create energy-aware scheduler tuning nodes
     mkdir /dev/stune/foreground
     mkdir /dev/stune/background
@@ -123,6 +139,14 @@ on init
     chmod 0664 /dev/stune/background/tasks
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
+
+    # Create an stune group for NNAPI HAL processes
+    mkdir /dev/stune/nnapi-hal
+    chown system system /dev/stune/nnapi-hal
+    chown system system /dev/stune/nnapi-hal/tasks
+    chmod 0664 /dev/stune/nnapi-hal/tasks
+    write /dev/stune/nnapi-hal/schedtune.boost 1
+    write /dev/stune/nnapi-hal/schedtune.prefer_idle 1
 
     # Create blkio group and apply initial settings.
     # This feature needs kernel to support it, and the
@@ -145,11 +169,24 @@ on init
     chmod 0770 /config/sdcardfs
     chown system package_info /config/sdcardfs
 
+    # Mount binderfs
+    mkdir /dev/binderfs
+    mount binder binder /dev/binderfs stats=global
+    chmod 0755 /dev/binderfs
+
+    symlink /dev/binderfs/binder /dev/binder
+    symlink /dev/binderfs/hwbinder /dev/hwbinder
+    symlink /dev/binderfs/vndbinder /dev/vndbinder
+
+    chmod 0666 /dev/binderfs/hwbinder
+    chmod 0666 /dev/binderfs/binder
+    chmod 0666 /dev/binderfs/vndbinder
+
     mkdir /mnt/secure 0700 root root
     mkdir /mnt/secure/asec 0700 root root
     mkdir /mnt/asec 0755 root system
     mkdir /mnt/obb 0755 root system
-    mkdir /mnt/media_rw 0750 root media_rw
+    mkdir /mnt/media_rw 0750 root external_storage
     mkdir /mnt/user 0755 root root
     mkdir /mnt/user/0 0755 root root
     mkdir /mnt/user/0/self 0755 root root
@@ -157,11 +194,11 @@ on init
     mkdir /mnt/user/0/emulated/0 0755 root root
 
     # Prepare directories for pass through processes
-    mkdir /mnt/pass_through 0755 root root
-    mkdir /mnt/pass_through/0 0755 root root
-    mkdir /mnt/pass_through/0/self 0755 root root
-    mkdir /mnt/pass_through/0/emulated 0755 root root
-    mkdir /mnt/pass_through/0/emulated/0 0755 root root
+    mkdir /mnt/pass_through 0700 root root
+    mkdir /mnt/pass_through/0 0710 root media_rw
+    mkdir /mnt/pass_through/0/self 0710 root media_rw
+    mkdir /mnt/pass_through/0/emulated 0710 root media_rw
+    mkdir /mnt/pass_through/0/emulated/0 0710 root media_rw
 
     mkdir /mnt/expand 0771 system system
     mkdir /mnt/appfuse 0711 root root
@@ -178,7 +215,6 @@ on init
     mkdir /mnt/runtime/full/self 0755 root root
 
     # Symlink to keep legacy apps working in multi-user world
-    symlink /storage/self/primary /sdcard
     symlink /storage/self/primary /mnt/sdcard
     symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
 
@@ -355,6 +391,10 @@ on init
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
     # Start lmkd before any other services run so that it can register them
+    chown root system /sys/module/lowmemorykiller/parameters/adj
+    chmod 0664 /sys/module/lowmemorykiller/parameters/adj
+    chown root system /sys/module/lowmemorykiller/parameters/minfree
+    chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
     start lmkd
 
     # Start essential services.
@@ -465,6 +505,7 @@ on post-fs
     mkdir /metadata/vold
     chmod 0700 /metadata/vold
     mkdir /metadata/password_slots 0771 root system
+    mkdir /metadata/bootstat 0750 system log
     mkdir /metadata/ota 0700 root system
     mkdir /metadata/ota/snapshots 0700 root system
 
@@ -473,6 +514,7 @@ on post-fs
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
+    chmod 0755 /sys/kernel/tracing
     chmod 0755 /sys/kernel/debug/tracing
 
     # HALs required before storage encryption can get unlocked (FBE/FDE)
@@ -535,6 +577,7 @@ on post-fs-data
     chown bluetooth bluetooth /data/misc/bluedroid/bt_config.conf
     mkdir /data/misc/bluetooth 0770 bluetooth bluetooth
     mkdir /data/misc/bluetooth/logs 0770 bluetooth bluetooth
+    mkdir /data/misc/credstore 0700 credstore credstore
     mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/gatekeeper 0700 system system
     mkdir /data/misc/keychain 0771 system system
@@ -572,12 +615,15 @@ on post-fs-data
     # profile file layout
     mkdir /data/misc/profiles 0771 system system
     mkdir /data/misc/profiles/cur 0771 system system
-    mkdir /data/misc/profiles/ref 0771 system system
+    mkdir /data/misc/profiles/ref 0770 system system
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
     mkdir /data/misc/installd 0700 root root
-    mkdir /data/misc/apexdata 0700 root root
+    mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
+    mkdir /data/misc/snapshotctl_log 0755 root root
+    # create location to store pre-reboot information
+    mkdir /data/misc/prereboot 0700 system system
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -658,15 +704,9 @@ on post-fs-data
     mkdir /data/user/0 0700 system system encryption=None
     mount none /data/data /data/user/0 bind rec
 
-    # Special-case /data/media/obb per b/64566063
-    mkdir /data/media 0770 media_rw media_rw encryption=None
-    mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
-
     # A tmpfs directory, which will contain all apps CE DE data directory that
     # bind mount from the original source.
-    chown root root /data_mirror
-    chmod 0700 /data_mirror
-    mount tmpfs tmpfs /data_mirror mode=0700,uid=0,gid=1000 nodev noexec nosuid
+    mount tmpfs tmpfs /data_mirror nodev noexec nosuid mode=0700,uid=0,gid=1000
     restorecon /data_mirror
     mkdir /data_mirror/data_ce 0700 root root
     mkdir /data_mirror/data_de 0700 root root
@@ -679,6 +719,10 @@ on post-fs-data
     mount none /data/user /data_mirror/data_ce/null bind rec
     mount none /data/user_de /data_mirror/data_de/null bind rec
 
+    # Create mirror directory for jit profiles
+    mkdir /data_mirror/cur_profiles 0700 root root
+    mount none /data/misc/profiles/cur /data_mirror/cur_profiles bind rec
+
     mkdir /data/cache 0770 system cache encryption=Require
     mkdir /data/cache/recovery 0770 system cache
     mkdir /data/cache/backup_stage 0700 system system
@@ -689,15 +733,33 @@ on post-fs-data
     mkdir /data/rollback-observer 0700 system system encryption=DeleteIfNecessary
 
     # Create root dir for Incremental Service
-    mkdir /data/incremental 0770 system system encryption=None
+    mkdir /data/incremental 0771 system system encryption=Require
+
+    # Create directories for statsd
+    mkdir /data/misc/stats-active-metric/ 0770 statsd system
+    mkdir /data/misc/stats-data/ 0770 statsd system
+    mkdir /data/misc/stats-metadata/ 0770 statsd system
+    mkdir /data/misc/stats-service/ 0770 statsd system
+    mkdir /data/misc/train-info/ 0770 statsd system
 
     # Wait for apexd to finish activating APEXes before starting more processes.
-    wait_for_prop apexd.status ready
+    wait_for_prop apexd.status activated
     perform_apex_config
+
+    # Special-case /data/media/obb per b/64566063
+    mkdir /data/media 0770 media_rw media_rw encryption=None
+    exec - media_rw media_rw -- /system/bin/chattr +F /data/media
+    mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
 
     exec_start derive_sdk
 
     init_user0
+
+    # Allow apexd to snapshot and restore device encrypted apex data in the case
+    # of a rollback. This should be done immediately after DE_user data keys
+    # are loaded. APEXes should not access this data until this has been
+    # completed and apexd.status becomes "ready".
+    exec_start apexd-snapshotde
 
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
@@ -716,6 +778,9 @@ on post-fs-data
     # until it is confirmed that apps and vendor processes don't make
     # IOCTLs on ashmem fds any more.
     setprop sys.use_memfd false
+
+    # Explicitly disable FUSE
+    setprop persist.sys.fuse false
 
     # Set fscklog permission
     chown root system /dev/fscklogs/log
@@ -774,10 +839,6 @@ on boot
     # parameters to match how it is managing things.
     write /proc/sys/vm/overcommit_memory 1
     write /proc/sys/vm/min_free_order_shift 4
-    chown root system /sys/module/lowmemorykiller/parameters/adj
-    chmod 0664 /sys/module/lowmemorykiller/parameters/adj
-    chown root system /sys/module/lowmemorykiller/parameters/minfree
-    chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
 
     # System server manages zram writeback
     chown root system /sys/block/zram0/idle
@@ -924,14 +985,33 @@ on property:sys.sysctl.extra_free_kbytes=*
 on property:sys.sysctl.tcp_def_init_rwnd=*
     write /proc/sys/net/ipv4/tcp_default_init_rwnd ${sys.sysctl.tcp_def_init_rwnd}
 
-on property:security.perf_harden=0
+# perf_event_open syscall security:
+# Newer kernels have the ability to control the use of the syscall via SELinux
+# hooks. init tests for this, and sets sys_init.perf_lsm_hooks to 1 if the
+# kernel has the hooks. In this case, the system-wide perf_event_paranoid
+# sysctl is set to -1 (unrestricted use), and the SELinux policy is used for
+# controlling access. On older kernels, the paranoid value is the only means of
+# controlling access. It is normally 3 (allow only root), but the shell user
+# can lower it to 1 (allowing thread-scoped pofiling) via security.perf_harden.
+on property:sys.init.perf_lsm_hooks=1
+    write /proc/sys/kernel/perf_event_paranoid -1
+on property:security.perf_harden=0 && property:sys.init.perf_lsm_hooks=""
     write /proc/sys/kernel/perf_event_paranoid 1
+on property:security.perf_harden=1 && property:sys.init.perf_lsm_hooks=""
+    write /proc/sys/kernel/perf_event_paranoid 3
+
+# Additionally, simpleperf profiler uses debug.* and security.perf_harden
+# sysprops to be able to indirectly set these sysctls.
+on property:security.perf_harden=0
     write /proc/sys/kernel/perf_event_max_sample_rate ${debug.perf_event_max_sample_rate:-100000}
     write /proc/sys/kernel/perf_cpu_time_max_percent ${debug.perf_cpu_time_max_percent:-25}
     write /proc/sys/kernel/perf_event_mlock_kb ${debug.perf_event_mlock_kb:-516}
-
+# Default values.
 on property:security.perf_harden=1
-    write /proc/sys/kernel/perf_event_paranoid 3
+    write /proc/sys/kernel/perf_event_max_sample_rate 100000
+    write /proc/sys/kernel/perf_cpu_time_max_percent 25
+    write /proc/sys/kernel/perf_event_mlock_kb 516
+
 
 # on shutdown
 # In device's init.rc, this trigger can be used to do device-specific actions
@@ -966,9 +1046,14 @@ on init && property:ro.debuggable=1
 
 on userspace-reboot-requested
   # TODO(b/135984674): reset all necessary properties here.
-  setprop sys.boot_completed 0
-  setprop sys.init.updatable_crashing 0
+  setprop sys.boot_completed ""
+  setprop dev.bootcomplete ""
+  setprop sys.init.updatable_crashing ""
+  setprop sys.init.updatable_crashing_process_name ""
   setprop apexd.status ""
+  setprop sys.user.0.ce_available ""
+  setprop sys.shutdown.requested ""
+  setprop service.bootanim.exit ""
 
 on userspace-reboot-fs-remount
   # Make sure that vold is running.
@@ -978,6 +1063,7 @@ on userspace-reboot-fs-remount
   exec - system system -- /system/bin/vdc checkpoint resetCheckpoint
   exec - system system -- /system/bin/vdc checkpoint markBootAttempt
   remount_userdata
+  start bootanim
 
 on userspace-reboot-resume
   trigger userspace-reboot-fs-remount
@@ -987,4 +1073,4 @@ on userspace-reboot-resume
   trigger boot
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
-  finish_userspace_reboot
+  setprop sys.init.userspace_reboot.in_progress ""

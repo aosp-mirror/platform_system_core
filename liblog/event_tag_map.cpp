@@ -36,7 +36,6 @@
 #include <utils/FastStrcmp.h>
 #include <utils/RWLock.h>
 
-#include "log_portability.h"
 #include "logd_reader.h"
 
 #define OUT_TAG "EventTagMap"

@@ -26,24 +26,20 @@ TEST(BuilderTest, VBMetaTableBasic) {
     std::unique_ptr<SuperVBMetaBuilder> builder = std::make_unique<SuperVBMetaBuilder>();
     ASSERT_NE(builder, nullptr);
 
-    Result<uint8_t> vbmeta_index = builder->AddVBMetaImage("vbmeta" /* vbmeta_name */
-    );
-    EXPECT_TRUE(vbmeta_index);
+    Result<uint8_t> vbmeta_index = builder->AddVBMetaImage("vbmeta" /* vbmeta_name */);
+    EXPECT_RESULT_OK(vbmeta_index);
 
-    Result<uint8_t> vbmeta_system_slot = builder->AddVBMetaImage("vbmeta_system" /* vbmeta_name */
-    );
-    EXPECT_TRUE(vbmeta_system_slot);
+    Result<uint8_t> vbmeta_system_slot = builder->AddVBMetaImage("vbmeta_system" /* vbmeta_name */);
+    EXPECT_RESULT_OK(vbmeta_system_slot);
 
-    Result<uint8_t> vbmeta_vendor_slot = builder->AddVBMetaImage("vbmeta_vendor" /* vbmeta_name */
-    );
-    EXPECT_TRUE(vbmeta_vendor_slot);
+    Result<uint8_t> vbmeta_vendor_slot = builder->AddVBMetaImage("vbmeta_vendor" /* vbmeta_name */);
+    EXPECT_RESULT_OK(vbmeta_vendor_slot);
 
-    builder->DeleteVBMetaImage("vbmeta_system" /* vbmeta_name */
-    );
+    builder->DeleteVBMetaImage("vbmeta_system" /* vbmeta_name */);
 
-    Result<uint8_t> vbmeta_product_slot = builder->AddVBMetaImage("vbmeta_product" /* vbmeta_name */
-    );
-    EXPECT_TRUE(vbmeta_product_slot);
+    Result<uint8_t> vbmeta_product_slot =
+            builder->AddVBMetaImage("vbmeta_product" /* vbmeta_name */);
+    EXPECT_RESULT_OK(vbmeta_product_slot);
 
     std::unique_ptr<VBMetaTable> table = builder->ExportVBMetaTable();
     ASSERT_NE(table, nullptr);

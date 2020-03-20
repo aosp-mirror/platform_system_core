@@ -86,7 +86,7 @@ void ServiceList::MarkServicesUpdate() {
             LOG(ERROR) << "delayed service '" << name << "' could not be found.";
             continue;
         }
-        if (auto result = service->Start(); !result) {
+        if (auto result = service->Start(); !result.ok()) {
             LOG(ERROR) << result.error().message();
         }
     }

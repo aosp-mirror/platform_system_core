@@ -14,8 +14,11 @@
 
 #include <libsnapshot/test_helpers.h>
 
+#include <sys/statvfs.h>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <openssl/sha.h>
@@ -165,6 +168,68 @@ void SetSize(PartitionUpdate* partition_update, uint64_t size) {
 
 uint64_t GetSize(PartitionUpdate* partition_update) {
     return partition_update->mutable_new_partition_info()->size();
+}
+
+AssertionResult LowSpaceUserdata::Init(uint64_t max_free_space) {
+    auto res = ReadUserdataStats();
+    if (!res) return res;
+
+    // Try to fill up the disk as much as possible until free_space_ <= max_free_space.
+    big_file_ = std::make_unique<TemporaryFile>();
+    if (big_file_->fd == -1) {
+        return AssertionFailure() << strerror(errno);
+    }
+    if (!android::base::StartsWith(big_file_->path, kUserDataDevice)) {
+        return AssertionFailure() << "Temp file allocated to " << big_file_->path << ", not in "
+                                  << kUserDataDevice;
+    }
+    uint64_t next_consume =
+            std::min(free_space_ - max_free_space, (uint64_t)std::numeric_limits<off_t>::max());
+    off_t allocated = 0;
+    while (next_consume > 0 && free_space_ > max_free_space) {
+        int status = fallocate(big_file_->fd, 0, allocated, next_consume);
+        if (status == -1 && errno == ENOSPC) {
+            next_consume /= 2;
+            continue;
+        }
+        if (status == -1) {
+            return AssertionFailure() << strerror(errno);
+        }
+        allocated += next_consume;
+
+        res = ReadUserdataStats();
+        if (!res) return res;
+    }
+
+    LOG(INFO) << allocated << " bytes allocated to " << big_file_->path;
+    initialized_ = true;
+    return AssertionSuccess();
+}
+
+AssertionResult LowSpaceUserdata::ReadUserdataStats() {
+    struct statvfs buf;
+    if (statvfs(kUserDataDevice, &buf) == -1) {
+        return AssertionFailure() << strerror(errno);
+    }
+    bsize_ = buf.f_bsize;
+    free_space_ = buf.f_bsize * buf.f_bfree;
+    available_space_ = buf.f_bsize * buf.f_bavail;
+    return AssertionSuccess();
+}
+
+uint64_t LowSpaceUserdata::free_space() const {
+    CHECK(initialized_);
+    return free_space_;
+}
+
+uint64_t LowSpaceUserdata::available_space() const {
+    CHECK(initialized_);
+    return available_space_;
+}
+
+uint64_t LowSpaceUserdata::bsize() const {
+    CHECK(initialized_);
+    return bsize_;
 }
 
 }  // namespace snapshot

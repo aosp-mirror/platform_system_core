@@ -1,0 +1,11 @@
+<manifest version="1.0" type="device">
+    <hal format="hidl">
+        <name>android.hardware.confirmationui</name>
+        <transport>hwbinder</transport>
+        <version>1.0</version>
+        <interface>
+        <name>IConfirmationUI</name>
+            <instance>default</instance>
+        </interface>
+    </hal>
+</manifest>

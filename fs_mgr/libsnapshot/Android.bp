@@ -24,15 +24,13 @@ cc_defaults {
     ],
     shared_libs: [
         "libbase",
+        "libcutils",
         "liblog",
         "liblp",
     ],
     static_libs: [
-        "libcutils",
         "libdm",
-        "libfs_mgr",
         "libfstab",
-        "liblp",
         "update_metadata-protos",
     ],
     whole_static_libs: [
@@ -74,8 +72,10 @@ filegroup {
         "android/snapshot/snapshot.proto",
         "device_info.cpp",
         "snapshot.cpp",
+        "snapshot_stats.cpp",
         "snapshot_metadata_updater.cpp",
         "partition_cow_creator.cpp",
+        "return.cpp",
         "utility.cpp",
     ],
 }
@@ -93,8 +93,8 @@ cc_library_static {
         "libsnapshot_hal_deps",
     ],
     srcs: [":libsnapshot_sources"],
-    whole_static_libs: [
-        "libfiemap_binder",
+    static_libs: [
+        "libfs_mgr_binder"
     ],
 }
 
@@ -103,8 +103,8 @@ cc_library_static {
     defaults: ["libsnapshot_defaults"],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
-    whole_static_libs: [
-        "libfiemap_passthrough",
+    static_libs: [
+        "libfs_mgr",
     ],
 }
 
@@ -116,8 +116,8 @@ cc_library_static {
     ],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
-    whole_static_libs: [
-        "libfiemap_passthrough",
+    static_libs: [
+        "libfs_mgr",
     ],
 }
 
@@ -128,6 +128,7 @@ cc_library_static {
         "include_test",
     ],
     srcs: [
+        "android/snapshot/snapshot.proto",
         "test_helpers.cpp",
     ],
     shared_libs: [
@@ -144,41 +145,54 @@ cc_library_static {
         "libstorage_literals_headers",
     ],
     static_libs: [
-        "libgtest",
+        "libfs_mgr",
         "libgmock",
+        "libgtest",
     ],
 }
 
-cc_test {
-    name: "libsnapshot_test",
+cc_defaults {
+    name: "libsnapshot_test_defaults",
     defaults: ["libsnapshot_defaults"],
     srcs: [
-        "snapshot_test.cpp",
         "partition_cow_creator_test.cpp",
         "snapshot_metadata_updater_test.cpp",
-        "test_helpers.cpp",
+        "snapshot_test.cpp",
     ],
     shared_libs: [
+        "android.hardware.boot@1.0",
+        "android.hardware.boot@1.1",
         "libbinder",
         "libcrypto",
         "libhidlbase",
         "libprotobuf-cpp-lite",
+        "libsparse",
         "libutils",
+        "libz",
     ],
     static_libs: [
-        "android.hardware.boot@1.0",
-        "android.hardware.boot@1.1",
         "libfs_mgr",
+        "libgsi",
         "libgmock",
         "liblp",
         "libsnapshot",
         "libsnapshot_test_helpers",
-        "libsparse",
-        "libz",
     ],
     header_libs: [
         "libstorage_literals_headers",
     ],
+    test_suites: [
+        "vts-core",
+        "device-tests"
+    ],
+    test_min_api_level: 29,
+    auto_gen_config: true,
+    require_root: true,
+}
+
+cc_test {
+    name: "vts_libsnapshot_test",
+    defaults: ["libsnapshot_test_defaults"],
 }
 
 cc_binary {
@@ -187,9 +201,6 @@ cc_binary {
         "snapshotctl.cpp",
     ],
     static_libs: [
-        "libdm",
-        "libext2_uuid",
-        "libfiemap_binder",
         "libfstab",
         "libsnapshot",
     ],
@@ -198,16 +209,14 @@ cc_binary {
         "android.hardware.boot@1.1",
         "libbase",
         "libbinder",
-        "libbinderthreadstate",
+        "libext2_uuid",
         "libext4_utils",
-        "libfs_mgr",
+        "libfs_mgr_binder",
         "libhidlbase",
         "liblog",
         "liblp",
         "libprotobuf-cpp-lite",
+        "libstatslog",
         "libutils",
-    ],
-    init_rc: [
-        "snapshotctl.rc",
     ],
 }

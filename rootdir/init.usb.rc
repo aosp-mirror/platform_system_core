@@ -138,5 +138,4 @@ on property:sys.usb.typec.power_role=sink
 
 on userspace-reboot-requested
   setprop sys.usb.config ""
-  setprop sys.usb.configfs ""
   setprop sys.usb.state ""

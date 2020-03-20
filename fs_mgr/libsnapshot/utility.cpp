@@ -14,12 +14,19 @@
 
 #include "utility.h"
 
+#include <errno.h>
+#include <time.h>
+
+#include <iomanip>
+#include <sstream>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <fs_mgr/roots.h>
 
 using android::dm::kSectorSize;
+using android::fiemap::FiemapStatus;
 using android::fs_mgr::EnsurePathMounted;
 using android::fs_mgr::EnsurePathUnmounted;
 using android::fs_mgr::Fstab;
@@ -27,6 +34,7 @@ using android::fs_mgr::GetEntryForPath;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::Partition;
 using android::fs_mgr::ReadDefaultFstab;
+using google::protobuf::RepeatedPtrField;
 
 namespace android {
 namespace snapshot {
@@ -83,7 +91,7 @@ AutoDeleteSnapshot::~AutoDeleteSnapshot() {
     }
 }
 
-bool InitializeCow(const std::string& device) {
+Return InitializeCow(const std::string& device) {
     // When the kernel creates a persistent dm-snapshot, it requires a CoW file
     // to store the modifications. The kernel interface does not specify how
     // the CoW is used, and there is no standard associated.
@@ -103,15 +111,15 @@ bool InitializeCow(const std::string& device) {
     android::base::unique_fd fd(open(device.c_str(), O_WRONLY | O_BINARY));
     if (fd < 0) {
         PLOG(ERROR) << "Can't open COW device: " << device;
-        return false;
+        return Return(FiemapStatus::FromErrno(errno));
     }
 
     LOG(INFO) << "Zero-filling COW device: " << device;
     if (!android::base::WriteFully(fd, zeros.data(), kDmSnapZeroFillSize)) {
         PLOG(ERROR) << "Can't zero-fill COW device for " << device;
-        return false;
+        return Return(FiemapStatus::FromErrno(errno));
     }
-    return true;
+    return Return::Ok();
 }
 
 std::unique_ptr<AutoUnmountDevice> AutoUnmountDevice::New(const std::string& path) {
@@ -150,6 +158,28 @@ bool WriteStringToFileAtomic(const std::string& content, const std::string& path
         return false;
     }
     return true;
+}
+
+std::ostream& operator<<(std::ostream& os, const Now&) {
+    struct tm now;
+    time_t t = time(nullptr);
+    localtime_r(&t, &now);
+    return os << std::put_time(&now, "%Y%m%d-%H%M%S");
+}
+
+void AppendExtent(RepeatedPtrField<chromeos_update_engine::Extent>* extents, uint64_t start_block,
+                  uint64_t num_blocks) {
+    if (extents->size() > 0) {
+        auto last_extent = extents->rbegin();
+        auto next_block = last_extent->start_block() + last_extent->num_blocks();
+        if (start_block == next_block) {
+            last_extent->set_num_blocks(last_extent->num_blocks() + num_blocks);
+            return;
+        }
+    }
+    auto* new_extent = extents->Add();
+    new_extent->set_start_block(start_block);
+    new_extent->set_num_blocks(num_blocks);
 }
 
 }  // namespace snapshot

@@ -39,7 +39,13 @@ std::string GetMetadataFile(const std::string& metadata_dir) {
 
 bool MetadataExists(const std::string& metadata_dir) {
     auto metadata_file = GetMetadataFile(metadata_dir);
-    return access(metadata_file.c_str(), F_OK) == 0;
+    if (access(metadata_file.c_str(), F_OK)) {
+        if (errno != ENOENT) {
+            PLOG(ERROR) << "Access " << metadata_file << " failed:";
+        }
+        return false;
+    }
+    return true;
 }
 
 std::unique_ptr<LpMetadata> OpenMetadata(const std::string& metadata_dir) {
@@ -61,7 +67,7 @@ std::unique_ptr<MetadataBuilder> OpenOrCreateMetadata(const std::string& metadat
     std::unique_ptr<MetadataBuilder> builder;
     if (access(metadata_file.c_str(), R_OK)) {
         if (errno != ENOENT) {
-            PLOG(ERROR) << "access " << metadata_file << " failed:";
+            PLOG(ERROR) << "Access " << metadata_file << " failed:";
             return nullptr;
         }
 
@@ -112,7 +118,12 @@ bool SaveMetadata(MetadataBuilder* builder, const std::string& metadata_dir) {
 
 bool RemoveAllMetadata(const std::string& dir) {
     auto metadata_file = GetMetadataFile(dir);
-    return android::base::RemoveFileIfExists(metadata_file);
+    std::string err;
+    if (!android::base::RemoveFileIfExists(metadata_file, &err)) {
+        LOG(ERROR) << "Could not remove metadata file: " << err;
+        return false;
+    }
+    return true;
 }
 
 bool FillPartitionExtents(MetadataBuilder* builder, Partition* partition, SplitFiemap* file,
@@ -189,6 +200,24 @@ bool UpdateMetadata(const std::string& metadata_dir, const std::string& partitio
     if (!FillPartitionExtents(builder.get(), partition, file, partition_size)) {
         return false;
     }
+    return SaveMetadata(builder.get(), metadata_dir);
+}
+
+bool AddAttributes(const std::string& metadata_dir, const std::string& partition_name,
+                   uint32_t attributes) {
+    auto metadata = OpenMetadata(metadata_dir);
+    if (!metadata) {
+        return false;
+    }
+    auto builder = MetadataBuilder::New(*metadata.get());
+    if (!builder) {
+        return false;
+    }
+    auto partition = builder->FindPartition(partition_name);
+    if (!partition) {
+        return false;
+    }
+    partition->set_attributes(partition->attributes() | attributes);
     return SaveMetadata(builder.get(), metadata_dir);
 }
 

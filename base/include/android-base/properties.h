@@ -20,7 +20,10 @@
 
 #include <chrono>
 #include <limits>
+#include <optional>
 #include <string>
+
+struct prop_info;
 
 namespace android {
 namespace base {
@@ -65,6 +68,33 @@ bool WaitForProperty(const std::string& key, const std::string& expected_value,
 #if defined(__BIONIC__)
 bool WaitForPropertyCreation(const std::string& key, std::chrono::milliseconds relative_timeout =
                                                          std::chrono::milliseconds::max());
+#endif
+
+#if defined(__BIONIC__) && __cplusplus >= 201703L
+// Cached system property lookup. For code that needs to read the same property multiple times,
+// this class helps optimize those lookups.
+class CachedProperty {
+ public:
+  explicit CachedProperty(const char* property_name);
+
+  // Returns the current value of the underlying system property as cheaply as possible.
+  // The returned pointer is valid until the next call to Get. Because most callers are going
+  // to want to parse the string returned here and cached that as well, this function performs
+  // no locking, and is completely thread unsafe. It is the caller's responsibility to provide a
+  // lock for thread-safety.
+  //
+  // Note: *changed can be set to true even if the contents of the property remain the same.
+  const char* Get(bool* changed = nullptr);
+
+ private:
+  std::string property_name_;
+  const prop_info* prop_info_;
+  std::optional<uint32_t> cached_area_serial_;
+  std::optional<uint32_t> cached_property_serial_;
+  char cached_value_[92];
+  bool is_read_only_;
+  const char* read_only_property_;
+};
 #endif
 
 } // namespace base

@@ -25,19 +25,20 @@
  * the adb_trace_init() function implemented in adb_trace.cpp.
  */
 enum AdbTrace {
-    ADB = 0,   /* 0x001 */
+    ADB = 0, /* 0x001 */
     SOCKETS,
     PACKETS,
     TRANSPORT,
-    RWX,       /* 0x010 */
+    RWX, /* 0x010 */
     USB,
     SYNC,
     SYSDEPS,
-    JDWP,      /* 0x100 */
+    JDWP, /* 0x100 */
     SERVICES,
     AUTH,
     FDEVENT,
-    SHELL
+    SHELL,
+    INCREMENTAL,
 };
 
 #define VLOG_IS_ON(TAG) \
@@ -57,12 +58,5 @@ enum AdbTrace {
 extern int adb_trace_mask;
 void adb_trace_init(char**);
 void adb_trace_enable(AdbTrace trace_tag);
-
-// Include <atomic> before stdatomic.h (introduced in cutils/trace.h) to avoid compile error.
-#include <atomic>
-
-#define ATRACE_TAG ATRACE_TAG_ADB
-#include <cutils/trace.h>
-#include <utils/Trace.h>
 
 #endif /* __ADB_TRACE_H */

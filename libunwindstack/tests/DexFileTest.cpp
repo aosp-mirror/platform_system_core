@@ -105,7 +105,7 @@ TEST(DexFileTest, create_using_file) {
             static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData)))));
 
   MemoryFake memory;
-  MapInfo info(nullptr, 0, 0x10000, 0, 0x5, tf.path);
+  MapInfo info(nullptr, nullptr, 0, 0x10000, 0, 0x5, tf.path);
   EXPECT_TRUE(DexFile::Create(0x500, &memory, &info) != nullptr);
 }
 
@@ -118,7 +118,7 @@ TEST(DexFileTest, create_using_file_non_zero_start) {
             static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData)))));
 
   MemoryFake memory;
-  MapInfo info(nullptr, 0x100, 0x10000, 0, 0x5, tf.path);
+  MapInfo info(nullptr, nullptr, 0x100, 0x10000, 0, 0x5, tf.path);
   EXPECT_TRUE(DexFile::Create(0x600, &memory, &info) != nullptr);
 }
 
@@ -131,21 +131,21 @@ TEST(DexFileTest, create_using_file_non_zero_offset) {
             static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData)))));
 
   MemoryFake memory;
-  MapInfo info(nullptr, 0x100, 0x10000, 0x200, 0x5, tf.path);
+  MapInfo info(nullptr, nullptr, 0x100, 0x10000, 0x200, 0x5, tf.path);
   EXPECT_TRUE(DexFile::Create(0x400, &memory, &info) != nullptr);
 }
 
 TEST(DexFileTest, create_using_memory_empty_file) {
   MemoryFake memory;
   memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
-  MapInfo info(nullptr, 0x100, 0x10000, 0x200, 0x5, "");
+  MapInfo info(nullptr, nullptr, 0x100, 0x10000, 0x200, 0x5, "");
   EXPECT_TRUE(DexFile::Create(0x4000, &memory, &info) != nullptr);
 }
 
 TEST(DexFileTest, create_using_memory_file_does_not_exist) {
   MemoryFake memory;
   memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
-  MapInfo info(nullptr, 0x100, 0x10000, 0x200, 0x5, "/does/not/exist");
+  MapInfo info(nullptr, nullptr, 0x100, 0x10000, 0x200, 0x5, "/does/not/exist");
   EXPECT_TRUE(DexFile::Create(0x4000, &memory, &info) != nullptr);
 }
 
@@ -158,7 +158,7 @@ TEST(DexFileTest, create_using_memory_file_is_malformed) {
 
   MemoryFake memory;
   memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
-  MapInfo info(nullptr, 0x4000, 0x10000, 0x200, 0x5, "/does/not/exist");
+  MapInfo info(nullptr, nullptr, 0x4000, 0x10000, 0x200, 0x5, "/does/not/exist");
   std::unique_ptr<DexFile> dex_file = DexFile::Create(0x4000, &memory, &info);
   ASSERT_TRUE(dex_file != nullptr);
 
@@ -171,7 +171,7 @@ TEST(DexFileTest, create_using_memory_file_is_malformed) {
 TEST(DexFileTest, get_method) {
   MemoryFake memory;
   memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
-  MapInfo info(nullptr, 0x100, 0x10000, 0x200, 0x5, "");
+  MapInfo info(nullptr, nullptr, 0x100, 0x10000, 0x200, 0x5, "");
   std::unique_ptr<DexFile> dex_file(DexFile::Create(0x4000, &memory, &info));
   ASSERT_TRUE(dex_file != nullptr);
 
@@ -189,7 +189,7 @@ TEST(DexFileTest, get_method) {
 TEST(DexFileTest, get_method_empty) {
   MemoryFake memory;
   memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
-  MapInfo info(nullptr, 0x100, 0x10000, 0x200, 0x5, "");
+  MapInfo info(nullptr, nullptr, 0x100, 0x10000, 0x200, 0x5, "");
   std::unique_ptr<DexFile> dex_file(DexFile::Create(0x4000, &memory, &info));
   ASSERT_TRUE(dex_file != nullptr);
 

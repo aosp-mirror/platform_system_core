@@ -56,3 +56,37 @@ bool set_tcp_keepalive(borrowed_fd fd, int interval_sec) {
 
     return true;
 }
+
+static __inline__ void disable_close_on_exec(borrowed_fd fd) {
+    const auto oldFlags = fcntl(fd.get(), F_GETFD);
+    const auto newFlags = (oldFlags & ~FD_CLOEXEC);
+    if (newFlags != oldFlags) {
+        fcntl(fd.get(), F_SETFD, newFlags);
+    }
+}
+
+Process adb_launch_process(std::string_view executable, std::vector<std::string> args,
+                           std::initializer_list<int> fds_to_inherit) {
+    const auto pid = fork();
+    if (pid != 0) {
+        // parent, includes the case when failed to fork()
+        return Process(pid);
+    }
+    // child
+    std::vector<std::string> copies;
+    copies.reserve(args.size() + 1);
+    copies.emplace_back(executable);
+    copies.insert(copies.end(), std::make_move_iterator(args.begin()),
+                  std::make_move_iterator(args.end()));
+
+    std::vector<char*> rawArgs;
+    rawArgs.reserve(copies.size() + 1);
+    for (auto&& str : copies) {
+        rawArgs.push_back(str.data());
+    }
+    rawArgs.push_back(nullptr);
+    for (auto fd : fds_to_inherit) {
+        disable_close_on_exec(fd);
+    }
+    exit(execv(copies.front().data(), rawArgs.data()));
+}

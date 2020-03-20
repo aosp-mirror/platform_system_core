@@ -16,41 +16,58 @@
 
 #pragma once
 
+#include <bionic/reserved_signals.h>
 #include <signal.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/cdefs.h>
+#include <sys/system_properties.h>
 #include <sys/types.h>
 
 __BEGIN_DECLS
+
+// Forward declare these classes so not everyone has to include GWP-ASan
+// headers.
+namespace gwp_asan {
+struct AllocatorState;
+struct AllocationMetadata;
+};  // namespace gwp_asan
 
 // These callbacks are called in a signal handler, and thus must be async signal safe.
 // If null, the callbacks will not be called.
 typedef struct {
   struct abort_msg_t* (*get_abort_message)();
   void (*post_dump)();
+  const struct gwp_asan::AllocatorState* (*get_gwp_asan_state)();
+  const struct gwp_asan::AllocationMetadata* (*get_gwp_asan_metadata)();
 } debuggerd_callbacks_t;
 
 void debuggerd_init(debuggerd_callbacks_t* callbacks);
 
 // DEBUGGER_ACTION_DUMP_TOMBSTONE and DEBUGGER_ACTION_DUMP_BACKTRACE are both
-// triggered via DEBUGGER_SIGNAL. The debugger_action_t is sent via si_value
+// triggered via BIONIC_SIGNAL_DEBUGGER. The debugger_action_t is sent via si_value
 // using sigqueue(2) or equivalent. If no si_value is specified (e.g. if the
 // signal is sent by kill(2)), the default behavior is to print the backtrace
 // to the log.
-#define DEBUGGER_SIGNAL (__SIGRTMIN + 3)
+#define DEBUGGER_SIGNAL BIONIC_SIGNAL_DEBUGGER
 
 static void __attribute__((__unused__)) debuggerd_register_handlers(struct sigaction* action) {
-  sigaction(SIGABRT, action, nullptr);
-  sigaction(SIGBUS, action, nullptr);
-  sigaction(SIGFPE, action, nullptr);
-  sigaction(SIGILL, action, nullptr);
-  sigaction(SIGSEGV, action, nullptr);
-#if defined(SIGSTKFLT)
-  sigaction(SIGSTKFLT, action, nullptr);
-#endif
-  sigaction(SIGSYS, action, nullptr);
-  sigaction(SIGTRAP, action, nullptr);
-  sigaction(DEBUGGER_SIGNAL, action, nullptr);
+  char value[PROP_VALUE_MAX] = "";
+  bool enabled =
+      !(__system_property_get("ro.debuggable", value) > 0 && !strcmp(value, "1") &&
+        __system_property_get("debug.debuggerd.disable", value) > 0 && !strcmp(value, "1"));
+  if (enabled) {
+    sigaction(SIGABRT, action, nullptr);
+    sigaction(SIGBUS, action, nullptr);
+    sigaction(SIGFPE, action, nullptr);
+    sigaction(SIGILL, action, nullptr);
+    sigaction(SIGSEGV, action, nullptr);
+    sigaction(SIGSTKFLT, action, nullptr);
+    sigaction(SIGSYS, action, nullptr);
+    sigaction(SIGTRAP, action, nullptr);
+  }
+
+  sigaction(BIONIC_SIGNAL_DEBUGGER, action, nullptr);
 }
 
 __END_DECLS

@@ -27,6 +27,7 @@
 #include <unordered_set>
 
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <benchmark/benchmark.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
@@ -1025,3 +1026,14 @@ static void BM_lookupEventTagNum_logd_existing(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_lookupEventTagNum_logd_existing);
+
+static void BM_log_verbose_overhead(benchmark::State& state) {
+  std::string test_log_tag = "liblog_verbose_tag";
+  android::base::SetProperty("log.tag." + test_log_tag, "I");
+  for (auto _ : state) {
+    __android_log_print(ANDROID_LOG_VERBOSE, test_log_tag.c_str(), "%s test log message %d %d",
+                        "test test", 123, 456);
+  }
+  android::base::SetProperty("log.tag." + test_log_tag, "");
+}
+BENCHMARK(BM_log_verbose_overhead);

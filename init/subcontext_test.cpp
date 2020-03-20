@@ -55,7 +55,7 @@ void RunTest(F&& test_function) {
 TEST(subcontext, CheckDifferentPid) {
     RunTest([](auto& subcontext) {
         auto result = subcontext.Execute(std::vector<std::string>{"return_pids_as_error"});
-        ASSERT_FALSE(result);
+        ASSERT_FALSE(result.ok());
 
         auto pids = Split(result.error().message(), " ");
         ASSERT_EQ(2U, pids.size());
@@ -81,7 +81,7 @@ TEST(subcontext, SetProp) {
             "success",
         };
         auto result = subcontext.Execute(args);
-        ASSERT_TRUE(result) << result.error();
+        ASSERT_RESULT_OK(result);
 
         EXPECT_TRUE(WaitForProperty("init.test.subcontext", "success", 10s));
     });
@@ -104,11 +104,11 @@ TEST(subcontext, MultipleCommands) {
                 word,
             };
             auto result = subcontext.Execute(args);
-            ASSERT_TRUE(result) << result.error();
+            ASSERT_RESULT_OK(result);
         }
 
         auto result = subcontext.Execute(std::vector<std::string>{"return_words_as_error"});
-        ASSERT_FALSE(result);
+        ASSERT_FALSE(result.ok());
         EXPECT_EQ(Join(expected_words, " "), result.error().message());
         EXPECT_EQ(first_pid, subcontext.pid());
     });
@@ -119,10 +119,10 @@ TEST(subcontext, RecoverAfterAbort) {
         auto first_pid = subcontext.pid();
 
         auto result = subcontext.Execute(std::vector<std::string>{"cause_log_fatal"});
-        ASSERT_FALSE(result);
+        ASSERT_FALSE(result.ok());
 
         auto result2 = subcontext.Execute(std::vector<std::string>{"generate_sane_error"});
-        ASSERT_FALSE(result2);
+        ASSERT_FALSE(result2.ok());
         EXPECT_EQ("Sane error!", result2.error().message());
         EXPECT_NE(subcontext.pid(), first_pid);
     });
@@ -131,7 +131,7 @@ TEST(subcontext, RecoverAfterAbort) {
 TEST(subcontext, ContextString) {
     RunTest([](auto& subcontext) {
         auto result = subcontext.Execute(std::vector<std::string>{"return_context_as_error"});
-        ASSERT_FALSE(result);
+        ASSERT_FALSE(result.ok());
         ASSERT_EQ(kTestContext, result.error().message());
     });
 }
@@ -143,7 +143,7 @@ TEST(subcontext, TriggerShutdown) {
     RunTest([](auto& subcontext) {
         auto result = subcontext.Execute(
                 std::vector<std::string>{"trigger_shutdown", kTestShutdownCommand});
-        ASSERT_TRUE(result);
+        ASSERT_RESULT_OK(result);
     });
     EXPECT_EQ(kTestShutdownCommand, trigger_shutdown_command);
 }
@@ -156,7 +156,7 @@ TEST(subcontext, ExpandArgs) {
             "$$third",
         };
         auto result = subcontext.ExpandArgs(args);
-        ASSERT_TRUE(result) << result.error();
+        ASSERT_RESULT_OK(result);
         ASSERT_EQ(3U, result->size());
         EXPECT_EQ(args[0], result->at(0));
         EXPECT_EQ(GetProperty("ro.hardware", ""), result->at(1));
@@ -171,7 +171,7 @@ TEST(subcontext, ExpandArgsFailure) {
             "${",
         };
         auto result = subcontext.ExpandArgs(args);
-        ASSERT_FALSE(result);
+        ASSERT_FALSE(result.ok());
         EXPECT_EQ("unexpected end of string in '" + args[1] + "', looking for }",
                   result.error().message());
     });

@@ -19,8 +19,6 @@
 
 #include <log/log.h>
 
-#include "log_portability.h"
-
 /* In the future, we would like to make this list extensible */
 static const char* LOG_NAME[LOG_ID_MAX] = {
     /* clang-format off */
@@ -43,7 +41,10 @@ const char* android_log_id_to_name(log_id_t log_id) {
 }
 
 static_assert(std::is_same<std::underlying_type<log_id_t>::type, uint32_t>::value,
-              "log_id_t must be an unsigned int");
+              "log_id_t must be an uint32_t");
+
+static_assert(std::is_same<std::underlying_type<android_LogPriority>::type, uint32_t>::value,
+              "log_id_t must be an uint32_t");
 
 log_id_t android_name_to_log_id(const char* logName) {
   const char* b;

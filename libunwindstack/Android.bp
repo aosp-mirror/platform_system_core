@@ -116,12 +116,6 @@ cc_library {
         x86_64: {
             srcs: ["AsmGetRegsX86_64.S"],
         },
-        mips: {
-            srcs: ["AsmGetRegsMips.S"],
-        },
-        mips64: {
-            srcs: ["AsmGetRegsMips64.S"],
-        },
     },
 
     static_libs: [
@@ -240,6 +234,7 @@ cc_defaults {
         "tests/files/offline/debug_frame_load_bias_arm/*",
         "tests/files/offline/eh_frame_bias_x86/*",
         "tests/files/offline/eh_frame_hdr_begin_x86_64/*",
+        "tests/files/offline/empty_arm64/*",
         "tests/files/offline/invalid_elf_offset_arm/*",
         "tests/files/offline/jit_debug_arm/*",
         "tests/files/offline/jit_debug_x86/*",

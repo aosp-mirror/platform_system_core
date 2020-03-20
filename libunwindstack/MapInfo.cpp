@@ -37,12 +37,12 @@ namespace unwindstack {
 bool MapInfo::InitFileMemoryFromPreviousReadOnlyMap(MemoryFileAtOffset* memory) {
   // One last attempt, see if the previous map is read-only with the
   // same name and stretches across this map.
-  if (prev_map == nullptr || prev_map->flags != PROT_READ) {
+  if (prev_real_map == nullptr || prev_real_map->flags != PROT_READ) {
     return false;
   }
 
-  uint64_t map_size = end - prev_map->end;
-  if (!memory->Init(name, prev_map->offset, map_size)) {
+  uint64_t map_size = end - prev_real_map->end;
+  if (!memory->Init(name, prev_real_map->offset, map_size)) {
     return false;
   }
 
@@ -51,12 +51,12 @@ bool MapInfo::InitFileMemoryFromPreviousReadOnlyMap(MemoryFileAtOffset* memory) 
     return false;
   }
 
-  if (!memory->Init(name, prev_map->offset, max_size)) {
+  if (!memory->Init(name, prev_real_map->offset, max_size)) {
     return false;
   }
 
-  elf_offset = offset - prev_map->offset;
-  elf_start_offset = prev_map->offset;
+  elf_offset = offset - prev_real_map->offset;
+  elf_start_offset = prev_real_map->offset;
   return true;
 }
 
@@ -112,8 +112,8 @@ Memory* MapInfo::GetFileMemory() {
     // Need to check how to set the elf start offset. If this map is not
     // the r-x map of a r-- map, then use the real offset value. Otherwise,
     // use 0.
-    if (prev_map == nullptr || prev_map->offset != 0 || prev_map->flags != PROT_READ ||
-        prev_map->name != name) {
+    if (prev_real_map == nullptr || prev_real_map->offset != 0 ||
+        prev_real_map->flags != PROT_READ || prev_real_map->name != name) {
       elf_start_offset = offset;
     }
     return memory.release();
@@ -172,20 +172,20 @@ Memory* MapInfo::CreateMemory(const std::shared_ptr<Memory>& process_memory) {
   // doesn't guarantee that this invariant will always be true. However,
   // if that changes, there is likely something else that will change and
   // break something.
-  if (offset == 0 || name.empty() || prev_map == nullptr || prev_map->name != name ||
-      prev_map->offset >= offset) {
+  if (offset == 0 || name.empty() || prev_real_map == nullptr || prev_real_map->name != name ||
+      prev_real_map->offset >= offset) {
     return nullptr;
   }
 
   // Make sure that relative pc values are corrected properly.
-  elf_offset = offset - prev_map->offset;
+  elf_offset = offset - prev_real_map->offset;
   // Use this as the elf start offset, otherwise, you always get offsets into
   // the r-x section, which is not quite the right information.
-  elf_start_offset = prev_map->offset;
+  elf_start_offset = prev_real_map->offset;
 
   MemoryRanges* ranges = new MemoryRanges;
-  ranges->Insert(
-      new MemoryRange(process_memory, prev_map->start, prev_map->end - prev_map->start, 0));
+  ranges->Insert(new MemoryRange(process_memory, prev_real_map->start,
+                                 prev_real_map->end - prev_real_map->start, 0));
   ranges->Insert(new MemoryRange(process_memory, start, end - start, elf_offset));
 
   memory_backed_elf = true;
@@ -236,15 +236,15 @@ Elf* MapInfo::GetElf(const std::shared_ptr<Memory>& process_memory, ArchEnum exp
 
   if (!elf->valid()) {
     elf_start_offset = offset;
-  } else if (prev_map != nullptr && elf_start_offset != offset &&
-             prev_map->offset == elf_start_offset && prev_map->name == name) {
+  } else if (prev_real_map != nullptr && elf_start_offset != offset &&
+             prev_real_map->offset == elf_start_offset && prev_real_map->name == name) {
     // If there is a read-only map then a read-execute map that represents the
     // same elf object, make sure the previous map is using the same elf
     // object if it hasn't already been set.
-    std::lock_guard<std::mutex> guard(prev_map->mutex_);
-    if (prev_map->elf.get() == nullptr) {
-      prev_map->elf = elf;
-      prev_map->memory_backed_elf = memory_backed_elf;
+    std::lock_guard<std::mutex> guard(prev_real_map->mutex_);
+    if (prev_real_map->elf.get() == nullptr) {
+      prev_real_map->elf = elf;
+      prev_real_map->memory_backed_elf = memory_backed_elf;
     }
   }
   return elf.get();

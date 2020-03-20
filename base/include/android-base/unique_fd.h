@@ -102,7 +102,7 @@ class unique_fd_impl final {
     return *this;
   }
 
-  void reset(int new_value = -1) { reset(new_value, nullptr); }
+  [[clang::reinitializes]] void reset(int new_value = -1) { reset(new_value, nullptr); }
 
   int get() const { return fd_; }
 
@@ -116,6 +116,8 @@ class unique_fd_impl final {
   bool operator<(int rhs) const { return get() < rhs; }
   bool operator==(int rhs) const { return get() == rhs; }
   bool operator!=(int rhs) const { return get() != rhs; }
+  bool operator==(const unique_fd_impl& rhs) const { return get() == rhs.get(); }
+  bool operator!=(const unique_fd_impl& rhs) const { return get() != rhs.get(); }
 
   // Catch bogus error checks (i.e.: "!fd" instead of "fd != -1").
   bool operator!() const = delete;

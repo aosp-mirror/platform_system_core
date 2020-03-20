@@ -4,6 +4,10 @@
 # first reads the 'last' logcat to persistent storage with `-L` then run logcat again without
 # `-L` to read the current logcat buffers to persistent storage.
 
+# init sets the umask to 077 for forked processes. logpersist needs to create files that are group
+# readable. So relax the umask to only disallow group wx and world rwx.
+umask 037
+
 has_last="false"
 for arg in "$@"; do
   if [ "$arg" == "-L" -o "$arg" == "--last" ]; then

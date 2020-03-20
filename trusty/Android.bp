@@ -1,6 +1,0 @@
-subdirs = [
-    "gatekeeper",
-    "keymaster",
-    "libtrusty",
-    "storage/*",
-]

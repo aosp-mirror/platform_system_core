@@ -27,6 +27,7 @@
 #include <android-base/file.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <fs_mgr.h>
 #include <fstab/fstab.h>
 #include <gtest/gtest.h>
 
@@ -413,7 +414,7 @@ source none2       swap   defaults      forcefdeorfbe=
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     EXPECT_EQ("", entry->key_loc);
-    EXPECT_EQ("", entry->key_dir);
+    EXPECT_EQ("", entry->metadata_key_dir);
     EXPECT_EQ(0, entry->length);
     EXPECT_EQ("", entry->label);
     EXPECT_EQ(-1, entry->partnum);
@@ -440,7 +441,7 @@ source none2       swap   defaults      forcefdeorfbe=
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     EXPECT_EQ("", entry->key_loc);
-    EXPECT_EQ("", entry->key_dir);
+    EXPECT_EQ("", entry->metadata_key_dir);
     EXPECT_EQ(0, entry->length);
     EXPECT_EQ("", entry->label);
     EXPECT_EQ(-1, entry->partnum);
@@ -892,7 +893,45 @@ source none0       swap   defaults      keydirectory=/dir/key
     FstabEntry::FsMgrFlags flags = {};
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
 
-    EXPECT_EQ("/dir/key", entry->key_dir);
+    EXPECT_EQ("/dir/key", entry->metadata_key_dir);
+}
+
+TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MetadataEncryption) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+source none0       swap   defaults      keydirectory=/dir/key,metadata_encryption=adiantum
+)fs";
+
+    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
+
+    Fstab fstab;
+    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
+    ASSERT_EQ(1U, fstab.size());
+
+    auto entry = fstab.begin();
+    EXPECT_EQ("adiantum", entry->metadata_encryption);
+}
+
+TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MetadataEncryption_WrappedKey) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+source none0       swap   defaults      keydirectory=/dir/key,metadata_encryption=aes-256-xts:wrappedkey_v0
+)fs";
+
+    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
+
+    Fstab fstab;
+    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
+    ASSERT_EQ(1U, fstab.size());
+
+    auto entry = fstab.begin();
+    EXPECT_EQ("aes-256-xts:wrappedkey_v0", entry->metadata_encryption);
+    auto parts = android::base::Split(entry->metadata_encryption, ":");
+    EXPECT_EQ(2U, parts.size());
+    EXPECT_EQ("aes-256-xts", parts[0]);
+    EXPECT_EQ("wrappedkey_v0", parts[1]);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_SysfsPath) {
@@ -977,6 +1016,10 @@ TEST(fs_mgr, UserdataMountedFromDefaultFstab) {
     }
     Fstab fstab;
     ASSERT_TRUE(ReadDefaultFstab(&fstab)) << "Failed to read default fstab";
-    ASSERT_NE(nullptr, GetMountedEntryForUserdata(&fstab))
+    Fstab proc_mounts;
+    ASSERT_TRUE(ReadFstabFromFile("/proc/mounts", &proc_mounts)) << "Failed to read /proc/mounts";
+    auto mounted_entry = GetEntryForMountPoint(&proc_mounts, "/data");
+    ASSERT_NE(mounted_entry, nullptr) << "/data is not mounted";
+    ASSERT_NE(nullptr, fs_mgr_get_mounted_entry_for_userdata(&fstab, *mounted_entry))
             << "/data wasn't mounted from default fstab";
 }

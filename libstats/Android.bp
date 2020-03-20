@@ -1,4 +1,0 @@
-subdirs = [
-    "socket",
-    "socket_q",
-]

@@ -100,10 +100,6 @@ ArchEnum Regs::CurrentArch() {
   return ARCH_X86;
 #elif defined(__x86_64__)
   return ARCH_X86_64;
-#elif defined(__mips__) && !defined(__LP64__)
-  return ARCH_MIPS;
-#elif defined(__mips__) && defined(__LP64__)
-  return ARCH_MIPS64;
 #else
   abort();
 #endif
@@ -119,10 +115,6 @@ Regs* Regs::CreateFromLocal() {
   regs = new RegsX86();
 #elif defined(__x86_64__)
   regs = new RegsX86_64();
-#elif defined(__mips__) && !defined(__LP64__)
-  regs = new RegsMips();
-#elif defined(__mips__) && defined(__LP64__)
-  regs = new RegsMips64();
 #else
   abort();
 #endif

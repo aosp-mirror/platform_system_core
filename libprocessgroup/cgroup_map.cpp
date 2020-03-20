@@ -71,7 +71,12 @@ bool CgroupController::IsUsable() {
     if (!HasValue()) return false;
 
     if (state_ == UNKNOWN) {
-        state_ = access(GetProcsFilePath("", 0, 0).c_str(), F_OK) == 0 ? USABLE : MISSING;
+        if (ACgroupController_getFlags != nullptr) {
+            uint32_t flags = ACgroupController_getFlags(controller_);
+            state_ = (flags & CGROUPRC_CONTROLLER_FLAG_MOUNTED) != 0 ? USABLE : MISSING;
+        } else {
+            state_ = access(GetProcsFilePath("", 0, 0).c_str(), F_OK) == 0 ? USABLE : MISSING;
+        }
     }
 
     return state_ == USABLE;
@@ -161,9 +166,16 @@ void CgroupMap::Print() const {
     auto controller_count = ACgroupFile_getControllerCount();
     for (uint32_t i = 0; i < controller_count; ++i) {
         const ACgroupController* controller = ACgroupFile_getController(i);
-        LOG(INFO) << "\t" << ACgroupController_getName(controller) << " ver "
-                  << ACgroupController_getVersion(controller) << " path "
-                  << ACgroupController_getPath(controller);
+        if (ACgroupController_getFlags != nullptr) {
+            LOG(INFO) << "\t" << ACgroupController_getName(controller) << " ver "
+                      << ACgroupController_getVersion(controller) << " path "
+                      << ACgroupController_getPath(controller) << " flags "
+                      << ACgroupController_getFlags(controller);
+        } else {
+            LOG(INFO) << "\t" << ACgroupController_getName(controller) << " ver "
+                      << ACgroupController_getVersion(controller) << " path "
+                      << ACgroupController_getPath(controller);
+        }
     }
 }
 

@@ -16,8 +16,11 @@
 
 #pragma once
 
+#include <functional>
+
 #include <fstab/fstab.h>
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -38,3 +41,13 @@ enum class OverlayfsValidResult {
     kOverrideCredsRequired,
 };
 OverlayfsValidResult fs_mgr_overlayfs_valid();
+
+namespace android {
+namespace fs_mgr {
+
+void MapScratchPartitionIfNeeded(Fstab* fstab,
+                                 const std::function<bool(const std::set<std::string>&)>& init);
+void CleanupOldScratchFiles();
+
+}  // namespace fs_mgr
+}  // namespace android

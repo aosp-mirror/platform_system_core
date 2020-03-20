@@ -17,10 +17,19 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 
 #include <modprobe/modprobe.h>
+
+std::string Modprobe::GetKernelCmdline(void) {
+    std::string cmdline;
+    if (!android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
+        return "";
+    }
+    return cmdline;
+}
 
 bool Modprobe::Insmod(const std::string& path_name, const std::string& parameters) {
     android::base::unique_fd fd(

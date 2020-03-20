@@ -43,12 +43,12 @@
     {
       "Name": "UClampMin",
       "Controller": "cpu",
-      "File": "cpu.util.min"
+      "File": "cpu.uclamp.min"
     },
     {
       "Name": "UClampMax",
       "Controller": "cpu",
-      "File": "cpu.util.max"
+      "File": "cpu.uclamp.max"
     }
   ],
 

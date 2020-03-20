@@ -23,90 +23,33 @@
 #include <unistd.h>
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "android-base/macros.h"
 #include "android-base/mapped_file.h"
-
-static const char* kErrorMessages[] = {
-    "Success",
-    "Iteration ended",
-    "Zlib error",
-    "Invalid file",
-    "Invalid handle",
-    "Duplicate entries in archive",
-    "Empty archive",
-    "Entry not found",
-    "Invalid offset",
-    "Inconsistent information",
-    "Invalid entry name",
-    "I/O error",
-    "File mapping failed",
-    "Allocation failed",
-};
-
-enum ErrorCodes : int32_t {
-  kIterationEnd = -1,
-
-  // We encountered a Zlib error when inflating a stream from this file.
-  // Usually indicates file corruption.
-  kZlibError = -2,
-
-  // The input file cannot be processed as a zip archive. Usually because
-  // it's too small, too large or does not have a valid signature.
-  kInvalidFile = -3,
-
-  // An invalid iteration / ziparchive handle was passed in as an input
-  // argument.
-  kInvalidHandle = -4,
-
-  // The zip archive contained two (or possibly more) entries with the same
-  // name.
-  kDuplicateEntry = -5,
-
-  // The zip archive contains no entries.
-  kEmptyArchive = -6,
-
-  // The specified entry was not found in the archive.
-  kEntryNotFound = -7,
-
-  // The zip archive contained an invalid local file header pointer.
-  kInvalidOffset = -8,
-
-  // The zip archive contained inconsistent entry information. This could
-  // be because the central directory & local file header did not agree, or
-  // if the actual uncompressed length or crc32 do not match their declared
-  // values.
-  kInconsistentInformation = -9,
-
-  // An invalid entry name was encountered.
-  kInvalidEntryName = -10,
-
-  // An I/O related system call (read, lseek, ftruncate, map) failed.
-  kIoError = -11,
-
-  // We were not able to mmap the central directory or entry contents.
-  kMmapFailed = -12,
-
-  // An allocation failed.
-  kAllocationFailed = -13,
-
-  kLastErrorCode = kAllocationFailed,
-};
+#include "zip_cd_entry_map.h"
+#include "zip_error.h"
 
 class MappedZipFile {
  public:
   explicit MappedZipFile(const int fd)
-      : has_fd_(true), fd_(fd), base_ptr_(nullptr), data_length_(0) {}
+      : has_fd_(true), fd_(fd), fd_offset_(0), base_ptr_(nullptr), data_length_(-1) {}
+
+  explicit MappedZipFile(const int fd, off64_t length, off64_t offset)
+      : has_fd_(true), fd_(fd), fd_offset_(offset), base_ptr_(nullptr), data_length_(length) {}
 
   explicit MappedZipFile(const void* address, size_t length)
-      : has_fd_(false), fd_(-1), base_ptr_(address), data_length_(static_cast<off64_t>(length)) {}
+      : has_fd_(false), fd_(-1), fd_offset_(0), base_ptr_(address),
+        data_length_(static_cast<off64_t>(length)) {}
 
   bool HasFd() const { return has_fd_; }
 
   int GetFileDescriptor() const;
 
   const void* GetBasePtr() const;
+
+  off64_t GetFileOffset() const;
 
   off64_t GetFileLength() const;
 
@@ -120,9 +63,10 @@ class MappedZipFile {
   const bool has_fd_;
 
   const int fd_;
+  const off64_t fd_offset_;
 
   const void* const base_ptr_;
-  const off64_t data_length_;
+  mutable off64_t data_length_;
 };
 
 class CentralDirectory {
@@ -140,26 +84,6 @@ class CentralDirectory {
   size_t length_;
 };
 
-/**
- * More space efficient string representation of strings in an mmaped zipped
- * file than std::string_view. Using std::string_view as an entry in the
- * ZipArchive hash table wastes space. std::string_view stores a pointer to a
- * string (on 64 bit, 8 bytes) and the length to read from that pointer,
- * 2 bytes. Because of alignment, the structure consumes 16 bytes, wasting
- * 6 bytes.
- *
- * ZipStringOffset stores a 4 byte offset from a fixed location in the memory
- * mapped file instead of the entire address, consuming 8 bytes with alignment.
- */
-struct ZipStringOffset {
-  uint32_t name_offset;
-  uint16_t name_length;
-
-  const std::string_view ToStringView(const uint8_t* start) const {
-    return std::string_view{reinterpret_cast<const char*>(start + name_offset), name_length};
-  }
-};
-
 struct ZipArchive {
   // open Zip archive
   mutable MappedZipFile mapped_zip;
@@ -172,15 +96,9 @@ struct ZipArchive {
 
   // number of entries in the Zip archive
   uint16_t num_entries;
+  std::unique_ptr<CdEntryMapInterface> cd_entry_map;
 
-  // We know how many entries are in the Zip archive, so we can have a
-  // fixed-size hash table. We define a load factor of 0.75 and over
-  // allocate so the maximum number entries can never be higher than
-  // ((4 * UINT16_MAX) / 3 + 1) which can safely fit into a uint32_t.
-  uint32_t hash_table_size;
-  ZipStringOffset* hash_table;
-
-  ZipArchive(const int fd, bool assume_ownership);
+  ZipArchive(MappedZipFile&& map, bool assume_ownership);
   ZipArchive(const void* address, size_t length);
   ~ZipArchive();
 

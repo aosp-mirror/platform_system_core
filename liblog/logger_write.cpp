@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
+#include "logger_write.h"
+
 #include <errno.h>
-#include <stdatomic.h>
+#include <inttypes.h>
+#include <libgen.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
@@ -24,31 +27,40 @@
 #include <android/set_abort_message.h>
 #endif
 
+#include <atomic>
+#include <shared_mutex>
+
+#include <android-base/errno_restorer.h>
+#include <android-base/macros.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "log_portability.h"
+#include "android/log.h"
+#include "log/log_read.h"
 #include "logger.h"
+#include "rwlock.h"
 #include "uio.h"
+
+#ifdef __ANDROID__
+#include "logd_writer.h"
+#include "pmsg_writer.h"
+#endif
+
+#if defined(__APPLE__)
+#include <pthread.h>
+#elif defined(__linux__) && !defined(__ANDROID__)
+#include <syscall.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#endif
+
+using android::base::ErrnoRestorer;
 
 #define LOG_BUF_SIZE 1024
 
-#if (FAKE_LOG_DEVICE == 0)
-extern struct android_log_transport_write logdLoggerWrite;
-extern struct android_log_transport_write pmsgLoggerWrite;
-
-android_log_transport_write* android_log_write = &logdLoggerWrite;
-android_log_transport_write* android_log_persist_write = &pmsgLoggerWrite;
-#else
-extern android_log_transport_write fakeLoggerWrite;
-
-android_log_transport_write* android_log_write = &fakeLoggerWrite;
-android_log_transport_write* android_log_persist_write = nullptr;
-#endif
-
 #if defined(__ANDROID__)
 static int check_log_uid_permissions() {
-  uid_t uid = __android_log_uid();
+  uid_t uid = getuid();
 
   /* Matches clientHasLogCredentials() in logd */
   if ((uid != AID_SYSTEM) && (uid != AID_ROOT) && (uid != AID_LOG)) {
@@ -92,144 +104,300 @@ static int check_log_uid_permissions() {
  * Release any logger resources. A new log write will immediately re-acquire.
  */
 void __android_log_close() {
-  if (android_log_write != nullptr) {
-    android_log_write->close();
-  }
-
-  if (android_log_persist_write != nullptr) {
-    android_log_persist_write->close();
-  }
-
+#ifdef __ANDROID__
+  LogdClose();
+  PmsgClose();
+#endif
 }
 
-static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
-  int ret, save_errno;
-  struct timespec ts;
+#if defined(__GLIBC__) || defined(_WIN32)
+static const char* getprogname() {
+#if defined(__GLIBC__)
+  return program_invocation_short_name;
+#elif defined(_WIN32)
+  static bool first = true;
+  static char progname[MAX_PATH] = {};
 
-  save_errno = errno;
+  if (first) {
+    char path[PATH_MAX + 1];
+    DWORD result = GetModuleFileName(nullptr, path, sizeof(path) - 1);
+    if (result == 0 || result == sizeof(path) - 1) return "";
+    path[PATH_MAX - 1] = 0;
+
+    char* path_basename = basename(path);
+
+    snprintf(progname, sizeof(progname), "%s", path_basename);
+    first = false;
+  }
+
+  return progname;
+#endif
+}
+#endif
+
+// It's possible for logging to happen during static initialization before our globals are
+// initialized, so we place this std::string in a function such that it is initialized on the first
+// call.
+std::string& GetDefaultTag() {
+  static std::string default_tag = getprogname();
+  return default_tag;
+}
+RwLock default_tag_lock;
+
+void __android_log_set_default_tag(const char* tag) {
+  auto lock = std::unique_lock{default_tag_lock};
+  GetDefaultTag().assign(tag, 0, LOGGER_ENTRY_MAX_PAYLOAD);
+}
+
+static std::atomic_int32_t minimum_log_priority = ANDROID_LOG_DEFAULT;
+int32_t __android_log_set_minimum_priority(int32_t priority) {
+  return minimum_log_priority.exchange(priority, std::memory_order_relaxed);
+}
+
+int32_t __android_log_get_minimum_priority() {
+  return minimum_log_priority;
+}
+
+#ifdef __ANDROID__
+static __android_logger_function logger_function = __android_log_logd_logger;
+#else
+static __android_logger_function logger_function = __android_log_stderr_logger;
+#endif
+static RwLock logger_function_lock;
+
+void __android_log_set_logger(__android_logger_function logger) {
+  auto lock = std::unique_lock{logger_function_lock};
+  logger_function = logger;
+}
+
+void __android_log_default_aborter(const char* abort_message) {
+#ifdef __ANDROID__
+  android_set_abort_message(abort_message);
+#else
+  UNUSED(abort_message);
+#endif
+  abort();
+}
+
+static __android_aborter_function aborter_function = __android_log_default_aborter;
+static RwLock aborter_function_lock;
+
+void __android_log_set_aborter(__android_aborter_function aborter) {
+  auto lock = std::unique_lock{aborter_function_lock};
+  aborter_function = aborter;
+}
+
+void __android_log_call_aborter(const char* abort_message) {
+  auto lock = std::shared_lock{aborter_function_lock};
+  aborter_function(abort_message);
+}
+
+#ifdef __ANDROID__
+static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
+  int ret;
+  struct timespec ts;
 
   if (log_id == LOG_ID_KERNEL) {
     return -EINVAL;
   }
 
-#if defined(__ANDROID__)
   clock_gettime(android_log_clockid(), &ts);
 
   if (log_id == LOG_ID_SECURITY) {
     if (vec[0].iov_len < 4) {
-      errno = save_errno;
       return -EINVAL;
     }
 
     ret = check_log_uid_permissions();
     if (ret < 0) {
-      errno = save_errno;
       return ret;
     }
     if (!__android_log_security()) {
       /* If only we could reset downstream logd counter */
-      errno = save_errno;
       return -EPERM;
     }
   } else if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
     if (vec[0].iov_len < 4) {
-      errno = save_errno;
       return -EINVAL;
     }
-  } else {
-    int prio = *static_cast<int*>(vec[0].iov_base);
-    const char* tag = static_cast<const char*>(vec[1].iov_base);
-    size_t len = vec[1].iov_len;
+  }
 
-    if (!__android_log_is_loggable_len(prio, tag, len - 1, ANDROID_LOG_VERBOSE)) {
-      errno = save_errno;
-      return -EPERM;
-    }
-  }
+  ret = LogdWrite(log_id, &ts, vec, nr);
+  PmsgWrite(log_id, &ts, vec, nr);
+
+  return ret;
+}
 #else
-  /* simulate clock_gettime(CLOCK_REALTIME, &ts); */
-  {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    ts.tv_sec = tv.tv_sec;
-    ts.tv_nsec = tv.tv_usec * 1000;
-  }
+static int write_to_log(log_id_t, struct iovec*, size_t) {
+  // Non-Android text logs should go to __android_log_stderr_logger, not here.
+  // Non-Android binary logs are always dropped.
+  return 1;
+}
 #endif
 
-  ret = 0;
+// Copied from base/threads.cpp
+static uint64_t GetThreadId() {
+#if defined(__BIONIC__)
+  return gettid();
+#elif defined(__APPLE__)
+  uint64_t tid;
+  pthread_threadid_np(NULL, &tid);
+  return tid;
+#elif defined(__linux__)
+  return syscall(__NR_gettid);
+#elif defined(_WIN32)
+  return GetCurrentThreadId();
+#endif
+}
 
-  if (android_log_write != nullptr) {
-    ssize_t retval;
-    retval = android_log_write->write(log_id, &ts, vec, nr);
-    if (ret >= 0) {
-      ret = retval;
-    }
+void __android_log_stderr_logger(const struct __android_logger_data* logger_data,
+                                 const char* message) {
+  struct tm now;
+  time_t t = time(nullptr);
+
+#if defined(_WIN32)
+  localtime_s(&now, &t);
+#else
+  localtime_r(&t, &now);
+#endif
+
+  char timestamp[32];
+  strftime(timestamp, sizeof(timestamp), "%m-%d %H:%M:%S", &now);
+
+  static const char log_characters[] = "XXVDIWEF";
+  static_assert(arraysize(log_characters) - 1 == ANDROID_LOG_SILENT,
+                "Mismatch in size of log_characters and values in android_LogPriority");
+  int32_t priority =
+      logger_data->priority > ANDROID_LOG_SILENT ? ANDROID_LOG_FATAL : logger_data->priority;
+  char priority_char = log_characters[priority];
+  uint64_t tid = GetThreadId();
+
+  if (logger_data->file != nullptr) {
+    fprintf(stderr, "%s %c %s %5d %5" PRIu64 " %s:%u] %s\n",
+            logger_data->tag ? logger_data->tag : "nullptr", priority_char, timestamp, getpid(),
+            tid, logger_data->file, logger_data->line, message);
+  } else {
+    fprintf(stderr, "%s %c %s %5d %5" PRIu64 " %s\n",
+            logger_data->tag ? logger_data->tag : "nullptr", priority_char, timestamp, getpid(),
+            tid, message);
   }
+}
 
-  if (android_log_persist_write != nullptr) {
-    android_log_persist_write->write(log_id, &ts, vec, nr);
-  }
+void __android_log_logd_logger(const struct __android_logger_data* logger_data,
+                               const char* message) {
+  int buffer_id = logger_data->buffer_id == LOG_ID_DEFAULT ? LOG_ID_MAIN : logger_data->buffer_id;
 
-  errno = save_errno;
-  return ret;
+  struct iovec vec[3];
+  vec[0].iov_base =
+      const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(&logger_data->priority));
+  vec[0].iov_len = 1;
+  vec[1].iov_base = const_cast<void*>(static_cast<const void*>(logger_data->tag));
+  vec[1].iov_len = strlen(logger_data->tag) + 1;
+  vec[2].iov_base = const_cast<void*>(static_cast<const void*>(message));
+  vec[2].iov_len = strlen(message) + 1;
+
+  write_to_log(static_cast<log_id_t>(buffer_id), vec, 3);
 }
 
 int __android_log_write(int prio, const char* tag, const char* msg) {
   return __android_log_buf_write(LOG_ID_MAIN, prio, tag, msg);
 }
 
-int __android_log_buf_write(int bufID, int prio, const char* tag, const char* msg) {
-  if (!tag) tag = "";
+void __android_log_write_logger_data(__android_logger_data* logger_data, const char* msg) {
+  ErrnoRestorer errno_restorer;
+
+  if (logger_data->buffer_id != LOG_ID_DEFAULT && logger_data->buffer_id != LOG_ID_MAIN &&
+      logger_data->buffer_id != LOG_ID_SYSTEM && logger_data->buffer_id != LOG_ID_RADIO &&
+      logger_data->buffer_id != LOG_ID_CRASH) {
+    return;
+  }
+
+  auto tag_lock = std::shared_lock{default_tag_lock, std::defer_lock};
+  if (logger_data->tag == nullptr) {
+    tag_lock.lock();
+    logger_data->tag = GetDefaultTag().c_str();
+  }
 
 #if __BIONIC__
-  if (prio == ANDROID_LOG_FATAL) {
+  if (logger_data->priority == ANDROID_LOG_FATAL) {
     android_set_abort_message(msg);
   }
 #endif
 
-  struct iovec vec[3];
-  vec[0].iov_base = (unsigned char*)&prio;
-  vec[0].iov_len = 1;
-  vec[1].iov_base = (void*)tag;
-  vec[1].iov_len = strlen(tag) + 1;
-  vec[2].iov_base = (void*)msg;
-  vec[2].iov_len = strlen(msg) + 1;
+  auto lock = std::shared_lock{logger_function_lock};
+  logger_function(logger_data, msg);
+}
 
-  return write_to_log(static_cast<log_id_t>(bufID), vec, 3);
+int __android_log_buf_write(int bufID, int prio, const char* tag, const char* msg) {
+  ErrnoRestorer errno_restorer;
+
+  if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+    return 0;
+  }
+
+  __android_logger_data logger_data = {sizeof(__android_logger_data), bufID, prio, tag, nullptr, 0};
+  __android_log_write_logger_data(&logger_data, msg);
+  return 1;
 }
 
 int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap) {
-  char buf[LOG_BUF_SIZE];
+  ErrnoRestorer errno_restorer;
+
+  if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+    return 0;
+  }
+
+  __attribute__((uninitialized)) char buf[LOG_BUF_SIZE];
 
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
 
-  return __android_log_write(prio, tag, buf);
+  __android_logger_data logger_data = {
+      sizeof(__android_logger_data), LOG_ID_MAIN, prio, tag, nullptr, 0};
+  __android_log_write_logger_data(&logger_data, buf);
+  return 1;
 }
 
 int __android_log_print(int prio, const char* tag, const char* fmt, ...) {
+  ErrnoRestorer errno_restorer;
+
+  if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+    return 0;
+  }
+
   va_list ap;
-  char buf[LOG_BUF_SIZE];
+  __attribute__((uninitialized)) char buf[LOG_BUF_SIZE];
 
   va_start(ap, fmt);
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
   va_end(ap);
 
-  return __android_log_write(prio, tag, buf);
+  __android_logger_data logger_data = {
+      sizeof(__android_logger_data), LOG_ID_MAIN, prio, tag, nullptr, 0};
+  __android_log_write_logger_data(&logger_data, buf);
+  return 1;
 }
 
 int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...) {
+  ErrnoRestorer errno_restorer;
+
+  if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
+    return 0;
+  }
+
   va_list ap;
-  char buf[LOG_BUF_SIZE];
+  __attribute__((uninitialized)) char buf[LOG_BUF_SIZE];
 
   va_start(ap, fmt);
   vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
   va_end(ap);
 
-  return __android_log_buf_write(bufID, prio, tag, buf);
+  __android_logger_data logger_data = {sizeof(__android_logger_data), bufID, prio, tag, nullptr, 0};
+  __android_log_write_logger_data(&logger_data, buf);
+  return 1;
 }
 
 void __android_log_assert(const char* cond, const char* tag, const char* fmt, ...) {
-  char buf[LOG_BUF_SIZE];
+  __attribute__((uninitialized)) char buf[LOG_BUF_SIZE];
 
   if (fmt) {
     va_list ap;
@@ -253,11 +421,13 @@ void __android_log_assert(const char* cond, const char* tag, const char* fmt, ..
   TEMP_FAILURE_RETRY(write(2, "\n", 1));
 
   __android_log_write(ANDROID_LOG_FATAL, tag, buf);
-  abort(); /* abort so we have a chance to debug the situation */
-           /* NOTREACHED */
+  __android_log_call_aborter(buf);
+  abort();
 }
 
 int __android_log_bwrite(int32_t tag, const void* payload, size_t len) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[2];
 
   vec[0].iov_base = &tag;
@@ -269,6 +439,8 @@ int __android_log_bwrite(int32_t tag, const void* payload, size_t len) {
 }
 
 int __android_log_stats_bwrite(int32_t tag, const void* payload, size_t len) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[2];
 
   vec[0].iov_base = &tag;
@@ -280,6 +452,8 @@ int __android_log_stats_bwrite(int32_t tag, const void* payload, size_t len) {
 }
 
 int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[2];
 
   vec[0].iov_base = &tag;
@@ -296,6 +470,8 @@ int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len) 
  * handy if we just want to dump an integer into the log.
  */
 int __android_log_btwrite(int32_t tag, char type, const void* payload, size_t len) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[3];
 
   vec[0].iov_base = &tag;
@@ -313,6 +489,8 @@ int __android_log_btwrite(int32_t tag, char type, const void* payload, size_t le
  * event log.
  */
 int __android_log_bswrite(int32_t tag, const char* payload) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[4];
   char type = EVENT_TYPE_STRING;
   uint32_t len = strlen(payload);
@@ -334,6 +512,8 @@ int __android_log_bswrite(int32_t tag, const char* payload) {
  * security log.
  */
 int __android_log_security_bswrite(int32_t tag, const char* payload) {
+  ErrnoRestorer errno_restorer;
+
   struct iovec vec[4];
   char type = EVENT_TYPE_STRING;
   uint32_t len = strlen(payload);

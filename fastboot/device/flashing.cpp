@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -56,6 +57,7 @@ void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partit
     Fstab fstab;
     ReadDefaultFstab(&fstab);
 
+    std::optional<AutoMountMetadata> mount_metadata;
     for (const auto& entry : fstab) {
         auto partition = android::base::Basename(entry.mount_point);
         if ("/" == entry.mount_point) {
@@ -63,6 +65,7 @@ void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partit
         }
 
         if ((partition + device->GetCurrentSlot()) == partition_name) {
+            mount_metadata.emplace();
             fs_mgr_overlayfs_teardown(entry.mount_point.c_str());
         }
     }

@@ -4,6 +4,18 @@
       "name": "adbd_test"
     },
     {
+      "name": "adb_crypto_test"
+    },
+    {
+      "name": "adb_pairing_auth_test"
+    },
+    {
+      "name": "adb_pairing_connection_test"
+    },
+    {
+      "name": "adb_tls_connection_test"
+    },
+    {
       "name": "CtsInitTestCases"
     },
     {
@@ -16,6 +28,9 @@
       "name": "fs_mgr_vendor_overlay_test"
     },
     {
+      "name": "init_kill_services_test"
+    },
+    {
       "name": "libbase_test"
     },
     {
@@ -23,6 +38,9 @@
     },
     {
       "name": "libcutils_test"
+    },
+    {
+      "name": "libmodprobe_tests"
     },
     {
       "name": "libprocinfo_test"

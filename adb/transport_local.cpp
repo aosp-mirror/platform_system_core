@@ -126,7 +126,8 @@ void connect_device(const std::string& address, std::string* response) {
     };
 
     int error;
-    if (!register_socket_transport(std::move(fd), serial, port, 0, std::move(reconnect), &error)) {
+    if (!register_socket_transport(std::move(fd), serial, port, 0, std::move(reconnect), false,
+                                   &error)) {
         if (error == EALREADY) {
             *response = android::base::StringPrintf("already connected to %s", serial.c_str());
         } else if (error == EPERM) {
@@ -163,8 +164,9 @@ int local_connect_arbitrary_ports(int console_port, int adb_port, std::string* e
         close_on_exec(fd.get());
         disable_tcp_nagle(fd.get());
         std::string serial = getEmulatorSerialString(console_port);
-        if (register_socket_transport(std::move(fd), std::move(serial), adb_port, 1,
-                                      [](atransport*) { return ReconnectResult::Abort; })) {
+        if (register_socket_transport(
+                    std::move(fd), std::move(serial), adb_port, 1,
+                    [](atransport*) { return ReconnectResult::Abort; }, false)) {
             return 0;
         }
     }
@@ -271,8 +273,9 @@ void server_socket_thread(std::function<unique_fd(std::string_view, std::string*
             std::string serial = android::base::StringPrintf("host-%d", fd.get());
             // We don't care about port value in "register_socket_transport" as it is used
             // only from ADB_HOST. "server_socket_thread" is never called from ADB_HOST.
-            register_socket_transport(std::move(fd), std::move(serial), 0, 1,
-                                      [](atransport*) { return ReconnectResult::Abort; });
+            register_socket_transport(
+                    std::move(fd), std::move(serial), 0, 1,
+                    [](atransport*) { return ReconnectResult::Abort; }, false);
         }
     }
     D("transport: server_socket_thread() exiting");
@@ -365,7 +368,7 @@ int init_socket_transport(atransport* t, unique_fd fd, int adb_port, int local) 
     if (local) {
         auto emulator_connection = std::make_unique<EmulatorConnection>(std::move(fd), adb_port);
         t->SetConnection(
-            std::make_unique<BlockingConnectionAdapter>(std::move(emulator_connection)));
+                std::make_unique<BlockingConnectionAdapter>(std::move(emulator_connection)));
         std::lock_guard<std::mutex> lock(local_transports_lock);
         atransport* existing_transport = find_emulator_transport_by_adb_port_locked(adb_port);
         if (existing_transport != nullptr) {

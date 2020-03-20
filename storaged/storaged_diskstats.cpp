@@ -41,8 +41,8 @@ void log_debug_disk_perf(struct disk_perf* perf, const char* type) {
     // skip if the input structure are all zeros
     if (perf == NULL || perf->is_zero()) return;
 
-    LOG_TO(SYSTEM, INFO) << "disk_perf " << type
-              << " rd: " << perf->read_perf << " kbps, " << perf->read_ios << " iops"
+    LOG(INFO) << "disk_perf " << type << " rd: " << perf->read_perf << " kbps, " << perf->read_ios
+              << " iops"
               << " wr: " << perf->write_perf << " kbps, " << perf->write_ios << " iops"
               << " q: " << perf->queue;
 }
@@ -71,7 +71,7 @@ bool get_time(struct timespec* ts) {
     // when system is running.
     int ret = clock_gettime(CLOCK_MONOTONIC, ts);
     if (ret < 0) {
-        PLOG_TO(SYSTEM, ERROR) << "clock_gettime() failed";
+        PLOG(ERROR) << "clock_gettime() failed";
         return false;
     }
     return true;
@@ -93,7 +93,7 @@ bool parse_disk_stats(const char* disk_stats_path, struct disk_stats* stats) {
 
     std::string buffer;
     if (!android::base::ReadFileToString(disk_stats_path, &buffer)) {
-        PLOG_TO(SYSTEM, ERROR) << disk_stats_path << ": ReadFileToString failed.";
+        PLOG(ERROR) << disk_stats_path << ": ReadFileToString failed.";
         return false;
     }
 
@@ -130,12 +130,12 @@ bool get_disk_stats_from_health_hal(const sp<IHealth>& service, struct disk_stat
     bool success = false;
     auto ret = service->getDiskStats([&success, stats](auto result, const auto& halStats) {
         if (result == Result::NOT_SUPPORTED) {
-            LOG_TO(SYSTEM, DEBUG) << "getDiskStats is not supported on health HAL.";
+            LOG(DEBUG) << "getDiskStats is not supported on health HAL.";
             return;
         }
         if (result != Result::SUCCESS || halStats.size() == 0) {
-            LOG_TO(SYSTEM, ERROR) << "getDiskStats failed with result " << toString(result)
-                                  << " and size " << halStats.size();
+            LOG(ERROR) << "getDiskStats failed with result " << toString(result) << " and size "
+                       << halStats.size();
             return;
         }
 
@@ -144,7 +144,7 @@ bool get_disk_stats_from_health_hal(const sp<IHealth>& service, struct disk_stat
     });
 
     if (!ret.isOk()) {
-        LOG_TO(SYSTEM, ERROR) << "getDiskStats failed with " << ret.description();
+        LOG(ERROR) << "getDiskStats failed with " << ret.description();
         return false;
     }
 
@@ -199,9 +199,9 @@ void get_inc_disk_stats(const struct disk_stats* prev, const struct disk_stats* 
 void add_disk_stats(struct disk_stats* src, struct disk_stats* dst)
 {
     if (dst->end_time != 0 && dst->end_time != src->start_time) {
-        LOG_TO(SYSTEM, WARNING) << "Two dis-continuous periods of diskstats"
-            << " are added. dst end with " << dst->end_time
-            << ", src start with " << src->start_time;
+        LOG(WARNING) << "Two dis-continuous periods of diskstats"
+                     << " are added. dst end with " << dst->end_time << ", src start with "
+                     << src->start_time;
     }
 
     *dst += *src;

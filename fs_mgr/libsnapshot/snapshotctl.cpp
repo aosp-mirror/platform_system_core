@@ -19,8 +19,12 @@
 #include <chrono>
 #include <iostream>
 #include <map>
+#include <sstream>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/unique_fd.h>
+
 #include <libsnapshot/snapshot.h>
 
 using namespace std::string_literals;
@@ -31,9 +35,8 @@ int Usage() {
                  "Actions:\n"
                  "  dump\n"
                  "    Print snapshot states.\n"
-                 "  merge [--logcat]\n"
-                 "    Initialize merge and wait for it to be completed.\n"
-                 "    If --logcat is specified, log to logcat. Otherwise, log to stdout.\n";
+                 "  merge\n"
+                 "    Deprecated.\n";
     return EX_USAGE;
 }
 
@@ -45,34 +48,9 @@ bool DumpCmdHandler(int /*argc*/, char** argv) {
     return SnapshotManager::New()->Dump(std::cout);
 }
 
-bool MergeCmdHandler(int argc, char** argv) {
-    auto begin = std::chrono::steady_clock::now();
-
-    bool log_to_logcat = false;
-    for (int i = 2; i < argc; ++i) {
-        if (argv[i] == "--logcat"s) {
-            log_to_logcat = true;
-        }
-    }
-    if (log_to_logcat) {
-        android::base::InitLogging(argv);
-    } else {
-        android::base::InitLogging(argv, &android::base::StdioLogger);
-    }
-
-    auto state = SnapshotManager::New()->InitiateMergeAndWait();
-
-    if (state == UpdateState::None) {
-        return true;
-    }
-    if (state == UpdateState::MergeCompleted) {
-        auto end = std::chrono::steady_clock::now();
-        auto passed = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-        LOG(INFO) << "Snapshot merged in " << passed << " ms.";
-        return true;
-    }
-
-    LOG(ERROR) << "Snapshot failed to merge with state \"" << state << "\".";
+bool MergeCmdHandler(int /*argc*/, char** argv) {
+    android::base::InitLogging(argv, &android::base::StderrLogger);
+    LOG(WARNING) << "Deprecated. Call update_engine_client --merge instead.";
     return false;
 }
 

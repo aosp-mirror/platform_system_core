@@ -621,29 +621,9 @@ void DwarfSectionImpl<AddressType>::InsertFde(const DwarfFde* fde) {
   uint64_t start = fde->pc_start;
   uint64_t end = fde->pc_end;
   auto it = fdes_.upper_bound(start);
-  bool add_element = false;
-  while (it != fdes_.end() && start < end) {
-    if (add_element) {
-      add_element = false;
-      if (end < it->second.first) {
-        if (it->first == end) {
-          return;
-        }
-        fdes_[end] = std::make_pair(start, fde);
-        return;
-      }
-      if (start != it->second.first) {
-        fdes_[it->second.first] = std::make_pair(start, fde);
-      }
-    }
-    if (start < it->first) {
-      if (end < it->second.first) {
-        if (it->first != end) {
-          fdes_[end] = std::make_pair(start, fde);
-        }
-        return;
-      }
-      add_element = true;
+  while (it != fdes_.end() && start < end && it->second.first < end) {
+    if (start < it->second.first) {
+      fdes_[it->second.first] = std::make_pair(start, fde);
     }
     start = it->first;
     ++it;

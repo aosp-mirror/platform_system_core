@@ -30,6 +30,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <iostream>
 
 #include <memory>
 #include <string>
@@ -49,6 +50,8 @@
 #include <unistd.h>
 #endif
 
+#include <google/protobuf/text_format.h>
+
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_client.h"
@@ -56,10 +59,12 @@
 #include "adb_io.h"
 #include "adb_unique_fd.h"
 #include "adb_utils.h"
+#include "app_processes.pb.h"
 #include "bugreport.h"
 #include "client/file_sync_client.h"
 #include "commandline.h"
 #include "fastdeploy.h"
+#include "incremental_server.h"
 #include "services.h"
 #include "shell_protocol.h"
 #include "sysdeps/chrono.h"
@@ -96,8 +101,10 @@ static void help() {
         " version                  show version num\n"
         "\n"
         "networking:\n"
-        " connect HOST[:PORT]      connect to a device via TCP/IP\n"
-        " disconnect [[HOST]:PORT] disconnect from given TCP/IP device, or all\n"
+        " connect HOST[:PORT]      connect to a device via TCP/IP [default port=5555]\n"
+        " disconnect [HOST[:PORT]]\n"
+        "     disconnect from given TCP/IP device [default port=5555], or all\n"
+        " pair HOST[:PORT]         pair with a device for secure TCP/IP communication\n"
         " forward --list           list all forward socket connections\n"
         " forward [--no-rebind] LOCAL REMOTE\n"
         "     forward socket connection using:\n"
@@ -187,8 +194,8 @@ static void help() {
         "     generate adb public/private key; private key stored in FILE,\n"
         "\n"
         "scripting:\n"
-        " wait-for[-TRANSPORT]-STATE\n"
-        "     wait for device to be in the given state\n"
+        " wait-for[-TRANSPORT]-STATE...\n"
+        "     wait for device to be in a given state\n"
         "     STATE: device, recovery, rescue, sideload, bootloader, or disconnect\n"
         "     TRANSPORT: usb, local, or any [default=any]\n"
         " get-state                print offline | bootloader | device\n"
@@ -352,7 +359,8 @@ static void stdinout_raw_epilogue(int inFd, int outFd, int old_stdin_mode, int o
 #endif
 }
 
-void copy_to_file(int inFd, int outFd) {
+bool copy_to_file(int inFd, int outFd) {
+    bool result = true;
     std::vector<char> buf(64 * 1024);
     int len;
     long total = 0;
@@ -375,6 +383,7 @@ void copy_to_file(int inFd, int outFd) {
         }
         if (len < 0) {
             D("copy_to_file(): read failed: %s", strerror(errno));
+            result = false;
             break;
         }
         if (outFd == STDOUT_FILENO) {
@@ -388,7 +397,8 @@ void copy_to_file(int inFd, int outFd) {
 
     stdinout_raw_epilogue(inFd, outFd, old_stdin_mode, old_stdout_mode);
 
-    D("copy_to_file() finished after %lu bytes", total);
+    D("copy_to_file() finished with %s after %lu bytes", result ? "success" : "failure", total);
+    return result;
 }
 
 static void send_window_size_change(int fd, std::unique_ptr<ShellProtocol>& shell) {
@@ -790,6 +800,15 @@ static int adb_abb(int argc, const char** argv) {
                        service_string);
 }
 
+static int adb_shell_noinput(int argc, const char** argv) {
+#if !defined(_WIN32)
+    unique_fd fd(adb_open("/dev/null", O_RDONLY));
+    CHECK_NE(STDIN_FILENO, fd.get());
+    dup2(fd.get(), STDIN_FILENO);
+#endif
+    return adb_shell(argc, argv);
+}
+
 static int adb_sideload_legacy(const char* filename, int in_fd, int size) {
     std::string error;
     unique_fd out_fd(adb_connect(android::base::StringPrintf("sideload:%d", size), &error));
@@ -1038,17 +1057,16 @@ static int ppp(int argc, const char** argv) {
 static bool wait_for_device(const char* service,
                             std::optional<std::chrono::milliseconds> timeout = std::nullopt) {
     std::vector<std::string> components = android::base::Split(service, "-");
-    if (components.size() < 3 || components.size() > 4) {
+    if (components.size() < 3) {
         fprintf(stderr, "adb: couldn't parse 'wait-for' command: %s\n", service);
         return false;
     }
 
-    TransportType t;
-    adb_get_transport(&t, nullptr, nullptr);
-
-    // Was the caller vague about what they'd like us to wait for?
-    // If so, check they weren't more specific in their choice of transport type.
-    if (components.size() == 3) {
+    // If the first thing after "wait-for-" wasn't a TRANSPORT, insert whatever
+    // the current transport implies.
+    if (components[2] != "usb" && components[2] != "local" && components[2] != "any") {
+        TransportType t;
+        adb_get_transport(&t, nullptr, nullptr);
         auto it = components.begin() + 2;
         if (t == kTransportUsb) {
             components.insert(it, "usb");
@@ -1057,23 +1075,9 @@ static bool wait_for_device(const char* service,
         } else {
             components.insert(it, "any");
         }
-    } else if (components[2] != "any" && components[2] != "local" && components[2] != "usb") {
-        fprintf(stderr, "adb: unknown type %s; expected 'any', 'local', or 'usb'\n",
-                components[2].c_str());
-        return false;
     }
 
-    if (components[3] != "any" && components[3] != "bootloader" && components[3] != "device" &&
-        components[3] != "recovery" && components[3] != "rescue" && components[3] != "sideload" &&
-        components[3] != "disconnect") {
-        fprintf(stderr,
-                "adb: unknown state %s; "
-                "expected 'any', 'bootloader', 'device', 'recovery', 'rescue', 'sideload', or "
-                "'disconnect'\n",
-                components[3].c_str());
-        return false;
-    }
-
+    // Stitch it back together and send it over...
     std::string cmd = format_host_command(android::base::Join(components, "-").c_str());
     if (timeout) {
         std::thread([timeout]() {
@@ -1116,8 +1120,8 @@ static bool adb_root(const char* command) {
         return false;
     }
 
+    fwrite(buf, 1, sizeof(buf) - bytes_left, stdout);
     fflush(stdout);
-    WriteFdExactly(STDOUT_FILENO, buf, sizeof(buf) - bytes_left);
     if (cur != buf && strstr(buf, "restarting") == nullptr) {
         return true;
     }
@@ -1338,16 +1342,48 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
     }
 }
 
-static int adb_connect_command(const std::string& command, TransportId* transport = nullptr) {
+static int adb_connect_command(const std::string& command, TransportId* transport,
+                               StandardStreamsCallbackInterface* callback) {
     std::string error;
     unique_fd fd(adb_connect(transport, command, &error));
     if (fd < 0) {
         fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
-    read_and_dump(fd);
+    read_and_dump(fd, false, callback);
     return 0;
 }
+
+static int adb_connect_command(const std::string& command, TransportId* transport = nullptr) {
+    return adb_connect_command(command, transport, &DEFAULT_STANDARD_STREAMS_CALLBACK);
+}
+
+// A class that prints out human readable form of the protobuf message for "track-app" service
+// (received in binary format).
+class TrackAppStreamsCallback : public DefaultStandardStreamsCallback {
+  public:
+    TrackAppStreamsCallback() : DefaultStandardStreamsCallback(nullptr, nullptr) {}
+
+    // Assume the buffer contains at least 4 bytes of valid data.
+    void OnStdout(const char* buffer, int length) override {
+        if (length < 4) return;  // Unexpected length received. Do nothing.
+
+        adb::proto::AppProcesses binary_proto;
+        // The first 4 bytes are the length of remaining content in hexadecimal format.
+        binary_proto.ParseFromString(std::string(buffer + 4, length - 4));
+        char summary[24];  // The following string includes digits and 16 fixed characters.
+        int written = snprintf(summary, sizeof(summary), "Process count: %d\n",
+                               binary_proto.process_size());
+        OnStream(nullptr, stdout, summary, written);
+
+        std::string string_proto;
+        google::protobuf::TextFormat::PrintToString(binary_proto, &string_proto);
+        OnStream(nullptr, stdout, string_proto.data(), string_proto.length());
+    }
+
+  private:
+    DISALLOW_COPY_AND_ASSIGN(TrackAppStreamsCallback);
+};
 
 static int adb_connect_command_bidirectional(const std::string& command) {
     std::string error;
@@ -1612,7 +1648,7 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "connect")) {
-        if (argc != 2) error_exit("usage: adb connect HOST[:PORT>]");
+        if (argc != 2) error_exit("usage: adb connect HOST[:PORT]");
 
         std::string query = android::base::StringPrintf("host:connect:%s", argv[1]);
         return adb_query_command(query);
@@ -1625,6 +1661,19 @@ int adb_commandline(int argc, const char** argv) {
         return adb_query_command(query);
     } else if (!strcmp(argv[0], "abb")) {
         return adb_abb(argc, argv);
+    } else if (!strcmp(argv[0], "pair")) {
+        if (argc != 2) error_exit("usage: adb pair <host>[:<port>]");
+
+        std::string password;
+        printf("Enter pairing code: ");
+        fflush(stdout);
+        if (!std::getline(std::cin, password) || password.empty()) {
+            error_exit("No pairing code provided");
+        }
+        std::string query =
+                android::base::StringPrintf("host:pair:%s:%s", password.c_str(), argv[1]);
+
+        return adb_query_command(query);
     } else if (!strcmp(argv[0], "emu")) {
         return adb_send_emulator_command(argc, argv, serial);
     } else if (!strcmp(argv[0], "shell")) {
@@ -1711,7 +1760,7 @@ int adb_commandline(int argc, const char** argv) {
         if (CanUseFeature(features, kFeatureRemountShell)) {
             std::vector<const char*> args = {"shell"};
             args.insert(args.cend(), argv, argv + argc);
-            return adb_shell(args.size(), args.data());
+            return adb_shell_noinput(args.size(), args.data());
         } else if (argc > 1) {
             auto command = android::base::StringPrintf("%s:%s", argv[0], argv[1]);
             return adb_connect_command(command);
@@ -1896,6 +1945,18 @@ int adb_commandline(int argc, const char** argv) {
         return adb_connect_command("jdwp");
     } else if (!strcmp(argv[0], "track-jdwp")) {
         return adb_connect_command("track-jdwp");
+    } else if (!strcmp(argv[0], "track-app")) {
+        FeatureSet features;
+        std::string error;
+        if (!adb_get_feature_set(&features, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
+            return 1;
+        }
+        if (!CanUseFeature(features, kFeatureTrackApp)) {
+            error_exit("track-app is not supported by the device");
+        }
+        TrackAppStreamsCallback callback;
+        return adb_connect_command("track-app", nullptr, &callback);
     } else if (!strcmp(argv[0], "track-devices")) {
         if (argc > 2 || (argc == 2 && strcmp(argv[1], "-l"))) {
             error_exit("usage: adb track-devices [-l]");
@@ -1947,6 +2008,18 @@ int adb_commandline(int argc, const char** argv) {
                 error_exit("usage: adb reconnect [device|offline]");
             }
         }
+    } else if (!strcmp(argv[0], "inc-server")) {
+        if (argc < 3) {
+            error_exit("usage: adb inc-server FD FILE1 FILE2 ...");
+        }
+        int fd = atoi(argv[1]);
+        if (fd < 3) {
+            // Disallow invalid FDs and stdin/out/err as well.
+            error_exit("Invalid fd number given: %d", fd);
+        }
+        fd = adb_register_socket(fd);
+        close_on_exec(fd);
+        return incremental::serve(fd, argc - 2, argv + 2);
     }
 
     error_exit("unknown command %s", argv[0]);

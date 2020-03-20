@@ -24,11 +24,14 @@
 #include <unistd.h>
 
 #include <memory>
+#include <set>
+#include <string_view>
 #include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/mapped_file.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <ziparchive/zip_archive.h>
@@ -51,6 +54,76 @@ static const std::vector<uint8_t> kBTxtContents{'a', 'b', 'c', 'd', 'e', 'f', 'g
 static int32_t OpenArchiveWrapper(const std::string& name, ZipArchiveHandle* handle) {
   const std::string abs_path = test_data_dir + "/" + name;
   return OpenArchive(abs_path.c_str(), handle);
+}
+
+class CdEntryMapTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    names_ = {
+        "a.txt", "b.txt", "b/", "b/c.txt", "b/d.txt",
+    };
+    separator_ = "separator";
+    header_ = "metadata";
+    joined_names_ = header_ + android::base::Join(names_, separator_);
+    base_ptr_ = reinterpret_cast<uint8_t*>(&joined_names_[0]);
+
+    entry_maps_.emplace_back(CdEntryMapZip32::Create(static_cast<uint16_t>(names_.size())));
+    entry_maps_.emplace_back(CdEntryMapZip64::Create());
+    for (auto& cd_map : entry_maps_) {
+      ASSERT_NE(nullptr, cd_map);
+      size_t offset = header_.size();
+      for (const auto& name : names_) {
+        auto status = cd_map->AddToMap(
+            std::string_view{joined_names_.c_str() + offset, name.size()}, base_ptr_);
+        ASSERT_EQ(0, status);
+        offset += name.size() + separator_.size();
+      }
+    }
+  }
+
+  std::vector<std::string> names_;
+  // A continuous region of memory serves as a mock of the central directory.
+  std::string joined_names_;
+  // We expect some metadata at the beginning of the central directory and between filenames.
+  std::string header_;
+  std::string separator_;
+
+  std::vector<std::unique_ptr<CdEntryMapInterface>> entry_maps_;
+  uint8_t* base_ptr_{nullptr};  // Points to the start of the central directory.
+};
+
+TEST_F(CdEntryMapTest, AddDuplicatedEntry) {
+  for (auto& cd_map : entry_maps_) {
+    std::string_view name = "b.txt";
+    ASSERT_NE(0, cd_map->AddToMap(name, base_ptr_));
+  }
+}
+
+TEST_F(CdEntryMapTest, FindEntry) {
+  for (auto& cd_map : entry_maps_) {
+    uint64_t expected_offset = header_.size();
+    for (const auto& name : names_) {
+      auto [status, offset] = cd_map->GetCdEntryOffset(name, base_ptr_);
+      ASSERT_EQ(status, kSuccess);
+      ASSERT_EQ(offset, expected_offset);
+      expected_offset += name.size() + separator_.size();
+    }
+  }
+}
+
+TEST_F(CdEntryMapTest, Iteration) {
+  std::set<std::string_view> expected(names_.begin(), names_.end());
+  for (auto& cd_map : entry_maps_) {
+    cd_map->ResetIteration();
+    std::set<std::string_view> entry_set;
+    auto ret = cd_map->Next(base_ptr_);
+    while (ret != std::pair<std::string_view, uint64_t>{}) {
+      auto [it, insert_status] = entry_set.insert(ret.first);
+      ASSERT_TRUE(insert_status);
+      ret = cd_map->Next(base_ptr_);
+    }
+    ASSERT_EQ(expected, entry_set);
+  }
 }
 
 TEST(ziparchive, Open) {
@@ -103,6 +176,32 @@ TEST(ziparchive, OpenDoNotAssumeFdOwnership) {
   ASSERT_NE(-1, fd);
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveFd(fd, "OpenWithAssumeFdOwnership", &handle, false));
+  CloseArchive(handle);
+  ASSERT_EQ(0, lseek(fd, 0, SEEK_SET));
+  close(fd);
+}
+
+TEST(ziparchive, OpenAssumeFdRangeOwnership) {
+  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY | O_BINARY);
+  ASSERT_NE(-1, fd);
+  const off64_t length = lseek64(fd, 0, SEEK_END);
+  ASSERT_NE(-1, length);
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFdRange(fd, "OpenWithAssumeFdOwnership", &handle,
+                                  static_cast<size_t>(length), 0));
+  CloseArchive(handle);
+  ASSERT_EQ(-1, lseek(fd, 0, SEEK_SET));
+  ASSERT_EQ(EBADF, errno);
+}
+
+TEST(ziparchive, OpenDoNotAssumeFdRangeOwnership) {
+  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY | O_BINARY);
+  ASSERT_NE(-1, fd);
+  const off64_t length = lseek(fd, 0, SEEK_END);
+  ASSERT_NE(-1, length);
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFdRange(fd, "OpenWithAssumeFdOwnership", &handle,
+                                  static_cast<size_t>(length), 0, false));
   CloseArchive(handle);
   ASSERT_EQ(0, lseek(fd, 0, SEEK_SET));
   close(fd);
@@ -250,6 +349,48 @@ TEST(ziparchive, TestInvalidDeclaredLength) {
 
   ASSERT_EQ(Next(iteration_cookie, &data, &name), 0);
   ASSERT_EQ(Next(iteration_cookie, &data, &name), 0);
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, OpenArchiveFdRange) {
+  TemporaryFile tmp_file;
+  ASSERT_NE(-1, tmp_file.fd);
+
+  const std::string leading_garbage(21, 'x');
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, leading_garbage.c_str(),
+                                        leading_garbage.size()));
+
+  std::string valid_content;
+  ASSERT_TRUE(android::base::ReadFileToString(test_data_dir + "/" + kValidZip, &valid_content));
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, valid_content.c_str(), valid_content.size()));
+
+  const std::string ending_garbage(42, 'x');
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, ending_garbage.c_str(),
+                                        ending_garbage.size()));
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, lseek(tmp_file.fd, 0, SEEK_SET));
+  ASSERT_EQ(0, OpenArchiveFdRange(tmp_file.fd, "OpenArchiveFdRange", &handle,
+                                  valid_content.size(),
+                                  static_cast<off64_t>(leading_garbage.size())));
+
+  // An entry that's deflated.
+  ZipEntry data;
+  ASSERT_EQ(0, FindEntry(handle, "a.txt", &data));
+  const uint32_t a_size = data.uncompressed_length;
+  ASSERT_EQ(a_size, kATxtContents.size());
+  auto buffer = std::unique_ptr<uint8_t[]>(new uint8_t[a_size]);
+  ASSERT_EQ(0, ExtractToMemory(handle, &data, buffer.get(), a_size));
+  ASSERT_EQ(0, memcmp(buffer.get(), kATxtContents.data(), a_size));
+
+  // An entry that's stored.
+  ASSERT_EQ(0, FindEntry(handle, "b.txt", &data));
+  const uint32_t b_size = data.uncompressed_length;
+  ASSERT_EQ(b_size, kBTxtContents.size());
+  buffer = std::unique_ptr<uint8_t[]>(new uint8_t[b_size]);
+  ASSERT_EQ(0, ExtractToMemory(handle, &data, buffer.get(), b_size));
+  ASSERT_EQ(0, memcmp(buffer.get(), kBTxtContents.data(), b_size));
 
   CloseArchive(handle);
 }
