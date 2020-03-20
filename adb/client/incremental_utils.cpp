@@ -18,6 +18,7 @@
 
 #include "incremental_utils.h"
 
+#include <android-base/mapped_file.h>
 #include <android-base/strings.h>
 #include <ziparchive/zip_archive.h>
 #include <ziparchive/zip_writer.h>
@@ -26,6 +27,7 @@
 #include <numeric>
 #include <unordered_set>
 
+#include "adb_trace.h"
 #include "sysdeps.h"
 
 static constexpr int kBlockSize = 4096;
@@ -155,18 +157,81 @@ static std::vector<int32_t> ZipPriorityBlocks(off64_t signerBlockOffset, int64_t
     return zipPriorityBlocks;
 }
 
-// TODO(b/151676293): avoid using OpenArchiveFd that reads local file headers
+[[maybe_unused]] static ZipArchiveHandle openZipArchiveFd(int fd) {
+    bool transferFdOwnership = false;
+#ifdef _WIN32
+    //
+    // Need to create a special CRT FD here as the current one is not compatible with
+    // normal read()/write() calls that libziparchive uses.
+    // To make this work we have to create a copy of the file handle, as CRT doesn't care
+    // and closes it together with the new descriptor.
+    //
+    // Note: don't move this into a helper function, it's better to be hard to reuse because
+    //       the code is ugly and won't work unless it's a last resort.
+    //
+    auto handle = adb_get_os_handle(fd);
+    HANDLE dupedHandle;
+    if (!::DuplicateHandle(::GetCurrentProcess(), handle, ::GetCurrentProcess(), &dupedHandle, 0,
+                           false, DUPLICATE_SAME_ACCESS)) {
+        D("%s failed at DuplicateHandle: %d", __func__, (int)::GetLastError());
+        return {};
+    }
+    fd = _open_osfhandle((intptr_t)dupedHandle, _O_RDONLY | _O_BINARY);
+    if (fd < 0) {
+        D("%s failed at _open_osfhandle: %d", __func__, errno);
+        ::CloseHandle(handle);
+        return {};
+    }
+    transferFdOwnership = true;
+#endif
+    ZipArchiveHandle zip;
+    if (OpenArchiveFd(fd, "apk_fd", &zip, transferFdOwnership) != 0) {
+        D("%s failed at OpenArchiveFd: %d", __func__, errno);
+#ifdef _WIN32
+        // "_close()" is a secret WinCRT name for the regular close() function.
+        _close(fd);
+#endif
+        return {};
+    }
+    return zip;
+}
+
+static std::pair<ZipArchiveHandle, std::unique_ptr<android::base::MappedFile>> openZipArchive(
+        int fd, int64_t fileSize) {
+#ifndef __LP64__
+    if (fileSize >= INT_MAX) {
+        return {openZipArchiveFd(fd), nullptr};
+    }
+#endif
+    auto mapping =
+            android::base::MappedFile::FromOsHandle(adb_get_os_handle(fd), 0, fileSize, PROT_READ);
+    if (!mapping) {
+        D("%s failed at FromOsHandle: %d", __func__, errno);
+        return {};
+    }
+    ZipArchiveHandle zip;
+    if (OpenArchiveFromMemory(mapping->data(), mapping->size(), "apk_mapping", &zip) != 0) {
+        D("%s failed at OpenArchiveFromMemory: %d", __func__, errno);
+        return {};
+    }
+    return {zip, std::move(mapping)};
+}
+
+// TODO(b/151676293): avoid using libziparchive as it reads local file headers
 // which causes additional performance cost. Instead, only read from central directory.
 static std::vector<int32_t> InstallationPriorityBlocks(int fd, int64_t fileSize) {
-    std::vector<int32_t> installationPriorityBlocks;
-    ZipArchiveHandle zip;
-    if (OpenArchiveFd(fd, "", &zip, false) != 0) {
+    auto [zip, _] = openZipArchive(fd, fileSize);
+    if (!zip) {
         return {};
     }
+
     void* cookie = nullptr;
     if (StartIteration(zip, &cookie) != 0) {
+        D("%s failed at StartIteration: %d", __func__, errno);
         return {};
     }
+
+    std::vector<int32_t> installationPriorityBlocks;
     ZipEntry entry;
     std::string_view entryName;
     while (Next(cookie, &entry, &entryName) == 0) {
@@ -183,6 +248,7 @@ static std::vector<int32_t> InstallationPriorityBlocks(int fd, int64_t fileSize)
             int32_t endBlockIndex = offsetToBlockIndex(entryEndOffset);
             int32_t numNewBlocks = endBlockIndex - startBlockIndex + 1;
             appendBlocks(startBlockIndex, numNewBlocks, &installationPriorityBlocks);
+            D("\tadding to priority blocks: '%.*s'", (int)entryName.size(), entryName.data());
         } else if (entryName == "classes.dex") {
             // Only the head is needed for installation
             int32_t startBlockIndex = offsetToBlockIndex(entry.offset);
