@@ -108,6 +108,32 @@ TEST(ziparchive, OpenDoNotAssumeFdOwnership) {
   close(fd);
 }
 
+TEST(ziparchive, OpenAssumeFdRangeOwnership) {
+  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY | O_BINARY);
+  ASSERT_NE(-1, fd);
+  const off64_t length = lseek64(fd, 0, SEEK_END);
+  ASSERT_NE(-1, length);
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFdRange(fd, "OpenWithAssumeFdOwnership", &handle,
+                                  static_cast<size_t>(length), 0));
+  CloseArchive(handle);
+  ASSERT_EQ(-1, lseek(fd, 0, SEEK_SET));
+  ASSERT_EQ(EBADF, errno);
+}
+
+TEST(ziparchive, OpenDoNotAssumeFdRangeOwnership) {
+  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY | O_BINARY);
+  ASSERT_NE(-1, fd);
+  const off64_t length = lseek(fd, 0, SEEK_END);
+  ASSERT_NE(-1, length);
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFdRange(fd, "OpenWithAssumeFdOwnership", &handle,
+                                  static_cast<size_t>(length), 0, false));
+  CloseArchive(handle);
+  ASSERT_EQ(0, lseek(fd, 0, SEEK_SET));
+  close(fd);
+}
+
 TEST(ziparchive, Iteration_std_string_view) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
@@ -250,6 +276,48 @@ TEST(ziparchive, TestInvalidDeclaredLength) {
 
   ASSERT_EQ(Next(iteration_cookie, &data, &name), 0);
   ASSERT_EQ(Next(iteration_cookie, &data, &name), 0);
+
+  CloseArchive(handle);
+}
+
+TEST(ziparchive, OpenArchiveFdRange) {
+  TemporaryFile tmp_file;
+  ASSERT_NE(-1, tmp_file.fd);
+
+  const std::string leading_garbage(21, 'x');
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, leading_garbage.c_str(),
+                                        leading_garbage.size()));
+
+  std::string valid_content;
+  ASSERT_TRUE(android::base::ReadFileToString(test_data_dir + "/" + kValidZip, &valid_content));
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, valid_content.c_str(), valid_content.size()));
+
+  const std::string ending_garbage(42, 'x');
+  ASSERT_TRUE(android::base::WriteFully(tmp_file.fd, ending_garbage.c_str(),
+                                        ending_garbage.size()));
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, lseek(tmp_file.fd, 0, SEEK_SET));
+  ASSERT_EQ(0, OpenArchiveFdRange(tmp_file.fd, "OpenArchiveFdRange", &handle,
+                                  valid_content.size(),
+                                  static_cast<off64_t>(leading_garbage.size())));
+
+  // An entry that's deflated.
+  ZipEntry data;
+  ASSERT_EQ(0, FindEntry(handle, "a.txt", &data));
+  const uint32_t a_size = data.uncompressed_length;
+  ASSERT_EQ(a_size, kATxtContents.size());
+  auto buffer = std::unique_ptr<uint8_t[]>(new uint8_t[a_size]);
+  ASSERT_EQ(0, ExtractToMemory(handle, &data, buffer.get(), a_size));
+  ASSERT_EQ(0, memcmp(buffer.get(), kATxtContents.data(), a_size));
+
+  // An entry that's stored.
+  ASSERT_EQ(0, FindEntry(handle, "b.txt", &data));
+  const uint32_t b_size = data.uncompressed_length;
+  ASSERT_EQ(b_size, kBTxtContents.size());
+  buffer = std::unique_ptr<uint8_t[]>(new uint8_t[b_size]);
+  ASSERT_EQ(0, ExtractToMemory(handle, &data, buffer.get(), b_size));
+  ASSERT_EQ(0, memcmp(buffer.get(), kBTxtContents.data(), b_size));
 
   CloseArchive(handle);
 }
