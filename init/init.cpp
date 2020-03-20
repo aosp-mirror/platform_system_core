@@ -81,6 +81,7 @@ using namespace std::chrono_literals;
 using namespace std::string_literals;
 
 using android::base::boot_clock;
+using android::base::ConsumePrefix;
 using android::base::GetProperty;
 using android::base::ReadFileToString;
 using android::base::SetProperty;
@@ -367,40 +368,27 @@ enum class ControlTarget {
     INTERFACE,  // action gets called for every service that holds this interface
 };
 
-struct ControlMessageFunction {
-    ControlTarget target;
-    std::function<Result<void>(Service*)> action;
-};
+using ControlMessageFunction = std::function<Result<void>(Service*)>;
 
-static const std::map<std::string, ControlMessageFunction>& get_control_message_map() {
+static const std::map<std::string, ControlMessageFunction, std::less<>>& GetControlMessageMap() {
     // clang-format off
-    static const std::map<std::string, ControlMessageFunction> control_message_functions = {
-        {"sigstop_on",        {ControlTarget::SERVICE,
-                               [](auto* service) { service->set_sigstop(true); return Result<void>{}; }}},
-        {"sigstop_off",       {ControlTarget::SERVICE,
-                               [](auto* service) { service->set_sigstop(false); return Result<void>{}; }}},
-        {"start",             {ControlTarget::SERVICE,   DoControlStart}},
-        {"stop",              {ControlTarget::SERVICE,   DoControlStop}},
-        {"restart",           {ControlTarget::SERVICE,   DoControlRestart}},
-        {"interface_start",   {ControlTarget::INTERFACE, DoControlStart}},
-        {"interface_stop",    {ControlTarget::INTERFACE, DoControlStop}},
-        {"interface_restart", {ControlTarget::INTERFACE, DoControlRestart}},
+    static const std::map<std::string, ControlMessageFunction, std::less<>> control_message_functions = {
+        {"sigstop_on",        [](auto* service) { service->set_sigstop(true); return Result<void>{}; }},
+        {"sigstop_off",       [](auto* service) { service->set_sigstop(false); return Result<void>{}; }},
+        {"oneshot_on",        [](auto* service) { service->set_oneshot(true); return Result<void>{}; }},
+        {"oneshot_off",       [](auto* service) { service->set_oneshot(false); return Result<void>{}; }},
+        {"start",             DoControlStart},
+        {"stop",              DoControlStop},
+        {"restart",           DoControlRestart},
     };
     // clang-format on
 
     return control_message_functions;
 }
 
-bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t pid) {
-    const auto& map = get_control_message_map();
-    const auto it = map.find(msg);
-
-    if (it == map.end()) {
-        LOG(ERROR) << "Unknown control msg '" << msg << "'";
-        return false;
-    }
-
-    std::string cmdline_path = StringPrintf("proc/%d/cmdline", pid);
+static bool HandleControlMessage(std::string_view message, const std::string& name,
+                                 pid_t from_pid) {
+    std::string cmdline_path = StringPrintf("proc/%d/cmdline", from_pid);
     std::string process_cmdline;
     if (ReadFileToString(cmdline_path, &process_cmdline)) {
         std::replace(process_cmdline.begin(), process_cmdline.end(), '\0', ' ');
@@ -409,37 +397,37 @@ bool HandleControlMessage(const std::string& msg, const std::string& name, pid_t
         process_cmdline = "unknown process";
     }
 
-    const ControlMessageFunction& function = it->second;
-
-    Service* svc = nullptr;
-
-    switch (function.target) {
-        case ControlTarget::SERVICE:
-            svc = ServiceList::GetInstance().FindService(name);
-            break;
-        case ControlTarget::INTERFACE:
-            svc = ServiceList::GetInstance().FindInterface(name);
-            break;
-        default:
-            LOG(ERROR) << "Invalid function target from static map key ctl." << msg << ": "
-                       << static_cast<std::underlying_type<ControlTarget>::type>(function.target);
-            return false;
+    Service* service = nullptr;
+    auto action = message;
+    if (ConsumePrefix(&action, "interface_")) {
+        service = ServiceList::GetInstance().FindInterface(name);
+    } else {
+        service = ServiceList::GetInstance().FindService(name);
     }
 
-    if (svc == nullptr) {
-        LOG(ERROR) << "Control message: Could not find '" << name << "' for ctl." << msg
-                   << " from pid: " << pid << " (" << process_cmdline << ")";
+    if (service == nullptr) {
+        LOG(ERROR) << "Control message: Could not find '" << name << "' for ctl." << message
+                   << " from pid: " << from_pid << " (" << process_cmdline << ")";
         return false;
     }
 
-    if (auto result = function.action(svc); !result.ok()) {
-        LOG(ERROR) << "Control message: Could not ctl." << msg << " for '" << name
-                   << "' from pid: " << pid << " (" << process_cmdline << "): " << result.error();
+    const auto& map = GetControlMessageMap();
+    const auto it = map.find(action);
+    if (it == map.end()) {
+        LOG(ERROR) << "Unknown control msg '" << message << "'";
+        return false;
+    }
+    const auto& function = it->second;
+
+    if (auto result = function(service); !result.ok()) {
+        LOG(ERROR) << "Control message: Could not ctl." << message << " for '" << name
+                   << "' from pid: " << from_pid << " (" << process_cmdline
+                   << "): " << result.error();
         return false;
     }
 
-    LOG(INFO) << "Control message: Processed ctl." << msg << " for '" << name
-              << "' from pid: " << pid << " (" << process_cmdline << ")";
+    LOG(INFO) << "Control message: Processed ctl." << message << " for '" << name
+              << "' from pid: " << from_pid << " (" << process_cmdline << ")";
     return true;
 }
 
