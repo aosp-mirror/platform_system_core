@@ -436,6 +436,15 @@ cc_library_static {
             ],
         }
     },
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adbd",
+    ],
+    visibility: [
+        "//bootable/recovery/minadbd",
+        "//system/core/adb",
+    ],
 }
 
 cc_library {
@@ -502,6 +511,15 @@ cc_library {
             ],
         },
     },
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adbd",
+    ],
+    visibility: [
+        "//system/core/adb",
+    ],
+
 }
 
 cc_library {
