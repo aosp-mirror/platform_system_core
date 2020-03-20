@@ -720,23 +720,35 @@ Init provides state information with the following properties.
   characteristics in a device agnostic manner.
 
 Init responds to properties that begin with `ctl.`.  These properties take the format of
-`ctl.<command>` and the _value_ of the system property is used as a parameter, for example:
-`SetProperty("ctl.start", "logd")` will run the `start` command on `logd`.  Note that these
+`ctl.[<target>_]<command>` and the _value_ of the system property is used as a parameter.  The
+_target_ is optional and specifies the service option that _value_ is meant to match with.  There is
+only one option for _target_, `interface` which indicates that _value_ will refer to an interface
+that a service provides and not the service name itself.
+
+For example:
+
+`SetProperty("ctl.start", "logd")` will run the `start` command on `logd`.
+
+`SetProperty("ctl.interface_start", "aidl/aidl_lazy_test_1")` will run the `start` command on the
+service that exposes the `aidl aidl_lazy_test_1` interface.
+
+Note that these
 properties are only settable; they will have no value when read.
 
-`ctl.start` \
-`ctl.restart` \
-`ctl.stop`
-> These are equivalent to using the `start`, `restart`, and `stop` commands on the service specified
+The _commands_ are listed below.
+
+`start` \
+`restart` \
+`stop` \
+These are equivalent to using the `start`, `restart`, and `stop` commands on the service specified
 by the _value_ of the property.
 
-`ctl.interface_start` \
-`ctl.interface_restart` \
-`ctl.interface_stop`
-> These are equivalent to using the `interface_start`, `interface_restart`, and `interface_stop`
-commands on the interface specified by the _value_ of the property.
+`oneshot_one` and `oneshot_off` will turn on or off the _oneshot_
+flag for the service specified by the _value_ of the property.  This is
+particularly intended for services that are conditionally lazy HALs.  When
+they are lazy HALs, oneshot must be on, otherwise oneshot should be off.
 
-`ctl.sigstop_on` and `ctl.sigstop_off` will turn on or off the _sigstop_ feature for the service
+`sigstop_on` and `sigstop_off` will turn on or off the _sigstop_ feature for the service
 specified by the _value_ of the property.  See the _Debugging init_ section below for more details
 about this feature.
 
