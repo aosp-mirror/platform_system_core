@@ -99,7 +99,6 @@ int32_t AStatsManager_PullAtomMetadata_getNumAdditiveFields(
 void AStatsManager_PullAtomMetadata_getAdditiveFields(AStatsManager_PullAtomMetadata* metadata,
                                                       int32_t* fields) {
     std::copy(metadata->additive_fields.begin(), metadata->additive_fields.end(), fields);
-    return;
 }
 
 class StatsPullAtomCallbackInternal : public BnPullAtomCallback {

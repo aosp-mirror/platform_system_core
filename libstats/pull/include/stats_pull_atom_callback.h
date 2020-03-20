@@ -78,7 +78,7 @@ void AStatsManager_PullAtomMetadata_setAdditiveFields(AStatsManager_PullAtomMeta
                                                       int32_t* additive_fields, int32_t num_fields);
 
 /**
- * Get the number the additive fields of this pulled atom. This is intended to be called before
+ * Get the number of additive fields for this pulled atom. This is intended to be called before
  * AStatsManager_PullAtomMetadata_getAdditiveFields to determine the size of the array.
  */
 int32_t AStatsManager_PullAtomMetadata_getNumAdditiveFields(
