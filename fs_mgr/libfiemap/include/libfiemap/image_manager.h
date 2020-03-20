@@ -21,9 +21,11 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 
 #include <android-base/unique_fd.h>
+#include <libfiemap/fiemap_status.h>
 #include <liblp/partition_opener.h>
 
 namespace android {
@@ -51,7 +53,9 @@ class IImageManager {
     // of the image is undefined. If zero-fill is requested, and the operation
     // cannot be completed, the image will be deleted and this function will
     // return false.
-    virtual bool CreateBackingImage(const std::string& name, uint64_t size, int flags) = 0;
+    virtual FiemapStatus CreateBackingImage(
+            const std::string& name, uint64_t size, int flags,
+            std::function<bool(uint64_t, uint64_t)>&& on_progress = nullptr) = 0;
 
     // Delete an image created with CreateBackingImage. Its entry will be
     // removed from the associated lp_metadata file.
@@ -72,7 +76,9 @@ class IImageManager {
     // Unmap a block device previously mapped with mapBackingImage.
     virtual bool UnmapImageDevice(const std::string& name) = 0;
 
-    // Returns true whether the named backing image exists.
+    // Returns true whether the named backing image exists. This does not check
+    // consistency with the /data partition, so that it can return true in
+    // recovery.
     virtual bool BackingImageExists(const std::string& name) = 0;
 
     // Returns true if the specified image is mapped to a device.
@@ -84,12 +90,35 @@ class IImageManager {
     virtual bool MapImageWithDeviceMapper(const IPartitionOpener& opener, const std::string& name,
                                           std::string* dev) = 0;
 
+    // If an image was mapped, return the path to its device. Otherwise, return
+    // false. Errors are not reported in this case, calling IsImageMapped is
+    // not necessary.
+    virtual bool GetMappedImageDevice(const std::string& name, std::string* device) = 0;
+
+    // Map all images owned by this manager. This is only intended to be used
+    // during first-stage init, and as such, it does not provide a timeout
+    // (meaning libdm races can't be resolved, as ueventd is not available),
+    // and is not available over binder.
+    //
+    // The callback provided is given the list of dependent block devices.
+    virtual bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) = 0;
+
+    // Mark an image as disabled. This is useful for marking an image as
+    // will-be-deleted in recovery, since recovery cannot mount /data.
+    //
+    // This is not available in binder, since it is intended for recovery.
+    // When binder is available, images can simply be removed.
+    virtual bool DisableImage(const std::string& name) = 0;
+
+    // Remove all images that been marked as disabled.
+    virtual bool RemoveDisabledImages() = 0;
+
     // Get all backing image names.
     virtual std::vector<std::string> GetAllBackingImages() = 0;
 
     // Writes |bytes| zeros to |name| file. If |bytes| is 0, then the
     // whole file if filled with zeros.
-    virtual bool ZeroFillNewImage(const std::string& name, uint64_t bytes) = 0;
+    virtual FiemapStatus ZeroFillNewImage(const std::string& name, uint64_t bytes) = 0;
 
     // Find and remove all images and metadata for this manager.
     virtual bool RemoveAllImages() = 0;
@@ -109,7 +138,8 @@ class ImageManager final : public IImageManager {
     static std::unique_ptr<ImageManager> Open(const std::string& dir_prefix);
 
     // Methods that must be implemented from IImageManager.
-    bool CreateBackingImage(const std::string& name, uint64_t size, int flags) override;
+    FiemapStatus CreateBackingImage(const std::string& name, uint64_t size, int flags,
+                                    std::function<bool(uint64_t, uint64_t)>&& on_progress) override;
     bool DeleteBackingImage(const std::string& name) override;
     bool MapImageDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms,
                         std::string* path) override;
@@ -119,15 +149,12 @@ class ImageManager final : public IImageManager {
     bool MapImageWithDeviceMapper(const IPartitionOpener& opener, const std::string& name,
                                   std::string* dev) override;
     bool RemoveAllImages() override;
+    bool DisableImage(const std::string& name) override;
+    bool RemoveDisabledImages() override;
+    bool GetMappedImageDevice(const std::string& name, std::string* device) override;
+    bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) override;
 
     std::vector<std::string> GetAllBackingImages();
-    // Same as CreateBackingImage, but provides a progress notification.
-    bool CreateBackingImage(const std::string& name, uint64_t size, int flags,
-                            std::function<bool(uint64_t, uint64_t)>&& on_progress);
-
-    // Returns true if the named partition exists. This does not check the
-    // consistency of the backing image/data file.
-    bool PartitionExists(const std::string& name);
 
     // Validates that all images still have pinned extents. This will be removed
     // once b/134588268 is fixed.
@@ -136,7 +163,7 @@ class ImageManager final : public IImageManager {
     void set_partition_opener(std::unique_ptr<IPartitionOpener>&& opener);
 
     // Writes |bytes| zeros at the beginning of the passed image
-    bool ZeroFillNewImage(const std::string& name, uint64_t bytes);
+    FiemapStatus ZeroFillNewImage(const std::string& name, uint64_t bytes);
 
   private:
     ImageManager(const std::string& metadata_dir, const std::string& data_dir);

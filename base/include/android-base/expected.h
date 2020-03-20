@@ -111,6 +111,7 @@ class _NODISCARD_ expected {
     !(!std::is_convertible_v<const U&, T> ||
      !std::is_convertible_v<const G&, E>) /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr expected(const expected<U, G>& rhs) {
     if (rhs.has_value()) var_ = rhs.value();
     else var_ = unexpected(rhs.error());
@@ -149,6 +150,7 @@ class _NODISCARD_ expected {
     !(!std::is_convertible_v<const U&, T> ||
      !std::is_convertible_v<const G&, E>) /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr expected(expected<U, G>&& rhs) {
     if (rhs.has_value()) var_ = std::move(rhs.value());
     else var_ = unexpected(std::move(rhs.error()));
@@ -180,6 +182,7 @@ class _NODISCARD_ expected {
                 !std::is_same_v<unexpected<E>, std::remove_cv_t<std::remove_reference_t<U>>> &&
                 std::is_convertible_v<U&&, T> /* non-explicit */
                 )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr expected(U&& v) : var_(std::in_place_index<0>, std::forward<U>(v)) {}
 
   template <class U = T _ENABLE_IF(
@@ -195,6 +198,7 @@ class _NODISCARD_ expected {
     std::is_constructible_v<E, const G&> &&
     std::is_convertible_v<const G&, E> /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr expected(const unexpected<G>& e)
   : var_(std::in_place_index<1>, e.value()) {}
 
@@ -209,6 +213,7 @@ class _NODISCARD_ expected {
     std::is_constructible_v<E, G&&> &&
     std::is_convertible_v<G&&, E> /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr expected(unexpected<G>&& e)
   : var_(std::in_place_index<1>, std::move(e.value())) {}
 
@@ -326,6 +331,7 @@ class _NODISCARD_ expected {
 
   constexpr explicit operator bool() const noexcept { return has_value(); }
   constexpr bool has_value() const noexcept { return var_.index() == 0; }
+  constexpr bool ok() const noexcept { return has_value(); }
 
   constexpr const T& value() const& { return std::get<T>(var_); }
   constexpr T& value() & { return std::get<T>(var_); }
@@ -361,16 +367,6 @@ class _NODISCARD_ expected {
   template<class T1, class E1, class T2, class E2>
   friend constexpr bool operator!=(const expected<T1, E1>& x, const expected<T2, E2>& y);
 
-  // comparison with T
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator==(const expected<T1, E1>&, const T2&);
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator==(const T2&, const expected<T1, E1>&);
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator!=(const expected<T1, E1>&, const T2&);
-  template<class T1, class E1, class T2>
-  friend constexpr bool operator!=(const T2&, const expected<T1, E1>&);
-
   // Comparison with unexpected<E>
   template<class T1, class E1, class E2>
   friend constexpr bool operator==(const expected<T1, E1>&, const unexpected<E2>&);
@@ -403,24 +399,6 @@ constexpr bool operator==(const expected<T1, E1>& x, const expected<T2, E2>& y) 
 template<class T1, class E1, class T2, class E2>
 constexpr bool operator!=(const expected<T1, E1>& x, const expected<T2, E2>& y) {
   return !(x == y);
-}
-
-// comparison with T
-template<class T1, class E1, class T2>
-constexpr bool operator==(const expected<T1, E1>& x, const T2& y) {
-  return x.has_value() && (*x == y);
-}
-template<class T1, class E1, class T2>
-constexpr bool operator==(const T2& x, const expected<T1, E1>& y) {
-  return y.has_value() && (x == *y);
-}
-template<class T1, class E1, class T2>
-constexpr bool operator!=(const expected<T1, E1>& x, const T2& y) {
-  return !x.has_value() || (*x != y);
-}
-template<class T1, class E1, class T2>
-constexpr bool operator!=(const T2& x, const expected<T1, E1>& y) {
-  return !y.has_value() || (x != *y);
 }
 
 // Comparison with unexpected<E>
@@ -457,6 +435,7 @@ class _NODISCARD_ expected<void, E> {
     std::is_void_v<U> &&
     std::is_convertible_v<const G&, E> /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr expected(const expected<U, G>& rhs) {
     if (!rhs.has_value()) var_ = unexpected(rhs.error());
   }
@@ -473,6 +452,7 @@ class _NODISCARD_ expected<void, E> {
     std::is_void_v<U> &&
     std::is_convertible_v<const G&&, E> /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr expected(expected<U, G>&& rhs) {
     if (!rhs.has_value()) var_ = unexpected(std::move(rhs.error()));
   }
@@ -489,6 +469,7 @@ class _NODISCARD_ expected<void, E> {
     std::is_constructible_v<E, const G&> &&
     std::is_convertible_v<const G&, E> /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr expected(const unexpected<G>& e)
   : var_(std::in_place_index<1>, e.value()) {}
 
@@ -503,6 +484,7 @@ class _NODISCARD_ expected<void, E> {
     std::is_constructible_v<E, G&&> &&
     std::is_convertible_v<G&&, E> /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr expected(unexpected<G>&& e)
   : var_(std::in_place_index<1>, std::move(e.value())) {}
 
@@ -576,6 +558,7 @@ class _NODISCARD_ expected<void, E> {
   // observers
   constexpr explicit operator bool() const noexcept { return has_value(); }
   constexpr bool has_value() const noexcept { return var_.index() == 0; }
+  constexpr bool ok() const noexcept { return has_value(); }
 
   constexpr void value() const& { if (!has_value()) std::get<0>(var_); }
 
@@ -640,6 +623,7 @@ class unexpected {
                 std::is_constructible_v<E, Err> &&
                 !std::is_same_v<std::remove_cv_t<std::remove_reference_t<E>>, std::in_place_t> &&
                 !std::is_same_v<std::remove_cv_t<std::remove_reference_t<E>>, unexpected>)>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr unexpected(Err&& e) : val_(std::forward<Err>(e)) {}
 
   template<class U, class... Args _ENABLE_IF(
@@ -660,6 +644,7 @@ class unexpected {
     !std::is_convertible_v<const unexpected<Err>, E> &&
     std::is_convertible_v<Err, E> /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr unexpected(const unexpected<Err>& rhs)
   : val_(rhs.value()) {}
 
@@ -690,6 +675,7 @@ class unexpected {
     !std::is_convertible_v<const unexpected<Err>, E> &&
     std::is_convertible_v<Err, E> /* non-explicit */
   )>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr unexpected(unexpected<Err>&& rhs)
   : val_(std::move(rhs.value())) {}
 

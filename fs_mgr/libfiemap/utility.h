@@ -28,7 +28,7 @@ namespace fiemap {
 // Given a file that will be created, determine the maximum size its containing
 // filesystem allows. Note this is a theoretical maximum size; free space is
 // ignored entirely.
-uint64_t DetermineMaximumFileSize(const std::string& file_path);
+FiemapStatus DetermineMaximumFileSize(const std::string& file_path, uint64_t* result);
 
 // Given a SplitFiemap, this returns a device path that will work during first-
 // stage init (i.e., its path can be found by InitRequiredDevices).

@@ -20,6 +20,7 @@
 
 #include <android-base/unique_fd.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
+#include <fstab/fstab.h>
 #include <liblp/liblp.h>
 
 // Logical partitions are only mapped to a block device as needed, and
@@ -49,6 +50,18 @@ class PartitionHandle {
     std::string path_;
     android::base::unique_fd fd_;
     std::function<void()> closer_;
+};
+
+class AutoMountMetadata {
+  public:
+    AutoMountMetadata();
+    ~AutoMountMetadata();
+    explicit operator bool() const { return mounted_; }
+
+  private:
+    android::fs_mgr::Fstab fstab_;
+    bool mounted_ = false;
+    bool should_unmount_ = false;
 };
 
 class FastbootDevice;

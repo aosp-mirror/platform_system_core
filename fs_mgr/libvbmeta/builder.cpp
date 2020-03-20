@@ -40,18 +40,18 @@ SuperVBMetaBuilder::SuperVBMetaBuilder(const int super_vbmeta_fd,
 Result<void> SuperVBMetaBuilder::Build() {
     for (const auto& [vbmeta_name, file_path] : images_path_) {
         Result<std::string> content = ReadVBMetaImageFromFile(file_path);
-        if (!content) {
+        if (!content.ok()) {
             return content.error();
         }
 
         Result<uint8_t> vbmeta_index = AddVBMetaImage(vbmeta_name);
-        if (!vbmeta_index) {
+        if (!vbmeta_index.ok()) {
             return vbmeta_index.error();
         }
 
         Result<void> rv_export_vbmeta_image =
                 ExportVBMetaImageToFile(vbmeta_index.value(), content.value());
-        if (!rv_export_vbmeta_image) {
+        if (!rv_export_vbmeta_image.ok()) {
             return rv_export_vbmeta_image;
         }
     }
@@ -65,7 +65,7 @@ Result<std::string> SuperVBMetaBuilder::ReadVBMetaImageFromFile(const std::strin
     }
 
     Result<uint64_t> file_size = GetFileSize(source_fd);
-    if (!file_size) {
+    if (!file_size.ok()) {
         return file_size.error();
     }
 
@@ -98,7 +98,7 @@ Result<uint8_t> SuperVBMetaBuilder::AddVBMetaImage(const std::string& vbmeta_nam
         slot_number = desc->vbmeta_index;
     } else {
         Result<uint8_t> new_slot = GetEmptySlot();
-        if (!new_slot) {
+        if (!new_slot.ok()) {
             return new_slot;
         }
         slot_number = new_slot.value();
@@ -162,7 +162,7 @@ Result<void> SuperVBMetaBuilder::ExportVBMetaTableToFile() {
 
     android::base::Result<void> rv_write_primary_vbmeta_table =
             WritePrimaryVBMetaTable(super_vbmeta_fd_, serialized_table);
-    if (!rv_write_primary_vbmeta_table) {
+    if (!rv_write_primary_vbmeta_table.ok()) {
         return rv_write_primary_vbmeta_table;
     }
 
@@ -175,7 +175,7 @@ Result<void> SuperVBMetaBuilder::ExportVBMetaImageToFile(const uint8_t vbmeta_in
                                                          const std::string& vbmeta_image) {
     Result<void> rv_write_vbmeta_image =
             WriteVBMetaImage(super_vbmeta_fd_, vbmeta_index, vbmeta_image);
-    if (!rv_write_vbmeta_image) {
+    if (!rv_write_vbmeta_image.ok()) {
         return rv_write_vbmeta_image;
     }
 
@@ -196,13 +196,13 @@ bool WriteToSuperVBMetaFile(const std::string& super_vbmeta_file,
     SuperVBMetaBuilder builder(super_vbmeta_fd, images_path);
 
     Result<void> rv_build = builder.Build();
-    if (!rv_build) {
+    if (!rv_build.ok()) {
         LERROR << rv_build.error();
         return false;
     }
 
     Result<void> rv_export = builder.ExportVBMetaTableToFile();
-    if (!rv_export) {
+    if (!rv_export.ok()) {
         LERROR << rv_export.error();
         return false;
     }

@@ -31,7 +31,13 @@ std::vector<std::string> test_modules;
 // Used by libmodprobe_ext_test to report which modules would have been loaded.
 std::vector<std::string> modules_loaded;
 
+// Used by libmodprobe_ext_test to fake a kernel commandline
+std::string kernel_cmdline;
+
 TEST(libmodprobe, Test) {
+    kernel_cmdline =
+            "flag1 flag2 test1.option1=50 test4.option3=\"set x\" test1.option2=60 "
+            "test8. test5.option1= test10.option1=1";
     test_modules = {
             "/test1.ko",  "/test2.ko",  "/test3.ko",  "/test4.ko",  "/test5.ko",
             "/test6.ko",  "/test7.ko",  "/test8.ko",  "/test9.ko",  "/test10.ko",
@@ -42,25 +48,33 @@ TEST(libmodprobe, Test) {
             "/test14.ko",
             "/test15.ko",
             "/test3.ko",
-            "/test4.ko",
-            "/test1.ko",
+            "/test4.ko option3=\"set x\"",
+            "/test1.ko option1=50 option2=60",
             "/test6.ko",
             "/test2.ko",
-            "/test5.ko",
+            "/test5.ko option1=",
             "/test8.ko",
             "/test7.ko param1=4",
             "/test9.ko param_x=1 param_y=2 param_z=3",
-            "/test10.ko",
+            "/test10.ko option1=1",
             "/test12.ko",
             "/test11.ko",
             "/test13.ko",
     };
 
     std::vector<std::string> expected_after_remove = {
-            "/test14.ko", "/test15.ko",         "/test1.ko",
-            "/test6.ko",  "/test2.ko",          "/test5.ko",
-            "/test8.ko",  "/test7.ko param1=4", "/test9.ko param_x=1 param_y=2 param_z=3",
-            "/test10.ko", "/test12.ko",         "/test11.ko",
+            "/test14.ko",
+            "/test15.ko",
+            "/test1.ko option1=50 option2=60",
+            "/test6.ko",
+            "/test2.ko",
+            "/test5.ko option1=",
+            "/test8.ko",
+            "/test7.ko param1=4",
+            "/test9.ko param_x=1 param_y=2 param_z=3",
+            "/test10.ko option1=1",
+            "/test12.ko",
+            "/test11.ko",
             "/test13.ko",
     };
 

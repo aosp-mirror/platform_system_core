@@ -70,30 +70,28 @@ void Global::FindAndReadVariable(Maps* maps, const char* var_str) {
   // This also works:
   //   f0000-f2000 0 r-- /system/lib/libc.so
   //   f2000-f3000 2000 rw- /system/lib/libc.so
-  MapInfo* map_start = nullptr;
+  // It is also possible to see empty maps after the read-only like so:
+  //   f0000-f1000 0 r-- /system/lib/libc.so
+  //   f1000-f2000 0 ---
+  //   f2000-f3000 1000 r-x /system/lib/libc.so
+  //   f3000-f4000 2000 rw- /system/lib/libc.so
+  MapInfo* map_zero = nullptr;
   for (const auto& info : *maps) {
-    if (map_start != nullptr && map_start->name == info->name) {
-      if (info->offset != 0 &&
-          (info->flags & (PROT_READ | PROT_WRITE)) == (PROT_READ | PROT_WRITE)) {
-        Elf* elf = map_start->GetElf(memory_, arch());
-        uint64_t ptr;
-        if (elf->GetGlobalVariableOffset(variable, &ptr) && ptr != 0) {
-          uint64_t offset_end = info->offset + info->end - info->start;
-          if (ptr >= info->offset && ptr < offset_end) {
-            ptr = info->start + ptr - info->offset;
-            if (ReadVariableData(ptr)) {
-              break;
-            }
+    if (info->offset != 0 && (info->flags & (PROT_READ | PROT_WRITE)) == (PROT_READ | PROT_WRITE) &&
+        map_zero != nullptr && Searchable(info->name) && info->name == map_zero->name) {
+      Elf* elf = map_zero->GetElf(memory_, arch());
+      uint64_t ptr;
+      if (elf->GetGlobalVariableOffset(variable, &ptr) && ptr != 0) {
+        uint64_t offset_end = info->offset + info->end - info->start;
+        if (ptr >= info->offset && ptr < offset_end) {
+          ptr = info->start + ptr - info->offset;
+          if (ReadVariableData(ptr)) {
+            break;
           }
         }
-        map_start = nullptr;
       }
-    } else {
-      map_start = nullptr;
-    }
-    if (map_start == nullptr && (info->flags & PROT_READ) && info->offset == 0 &&
-        Searchable(info->name)) {
-      map_start = info.get();
+    } else if (info->offset == 0 && !info->name.empty()) {
+      map_zero = info.get();
     }
   }
 }

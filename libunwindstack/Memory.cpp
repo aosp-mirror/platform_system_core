@@ -206,12 +206,12 @@ std::shared_ptr<Memory> Memory::CreateOfflineMemory(const uint8_t* data, uint64_
 }
 
 size_t MemoryBuffer::Read(uint64_t addr, void* dst, size_t size) {
-  if (addr >= raw_.size()) {
+  if (addr >= size_) {
     return 0;
   }
 
-  size_t bytes_left = raw_.size() - static_cast<size_t>(addr);
-  const unsigned char* actual_base = static_cast<const unsigned char*>(raw_.data()) + addr;
+  size_t bytes_left = size_ - static_cast<size_t>(addr);
+  const unsigned char* actual_base = static_cast<const unsigned char*>(raw_) + addr;
   size_t actual_len = std::min(bytes_left, size);
 
   memcpy(dst, actual_base, actual_len);
@@ -219,7 +219,7 @@ size_t MemoryBuffer::Read(uint64_t addr, void* dst, size_t size) {
 }
 
 uint8_t* MemoryBuffer::GetPtr(size_t offset) {
-  if (offset < raw_.size()) {
+  if (offset < size_) {
     return &raw_[offset];
   }
   return nullptr;

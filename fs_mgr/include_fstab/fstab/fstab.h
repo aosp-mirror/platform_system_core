@@ -37,7 +37,8 @@ struct FstabEntry {
     unsigned long flags = 0;
     std::string fs_options;
     std::string key_loc;
-    std::string key_dir;
+    std::string metadata_key_dir;
+    std::string metadata_encryption;
     off64_t length = 0;
     std::string label;
     int partnum = -1;
@@ -82,6 +83,7 @@ struct FstabEntry {
         bool first_stage_mount : 1;
         bool slot_select_other : 1;
         bool fs_verity : 1;
+        bool ext_meta_csum : 1;
     } fs_mgr_flags = {};
 
     bool is_encryptable() const {
@@ -102,7 +104,6 @@ bool SkipMountingPartitions(Fstab* fstab);
 FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
 // The Fstab can contain multiple entries for the same mount point with different configurations.
 std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path);
-FstabEntry* GetMountedEntryForUserdata(Fstab* fstab);
 
 // This method builds DSU fstab entries and transfer the fstab.
 //

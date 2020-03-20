@@ -374,7 +374,7 @@ static int parent(const char* tag, int parent_read, pid_t pid, int* chld_sts, in
     }
 
     if (log_target & LOG_FILE) {
-        fd = open(file_path, O_WRONLY | O_CREAT, 0664);
+        fd = open(file_path, O_WRONLY | O_CREAT | O_CLOEXEC, 0664);
         if (fd < 0) {
             ERROR("Cannot log to file %s\n", file_path);
             log_target &= ~LOG_FILE;

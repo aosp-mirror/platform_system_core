@@ -55,6 +55,13 @@
  */
 
 #include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/cdefs.h>
+
+#if !defined(__BIONIC__) && !defined(__INTRODUCED_IN)
+#define __INTRODUCED_IN(x)
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -148,7 +155,10 @@ typedef enum log_id {
   /** The kernel log buffer. */
   LOG_ID_KERNEL = 7,
 
-  LOG_ID_MAX
+  LOG_ID_MAX,
+
+  /** Let the logging function choose the best log target. */
+  LOG_ID_DEFAULT = 0x7FFFFFFF
 } log_id_t;
 
 /**
@@ -169,6 +179,116 @@ int __android_log_buf_write(int bufID, int prio, const char* tag, const char* te
  */
 int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...)
     __attribute__((__format__(printf, 4, 5)));
+
+/**
+ * Logger data struct used for writing log messages to liblog via __android_log_write_logger_data()
+ * and sending log messages to user defined loggers specified in __android_log_set_logger().
+ */
+struct __android_logger_data {
+  size_t struct_size; /* Must be set to sizeof(__android_logger_data) and is used for versioning. */
+  int32_t buffer_id;  /* log_id_t or -1 to represent 'default'. */
+  int32_t priority;   /* android_LogPriority values. */
+  const char* tag;
+  const char* file;  /* Optional file name, may be set to nullptr. */
+  uint32_t line;     /* Optional line number, ignore if file is nullptr. */
+};
+
+/**
+ * Prototype for the 'logger' function that is called for every log message.
+ */
+typedef void (*__android_logger_function)(const struct __android_logger_data* logger_data,
+                                          const char* message);
+/**
+ * Prototype for the 'abort' function that is called when liblog will abort due to
+ * __android_log_assert() failures.
+ */
+typedef void (*__android_aborter_function)(const char* abort_message);
+
+#if !defined(__ANDROID__) || __ANDROID_API__ >= 30
+/**
+ * Writes the log message specified with logger_data and msg to the log.  logger_data includes
+ * additional file name and line number information that a logger may use.  logger_data is versioned
+ * for backwards compatibility.
+ * This assumes that loggability has already been checked through __android_log_is_loggable().
+ * Higher level logging libraries, such as libbase, first check loggability, then format their
+ * buffers, then pass the message to liblog via this function, and therefore we do not want to
+ * duplicate the loggability check here.
+ */
+void __android_log_write_logger_data(struct __android_logger_data* logger_data, const char* msg)
+    __INTRODUCED_IN(30);
+
+/**
+ * Sets a user defined logger function.  All log messages sent to liblog will be set to the
+ * function pointer specified by logger for processing.
+ */
+void __android_log_set_logger(__android_logger_function logger) __INTRODUCED_IN(30);
+
+/**
+ * Writes the log message to logd.  This is an __android_logger_function and can be provided to
+ * __android_log_set_logger().  It is the default logger when running liblog on a device.
+ */
+void __android_log_logd_logger(const struct __android_logger_data* logger_data, const char* msg)
+    __INTRODUCED_IN(30);
+
+/**
+ * Writes the log message to stderr.  This is an __android_logger_function and can be provided to
+ * __android_log_set_logger().  It is the default logger when running liblog on host.
+ */
+void __android_log_stderr_logger(const struct __android_logger_data* logger_data,
+                                 const char* message) __INTRODUCED_IN(30);
+
+/**
+ * Sets a user defined aborter function that is called for __android_log_assert() failures.
+ */
+void __android_log_set_aborter(__android_aborter_function aborter) __INTRODUCED_IN(30);
+
+/**
+ * Calls the stored aborter function.  This allows for other logging libraries to use the same
+ * aborter function by calling this function in liblog.
+ */
+void __android_log_call_aborter(const char* abort_message) __INTRODUCED_IN(30);
+
+/**
+ * Sets android_set_abort_message() on device then aborts().  This is the default aborter.
+ */
+void __android_log_default_aborter(const char* abort_message) __INTRODUCED_IN(30);
+
+/**
+ * Use the per-tag properties "log.tag.<tagname>" along with the minimum priority from
+ * __android_log_set_minimum_priority() to determine if a log message with a given prio and tag will
+ * be printed.  A non-zero result indicates yes, zero indicates false.
+ *
+ * If both a priority for a tag and a minimum priority are set by
+ * __android_log_set_minimum_priority(), then the lowest of the two values are to determine the
+ * minimum priority needed to log.  If only one is set, then that value is used to determine the
+ * minimum priority needed.  If none are set, then default_priority is used.
+ *
+ * prio is ANDROID_LOG_VERBOSE to ANDROID_LOG_FATAL.
+ */
+int __android_log_is_loggable(int prio, const char* tag, int default_prio) __INTRODUCED_IN(30);
+int __android_log_is_loggable_len(int prio, const char* tag, size_t len, int default_prio)
+    __INTRODUCED_IN(30);
+
+/**
+ * Sets the minimum priority that will be logged for this process.
+ *
+ * This returns the previous set minimum priority, or ANDROID_LOG_DEFAULT if none was set.
+ */
+int32_t __android_log_set_minimum_priority(int32_t priority) __INTRODUCED_IN(30);
+
+/**
+ * Gets the minimum priority that will be logged for this process.  If none has been set by a
+ * previous __android_log_set_minimum_priority() call, this returns ANDROID_LOG_DEFAULT.
+ */
+int32_t __android_log_get_minimum_priority(void) __INTRODUCED_IN(30);
+
+/**
+ * Sets the default tag if no tag is provided when writing a log message.  Defaults to
+ * getprogname().  This truncates tag to the maximum log message size, though appropriate tags
+ * should be much smaller.
+ */
+void __android_log_set_default_tag(const char* tag) __INTRODUCED_IN(30);
+#endif
 
 #ifdef __cplusplus
 }

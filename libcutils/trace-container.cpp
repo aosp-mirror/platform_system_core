@@ -39,6 +39,11 @@ static int              atrace_container_sock_fd     = -1;
 static pthread_mutex_t  atrace_enabling_mutex        = PTHREAD_MUTEX_INITIALIZER;
 static pthread_rwlock_t atrace_container_sock_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 
+static void atrace_seq_number_changed(uint32_t, uint32_t seq_no) {
+    pthread_once(&atrace_once_control, atrace_init_once);
+    atomic_store_explicit(&last_sequence_number, seq_no, memory_order_relaxed);
+}
+
 static bool atrace_init_container_sock()
 {
     pthread_rwlock_wrlock(&atrace_container_sock_rwlock);
@@ -82,24 +87,28 @@ void atrace_set_tracing_enabled(bool enabled)
 
 static void atrace_init_once()
 {
-    atrace_marker_fd = open("/sys/kernel/debug/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
+    atrace_marker_fd = open("/sys/kernel/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
     if (atrace_marker_fd < 0) {
-        // We're in container, ftrace may be disabled. In such case, we use the
-        // socket to write trace event.
+        // try debugfs
+        atrace_marker_fd = open("/sys/kernel/debug/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
+        if (atrace_marker_fd < 0) {
+            // We're in container, ftrace may be disabled. In such case, we use the
+            // socket to write trace event.
 
-        // Protect the initialization of container socket from
-        // atrace_set_tracing_enabled.
-        pthread_mutex_lock(&atrace_enabling_mutex);
-        atrace_use_container_sock = true;
-        bool success = false;
-        if (atomic_load_explicit(&atrace_is_enabled, memory_order_acquire)) {
-            success = atrace_init_container_sock();
-        }
-        pthread_mutex_unlock(&atrace_enabling_mutex);
+            // Protect the initialization of container socket from
+            // atrace_set_tracing_enabled.
+            pthread_mutex_lock(&atrace_enabling_mutex);
+            atrace_use_container_sock = true;
+            bool success = false;
+            if (atomic_load_explicit(&atrace_is_enabled, memory_order_acquire)) {
+                success = atrace_init_container_sock();
+            }
+            pthread_mutex_unlock(&atrace_enabling_mutex);
 
-        if (!success) {
-            atrace_enabled_tags = 0;
-            goto done;
+            if (!success) {
+                atrace_enabled_tags = 0;
+                goto done;
+            }
         }
     }
     atrace_enabled_tags = atrace_get_property();

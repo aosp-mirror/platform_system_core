@@ -25,8 +25,6 @@
 #include <log/log_event_list.h>
 #include <private/android_logger.h>
 
-#include "log_portability.h"
-
 #define MAX_EVENT_PAYLOAD (LOGGER_ENTRY_MAX_PAYLOAD - sizeof(int32_t))
 
 enum ReadWriteFlag {

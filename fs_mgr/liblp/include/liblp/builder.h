@@ -145,6 +145,7 @@ class Partition final {
     std::vector<std::unique_ptr<Extent>> extents_;
     uint32_t attributes_;
     uint64_t size_;
+    bool disabled_;
 };
 
 // An interval in the metadata. This is similar to a LinearExtent with one difference.

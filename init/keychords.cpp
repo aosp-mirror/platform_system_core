@@ -187,7 +187,7 @@ bool Keychords::GeteventEnable(int fd) {
         LambdaCheck();
     }
     if (auto result = epoll_->RegisterHandler(fd, [this, fd]() { this->LambdaHandler(fd); });
-        !result) {
+        !result.ok()) {
         LOG(WARNING) << "Could not register keychord epoll handler: " << result.error();
         return false;
     }
@@ -272,7 +272,7 @@ void Keychords::GeteventOpenDevice() {
     if (inotify_fd_ >= 0) {
         if (auto result =
                     epoll_->RegisterHandler(inotify_fd_, [this]() { this->InotifyHandler(); });
-            !result) {
+            !result.ok()) {
             LOG(WARNING) << "Could not register keychord epoll handler: " << result.error();
         }
     }

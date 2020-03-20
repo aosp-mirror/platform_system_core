@@ -165,9 +165,11 @@ cc_library_host_static {
 
     srcs: libadb_srcs + [
         "client/auth.cpp",
+        "client/adb_wifi.cpp",
         "client/usb_libusb.cpp",
         "client/usb_dispatch.cpp",
         "client/transport_mdns.cpp",
+        "client/pairing/pairing_client.cpp",
     ],
 
     generated_headers: ["platform_tools_version"],
@@ -195,6 +197,10 @@ cc_library_host_static {
     },
 
     static_libs: [
+        "libadb_crypto",
+        "libadb_protos",
+        "libadb_pairing_connection",
+        "libadb_tls_connection",
         "libbase",
         "libcrypto_utils",
         "libcrypto",
@@ -204,6 +210,7 @@ cc_library_host_static {
         "libutils",
         "liblog",
         "libcutils",
+        "libprotobuf-cpp-lite",
     ],
 }
 
@@ -212,13 +219,21 @@ cc_test_host {
     defaults: ["adb_defaults"],
     srcs: libadb_test_srcs,
     static_libs: [
+        "libadb_crypto_static",
         "libadb_host",
+        "libadb_pairing_auth_static",
+        "libadb_pairing_connection_static",
+        "libadb_protos_static",
+        "libadb_tls_connection_static",
         "libbase",
         "libcutils",
         "libcrypto_utils",
         "libcrypto",
+        "liblog",
         "libmdnssd",
         "libdiagnose_usb",
+        "libprotobuf-cpp-lite",
+        "libssl",
         "libusb",
     ],
 
@@ -250,12 +265,16 @@ cc_benchmark {
     },
 
     static_libs: [
+        "libadb_crypto_static",
+        "libadb_tls_connection_static",
+        "libadbd_auth",
         "libbase",
         "libcutils",
         "libcrypto_utils",
         "libcrypto_static",
         "libdiagnose_usb",
         "liblog",
+        "libssl",
         "libusb",
     ],
 }
@@ -263,6 +282,7 @@ cc_benchmark {
 cc_binary_host {
     name: "adb",
 
+    stl: "libc++_static",
     defaults: ["adb_defaults"],
 
     srcs: [
@@ -276,6 +296,8 @@ cc_binary_host {
         "client/line_printer.cpp",
         "client/fastdeploy.cpp",
         "client/fastdeploycallbacks.cpp",
+        "client/incremental.cpp",
+        "client/incremental_server.cpp",
         "shell_service_protocol.cpp",
     ],
 
@@ -285,8 +307,14 @@ cc_binary_host {
     ],
 
     static_libs: [
+        "libadb_crypto",
         "libadb_host",
+	"libadb_pairing_auth",
+	"libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libandroidfw",
+        "libapp_processes_protos_full",
         "libbase",
         "libcutils",
         "libcrypto_utils",
@@ -294,16 +322,16 @@ cc_binary_host {
         "libfastdeploy_host",
         "libdiagnose_usb",
         "liblog",
+        "liblz4",
         "libmdnssd",
-        "libprotobuf-cpp-lite",
+        "libprotobuf-cpp-full",
+        "libssl",
         "libusb",
         "libutils",
         "liblog",
         "libziparchive",
         "libz",
     ],
-
-    stl: "libc++_static",
 
     // Don't add anything here, we don't want additional shared dependencies
     // on the host adb tool, and shared libraries that link against libc++
@@ -348,6 +376,8 @@ cc_library_static {
     srcs: libadb_srcs + libadb_linux_srcs + libadb_posix_srcs + [
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
+        "daemon/logging.cpp",
+        "daemon/adb_wifi.cpp",
     ],
 
     local_include_dirs: [
@@ -362,14 +392,24 @@ cc_library_static {
 
     shared_libs: [
         "libadbconnection_server",
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libadbd_auth",
+        "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
         "liblog",
     ],
+
+    proto: {
+        type: "lite",
+        static: true,
+        export_proto_headers: true,
+    },
 
     target: {
         android: {
@@ -387,8 +427,24 @@ cc_library_static {
             srcs: [
                 "daemon/usb_dummy.cpp",
             ]
+        },
+        recovery: {
+            exclude_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+                "libapp_processes_protos_lite",
+            ],
         }
     },
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adbd",
+    ],
+    visibility: [
+        "//bootable/recovery/minadbd",
+        "//system/core/adb",
+    ],
 }
 
 cc_library {
@@ -410,19 +466,26 @@ cc_library {
     ],
 
     static_libs: [
+        "libadbconnection_server",
         "libadbd_core",
         "libdiagnose_usb",
     ],
 
     shared_libs: [
-        "libadbconnection_server",
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_protos",
+        "libadb_tls_connection",
         "libadbd_auth",
+        "libadbd_fs",
+        "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
+        "libcutils_sockets",
         "liblog",
+        "libprotobuf-cpp-lite",
     ],
 
     target: {
@@ -442,8 +505,21 @@ cc_library {
             exclude_srcs: [
                 "daemon/abb_service.cpp",
             ],
+            exclude_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+            ],
         },
     },
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adbd",
+    ],
+    visibility: [
+        "//system/core/adb",
+    ],
+
 }
 
 cc_library {
@@ -451,27 +527,47 @@ cc_library {
     defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
 
-    // Avoid getting duplicate symbol of android::build::GetBuildNumber().
+    // avoid getting duplicate symbol of android::build::getbuildnumber().
     use_version_lib: false,
 
     // libminadbd wants both, as it's used to build native tests.
     compile_multilib: "both",
 
-    // libadbd doesn't build any additional source, but to expose libadbd_core as a shared library.
     whole_static_libs: [
         "libadbd_core",
     ],
 
     shared_libs: [
         "libadbconnection_server",
+        "libapp_processes_protos_lite",
+        "libprotobuf-cpp-lite",
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_tls_connection",
         "libadbd_auth",
+        "libadbd_fs",
         "libadbd_services",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
         "liblog",
+        "libselinux",
+    ],
+
+    target: {
+        recovery: {
+            exclude_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+            ],
+        }
+    },
+
+    static_libs: [
+        "libcutils_sockets",
+        "libdiagnose_usb",
+        "libmdnssd",
     ],
 
     export_include_dirs: [
@@ -482,6 +578,7 @@ cc_library {
 cc_binary {
     name: "adbd",
     defaults: ["adbd_defaults", "host_adbd_supported"],
+    stl: "libc++_static",
     recovery_available: true,
 
     srcs: [
@@ -497,26 +594,47 @@ cc_binary {
         keep_symbols: true,
     },
 
-    stl: "libc++_static",
     static_libs: [
+        "libadb_crypto",
+        "libadb_tls_connection",
+        "libadbconnection_server",
         "libadbd",
-        "libadbd_auth",
         "libadbd_services",
+        "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
         "libcap",
         "libcrypto_utils",
-        "libcutils",
+        "libcutils_sockets",
         "libdiagnose_usb",
-        "liblog",
         "libmdnssd",
         "libminijail",
-        "libselinux",
+        "libprotobuf-cpp-lite",
+        "libssl",
     ],
 
     shared_libs: [
-        "libadbconnection_server",
+        "libadb_pairing_connection",
+        "libadb_protos",
+        "libadbd_auth",
+        "libadbd_fs",
         "libcrypto",
+        "liblog",
+        "libselinux",
+    ],
+
+    target: {
+        recovery: {
+            exclude_shared_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+            ],
+        }
+    },
+
+    required: [
+        "libadbd_auth",
+        "libadbd_fs",
     ],
 }
 
@@ -524,7 +642,6 @@ phony {
     name: "adbd_system_binaries",
     required: [
         "abb",
-        "libadbd_auth",
         "reboot",
         "set-verity-state",
     ]
@@ -541,6 +658,7 @@ cc_binary {
     name: "abb",
 
     defaults: ["adbd_defaults"],
+    stl: "libc++",
     recovery_available: false,
 
     srcs: [
@@ -573,7 +691,11 @@ cc_binary {
 
 cc_test {
     name: "adbd_test",
+
     defaults: ["adbd_defaults"],
+    stl: "libc++_static",
+
+    recovery_available: false,
     srcs: libadb_test_srcs + [
         "daemon/services.cpp",
         "daemon/shell_service.cpp",
@@ -585,17 +707,20 @@ cc_test {
     static_libs: [
         "libadbd",
         "libadbd_auth",
+        "libadb_crypto_static",
+        "libadb_pairing_connection_static",
+        "libadb_tls_connection_static",
         "libbase",
-        "libcutils",
         "libcrypto_utils",
         "libcrypto_static",
+        "libcutils_sockets",
         "libdiagnose_usb",
         "liblog",
         "libusb",
         "libmdnssd",
         "libselinux",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["device-tests", "mts"],
     require_root: true,
 }
 
@@ -630,10 +755,10 @@ python_test_host {
     test_suites: ["general-tests"],
     version: {
         py2: {
-            enabled: true,
+            enabled: false,
         },
         py3: {
-            enabled: false,
+            enabled: true,
         },
     },
 }
@@ -678,7 +803,6 @@ cc_library_host_static {
         "libziparchive",
         "libz",
     ],
-    stl: "libc++_static",
     proto: {
         type: "lite",
         export_proto_headers: true,
@@ -700,7 +824,12 @@ cc_test_host {
         "fastdeploy/deploypatchgenerator/patch_utils_test.cpp",
     ],
     static_libs: [
+        "libadb_crypto_static",
         "libadb_host",
+        "libadb_pairing_auth_static",
+        "libadb_pairing_connection_static",
+        "libadb_protos_static",
+        "libadb_tls_connection_static",
         "libandroidfw",
         "libbase",
         "libcutils",
@@ -711,6 +840,7 @@ cc_test_host {
         "liblog",
         "libmdnssd",
         "libprotobuf-cpp-lite",
+        "libssl",
         "libusb",
         "libutils",
         "libziparchive",
@@ -728,40 +858,4 @@ cc_test_host {
         "fastdeploy/testdata/sample.apk",
         "fastdeploy/testdata/sample.cd",
     ],
-}
-
-prebuilt_etc {
-    name: "com.android.adbd.ld.config.txt",
-    src: "apex/ld.config.txt",
-    filename: "ld.config.txt",
-    installable: false,
-}
-
-apex {
-    name: "com.android.adbd",
-    manifest: "apex/apex_manifest.json",
-
-    binaries: ["adbd"],
-    prebuilts: ["com.android.adbd.init.rc", "com.android.adbd.ld.config.txt"],
-
-    key: "com.android.adbd.key",
-    certificate: ":com.android.adbd.certificate",
-}
-
-apex_key {
-    name: "com.android.adbd.key",
-    public_key: "apex/com.android.adbd.avbpubkey",
-    private_key: "apex/com.android.adbd.pem",
-}
-
-android_app_certificate {
-    name: "com.android.adbd.certificate",
-    certificate: "apex/com.android.adbd",
-}
-
-prebuilt_etc {
-    name: "com.android.adbd.init.rc",
-    src: "apex/adbd.rc",
-    filename: "init.rc",
-    installable: false,
 }

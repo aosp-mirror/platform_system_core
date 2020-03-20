@@ -2,6 +2,9 @@
   "presubmit": [
     {
       "name": "libunwindstack_unit_test"
+    },
+    {
+      "name": "CtsSimpleperfTestCases"
     }
   ]
 }

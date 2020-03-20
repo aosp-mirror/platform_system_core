@@ -60,7 +60,7 @@
 
 using namespace android;
 using android::hardware::Return;
-using android::hardware::health::GetPassthroughHealth;
+using android::hardware::health::GetHealthServiceOrDefault;
 using android::hardware::health::HealthLoop;
 using android::hardware::health::V1_0::BatteryStatus;
 using android::hardware::health::V2_0::Result;
@@ -742,6 +742,6 @@ int healthd_charger_main(int argc, char** argv) {
         }
     }
 
-    Charger charger(GetPassthroughHealth());
+    Charger charger(GetHealthServiceOrDefault());
     return charger.StartLoop();
 }

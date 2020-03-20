@@ -45,16 +45,28 @@ static const size_t kMaxFilePieces = 500;
 std::unique_ptr<SplitFiemap> SplitFiemap::Create(const std::string& file_path, uint64_t file_size,
                                                  uint64_t max_piece_size,
                                                  ProgressCallback progress) {
+    std::unique_ptr<SplitFiemap> ret;
+    if (!Create(file_path, file_size, max_piece_size, &ret, progress).is_ok()) {
+        return nullptr;
+    }
+    return ret;
+}
+
+FiemapStatus SplitFiemap::Create(const std::string& file_path, uint64_t file_size,
+                                 uint64_t max_piece_size, std::unique_ptr<SplitFiemap>* out_val,
+                                 ProgressCallback progress) {
+    out_val->reset();
+
     if (!file_size) {
         LOG(ERROR) << "Cannot create a fiemap for a 0-length file: " << file_path;
-        return nullptr;
+        return FiemapStatus::Error();
     }
 
     if (!max_piece_size) {
-        max_piece_size = DetermineMaximumFileSize(file_path);
-        if (!max_piece_size) {
+        auto status = DetermineMaximumFileSize(file_path, &max_piece_size);
+        if (!status.is_ok()) {
             LOG(ERROR) << "Could not determine maximum file size for " << file_path;
-            return nullptr;
+            return status;
         }
     }
 
@@ -75,7 +87,6 @@ std::unique_ptr<SplitFiemap> SplitFiemap::Create(const std::string& file_path, u
         }
         return true;
     };
-
     std::unique_ptr<SplitFiemap> out(new SplitFiemap());
     out->creating_ = true;
     out->list_file_ = file_path;
@@ -85,14 +96,17 @@ std::unique_ptr<SplitFiemap> SplitFiemap::Create(const std::string& file_path, u
     while (remaining_bytes) {
         if (out->files_.size() >= kMaxFilePieces) {
             LOG(ERROR) << "Requested size " << file_size << " created too many split files";
-            return nullptr;
+            out.reset();
+            return FiemapStatus::Error();
         }
         std::string chunk_path =
                 android::base::StringPrintf("%s.%04d", file_path.c_str(), (int)out->files_.size());
         uint64_t chunk_size = std::min(max_piece_size, remaining_bytes);
-        auto writer = FiemapWriter::Open(chunk_path, chunk_size, true, on_progress);
-        if (!writer) {
-            return nullptr;
+        FiemapUniquePtr writer;
+        auto status = FiemapWriter::Open(chunk_path, chunk_size, &writer, true, on_progress);
+        if (!status.is_ok()) {
+            out.reset();
+            return status;
         }
 
         // To make sure the alignment doesn't create too much inconsistency, we
@@ -110,20 +124,23 @@ std::unique_ptr<SplitFiemap> SplitFiemap::Create(const std::string& file_path, u
     unique_fd fd(open(out->list_file_.c_str(), O_CREAT | O_WRONLY | O_CLOEXEC, 0660));
     if (fd < 0) {
         PLOG(ERROR) << "Failed to open " << file_path;
-        return nullptr;
+        out.reset();
+        return FiemapStatus::FromErrno(errno);
     }
 
     for (const auto& writer : out->files_) {
         std::string line = android::base::Basename(writer->file_path()) + "\n";
         if (!android::base::WriteFully(fd, line.data(), line.size())) {
             PLOG(ERROR) << "Write failed " << file_path;
-            return nullptr;
+            out.reset();
+            return FiemapStatus::FromErrno(errno);
         }
     }
 
     // Unset this bit, so we don't unlink on destruction.
     out->creating_ = false;
-    return out;
+    *out_val = std::move(out);
+    return FiemapStatus::Ok();
 }
 
 std::unique_ptr<SplitFiemap> SplitFiemap::Open(const std::string& file_path) {

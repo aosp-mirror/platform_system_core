@@ -105,6 +105,9 @@ class ElfInterfaceFake : public ElfInterface {
   void FakeSetDynamicVaddrStart(uint64_t vaddr) { dynamic_vaddr_start_ = vaddr; }
   void FakeSetDynamicVaddrEnd(uint64_t vaddr) { dynamic_vaddr_end_ = vaddr; }
 
+  void FakeSetGnuDebugdataOffset(uint64_t offset) { gnu_debugdata_offset_ = offset; }
+  void FakeSetGnuDebugdataSize(uint64_t size) { gnu_debugdata_size_ = size; }
+
  private:
   std::unordered_map<std::string, uint64_t> globals_;
   std::string fake_build_id_;

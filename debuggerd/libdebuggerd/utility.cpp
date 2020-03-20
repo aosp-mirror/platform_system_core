@@ -35,6 +35,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <bionic/reserved_signals.h>
 #include <debuggerd/handler.h>
 #include <log/log.h>
 #include <unwindstack/Memory.h>
@@ -296,7 +297,8 @@ const char* get_signame(const siginfo_t* si) {
     case SIGSTOP: return "SIGSTOP";
     case SIGSYS: return "SIGSYS";
     case SIGTRAP: return "SIGTRAP";
-    case DEBUGGER_SIGNAL: return "<debuggerd signal>";
+    case BIONIC_SIGNAL_DEBUGGER:
+      return "<debuggerd signal>";
     default: return "?";
   }
 }

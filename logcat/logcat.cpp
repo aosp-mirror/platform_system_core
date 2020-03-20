@@ -110,7 +110,7 @@ class Logcat {
 #endif
 
 static int openLogFile(const char* pathname, size_t sizeKB) {
-    int fd = open(pathname, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR);
+    int fd = open(pathname, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP);
     if (fd < 0) {
         return fd;
     }
@@ -1129,7 +1129,7 @@ int Logcat::Run(int argc, char** argv) {
         if (!ret) {
             error(EXIT_FAILURE, 0, R"init(Unexpected EOF!
 
-This means that either logd crashed, or more likely, this instance of logcat was unable to read log
+This means that either the device shut down, logd crashed, or this instance of logcat was unable to read log
 messages as quickly as they were being produced.
 
 If you have enabled significant logging, look into using the -G option to increase log buffer sizes.)init");

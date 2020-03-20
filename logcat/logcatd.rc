@@ -30,8 +30,8 @@ on load_persist_props_action
     setprop logd.logpersistd.enable true
 
 on property:logd.logpersistd.enable=true && property:logd.logpersistd=logcatd
-    # all exec/services are called with umask(077), so no gain beyond 0700
-    mkdir /data/misc/logd 0700 logd log
+    # log group should be able to read persisted logs
+    mkdir /data/misc/logd 0750 logd log
     start logcatd
 
 # stop logcatd service and clear data

@@ -151,6 +151,10 @@ bool CreateLogicalPartitions(const LpMetadata& metadata, const std::string& supe
             LINFO << "Skipping zero-length logical partition: " << GetPartitionName(partition);
             continue;
         }
+        if (partition.attributes & LP_PARTITION_ATTR_DISABLED) {
+            LINFO << "Skipping disabled partition: " << GetPartitionName(partition);
+            continue;
+        }
 
         params.partition = &partition;
 

@@ -25,7 +25,6 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <unistd.h>
-
 #include <cutils/compiler.h>
 
 __BEGIN_DECLS
@@ -118,9 +117,9 @@ void atrace_set_debuggable(bool debuggable);
 void atrace_set_tracing_enabled(bool enabled);
 
 /**
- * Flag indicating whether setup has been completed, initialized to 0.
- * Nonzero indicates setup has completed.
- * Note: This does NOT indicate whether or not setup was successful.
+ * This is always set to false. This forces code that uses an old version
+ * of this header to always call into atrace_setup, in which we call
+ * atrace_init unconditionally.
  */
 extern atomic_bool atrace_is_ready;
 
@@ -143,24 +142,10 @@ extern int atrace_marker_fd;
  * This can be explicitly run to avoid setup delay on first trace function.
  */
 #define ATRACE_INIT() atrace_init()
-static inline void atrace_init()
-{
-    if (CC_UNLIKELY(!atomic_load_explicit(&atrace_is_ready, memory_order_acquire))) {
-        atrace_setup();
-    }
-}
-
-/**
- * Get the mask of all tags currently enabled.
- * It can be used as a guard condition around more expensive trace calculations.
- * Every trace function calls this, which ensures atrace_init is run.
- */
 #define ATRACE_GET_ENABLED_TAGS() atrace_get_enabled_tags()
-static inline uint64_t atrace_get_enabled_tags()
-{
-    atrace_init();
-    return atrace_enabled_tags;
-}
+
+void atrace_init();
+uint64_t atrace_get_enabled_tags();
 
 /**
  * Test if a given tag is currently enabled.

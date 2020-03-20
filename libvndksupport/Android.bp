@@ -1,5 +1,3 @@
-subdirs = ["tests"]
-
 cc_library {
     name: "libvndksupport",
     native_bridge_supported: true,

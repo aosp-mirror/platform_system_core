@@ -26,6 +26,7 @@
 #include <vector>
 
 #include <android-base/unique_fd.h>
+#include <android/snapshot/snapshot.pb.h>
 #include <fs_mgr_dm_linear.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
@@ -34,6 +35,7 @@
 #include <update_engine/update_metadata.pb.h>
 
 #include <libsnapshot/auto_device.h>
+#include <libsnapshot/return.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -72,36 +74,14 @@ class SnapshotStatus;
 
 static constexpr const std::string_view kCowGroupName = "cow";
 
-bool SourceCopyOperationIsClone(const chromeos_update_engine::InstallOperation& operation);
+bool OptimizeSourceCopyOperation(const chromeos_update_engine::InstallOperation& operation,
+                                 chromeos_update_engine::InstallOperation* optimized);
 
-enum class UpdateState : unsigned int {
-    // No update or merge is in progress.
-    None,
-
-    // An update is applying; snapshots may already exist.
-    Initiated,
-
-    // An update is pending, but has not been successfully booted yet.
-    Unverified,
-
-    // The kernel is merging in the background.
-    Merging,
-
-    // Post-merge cleanup steps could not be completed due to a transient
-    // error, but the next reboot will finish any pending operations.
-    MergeNeedsReboot,
-
-    // Merging is complete, and needs to be acknowledged.
-    MergeCompleted,
-
-    // Merging failed due to an unrecoverable error.
-    MergeFailed,
-
-    // The update was implicitly cancelled, either by a rollback or a flash
-    // operation via fastboot. This state can only be returned by WaitForMerge.
-    Cancelled
+enum class CreateResult : unsigned int {
+    ERROR,
+    CREATED,
+    NOT_CREATED,
 };
-std::ostream& operator<<(std::ostream& os, UpdateState state);
 
 class SnapshotManager final {
     using CreateLogicalPartitionParams = android::fs_mgr::CreateLogicalPartitionParams;
@@ -110,6 +90,9 @@ class SnapshotManager final {
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
     using DeltaArchiveManifest = chromeos_update_engine::DeltaArchiveManifest;
     using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
+    using FiemapStatus = android::fiemap::FiemapStatus;
+
+    friend class SnapshotMergeStats;
 
   public:
     // Dependency injection for testing.
@@ -143,6 +126,9 @@ class SnapshotManager final {
     // might be needed to perform first-stage mounts.
     static bool IsSnapshotManagerNeeded();
 
+    // Helper function for second stage init to restorecon on the rollback indicator.
+    static std::string GetGlobalRollbackIndicatorPath();
+
     // Begin an update. This must be called before creating any snapshots. It
     // will fail if GetUpdateState() != None.
     bool BeginUpdate();
@@ -158,7 +144,6 @@ class SnapshotManager final {
     // Before calling this function, all snapshots must be mapped.
     bool FinishedSnapshotWrites();
 
-  private:
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
     bool InitiateMerge();
@@ -167,7 +152,11 @@ class SnapshotManager final {
     // /data is mounted.
     //
     // If a merge is in progress, this function will block until the merge is
-    // completed. If a merge or update was cancelled, this will clean up any
+    // completed.
+    //    - Callback is called periodically during the merge. If callback()
+    //      returns false during the merge, ProcessUpdateState() will pause
+    //      and returns Merging.
+    // If a merge or update was cancelled, this will clean up any
     // update artifacts and return.
     //
     // Note that after calling this, GetUpdateState() may still return that a
@@ -187,23 +176,8 @@ class SnapshotManager final {
     //
     // The optional callback allows the caller to periodically check the
     // progress with GetUpdateState().
-    UpdateState ProcessUpdateState(const std::function<void()>& callback = {});
-
-  public:
-    // Initiate the merge if necessary, then wait for the merge to finish.
-    // See InitiateMerge() and ProcessUpdateState() for details.
-    // Returns:
-    //   - None if no merge to initiate
-    //   - MergeCompleted if merge is completed
-    //   - other states indicating an error has occurred
-    UpdateState InitiateMergeAndWait();
-
-    // Wait for the merge if rebooted into the new slot. Does NOT initiate a
-    // merge. If the merge has not been initiated (but should be), wait.
-    // Returns:
-    //   - true there is no merge or merge finishes
-    //   - false indicating an error has occurred
-    bool WaitForMerge();
+    UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
+                                   const std::function<bool()>& before_cancel = {});
 
     // Find the status of the current update, if any.
     //
@@ -216,7 +190,7 @@ class SnapshotManager final {
     // Create necessary COW device / files for OTA clients. New logical partitions will be added to
     // group "cow" in target_metadata. Regions of partitions of current_metadata will be
     // "write-protected" and snapshotted.
-    bool CreateUpdateSnapshots(const DeltaArchiveManifest& manifest);
+    Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest);
 
     // Map a snapshotted partition for OTA clients to write to. Write-protected regions are
     // determined previously in CreateSnapshots.
@@ -231,7 +205,8 @@ class SnapshotManager final {
 
     // Perform first-stage mapping of snapshot targets. This replaces init's
     // call to CreateLogicalPartitions when snapshots are present.
-    bool CreateLogicalAndSnapshotPartitions(const std::string& super_device);
+    bool CreateLogicalAndSnapshotPartitions(const std::string& super_device,
+                                            const std::chrono::milliseconds& timeout_ms = {});
 
     // This method should be called preceding any wipe or flash of metadata or
     // userdata. It is only valid in recovery or fastbootd, and it ensures that
@@ -245,6 +220,17 @@ class SnapshotManager final {
     // Returns true on success (or nothing to do), false on failure. The
     // optional callback fires periodically to query progress via GetUpdateState.
     bool HandleImminentDataWipe(const std::function<void()>& callback = {});
+
+    // This method is only allowed in recovery and is used as a helper to
+    // initialize the snapshot devices as a requirement to mount a snapshotted
+    // /system in recovery.
+    // This function returns:
+    // - CreateResult::CREATED if snapshot devices were successfully created;
+    // - CreateResult::NOT_CREATED if it was not necessary to create snapshot
+    // devices;
+    // - CreateResult::ERROR if a fatal error occurred, mounting /system should
+    // be aborted.
+    CreateResult RecoveryCreateSnapshotDevices();
 
     // Dump debug information.
     bool Dump(std::ostream& os);
@@ -279,6 +265,7 @@ class SnapshotManager final {
     FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeAfterRollback);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeRollbackInRecovery);
+    FRIEND_TEST(SnapshotUpdateTest, FullUpdateFlow);
     FRIEND_TEST(SnapshotUpdateTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotUpdateTest, MergeInRecovery);
     FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
@@ -342,7 +329,7 @@ class SnapshotManager final {
 
     // |name| should be the base partition name (e.g. "system_a"). Create the
     // backing COW image using the size previously passed to CreateSnapshot().
-    bool CreateCowImage(LockedFile* lock, const std::string& name);
+    Return CreateCowImage(LockedFile* lock, const std::string& name);
 
     // Map a snapshot device that was previously created with CreateSnapshot.
     // If a merge was previously initiated, the device-mapper table will have a
@@ -377,14 +364,23 @@ class SnapshotManager final {
 
     // Check for a cancelled or rolled back merge, returning true if such a
     // condition was detected and handled.
-    bool HandleCancelledUpdate(LockedFile* lock);
+    bool HandleCancelledUpdate(LockedFile* lock, const std::function<bool()>& before_cancel);
 
     // Helper for HandleCancelledUpdate. Assumes booting from new slot.
-    bool HandleCancelledUpdateOnNewSlot(LockedFile* lock);
+    bool AreAllSnapshotsCancelled(LockedFile* lock);
+
+    // Determine whether partition names in |snapshots| have been flashed and
+    // store result to |out|.
+    // Return true if values are successfully retrieved and false on error
+    // (e.g. super partition metadata cannot be read). When it returns true,
+    // |out| stores true for partitions that have been flashed and false for
+    // partitions that have not been flashed.
+    bool GetSnapshotFlashingStatus(LockedFile* lock, const std::vector<std::string>& snapshots,
+                                   std::map<std::string, bool>* out);
 
     // Remove artifacts created by the update process, such as snapshots, and
     // set the update state to None.
-    bool RemoveAllUpdateState(LockedFile* lock);
+    bool RemoveAllUpdateState(LockedFile* lock, const std::function<bool()>& prolog = {});
 
     // Interact with /metadata/ota.
     std::unique_ptr<LockedFile> OpenLock(int lock_flags);
@@ -394,8 +390,14 @@ class SnapshotManager final {
 
     // Interact with /metadata/ota/state.
     UpdateState ReadUpdateState(LockedFile* file);
+    SnapshotUpdateStatus ReadSnapshotUpdateStatus(LockedFile* file);
     bool WriteUpdateState(LockedFile* file, UpdateState state);
+    bool WriteSnapshotUpdateStatus(LockedFile* file, const SnapshotUpdateStatus& status);
     std::string GetStateFilePath() const;
+
+    // Interact with /metadata/ota/merge_state.
+    // This file contains information related to the snapshot merge process.
+    std::string GetMergeStateFilePath() const;
 
     // Helpers for merging.
     bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
@@ -433,8 +435,8 @@ class SnapshotManager final {
     //   UpdateState::MergeCompleted
     //   UpdateState::MergeFailed
     //   UpdateState::MergeNeedsReboot
-    UpdateState CheckMergeState();
-    UpdateState CheckMergeState(LockedFile* lock);
+    UpdateState CheckMergeState(const std::function<bool()>& before_cancel);
+    UpdateState CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
     UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name);
 
     // Interact with status files under /metadata/ota/snapshots.
@@ -443,7 +445,7 @@ class SnapshotManager final {
     std::string GetSnapshotStatusFilePath(const std::string& name);
 
     std::string GetSnapshotBootIndicatorPath();
-    void RemoveSnapshotBootIndicator();
+    std::string GetRollbackIndicatorPath();
 
     // Return the name of the device holding the "snapshot" or "snapshot-merge"
     // target. This may not be the final device presented via MapSnapshot(), if
@@ -482,14 +484,14 @@ class SnapshotManager final {
 
     // Helper for CreateUpdateSnapshots.
     // Creates all underlying images, COW partitions and snapshot files. Does not initialize them.
-    bool CreateUpdateSnapshotsInternal(LockedFile* lock, const DeltaArchiveManifest& manifest,
-                                       PartitionCowCreator* cow_creator,
-                                       AutoDeviceList* created_devices,
-                                       std::map<std::string, SnapshotStatus>* all_snapshot_status);
+    Return CreateUpdateSnapshotsInternal(
+            LockedFile* lock, const DeltaArchiveManifest& manifest,
+            PartitionCowCreator* cow_creator, AutoDeviceList* created_devices,
+            std::map<std::string, SnapshotStatus>* all_snapshot_status);
 
     // Initialize snapshots so that they can be mapped later.
     // Map the COW partition and zero-initialize the header.
-    bool InitializeUpdateSnapshots(
+    Return InitializeUpdateSnapshots(
             LockedFile* lock, MetadataBuilder* target_metadata,
             const LpMetadata* exported_target_metadata, const std::string& target_suffix,
             const std::map<std::string, SnapshotStatus>& all_snapshot_status);
@@ -506,6 +508,13 @@ class SnapshotManager final {
     enum class Slot { Unknown, Source, Target };
     friend std::ostream& operator<<(std::ostream& os, SnapshotManager::Slot slot);
     Slot GetCurrentSlot();
+
+    std::string ReadUpdateSourceSlotSuffix();
+
+    // Helper for RemoveAllSnapshots.
+    // Check whether |name| should be deleted as a snapshot name.
+    bool ShouldDeleteSnapshot(LockedFile* lock, const std::map<std::string, bool>& flashing_status,
+                              Slot current_slot, const std::string& name);
 
     std::string gsid_dir_;
     std::string metadata_dir_;

@@ -75,6 +75,11 @@ class ServiceList {
     bool IsServicesUpdated() const { return services_update_finished_; }
     void DelayService(const Service& service);
 
+    void ResetState() {
+        post_data_ = false;
+        services_update_finished_ = false;
+    }
+
   private:
     std::vector<std::unique_ptr<Service>> services_;
 

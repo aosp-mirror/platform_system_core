@@ -18,6 +18,10 @@ cc_library_headers {
     recovery_available: true,
     host_supported: true,
     native_bridge_supported: true,
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
 
     header_libs: [
         "liblog_headers",
@@ -73,12 +77,6 @@ cc_defaults {
         "libcutils",
         "liblog",
     ],
-
-    arch: {
-        mips: {
-            cflags: ["-DALIGN_DOUBLE"],
-        },
-    },
 
     target: {
         android: {
@@ -159,6 +157,11 @@ cc_library {
             ],
         },
     },
+
+    apex_available: [
+        "//apex_available:anyapex",
+        "//apex_available:platform",
+    ],
 }
 
 cc_library {
@@ -168,12 +171,6 @@ cc_library {
     srcs: [
         "CallStack.cpp",
     ],
-
-    arch: {
-        mips: {
-            cflags: ["-DALIGN_DOUBLE"],
-        },
-    },
 
     shared_libs: [
          "libutils",

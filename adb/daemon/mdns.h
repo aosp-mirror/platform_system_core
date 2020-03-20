@@ -19,4 +19,9 @@
 
 void setup_mdns(int port);
 
+void register_adb_secure_connect_service(int port);
+void unregister_adb_secure_connect_service();
+bool is_adb_secure_connect_service_registered();
+
+void start_mdnsd();
 #endif  // _DAEMON_MDNS_H_

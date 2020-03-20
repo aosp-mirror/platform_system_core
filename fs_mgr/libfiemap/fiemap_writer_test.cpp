@@ -193,7 +193,9 @@ TEST_F(FiemapWriterTest, FileDeletedOnError) {
 }
 
 TEST_F(FiemapWriterTest, MaxBlockSize) {
-    ASSERT_GT(DetermineMaximumFileSize(testfile), 0);
+    uint64_t max_piece_size = 0;
+    ASSERT_TRUE(DetermineMaximumFileSize(testfile, &max_piece_size));
+    ASSERT_GT(max_piece_size, 0);
 }
 
 TEST_F(FiemapWriterTest, FibmapBlockAddressing) {

@@ -39,6 +39,10 @@ cc_library {
         "clang-analyzer-security*",
         "android-*",
     ],
+    apex_available: [
+        "//apex_available:anyapex",
+        "//apex_available:platform",
+    ],
 }
 
 cc_test {

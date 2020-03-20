@@ -31,7 +31,6 @@
 #include <cutils/android_reboot.h>
 #include <ext4_utils/wipe.h>
 #include <fs_mgr.h>
-#include <fs_mgr/roots.h>
 #include <libgsi/libgsi.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
@@ -107,6 +106,8 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_VERSION, {GetVersion, nullptr}},
             {FB_VAR_VERSION_BOOTLOADER, {GetBootloaderVersion, nullptr}},
             {FB_VAR_VERSION_BASEBAND, {GetBasebandVersion, nullptr}},
+            {FB_VAR_VERSION_OS, {GetOsVersion, nullptr}},
+            {FB_VAR_VERSION_VNDK, {GetVndkVersion, nullptr}},
             {FB_VAR_PRODUCT, {GetProduct, nullptr}},
             {FB_VAR_SERIALNO, {GetSerial, nullptr}},
             {FB_VAR_VARIANT, {GetVariant, nullptr}},
@@ -128,7 +129,13 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
             {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}},
             {FB_VAR_SNAPSHOT_UPDATE_STATUS, {GetSnapshotUpdateStatus, nullptr}},
-            {FB_VAR_CPU_ABI, {GetCpuAbi, nullptr}}};
+            {FB_VAR_CPU_ABI, {GetCpuAbi, nullptr}},
+            {FB_VAR_SYSTEM_FINGERPRINT, {GetSystemFingerprint, nullptr}},
+            {FB_VAR_VENDOR_FINGERPRINT, {GetVendorFingerprint, nullptr}},
+            {FB_VAR_DYNAMIC_PARTITION, {GetDynamicPartition, nullptr}},
+            {FB_VAR_FIRST_API_LEVEL, {GetFirstApiLevel, nullptr}},
+            {FB_VAR_SECURITY_PATCH_LEVEL, {GetSecurityPatchLevel, nullptr}},
+            {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}}};
 
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");
@@ -254,7 +261,7 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
     }
 
     // If the slot is not changing, do nothing.
-    if (slot == boot_control_hal->getCurrentSlot()) {
+    if (args[1] == device->GetCurrentSlot()) {
         return device->WriteOkay("");
     }
 
@@ -549,42 +556,6 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
     bool wipe = (args.size() >= 3 && args[2] == "wipe");
     return UpdateSuper(device, args[1], wipe);
 }
-
-class AutoMountMetadata {
-  public:
-    AutoMountMetadata() {
-        android::fs_mgr::Fstab proc_mounts;
-        if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
-            LOG(ERROR) << "Could not read /proc/mounts";
-            return;
-        }
-
-        auto iter = std::find_if(proc_mounts.begin(), proc_mounts.end(),
-                [](const auto& entry) { return entry.mount_point == "/metadata"; });
-        if (iter != proc_mounts.end()) {
-            mounted_ = true;
-            return;
-        }
-
-        if (!ReadDefaultFstab(&fstab_)) {
-            LOG(ERROR) << "Could not read default fstab";
-            return;
-        }
-        mounted_ = EnsurePathMounted(&fstab_, "/metadata");
-        should_unmount_ = true;
-    }
-    ~AutoMountMetadata() {
-        if (mounted_ && should_unmount_) {
-            EnsurePathUnmounted(&fstab_, "/metadata");
-        }
-    }
-    explicit operator bool() const { return mounted_; }
-
-  private:
-    android::fs_mgr::Fstab fstab_;
-    bool mounted_ = false;
-    bool should_unmount_ = false;
-};
 
 bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() != 2) {

@@ -155,6 +155,11 @@ struct NonblockingFdConnection : public Connection {
         thread_.join();
     }
 
+    bool DoTlsHandshake(RSA* key, std::string* auth_key) override final {
+        LOG(FATAL) << "Not supported yet";
+        return false;
+    }
+
     void WakeThread() {
         uint64_t buf = 0;
         if (TEMP_FAILURE_RETRY(adb_write(wake_fd_write_.get(), &buf, sizeof(buf))) != sizeof(buf)) {

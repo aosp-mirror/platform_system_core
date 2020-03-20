@@ -44,6 +44,7 @@ constexpr size_t LINUX_MAX_SOCKET_SIZE = 4194304;
 #define A_CLSE 0x45534c43
 #define A_WRTE 0x45545257
 #define A_AUTH 0x48545541
+#define A_STLS 0x534C5453
 
 // ADB protocol version.
 // Version revision:
@@ -52,6 +53,10 @@ constexpr size_t LINUX_MAX_SOCKET_SIZE = 4194304;
 #define A_VERSION_MIN 0x01000000
 #define A_VERSION_SKIP_CHECKSUM 0x01000001
 #define A_VERSION 0x01000001
+
+// Stream-based TLS protocol version
+#define A_STLS_VERSION_MIN 0x01000000
+#define A_STLS_VERSION 0x01000000
 
 // Used for help/version information.
 #define ADB_VERSION_MAJOR 1
@@ -164,6 +169,7 @@ unique_fd execute_abb_command(std::string_view command);
 int init_jdwp(void);
 asocket* create_jdwp_service_socket();
 asocket* create_jdwp_tracker_service_socket();
+asocket* create_app_tracker_service_socket();
 unique_fd create_jdwp_connection_fd(int jdwp_pid);
 #endif
 
@@ -185,14 +191,7 @@ void put_apacket(apacket* p);
     } while (0)
 #endif
 
-#if ADB_HOST_ON_TARGET
-/* adb and adbd are coexisting on the target, so use 5038 for adb
- * to avoid conflicting with adbd's usage of 5037
- */
-#define DEFAULT_ADB_PORT 5038
-#else
 #define DEFAULT_ADB_PORT 5037
-#endif
 
 #define DEFAULT_ADB_LOCAL_TRANSPORT_PORT 5555
 
@@ -236,6 +235,7 @@ void handle_online(atransport* t);
 void handle_offline(atransport* t);
 
 void send_connect(atransport* t);
+void send_tls_request(atransport* t);
 
 void parse_banner(const std::string&, atransport* t);
 
