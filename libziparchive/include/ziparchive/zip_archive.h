@@ -126,6 +126,9 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle);
 int32_t OpenArchiveFd(const int fd, const char* debugFileName, ZipArchiveHandle* handle,
                       bool assume_ownership = true);
 
+int32_t OpenArchiveFdRange(const int fd, const char* debugFileName, ZipArchiveHandle* handle,
+                           off64_t length, off64_t offset, bool assume_ownership = true);
+
 int32_t OpenArchiveFromMemory(const void* address, size_t length, const char* debugFileName,
                               ZipArchiveHandle* handle);
 /*
@@ -221,6 +224,12 @@ int32_t ExtractEntryToFile(ZipArchiveHandle archive, ZipEntry* entry, int fd);
 int32_t ExtractToMemory(ZipArchiveHandle archive, ZipEntry* entry, uint8_t* begin, uint32_t size);
 
 int GetFileDescriptor(const ZipArchiveHandle archive);
+
+/**
+ * Returns the offset of the zip archive in the backing file descriptor, or 0 if the zip archive is
+ * not backed by a file descriptor.
+ */
+off64_t GetFileDescriptorOffset(const ZipArchiveHandle archive);
 
 const char* ErrorCodeString(int32_t error_code);
 
