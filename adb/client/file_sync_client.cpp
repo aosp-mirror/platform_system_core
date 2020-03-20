@@ -112,6 +112,7 @@ struct TransferLedger {
     uint64_t bytes_transferred;
     uint64_t bytes_expected;
     bool expect_multiple_files;
+    std::string last_progress_str;
 
     TransferLedger() {
         Reset();
@@ -127,6 +128,7 @@ struct TransferLedger {
     }
 
     void Reset() {
+        last_progress_str.clear();
         start_time = std::chrono::steady_clock::now();
         files_transferred = 0;
         files_skipped = 0;
@@ -181,7 +183,10 @@ struct TransferLedger {
                     android::base::StringPrintf("[%4s] %s", overall_percentage_str, file.c_str());
             }
         }
-        lp.Print(output, LinePrinter::LineType::INFO);
+        if (output != last_progress_str) {
+            lp.Print(output, LinePrinter::LineType::INFO);
+            last_progress_str = std::move(output);
+        }
     }
 
     void ReportTransferRate(LinePrinter& lp, const std::string& name, TransferDirection direction) {
