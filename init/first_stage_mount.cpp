@@ -42,6 +42,7 @@
 #include <liblp/liblp.h>
 #include <libsnapshot/snapshot.h>
 
+#include "block_dev_initializer.h"
 #include "devices.h"
 #include "switch_root.h"
 #include "uevent.h"
@@ -84,11 +85,7 @@ class FirstStageMount {
     bool InitDevices();
 
   protected:
-    ListenerAction HandleBlockDevice(const std::string& name, const Uevent&,
-                                     std::set<std::string>* required_devices);
     bool InitRequiredDevices(std::set<std::string> devices);
-    bool InitMappedDevice(const std::string& verity_device);
-    bool InitDeviceMapper();
     bool CreateLogicalPartitions();
     bool MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
                         Fstab::iterator* end = nullptr);
@@ -106,8 +103,6 @@ class FirstStageMount {
     // revocation check by DSU installation service.
     void CopyDsuAvbKeys();
 
-    ListenerAction UeventCallback(const Uevent& uevent, std::set<std::string>* required_devices);
-
     // Pure virtual functions.
     virtual bool GetDmVerityDevices(std::set<std::string>* devices) = 0;
     virtual bool SetUpDmVerity(FstabEntry* fstab_entry) = 0;
@@ -119,8 +114,7 @@ class FirstStageMount {
     // The super path is only set after InitDevices, and is invalid before.
     std::string super_path_;
     std::string super_partition_name_;
-    std::unique_ptr<DeviceHandler> device_handler_;
-    UeventListener uevent_listener_;
+    BlockDevInitializer block_dev_init_;
     // Reads all AVB keys before chroot into /system, as they might be used
     // later when mounting other partitions, e.g., /vendor and /product.
     std::map<std::string, std::vector<std::string>> preload_avb_key_blobs_;
@@ -234,13 +228,7 @@ static bool IsStandaloneImageRollback(const AvbHandle& builtin_vbmeta,
 
 // Class Definitions
 // -----------------
-FirstStageMount::FirstStageMount(Fstab fstab)
-    : need_dm_verity_(false), fstab_(std::move(fstab)), uevent_listener_(16 * 1024 * 1024) {
-    auto boot_devices = android::fs_mgr::GetBootDevices();
-    device_handler_ = std::make_unique<DeviceHandler>(
-            std::vector<Permissions>{}, std::vector<SysfsPermissions>{}, std::vector<Subsystem>{},
-            std::move(boot_devices), false);
-
+FirstStageMount::FirstStageMount(Fstab fstab) : need_dm_verity_(false), fstab_(std::move(fstab)) {
     super_partition_name_ = fs_mgr_get_super_partition_name();
 }
 
@@ -308,62 +296,13 @@ void FirstStageMount::GetSuperDeviceName(std::set<std::string>* devices) {
 // Found partitions will then be removed from it for the subsequent member
 // function to check which devices are NOT created.
 bool FirstStageMount::InitRequiredDevices(std::set<std::string> devices) {
-    if (!InitDeviceMapper()) {
+    if (!block_dev_init_.InitDeviceMapper()) {
         return false;
     }
-
     if (devices.empty()) {
         return true;
     }
-
-    auto uevent_callback = [&, this](const Uevent& uevent) {
-        return UeventCallback(uevent, &devices);
-    };
-    uevent_listener_.RegenerateUevents(uevent_callback);
-
-    // UeventCallback() will remove found partitions from |devices|. So if it
-    // isn't empty here, it means some partitions are not found.
-    if (!devices.empty()) {
-        LOG(INFO) << __PRETTY_FUNCTION__
-                  << ": partition(s) not found in /sys, waiting for their uevent(s): "
-                  << android::base::Join(devices, ", ");
-        Timer t;
-        uevent_listener_.Poll(uevent_callback, 10s);
-        LOG(INFO) << "Wait for partitions returned after " << t;
-    }
-
-    if (!devices.empty()) {
-        LOG(ERROR) << __PRETTY_FUNCTION__ << ": partition(s) not found after polling timeout: "
-                   << android::base::Join(devices, ", ");
-        return false;
-    }
-
-    return true;
-}
-
-bool FirstStageMount::InitDeviceMapper() {
-    const std::string dm_path = "/devices/virtual/misc/device-mapper";
-    bool found = false;
-    auto dm_callback = [this, &dm_path, &found](const Uevent& uevent) {
-        if (uevent.path == dm_path) {
-            device_handler_->HandleUevent(uevent);
-            found = true;
-            return ListenerAction::kStop;
-        }
-        return ListenerAction::kContinue;
-    };
-    uevent_listener_.RegenerateUeventsForPath("/sys" + dm_path, dm_callback);
-    if (!found) {
-        LOG(INFO) << "device-mapper device not found in /sys, waiting for its uevent";
-        Timer t;
-        uevent_listener_.Poll(dm_callback, 10s);
-        LOG(INFO) << "Wait for device-mapper returned after " << t;
-    }
-    if (!found) {
-        LOG(ERROR) << "device-mapper device not found after polling timeout";
-        return false;
-    }
-    return true;
+    return block_dev_init_.InitDevices(std::move(devices));
 }
 
 bool FirstStageMount::InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata) {
@@ -419,75 +358,6 @@ bool FirstStageMount::CreateLogicalPartitions() {
     return android::fs_mgr::CreateLogicalPartitions(*metadata.get(), super_path_);
 }
 
-ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const Uevent& uevent,
-                                                  std::set<std::string>* required_devices) {
-    // Matches partition name to create device nodes.
-    // Both required_devices_partition_names_ and uevent->partition_name have A/B
-    // suffix when A/B is used.
-    auto iter = required_devices->find(name);
-    if (iter != required_devices->end()) {
-        LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << *iter;
-        required_devices->erase(iter);
-        device_handler_->HandleUevent(uevent);
-        if (required_devices->empty()) {
-            return ListenerAction::kStop;
-        } else {
-            return ListenerAction::kContinue;
-        }
-    }
-    return ListenerAction::kContinue;
-}
-
-ListenerAction FirstStageMount::UeventCallback(const Uevent& uevent,
-                                               std::set<std::string>* required_devices) {
-    // Ignores everything that is not a block device.
-    if (uevent.subsystem != "block") {
-        return ListenerAction::kContinue;
-    }
-
-    if (!uevent.partition_name.empty()) {
-        return HandleBlockDevice(uevent.partition_name, uevent, required_devices);
-    } else {
-        size_t base_idx = uevent.path.rfind('/');
-        if (base_idx != std::string::npos) {
-            return HandleBlockDevice(uevent.path.substr(base_idx + 1), uevent, required_devices);
-        }
-    }
-    // Not found a partition or find an unneeded partition, continue to find others.
-    return ListenerAction::kContinue;
-}
-
-// Creates "/dev/block/dm-XX" for dm-verity by running coldboot on /sys/block/dm-XX.
-bool FirstStageMount::InitMappedDevice(const std::string& dm_device) {
-    const std::string device_name(basename(dm_device.c_str()));
-    const std::string syspath = "/sys/block/" + device_name;
-    bool found = false;
-
-    auto verity_callback = [&device_name, &dm_device, this, &found](const Uevent& uevent) {
-        if (uevent.device_name == device_name) {
-            LOG(VERBOSE) << "Creating device-mapper device : " << dm_device;
-            device_handler_->HandleUevent(uevent);
-            found = true;
-            return ListenerAction::kStop;
-        }
-        return ListenerAction::kContinue;
-    };
-
-    uevent_listener_.RegenerateUeventsForPath(syspath, verity_callback);
-    if (!found) {
-        LOG(INFO) << "dm device '" << dm_device << "' not found in /sys, waiting for its uevent";
-        Timer t;
-        uevent_listener_.Poll(verity_callback, 10s);
-        LOG(INFO) << "wait for dm device '" << dm_device << "' returned after " << t;
-    }
-    if (!found) {
-        LOG(ERROR) << "dm device '" << dm_device << "' not found after polling timeout";
-        return false;
-    }
-
-    return true;
-}
-
 bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
                                      Fstab::iterator* end) {
     // Sets end to begin + 1, so we can just return on failure below.
@@ -499,7 +369,7 @@ bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_sa
         if (!fs_mgr_update_logical_partition(&(*begin))) {
             return false;
         }
-        if (!InitMappedDevice(begin->blk_device)) {
+        if (!block_dev_init_.InitDmDevice(begin->blk_device)) {
             return false;
         }
     }
@@ -666,7 +536,9 @@ bool FirstStageMount::MountPartitions() {
     auto init_devices = [this](std::set<std::string> devices) -> bool {
         for (auto iter = devices.begin(); iter != devices.end();) {
             if (android::base::StartsWith(*iter, "/dev/block/dm-")) {
-                if (!InitMappedDevice(*iter)) return false;
+                if (!block_dev_init_.InitDmDevice(*iter)) {
+                    return false;
+                }
                 iter = devices.erase(iter);
             } else {
                 iter++;
@@ -782,7 +654,7 @@ bool FirstStageMountVBootV1::SetUpDmVerity(FstabEntry* fstab_entry) {
                 // The exact block device name (fstab_rec->blk_device) is changed to
                 // "/dev/block/dm-XX". Needs to create it because ueventd isn't started in init
                 // first stage.
-                return InitMappedDevice(fstab_entry->blk_device);
+                return block_dev_init_.InitDmDevice(fstab_entry->blk_device);
             default:
                 return false;
         }
@@ -902,7 +774,7 @@ bool FirstStageMountVBootV2::SetUpDmVerity(FstabEntry* fstab_entry) {
             // The exact block device name (fstab_rec->blk_device) is changed to
             // "/dev/block/dm-XX". Needs to create it because ueventd isn't started in init
             // first stage.
-            return InitMappedDevice(fstab_entry->blk_device);
+            return block_dev_init_.InitDmDevice(fstab_entry->blk_device);
         default:
             return false;
     }
