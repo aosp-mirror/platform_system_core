@@ -121,4 +121,62 @@ Regs* Regs::CreateFromLocal() {
   return regs;
 }
 
+uint64_t GetPcAdjustment(uint64_t rel_pc, Elf* elf, ArchEnum arch) {
+  switch (arch) {
+    case ARCH_ARM: {
+      if (!elf->valid()) {
+        return 2;
+      }
+
+      uint64_t load_bias = elf->GetLoadBias();
+      if (rel_pc < load_bias) {
+        if (rel_pc < 2) {
+          return 0;
+        }
+        return 2;
+      }
+      uint64_t adjusted_rel_pc = rel_pc - load_bias;
+      if (adjusted_rel_pc < 5) {
+        if (adjusted_rel_pc < 2) {
+          return 0;
+        }
+        return 2;
+      }
+
+      if (adjusted_rel_pc & 1) {
+        // This is a thumb instruction, it could be 2 or 4 bytes.
+        uint32_t value;
+        if (!elf->memory()->ReadFully(adjusted_rel_pc - 5, &value, sizeof(value)) ||
+            (value & 0xe000f000) != 0xe000f000) {
+          return 2;
+        }
+      }
+      return 4;
+    }
+  case ARCH_ARM64: {
+    if (rel_pc < 4) {
+      return 0;
+    }
+    return 4;
+  }
+  case ARCH_MIPS:
+  case ARCH_MIPS64: {
+    if (rel_pc < 8) {
+      return 0;
+    }
+    // For now, just assume no compact branches
+    return 8;
+  }
+  case ARCH_X86:
+  case ARCH_X86_64: {
+    if (rel_pc == 0) {
+      return 0;
+    }
+    return 1;
+  }
+  case ARCH_UNKNOWN:
+    return 0;
+  }
+}
+
 }  // namespace unwindstack
