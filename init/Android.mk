@@ -48,6 +48,7 @@ ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
 include $(CLEAR_VARS)
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES := \
+    block_dev_initializer.cpp \
     devices.cpp \
     first_stage_init.cpp \
     first_stage_main.cpp \
