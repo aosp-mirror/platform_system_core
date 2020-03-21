@@ -65,3 +65,25 @@ cc_library_static {
         "//frameworks/base/apex/statsd/tests/libstatspull",
     ],
 }
+
+// Note: These unit tests only test PullAtomMetadata.
+// For full E2E tests of libstatspull, use LibStatsPullTests
+cc_test {
+    name: "libstatspull_test",
+    srcs: [
+        "tests/pull_atom_metadata_test.cpp",
+    ],
+    shared_libs: [
+        "libstatspull",
+        "libstatssocket",
+    ],
+    test_suites: ["general-tests"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-missing-field-initializers",
+        "-Wno-unused-variable",
+        "-Wno-unused-function",
+        "-Wno-unused-parameter",
+    ],
+}
