@@ -1,0 +1,7 @@
+{
+  "presubmit" : [
+    {
+      "name" : "libstatspull_test"
+    }
+  ]
+}
