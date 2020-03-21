@@ -162,8 +162,8 @@ uint64_t GetOwnerTag(const ZipArchive* archive) {
 }
 #endif
 
-ZipArchive::ZipArchive(const int fd, bool assume_ownership)
-    : mapped_zip(fd),
+ZipArchive::ZipArchive(MappedZipFile&& map, bool assume_ownership)
+    : mapped_zip(map),
       close_file(assume_ownership),
       directory_offset(0),
       central_directory(),
@@ -173,7 +173,8 @@ ZipArchive::ZipArchive(const int fd, bool assume_ownership)
       hash_table(nullptr) {
 #if defined(__BIONIC__)
   if (assume_ownership) {
-    android_fdsan_exchange_owner_tag(fd, 0, GetOwnerTag(this));
+    CHECK(mapped_zip.HasFd());
+    android_fdsan_exchange_owner_tag(mapped_zip.GetFileDescriptor(), 0, GetOwnerTag(this));
   }
 #endif
 }
@@ -442,14 +443,32 @@ static int32_t OpenArchiveInternal(ZipArchive* archive, const char* debug_file_n
 
 int32_t OpenArchiveFd(int fd, const char* debug_file_name, ZipArchiveHandle* handle,
                       bool assume_ownership) {
-  ZipArchive* archive = new ZipArchive(fd, assume_ownership);
+  ZipArchive* archive = new ZipArchive(MappedZipFile(fd), assume_ownership);
   *handle = archive;
+  return OpenArchiveInternal(archive, debug_file_name);
+}
+
+int32_t OpenArchiveFdRange(int fd, const char* debug_file_name, ZipArchiveHandle* handle,
+                           off64_t length, off64_t offset, bool assume_ownership) {
+  ZipArchive* archive = new ZipArchive(MappedZipFile(fd, length, offset), assume_ownership);
+  *handle = archive;
+
+  if (length < 0) {
+    ALOGW("Invalid zip length %" PRId64, length);
+    return kIoError;
+  }
+
+  if (offset < 0) {
+    ALOGW("Invalid zip offset %" PRId64, offset);
+    return kIoError;
+  }
+
   return OpenArchiveInternal(archive, debug_file_name);
 }
 
 int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle) {
   const int fd = ::android::base::utf8::open(fileName, O_RDONLY | O_BINARY | O_CLOEXEC, 0);
-  ZipArchive* archive = new ZipArchive(fd, true);
+  ZipArchive* archive = new ZipArchive(MappedZipFile(fd), true);
   *handle = archive;
 
   if (fd < 0) {
@@ -1126,6 +1145,10 @@ int GetFileDescriptor(const ZipArchiveHandle archive) {
   return archive->mapped_zip.GetFileDescriptor();
 }
 
+off64_t GetFileDescriptorOffset(const ZipArchiveHandle archive) {
+  return archive->mapped_zip.GetFileOffset();
+}
+
 #if !defined(_WIN32)
 class ProcessWriter : public zip_archive::Writer {
  public:
@@ -1165,31 +1188,65 @@ const void* MappedZipFile::GetBasePtr() const {
   return base_ptr_;
 }
 
+off64_t MappedZipFile::GetFileOffset() const {
+  return fd_offset_;
+}
+
 off64_t MappedZipFile::GetFileLength() const {
   if (has_fd_) {
-    off64_t result = lseek64(fd_, 0, SEEK_END);
-    if (result == -1) {
+    if (data_length_ != -1) {
+      return data_length_;
+    }
+    data_length_ = lseek64(fd_, 0, SEEK_END);
+    if (data_length_ == -1) {
       ALOGE("Zip: lseek on fd %d failed: %s", fd_, strerror(errno));
     }
-    return result;
+    return data_length_;
   } else {
     if (base_ptr_ == nullptr) {
       ALOGE("Zip: invalid file map");
       return -1;
     }
-    return static_cast<off64_t>(data_length_);
+    return data_length_;
   }
 }
 
 // Attempts to read |len| bytes into |buf| at offset |off|.
 bool MappedZipFile::ReadAtOffset(uint8_t* buf, size_t len, off64_t off) const {
   if (has_fd_) {
-    if (!android::base::ReadFullyAtOffset(fd_, buf, len, off)) {
+    if (off < 0) {
+      ALOGE("Zip: invalid offset %" PRId64, off);
+      return false;
+    }
+
+    off64_t read_offset;
+    if (__builtin_add_overflow(fd_offset_, off, &read_offset)) {
+      ALOGE("Zip: invalid read offset %" PRId64 " overflows, fd offset %" PRId64, off, fd_offset_);
+      return false;
+    }
+
+    if (data_length_ != -1) {
+      off64_t read_end;
+      if (len > std::numeric_limits<off64_t>::max() ||
+          __builtin_add_overflow(off, static_cast<off64_t>(len), &read_end)) {
+        ALOGE("Zip: invalid read length %" PRId64 " overflows, offset %" PRId64,
+              static_cast<off64_t>(len), off);
+        return false;
+      }
+
+      if (read_end > data_length_) {
+        ALOGE("Zip: invalid read length %" PRId64 " exceeds data length %" PRId64 ", offset %"
+              PRId64, static_cast<off64_t>(len), data_length_, off);
+        return false;
+      }
+    }
+
+    if (!android::base::ReadFullyAtOffset(fd_, buf, len, read_offset)) {
       ALOGE("Zip: failed to read at offset %" PRId64, off);
       return false;
     }
   } else {
-    if (off < 0 || off > static_cast<off64_t>(data_length_)) {
+    if (off < 0 || off > data_length_) {
       ALOGE("Zip: invalid offset: %" PRId64 ", data length: %" PRId64, off, data_length_);
       return false;
     }
@@ -1207,7 +1264,8 @@ void CentralDirectory::Initialize(const void* map_base_ptr, off64_t cd_start_off
 bool ZipArchive::InitializeCentralDirectory(off64_t cd_start_offset, size_t cd_size) {
   if (mapped_zip.HasFd()) {
     directory_map = android::base::MappedFile::FromFd(mapped_zip.GetFileDescriptor(),
-                                                      cd_start_offset, cd_size, PROT_READ);
+                                                      mapped_zip.GetFileOffset() + cd_start_offset,
+                                                      cd_size, PROT_READ);
     if (!directory_map) {
       ALOGE("Zip: failed to map central directory (offset %" PRId64 ", size %zu): %s",
             cd_start_offset, cd_size, strerror(errno));
