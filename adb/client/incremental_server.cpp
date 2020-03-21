@@ -46,8 +46,9 @@ namespace incremental {
 
 static constexpr int kBlockSize = 4096;
 static constexpr int kCompressedSizeMax = kBlockSize * 0.95;
-static constexpr short kCompressionNone = 0;
-static constexpr short kCompressionLZ4 = 1;
+static constexpr int8_t kTypeData = 0;
+static constexpr int8_t kCompressionNone = 0;
+static constexpr int8_t kCompressionLZ4 = 1;
 static constexpr int kCompressBound = std::max(kBlockSize, LZ4_COMPRESSBOUND(kBlockSize));
 static constexpr auto kReadBufferSize = 128 * 1024;
 static constexpr int kPollTimeoutMillis = 300000;  // 5 minutes
@@ -56,7 +57,8 @@ using BlockSize = int16_t;
 using FileId = int16_t;
 using BlockIdx = int32_t;
 using NumBlocks = int32_t;
-using CompressionType = int16_t;
+using BlockType = int8_t;
+using CompressionType = int8_t;
 using RequestType = int16_t;
 using ChunkHeader = int32_t;
 using MagicType = uint32_t;
@@ -126,7 +128,8 @@ struct RequestCommand {
 // Placed before actual data bytes of each block
 struct ResponseHeader {
     FileId file_id;                    // 2 bytes
-    CompressionType compression_type;  // 2 bytes
+    BlockType block_type;              // 1 byte
+    CompressionType compression_type;  // 1 byte
     BlockIdx block_idx;                // 4 bytes
     BlockSize block_size;              // 2 bytes
 } __attribute__((packed));
@@ -343,13 +346,15 @@ auto IncrementalServer::SendBlock(FileId fileId, BlockIdx blockIdx, bool flush) 
         ++compressed_;
         blockSize = compressedSize;
         header = reinterpret_cast<ResponseHeader*>(data);
-        header->compression_type = toBigEndian(kCompressionLZ4);
+        header->compression_type = kCompressionLZ4;
     } else {
         ++uncompressed_;
         blockSize = bytesRead;
         header = reinterpret_cast<ResponseHeader*>(raw);
-        header->compression_type = toBigEndian(kCompressionNone);
+        header->compression_type = kCompressionNone;
     }
+
+    header->block_type = kTypeData;
 
     header->file_id = toBigEndian(fileId);
     header->block_size = toBigEndian(blockSize);
@@ -364,6 +369,7 @@ auto IncrementalServer::SendBlock(FileId fileId, BlockIdx blockIdx, bool flush) 
 bool IncrementalServer::SendDone() {
     ResponseHeader header;
     header.file_id = -1;
+    header.block_type = 0;
     header.compression_type = 0;
     header.block_idx = 0;
     header.block_size = 0;
