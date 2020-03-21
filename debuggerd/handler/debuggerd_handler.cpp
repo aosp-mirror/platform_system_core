@@ -167,7 +167,7 @@ static bool get_main_thread_name(char* buf, size_t len) {
  * mutex is being held, so we don't want to use any libc functions that
  * could allocate memory or hold a lock.
  */
-static void log_signal_summary(const siginfo_t* info) {
+static void log_signal_summary(const siginfo_t* info, const ucontext_t* ucontext) {
   char thread_name[MAX_TASK_NAME_LEN + 1];  // one more for termination
   if (prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(thread_name), 0, 0, 0) != 0) {
     strcpy(thread_name, "<name unknown>");
@@ -186,7 +186,8 @@ static void log_signal_summary(const siginfo_t* info) {
   // Many signals don't have an address or sender.
   char addr_desc[32] = "";  // ", fault addr 0x1234"
   if (signal_has_si_addr(info)) {
-    async_safe_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p", info->si_addr);
+    async_safe_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p",
+                             reinterpret_cast<void*>(get_fault_address(info, ucontext)));
   }
   pid_t self_pid = __getpid();
   char sender_desc[32] = {};  // " from pid 1234, uid 666"
@@ -476,6 +477,8 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   // making a syscall and checking errno.
   ErrnoRestorer restorer;
 
+  auto *ucontext = static_cast<ucontext_t*>(context);
+
   // It's possible somebody cleared the SA_SIGINFO flag, which would mean
   // our "info" arg holds an undefined value.
   if (!have_siginfo(signal_number)) {
@@ -522,7 +525,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // This check might be racy if another thread sets NO_NEW_PRIVS, but this should be unlikely,
     // you can only set NO_NEW_PRIVS to 1, and the effect should be at worst a single missing
     // ANR trace.
-    debuggerd_fallback_handler(info, static_cast<ucontext_t*>(context), process_info.abort_msg);
+    debuggerd_fallback_handler(info, ucontext, process_info.abort_msg);
     resend_signal(info);
     return;
   }
@@ -534,7 +537,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     return;
   }
 
-  log_signal_summary(info);
+  log_signal_summary(info, ucontext);
 
   debugger_thread_info thread_info = {
       .crashing_tid = __gettid(),
