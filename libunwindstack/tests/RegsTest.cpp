@@ -93,123 +93,104 @@ TEST_F(RegsTest, regs64) {
 }
 
 TEST_F(RegsTest, rel_pc) {
-  RegsArm64 arm64;
-  EXPECT_EQ(4U, arm64.GetPcAdjustment(0x10, elf_.get()));
-  EXPECT_EQ(4U, arm64.GetPcAdjustment(0x4, elf_.get()));
-  EXPECT_EQ(0U, arm64.GetPcAdjustment(0x3, elf_.get()));
-  EXPECT_EQ(0U, arm64.GetPcAdjustment(0x2, elf_.get()));
-  EXPECT_EQ(0U, arm64.GetPcAdjustment(0x1, elf_.get()));
-  EXPECT_EQ(0U, arm64.GetPcAdjustment(0x0, elf_.get()));
+  EXPECT_EQ(4U, GetPcAdjustment(0x10, elf_.get(), ARCH_ARM64));
+  EXPECT_EQ(4U, GetPcAdjustment(0x4, elf_.get(), ARCH_ARM64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x3, elf_.get(), ARCH_ARM64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x2, elf_.get(), ARCH_ARM64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x1, elf_.get(), ARCH_ARM64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x0, elf_.get(), ARCH_ARM64));
 
-  RegsX86 x86;
-  EXPECT_EQ(1U, x86.GetPcAdjustment(0x100, elf_.get()));
-  EXPECT_EQ(1U, x86.GetPcAdjustment(0x2, elf_.get()));
-  EXPECT_EQ(1U, x86.GetPcAdjustment(0x1, elf_.get()));
-  EXPECT_EQ(0U, x86.GetPcAdjustment(0x0, elf_.get()));
+  EXPECT_EQ(1U, GetPcAdjustment(0x100, elf_.get(), ARCH_X86));
+  EXPECT_EQ(1U, GetPcAdjustment(0x2, elf_.get(), ARCH_X86));
+  EXPECT_EQ(1U, GetPcAdjustment(0x1, elf_.get(), ARCH_X86));
+  EXPECT_EQ(0U, GetPcAdjustment(0x0, elf_.get(), ARCH_X86));
 
-  RegsX86_64 x86_64;
-  EXPECT_EQ(1U, x86_64.GetPcAdjustment(0x100, elf_.get()));
-  EXPECT_EQ(1U, x86_64.GetPcAdjustment(0x2, elf_.get()));
-  EXPECT_EQ(1U, x86_64.GetPcAdjustment(0x1, elf_.get()));
-  EXPECT_EQ(0U, x86_64.GetPcAdjustment(0x0, elf_.get()));
+  EXPECT_EQ(1U, GetPcAdjustment(0x100, elf_.get(), ARCH_X86_64));
+  EXPECT_EQ(1U, GetPcAdjustment(0x2, elf_.get(), ARCH_X86_64));
+  EXPECT_EQ(1U, GetPcAdjustment(0x1, elf_.get(), ARCH_X86_64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x0, elf_.get(), ARCH_X86_64));
 
-  RegsMips mips;
-  EXPECT_EQ(8U, mips.GetPcAdjustment(0x10, elf_.get()));
-  EXPECT_EQ(8U, mips.GetPcAdjustment(0x8, elf_.get()));
-  EXPECT_EQ(0U, mips.GetPcAdjustment(0x7, elf_.get()));
-  EXPECT_EQ(0U, mips.GetPcAdjustment(0x6, elf_.get()));
-  EXPECT_EQ(0U, mips.GetPcAdjustment(0x5, elf_.get()));
-  EXPECT_EQ(0U, mips.GetPcAdjustment(0x4, elf_.get()));
-  EXPECT_EQ(0U, mips.GetPcAdjustment(0x3, elf_.get()));
-  EXPECT_EQ(0U, mips.GetPcAdjustment(0x2, elf_.get()));
-  EXPECT_EQ(0U, mips.GetPcAdjustment(0x1, elf_.get()));
-  EXPECT_EQ(0U, mips.GetPcAdjustment(0x0, elf_.get()));
+  EXPECT_EQ(8U, GetPcAdjustment(0x10, elf_.get(), ARCH_MIPS));
+  EXPECT_EQ(8U, GetPcAdjustment(0x8, elf_.get(), ARCH_MIPS));
+  EXPECT_EQ(0U, GetPcAdjustment(0x7, elf_.get(), ARCH_MIPS));
+  EXPECT_EQ(0U, GetPcAdjustment(0x6, elf_.get(), ARCH_MIPS));
+  EXPECT_EQ(0U, GetPcAdjustment(0x5, elf_.get(), ARCH_MIPS));
+  EXPECT_EQ(0U, GetPcAdjustment(0x4, elf_.get(), ARCH_MIPS));
+  EXPECT_EQ(0U, GetPcAdjustment(0x3, elf_.get(), ARCH_MIPS));
+  EXPECT_EQ(0U, GetPcAdjustment(0x2, elf_.get(), ARCH_MIPS));
+  EXPECT_EQ(0U, GetPcAdjustment(0x1, elf_.get(), ARCH_MIPS));
+  EXPECT_EQ(0U, GetPcAdjustment(0x0, elf_.get(), ARCH_MIPS));
 
-  RegsMips64 mips64;
-  EXPECT_EQ(8U, mips64.GetPcAdjustment(0x10, elf_.get()));
-  EXPECT_EQ(8U, mips64.GetPcAdjustment(0x8, elf_.get()));
-  EXPECT_EQ(0U, mips64.GetPcAdjustment(0x7, elf_.get()));
-  EXPECT_EQ(0U, mips64.GetPcAdjustment(0x6, elf_.get()));
-  EXPECT_EQ(0U, mips64.GetPcAdjustment(0x5, elf_.get()));
-  EXPECT_EQ(0U, mips64.GetPcAdjustment(0x4, elf_.get()));
-  EXPECT_EQ(0U, mips64.GetPcAdjustment(0x3, elf_.get()));
-  EXPECT_EQ(0U, mips64.GetPcAdjustment(0x2, elf_.get()));
-  EXPECT_EQ(0U, mips64.GetPcAdjustment(0x1, elf_.get()));
-  EXPECT_EQ(0U, mips64.GetPcAdjustment(0x0, elf_.get()));
+  EXPECT_EQ(8U, GetPcAdjustment(0x10, elf_.get(), ARCH_MIPS64));
+  EXPECT_EQ(8U, GetPcAdjustment(0x8, elf_.get(), ARCH_MIPS64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x7, elf_.get(), ARCH_MIPS64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x6, elf_.get(), ARCH_MIPS64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x5, elf_.get(), ARCH_MIPS64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x4, elf_.get(), ARCH_MIPS64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x3, elf_.get(), ARCH_MIPS64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x2, elf_.get(), ARCH_MIPS64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x1, elf_.get(), ARCH_MIPS64));
+  EXPECT_EQ(0U, GetPcAdjustment(0x0, elf_.get(), ARCH_MIPS64));
 }
 
 TEST_F(RegsTest, rel_pc_arm) {
-  RegsArm arm;
-
   // Check fence posts.
   elf_->FakeSetLoadBias(0);
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x5, elf_.get()));
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x4, elf_.get()));
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x3, elf_.get()));
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x2, elf_.get()));
-  EXPECT_EQ(0U, arm.GetPcAdjustment(0x1, elf_.get()));
-  EXPECT_EQ(0U, arm.GetPcAdjustment(0x0, elf_.get()));
+  EXPECT_EQ(2U, GetPcAdjustment(0x5, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0x4, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0x3, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0x2, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(0U, GetPcAdjustment(0x1, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(0U, GetPcAdjustment(0x0, elf_.get(), ARCH_ARM));
 
   elf_->FakeSetLoadBias(0x100);
-  EXPECT_EQ(0U, arm.GetPcAdjustment(0x1, elf_.get()));
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x2, elf_.get()));
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0xff, elf_.get()));
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x105, elf_.get()));
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x104, elf_.get()));
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x103, elf_.get()));
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x102, elf_.get()));
-  EXPECT_EQ(0U, arm.GetPcAdjustment(0x101, elf_.get()));
-  EXPECT_EQ(0U, arm.GetPcAdjustment(0x100, elf_.get()));
+  EXPECT_EQ(0U, GetPcAdjustment(0x1, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0x2, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0xff, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0x105, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0x104, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0x103, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0x102, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(0U, GetPcAdjustment(0x101, elf_.get(), ARCH_ARM));
+  EXPECT_EQ(0U, GetPcAdjustment(0x100, elf_.get(), ARCH_ARM));
 
   // Check thumb instructions handling.
   elf_->FakeSetLoadBias(0);
   memory_->SetData32(0x2000, 0);
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x2005, elf_.get()));
+  EXPECT_EQ(2U, GetPcAdjustment(0x2005, elf_.get(), ARCH_ARM));
   memory_->SetData32(0x2000, 0xe000f000);
-  EXPECT_EQ(4U, arm.GetPcAdjustment(0x2005, elf_.get()));
+  EXPECT_EQ(4U, GetPcAdjustment(0x2005, elf_.get(), ARCH_ARM));
 
   elf_->FakeSetLoadBias(0x400);
   memory_->SetData32(0x2100, 0);
-  EXPECT_EQ(2U, arm.GetPcAdjustment(0x2505, elf_.get()));
+  EXPECT_EQ(2U, GetPcAdjustment(0x2505, elf_.get(), ARCH_ARM));
   memory_->SetData32(0x2100, 0xf111f111);
-  EXPECT_EQ(4U, arm.GetPcAdjustment(0x2505, elf_.get()));
+  EXPECT_EQ(4U, GetPcAdjustment(0x2505, elf_.get(), ARCH_ARM));
 }
 
 TEST_F(RegsTest, elf_invalid) {
-  RegsArm regs_arm;
-  RegsArm64 regs_arm64;
-  RegsX86 regs_x86;
-  RegsX86_64 regs_x86_64;
-  RegsMips regs_mips;
-  RegsMips64 regs_mips64;
   MapInfo map_info(nullptr, nullptr, 0x1000, 0x2000, 0, 0, "");
   Elf* invalid_elf = new Elf(nullptr);
   map_info.elf.reset(invalid_elf);
 
-  regs_arm.set_pc(0x1500);
-  EXPECT_EQ(0x500U, invalid_elf->GetRelPc(regs_arm.pc(), &map_info));
-  EXPECT_EQ(2U, regs_arm.GetPcAdjustment(0x500U, invalid_elf));
-  EXPECT_EQ(2U, regs_arm.GetPcAdjustment(0x511U, invalid_elf));
+  EXPECT_EQ(0x500U, invalid_elf->GetRelPc(0x1500, &map_info));
+  EXPECT_EQ(2U, GetPcAdjustment(0x500U, invalid_elf, ARCH_ARM));
+  EXPECT_EQ(2U, GetPcAdjustment(0x511U, invalid_elf, ARCH_ARM));
 
-  regs_arm64.set_pc(0x1600);
-  EXPECT_EQ(0x600U, invalid_elf->GetRelPc(regs_arm64.pc(), &map_info));
-  EXPECT_EQ(4U, regs_arm64.GetPcAdjustment(0x600U, invalid_elf));
+  EXPECT_EQ(0x600U, invalid_elf->GetRelPc(0x1600, &map_info));
+  EXPECT_EQ(4U, GetPcAdjustment(0x600U, invalid_elf, ARCH_ARM64));
 
-  regs_x86.set_pc(0x1700);
-  EXPECT_EQ(0x700U, invalid_elf->GetRelPc(regs_x86.pc(), &map_info));
-  EXPECT_EQ(1U, regs_x86.GetPcAdjustment(0x700U, invalid_elf));
+  EXPECT_EQ(0x700U, invalid_elf->GetRelPc(0x1700, &map_info));
+  EXPECT_EQ(1U, GetPcAdjustment(0x700U, invalid_elf, ARCH_X86));
 
-  regs_x86_64.set_pc(0x1800);
-  EXPECT_EQ(0x800U, invalid_elf->GetRelPc(regs_x86_64.pc(), &map_info));
-  EXPECT_EQ(1U, regs_x86_64.GetPcAdjustment(0x800U, invalid_elf));
+  EXPECT_EQ(0x800U, invalid_elf->GetRelPc(0x1800, &map_info));
+  EXPECT_EQ(1U, GetPcAdjustment(0x800U, invalid_elf, ARCH_X86_64));
 
-  regs_mips.set_pc(0x1900);
-  EXPECT_EQ(0x900U, invalid_elf->GetRelPc(regs_mips.pc(), &map_info));
-  EXPECT_EQ(8U, regs_mips.GetPcAdjustment(0x900U, invalid_elf));
+  EXPECT_EQ(0x900U, invalid_elf->GetRelPc(0x1900, &map_info));
+  EXPECT_EQ(8U, GetPcAdjustment(0x900U, invalid_elf, ARCH_MIPS));
 
-  regs_mips64.set_pc(0x1a00);
-  EXPECT_EQ(0xa00U, invalid_elf->GetRelPc(regs_mips64.pc(), &map_info));
-  EXPECT_EQ(8U, regs_mips64.GetPcAdjustment(0xa00U, invalid_elf));
+  EXPECT_EQ(0xa00U, invalid_elf->GetRelPc(0x1a00, &map_info));
+  EXPECT_EQ(8U, GetPcAdjustment(0xa00U, invalid_elf, ARCH_MIPS64));
 }
 
 TEST_F(RegsTest, arm_verify_sp_pc) {

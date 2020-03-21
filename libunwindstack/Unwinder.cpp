@@ -181,7 +181,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         step_pc = rel_pc;
       }
       if (adjust_pc) {
-        pc_adjustment = regs_->GetPcAdjustment(rel_pc, elf);
+        pc_adjustment = GetPcAdjustment(rel_pc, elf, arch);
       } else {
         pc_adjustment = 0;
       }
