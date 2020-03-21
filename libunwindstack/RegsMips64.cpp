@@ -52,14 +52,6 @@ void RegsMips64::set_sp(uint64_t sp) {
   regs_[MIPS64_REG_SP] = sp;
 }
 
-uint64_t RegsMips64::GetPcAdjustment(uint64_t rel_pc, Elf*) {
-  if (rel_pc < 8) {
-    return 0;
-  }
-  // For now, just assume no compact branches
-  return 8;
-}
-
 bool RegsMips64::SetPcFromReturnAddress(Memory*) {
   uint64_t ra = regs_[MIPS64_REG_RA];
   if (regs_[MIPS64_REG_PC] == ra) {
