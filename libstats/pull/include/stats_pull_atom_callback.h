@@ -45,17 +45,27 @@ AStatsManager_PullAtomMetadata* AStatsManager_PullAtomMetadata_obtain();
 void AStatsManager_PullAtomMetadata_release(AStatsManager_PullAtomMetadata* metadata);
 
 /**
- * Set the cool down time of the pull in nanoseconds. If two successive pulls are issued
+ * Set the cool down time of the pull in milliseconds. If two successive pulls are issued
  * within the cool down, a cached version of the first will be used for the second.
  */
-void AStatsManager_PullAtomMetadata_setCoolDownNs(AStatsManager_PullAtomMetadata* metadata,
-                                                  int64_t cool_down_ns);
+void AStatsManager_PullAtomMetadata_setCoolDownMillis(AStatsManager_PullAtomMetadata* metadata,
+                                                      int64_t cool_down_millis);
 
 /**
- * Set the maximum time the pull can take in nanoseconds.
+ * Get the cool down time of the pull in milliseconds.
  */
-void AStatsManager_PullAtomMetadata_setTimeoutNs(AStatsManager_PullAtomMetadata* metadata,
-                                                 int64_t timeout_ns);
+int64_t AStatsManager_PullAtomMetadata_getCoolDownMillis(AStatsManager_PullAtomMetadata* metadata);
+
+/**
+ * Set the maximum time the pull can take in milliseconds.
+ */
+void AStatsManager_PullAtomMetadata_setTimeoutMillis(AStatsManager_PullAtomMetadata* metadata,
+                                                     int64_t timeout_millis);
+
+/**
+ * Get the maximum time the pull can take in milliseconds.
+ */
+int64_t AStatsManager_PullAtomMetadata_getTimeoutMillis(AStatsManager_PullAtomMetadata* metadata);
 
 /**
  * Set the additive fields of this pulled atom.
@@ -65,7 +75,25 @@ void AStatsManager_PullAtomMetadata_setTimeoutNs(AStatsManager_PullAtomMetadata*
  * will be combined when the non-additive fields are the same.
  */
 void AStatsManager_PullAtomMetadata_setAdditiveFields(AStatsManager_PullAtomMetadata* metadata,
-                                                      int* additive_fields, int num_fields);
+                                                      int32_t* additive_fields, int32_t num_fields);
+
+/**
+ * Get the number the additive fields of this pulled atom. This is intended to be called before
+ * AStatsManager_PullAtomMetadata_getAdditiveFields to determine the size of the array.
+ */
+int32_t AStatsManager_PullAtomMetadata_getNumAdditiveFields(
+        AStatsManager_PullAtomMetadata* metadata);
+
+/**
+ * Get the additive fields of this pulled atom.
+ *
+ * \param fields an output parameter containing the additive fields for this PullAtomMetadata.
+ *               Fields is an array and it is assumed that it is at least as large as the number of
+ *               additive fields, which can be obtained by calling
+ *               AStatsManager_PullAtomMetadata_getNumAdditiveFields.
+ */
+void AStatsManager_PullAtomMetadata_getAdditiveFields(AStatsManager_PullAtomMetadata* metadata,
+                                                      int32_t* fields);
 
 /**
  * Return codes for the result of a pull.
@@ -108,7 +136,7 @@ AStatsEvent* AStatsEventList_addStatsEvent(AStatsEventList* pull_data);
 typedef AStatsManager_PullAtomCallbackReturn (*AStatsManager_PullAtomCallback)(
         int32_t atom_tag, AStatsEventList* data, void* cookie);
 /**
- * Registers a callback for an atom when that atom is to be pulled. The stats service will
+ * Sets a callback for an atom when that atom is to be pulled. The stats service will
  * invoke the callback when the stats service determines that this atom needs to be
  * pulled.
  *
@@ -122,19 +150,18 @@ typedef AStatsManager_PullAtomCallbackReturn (*AStatsManager_PullAtomCallback)(
  * \param cookie            A pointer that will be passed back to the callback.
  *                          It has no meaning to statsd.
  */
-void AStatsManager_registerPullAtomCallback(int32_t atom_tag,
-                                            AStatsManager_PullAtomCallback callback,
-                                            AStatsManager_PullAtomMetadata* metadata, void* cookie);
+void AStatsManager_setPullAtomCallback(int32_t atom_tag, AStatsManager_PullAtomMetadata* metadata,
+                                       AStatsManager_PullAtomCallback callback, void* cookie);
 
 /**
- * Unregisters a callback for an atom when that atom is to be pulled. Note that any ongoing
+ * Clears a callback for an atom when that atom is to be pulled. Note that any ongoing
  * pulls will still occur.
  *
  * Requires the REGISTER_STATS_PULL_ATOM permission.
  *
  * \param atomTag           The tag of the atom of which to unregister
  */
-void AStatsManager_unregisterPullAtomCallback(int32_t atom_tag);
+void AStatsManager_clearPullAtomCallback(int32_t atom_tag);
 
 #ifdef __cplusplus
 }
