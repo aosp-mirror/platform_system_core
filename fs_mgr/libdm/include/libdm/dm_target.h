@@ -290,8 +290,7 @@ class DmTargetDefaultKey final : public DmTarget {
     std::string name() const override { return kName; }
     bool Valid() const override;
     std::string GetParameterString() const override;
-    static bool IsLegacy(bool* result);
-    void SetIsLegacy() { is_legacy_ = true; }
+    void SetUseLegacyOptionsFormat() { use_legacy_options_format_ = true; }
     void SetSetDun() { set_dun_ = true; }
     void SetWrappedKeyV0() { is_hw_wrapped_ = true; }
 
@@ -302,7 +301,7 @@ class DmTargetDefaultKey final : public DmTarget {
     std::string key_;
     std::string blockdev_;
     uint64_t start_sector_;
-    bool is_legacy_ = false;
+    bool use_legacy_options_format_ = false;
     bool set_dun_ = false;
     bool is_hw_wrapped_ = false;
 };
