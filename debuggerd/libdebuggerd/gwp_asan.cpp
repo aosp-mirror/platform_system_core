@@ -172,15 +172,12 @@ static unwindstack::FrameData BuildFrame(unwindstack::Unwinder* unwinder, uintpt
     return frame;
   }
 
-  unwindstack::Elf* elf =
-      map_info->GetElf(unwinder->GetProcessMemory(), unwindstack::Regs::CurrentArch());
+  unwindstack::ArchEnum arch = unwindstack::Regs::CurrentArch();
+  unwindstack::Elf* elf = map_info->GetElf(unwinder->GetProcessMemory(), arch);
 
   uint64_t relative_pc = elf->GetRelPc(pc, map_info);
 
-  // Create registers just to get PC adjustment. Doesn't matter what they point
-  // to.
-  unwindstack::Regs* regs = unwindstack::Regs::CreateFromLocal();
-  uint64_t pc_adjustment = regs->GetPcAdjustment(relative_pc, elf);
+  uint64_t pc_adjustment = unwindstack::GetPcAdjustment(relative_pc, elf, arch);
   relative_pc -= pc_adjustment;
   // The debug PC may be different if the PC comes from the JIT.
   uint64_t debug_pc = relative_pc;
