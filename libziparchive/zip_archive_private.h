@@ -97,16 +97,22 @@ enum ErrorCodes : int32_t {
 class MappedZipFile {
  public:
   explicit MappedZipFile(const int fd)
-      : has_fd_(true), fd_(fd), base_ptr_(nullptr), data_length_(0) {}
+      : has_fd_(true), fd_(fd), fd_offset_(0), base_ptr_(nullptr), data_length_(-1) {}
+
+  explicit MappedZipFile(const int fd, off64_t length, off64_t offset)
+      : has_fd_(true), fd_(fd), fd_offset_(offset), base_ptr_(nullptr), data_length_(length) {}
 
   explicit MappedZipFile(const void* address, size_t length)
-      : has_fd_(false), fd_(-1), base_ptr_(address), data_length_(static_cast<off64_t>(length)) {}
+      : has_fd_(false), fd_(-1), fd_offset_(0), base_ptr_(address),
+        data_length_(static_cast<off64_t>(length)) {}
 
   bool HasFd() const { return has_fd_; }
 
   int GetFileDescriptor() const;
 
   const void* GetBasePtr() const;
+
+  off64_t GetFileOffset() const;
 
   off64_t GetFileLength() const;
 
@@ -120,9 +126,10 @@ class MappedZipFile {
   const bool has_fd_;
 
   const int fd_;
+  const off64_t fd_offset_;
 
   const void* const base_ptr_;
-  const off64_t data_length_;
+  mutable off64_t data_length_;
 };
 
 class CentralDirectory {
@@ -180,7 +187,7 @@ struct ZipArchive {
   uint32_t hash_table_size;
   ZipStringOffset* hash_table;
 
-  ZipArchive(const int fd, bool assume_ownership);
+  ZipArchive(MappedZipFile&& map, bool assume_ownership);
   ZipArchive(const void* address, size_t length);
   ~ZipArchive();
 

@@ -46,19 +46,19 @@ AStatsEvent* AStatsEventList_addStatsEvent(AStatsEventList* pull_data) {
     return event;
 }
 
-static const int64_t DEFAULT_COOL_DOWN_NS = 1000000000LL;  // 1 second.
-static const int64_t DEFAULT_TIMEOUT_NS = 10000000000LL;   // 10 seconds.
+static const int64_t DEFAULT_COOL_DOWN_MILLIS = 1000LL;  // 1 second.
+static const int64_t DEFAULT_TIMEOUT_MILLIS = 10000LL;   // 10 seconds.
 
 struct AStatsManager_PullAtomMetadata {
-    int64_t cool_down_ns;
-    int64_t timeout_ns;
+    int64_t cool_down_millis;
+    int64_t timeout_millis;
     std::vector<int32_t> additive_fields;
 };
 
 AStatsManager_PullAtomMetadata* AStatsManager_PullAtomMetadata_obtain() {
     AStatsManager_PullAtomMetadata* metadata = new AStatsManager_PullAtomMetadata();
-    metadata->cool_down_ns = DEFAULT_COOL_DOWN_NS;
-    metadata->timeout_ns = DEFAULT_TIMEOUT_NS;
+    metadata->cool_down_millis = DEFAULT_COOL_DOWN_MILLIS;
+    metadata->timeout_millis = DEFAULT_TIMEOUT_MILLIS;
     metadata->additive_fields = std::vector<int32_t>();
     return metadata;
 }
@@ -67,30 +67,49 @@ void AStatsManager_PullAtomMetadata_release(AStatsManager_PullAtomMetadata* meta
     delete metadata;
 }
 
-void AStatsManager_PullAtomMetadata_setCoolDownNs(AStatsManager_PullAtomMetadata* metadata,
-                                                  int64_t cool_down_ns) {
-    metadata->cool_down_ns = cool_down_ns;
+void AStatsManager_PullAtomMetadata_setCoolDownMillis(AStatsManager_PullAtomMetadata* metadata,
+                                                      int64_t cool_down_millis) {
+    metadata->cool_down_millis = cool_down_millis;
 }
 
-void AStatsManager_PullAtomMetadata_setTimeoutNs(AStatsManager_PullAtomMetadata* metadata,
-                                                 int64_t timeout_ns) {
-    metadata->timeout_ns = timeout_ns;
+int64_t AStatsManager_PullAtomMetadata_getCoolDownMillis(AStatsManager_PullAtomMetadata* metadata) {
+    return metadata->cool_down_millis;
+}
+
+void AStatsManager_PullAtomMetadata_setTimeoutMillis(AStatsManager_PullAtomMetadata* metadata,
+                                                     int64_t timeout_millis) {
+    metadata->timeout_millis = timeout_millis;
+}
+
+int64_t AStatsManager_PullAtomMetadata_getTimeoutMillis(AStatsManager_PullAtomMetadata* metadata) {
+    return metadata->timeout_millis;
 }
 
 void AStatsManager_PullAtomMetadata_setAdditiveFields(AStatsManager_PullAtomMetadata* metadata,
-                                                      int* additive_fields, int num_fields) {
+                                                      int32_t* additive_fields,
+                                                      int32_t num_fields) {
     metadata->additive_fields.assign(additive_fields, additive_fields + num_fields);
+}
+
+int32_t AStatsManager_PullAtomMetadata_getNumAdditiveFields(
+        AStatsManager_PullAtomMetadata* metadata) {
+    return metadata->additive_fields.size();
+}
+
+void AStatsManager_PullAtomMetadata_getAdditiveFields(AStatsManager_PullAtomMetadata* metadata,
+                                                      int32_t* fields) {
+    std::copy(metadata->additive_fields.begin(), metadata->additive_fields.end(), fields);
 }
 
 class StatsPullAtomCallbackInternal : public BnPullAtomCallback {
   public:
     StatsPullAtomCallbackInternal(const AStatsManager_PullAtomCallback callback, void* cookie,
-                                  const int64_t coolDownNs, const int64_t timeoutNs,
+                                  const int64_t coolDownMillis, const int64_t timeoutMillis,
                                   const std::vector<int32_t> additiveFields)
         : mCallback(callback),
           mCookie(cookie),
-          mCoolDownNs(coolDownNs),
-          mTimeoutNs(timeoutNs),
+          mCoolDownMillis(coolDownMillis),
+          mTimeoutMillis(timeoutMillis),
           mAdditiveFields(additiveFields) {}
 
     Status onPullAtom(int32_t atomTag,
@@ -119,15 +138,15 @@ class StatsPullAtomCallbackInternal : public BnPullAtomCallback {
         return Status::ok();
     }
 
-    const int64_t& getCoolDownNs() const { return mCoolDownNs; }
-    const int64_t& getTimeoutNs() const { return mTimeoutNs; }
+    int64_t getCoolDownMillis() const { return mCoolDownMillis; }
+    int64_t getTimeoutMillis() const { return mTimeoutMillis; }
     const std::vector<int32_t>& getAdditiveFields() const { return mAdditiveFields; }
 
   private:
     const AStatsManager_PullAtomCallback mCallback;
     void* mCookie;
-    const int64_t mCoolDownNs;
-    const int64_t mTimeoutNs;
+    const int64_t mCoolDownMillis;
+    const int64_t mTimeoutMillis;
     const std::vector<int32_t> mAdditiveFields;
 };
 
@@ -156,8 +175,8 @@ static void binderDied(void* /*cookie*/) {
         pullersCopy = mPullers;
     }
     for (const auto& it : pullersCopy) {
-        statsService->registerNativePullAtomCallback(it.first, it.second->getCoolDownNs(),
-                                                     it.second->getTimeoutNs(),
+        statsService->registerNativePullAtomCallback(it.first, it.second->getCoolDownMillis(),
+                                                     it.second->getTimeoutMillis(),
                                                      it.second->getAdditiveFields(), it.second);
     }
 }
@@ -186,8 +205,8 @@ void registerStatsPullAtomCallbackBlocking(int32_t atomTag,
         return;
     }
 
-    statsService->registerNativePullAtomCallback(atomTag, cb->getCoolDownNs(), cb->getTimeoutNs(),
-                                                 cb->getAdditiveFields(), cb);
+    statsService->registerNativePullAtomCallback(
+            atomTag, cb->getCoolDownMillis(), cb->getTimeoutMillis(), cb->getAdditiveFields(), cb);
 }
 
 void unregisterStatsPullAtomCallbackBlocking(int32_t atomTag) {
@@ -200,12 +219,11 @@ void unregisterStatsPullAtomCallbackBlocking(int32_t atomTag) {
     statsService->unregisterNativePullAtomCallback(atomTag);
 }
 
-void AStatsManager_registerPullAtomCallback(int32_t atom_tag,
-                                            AStatsManager_PullAtomCallback callback,
-                                            AStatsManager_PullAtomMetadata* metadata,
-                                            void* cookie) {
-    int64_t coolDownNs = metadata == nullptr ? DEFAULT_COOL_DOWN_NS : metadata->cool_down_ns;
-    int64_t timeoutNs = metadata == nullptr ? DEFAULT_TIMEOUT_NS : metadata->timeout_ns;
+void AStatsManager_setPullAtomCallback(int32_t atom_tag, AStatsManager_PullAtomMetadata* metadata,
+                                       AStatsManager_PullAtomCallback callback, void* cookie) {
+    int64_t coolDownMillis =
+            metadata == nullptr ? DEFAULT_COOL_DOWN_MILLIS : metadata->cool_down_millis;
+    int64_t timeoutMillis = metadata == nullptr ? DEFAULT_TIMEOUT_MILLIS : metadata->timeout_millis;
 
     std::vector<int32_t> additiveFields;
     if (metadata != nullptr) {
@@ -213,8 +231,8 @@ void AStatsManager_registerPullAtomCallback(int32_t atom_tag,
     }
 
     std::shared_ptr<StatsPullAtomCallbackInternal> callbackBinder =
-            SharedRefBase::make<StatsPullAtomCallbackInternal>(callback, cookie, coolDownNs,
-                                                               timeoutNs, additiveFields);
+            SharedRefBase::make<StatsPullAtomCallbackInternal>(callback, cookie, coolDownMillis,
+                                                               timeoutMillis, additiveFields);
 
     {
         std::lock_guard<std::mutex> lg(pullAtomMutex);
@@ -226,7 +244,7 @@ void AStatsManager_registerPullAtomCallback(int32_t atom_tag,
     registerThread.detach();
 }
 
-void AStatsManager_unregisterPullAtomCallback(int32_t atom_tag) {
+void AStatsManager_clearPullAtomCallback(int32_t atom_tag) {
     {
         std::lock_guard<std::mutex> lg(pullAtomMutex);
         // Always remove the puller from our map.
