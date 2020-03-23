@@ -97,7 +97,7 @@ class FirstStageMount {
     bool TrySwitchSystemAsRoot();
     bool TrySkipMountingPartitions();
     bool IsDmLinearEnabled();
-    void GetDmLinearMetadataDevice(std::set<std::string>* devices);
+    void GetSuperDeviceName(std::set<std::string>* devices);
     bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
     void UseDsuIfPresent();
     // Reads all fstab.avb_keys from the ramdisk for first-stage mount.
@@ -116,7 +116,8 @@ class FirstStageMount {
     bool dsu_not_on_userdata_ = false;
 
     Fstab fstab_;
-    std::string lp_metadata_partition_;
+    // The super path is only set after InitDevices, and is invalid before.
+    std::string super_path_;
     std::string super_partition_name_;
     std::unique_ptr<DeviceHandler> device_handler_;
     UeventListener uevent_listener_;
@@ -268,12 +269,23 @@ bool FirstStageMount::DoFirstStageMount() {
 
 bool FirstStageMount::InitDevices() {
     std::set<std::string> devices;
-    GetDmLinearMetadataDevice(&devices);
+    GetSuperDeviceName(&devices);
 
     if (!GetDmVerityDevices(&devices)) {
         return false;
     }
-    return InitRequiredDevices(std::move(devices));
+    if (!InitRequiredDevices(std::move(devices))) {
+        return false;
+    }
+
+    if (IsDmLinearEnabled()) {
+        auto super_symlink = "/dev/block/by-name/"s + super_partition_name_;
+        if (!android::base::Realpath(super_symlink, &super_path_)) {
+            PLOG(ERROR) << "realpath failed: " << super_symlink;
+            return false;
+        }
+    }
+    return true;
 }
 
 bool FirstStageMount::IsDmLinearEnabled() {
@@ -283,7 +295,7 @@ bool FirstStageMount::IsDmLinearEnabled() {
     return false;
 }
 
-void FirstStageMount::GetDmLinearMetadataDevice(std::set<std::string>* devices) {
+void FirstStageMount::GetSuperDeviceName(std::set<std::string>* devices) {
     // Add any additional devices required for dm-linear mappings.
     if (!IsDmLinearEnabled()) {
         return;
@@ -375,7 +387,7 @@ bool FirstStageMount::CreateLogicalPartitions() {
     if (!IsDmLinearEnabled()) {
         return true;
     }
-    if (lp_metadata_partition_.empty()) {
+    if (super_path_.empty()) {
         LOG(ERROR) << "Could not locate logical partition tables in partition "
                    << super_partition_name_;
         return false;
@@ -392,19 +404,19 @@ bool FirstStageMount::CreateLogicalPartitions() {
             if (!InitRequiredDevices({"userdata"})) {
                 return false;
             }
-            return sm->CreateLogicalAndSnapshotPartitions(lp_metadata_partition_);
+            return sm->CreateLogicalAndSnapshotPartitions(super_path_);
         }
     }
 
-    auto metadata = android::fs_mgr::ReadCurrentMetadata(lp_metadata_partition_);
+    auto metadata = android::fs_mgr::ReadCurrentMetadata(super_path_);
     if (!metadata) {
-        LOG(ERROR) << "Could not read logical partition metadata from " << lp_metadata_partition_;
+        LOG(ERROR) << "Could not read logical partition metadata from " << super_path_;
         return false;
     }
     if (!InitDmLinearBackingDevices(*metadata.get())) {
         return false;
     }
-    return android::fs_mgr::CreateLogicalPartitions(*metadata.get(), lp_metadata_partition_);
+    return android::fs_mgr::CreateLogicalPartitions(*metadata.get(), super_path_);
 }
 
 ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const Uevent& uevent,
@@ -415,10 +427,6 @@ ListenerAction FirstStageMount::HandleBlockDevice(const std::string& name, const
     auto iter = required_devices->find(name);
     if (iter != required_devices->end()) {
         LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << *iter;
-        if (IsDmLinearEnabled() && name == super_partition_name_) {
-            std::vector<std::string> links = device_handler_->GetBlockDeviceSymlinks(uevent);
-            lp_metadata_partition_ = links[0];
-        }
         required_devices->erase(iter);
         device_handler_->HandleUevent(uevent);
         if (required_devices->empty()) {
