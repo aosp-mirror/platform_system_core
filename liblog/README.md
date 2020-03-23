@@ -118,10 +118,9 @@ at a time in time sorted order, optionally limited to a specific pid and tail of
 finally a call closing the logs.  A single log can be opened with `android_logger_list_open()`; or
 multiple logs can be opened with `android_logger_list_alloc()`, calling in turn the
 `android_logger_open()` for each log id.  Each entry can be retrieved with
-`android_logger_list_read()`.  The log(s) can be closed with `android_logger_list_free()`.  The logs
-should be opened with an `ANDROID_LOG_RDONLY` mode.  `ANDROID_LOG_NONBLOCK` mode will report when
-the log reading is done with an `EAGAIN` error return code, otherwise the
-`android_logger_list_read()` call will block for new entries.
+`android_logger_list_read()`.  The log(s) can be closed with `android_logger_list_free()`.
+`ANDROID_LOG_NONBLOCK` mode will report when the log reading is done with an `EAGAIN` error return 
+code, otherwise the `android_logger_list_read()` call will block for new entries.
 
 The `ANDROID_LOG_WRAP` mode flag to the `android_logger_list_alloc_time()` signals logd to quiesce
 the reader until the buffer is about to prune at the start time then proceed to dumping content.
@@ -130,14 +129,12 @@ The `ANDROID_LOG_PSTORE` mode flag to the `android_logger_open()` is used to swi
 logs to the persistent logs from before the last reboot.
 
 The value returned by `android_logger_open()` can be used as a parameter to the
-`android_logger_clear()` function to empty the sub-log.  It is recommended to only open log
-`ANDROID_LOG_WRONLY` in that case.
+`android_logger_clear()` function to empty the sub-log.
 
 The value returned by `android_logger_open()` can be used as a parameter to the
 `android_logger_get_log_(size|readable_size|version)` to retrieve the sub-log maximum size, readable
 size and log buffer format protocol version respectively.  `android_logger_get_id()` returns the id
-that was used when opening the sub-log.  It is recommended to open the log `ANDROID_LOG_RDONLY` in
-these cases.
+that was used when opening the sub-log.
 
 Errors
 ------
