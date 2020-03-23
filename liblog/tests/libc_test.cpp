@@ -22,6 +22,10 @@
 TEST(libc, __pstore_append) {
 #ifdef __ANDROID__
 #ifndef NO_PSTORE
+  if (access("/dev/pmsg0", W_OK) != 0) {
+    GTEST_SKIP() << "pmsg0 not found, skipping test";
+  }
+
   FILE* fp;
   ASSERT_TRUE(NULL != (fp = fopen("/dev/pmsg0", "ae")));
   static const char message[] = "libc.__pstore_append\n";
