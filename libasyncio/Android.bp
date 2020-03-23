@@ -28,10 +28,6 @@ cc_library {
     defaults: ["libasyncio_defaults"],
     vendor_available: true,
     recovery_available: true,
-    apex_available: [
-        "//apex_available:platform",
-        "com.android.adbd",
-    ],
     host_supported: true,
     srcs: [
         "AsyncIO.cpp",
