@@ -526,7 +526,6 @@ cc_library {
     name: "libadbd",
     defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
-    apex_available: ["com.android.adbd"],
 
     // avoid getting duplicate symbol of android::build::getbuildnumber().
     use_version_lib: false,
@@ -581,7 +580,6 @@ cc_binary {
     defaults: ["adbd_defaults", "host_adbd_supported"],
     stl: "libc++_static",
     recovery_available: true,
-    apex_available: ["com.android.adbd"],
 
     srcs: [
         "daemon/main.cpp",
