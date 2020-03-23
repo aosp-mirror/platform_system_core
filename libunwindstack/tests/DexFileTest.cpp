@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <malloc.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -72,6 +73,37 @@ TEST(DexFileTest, from_file_open_non_zero_offset) {
   EXPECT_TRUE(DexFileFromFile::Create(0x100, tf.path) != nullptr);
 }
 
+static constexpr size_t kNumLeakLoops = 5000;
+static constexpr size_t kMaxAllowedLeakBytes = 1024;
+
+static void CheckForLeak(size_t loop, size_t* first_allocated_bytes, size_t* last_allocated_bytes) {
+  size_t allocated_bytes = mallinfo().uordblks;
+  if (*first_allocated_bytes == 0) {
+    *first_allocated_bytes = allocated_bytes;
+  } else if (*last_allocated_bytes > *first_allocated_bytes) {
+    // Check that the total memory did not increase too much over the first loop.
+    ASSERT_LE(*last_allocated_bytes - *first_allocated_bytes, kMaxAllowedLeakBytes)
+        << "Failed in loop " << loop << " first_allocated_bytes " << *first_allocated_bytes
+        << " last_allocated_bytes " << *last_allocated_bytes;
+  }
+  *last_allocated_bytes = allocated_bytes;
+}
+
+TEST(DexFileTest, from_file_no_leak) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+
+  ASSERT_EQ(sizeof(kDexData),
+            static_cast<size_t>(TEMP_FAILURE_RETRY(write(tf.fd, kDexData, sizeof(kDexData)))));
+
+  size_t first_allocated_bytes = 0;
+  size_t last_allocated_bytes = 0;
+  for (size_t i = 0; i < kNumLeakLoops; i++) {
+    EXPECT_TRUE(DexFileFromFile::Create(0, tf.path) != nullptr);
+    ASSERT_NO_FATAL_FAILURE(CheckForLeak(i, &first_allocated_bytes, &last_allocated_bytes));
+  }
+}
+
 TEST(DexFileTest, from_memory_fail_too_small_for_header) {
   MemoryFake memory;
 
@@ -94,6 +126,19 @@ TEST(DexFileTest, from_memory_open) {
   memory.SetMemory(0x1000, kDexData, sizeof(kDexData));
 
   EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "") != nullptr);
+}
+
+TEST(DexFileTest, from_memory_no_leak) {
+  MemoryFake memory;
+
+  memory.SetMemory(0x1000, kDexData, sizeof(kDexData));
+
+  size_t first_allocated_bytes = 0;
+  size_t last_allocated_bytes = 0;
+  for (size_t i = 0; i < kNumLeakLoops; i++) {
+    EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "") != nullptr);
+    ASSERT_NO_FATAL_FAILURE(CheckForLeak(i, &first_allocated_bytes, &last_allocated_bytes));
+  }
 }
 
 TEST(DexFileTest, create_using_file) {
