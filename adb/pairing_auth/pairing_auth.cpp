@@ -75,8 +75,8 @@ struct PairingAuthCtx {
     // Returns a safe buffer size for encrypting a buffer of size |len|.
     size_t SafeEncryptedSize(size_t len);
 
-    // Returns a safe buffer size for decrypting a buffer |buf|.
-    size_t SafeDecryptedSize(const Data& buf);
+    // Returns a safe buffer size for decrypting a buffer of size |len|.
+    size_t SafeDecryptedSize(size_t len);
 
   private:
     Data our_msg_;
@@ -167,12 +167,12 @@ PairingAuthCtx::Data PairingAuthCtx::Encrypt(const PairingAuthCtx::Data& data) {
 
     // Determine the size for the encrypted data based on the raw data.
     Data encrypted(cipher_->EncryptedSize(data.size()));
-    int bytes = cipher_->Encrypt(data.data(), data.size(), encrypted.data(), encrypted.size());
-    if (bytes < 0) {
+    auto out_size = cipher_->Encrypt(data.data(), data.size(), encrypted.data(), encrypted.size());
+    if (!out_size.has_value() || *out_size == 0) {
         LOG(ERROR) << "Unable to encrypt data";
         return Data();
     }
-    encrypted.resize(bytes);
+    encrypted.resize(*out_size);
 
     return encrypted;
 }
@@ -182,14 +182,14 @@ PairingAuthCtx::Data PairingAuthCtx::Decrypt(const PairingAuthCtx::Data& data) {
     CHECK(!data.empty());
 
     // Determine the size for the decrypted data based on the raw data.
-    Data decrypted(cipher_->DecryptedSize(data.data(), data.size()));
+    Data decrypted(cipher_->DecryptedSize(data.size()));
     size_t decrypted_size = decrypted.size();
-    int bytes = cipher_->Decrypt(data.data(), data.size(), decrypted.data(), decrypted_size);
-    if (bytes <= 0) {
+    auto out_size = cipher_->Decrypt(data.data(), data.size(), decrypted.data(), decrypted_size);
+    if (!out_size.has_value() || *out_size == 0) {
         LOG(ERROR) << "Unable to decrypt data";
         return Data();
     }
-    decrypted.resize(bytes);
+    decrypted.resize(*out_size);
 
     return decrypted;
 }
@@ -199,9 +199,9 @@ size_t PairingAuthCtx::SafeEncryptedSize(size_t len) {
     return cipher_->EncryptedSize(len);
 }
 
-size_t PairingAuthCtx::SafeDecryptedSize(const PairingAuthCtx::Data& buf) {
+size_t PairingAuthCtx::SafeDecryptedSize(size_t len) {
     CHECK(cipher_);
-    return cipher_->DecryptedSize(buf.data(), buf.size());
+    return cipher_->DecryptedSize(len);
 }
 
 PairingAuthCtx* pairing_auth_server_new(const uint8_t* pswd, size_t len) {
@@ -271,8 +271,8 @@ size_t pairing_auth_safe_decrypted_size(PairingAuthCtx* ctx, const uint8_t* buf,
     CHECK(ctx);
     CHECK(buf);
     CHECK_GT(len, 0U);
-    std::vector<uint8_t> p(buf, buf + len);
-    return ctx->SafeDecryptedSize(p);
+    // We no longer need buf for EVP_AEAD
+    return ctx->SafeDecryptedSize(len);
 }
 
 bool pairing_auth_decrypt(PairingAuthCtx* ctx, const uint8_t* inbuf, size_t inlen, uint8_t* outbuf,
