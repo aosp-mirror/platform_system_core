@@ -648,8 +648,7 @@ static const int alarm_time = 3;
 static void BM_log_latency(benchmark::State& state) {
   pid_t pid = getpid();
 
-  struct logger_list* logger_list =
-      android_logger_list_open(LOG_ID_EVENTS, ANDROID_LOG_RDONLY, 0, pid);
+  struct logger_list* logger_list = android_logger_list_open(LOG_ID_EVENTS, 0, 0, pid);
 
   if (!logger_list) {
     fprintf(stderr, "Unable to open events log: %s\n", strerror(errno));
@@ -723,8 +722,7 @@ static void caught_delay(int /*signum*/) {
 static void BM_log_delay(benchmark::State& state) {
   pid_t pid = getpid();
 
-  struct logger_list* logger_list =
-      android_logger_list_open(LOG_ID_EVENTS, ANDROID_LOG_RDONLY, 0, pid);
+  struct logger_list* logger_list = android_logger_list_open(LOG_ID_EVENTS, 0, 0, pid);
 
   if (!logger_list) {
     fprintf(stderr, "Unable to open events log: %s\n", strerror(errno));
