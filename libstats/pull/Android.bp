@@ -53,6 +53,10 @@ cc_library_shared {
         "com.android.os.statsd",
         "test_com.android.os.statsd",
     ],
+    // TODO(b/151102177): Enable it when the build error is fixed.
+    header_abi_checker: {
+        enabled: false,
+    },
 }
 
 // ONLY USE IN TESTS.
