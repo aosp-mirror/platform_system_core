@@ -89,7 +89,8 @@ void AStatsEvent_release(AStatsEvent* event);
 /**
  * Sets the atom id for this StatsEvent.
  *
- * This function should be called immediately after AStatsEvent_obtain.
+ * This function should be called immediately after AStatsEvent_obtain. It may
+ * be called additional times as well, but subsequent calls will have no effect.
  **/
 void AStatsEvent_setAtomId(AStatsEvent* event, uint32_t atomId);
 
