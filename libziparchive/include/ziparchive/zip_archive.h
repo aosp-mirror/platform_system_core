@@ -145,7 +145,7 @@ struct ZipArchiveInfo {
   /** The size in bytes of the archive itself. Used by zipinfo. */
   off64_t archive_size;
   /** The number of entries in the archive. */
-  size_t entry_count;
+  uint64_t entry_count;
 };
 
 /**
