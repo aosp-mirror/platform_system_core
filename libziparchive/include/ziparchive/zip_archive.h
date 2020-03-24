@@ -188,6 +188,15 @@ int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
                        const std::string_view optional_suffix = "");
 
 /*
+ * Start iterating over all entries of a zip file. Use the matcher functor to
+ * restrict iteration to entry names that make the functor return true.
+ *
+ * Returns 0 on success and negative values on failure.
+ */
+int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
+                       std::function<bool(std::string_view entry_name)> matcher);
+
+/*
  * Advance to the next element in the zipfile in iteration order.
  *
  * Returns 0 on success, -1 if there are no more elements in this
