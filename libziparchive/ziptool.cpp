@@ -133,8 +133,8 @@ static void MaybeShowHeader(ZipArchiveHandle zah) {
     if (!flag_1 && includes.empty() && excludes.empty()) {
       ZipArchiveInfo info{GetArchiveInfo(zah)};
       printf("Archive:  %s\n", archive_name);
-      printf("Zip file size: %" PRId64 " bytes, number of entries: %zu\n", info.archive_size,
-             info.entry_count);
+      printf("Zip file size: %" PRId64 " bytes, number of entries: %" PRIu64 "\n",
+             info.archive_size, info.entry_count);
     }
   }
 }
