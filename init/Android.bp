@@ -259,6 +259,7 @@ cc_test {
         "cts",
         "device-tests",
         "vts",
+        "vts10",
     ],
 }
 
