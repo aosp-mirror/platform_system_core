@@ -529,6 +529,13 @@ class SnapshotManager final {
     // allow forward merge on FDR.
     bool UpdateForwardMergeIndicator(bool wipe);
 
+    // Helper for HandleImminentDataWipe.
+    // Call ProcessUpdateState and handle states with special rules before data wipe. Specifically,
+    // if |allow_forward_merge| and allow-forward-merge indicator exists, initiate merge if
+    // necessary.
+    bool ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
+                                      const std::function<bool()>& callback);
+
     std::string gsid_dir_;
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;

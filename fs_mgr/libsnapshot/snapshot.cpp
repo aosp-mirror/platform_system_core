@@ -2522,19 +2522,39 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
         return false;
     }
 
-    UpdateState state = ProcessUpdateState([&]() -> bool {
+    auto process_callback = [&]() -> bool {
         if (callback) {
             callback();
         }
         return true;
-    });
+    };
+    if (!ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback)) {
+        return false;
+    }
+
+    // Nothing should be depending on partitions now, so unmap them all.
+    if (!UnmapAllPartitions()) {
+        LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
+    }
+    return true;
+}
+
+bool SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
+                                                   const std::function<bool()>& callback) {
+    auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+    UpdateState state = ProcessUpdateState(callback);
     LOG(INFO) << "Update state in recovery: " << state;
     switch (state) {
         case UpdateState::MergeFailed:
             LOG(ERROR) << "Unrecoverable merge failure detected.";
             return false;
         case UpdateState::Unverified: {
-            // If an OTA was just applied but has not yet started merging, we
+            // If an OTA was just applied but has not yet started merging:
+            //
+            // - if forward merge is allowed, initiate merge and call
+            // ProcessUpdateState again.
+            //
+            // - if forward merge is not allowed, we
             // have no choice but to revert slots, because the current slot will
             // immediately become unbootable. Rather than wait for the device
             // to reboot N times until a rollback, we proactively disable the
@@ -2544,8 +2564,17 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
             // as an error here.
             auto slot = GetCurrentSlot();
             if (slot == Slot::Target) {
+                if (allow_forward_merge &&
+                    access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0) {
+                    LOG(INFO) << "Forward merge allowed, initiating merge now.";
+                    return InitiateMerge() &&
+                           ProcessUpdateStateOnDataWipe(false /* allow_forward_merge */, callback);
+                }
+
                 LOG(ERROR) << "Reverting to old slot since update will be deleted.";
                 device_->SetSlotAsUnbootable(slot_number);
+            } else {
+                LOG(INFO) << "Booting from " << slot << " slot, no action is taken.";
             }
             break;
         }
@@ -2556,11 +2585,6 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
             break;
         default:
             break;
-    }
-
-    // Nothing should be depending on partitions now, so unmap them all.
-    if (!UnmapAllPartitions()) {
-        LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
     }
     return true;
 }
@@ -2643,9 +2667,14 @@ CreateResult SnapshotManager::RecoveryCreateSnapshotDevices(
 }
 
 bool SnapshotManager::UpdateForwardMergeIndicator(bool wipe) {
+    auto path = GetForwardMergeIndicatorPath();
+
     if (!wipe) {
+        LOG(INFO) << "Wipe is not scheduled. Deleting forward merge indicator.";
         return RemoveFileIfExists(path);
     }
+
+    // TODO(b/152094219): Don't forward merge if no CoW file is allocated.
 
     LOG(INFO) << "Wipe will be scheduled. Allowing forward merge of snapshots.";
     if (!android::base::WriteStringToFile("1", path)) {
