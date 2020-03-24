@@ -89,7 +89,7 @@ std::unique_ptr<DexFileFromFile> DexFileFromFile::Create(uint64_t dex_file_offse
     return nullptr;
   }
 
-  return std::unique_ptr<DexFileFromFile>(new DexFileFromFile(std::move(*art_dex_file.release())));
+  return std::unique_ptr<DexFileFromFile>(new DexFileFromFile(art_dex_file));
 }
 
 std::unique_ptr<DexFileFromMemory> DexFileFromMemory::Create(uint64_t dex_file_offset_in_memory,
@@ -108,7 +108,7 @@ std::unique_ptr<DexFileFromMemory> DexFileFromMemory::Create(uint64_t dex_file_o
 
     if (art_dex_file != nullptr) {
       return std::unique_ptr<DexFileFromMemory>(
-          new DexFileFromMemory(std::move(*art_dex_file.release()), std::move(backing_memory)));
+          new DexFileFromMemory(art_dex_file, std::move(backing_memory)));
     }
 
     if (!error_msg.empty()) {
