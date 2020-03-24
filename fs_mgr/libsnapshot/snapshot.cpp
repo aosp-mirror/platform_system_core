@@ -248,7 +248,7 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
     return WriteUpdateState(lock, UpdateState::None);
 }
 
-bool SnapshotManager::FinishedSnapshotWrites() {
+bool SnapshotManager::FinishedSnapshotWrites(bool wipe) {
     auto lock = LockExclusive();
     if (!lock) return false;
 
@@ -265,6 +265,10 @@ bool SnapshotManager::FinishedSnapshotWrites() {
 
     if (!EnsureNoOverflowSnapshot(lock.get())) {
         LOG(ERROR) << "Cannot ensure there are no overflow snapshots.";
+        return false;
+    }
+
+    if (!UpdateForwardMergeIndicator(wipe)) {
         return false;
     }
 
@@ -2636,6 +2640,20 @@ CreateResult SnapshotManager::RecoveryCreateSnapshotDevices(
         return CreateResult::ERROR;
     }
     return CreateResult::CREATED;
+}
+
+bool SnapshotManager::UpdateForwardMergeIndicator(bool wipe) {
+    if (!wipe) {
+        return RemoveFileIfExists(path);
+    }
+
+    LOG(INFO) << "Wipe will be scheduled. Allowing forward merge of snapshots.";
+    if (!android::base::WriteStringToFile("1", path)) {
+        PLOG(ERROR) << "Unable to write forward merge indicator: " << path;
+        return false;
+    }
+
+    return true;
 }
 
 }  // namespace snapshot
