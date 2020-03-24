@@ -230,7 +230,13 @@ class SnapshotManager final {
     // devices;
     // - CreateResult::ERROR if a fatal error occurred, mounting /system should
     // be aborted.
+    // This function mounts /metadata when called, and unmounts /metadata upon
+    // return.
     CreateResult RecoveryCreateSnapshotDevices();
+
+    // Same as RecoveryCreateSnapshotDevices(), but does not auto mount/umount
+    // /metadata.
+    CreateResult RecoveryCreateSnapshotDevices(const std::unique_ptr<AutoDevice>& metadata_device);
 
     // Dump debug information.
     bool Dump(std::ostream& os);

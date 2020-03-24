@@ -2587,6 +2587,20 @@ CreateResult SnapshotManager::RecoveryCreateSnapshotDevices() {
         LOG(ERROR) << "Couldn't mount Metadata.";
         return CreateResult::NOT_CREATED;
     }
+    return RecoveryCreateSnapshotDevices(mount);
+}
+
+CreateResult SnapshotManager::RecoveryCreateSnapshotDevices(
+        const std::unique_ptr<AutoDevice>& metadata_device) {
+    if (!device_->IsRecovery()) {
+        LOG(ERROR) << __func__ << " is only allowed in recovery.";
+        return CreateResult::NOT_CREATED;
+    }
+
+    if (metadata_device == nullptr || !metadata_device->HasDevice()) {
+        LOG(ERROR) << "Metadata not mounted.";
+        return CreateResult::NOT_CREATED;
+    }
 
     auto state_file = GetStateFilePath();
     if (access(state_file.c_str(), F_OK) != 0 && errno == ENOENT) {
