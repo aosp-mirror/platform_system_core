@@ -870,10 +870,8 @@ void __android_log_btwrite_multiple__helper(int count) {
     ASSERT_EQ(0, info.si_status);
 
     struct logger_list* logger_list;
-    ASSERT_TRUE(nullptr !=
-                (logger_list = android_logger_list_open(
-                     LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
-                     0, pid)));
+    ASSERT_TRUE(nullptr != (logger_list = android_logger_list_open(LOG_ID_EVENTS,
+                                                                   ANDROID_LOG_NONBLOCK, 0, pid)));
 
     int expected_count = (count < 2) ? count : 2;
     int expected_chatty_count = (count <= 2) ? 0 : 1;
