@@ -317,6 +317,10 @@ cc_binary {
         "libprocinfo",
         "libunwindstack",
     ],
+
+    apex_available: [
+        "com.android.runtime",
+    ],
 }
 
 cc_binary {
