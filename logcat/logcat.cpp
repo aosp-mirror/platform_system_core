@@ -513,7 +513,7 @@ int Logcat::Run(int argc, char** argv) {
     unsigned long setLogSize = 0;
     const char* setPruneList = nullptr;
     const char* setId = nullptr;
-    int mode = ANDROID_LOG_RDONLY;
+    int mode = 0;
     std::string forceFilters;
     size_t tail_lines = 0;
     log_time tail_time(log_time::EPOCH);
@@ -591,8 +591,7 @@ int Logcat::Run(int argc, char** argv) {
                     break;
                 }
                 if (long_options[option_index].name == wrap_str) {
-                    mode |= ANDROID_LOG_WRAP | ANDROID_LOG_RDONLY |
-                            ANDROID_LOG_NONBLOCK;
+                    mode |= ANDROID_LOG_WRAP | ANDROID_LOG_NONBLOCK;
                     // ToDo: implement API that supports setting a wrap timeout
                     size_t dummy = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
                     if (optarg && (!ParseUint(optarg, &dummy) || dummy < 1)) {
@@ -626,21 +625,19 @@ int Logcat::Run(int argc, char** argv) {
 
             case 'c':
                 clearLog = true;
-                mode |= ANDROID_LOG_WRONLY;
                 break;
 
             case 'L':
-                mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_PSTORE |
-                        ANDROID_LOG_NONBLOCK;
+                mode |= ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK;
                 break;
 
             case 'd':
-                mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
+                mode |= ANDROID_LOG_NONBLOCK;
                 break;
 
             case 't':
                 got_t = true;
-                mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
+                mode |= ANDROID_LOG_NONBLOCK;
                 FALLTHROUGH_INTENDED;
             case 'T':
                 if (strspn(optarg, "0123456789") != strlen(optarg)) {
