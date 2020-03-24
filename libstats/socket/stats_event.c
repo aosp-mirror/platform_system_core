@@ -47,6 +47,7 @@
 #define ERROR_TOO_MANY_FIELDS 0x200
 #define ERROR_INVALID_VALUE_TYPE 0x400
 #define ERROR_STRING_NOT_NULL_TERMINATED 0x800
+#define ERROR_ATOM_ID_INVALID_POSITION 0x2000
 
 /* TYPE IDS */
 #define INT32_TYPE 0x00
@@ -98,11 +99,6 @@ AStatsEvent* AStatsEvent_obtain() {
     event->buf[0] = OBJECT_TYPE;
     AStatsEvent_writeInt64(event, get_elapsed_realtime_ns());  // write the timestamp
 
-    // Force client to set atom id immediately (this is required for atom-level
-    // annotations to be written correctly). All atom field and annotation
-    // writes will fail until the atom id is set because event->errors != 0.
-    event->errors |= ERROR_NO_ATOM_ID;
-
     return event;
 }
 
@@ -112,10 +108,12 @@ void AStatsEvent_release(AStatsEvent* event) {
 }
 
 void AStatsEvent_setAtomId(AStatsEvent* event, uint32_t atomId) {
-    if ((event->errors & ERROR_NO_ATOM_ID) == 0) return;
+    if (event->atomId != 0) return;
+    if (event->numElements != 1) {
+        event->errors |= ERROR_ATOM_ID_INVALID_POSITION;
+        return;
+    }
 
-    // Clear the ERROR_NO_ATOM_ID bit.
-    event->errors &= ~ERROR_NO_ATOM_ID;
     event->atomId = atomId;
     AStatsEvent_writeInt32(event, atomId);
 }
@@ -197,36 +195,26 @@ static void start_field(AStatsEvent* event, uint8_t typeId) {
 }
 
 void AStatsEvent_writeInt32(AStatsEvent* event, int32_t value) {
-    if (event->errors) return;
-
     start_field(event, INT32_TYPE);
     append_int32(event, value);
 }
 
 void AStatsEvent_writeInt64(AStatsEvent* event, int64_t value) {
-    if (event->errors) return;
-
     start_field(event, INT64_TYPE);
     append_int64(event, value);
 }
 
 void AStatsEvent_writeFloat(AStatsEvent* event, float value) {
-    if (event->errors) return;
-
     start_field(event, FLOAT_TYPE);
     append_float(event, value);
 }
 
 void AStatsEvent_writeBool(AStatsEvent* event, bool value) {
-    if (event->errors) return;
-
     start_field(event, BOOL_TYPE);
     append_bool(event, value);
 }
 
 void AStatsEvent_writeByteArray(AStatsEvent* event, const uint8_t* buf, size_t numBytes) {
-    if (event->errors) return;
-
     start_field(event, BYTE_ARRAY_TYPE);
     append_int32(event, numBytes);
     append_byte_array(event, buf, numBytes);
@@ -234,8 +222,6 @@ void AStatsEvent_writeByteArray(AStatsEvent* event, const uint8_t* buf, size_t n
 
 // Value is assumed to be encoded using UTF8
 void AStatsEvent_writeString(AStatsEvent* event, const char* value) {
-    if (event->errors) return;
-
     start_field(event, STRING_TYPE);
     append_string(event, value);
 }
@@ -243,8 +229,10 @@ void AStatsEvent_writeString(AStatsEvent* event, const char* value) {
 // Tags are assumed to be encoded using UTF8
 void AStatsEvent_writeAttributionChain(AStatsEvent* event, const uint32_t* uids,
                                        const char* const* tags, uint8_t numNodes) {
-    if (numNodes > MAX_BYTE_VALUE) event->errors |= ERROR_ATTRIBUTION_CHAIN_TOO_LONG;
-    if (event->errors) return;
+    if (numNodes > MAX_BYTE_VALUE) {
+        event->errors |= ERROR_ATTRIBUTION_CHAIN_TOO_LONG;
+        return;
+    }
 
     start_field(event, ATTRIBUTION_CHAIN_TYPE);
     append_byte(event, numNodes);
@@ -270,9 +258,13 @@ static void increment_annotation_count(AStatsEvent* event) {
 }
 
 void AStatsEvent_addBoolAnnotation(AStatsEvent* event, uint8_t annotationId, bool value) {
-    if (event->lastFieldPos == 0) event->errors |= ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD;
-    if (annotationId > MAX_BYTE_VALUE) event->errors |= ERROR_ANNOTATION_ID_TOO_LARGE;
-    if (event->errors) return;
+    if (event->numElements < 2) {
+        event->errors |= ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD;
+        return;
+    } else if (annotationId > MAX_BYTE_VALUE) {
+        event->errors |= ERROR_ANNOTATION_ID_TOO_LARGE;
+        return;
+    }
 
     append_byte(event, annotationId);
     append_byte(event, BOOL_TYPE);
@@ -281,9 +273,13 @@ void AStatsEvent_addBoolAnnotation(AStatsEvent* event, uint8_t annotationId, boo
 }
 
 void AStatsEvent_addInt32Annotation(AStatsEvent* event, uint8_t annotationId, int32_t value) {
-    if (event->lastFieldPos == 0) event->errors |= ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD;
-    if (annotationId > MAX_BYTE_VALUE) event->errors |= ERROR_ANNOTATION_ID_TOO_LARGE;
-    if (event->errors) return;
+    if (event->numElements < 2) {
+        event->errors |= ERROR_ANNOTATION_DOES_NOT_FOLLOW_FIELD;
+        return;
+    } else if (annotationId > MAX_BYTE_VALUE) {
+        event->errors |= ERROR_ANNOTATION_ID_TOO_LARGE;
+        return;
+    }
 
     append_byte(event, annotationId);
     append_byte(event, INT32_TYPE);
