@@ -34,8 +34,7 @@ TEST(liblog, android_logger_get_) {
   // This test assumes the log buffers are filled with noise from
   // normal operations. It will fail if done immediately after a
   // logcat -c.
-  struct logger_list* logger_list =
-      android_logger_list_alloc(ANDROID_LOG_WRONLY, 0, 0);
+  struct logger_list* logger_list = android_logger_list_alloc(0, 0, 0);
 
   for (int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
     log_id_t id = static_cast<log_id_t>(i);
