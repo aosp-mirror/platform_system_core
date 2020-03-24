@@ -227,6 +227,22 @@ TEST(ziparchive, Iteration_std_string_view) {
   CloseArchive(handle);
 }
 
+static void AssertIterationNames(void* iteration_cookie,
+                                 const std::vector<std::string>& expected_names_sorted) {
+  ZipEntry data;
+  std::vector<std::string> names;
+  std::string name;
+  for (size_t i = 0; i < expected_names_sorted.size(); ++i) {
+    ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
+    names.push_back(name);
+  }
+  // End of iteration.
+  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
+  // Assert that the names are as expected.
+  std::sort(names.begin(), names.end());
+  ASSERT_EQ(expected_names_sorted, names);
+}
+
 static void AssertIterationOrder(const std::string_view prefix, const std::string_view suffix,
                                  const std::vector<std::string>& expected_names_sorted) {
   ZipArchiveHandle handle;
@@ -234,23 +250,19 @@ static void AssertIterationOrder(const std::string_view prefix, const std::strin
 
   void* iteration_cookie;
   ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, prefix, suffix));
-
-  ZipEntry data;
-  std::vector<std::string> names;
-
-  std::string name;
-  for (size_t i = 0; i < expected_names_sorted.size(); ++i) {
-    ASSERT_EQ(0, Next(iteration_cookie, &data, &name));
-    names.push_back(name);
-  }
-
-  // End of iteration.
-  ASSERT_EQ(-1, Next(iteration_cookie, &data, &name));
+  AssertIterationNames(iteration_cookie, expected_names_sorted);
   CloseArchive(handle);
+}
 
-  // Assert that the names are as expected.
-  std::sort(names.begin(), names.end());
-  ASSERT_EQ(expected_names_sorted, names);
+static void AssertIterationOrderWithMatcher(std::function<bool(std::string_view)> matcher,
+                                            const std::vector<std::string>& expected_names_sorted) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
+
+  void* iteration_cookie;
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, matcher));
+  AssertIterationNames(iteration_cookie, expected_names_sorted);
+  CloseArchive(handle);
 }
 
 TEST(ziparchive, Iteration) {
@@ -277,6 +289,30 @@ TEST(ziparchive, IterationWithPrefixAndSuffix) {
   static const std::vector<std::string> kExpectedMatchesSorted = {"b.txt", "b/c.txt", "b/d.txt"};
 
   AssertIterationOrder("b", ".txt", kExpectedMatchesSorted);
+}
+
+TEST(ziparchive, IterationWithAdditionalMatchesExactly) {
+  static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt"};
+  auto matcher = [](std::string_view name) { return name == "a.txt"; };
+  AssertIterationOrderWithMatcher(matcher, kExpectedMatchesSorted);
+}
+
+TEST(ziparchive, IterationWithAdditionalMatchesWithSuffix) {
+  static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b.txt", "b/c.txt",
+                                                                  "b/d.txt"};
+  auto matcher = [](std::string_view name) {
+    return name == "a.txt" || android::base::EndsWith(name, ".txt");
+  };
+  AssertIterationOrderWithMatcher(matcher, kExpectedMatchesSorted);
+}
+
+TEST(ziparchive, IterationWithAdditionalMatchesWithPrefixAndSuffix) {
+  static const std::vector<std::string> kExpectedMatchesSorted = {"a.txt", "b/c.txt", "b/d.txt"};
+  auto matcher = [](std::string_view name) {
+    return name == "a.txt" ||
+           (android::base::EndsWith(name, ".txt") && android::base::StartsWith(name, "b/"));
+  };
+  AssertIterationOrderWithMatcher(matcher, kExpectedMatchesSorted);
 }
 
 TEST(ziparchive, IterationWithBadPrefixAndSuffix) {
