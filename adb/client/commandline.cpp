@@ -1443,13 +1443,13 @@ static bool _is_valid_ack_reply_fd(const int ack_reply_fd) {
 #endif
 }
 
-static bool _is_valid_fd(int fd) {
+static bool _is_valid_os_fd(int fd) {
     // Disallow invalid FDs and stdin/out/err as well.
     if (fd < 3) {
         return false;
     }
 #ifdef _WIN32
-    HANDLE handle = adb_get_os_handle(fd);
+    auto handle = (HANDLE)fd;
     DWORD info = 0;
     if (GetHandleInformation(handle, &info) == 0) {
         return false;
@@ -2037,7 +2037,7 @@ int adb_commandline(int argc, const char** argv) {
 #endif
         }
         int connection_fd = atoi(argv[1]);
-        if (!_is_valid_fd(connection_fd)) {
+        if (!_is_valid_os_fd(connection_fd)) {
             error_exit("Invalid connection_fd number given: %d", connection_fd);
         }
 
@@ -2045,7 +2045,7 @@ int adb_commandline(int argc, const char** argv) {
         close_on_exec(connection_fd);
 
         int output_fd = atoi(argv[2]);
-        if (!_is_valid_fd(output_fd)) {
+        if (!_is_valid_os_fd(output_fd)) {
             error_exit("Invalid output_fd number given: %d", output_fd);
         }
         output_fd = adb_register_socket(output_fd);
