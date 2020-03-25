@@ -45,6 +45,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <backtrace/Backtrace.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr_vendor_overlay.h>
 #include <keyutils.h>
@@ -218,6 +219,16 @@ void ResetWaitForProp() {
     prop_waiter_state.ResetWaitForProp();
 }
 
+static void UnwindMainThreadStack() {
+    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, 1));
+    if (!backtrace->Unwind(0)) {
+        LOG(ERROR) << __FUNCTION__ << ": Failed to unwind callstack.";
+    }
+    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
+        LOG(ERROR) << backtrace->FormatFrameData(i);
+    }
+}
+
 static class ShutdownState {
   public:
     void TriggerShutdown(const std::string& command) {
@@ -227,6 +238,15 @@ static class ShutdownState {
         // action queue.  Instead we set this flag and ensure that shutdown happens before the next
         // command is run in the main init loop.
         auto lock = std::lock_guard{shutdown_command_lock_};
+        if (do_shutdown_) {
+            LOG(ERROR) << "TriggerShutdown called while a previous shutdown command '"
+                       << shutdown_command_ << "' has not been handled";
+            UnwindMainThreadStack();
+        }
+        if (IsShuttingDown()) {
+            LOG(ERROR) << "TriggerShutdown called while init is already shutting down";
+            UnwindMainThreadStack();
+        }
         shutdown_command_ = command;
         do_shutdown_ = true;
         WakeEpoll();
@@ -848,6 +868,8 @@ int SecondStageMain(int argc, char** argv) {
 
         auto shutdown_command = shutdown_state.CheckShutdown();
         if (shutdown_command) {
+            LOG(INFO) << "Got shutdown_command '" << *shutdown_command
+                      << "' Calling HandlePowerctlMessage()";
             HandlePowerctlMessage(*shutdown_command);
         }
 
