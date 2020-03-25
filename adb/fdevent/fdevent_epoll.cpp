@@ -155,15 +155,15 @@ void fdevent_context_epoll::Loop() {
             event_map[fde] = events;
         }
 
-        for (const auto& [fd, fde] : installed_fdevents_) {
+        for (auto& [fd, fde] : installed_fdevents_) {
             unsigned events = 0;
-            if (auto it = event_map.find(fde); it != event_map.end()) {
+            if (auto it = event_map.find(&fde); it != event_map.end()) {
                 events = it->second;
             }
 
             if (events == 0) {
-                if (fde->timeout) {
-                    auto deadline = fde->last_active + *fde->timeout;
+                if (fde.timeout) {
+                    auto deadline = fde.last_active + *fde.timeout;
                     if (deadline < post_poll) {
                         events |= FDE_TIMEOUT;
                     }
@@ -171,13 +171,13 @@ void fdevent_context_epoll::Loop() {
             }
 
             if (events != 0) {
-                LOG(DEBUG) << dump_fde(fde) << " got events " << std::hex << std::showbase
+                LOG(DEBUG) << dump_fde(&fde) << " got events " << std::hex << std::showbase
                            << events;
-                fde_events.push_back({fde, events});
-                fde->last_active = post_poll;
+                fde_events.push_back({&fde, events});
+                fde.last_active = post_poll;
             }
         }
-        this->HandleEvents(std::move(fde_events));
+        this->HandleEvents(fde_events);
         fde_events.clear();
     }
 
