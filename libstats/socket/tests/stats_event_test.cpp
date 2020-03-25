@@ -32,6 +32,7 @@
 #define ERROR_TOO_MANY_FIELDS 0x200
 #define ERROR_INVALID_VALUE_TYPE 0x400
 #define ERROR_STRING_NOT_NULL_TERMINATED 0x800
+#define ERROR_ATOM_ID_INVALID_POSITION 0x2000
 
 /* TYPE IDS */
 #define INT32_TYPE 0x00
@@ -354,6 +355,19 @@ TEST(StatsEventTest, TestOverflowError) {
 
     uint32_t errors = AStatsEvent_getErrors(event);
     EXPECT_NE(errors | ERROR_OVERFLOW, 0);
+
+    AStatsEvent_release(event);
+}
+
+TEST(StatsEventTest, TestAtomIdInvalidPositionError) {
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_writeInt32(event, 0);
+    AStatsEvent_setAtomId(event, 100);
+    AStatsEvent_writeBool(event, true);
+    AStatsEvent_build(event);
+
+    uint32_t errors = AStatsEvent_getErrors(event);
+    EXPECT_NE(errors | ERROR_ATOM_ID_INVALID_POSITION, 0);
 
     AStatsEvent_release(event);
 }
