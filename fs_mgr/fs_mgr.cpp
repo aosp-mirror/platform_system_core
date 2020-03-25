@@ -96,6 +96,7 @@
 
 using android::base::Basename;
 using android::base::GetBoolProperty;
+using android::base::GetUintProperty;
 using android::base::Readlink;
 using android::base::Realpath;
 using android::base::SetProperty;
@@ -1545,11 +1546,16 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
     return ret;
 }
 
+static std::chrono::milliseconds GetMillisProperty(const std::string& name,
+                                                   std::chrono::milliseconds default_value) {
+    auto value = GetUintProperty(name, static_cast<uint64_t>(default_value.count()));
+    return std::chrono::milliseconds(std::move(value));
+}
+
 static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
     LINFO << __FUNCTION__ << "(): about to umount everything on top of " << block_device;
     Timer t;
-    // TODO(b/135984674): should be configured via a read-only property.
-    std::chrono::milliseconds timeout = 5s;
+    auto timeout = GetMillisProperty("init.userspace_reboot.userdata_remount.timeoutmillis", 5s);
     while (true) {
         bool umount_done = true;
         Fstab proc_mounts;
