@@ -27,4 +27,7 @@ namespace incremental {
 
 std::optional<Process> install(std::vector<std::string> files);
 
+enum class Result { Success, Failure, None };
+Result wait_for_installation(int read_fd);
+
 }  // namespace incremental

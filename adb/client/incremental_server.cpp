@@ -18,13 +18,6 @@
 
 #include "incremental_server.h"
 
-#include "adb.h"
-#include "adb_io.h"
-#include "adb_trace.h"
-#include "adb_unique_fd.h"
-#include "adb_utils.h"
-#include "sysdeps.h"
-
 #include <android-base/endian.h>
 #include <android-base/strings.h>
 #include <inttypes.h>
@@ -41,6 +34,13 @@
 #include <type_traits>
 #include <unordered_set>
 
+#include "adb.h"
+#include "adb_io.h"
+#include "adb_trace.h"
+#include "adb_unique_fd.h"
+#include "adb_utils.h"
+#include "sysdeps.h"
+
 namespace incremental {
 
 static constexpr int kBlockSize = 4096;
@@ -49,6 +49,7 @@ static constexpr short kCompressionNone = 0;
 static constexpr short kCompressionLZ4 = 1;
 static constexpr int kCompressBound = std::max(kBlockSize, LZ4_COMPRESSBOUND(kBlockSize));
 static constexpr auto kReadBufferSize = 128 * 1024;
+static constexpr int kPollTimeoutMillis = 300000;  // 5 minutes
 
 using BlockSize = int16_t;
 using FileId = int16_t;
@@ -61,9 +62,10 @@ using MagicType = uint32_t;
 
 static constexpr MagicType INCR = 0x494e4352;  // LE INCR
 
-static constexpr RequestType EXIT = 0;
+static constexpr RequestType SERVING_COMPLETE = 0;
 static constexpr RequestType BLOCK_MISSING = 1;
 static constexpr RequestType PREFETCH = 2;
+static constexpr RequestType DESTROY = 3;
 
 static constexpr inline int64_t roundDownToBlockOffset(int64_t val) {
     return val & ~(kBlockSize - 1);
@@ -162,8 +164,8 @@ class File {
 
 class IncrementalServer {
   public:
-    IncrementalServer(unique_fd fd, std::vector<File> files)
-        : adb_fd_(std::move(fd)), files_(std::move(files)) {
+    IncrementalServer(unique_fd adb_fd, unique_fd output_fd, std::vector<File> files)
+        : adb_fd_(std::move(adb_fd)), output_fd_(std::move(output_fd)), files_(std::move(files)) {
         buffer_.reserve(kReadBufferSize);
     }
 
@@ -197,9 +199,10 @@ class IncrementalServer {
     void Send(const void* data, size_t size, bool flush);
     void Flush();
     using TimePoint = decltype(std::chrono::high_resolution_clock::now());
-    bool Exit(std::optional<TimePoint> startTime, int missesCount, int missesSent);
+    bool ServingComplete(std::optional<TimePoint> startTime, int missesCount, int missesSent);
 
     unique_fd const adb_fd_;
+    unique_fd const output_fd_;
     std::vector<File> files_;
 
     // Incoming data buffer.
@@ -210,6 +213,9 @@ class IncrementalServer {
     long long sentSize_ = 0;
 
     std::vector<char> pendingBlocks_;
+
+    // True when client notifies that all the data has been received
+    bool servingComplete_;
 };
 
 bool IncrementalServer::SkipToRequest(void* buffer, size_t* size, bool blocking) {
@@ -217,7 +223,8 @@ bool IncrementalServer::SkipToRequest(void* buffer, size_t* size, bool blocking)
         // Looking for INCR magic.
         bool magic_found = false;
         int bcur = 0;
-        for (int bsize = buffer_.size(); bcur + 4 < bsize; ++bcur) {
+        int bsize = buffer_.size();
+        for (bcur = 0; bcur + 4 < bsize; ++bcur) {
             uint32_t magic = be32toh(*(uint32_t*)(buffer_.data() + bcur));
             if (magic == INCR) {
                 magic_found = true;
@@ -226,8 +233,8 @@ bool IncrementalServer::SkipToRequest(void* buffer, size_t* size, bool blocking)
         }
 
         if (bcur > 0) {
-            // Stream the rest to stderr.
-            fprintf(stderr, "%.*s", bcur, buffer_.data());
+            // output the rest.
+            WriteFdExactly(output_fd_, buffer_.data(), bcur);
             erase_buffer_head(bcur);
         }
 
@@ -239,17 +246,26 @@ bool IncrementalServer::SkipToRequest(void* buffer, size_t* size, bool blocking)
         }
 
         adb_pollfd pfd = {adb_fd_.get(), POLLIN, 0};
-        auto res = adb_poll(&pfd, 1, blocking ? -1 : 0);
+        auto res = adb_poll(&pfd, 1, blocking ? kPollTimeoutMillis : 0);
+
         if (res != 1) {
+            WriteFdExactly(output_fd_, buffer_.data(), buffer_.size());
             if (res < 0) {
-                fprintf(stderr, "Failed to poll: %s\n", strerror(errno));
+                D("Failed to poll: %s\n", strerror(errno));
+                return false;
+            }
+            if (blocking) {
+                fprintf(stderr, "Timed out waiting for data from device.\n");
+            }
+            if (blocking && servingComplete_) {
+                // timeout waiting from client. Serving is complete, so quit.
                 return false;
             }
             *size = 0;
             return true;
         }
 
-        auto bsize = buffer_.size();
+        bsize = buffer_.size();
         buffer_.resize(kReadBufferSize);
         int r = adb_read(adb_fd_, buffer_.data() + bsize, kReadBufferSize - bsize);
         if (r > 0) {
@@ -257,21 +273,19 @@ bool IncrementalServer::SkipToRequest(void* buffer, size_t* size, bool blocking)
             continue;
         }
 
-        if (r == -1) {
-            fprintf(stderr, "Failed to read from fd %d: %d. Exit\n", adb_fd_.get(), errno);
-            return false;
-        }
-
-        // socket is closed
-        return false;
+        D("Failed to read from fd %d: %d. Exit\n", adb_fd_.get(), errno);
+        break;
     }
+    // socket is closed. print remaining messages
+    WriteFdExactly(output_fd_, buffer_.data(), buffer_.size());
+    return false;
 }
 
 std::optional<RequestCommand> IncrementalServer::ReadRequest(bool blocking) {
     uint8_t commandBuf[sizeof(RequestCommand)];
     auto size = sizeof(commandBuf);
     if (!SkipToRequest(&commandBuf, &size, blocking)) {
-        return {{EXIT}};
+        return {{DESTROY}};
     }
     if (size < sizeof(RequestCommand)) {
         return {};
@@ -391,17 +405,17 @@ void IncrementalServer::Flush() {
     pendingBlocks_.clear();
 }
 
-bool IncrementalServer::Exit(std::optional<TimePoint> startTime, int missesCount, int missesSent) {
+bool IncrementalServer::ServingComplete(std::optional<TimePoint> startTime, int missesCount,
+                                        int missesSent) {
+    servingComplete_ = true;
     using namespace std::chrono;
     auto endTime = high_resolution_clock::now();
-    fprintf(stderr,
-            "Connection failed or received exit command. Exit.\n"
-            "Misses: %d, of those unique: %d; sent compressed: %d, uncompressed: "
-            "%d, mb: %.3f\n"
-            "Total time taken: %.3fms\n",
-            missesCount, missesSent, compressed_, uncompressed_, sentSize_ / 1024.0 / 1024.0,
-            duration_cast<microseconds>(endTime - (startTime ? *startTime : endTime)).count() /
-                    1000.0);
+    D("Streaming completed.\n"
+      "Misses: %d, of those unique: %d; sent compressed: %d, uncompressed: "
+      "%d, mb: %.3f\n"
+      "Total time taken: %.3fms\n",
+      missesCount, missesSent, compressed_, uncompressed_, sentSize_ / 1024.0 / 1024.0,
+      duration_cast<microseconds>(endTime - (startTime ? *startTime : endTime)).count() / 1000.0);
     return true;
 }
 
@@ -425,7 +439,7 @@ bool IncrementalServer::Serve() {
             std::all_of(files_.begin(), files_.end(), [](const File& f) {
                 return f.sentBlocksCount == NumBlocks(f.sentBlocks.size());
             })) {
-            fprintf(stdout, "All files should be loaded. Notifying the device.\n");
+            fprintf(stderr, "All files should be loaded. Notifying the device.\n");
             SendDone();
             doneSent = true;
         }
@@ -446,9 +460,14 @@ bool IncrementalServer::Serve() {
             BlockIdx blockIdx = request->block_idx;
 
             switch (request->request_type) {
-                case EXIT: {
+                case DESTROY: {
                     // Stop everything.
-                    return Exit(startTime, missesCount, missesSent);
+                    return true;
+                }
+                case SERVING_COMPLETE: {
+                    // Not stopping the server here.
+                    ServingComplete(startTime, missesCount, missesSent);
+                    break;
                 }
                 case BLOCK_MISSING: {
                     ++missesCount;
@@ -502,8 +521,9 @@ bool IncrementalServer::Serve() {
     }
 }
 
-bool serve(int adb_fd, int argc, const char** argv) {
-    auto connection_fd = unique_fd(adb_fd);
+bool serve(int connection_fd, int output_fd, int argc, const char** argv) {
+    auto connection_ufd = unique_fd(connection_fd);
+    auto output_ufd = unique_fd(output_fd);
     if (argc <= 0) {
         error_exit("inc-server: must specify at least one file.");
     }
@@ -526,7 +546,7 @@ bool serve(int adb_fd, int argc, const char** argv) {
         files.emplace_back(filepath, i, st.st_size, std::move(fd));
     }
 
-    IncrementalServer server(std::move(connection_fd), std::move(files));
+    IncrementalServer server(std::move(connection_ufd), std::move(output_ufd), std::move(files));
     printf("Serving...\n");
     fclose(stdin);
     fclose(stdout);
