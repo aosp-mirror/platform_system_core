@@ -138,7 +138,7 @@ static void InstallInitNotifier(Epoll* epoll) {
 
 static void WakeEpoll() {
     constexpr char value[] = "1";
-    write(wake_epoll_fd, value, sizeof(value));
+    TEMP_FAILURE_RETRY(write(wake_epoll_fd, value, sizeof(value)));
 }
 
 static class PropWaiterState {
