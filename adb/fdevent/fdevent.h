@@ -52,6 +52,20 @@ struct fdevent_event {
     unsigned events;
 };
 
+struct fdevent final {
+    uint64_t id;
+
+    unique_fd fd;
+    int force_eof = 0;
+
+    uint16_t state = 0;
+    std::optional<std::chrono::milliseconds> timeout;
+    std::chrono::steady_clock::time_point last_active;
+
+    std::variant<fd_func, fd_func2> func;
+    void* arg = nullptr;
+};
+
 struct fdevent_context {
   public:
     virtual ~fdevent_context() = default;
@@ -113,26 +127,12 @@ struct fdevent_context {
     std::atomic<bool> terminate_loop_ = false;
 
   protected:
-    std::unordered_map<int, fdevent*> installed_fdevents_;
+    std::unordered_map<int, fdevent> installed_fdevents_;
 
   private:
     uint64_t fdevent_id_ = 0;
     std::mutex run_queue_mutex_;
     std::deque<std::function<void()>> run_queue_ GUARDED_BY(run_queue_mutex_);
-};
-
-struct fdevent {
-    uint64_t id;
-
-    unique_fd fd;
-    int force_eof = 0;
-
-    uint16_t state = 0;
-    std::optional<std::chrono::milliseconds> timeout;
-    std::chrono::steady_clock::time_point last_active;
-
-    std::variant<fd_func, fd_func2> func;
-    void* arg = nullptr;
 };
 
 // Backwards compatibility shims that forward to the global fdevent_context.

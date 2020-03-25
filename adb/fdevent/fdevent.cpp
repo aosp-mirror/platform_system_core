@@ -63,7 +63,10 @@ fdevent* fdevent_context::Create(unique_fd fd, std::variant<fd_func, fd_func2> f
 
     int fd_num = fd.get();
 
-    fdevent* fde = new fdevent();
+    auto [it, inserted] = this->installed_fdevents_.emplace(fd_num, fdevent{});
+    CHECK(inserted);
+
+    fdevent* fde = &it->second;
     fde->id = fdevent_id_++;
     fde->state = 0;
     fde->fd = std::move(fd);
@@ -75,10 +78,6 @@ fdevent* fdevent_context::Create(unique_fd fd, std::variant<fd_func, fd_func2> f
         // to handle it.
         LOG(ERROR) << "failed to set non-blocking mode for fd " << fde->fd.get();
     }
-
-    auto [it, inserted] = this->installed_fdevents_.emplace(fd_num, fde);
-    CHECK(inserted);
-    UNUSED(it);
 
     this->Register(fde);
     return fde;
@@ -92,12 +91,12 @@ unique_fd fdevent_context::Destroy(fdevent* fde) {
 
     this->Unregister(fde);
 
-    auto erased = this->installed_fdevents_.erase(fde->fd.get());
+    unique_fd fd = std::move(fde->fd);
+
+    auto erased = this->installed_fdevents_.erase(fd.get());
     CHECK_EQ(1UL, erased);
 
-    unique_fd result = std::move(fde->fd);
-    delete fde;
-    return result;
+    return fd;
 }
 
 void fdevent_context::Add(fdevent* fde, unsigned events) {
@@ -123,9 +122,9 @@ std::optional<std::chrono::milliseconds> fdevent_context::CalculatePollDuration(
 
     for (const auto& [fd, fde] : this->installed_fdevents_) {
         UNUSED(fd);
-        auto timeout_opt = fde->timeout;
+        auto timeout_opt = fde.timeout;
         if (timeout_opt) {
-            auto deadline = fde->last_active + *timeout_opt;
+            auto deadline = fde.last_active + *timeout_opt;
             auto time_left = duration_cast<std::chrono::milliseconds>(deadline - now);
             if (time_left < 0ms) {
                 time_left = 0ms;
@@ -194,11 +193,13 @@ static std::unique_ptr<fdevent_context> fdevent_create_context() {
 #endif
 }
 
-static auto& g_ambient_fdevent_context =
-        *new std::unique_ptr<fdevent_context>(fdevent_create_context());
+static auto& g_ambient_fdevent_context() {
+    static auto context = fdevent_create_context().release();
+    return context;
+}
 
 static fdevent_context* fdevent_get_ambient() {
-    return g_ambient_fdevent_context.get();
+    return g_ambient_fdevent_context();
 }
 
 fdevent* fdevent_create(int fd, fd_func func, void* arg) {
@@ -256,5 +257,6 @@ size_t fdevent_installed_count() {
 }
 
 void fdevent_reset() {
-    g_ambient_fdevent_context = fdevent_create_context();
+    auto old = std::exchange(g_ambient_fdevent_context(), fdevent_create_context().release());
+    delete old;
 }

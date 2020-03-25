@@ -103,24 +103,27 @@ static std::string dump_pollfds(const std::vector<adb_pollfd>& pollfds) {
 void fdevent_context_poll::Loop() {
     main_thread_id_ = android::base::GetThreadId();
 
+    std::vector<adb_pollfd> pollfds;
+    std::vector<fdevent_event> poll_events;
+
     while (true) {
         if (terminate_loop_) {
             break;
         }
 
         D("--- --- waiting for events");
-        std::vector<adb_pollfd> pollfds;
+        pollfds.clear();
         for (const auto& [fd, fde] : this->installed_fdevents_) {
             adb_pollfd pfd;
             pfd.fd = fd;
             pfd.events = 0;
-            if (fde->state & FDE_READ) {
+            if (fde.state & FDE_READ) {
                 pfd.events |= POLLIN;
             }
-            if (fde->state & FDE_WRITE) {
+            if (fde.state & FDE_WRITE) {
                 pfd.events |= POLLOUT;
             }
-            if (fde->state & FDE_ERROR) {
+            if (fde.state & FDE_ERROR) {
                 pfd.events |= POLLERR;
             }
 #if defined(__linux__)
@@ -147,7 +150,6 @@ void fdevent_context_poll::Loop() {
         }
 
         auto post_poll = std::chrono::steady_clock::now();
-        std::vector<fdevent_event> poll_events;
 
         for (const auto& pollfd : pollfds) {
             unsigned events = 0;
@@ -170,7 +172,7 @@ void fdevent_context_poll::Loop() {
 
             auto it = this->installed_fdevents_.find(pollfd.fd);
             CHECK(it != this->installed_fdevents_.end());
-            fdevent* fde = it->second;
+            fdevent* fde = &it->second;
 
             if (events == 0) {
                 if (fde->timeout) {
@@ -187,7 +189,8 @@ void fdevent_context_poll::Loop() {
                 fde->last_active = post_poll;
             }
         }
-        this->HandleEvents(std::move(poll_events));
+        this->HandleEvents(poll_events);
+        poll_events.clear();
     }
 
     main_thread_id_.reset();
