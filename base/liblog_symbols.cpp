@@ -46,7 +46,7 @@ const std::optional<LibLogFunctions>& GetLibLogFunctions() {
   }
 
     DLSYM(__android_log_set_logger)
-    DLSYM(__android_log_write_logger_data)
+    DLSYM(__android_log_write_log_message)
     DLSYM(__android_log_logd_logger)
     DLSYM(__android_log_stderr_logger)
     DLSYM(__android_log_set_aborter)
@@ -69,7 +69,7 @@ const std::optional<LibLogFunctions>& GetLibLogFunctions() {
   static std::optional<LibLogFunctions> liblog_functions = []() -> std::optional<LibLogFunctions> {
     return LibLogFunctions{
         .__android_log_set_logger = __android_log_set_logger,
-        .__android_log_write_logger_data = __android_log_write_logger_data,
+        .__android_log_write_log_message = __android_log_write_log_message,
         .__android_log_logd_logger = __android_log_logd_logger,
         .__android_log_stderr_logger = __android_log_stderr_logger,
         .__android_log_set_aborter = __android_log_set_aborter,
