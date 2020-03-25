@@ -53,6 +53,8 @@
 #include <android-base/strings.h>
 #include <android-base/stringprintf.h>
 
+using namespace std::literals;
+
 typedef void(sync_ls_cb)(unsigned mode, uint64_t size, uint64_t time, const char* name);
 
 struct syncsendbuf {
@@ -113,6 +115,11 @@ struct TransferLedger {
     uint64_t bytes_expected;
     bool expect_multiple_files;
 
+  private:
+    std::string last_progress_str;
+    std::chrono::steady_clock::time_point last_progress_time;
+
+  public:
     TransferLedger() {
         Reset();
     }
@@ -132,6 +139,8 @@ struct TransferLedger {
         files_skipped = 0;
         bytes_transferred = 0;
         bytes_expected = 0;
+        last_progress_str.clear();
+        last_progress_time = {};
     }
 
     std::string TransferRate() {
@@ -151,6 +160,12 @@ struct TransferLedger {
 
     void ReportProgress(LinePrinter& lp, const std::string& file, uint64_t file_copied_bytes,
                         uint64_t file_total_bytes) {
+        static constexpr auto kProgressReportInterval = 100ms;
+
+        auto now = std::chrono::steady_clock::now();
+        if (now < last_progress_time + kProgressReportInterval) {
+            return;
+        }
         char overall_percentage_str[5] = "?";
         if (bytes_expected != 0 && bytes_transferred <= bytes_expected) {
             int overall_percentage = static_cast<int>(bytes_transferred * 100 / bytes_expected);
@@ -181,7 +196,11 @@ struct TransferLedger {
                     android::base::StringPrintf("[%4s] %s", overall_percentage_str, file.c_str());
             }
         }
-        lp.Print(output, LinePrinter::LineType::INFO);
+        if (output != last_progress_str) {
+            lp.Print(output, LinePrinter::LineType::INFO);
+            last_progress_str = std::move(output);
+            last_progress_time = now;
+        }
     }
 
     void ReportTransferRate(LinePrinter& lp, const std::string& name, TransferDirection direction) {
