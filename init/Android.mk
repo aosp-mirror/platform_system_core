@@ -48,6 +48,7 @@ ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
 include $(CLEAR_VARS)
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES := \
+    block_dev_initializer.cpp \
     devices.cpp \
     first_stage_init.cpp \
     first_stage_main.cpp \
@@ -105,9 +106,8 @@ LOCAL_STATIC_LIBRARIES := \
     libgsi \
     libcom.android.sysprop.apex \
     liblzma \
-    libdexfile_support_static \
-    libunwindstack \
-    libbacktrace \
+    libunwindstack_no_dex \
+    libbacktrace_no_dex \
     libmodprobe \
     libext2_uuid \
     libprotobuf-cpp-lite \

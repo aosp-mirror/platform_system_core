@@ -36,6 +36,7 @@ init_common_sources = [
     "util.cpp",
 ]
 init_device_sources = [
+    "block_dev_initializer.cpp",
     "bootchart.cpp",
     "builtins.cpp",
     "devices.cpp",
@@ -258,6 +259,7 @@ cc_test {
         "cts",
         "device-tests",
         "vts",
+        "vts10",
     ],
 }
 

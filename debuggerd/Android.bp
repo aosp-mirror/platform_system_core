@@ -103,9 +103,14 @@ cc_library_static {
     export_include_dirs: ["include"],
 }
 
-// Fallback implementation.
+// Fallback implementation, for use in the Bionic linker only.
 cc_library_static {
     name: "libdebuggerd_handler_fallback",
+    visibility: ["//bionic/linker"],
+    apex_available: [
+        "com.android.runtime",
+        "//apex_available:platform",
+    ],
     defaults: ["debuggerd_defaults"],
     recovery_available: true,
     srcs: [
@@ -118,22 +123,13 @@ cc_library_static {
         "libasync_safe",
         "libbase",
         "libdebuggerd",
-        "libunwindstack",
-        "libdexfile_support_static",  // libunwindstack dependency
+        "libunwindstack_no_dex",
         "liblzma",
         "libcutils",
     ],
 
     header_libs: ["bionic_libc_platform_headers"],
     export_header_lib_headers: ["bionic_libc_platform_headers"],
-
-    target: {
-        recovery: {
-            exclude_static_libs: [
-                "libdexfile_support_static",
-            ],
-        },
-    },
 
     export_include_dirs: ["include"],
 }
@@ -188,7 +184,7 @@ cc_library_static {
     ],
 
     static_libs: [
-        "libdexfile_support_static",  // libunwindstack dependency
+        "libdexfile_support",  // libunwindstack dependency
         "libunwindstack",
         "liblzma",
         "libbase",
@@ -201,7 +197,7 @@ cc_library_static {
     target: {
         recovery: {
             exclude_static_libs: [
-                "libdexfile_support_static",
+                "libdexfile_support",
             ],
         },
     },

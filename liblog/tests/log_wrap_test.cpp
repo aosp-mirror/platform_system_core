@@ -32,7 +32,7 @@
 static void read_with_wrap() {
   // Read the last line in the log to get a starting timestamp. We're assuming
   // the log is not empty.
-  const int mode = ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
+  const int mode = ANDROID_LOG_NONBLOCK;
   struct logger_list* logger_list =
       android_logger_list_open(LOG_ID_MAIN, mode, 1000, 0);
 

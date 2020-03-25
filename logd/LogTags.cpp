@@ -289,9 +289,8 @@ static inline uint32_t get4LE(const char* msg) {
 // special pmsg event for log tags, and build up our internal
 // database with any found.
 void LogTags::ReadPersistEventLogTags() {
-    struct logger_list* logger_list = android_logger_list_alloc(
-        ANDROID_LOG_RDONLY | ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK, 0,
-        (pid_t)0);
+    struct logger_list* logger_list =
+            android_logger_list_alloc(ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK, 0, (pid_t)0);
     if (!logger_list) return;
 
     struct logger* e = android_logger_open(logger_list, LOG_ID_EVENTS);

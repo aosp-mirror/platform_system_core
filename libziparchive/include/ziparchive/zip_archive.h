@@ -145,7 +145,7 @@ struct ZipArchiveInfo {
   /** The size in bytes of the archive itself. Used by zipinfo. */
   off64_t archive_size;
   /** The number of entries in the archive. */
-  size_t entry_count;
+  uint64_t entry_count;
 };
 
 /**
@@ -186,6 +186,15 @@ int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryNa
 int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
                        const std::string_view optional_prefix = "",
                        const std::string_view optional_suffix = "");
+
+/*
+ * Start iterating over all entries of a zip file. Use the matcher functor to
+ * restrict iteration to entry names that make the functor return true.
+ *
+ * Returns 0 on success and negative values on failure.
+ */
+int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
+                       std::function<bool(std::string_view entry_name)> matcher);
 
 /*
  * Advance to the next element in the zipfile in iteration order.

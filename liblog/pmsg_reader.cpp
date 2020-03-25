@@ -185,7 +185,7 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
   /* Add just enough clues in logger_list and transp to make API function */
   memset(&logger_list, 0, sizeof(logger_list));
 
-  logger_list.mode = ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK | ANDROID_LOG_RDONLY;
+  logger_list.mode = ANDROID_LOG_PSTORE | ANDROID_LOG_NONBLOCK;
   logger_list.log_mask = (unsigned)-1;
   if (logId != LOG_ID_ANY) {
     logger_list.log_mask = (1 << logId);
