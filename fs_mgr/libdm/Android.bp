@@ -79,7 +79,7 @@ cc_test {
 cc_test {
     name: "vts_libdm_test",
     defaults: ["libdm_test_defaults"],
-    test_suites: ["vts-core"],
+    test_suites: ["vts"],
     test_min_api_level: 29,
 }
 

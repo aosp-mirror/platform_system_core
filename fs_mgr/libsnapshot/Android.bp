@@ -182,7 +182,7 @@ cc_defaults {
         "libstorage_literals_headers",
     ],
     test_suites: [
-        "vts-core",
+        "vts",
         "device-tests"
     ],
     test_min_api_level: 29,
