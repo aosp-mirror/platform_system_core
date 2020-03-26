@@ -35,20 +35,13 @@ cc_defaults {
     },
 }
 
-cc_library {
-    name: "libunwindstack",
-    vendor_available: true,
-    recovery_available: true,
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+cc_defaults {
+    name: "libunwindstack_defaults",
     defaults: ["libunwindstack_flags"],
     export_include_dirs: ["include"],
 
     srcs: [
         "ArmExidx.cpp",
-        "DexFile.cpp",
         "DexFiles.cpp",
         "DwarfCfa.cpp",
         "DwarfEhFrameWithHdr.cpp",
@@ -77,7 +70,6 @@ cc_library {
     ],
 
     cflags: [
-        "-DDEXFILE_SUPPORT",
         "-Wexit-time-destructors",
     ],
 
@@ -87,24 +79,6 @@ cc_library {
             cflags: [
                 "-O0",
                 "-g",
-            ],
-        },
-        vendor: {
-            cflags: ["-UDEXFILE_SUPPORT"],
-            exclude_srcs: [
-                "DexFile.cpp",
-            ],
-            exclude_shared_libs: [
-                "libdexfile_support",
-            ],
-        },
-        recovery: {
-            cflags: ["-UDEXFILE_SUPPORT"],
-            exclude_srcs: [
-                "DexFile.cpp",
-            ],
-            exclude_shared_libs: [
-                "libdexfile_support",
             ],
         },
     },
@@ -130,9 +104,53 @@ cc_library {
 
     shared_libs: [
         "libbase",
-        "libdexfile_support",
         "liblog",
         "liblzma",
+    ],
+}
+
+cc_library {
+    name: "libunwindstack",
+    vendor_available: true,
+    recovery_available: true,
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
+    defaults: ["libunwindstack_defaults"],
+
+    srcs: ["DexFile.cpp"],
+    cflags: ["-DDEXFILE_SUPPORT"],
+    shared_libs: ["libdexfile_support"],
+
+    target: {
+        vendor: {
+            cflags: ["-UDEXFILE_SUPPORT"],
+            exclude_srcs: ["DexFile.cpp"],
+            exclude_shared_libs: ["libdexfile_support"],
+        },
+        recovery: {
+            cflags: ["-UDEXFILE_SUPPORT"],
+            exclude_srcs: ["DexFile.cpp"],
+            exclude_shared_libs: ["libdexfile_support"],
+        },
+    },
+}
+
+// Static library without DEX support to avoid dependencies on the ART APEX.
+cc_library_static {
+    name: "libunwindstack_no_dex",
+    recovery_available: true,
+    defaults: ["libunwindstack_defaults"],
+
+    visibility: [
+        "//system/core/debuggerd",
+        "//system/core/init",
+        "//system/core/libbacktrace",
+    ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.runtime",
     ],
 }
 
