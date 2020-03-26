@@ -112,7 +112,7 @@ static void push_to_device(const void* data, size_t byte_count, const char* dst,
     // but can't be removed until after the push.
     unix_close(tf.release());
 
-    if (!do_sync_push(srcs, dst, sync)) {
+    if (!do_sync_push(srcs, dst, sync, true)) {
         error_exit("Failed to push fastdeploy agent to device.");
     }
 }
