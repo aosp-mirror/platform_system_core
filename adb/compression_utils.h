@@ -23,7 +23,14 @@
 
 #include "types.h"
 
-enum class BrotliDecodeResult {
+enum class DecodeResult {
+    Error,
+    Done,
+    NeedInput,
+    MoreOutput,
+};
+
+enum class EncodeResult {
     Error,
     Done,
     NeedInput,
@@ -38,7 +45,7 @@ struct BrotliDecoder {
 
     void Append(Block&& block) { input_buffer_.append(std::move(block)); }
 
-    BrotliDecodeResult Decode(std::span<char>* output) {
+    DecodeResult Decode(std::span<char>* output) {
         size_t available_in = input_buffer_.front_size();
         const uint8_t* next_in = reinterpret_cast<const uint8_t*>(input_buffer_.front_data());
 
@@ -56,16 +63,16 @@ struct BrotliDecoder {
 
         switch (r) {
             case BROTLI_DECODER_RESULT_SUCCESS:
-                return BrotliDecodeResult::Done;
+                return DecodeResult::Done;
             case BROTLI_DECODER_RESULT_ERROR:
-                return BrotliDecodeResult::Error;
+                return DecodeResult::Error;
             case BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT:
                 // Brotli guarantees as one of its invariants that if it returns NEEDS_MORE_INPUT,
                 // it will consume the entire input buffer passed in, so we don't have to worry
                 // about bytes left over in the front block with more input remaining.
-                return BrotliDecodeResult::NeedInput;
+                return DecodeResult::NeedInput;
             case BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT:
-                return BrotliDecodeResult::MoreOutput;
+                return DecodeResult::MoreOutput;
         }
     }
 
@@ -73,13 +80,6 @@ struct BrotliDecoder {
     IOVector input_buffer_;
     std::span<char> output_buffer_;
     std::unique_ptr<BrotliDecoderState, void (*)(BrotliDecoderState*)> decoder_;
-};
-
-enum class BrotliEncodeResult {
-    Error,
-    Done,
-    NeedInput,
-    MoreOutput,
 };
 
 template <size_t OutputBlockSize>
@@ -95,7 +95,7 @@ struct BrotliEncoder {
     void Append(Block input) { input_buffer_.append(std::move(input)); }
     void Finish() { finished_ = true; }
 
-    BrotliEncodeResult Encode(Block* output) {
+    EncodeResult Encode(Block* output) {
         output->clear();
         while (true) {
             size_t available_in = input_buffer_.front_size();
@@ -112,7 +112,7 @@ struct BrotliEncoder {
 
             if (!BrotliEncoderCompressStream(encoder_.get(), op, &available_in, &next_in,
                                              &available_out, &next_out, nullptr)) {
-                return BrotliEncodeResult::Error;
+                return EncodeResult::Error;
             }
 
             size_t bytes_consumed = input_buffer_.front_size() - available_in;
@@ -123,14 +123,14 @@ struct BrotliEncoder {
             if (BrotliEncoderIsFinished(encoder_.get())) {
                 output_block_.resize(OutputBlockSize - output_bytes_left_);
                 *output = std::move(output_block_);
-                return BrotliEncodeResult::Done;
+                return EncodeResult::Done;
             } else if (output_bytes_left_ == 0) {
                 *output = std::move(output_block_);
                 output_block_.resize(OutputBlockSize);
                 output_bytes_left_ = OutputBlockSize;
-                return BrotliEncodeResult::MoreOutput;
+                return EncodeResult::MoreOutput;
             } else if (input_buffer_.empty()) {
-                return BrotliEncodeResult::NeedInput;
+                return EncodeResult::NeedInput;
             }
         }
     }
