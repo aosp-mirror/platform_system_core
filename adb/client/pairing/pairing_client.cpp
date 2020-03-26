@@ -141,7 +141,12 @@ bool PairingClientImpl::StartConnection() {
                                           cert_.size(), priv_key_.data(), priv_key_.size()));
     CHECK(connection_);
 
-    if (!pairing_connection_start(connection_.get(), fd.release(), OnPairingResult, this)) {
+#ifdef _WIN32
+    int osh = cast_handle_to_int(adb_get_os_handle(fd.release()));
+#else
+    int osh = adb_get_os_handle(fd.release());
+#endif
+    if (!pairing_connection_start(connection_.get(), osh, OnPairingResult, this)) {
         LOG(ERROR) << "PairingClient failed to start the PairingConnection";
         state_ = State::Stopped;
         return false;
