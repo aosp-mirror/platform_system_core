@@ -497,12 +497,18 @@ bool FdConnection::DoTlsHandshake(RSA* key, std::string* auth_key) {
     auto x509 = GenerateX509Certificate(evp_pkey.get());
     auto x509_str = X509ToPEMString(x509.get());
     auto evp_str = Key::ToPEMString(evp_pkey.get());
+#ifdef _WIN32
+    int osh = cast_handle_to_int(adb_get_os_handle(fd_));
+#else
+    int osh = adb_get_os_handle(fd_);
+#endif
+
 #if ADB_HOST
     tls_ = TlsConnection::Create(TlsConnection::Role::Client,
 #else
     tls_ = TlsConnection::Create(TlsConnection::Role::Server,
 #endif
-                                 x509_str, evp_str, fd_);
+                                 x509_str, evp_str, osh);
     CHECK(tls_);
 #if ADB_HOST
     // TLS 1.3 gives the client no message if the server rejected the
