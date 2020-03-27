@@ -617,7 +617,7 @@ class SyncConnection {
         }
 
         std::string path_and_mode = android::base::StringPrintf("%s,%d", path.c_str(), mode);
-        if (!SendRequest(ID_SEND_V1, path_and_mode.c_str())) {
+        if (!SendRequest(ID_SEND_V1, path_and_mode)) {
             Error("failed to send ID_SEND_V1 message '%s': %s", path_and_mode.c_str(),
                   strerror(errno));
             return false;
