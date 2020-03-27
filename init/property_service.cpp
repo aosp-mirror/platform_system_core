@@ -125,7 +125,7 @@ void StartSendingMessages() {
 
 void StopSendingMessages() {
     auto lock = std::lock_guard{accept_messages_lock};
-    accept_messages = true;
+    accept_messages = false;
 }
 
 bool CanReadProperty(const std::string& source_context, const std::string& name) {
