@@ -16,18 +16,22 @@
 
 #include "fastboot_device.h"
 
+#include <algorithm>
+
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
 #include <android/hardware/fastboot/1.0/IFastboot.h>
+#include <fs_mgr.h>
+#include <fs_mgr/roots.h>
 #include <healthhalutils/HealthHalUtils.h>
-
-#include <algorithm>
 
 #include "constants.h"
 #include "flashing.h"
 #include "usb_client.h"
 
+using android::fs_mgr::EnsurePathUnmounted;
+using android::fs_mgr::Fstab;
 using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::IBootControl;
 using ::android::hardware::boot::V1_0::Slot;
@@ -63,6 +67,13 @@ FastbootDevice::FastbootDevice()
       active_slot_("") {
     if (boot_control_hal_) {
         boot1_1_ = android::hardware::boot::V1_1::IBootControl::castFrom(boot_control_hal_);
+    }
+
+    // Make sure cache is unmounted, since recovery will have mounted it for
+    // logging.
+    Fstab fstab;
+    if (ReadDefaultFstab(&fstab)) {
+        EnsurePathUnmounted(&fstab, "/cache");
     }
 }
 
