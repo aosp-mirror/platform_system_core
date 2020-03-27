@@ -126,15 +126,21 @@ static void help() {
         " reverse --remove-all     remove all reverse socket connections from device\n"
         "\n"
         "file transfer:\n"
-        " push [--sync] LOCAL... REMOTE\n"
+        " push [--sync] [-zZ] LOCAL... REMOTE\n"
         "     copy local files/directories to device\n"
         "     --sync: only push files that are newer on the host than the device\n"
-        " pull [-a] REMOTE... LOCAL\n"
+        "     -z: enable compression\n"
+        "     -Z: disable compression\n"
+        " pull [-azZ] REMOTE... LOCAL\n"
         "     copy files/dirs from device\n"
         "     -a: preserve file timestamp and mode\n"
-        " sync [all|data|odm|oem|product|system|system_ext|vendor]\n"
+        "     -z: enable compression\n"
+        "     -Z: disable compression\n"
+        " sync [-lzZ] [all|data|odm|oem|product|system|system_ext|vendor]\n"
         "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
         "     -l: list files that would be copied, but don't copy them\n"
+        "     -z: enable compression\n"
+        "     -Z: disable compression\n"
         "\n"
         "shell:\n"
         " shell [-e ESCAPE] [-n] [-Tt] [-x] [COMMAND...]\n"
@@ -1321,8 +1327,12 @@ static int restore(int argc, const char** argv) {
 }
 
 static void parse_push_pull_args(const char** arg, int narg, std::vector<const char*>* srcs,
-                                 const char** dst, bool* copy_attrs, bool* sync) {
+                                 const char** dst, bool* copy_attrs, bool* sync, bool* compressed) {
     *copy_attrs = false;
+    const char* adb_compression = getenv("ADB_COMPRESSION");
+    if (adb_compression && strcmp(adb_compression, "0") == 0) {
+        *compressed = false;
+    }
 
     srcs->clear();
     bool ignore_flags = false;
@@ -1334,6 +1344,14 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
                 // Silently ignore for backwards compatibility.
             } else if (!strcmp(*arg, "-a")) {
                 *copy_attrs = true;
+            } else if (!strcmp(*arg, "-z")) {
+                if (compressed != nullptr) {
+                    *compressed = true;
+                }
+            } else if (!strcmp(*arg, "-Z")) {
+                if (compressed != nullptr) {
+                    *compressed = false;
+                }
             } else if (!strcmp(*arg, "--sync")) {
                 if (sync != nullptr) {
                     *sync = true;
@@ -1856,20 +1874,22 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "push")) {
         bool copy_attrs = false;
         bool sync = false;
+        bool compressed = true;
         std::vector<const char*> srcs;
         const char* dst = nullptr;
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync, &compressed);
         if (srcs.empty() || !dst) error_exit("push requires an argument");
-        return do_sync_push(srcs, dst, sync) ? 0 : 1;
+        return do_sync_push(srcs, dst, sync, compressed) ? 0 : 1;
     } else if (!strcmp(argv[0], "pull")) {
         bool copy_attrs = false;
+        bool compressed = true;
         std::vector<const char*> srcs;
         const char* dst = ".";
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr, &compressed);
         if (srcs.empty()) error_exit("pull requires an argument");
-        return do_sync_pull(srcs, dst, copy_attrs) ? 0 : 1;
+        return do_sync_pull(srcs, dst, copy_attrs, compressed) ? 0 : 1;
     } else if (!strcmp(argv[0], "install")) {
         if (argc < 2) error_exit("install requires an argument");
         return install_app(argc, argv);
@@ -1885,18 +1905,38 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "sync")) {
         std::string src;
         bool list_only = false;
-        if (argc < 2) {
-            // No partition specified: sync all of them.
-        } else if (argc >= 2 && strcmp(argv[1], "-l") == 0) {
-            list_only = true;
-            if (argc == 3) src = argv[2];
-        } else if (argc == 2) {
-            src = argv[1];
-        } else {
-            error_exit("usage: adb sync [-l] [PARTITION]");
+        bool compressed = true;
+
+        const char* adb_compression = getenv("ADB_COMPRESSION");
+        if (adb_compression && strcmp(adb_compression, "0") == 0) {
+            compressed = false;
         }
 
-        if (src.empty()) src = "all";
+        int opt;
+        while ((opt = getopt(argc, const_cast<char**>(argv), "lzZ")) != -1) {
+            switch (opt) {
+                case 'l':
+                    list_only = true;
+                    break;
+                case 'z':
+                    compressed = true;
+                    break;
+                case 'Z':
+                    compressed = false;
+                    break;
+                default:
+                    error_exit("usage: adb sync [-lzZ] [PARTITION]");
+            }
+        }
+
+        if (optind == argc) {
+            src = "all";
+        } else if (optind + 1 == argc) {
+            src = argv[optind];
+        } else {
+            error_exit("usage: adb sync [-lzZ] [PARTITION]");
+        }
+
         std::vector<std::string> partitions{"data",   "odm",        "oem",   "product",
                                             "system", "system_ext", "vendor"};
         bool found = false;
@@ -1905,7 +1945,7 @@ int adb_commandline(int argc, const char** argv) {
                 std::string src_dir{product_file(partition)};
                 if (!directory_exists(src_dir)) continue;
                 found = true;
-                if (!do_sync_sync(src_dir, "/" + partition, list_only)) return 1;
+                if (!do_sync_sync(src_dir, "/" + partition, list_only, compressed)) return 1;
             }
         }
         if (!found) error_exit("don't know how to sync %s partition", src.c_str());
