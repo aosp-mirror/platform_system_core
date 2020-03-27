@@ -22,6 +22,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/eventfd.h>
 #include <sys/mount.h>
 #include <sys/signalfd.h>
 #include <sys/types.h>
@@ -115,30 +116,26 @@ static std::queue<PendingControlMessage> pending_control_messages;
 // to fill that socket and deadlock the system.  Now we use locks to handle the property changes
 // directly in the property thread, however we still must wake the epoll to inform init that there
 // is a change to process, so we use this FD.  It is non-blocking, since we do not care how many
-// times WakeEpoll() is called, only that the epoll will wake.
-static int wake_epoll_fd = -1;
+// times WakeMainInitThread() is called, only that the epoll will wake.
+static int wake_main_thread_fd = -1;
 static void InstallInitNotifier(Epoll* epoll) {
-    int sockets[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0, sockets) != 0) {
-        PLOG(FATAL) << "Failed to socketpair() between property_service and init";
+    wake_main_thread_fd = eventfd(0, EFD_CLOEXEC);
+    if (wake_main_thread_fd == -1) {
+        PLOG(FATAL) << "Failed to create eventfd for waking init";
     }
-    int epoll_fd = sockets[0];
-    wake_epoll_fd = sockets[1];
-
-    auto drain_socket = [epoll_fd] {
-        char buf[512];
-        while (read(epoll_fd, buf, sizeof(buf)) > 0) {
-        }
+    auto clear_eventfd = [] {
+        uint64_t counter;
+        TEMP_FAILURE_RETRY(read(wake_main_thread_fd, &counter, sizeof(counter)));
     };
 
-    if (auto result = epoll->RegisterHandler(epoll_fd, drain_socket); !result.ok()) {
+    if (auto result = epoll->RegisterHandler(wake_main_thread_fd, clear_eventfd); !result.ok()) {
         LOG(FATAL) << result.error();
     }
 }
 
-static void WakeEpoll() {
-    constexpr char value[] = "1";
-    TEMP_FAILURE_RETRY(write(wake_epoll_fd, value, sizeof(value)));
+static void WakeMainInitThread() {
+    uint64_t counter = 1;
+    TEMP_FAILURE_RETRY(write(wake_main_thread_fd, &counter, sizeof(counter)));
 }
 
 static class PropWaiterState {
@@ -182,7 +179,7 @@ static class PropWaiterState {
                 LOG(INFO) << "Wait for property '" << wait_prop_name_ << "=" << wait_prop_value_
                           << "' took " << *waiting_for_prop_;
                 ResetWaitForPropLocked();
-                WakeEpoll();
+                WakeMainInitThread();
             }
         }
     }
@@ -249,7 +246,7 @@ static class ShutdownState {
         }
         shutdown_command_ = command;
         do_shutdown_ = true;
-        WakeEpoll();
+        WakeMainInitThread();
     }
 
     std::optional<std::string> CheckShutdown() {
@@ -333,7 +330,7 @@ void PropertyChanged(const std::string& name, const std::string& value) {
 
     if (property_triggers_enabled) {
         ActionManager::GetInstance().QueuePropertyChange(name, value);
-        WakeEpoll();
+        WakeMainInitThread();
     }
 
     prop_waiter_state.CheckAndResetWait(name, value);
@@ -459,7 +456,7 @@ bool QueueControlMessage(const std::string& message, const std::string& name, pi
         return false;
     }
     pending_control_messages.push({message, name, pid, fd});
-    WakeEpoll();
+    WakeMainInitThread();
     return true;
 }
 
@@ -485,7 +482,7 @@ static void HandleControlMessages() {
     }
     // If we still have items to process, make sure we wake back up to do so.
     if (!pending_control_messages.empty()) {
-        WakeEpoll();
+        WakeMainInitThread();
     }
 }
 
