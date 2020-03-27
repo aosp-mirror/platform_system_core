@@ -591,7 +591,6 @@ static bool do_send_v2(int s, const std::string& path, std::vector<char>& buffer
 static bool recv_uncompressed(borrowed_fd s, unique_fd fd, std::vector<char>& buffer) {
     syncmsg msg;
     msg.data.id = ID_DATA;
-    std::optional<BrotliEncoder<SYNC_DATA_MAX>> encoder;
     while (true) {
         int r = adb_read(fd.get(), &buffer[0], buffer.size() - sizeof(msg.data));
         if (r <= 0) {
