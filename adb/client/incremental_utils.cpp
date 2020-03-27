@@ -18,6 +18,7 @@
 
 #include "incremental_utils.h"
 
+#include <android-base/endian.h>
 #include <android-base/mapped_file.h>
 #include <android-base/strings.h>
 #include <ziparchive/zip_archive.h>
@@ -28,19 +29,98 @@
 #include <numeric>
 #include <unordered_set>
 
+#include "adb_io.h"
 #include "adb_trace.h"
 #include "sysdeps.h"
 
 using namespace std::literals;
 
-static constexpr int kBlockSize = 4096;
+namespace incremental {
 
 static constexpr inline int32_t offsetToBlockIndex(int64_t offset) {
     return (offset & ~(kBlockSize - 1)) >> 12;
 }
 
+Size verity_tree_blocks_for_file(Size fileSize) {
+    if (fileSize == 0) {
+        return 0;
+    }
+
+    constexpr int hash_per_block = kBlockSize / kDigestSize;
+
+    Size total_tree_block_count = 0;
+
+    auto block_count = 1 + (fileSize - 1) / kBlockSize;
+    auto hash_block_count = block_count;
+    for (auto i = 0; hash_block_count > 1; i++) {
+        hash_block_count = (hash_block_count + hash_per_block - 1) / hash_per_block;
+        total_tree_block_count += hash_block_count;
+    }
+    return total_tree_block_count;
+}
+
+Size verity_tree_size_for_file(Size fileSize) {
+    return verity_tree_blocks_for_file(fileSize) * kBlockSize;
+}
+
+static inline int32_t read_int32(borrowed_fd fd) {
+    int32_t result;
+    return ReadFdExactly(fd, &result, sizeof(result)) ? result : -1;
+}
+
+static inline int32_t skip_int(borrowed_fd fd) {
+    return adb_lseek(fd, 4, SEEK_CUR);
+}
+
+static inline void append_int(borrowed_fd fd, std::vector<char>* bytes) {
+    int32_t le_val = read_int32(fd);
+    auto old_size = bytes->size();
+    bytes->resize(old_size + sizeof(le_val));
+    memcpy(bytes->data() + old_size, &le_val, sizeof(le_val));
+}
+
+static inline void append_bytes_with_size(borrowed_fd fd, std::vector<char>* bytes) {
+    int32_t le_size = read_int32(fd);
+    if (le_size < 0) {
+        return;
+    }
+    int32_t size = int32_t(le32toh(le_size));
+    auto old_size = bytes->size();
+    bytes->resize(old_size + sizeof(le_size) + size);
+    memcpy(bytes->data() + old_size, &le_size, sizeof(le_size));
+    ReadFdExactly(fd, bytes->data() + old_size + sizeof(le_size), size);
+}
+
+static inline int32_t skip_bytes_with_size(borrowed_fd fd) {
+    int32_t le_size = read_int32(fd);
+    if (le_size < 0) {
+        return -1;
+    }
+    int32_t size = int32_t(le32toh(le_size));
+    return (int32_t)adb_lseek(fd, size, SEEK_CUR);
+}
+
+std::pair<std::vector<char>, int32_t> read_id_sig_headers(borrowed_fd fd) {
+    std::vector<char> result;
+    append_int(fd, &result);              // version
+    append_bytes_with_size(fd, &result);  // hashingInfo
+    append_bytes_with_size(fd, &result);  // signingInfo
+    auto le_tree_size = read_int32(fd);
+    auto tree_size = int32_t(le32toh(le_tree_size));  // size of the verity tree
+    return {std::move(result), tree_size};
+}
+
+std::pair<off64_t, ssize_t> skip_id_sig_headers(borrowed_fd fd) {
+    skip_int(fd);                            // version
+    skip_bytes_with_size(fd);                // hashingInfo
+    auto offset = skip_bytes_with_size(fd);  // signingInfo
+    auto le_tree_size = read_int32(fd);
+    auto tree_size = int32_t(le32toh(le_tree_size));  // size of the verity tree
+    return {offset + sizeof(le_tree_size), tree_size};
+}
+
 template <class T>
-T valueAt(int fd, off64_t offset) {
+static T valueAt(borrowed_fd fd, off64_t offset) {
     T t;
     memset(&t, 0, sizeof(T));
     if (adb_pread(fd, &t, sizeof(T), offset) != sizeof(T)) {
@@ -68,7 +148,7 @@ static void unduplicate(std::vector<T>& v) {
             v.end());
 }
 
-static off64_t CentralDirOffset(int fd, int64_t fileSize) {
+static off64_t CentralDirOffset(borrowed_fd fd, Size fileSize) {
     static constexpr int kZipEocdRecMinSize = 22;
     static constexpr int32_t kZipEocdRecSig = 0x06054b50;
     static constexpr int kZipEocdCentralDirSizeFieldOffset = 12;
@@ -103,7 +183,7 @@ static off64_t CentralDirOffset(int fd, int64_t fileSize) {
 }
 
 // Does not support APKs larger than 4GB
-static off64_t SignerBlockOffset(int fd, int64_t fileSize) {
+static off64_t SignerBlockOffset(borrowed_fd fd, Size fileSize) {
     static constexpr int kApkSigBlockMinSize = 32;
     static constexpr int kApkSigBlockFooterSize = 24;
     static constexpr int64_t APK_SIG_BLOCK_MAGIC_HI = 0x3234206b636f6c42l;
@@ -132,7 +212,7 @@ static off64_t SignerBlockOffset(int fd, int64_t fileSize) {
     return signerBlockOffset;
 }
 
-static std::vector<int32_t> ZipPriorityBlocks(off64_t signerBlockOffset, int64_t fileSize) {
+static std::vector<int32_t> ZipPriorityBlocks(off64_t signerBlockOffset, Size fileSize) {
     int32_t signerBlockIndex = offsetToBlockIndex(signerBlockOffset);
     int32_t lastBlockIndex = offsetToBlockIndex(fileSize);
     const auto numPriorityBlocks = lastBlockIndex - signerBlockIndex + 1;
@@ -160,7 +240,7 @@ static std::vector<int32_t> ZipPriorityBlocks(off64_t signerBlockOffset, int64_t
     return zipPriorityBlocks;
 }
 
-[[maybe_unused]] static ZipArchiveHandle openZipArchiveFd(int fd) {
+[[maybe_unused]] static ZipArchiveHandle openZipArchiveFd(borrowed_fd fd) {
     bool transferFdOwnership = false;
 #ifdef _WIN32
     //
@@ -179,20 +259,22 @@ static std::vector<int32_t> ZipPriorityBlocks(off64_t signerBlockOffset, int64_t
         D("%s failed at DuplicateHandle: %d", __func__, (int)::GetLastError());
         return {};
     }
-    fd = _open_osfhandle((intptr_t)dupedHandle, _O_RDONLY | _O_BINARY);
-    if (fd < 0) {
+    int osfd = _open_osfhandle((intptr_t)dupedHandle, _O_RDONLY | _O_BINARY);
+    if (osfd < 0) {
         D("%s failed at _open_osfhandle: %d", __func__, errno);
         ::CloseHandle(handle);
         return {};
     }
     transferFdOwnership = true;
+#else
+    int osfd = fd.get();
 #endif
     ZipArchiveHandle zip;
-    if (OpenArchiveFd(fd, "apk_fd", &zip, transferFdOwnership) != 0) {
+    if (OpenArchiveFd(osfd, "apk_fd", &zip, transferFdOwnership) != 0) {
         D("%s failed at OpenArchiveFd: %d", __func__, errno);
 #ifdef _WIN32
         // "_close()" is a secret WinCRT name for the regular close() function.
-        _close(fd);
+        _close(osfd);
 #endif
         return {};
     }
@@ -200,7 +282,7 @@ static std::vector<int32_t> ZipPriorityBlocks(off64_t signerBlockOffset, int64_t
 }
 
 static std::pair<ZipArchiveHandle, std::unique_ptr<android::base::MappedFile>> openZipArchive(
-        int fd, int64_t fileSize) {
+        borrowed_fd fd, Size fileSize) {
 #ifndef __LP64__
     if (fileSize >= INT_MAX) {
         return {openZipArchiveFd(fd), nullptr};
@@ -220,9 +302,10 @@ static std::pair<ZipArchiveHandle, std::unique_ptr<android::base::MappedFile>> o
     return {zip, std::move(mapping)};
 }
 
-static std::vector<int32_t> InstallationPriorityBlocks(int fd, int64_t fileSize) {
+static std::vector<int32_t> InstallationPriorityBlocks(int fd, Size fileSize) {
     static constexpr std::array<std::string_view, 3> additional_matches = {
             "resources.arsc"sv, "AndroidManifest.xml"sv, "classes.dex"sv};
+
     auto [zip, _] = openZipArchive(fd, fileSize);
     if (!zip) {
         return {};
@@ -249,8 +332,9 @@ static std::vector<int32_t> InstallationPriorityBlocks(int fd, int64_t fileSize)
         if (entryName == "classes.dex"sv) {
             // Only the head is needed for installation
             int32_t startBlockIndex = offsetToBlockIndex(entry.offset);
-            appendBlocks(startBlockIndex, 1, &installationPriorityBlocks);
-            D("\tadding to priority blocks: '%.*s' 1", (int)entryName.size(), entryName.data());
+            appendBlocks(startBlockIndex, 2, &installationPriorityBlocks);
+            D("\tadding to priority blocks: '%.*s' (%d)", (int)entryName.size(), entryName.data(),
+              2);
         } else {
             // Full entries are needed for installation
             off64_t entryStartOffset = entry.offset;
@@ -273,8 +357,8 @@ static std::vector<int32_t> InstallationPriorityBlocks(int fd, int64_t fileSize)
     return installationPriorityBlocks;
 }
 
-namespace incremental {
-std::vector<int32_t> PriorityBlocksForFile(const std::string& filepath, int fd, int64_t fileSize) {
+std::vector<int32_t> PriorityBlocksForFile(const std::string& filepath, borrowed_fd fd,
+                                           Size fileSize) {
     if (!android::base::EndsWithIgnoreCase(filepath, ".apk")) {
         return {};
     }
@@ -291,4 +375,5 @@ std::vector<int32_t> PriorityBlocksForFile(const std::string& filepath, int fd, 
     unduplicate(priorityBlocks);
     return priorityBlocks;
 }
+
 }  // namespace incremental
