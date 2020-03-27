@@ -188,12 +188,8 @@ std::optional<Process> install(std::vector<std::string> files) {
 
     std::string adb_path = android::base::GetExecutablePath();
 
-    auto osh = adb_get_os_handle(connection_fd.get());
-#ifdef _WIN32
-    auto fd_param = std::to_string(reinterpret_cast<intptr_t>(osh));
-#else /* !_WIN32 a.k.a. Unix */
+    auto osh = cast_handle_to_int(adb_get_os_handle(connection_fd.get()));
     auto fd_param = std::to_string(osh);
-#endif
 
     // pipe for child process to write output
     int print_fds[2];
@@ -202,7 +198,7 @@ std::optional<Process> install(std::vector<std::string> files) {
         return {};
     }
     auto [pipe_read_fd, pipe_write_fd] = print_fds;
-    auto pipe_write_fd_param = std::to_string(intptr_t(adb_get_os_handle(pipe_write_fd)));
+    auto pipe_write_fd_param = std::to_string(cast_handle_to_int(adb_get_os_handle(pipe_write_fd)));
     close_on_exec(pipe_read_fd);
 
     std::vector<std::string> args(std::move(files));
