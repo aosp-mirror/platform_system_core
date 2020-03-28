@@ -81,6 +81,8 @@ const char* const kFeatureAbb = "abb";
 const char* const kFeatureFixedPushSymlinkTimestamp = "fixed_push_symlink_timestamp";
 const char* const kFeatureAbbExec = "abb_exec";
 const char* const kFeatureRemountShell = "remount_shell";
+const char* const kFeatureSendRecv2 = "sendrecv_v2";
+const char* const kFeatureSendRecv2Brotli = "sendrecv_v2_brotli";
 
 namespace {
 
@@ -1181,6 +1183,8 @@ const FeatureSet& supported_features() {
             kFeatureFixedPushSymlinkTimestamp,
             kFeatureAbbExec,
             kFeatureRemountShell,
+            kFeatureSendRecv2,
+            kFeatureSendRecv2Brotli,
             // Increment ADB_SERVER_VERSION when adding a feature that adbd needs
             // to know about. Otherwise, the client can be stuck running an old
             // version of the server even after upgrading their copy of adb.
