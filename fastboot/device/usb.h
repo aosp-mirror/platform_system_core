@@ -36,17 +36,14 @@ struct aio_block {
 };
 
 struct usb_handle {
-    usb_handle() : kicked(false) {
-    }
+    usb_handle() {}
 
     std::condition_variable notify;
     std::mutex lock;
-    std::atomic<bool> kicked;
     bool open_new_connection = true;
 
     int (*write)(usb_handle* h, const void* data, int len);
     int (*read)(usb_handle* h, void* data, int len, bool allow_partial);
-    void (*kick)(usb_handle* h);
     void (*close)(usb_handle* h);
 
     // FunctionFS
@@ -63,6 +60,4 @@ struct usb_handle {
     size_t io_size;
 };
 
-usb_handle *create_usb_handle(unsigned num_bufs, unsigned io_size);
-bool open_functionfs(android::base::unique_fd* control, android::base::unique_fd* bulk_out,
-                     android::base::unique_fd* bulk_in);
+usb_handle* create_usb_handle(unsigned num_bufs, unsigned io_size);
