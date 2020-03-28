@@ -18,6 +18,8 @@
 
 #include "sysdeps.h"
 
+#include "client/usb.h"
+
 // clang-format off
 #include <winsock2.h>  // winsock.h *must* be included before windows.h.
 #include <windows.h>

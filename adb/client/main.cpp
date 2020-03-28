@@ -36,6 +36,7 @@
 #include "adb_listeners.h"
 #include "adb_utils.h"
 #include "adb_wifi.h"
+#include "client/usb.h"
 #include "commandline.h"
 #include "sysdeps/chrono.h"
 #include "transport.h"
