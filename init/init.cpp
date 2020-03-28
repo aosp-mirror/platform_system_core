@@ -235,15 +235,6 @@ static class ShutdownState {
         // action queue.  Instead we set this flag and ensure that shutdown happens before the next
         // command is run in the main init loop.
         auto lock = std::lock_guard{shutdown_command_lock_};
-        if (do_shutdown_) {
-            LOG(ERROR) << "TriggerShutdown called while a previous shutdown command '"
-                       << shutdown_command_ << "' has not been handled";
-            UnwindMainThreadStack();
-        }
-        if (IsShuttingDown()) {
-            LOG(ERROR) << "TriggerShutdown called while init is already shutting down";
-            UnwindMainThreadStack();
-        }
         shutdown_command_ = command;
         do_shutdown_ = true;
         WakeMainInitThread();
@@ -258,11 +249,26 @@ static class ShutdownState {
         return {};
     }
 
+    bool do_shutdown() const { return do_shutdown_; }
+
   private:
     std::mutex shutdown_command_lock_;
     std::string shutdown_command_;
     bool do_shutdown_ = false;
 } shutdown_state;
+
+void DebugRebootLogging() {
+    LOG(INFO) << "do_shutdown: " << shutdown_state.do_shutdown()
+              << " IsShuttingDown: " << IsShuttingDown();
+    if (shutdown_state.do_shutdown()) {
+        LOG(ERROR) << "sys.powerctl set while a previous shutdown command has not been handled";
+        UnwindMainThreadStack();
+    }
+    if (IsShuttingDown()) {
+        LOG(ERROR) << "sys.powerctl set while init is already shutting down";
+        UnwindMainThreadStack();
+    }
+}
 
 void DumpState() {
     ServiceList::GetInstance().DumpState();
