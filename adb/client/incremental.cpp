@@ -90,38 +90,58 @@ static inline Size verity_tree_size_for_file(Size fileSize) {
     return total_tree_block_count * INCFS_DATA_FILE_BLOCK_SIZE;
 }
 
-// Base64-encode signature bytes. Keeping fd at the position of start of verity tree.
-static std::pair<unique_fd, std::string> read_and_encode_signature(Size file_size,
-                                                                   std::string signature_file) {
+// Read, verify and return the signature bytes. Keeping fd at the position of start of verity tree.
+static std::pair<unique_fd, std::vector<char>> read_signature(Size file_size,
+                                                              std::string signature_file,
+                                                              bool silent) {
     signature_file += IDSIG;
 
     struct stat st;
     if (stat(signature_file.c_str(), &st)) {
-        fprintf(stderr, "Failed to stat signature file %s. Abort.\n", signature_file.c_str());
+        if (!silent) {
+            fprintf(stderr, "Failed to stat signature file %s. Abort.\n", signature_file.c_str());
+        }
         return {};
     }
 
     unique_fd fd(adb_open(signature_file.c_str(), O_RDONLY | O_CLOEXEC));
     if (fd < 0) {
-        fprintf(stderr, "Failed to open signature file: %s. Abort.\n", signature_file.c_str());
+        if (!silent) {
+            fprintf(stderr, "Failed to open signature file: %s. Abort.\n", signature_file.c_str());
+        }
         return {};
     }
 
     auto [signature, tree_size] = read_id_sig_headers(fd);
     if (auto expected = verity_tree_size_for_file(file_size); tree_size != expected) {
-        fprintf(stderr,
-                "Verity tree size mismatch in signature file: %s [was %lld, expected %lld].\n",
-                signature_file.c_str(), (long long)tree_size, (long long)expected);
+        if (!silent) {
+            fprintf(stderr,
+                    "Verity tree size mismatch in signature file: %s [was %lld, expected %lld].\n",
+                    signature_file.c_str(), (long long)tree_size, (long long)expected);
+        }
+        return {};
+    }
+
+    return {std::move(fd), std::move(signature)};
+}
+
+// Base64-encode signature bytes. Keeping fd at the position of start of verity tree.
+static std::pair<unique_fd, std::string> read_and_encode_signature(Size file_size,
+                                                                   std::string signature_file,
+                                                                   bool silent) {
+    auto [fd, signature] = read_signature(file_size, std::move(signature_file), silent);
+    if (!fd.ok()) {
         return {};
     }
 
     size_t base64_len = 0;
     if (!EVP_EncodedLength(&base64_len, signature.size())) {
-        fprintf(stderr, "Fail to estimate base64 encoded length. Abort.\n");
+        if (!silent) {
+            fprintf(stderr, "Fail to estimate base64 encoded length. Abort.\n");
+        }
         return {};
     }
-    std::string encoded_signature;
-    encoded_signature.resize(base64_len);
+    std::string encoded_signature(base64_len, '\0');
     encoded_signature.resize(EVP_EncodeBlock((uint8_t*)encoded_signature.data(),
                                              (const uint8_t*)signature.data(), signature.size()));
 
@@ -130,7 +150,7 @@ static std::pair<unique_fd, std::string> read_and_encode_signature(Size file_siz
 
 // Send install-incremental to the device along with properly configured file descriptors in
 // streaming format. Once connection established, send all fs-verity tree bytes.
-static unique_fd start_install(const std::vector<std::string>& files) {
+static unique_fd start_install(const Files& files, bool silent) {
     std::vector<std::string> command_args{"package", "install-incremental"};
 
     // fd's with positions at the beginning of fs-verity
@@ -141,11 +161,13 @@ static unique_fd start_install(const std::vector<std::string>& files) {
 
         struct stat st;
         if (stat(file.c_str(), &st)) {
-            fprintf(stderr, "Failed to stat input file %s. Abort.\n", file.c_str());
+            if (!silent) {
+                fprintf(stderr, "Failed to stat input file %s. Abort.\n", file.c_str());
+            }
             return {};
         }
 
-        auto [signature_fd, signature] = read_and_encode_signature(st.st_size, file);
+        auto [signature_fd, signature] = read_and_encode_signature(st.st_size, file, silent);
         if (!signature_fd.ok()) {
             return {};
         }
@@ -161,15 +183,19 @@ static unique_fd start_install(const std::vector<std::string>& files) {
     std::string error;
     auto connection_fd = unique_fd(send_abb_exec_command(command_args, &error));
     if (connection_fd < 0) {
-        fprintf(stderr, "Failed to run: %s, error: %s\n",
-                android::base::Join(command_args, " ").c_str(), error.c_str());
+        if (!silent) {
+            fprintf(stderr, "Failed to run: %s, error: %s\n",
+                    android::base::Join(command_args, " ").c_str(), error.c_str());
+        }
         return {};
     }
 
     // Pushing verity trees for all installation files.
     for (auto&& local_fd : signature_fds) {
         if (!copy_to_file(local_fd.get(), connection_fd.get())) {
-            fprintf(stderr, "Failed to stream tree bytes: %s. Abort.\n", strerror(errno));
+            if (!silent) {
+                fprintf(stderr, "Failed to stream tree bytes: %s. Abort.\n", strerror(errno));
+            }
             return {};
         }
     }
@@ -179,10 +205,27 @@ static unique_fd start_install(const std::vector<std::string>& files) {
 
 }  // namespace
 
-std::optional<Process> install(std::vector<std::string> files) {
-    auto connection_fd = start_install(files);
+bool can_install(const Files& files) {
+    for (const auto& file : files) {
+        struct stat st;
+        if (stat(file.c_str(), &st)) {
+            return false;
+        }
+
+        auto [fd, _] = read_signature(st.st_size, file, true);
+        if (!fd.ok()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::optional<Process> install(const Files& files, bool silent) {
+    auto connection_fd = start_install(files, silent);
     if (connection_fd < 0) {
-        fprintf(stderr, "adb: failed to initiate installation on device.\n");
+        if (!silent) {
+            fprintf(stderr, "adb: failed to initiate installation on device.\n");
+        }
         return {};
     }
 
@@ -194,7 +237,9 @@ std::optional<Process> install(std::vector<std::string> files) {
     // pipe for child process to write output
     int print_fds[2];
     if (adb_socketpair(print_fds) != 0) {
-        fprintf(stderr, "Failed to create socket pair for child to print to parent\n");
+        if (!silent) {
+            fprintf(stderr, "Failed to create socket pair for child to print to parent\n");
+        }
         return {};
     }
     auto [pipe_read_fd, pipe_write_fd] = print_fds;
@@ -206,7 +251,9 @@ std::optional<Process> install(std::vector<std::string> files) {
     auto child =
             adb_launch_process(adb_path, std::move(args), {connection_fd.get(), pipe_write_fd});
     if (!child) {
-        fprintf(stderr, "adb: failed to fork: %s\n", strerror(errno));
+        if (!silent) {
+            fprintf(stderr, "adb: failed to fork: %s\n", strerror(errno));
+        }
         return {};
     }
 
