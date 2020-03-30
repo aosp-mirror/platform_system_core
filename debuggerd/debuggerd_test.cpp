@@ -305,6 +305,32 @@ TEST_F(CrasherTest, smoke) {
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0xdead)");
 }
 
+TEST_F(CrasherTest, tagged_fault_addr) {
+#if !defined(__aarch64__)
+  GTEST_SKIP() << "Requires aarch64";
+#endif
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    *reinterpret_cast<volatile char*>(0x100000000000dead) = '1';
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  // The address can either be tagged (new kernels) or untagged (old kernels).
+  ASSERT_MATCH(
+      result,
+      R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr (0x100000000000dead|0xdead))");
+}
+
 TEST_F(CrasherTest, LD_PRELOAD) {
   int intercept_result;
   unique_fd output_fd;

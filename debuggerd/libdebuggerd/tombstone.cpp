@@ -154,16 +154,16 @@ static void dump_probable_cause(log_t* log, const siginfo_t* si, unwindstack::Ma
 }
 
 static void dump_signal_info(log_t* log, const ThreadInfo& thread_info,
-                             unwindstack::Memory* process_memory) {
+                             const ProcessInfo& process_info, unwindstack::Memory* process_memory) {
   char addr_desc[64];  // ", fault addr 0x1234"
-  if (signal_has_si_addr(thread_info.siginfo)) {
-    void* addr = thread_info.siginfo->si_addr;
+  if (process_info.has_fault_address) {
+    size_t addr = process_info.fault_address;
     if (thread_info.siginfo->si_signo == SIGILL) {
       uint32_t instruction = {};
-      process_memory->Read(reinterpret_cast<uint64_t>(addr), &instruction, sizeof(instruction));
-      snprintf(addr_desc, sizeof(addr_desc), "%p (*pc=%#08x)", addr, instruction);
+      process_memory->Read(addr, &instruction, sizeof(instruction));
+      snprintf(addr_desc, sizeof(addr_desc), "0x%zx (*pc=%#08x)", addr, instruction);
     } else {
-      snprintf(addr_desc, sizeof(addr_desc), "%p", addr);
+      snprintf(addr_desc, sizeof(addr_desc), "0x%zx", addr);
     }
   } else {
     snprintf(addr_desc, sizeof(addr_desc), "--------");
@@ -384,7 +384,7 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
   dump_thread_info(log, thread_info);
 
   if (thread_info.siginfo) {
-    dump_signal_info(log, thread_info, unwinder->GetProcessMemory().get());
+    dump_signal_info(log, thread_info, process_info, unwinder->GetProcessMemory().get());
   }
 
   std::unique_ptr<GwpAsanCrashData> gwp_asan_crash_data;
