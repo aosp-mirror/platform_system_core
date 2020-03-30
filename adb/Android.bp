@@ -298,6 +298,7 @@ cc_binary_host {
         "client/fastdeploycallbacks.cpp",
         "client/incremental.cpp",
         "client/incremental_server.cpp",
+        "client/incremental_utils.cpp",
         "shell_service_protocol.cpp",
     ],
 
@@ -316,6 +317,7 @@ cc_binary_host {
         "libandroidfw",
         "libapp_processes_protos_full",
         "libbase",
+        "libbrotli",
         "libcutils",
         "libcrypto_utils",
         "libcrypto",
@@ -468,6 +470,7 @@ cc_library {
     static_libs: [
         "libadbconnection_server",
         "libadbd_core",
+        "libbrotli",
         "libdiagnose_usb",
     ],
 
@@ -526,6 +529,7 @@ cc_library {
     name: "libadbd",
     defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
+    apex_available: ["com.android.adbd"],
 
     // avoid getting duplicate symbol of android::build::getbuildnumber().
     use_version_lib: false,
@@ -565,6 +569,7 @@ cc_library {
     },
 
     static_libs: [
+        "libbrotli",
         "libcutils_sockets",
         "libdiagnose_usb",
         "libmdnssd",
@@ -580,6 +585,7 @@ cc_binary {
     defaults: ["adbd_defaults", "host_adbd_supported"],
     stl: "libc++_static",
     recovery_available: true,
+    apex_available: ["com.android.adbd"],
 
     srcs: [
         "daemon/main.cpp",
@@ -603,6 +609,7 @@ cc_binary {
         "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
+        "libbrotli",
         "libcap",
         "libcrypto_utils",
         "libcutils_sockets",

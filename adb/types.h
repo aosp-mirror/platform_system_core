@@ -150,6 +150,22 @@ struct IOVector {
     IOVector& operator=(const IOVector& copy) = delete;
     IOVector& operator=(IOVector&& move) noexcept;
 
+    const value_type* front_data() const {
+        if (chain_.empty()) {
+            return nullptr;
+        }
+
+        return chain_.front().data() + begin_offset_;
+    }
+
+    size_type front_size() const {
+        if (chain_.empty()) {
+            return 0;
+        }
+
+        return chain_.front().size() - begin_offset_;
+    }
+
     size_type size() const { return chain_length_ - begin_offset_; }
     bool empty() const { return size() == 0; }
 

@@ -16,21 +16,11 @@
 
 #pragma once
 
-#include "adb_unique_fd.h"
+#include <stdint.h>
 
-#include <optional>
 #include <string>
-
-#include "sysdeps.h"
+#include <vector>
 
 namespace incremental {
-
-using Files = std::vector<std::string>;
-
-bool can_install(const Files& files);
-std::optional<Process> install(const Files& files, bool silent);
-
-enum class Result { Success, Failure, None };
-Result wait_for_installation(int read_fd);
-
+std::vector<int32_t> PriorityBlocksForFile(const std::string& filepath, int fd, int64_t fileSize);
 }  // namespace incremental

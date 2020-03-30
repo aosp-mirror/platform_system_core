@@ -139,9 +139,10 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
     auto start = std::chrono::steady_clock::now();
 
     // If we told a previous adb server to quit because of version mismatch, we can get to this
-    // point before it's finished exiting. Retry for a while to give it some time.
-    while (install_listener(socket_spec, "*smartsocket*", nullptr, 0, nullptr, &error) !=
-           INSTALL_STATUS_OK) {
+    // point before it's finished exiting. Retry for a while to give it some time. Don't actually
+    // accept any connections until adb_wait_for_device_initialization finishes below.
+    while (install_listener(socket_spec, "*smartsocket*", nullptr, INSTALL_LISTENER_DISABLED,
+                            nullptr, &error) != INSTALL_STATUS_OK) {
         if (std::chrono::steady_clock::now() - start > 0.5s) {
             LOG(FATAL) << "could not install *smartsocket* listener: " << error;
         }
@@ -162,12 +163,14 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
             PLOG(FATAL) << "setsid() failed";
         }
 #endif
+    }
 
-        // Wait for the USB scan to complete before notifying the parent that we're up.
-        // We need to perform this in a thread, because we would otherwise block the event loop.
-        std::thread notify_thread([ack_reply_fd]() {
-            adb_wait_for_device_initialization();
+    // Wait for the USB scan to complete before notifying the parent that we're up.
+    // We need to perform this in a thread, because we would otherwise block the event loop.
+    std::thread notify_thread([ack_reply_fd]() {
+        adb_wait_for_device_initialization();
 
+        if (ack_reply_fd >= 0) {
             // Any error output written to stderr now goes to adb.log. We could
             // keep around a copy of the stderr fd and use that to write any errors
             // encountered by the following code, but that is probably overkill.
@@ -193,9 +196,13 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
             }
             unix_close(ack_reply_fd);
 #endif
-        });
-        notify_thread.detach();
-    }
+        }
+        // We don't accept() client connections until this point: this way, clients
+        // can't see wonky state early in startup even if they're connecting directly
+        // to the server instead of going through the adb program.
+        fdevent_run_on_main_thread([] { enable_daemon_sockets(); });
+    });
+    notify_thread.detach();
 
 #if defined(__linux__)
     // Write our location to .android/adb.$PORT, so that older clients can exec us.

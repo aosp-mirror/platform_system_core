@@ -72,6 +72,7 @@ using namespace std::literals;
 
 using android::base::boot_clock;
 using android::base::GetBoolProperty;
+using android::base::GetUintProperty;
 using android::base::SetProperty;
 using android::base::Split;
 using android::base::Timer;
@@ -732,6 +733,12 @@ static Result<void> UnmountAllApexes() {
     return Error() << "'/system/bin/apexd --unmount-all' failed : " << status;
 }
 
+static std::chrono::milliseconds GetMillisProperty(const std::string& name,
+                                                   std::chrono::milliseconds default_value) {
+    auto value = GetUintProperty(name, static_cast<uint64_t>(default_value.count()));
+    return std::chrono::milliseconds(std::move(value));
+}
+
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
     auto guard = android::base::make_scope_guard([] {
@@ -769,10 +776,13 @@ static Result<void> DoUserspaceReboot() {
         sync();
         LOG(INFO) << "sync() took " << sync_timer;
     }
-    // TODO(b/135984674): do we need shutdown animation for userspace reboot?
-    // TODO(b/135984674): control userspace timeout via read-only property?
-    StopServicesAndLogViolations(stop_first, 10s, true /* SIGTERM */);
-    if (int r = StopServicesAndLogViolations(stop_first, 20s, false /* SIGKILL */); r > 0) {
+    auto sigterm_timeout = GetMillisProperty("init.userspace_reboot.sigterm.timeoutmillis", 5s);
+    auto sigkill_timeout = GetMillisProperty("init.userspace_reboot.sigkill.timeoutmillis", 10s);
+    LOG(INFO) << "Timeout to terminate services : " << sigterm_timeout.count() << "ms"
+              << "Timeout to kill services: " << sigkill_timeout.count() << "ms";
+    StopServicesAndLogViolations(stop_first, sigterm_timeout, true /* SIGTERM */);
+    if (int r = StopServicesAndLogViolations(stop_first, sigkill_timeout, false /* SIGKILL */);
+        r > 0) {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
@@ -782,8 +792,8 @@ static Result<void> DoUserspaceReboot() {
     if (auto result = CallVdc("volume", "reset"); !result.ok()) {
         return result;
     }
-    if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */), 5s,
-                                             false /* SIGKILL */);
+    if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */),
+                                             sigkill_timeout, false /* SIGKILL */);
         r > 0) {
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " debugging services are still running";
@@ -827,8 +837,8 @@ static void UserspaceRebootWatchdogThread() {
         return;
     }
     LOG(INFO) << "Starting userspace reboot watchdog";
-    // TODO(b/135984674): this should be configured via a read-only sysprop.
-    std::chrono::milliseconds timeout = 60s;
+    auto timeout = GetMillisProperty("init.userspace_reboot.watchdog.timeoutmillis", 5min);
+    LOG(INFO) << "UserspaceRebootWatchdog timeout: " << timeout.count() << "ms";
     if (!WaitForProperty("sys.boot_completed", "1", timeout)) {
         LOG(ERROR) << "Failed to boot in " << timeout.count() << "ms. Switching to full reboot";
         // In this case device is in a boot loop. Only way to recover is to do dirty reboot.

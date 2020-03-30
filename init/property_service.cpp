@@ -125,7 +125,7 @@ void StartSendingMessages() {
 
 void StopSendingMessages() {
     auto lock = std::lock_guard{accept_messages_lock};
-    accept_messages = true;
+    accept_messages = false;
 }
 
 bool CanReadProperty(const std::string& source_context, const std::string& name) {
@@ -489,6 +489,7 @@ uint32_t HandlePropertySet(const std::string& name, const std::string& value,
         }
         LOG(INFO) << "Received sys.powerctl='" << value << "' from pid: " << cr.pid
                   << process_log_string;
+        DebugRebootLogging();
     }
 
     // If a process other than init is writing a non-empty value, it means that process is

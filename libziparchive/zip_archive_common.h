@@ -21,6 +21,8 @@
 
 #include <inttypes.h>
 
+#include <optional>
+
 // The "end of central directory" (EOCD) record. Each archive
 // contains exactly once such record which appears at the end of
 // the archive. It contains archive wide information like the
@@ -172,6 +174,89 @@ struct DataDescriptor {
   DataDescriptor() = default;
   DISALLOW_COPY_AND_ASSIGN(DataDescriptor);
 } __attribute__((packed));
+
+// The zip64 end of central directory locator helps to find the zip64 EOCD.
+struct Zip64EocdLocator {
+  static constexpr uint32_t kSignature = 0x07064b50;
+
+  // The signature of zip64 eocd locator, must be |kSignature|
+  uint32_t locator_signature;
+  // The start disk of the zip64 eocd. This implementation assumes that each
+  // archive spans a single disk only.
+  uint32_t eocd_start_disk;
+  // The offset offset of the zip64 end of central directory record.
+  uint64_t zip64_eocd_offset;
+  // The total number of disks. This implementation assumes that each archive
+  // spans a single disk only.
+  uint32_t num_of_disks;
+
+ private:
+  Zip64EocdLocator() = default;
+  DISALLOW_COPY_AND_ASSIGN(Zip64EocdLocator);
+} __attribute__((packed));
+
+// The optional zip64 EOCD. If one of the fields in the end of central directory
+// record is too small to hold required data, the field SHOULD be  set to -1
+// (0xFFFF or 0xFFFFFFFF) and the ZIP64 format record SHOULD be created.
+struct Zip64EocdRecord {
+  static constexpr uint32_t kSignature = 0x06064b50;
+
+  // The signature of zip64 eocd record, must be |kSignature|
+  uint32_t record_signature;
+  // Size of zip64 end of central directory record. It SHOULD be the size of the
+  // remaining record and SHOULD NOT include the leading 12 bytes.
+  uint64_t record_size;
+  // The version of the tool that make this archive.
+  uint16_t version_made_by;
+  // Tool version needed to extract this archive.
+  uint16_t version_needed;
+  // Number of this disk.
+  uint32_t disk_num;
+  // Number of the disk with the start of the central directory.
+  uint32_t cd_start_disk;
+  // Total number of entries in the central directory on this disk.
+  // This implementation assumes that each archive spans a single
+  // disk only. i.e, that num_records_on_disk == num_records.
+  uint64_t num_records_on_disk;
+  // The total number of central directory records.
+  uint64_t num_records;
+  // The size of the central directory in bytes.
+  uint64_t cd_size;
+  // The offset of the start of the central directory, relative to the start of
+  // the file.
+  uint64_t cd_start_offset;
+
+ private:
+  Zip64EocdRecord() = default;
+  DISALLOW_COPY_AND_ASSIGN(Zip64EocdRecord);
+} __attribute__((packed));
+
+// The possible contents of the Zip64 Extended Information Extra Field. It may appear in
+// the 'extra' field of a central directory record or local file header. The order of
+// the fields in the zip64 extended information record is fixed, but the fields MUST
+// only appear if the corresponding local or central directory record field is set to
+// 0xFFFF or 0xFFFFFFFF. And this entry in the Local header MUST include BOTH original
+// and compressed file size fields.
+struct Zip64ExtendedInfo {
+  static constexpr uint16_t kHeaderId = 0x0001;
+  // The header tag for this 'extra' block, should be |kHeaderId|.
+  uint16_t header_id;
+  // The size in bytes of the remaining data (excluding the top 4 bytes).
+  uint16_t data_size;
+  // Size in bytes of the uncompressed file.
+  std::optional<uint64_t> uncompressed_file_size;
+  // Size in bytes of the compressed file.
+  std::optional<uint64_t> compressed_file_size;
+  // Local file header offset relative to the start of the zip file.
+  std::optional<uint64_t> local_header_offset;
+
+  // This implementation assumes that each archive spans a single disk only. So
+  // the disk_number is not used.
+  // uint32_t disk_num;
+ private:
+  Zip64ExtendedInfo() = default;
+  DISALLOW_COPY_AND_ASSIGN(Zip64ExtendedInfo);
+};
 
 // mask value that signifies that the entry has a DD
 static const uint32_t kGPBDDFlagMask = 0x0008;
