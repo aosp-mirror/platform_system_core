@@ -82,7 +82,7 @@ static void RunLogTests(log_id_t log_buffer, FWrite write_messages, FCheck check
   pid_t pid = getpid();
 
   auto logger_list = std::unique_ptr<struct logger_list, ListCloser>{
-      android_logger_list_open(log_buffer, ANDROID_LOG_RDONLY, 1000, pid)};
+      android_logger_list_open(log_buffer, 0, 1000, pid)};
   ASSERT_TRUE(logger_list);
 
   write_messages();
@@ -106,7 +106,7 @@ static void RunLogTests(log_id_t log_buffer, FWrite write_messages, FCheck check
   }
 
   auto logger_list_non_block = std::unique_ptr<struct logger_list, ListCloser>{
-      android_logger_list_open(log_buffer, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)};
+      android_logger_list_open(log_buffer, ANDROID_LOG_NONBLOCK, 1000, pid)};
   ASSERT_TRUE(logger_list_non_block);
 
   size_t count = 0;
@@ -160,7 +160,6 @@ static std::string popenToString(const std::string& command) {
   return ret;
 }
 
-#ifndef NO_PSTORE
 static bool isPmsgActive() {
   pid_t pid = getpid();
 
@@ -170,7 +169,6 @@ static bool isPmsgActive() {
 
   return std::string::npos != myPidFds.find(" -> /dev/pmsg0");
 }
-#endif /* NO_PSTORE */
 
 static bool isLogdwActive() {
   std::string logdwSignature =
@@ -222,16 +220,18 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
   log_time ts(CLOCK_MONOTONIC);
   log_time ts1(ts);
 
+  bool has_pstore = access("/dev/pmsg0", W_OK) == 0;
+
   auto write_function = [&] {
     EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
     // Check that we can close and reopen the logger
     bool logdwActiveAfter__android_log_btwrite;
     if (getuid() == AID_ROOT) {
       tested__android_log_close = true;
-#ifndef NO_PSTORE
-      bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-      EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
-#endif /* NO_PSTORE */
+      if (has_pstore) {
+        bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+        EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+      }
       logdwActiveAfter__android_log_btwrite = isLogdwActive();
       EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
     } else if (!tested__android_log_close) {
@@ -239,10 +239,10 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     }
     __android_log_close();
     if (getuid() == AID_ROOT) {
-#ifndef NO_PSTORE
-      bool pmsgActiveAfter__android_log_close = isPmsgActive();
-      EXPECT_FALSE(pmsgActiveAfter__android_log_close);
-#endif /* NO_PSTORE */
+      if (has_pstore) {
+        bool pmsgActiveAfter__android_log_close = isPmsgActive();
+        EXPECT_FALSE(pmsgActiveAfter__android_log_close);
+      }
       bool logdwActiveAfter__android_log_close = isLogdwActive();
       EXPECT_FALSE(logdwActiveAfter__android_log_close);
     }
@@ -250,10 +250,10 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     ts1 = log_time(CLOCK_MONOTONIC);
     EXPECT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
     if (getuid() == AID_ROOT) {
-#ifndef NO_PSTORE
-      bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
-      EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
-#endif /* NO_PSTORE */
+      if (has_pstore) {
+        bool pmsgActiveAfter__android_log_btwrite = isPmsgActive();
+        EXPECT_TRUE(pmsgActiveAfter__android_log_btwrite);
+      }
       logdwActiveAfter__android_log_btwrite = isLogdwActive();
       EXPECT_TRUE(logdwActiveAfter__android_log_btwrite);
     }
@@ -572,8 +572,7 @@ TEST(liblog, android_logger_list_read__cpu_signal) {
 
   v += pid & 0xFFFF;
 
-  ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-                           LOG_ID_EVENTS, ANDROID_LOG_RDONLY, 1000, pid)));
+  ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(LOG_ID_EVENTS, 0, 1000, pid)));
 
   int count = 0;
 
@@ -728,8 +727,7 @@ TEST(liblog, android_logger_list_read__cpu_thread) {
 
   v += pid & 0xFFFF;
 
-  ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-                           LOG_ID_EVENTS, ANDROID_LOG_RDONLY, 1000, pid)));
+  ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(LOG_ID_EVENTS, 0, 1000, pid)));
 
   int count = 0;
 
@@ -1093,11 +1091,11 @@ TEST(liblog, dual_reader) {
   pid_t pid = getpid();
 
   auto logger_list1 = std::unique_ptr<struct logger_list, ListCloser>{
-      android_logger_list_open(LOG_ID_MAIN, ANDROID_LOG_RDONLY, expected_count1, pid)};
+      android_logger_list_open(LOG_ID_MAIN, 0, expected_count1, pid)};
   ASSERT_TRUE(logger_list1);
 
   auto logger_list2 = std::unique_ptr<struct logger_list, ListCloser>{
-      android_logger_list_open(LOG_ID_MAIN, ANDROID_LOG_RDONLY, expected_count2, pid)};
+      android_logger_list_open(LOG_ID_MAIN, 0, expected_count2, pid)};
   ASSERT_TRUE(logger_list2);
 
   for (int i = 25; i > 0; --i) {
@@ -1128,14 +1126,12 @@ TEST(liblog, dual_reader) {
   }
 
   // Test again with the nonblocking reader.
-  auto logger_list_non_block1 =
-      std::unique_ptr<struct logger_list, ListCloser>{android_logger_list_open(
-          LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, expected_count1, pid)};
+  auto logger_list_non_block1 = std::unique_ptr<struct logger_list, ListCloser>{
+      android_logger_list_open(LOG_ID_MAIN, ANDROID_LOG_NONBLOCK, expected_count1, pid)};
   ASSERT_TRUE(logger_list_non_block1);
 
-  auto logger_list_non_block2 =
-      std::unique_ptr<struct logger_list, ListCloser>{android_logger_list_open(
-          LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, expected_count2, pid)};
+  auto logger_list_non_block2 = std::unique_ptr<struct logger_list, ListCloser>{
+      android_logger_list_open(LOG_ID_MAIN, ANDROID_LOG_NONBLOCK, expected_count2, pid)};
   ASSERT_TRUE(logger_list_non_block2);
   count1 = 0;
   count2 = 0;
@@ -1542,8 +1538,8 @@ static int count_matching_ts(log_time ts) {
 
   pid_t pid = getpid();
 
-  struct logger_list* logger_list = android_logger_list_open(
-      LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid);
+  struct logger_list* logger_list =
+      android_logger_list_open(LOG_ID_EVENTS, ANDROID_LOG_NONBLOCK, 1000, pid);
 
   int count = 0;
   if (logger_list == NULL) return count;
@@ -1832,10 +1828,8 @@ TEST(liblog, __security_buffer) {
   gid = getgid();
   pid_t pid = getpid();
 
-  ASSERT_TRUE(NULL !=
-              (logger_list = android_logger_list_open(
-                   LOG_ID_SECURITY, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK,
-                   1000, pid)));
+  ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(LOG_ID_SECURITY, ANDROID_LOG_NONBLOCK,
+                                                              1000, pid)));
 
   log_time ts(CLOCK_MONOTONIC);
 

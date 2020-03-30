@@ -142,7 +142,9 @@ class SnapshotManager final {
     // be created, and the device must either cancel the OTA (either before
     // rebooting or after rolling back), or merge the OTA.
     // Before calling this function, all snapshots must be mapped.
-    bool FinishedSnapshotWrites();
+    // If |wipe| is set to true, wipe is scheduled after reboot, and snapshots
+    // may need to be merged before wiping.
+    bool FinishedSnapshotWrites(bool wipe);
 
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
@@ -230,7 +232,13 @@ class SnapshotManager final {
     // devices;
     // - CreateResult::ERROR if a fatal error occurred, mounting /system should
     // be aborted.
+    // This function mounts /metadata when called, and unmounts /metadata upon
+    // return.
     CreateResult RecoveryCreateSnapshotDevices();
+
+    // Same as RecoveryCreateSnapshotDevices(), but does not auto mount/umount
+    // /metadata.
+    CreateResult RecoveryCreateSnapshotDevices(const std::unique_ptr<AutoDevice>& metadata_device);
 
     // Dump debug information.
     bool Dump(std::ostream& os);
@@ -446,6 +454,7 @@ class SnapshotManager final {
 
     std::string GetSnapshotBootIndicatorPath();
     std::string GetRollbackIndicatorPath();
+    std::string GetForwardMergeIndicatorPath();
 
     // Return the name of the device holding the "snapshot" or "snapshot-merge"
     // target. This may not be the final device presented via MapSnapshot(), if
@@ -515,6 +524,17 @@ class SnapshotManager final {
     // Check whether |name| should be deleted as a snapshot name.
     bool ShouldDeleteSnapshot(LockedFile* lock, const std::map<std::string, bool>& flashing_status,
                               Slot current_slot, const std::string& name);
+
+    // Create or delete forward merge indicator given |wipe|. Iff wipe is scheduled,
+    // allow forward merge on FDR.
+    bool UpdateForwardMergeIndicator(bool wipe);
+
+    // Helper for HandleImminentDataWipe.
+    // Call ProcessUpdateState and handle states with special rules before data wipe. Specifically,
+    // if |allow_forward_merge| and allow-forward-merge indicator exists, initiate merge if
+    // necessary.
+    bool ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
+                                      const std::function<bool()>& callback);
 
     std::string gsid_dir_;
     std::string metadata_dir_;

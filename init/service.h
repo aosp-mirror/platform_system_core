@@ -130,6 +130,13 @@ class Service {
     bool is_updatable() const { return updatable_; }
     bool is_post_data() const { return post_data_; }
     bool is_from_apex() const { return from_apex_; }
+    void set_oneshot(bool value) {
+        if (value) {
+            flags_ |= SVC_ONESHOT;
+        } else {
+            flags_ &= ~SVC_ONESHOT;
+        }
+    }
 
   private:
     void NotifyStateChange(const std::string& new_state) const;

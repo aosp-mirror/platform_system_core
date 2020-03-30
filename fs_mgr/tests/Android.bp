@@ -18,6 +18,7 @@ cc_test {
         "cts",
         "device-tests",
         "vts",
+        "vts10",
     ],
     compile_multilib: "both",
     multilib: {

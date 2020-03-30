@@ -129,15 +129,21 @@ static void help() {
         " reverse --remove-all     remove all reverse socket connections from device\n"
         "\n"
         "file transfer:\n"
-        " push [--sync] LOCAL... REMOTE\n"
+        " push [--sync] [-zZ] LOCAL... REMOTE\n"
         "     copy local files/directories to device\n"
         "     --sync: only push files that are newer on the host than the device\n"
-        " pull [-a] REMOTE... LOCAL\n"
+        "     -z: enable compression\n"
+        "     -Z: disable compression\n"
+        " pull [-azZ] REMOTE... LOCAL\n"
         "     copy files/dirs from device\n"
         "     -a: preserve file timestamp and mode\n"
-        " sync [all|data|odm|oem|product|system|system_ext|vendor]\n"
+        "     -z: enable compression\n"
+        "     -Z: disable compression\n"
+        " sync [-lzZ] [all|data|odm|oem|product|system|system_ext|vendor]\n"
         "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
         "     -l: list files that would be copied, but don't copy them\n"
+        "     -z: enable compression\n"
+        "     -Z: disable compression\n"
         "\n"
         "shell:\n"
         " shell [-e ESCAPE] [-n] [-Tt] [-x] [COMMAND...]\n"
@@ -1309,8 +1315,12 @@ static int restore(int argc, const char** argv) {
 }
 
 static void parse_push_pull_args(const char** arg, int narg, std::vector<const char*>* srcs,
-                                 const char** dst, bool* copy_attrs, bool* sync) {
+                                 const char** dst, bool* copy_attrs, bool* sync, bool* compressed) {
     *copy_attrs = false;
+    const char* adb_compression = getenv("ADB_COMPRESSION");
+    if (adb_compression && strcmp(adb_compression, "0") == 0) {
+        *compressed = false;
+    }
 
     srcs->clear();
     bool ignore_flags = false;
@@ -1322,6 +1332,14 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
                 // Silently ignore for backwards compatibility.
             } else if (!strcmp(*arg, "-a")) {
                 *copy_attrs = true;
+            } else if (!strcmp(*arg, "-z")) {
+                if (compressed != nullptr) {
+                    *compressed = true;
+                }
+            } else if (!strcmp(*arg, "-Z")) {
+                if (compressed != nullptr) {
+                    *compressed = false;
+                }
             } else if (!strcmp(*arg, "--sync")) {
                 if (sync != nullptr) {
                     *sync = true;
@@ -1441,6 +1459,26 @@ static bool _is_valid_ack_reply_fd(const int ack_reply_fd) {
 #else
     return ack_reply_fd > 2;
 #endif
+}
+
+static bool _is_valid_os_fd(int fd) {
+    // Disallow invalid FDs and stdin/out/err as well.
+    if (fd < 3) {
+        return false;
+    }
+#ifdef _WIN32
+    auto handle = (HANDLE)fd;
+    DWORD info = 0;
+    if (GetHandleInformation(handle, &info) == 0) {
+        return false;
+    }
+#else
+    int flags = fcntl(fd, F_GETFD);
+    if (flags == -1) {
+        return false;
+    }
+#endif
+    return true;
 }
 
 int adb_commandline(int argc, const char** argv) {
@@ -1856,20 +1894,22 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "push")) {
         bool copy_attrs = false;
         bool sync = false;
+        bool compressed = true;
         std::vector<const char*> srcs;
         const char* dst = nullptr;
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync, &compressed);
         if (srcs.empty() || !dst) error_exit("push requires an argument");
-        return do_sync_push(srcs, dst, sync) ? 0 : 1;
+        return do_sync_push(srcs, dst, sync, compressed) ? 0 : 1;
     } else if (!strcmp(argv[0], "pull")) {
         bool copy_attrs = false;
+        bool compressed = true;
         std::vector<const char*> srcs;
         const char* dst = ".";
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr, &compressed);
         if (srcs.empty()) error_exit("pull requires an argument");
-        return do_sync_pull(srcs, dst, copy_attrs) ? 0 : 1;
+        return do_sync_pull(srcs, dst, copy_attrs, compressed) ? 0 : 1;
     } else if (!strcmp(argv[0], "install")) {
         if (argc < 2) error_exit("install requires an argument");
         return install_app(argc, argv);
@@ -1885,18 +1925,38 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "sync")) {
         std::string src;
         bool list_only = false;
-        if (argc < 2) {
-            // No partition specified: sync all of them.
-        } else if (argc >= 2 && strcmp(argv[1], "-l") == 0) {
-            list_only = true;
-            if (argc == 3) src = argv[2];
-        } else if (argc == 2) {
-            src = argv[1];
-        } else {
-            error_exit("usage: adb sync [-l] [PARTITION]");
+        bool compressed = true;
+
+        const char* adb_compression = getenv("ADB_COMPRESSION");
+        if (adb_compression && strcmp(adb_compression, "0") == 0) {
+            compressed = false;
         }
 
-        if (src.empty()) src = "all";
+        int opt;
+        while ((opt = getopt(argc, const_cast<char**>(argv), "lzZ")) != -1) {
+            switch (opt) {
+                case 'l':
+                    list_only = true;
+                    break;
+                case 'z':
+                    compressed = true;
+                    break;
+                case 'Z':
+                    compressed = false;
+                    break;
+                default:
+                    error_exit("usage: adb sync [-lzZ] [PARTITION]");
+            }
+        }
+
+        if (optind == argc) {
+            src = "all";
+        } else if (optind + 1 == argc) {
+            src = argv[optind];
+        } else {
+            error_exit("usage: adb sync [-lzZ] [PARTITION]");
+        }
+
         std::vector<std::string> partitions{"data",   "odm",        "oem",   "product",
                                             "system", "system_ext", "vendor"};
         bool found = false;
@@ -1905,7 +1965,7 @@ int adb_commandline(int argc, const char** argv) {
                 std::string src_dir{product_file(partition)};
                 if (!directory_exists(src_dir)) continue;
                 found = true;
-                if (!do_sync_sync(src_dir, "/" + partition, list_only)) return 1;
+                if (!do_sync_sync(src_dir, "/" + partition, list_only, compressed)) return 1;
             }
         }
         if (!found) error_exit("don't know how to sync %s partition", src.c_str());
@@ -2009,17 +2069,28 @@ int adb_commandline(int argc, const char** argv) {
             }
         }
     } else if (!strcmp(argv[0], "inc-server")) {
-        if (argc < 3) {
-            error_exit("usage: adb inc-server FD FILE1 FILE2 ...");
+        if (argc < 4) {
+#ifdef _WIN32
+            error_exit("usage: adb inc-server CONNECTION_HANDLE OUTPUT_HANDLE FILE1 FILE2 ...");
+#else
+            error_exit("usage: adb inc-server CONNECTION_FD OUTPUT_FD FILE1 FILE2 ...");
+#endif
         }
-        int fd = atoi(argv[1]);
-        if (fd < 3) {
-            // Disallow invalid FDs and stdin/out/err as well.
-            error_exit("Invalid fd number given: %d", fd);
+        int connection_fd = atoi(argv[1]);
+        if (!_is_valid_os_fd(connection_fd)) {
+            error_exit("Invalid connection_fd number given: %d", connection_fd);
         }
-        fd = adb_register_socket(fd);
-        close_on_exec(fd);
-        return incremental::serve(fd, argc - 2, argv + 2);
+
+        connection_fd = adb_register_socket(connection_fd);
+        close_on_exec(connection_fd);
+
+        int output_fd = atoi(argv[2]);
+        if (!_is_valid_os_fd(output_fd)) {
+            error_exit("Invalid output_fd number given: %d", output_fd);
+        }
+        output_fd = adb_register_socket(output_fd);
+        close_on_exec(output_fd);
+        return incremental::serve(connection_fd, output_fd, argc - 3, argv + 3);
     }
 
     error_exit("unknown command %s", argv[0]);

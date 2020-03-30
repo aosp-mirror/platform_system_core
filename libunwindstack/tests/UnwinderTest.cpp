@@ -161,8 +161,8 @@ TEST_F(UnwinderTest, multiple_frames) {
 
   regs_.set_pc(0x1000);
   regs_.set_sp(0x10000);
-  ElfInterfaceFake::FakePushStepData(StepData(0x1102, 0x10010, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x1202, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x1104, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x1204, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
@@ -225,8 +225,8 @@ TEST_F(UnwinderTest, multiple_frames_dont_resolve_names) {
 
   regs_.set_pc(0x1000);
   regs_.set_sp(0x10000);
-  ElfInterfaceFake::FakePushStepData(StepData(0x1102, 0x10010, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x1202, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x1104, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x1204, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
@@ -445,7 +445,7 @@ TEST_F(UnwinderTest, no_frames_after_finished) {
 TEST_F(UnwinderTest, max_frames) {
   for (size_t i = 0; i < 30; i++) {
     ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame" + std::to_string(i), i));
-    ElfInterfaceFake::FakePushStepData(StepData(0x1102 + i * 0x100, 0x10010 + i * 0x10, false));
+    ElfInterfaceFake::FakePushStepData(StepData(0x1104 + i * 0x100, 0x10010 + i * 0x10, false));
   }
 
   regs_.set_pc(0x1000);
@@ -484,12 +484,12 @@ TEST_F(UnwinderTest, verify_frames_skipped) {
 
   regs_.set_pc(0x20000);
   regs_.set_sp(0x10000);
-  ElfInterfaceFake::FakePushStepData(StepData(0x23002, 0x10010, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x23102, 0x10020, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x20002, 0x10030, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x21002, 0x10040, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x23004, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x23104, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x20004, 0x10030, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x21004, 0x10040, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x1002, 0x10050, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x21002, 0x10060, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x21004, 0x10060, false));
   ElfInterfaceFake::FakePushStepData(StepData(0x23002, 0x10070, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
@@ -553,7 +553,7 @@ TEST_F(UnwinderTest, sp_not_in_map) {
 
   regs_.set_pc(0x1000);
   regs_.set_sp(0x63000);
-  ElfInterfaceFake::FakePushStepData(StepData(0x21002, 0x50020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x21004, 0x50020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
@@ -670,10 +670,10 @@ TEST_F(UnwinderTest, speculative_frame) {
   // Fake as if code called a nullptr function.
   regs_.set_pc(0);
   regs_.set_sp(0x10000);
-  regs_.FakeSetReturnAddress(0x1202);
+  regs_.FakeSetReturnAddress(0x1204);
   regs_.FakeSetReturnAddressValid(true);
 
-  ElfInterfaceFake::FakePushStepData(StepData(0x23102, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x23104, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
@@ -789,7 +789,7 @@ TEST_F(UnwinderTest, speculative_frame_not_removed_pc_bad) {
   // Fake as if code called a nullptr function.
   regs_.set_pc(0);
   regs_.set_sp(0x10000);
-  regs_.FakeSetReturnAddress(0x1202);
+  regs_.FakeSetReturnAddress(0x1204);
   regs_.FakeSetReturnAddressValid(true);
 
   Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
@@ -858,8 +858,8 @@ TEST_F(UnwinderTest, map_ignore_suffixes) {
   // Fake as if code called a nullptr function.
   regs_.set_pc(0x1000);
   regs_.set_sp(0x10000);
-  ElfInterfaceFake::FakePushStepData(StepData(0x43402, 0x10010, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x53502, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x43404, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x53504, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
@@ -915,11 +915,11 @@ TEST_F(UnwinderTest, sp_pc_do_not_change) {
 
   regs_.set_pc(0x1000);
   regs_.set_sp(0x10000);
-  ElfInterfaceFake::FakePushStepData(StepData(0x33402, 0x10010, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
-  ElfInterfaceFake::FakePushStepData(StepData(0x33502, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33404, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33504, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33504, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33504, 0x10020, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33504, 0x10020, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
@@ -1113,7 +1113,7 @@ TEST_F(UnwinderTest, dex_pc_multiple_frames) {
   regs_.set_pc(0x1000);
   regs_.set_sp(0x10000);
   regs_.FakeSetDexPc(0xa3400);
-  ElfInterfaceFake::FakePushStepData(StepData(0x33402, 0x10010, false));
+  ElfInterfaceFake::FakePushStepData(StepData(0x33404, 0x10010, false));
   ElfInterfaceFake::FakePushStepData(StepData(0, 0, true));
 
   Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);

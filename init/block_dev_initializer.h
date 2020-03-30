@@ -1,4 +1,3 @@
-//
 // Copyright (C) 2020 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,27 +11,31 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
 
-cc_test {
-    name: "adb_pairing_auth_test",
-    srcs: [
-        "aes_128_gcm_test.cpp",
-        "pairing_auth_test.cpp",
-    ],
+#include <memory>
+#include <set>
+#include <string>
 
-    compile_multilib: "first",
+#include "devices.h"
+#include "uevent_listener.h"
 
-    shared_libs: [
-        "libbase",
-        "libcrypto",
-    ],
+namespace android {
+namespace init {
 
-    // Let's statically link them so we don't have to install it onto the
-    // system image for testing.
-    static_libs: [
-        "libadb_pairing_auth_static",
-    ],
+class BlockDevInitializer final {
+  public:
+    BlockDevInitializer();
 
-    test_suites: ["device-tests"],
-}
+    bool InitDeviceMapper();
+    bool InitDevices(std::set<std::string> devices);
+    bool InitDmDevice(const std::string& device);
+
+  private:
+    ListenerAction HandleUevent(const Uevent& uevent, std::set<std::string>* devices);
+
+    std::unique_ptr<DeviceHandler> device_handler_;
+    UeventListener uevent_listener_;
+};
+
+}  // namespace init
+}  // namespace android
