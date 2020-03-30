@@ -95,56 +95,6 @@ unique_fd service_to_fd(std::string_view name, atransport* transport) {
 }
 
 #if ADB_HOST
-struct state_info {
-    TransportType transport_type;
-    std::string serial;
-    TransportId transport_id;
-    ConnectionState state;
-};
-
-static void wait_for_state(unique_fd fd, state_info* sinfo) {
-    D("wait_for_state %d", sinfo->state);
-
-    while (true) {
-        bool is_ambiguous = false;
-        std::string error = "unknown error";
-        const char* serial = sinfo->serial.length() ? sinfo->serial.c_str() : nullptr;
-        atransport* t = acquire_one_transport(sinfo->transport_type, serial, sinfo->transport_id,
-                                              &is_ambiguous, &error);
-        if (sinfo->state == kCsOffline) {
-            // wait-for-disconnect uses kCsOffline, we don't actually want to wait for 'offline'.
-            if (t == nullptr) {
-                SendOkay(fd);
-                break;
-            }
-        } else if (t != nullptr &&
-                   (sinfo->state == kCsAny || sinfo->state == t->GetConnectionState())) {
-            SendOkay(fd);
-            break;
-        }
-
-        if (!is_ambiguous) {
-            adb_pollfd pfd = {.fd = fd.get(), .events = POLLIN};
-            int rc = adb_poll(&pfd, 1, 100);
-            if (rc < 0) {
-                SendFail(fd, error);
-                break;
-            } else if (rc > 0 && (pfd.revents & POLLHUP) != 0) {
-                // The other end of the socket is closed, probably because the other side was
-                // terminated, bail out.
-                break;
-            }
-
-            // Try again...
-        } else {
-            SendFail(fd, error);
-            break;
-        }
-    }
-
-    D("wait_for_state is done");
-}
-
 void connect_emulator(const std::string& port_spec, std::string* response) {
     std::vector<std::string> pieces = android::base::Split(port_spec, ",");
     if (pieces.size() != 2) {
@@ -201,6 +151,80 @@ static void pair_service(unique_fd fd, std::string host, std::string password) {
     adb_wifi_pair_device(host, password, response);
     SendProtocolString(fd.get(), response);
 }
+
+static void wait_service(unique_fd fd, std::string serial, TransportId transport_id,
+                         std::string spec) {
+    std::vector<std::string> components = android::base::Split(spec, "-");
+    if (components.size() < 2) {
+        SendFail(fd, "short wait-for-: " + spec);
+        return;
+    }
+
+    TransportType transport_type;
+    if (components[0] == "local") {
+        transport_type = kTransportLocal;
+    } else if (components[0] == "usb") {
+        transport_type = kTransportUsb;
+    } else if (components[0] == "any") {
+        transport_type = kTransportAny;
+    } else {
+        SendFail(fd, "bad wait-for- transport: " + spec);
+        return;
+    }
+
+    std::vector<ConnectionState> states;
+    for (size_t i = 1; i < components.size(); ++i) {
+        if (components[i] == "device") {
+            states.push_back(kCsDevice);
+        } else if (components[i] == "recovery") {
+            states.push_back(kCsRecovery);
+        } else if (components[i] == "rescue") {
+            states.push_back(kCsRescue);
+        } else if (components[i] == "sideload") {
+            states.push_back(kCsSideload);
+        } else if (components[i] == "bootloader") {
+            states.push_back(kCsBootloader);
+        } else if (components[i] == "any") {
+            states.push_back(kCsAny);
+        } else if (components[i] == "disconnect") {
+            states.push_back(kCsOffline);
+        } else {
+            SendFail(fd, "bad wait-for- state: " + spec);
+            return;
+        }
+    }
+
+    while (true) {
+        bool is_ambiguous = false;
+        std::string error = "unknown error";
+        atransport* t =
+                acquire_one_transport(transport_type, !serial.empty() ? serial.c_str() : nullptr,
+                                      transport_id, &is_ambiguous, &error);
+
+        for (const auto& state : states) {
+            // wait-for-disconnect uses kCsOffline, we don't actually want to wait for 'offline'.
+            if ((t == nullptr && state == kCsOffline) || (t != nullptr && state == kCsAny) ||
+                (t != nullptr && state == t->GetConnectionState())) {
+                SendOkay(fd);
+                return;
+            }
+        }
+
+        if (is_ambiguous) {
+            SendFail(fd, error);
+            return;
+        }
+
+        // Sleep before retrying.
+        adb_pollfd pfd = {.fd = fd.get(), .events = POLLIN};
+        if (adb_poll(&pfd, 1, 100) != 0) {
+            // The other end of the socket is closed, probably because the
+            // client terminated. Bail out.
+            SendFail(fd, error);
+            return;
+        }
+    }
+}
 #endif
 
 #if ADB_HOST
@@ -211,45 +235,10 @@ asocket* host_service_to_socket(std::string_view name, std::string_view serial,
     } else if (name == "track-devices-l") {
         return create_device_tracker(true);
     } else if (android::base::ConsumePrefix(&name, "wait-for-")) {
-        std::shared_ptr<state_info> sinfo = std::make_shared<state_info>();
-        if (sinfo == nullptr) {
-            fprintf(stderr, "couldn't allocate state_info: %s", strerror(errno));
-            return nullptr;
-        }
-
-        sinfo->serial = serial;
-        sinfo->transport_id = transport_id;
-
-        if (android::base::ConsumePrefix(&name, "local")) {
-            sinfo->transport_type = kTransportLocal;
-        } else if (android::base::ConsumePrefix(&name, "usb")) {
-            sinfo->transport_type = kTransportUsb;
-        } else if (android::base::ConsumePrefix(&name, "any")) {
-            sinfo->transport_type = kTransportAny;
-        } else {
-            return nullptr;
-        }
-
-        if (name == "-device") {
-            sinfo->state = kCsDevice;
-        } else if (name == "-recovery") {
-            sinfo->state = kCsRecovery;
-        } else if (name == "-rescue") {
-            sinfo->state = kCsRescue;
-        } else if (name == "-sideload") {
-            sinfo->state = kCsSideload;
-        } else if (name == "-bootloader") {
-            sinfo->state = kCsBootloader;
-        } else if (name == "-any") {
-            sinfo->state = kCsAny;
-        } else if (name == "-disconnect") {
-            sinfo->state = kCsOffline;
-        } else {
-            return nullptr;
-        }
-
-        unique_fd fd = create_service_thread(
-                "wait", [sinfo](unique_fd fd) { wait_for_state(std::move(fd), sinfo.get()); });
+        std::string spec(name);
+        unique_fd fd =
+                create_service_thread("wait", std::bind(wait_service, std::placeholders::_1,
+                                                        std::string(serial), transport_id, spec));
         return create_local_socket(std::move(fd));
     } else if (android::base::ConsumePrefix(&name, "connect:")) {
         std::string host(name);

@@ -16,6 +16,7 @@
 
 #if !ADB_HOST
 
+#if !defined(__ANDROID_RECOVERY__)
 #define TRACE_TAG JDWP
 
 #include "sysdeps.h"
@@ -459,7 +460,7 @@ static int jdwp_tracker_enqueue(asocket* s, apacket::payload_type) {
     return -1;
 }
 
-asocket* create_process_tracker_service_socket(TrackerKind kind) {
+static asocket* create_process_tracker_service_socket(TrackerKind kind) {
     auto t = std::make_unique<JdwpTracker>(kind, true);
     if (!t) {
         LOG(FATAL) << "failed to allocate JdwpTracker";
@@ -509,4 +510,28 @@ int init_jdwp(void) {
     return 0;
 }
 
+#else  // !defined(__ANDROID_RECOVERY)
+#include "adb.h"
+
+asocket* create_jdwp_service_socket(void) {
+    return nullptr;
+}
+
+unique_fd create_jdwp_connection_fd(int pid) {
+    return {};
+}
+
+asocket* create_app_tracker_service_socket() {
+    return nullptr;
+}
+
+asocket* create_jdwp_tracker_service_socket() {
+    return nullptr;
+}
+
+int init_jdwp() {
+    return 0;
+}
+
+#endif /* defined(__ANDROID_RECOVERY__) */
 #endif /* !ADB_HOST */

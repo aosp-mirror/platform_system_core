@@ -276,6 +276,7 @@ inline void seekdir(DIR*, long) {
 class Process {
   public:
     constexpr explicit Process(HANDLE h = nullptr) : h_(h) {}
+    constexpr Process(Process&& other) : h_(std::exchange(other.h_, nullptr)) {}
     ~Process() { close(); }
     constexpr explicit operator bool() const { return h_ != nullptr; }
 
@@ -292,6 +293,8 @@ class Process {
     }
 
   private:
+    DISALLOW_COPY_AND_ASSIGN(Process);
+
     void close() {
         if (*this) {
             ::CloseHandle(h_);
@@ -662,10 +665,16 @@ static __inline__ int adb_get_os_handle(borrowed_fd fd) {
     return fd.get();
 }
 
+static __inline__ int cast_handle_to_int(int fd) {
+    return fd;
+}
+
 // A very simple wrapper over a launched child process
 class Process {
   public:
     constexpr explicit Process(pid_t pid) : pid_(pid) {}
+    constexpr Process(Process&& other) : pid_(std::exchange(other.pid_, -1)) {}
+
     constexpr explicit operator bool() const { return pid_ >= 0; }
 
     void wait() {
@@ -682,6 +691,8 @@ class Process {
     }
 
   private:
+    DISALLOW_COPY_AND_ASSIGN(Process);
+
     pid_t pid_;
 };
 

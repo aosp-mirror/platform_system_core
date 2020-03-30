@@ -141,10 +141,6 @@ ssize_t android_logger_get_prune_list(struct logger_list* logger_list,
                                       char* buf, size_t len);
 int android_logger_set_prune_list(struct logger_list* logger_list, const char* buf, size_t len);
 
-#define ANDROID_LOG_RDONLY O_RDONLY
-#define ANDROID_LOG_WRONLY O_WRONLY
-#define ANDROID_LOG_RDWR O_RDWR
-#define ANDROID_LOG_ACCMODE O_ACCMODE
 #ifndef O_NONBLOCK
 #define ANDROID_LOG_NONBLOCK 0x00000800
 #else
