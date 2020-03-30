@@ -1498,7 +1498,7 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
-    EXPECT_FALSE(test_device->IsSlotUnbootable(0));
+    EXPECT_FALSE(test_device->IsSlotUnbootable(1));
 }
 
 TEST_F(SnapshotUpdateTest, Hashtree) {
