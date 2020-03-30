@@ -298,6 +298,7 @@ cc_binary_host {
         "client/fastdeploycallbacks.cpp",
         "client/incremental.cpp",
         "client/incremental_server.cpp",
+        "client/incremental_utils.cpp",
         "shell_service_protocol.cpp",
     ],
 
@@ -316,6 +317,7 @@ cc_binary_host {
         "libandroidfw",
         "libapp_processes_protos_full",
         "libbase",
+        "libbrotli",
         "libcutils",
         "libcrypto_utils",
         "libcrypto",
@@ -387,17 +389,17 @@ cc_library_static {
     generated_headers: ["platform_tools_version"],
 
     static_libs: [
-        "libadbconnection_server",
-        "libapp_processes_protos_lite",
         "libdiagnose_usb",
     ],
 
     shared_libs: [
+        "libadbconnection_server",
         "libadb_crypto",
         "libadb_pairing_connection",
         "libadb_protos",
         "libadb_tls_connection",
         "libadbd_auth",
+        "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
         "libcrypto",
@@ -432,9 +434,19 @@ cc_library_static {
             exclude_shared_libs: [
                 "libadb_pairing_auth",
                 "libadb_pairing_connection",
+                "libapp_processes_protos_lite",
             ],
         }
     },
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adbd",
+    ],
+    visibility: [
+        "//bootable/recovery/minadbd",
+        "//system/core/adb",
+    ],
 }
 
 cc_library {
@@ -458,9 +470,8 @@ cc_library {
     static_libs: [
         "libadbconnection_server",
         "libadbd_core",
-        "libapp_processes_protos_lite",
+        "libbrotli",
         "libdiagnose_usb",
-        "libprotobuf-cpp-lite",
     ],
 
     shared_libs: [
@@ -470,12 +481,14 @@ cc_library {
         "libadb_tls_connection",
         "libadbd_auth",
         "libadbd_fs",
+        "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
         "libcutils_sockets",
         "liblog",
+        "libprotobuf-cpp-lite",
     ],
 
     target: {
@@ -501,12 +514,22 @@ cc_library {
             ],
         },
     },
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adbd",
+    ],
+    visibility: [
+        "//system/core/adb",
+    ],
+
 }
 
 cc_library {
     name: "libadbd",
     defaults: ["adbd_defaults", "host_adbd_supported"],
     recovery_available: true,
+    apex_available: ["com.android.adbd"],
 
     // avoid getting duplicate symbol of android::build::getbuildnumber().
     use_version_lib: false,
@@ -514,15 +537,14 @@ cc_library {
     // libminadbd wants both, as it's used to build native tests.
     compile_multilib: "both",
 
-    // libadbd doesn't build any additional source, but to expose libadbd_core as a shared library.
     whole_static_libs: [
-        "libadbconnection_server",
         "libadbd_core",
-        "libapp_processes_protos_lite",
-        "libprotobuf-cpp-lite",
     ],
 
     shared_libs: [
+        "libadbconnection_server",
+        "libapp_processes_protos_lite",
+        "libprotobuf-cpp-lite",
         "libadb_crypto",
         "libadb_pairing_connection",
         "libadb_tls_connection",
@@ -547,6 +569,7 @@ cc_library {
     },
 
     static_libs: [
+        "libbrotli",
         "libcutils_sockets",
         "libdiagnose_usb",
         "libmdnssd",
@@ -562,6 +585,7 @@ cc_binary {
     defaults: ["adbd_defaults", "host_adbd_supported"],
     stl: "libc++_static",
     recovery_available: true,
+    apex_available: ["com.android.adbd"],
 
     srcs: [
         "daemon/main.cpp",
@@ -585,6 +609,7 @@ cc_binary {
         "libapp_processes_protos_lite",
         "libasyncio",
         "libbase",
+        "libbrotli",
         "libcap",
         "libcrypto_utils",
         "libcutils_sockets",

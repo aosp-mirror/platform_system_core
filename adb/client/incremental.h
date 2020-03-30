@@ -25,6 +25,12 @@
 
 namespace incremental {
 
-std::optional<Process> install(std::vector<std::string> files);
+using Files = std::vector<std::string>;
+
+bool can_install(const Files& files);
+std::optional<Process> install(const Files& files, bool silent);
+
+enum class Result { Success, Failure, None };
+Result wait_for_installation(int read_fd);
 
 }  // namespace incremental

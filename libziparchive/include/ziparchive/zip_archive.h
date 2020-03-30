@@ -126,6 +126,9 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle);
 int32_t OpenArchiveFd(const int fd, const char* debugFileName, ZipArchiveHandle* handle,
                       bool assume_ownership = true);
 
+int32_t OpenArchiveFdRange(const int fd, const char* debugFileName, ZipArchiveHandle* handle,
+                           off64_t length, off64_t offset, bool assume_ownership = true);
+
 int32_t OpenArchiveFromMemory(const void* address, size_t length, const char* debugFileName,
                               ZipArchiveHandle* handle);
 /*
@@ -142,7 +145,7 @@ struct ZipArchiveInfo {
   /** The size in bytes of the archive itself. Used by zipinfo. */
   off64_t archive_size;
   /** The number of entries in the archive. */
-  size_t entry_count;
+  uint64_t entry_count;
 };
 
 /**
@@ -185,6 +188,15 @@ int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
                        const std::string_view optional_suffix = "");
 
 /*
+ * Start iterating over all entries of a zip file. Use the matcher functor to
+ * restrict iteration to entry names that make the functor return true.
+ *
+ * Returns 0 on success and negative values on failure.
+ */
+int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
+                       std::function<bool(std::string_view entry_name)> matcher);
+
+/*
  * Advance to the next element in the zipfile in iteration order.
  *
  * Returns 0 on success, -1 if there are no more elements in this
@@ -221,6 +233,12 @@ int32_t ExtractEntryToFile(ZipArchiveHandle archive, ZipEntry* entry, int fd);
 int32_t ExtractToMemory(ZipArchiveHandle archive, ZipEntry* entry, uint8_t* begin, uint32_t size);
 
 int GetFileDescriptor(const ZipArchiveHandle archive);
+
+/**
+ * Returns the offset of the zip archive in the backing file descriptor, or 0 if the zip archive is
+ * not backed by a file descriptor.
+ */
+off64_t GetFileDescriptorOffset(const ZipArchiveHandle archive);
 
 const char* ErrorCodeString(int32_t error_code);
 

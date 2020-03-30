@@ -1,6 +1,6 @@
 LIBLOG {
   global:
-    android_name_to_log_id; # llndk
+    android_name_to_log_id; # apex llndk
     android_log_id_to_name; # llndk
     __android_log_assert;
     __android_log_buf_print;
@@ -22,7 +22,7 @@ LIBLOG_L {
     android_logger_list_alloc; # apex llndk
     android_logger_list_alloc_time; # apex llndk
     android_logger_list_free; # apex llndk
-    android_logger_list_open; # llndk
+    android_logger_list_open; # apex llndk
     android_logger_list_read; # apex llndk
     android_logger_open; # apex llndk
     android_logger_set_log_size; # llndk
@@ -65,7 +65,7 @@ LIBLOG_Q { # introduced=29
     android_log_parser_reset; # llndk
 };
 
-LIGLOG_R { # introduced=30
+LIBLOG_R { # introduced=30
   global:
     __android_log_call_aborter;
     __android_log_default_aborter;
@@ -77,7 +77,7 @@ LIGLOG_R { # introduced=30
     __android_log_set_logger;
     __android_log_set_minimum_priority;
     __android_log_stderr_logger;
-    __android_log_write_logger_data;
+    __android_log_write_log_message;
 };
 
 LIBLOG_PRIVATE {

@@ -47,12 +47,7 @@ struct fdevent_context_epoll final : public fdevent_context {
   protected:
     virtual void Interrupt() final;
 
-  public:
-    // All operations to fdevent should happen only in the main thread.
-    // That's why we don't need a lock for fdevent.
-    std::unordered_map<int, fdevent*> epoll_node_map_;
-    std::list<fdevent*> pending_list_;
-
+  private:
     unique_fd epoll_fd_;
     unique_fd interrupt_fd_;
     fdevent* interrupt_fde_ = nullptr;

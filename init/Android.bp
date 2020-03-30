@@ -36,6 +36,7 @@ init_common_sources = [
     "util.cpp",
 ]
 init_device_sources = [
+    "block_dev_initializer.cpp",
     "bootchart.cpp",
     "builtins.cpp",
     "devices.cpp",
@@ -81,6 +82,7 @@ cc_defaults {
         "-Wextra",
         "-Wno-unused-parameter",
         "-Werror",
+        "-Wthread-safety",
         "-DALLOW_FIRST_STAGE_CONSOLE=0",
         "-DALLOW_LOCAL_PROP_OVERRIDE=0",
         "-DALLOW_PERMISSIVE_SELINUX=0",
@@ -239,6 +241,7 @@ cc_test {
         "firmware_handler_test.cpp",
         "init_test.cpp",
         "keychords_test.cpp",
+        "oneshot_on_test.cpp",
         "persistent_properties_test.cpp",
         "property_service_test.cpp",
         "property_type_test.cpp",
@@ -256,6 +259,7 @@ cc_test {
         "cts",
         "device-tests",
         "vts",
+        "vts10",
     ],
 }
 

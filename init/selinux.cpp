@@ -63,12 +63,15 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <fs_avb/fs_avb.h>
+#include <fs_mgr.h>
 #include <libgsi/libgsi.h>
 #include <libsnapshot/snapshot.h>
 #include <selinux/android.h>
 
+#include "block_dev_initializer.h"
 #include "debug_ramdisk.h"
 #include "reboot_utils.h"
 #include "util.h"
@@ -539,9 +542,9 @@ void SelinuxRestoreContext() {
 
     // adb remount, snapshot-based updates, and DSUs all create files during
     // first-stage init.
-    selinux_android_restorecon("/metadata", SELINUX_ANDROID_RESTORECON_RECURSE);
-
     selinux_android_restorecon(SnapshotManager::GetGlobalRollbackIndicatorPath().c_str(), 0);
+    selinux_android_restorecon("/metadata/gsi", SELINUX_ANDROID_RESTORECON_RECURSE |
+                                                        SELINUX_ANDROID_RESTORECON_SKIP_SEHASH);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {
@@ -598,6 +601,74 @@ int SelinuxGetVendorAndroidVersion() {
     return vendor_android_version;
 }
 
+// This is for R system.img/system_ext.img to work on old vendor.img as system_ext.img
+// is introduced in R. We mount system_ext in second stage init because the first-stage
+// init in boot.img won't be updated in the system-only OTA scenario.
+void MountMissingSystemPartitions() {
+    android::fs_mgr::Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        LOG(ERROR) << "Could not read default fstab";
+    }
+
+    android::fs_mgr::Fstab mounts;
+    if (!ReadFstabFromFile("/proc/mounts", &mounts)) {
+        LOG(ERROR) << "Could not read /proc/mounts";
+    }
+
+    static const std::vector<std::string> kPartitionNames = {"system_ext", "product"};
+
+    android::fs_mgr::Fstab extra_fstab;
+    for (const auto& name : kPartitionNames) {
+        if (GetEntryForMountPoint(&mounts, "/"s + name)) {
+            // The partition is already mounted.
+            continue;
+        }
+
+        auto system_entry = GetEntryForMountPoint(&fstab, "/system");
+        if (!system_entry) {
+            LOG(ERROR) << "Could not find mount entry for /system";
+            break;
+        }
+        if (!system_entry->fs_mgr_flags.logical) {
+            LOG(INFO) << "Skipping mount of " << name << ", system is not dynamic.";
+            break;
+        }
+
+        auto entry = *system_entry;
+        auto partition_name = name + fs_mgr_get_slot_suffix();
+        auto replace_name = "system"s + fs_mgr_get_slot_suffix();
+
+        entry.mount_point = "/"s + name;
+        entry.blk_device =
+                android::base::StringReplace(entry.blk_device, replace_name, partition_name, false);
+        if (!fs_mgr_update_logical_partition(&entry)) {
+            LOG(ERROR) << "Could not update logical partition";
+            continue;
+        }
+
+        extra_fstab.emplace_back(std::move(entry));
+    }
+
+    SkipMountingPartitions(&extra_fstab);
+    if (extra_fstab.empty()) {
+        return;
+    }
+
+    BlockDevInitializer block_dev_init;
+    for (auto& entry : extra_fstab) {
+        if (access(entry.blk_device.c_str(), F_OK) != 0) {
+            auto block_dev = android::base::Basename(entry.blk_device);
+            if (!block_dev_init.InitDmDevice(block_dev)) {
+                LOG(ERROR) << "Failed to find device-mapper node: " << block_dev;
+                continue;
+            }
+        }
+        if (fs_mgr_do_mount_one(entry)) {
+            LOG(ERROR) << "Could not mount " << entry.mount_point;
+        }
+    }
+}
+
 int SetupSelinux(char** argv) {
     SetStdioToDevNull(argv);
     InitKernelLogging(argv);
@@ -607,6 +678,8 @@ int SetupSelinux(char** argv) {
     }
 
     boot_clock::time_point start_time = boot_clock::now();
+
+    MountMissingSystemPartitions();
 
     // Set up SELinux, loading the SELinux policy.
     SelinuxSetupKernelLogging();

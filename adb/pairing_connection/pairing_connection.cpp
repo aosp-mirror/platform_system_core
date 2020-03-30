@@ -278,13 +278,13 @@ bool PairingConnectionCtx::Start(int fd, ResultCallback cb, void* opaque) {
     if (fd < 0) {
         return false;
     }
+    fd_.reset(fd);
 
     State expected = State::Ready;
     if (!state_.compare_exchange_strong(expected, State::ExchangingMsgs)) {
         return false;
     }
 
-    fd_.reset(fd);
     cb_ = cb;
     opaque_ = opaque;
 

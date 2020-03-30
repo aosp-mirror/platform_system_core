@@ -52,13 +52,6 @@ void RegsArm64::set_sp(uint64_t sp) {
   regs_[ARM64_REG_SP] = sp;
 }
 
-uint64_t RegsArm64::GetPcAdjustment(uint64_t rel_pc, Elf*) {
-  if (rel_pc < 4) {
-    return 0;
-  }
-  return 4;
-}
-
 bool RegsArm64::SetPcFromReturnAddress(Memory*) {
   uint64_t lr = regs_[ARM64_REG_LR];
   if (regs_[ARM64_REG_PC] == lr) {

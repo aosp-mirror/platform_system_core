@@ -16,17 +16,12 @@
 
 #pragma once
 
-#include <openssl/aes.h>
-#include <openssl/cipher.h>
-
 #include <stdint.h>
 
-#include "adb/pairing/counter.h"
+#include <optional>
+#include <vector>
 
-// This is the default size of the initialization vector (iv) for AES-128-GCM
-#define AES_128_GCM_IV_SIZE 12
-// This is the full tag size for AES-128-GCM
-#define AES_128_GCM_TAG_SIZE 16
+#include <openssl/aead.h>
 
 namespace adb {
 namespace pairing {
@@ -42,7 +37,7 @@ class Aes128Gcm {
     // suitable for decryption with this class.
     // The method returns the number of bytes placed in |out| on success and a
     // negative value if an error occurs.
-    int Encrypt(const uint8_t* in, size_t in_len, uint8_t* out, size_t out_len);
+    std::optional<size_t> Encrypt(const uint8_t* in, size_t in_len, uint8_t* out, size_t out_len);
     // Decrypt a block of data in |in| of length |in_len|, this consumes all data
     // in |in_len| bytes of data. The decrypted output is placed in the |out|
     // buffer of length |out_len|. On successful decryption the number of bytes in
@@ -50,22 +45,18 @@ class Aes128Gcm {
     // The method returns the number of bytes consumed from the |in| buffer. If
     // there is not enough data available in |in| the method returns zero. If
     // an error occurs the method returns a negative value.
-    int Decrypt(const uint8_t* in, size_t in_len, uint8_t* out, size_t out_len);
+    std::optional<size_t> Decrypt(const uint8_t* in, size_t in_len, uint8_t* out, size_t out_len);
 
     // Return a safe amount of buffer storage needed to encrypt |size| bytes.
     size_t EncryptedSize(size_t size);
-    // Return a safe amount of buffer storage needed to decrypt the encrypted
-    // data in |encrypted_data| which is of length |encrypted_size|. Returns 0 if
-    // there is not enough data available to determine the required size.
-    size_t DecryptedSize(const uint8_t* encrypted_data, size_t encrypted_size);
-
-    static const EVP_CIPHER* cipher_;
+    // Return a safe amount of buffer storage needed to decrypt |size| bytes.
+    size_t DecryptedSize(size_t size);
 
   private:
-    bssl::UniquePtr<EVP_CIPHER_CTX> context_;
-    AES_KEY aes_key_;
-    // We're going to use this counter for our iv so that it never repeats
-    Counter<AES_128_GCM_IV_SIZE> counter_;
+    bssl::ScopedEVP_AEAD_CTX context_;
+    // Sequence numbers to use as nonces in the encryption scheme
+    uint64_t dec_sequence_ = 0;
+    uint64_t enc_sequence_ = 0;
 };
 
 }  // namespace pairing
