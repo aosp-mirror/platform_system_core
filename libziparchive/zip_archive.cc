@@ -162,8 +162,10 @@ static ZipError FindCentralDirectoryInfoForZip64(const char* debugFileName, ZipA
   }
 
   const int64_t zip64EocdOffset = zip64EocdLocator.zip64_eocd_offset;
-  if (zip64EocdOffset > locatorOffset - sizeof(Zip64EocdRecord)) {
-    ALOGW("Zip: %s: Bad zip64 eocd offset %" PRIu64, debugFileName, zip64EocdOffset);
+  if (locatorOffset <= sizeof(Zip64EocdRecord) ||
+      zip64EocdOffset > locatorOffset - sizeof(Zip64EocdRecord)) {
+    ALOGW("Zip: %s: Bad zip64 eocd offset %" PRId64 ", eocd locator offset %" PRId64, debugFileName,
+          zip64EocdOffset, locatorOffset);
     return kInvalidOffset;
   }
 
@@ -171,7 +173,7 @@ static ZipError FindCentralDirectoryInfoForZip64(const char* debugFileName, ZipA
   if (!archive->mapped_zip.ReadAtOffset(reinterpret_cast<uint8_t*>(&zip64EocdRecord),
                                         sizeof(Zip64EocdRecord), zip64EocdOffset)) {
     ALOGW("Zip: %s: read %zu from offset %" PRId64 " failed %s", debugFileName,
-          sizeof(Zip64EocdLocator), static_cast<int64_t>(zip64EocdOffset), debugFileName);
+          sizeof(Zip64EocdLocator), zip64EocdOffset, debugFileName);
     return kIoError;
   }
 
@@ -181,7 +183,8 @@ static ZipError FindCentralDirectoryInfoForZip64(const char* debugFileName, ZipA
     return kInvalidFile;
   }
 
-  if (zip64EocdRecord.cd_start_offset > zip64EocdOffset - zip64EocdRecord.cd_size) {
+  if (zip64EocdOffset <= zip64EocdRecord.cd_size ||
+      zip64EocdRecord.cd_start_offset > zip64EocdOffset - zip64EocdRecord.cd_size) {
     ALOGW("Zip: %s: Bad offset for zip64 central directory. cd offset %" PRIu64 ", cd size %" PRIu64
           ", zip64 eocd offset %" PRIu64,
           debugFileName, zip64EocdRecord.cd_start_offset, zip64EocdRecord.cd_size, zip64EocdOffset);
