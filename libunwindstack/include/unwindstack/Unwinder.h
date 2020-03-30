@@ -114,6 +114,13 @@ class Unwinder {
   ErrorCode LastErrorCode() { return last_error_.code; }
   uint64_t LastErrorAddress() { return last_error_.address; }
 
+  // Builds a frame for symbolization using the maps from this unwinder. The
+  // constructed frame contains just enough information to be used to symbolize
+  // frames collected by frame-pointer unwinding that's done outside of
+  // libunwindstack. This is used by tombstoned to symbolize frame pointer-based
+  // stack traces that are collected by tools such as GWP-ASan and MTE.
+  FrameData BuildFrameFromPcOnly(uint64_t pc);
+
  protected:
   Unwinder(size_t max_frames) : max_frames_(max_frames) { frames_.reserve(max_frames); }
 
