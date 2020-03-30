@@ -2505,7 +2505,9 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
     }
 
     UpdateState state = ProcessUpdateState([&]() -> bool {
-        callback();
+        if (callback) {
+            callback();
+        }
         return true;
     });
     LOG(INFO) << "Update state in recovery: " << state;
