@@ -349,7 +349,7 @@ noinline int do_action(const char* arg) {
 int main(int argc, char** argv) {
 #if defined(STATIC_CRASHER)
     debuggerd_callbacks_t callbacks = {
-      .get_abort_message = []() {
+      .get_process_info = []() {
         static struct {
           size_t size;
           char msg[32];
@@ -357,7 +357,9 @@ int main(int argc, char** argv) {
 
         msg.size = strlen("dummy abort message");
         memcpy(msg.msg, "dummy abort message", strlen("dummy abort message"));
-        return reinterpret_cast<abort_msg_t*>(&msg);
+        return debugger_process_info{
+            .abort_msg = reinterpret_cast<void*>(&msg),
+        };
       },
       .post_dump = nullptr
     };

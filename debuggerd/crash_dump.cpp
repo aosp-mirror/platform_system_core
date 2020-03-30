@@ -264,15 +264,13 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
     ssize_t expected_size = 0;
     switch (crash_info->header.version) {
       case 1:
-        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV1);
-        break;
-
       case 2:
-        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV2);
+      case 3:
+        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic);
         break;
 
-      case 3:
-        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV3);
+      case 4:
+        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic);
         break;
 
       default:
@@ -280,25 +278,25 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
         break;
     };
 
-    if (rc != expected_size) {
+    if (rc < expected_size) {
       LOG(FATAL) << "read " << rc << " bytes when reading target crash information, expected "
                  << expected_size;
     }
   }
 
   switch (crash_info->header.version) {
-    case 3:
-      process_info->gwp_asan_state = crash_info->data.v3.gwp_asan_state;
-      process_info->gwp_asan_metadata = crash_info->data.v3.gwp_asan_metadata;
-      FALLTHROUGH_INTENDED;
-    case 2:
-      process_info->fdsan_table_address = crash_info->data.v2.fdsan_table_address;
+    case 4:
+      process_info->fdsan_table_address = crash_info->data.d.fdsan_table_address;
+      process_info->gwp_asan_state = crash_info->data.d.gwp_asan_state;
+      process_info->gwp_asan_metadata = crash_info->data.d.gwp_asan_metadata;
       FALLTHROUGH_INTENDED;
     case 1:
-      process_info->abort_msg_address = crash_info->data.v1.abort_msg_address;
-      *siginfo = crash_info->data.v1.siginfo;
+    case 2:
+    case 3:
+      process_info->abort_msg_address = crash_info->data.s.abort_msg_address;
+      *siginfo = crash_info->data.s.siginfo;
       regs->reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(),
-                                                        &crash_info->data.v1.ucontext));
+                                                        &crash_info->data.s.ucontext));
       break;
 
     default:
