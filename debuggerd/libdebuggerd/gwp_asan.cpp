@@ -157,60 +157,6 @@ void GwpAsanCrashData::DumpCause(log_t* log) const {
        error_string_, diff, byte_suffix, location_str, alloc_size, alloc_address);
 }
 
-// Build a frame for symbolization using the maps from the provided unwinder.
-// The constructed frame contains just enough information to be used to
-// symbolize a GWP-ASan stack trace.
-static unwindstack::FrameData BuildFrame(unwindstack::Unwinder* unwinder, uintptr_t pc,
-                                         size_t frame_num) {
-  unwindstack::FrameData frame;
-  frame.num = frame_num;
-
-  unwindstack::Maps* maps = unwinder->GetMaps();
-  unwindstack::MapInfo* map_info = maps->Find(pc);
-  if (!map_info) {
-    frame.rel_pc = pc;
-    return frame;
-  }
-
-  unwindstack::ArchEnum arch = unwindstack::Regs::CurrentArch();
-  unwindstack::Elf* elf = map_info->GetElf(unwinder->GetProcessMemory(), arch);
-
-  uint64_t relative_pc = elf->GetRelPc(pc, map_info);
-
-  uint64_t pc_adjustment = unwindstack::GetPcAdjustment(relative_pc, elf, arch);
-  relative_pc -= pc_adjustment;
-  // The debug PC may be different if the PC comes from the JIT.
-  uint64_t debug_pc = relative_pc;
-
-  // If we don't have a valid ELF file, check the JIT.
-  if (!elf->valid()) {
-    unwindstack::JitDebug jit_debug(unwinder->GetProcessMemory());
-    uint64_t jit_pc = pc - pc_adjustment;
-    unwindstack::Elf* jit_elf = jit_debug.GetElf(maps, jit_pc);
-    if (jit_elf != nullptr) {
-      debug_pc = jit_pc;
-      elf = jit_elf;
-    }
-  }
-
-  // Copy all the things we need into the frame for symbolization.
-  frame.rel_pc = relative_pc;
-  frame.pc = pc - pc_adjustment;
-  frame.map_name = map_info->name;
-  frame.map_elf_start_offset = map_info->elf_start_offset;
-  frame.map_exact_offset = map_info->offset;
-  frame.map_start = map_info->start;
-  frame.map_end = map_info->end;
-  frame.map_flags = map_info->flags;
-  frame.map_load_bias = elf->GetLoadBias();
-
-  if (!elf->GetFunctionName(relative_pc, &frame.function_name, &frame.function_offset)) {
-    frame.function_name = "";
-    frame.function_offset = 0;
-  }
-  return frame;
-}
-
 constexpr size_t kMaxTraceLength = gwp_asan::AllocationMetadata::kMaxTraceLengthToCollect;
 
 bool GwpAsanCrashData::HasDeallocationTrace() const {
@@ -237,7 +183,8 @@ void GwpAsanCrashData::DumpDeallocationTrace(log_t* log, unwindstack::Unwinder* 
 
   unwinder->SetDisplayBuildID(true);
   for (size_t i = 0; i < num_frames; ++i) {
-    unwindstack::FrameData frame_data = BuildFrame(unwinder, frames.get()[i], i);
+    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames.get()[i]);
+    frame_data.num = i;
     _LOG(log, logtype::BACKTRACE, "    %s\n", unwinder->FormatFrame(frame_data).c_str());
   }
 }
@@ -263,7 +210,8 @@ void GwpAsanCrashData::DumpAllocationTrace(log_t* log, unwindstack::Unwinder* un
 
   unwinder->SetDisplayBuildID(true);
   for (size_t i = 0; i < num_frames; ++i) {
-    unwindstack::FrameData frame_data = BuildFrame(unwinder, frames.get()[i], i);
+    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames.get()[i]);
+    frame_data.num = i;
     _LOG(log, logtype::BACKTRACE, "    %s\n", unwinder->FormatFrame(frame_data).c_str());
   }
 }
