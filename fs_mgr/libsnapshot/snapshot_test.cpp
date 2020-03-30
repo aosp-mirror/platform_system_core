@@ -320,7 +320,7 @@ class SnapshotTest : public ::testing::Test {
     // Simulate a reboot into the new slot.
     AssertionResult SimulateReboot() {
         lock_ = nullptr;
-        if (!sm->FinishedSnapshotWrites()) {
+        if (!sm->FinishedSnapshotWrites(false)) {
             return AssertionFailure();
         }
         if (!dm_.DeleteDevice("test_partition_b")) {
@@ -424,7 +424,7 @@ TEST_F(SnapshotTest, MapPartialSnapshot) {
 }
 
 TEST_F(SnapshotTest, NoMergeBeforeReboot) {
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Merge should fail, since the slot hasn't changed.
     ASSERT_FALSE(sm->InitiateMerge());
@@ -440,7 +440,7 @@ TEST_F(SnapshotTest, CleanFirstStageMount) {
 }
 
 TEST_F(SnapshotTest, FirstStageMountAfterRollback) {
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // We didn't change the slot, so we shouldn't need snapshots.
     TestDeviceInfo* info = new TestDeviceInfo(fake_super);
@@ -476,7 +476,7 @@ TEST_F(SnapshotTest, Merge) {
     lock_ = nullptr;
 
     // Done updating.
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     test_device->set_slot_suffix("_b");
     ASSERT_TRUE(sm->InitiateMerge());
@@ -1007,7 +1007,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
         ASSERT_TRUE(IsPartitionUnchanged(name));
     }
 
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
@@ -1139,7 +1139,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
         ASSERT_TRUE(IsPartitionUnchanged(name));
     }
 
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
@@ -1171,7 +1171,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
 // Test that if an update is applied but not booted into, it can be canceled.
 TEST_F(SnapshotUpdateTest, CancelAfterApply) {
     ASSERT_TRUE(sm->BeginUpdate());
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
     ASSERT_TRUE(sm->CancelUpdate());
 }
 
@@ -1188,7 +1188,7 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
     ASSERT_TRUE(MapUpdateSnapshots());
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
@@ -1295,7 +1295,7 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
         ASSERT_TRUE(IsPartitionUnchanged(name));
     }
 
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 }
 
 TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
@@ -1324,7 +1324,7 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
     ASSERT_TRUE(MapUpdateSnapshots());
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
@@ -1428,7 +1428,7 @@ TEST_F(SnapshotUpdateTest, MergeInRecovery) {
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
     ASSERT_TRUE(MapUpdateSnapshots());
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
@@ -1460,7 +1460,7 @@ TEST_F(SnapshotUpdateTest, DataWipeRollbackInRecovery) {
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
     ASSERT_TRUE(MapUpdateSnapshots());
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
@@ -1485,7 +1485,7 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
     ASSERT_TRUE(MapUpdateSnapshots());
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
@@ -1533,7 +1533,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
     ASSERT_TRUE(WriteSnapshotAndHash("sys_b", partition_size));
 
     // Finish update.
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
@@ -1569,7 +1569,7 @@ TEST_F(SnapshotUpdateTest, Overflow) {
     ASSERT_EQ(1u, table.size());
     EXPECT_TRUE(table[0].IsOverflowSnapshot());
 
-    ASSERT_FALSE(sm->FinishedSnapshotWrites())
+    ASSERT_FALSE(sm->FinishedSnapshotWrites(false))
             << "FinishedSnapshotWrites should detect overflow of CoW device.";
 }
 
@@ -1623,7 +1623,7 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
     ASSERT_TRUE(MapUpdateSnapshots());
-    ASSERT_TRUE(sm->FinishedSnapshotWrites());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // Simulate shutting down the device.
     ASSERT_TRUE(UnmapAll());
