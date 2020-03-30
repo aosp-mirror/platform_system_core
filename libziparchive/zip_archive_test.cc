@@ -1256,3 +1256,17 @@ TEST_F(Zip64ParseTest, iterates) {
 
   CloseArchive(handle);
 }
+
+TEST_F(Zip64ParseTest, zip64EocdWrongLocatorOffset) {
+  AddEntry("a.txt", std::vector<uint8_t>(1, 'a'), true, true, true);
+  ConstructEocd();
+  zip_content_.resize(20, 'a');
+  std::copy(zip64_eocd_locator_.begin(), zip64_eocd_locator_.end(),
+            std::back_inserter(zip_content_));
+  std::copy(eocd_record_.begin(), eocd_record_.end(), std::back_inserter(zip_content_));
+
+  ZipArchiveHandle handle;
+  ASSERT_NE(
+      0, OpenArchiveFromMemory(zip_content_.data(), zip_content_.size(), "debug_zip64", &handle));
+  CloseArchive(handle);
+}
