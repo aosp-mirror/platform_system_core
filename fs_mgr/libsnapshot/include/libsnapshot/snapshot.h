@@ -452,6 +452,7 @@ class SnapshotManager final {
 
     std::string GetSnapshotBootIndicatorPath();
     std::string GetRollbackIndicatorPath();
+    std::string GetForwardMergeIndicatorPath();
 
     // Return the name of the device holding the "snapshot" or "snapshot-merge"
     // target. This may not be the final device presented via MapSnapshot(), if
