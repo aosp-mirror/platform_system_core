@@ -2435,6 +2435,9 @@ bool SnapshotManager::Dump(std::ostream& os) {
 
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
+    ss << "Rollback indicator: "
+       << (access(GetRollbackIndicatorPath().c_str(), F_OK) == 0 ? "exists" : strerror(errno))
+       << std::endl;
 
     bool ok = true;
     std::vector<std::string> snapshots;
