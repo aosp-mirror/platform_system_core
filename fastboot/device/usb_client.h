@@ -17,7 +17,7 @@
 
 #include <memory>
 
-#include <adbd/usb.h>
+#include "usb.h"
 
 #include "transport.h"
 
