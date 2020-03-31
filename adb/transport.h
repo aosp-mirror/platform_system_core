@@ -39,7 +39,6 @@
 #include "adb.h"
 #include "adb_unique_fd.h"
 #include "types.h"
-#include "usb.h"
 
 typedef std::unordered_set<std::string> FeatureSet;
 
@@ -204,20 +203,6 @@ struct FdConnection : public BlockingConnection {
     std::unique_ptr<adb::tls::TlsConnection> tls_;
 };
 
-struct UsbConnection : public BlockingConnection {
-    explicit UsbConnection(usb_handle* handle) : handle_(handle) {}
-    ~UsbConnection();
-
-    bool Read(apacket* packet) override final;
-    bool Write(apacket* packet) override final;
-    bool DoTlsHandshake(RSA* key, std::string* auth_key) override final;
-
-    void Close() override final;
-    virtual void Reset() override final;
-
-    usb_handle* handle_;
-};
-
 // Waits for a transport's connection to be not pending. This is a separate
 // object so that the transport can be destroyed and another thread can be
 // notified of it in a race-free way.
@@ -252,6 +237,10 @@ enum class ReconnectResult {
     Success,
     Abort,
 };
+
+#if ADB_HOST
+struct usb_handle;
+#endif
 
 class atransport : public enable_weak_from_this<atransport> {
   public:
@@ -293,8 +282,10 @@ class atransport : public enable_weak_from_this<atransport> {
         return connection_;
     }
 
+#if ADB_HOST
     void SetUsbHandle(usb_handle* h) { usb_handle_ = h; }
     usb_handle* GetUsbHandle() { return usb_handle_; }
+#endif
 
     const TransportId id;
 
@@ -401,8 +392,10 @@ class atransport : public enable_weak_from_this<atransport> {
     // The underlying connection object.
     std::shared_ptr<Connection> connection_ GUARDED_BY(mutex_);
 
+#if ADB_HOST
     // USB handle for the connection, if available.
     usb_handle* usb_handle_ = nullptr;
+#endif
 
     // A callback that will be invoked when the atransport needs to reconnect.
     ReconnectCallback reconnect_;
@@ -443,8 +436,15 @@ void kick_all_transports_by_auth_key(std::string_view auth_key);
 #endif
 
 void register_transport(atransport* transport);
-void register_usb_transport(usb_handle* h, const char* serial,
-                            const char* devpath, unsigned writeable);
+
+#if ADB_HOST
+void init_usb_transport(atransport* t, usb_handle* usb);
+void register_usb_transport(usb_handle* h, const char* serial, const char* devpath,
+                            unsigned writeable);
+
+// This should only be used for transports with connection_state == kCsNoPerm.
+void unregister_usb_transport(usb_handle* usb);
+#endif
 
 /* Connect to a network address and register it as a device */
 void connect_device(const std::string& address, std::string* response);
@@ -453,9 +453,6 @@ void connect_device(const std::string& address, std::string* response);
 bool register_socket_transport(unique_fd s, std::string serial, int port, int local,
                                atransport::ReconnectCallback reconnect, bool use_tls,
                                int* error = nullptr);
-
-// This should only be used for transports with connection_state == kCsNoPerm.
-void unregister_usb_transport(usb_handle* usb);
 
 bool check_header(apacket* p, atransport* t);
 
