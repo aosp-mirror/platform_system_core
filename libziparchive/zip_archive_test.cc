@@ -979,10 +979,11 @@ class Zip64ParseTest : public ::testing::Test {
     std::vector<uint8_t> extended_field;
     // Fake data to mimic the compressed bytes in the zipfile.
     std::vector<uint8_t> compressed_bytes;
+    std::vector<uint8_t> data_descriptor;
 
     size_t GetSize() const {
       return local_file_header.size() + file_name.size() + extended_field.size() +
-             compressed_bytes.size();
+             compressed_bytes.size() + data_descriptor.size();
     }
 
     void CopyToOutput(std::vector<uint8_t>* output) const {
@@ -990,6 +991,7 @@ class Zip64ParseTest : public ::testing::Test {
       std::copy(file_name.begin(), file_name.end(), std::back_inserter(*output));
       std::copy(extended_field.begin(), extended_field.end(), std::back_inserter(*output));
       std::copy(compressed_bytes.begin(), compressed_bytes.end(), std::back_inserter(*output));
+      std::copy(data_descriptor.begin(), data_descriptor.end(), std::back_inserter(*output));
     }
   };
 
@@ -1057,7 +1059,7 @@ class Zip64ParseTest : public ::testing::Test {
   // Add an entry to the zipfile, construct the corresponding local header and cd entry.
   void AddEntry(const std::string& name, const std::vector<uint8_t>& content,
                 bool uncompressed_size_in_extended, bool compressed_size_in_extended,
-                bool local_offset_in_extended) {
+                bool local_offset_in_extended, bool include_data_descriptor = false) {
     auto uncompressed_size = static_cast<uint32_t>(content.size());
     auto compressed_size = static_cast<uint32_t>(content.size());
     uint32_t local_file_header_offset = 0;
@@ -1084,6 +1086,21 @@ class Zip64ParseTest : public ::testing::Test {
     ConstructLocalFileHeader(name, &local_entry.local_file_header, uncompressed_size,
                              compressed_size);
     ConstructExtendedField(zip64_fields, &local_entry.extended_field);
+    if (include_data_descriptor) {
+      size_t descriptor_size = compressed_size_in_extended ? 24 : 16;
+      local_entry.data_descriptor.resize(descriptor_size);
+      uint8_t* write_ptr = local_entry.data_descriptor.data();
+      EmitUnaligned<uint32_t>(&write_ptr, DataDescriptor::kOptSignature);
+      EmitUnaligned<uint32_t>(&write_ptr, 0 /* crc */);
+      if (compressed_size_in_extended) {
+        EmitUnaligned<uint64_t>(&write_ptr, compressed_size_in_extended);
+        EmitUnaligned<uint64_t>(&write_ptr, uncompressed_size_in_extended);
+      } else {
+        EmitUnaligned<uint32_t>(&write_ptr, compressed_size_in_extended);
+        EmitUnaligned<uint32_t>(&write_ptr, uncompressed_size_in_extended);
+      }
+    }
+
     file_entries_.push_back(std::move(local_entry));
 
     if (local_offset_in_extended) {
@@ -1269,4 +1286,39 @@ TEST_F(Zip64ParseTest, zip64EocdWrongLocatorOffset) {
   ASSERT_NE(
       0, OpenArchiveFromMemory(zip_content_.data(), zip_content_.size(), "debug_zip64", &handle));
   CloseArchive(handle);
+}
+
+TEST_F(Zip64ParseTest, extract) {
+  std::vector<uint8_t> content(200, 'a');
+  AddEntry("a.txt", content, true, true, true);
+  ConstructEocd();
+  ConstructZipFile();
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(
+      0, OpenArchiveFromMemory(zip_content_.data(), zip_content_.size(), "debug_zip64", &handle));
+  ZipEntry entry;
+  ASSERT_EQ(0, FindEntry(handle, "a.txt", &entry));
+
+  VectorWriter writer;
+  ASSERT_EQ(0, ExtractToWriter(handle, &entry, &writer));
+  ASSERT_EQ(content, writer.GetOutput());
+}
+
+TEST_F(Zip64ParseTest, extractWithDataDescriptor) {
+  std::vector<uint8_t> content(300, 'b');
+  AddEntry("a.txt", std::vector<uint8_t>(200, 'a'), true, true, true);
+  AddEntry("b.txt", content, true, true, true, true /* data descriptor */);
+  ConstructEocd();
+  ConstructZipFile();
+
+  ZipArchiveHandle handle;
+  ASSERT_EQ(
+      0, OpenArchiveFromMemory(zip_content_.data(), zip_content_.size(), "debug_zip64", &handle));
+  ZipEntry entry;
+  ASSERT_EQ(0, FindEntry(handle, "b.txt", &entry));
+
+  VectorWriter writer;
+  ASSERT_EQ(0, ExtractToWriter(handle, &entry, &writer));
+  ASSERT_EQ(content, writer.GetOutput());
 }
