@@ -16,6 +16,10 @@
 
 #define TRACE_TAG TRANSPORT
 
+#include "sysdeps.h"
+
+#include "client/usb.h"
+
 #include <memory>
 
 #include "sysdeps.h"
@@ -135,8 +139,8 @@ static int remote_read(apacket* p, usb_handle* usb) {
         }
 
         p->payload.resize(p->msg.data_length);
-        if (usb_read(usb, &p->payload[0], p->payload.size())
-                != static_cast<int>(p->payload.size())) {
+        if (usb_read(usb, &p->payload[0], p->payload.size()) !=
+            static_cast<int>(p->payload.size())) {
             PLOG(ERROR) << "remote usb: terminated (data)";
             return -1;
         }
