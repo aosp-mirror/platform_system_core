@@ -228,10 +228,17 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
         return false;
     }
 
-    // It's okay if these fail - first-stage init performs a deeper check after
+    // It's okay if these fail:
+    // - For SnapshotBoot and Rollback, first-stage init performs a deeper check after
     // reading the indicator file, so it's not a problem if it still exists
     // after the update completes.
-    std::vector<std::string> files = {GetSnapshotBootIndicatorPath(), GetRollbackIndicatorPath()};
+    // - For ForwardMerge, FinishedSnapshotWrites asserts that the existence of the indicator
+    // matches the incoming update.
+    std::vector<std::string> files = {
+            GetSnapshotBootIndicatorPath(),
+            GetRollbackIndicatorPath(),
+            GetForwardMergeIndicatorPath(),
+    };
     for (const auto& file : files) {
         RemoveFileIfExists(file);
     }
@@ -241,7 +248,7 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
     return WriteUpdateState(lock, UpdateState::None);
 }
 
-bool SnapshotManager::FinishedSnapshotWrites() {
+bool SnapshotManager::FinishedSnapshotWrites(bool wipe) {
     auto lock = LockExclusive();
     if (!lock) return false;
 
@@ -258,6 +265,10 @@ bool SnapshotManager::FinishedSnapshotWrites() {
 
     if (!EnsureNoOverflowSnapshot(lock.get())) {
         LOG(ERROR) << "Cannot ensure there are no overflow snapshots.";
+        return false;
+    }
+
+    if (!UpdateForwardMergeIndicator(wipe)) {
         return false;
     }
 
@@ -990,6 +1001,10 @@ std::string SnapshotManager::GetSnapshotBootIndicatorPath() {
 
 std::string SnapshotManager::GetRollbackIndicatorPath() {
     return metadata_dir_ + "/" + android::base::Basename(kRollbackIndicatorPath);
+}
+
+std::string SnapshotManager::GetForwardMergeIndicatorPath() {
+    return metadata_dir_ + "/allow-forward-merge";
 }
 
 void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
@@ -2435,6 +2450,12 @@ bool SnapshotManager::Dump(std::ostream& os) {
 
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
+    ss << "Rollback indicator: "
+       << (access(GetRollbackIndicatorPath().c_str(), F_OK) == 0 ? "exists" : strerror(errno))
+       << std::endl;
+    ss << "Forward merge indicator: "
+       << (access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0 ? "exists" : strerror(errno))
+       << std::endl;
 
     bool ok = true;
     std::vector<std::string> snapshots;
@@ -2501,17 +2522,39 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
         return false;
     }
 
-    UpdateState state = ProcessUpdateState([&]() -> bool {
-        callback();
+    auto process_callback = [&]() -> bool {
+        if (callback) {
+            callback();
+        }
         return true;
-    });
+    };
+    if (!ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback)) {
+        return false;
+    }
+
+    // Nothing should be depending on partitions now, so unmap them all.
+    if (!UnmapAllPartitions()) {
+        LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
+    }
+    return true;
+}
+
+bool SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
+                                                   const std::function<bool()>& callback) {
+    auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+    UpdateState state = ProcessUpdateState(callback);
     LOG(INFO) << "Update state in recovery: " << state;
     switch (state) {
         case UpdateState::MergeFailed:
             LOG(ERROR) << "Unrecoverable merge failure detected.";
             return false;
         case UpdateState::Unverified: {
-            // If an OTA was just applied but has not yet started merging, we
+            // If an OTA was just applied but has not yet started merging:
+            //
+            // - if forward merge is allowed, initiate merge and call
+            // ProcessUpdateState again.
+            //
+            // - if forward merge is not allowed, we
             // have no choice but to revert slots, because the current slot will
             // immediately become unbootable. Rather than wait for the device
             // to reboot N times until a rollback, we proactively disable the
@@ -2521,8 +2564,17 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
             // as an error here.
             auto slot = GetCurrentSlot();
             if (slot == Slot::Target) {
+                if (allow_forward_merge &&
+                    access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0) {
+                    LOG(INFO) << "Forward merge allowed, initiating merge now.";
+                    return InitiateMerge() &&
+                           ProcessUpdateStateOnDataWipe(false /* allow_forward_merge */, callback);
+                }
+
                 LOG(ERROR) << "Reverting to old slot since update will be deleted.";
                 device_->SetSlotAsUnbootable(slot_number);
+            } else {
+                LOG(INFO) << "Booting from " << slot << " slot, no action is taken.";
             }
             break;
         }
@@ -2533,11 +2585,6 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
             break;
         default:
             break;
-    }
-
-    // Nothing should be depending on partitions now, so unmap them all.
-    if (!UnmapAllPartitions()) {
-        LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
     }
     return true;
 }
@@ -2617,6 +2664,25 @@ CreateResult SnapshotManager::RecoveryCreateSnapshotDevices(
         return CreateResult::ERROR;
     }
     return CreateResult::CREATED;
+}
+
+bool SnapshotManager::UpdateForwardMergeIndicator(bool wipe) {
+    auto path = GetForwardMergeIndicatorPath();
+
+    if (!wipe) {
+        LOG(INFO) << "Wipe is not scheduled. Deleting forward merge indicator.";
+        return RemoveFileIfExists(path);
+    }
+
+    // TODO(b/152094219): Don't forward merge if no CoW file is allocated.
+
+    LOG(INFO) << "Wipe will be scheduled. Allowing forward merge of snapshots.";
+    if (!android::base::WriteStringToFile("1", path)) {
+        PLOG(ERROR) << "Unable to write forward merge indicator: " << path;
+        return false;
+    }
+
+    return true;
 }
 
 }  // namespace snapshot
