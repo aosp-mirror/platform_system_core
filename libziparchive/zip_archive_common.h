@@ -165,15 +165,24 @@ struct DataDescriptor {
 
   // CRC-32 checksum of the entry.
   uint32_t crc32;
-  // Compressed size of the entry.
-  uint32_t compressed_size;
-  // Uncompressed size of the entry.
-  uint32_t uncompressed_size;
+
+  // For ZIP64 format archives, the compressed and uncompressed sizes are 8
+  // bytes each. Also, the ZIP64 format MAY be used regardless of the size
+  // of a file.  When extracting, if the zip64 extended information extra field
+  // is present for the file the compressed and uncompressed sizes will be 8
+  // byte values.
+
+  // Compressed size of the entry, the field can be either 4 bytes or 8 bytes
+  // in the zip file.
+  uint64_t compressed_size;
+  // Uncompressed size of the entry, the field can be either 4 bytes or 8 bytes
+  // in the zip file.
+  uint64_t uncompressed_size;
 
  private:
   DataDescriptor() = default;
   DISALLOW_COPY_AND_ASSIGN(DataDescriptor);
-} __attribute__((packed));
+};
 
 // The zip64 end of central directory locator helps to find the zip64 EOCD.
 struct Zip64EocdLocator {
