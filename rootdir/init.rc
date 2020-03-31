@@ -825,6 +825,11 @@ on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type
     start zygote
     start zygote_secondary
 
+on boot && property:ro.config.low_ram=true
+    # Tweak background writeout
+    write /proc/sys/vm/dirty_expire_centisecs 200
+    write /proc/sys/vm/dirty_background_ratio  5
+
 on boot
     # basic network init
     ifup lo
@@ -846,11 +851,7 @@ on boot
     chown root system /sys/block/zram0/writeback
     chmod 0664 /sys/block/zram0/writeback
 
-    # Tweak background writeout
-    write /proc/sys/vm/dirty_expire_centisecs 200
-    write /proc/sys/vm/dirty_background_ratio  5
-
-    # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs
+    # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs, 30 secs,
     # to avoid power consumption when system becomes mostly idle. Be careful
     # to make it too large, since it may bring userdata loss, if they
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
