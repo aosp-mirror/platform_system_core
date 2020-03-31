@@ -576,6 +576,17 @@ class PowerTest(unittest.TestCase):
         # If the power event was detected, the adb shell command should be broken very quickly.
         self.assertLess(end - start, 2)
 
+"""Use 'adb mdns check' to see if mdns discovery is available."""
+def is_adb_mdns_available():
+    with adb_server() as server_port:
+        output = subprocess.check_output(["adb", "-P", str(server_port),
+                                          "mdns", "check"]).strip()
+        return output.startswith(b"mdns daemon version")
+
+@unittest.skipIf(not is_adb_mdns_available(), "mdns feature not available")
+class MdnsTest(unittest.TestCase):
+    """Tests for adb mdns."""
+    pass
 
 def main():
     """Main entrypoint."""
