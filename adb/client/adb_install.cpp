@@ -325,7 +325,12 @@ static int install_app_incremental(int argc, const char** argv, bool wait, bool 
         }
     }
 
-    if (first_apk == -1) error_exit("Need at least one APK file on command line");
+    if (first_apk == -1) {
+        if (!silent) {
+            fprintf(stderr, "error: need at least one APK file on command line\n");
+        }
+        return -1;
+    }
 
     auto files = incremental::Files{argv + first_apk, argv + last_apk + 1};
     if (silent) {
