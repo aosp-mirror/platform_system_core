@@ -32,6 +32,8 @@ import threading
 import time
 import unittest
 import warnings
+from importlib import util
+from parameterized import parameterized_class
 
 def find_open_port():
     # Find an open port.
@@ -583,10 +585,91 @@ def is_adb_mdns_available():
                                           "mdns", "check"]).strip()
         return output.startswith(b"mdns daemon version")
 
+"""Check if we have zeroconf python library installed"""
+def is_zeroconf_installed():
+    zeroconf_spec = util.find_spec("zeroconf")
+    return zeroconf_spec is not None
+
+@contextlib.contextmanager
+def zeroconf_context(ipversion):
+    from zeroconf import Zeroconf
+    """Context manager for a zeroconf instance
+
+    This creates a zeroconf instance and returns it.
+    """
+
+    try:
+        zeroconf = Zeroconf(ip_version=ipversion)
+        yield zeroconf
+    finally:
+        zeroconf.close()
+
+@contextlib.contextmanager
+def zeroconf_register_service(zeroconf_ctx, info):
+    """Context manager for a zeroconf service
+
+    Registers a service and unregisters it on cleanup. Returns the ServiceInfo
+    supplied.
+    """
+
+    try:
+        zeroconf_ctx.register_service(info)
+        yield info
+    finally:
+        zeroconf_ctx.unregister_service(info)
+
+"""Should match the service names listed in adb_mdns.h"""
+@parameterized_class(('service_name',), [
+    ("adb",),
+    ("adb-tls-connect",),
+    ("adb-tls-pairing",),
+])
 @unittest.skipIf(not is_adb_mdns_available(), "mdns feature not available")
 class MdnsTest(unittest.TestCase):
     """Tests for adb mdns."""
-    pass
+
+    @unittest.skipIf(not is_zeroconf_installed(), "zeroconf library not installed")
+    def test_mdns_services_register_unregister(self):
+        """Ensure that `adb mdns services` correctly adds and removes a service
+        """
+        from zeroconf import IPVersion, ServiceInfo
+ 
+        def _mdns_services(port):
+            output = subprocess.check_output(["adb", "-P", str(port), "mdns", "services"])
+            return [x.split("\t") for x in output.decode("utf8").strip().splitlines()[1:]]
+
+        with adb_server() as server_port:
+            output = subprocess.check_output(["adb", "-P", str(server_port),
+                                              "mdns", "services"]).strip()
+            self.assertTrue(output.startswith(b"List of discovered mdns services"))
+            print(f"services={_mdns_services(server_port)}")
+
+            """TODO(joshuaduong): Add ipv6 tests once we have it working in adb"""
+            """Register/Unregister a service"""
+            with zeroconf_context(IPVersion.V4Only) as zc:
+                serv_instance = "my_fake_test_service"
+                serv_type = "_" + self.service_name + "._tcp."
+                serv_ipaddr = socket.inet_aton("1.2.3.4")
+                serv_port = 12345
+                service_info = ServiceInfo(
+                        serv_type + "local.",
+                        name=serv_instance + "." + serv_type + "local.",
+                        addresses=[serv_ipaddr],
+                        port=serv_port)
+                print(f"Registering {serv_instance}.{serv_type} ...")
+                with zeroconf_register_service(zc, service_info) as info:
+                    """Give adb some time to register the service"""
+                    time.sleep(0.25)
+                    print(f"services={_mdns_services(server_port)}")
+                    self.assertTrue(any((serv_instance in line and serv_type in line)
+                        for line in _mdns_services(server_port)))
+
+                """Give adb some time to unregister the service"""
+                print("Unregistering mdns service...")
+                time.sleep(0.25)
+                print(f"services={_mdns_services(server_port)}")
+                self.assertFalse(any((serv_instance in line and serv_type in line)
+                    for line in _mdns_services(server_port)))
 
 def main():
     """Main entrypoint."""

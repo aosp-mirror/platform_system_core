@@ -1086,6 +1086,11 @@ static bool handle_mdns_request(std::string_view service, int reply_fd) {
         SendOkay(reply_fd, check);
         return true;
     }
+    if (service == "services") {
+        std::string services_list = mdns_list_discovered_services();
+        SendOkay(reply_fd, services_list);
+        return true;
+    }
 
     return false;
 }

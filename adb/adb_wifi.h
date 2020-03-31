@@ -28,6 +28,7 @@ void adb_wifi_pair_device(const std::string& host, const std::string& password,
 bool adb_wifi_is_known_host(const std::string& host);
 
 std::string mdns_check();
+std::string mdns_list_discovered_services();
 
 #else  // !ADB_HOST
 

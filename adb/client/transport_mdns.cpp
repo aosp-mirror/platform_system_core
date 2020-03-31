@@ -216,6 +216,9 @@ class ResolvedService : public AsyncServiceRef {
 
         int adbSecureServiceType = serviceIndex();
         switch (adbSecureServiceType) {
+            case kADBTransportServiceRefIndex:
+                sAdbTransportServices->push_back(this);
+                break;
             case kADBSecurePairingServiceRefIndex:
                 sAdbSecurePairingServices->push_back(this);
                 break;
@@ -233,16 +236,21 @@ class ResolvedService : public AsyncServiceRef {
 
     std::string serviceName() const { return serviceName_; }
 
+    std::string regType() const { return regType_; }
+
     std::string ipAddress() const { return ip_addr_; }
 
     uint16_t port() const { return port_; }
 
     using ServiceRegistry = std::vector<ResolvedService*>;
 
+    // unencrypted tcp connections
+    static ServiceRegistry* sAdbTransportServices;
+
     static ServiceRegistry* sAdbSecurePairingServices;
     static ServiceRegistry* sAdbSecureConnectServices;
 
-    static void initAdbSecure();
+    static void initAdbServiceRegistries();
 
     static void forEachService(const ServiceRegistry& services, const std::string& hostname,
                                adb_secure_foreach_service_callback cb);
@@ -264,13 +272,19 @@ class ResolvedService : public AsyncServiceRef {
 };
 
 // static
+std::vector<ResolvedService*>* ResolvedService::sAdbTransportServices = NULL;
+
+// static
 std::vector<ResolvedService*>* ResolvedService::sAdbSecurePairingServices = NULL;
 
 // static
 std::vector<ResolvedService*>* ResolvedService::sAdbSecureConnectServices = NULL;
 
 // static
-void ResolvedService::initAdbSecure() {
+void ResolvedService::initAdbServiceRegistries() {
+    if (!sAdbTransportServices) {
+        sAdbTransportServices = new ServiceRegistry;
+    }
     if (!sAdbSecurePairingServices) {
         sAdbSecurePairingServices = new ServiceRegistry;
     }
@@ -283,17 +297,18 @@ void ResolvedService::initAdbSecure() {
 void ResolvedService::forEachService(const ServiceRegistry& services,
                                      const std::string& wanted_service_name,
                                      adb_secure_foreach_service_callback cb) {
-    initAdbSecure();
+    initAdbServiceRegistries();
 
     for (auto service : services) {
         auto service_name = service->serviceName();
+        auto reg_type = service->regType();
         auto ip = service->ipAddress();
         auto port = service->port();
 
         if (wanted_service_name == "") {
-            cb(service_name.c_str(), ip.c_str(), port);
+            cb(service_name.c_str(), reg_type.c_str(), ip.c_str(), port);
         } else if (service_name == wanted_service_name) {
-            cb(service_name.c_str(), ip.c_str(), port);
+            cb(service_name.c_str(), reg_type.c_str(), ip.c_str(), port);
         }
     }
 }
@@ -301,7 +316,7 @@ void ResolvedService::forEachService(const ServiceRegistry& services,
 // static
 bool ResolvedService::connectByServiceName(const ServiceRegistry& services,
                                            const std::string& service_name) {
-    initAdbSecure();
+    initAdbServiceRegistries();
     for (auto service : services) {
         if (service_name == service->serviceName()) {
             D("Got service_name match [%s]", service->serviceName().c_str());
@@ -398,6 +413,9 @@ static void adb_RemoveDNSService(const char* regType, const char* serviceName) {
     int index = adb_DNSServiceIndexByName(regType);
     ResolvedService::ServiceRegistry* services;
     switch (index) {
+        case kADBTransportServiceRefIndex:
+            services = ResolvedService::sAdbTransportServices;
+            break;
         case kADBSecurePairingServiceRefIndex:
             services = ResolvedService::sAdbSecurePairingServices;
             break;
@@ -542,7 +560,7 @@ void init_mdns_transport_discovery_thread(void) {
 }
 
 void init_mdns_transport_discovery(void) {
-    ResolvedService::initAdbSecure();
+    ResolvedService::initAdbServiceRegistries();
     std::thread(init_mdns_transport_discovery_thread).detach();
 }
 
@@ -557,5 +575,19 @@ std::string mdns_check() {
     }
 
     result = android::base::StringPrintf("mdns daemon version [%u]", daemon_version);
+    return result;
+}
+
+std::string mdns_list_discovered_services() {
+    std::string result;
+    auto cb = [&](const char* service_name, const char* reg_type, const char* ip_addr,
+                  uint16_t port) {
+        result += android::base::StringPrintf("%s\t%s\t%s:%u\n", service_name, reg_type, ip_addr,
+                                              port);
+    };
+
+    ResolvedService::forEachService(*ResolvedService::sAdbTransportServices, "", cb);
+    ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices, "", cb);
+    ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices, "", cb);
     return result;
 }

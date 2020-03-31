@@ -90,8 +90,9 @@ extern const char* _Nullable * _Nullable __adb_envp;
 
 // ADB Secure DNS service interface. Used to query what ADB Secure DNS services have been
 // resolved, and to run some kind of callback for each one.
-using adb_secure_foreach_service_callback = std::function<void(
-        const char* _Nonnull service_name, const char* _Nonnull ip_address, uint16_t port)>;
+using adb_secure_foreach_service_callback =
+        std::function<void(const char* _Nonnull service_name, const char* _Nonnull reg_type,
+                           const char* _Nonnull ip_address, uint16_t port)>;
 
 // Queries pairing/connect services that have been discovered and resolved.
 // If |host_name| is not null, run |cb| only for services
