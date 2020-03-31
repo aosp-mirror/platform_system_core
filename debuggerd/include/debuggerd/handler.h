@@ -33,13 +33,20 @@ struct AllocatorState;
 struct AllocationMetadata;
 };  // namespace gwp_asan
 
+// When updating this data structure, CrashInfoDataDynamic and the code in
+// ReadCrashInfo() must also be updated.
+struct debugger_process_info {
+  void* abort_msg;
+  void* fdsan_table;
+  const gwp_asan::AllocatorState* gwp_asan_state;
+  const gwp_asan::AllocationMetadata* gwp_asan_metadata;
+};
+
 // These callbacks are called in a signal handler, and thus must be async signal safe.
 // If null, the callbacks will not be called.
 typedef struct {
-  struct abort_msg_t* (*get_abort_message)();
+  debugger_process_info (*get_process_info)();
   void (*post_dump)();
-  const struct gwp_asan::AllocatorState* (*get_gwp_asan_state)();
-  const struct gwp_asan::AllocationMetadata* (*get_gwp_asan_metadata)();
 } debuggerd_callbacks_t;
 
 void debuggerd_init(debuggerd_callbacks_t* callbacks);
