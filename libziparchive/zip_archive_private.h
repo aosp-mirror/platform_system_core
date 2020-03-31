@@ -28,6 +28,7 @@
 
 #include "android-base/macros.h"
 #include "android-base/mapped_file.h"
+#include "android-base/memory.h"
 #include "zip_cd_entry_map.h"
 #include "zip_error.h"
 
@@ -104,3 +105,20 @@ struct ZipArchive {
 
   bool InitializeCentralDirectory(off64_t cd_start_offset, size_t cd_size);
 };
+
+int32_t ExtractToWriter(ZipArchiveHandle handle, ZipEntry* entry, zip_archive::Writer* writer);
+
+// Reads the unaligned data of type |T| and auto increment the offset.
+template <typename T>
+static T ConsumeUnaligned(uint8_t** address) {
+  auto ret = android::base::get_unaligned<T>(*address);
+  *address += sizeof(T);
+  return ret;
+}
+
+// Writes the unaligned data of type |T| and auto increment the offset.
+template <typename T>
+void EmitUnaligned(uint8_t** address, T data) {
+  android::base::put_unaligned<T>(*address, data);
+  *address += sizeof(T);
+}
