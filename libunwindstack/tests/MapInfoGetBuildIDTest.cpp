@@ -142,15 +142,14 @@ static void InitElfData(int fd) {
 
   char note_section[128];
   Elf32_Nhdr note_header = {};
-  note_header.n_namesz = 4;   // "GNU"
-  note_header.n_descsz = 12;  // "ELF_BUILDID"
+  note_header.n_namesz = sizeof("GNU");
+  note_header.n_descsz = sizeof("ELF_BUILDID") - 1;
   note_header.n_type = NT_GNU_BUILD_ID;
   memcpy(&note_section, &note_header, sizeof(note_header));
   size_t note_offset = sizeof(note_header);
-  memcpy(&note_section[note_offset], "GNU", sizeof("GNU"));
-  note_offset += sizeof("GNU");
-  memcpy(&note_section[note_offset], "ELF_BUILDID", sizeof("ELF_BUILDID"));
-  note_offset += sizeof("ELF_BUILDID");
+  memcpy(&note_section[note_offset], "GNU", note_header.n_namesz);
+  note_offset += note_header.n_namesz;
+  memcpy(&note_section[note_offset], "ELF_BUILDID", note_header.n_descsz);
 
   Elf32_Shdr shdr = {};
   shdr.sh_type = SHT_NOTE;
@@ -193,6 +192,12 @@ TEST_F(MapInfoGetBuildIDTest, multiple_thread_elf_exists_in_memory) {
   InitElfData(tf_->fd);
 
   MultipleThreadTest("ELF_BUILDID");
+}
+
+TEST_F(MapInfoGetBuildIDTest, real_elf) {
+  MapInfo map_info(nullptr, nullptr, 0x1000, 0x20000, 0, PROT_READ | PROT_WRITE,
+                   TestGetFileDirectory() + "offline/empty_arm64/libc.so");
+  EXPECT_EQ("6df0590c4920f4c7b9f34fe833f37d54", map_info.GetPrintableBuildID());
 }
 
 }  // namespace unwindstack

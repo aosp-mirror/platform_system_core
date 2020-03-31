@@ -662,7 +662,7 @@ std::string ElfInterface::ReadBuildIDFromMemory(Memory* memory) {
         if (note_size - offset < hdr.n_descsz || hdr.n_descsz == 0) {
           return "";
         }
-        std::string build_id(hdr.n_descsz - 1, '\0');
+        std::string build_id(hdr.n_descsz, '\0');
         if (memory->ReadFully(note_offset + offset, &build_id[0], hdr.n_descsz)) {
           return build_id;
         }
