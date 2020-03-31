@@ -40,6 +40,7 @@ cc_defaults {
 
     visibility: [
         "//system/core/adb:__subpackages__",
+        "//bootable/recovery/minadbd:__subpackages__",
     ],
 
     host_supported: true,
