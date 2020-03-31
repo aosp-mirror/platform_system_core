@@ -246,39 +246,6 @@ cc_test_host {
     },
 }
 
-cc_benchmark {
-    name: "adb_benchmark",
-    defaults: ["adb_defaults"],
-
-    srcs: ["transport_benchmark.cpp"],
-    target: {
-        android: {
-            static_libs: [
-                "libadbd",
-            ],
-        },
-        host: {
-            static_libs: [
-                "libadb_host",
-            ],
-        },
-    },
-
-    static_libs: [
-        "libadb_crypto_static",
-        "libadb_tls_connection_static",
-        "libadbd_auth",
-        "libbase",
-        "libcutils",
-        "libcrypto_utils",
-        "libcrypto_static",
-        "libdiagnose_usb",
-        "liblog",
-        "libssl",
-        "libusb",
-    ],
-}
-
 cc_binary_host {
     name: "adb",
 
