@@ -26,6 +26,11 @@ using android::base::WaitForProperty;
 using namespace std::literals;
 
 TEST(init, oneshot_on) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Skipping test, must be run as root.";
+        return;
+    }
+
     // Bootanim shouldn't be running once the device has booted.
     ASSERT_EQ("stopped", GetProperty("init.svc.bootanim", ""));
 
