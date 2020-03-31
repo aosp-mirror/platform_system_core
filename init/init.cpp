@@ -879,7 +879,9 @@ int SecondStageMain(int argc, char** argv) {
                 (*function)();
             }
         }
-        HandleControlMessages();
+        if (!IsShuttingDown()) {
+            HandleControlMessages();
+        }
     }
 
     return 0;
