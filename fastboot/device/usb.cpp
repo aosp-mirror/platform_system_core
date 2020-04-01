@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG USB
-
-#include "sysdeps.h"
+#include "usb.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -41,12 +39,9 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 
-#include "adb.h"
-#include "adbd/usb.h"
-#include "transport.h"
-
 using namespace std::chrono_literals;
 
+#define D(...)
 #define MAX_PACKET_SIZE_FS 64
 #define MAX_PACKET_SIZE_HS 512
 #define MAX_PACKET_SIZE_SS 1024
@@ -55,8 +50,6 @@ using namespace std::chrono_literals;
 
 // Number of buffers needed to fit MAX_PAYLOAD, with an extra for ZLPs.
 #define USB_FFS_NUM_BUFS ((4 * MAX_PAYLOAD / USB_FFS_BULK_SIZE) + 1)
-
-static unique_fd& dummy_fd = *new unique_fd();
 
 static void aio_block_init(aio_block* aiob, unsigned num_bufs) {
     aiob->iocb.resize(num_bufs);
@@ -82,46 +75,6 @@ static int getMaxPacketSize(int ffs_fd) {
     }
 }
 
-static bool init_functionfs(struct usb_handle* h) {
-    LOG(INFO) << "initializing functionfs";
-    if (!open_functionfs(&h->control, &h->bulk_out, &h->bulk_in)) {
-        return false;
-    }
-
-    h->read_aiob.fd = h->bulk_out.get();
-    h->write_aiob.fd = h->bulk_in.get();
-    h->reads_zero_packets = true;
-    return true;
-}
-
-static void usb_legacy_ffs_open_thread(usb_handle* usb) {
-    adb_thread_setname("usb legacy ffs open");
-
-    while (true) {
-        // wait until the USB device needs opening
-        std::unique_lock<std::mutex> lock(usb->lock);
-        while (!usb->open_new_connection) {
-            usb->notify.wait(lock);
-        }
-        usb->open_new_connection = false;
-        lock.unlock();
-
-        while (true) {
-            if (init_functionfs(usb)) {
-                LOG(INFO) << "functionfs successfully initialized";
-                break;
-            }
-            std::this_thread::sleep_for(1s);
-        }
-
-        LOG(INFO) << "registering usb transport";
-        register_usb_transport(usb, nullptr, nullptr, 1);
-    }
-
-    // never gets here
-    abort();
-}
-
 static int usb_ffs_write(usb_handle* h, const void* data, int len) {
     D("about to write (fd=%d, len=%d)", h->bulk_in.get(), len);
 
@@ -129,7 +82,7 @@ static int usb_ffs_write(usb_handle* h, const void* data, int len) {
     int orig_len = len;
     while (len > 0) {
         int write_len = std::min(USB_FFS_BULK_SIZE, len);
-        int n = adb_write(h->bulk_in, buf, write_len);
+        int n = write(h->bulk_in, buf, write_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_in.get(), n, strerror(errno));
             return -1;
@@ -150,7 +103,7 @@ static int usb_ffs_read(usb_handle* h, void* data, int len, bool allow_partial) 
     unsigned count = 0;
     while (len > 0) {
         int read_len = std::min(USB_FFS_BULK_SIZE, len);
-        int n = adb_read(h->bulk_out, buf, read_len);
+        int n = read(h->bulk_out, buf, read_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_out.get(), n, strerror(errno));
             return -1;
@@ -232,7 +185,7 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
     }
 }
 
-static int usb_ffs_aio_read(usb_handle* h, void* data, int len, bool allow_partial) {
+static int usb_ffs_aio_read(usb_handle* h, void* data, int len, bool /* allow_partial */) {
     return usb_ffs_do_aio(h, data, len, true);
 }
 
@@ -240,32 +193,9 @@ static int usb_ffs_aio_write(usb_handle* h, const void* data, int len) {
     return usb_ffs_do_aio(h, data, len, false);
 }
 
-static void usb_ffs_kick(usb_handle* h) {
-    int err;
-
-    err = ioctl(h->bulk_in.get(), FUNCTIONFS_CLEAR_HALT);
-    if (err < 0) {
-        D("[ kick: source (fd=%d) clear halt failed (%d) ]", h->bulk_in.get(), errno);
-    }
-
-    err = ioctl(h->bulk_out.get(), FUNCTIONFS_CLEAR_HALT);
-    if (err < 0) {
-        D("[ kick: sink (fd=%d) clear halt failed (%d) ]", h->bulk_out.get(), errno);
-    }
-
-    // don't close ep0 here, since we may not need to reinitialize it with
-    // the same descriptors again. if however ep1/ep2 fail to re-open in
-    // init_functionfs, only then would we close and open ep0 again.
-    // Ditto the comment in usb_adb_kick.
-    h->kicked = true;
-    TEMP_FAILURE_RETRY(dup2(dummy_fd.get(), h->bulk_out.get()));
-    TEMP_FAILURE_RETRY(dup2(dummy_fd.get(), h->bulk_in.get()));
-}
-
 static void usb_ffs_close(usb_handle* h) {
     LOG(INFO) << "closing functionfs transport";
 
-    h->kicked = false;
     h->bulk_out.reset();
     h->bulk_in.reset();
 
@@ -291,37 +221,6 @@ usb_handle* create_usb_handle(unsigned num_bufs, unsigned io_size) {
         aio_block_init(&h->write_aiob, num_bufs);
     }
     h->io_size = io_size;
-    h->kick = usb_ffs_kick;
     h->close = usb_ffs_close;
     return h;
-}
-
-void usb_init_legacy() {
-    D("[ usb_init - using legacy FunctionFS ]");
-    dummy_fd.reset(adb_open("/dev/null", O_WRONLY | O_CLOEXEC));
-    CHECK_NE(-1, dummy_fd.get());
-
-    std::thread(usb_legacy_ffs_open_thread, create_usb_handle(USB_FFS_NUM_BUFS, USB_FFS_BULK_SIZE))
-            .detach();
-}
-
-int usb_write(usb_handle* h, const void* data, int len) {
-    return h->write(h, data, len);
-}
-
-int usb_read(usb_handle* h, void* data, int len) {
-    return h->read(h, data, len, false /* allow_partial */);
-}
-
-int usb_close(usb_handle* h) {
-    h->close(h);
-    return 0;
-}
-
-void usb_reset(usb_handle* h) {
-    usb_close(h);
-}
-
-void usb_kick(usb_handle* h) {
-    h->kick(h);
 }
