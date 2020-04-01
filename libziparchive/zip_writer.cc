@@ -475,19 +475,16 @@ int32_t ZipWriter::FinishEntry() {
   if (ShouldUseDataDescriptor()) {
     // Some versions of ZIP don't allow STORED data to have a trailing DataDescriptor.
     // If this file is not seekable, or if the data is compressed, write a DataDescriptor.
-    const uint32_t sig = DataDescriptor::kOptSignature;
-    if (fwrite(&sig, sizeof(sig), 1, file_) != 1) {
+    // We haven't supported zip64 format yet. Write both uncompressed size and compressed
+    // size as uint32_t.
+    std::vector<uint32_t> dataDescriptor = {
+        DataDescriptor::kOptSignature, current_file_entry_.crc32,
+        current_file_entry_.compressed_size, current_file_entry_.uncompressed_size};
+    if (fwrite(dataDescriptor.data(), dataDescriptor.size() * sizeof(uint32_t), 1, file_) != 1) {
       return HandleError(kIoError);
     }
 
-    DataDescriptor dd = {};
-    dd.crc32 = current_file_entry_.crc32;
-    dd.compressed_size = current_file_entry_.compressed_size;
-    dd.uncompressed_size = current_file_entry_.uncompressed_size;
-    if (fwrite(&dd, sizeof(dd), 1, file_) != 1) {
-      return HandleError(kIoError);
-    }
-    current_offset_ += sizeof(DataDescriptor::kOptSignature) + sizeof(dd);
+    current_offset_ += sizeof(uint32_t) * dataDescriptor.size();
   } else {
     // Seek back to the header and rewrite to include the size.
     if (fseeko(file_, current_file_entry_.local_file_header_offset, SEEK_SET) != 0) {
