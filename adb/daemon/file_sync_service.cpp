@@ -57,7 +57,7 @@
 #include "adb_io.h"
 #include "adb_trace.h"
 #include "adb_utils.h"
-#include "brotli_utils.h"
+#include "compression_utils.h"
 #include "file_sync_protocol.h"
 #include "security_log_tags.h"
 #include "sysdeps/errno.h"
@@ -288,8 +288,8 @@ static bool handle_send_file_compressed(borrowed_fd s, unique_fd fd, uint32_t* t
 
         while (true) {
             std::span<char> output;
-            BrotliDecodeResult result = decoder.Decode(&output);
-            if (result == BrotliDecodeResult::Error) {
+            DecodeResult result = decoder.Decode(&output);
+            if (result == DecodeResult::Error) {
                 SendSyncFailErrno(s, "decompress failed");
                 return false;
             }
@@ -299,14 +299,14 @@ static bool handle_send_file_compressed(borrowed_fd s, unique_fd fd, uint32_t* t
                 return false;
             }
 
-            if (result == BrotliDecodeResult::NeedInput) {
+            if (result == DecodeResult::NeedInput) {
                 break;
-            } else if (result == BrotliDecodeResult::MoreOutput) {
+            } else if (result == DecodeResult::MoreOutput) {
                 continue;
-            } else if (result == BrotliDecodeResult::Done) {
+            } else if (result == DecodeResult::Done) {
                 break;
             } else {
-                LOG(FATAL) << "invalid BrotliDecodeResult: " << static_cast<int>(result);
+                LOG(FATAL) << "invalid DecodeResult: " << static_cast<int>(result);
             }
         }
     }
@@ -591,7 +591,6 @@ static bool do_send_v2(int s, const std::string& path, std::vector<char>& buffer
 static bool recv_uncompressed(borrowed_fd s, unique_fd fd, std::vector<char>& buffer) {
     syncmsg msg;
     msg.data.id = ID_DATA;
-    std::optional<BrotliEncoder<SYNC_DATA_MAX>> encoder;
     while (true) {
         int r = adb_read(fd.get(), &buffer[0], buffer.size() - sizeof(msg.data));
         if (r <= 0) {
@@ -633,8 +632,8 @@ static bool recv_compressed(borrowed_fd s, unique_fd fd) {
 
         while (true) {
             Block output;
-            BrotliEncodeResult result = encoder.Encode(&output);
-            if (result == BrotliEncodeResult::Error) {
+            EncodeResult result = encoder.Encode(&output);
+            if (result == EncodeResult::Error) {
                 SendSyncFailErrno(s, "compress failed");
                 return false;
             }
@@ -647,12 +646,12 @@ static bool recv_compressed(borrowed_fd s, unique_fd fd) {
                 }
             }
 
-            if (result == BrotliEncodeResult::Done) {
+            if (result == EncodeResult::Done) {
                 sending = false;
                 break;
-            } else if (result == BrotliEncodeResult::NeedInput) {
+            } else if (result == EncodeResult::NeedInput) {
                 break;
-            } else if (result == BrotliEncodeResult::MoreOutput) {
+            } else if (result == EncodeResult::MoreOutput) {
                 continue;
             }
         }
