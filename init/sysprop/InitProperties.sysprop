@@ -31,6 +31,6 @@ prop {
     type: Boolean
     scope: Public
     access: Readonly
-    prop_name: "ro.init.userspace_reboot.is_supported"
+    prop_name: "init.userspace_reboot.is_supported"
     integer_as_bool: true
 }
