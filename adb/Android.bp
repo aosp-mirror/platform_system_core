@@ -317,8 +317,8 @@ cc_binary_host {
     static_libs: [
         "libadb_crypto",
         "libadb_host",
-	"libadb_pairing_auth",
-	"libadb_pairing_connection",
+        "libadb_pairing_auth",
+        "libadb_pairing_connection",
         "libadb_protos",
         "libadb_tls_connection",
         "libandroidfw",
