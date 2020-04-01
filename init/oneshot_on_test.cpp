@@ -25,8 +25,12 @@ using android::base::SetProperty;
 using android::base::WaitForProperty;
 using namespace std::literals;
 
-#if 0  // TODO(b/152637928): this test is flaky
 TEST(init, oneshot_on) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Skipping test, must be run as root.";
+        return;
+    }
+
     // Bootanim shouldn't be running once the device has booted.
     ASSERT_EQ("stopped", GetProperty("init.svc.bootanim", ""));
 
@@ -43,4 +47,3 @@ TEST(init, oneshot_on) {
     // Now that oneshot is enabled again, bootanim should transition into the 'stopped' state.
     EXPECT_TRUE(WaitForProperty("init.svc.bootanim", "stopped", 10s));
 }
-#endif

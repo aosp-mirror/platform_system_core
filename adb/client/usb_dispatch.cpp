@@ -15,7 +15,8 @@
  */
 
 #include <android-base/logging.h>
-#include "usb.h"
+
+#include "client/usb.h"
 
 void usb_init() {
     if (should_use_libusb()) {
