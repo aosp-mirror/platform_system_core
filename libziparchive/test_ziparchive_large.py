@@ -26,13 +26,17 @@ import time
 
 class Zip64Test(unittest.TestCase):
   @staticmethod
+  def _WriteFile(path, size_in_kib):
+    contents = os.path.basename(path)[0] * 1024
+    with open(path, 'w') as f:
+      for it in range(0, size_in_kib):
+        f.write(contents)
+
+  @staticmethod
   def _AddEntriesToZip(output_zip, entries_dict=None):
     for name, size in entries_dict.items():
-      contents = name[0] * 1024
       file_path = tempfile.NamedTemporaryFile()
-      with open(file_path.name, 'w') as f:
-        for it in range(0, size):
-          f.write(contents)
+      Zip64Test._WriteFile(file_path.name, size)
       output_zip.write(file_path.name, arcname = name)
 
   def _getEntryNames(self, zip_name):
@@ -92,6 +96,22 @@ class Zip64Test(unittest.TestCase):
     self.assertEquals(sorted(entry_dict.keys()), sorted(read_names))
     self._ExtractEntries(zip_path.name)
 
+
+  def test_forceDataDescriptor(self):
+    file_path = tempfile.NamedTemporaryFile(suffix='.txt')
+    # TODO create the entry > 4GiB.
+    self._WriteFile(file_path.name, 1024)
+
+    zip_path = tempfile.NamedTemporaryFile(suffix='.zip')
+    with zipfile.ZipFile(zip_path, 'w', allowZip64=True) as output_zip:
+      pass
+    # The fd option force writes a data descriptor
+    cmd = ['zip', '-fd', zip_path.name, file_path.name]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    proc.communicate()
+    read_names = self._getEntryNames(zip_path.name)
+    self.assertEquals([file_path.name[1:]], read_names)
+    self._ExtractEntries(zip_path.name)
 
 if __name__ == '__main__':
   testsuite = unittest.TestLoader().discover(
