@@ -58,11 +58,11 @@ cc_defaults {
     defaults: ["fs_mgr_defaults"],
     static_libs: [
         "libdm",
+        "libext2_uuid",
+        "libfs_mgr",
     ],
     shared_libs: [
         "libbase",
-        "libext2_uuid",
-        "libfs_mgr",
         "liblog",
     ],
     srcs: [":libdm_test_srcs"],
