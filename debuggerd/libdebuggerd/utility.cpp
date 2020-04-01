@@ -449,3 +449,40 @@ void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* pref
     _LOG(log, logtype::BACKTRACE, "%s%s\n", prefix, unwinder->FormatFrame(i).c_str());
   }
 }
+
+#if defined(__aarch64__)
+#define FAR_MAGIC 0x46415201
+
+struct far_context {
+  struct _aarch64_ctx head;
+  __u64 far;
+};
+#endif
+
+uintptr_t get_fault_address(const siginfo_t* siginfo, const ucontext_t* ucontext) {
+  (void)ucontext;
+#if defined(__aarch64__)
+  // This relies on a kernel patch:
+  //   https://patchwork.kernel.org/patch/11435077/
+  // that hasn't been accepted into the kernel yet. TODO(pcc): Update this to
+  // use the official interface once it lands.
+  auto* begin = reinterpret_cast<const char*>(ucontext->uc_mcontext.__reserved);
+  auto* end = begin + sizeof(ucontext->uc_mcontext.__reserved);
+  auto* ptr = begin;
+  while (1) {
+    auto* ctx = reinterpret_cast<const _aarch64_ctx*>(ptr);
+    if (ctx->magic == 0) {
+      break;
+    }
+    if (ctx->magic == FAR_MAGIC) {
+      auto* far_ctx = reinterpret_cast<const far_context*>(ctx);
+      return far_ctx->far;
+    }
+    ptr += ctx->size;
+    if (ctx->size % sizeof(void*) != 0 || ptr < begin || ptr >= end) {
+      break;
+    }
+  }
+#endif
+  return reinterpret_cast<uintptr_t>(siginfo->si_addr);
+}

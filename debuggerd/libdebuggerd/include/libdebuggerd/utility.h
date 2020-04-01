@@ -93,4 +93,6 @@ void get_signal_sender(char* buf, size_t n, const siginfo_t*);
 const char* get_signame(const siginfo_t*);
 const char* get_sigcode(const siginfo_t*);
 
+uintptr_t get_fault_address(const siginfo_t* siginfo, const ucontext_t* ucontext);
+
 #endif // _DEBUGGERD_UTILITY_H
