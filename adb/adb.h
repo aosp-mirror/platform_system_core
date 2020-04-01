@@ -29,7 +29,6 @@
 #include "fdevent/fdevent.h"
 #include "socket.h"
 #include "types.h"
-#include "usb.h"
 
 constexpr size_t MAX_PAYLOAD_V1 = 4 * 1024;
 constexpr size_t MAX_PAYLOAD = 1024 * 1024;
@@ -139,7 +138,6 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
 
 /* initialize a transport object's func pointers and state */
 int init_socket_transport(atransport* t, unique_fd s, int port, int local);
-void init_usb_transport(atransport* t, usb_handle* usb);
 
 std::string getEmulatorSerialString(int console_port);
 #if ADB_HOST
@@ -252,4 +250,5 @@ void update_transport_status();
 // Wait until device scan has completed and every transport is ready, or a timeout elapses.
 void adb_wait_for_device_initialization();
 
+void usb_init();
 #endif
