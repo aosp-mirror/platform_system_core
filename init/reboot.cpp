@@ -102,7 +102,15 @@ static void PersistRebootReason(const char* reason, bool write_to_property) {
     if (write_to_property) {
         SetProperty(LAST_REBOOT_REASON_PROPERTY, reason);
     }
-    WriteStringToFile(reason, LAST_REBOOT_REASON_FILE);
+    auto fd = unique_fd(TEMP_FAILURE_RETRY(open(
+            LAST_REBOOT_REASON_FILE, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_BINARY, 0666)));
+    if (!fd.ok()) {
+        PLOG(ERROR) << "Could not open '" << LAST_REBOOT_REASON_FILE
+                    << "' to persist reboot reason";
+        return;
+    }
+    WriteStringToFd(reason, fd);
+    fsync(fd.get());
 }
 
 // represents umount status during reboot / shutdown.
@@ -317,9 +325,9 @@ void RebootMonitorThread(unsigned int cmd, const std::string& reboot_target,
                          bool* reboot_monitor_run) {
     unsigned int remaining_shutdown_time = 0;
 
-    // 30 seconds more than the timeout passed to the thread as there is a final Umount pass
+    // 300 seconds more than the timeout passed to the thread as there is a final Umount pass
     // after the timeout is reached.
-    constexpr unsigned int shutdown_watchdog_timeout_default = 30;
+    constexpr unsigned int shutdown_watchdog_timeout_default = 300;
     auto shutdown_watchdog_timeout = android::base::GetUintProperty(
             "ro.build.shutdown.watchdog.timeout", shutdown_watchdog_timeout_default);
     remaining_shutdown_time = shutdown_watchdog_timeout + shutdown_timeout.count() / 1000;
@@ -539,26 +547,6 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     Timer t;
     LOG(INFO) << "Reboot start, reason: " << reason << ", reboot_target: " << reboot_target;
 
-    // Ensure last reboot reason is reduced to canonical
-    // alias reported in bootloader or system boot reason.
-    size_t skip = 0;
-    std::vector<std::string> reasons = Split(reason, ",");
-    if (reasons.size() >= 2 && reasons[0] == "reboot" &&
-        (reasons[1] == "recovery" || reasons[1] == "bootloader" || reasons[1] == "cold" ||
-         reasons[1] == "hard" || reasons[1] == "warm")) {
-        skip = strlen("reboot,");
-    }
-    PersistRebootReason(reason.c_str() + skip, true);
-    sync();
-
-    // If /data isn't mounted then we can skip the extra reboot steps below, since we don't need to
-    // worry about unmounting it.
-    if (!IsDataMounted()) {
-        sync();
-        RebootSystem(cmd, reboot_target);
-        abort();
-    }
-
     bool is_thermal_shutdown = cmd == ANDROID_RB_THERMOFF;
 
     auto shutdown_timeout = 0ms;
@@ -590,6 +578,25 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
 
     // Start reboot monitor thread
     sem_post(&reboot_semaphore);
+
+    // Ensure last reboot reason is reduced to canonical
+    // alias reported in bootloader or system boot reason.
+    size_t skip = 0;
+    std::vector<std::string> reasons = Split(reason, ",");
+    if (reasons.size() >= 2 && reasons[0] == "reboot" &&
+        (reasons[1] == "recovery" || reasons[1] == "bootloader" || reasons[1] == "cold" ||
+         reasons[1] == "hard" || reasons[1] == "warm")) {
+        skip = strlen("reboot,");
+    }
+    PersistRebootReason(reason.c_str() + skip, true);
+
+    // If /data isn't mounted then we can skip the extra reboot steps below, since we don't need to
+    // worry about unmounting it.
+    if (!IsDataMounted()) {
+        sync();
+        RebootSystem(cmd, reboot_target);
+        abort();
+    }
 
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
     const std::set<std::string> to_starts{"watchdogd"};
