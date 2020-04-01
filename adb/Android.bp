@@ -114,6 +114,44 @@ cc_defaults {
     },
 }
 
+cc_defaults {
+    name: "libadbd_binary_dependencies",
+    static_libs: [
+        "libadb_crypto",
+        "libadb_pairing_connection",
+        "libadb_tls_connection",
+        "libadbd",
+        "libadbd_core",
+        "libadbconnection_server",
+        "libasyncio",
+        "libbrotli",
+        "libcutils_sockets",
+        "libdiagnose_usb",
+        "libmdnssd",
+        "libbase",
+
+        "libadb_protos",
+    ],
+
+    shared_libs: [
+        "libadbd_auth",
+        "libadbd_fs",
+        "libcrypto",
+        "libcrypto_utils",
+        "liblog",
+        "libselinux",
+    ],
+
+    target: {
+        recovery: {
+            exclude_static_libs: [
+                "libadb_pairing_auth",
+                "libadb_pairing_connection",
+            ],
+        },
+    },
+}
+
 // libadb
 // =========================================================
 // These files are compiled for both the host and the device.
@@ -365,6 +403,7 @@ cc_library_static {
         "libbase",
         "libcrypto",
         "libcrypto_utils",
+        "libcutils_sockets",
         "liblog",
     ],
 
@@ -418,13 +457,15 @@ cc_library {
         "libadb_pairing_connection",
         "libadb_protos",
         "libadb_tls_connection",
-        "libadbd_auth",
-        "libadbd_fs",
         "libasyncio",
         "libbase",
-        "libcrypto",
         "libcrypto_utils",
         "libcutils_sockets",
+
+        // APEX dependencies.
+        "libadbd_auth",
+        "libadbd_fs",
+        "libcrypto",
         "liblog",
     ],
 
@@ -464,25 +505,21 @@ cc_library {
     // libminadbd wants both, as it's used to build native tests.
     compile_multilib: "both",
 
-    // libadbd doesn't build any additional source, but to expose libadbd_core as a shared library.
-    whole_static_libs: [
-        "libadbconnection_server",
-        "libadbd_core",
-    ],
-
     shared_libs: [
         "libadb_crypto",
         "libadb_pairing_connection",
         "libadb_tls_connection",
-        "libadbd_auth",
-        "libadbd_fs",
-        "libadbd_services",
         "libasyncio",
         "libbase",
         "libcrypto",
         "libcrypto_utils",
         "liblog",
         "libselinux",
+
+        // APEX dependencies on the system image.
+        "libadbd_auth",
+        "libadbd_fs",
+        "libadbd_services",
     ],
 
     target: {
@@ -495,6 +532,7 @@ cc_library {
     },
 
     static_libs: [
+        "libadbd_core",
         "libbrotli",
         "libcutils_sockets",
         "libdiagnose_usb",
@@ -509,7 +547,7 @@ cc_library {
 
 cc_binary {
     name: "adbd",
-    defaults: ["adbd_defaults", "host_adbd_supported"],
+    defaults: ["adbd_defaults", "host_adbd_supported", "libadbd_binary_dependencies"],
     stl: "libc++_static",
     recovery_available: true,
 
@@ -527,31 +565,17 @@ cc_binary {
     },
 
     static_libs: [
-        "libadb_crypto",
-        "libadb_tls_connection",
-        "libadbconnection_server",
         "libadbd",
         "libadbd_services",
         "libasyncio",
-        "libbase",
-        "libbrotli",
         "libcap",
-        "libcrypto_utils",
-        "libcutils_sockets",
-        "libdiagnose_usb",
-        "libmdnssd",
         "libminijail",
         "libssl",
     ],
 
     shared_libs: [
-        "libadb_pairing_connection",
         "libadb_protos",
         "libadbd_auth",
-        "libadbd_fs",
-        "libcrypto",
-        "liblog",
-        "libselinux",
     ],
 
     target: {
@@ -623,8 +647,7 @@ cc_binary {
 cc_test {
     name: "adbd_test",
 
-    defaults: ["adbd_defaults"],
-    stl: "libc++_static",
+    defaults: ["adbd_defaults", "libadbd_binary_dependencies"],
 
     recovery_available: false,
     srcs: libadb_test_srcs + [
@@ -635,21 +658,16 @@ cc_test {
         "shell_service_protocol_test.cpp",
     ],
 
+    shared_libs: [
+        "liblog",
+    ],
+
     static_libs: [
         "libadbd",
         "libadbd_auth",
-        "libadb_crypto_static",
-        "libadb_pairing_connection_static",
-        "libadb_tls_connection_static",
         "libbase",
         "libcrypto_utils",
-        "libcrypto_static",
-        "libcutils_sockets",
-        "libdiagnose_usb",
-        "liblog",
         "libusb",
-        "libmdnssd",
-        "libselinux",
     ],
     test_suites: ["device-tests", "mts"],
     require_root: true,
