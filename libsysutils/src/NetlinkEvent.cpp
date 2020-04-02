@@ -529,6 +529,10 @@ bool NetlinkEvent::parseNdUserOptMessage(const struct nlmsghdr *nh) {
         free(buf);
     } else if (opthdr->nd_opt_type == ND_OPT_DNSSL) {
         // TODO: support DNSSL.
+    } else if (opthdr->nd_opt_type == ND_OPT_CAPTIVE_PORTAL) {
+        // TODO: support CAPTIVE PORTAL.
+    } else if (opthdr->nd_opt_type == ND_OPT_PREF64) {
+        // TODO: support PREF64.
     } else {
         SLOGD("Unknown ND option type %d\n", opthdr->nd_opt_type);
         return false;
