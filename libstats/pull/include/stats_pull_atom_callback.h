@@ -46,7 +46,8 @@ void AStatsManager_PullAtomMetadata_release(AStatsManager_PullAtomMetadata* meta
 
 /**
  * Set the cool down time of the pull in milliseconds. If two successive pulls are issued
- * within the cool down, a cached version of the first will be used for the second.
+ * within the cool down, a cached version of the first will be used for the second. The minimum
+ * allowed cool down is one second.
  */
 void AStatsManager_PullAtomMetadata_setCoolDownMillis(AStatsManager_PullAtomMetadata* metadata,
                                                       int64_t cool_down_millis);
@@ -58,6 +59,7 @@ int64_t AStatsManager_PullAtomMetadata_getCoolDownMillis(AStatsManager_PullAtomM
 
 /**
  * Set the maximum time the pull can take in milliseconds.
+ * The maximum allowed timeout is 10 seconds.
  */
 void AStatsManager_PullAtomMetadata_setTimeoutMillis(AStatsManager_PullAtomMetadata* metadata,
                                                      int64_t timeout_millis);

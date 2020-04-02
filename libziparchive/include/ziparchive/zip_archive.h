@@ -77,6 +77,10 @@ struct ZipEntry {
   // footer.
   uint32_t uncompressed_length;
 
+  // If the value of uncompressed length and compressed length are stored in
+  // the zip64 extended info of the extra field.
+  bool zip64_format_size{false};
+
   // The offset to the start of data for this ZipEntry.
   off64_t offset;
 

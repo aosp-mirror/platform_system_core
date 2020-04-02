@@ -42,7 +42,7 @@
 #include "adb_client.h"
 #include "adb_io.h"
 #include "adb_utils.h"
-#include "brotli_utils.h"
+#include "compression_utils.h"
 #include "file_sync_protocol.h"
 #include "line_printer.h"
 #include "sysdeps/errno.h"
@@ -580,8 +580,8 @@ class SyncConnection {
 
             while (true) {
                 Block output;
-                BrotliEncodeResult result = encoder.Encode(&output);
-                if (result == BrotliEncodeResult::Error) {
+                EncodeResult result = encoder.Encode(&output);
+                if (result == EncodeResult::Error) {
                     Error("compressing '%s' locally failed", lpath.c_str());
                     return false;
                 }
@@ -592,12 +592,12 @@ class SyncConnection {
                     WriteOrDie(lpath, rpath, &sbuf, sizeof(SyncRequest) + output.size());
                 }
 
-                if (result == BrotliEncodeResult::Done) {
+                if (result == EncodeResult::Done) {
                     sending = false;
                     break;
-                } else if (result == BrotliEncodeResult::NeedInput) {
+                } else if (result == EncodeResult::NeedInput) {
                     break;
-                } else if (result == BrotliEncodeResult::MoreOutput) {
+                } else if (result == EncodeResult::MoreOutput) {
                     continue;
                 }
             }
@@ -1076,9 +1076,9 @@ static bool sync_recv_v2(SyncConnection& sc, const char* rpath, const char* lpat
 
         while (true) {
             std::span<char> output;
-            BrotliDecodeResult result = decoder.Decode(&output);
+            DecodeResult result = decoder.Decode(&output);
 
-            if (result == BrotliDecodeResult::Error) {
+            if (result == DecodeResult::Error) {
                 sc.Error("decompress failed");
                 adb_unlink(lpath);
                 return false;
@@ -1097,15 +1097,15 @@ static bool sync_recv_v2(SyncConnection& sc, const char* rpath, const char* lpat
             sc.RecordBytesTransferred(msg.data.size);
             sc.ReportProgress(name != nullptr ? name : rpath, bytes_copied, expected_size);
 
-            if (result == BrotliDecodeResult::NeedInput) {
+            if (result == DecodeResult::NeedInput) {
                 break;
-            } else if (result == BrotliDecodeResult::MoreOutput) {
+            } else if (result == DecodeResult::MoreOutput) {
                 continue;
-            } else if (result == BrotliDecodeResult::Done) {
+            } else if (result == DecodeResult::Done) {
                 reading = false;
                 break;
             } else {
-                LOG(FATAL) << "invalid BrotliDecodeResult: " << static_cast<int>(result);
+                LOG(FATAL) << "invalid DecodeResult: " << static_cast<int>(result);
             }
         }
     }
