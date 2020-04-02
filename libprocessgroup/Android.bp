@@ -23,6 +23,10 @@ cc_library {
         "task_profiles.cpp",
     ],
     name: "libprocessgroup",
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.os.statsd",
+    ],
     host_supported: true,
     native_bridge_supported: true,
     recovery_available: true,
