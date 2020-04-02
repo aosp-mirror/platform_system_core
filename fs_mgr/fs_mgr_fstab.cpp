@@ -824,6 +824,20 @@ std::set<std::string> GetBootDevices() {
         return std::set<std::string>(boot_devices.begin(), boot_devices.end());
     }
 
+    std::string cmdline;
+    if (android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
+        std::set<std::string> boot_devices;
+        const std::string cmdline_key = "androidboot.boot_device";
+        for (const auto& [key, value] : fs_mgr_parse_boot_config(cmdline)) {
+            if (key == cmdline_key) {
+                boot_devices.emplace(value);
+            }
+        }
+        if (!boot_devices.empty()) {
+            return boot_devices;
+        }
+    }
+
     // Fallback to extract boot devices from fstab.
     Fstab fstab;
     if (!ReadDefaultFstab(&fstab)) {
