@@ -42,6 +42,12 @@
 #include "sysdeps/network.h"
 #include "sysdeps/stat.h"
 
+#if defined(__APPLE__)
+static void* mempcpy(void* dst, const void* src, size_t n) {
+    return static_cast<char*>(memcpy(dst, src, n)) + n;
+}
+#endif
+
 #ifdef _WIN32
 
 // Clang-only nullability specifiers
