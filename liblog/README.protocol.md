@@ -17,6 +17,49 @@ The data that liblog sends to logd is represented below.
         };
     };
 
+where the embedded structs are defined as:
+
+    struct android_log_header_t {
+        uint8_t id;
+        uint16_t tid;
+        log_time realtime;
+    };
+
+    struct log_time {
+        uint32_t tv_sec = 0;
+        uint32_t tv_nsec = 0;
+    }
+
+    struct android_event_header_t {
+        int32_t tag;
+    };
+
+    struct android_event_list_t {
+        int8_t type;  // EVENT_TYPE_LIST
+        int8_t element_count;
+    };
+
+    struct android_event_float_t {
+        int8_t type;  // EVENT_TYPE_FLOAT
+        float data;
+    };
+
+    struct android_event_int_t {
+        int8_t type;   // EVENT_TYPE_INT
+        int32_t data;
+    } android_event_int_t;
+
+    struct android_event_long_t {
+        int8_t type;   // EVENT_TYPE_LONG
+        int64_t data;
+    };
+
+    struct android_event_string_t {
+        int8_t type;     // EVENT_TYPE_STRING;
+        int32_t length;
+        char data[];
+    };
+
 The payload, excluding the header, has a max size of LOGGER_ENTRY_MAX_PAYLOAD.
 
 ## header
