@@ -32,6 +32,7 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
+#include <generated_android_ids.h>
 #include <hidl/metadata.h>
 #include <property_info_serializer/property_info_serializer.h>
 
@@ -47,9 +48,6 @@
 #include "service.h"
 #include "service_list.h"
 #include "service_parser.h"
-
-#define EXCLUDE_FS_CONFIG_STRUCTURES
-#include "generated_android_ids.h"
 
 using namespace std::literals;
 
