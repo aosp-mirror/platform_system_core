@@ -193,21 +193,25 @@ static bool PromptOverwrite(const std::string& dst) {
   }
 }
 
-static void ExtractToPipe(ZipArchiveHandle zah, ZipEntry& entry, const std::string& name) {
+static void ExtractToPipe(ZipArchiveHandle zah, const ZipEntry64& entry, const std::string& name) {
   // We need to extract to memory because ExtractEntryToFile insists on
   // being able to seek and truncate, and you can't do that with stdout.
-  uint8_t* buffer = new uint8_t[entry.uncompressed_length];
-  int err = ExtractToMemory(zah, &entry, buffer, entry.uncompressed_length);
+  if (entry.uncompressed_length > SIZE_MAX) {
+    die(0, "entry size %" PRIu64 " is too large to extract.", entry.uncompressed_length);
+  }
+  auto uncompressed_length = static_cast<size_t>(entry.uncompressed_length);
+  uint8_t* buffer = new uint8_t[uncompressed_length];
+  int err = ExtractToMemory(zah, &entry, buffer, uncompressed_length);
   if (err < 0) {
     die(0, "failed to extract %s: %s", name.c_str(), ErrorCodeString(err));
   }
-  if (!android::base::WriteFully(1, buffer, entry.uncompressed_length)) {
+  if (!android::base::WriteFully(1, buffer, uncompressed_length)) {
     die(errno, "failed to write %s to stdout", name.c_str());
   }
   delete[] buffer;
 }
 
-static void ExtractOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string& name) {
+static void ExtractOne(ZipArchiveHandle zah, const ZipEntry64& entry, const std::string& name) {
   // Bad filename?
   if (StartsWith(name, "/") || StartsWith(name, "../") || name.find("/../") != std::string::npos) {
     die(0, "bad filename %s", name.c_str());
@@ -253,22 +257,22 @@ static void ExtractOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string&
   close(fd);
 }
 
-static void ListOne(const ZipEntry& entry, const std::string& name) {
+static void ListOne(const ZipEntry64& entry, const std::string& name) {
   tm t = entry.GetModificationTime();
   char time[32];
   snprintf(time, sizeof(time), "%04d-%02d-%02d %02d:%02d", t.tm_year + 1900, t.tm_mon + 1,
            t.tm_mday, t.tm_hour, t.tm_min);
   if (flag_v) {
-    printf("%8d  %s  %7d %3.0f%% %s %08x  %s\n", entry.uncompressed_length,
+    printf("%8" PRIu64 " %s  %8" PRIu64 " %3.0f%% %s %08x  %s\n", entry.uncompressed_length,
            (entry.method == kCompressStored) ? "Stored" : "Defl:N", entry.compressed_length,
            CompressionRatio(entry.uncompressed_length, entry.compressed_length), time, entry.crc32,
            name.c_str());
   } else {
-    printf("%9d  %s   %s\n", entry.uncompressed_length, time, name.c_str());
+    printf("%9" PRIu64 " %s   %s\n", entry.uncompressed_length, time, name.c_str());
   }
 }
 
-static void InfoOne(const ZipEntry& entry, const std::string& name) {
+static void InfoOne(const ZipEntry64& entry, const std::string& name) {
   if (flag_1) {
     // "android-ndk-r19b/sources/android/NOTICE"
     printf("%s\n", name.c_str());
@@ -323,12 +327,12 @@ static void InfoOne(const ZipEntry& entry, const std::string& name) {
            t.tm_mday, t.tm_hour, t.tm_min);
 
   // "-rw-r--r--  3.0 unx      577 t- defX 19-Feb-12 16:09 android-ndk-r19b/sources/android/NOTICE"
-  printf("%s %2d.%d %s %8d %c%c %s %s %s\n", mode, version / 10, version % 10, src_fs,
+  printf("%s %2d.%d %s %8" PRIu64 " %c%c %s %s %s\n", mode, version / 10, version % 10, src_fs,
          entry.uncompressed_length, entry.is_text ? 't' : 'b',
          entry.has_data_descriptor ? 'X' : 'x', method, time, name.c_str());
 }
 
-static void ProcessOne(ZipArchiveHandle zah, ZipEntry& entry, const std::string& name) {
+static void ProcessOne(ZipArchiveHandle zah, const ZipEntry64& entry, const std::string& name) {
   if (role == kUnzip) {
     if (flag_l || flag_v) {
       // -l or -lv or -lq or -v.
@@ -361,7 +365,7 @@ static void ProcessAll(ZipArchiveHandle zah) {
     die(0, "couldn't iterate %s: %s", archive_name, ErrorCodeString(err));
   }
 
-  ZipEntry entry;
+  ZipEntry64 entry;
   std::string name;
   while ((err = Next(cookie, &entry, &name)) >= 0) {
     if (ShouldInclude(name)) ProcessOne(zah, entry, name);
