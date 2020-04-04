@@ -33,6 +33,7 @@ static const char* kErrorMessages[] = {
     "I/O error",
     "File mapping failed",
     "Allocation failed",
+    "Unsupported zip entry size",
 };
 
 const char* ErrorCodeString(int32_t error_code) {
