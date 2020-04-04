@@ -83,7 +83,7 @@ class Zip64Test(unittest.TestCase):
     self._ExtractEntries(zip_path.name)
 
 
-  def test_largeCompressedEntries(self):
+  def test_largeCompressedEntriesSmallerThan4G(self):
     zip_path = tempfile.NamedTemporaryFile(suffix='.zip')
     with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED,
                          allowZip64=True) as output_zip:
@@ -99,8 +99,7 @@ class Zip64Test(unittest.TestCase):
 
   def test_forceDataDescriptor(self):
     file_path = tempfile.NamedTemporaryFile(suffix='.txt')
-    # TODO create the entry > 4GiB.
-    self._WriteFile(file_path.name, 1024)
+    self._WriteFile(file_path.name, 5000 * 1024)
 
     zip_path = tempfile.NamedTemporaryFile(suffix='.zip')
     with zipfile.ZipFile(zip_path, 'w', allowZip64=True) as output_zip:
@@ -112,6 +111,35 @@ class Zip64Test(unittest.TestCase):
     read_names = self._getEntryNames(zip_path.name)
     self.assertEquals([file_path.name[1:]], read_names)
     self._ExtractEntries(zip_path.name)
+
+
+  def test_largeUncompressedEntriesLargerThan4G(self):
+    zip_path = tempfile.NamedTemporaryFile(suffix='.zip')
+    with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_STORED,
+                         allowZip64=True) as output_zip:
+      # Add entries close to 4GiB in size. Somehow the python library will put the (un)compressed
+      # sizes in the extra field. Test if our ziptool should be able to parse it.
+      entry_dict = {'g.txt': 5000 * 1024, 'h.txt': 6000 * 1024}
+      self._AddEntriesToZip(output_zip, entry_dict)
+
+    read_names = self._getEntryNames(zip_path.name)
+    self.assertEquals(sorted(entry_dict.keys()), sorted(read_names))
+    self._ExtractEntries(zip_path.name)
+
+
+  def test_largeCompressedEntriesLargerThan4G(self):
+    zip_path = tempfile.NamedTemporaryFile(suffix='.zip')
+    with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED,
+                         allowZip64=True) as output_zip:
+      # Add entries close to 4GiB in size. Somehow the python library will put the (un)compressed
+      # sizes in the extra field. Test if our ziptool should be able to parse it.
+      entry_dict = {'i.txt': 4096 * 1024, 'j.txt': 7000 * 1024}
+      self._AddEntriesToZip(output_zip, entry_dict)
+
+    read_names = self._getEntryNames(zip_path.name)
+    self.assertEquals(sorted(entry_dict.keys()), sorted(read_names))
+    self._ExtractEntries(zip_path.name)
+
 
 if __name__ == '__main__':
   testsuite = unittest.TestLoader().discover(

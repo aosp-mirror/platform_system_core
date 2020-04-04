@@ -66,5 +66,9 @@ enum ZipError : int32_t {
   // An allocation failed.
   kAllocationFailed = -13,
 
-  kLastErrorCode = kAllocationFailed,
+  // The compressed or uncompressed size is larger than UINT32_MAX and
+  // doesn't fit into the 32 bits zip entry.
+  kUnsupportedEntrySize = -14,
+
+  kLastErrorCode = kUnsupportedEntrySize,
 };
