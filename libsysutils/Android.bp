@@ -4,6 +4,7 @@ package {
 
 cc_library {
     name: "libsysutils",
+    recovery_available: true,
     vendor_available: true,
     vndk: {
         enabled: true,
