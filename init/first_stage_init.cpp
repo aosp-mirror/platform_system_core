@@ -107,7 +107,7 @@ void StartConsole() {
         return;
     }
     int fd = -1;
-    int tries = 10;
+    int tries = 50; // should timeout after 5s
     // The device driver for console may not be ready yet so retry for a while in case of failure.
     while (tries--) {
         fd = open("/dev/console", O_RDWR);
