@@ -1238,16 +1238,26 @@ void SetSystemBootReason() {
   // Shift last_reboot_reason_property to last_last_reboot_reason_property
   std::string last_boot_reason;
   if (!android::base::ReadFileToString(last_reboot_reason_file, &last_boot_reason)) {
+    PLOG(ERROR) << "Failed to read " << last_reboot_reason_file;
     last_boot_reason = android::base::GetProperty(last_reboot_reason_property, "");
+    LOG(INFO) << "Value of " << last_reboot_reason_property << " : " << last_boot_reason;
+  } else {
+    LOG(INFO) << "Last reboot reason read from " << last_reboot_reason_file << " : "
+              << last_boot_reason << ". Last reboot reason read from "
+              << last_reboot_reason_property << " : "
+              << android::base::GetProperty(last_reboot_reason_property, "");
   }
   if (last_boot_reason.empty() || isKernelRebootReason(system_boot_reason)) {
     last_boot_reason = system_boot_reason;
   } else {
     transformReason(last_boot_reason);
   }
+  LOG(INFO) << "Normalized last reboot reason : " << last_boot_reason;
   android::base::SetProperty(last_last_reboot_reason_property, last_boot_reason);
   android::base::SetProperty(last_reboot_reason_property, "");
-  unlink(last_reboot_reason_file);
+  if (unlink(last_reboot_reason_file) != 0) {
+    PLOG(ERROR) << "Failed to unlink " << last_reboot_reason_file;
+  }
 }
 
 // Gets the boot time offset. This is useful when Android is running in a
