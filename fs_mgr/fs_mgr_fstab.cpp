@@ -790,15 +790,16 @@ std::set<std::string> GetBootDevices() {
 
 FstabEntry BuildGsiSystemFstabEntry() {
     // .logical_partition_name is required to look up AVB Hashtree descriptors.
-    FstabEntry system = {
-            .blk_device = "system_gsi",
-            .mount_point = "/system",
-            .fs_type = "ext4",
-            .flags = MS_RDONLY,
-            .fs_options = "barrier=1",
-            // could add more keys separated by ':'.
-            .avb_keys = "/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey",
-            .logical_partition_name = "system"};
+    FstabEntry system = {.blk_device = "system_gsi",
+                         .mount_point = "/system",
+                         .fs_type = "ext4",
+                         .flags = MS_RDONLY,
+                         .fs_options = "barrier=1",
+                         // could add more keys separated by ':'.
+                         .avb_keys =
+                                 "/avb/q-gsi.avbpubkey:/avb/q-developer-gsi.avbpubkey:"
+                                 "/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey",
+                         .logical_partition_name = "system"};
     system.fs_mgr_flags.wait = true;
     system.fs_mgr_flags.logical = true;
     system.fs_mgr_flags.first_stage_mount = true;

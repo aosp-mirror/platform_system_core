@@ -387,6 +387,7 @@ void Service::Reap(const siginfo_t& siginfo) {
                     LOG(ERROR) << "updatable process '" << name_ << "' exited 4 times "
                                << (boot_completed ? "in 4 minutes" : "before boot completed");
                     // Notifies update_verifier and apexd
+                    property_set("ro.init.updatable_crashing_process_name", name_);
                     property_set("ro.init.updatable_crashing", "1");
                 }
             }
