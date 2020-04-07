@@ -182,7 +182,7 @@ cc_defaults {
         "libstorage_literals_headers",
     ],
     test_suites: [
-        "vts-core",
+        "vts",
         "device-tests"
     ],
     test_min_api_level: 29,
@@ -193,6 +193,12 @@ cc_defaults {
 cc_test {
     name: "vts_libsnapshot_test",
     defaults: ["libsnapshot_test_defaults"],
+}
+
+// For VTS 10
+vts_config {
+    name: "VtsLibsnapshotTest",
+    test_config: "VtsLibsnapshotTest.xml"
 }
 
 cc_binary {
