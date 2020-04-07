@@ -97,7 +97,6 @@
 using android::base::Basename;
 using android::base::GetBoolProperty;
 using android::base::GetUintProperty;
-using android::base::Readlink;
 using android::base::Realpath;
 using android::base::SetProperty;
 using android::base::StartsWith;
@@ -1572,8 +1571,8 @@ static std::chrono::milliseconds GetMillisProperty(const std::string& name,
     return std::chrono::milliseconds(std::move(value));
 }
 
-static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
-    LINFO << __FUNCTION__ << "(): about to umount everything on top of " << block_device;
+static bool fs_mgr_unmount_all_data_mounts(const std::string& data_block_device) {
+    LINFO << __FUNCTION__ << "(): about to umount everything on top of " << data_block_device;
     Timer t;
     auto timeout = GetMillisProperty("init.userspace_reboot.userdata_remount.timeoutmillis", 5s);
     while (true) {
@@ -1585,7 +1584,13 @@ static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
         }
         // Now proceed with other bind mounts on top of /data.
         for (const auto& entry : proc_mounts) {
-            if (entry.blk_device == block_device) {
+            std::string block_device;
+            if (StartsWith(entry.blk_device, "/dev/block") &&
+                !Realpath(entry.blk_device, &block_device)) {
+                PWARNING << __FUNCTION__ << "(): failed to realpath " << entry.blk_device;
+                block_device = entry.blk_device;
+            }
+            if (data_block_device == block_device) {
                 if (umount2(entry.mount_point.c_str(), 0) != 0) {
                     PERROR << __FUNCTION__ << "(): Failed to umount " << entry.mount_point;
                     umount_done = false;
@@ -1597,7 +1602,8 @@ static bool fs_mgr_unmount_all_data_mounts(const std::string& block_device) {
             return true;
         }
         if (t.duration() > timeout) {
-            LERROR << __FUNCTION__ << "(): Timed out unmounting all mounts on " << block_device;
+            LERROR << __FUNCTION__ << "(): Timed out unmounting all mounts on "
+                   << data_block_device;
             Fstab remaining_mounts;
             if (!ReadFstabFromFile("/proc/mounts", &remaining_mounts)) {
                 LERROR << __FUNCTION__ << "(): Can't read /proc/mounts";
@@ -1636,14 +1642,11 @@ static bool UnwindDmDeviceStack(const std::string& block_device,
     return true;
 }
 
-FstabEntry* fs_mgr_get_mounted_entry_for_userdata(Fstab* fstab, const FstabEntry& mounted_entry) {
-    if (mounted_entry.mount_point != "/data") {
-        LERROR << mounted_entry.mount_point << " is not /data";
-        return nullptr;
-    }
+FstabEntry* fs_mgr_get_mounted_entry_for_userdata(Fstab* fstab,
+                                                  const std::string& data_block_device) {
     std::vector<std::string> dm_stack;
-    if (!UnwindDmDeviceStack(mounted_entry.blk_device, &dm_stack)) {
-        LERROR << "Failed to unwind dm-device stack for " << mounted_entry.blk_device;
+    if (!UnwindDmDeviceStack(data_block_device, &dm_stack)) {
+        LERROR << "Failed to unwind dm-device stack for " << data_block_device;
         return nullptr;
     }
     for (auto& entry : *fstab) {
@@ -1657,15 +1660,15 @@ FstabEntry* fs_mgr_get_mounted_entry_for_userdata(Fstab* fstab, const FstabEntry
                 continue;
             }
             block_device = entry.blk_device;
-        } else if (!Readlink(entry.blk_device, &block_device)) {
-            PWARNING << "Failed to read link " << entry.blk_device;
+        } else if (!Realpath(entry.blk_device, &block_device)) {
+            PWARNING << "Failed to realpath " << entry.blk_device;
             block_device = entry.blk_device;
         }
         if (std::find(dm_stack.begin(), dm_stack.end(), block_device) != dm_stack.end()) {
             return &entry;
         }
     }
-    LERROR << "Didn't find entry that was used to mount /data onto " << mounted_entry.blk_device;
+    LERROR << "Didn't find entry that was used to mount /data onto " << data_block_device;
     return nullptr;
 }
 
@@ -1676,14 +1679,17 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
         LERROR << "Can't read /proc/mounts";
         return -1;
     }
-    std::string block_device;
     auto mounted_entry = GetEntryForMountPoint(&proc_mounts, "/data");
     if (mounted_entry == nullptr) {
         LERROR << "/data is not mounted";
         return -1;
     }
-    block_device = mounted_entry->blk_device;
-    auto fstab_entry = fs_mgr_get_mounted_entry_for_userdata(fstab, *mounted_entry);
+    std::string block_device;
+    if (!Realpath(mounted_entry->blk_device, &block_device)) {
+        PERROR << "Failed to realpath " << mounted_entry->blk_device;
+        return -1;
+    }
+    auto fstab_entry = fs_mgr_get_mounted_entry_for_userdata(fstab, block_device);
     if (fstab_entry == nullptr) {
         LERROR << "Can't find /data in fstab";
         return -1;
