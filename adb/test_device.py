@@ -1302,6 +1302,10 @@ class FileOperationsTestBrotli(FileOperationsTest.Base):
     compression = "brotli"
 
 
+class FileOperationsTestLZ4(FileOperationsTest.Base):
+    compression = "lz4"
+
+
 class DeviceOfflineTest(DeviceTest):
     def _get_device_state(self, serialno):
         output = subprocess.check_output(self.device.adb_cmd + ['devices'])

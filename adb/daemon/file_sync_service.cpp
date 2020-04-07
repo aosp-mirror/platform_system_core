@@ -272,7 +272,7 @@ static bool handle_send_file_data(borrowed_fd s, unique_fd fd, uint32_t* timesta
     syncmsg msg;
     Block buffer(SYNC_DATA_MAX);
     std::span<char> buffer_span(buffer.data(), buffer.size());
-    std::variant<std::monostate, NullDecoder, BrotliDecoder> decoder_storage;
+    std::variant<std::monostate, NullDecoder, BrotliDecoder, LZ4Decoder> decoder_storage;
     Decoder* decoder = nullptr;
 
     switch (compression) {
@@ -282,6 +282,10 @@ static bool handle_send_file_data(borrowed_fd s, unique_fd fd, uint32_t* timesta
 
         case CompressionType::Brotli:
             decoder = &decoder_storage.emplace<BrotliDecoder>(buffer_span);
+            break;
+
+        case CompressionType::LZ4:
+            decoder = &decoder_storage.emplace<LZ4Decoder>(buffer_span);
             break;
 
         case CompressionType::Any:
@@ -569,6 +573,15 @@ static bool do_send_v2(int s, const std::string& path, std::vector<char>& buffer
         }
         compression = CompressionType::Brotli;
     }
+    if (msg.send_v2_setup.flags & kSyncFlagLZ4) {
+        msg.send_v2_setup.flags &= ~kSyncFlagLZ4;
+        if (compression) {
+            SendSyncFail(s, android::base::StringPrintf("multiple compression flags received: %d",
+                                                        orig_flags));
+            return false;
+        }
+        compression = CompressionType::LZ4;
+    }
 
     if (msg.send_v2_setup.flags) {
         SendSyncFail(s, android::base::StringPrintf("unknown flags: %d", msg.send_v2_setup.flags));
@@ -598,7 +611,7 @@ static bool recv_impl(borrowed_fd s, const char* path, CompressionType compressi
     syncmsg msg;
     msg.data.id = ID_DATA;
 
-    std::variant<std::monostate, NullEncoder, BrotliEncoder> encoder_storage;
+    std::variant<std::monostate, NullEncoder, BrotliEncoder, LZ4Encoder> encoder_storage;
     Encoder* encoder;
 
     switch (compression) {
@@ -608,6 +621,10 @@ static bool recv_impl(borrowed_fd s, const char* path, CompressionType compressi
 
         case CompressionType::Brotli:
             encoder = &encoder_storage.emplace<BrotliEncoder>(SYNC_DATA_MAX);
+            break;
+
+        case CompressionType::LZ4:
+            encoder = &encoder_storage.emplace<LZ4Encoder>(SYNC_DATA_MAX);
             break;
 
         case CompressionType::Any:
@@ -687,6 +704,15 @@ static bool do_recv_v2(borrowed_fd s, const char* path, std::vector<char>& buffe
             return false;
         }
         compression = CompressionType::Brotli;
+    }
+    if (msg.recv_v2_setup.flags & kSyncFlagLZ4) {
+        msg.recv_v2_setup.flags &= ~kSyncFlagLZ4;
+        if (compression) {
+            SendSyncFail(s, android::base::StringPrintf("multiple compression flags received: %d",
+                                                        orig_flags));
+            return false;
+        }
+        compression = CompressionType::LZ4;
     }
 
     if (msg.recv_v2_setup.flags) {
