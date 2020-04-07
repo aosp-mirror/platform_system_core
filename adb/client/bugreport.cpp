@@ -282,5 +282,5 @@ int Bugreport::SendShellCommand(const std::string& command, bool disable_shell_p
 
 bool Bugreport::DoSyncPull(const std::vector<const char*>& srcs, const char* dst, bool copy_attrs,
                            const char* name) {
-    return do_sync_pull(srcs, dst, copy_attrs, false, name);
+    return do_sync_pull(srcs, dst, copy_attrs, CompressionType::None, name);
 }
