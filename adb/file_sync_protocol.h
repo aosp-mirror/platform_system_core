@@ -92,6 +92,15 @@ struct __attribute__((packed)) sync_dent_v2 {
 enum SyncFlag : uint32_t {
     kSyncFlagNone = 0,
     kSyncFlagBrotli = 1,
+    kSyncFlagLZ4 = 2,
+    kSyncFlagDryRun = 0x8000'0000U,
+};
+
+enum class CompressionType {
+    None,
+    Any,
+    Brotli,
+    LZ4,
 };
 
 // send_v1 sent the path in a buffer, followed by a comma and the mode as a string.
