@@ -1331,6 +1331,8 @@ static CompressionType parse_compression_type(const std::string& str, bool allow
 
     if (str == "brotli") {
         return CompressionType::Brotli;
+    } else if (str == "lz4") {
+        return CompressionType::LZ4;
     }
 
     error_exit("unexpected compression type %s", str.c_str());
