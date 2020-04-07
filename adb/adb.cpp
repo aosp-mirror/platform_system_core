@@ -1071,19 +1071,25 @@ static int SendOkay(int fd, const std::string& s) {
     return 0;
 }
 
+static bool g_reject_kill_server = false;
+void adb_set_reject_kill_server(bool value) {
+    g_reject_kill_server = value;
+}
+
 HostRequestResult handle_host_request(std::string_view service, TransportType type,
                                       const char* serial, TransportId transport_id, int reply_fd,
                                       asocket* s) {
     if (service == "kill") {
-        fprintf(stderr, "adb server killed by remote request\n");
-        fflush(stdout);
+        if (g_reject_kill_server) {
+            LOG(WARNING) << "adb server ignoring kill-server";
+            SendFail(reply_fd, "kill-server rejected by remote server");
+        } else {
+            fprintf(stderr, "adb server killed by remote request\n");
+            SendOkay(reply_fd);
 
-        // Send a reply even though we don't read it anymore, so that old versions
-        // of adb that do read it don't spew error messages.
-        SendOkay(reply_fd);
-
-        // Rely on process exit to close the socket for us.
-        exit(0);
+            // Rely on process exit to close the socket for us.
+            exit(0);
+        }
     }
 
     LOG(DEBUG) << "handle_host_request(" << service << ")";
