@@ -81,7 +81,7 @@ cc_test {
         "fiemap_writer_test.cpp",
     ],
 
-    test_suites: ["vts-core", "device-tests"],
+    test_suites: ["vts", "device-tests"],
     auto_gen_config: true,
     test_min_api_level: 29,
     require_root: true,
