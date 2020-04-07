@@ -94,6 +94,12 @@ enum SyncFlag : uint32_t {
     kSyncFlagBrotli = 1,
 };
 
+enum class CompressionType {
+    None,
+    Any,
+    Brotli,
+};
+
 // send_v1 sent the path in a buffer, followed by a comma and the mode as a string.
 // send_v2 sends just the path in the first request, and then sends another syncmsg (with the
 // same ID!) with details.
