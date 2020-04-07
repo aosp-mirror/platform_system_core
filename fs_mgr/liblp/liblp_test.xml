@@ -19,7 +19,6 @@
         <option name="cleanup" value="true" />
         <option name="push" value="liblp_test->/data/local/tmp/liblp_test" />
     </target_preparer>
-    <option name="test-suite-tag" value="vts-core" />
     <test class="com.android.tradefed.testtype.GTest" >
         <option name="native-test-device-path" value="/data/local/tmp" />
         <option name="module-name" value="liblp_test" />

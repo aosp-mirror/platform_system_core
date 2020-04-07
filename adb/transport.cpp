@@ -84,6 +84,8 @@ const char* const kFeatureRemountShell = "remount_shell";
 const char* const kFeatureTrackApp = "track_app";
 const char* const kFeatureSendRecv2 = "sendrecv_v2";
 const char* const kFeatureSendRecv2Brotli = "sendrecv_v2_brotli";
+const char* const kFeatureSendRecv2LZ4 = "sendrecv_v2_lz4";
+const char* const kFeatureSendRecv2DryRunSend = "sendrecv_v2_dry_run_send";
 
 namespace {
 
@@ -1183,6 +1185,8 @@ const FeatureSet& supported_features() {
             kFeatureTrackApp,
             kFeatureSendRecv2,
             kFeatureSendRecv2Brotli,
+            kFeatureSendRecv2LZ4,
+            kFeatureSendRecv2DryRunSend,
             // Increment ADB_SERVER_VERSION when adding a feature that adbd needs
             // to know about. Otherwise, the client can be stuck running an old
             // version of the server even after upgrading their copy of adb.
