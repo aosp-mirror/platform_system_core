@@ -132,6 +132,7 @@ static void help() {
         " push [--sync] [-z ALGORITHM] [-Z] LOCAL... REMOTE\n"
         "     copy local files/directories to device\n"
         "     --sync: only push files that are newer on the host than the device\n"
+        "     -n: dry run: push files to device without storing to the filesystem\n"
         "     -z: enable compression with a specified algorithm (any, none, brotli)\n"
         "     -Z: disable compression\n"
         " pull [-a] [-z ALGORITHM] [-Z] REMOTE... LOCAL\n"
@@ -141,6 +142,7 @@ static void help() {
         "     -Z: disable compression\n"
         " sync [-l] [-z ALGORITHM] [-Z] [all|data|odm|oem|product|system|system_ext|vendor]\n"
         "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
+        "     -n: dry run: push files to device without storing to the filesystem\n"
         "     -l: list files that would be copied, but don't copy them\n"
         "     -z: enable compression with a specified algorithm (any, none, brotli)\n"
         "     -Z: disable compression\n"
@@ -1340,7 +1342,7 @@ static CompressionType parse_compression_type(const std::string& str, bool allow
 
 static void parse_push_pull_args(const char** arg, int narg, std::vector<const char*>* srcs,
                                  const char** dst, bool* copy_attrs, bool* sync,
-                                 CompressionType* compression) {
+                                 CompressionType* compression, bool* dry_run) {
     *copy_attrs = false;
     if (const char* adb_compression = getenv("ADB_COMPRESSION")) {
         *compression = parse_compression_type(adb_compression, true);
@@ -1364,6 +1366,8 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
                 --narg;
             } else if (!strcmp(*arg, "-Z")) {
                 *compression = CompressionType::None;
+            } else if (dry_run && !strcmp(*arg, "-n")) {
+                *dry_run = true;
             } else if (!strcmp(*arg, "--sync")) {
                 if (sync != nullptr) {
                     *sync = true;
@@ -1918,20 +1922,23 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "push")) {
         bool copy_attrs = false;
         bool sync = false;
+        bool dry_run = false;
         CompressionType compression = CompressionType::Any;
         std::vector<const char*> srcs;
         const char* dst = nullptr;
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync, &compression);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync, &compression,
+                             &dry_run);
         if (srcs.empty() || !dst) error_exit("push requires an argument");
-        return do_sync_push(srcs, dst, sync, compression) ? 0 : 1;
+        return do_sync_push(srcs, dst, sync, compression, dry_run) ? 0 : 1;
     } else if (!strcmp(argv[0], "pull")) {
         bool copy_attrs = false;
         CompressionType compression = CompressionType::Any;
         std::vector<const char*> srcs;
         const char* dst = ".";
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr, &compression);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr, &compression,
+                             nullptr);
         if (srcs.empty()) error_exit("pull requires an argument");
         return do_sync_pull(srcs, dst, copy_attrs, compression) ? 0 : 1;
     } else if (!strcmp(argv[0], "install")) {
@@ -1949,6 +1956,7 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "sync")) {
         std::string src;
         bool list_only = false;
+        bool dry_run = false;
         CompressionType compression = CompressionType::Any;
 
         if (const char* adb_compression = getenv("ADB_COMPRESSION"); adb_compression) {
@@ -1956,10 +1964,13 @@ int adb_commandline(int argc, const char** argv) {
         }
 
         int opt;
-        while ((opt = getopt(argc, const_cast<char**>(argv), "lz:Z")) != -1) {
+        while ((opt = getopt(argc, const_cast<char**>(argv), "lnz:Z")) != -1) {
             switch (opt) {
                 case 'l':
                     list_only = true;
+                    break;
+                case 'n':
+                    dry_run = true;
                     break;
                 case 'z':
                     compression = parse_compression_type(optarg, false);
@@ -1968,7 +1979,7 @@ int adb_commandline(int argc, const char** argv) {
                     compression = CompressionType::None;
                     break;
                 default:
-                    error_exit("usage: adb sync [-l] [-z ALGORITHM] [-Z] [PARTITION]");
+                    error_exit("usage: adb sync [-l] [-n]  [-z ALGORITHM] [-Z] [PARTITION]");
             }
         }
 
@@ -1977,7 +1988,7 @@ int adb_commandline(int argc, const char** argv) {
         } else if (optind + 1 == argc) {
             src = argv[optind];
         } else {
-            error_exit("usage: adb sync [-l] [-z ALGORITHM] [-Z] [PARTITION]");
+            error_exit("usage: adb sync [-l] [-n] [-z ALGORITHM] [-Z] [PARTITION]");
         }
 
         std::vector<std::string> partitions{"data",   "odm",        "oem",   "product",
@@ -1988,7 +1999,9 @@ int adb_commandline(int argc, const char** argv) {
                 std::string src_dir{product_file(partition)};
                 if (!directory_exists(src_dir)) continue;
                 found = true;
-                if (!do_sync_sync(src_dir, "/" + partition, list_only, compression)) return 1;
+                if (!do_sync_sync(src_dir, "/" + partition, list_only, compression, dry_run)) {
+                    return 1;
+                }
             }
         }
         if (!found) error_exit("don't know how to sync %s partition", src.c_str());
