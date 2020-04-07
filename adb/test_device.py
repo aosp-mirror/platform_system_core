@@ -1268,6 +1268,59 @@ class FileOperationsTest:
                 if temp_dir is not None:
                     shutil.rmtree(temp_dir)
 
+        def test_push_dry_run_nonexistent_file(self):
+            """Push with dry run."""
+
+            for file_size in [8, 1024 * 1024]:
+                try:
+                    device_dir = posixpath.join(self.DEVICE_TEMP_DIR, 'push_dry_run')
+                    device_file = posixpath.join(device_dir, 'file')
+
+                    self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+                    self.device.shell(['mkdir', '-p', device_dir])
+
+                    host_dir = tempfile.mkdtemp()
+                    host_file = posixpath.join(host_dir, 'file')
+
+                    with open(host_file, "w") as f:
+                        f.write('x' * file_size)
+
+                    self.device._simple_call(['push', '-n', host_file, device_file])
+                    rc, _, _ = self.device.shell_nocheck(['[', '-e', device_file, ']'])
+                    self.assertNotEqual(0, rc)
+
+                    self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+                finally:
+                    if host_dir is not None:
+                        shutil.rmtree(host_dir)
+
+        def test_push_dry_run_existent_file(self):
+            """Push with dry run."""
+
+            for file_size in [8, 1024 * 1024]:
+                try:
+                    device_dir = posixpath.join(self.DEVICE_TEMP_DIR, 'push_dry_run')
+                    device_file = posixpath.join(device_dir, 'file')
+
+                    self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+                    self.device.shell(['mkdir', '-p', device_dir])
+                    self.device.shell(['echo', 'foo', '>', device_file])
+
+                    host_dir = tempfile.mkdtemp()
+                    host_file = posixpath.join(host_dir, 'file')
+
+                    with open(host_file, "w") as f:
+                        f.write('x' * file_size)
+
+                    self.device._simple_call(['push', '-n', host_file, device_file])
+                    stdout, stderr = self.device.shell(['cat', device_file])
+                    self.assertEqual(stdout.strip(), "foo")
+
+                    self.device.shell(['rm', '-rf', self.DEVICE_TEMP_DIR])
+                finally:
+                    if host_dir is not None:
+                        shutil.rmtree(host_dir)
+
         def test_unicode_paths(self):
             """Ensure that we can support non-ASCII paths, even on Windows."""
             name = u'로보카 폴리'
