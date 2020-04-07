@@ -237,6 +237,7 @@ class SyncConnection {
             have_ls_v2_ = CanUseFeature(features_, kFeatureLs2);
             have_sendrecv_v2_ = CanUseFeature(features_, kFeatureSendRecv2);
             have_sendrecv_v2_brotli_ = CanUseFeature(features_, kFeatureSendRecv2Brotli);
+            have_sendrecv_v2_lz4_ = CanUseFeature(features_, kFeatureSendRecv2LZ4);
             fd.reset(adb_connect("sync:", &error));
             if (fd < 0) {
                 Error("connect failed: %s", error.c_str());
@@ -262,12 +263,15 @@ class SyncConnection {
 
     bool HaveSendRecv2() const { return have_sendrecv_v2_; }
     bool HaveSendRecv2Brotli() const { return have_sendrecv_v2_brotli_; }
+    bool HaveSendRecv2LZ4() const { return have_sendrecv_v2_lz4_; }
 
     // Resolve a compression type which might be CompressionType::Any to a specific compression
     // algorithm.
     CompressionType ResolveCompressionType(CompressionType compression) const {
         if (compression == CompressionType::Any) {
-            if (HaveSendRecv2Brotli()) {
+            if (HaveSendRecv2LZ4()) {
+                return CompressionType::LZ4;
+            } else if (HaveSendRecv2Brotli()) {
                 return CompressionType::Brotli;
             }
             return CompressionType::None;
@@ -361,6 +365,10 @@ class SyncConnection {
                 msg.send_v2_setup.flags = kSyncFlagBrotli;
                 break;
 
+            case CompressionType::LZ4:
+                msg.send_v2_setup.flags = kSyncFlagLZ4;
+                break;
+
             case CompressionType::Any:
                 LOG(FATAL) << "unexpected CompressionType::Any";
         }
@@ -398,6 +406,10 @@ class SyncConnection {
 
             case CompressionType::Brotli:
                 msg.recv_v2_setup.flags |= kSyncFlagBrotli;
+                break;
+
+            case CompressionType::LZ4:
+                msg.recv_v2_setup.flags |= kSyncFlagLZ4;
                 break;
 
             case CompressionType::Any:
@@ -599,7 +611,7 @@ class SyncConnection {
         syncsendbuf sbuf;
         sbuf.id = ID_DATA;
 
-        std::variant<std::monostate, NullEncoder, BrotliEncoder> encoder_storage;
+        std::variant<std::monostate, NullEncoder, BrotliEncoder, LZ4Encoder> encoder_storage;
         Encoder* encoder = nullptr;
         switch (compression) {
             case CompressionType::None:
@@ -608,6 +620,10 @@ class SyncConnection {
 
             case CompressionType::Brotli:
                 encoder = &encoder_storage.emplace<BrotliEncoder>(SYNC_DATA_MAX);
+                break;
+
+            case CompressionType::LZ4:
+                encoder = &encoder_storage.emplace<LZ4Encoder>(SYNC_DATA_MAX);
                 break;
 
             case CompressionType::Any:
@@ -891,6 +907,7 @@ class SyncConnection {
     bool have_ls_v2_;
     bool have_sendrecv_v2_;
     bool have_sendrecv_v2_brotli_;
+    bool have_sendrecv_v2_lz4_;
 
     TransferLedger global_ledger_;
     TransferLedger current_ledger_;
@@ -1093,7 +1110,7 @@ static bool sync_recv_v2(SyncConnection& sc, const char* rpath, const char* lpat
     uint64_t bytes_copied = 0;
 
     Block buffer(SYNC_DATA_MAX);
-    std::variant<std::monostate, NullDecoder, BrotliDecoder> decoder_storage;
+    std::variant<std::monostate, NullDecoder, BrotliDecoder, LZ4Decoder> decoder_storage;
     Decoder* decoder = nullptr;
 
     std::span buffer_span(buffer.data(), buffer.size());
@@ -1104,6 +1121,10 @@ static bool sync_recv_v2(SyncConnection& sc, const char* rpath, const char* lpat
 
         case CompressionType::Brotli:
             decoder = &decoder_storage.emplace<BrotliDecoder>(buffer_span);
+            break;
+
+        case CompressionType::LZ4:
+            decoder = &decoder_storage.emplace<LZ4Decoder>(buffer_span);
             break;
 
         case CompressionType::Any:
@@ -1160,8 +1181,7 @@ static bool sync_recv_v2(SyncConnection& sc, const char* rpath, const char* lpat
             }
 
             bytes_copied += output.size();
-
-            sc.RecordBytesTransferred(msg.data.size);
+            sc.RecordBytesTransferred(output.size());
             sc.ReportProgress(name != nullptr ? name : rpath, bytes_copied, expected_size);
 
             if (result == DecodeResult::NeedInput) {
