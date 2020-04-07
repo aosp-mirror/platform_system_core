@@ -105,7 +105,12 @@ int adb_server_main(int is_daemon, const std::string& socket_spec, int ack_reply
         fdevent_run_on_main_thread([]() { exit(0); });
     });
 
-    char* leak = getenv("ADB_LEAK");
+    const char* reject_kill_server = getenv("ADB_REJECT_KILL_SERVER");
+    if (reject_kill_server && strcmp(reject_kill_server, "1") == 0) {
+        adb_set_reject_kill_server(true);
+    }
+
+    const char* leak = getenv("ADB_LEAK");
     if (leak && strcmp(leak, "1") == 0) {
         intentionally_leak();
     }
