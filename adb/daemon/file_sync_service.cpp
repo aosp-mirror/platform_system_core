@@ -315,9 +315,12 @@ static bool handle_send_file_data(borrowed_fd s, unique_fd fd, uint32_t* timesta
                 return false;
             }
 
-            if (!WriteFdExactly(fd, output.data(), output.size())) {
-                SendSyncFailErrno(s, "write failed");
-                return false;
+            // fd is -1 if the client is pushing with --dry-run.
+            if (fd != -1) {
+                if (!WriteFdExactly(fd, output.data(), output.size())) {
+                    SendSyncFailErrno(s, "write failed");
+                    return false;
+                }
             }
 
             if (result == DecodeResult::NeedInput) {
@@ -337,65 +340,64 @@ static bool handle_send_file_data(borrowed_fd s, unique_fd fd, uint32_t* timesta
 
 static bool handle_send_file(borrowed_fd s, const char* path, uint32_t* timestamp, uid_t uid,
                              gid_t gid, uint64_t capabilities, mode_t mode,
-                             CompressionType compression, std::vector<char>& buffer,
+                             CompressionType compression, bool dry_run, std::vector<char>& buffer,
                              bool do_unlink) {
-    int rc;
     syncmsg msg;
+    unique_fd fd;
 
-    __android_log_security_bswrite(SEC_TAG_ADB_SEND_FILE, path);
-
-    unique_fd fd(adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode));
-
-    if (fd < 0 && errno == ENOENT) {
-        if (!secure_mkdirs(Dirname(path))) {
-            SendSyncFailErrno(s, "secure_mkdirs failed");
-            goto fail;
-        }
+    if (!dry_run) {
+        __android_log_security_bswrite(SEC_TAG_ADB_SEND_FILE, path);
         fd.reset(adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode));
-    }
-    if (fd < 0 && errno == EEXIST) {
-        fd.reset(adb_open_mode(path, O_WRONLY | O_CLOEXEC, mode));
-    }
-    if (fd < 0) {
-        SendSyncFailErrno(s, "couldn't create file");
-        goto fail;
-    } else {
-        if (fchown(fd.get(), uid, gid) == -1) {
-            SendSyncFailErrno(s, "fchown failed");
-            goto fail;
+
+        if (fd < 0 && errno == ENOENT) {
+            if (!secure_mkdirs(Dirname(path))) {
+                SendSyncFailErrno(s, "secure_mkdirs failed");
+                goto fail;
+            }
+            fd.reset(adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode));
         }
+        if (fd < 0 && errno == EEXIST) {
+            fd.reset(adb_open_mode(path, O_WRONLY | O_CLOEXEC, mode));
+        }
+        if (fd < 0) {
+            SendSyncFailErrno(s, "couldn't create file");
+            goto fail;
+        } else {
+            if (fchown(fd.get(), uid, gid) == -1) {
+                SendSyncFailErrno(s, "fchown failed");
+                goto fail;
+            }
 
 #if defined(__ANDROID__)
-        // Not all filesystems support setting SELinux labels. http://b/23530370.
-        selinux_android_restorecon(path, 0);
+            // Not all filesystems support setting SELinux labels. http://b/23530370.
+            selinux_android_restorecon(path, 0);
 #endif
 
-        // fchown clears the setuid bit - restore it if present.
-        // Ignore the result of calling fchmod. It's not supported
-        // by all filesystems, so we don't check for success. b/12441485
-        fchmod(fd.get(), mode);
-    }
+            // fchown clears the setuid bit - restore it if present.
+            // Ignore the result of calling fchmod. It's not supported
+            // by all filesystems, so we don't check for success. b/12441485
+            fchmod(fd.get(), mode);
+        }
 
-    {
-        rc = posix_fadvise(fd.get(), 0, 0,
-                           POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE | POSIX_FADV_WILLNEED);
+        int rc = posix_fadvise(fd.get(), 0, 0,
+                               POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE | POSIX_FADV_WILLNEED);
         if (rc != 0) {
             D("[ Failed to fadvise: %s ]", strerror(rc));
         }
-
-        if (!handle_send_file_data(s, std::move(fd), timestamp, compression)) {
-            goto fail;
-        }
-
-        if (!update_capabilities(path, capabilities)) {
-            SendSyncFailErrno(s, "update_capabilities failed");
-            goto fail;
-        }
-
-        msg.status.id = ID_OKAY;
-        msg.status.msglen = 0;
-        return WriteFdExactly(s, &msg.status, sizeof(msg.status));
     }
+
+    if (!handle_send_file_data(s, std::move(fd), timestamp, compression)) {
+        goto fail;
+    }
+
+    if (!update_capabilities(path, capabilities)) {
+        SendSyncFailErrno(s, "update_capabilities failed");
+        goto fail;
+    }
+
+    msg.status.id = ID_OKAY;
+    msg.status.msglen = 0;
+    return WriteFdExactly(s, &msg.status, sizeof(msg.status));
 
 fail:
     // If there's a problem on the device, we'll send an ID_FAIL message and
@@ -435,7 +437,7 @@ extern bool handle_send_link(int s, const std::string& path,
                              uint32_t* timestamp, std::vector<char>& buffer)
         __attribute__((error("no symlinks on Windows")));
 #else
-static bool handle_send_link(int s, const std::string& path, uint32_t* timestamp,
+static bool handle_send_link(int s, const std::string& path, uint32_t* timestamp, bool dry_run,
                              std::vector<char>& buffer) {
     syncmsg msg;
 
@@ -454,19 +456,21 @@ static bool handle_send_link(int s, const std::string& path, uint32_t* timestamp
     if (!ReadFdExactly(s, &buffer[0], len)) return false;
 
     std::string buf_link;
-    if (!android::base::Readlink(path, &buf_link) || (buf_link != &buffer[0])) {
-        adb_unlink(path.c_str());
-        auto ret = symlink(&buffer[0], path.c_str());
-        if (ret && errno == ENOENT) {
-            if (!secure_mkdirs(Dirname(path))) {
-                SendSyncFailErrno(s, "secure_mkdirs failed");
+    if (!dry_run) {
+        if (!android::base::Readlink(path, &buf_link) || (buf_link != &buffer[0])) {
+            adb_unlink(path.c_str());
+            auto ret = symlink(&buffer[0], path.c_str());
+            if (ret && errno == ENOENT) {
+                if (!secure_mkdirs(Dirname(path))) {
+                    SendSyncFailErrno(s, "secure_mkdirs failed");
+                    return false;
+                }
+                ret = symlink(&buffer[0], path.c_str());
+            }
+            if (ret) {
+                SendSyncFailErrno(s, "symlink failed");
                 return false;
             }
-            ret = symlink(&buffer[0], path.c_str());
-        }
-        if (ret) {
-            SendSyncFailErrno(s, "symlink failed");
-            return false;
         }
     }
 
@@ -487,11 +491,14 @@ static bool handle_send_link(int s, const std::string& path, uint32_t* timestamp
 #endif
 
 static bool send_impl(int s, const std::string& path, mode_t mode, CompressionType compression,
-                      std::vector<char>& buffer) {
+                      bool dry_run, std::vector<char>& buffer) {
     // Don't delete files before copying if they are not "regular" or symlinks.
     struct stat st;
-    bool do_unlink = (lstat(path.c_str(), &st) == -1) || S_ISREG(st.st_mode) ||
-                     (S_ISLNK(st.st_mode) && !S_ISLNK(mode));
+    bool do_unlink = false;
+    if (!dry_run) {
+        do_unlink = (lstat(path.c_str(), &st) == -1) || S_ISREG(st.st_mode) ||
+                    (S_ISLNK(st.st_mode) && !S_ISLNK(mode));
+    }
     if (do_unlink) {
         adb_unlink(path.c_str());
     }
@@ -499,7 +506,7 @@ static bool send_impl(int s, const std::string& path, mode_t mode, CompressionTy
     bool result;
     uint32_t timestamp;
     if (S_ISLNK(mode)) {
-        result = handle_send_link(s, path, &timestamp, buffer);
+        result = handle_send_link(s, path, &timestamp, dry_run, buffer);
     } else {
         // Copy user permission bits to "group" and "other" permissions.
         mode &= 0777;
@@ -509,12 +516,12 @@ static bool send_impl(int s, const std::string& path, mode_t mode, CompressionTy
         uid_t uid = -1;
         gid_t gid = -1;
         uint64_t capabilities = 0;
-        if (should_use_fs_config(path)) {
+        if (should_use_fs_config(path) && !dry_run) {
             adbd_fs_config(path.c_str(), 0, nullptr, &uid, &gid, &mode, &capabilities);
         }
 
         result = handle_send_file(s, path.c_str(), &timestamp, uid, gid, capabilities, mode,
-                                  compression, buffer, do_unlink);
+                                  compression, dry_run, buffer, do_unlink);
     }
 
     if (!result) {
@@ -547,7 +554,7 @@ static bool do_send_v1(int s, const std::string& spec, std::vector<char>& buffer
         return false;
     }
 
-    return send_impl(s, path, mode, CompressionType::None, buffer);
+    return send_impl(s, path, mode, CompressionType::None, false, buffer);
 }
 
 static bool do_send_v2(int s, const std::string& path, std::vector<char>& buffer) {
@@ -561,6 +568,7 @@ static bool do_send_v2(int s, const std::string& path, std::vector<char>& buffer
         PLOG(ERROR) << "failed to read send_v2 setup packet";
     }
 
+    bool dry_run = false;
     std::optional<CompressionType> compression;
 
     uint32_t orig_flags = msg.send_v2_setup.flags;
@@ -582,6 +590,10 @@ static bool do_send_v2(int s, const std::string& path, std::vector<char>& buffer
         }
         compression = CompressionType::LZ4;
     }
+    if (msg.send_v2_setup.flags & kSyncFlagDryRun) {
+        msg.send_v2_setup.flags &= ~kSyncFlagDryRun;
+        dry_run = true;
+    }
 
     if (msg.send_v2_setup.flags) {
         SendSyncFail(s, android::base::StringPrintf("unknown flags: %d", msg.send_v2_setup.flags));
@@ -590,7 +602,7 @@ static bool do_send_v2(int s, const std::string& path, std::vector<char>& buffer
 
     errno = 0;
     return send_impl(s, path, msg.send_v2_setup.mode, compression.value_or(CompressionType::None),
-                     buffer);
+                     dry_run, buffer);
 }
 
 static bool recv_impl(borrowed_fd s, const char* path, CompressionType compression,
