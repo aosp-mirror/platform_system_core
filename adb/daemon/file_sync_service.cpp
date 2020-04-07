@@ -558,11 +558,13 @@ static bool do_send_v2(int s, const std::string& path, std::vector<char>& buffer
     }
 
     std::optional<CompressionType> compression;
+
+    uint32_t orig_flags = msg.send_v2_setup.flags;
     if (msg.send_v2_setup.flags & kSyncFlagBrotli) {
         msg.send_v2_setup.flags &= ~kSyncFlagBrotli;
         if (compression) {
             SendSyncFail(s, android::base::StringPrintf("multiple compression flags received: %d",
-                                                        msg.recv_v2_setup.flags));
+                                                        orig_flags));
             return false;
         }
         compression = CompressionType::Brotli;
@@ -676,11 +678,12 @@ static bool do_recv_v2(borrowed_fd s, const char* path, std::vector<char>& buffe
     }
 
     std::optional<CompressionType> compression;
+    uint32_t orig_flags = msg.recv_v2_setup.flags;
     if (msg.recv_v2_setup.flags & kSyncFlagBrotli) {
         msg.recv_v2_setup.flags &= ~kSyncFlagBrotli;
         if (compression) {
             SendSyncFail(s, android::base::StringPrintf("multiple compression flags received: %d",
-                                                        msg.recv_v2_setup.flags));
+                                                        orig_flags));
             return false;
         }
         compression = CompressionType::Brotli;
