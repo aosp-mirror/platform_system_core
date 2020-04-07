@@ -88,6 +88,8 @@ extern const char* const kFeatureTrackApp;
 extern const char* const kFeatureSendRecv2;
 // adbd supports brotli for send/recv v2.
 extern const char* const kFeatureSendRecv2Brotli;
+// adbd supports LZ4 for send/recv v2.
+extern const char* const kFeatureSendRecv2LZ4;
 
 TransportId NextTransportId();
 
