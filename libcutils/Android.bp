@@ -346,7 +346,7 @@ cc_test {
 
 cc_test {
     name: "KernelLibcutilsTest",
-    test_suites: ["general-tests", "vts-core"],
+    test_suites: ["general-tests", "vts"],
     defaults: ["libcutils_test_static_defaults"],
     test_config: "KernelLibcutilsTest.xml",
 }
