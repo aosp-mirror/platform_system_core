@@ -204,9 +204,25 @@ bool adb_kill_server() {
         return false;
     }
 
-    // The server might send OKAY, so consume that.
     char buf[4];
-    ReadFdExactly(fd.get(), buf, 4);
+    if (!ReadFdExactly(fd.get(), buf, 4)) {
+        fprintf(stderr, "error: failed to read response from server\n");
+        return false;
+    }
+
+    if (memcmp(buf, "OKAY", 4) == 0) {
+        // Nothing to do.
+    } else if (memcmp(buf, "FAIL", 4) == 0) {
+        std::string output, error;
+        if (!ReadProtocolString(fd.get(), &output, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
+            return false;
+        }
+
+        fprintf(stderr, "error: %s\n", output.c_str());
+        return false;
+    }
+
     // Now that no more data is expected, wait for socket orderly shutdown or error, indicating
     // server death.
     ReadOrderlyShutdown(fd.get());

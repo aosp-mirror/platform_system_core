@@ -290,7 +290,7 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy) 
         }
     }
 
-    if (do_sync_push(apk_file, apk_dest.c_str(), false, true)) {
+    if (do_sync_push(apk_file, apk_dest.c_str(), false, CompressionType::Any, false)) {
         result = pm_command(argc, argv);
         delete_device_file(apk_dest);
     }

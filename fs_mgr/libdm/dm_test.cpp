@@ -516,32 +516,22 @@ TEST(libdm, CryptArgs) {
 }
 
 TEST(libdm, DefaultKeyArgs) {
-    DmTargetTypeInfo info;
-
-    DeviceMapper& dm = DeviceMapper::Instance();
-    if (!dm.GetTargetByName("default-key", &info)) {
-        cout << "default-key module not enabled; skipping test" << std::endl;
-        return;
-    }
-    bool is_legacy;
-    ASSERT_TRUE(DmTargetDefaultKey::IsLegacy(&is_legacy));
-    // set_dun only in the non-is_legacy case
-    DmTargetDefaultKey target(0, 4096, "AES-256-XTS", "abcdef0123456789", "/dev/loop0", 0);
-    if (is_legacy) {
-        target.SetIsLegacy();
-    } else {
-        target.SetSetDun();
-    }
+    DmTargetDefaultKey target(0, 4096, "aes-xts-plain64", "abcdef0123456789", "/dev/loop0", 0);
+    target.SetSetDun();
     ASSERT_EQ(target.name(), "default-key");
     ASSERT_TRUE(target.Valid());
-    if (is_legacy) {
-        ASSERT_EQ(target.GetParameterString(), "AES-256-XTS abcdef0123456789 /dev/loop0 0");
-    } else {
-        // TODO: Add case for wrapped key enabled
-        ASSERT_EQ(target.GetParameterString(),
-                  "AES-256-XTS abcdef0123456789 0 /dev/loop0 0 3 allow_discards sector_size:4096 "
-                  "iv_large_sectors");
-    }
+    // TODO: Add case for wrapped key enabled
+    ASSERT_EQ(target.GetParameterString(),
+              "aes-xts-plain64 abcdef0123456789 0 /dev/loop0 0 3 allow_discards sector_size:4096 "
+              "iv_large_sectors");
+}
+
+TEST(libdm, DefaultKeyLegacyArgs) {
+    DmTargetDefaultKey target(0, 4096, "AES-256-XTS", "abcdef0123456789", "/dev/loop0", 0);
+    target.SetUseLegacyOptionsFormat();
+    ASSERT_EQ(target.name(), "default-key");
+    ASSERT_TRUE(target.Valid());
+    ASSERT_EQ(target.GetParameterString(), "AES-256-XTS abcdef0123456789 /dev/loop0 0");
 }
 
 TEST(libdm, DeleteDeviceWithTimeout) {

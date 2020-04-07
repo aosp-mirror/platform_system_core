@@ -155,7 +155,7 @@ struct IOVector {
             return nullptr;
         }
 
-        return chain_.front().data() + begin_offset_;
+        return chain_[start_index_].data() + begin_offset_;
     }
 
     size_type front_size() const {
@@ -163,7 +163,7 @@ struct IOVector {
             return 0;
         }
 
-        return chain_.front().size() - begin_offset_;
+        return chain_[start_index_].size() - begin_offset_;
     }
 
     size_type size() const { return chain_length_ - begin_offset_; }

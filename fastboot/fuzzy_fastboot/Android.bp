@@ -49,6 +49,6 @@ cc_test_host {
   auto_gen_config: false,
   test_suites: [
     "general-tests",
-    "vts-core",
+    "vts",
   ],
 }

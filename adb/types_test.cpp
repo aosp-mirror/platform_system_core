@@ -117,3 +117,20 @@ TEST(IOVector, misaligned_split) {
     ASSERT_EQ(1ULL, bc.size());
     ASSERT_EQ(create_block("x"), bc.coalesce());
 }
+
+TEST(IOVector, drop_front) {
+    IOVector vec;
+
+    vec.append(create_block('x', 2));
+    vec.append(create_block('y', 1000));
+    ASSERT_EQ(2U, vec.front_size());
+    ASSERT_EQ(1002U, vec.size());
+
+    vec.drop_front(1);
+    ASSERT_EQ(1U, vec.front_size());
+    ASSERT_EQ(1001U, vec.size());
+
+    vec.drop_front(1);
+    ASSERT_EQ(1000U, vec.front_size());
+    ASSERT_EQ(1000U, vec.size());
+}
