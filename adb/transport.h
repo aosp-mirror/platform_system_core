@@ -90,6 +90,8 @@ extern const char* const kFeatureSendRecv2;
 extern const char* const kFeatureSendRecv2Brotli;
 // adbd supports LZ4 for send/recv v2.
 extern const char* const kFeatureSendRecv2LZ4;
+// adbd supports dry-run send for send/recv v2.
+extern const char* const kFeatureSendRecv2DryRunSend;
 
 TransportId NextTransportId();
 
