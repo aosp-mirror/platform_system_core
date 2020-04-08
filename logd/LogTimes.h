@@ -56,9 +56,8 @@ class LogTimeEntry {
 
     SocketClient* mClient;
     log_time mStart;
-    struct timespec mTimeout;
+    struct timespec mTimeout;  // CLOCK_MONOTONIC based timeout used for log wrapping.
     const bool mNonBlock;
-    const log_time mEnd;  // only relevant if mNonBlock
 
     // Protect List manipulations
     static void wrlock(void) {

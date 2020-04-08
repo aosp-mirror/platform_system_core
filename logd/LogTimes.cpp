@@ -27,9 +27,9 @@
 
 pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
-LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client,
-                           bool nonBlock, unsigned long tail, log_mask_t logMask,
-                           pid_t pid, log_time start, uint64_t timeout)
+LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock,
+                           unsigned long tail, log_mask_t logMask, pid_t pid, log_time start,
+                           uint64_t timeout)
     : leadingDropped(false),
       mReader(reader),
       mLogMask(logMask),
@@ -39,8 +39,7 @@ LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client,
       mIndex(0),
       mClient(client),
       mStart(start),
-      mNonBlock(nonBlock),
-      mEnd(log_time(android_log_clockid())) {
+      mNonBlock(nonBlock) {
     mTimeout.tv_sec = timeout / NS_PER_SEC;
     mTimeout.tv_nsec = timeout % NS_PER_SEC;
     memset(mLastTid, 0, sizeof(mLastTid));
@@ -85,8 +84,8 @@ void* LogTimeEntry::threadStart(void* obj) {
 
     while (!me->mRelease) {
         if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
-            if (pthread_cond_timedwait(&me->threadTriggeredCondition,
-                                       &timesLock, &me->mTimeout) == ETIMEDOUT) {
+            if (pthread_cond_clockwait(&me->threadTriggeredCondition, &timesLock, CLOCK_MONOTONIC,
+                                       &me->mTimeout) == ETIMEDOUT) {
                 me->mTimeout.tv_sec = 0;
                 me->mTimeout.tv_nsec = 0;
             }
