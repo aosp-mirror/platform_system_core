@@ -344,8 +344,8 @@ TEST(ziparchive, FindEntry) {
   // Known facts about a.txt, from zipinfo -v.
   ASSERT_EQ(63, data.offset);
   ASSERT_EQ(kCompressDeflated, data.method);
-  ASSERT_EQ(static_cast<uint32_t>(17), data.uncompressed_length);
-  ASSERT_EQ(static_cast<uint32_t>(13), data.compressed_length);
+  ASSERT_EQ(17u, data.uncompressed_length);
+  ASSERT_EQ(13u, data.compressed_length);
   ASSERT_EQ(0x950821c5, data.crc32);
   ASSERT_EQ(static_cast<uint32_t>(0x438a8005), data.mod_time);
 
@@ -505,9 +505,12 @@ TEST(ziparchive, EmptyEntries) {
 
   ZipEntry64 entry;
   ASSERT_EQ(0, FindEntry(handle, "empty.txt", &entry));
-  ASSERT_EQ(static_cast<uint32_t>(0), entry.uncompressed_length);
+  ASSERT_EQ(0u, entry.uncompressed_length);
+  // Extraction to a 1 byte buffer should succeed.
   uint8_t buffer[1];
   ASSERT_EQ(0, ExtractToMemory(handle, &entry, buffer, 1));
+  // Extraction to an empty buffer should succeed.
+  ASSERT_EQ(0, ExtractToMemory(handle, &entry, nullptr, 0));
 
   TemporaryFile tmp_output_file;
   ASSERT_NE(-1, tmp_output_file.fd);
@@ -782,7 +785,7 @@ static void ExtractEntryToMemory(const std::vector<uint8_t>& zip_data,
   // "abdcdefghijk").
   ZipEntry64 entry;
   ASSERT_EQ(0, FindEntry(handle, "name", &entry));
-  ASSERT_EQ(static_cast<uint32_t>(12), entry.uncompressed_length);
+  ASSERT_EQ(12u, entry.uncompressed_length);
 
   entry_out->resize(12);
   (*error_code_out) = ExtractToMemory(handle, &entry, &((*entry_out)[0]), 12);
