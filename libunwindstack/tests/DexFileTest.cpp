@@ -21,6 +21,7 @@
 
 #include <unordered_map>
 
+#include <MemoryLocal.h>
 #include <android-base/file.h>
 #include <gtest/gtest.h>
 #include <unwindstack/MapInfo.h>
@@ -109,7 +110,7 @@ TEST(DexFileTest, from_memory_fail_too_small_for_header) {
 
   memory.SetMemory(0x1000, kDexData, 10);
 
-  EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "") == nullptr);
+  EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "", sizeof(kDexData)) == nullptr);
 }
 
 TEST(DexFileTest, from_memory_fail_too_small_for_data) {
@@ -117,7 +118,7 @@ TEST(DexFileTest, from_memory_fail_too_small_for_data) {
 
   memory.SetMemory(0x1000, kDexData, sizeof(kDexData) - 2);
 
-  EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "") == nullptr);
+  EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "", sizeof(kDexData)) == nullptr);
 }
 
 TEST(DexFileTest, from_memory_open) {
@@ -125,7 +126,7 @@ TEST(DexFileTest, from_memory_open) {
 
   memory.SetMemory(0x1000, kDexData, sizeof(kDexData));
 
-  EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "") != nullptr);
+  EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "", sizeof(kDexData)) != nullptr);
 }
 
 TEST(DexFileTest, from_memory_no_leak) {
@@ -136,7 +137,7 @@ TEST(DexFileTest, from_memory_no_leak) {
   size_t first_allocated_bytes = 0;
   size_t last_allocated_bytes = 0;
   for (size_t i = 0; i < kNumLeakLoops; i++) {
-    EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "") != nullptr);
+    EXPECT_TRUE(DexFileFromMemory::Create(0x1000, &memory, "", sizeof(kDexData)) != nullptr);
     ASSERT_NO_FATAL_FAILURE(CheckForLeak(i, &first_allocated_bytes, &last_allocated_bytes));
   }
 }
@@ -211,6 +212,43 @@ TEST(DexFileTest, create_using_memory_file_is_malformed) {
   memory.Clear();
   dex_file = DexFile::Create(0x4000, &memory, &info);
   EXPECT_TRUE(dex_file == nullptr);
+}
+
+TEST(DexFileTest, create_using_memory_size_too_small) {
+  MemoryFake memory;
+  memory.SetMemory(0x4000, kDexData, sizeof(kDexData));
+  MapInfo info(nullptr, nullptr, 0x100, sizeof(kDexData) - 2, 0x200, 0x5, "/does/not/exist");
+  EXPECT_TRUE(DexFile::Create(0x4000, &memory, &info) != nullptr);
+}
+
+class MemoryLocalFake : public MemoryLocal {
+ public:
+  MemoryLocalFake(size_t memory_size) : backing_(memory_size) {}
+  virtual ~MemoryLocalFake() = default;
+
+  void* Data() { return backing_.data(); }
+
+ private:
+  std::vector<void*> backing_;
+};
+
+TEST(DexFileTest, create_using_local_memory) {
+  MemoryLocalFake memory(sizeof(kDexData));
+
+  memcpy(memory.Data(), kDexData, sizeof(kDexData));
+  uint64_t start = reinterpret_cast<uint64_t>(memory.Data());
+  MapInfo info(nullptr, nullptr, start, start + 0x1000, 0x200, 0x5, "/does/not/exist");
+  EXPECT_TRUE(DexFile::Create(start, &memory, &info) != nullptr);
+}
+
+TEST(DexFileTest, create_using_local_memory_size_too_small) {
+  MemoryLocalFake memory(sizeof(kDexData));
+
+  memcpy(memory.Data(), kDexData, sizeof(kDexData));
+  uint64_t start = reinterpret_cast<uint64_t>(memory.Data());
+  MapInfo info(nullptr, nullptr, start, start + sizeof(kDexData) - 2, 0x200, 0x5,
+               "/does/not/exist");
+  EXPECT_TRUE(DexFile::Create(start, &memory, &info) == nullptr);
 }
 
 TEST(DexFileTest, get_method) {
