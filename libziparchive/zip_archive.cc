@@ -1009,18 +1009,16 @@ int32_t Next(void* cookie, ZipEntry64* data, std::string_view* name) {
 // the data appended to it.
 class MemoryWriter : public zip_archive::Writer {
  public:
-  static MemoryWriter Create(uint8_t* buf, size_t size, const ZipEntry64* entry) {
+  static std::unique_ptr<MemoryWriter> Create(uint8_t* buf, size_t size, const ZipEntry64* entry) {
     const uint64_t declared_length = entry->uncompressed_length;
     if (declared_length > size) {
       ALOGW("Zip: file size %" PRIu64 " is larger than the buffer size %zu.", declared_length,
             size);
-      return MemoryWriter{nullptr, 0};
+      return nullptr;
     }
 
-    return MemoryWriter(buf, size);
+    return std::unique_ptr<MemoryWriter>(new MemoryWriter(buf, size));
   }
-
-  bool IsValid() const { return buf_ != nullptr; }
 
   virtual bool Append(uint8_t* buf, size_t buf_size) override {
     if (size_ < buf_size || bytes_written_ > size_ - buf_size) {
@@ -1053,17 +1051,17 @@ class FileWriter : public zip_archive::Writer {
   // block device).
   //
   // Returns a valid FileWriter on success, |nullptr| if an error occurred.
-  static FileWriter Create(int fd, const ZipEntry64* entry) {
+  static std::unique_ptr<FileWriter> Create(int fd, const ZipEntry64* entry) {
     const uint64_t declared_length = entry->uncompressed_length;
     const off64_t current_offset = lseek64(fd, 0, SEEK_CUR);
     if (current_offset == -1) {
       ALOGW("Zip: unable to seek to current location on fd %d: %s", fd, strerror(errno));
-      return FileWriter{};
+      return nullptr;
     }
 
     if (declared_length > SIZE_MAX || declared_length > INT64_MAX) {
       ALOGW("Zip: file size %" PRIu64 " is too large to extract.", declared_length);
-      return FileWriter{};
+      return nullptr;
     }
 
 #if defined(__linux__)
@@ -1081,7 +1079,7 @@ class FileWriter : public zip_archive::Writer {
       if (result == -1 && errno == ENOSPC) {
         ALOGW("Zip: unable to allocate %" PRIu64 " bytes at offset %" PRId64 ": %s",
               declared_length, static_cast<int64_t>(current_offset), strerror(errno));
-        return FileWriter{};
+        return nullptr;
       }
     }
 #endif  // __linux__
@@ -1089,7 +1087,7 @@ class FileWriter : public zip_archive::Writer {
     struct stat sb;
     if (fstat(fd, &sb) == -1) {
       ALOGW("Zip: unable to fstat file: %s", strerror(errno));
-      return FileWriter{};
+      return nullptr;
     }
 
     // Block device doesn't support ftruncate(2).
@@ -1098,11 +1096,11 @@ class FileWriter : public zip_archive::Writer {
       if (result == -1) {
         ALOGW("Zip: unable to truncate file to %" PRId64 ": %s",
               static_cast<int64_t>(declared_length + current_offset), strerror(errno));
-        return FileWriter{};
+        return nullptr;
       }
     }
 
-    return FileWriter(fd, declared_length);
+    return std::unique_ptr<FileWriter>(new FileWriter(fd, declared_length));
   }
 
   FileWriter(FileWriter&& other) noexcept
@@ -1111,8 +1109,6 @@ class FileWriter : public zip_archive::Writer {
         total_bytes_written_(other.total_bytes_written_) {
     other.fd_ = -1;
   }
-
-  bool IsValid() const { return fd_ != -1; }
 
   virtual bool Append(uint8_t* buf, size_t buf_size) override {
     if (declared_length_ < buf_size || total_bytes_written_ > declared_length_ - buf_size) {
@@ -1365,11 +1361,11 @@ int32_t ExtractToMemory(ZipArchiveHandle archive, const ZipEntry* entry, uint8_t
 int32_t ExtractToMemory(ZipArchiveHandle archive, const ZipEntry64* entry, uint8_t* begin,
                         size_t size) {
   auto writer = MemoryWriter::Create(begin, size, entry);
-  if (!writer.IsValid()) {
+  if (!writer) {
     return kIoError;
   }
 
-  return ExtractToWriter(archive, entry, &writer);
+  return ExtractToWriter(archive, entry, writer.get());
 }
 
 int32_t ExtractEntryToFile(ZipArchiveHandle archive, const ZipEntry* entry, int fd) {
@@ -1379,11 +1375,11 @@ int32_t ExtractEntryToFile(ZipArchiveHandle archive, const ZipEntry* entry, int 
 
 int32_t ExtractEntryToFile(ZipArchiveHandle archive, const ZipEntry64* entry, int fd) {
   auto writer = FileWriter::Create(fd, entry);
-  if (!writer.IsValid()) {
+  if (!writer) {
     return kIoError;
   }
 
-  return ExtractToWriter(archive, entry, &writer);
+  return ExtractToWriter(archive, entry, writer.get());
 }
 
 int GetFileDescriptor(const ZipArchiveHandle archive) {
