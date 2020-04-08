@@ -548,7 +548,7 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
      */
 
     struct timespec ts;
-    clock_gettime(android_log_clockid(), &ts);
+    clock_gettime(CLOCK_REALTIME, &ts);
 
     android_log_header_t header = {
         .id = LOG_ID_EVENTS,

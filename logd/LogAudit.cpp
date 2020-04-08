@@ -247,22 +247,13 @@ int LogAudit::logPrint(const char* fmt, ...) {
 
     static const char audit_str[] = " audit(";
     char* timeptr = strstr(str, audit_str);
-    if (timeptr &&
-        ((cp = now.strptime(timeptr + sizeof(audit_str) - 1, "%s.%q"))) &&
+    if (timeptr && ((cp = now.strptime(timeptr + sizeof(audit_str) - 1, "%s.%q"))) &&
         (*cp == ':')) {
         memcpy(timeptr + sizeof(audit_str) - 1, "0.0", 3);
         memmove(timeptr + sizeof(audit_str) - 1 + 3, cp, strlen(cp) + 1);
-        if (!isMonotonic()) {
-            if (android::isMonotonic(now)) {
-                LogKlog::convertMonotonicToReal(now);
-            }
-        } else {
-            if (!android::isMonotonic(now)) {
-                LogKlog::convertRealToMonotonic(now);
-            }
+        if (android::isMonotonic(now)) {
+            LogKlog::convertMonotonicToReal(now);
         }
-    } else if (isMonotonic()) {
-        now = log_time(CLOCK_MONOTONIC);
     } else {
         now = log_time(CLOCK_REALTIME);
     }

@@ -201,10 +201,6 @@ static void readDmesg(LogAudit* al, LogKlog* kl) {
     }
     buf[--len] = '\0';
 
-    if (kl && kl->isMonotonic()) {
-        kl->synchronize(buf.get(), len);
-    }
-
     ssize_t sublen;
     for (char *ptr = nullptr, *tok = buf.get();
          (rc >= 0) && !!(tok = android::log_strntok_r(tok, len, ptr, sublen));
