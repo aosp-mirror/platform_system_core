@@ -470,6 +470,7 @@ cc_library {
         "libadbd_core",
         "libbrotli",
         "libdiagnose_usb",
+        "liblz4",
     ],
 
     shared_libs: [
@@ -571,6 +572,7 @@ cc_library {
         "libbrotli",
         "libcutils_sockets",
         "libdiagnose_usb",
+        "liblz4",
         "libmdnssd",
     ],
 
@@ -605,6 +607,7 @@ cc_binary {
         "libadbd_services",
         "libasyncio",
         "libcap",
+        "liblz4",
         "libminijail",
         "libssl",
     ],

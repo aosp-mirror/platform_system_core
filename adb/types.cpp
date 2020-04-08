@@ -51,7 +51,7 @@ void IOVector::drop_front(IOVector::size_type len) {
     auto dropped = 0u;
     while (dropped < len) {
         const auto next = chain_[start_index_].size() - begin_offset_;
-        if (dropped + next < len) {
+        if (dropped + next <= len) {
             pop_front_block();
             dropped += next;
         } else {

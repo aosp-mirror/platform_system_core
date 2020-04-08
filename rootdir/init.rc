@@ -1063,6 +1063,12 @@ on userspace-reboot-fs-remount
   start vold
   exec - system system -- /system/bin/vdc checkpoint resetCheckpoint
   exec - system system -- /system/bin/vdc checkpoint markBootAttempt
+  # Unmount /data_mirror mounts in the reverse order of corresponding mounts.
+  umount /data_mirror/data_ce/null/0
+  umount /data_mirror/data_ce/null
+  umount /data_mirror/data_de/null
+  umount /data_mirror/cur_profiles
+  umount /data_mirror
   remount_userdata
   start bootanim
 
