@@ -54,6 +54,7 @@ cc_library {
             },
         },
     },
+    stl: "libc++_static",
 
     // enumerate stable entry points for APEX use
     stubs: {
