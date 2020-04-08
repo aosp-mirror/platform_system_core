@@ -1006,6 +1006,8 @@ TEST(fs_mgr, UserdataMountedFromDefaultFstab) {
     ASSERT_TRUE(ReadFstabFromFile("/proc/mounts", &proc_mounts)) << "Failed to read /proc/mounts";
     auto mounted_entry = GetEntryForMountPoint(&proc_mounts, "/data");
     ASSERT_NE(mounted_entry, nullptr) << "/data is not mounted";
-    ASSERT_NE(nullptr, fs_mgr_get_mounted_entry_for_userdata(&fstab, *mounted_entry))
+    std::string block_device;
+    ASSERT_TRUE(android::base::Realpath(mounted_entry->blk_device, &block_device));
+    ASSERT_NE(nullptr, fs_mgr_get_mounted_entry_for_userdata(&fstab, block_device))
             << "/data wasn't mounted from default fstab";
 }
