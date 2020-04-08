@@ -28,6 +28,8 @@ class MemoryLocal : public Memory {
   MemoryLocal() = default;
   virtual ~MemoryLocal() = default;
 
+  bool IsLocal() const override { return true; }
+
   size_t Read(uint64_t addr, void* dst, size_t size) override;
 };
 
