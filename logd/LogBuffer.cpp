@@ -576,16 +576,6 @@ class LogBufferElementLast {
     }
 };
 
-// Determine if watermark is within pruneMargin + 1s from the end of the list,
-// the caller will use this result to set an internal busy flag indicating
-// the prune operation could not be completed because a reader is blocking
-// the request.
-bool LogBuffer::isBusy(log_time watermark) {
-    LogBufferElementCollection::iterator ei = mLogElements.end();
-    --ei;
-    return watermark < ((*ei)->getRealTime() - pruneMargin - log_time(1, 0));
-}
-
 // If the selected reader is blocking our pruning progress, decide on
 // what kind of mitigation is necessary to unblock the situation.
 void LogBuffer::kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows) {
@@ -698,8 +688,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (oldest && (watermark <= element->getRealTime())) {
-                busy = isBusy(watermark);
-                if (busy) kickMe(oldest, id, pruneRows);
+                busy = true;
+                kickMe(oldest, id, pruneRows);
                 break;
             }
 
@@ -786,7 +776,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             LogBufferElement* element = *it;
 
             if (oldest && (watermark <= element->getRealTime())) {
-                busy = isBusy(watermark);
+                busy = true;
                 // Do not let chatty eliding trigger any reader mitigation
                 break;
             }
@@ -938,8 +928,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
 
         if (oldest && (watermark <= element->getRealTime())) {
-            busy = isBusy(watermark);
-            if (!whitelist && busy) kickMe(oldest, id, pruneRows);
+            busy = true;
+            if (!whitelist) kickMe(oldest, id, pruneRows);
             break;
         }
 
@@ -971,8 +961,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (oldest && (watermark <= element->getRealTime())) {
-                busy = isBusy(watermark);
-                if (busy) kickMe(oldest, id, pruneRows);
+                busy = true;
+                kickMe(oldest, id, pruneRows);
                 break;
             }
 
