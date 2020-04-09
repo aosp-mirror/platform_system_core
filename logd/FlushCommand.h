@@ -16,7 +16,7 @@
 #ifndef _FLUSH_COMMAND_H
 #define _FLUSH_COMMAND_H
 
-#include <private/android_logger.h>
+#include <android/log.h>
 #include <sysutils/SocketClientCommand.h>
 
 class LogBufferElement;
