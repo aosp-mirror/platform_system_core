@@ -30,11 +30,11 @@ cc_defaults {
     shared_libs: [
         "libbinder_ndk",
         "liblog",
-        "statsd-aidl-ndk_platform",
         "libstatssocket",
     ],
     static_libs: [
         "libutils",
+        "statsd-aidl-ndk_platform",
     ],
 }
 cc_library_shared {
@@ -53,6 +53,9 @@ cc_library_shared {
         "com.android.os.statsd",
         "test_com.android.os.statsd",
     ],
+
+    stl: "libc++_static",
+
     // TODO(b/151102177): Enable it when the build error is fixed.
     header_abi_checker: {
         enabled: false,
