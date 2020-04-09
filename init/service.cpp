@@ -90,7 +90,9 @@ static Result<std::string> ComputeContextFromExecutable(const std::string& servi
                        << "\") has incorrect label or no domain transition from " << mycon.get()
                        << " to another SELinux domain defined. Have you configured your "
                           "service correctly? https://source.android.com/security/selinux/"
-                          "device-policy#label_new_services_and_address_denials";
+                          "device-policy#label_new_services_and_address_denials. Note: this "
+                          "error shows up even in permissive mode in order to make auditing "
+                          "denials possible.";
     }
     if (rc < 0) {
         return Error() << "Could not get process context";
