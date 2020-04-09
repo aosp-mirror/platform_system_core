@@ -234,7 +234,16 @@ int FirstStageMain(int argc, char** argv) {
         old_root_dir.reset();
     }
 
-    Modprobe m({"/lib/modules"});
+    std::string module_load_file = "modules.load";
+    if (IsRecoveryMode() && !ForceNormalBoot(cmdline)) {
+        struct stat fileStat;
+        std::string recovery_load_path = "/lib/modules/modules.load.recovery";
+        if (!stat(recovery_load_path.c_str(), &fileStat)) {
+            module_load_file = "modules.load.recovery";
+        }
+    }
+
+    Modprobe m({"/lib/modules"}, module_load_file);
     auto want_console = ALLOW_FIRST_STAGE_CONSOLE && FirstStageConsole(cmdline);
     if (!m.LoadListedModules(!want_console)) {
         if (want_console) {
