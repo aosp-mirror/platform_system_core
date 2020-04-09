@@ -312,7 +312,7 @@ void Modprobe::ParseKernelCmdlineOptions(void) {
     }
 }
 
-Modprobe::Modprobe(const std::vector<std::string>& base_paths) {
+Modprobe::Modprobe(const std::vector<std::string>& base_paths, const std::string load_file) {
     using namespace std::placeholders;
 
     for (const auto& base_path : base_paths) {
@@ -326,7 +326,7 @@ Modprobe::Modprobe(const std::vector<std::string>& base_paths) {
         ParseCfg(base_path + "/modules.softdep", softdep_callback);
 
         auto load_callback = std::bind(&Modprobe::ParseLoadCallback, this, _1);
-        ParseCfg(base_path + "/modules.load", load_callback);
+        ParseCfg(base_path + "/" + load_file, load_callback);
 
         auto options_callback = std::bind(&Modprobe::ParseOptionsCallback, this, _1);
         ParseCfg(base_path + "/modules.options", options_callback);

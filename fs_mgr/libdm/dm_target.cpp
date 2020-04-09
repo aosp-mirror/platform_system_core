@@ -243,20 +243,8 @@ std::string DmTargetCrypt::GetParameterString() const {
     return android::base::Join(argv, " ");
 }
 
-bool DmTargetDefaultKey::IsLegacy(bool* result) {
-    DeviceMapper& dm = DeviceMapper::Instance();
-    DmTargetTypeInfo info;
-    if (!dm.GetTargetByName(kName, &info)) return false;
-    // dm-default-key was modified to be like dm-crypt with version 2
-    *result = !info.IsAtLeast(2, 0, 0);
-    return true;
-}
-
 bool DmTargetDefaultKey::Valid() const {
-    bool real_is_legacy;
-    if (!DmTargetDefaultKey::IsLegacy(&real_is_legacy)) return false;
-    if (real_is_legacy != is_legacy_) return false;
-    if (!is_legacy_ && !set_dun_) return false;
+    if (!use_legacy_options_format_ && !set_dun_) return false;
     return true;
 }
 
@@ -264,13 +252,13 @@ std::string DmTargetDefaultKey::GetParameterString() const {
     std::vector<std::string> argv;
     argv.emplace_back(cipher_);
     argv.emplace_back(key_);
-    if (!is_legacy_) {
+    if (!use_legacy_options_format_) {
         argv.emplace_back("0");  // iv_offset
     }
     argv.emplace_back(blockdev_);
     argv.push_back(std::to_string(start_sector_));
     std::vector<std::string> extra_argv;
-    if (is_legacy_) {
+    if (use_legacy_options_format_) {
         if (set_dun_) {  // v2 always sets the DUN.
             extra_argv.emplace_back("set_dun");
         }
