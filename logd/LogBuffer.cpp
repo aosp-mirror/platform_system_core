@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include <unordered_map>
+#include <utility>
 
 #include <cutils/properties.h>
 #include <private/android_logger.h>
@@ -42,8 +43,6 @@
 
 // Default
 #define log_buffer_size(id) mMaxSize[id]
-
-const log_time LogBuffer::pruneMargin(3, 0);
 
 void LogBuffer::init() {
     log_id_for_each(i) {
@@ -390,59 +389,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
 
 // assumes LogBuffer::wrlock() held, owns elem, look after garbage collection
 void LogBuffer::log(LogBufferElement* elem) {
-    // cap on how far back we will sort in-place, otherwise append
-    static uint32_t too_far_back = 5;  // five seconds
-    // Insert elements in time sorted order if possible
-    //  NB: if end is region locked, place element at end of list
-    LogBufferElementCollection::iterator it = mLogElements.end();
-    LogBufferElementCollection::iterator last = it;
-    if (__predict_true(it != mLogElements.begin())) --it;
-    if (__predict_false(it == mLogElements.begin()) ||
-        __predict_true((*it)->getRealTime() <= elem->getRealTime()) ||
-        __predict_false((((*it)->getRealTime().tv_sec - too_far_back) >
-                         elem->getRealTime().tv_sec) &&
-                        (elem->getLogId() != LOG_ID_KERNEL) &&
-                        ((*it)->getLogId() != LOG_ID_KERNEL))) {
-        mLogElements.push_back(elem);
-    } else {
-        log_time end(log_time::EPOCH);
-        bool end_set = false;
-        bool end_always = false;
-
-        LogTimeEntry::rdlock();
-
-        LastLogTimes::iterator times = mTimes.begin();
-        while (times != mTimes.end()) {
-            LogTimeEntry* entry = times->get();
-            if (!entry->mNonBlock) {
-                end_always = true;
-                break;
-            }
-            // it passing mEnd is blocked by the following checks.
-            if (!end_set || (end <= entry->mEnd)) {
-                end = entry->mEnd;
-                end_set = true;
-            }
-            times++;
-        }
-
-        if (end_always || (end_set && (end > (*it)->getRealTime()))) {
-            mLogElements.push_back(elem);
-        } else {
-            // should be short as timestamps are localized near end()
-            do {
-                last = it;
-                if (__predict_false(it == mLogElements.begin())) {
-                    break;
-                }
-                --it;
-            } while (((*it)->getRealTime() > elem->getRealTime()) &&
-                     (!end_set || (end <= (*it)->getRealTime())));
-            mLogElements.insert(last, elem);
-        }
-        LogTimeEntry::unlock();
-    }
-
+    mLogElements.push_back(elem);
     stats.add(elem);
     maybePrune(elem->getLogId());
 }
@@ -614,12 +561,11 @@ class LogBufferElementLast {
     }
 
     void clear(LogBufferElement* element) {
-        log_time current =
-            element->getRealTime() - log_time(EXPIRE_RATELIMIT, 0);
+        uint64_t current = element->getRealTime().nsec() - (EXPIRE_RATELIMIT * NS_PER_SEC);
         for (LogBufferElementMap::iterator it = map.begin(); it != map.end();) {
             LogBufferElement* mapElement = it->second;
-            if ((mapElement->getDropped() >= EXPIRE_THRESHOLD) &&
-                (current > mapElement->getRealTime())) {
+            if (mapElement->getDropped() >= EXPIRE_THRESHOLD &&
+                current > mapElement->getRealTime().nsec()) {
                 it = map.erase(it);
             } else {
                 ++it;
@@ -627,16 +573,6 @@ class LogBufferElementLast {
         }
     }
 };
-
-// Determine if watermark is within pruneMargin + 1s from the end of the list,
-// the caller will use this result to set an internal busy flag indicating
-// the prune operation could not be completed because a reader is blocking
-// the request.
-bool LogBuffer::isBusy(log_time watermark) {
-    LogBufferElementCollection::iterator ei = mLogElements.end();
-    --ei;
-    return watermark < ((*ei)->getRealTime() - pruneMargin - log_time(1, 0));
-}
 
 // If the selected reader is blocking our pruning progress, decide on
 // what kind of mitigation is necessary to unblock the situation.
@@ -726,8 +662,6 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
         times++;
     }
-    log_time watermark(log_time::tv_sec_max, log_time::tv_nsec_max);
-    if (oldest) watermark = oldest->mStart - pruneMargin;
 
     LogBufferElementCollection::iterator it;
 
@@ -749,9 +683,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 mLastSet[id] = true;
             }
 
-            if (oldest && (watermark <= element->getRealTime())) {
-                busy = isBusy(watermark);
-                if (busy) kickMe(oldest, id, pruneRows);
+            if (oldest && oldest->mStart <= element->getSequence()) {
+                busy = true;
+                kickMe(oldest, id, pruneRows);
                 break;
             }
 
@@ -837,8 +771,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         while (it != mLogElements.end()) {
             LogBufferElement* element = *it;
 
-            if (oldest && (watermark <= element->getRealTime())) {
-                busy = isBusy(watermark);
+            if (oldest && oldest->mStart <= element->getSequence()) {
+                busy = true;
                 // Do not let chatty eliding trigger any reader mitigation
                 break;
             }
@@ -989,9 +923,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             mLastSet[id] = true;
         }
 
-        if (oldest && (watermark <= element->getRealTime())) {
-            busy = isBusy(watermark);
-            if (!whitelist && busy) kickMe(oldest, id, pruneRows);
+        if (oldest && oldest->mStart <= element->getSequence()) {
+            busy = true;
+            if (!whitelist) kickMe(oldest, id, pruneRows);
             break;
         }
 
@@ -1022,9 +956,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 mLastSet[id] = true;
             }
 
-            if (oldest && (watermark <= element->getRealTime())) {
-                busy = isBusy(watermark);
-                if (busy) kickMe(oldest, id, pruneRows);
+            if (oldest && oldest->mStart <= element->getSequence()) {
+                busy = true;
+                kickMe(oldest, id, pruneRows);
                 break;
             }
 
@@ -1111,43 +1045,32 @@ unsigned long LogBuffer::getSize(log_id_t id) {
     return retval;
 }
 
-log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
-                            pid_t* lastTid, bool privileged, bool security,
-                            int (*filter)(const LogBufferElement* element,
-                                          void* arg),
-                            void* arg) {
+uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid, bool privileged,
+                            bool security,
+                            int (*filter)(const LogBufferElement* element, void* arg), void* arg) {
     LogBufferElementCollection::iterator it;
     uid_t uid = reader->getUid();
 
     rdlock();
 
-    if (start == log_time::EPOCH) {
+    if (start <= 1) {
         // client wants to start from the beginning
         it = mLogElements.begin();
     } else {
-        // Cap to 300 iterations we look back for out-of-order entries.
-        size_t count = 300;
-
         // Client wants to start from some specified time. Chances are
         // we are better off starting from the end of the time sorted list.
-        LogBufferElementCollection::iterator last;
-        for (last = it = mLogElements.end(); it != mLogElements.begin();
+        for (it = mLogElements.end(); it != mLogElements.begin();
              /* do nothing */) {
             --it;
             LogBufferElement* element = *it;
-            if (element->getRealTime() > start) {
-                last = it;
-            } else if (element->getRealTime() == start) {
-                last = ++it;
-                break;
-            } else if (!--count) {
+            if (element->getSequence() <= start) {
+                it++;
                 break;
             }
         }
-        it = last;
     }
 
-    log_time curr = start;
+    uint64_t curr = start;
 
     LogBufferElement* lastElement = nullptr;  // iterator corruption paranoia
     static const size_t maxSkip = 4194304;    // maximum entries to skip
