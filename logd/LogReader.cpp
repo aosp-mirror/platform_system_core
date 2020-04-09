@@ -89,8 +89,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     static const char _timeout[] = " timeout=";
     cp = strstr(buffer, _timeout);
     if (cp) {
-        timeout = atol(cp + sizeof(_timeout) - 1) * NS_PER_SEC +
-                  log_time(CLOCK_REALTIME).nsec();
+        timeout = atol(cp + sizeof(_timeout) - 1) * NS_PER_SEC + log_time(CLOCK_MONOTONIC).nsec();
     }
 
     unsigned int logMask = -1;
@@ -130,70 +129,53 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         nonBlock = true;
     }
 
-    log_time sequence = start;
-    //
-    // This somewhat expensive data validation operation is required
-    // for non-blocking, with timeout.  The incoming timestamp must be
-    // in range of the list, if not, return immediately.  This is
-    // used to prevent us from from getting stuck in timeout processing
-    // with an invalid time.
-    //
-    // Find if time is really present in the logs, monotonic or real, implicit
-    // conversion from monotonic or real as necessary to perform the check.
-    // Exit in the check loop ASAP as you find a transition from older to
-    // newer, but use the last entry found to ensure overlap.
-    //
-    if (nonBlock && (sequence != log_time::EPOCH) && timeout) {
-        class LogFindStart {  // A lambda by another name
-           private:
+    uint64_t sequence = 1;
+    // Convert realtime to sequence number
+    if (start != log_time::EPOCH) {
+        class LogFindStart {
             const pid_t mPid;
             const unsigned mLogMask;
-            bool mStartTimeSet;
-            log_time mStart;
-            log_time& mSequence;
-            log_time mLast;
-            bool mIsMonotonic;
+            bool startTimeSet;
+            const log_time start;
+            uint64_t& sequence;
+            uint64_t last;
+            bool isMonotonic;
 
-           public:
-            LogFindStart(pid_t pid, unsigned logMask, log_time& sequence,
+          public:
+            LogFindStart(unsigned logMask, pid_t pid, log_time start, uint64_t& sequence,
                          bool isMonotonic)
                 : mPid(pid),
                   mLogMask(logMask),
-                  mStartTimeSet(false),
-                  mStart(sequence),
-                  mSequence(sequence),
-                  mLast(sequence),
-                  mIsMonotonic(isMonotonic) {
-            }
+                  startTimeSet(false),
+                  start(start),
+                  sequence(sequence),
+                  last(sequence),
+                  isMonotonic(isMonotonic) {}
 
             static int callback(const LogBufferElement* element, void* obj) {
                 LogFindStart* me = reinterpret_cast<LogFindStart*>(obj);
                 if ((!me->mPid || (me->mPid == element->getPid())) &&
                     (me->mLogMask & (1 << element->getLogId()))) {
-                    log_time real = element->getRealTime();
-                    if (me->mStart == real) {
-                        me->mSequence = real;
-                        me->mStartTimeSet = true;
+                    if (me->start == element->getRealTime()) {
+                        me->sequence = element->getSequence();
+                        me->startTimeSet = true;
                         return -1;
-                    } else if (!me->mIsMonotonic || android::isMonotonic(real)) {
-                        if (me->mStart < real) {
-                            me->mSequence = me->mLast;
-                            me->mStartTimeSet = true;
+                    } else if (!me->isMonotonic || android::isMonotonic(element->getRealTime())) {
+                        if (me->start < element->getRealTime()) {
+                            me->sequence = me->last;
+                            me->startTimeSet = true;
                             return -1;
                         }
-                        me->mLast = real;
+                        me->last = element->getSequence();
                     } else {
-                        me->mLast = real;
+                        me->last = element->getSequence();
                     }
                 }
                 return false;
             }
 
-            bool found() {
-                return mStartTimeSet;
-            }
-
-        } logFindStart(pid, logMask, sequence,
+            bool found() { return startTimeSet; }
+        } logFindStart(logMask, pid, start, sequence,
                        logbuf().isMonotonic() && android::isMonotonic(start));
 
         logbuf().flushTo(cli, sequence, nullptr, FlushCommand::hasReadLogs(cli),
@@ -201,24 +183,27 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
                          logFindStart.callback, &logFindStart);
 
         if (!logFindStart.found()) {
-            doSocketDelete(cli);
-            return false;
+            if (nonBlock) {
+                doSocketDelete(cli);
+                return false;
+            }
+            sequence = LogBufferElement::getCurrentSequence();
         }
     }
 
     android::prdebug(
-        "logdr: UID=%d GID=%d PID=%d %c tail=%lu logMask=%x pid=%d "
-        "start=%" PRIu64 "ns timeout=%" PRIu64 "ns\n",
-        cli->getUid(), cli->getGid(), cli->getPid(), nonBlock ? 'n' : 'b', tail,
-        logMask, (int)pid, sequence.nsec(), timeout);
+            "logdr: UID=%d GID=%d PID=%d %c tail=%lu logMask=%x pid=%d "
+            "start=%" PRIu64 "ns timeout=%" PRIu64 "ns\n",
+            cli->getUid(), cli->getGid(), cli->getPid(), nonBlock ? 'n' : 'b', tail, logMask,
+            (int)pid, start.nsec(), timeout);
 
-    if (sequence == log_time::EPOCH) {
+    if (start == log_time::EPOCH) {
         timeout = 0;
     }
 
     LogTimeEntry::wrlock();
-    auto entry = std::make_unique<LogTimeEntry>(
-        *this, cli, nonBlock, tail, logMask, pid, sequence, timeout);
+    auto entry = std::make_unique<LogTimeEntry>(*this, cli, nonBlock, tail, logMask, pid, start,
+                                                sequence, timeout);
     if (!entry->startReader_Locked()) {
         LogTimeEntry::unlock();
         return false;
