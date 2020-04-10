@@ -57,10 +57,8 @@ enum class CmdlineOption { None, Enable, Disable };
 }
 
 static bool can_use_feature(const char* feature) {
-    FeatureSet features;
-    std::string error;
-    if (!adb_get_feature_set(&features, &error)) {
-        fprintf(stderr, "error: %s\n", error.c_str());
+    auto&& features = adb_get_feature_set();
+    if (features.empty()) {
         return false;
     }
     return CanUseFeature(features, feature);
