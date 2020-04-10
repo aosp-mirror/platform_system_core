@@ -48,8 +48,6 @@ extern "C" {
  * access to raw information, or parsing is an issue.
  */
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wzero-length-array"
 struct logger_entry {
   uint16_t len;      /* length of the payload */
   uint16_t hdr_size; /* sizeof(struct logger_entry) */
@@ -59,9 +57,7 @@ struct logger_entry {
   uint32_t nsec;     /* nanoseconds */
   uint32_t lid;      /* log id of the payload, bottom 4 bits currently */
   uint32_t uid;      /* generating process's uid */
-  char msg[0]; /* the entry's payload */
 };
-#pragma clang diagnostic pop
 
 /*
  * The maximum size of the log entry payload that can be
