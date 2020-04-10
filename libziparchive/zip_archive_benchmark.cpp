@@ -17,7 +17,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -28,17 +27,20 @@
 #include <ziparchive/zip_archive_stream_entry.h>
 #include <ziparchive/zip_writer.h>
 
-static TemporaryFile* CreateZip() {
-  TemporaryFile* result = new TemporaryFile;
+static std::unique_ptr<TemporaryFile> CreateZip(int size = 4, int count = 1000) {
+  auto result = std::make_unique<TemporaryFile>();
   FILE* fp = fdopen(result->fd, "w");
 
   ZipWriter writer(fp);
   std::string lastName = "file";
-  for (size_t i = 0; i < 1000; i++) {
+  for (size_t i = 0; i < count; i++) {
     // Make file names longer and longer.
     lastName = lastName + std::to_string(i);
     writer.StartEntry(lastName.c_str(), ZipWriter::kCompress);
-    writer.WriteBytes("helo", 4);
+    while (size > 0) {
+      writer.WriteBytes("helo", 4);
+      size -= 4;
+    }
     writer.FinishEntry();
   }
   writer.Finish();
@@ -106,5 +108,28 @@ static void StartAlignedEntry(benchmark::State& state) {
 }
 BENCHMARK(StartAlignedEntry)->Arg(2)->Arg(16)->Arg(1024)->Arg(4096);
 
+static void ExtractEntry(benchmark::State& state) {
+  std::unique_ptr<TemporaryFile> temp_file(CreateZip(1024 * 1024, 1));
+
+  ZipArchiveHandle handle;
+  ZipEntry data;
+  if (OpenArchive(temp_file->path, &handle)) {
+    state.SkipWithError("Failed to open archive");
+  }
+  if (FindEntry(handle, "file0", &data)) {
+    state.SkipWithError("Failed to find archive entry");
+  }
+
+  std::vector<uint8_t> buffer(1024 * 1024);
+  for (auto _ : state) {
+    if (ExtractToMemory(handle, &data, buffer.data(), uint32_t(buffer.size()))) {
+      state.SkipWithError("Failed to extract archive entry");
+      break;
+    }
+  }
+  CloseArchive(handle);
+}
+
+BENCHMARK(ExtractEntry)->Arg(2)->Arg(16)->Arg(1024);
 
 BENCHMARK_MAIN();
