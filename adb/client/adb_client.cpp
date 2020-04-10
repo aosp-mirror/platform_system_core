@@ -37,6 +37,7 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/no_destructor.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/thread_annotations.h>
@@ -415,18 +416,14 @@ std::string format_host_command(const char* command) {
     return android::base::StringPrintf("%s:%s", prefix, command);
 }
 
-bool adb_get_feature_set(FeatureSet* feature_set, std::string* error) {
-    static FeatureSet* features = nullptr;
-    if (!features) {
+const FeatureSet& adb_get_feature_set() {
+    static const android::base::NoDestructor<FeatureSet> features([] {
         std::string result;
-        if (adb_query(format_host_command("features"), &result, error)) {
-            features = new FeatureSet(StringToFeatureSet(result));
+        if (!adb_query(format_host_command("features"), &result, &result)) {
+            fprintf(stderr, "failed to get feature set: %s\n", result.c_str());
+            return FeatureSet{};
         }
-    }
-    if (features) {
-        *feature_set = *features;
-        return true;
-    }
-    feature_set->clear();
-    return false;
+        return StringToFeatureSet(result);
+    }());
+    return *features;
 }
