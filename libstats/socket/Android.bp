@@ -85,6 +85,7 @@ cc_library_headers {
     name: "libstatssocket_headers",
     export_include_dirs: ["include"],
     host_supported: true,
+    apex_available: ["com.android.resolv"],
 }
 
 cc_benchmark {
