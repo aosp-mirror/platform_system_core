@@ -29,7 +29,6 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <deque>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -40,6 +39,7 @@
 #include <adb/crypto/x509_generator.h>
 #include <adb/tls/tls_connection.h>
 #include <android-base/logging.h>
+#include <android-base/no_destructor.h>
 #include <android-base/parsenetaddress.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -1170,28 +1170,29 @@ size_t atransport::get_max_payload() const {
 }
 
 const FeatureSet& supported_features() {
-    // Local static allocation to avoid global non-POD variables.
-    static const FeatureSet* features = new FeatureSet{
-            kFeatureShell2,
-            kFeatureCmd,
-            kFeatureStat2,
-            kFeatureLs2,
-            kFeatureFixedPushMkdir,
-            kFeatureApex,
-            kFeatureAbb,
-            kFeatureFixedPushSymlinkTimestamp,
-            kFeatureAbbExec,
-            kFeatureRemountShell,
-            kFeatureTrackApp,
-            kFeatureSendRecv2,
-            kFeatureSendRecv2Brotli,
-            kFeatureSendRecv2LZ4,
-            kFeatureSendRecv2DryRunSend,
-            // Increment ADB_SERVER_VERSION when adding a feature that adbd needs
-            // to know about. Otherwise, the client can be stuck running an old
-            // version of the server even after upgrading their copy of adb.
-            // (http://b/24370690)
-    };
+    static const android::base::NoDestructor<FeatureSet> features([] {
+        return FeatureSet{
+                kFeatureShell2,
+                kFeatureCmd,
+                kFeatureStat2,
+                kFeatureLs2,
+                kFeatureFixedPushMkdir,
+                kFeatureApex,
+                kFeatureAbb,
+                kFeatureFixedPushSymlinkTimestamp,
+                kFeatureAbbExec,
+                kFeatureRemountShell,
+                kFeatureTrackApp,
+                kFeatureSendRecv2,
+                kFeatureSendRecv2Brotli,
+                kFeatureSendRecv2LZ4,
+                kFeatureSendRecv2DryRunSend,
+                // Increment ADB_SERVER_VERSION when adding a feature that adbd needs
+                // to know about. Otherwise, the client can be stuck running an old
+                // version of the server even after upgrading their copy of adb.
+                // (http://b/24370690)
+        };
+    }());
 
     return *features;
 }
@@ -1205,16 +1206,20 @@ FeatureSet StringToFeatureSet(const std::string& features_string) {
         return FeatureSet();
     }
 
-    auto names = android::base::Split(features_string, ",");
-    return FeatureSet(names.begin(), names.end());
+    return android::base::Split(features_string, ",");
+}
+
+template <class Range, class Value>
+static bool contains(const Range& r, const Value& v) {
+    return std::find(std::begin(r), std::end(r), v) != std::end(r);
 }
 
 bool CanUseFeature(const FeatureSet& feature_set, const std::string& feature) {
-    return feature_set.count(feature) > 0 && supported_features().count(feature) > 0;
+    return contains(feature_set, feature) && contains(supported_features(), feature);
 }
 
 bool atransport::has_feature(const std::string& feature) const {
-    return features_.count(feature) > 0;
+    return contains(features_, feature);
 }
 
 void atransport::SetFeatures(const std::string& features_string) {
