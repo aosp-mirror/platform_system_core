@@ -1072,21 +1072,8 @@ uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid
 
     uint64_t curr = start;
 
-    LogBufferElement* lastElement = nullptr;  // iterator corruption paranoia
-    static const size_t maxSkip = 4194304;    // maximum entries to skip
-    size_t skip = maxSkip;
     for (; it != mLogElements.end(); ++it) {
         LogBufferElement* element = *it;
-
-        if (!--skip) {
-            android::prdebug("reader.per: too many elements skipped");
-            break;
-        }
-        if (element == lastElement) {
-            android::prdebug("reader.per: identical elements");
-            break;
-        }
-        lastElement = element;
 
         if (!privileged && (element->getUid() != uid)) {
             continue;
@@ -1128,7 +1115,6 @@ uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid
             return curr;
         }
 
-        skip = maxSkip;
         rdlock();
     }
     unlock();
