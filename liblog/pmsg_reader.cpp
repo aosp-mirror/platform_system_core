@@ -96,7 +96,7 @@ int PmsgRead(struct logger_list* logger_list, struct log_msg* log_msg) {
           ((logger_list->start.tv_sec != buf.l.realtime.tv_sec) ||
            (logger_list->start.tv_nsec <= buf.l.realtime.tv_nsec)))) &&
         (!logger_list->pid || (logger_list->pid == buf.p.pid))) {
-      char* msg = log_msg->entry.msg;
+      char* msg = reinterpret_cast<char*>(&log_msg->entry) + log_msg->entry.hdr_size;
       *msg = buf.prio;
       fd = atomic_load(&logger_list->fd);
       if (fd <= 0) {
