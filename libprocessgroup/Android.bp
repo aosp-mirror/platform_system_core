@@ -13,6 +13,10 @@ cc_library_headers {
             enabled: true,
         },
     },
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
 }
 
 cc_library {
@@ -51,5 +55,9 @@ cc_library {
         "-Wall",
         "-Werror",
         "-Wexit-time-destructors",
+    ],
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
     ],
 }
