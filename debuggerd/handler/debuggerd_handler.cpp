@@ -417,23 +417,28 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   // us to fork off a process to read memory from.
   char buf[4];
   rc = TEMP_FAILURE_RETRY(read(input_read.get(), &buf, sizeof(buf)));
-  if (rc == -1) {
-    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "read of IPC pipe failed: %s", strerror(errno));
-    return 1;
-  } else if (rc == 0) {
-    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper failed to exec");
-    return 1;
-  } else if (rc != 1) {
-    async_safe_format_log(ANDROID_LOG_FATAL, "libc",
-                          "read of IPC pipe returned unexpected value: %zd", rc);
-    return 1;
-  } else if (buf[0] != '\1') {
-    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper reported failure");
-    return 1;
-  }
 
-  // crash_dump is ptracing us, fork off a copy of our address space for it to use.
-  create_vm_process();
+  bool success = false;
+  if (rc == 1 && buf[0] == '\1') {
+    // crash_dump successfully started, and is ptracing us.
+    // Fork off a copy of our address space for it to use.
+    create_vm_process();
+    success = true;
+  } else {
+    // Something went wrong, log it.
+    if (rc == -1) {
+      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "read of IPC pipe failed: %s",
+                            strerror(errno));
+    } else if (rc == 0) {
+      async_safe_format_log(ANDROID_LOG_FATAL, "libc",
+                            "crash_dump helper failed to exec, or was killed");
+    } else if (rc != 1) {
+      async_safe_format_log(ANDROID_LOG_FATAL, "libc",
+                            "read of IPC pipe returned unexpected value: %zd", rc);
+    } else if (buf[0] != '\1') {
+      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper reported failure");
+    }
+  }
 
   // Don't leave a zombie child.
   int status;
@@ -444,14 +449,16 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper crashed or stopped");
   }
 
-  if (thread_info->siginfo->si_signo != BIONIC_SIGNAL_DEBUGGER) {
-    // For crashes, we don't need to minimize pause latency.
-    // Wait for the dump to complete before having the process exit, to avoid being murdered by
-    // ActivityManager or init.
-    TEMP_FAILURE_RETRY(read(input_read, &buf, sizeof(buf)));
+  if (success) {
+    if (thread_info->siginfo->si_signo != BIONIC_SIGNAL_DEBUGGER) {
+      // For crashes, we don't need to minimize pause latency.
+      // Wait for the dump to complete before having the process exit, to avoid being murdered by
+      // ActivityManager or init.
+      TEMP_FAILURE_RETRY(read(input_read, &buf, sizeof(buf)));
+    }
   }
 
-  return 0;
+  return success ? 0 : 1;
 }
 
 static void resend_signal(siginfo_t* info) {
