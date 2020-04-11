@@ -49,6 +49,7 @@ cc_library {
         "libstatssocket_headers",
     ],
     static_libs: ["libgtest_prod"],
+    apex_available: ["com.android.resolv"],
 }
 
 cc_test {

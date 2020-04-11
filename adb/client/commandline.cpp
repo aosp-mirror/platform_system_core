@@ -672,10 +672,8 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg, cha
 }
 
 static int adb_shell(int argc, const char** argv) {
-    FeatureSet features;
-    std::string error_message;
-    if (!adb_get_feature_set(&features, &error_message)) {
-        fprintf(stderr, "error: %s\n", error_message.c_str());
+    auto&& features = adb_get_feature_set();
+    if (features.empty()) {
         return 1;
     }
 
@@ -779,13 +777,10 @@ static int adb_shell(int argc, const char** argv) {
 }
 
 static int adb_abb(int argc, const char** argv) {
-    FeatureSet features;
-    std::string error_message;
-    if (!adb_get_feature_set(&features, &error_message)) {
-        fprintf(stderr, "error: %s\n", error_message.c_str());
+    auto&& features = adb_get_feature_set();
+    if (features.empty()) {
         return 1;
     }
-
     if (!CanUseFeature(features, kFeatureAbb)) {
         error_exit("abb is not supported by the device");
     }
@@ -1164,9 +1159,8 @@ int send_shell_command(const std::string& command, bool disable_shell_protocol,
         // Use shell protocol if it's supported and the caller doesn't explicitly
         // disable it.
         if (!disable_shell_protocol) {
-            FeatureSet features;
-            std::string error;
-            if (adb_get_feature_set(&features, &error)) {
+            auto&& features = adb_get_feature_set();
+            if (!features.empty()) {
                 use_shell_protocol = CanUseFeature(features, kFeatureShell2);
             } else {
                 // Device was unreachable.
@@ -1816,10 +1810,8 @@ int adb_commandline(int argc, const char** argv) {
         }
         return adb_connect_command(android::base::StringPrintf("tcpip:%d", port));
     } else if (!strcmp(argv[0], "remount")) {
-        FeatureSet features;
-        std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
+        auto&& features = adb_get_feature_set();
+        if (features.empty()) {
             return 1;
         }
 
@@ -2042,10 +2034,8 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "track-jdwp")) {
         return adb_connect_command("track-jdwp");
     } else if (!strcmp(argv[0], "track-app")) {
-        FeatureSet features;
-        std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
+        auto&& features = adb_get_feature_set();
+        if (features.empty()) {
             return 1;
         }
         if (!CanUseFeature(features, kFeatureTrackApp)) {
@@ -2074,10 +2064,8 @@ int adb_commandline(int argc, const char** argv) {
         return 0;
     } else if (!strcmp(argv[0], "features")) {
         // Only list the features common to both the adb client and the device.
-        FeatureSet features;
-        std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
+        auto&& features = adb_get_feature_set();
+        if (features.empty()) {
             return 1;
         }
 
