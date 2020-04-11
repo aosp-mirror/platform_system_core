@@ -97,10 +97,7 @@ static void RunLogTests(log_id_t log_buffer, FWrite write_messages, FCheck check
     ASSERT_EQ(log_buffer, log_msg.id());
     ASSERT_EQ(pid, log_msg.entry.pid);
 
-    // TODO: Should this be an assert?
-    if (log_msg.msg() == nullptr) {
-      continue;
-    }
+    ASSERT_NE(nullptr, log_msg.msg());
 
     check_message(log_msg, &found);
   }
@@ -121,10 +118,7 @@ static void RunLogTests(log_id_t log_buffer, FWrite write_messages, FCheck check
     ASSERT_EQ(log_buffer, log_msg.id());
     ASSERT_EQ(pid, log_msg.entry.pid);
 
-    // TODO: Should this be an assert?
-    if (log_msg.msg() == nullptr) {
-      continue;
-    }
+    ASSERT_NE(nullptr, log_msg.msg());
 
     found = false;
     check_message(log_msg, &found);
@@ -1031,7 +1025,7 @@ TEST(liblog, __android_log_buf_print__maxtag) {
 #endif
 }
 
-// TODO: This test is tautological. android_logger_list_read() calls recv() with
+// Note: This test is tautological. android_logger_list_read() calls recv() with
 // LOGGER_ENTRY_MAX_PAYLOAD as its size argument, so it's not possible for this test to read a
 // payload larger than that size.
 TEST(liblog, too_big_payload) {
@@ -1982,7 +1976,6 @@ TEST(liblog,
 #endif
 }
 
-// TODO: Do we need to check that we didn't actually write anything if we return a failure here?
 TEST(liblog,
      android_errorWriteWithInfoLog__android_logger_list_read__null_data) {
 #ifdef __ANDROID__
