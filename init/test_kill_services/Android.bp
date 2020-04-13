@@ -3,5 +3,9 @@ cc_test {
     srcs: ["init_kill_services_test.cpp"],
     shared_libs: ["libbase"],
     test_suites: ["general-tests"],
-    require_root: true,
+
+    // TODO(b/153565474): switch back to auto-generation
+    // and add back:
+    //     require_root: true,
+    auto_gen_config: false,
 }
