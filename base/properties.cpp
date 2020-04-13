@@ -133,7 +133,6 @@ static void DurationToTimeSpec(timespec& ts, const std::chrono::milliseconds d) 
   ts.tv_nsec = ns.count();
 }
 
-// TODO: boot_clock?
 using AbsTime = std::chrono::time_point<std::chrono::steady_clock>;
 
 static void UpdateTimeSpec(timespec& ts, std::chrono::milliseconds relative_timeout,
