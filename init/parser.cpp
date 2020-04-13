@@ -41,7 +41,7 @@ void Parser::AddSingleLineParser(const std::string& prefix, LineCallback callbac
 }
 
 void Parser::ParseData(const std::string& filename, std::string* data) {
-    data->push_back('\n');  // TODO: fix tokenizer
+    data->push_back('\n');
     data->push_back('\0');
 
     parse_state state;
