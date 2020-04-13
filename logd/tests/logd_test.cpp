@@ -246,7 +246,7 @@ static void dump_log_msg(const char* prefix, log_msg* msg, int lid) {
     std::cerr << std::flush;
     fflush(stdout);
     fflush(stderr);
-    EXPECT_EQ(sizeof(logger_entry), msg->entry.hdr_size);
+    EXPECT_GE(msg->entry.hdr_size, sizeof(logger_entry));
 
     fprintf(stderr, "%s: [%u] ", prefix, msg->len());
     fprintf(stderr, "hdr_size=%u ", msg->entry.hdr_size);
