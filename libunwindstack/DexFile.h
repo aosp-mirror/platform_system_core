@@ -55,7 +55,8 @@ class DexFileFromFile : public DexFile {
 class DexFileFromMemory : public DexFile {
  public:
   static std::unique_ptr<DexFileFromMemory> Create(uint64_t dex_file_offset_in_memory,
-                                                   Memory* memory, const std::string& name);
+                                                   Memory* memory, const std::string& name,
+                                                   size_t max_size);
 
  private:
   DexFileFromMemory(std::unique_ptr<art_api::dex::DexFile>& art_dex_file,
