@@ -60,7 +60,7 @@ using android::base::get_unaligned;
 
 // Used to turn on crc checks - verify that the content CRC matches the values
 // specified in the local file header and the central directory.
-static const bool kCrcChecksEnabled = false;
+static constexpr bool kCrcChecksEnabled = false;
 
 // The maximum number of bytes to scan backwards for the EOCD start.
 static const uint32_t kMaxEOCDSearch = kMaxCommentLen + sizeof(EocdRecord);
@@ -1076,11 +1076,15 @@ static int32_t CopyEntryToWriter(MappedZipFile& mapped_zip, const ZipEntry* entr
     if (!writer->Append(&buf[0], block_size)) {
       return kIoError;
     }
-    crc = crc32(crc, &buf[0], block_size);
+    if (crc_out) {
+      crc = crc32(crc, &buf[0], block_size);
+    }
     count += block_size;
   }
 
-  *crc_out = crc;
+  if (crc_out) {
+    *crc_out = crc;
+  }
 
   return 0;
 }
@@ -1092,9 +1096,11 @@ int32_t ExtractToWriter(ZipArchiveHandle archive, ZipEntry* entry, zip_archive::
   int32_t return_value = -1;
   uint64_t crc = 0;
   if (method == kCompressStored) {
-    return_value = CopyEntryToWriter(archive->mapped_zip, entry, writer, &crc);
+    return_value =
+        CopyEntryToWriter(archive->mapped_zip, entry, writer, kCrcChecksEnabled ? &crc : nullptr);
   } else if (method == kCompressDeflated) {
-    return_value = InflateEntryToWriter(archive->mapped_zip, entry, writer, &crc);
+    return_value = InflateEntryToWriter(archive->mapped_zip, entry, writer,
+                                        kCrcChecksEnabled ? &crc : nullptr);
   }
 
   if (!return_value && entry->has_data_descriptor) {
