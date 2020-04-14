@@ -137,6 +137,19 @@ struct CentralDirectoryInfo {
   uint64_t cd_start_offset;
 };
 
+// Reads |T| at |readPtr| and increments |readPtr|. Returns std::nullopt if the boundary check
+// fails.
+template <typename T>
+static std::optional<T> TryConsumeUnaligned(uint8_t** readPtr, const uint8_t* bufStart,
+                                            size_t bufSize) {
+  if (bufSize < sizeof(T) || *readPtr - bufStart > bufSize - sizeof(T)) {
+    ALOGW("Zip: %zu byte read exceeds the boundary of allocated buf, offset %zu, bufSize %zu",
+          sizeof(T), *readPtr - bufStart, bufSize);
+    return std::nullopt;
+  }
+  return ConsumeUnaligned<T>(readPtr);
+}
+
 static ZipError FindCentralDirectoryInfoForZip64(const char* debugFileName, ZipArchive* archive,
                                                  off64_t eocdOffset, CentralDirectoryInfo* cdInfo) {
   if (eocdOffset <= sizeof(Zip64EocdLocator)) {
@@ -379,13 +392,19 @@ static ZipError ParseZip64ExtendedInfoInExtraField(
     std::optional<uint64_t> compressedFileSize;
     std::optional<uint64_t> localHeaderOffset;
     if (zip32UncompressedSize == UINT32_MAX) {
-      uncompressedFileSize = ConsumeUnaligned<uint64_t>(&readPtr);
+      uncompressedFileSize =
+          TryConsumeUnaligned<uint64_t>(&readPtr, extraFieldStart, extraFieldLength);
+      if (!uncompressedFileSize.has_value()) return kInvalidOffset;
     }
     if (zip32CompressedSize == UINT32_MAX) {
-      compressedFileSize = ConsumeUnaligned<uint64_t>(&readPtr);
+      compressedFileSize =
+          TryConsumeUnaligned<uint64_t>(&readPtr, extraFieldStart, extraFieldLength);
+      if (!compressedFileSize.has_value()) return kInvalidOffset;
     }
     if (zip32LocalFileHeaderOffset == UINT32_MAX) {
-      localHeaderOffset = ConsumeUnaligned<uint64_t>(&readPtr);
+      localHeaderOffset =
+          TryConsumeUnaligned<uint64_t>(&readPtr, extraFieldStart, extraFieldLength);
+      if (!localHeaderOffset.has_value()) return kInvalidOffset;
     }
 
     // calculate how many bytes we read after the data size field.
@@ -606,6 +625,10 @@ void CloseArchive(ZipArchiveHandle archive) {
 
 static int32_t ValidateDataDescriptor(MappedZipFile& mapped_zip, const ZipEntry64* entry) {
   // Maximum possible size for data descriptor: 2 * 4 + 2 * 8 = 24 bytes
+  // The zip format doesn't specify the size of data descriptor. But we won't read OOB here even
+  // if the descriptor isn't present. Because the size cd + eocd in the end of the zipfile is
+  // larger than 24 bytes. And if the descriptor contains invalid data, we'll abort due to
+  // kInconsistentInformation.
   uint8_t ddBuf[24];
   off64_t offset = entry->offset;
   if (entry->method != kCompressStored) {
@@ -1499,8 +1522,9 @@ bool MappedZipFile::ReadAtOffset(uint8_t* buf, size_t len, off64_t off) const {
       return false;
     }
   } else {
-    if (off < 0 || off > data_length_) {
-      ALOGE("Zip: invalid offset: %" PRId64 ", data length: %" PRId64, off, data_length_);
+    if (off < 0 || data_length_ < len || off > data_length_ - len) {
+      ALOGE("Zip: invalid offset: %" PRId64 ", read length: %zu, data length: %" PRId64, off, len,
+            data_length_);
       return false;
     }
     memcpy(buf, static_cast<const uint8_t*>(base_ptr_) + off, len);
