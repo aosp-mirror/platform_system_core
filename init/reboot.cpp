@@ -838,20 +838,25 @@ static Result<void> DoUserspaceReboot() {
 }
 
 static void UserspaceRebootWatchdogThread() {
-    if (!WaitForProperty("sys.init.userspace_reboot.in_progress", "1", 20s)) {
-        // TODO(b/135984674): should we reboot instead?
-        LOG(WARNING) << "Userspace reboot didn't start in 20 seconds. Stopping watchdog";
-        return;
+    auto started_timeout = GetMillisProperty("init.userspace_reboot.started.timeoutmillis", 10s);
+    if (!WaitForProperty("sys.init.userspace_reboot.in_progress", "1", started_timeout)) {
+        LOG(ERROR) << "Userspace reboot didn't start in " << started_timeout.count()
+                   << "ms. Switching to full reboot";
+        // Init might be wedged, don't try to write reboot reason into a persistent property and do
+        // a dirty reboot.
+        PersistRebootReason("userspace_failed,watchdog_triggered,failed_to_start", false);
+        RebootSystem(ANDROID_RB_RESTART2, "userspace_failed,watchdog_triggered,failed_to_start");
     }
     LOG(INFO) << "Starting userspace reboot watchdog";
-    auto timeout = GetMillisProperty("init.userspace_reboot.watchdog.timeoutmillis", 5min);
-    LOG(INFO) << "UserspaceRebootWatchdog timeout: " << timeout.count() << "ms";
-    if (!WaitForProperty("sys.boot_completed", "1", timeout)) {
-        LOG(ERROR) << "Failed to boot in " << timeout.count() << "ms. Switching to full reboot";
+    auto watchdog_timeout = GetMillisProperty("init.userspace_reboot.watchdog.timeoutmillis", 5min);
+    LOG(INFO) << "UserspaceRebootWatchdog timeout: " << watchdog_timeout.count() << "ms";
+    if (!WaitForProperty("sys.boot_completed", "1", watchdog_timeout)) {
+        LOG(ERROR) << "Failed to boot in " << watchdog_timeout.count()
+                   << "ms. Switching to full reboot";
         // In this case device is in a boot loop. Only way to recover is to do dirty reboot.
         // Since init might be wedged, don't try to write reboot reason into a persistent property.
-        PersistRebootReason("userspace_failed,watchdog_triggered", false);
-        RebootSystem(ANDROID_RB_RESTART2, "userspace_failed,watchdog_triggered");
+        PersistRebootReason("userspace_failed,watchdog_triggered,failed_to_boot", false);
+        RebootSystem(ANDROID_RB_RESTART2, "userspace_failed,watchdog_triggered,failed_to_boot");
     }
     LOG(INFO) << "Device booted, stopping userspace reboot watchdog";
 }
