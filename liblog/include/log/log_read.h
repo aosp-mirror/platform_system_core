@@ -79,32 +79,9 @@ struct log_msg {
     struct logger_entry entry;
   } __attribute__((aligned(4)));
 #ifdef __cplusplus
-  /* Matching log_time operators */
-  bool operator==(const log_msg& T) const {
-    return (entry.sec == T.entry.sec) && (entry.nsec == T.entry.nsec);
-  }
-  bool operator!=(const log_msg& T) const {
-    return !(*this == T);
-  }
-  bool operator<(const log_msg& T) const {
-    return (entry.sec < T.entry.sec) ||
-           ((entry.sec == T.entry.sec) && (entry.nsec < T.entry.nsec));
-  }
-  bool operator>=(const log_msg& T) const {
-    return !(*this < T);
-  }
-  bool operator>(const log_msg& T) const {
-    return (entry.sec > T.entry.sec) ||
-           ((entry.sec == T.entry.sec) && (entry.nsec > T.entry.nsec));
-  }
-  bool operator<=(const log_msg& T) const {
-    return !(*this > T);
-  }
   uint64_t nsec() const {
     return static_cast<uint64_t>(entry.sec) * NS_PER_SEC + entry.nsec;
   }
-
-  /* packet methods */
   log_id_t id() {
     return static_cast<log_id_t>(entry.lid);
   }
