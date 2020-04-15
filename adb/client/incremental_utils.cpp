@@ -302,7 +302,7 @@ static std::pair<ZipArchiveHandle, std::unique_ptr<android::base::MappedFile>> o
     return {zip, std::move(mapping)};
 }
 
-static std::vector<int32_t> InstallationPriorityBlocks(int fd, Size fileSize) {
+static std::vector<int32_t> InstallationPriorityBlocks(borrowed_fd fd, Size fileSize) {
     static constexpr std::array<std::string_view, 3> additional_matches = {
             "resources.arsc"sv, "AndroidManifest.xml"sv, "classes.dex"sv};
 
