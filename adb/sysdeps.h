@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+#pragma once
+
 /* this file contains system-dependent definitions used by ADB
  * they're related to threads, sockets and file descriptors
  */
-#ifndef _ADB_SYSDEPS_H
-#define _ADB_SYSDEPS_H
 
 #ifdef __CYGWIN__
 #  undef _WIN32
@@ -43,7 +43,7 @@
 #include "sysdeps/stat.h"
 
 #if defined(__APPLE__)
-static void* mempcpy(void* dst, const void* src, size_t n) {
+static inline void* mempcpy(void* dst, const void* src, size_t n) {
     return static_cast<char*>(memcpy(dst, src, n)) + n;
 }
 #endif
@@ -76,13 +76,13 @@ static void* mempcpy(void* dst, const void* src, size_t n) {
 #define OS_PATH_SEPARATOR_STR "\\"
 #define ENV_PATH_SEPARATOR_STR ";"
 
-static __inline__ bool adb_is_separator(char c) {
+static inline bool adb_is_separator(char c) {
     return c == '\\' || c == '/';
 }
 
 extern int adb_thread_setname(const std::string& name);
 
-static __inline__ void close_on_exec(borrowed_fd fd) {
+static inline void close_on_exec(borrowed_fd fd) {
     /* nothing really */
 }
 
@@ -113,7 +113,7 @@ extern int adb_gethostname(char* name, size_t len);
 extern int adb_getlogin_r(char* buf, size_t bufsize);
 
 // See the comments for the !defined(_WIN32) version of unix_close().
-static __inline__ int unix_close(int fd) {
+static inline int unix_close(int fd) {
     return close(fd);
 }
 #undef close
@@ -123,7 +123,7 @@ static __inline__ int unix_close(int fd) {
 extern int unix_read_interruptible(borrowed_fd fd, void* buf, size_t len);
 
 // See the comments for the !defined(_WIN32) version of unix_read().
-static __inline__ int unix_read(borrowed_fd fd, void* buf, size_t len) {
+static inline int unix_read(borrowed_fd fd, void* buf, size_t len) {
     return TEMP_FAILURE_RETRY(unix_read_interruptible(fd, buf, len));
 }
 
@@ -134,7 +134,7 @@ static __inline__ int unix_read(borrowed_fd fd, void* buf, size_t len) {
 #define pread ___xxx_pread
 
 // See the comments for the !defined(_WIN32) version of unix_write().
-static __inline__ int unix_write(borrowed_fd fd, const void* buf, size_t len) {
+static inline int unix_write(borrowed_fd fd, const void* buf, size_t len) {
     return write(fd.get(), buf, len);
 }
 #undef   write
@@ -144,14 +144,14 @@ static __inline__ int unix_write(borrowed_fd fd, const void* buf, size_t len) {
 #define pwrite ___xxx_pwrite
 
 // See the comments for the !defined(_WIN32) version of unix_lseek().
-static __inline__ int unix_lseek(borrowed_fd fd, int pos, int where) {
+static inline int unix_lseek(borrowed_fd fd, int pos, int where) {
     return lseek(fd.get(), pos, where);
 }
 #undef lseek
 #define lseek ___xxx_lseek
 
 // See the comments for the !defined(_WIN32) version of adb_open_mode().
-static __inline__ int adb_open_mode(const char* path, int options, int mode) {
+static inline int adb_open_mode(const char* path, int options, int mode) {
     return adb_open(path, options);
 }
 
@@ -208,7 +208,7 @@ struct adb_pollfd {
 extern int adb_poll(adb_pollfd* fds, size_t nfds, int timeout);
 #define poll ___xxx_poll
 
-static __inline__ int adb_is_absolute_host_path(const char* path) {
+static inline int adb_is_absolute_host_path(const char* path) {
     return isalpha(path[0]) && path[1] == ':' && path[2] == '\\';
 }
 
@@ -392,15 +392,15 @@ size_t ParseCompleteUTF8(const char* first, const char* last, std::vector<char>*
 #define OS_PATH_SEPARATOR_STR "/"
 #define ENV_PATH_SEPARATOR_STR ":"
 
-static __inline__ bool adb_is_separator(char c) {
+static inline bool adb_is_separator(char c) {
     return c == '/';
 }
 
-static __inline__ int get_fd_flags(borrowed_fd fd) {
+static inline int get_fd_flags(borrowed_fd fd) {
     return fcntl(fd.get(), F_GETFD);
 }
 
-static __inline__ void close_on_exec(borrowed_fd fd) {
+static inline void close_on_exec(borrowed_fd fd) {
     int flags = get_fd_flags(fd);
     if (flags >= 0 && (flags & FD_CLOEXEC) == 0) {
         fcntl(fd.get(), F_SETFD, flags | FD_CLOEXEC);
@@ -416,7 +416,7 @@ static __inline__ void close_on_exec(borrowed_fd fd) {
 // by unix_read(), unix_write(), unix_close()). Also, the C Runtime has
 // configurable CR/LF translation which defaults to text mode, but is settable
 // with _setmode().
-static __inline__ int unix_open(std::string_view path, int options, ...) {
+static inline int unix_open(std::string_view path, int options, ...) {
     std::string zero_terminated(path.begin(), path.end());
     if ((options & O_CREAT) == 0) {
         return TEMP_FAILURE_RETRY(open(zero_terminated.c_str(), options));
@@ -432,7 +432,7 @@ static __inline__ int unix_open(std::string_view path, int options, ...) {
 
 // Similar to the two-argument adb_open(), but takes a mode parameter for file
 // creation. See adb_open() for more info.
-static __inline__ int adb_open_mode(const char* pathname, int options, int mode) {
+static inline int adb_open_mode(const char* pathname, int options, int mode) {
     return TEMP_FAILURE_RETRY(open(pathname, options, mode));
 }
 
@@ -443,7 +443,7 @@ static __inline__ int adb_open_mode(const char* pathname, int options, int mode)
 // sysdeps_win32.cpp) uses Windows native file I/O and bypasses the C Runtime
 // and its CR/LF translation. The returned file descriptor should be used with
 // adb_read(), adb_write(), adb_close(), etc.
-static __inline__ int adb_open(const char* pathname, int options) {
+static inline int adb_open(const char* pathname, int options) {
     int fd = TEMP_FAILURE_RETRY(open(pathname, options));
     if (fd < 0) return -1;
     close_on_exec(fd);
@@ -452,7 +452,7 @@ static __inline__ int adb_open(const char* pathname, int options) {
 #undef open
 #define open ___xxx_open
 
-static __inline__ int adb_shutdown(borrowed_fd fd, int direction = SHUT_RDWR) {
+static inline int adb_shutdown(borrowed_fd fd, int direction = SHUT_RDWR) {
     return shutdown(fd.get(), direction);
 }
 
@@ -462,7 +462,7 @@ static __inline__ int adb_shutdown(borrowed_fd fd, int direction = SHUT_RDWR) {
 // Closes a file descriptor that came from adb_open() or adb_open_mode(), but
 // not designed to take a file descriptor from unix_open(). See the comments
 // for adb_open() for more info.
-__inline__ int adb_close(int fd) {
+inline int adb_close(int fd) {
     return close(fd);
 }
 #undef close
@@ -471,23 +471,23 @@ __inline__ int adb_close(int fd) {
 // On Windows, ADB has an indirection layer for file descriptors. If we get a
 // Win32 SOCKET object from an external library, we have to map it in to that
 // indirection layer, which this does.
-__inline__ int adb_register_socket(int s) {
+inline int adb_register_socket(int s) {
     return s;
 }
 
-static __inline__ int adb_gethostname(char* name, size_t len) {
+static inline int adb_gethostname(char* name, size_t len) {
     return gethostname(name, len);
 }
 
-static __inline__ int adb_getlogin_r(char* buf, size_t bufsize) {
+static inline int adb_getlogin_r(char* buf, size_t bufsize) {
     return getlogin_r(buf, bufsize);
 }
 
-static __inline__ int adb_read(borrowed_fd fd, void* buf, size_t len) {
+static inline int adb_read(borrowed_fd fd, void* buf, size_t len) {
     return TEMP_FAILURE_RETRY(read(fd.get(), buf, len));
 }
 
-static __inline__ int adb_pread(borrowed_fd fd, void* buf, size_t len, off64_t offset) {
+static inline int adb_pread(borrowed_fd fd, void* buf, size_t len, off64_t offset) {
 #if defined(__APPLE__)
     return TEMP_FAILURE_RETRY(pread(fd.get(), buf, len, offset));
 #else
@@ -496,7 +496,7 @@ static __inline__ int adb_pread(borrowed_fd fd, void* buf, size_t len, off64_t o
 }
 
 // Like unix_read(), but does not handle EINTR.
-static __inline__ int unix_read_interruptible(borrowed_fd fd, void* buf, size_t len) {
+static inline int unix_read_interruptible(borrowed_fd fd, void* buf, size_t len) {
     return read(fd.get(), buf, len);
 }
 
@@ -505,11 +505,11 @@ static __inline__ int unix_read_interruptible(borrowed_fd fd, void* buf, size_t 
 #undef pread
 #define pread ___xxx_pread
 
-static __inline__ int adb_write(borrowed_fd fd, const void* buf, size_t len) {
+static inline int adb_write(borrowed_fd fd, const void* buf, size_t len) {
     return TEMP_FAILURE_RETRY(write(fd.get(), buf, len));
 }
 
-static __inline__ int adb_pwrite(int fd, const void* buf, size_t len, off64_t offset) {
+static inline int adb_pwrite(int fd, const void* buf, size_t len, off64_t offset) {
 #if defined(__APPLE__)
     return TEMP_FAILURE_RETRY(pwrite(fd, buf, len, offset));
 #else
@@ -522,7 +522,7 @@ static __inline__ int adb_pwrite(int fd, const void* buf, size_t len, off64_t of
 #undef pwrite
 #define pwrite ___xxx_pwrite
 
-static __inline__ int64_t adb_lseek(borrowed_fd fd, int64_t pos, int where) {
+static inline int64_t adb_lseek(borrowed_fd fd, int64_t pos, int where) {
 #if defined(__APPLE__)
     return lseek(fd.get(), pos, where);
 #else
@@ -532,13 +532,13 @@ static __inline__ int64_t adb_lseek(borrowed_fd fd, int64_t pos, int where) {
 #undef lseek
 #define lseek ___xxx_lseek
 
-static __inline__ int adb_unlink(const char* path) {
+static inline int adb_unlink(const char* path) {
     return unlink(path);
 }
 #undef unlink
 #define unlink ___xxx_unlink
 
-static __inline__ int adb_creat(const char* path, int mode) {
+static inline int adb_creat(const char* path, int mode) {
     int fd = TEMP_FAILURE_RETRY(creat(path, mode));
 
     if (fd < 0) return -1;
@@ -549,7 +549,7 @@ static __inline__ int adb_creat(const char* path, int mode) {
 #undef creat
 #define creat ___xxx_creat
 
-static __inline__ int unix_isatty(borrowed_fd fd) {
+static inline int unix_isatty(borrowed_fd fd) {
     return isatty(fd.get());
 }
 #define isatty ___xxx_isatty
@@ -576,8 +576,8 @@ inline int network_local_server(const char* name, int namespace_id, int type, st
 
 int network_connect(const std::string& host, int port, int type, int timeout, std::string* error);
 
-static __inline__ int adb_socket_accept(borrowed_fd serverfd, struct sockaddr* addr,
-                                        socklen_t* addrlen) {
+static inline int adb_socket_accept(borrowed_fd serverfd, struct sockaddr* addr,
+                                    socklen_t* addrlen) {
     int fd;
 
     fd = TEMP_FAILURE_RETRY(accept(serverfd.get(), addr, addrlen));
@@ -606,7 +606,7 @@ inline int adb_socket_get_local_port(borrowed_fd fd) {
 #define unix_lseek adb_lseek
 #define unix_close adb_close
 
-static __inline__ int adb_thread_setname(const std::string& name) {
+static inline int adb_thread_setname(const std::string& name) {
 #ifdef __APPLE__
     return pthread_setname_np(name.c_str());
 #else
@@ -619,19 +619,19 @@ static __inline__ int adb_thread_setname(const std::string& name) {
 #endif
 }
 
-static __inline__ int adb_setsockopt(borrowed_fd fd, int level, int optname, const void* optval,
-                                     socklen_t optlen) {
+static inline int adb_setsockopt(borrowed_fd fd, int level, int optname, const void* optval,
+                                 socklen_t optlen) {
     return setsockopt(fd.get(), level, optname, optval, optlen);
 }
 
 #undef setsockopt
 #define setsockopt ___xxx_setsockopt
 
-static __inline__ int unix_socketpair(int d, int type, int protocol, int sv[2]) {
+static inline int unix_socketpair(int d, int type, int protocol, int sv[2]) {
     return socketpair(d, type, protocol, sv);
 }
 
-static __inline__ int adb_socketpair(int sv[2]) {
+static inline int adb_socketpair(int sv[2]) {
     int rc;
 
     rc = unix_socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
@@ -646,28 +646,28 @@ static __inline__ int adb_socketpair(int sv[2]) {
 #define socketpair ___xxx_socketpair
 
 typedef struct pollfd adb_pollfd;
-static __inline__ int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
+static inline int adb_poll(adb_pollfd* fds, size_t nfds, int timeout) {
     return TEMP_FAILURE_RETRY(poll(fds, nfds, timeout));
 }
 
 #define poll ___xxx_poll
 
-static __inline__ int adb_mkdir(const std::string& path, int mode) {
+static inline int adb_mkdir(const std::string& path, int mode) {
     return mkdir(path.c_str(), mode);
 }
 
 #undef mkdir
 #define mkdir ___xxx_mkdir
 
-static __inline__ int adb_rename(const char* oldpath, const char* newpath) {
+static inline int adb_rename(const char* oldpath, const char* newpath) {
     return rename(oldpath, newpath);
 }
 
-static __inline__ int adb_is_absolute_host_path(const char* path) {
+static inline int adb_is_absolute_host_path(const char* path) {
     return path[0] == '/';
 }
 
-static __inline__ int adb_get_os_handle(borrowed_fd fd) {
+static inline int adb_get_os_handle(borrowed_fd fd) {
     return fd.get();
 }
 
@@ -717,5 +717,3 @@ bool set_tcp_keepalive(borrowed_fd fd, int interval_sec);
 // Win32 defines ERROR, which we don't need, but which conflicts with google3 logging.
 #undef ERROR
 #endif
-
-#endif /* _ADB_SYSDEPS_H */
