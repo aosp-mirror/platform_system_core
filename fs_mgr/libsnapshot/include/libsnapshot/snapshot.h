@@ -70,6 +70,8 @@ struct AutoDeleteCowImage;
 struct AutoDeleteSnapshot;
 struct AutoDeviceList;
 struct PartitionCowCreator;
+class ISnapshotMergeStats;
+class SnapshotMergeStats;
 class SnapshotStatus;
 
 static constexpr const std::string_view kCowGroupName = "cow";
@@ -235,6 +237,9 @@ class ISnapshotManager {
     //   b.reset() // unmounts
     //   a.reset() // does nothing
     virtual std::unique_ptr<AutoDevice> EnsureMetadataMounted() = 0;
+
+    // Return the associated ISnapshotMergeStats instance. Never null.
+    virtual ISnapshotMergeStats* GetSnapshotMergeStatsInstance() = 0;
 };
 
 class SnapshotManager final : public ISnapshotManager {
@@ -289,6 +294,7 @@ class SnapshotManager final : public ISnapshotManager {
             const std::unique_ptr<AutoDevice>& metadata_device) override;
     bool Dump(std::ostream& os) override;
     std::unique_ptr<AutoDevice> EnsureMetadataMounted() override;
+    ISnapshotMergeStats* GetSnapshotMergeStatsInstance() override;
 
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);

@@ -46,6 +46,7 @@ class SnapshotManagerStub : public ISnapshotManager {
             const std::unique_ptr<AutoDevice>& metadata_device) override;
     bool Dump(std::ostream& os) override;
     std::unique_ptr<AutoDevice> EnsureMetadataMounted() override;
+    ISnapshotMergeStats* GetSnapshotMergeStatsInstance() override;
 };
 
 }  // namespace android::snapshot

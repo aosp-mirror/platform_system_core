@@ -16,6 +16,8 @@
 
 #include <android-base/logging.h>
 
+#include <libsnapshot/snapshot_stats.h>
+
 using android::fs_mgr::CreateLogicalPartitionParams;
 using chromeos_update_engine::DeltaArchiveManifest;
 
@@ -106,6 +108,18 @@ bool SnapshotManagerStub::Dump(std::ostream&) {
 std::unique_ptr<AutoDevice> SnapshotManagerStub::EnsureMetadataMounted() {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return nullptr;
+}
+
+class SnapshotMergeStatsStub : public ISnapshotMergeStats {
+    bool Start() override { return false; }
+    void set_state(android::snapshot::UpdateState) override {}
+    std::unique_ptr<Result> Finish() override { return nullptr; }
+};
+
+ISnapshotMergeStats* SnapshotManagerStub::GetSnapshotMergeStatsInstance() {
+    static SnapshotMergeStatsStub snapshot_merge_stats;
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
+    return &snapshot_merge_stats;
 }
 
 }  // namespace android::snapshot
