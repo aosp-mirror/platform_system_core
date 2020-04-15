@@ -24,12 +24,10 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include <filesystem>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include <android-base/chrono_utils.h>
@@ -39,6 +37,7 @@
 #include <private/android_filesystem_config.h>
 
 #include "debug_ramdisk.h"
+#include "first_stage_console.h"
 #include "first_stage_mount.h"
 #include "reboot_utils.h"
 #include "switch_root.h"
@@ -92,49 +91,6 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
         }
         unlinkat(dfd, de->d_name, is_dir ? AT_REMOVEDIR : 0);
     }
-}
-
-void StartConsole() {
-    if (mknod("/dev/console", S_IFCHR | 0600, makedev(5, 1))) {
-        PLOG(ERROR) << "unable to create /dev/console";
-        return;
-    }
-    pid_t pid = fork();
-    if (pid != 0) {
-        int status;
-        waitpid(pid, &status, 0);
-        LOG(ERROR) << "console shell exited with status " << status;
-        return;
-    }
-    int fd = -1;
-    int tries = 50; // should timeout after 5s
-    // The device driver for console may not be ready yet so retry for a while in case of failure.
-    while (tries--) {
-        fd = open("/dev/console", O_RDWR);
-        if (fd != -1) {
-            break;
-        }
-        std::this_thread::sleep_for(100ms);
-    }
-    if (fd == -1) {
-        LOG(ERROR) << "Could not open /dev/console, errno = " << errno;
-        _exit(127);
-    }
-    ioctl(fd, TIOCSCTTY, 0);
-    dup2(fd, STDIN_FILENO);
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
-    close(fd);
-
-    const char* path = "/system/bin/sh";
-    const char* args[] = {path, nullptr};
-    int rv = execv(path, const_cast<char**>(args));
-    LOG(ERROR) << "unable to execv, returned " << rv << " errno " << errno;
-    _exit(127);
-}
-
-bool FirstStageConsole(const std::string& cmdline) {
-    return cmdline.find("androidboot.first_stage_console=1") != std::string::npos;
 }
 
 bool ForceNormalBoot(const std::string& cmdline) {
