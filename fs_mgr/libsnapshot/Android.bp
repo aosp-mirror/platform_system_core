@@ -73,6 +73,7 @@ filegroup {
         "device_info.cpp",
         "snapshot.cpp",
         "snapshot_stats.cpp",
+        "snapshot_stub.cpp",
         "snapshot_metadata_updater.cpp",
         "partition_cow_creator.cpp",
         "return.cpp",
