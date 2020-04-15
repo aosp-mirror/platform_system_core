@@ -53,6 +53,7 @@ cc_library {
         linux: {
             version_script: "libadbconnection_client.map.txt",
         },
+        darwin: { enabled: false },
     },
     stubs: {
         symbol_file: "libadbconnection_client.map.txt",
