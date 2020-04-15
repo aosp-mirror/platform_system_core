@@ -221,6 +221,7 @@ FirstStageMount::FirstStageMount(Fstab fstab)
     auto boot_devices = android::fs_mgr::GetBootDevices();
     device_handler_ = std::make_unique<DeviceHandler>(
             std::vector<Permissions>{}, std::vector<SysfsPermissions>{}, std::vector<Subsystem>{},
+            std::vector<Aliases>(),
             std::move(boot_devices), false);
 
     super_partition_name_ = fs_mgr_get_super_partition_name();

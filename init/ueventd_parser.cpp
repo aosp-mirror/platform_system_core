@@ -105,6 +105,34 @@ Result<Success> ParseModaliasHandlingLine(std::vector<std::string>&& args,
     return Success();
 }
 
+Result<Success> ParseAliasLine(std::vector<std::string>&& args,
+                               std::vector<Aliases>* aliases) {
+    if (args.size() != 6)
+        return Error() << "alias lines must have 6 entries";
+
+    auto it = args.begin();
+
+    // Skip "alias"
+    *it++;
+
+    // Format of alias lines: <to> <hex:productId> <hex:vendorId> <major> <minor>
+
+    std::string& alias_to = *it++;
+    std::string& productId_s = *it++;
+    std::string& vendorId_s = *it++;
+    std::string& major_s = *it++;
+    std::string& minor_s = *it++;
+
+    int productId = std::stoi(productId_s, 0, 16);
+    int vendorId = std::stoi(vendorId_s, 0, 16);
+    int major = std::stoi(major_s);
+    int minor = std::stoi(minor_s);
+
+    aliases->emplace_back(alias_to, productId, vendorId, major, minor);
+
+    return Success();
+}
+
 Result<Success> ParseUeventSocketRcvbufSizeLine(std::vector<std::string>&& args,
                                                 size_t* uevent_socket_rcvbuf_size) {
     if (args.size() != 2) {
@@ -225,6 +253,8 @@ UeventdConfiguration ParseConfig(const std::vector<std::string>& configs) {
     parser.AddSingleLineParser("uevent_socket_rcvbuf_size",
                                std::bind(ParseUeventSocketRcvbufSizeLine, _1,
                                          &ueventd_configuration.uevent_socket_rcvbuf_size));
+    parser.AddSingleLineParser("alias", std::bind(ParseAliasLine, _1,
+                                                  &ueventd_configuration.aliases));
 
     for (const auto& config : configs) {
         parser.ParseConfig(config);

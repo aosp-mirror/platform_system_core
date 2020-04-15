@@ -43,6 +43,14 @@ void TestSysfsPermissions(const SysfsPermissions& expected, const SysfsPermissio
     EXPECT_EQ(expected.attribute_, test.attribute_);
 }
 
+void TestAliases(const Aliases& expected, const Aliases& test) {
+    EXPECT_EQ(expected.productId_, test.productId_);
+    EXPECT_EQ(expected.vendorId_, test.vendorId_);
+    EXPECT_EQ(expected.major_, test.major_);
+    EXPECT_EQ(expected.minor_, test.minor_);
+    EXPECT_EQ(expected.alias_to_, test.alias_to_);
+}
+
 template <typename T, typename F>
 void TestVector(const T& expected, const T& test, F function) {
     ASSERT_EQ(expected.size(), test.size());
@@ -64,6 +72,7 @@ void TestUeventdFile(const std::string& content, const UeventdConfiguration& exp
     TestVector(expected.subsystems, result.subsystems, TestSubsystems);
     TestVector(expected.sysfs_permissions, result.sysfs_permissions, TestSysfsPermissions);
     TestVector(expected.dev_permissions, result.dev_permissions, TestPermissions);
+    TestVector(expected.aliases, result.aliases, TestAliases);
     EXPECT_EQ(expected.firmware_directories, result.firmware_directories);
 }
 
@@ -93,7 +102,19 @@ subsystem test_devpath_dirname
             {"test_devname2", Subsystem::DEVNAME_UEVENT_DEVNAME, "/dev"},
             {"test_devpath_dirname", Subsystem::DEVNAME_UEVENT_DEVPATH, "/dev/graphics"}};
 
-    TestUeventdFile(ueventd_file, {subsystems, {}, {}, {}});
+    TestUeventdFile(ueventd_file, {subsystems, {}, {}, {}, {}});
+}
+
+TEST(ueventd_parser, Aliases) {
+    auto ueventd_file = R"(
+alias /dev/test 1 2 3 4
+)";
+
+    auto aliases = std::vector<Aliases>{
+        { "/dev/test", 1, 2, 3, 4}
+    };
+
+    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, aliases});
 }
 
 TEST(ueventd_parser, Permissions) {
@@ -119,7 +140,7 @@ TEST(ueventd_parser, Permissions) {
             {"/sys/devices/virtual/*/input", "poll_delay", 0660, AID_ROOT, AID_INPUT},
     };
 
-    TestUeventdFile(ueventd_file, {{}, sysfs_permissions, permissions, {}});
+    TestUeventdFile(ueventd_file, {{}, sysfs_permissions, permissions, {}, {}});
 }
 
 TEST(ueventd_parser, FirmwareDirectories) {
@@ -135,7 +156,7 @@ firmware_directories /more
             "/more",
     };
 
-    TestUeventdFile(ueventd_file, {{}, {}, {}, firmware_directories});
+    TestUeventdFile(ueventd_file, {{}, {}, {}, firmware_directories, {}});
 }
 
 TEST(ueventd_parser, UeventSocketRcvbufSize) {
@@ -144,7 +165,7 @@ uevent_socket_rcvbuf_size 8k
 uevent_socket_rcvbuf_size 8M
 )";
 
-    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, false, 8 * 1024 * 1024});
+    TestUeventdFile(ueventd_file, {{}, {}, {}, {}, {}, false, 8 * 1024 * 1024});
 }
 
 TEST(ueventd_parser, AllTogether) {
@@ -180,6 +201,8 @@ firmware_directories /more
 
 uevent_socket_rcvbuf_size 6M
 
+alias /dev/test 1 2 3 4
+
 #ending comment
 )";
 
@@ -208,9 +231,13 @@ uevent_socket_rcvbuf_size 6M
             "/more",
     };
 
+    auto aliases = std::vector<Aliases>{
+        {"/dev/test", 1, 2, 3, 4}
+    };
+
     size_t uevent_socket_rcvbuf_size = 6 * 1024 * 1024;
 
-    TestUeventdFile(ueventd_file, {subsystems, sysfs_permissions, permissions, firmware_directories,
+    TestUeventdFile(ueventd_file, {subsystems, sysfs_permissions, permissions, firmware_directories, aliases,
                                    false, uevent_socket_rcvbuf_size});
 }
 

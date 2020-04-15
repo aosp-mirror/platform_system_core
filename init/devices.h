@@ -34,6 +34,26 @@
 namespace android {
 namespace init {
 
+class Aliases {
+    private:
+    int minor_;
+    int major_;
+    int productId_;
+    int vendorId_;
+    std::string alias_to_;
+
+    public:
+    Aliases(const std::string& to, int productId, int vendorId, int major, int minor);
+
+    friend void TestAliases(const Aliases& expected, const Aliases& test);
+
+    int Minor() const { return minor_; };
+    int Major() const { return major_; };
+    int ProductId() const { return productId_; };
+    int VendorId() const { return vendorId_; };
+    std::string AliasTo() const { return alias_to_; };
+};
+
 class Permissions {
   public:
     friend void TestPermissions(const Permissions& expected, const Permissions& test);
@@ -112,7 +132,9 @@ class DeviceHandler : public UeventHandler {
 
     DeviceHandler();
     DeviceHandler(std::vector<Permissions> dev_permissions,
-                  std::vector<SysfsPermissions> sysfs_permissions, std::vector<Subsystem> subsystems,
+                  std::vector<SysfsPermissions> sysfs_permissions,
+                  std::vector<Subsystem> subsystems,
+                  std::vector<Aliases> aliases,
                   std::set<std::string> boot_devices, bool skip_restorecon);
     virtual ~DeviceHandler() = default;
 
@@ -127,13 +149,16 @@ class DeviceHandler : public UeventHandler {
         const std::string& path, const std::vector<std::string>& links) const;
     void MakeDevice(const std::string& path, bool block, int major, int minor,
                     const std::vector<std::string>& links) const;
-    void HandleDevice(const std::string& action, const std::string& devpath, bool block, int major,
+    void HandleDevice(const std::string& action, const std::string& devpath,
+                      const std::string& upath, bool block, int major,
                       int minor, const std::vector<std::string>& links) const;
     void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
+    bool GetDeviceAlias(const std::string &upath, int major, int minor, std::string& alias_link) const;
 
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;
     std::vector<Subsystem> subsystems_;
+    std::vector<Aliases> aliases_;
     std::set<std::string> boot_devices_;
     bool skip_restorecon_;
     std::string sysfs_mount_point_;

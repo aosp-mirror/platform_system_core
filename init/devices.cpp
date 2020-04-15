@@ -136,6 +136,10 @@ static bool FindDmDevicePartition(const std::string& path, std::string* result) 
     return true;
 }
 
+Aliases::Aliases(const std::string& to, int productId, int vendorId, int major, int minor)
+    : minor_(minor), major_(major), productId_(productId), vendorId_(vendorId), alias_to_(to) {
+}
+
 Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid)
     : name_(name), perm_(perm), uid_(uid), gid_(gid), prefix_(false), wildcard_(false) {
     // Set 'prefix_' or 'wildcard_' based on the below cases:
@@ -383,11 +387,19 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
     return links;
 }
 
-void DeviceHandler::HandleDevice(const std::string& action, const std::string& devpath, bool block,
+void DeviceHandler::HandleDevice(const std::string& action, const std::string& devpath,
+                                 const std::string& upath, bool block,
                                  int major, int minor, const std::vector<std::string>& links) const {
     if (action == "add") {
         MakeDevice(devpath, block, major, minor, links);
-        for (const auto& link : links) {
+
+        std::vector<std::string> all_links(links);
+        std::string alias_link;
+
+        if (GetDeviceAlias(upath, major, minor, alias_link))
+            all_links.push_back(alias_link);
+
+        for (const auto& link : all_links) {
             if (!mkdir_recursive(Dirname(link), 0755)) {
                 PLOG(ERROR) << "Failed to create directory " << Dirname(link);
             }
@@ -458,7 +470,66 @@ void DeviceHandler::HandleUevent(const Uevent& uevent) {
 
     mkdir_recursive(Dirname(devpath), 0755);
 
-    HandleDevice(uevent.action, devpath, block, uevent.major, uevent.minor, links);
+    HandleDevice(uevent.action, devpath, uevent.path, block, uevent.major, uevent.minor, links);
+}
+
+bool DeviceHandler::GetDeviceAlias(const std::string &upath, int major, int minor,
+                                   std::string& alias_link) const {
+    bool found = false;
+    std::string parent_dir;
+    std::string vendorId_s, productId_s, dev_s;
+    std::string vendorId_path, productId_path;
+    std::string sAliasPath;
+    int vendorId, productId;
+
+    parent_dir = Dirname("/sys" + upath);
+
+    while ((parent_dir != "/" && parent_dir != ".")) {
+        std::string vendorId_path = parent_dir + "/idVendor";
+
+        // Get the vendor ID
+        if (!android::base::ReadFileToString(vendorId_path, &vendorId_s)) {
+            // Can't find the vendor ID? move up the path.
+            auto last_slash = parent_dir.rfind('/');
+            if (last_slash == std::string::npos) break;
+
+            parent_dir.erase(last_slash);
+        }
+        // Found the idVendor, move to the next step.
+        else { found = true; break; }
+    }
+
+    if (!found) return false;
+
+    for (const auto& alias : aliases_) {
+        bool match_productId, match_vendorId, match_major, match_minor;
+        std::string sys_path;
+
+        // Look in /sys for the information we need.
+        productId_path = parent_dir + "/idProduct";
+        sys_path = "/sys" + upath;
+
+        // Get the product ID
+        if (!android::base::ReadFileToString(productId_path, &productId_s)) {
+            PLOG(ERROR) << "Failed to read " << productId_path;
+            continue;
+        }
+
+        vendorId = std::stoi(vendorId_s, 0, 16);
+        productId = std::stoi(productId_s, 0, 16);
+        match_productId = (alias.ProductId() == productId);
+        match_vendorId = (alias.VendorId() == vendorId);
+        match_major = (alias.Major() == major);
+        match_minor = (alias.Minor() == minor);
+
+        if (match_productId && match_vendorId && match_major && match_minor) {
+            LOG(INFO) << "Will create link: " << alias.AliasTo();
+            alias_link = alias.AliasTo();
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void DeviceHandler::ColdbootDone() {
@@ -467,18 +538,21 @@ void DeviceHandler::ColdbootDone() {
 
 DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,
                              std::vector<SysfsPermissions> sysfs_permissions,
-                             std::vector<Subsystem> subsystems, std::set<std::string> boot_devices,
+                             std::vector<Subsystem> subsystems,
+                             std::vector<Aliases> aliases,
+                             std::set<std::string> boot_devices,
                              bool skip_restorecon)
     : dev_permissions_(std::move(dev_permissions)),
       sysfs_permissions_(std::move(sysfs_permissions)),
       subsystems_(std::move(subsystems)),
+      aliases_(std::move(aliases)),
       boot_devices_(std::move(boot_devices)),
       skip_restorecon_(skip_restorecon),
       sysfs_mount_point_("/sys") {}
 
 DeviceHandler::DeviceHandler()
     : DeviceHandler(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
-                    std::vector<Subsystem>{}, std::set<std::string>{}, false) {}
+                    std::vector<Subsystem>{}, std::vector<Aliases>{}, std::set<std::string>{}, false) {}
 
 }  // namespace init
 }  // namespace android
