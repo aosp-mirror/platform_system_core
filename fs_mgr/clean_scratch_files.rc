@@ -1,2 +1,2 @@
 on post-fs-data && property:ro.debuggable=1
-    exec_background - root root -- clean_scratch_files
+    exec_background - root root -- /system/bin/clean_scratch_files
