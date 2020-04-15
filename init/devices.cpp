@@ -390,15 +390,16 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
 void DeviceHandler::HandleDevice(const std::string& action, const std::string& devpath,
                                  const std::string& upath, bool block,
                                  int major, int minor, const std::vector<std::string>& links) const {
+    std::vector<std::string> all_links(links);
+    std::string alias_link;
+
+    // Add the alias link to the device to the list of links to
+    // create.
+    if (GetDeviceAlias(upath, major, minor, alias_link))
+        all_links.push_back(alias_link);
+
     if (action == "add") {
-        MakeDevice(devpath, block, major, minor, links);
-
-        std::vector<std::string> all_links(links);
-        std::string alias_link;
-
-        if (GetDeviceAlias(upath, major, minor, alias_link))
-            all_links.push_back(alias_link);
-
+        MakeDevice(devpath, block, major, minor, all_links);
         for (const auto& link : all_links) {
             if (!mkdir_recursive(Dirname(link), 0755)) {
                 PLOG(ERROR) << "Failed to create directory " << Dirname(link);
@@ -417,7 +418,7 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     }
 
     if (action == "remove") {
-        for (const auto& link : links) {
+        for (const auto& link : all_links) {
             std::string link_path;
             if (Readlink(link, &link_path) && link_path == devpath) {
                 unlink(link.c_str());
