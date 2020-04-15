@@ -523,7 +523,6 @@ bool DeviceHandler::GetDeviceAlias(const std::string &upath, int major, int mino
         match_minor = (alias.Minor() == minor);
 
         if (match_productId && match_vendorId && match_major && match_minor) {
-            LOG(INFO) << "Will create link: " << alias.AliasTo();
             alias_link = alias.AliasTo();
             return true;
         }
