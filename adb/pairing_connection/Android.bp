@@ -84,7 +84,7 @@ cc_library {
     static_libs: [
         "libadb_protos",
         // Statically link libadb_tls_connection because it is not
-	// ABI-stable.
+        // ABI-stable.
         "libadb_tls_connection",
         "libprotobuf-cpp-lite",
     ],
@@ -133,7 +133,6 @@ cc_defaults {
         "//frameworks/base/services:__subpackages__",
     ],
 
-    host_supported: true,
     recovery_available: false,
 
     stl: "libc++_static",
