@@ -50,6 +50,7 @@ LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES := \
     block_dev_initializer.cpp \
     devices.cpp \
+    first_stage_console.cpp \
     first_stage_init.cpp \
     first_stage_main.cpp \
     first_stage_mount.cpp \
