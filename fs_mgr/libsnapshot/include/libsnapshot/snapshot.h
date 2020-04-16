@@ -83,17 +83,7 @@ enum class CreateResult : unsigned int {
     NOT_CREATED,
 };
 
-class SnapshotManager final {
-    using CreateLogicalPartitionParams = android::fs_mgr::CreateLogicalPartitionParams;
-    using IPartitionOpener = android::fs_mgr::IPartitionOpener;
-    using LpMetadata = android::fs_mgr::LpMetadata;
-    using MetadataBuilder = android::fs_mgr::MetadataBuilder;
-    using DeltaArchiveManifest = chromeos_update_engine::DeltaArchiveManifest;
-    using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
-    using FiemapStatus = android::fiemap::FiemapStatus;
-
-    friend class SnapshotMergeStats;
-
+class ISnapshotManager {
   public:
     // Dependency injection for testing.
     class IDeviceInfo {
@@ -104,39 +94,23 @@ class SnapshotManager final {
         virtual std::string GetSlotSuffix() const = 0;
         virtual std::string GetOtherSlotSuffix() const = 0;
         virtual std::string GetSuperDevice(uint32_t slot) const = 0;
-        virtual const IPartitionOpener& GetPartitionOpener() const = 0;
+        virtual const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const = 0;
         virtual bool IsOverlayfsSetup() const = 0;
-        virtual bool SetBootControlMergeStatus(MergeStatus status) = 0;
+        virtual bool SetBootControlMergeStatus(
+                android::hardware::boot::V1_1::MergeStatus status) = 0;
         virtual bool SetSlotAsUnbootable(unsigned int slot) = 0;
         virtual bool IsRecovery() const = 0;
     };
-
-    ~SnapshotManager();
-
-    // Return a new SnapshotManager instance, or null on error. The device
-    // pointer is owned for the lifetime of SnapshotManager. If null, a default
-    // instance will be created.
-    static std::unique_ptr<SnapshotManager> New(IDeviceInfo* device = nullptr);
-
-    // This is similar to New(), except designed specifically for first-stage
-    // init or recovery.
-    static std::unique_ptr<SnapshotManager> NewForFirstStageMount(IDeviceInfo* device = nullptr);
-
-    // Helper function for first-stage init to check whether a SnapshotManager
-    // might be needed to perform first-stage mounts.
-    static bool IsSnapshotManagerNeeded();
-
-    // Helper function for second stage init to restorecon on the rollback indicator.
-    static std::string GetGlobalRollbackIndicatorPath();
+    virtual ~ISnapshotManager() = default;
 
     // Begin an update. This must be called before creating any snapshots. It
     // will fail if GetUpdateState() != None.
-    bool BeginUpdate();
+    virtual bool BeginUpdate() = 0;
 
     // Cancel an update; any snapshots will be deleted. This is allowed if the
     // state == Initiated, None, or Unverified (before rebooting to the new
     // slot).
-    bool CancelUpdate();
+    virtual bool CancelUpdate() = 0;
 
     // Mark snapshot writes as having completed. After this, new snapshots cannot
     // be created, and the device must either cancel the OTA (either before
@@ -144,11 +118,11 @@ class SnapshotManager final {
     // Before calling this function, all snapshots must be mapped.
     // If |wipe| is set to true, wipe is scheduled after reboot, and snapshots
     // may need to be merged before wiping.
-    bool FinishedSnapshotWrites(bool wipe);
+    virtual bool FinishedSnapshotWrites(bool wipe) = 0;
 
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
-    bool InitiateMerge();
+    virtual bool InitiateMerge() = 0;
 
     // Perform any necessary post-boot actions. This should be run soon after
     // /data is mounted.
@@ -178,8 +152,8 @@ class SnapshotManager final {
     //
     // The optional callback allows the caller to periodically check the
     // progress with GetUpdateState().
-    UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
-                                   const std::function<bool()>& before_cancel = {});
+    virtual UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
+                                           const std::function<bool()>& before_cancel = {}) = 0;
 
     // Find the status of the current update, if any.
     //
@@ -187,28 +161,30 @@ class SnapshotManager final {
     //   Merging: Value in the range [0, 100]
     //   MergeCompleted: 100
     //   Other: 0
-    UpdateState GetUpdateState(double* progress = nullptr);
+    virtual UpdateState GetUpdateState(double* progress = nullptr) = 0;
 
     // Create necessary COW device / files for OTA clients. New logical partitions will be added to
     // group "cow" in target_metadata. Regions of partitions of current_metadata will be
     // "write-protected" and snapshotted.
-    Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest);
+    virtual Return CreateUpdateSnapshots(
+            const chromeos_update_engine::DeltaArchiveManifest& manifest) = 0;
 
     // Map a snapshotted partition for OTA clients to write to. Write-protected regions are
     // determined previously in CreateSnapshots.
-    bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params, std::string* snapshot_path);
+    virtual bool MapUpdateSnapshot(const android::fs_mgr::CreateLogicalPartitionParams& params,
+                                   std::string* snapshot_path) = 0;
 
     // Unmap a snapshot device that's previously mapped with MapUpdateSnapshot.
-    bool UnmapUpdateSnapshot(const std::string& target_partition_name);
+    virtual bool UnmapUpdateSnapshot(const std::string& target_partition_name) = 0;
 
     // If this returns true, first-stage mount must call
     // CreateLogicalAndSnapshotPartitions rather than CreateLogicalPartitions.
-    bool NeedSnapshotsInFirstStageMount();
+    virtual bool NeedSnapshotsInFirstStageMount() = 0;
 
     // Perform first-stage mapping of snapshot targets. This replaces init's
     // call to CreateLogicalPartitions when snapshots are present.
-    bool CreateLogicalAndSnapshotPartitions(const std::string& super_device,
-                                            const std::chrono::milliseconds& timeout_ms = {});
+    virtual bool CreateLogicalAndSnapshotPartitions(
+            const std::string& super_device, const std::chrono::milliseconds& timeout_ms = {}) = 0;
 
     // This method should be called preceding any wipe or flash of metadata or
     // userdata. It is only valid in recovery or fastbootd, and it ensures that
@@ -221,7 +197,7 @@ class SnapshotManager final {
     //
     // Returns true on success (or nothing to do), false on failure. The
     // optional callback fires periodically to query progress via GetUpdateState.
-    bool HandleImminentDataWipe(const std::function<void()>& callback = {});
+    virtual bool HandleImminentDataWipe(const std::function<void()>& callback = {}) = 0;
 
     // This method is only allowed in recovery and is used as a helper to
     // initialize the snapshot devices as a requirement to mount a snapshotted
@@ -234,14 +210,15 @@ class SnapshotManager final {
     // be aborted.
     // This function mounts /metadata when called, and unmounts /metadata upon
     // return.
-    CreateResult RecoveryCreateSnapshotDevices();
+    virtual CreateResult RecoveryCreateSnapshotDevices() = 0;
 
     // Same as RecoveryCreateSnapshotDevices(), but does not auto mount/umount
     // /metadata.
-    CreateResult RecoveryCreateSnapshotDevices(const std::unique_ptr<AutoDevice>& metadata_device);
+    virtual CreateResult RecoveryCreateSnapshotDevices(
+            const std::unique_ptr<AutoDevice>& metadata_device) = 0;
 
     // Dump debug information.
-    bool Dump(std::ostream& os);
+    virtual bool Dump(std::ostream& os) = 0;
 
     // Ensure metadata directory is mounted in recovery. When the returned
     // AutoDevice is destroyed, the metadata directory is automatically
@@ -257,7 +234,61 @@ class SnapshotManager final {
     //   auto b = mgr->EnsureMetadataMounted(); // does nothing
     //   b.reset() // unmounts
     //   a.reset() // does nothing
-    std::unique_ptr<AutoDevice> EnsureMetadataMounted();
+    virtual std::unique_ptr<AutoDevice> EnsureMetadataMounted() = 0;
+};
+
+class SnapshotManager final : public ISnapshotManager {
+    using CreateLogicalPartitionParams = android::fs_mgr::CreateLogicalPartitionParams;
+    using IPartitionOpener = android::fs_mgr::IPartitionOpener;
+    using LpMetadata = android::fs_mgr::LpMetadata;
+    using MetadataBuilder = android::fs_mgr::MetadataBuilder;
+    using DeltaArchiveManifest = chromeos_update_engine::DeltaArchiveManifest;
+    using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
+    using FiemapStatus = android::fiemap::FiemapStatus;
+
+    friend class SnapshotMergeStats;
+
+  public:
+    ~SnapshotManager();
+
+    // Return a new SnapshotManager instance, or null on error. The device
+    // pointer is owned for the lifetime of SnapshotManager. If null, a default
+    // instance will be created.
+    static std::unique_ptr<SnapshotManager> New(IDeviceInfo* device = nullptr);
+
+    // This is similar to New(), except designed specifically for first-stage
+    // init or recovery.
+    static std::unique_ptr<SnapshotManager> NewForFirstStageMount(IDeviceInfo* device = nullptr);
+
+    // Helper function for first-stage init to check whether a SnapshotManager
+    // might be needed to perform first-stage mounts.
+    static bool IsSnapshotManagerNeeded();
+
+    // Helper function for second stage init to restorecon on the rollback indicator.
+    static std::string GetGlobalRollbackIndicatorPath();
+
+    // ISnapshotManager overrides.
+    bool BeginUpdate() override;
+    bool CancelUpdate() override;
+    bool FinishedSnapshotWrites(bool wipe) override;
+    bool InitiateMerge() override;
+    UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
+                                   const std::function<bool()>& before_cancel = {}) override;
+    UpdateState GetUpdateState(double* progress = nullptr) override;
+    Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) override;
+    bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
+                           std::string* snapshot_path) override;
+    bool UnmapUpdateSnapshot(const std::string& target_partition_name) override;
+    bool NeedSnapshotsInFirstStageMount() override;
+    bool CreateLogicalAndSnapshotPartitions(
+            const std::string& super_device,
+            const std::chrono::milliseconds& timeout_ms = {}) override;
+    bool HandleImminentDataWipe(const std::function<void()>& callback = {}) override;
+    CreateResult RecoveryCreateSnapshotDevices() override;
+    CreateResult RecoveryCreateSnapshotDevices(
+            const std::unique_ptr<AutoDevice>& metadata_device) override;
+    bool Dump(std::ostream& os) override;
+    std::unique_ptr<AutoDevice> EnsureMetadataMounted() override;
 
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
