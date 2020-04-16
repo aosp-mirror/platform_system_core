@@ -358,7 +358,7 @@ static void tune_quota(const std::string& blk_device, const FstabEntry& entry,
                        const struct ext4_super_block* sb, int* fs_stat) {
     bool has_quota = (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_QUOTA)) != 0;
     bool want_quota = entry.fs_mgr_flags.quota;
-    bool want_projid = android::base::GetBoolProperty("ro.emulated_storage.projid", false);
+    bool want_projid = android::base::GetBoolProperty("external_storage.projid.enabled", false);
 
     if (has_quota == want_quota) {
         return;
@@ -521,7 +521,8 @@ static void tune_verity(const std::string& blk_device, const FstabEntry& entry,
 static void tune_casefold(const std::string& blk_device, const struct ext4_super_block* sb,
                           int* fs_stat) {
     bool has_casefold = (sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_CASEFOLD)) != 0;
-    bool wants_casefold = android::base::GetBoolProperty("ro.emulated_storage.casefold", false);
+    bool wants_casefold =
+            android::base::GetBoolProperty("external_storage.casefold.enabled", false);
 
     if (!wants_casefold || has_casefold) return;
 

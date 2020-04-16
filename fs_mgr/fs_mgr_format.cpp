@@ -166,8 +166,8 @@ int fs_mgr_do_format(const FstabEntry& entry, bool crypt_footer) {
     bool needs_projid = false;
 
     if (entry.mount_point == "/data") {
-        needs_casefold = android::base::GetBoolProperty("ro.emulated_storage.casefold", false);
-        needs_projid = android::base::GetBoolProperty("ro.emulated_storage.projid", false);
+        needs_casefold = android::base::GetBoolProperty("external_storage.casefold.enabled", false);
+        needs_projid = android::base::GetBoolProperty("external_storage.projid.enabled", false);
     }
 
     if (entry.fs_type == "f2fs") {
