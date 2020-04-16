@@ -226,3 +226,19 @@ cc_binary {
         "libutils",
     ],
 }
+
+cc_test {
+    name: "snapshot_power_test",
+    srcs: [
+        "power_test.cpp",
+    ],
+    static_libs: [
+        "libsnapshot",
+    ],
+    shared_libs: [
+        "libbase",
+        "libfs_mgr_binder",
+        "liblog",
+    ],
+    gtest: false,
+}
