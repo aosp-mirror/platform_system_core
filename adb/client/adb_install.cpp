@@ -57,11 +57,12 @@ enum class CmdlineOption { None, Enable, Disable };
 }
 
 static bool can_use_feature(const char* feature) {
-    auto&& features = adb_get_feature_set();
-    if (features.empty()) {
+    // We ignore errors here, if the device is missing, we'll notice when we try to push install.
+    auto&& features = adb_get_feature_set(nullptr);
+    if (!features) {
         return false;
     }
-    return CanUseFeature(features, feature);
+    return CanUseFeature(*features, feature);
 }
 
 static InstallMode best_install_mode() {
