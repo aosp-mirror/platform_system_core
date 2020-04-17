@@ -1299,6 +1299,7 @@ bool ZipArchive::InitializeCentralDirectory(off64_t cd_start_offset, size_t cd_s
   return true;
 }
 
+// This function returns the embedded timestamp as is; and doesn't perform validations.
 tm ZipEntry::GetModificationTime() const {
   tm t = {};
 
