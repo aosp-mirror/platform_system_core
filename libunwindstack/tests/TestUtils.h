@@ -21,6 +21,7 @@
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 namespace unwindstack {
 
@@ -48,6 +49,18 @@ inline bool TestQuiescePid(pid_t pid) {
     usleep(1000);
   }
   return ready;
+}
+
+inline bool TestAttach(pid_t pid) {
+  if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
+    return false;
+  }
+
+  return TestQuiescePid(pid);
+}
+
+inline bool TestDetach(pid_t pid) {
+  return ptrace(PTRACE_DETACH, pid, 0, 0) == 0;
 }
 
 void TestCheckForLeaks(void (*unwind_func)(void*), void* data);

@@ -30,7 +30,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
-#include <unordered_set>
+#include <vector>
 
 #include <android-base/macros.h>
 #include <android-base/thread_annotations.h>
@@ -40,7 +40,10 @@
 #include "adb_unique_fd.h"
 #include "types.h"
 
-typedef std::unordered_set<std::string> FeatureSet;
+// Even though the feature set is used as a set, we only have a dozen or two
+// of available features at any moment. Vector works much better in terms of
+// both memory usage and performance for these sizes.
+using FeatureSet = std::vector<std::string>;
 
 namespace adb {
 namespace tls {
@@ -88,6 +91,10 @@ extern const char* const kFeatureTrackApp;
 extern const char* const kFeatureSendRecv2;
 // adbd supports brotli for send/recv v2.
 extern const char* const kFeatureSendRecv2Brotli;
+// adbd supports LZ4 for send/recv v2.
+extern const char* const kFeatureSendRecv2LZ4;
+// adbd supports dry-run send for send/recv v2.
+extern const char* const kFeatureSendRecv2DryRunSend;
 
 TransportId NextTransportId();
 

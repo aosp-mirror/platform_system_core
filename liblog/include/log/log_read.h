@@ -16,22 +16,8 @@
 
 #pragma once
 
-#include <sys/types.h>
-
-/* deal with possible sys/cdefs.h conflict with fcntl.h */
-#ifdef __unused
-#define __unused_defined __unused
-#undef __unused
-#endif
-
-#include <fcntl.h> /* Pick up O_* macros */
-
-/* restore definitions from above */
-#ifdef __unused_defined
-#define __unused __attribute__((__unused__))
-#endif
-
 #include <stdint.h>
+#include <sys/types.h>
 
 #include <log/log_id.h>
 #include <log/log_time.h>
@@ -39,6 +25,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define ANDROID_LOG_WRAP_DEFAULT_TIMEOUT 7200 /* 2 hour default */
 
 /*
  * Native log reading interface section. See logcat for sample code.
@@ -48,8 +36,6 @@ extern "C" {
  * access to raw information, or parsing is an issue.
  */
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wzero-length-array"
 struct logger_entry {
   uint16_t len;      /* length of the payload */
   uint16_t hdr_size; /* sizeof(struct logger_entry) */
@@ -59,9 +45,7 @@ struct logger_entry {
   uint32_t nsec;     /* nanoseconds */
   uint32_t lid;      /* log id of the payload, bottom 4 bits currently */
   uint32_t uid;      /* generating process's uid */
-  char msg[0]; /* the entry's payload */
 };
-#pragma clang diagnostic pop
 
 /*
  * The maximum size of the log entry payload that can be
@@ -83,32 +67,9 @@ struct log_msg {
     struct logger_entry entry;
   } __attribute__((aligned(4)));
 #ifdef __cplusplus
-  /* Matching log_time operators */
-  bool operator==(const log_msg& T) const {
-    return (entry.sec == T.entry.sec) && (entry.nsec == T.entry.nsec);
-  }
-  bool operator!=(const log_msg& T) const {
-    return !(*this == T);
-  }
-  bool operator<(const log_msg& T) const {
-    return (entry.sec < T.entry.sec) ||
-           ((entry.sec == T.entry.sec) && (entry.nsec < T.entry.nsec));
-  }
-  bool operator>=(const log_msg& T) const {
-    return !(*this < T);
-  }
-  bool operator>(const log_msg& T) const {
-    return (entry.sec > T.entry.sec) ||
-           ((entry.sec == T.entry.sec) && (entry.nsec > T.entry.nsec));
-  }
-  bool operator<=(const log_msg& T) const {
-    return !(*this > T);
-  }
   uint64_t nsec() const {
     return static_cast<uint64_t>(entry.sec) * NS_PER_SEC + entry.nsec;
   }
-
-  /* packet methods */
   log_id_t id() {
     return static_cast<log_id_t>(entry.lid);
   }
@@ -141,13 +102,10 @@ ssize_t android_logger_get_prune_list(struct logger_list* logger_list,
                                       char* buf, size_t len);
 int android_logger_set_prune_list(struct logger_list* logger_list, const char* buf, size_t len);
 
-#ifndef O_NONBLOCK
+/* The below values are used for the `mode` argument of the below functions. */
+/* Note that 0x00000003 were previously used and should be considered reserved. */
 #define ANDROID_LOG_NONBLOCK 0x00000800
-#else
-#define ANDROID_LOG_NONBLOCK O_NONBLOCK
-#endif
 #define ANDROID_LOG_WRAP 0x40000000 /* Block until buffer about to wrap */
-#define ANDROID_LOG_WRAP_DEFAULT_TIMEOUT 7200 /* 2 hour default */
 #define ANDROID_LOG_PSTORE 0x80000000
 
 struct logger_list* android_logger_list_alloc(int mode, unsigned int tail,

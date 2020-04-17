@@ -129,20 +129,22 @@ static void help() {
         " reverse --remove-all     remove all reverse socket connections from device\n"
         "\n"
         "file transfer:\n"
-        " push [--sync] [-zZ] LOCAL... REMOTE\n"
+        " push [--sync] [-z ALGORITHM] [-Z] LOCAL... REMOTE\n"
         "     copy local files/directories to device\n"
         "     --sync: only push files that are newer on the host than the device\n"
-        "     -z: enable compression\n"
+        "     -n: dry run: push files to device without storing to the filesystem\n"
+        "     -z: enable compression with a specified algorithm (any, none, brotli)\n"
         "     -Z: disable compression\n"
-        " pull [-azZ] REMOTE... LOCAL\n"
+        " pull [-a] [-z ALGORITHM] [-Z] REMOTE... LOCAL\n"
         "     copy files/dirs from device\n"
         "     -a: preserve file timestamp and mode\n"
-        "     -z: enable compression\n"
+        "     -z: enable compression with a specified algorithm (any, none, brotli)\n"
         "     -Z: disable compression\n"
-        " sync [-lzZ] [all|data|odm|oem|product|system|system_ext|vendor]\n"
+        " sync [-l] [-z ALGORITHM] [-Z] [all|data|odm|oem|product|system|system_ext|vendor]\n"
         "     sync a local build from $ANDROID_PRODUCT_OUT to the device (default all)\n"
+        "     -n: dry run: push files to device without storing to the filesystem\n"
         "     -l: list files that would be copied, but don't copy them\n"
-        "     -z: enable compression\n"
+        "     -z: enable compression with a specified algorithm (any, none, brotli)\n"
         "     -Z: disable compression\n"
         "\n"
         "shell:\n"
@@ -670,18 +672,17 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg, cha
 }
 
 static int adb_shell(int argc, const char** argv) {
-    FeatureSet features;
-    std::string error_message;
-    if (!adb_get_feature_set(&features, &error_message)) {
-        fprintf(stderr, "error: %s\n", error_message.c_str());
-        return 1;
+    std::string error;
+    auto&& features = adb_get_feature_set(&error);
+    if (!features) {
+        error_exit("%s", error.c_str());
     }
 
     enum PtyAllocationMode { kPtyAuto, kPtyNo, kPtyYes, kPtyDefinitely };
 
     // Defaults.
-    char escape_char = '~'; // -e
-    bool use_shell_protocol = CanUseFeature(features, kFeatureShell2); // -x
+    char escape_char = '~';                                                 // -e
+    bool use_shell_protocol = CanUseFeature(*features, kFeatureShell2);     // -x
     PtyAllocationMode tty = use_shell_protocol ? kPtyAuto : kPtyDefinitely; // -t/-T
 
     // Parse shell-specific command-line options.
@@ -757,7 +758,7 @@ static int adb_shell(int argc, const char** argv) {
     if (!use_shell_protocol) {
         if (shell_type_arg != kShellServiceArgPty) {
             fprintf(stderr, "error: %s only supports allocating a pty\n",
-                    !CanUseFeature(features, kFeatureShell2) ? "device" : "-x");
+                    !CanUseFeature(*features, kFeatureShell2) ? "device" : "-x");
             return 1;
         } else {
             // If we're not using the shell protocol, the type argument must be empty.
@@ -777,14 +778,13 @@ static int adb_shell(int argc, const char** argv) {
 }
 
 static int adb_abb(int argc, const char** argv) {
-    FeatureSet features;
-    std::string error_message;
-    if (!adb_get_feature_set(&features, &error_message)) {
-        fprintf(stderr, "error: %s\n", error_message.c_str());
+    std::string error;
+    auto&& features = adb_get_feature_set(&error);
+    if (!features) {
+        error_exit("%s", error.c_str());
         return 1;
     }
-
-    if (!CanUseFeature(features, kFeatureAbb)) {
+    if (!CanUseFeature(*features, kFeatureAbb)) {
         error_exit("abb is not supported by the device");
     }
 
@@ -1162,10 +1162,9 @@ int send_shell_command(const std::string& command, bool disable_shell_protocol,
         // Use shell protocol if it's supported and the caller doesn't explicitly
         // disable it.
         if (!disable_shell_protocol) {
-            FeatureSet features;
-            std::string error;
-            if (adb_get_feature_set(&features, &error)) {
-                use_shell_protocol = CanUseFeature(features, kFeatureShell2);
+            auto&& features = adb_get_feature_set(nullptr);
+            if (features) {
+                use_shell_protocol = CanUseFeature(*features, kFeatureShell2);
             } else {
                 // Device was unreachable.
                 attempt_connection = false;
@@ -1314,12 +1313,36 @@ static int restore(int argc, const char** argv) {
     return 0;
 }
 
+static CompressionType parse_compression_type(const std::string& str, bool allow_numbers) {
+    if (allow_numbers) {
+        if (str == "0") {
+            return CompressionType::None;
+        } else if (str == "1") {
+            return CompressionType::Any;
+        }
+    }
+
+    if (str == "any") {
+        return CompressionType::Any;
+    } else if (str == "none") {
+        return CompressionType::None;
+    }
+
+    if (str == "brotli") {
+        return CompressionType::Brotli;
+    } else if (str == "lz4") {
+        return CompressionType::LZ4;
+    }
+
+    error_exit("unexpected compression type %s", str.c_str());
+}
+
 static void parse_push_pull_args(const char** arg, int narg, std::vector<const char*>* srcs,
-                                 const char** dst, bool* copy_attrs, bool* sync, bool* compressed) {
+                                 const char** dst, bool* copy_attrs, bool* sync,
+                                 CompressionType* compression, bool* dry_run) {
     *copy_attrs = false;
-    const char* adb_compression = getenv("ADB_COMPRESSION");
-    if (adb_compression && strcmp(adb_compression, "0") == 0) {
-        *compressed = false;
+    if (const char* adb_compression = getenv("ADB_COMPRESSION")) {
+        *compression = parse_compression_type(adb_compression, true);
     }
 
     srcs->clear();
@@ -1333,13 +1356,15 @@ static void parse_push_pull_args(const char** arg, int narg, std::vector<const c
             } else if (!strcmp(*arg, "-a")) {
                 *copy_attrs = true;
             } else if (!strcmp(*arg, "-z")) {
-                if (compressed != nullptr) {
-                    *compressed = true;
+                if (narg < 2) {
+                    error_exit("-z requires an argument");
                 }
+                *compression = parse_compression_type(*++arg, false);
+                --narg;
             } else if (!strcmp(*arg, "-Z")) {
-                if (compressed != nullptr) {
-                    *compressed = false;
-                }
+                *compression = CompressionType::None;
+            } else if (dry_run && !strcmp(*arg, "-n")) {
+                *dry_run = true;
             } else if (!strcmp(*arg, "--sync")) {
                 if (sync != nullptr) {
                     *sync = true;
@@ -1788,14 +1813,13 @@ int adb_commandline(int argc, const char** argv) {
         }
         return adb_connect_command(android::base::StringPrintf("tcpip:%d", port));
     } else if (!strcmp(argv[0], "remount")) {
-        FeatureSet features;
         std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
-            return 1;
+        auto&& features = adb_get_feature_set(&error);
+        if (!features) {
+            error_exit("%s", error.c_str());
         }
 
-        if (CanUseFeature(features, kFeatureRemountShell)) {
+        if (CanUseFeature(*features, kFeatureRemountShell)) {
             std::vector<const char*> args = {"shell"};
             args.insert(args.cend(), argv, argv + argc);
             return adb_shell_noinput(args.size(), args.data());
@@ -1894,22 +1918,25 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "push")) {
         bool copy_attrs = false;
         bool sync = false;
-        bool compressed = true;
+        bool dry_run = false;
+        CompressionType compression = CompressionType::Any;
         std::vector<const char*> srcs;
         const char* dst = nullptr;
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync, &compressed);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, &sync, &compression,
+                             &dry_run);
         if (srcs.empty() || !dst) error_exit("push requires an argument");
-        return do_sync_push(srcs, dst, sync, compressed) ? 0 : 1;
+        return do_sync_push(srcs, dst, sync, compression, dry_run) ? 0 : 1;
     } else if (!strcmp(argv[0], "pull")) {
         bool copy_attrs = false;
-        bool compressed = true;
+        CompressionType compression = CompressionType::Any;
         std::vector<const char*> srcs;
         const char* dst = ".";
 
-        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr, &compressed);
+        parse_push_pull_args(&argv[1], argc - 1, &srcs, &dst, &copy_attrs, nullptr, &compression,
+                             nullptr);
         if (srcs.empty()) error_exit("pull requires an argument");
-        return do_sync_pull(srcs, dst, copy_attrs, compressed) ? 0 : 1;
+        return do_sync_pull(srcs, dst, copy_attrs, compression) ? 0 : 1;
     } else if (!strcmp(argv[0], "install")) {
         if (argc < 2) error_exit("install requires an argument");
         return install_app(argc, argv);
@@ -1925,27 +1952,30 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "sync")) {
         std::string src;
         bool list_only = false;
-        bool compressed = true;
+        bool dry_run = false;
+        CompressionType compression = CompressionType::Any;
 
-        const char* adb_compression = getenv("ADB_COMPRESSION");
-        if (adb_compression && strcmp(adb_compression, "0") == 0) {
-            compressed = false;
+        if (const char* adb_compression = getenv("ADB_COMPRESSION"); adb_compression) {
+            compression = parse_compression_type(adb_compression, true);
         }
 
         int opt;
-        while ((opt = getopt(argc, const_cast<char**>(argv), "lzZ")) != -1) {
+        while ((opt = getopt(argc, const_cast<char**>(argv), "lnz:Z")) != -1) {
             switch (opt) {
                 case 'l':
                     list_only = true;
                     break;
+                case 'n':
+                    dry_run = true;
+                    break;
                 case 'z':
-                    compressed = true;
+                    compression = parse_compression_type(optarg, false);
                     break;
                 case 'Z':
-                    compressed = false;
+                    compression = CompressionType::None;
                     break;
                 default:
-                    error_exit("usage: adb sync [-lzZ] [PARTITION]");
+                    error_exit("usage: adb sync [-l] [-n]  [-z ALGORITHM] [-Z] [PARTITION]");
             }
         }
 
@@ -1954,7 +1984,7 @@ int adb_commandline(int argc, const char** argv) {
         } else if (optind + 1 == argc) {
             src = argv[optind];
         } else {
-            error_exit("usage: adb sync [-lzZ] [PARTITION]");
+            error_exit("usage: adb sync [-l] [-n] [-z ALGORITHM] [-Z] [PARTITION]");
         }
 
         std::vector<std::string> partitions{"data",   "odm",        "oem",   "product",
@@ -1965,7 +1995,9 @@ int adb_commandline(int argc, const char** argv) {
                 std::string src_dir{product_file(partition)};
                 if (!directory_exists(src_dir)) continue;
                 found = true;
-                if (!do_sync_sync(src_dir, "/" + partition, list_only, compressed)) return 1;
+                if (!do_sync_sync(src_dir, "/" + partition, list_only, compression, dry_run)) {
+                    return 1;
+                }
             }
         }
         if (!found) error_exit("don't know how to sync %s partition", src.c_str());
@@ -2006,13 +2038,12 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "track-jdwp")) {
         return adb_connect_command("track-jdwp");
     } else if (!strcmp(argv[0], "track-app")) {
-        FeatureSet features;
         std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
-            return 1;
+        auto&& features = adb_get_feature_set(&error);
+        if (!features) {
+            error_exit("%s", error.c_str());
         }
-        if (!CanUseFeature(features, kFeatureTrackApp)) {
+        if (!CanUseFeature(*features, kFeatureTrackApp)) {
             error_exit("track-app is not supported by the device");
         }
         TrackAppStreamsCallback callback;
@@ -2038,15 +2069,14 @@ int adb_commandline(int argc, const char** argv) {
         return 0;
     } else if (!strcmp(argv[0], "features")) {
         // Only list the features common to both the adb client and the device.
-        FeatureSet features;
         std::string error;
-        if (!adb_get_feature_set(&features, &error)) {
-            fprintf(stderr, "error: %s\n", error.c_str());
-            return 1;
+        auto&& features = adb_get_feature_set(&error);
+        if (!features) {
+            error_exit("%s", error.c_str());
         }
 
-        for (const std::string& name : features) {
-            if (CanUseFeature(features, name)) {
+        for (const std::string& name : *features) {
+            if (CanUseFeature(*features, name)) {
                 printf("%s\n", name.c_str());
             }
         }

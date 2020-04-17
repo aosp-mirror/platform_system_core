@@ -258,7 +258,7 @@ void BatteryMonitor::updateValues(void) {
     props.batteryVoltage = getIntField(mHealthdConfig->batteryVoltagePath) / 1000;
 
     if (!mHealthdConfig->batteryCurrentNowPath.isEmpty())
-        props.batteryCurrent = getIntField(mHealthdConfig->batteryCurrentNowPath) / 1000;
+        props.batteryCurrent = getIntField(mHealthdConfig->batteryCurrentNowPath);
 
     if (!mHealthdConfig->batteryFullChargePath.isEmpty())
         props.batteryFullCharge = getIntField(mHealthdConfig->batteryFullChargePath);

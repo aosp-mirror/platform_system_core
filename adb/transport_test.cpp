@@ -66,7 +66,7 @@ TEST_F(TransportTest, SetFeatures) {
     ASSERT_TRUE(t.has_feature("bar"));
 
     t.SetFeatures(FeatureSetToString(FeatureSet{"foo", "bar", "foo"}));
-    ASSERT_EQ(2U, t.features().size());
+    ASSERT_LE(2U, t.features().size());
     ASSERT_TRUE(t.has_feature("foo"));
     ASSERT_TRUE(t.has_feature("bar"));
 

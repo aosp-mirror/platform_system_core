@@ -50,6 +50,7 @@ LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES := \
     block_dev_initializer.cpp \
     devices.cpp \
+    first_stage_console.cpp \
     first_stage_init.cpp \
     first_stage_main.cpp \
     first_stage_mount.cpp \
@@ -112,6 +113,7 @@ LOCAL_STATIC_LIBRARIES := \
     libext2_uuid \
     libprotobuf-cpp-lite \
     libsnapshot_init \
+    update_metadata-protos \
 
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.
