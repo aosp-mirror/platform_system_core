@@ -76,7 +76,7 @@ bool adb_status(borrowed_fd fd, std::string* _Nonnull error);
 std::string format_host_command(const char* _Nonnull command);
 
 // Get the feature set of the current preferred transport.
-const FeatureSet& adb_get_feature_set();
+const std::optional<FeatureSet>& adb_get_feature_set(std::string* _Nullable error);
 
 #if defined(__linux__)
 // Get the path of a file containing the path to the server executable, if the socket spec set via
