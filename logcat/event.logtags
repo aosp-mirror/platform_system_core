@@ -145,6 +145,8 @@
 # libcore failure logging
 90100 exp_det_cert_pin_failure (certs|4)
 
+# 150000 - 160000 reserved for Android Automotive builds
+
 1397638484 snet_event_log (subtag|3) (uid|1) (message|3)
 
 # for events that go to stats log buffer

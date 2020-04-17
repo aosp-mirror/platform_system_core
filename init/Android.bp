@@ -41,6 +41,7 @@ init_device_sources = [
     "builtins.cpp",
     "devices.cpp",
     "firmware_handler.cpp",
+    "first_stage_console.cpp",
     "first_stage_init.cpp",
     "first_stage_mount.cpp",
     "fscrypt_init_extensions.cpp",
