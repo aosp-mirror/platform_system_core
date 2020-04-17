@@ -209,6 +209,7 @@ cc_binary {
     static_libs: [
         "libfstab",
         "libsnapshot",
+        "update_metadata-protos",
     ],
     shared_libs: [
         "android.hardware.boot@1.0",
@@ -234,6 +235,7 @@ cc_test {
     ],
     static_libs: [
         "libsnapshot",
+        "update_metadata-protos",
     ],
     shared_libs: [
         "libbase",
