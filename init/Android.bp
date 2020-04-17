@@ -131,6 +131,7 @@ cc_defaults {
         "libpropertyinfoparser",
         "libsnapshot_init",
         "lib_apex_manifest_proto_lite",
+        "update_metadata-protos",
     ],
     shared_libs: [
         "libbacktrace",
