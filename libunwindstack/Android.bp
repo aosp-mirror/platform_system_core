@@ -57,6 +57,7 @@ cc_defaults {
         "MapInfo.cpp",
         "Maps.cpp",
         "Memory.cpp",
+        "MemoryMte.cpp",
         "LocalUnwinder.cpp",
         "Regs.cpp",
         "RegsArm.cpp",
@@ -101,6 +102,16 @@ cc_defaults {
         "liblog",
         "liblzma",
     ],
+
+    header_libs: [
+        "bionic_libc_platform_headers",
+    ],
+
+    product_variables: {
+        experimental_mte: {
+            cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+        },
+    },
 }
 
 cc_library {
@@ -213,6 +224,7 @@ cc_defaults {
         "tests/MemoryRangesTest.cpp",
         "tests/MemoryRemoteTest.cpp",
         "tests/MemoryTest.cpp",
+        "tests/MemoryMteTest.cpp",
         "tests/RegsInfoTest.cpp",
         "tests/RegsIterateTest.cpp",
         "tests/RegsStepIfSignalHandlerTest.cpp",
@@ -268,6 +280,16 @@ cc_defaults {
         "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
     ],
+
+    header_libs: [
+        "bionic_libc_platform_headers",
+    ],
+
+    product_variables: {
+        experimental_mte: {
+            cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+        },
+    },
 }
 
 cc_test {

@@ -26,8 +26,10 @@
 
 #include <vector>
 
-#include <android-base/test_utils.h>
 #include <android-base/file.h>
+#include <android-base/test_utils.h>
+#include <bionic/mte.h>
+#include <bionic/mte_kernel.h>
 #include <gtest/gtest.h>
 
 #include "MemoryRemote.h"
@@ -37,24 +39,7 @@
 
 namespace unwindstack {
 
-class MemoryRemoteTest : public ::testing::Test {
- protected:
-  static bool Attach(pid_t pid) {
-    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
-      return false;
-    }
-
-    return TestQuiescePid(pid);
-  }
-
-  static bool Detach(pid_t pid) {
-    return ptrace(PTRACE_DETACH, pid, 0, 0) == 0;
-  }
-
-  static constexpr size_t NS_PER_SEC = 1000000000ULL;
-};
-
-TEST_F(MemoryRemoteTest, read) {
+TEST(MemoryRemoteTest, read) {
   std::vector<uint8_t> src(1024);
   memset(src.data(), 0x4c, 1024);
 
@@ -66,7 +51,7 @@ TEST_F(MemoryRemoteTest, read) {
   ASSERT_LT(0, pid);
   TestScopedPidReaper reap(pid);
 
-  ASSERT_TRUE(Attach(pid));
+  ASSERT_TRUE(TestAttach(pid));
 
   MemoryRemote remote(pid);
 
@@ -76,10 +61,10 @@ TEST_F(MemoryRemoteTest, read) {
     ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
   }
 
-  ASSERT_TRUE(Detach(pid));
+  ASSERT_TRUE(TestDetach(pid));
 }
 
-TEST_F(MemoryRemoteTest, read_large) {
+TEST(MemoryRemoteTest, read_large) {
   static constexpr size_t kTotalPages = 245;
   std::vector<uint8_t> src(kTotalPages * getpagesize());
   for (size_t i = 0; i < kTotalPages; i++) {
@@ -95,7 +80,7 @@ TEST_F(MemoryRemoteTest, read_large) {
   ASSERT_LT(0, pid);
   TestScopedPidReaper reap(pid);
 
-  ASSERT_TRUE(Attach(pid));
+  ASSERT_TRUE(TestAttach(pid));
 
   MemoryRemote remote(pid);
 
@@ -105,10 +90,10 @@ TEST_F(MemoryRemoteTest, read_large) {
     ASSERT_EQ(i / getpagesize(), dst[i]) << "Failed at byte " << i;
   }
 
-  ASSERT_TRUE(Detach(pid));
+  ASSERT_TRUE(TestDetach(pid));
 }
 
-TEST_F(MemoryRemoteTest, read_partial) {
+TEST(MemoryRemoteTest, read_partial) {
   char* mapping = static_cast<char*>(
       mmap(nullptr, 4 * getpagesize(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
   ASSERT_NE(MAP_FAILED, mapping);
@@ -128,7 +113,7 @@ TEST_F(MemoryRemoteTest, read_partial) {
   // Unmap from our process.
   ASSERT_EQ(0, munmap(mapping, 3 * getpagesize()));
 
-  ASSERT_TRUE(Attach(pid));
+  ASSERT_TRUE(TestAttach(pid));
 
   MemoryRemote remote(pid);
 
@@ -149,10 +134,10 @@ TEST_F(MemoryRemoteTest, read_partial) {
     ASSERT_EQ(0x4cU, dst[i]) << "Failed at byte " << i;
   }
 
-  ASSERT_TRUE(Detach(pid));
+  ASSERT_TRUE(TestDetach(pid));
 }
 
-TEST_F(MemoryRemoteTest, read_fail) {
+TEST(MemoryRemoteTest, read_fail) {
   int pagesize = getpagesize();
   void* src = mmap(nullptr, pagesize * 2, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE,-1, 0);
   memset(src, 0x4c, pagesize * 2);
@@ -169,7 +154,7 @@ TEST_F(MemoryRemoteTest, read_fail) {
   ASSERT_LT(0, pid);
   TestScopedPidReaper reap(pid);
 
-  ASSERT_TRUE(Attach(pid));
+  ASSERT_TRUE(TestAttach(pid));
 
   MemoryRemote remote(pid);
 
@@ -188,10 +173,10 @@ TEST_F(MemoryRemoteTest, read_fail) {
 
   ASSERT_EQ(0, munmap(src, pagesize));
 
-  ASSERT_TRUE(Detach(pid));
+  ASSERT_TRUE(TestDetach(pid));
 }
 
-TEST_F(MemoryRemoteTest, read_overflow) {
+TEST(MemoryRemoteTest, read_overflow) {
   pid_t pid;
   if ((pid = fork()) == 0) {
     while (true)
@@ -201,7 +186,7 @@ TEST_F(MemoryRemoteTest, read_overflow) {
   ASSERT_LT(0, pid);
   TestScopedPidReaper reap(pid);
 
-  ASSERT_TRUE(Attach(pid));
+  ASSERT_TRUE(TestAttach(pid));
 
   MemoryRemote remote(pid);
 
@@ -209,10 +194,10 @@ TEST_F(MemoryRemoteTest, read_overflow) {
   std::vector<uint8_t> dst(200);
   ASSERT_FALSE(remote.ReadFully(UINT64_MAX - 100, dst.data(), 200));
 
-  ASSERT_TRUE(Detach(pid));
+  ASSERT_TRUE(TestDetach(pid));
 }
 
-TEST_F(MemoryRemoteTest, read_illegal) {
+TEST(MemoryRemoteTest, read_illegal) {
   pid_t pid;
   if ((pid = fork()) == 0) {
     while (true);
@@ -221,7 +206,7 @@ TEST_F(MemoryRemoteTest, read_illegal) {
   ASSERT_LT(0, pid);
   TestScopedPidReaper reap(pid);
 
-  ASSERT_TRUE(Attach(pid));
+  ASSERT_TRUE(TestAttach(pid));
 
   MemoryRemote remote(pid);
 
@@ -229,10 +214,10 @@ TEST_F(MemoryRemoteTest, read_illegal) {
   ASSERT_FALSE(remote.ReadFully(0, dst.data(), 1));
   ASSERT_FALSE(remote.ReadFully(0, dst.data(), 100));
 
-  ASSERT_TRUE(Detach(pid));
+  ASSERT_TRUE(TestDetach(pid));
 }
 
-TEST_F(MemoryRemoteTest, read_mprotect_hole) {
+TEST(MemoryRemoteTest, read_mprotect_hole) {
   size_t page_size = getpagesize();
   void* mapping =
       mmap(nullptr, 3 * getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
@@ -250,7 +235,7 @@ TEST_F(MemoryRemoteTest, read_mprotect_hole) {
 
   ASSERT_EQ(0, munmap(mapping, 3 * page_size));
 
-  ASSERT_TRUE(Attach(pid));
+  ASSERT_TRUE(TestAttach(pid));
 
   MemoryRemote remote(pid);
   std::vector<uint8_t> dst(getpagesize() * 4, 0xCC);
@@ -263,9 +248,11 @@ TEST_F(MemoryRemoteTest, read_mprotect_hole) {
   for (size_t i = read_size; i < dst.size(); ++i) {
     ASSERT_EQ(0xCC, dst[i]);
   }
+
+  ASSERT_TRUE(TestDetach(pid));
 }
 
-TEST_F(MemoryRemoteTest, read_munmap_hole) {
+TEST(MemoryRemoteTest, read_munmap_hole) {
   size_t page_size = getpagesize();
   void* mapping =
       mmap(nullptr, 3 * getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
@@ -285,7 +272,7 @@ TEST_F(MemoryRemoteTest, read_munmap_hole) {
   ASSERT_EQ(0, munmap(mapping, page_size));
   ASSERT_EQ(0, munmap(static_cast<char*>(mapping) + 2 * page_size, page_size));
 
-  ASSERT_TRUE(Attach(pid));
+  ASSERT_TRUE(TestAttach(pid));
 
   MemoryRemote remote(pid);
   std::vector<uint8_t> dst(getpagesize() * 4, 0xCC);
@@ -297,11 +284,13 @@ TEST_F(MemoryRemoteTest, read_munmap_hole) {
   for (size_t i = read_size; i < dst.size(); ++i) {
     ASSERT_EQ(0xCC, dst[i]);
   }
+
+  ASSERT_TRUE(TestDetach(pid));
 }
 
 // Verify that the memory remote object chooses a memory read function
 // properly. Either process_vm_readv or ptrace.
-TEST_F(MemoryRemoteTest, read_choose_correctly) {
+TEST(MemoryRemoteTest, read_choose_correctly) {
   size_t page_size = getpagesize();
   void* mapping =
       mmap(nullptr, 2 * getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
@@ -320,7 +309,7 @@ TEST_F(MemoryRemoteTest, read_choose_correctly) {
 
   ASSERT_EQ(0, munmap(mapping, 2 * page_size));
 
-  ASSERT_TRUE(Attach(pid));
+  ASSERT_TRUE(TestAttach(pid));
 
   // We know that process_vm_readv of a mprotect'd PROT_NONE region will fail.
   // Read from the PROT_NONE area first to force the choice of ptrace.
@@ -348,6 +337,8 @@ TEST_F(MemoryRemoteTest, read_choose_correctly) {
   bytes = remote_readv.Read(reinterpret_cast<uint64_t>(mapping) + page_size, &value, sizeof(value));
   ASSERT_EQ(sizeof(value), bytes);
   ASSERT_EQ(0xfcfcfcfcU, value);
+
+  ASSERT_TRUE(TestDetach(pid));
 }
 
 }  // namespace unwindstack
