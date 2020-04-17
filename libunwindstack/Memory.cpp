@@ -324,6 +324,16 @@ size_t MemoryLocal::Read(uint64_t addr, void* dst, size_t size) {
   return ProcessVmRead(getpid(), addr, dst, size);
 }
 
+#if !defined(ANDROID_EXPERIMENTAL_MTE)
+long MemoryRemote::ReadTag(uint64_t) {
+  return -1;
+}
+
+long MemoryLocal::ReadTag(uint64_t) {
+  return -1;
+}
+#endif
+
 MemoryRange::MemoryRange(const std::shared_ptr<Memory>& memory, uint64_t begin, uint64_t length,
                          uint64_t offset)
     : memory_(memory), begin_(begin), length_(length), offset_(offset) {}
