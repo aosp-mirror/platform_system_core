@@ -57,13 +57,12 @@ enum class CmdlineOption { None, Enable, Disable };
 }
 
 static bool can_use_feature(const char* feature) {
-    FeatureSet features;
-    std::string error;
-    if (!adb_get_feature_set(&features, &error)) {
-        fprintf(stderr, "error: %s\n", error.c_str());
+    // We ignore errors here, if the device is missing, we'll notice when we try to push install.
+    auto&& features = adb_get_feature_set(nullptr);
+    if (!features) {
         return false;
     }
-    return CanUseFeature(features, feature);
+    return CanUseFeature(*features, feature);
 }
 
 static InstallMode best_install_mode() {
@@ -290,7 +289,7 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy) 
         }
     }
 
-    if (do_sync_push(apk_file, apk_dest.c_str(), false, true)) {
+    if (do_sync_push(apk_file, apk_dest.c_str(), false, CompressionType::Any, false)) {
         result = pm_command(argc, argv);
         delete_device_file(apk_dest);
     }

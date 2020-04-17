@@ -37,6 +37,7 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/no_destructor.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/thread_annotations.h>
@@ -204,9 +205,25 @@ bool adb_kill_server() {
         return false;
     }
 
-    // The server might send OKAY, so consume that.
     char buf[4];
-    ReadFdExactly(fd.get(), buf, 4);
+    if (!ReadFdExactly(fd.get(), buf, 4)) {
+        fprintf(stderr, "error: failed to read response from server\n");
+        return false;
+    }
+
+    if (memcmp(buf, "OKAY", 4) == 0) {
+        // Nothing to do.
+    } else if (memcmp(buf, "FAIL", 4) == 0) {
+        std::string output, error;
+        if (!ReadProtocolString(fd.get(), &output, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
+            return false;
+        }
+
+        fprintf(stderr, "error: %s\n", output.c_str());
+        return false;
+    }
+
     // Now that no more data is expected, wait for socket orderly shutdown or error, indicating
     // server death.
     ReadOrderlyShutdown(fd.get());
@@ -399,18 +416,18 @@ std::string format_host_command(const char* command) {
     return android::base::StringPrintf("%s:%s", prefix, command);
 }
 
-bool adb_get_feature_set(FeatureSet* feature_set, std::string* error) {
-    static FeatureSet* features = nullptr;
-    if (!features) {
-        std::string result;
-        if (adb_query(format_host_command("features"), &result, error)) {
-            features = new FeatureSet(StringToFeatureSet(result));
-        }
+const std::optional<FeatureSet>& adb_get_feature_set(std::string* error) {
+    static std::string cached_error [[clang::no_destroy]];
+    static const std::optional<FeatureSet> features
+            [[clang::no_destroy]] ([]() -> std::optional<FeatureSet> {
+                std::string result;
+                if (adb_query(format_host_command("features"), &result, &cached_error)) {
+                    return StringToFeatureSet(result);
+                }
+                return std::nullopt;
+            }());
+    if (!features && error) {
+        *error = cached_error;
     }
-    if (features) {
-        *feature_set = *features;
-        return true;
-    }
-    feature_set->clear();
-    return false;
+    return features;
 }

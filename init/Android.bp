@@ -41,6 +41,7 @@ init_device_sources = [
     "builtins.cpp",
     "devices.cpp",
     "firmware_handler.cpp",
+    "first_stage_console.cpp",
     "first_stage_init.cpp",
     "first_stage_mount.cpp",
     "fscrypt_init_extensions.cpp",
@@ -130,6 +131,7 @@ cc_defaults {
         "libpropertyinfoparser",
         "libsnapshot_init",
         "lib_apex_manifest_proto_lite",
+        "update_metadata-protos",
     ],
     shared_libs: [
         "libbacktrace",
@@ -258,7 +260,6 @@ cc_test {
     test_suites: [
         "cts",
         "device-tests",
-        "vts",
         "vts10",
     ],
 }

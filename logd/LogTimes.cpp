@@ -18,8 +18,6 @@
 #include <string.h>
 #include <sys/prctl.h>
 
-#include <private/android_logger.h>
-
 #include "FlushCommand.h"
 #include "LogBuffer.h"
 #include "LogReader.h"
@@ -27,9 +25,9 @@
 
 pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
-LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client,
-                           bool nonBlock, unsigned long tail, log_mask_t logMask,
-                           pid_t pid, log_time start, uint64_t timeout)
+LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock,
+                           unsigned long tail, log_mask_t logMask, pid_t pid, log_time start_time,
+                           uint64_t start, uint64_t timeout)
     : leadingDropped(false),
       mReader(reader),
       mLogMask(logMask),
@@ -38,9 +36,9 @@ LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client,
       mTail(tail),
       mIndex(0),
       mClient(client),
+      mStartTime(start_time),
       mStart(start),
-      mNonBlock(nonBlock),
-      mEnd(log_time(android_log_clockid())) {
+      mNonBlock(nonBlock) {
     mTimeout.tv_sec = timeout / NS_PER_SEC;
     mTimeout.tv_nsec = timeout % NS_PER_SEC;
     memset(mLastTid, 0, sizeof(mLastTid));
@@ -81,12 +79,12 @@ void* LogTimeEntry::threadStart(void* obj) {
 
     wrlock();
 
-    log_time start = me->mStart;
+    uint64_t start = me->mStart;
 
     while (!me->mRelease) {
         if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
-            if (pthread_cond_timedwait(&me->threadTriggeredCondition,
-                                       &timesLock, &me->mTimeout) == ETIMEDOUT) {
+            if (pthread_cond_clockwait(&me->threadTriggeredCondition, &timesLock, CLOCK_MONOTONIC,
+                                       &me->mTimeout) == ETIMEDOUT) {
                 me->mTimeout.tv_sec = 0;
                 me->mTimeout.tv_nsec = 0;
             }
@@ -105,13 +103,22 @@ void* LogTimeEntry::threadStart(void* obj) {
         start = logbuf.flushTo(client, start, me->mLastTid, privileged,
                                security, FilterSecondPass, me);
 
+        // We only ignore entries before the original start time for the first flushTo(), if we
+        // get entries after this first flush before the original start time, then the client
+        // wouldn't have seen them.
+        // Note: this is still racy and may skip out of order events that came in since the last
+        // time the client disconnected and then reconnected with the new start time.  The long term
+        // solution here is that clients must request events since a specific sequence number.
+        me->mStartTime.tv_sec = 0;
+        me->mStartTime.tv_nsec = 0;
+
         wrlock();
 
         if (start == LogBufferElement::FLUSH_ERROR) {
             break;
         }
 
-        me->mStart = start + log_time(0, 1);
+        me->mStart = start + 1;
 
         if (me->mNonBlock || me->mRelease) {
             break;
@@ -158,11 +165,11 @@ int LogTimeEntry::FilterFirstPass(const LogBufferElement* element, void* obj) {
     }
 
     if (me->mCount == 0) {
-        me->mStart = element->getRealTime();
+        me->mStart = element->getSequence();
     }
 
-    if ((!me->mPid || (me->mPid == element->getPid())) &&
-        (me->isWatching(element->getLogId()))) {
+    if ((!me->mPid || me->mPid == element->getPid()) && me->isWatching(element->getLogId()) &&
+        (me->mStartTime == log_time::EPOCH || me->mStartTime <= element->getRealTime())) {
         ++me->mCount;
     }
 
@@ -177,7 +184,7 @@ int LogTimeEntry::FilterSecondPass(const LogBufferElement* element, void* obj) {
 
     LogTimeEntry::wrlock();
 
-    me->mStart = element->getRealTime();
+    me->mStart = element->getSequence();
 
     if (me->skipAhead[element->getLogId()]) {
         me->skipAhead[element->getLogId()]--;
@@ -201,6 +208,10 @@ int LogTimeEntry::FilterSecondPass(const LogBufferElement* element, void* obj) {
     }
 
     if (me->mPid && (me->mPid != element->getPid())) {
+        goto skip;
+    }
+
+    if (me->mStartTime != log_time::EPOCH && element->getRealTime() <= me->mStartTime) {
         goto skip;
     }
 

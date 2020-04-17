@@ -509,12 +509,12 @@ int android_log_processLogBuffer(struct logger_entry* buf, AndroidLogEntry* entr
    * format: <priority:1><tag:N>\0<message:N>\0
    *
    * tag str
-   *   starts at buf->msg+1
+   *   starts at buf + buf->hdr_size + 1
    * msg
-   *   starts at buf->msg+1+len(tag)+1
+   *   starts at buf + buf->hdr_size + 1 + len(tag) + 1
    *
-   * The message may have been truncated by the kernel log driver.
-   * When that happens, we must null-terminate the message ourselves.
+   * The message may have been truncated.  When that happens, we must null-terminate the message
+   * ourselves.
    */
   if (buf->len < 3) {
     /*
@@ -529,11 +529,11 @@ int android_log_processLogBuffer(struct logger_entry* buf, AndroidLogEntry* entr
   int msgEnd = -1;
 
   int i;
-  char* msg = buf->msg;
-  if (buf->hdr_size != sizeof(struct logger_entry)) {
-    fprintf(stderr, "+++ LOG: entry illegal hdr_size\n");
+  if (buf->hdr_size < sizeof(logger_entry)) {
+    fprintf(stderr, "+++ LOG: hdr_size must be at least as big as struct logger_entry\n");
     return -1;
   }
+  char* msg = reinterpret_cast<char*>(buf) + buf->hdr_size;
   entry->uid = buf->uid;
 
   for (i = 1; i < buf->len; i++) {
@@ -985,11 +985,11 @@ int android_log_processBinaryLogBuffer(
   entry->pid = buf->pid;
   entry->tid = buf->tid;
 
-  eventData = (const unsigned char*)buf->msg;
-  if (buf->hdr_size != sizeof(struct logger_entry)) {
-    fprintf(stderr, "+++ LOG: entry illegal hdr_size\n");
+  if (buf->hdr_size < sizeof(logger_entry)) {
+    fprintf(stderr, "+++ LOG: hdr_size must be at least as big as struct logger_entry\n");
     return -1;
   }
+  eventData = reinterpret_cast<unsigned char*>(buf) + buf->hdr_size;
   if (buf->lid == LOG_ID_SECURITY) {
     entry->priority = ANDROID_LOG_WARN;
   }
@@ -1048,7 +1048,7 @@ int android_log_processBinaryLogBuffer(
   }
   if ((result == 1) && fmtStr) {
     /* We overflowed :-(, let's repaint the line w/o format dressings */
-    eventData = (const unsigned char*)buf->msg;
+    eventData = reinterpret_cast<unsigned char*>(buf) + buf->hdr_size;
     eventData += 4;
     outBuf = messageBuf;
     outRemaining = messageBufLen - 1;

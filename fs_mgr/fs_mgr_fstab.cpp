@@ -178,6 +178,7 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         CheckFlag("slotselect_other", slot_select_other);
         CheckFlag("fsverity", fs_verity);
         CheckFlag("metadata_csum", ext_meta_csum);
+        CheckFlag("fscompress", fs_compress);
 
 #undef CheckFlag
 
@@ -827,6 +828,20 @@ std::set<std::string> GetBootDevices() {
         ReadDtFile(dt_file_name, &value)) {
         auto boot_devices = Split(value, ",");
         return std::set<std::string>(boot_devices.begin(), boot_devices.end());
+    }
+
+    std::string cmdline;
+    if (android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
+        std::set<std::string> boot_devices;
+        const std::string cmdline_key = "androidboot.boot_device";
+        for (const auto& [key, value] : fs_mgr_parse_boot_config(cmdline)) {
+            if (key == cmdline_key) {
+                boot_devices.emplace(value);
+            }
+        }
+        if (!boot_devices.empty()) {
+            return boot_devices;
+        }
     }
 
     // Fallback to extract boot devices from fstab.
