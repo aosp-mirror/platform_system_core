@@ -32,6 +32,7 @@
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
+#include <log/log_read.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 #ifdef __ANDROID__

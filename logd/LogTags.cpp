@@ -34,6 +34,7 @@
 #include <android-base/stringprintf.h>
 #include <log/log_event_list.h>
 #include <log/log_properties.h>
+#include <log/log_read.h>
 #include <private/android_filesystem_config.h>
 
 #include "LogTags.h"

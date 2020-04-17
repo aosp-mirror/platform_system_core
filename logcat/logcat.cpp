@@ -50,6 +50,7 @@
 #include <android/log.h>
 #include <log/event_tag_map.h>
 #include <log/log_id.h>
+#include <log/log_read.h>
 #include <log/logprint.h>
 #include <private/android_logger.h>
 #include <processgroup/sched_policy.h>

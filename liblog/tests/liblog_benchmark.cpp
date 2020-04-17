@@ -31,6 +31,7 @@
 #include <benchmark/benchmark.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
+#include <log/log_read.h>
 #include <private/android_logger.h>
 
 BENCHMARK_MAIN();
