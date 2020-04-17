@@ -373,12 +373,26 @@ cc_benchmark {
 
     srcs: [
         "benchmarks/unwind_benchmarks.cpp",
+        "benchmarks/SymbolBenchmark.cpp",
+    ],
+
+    data: [
+        "benchmarks/files/*",
     ],
 
     shared_libs: [
         "libbase",
         "libunwindstack",
     ],
+
+    target: {
+        android: {
+            static_libs: [
+                "libmeminfo",
+                "libprocinfo",
+            ],
+        },
+    },
 }
 
 // Generates the elf data for use in the tests for .gnu_debugdata frames.
