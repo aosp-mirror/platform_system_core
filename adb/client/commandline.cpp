@@ -672,16 +672,17 @@ static int RemoteShell(bool use_shell_protocol, const std::string& type_arg, cha
 }
 
 static int adb_shell(int argc, const char** argv) {
-    auto&& features = adb_get_feature_set();
-    if (features.empty()) {
-        return 1;
+    std::string error;
+    auto&& features = adb_get_feature_set(&error);
+    if (!features) {
+        error_exit("%s", error.c_str());
     }
 
     enum PtyAllocationMode { kPtyAuto, kPtyNo, kPtyYes, kPtyDefinitely };
 
     // Defaults.
-    char escape_char = '~'; // -e
-    bool use_shell_protocol = CanUseFeature(features, kFeatureShell2); // -x
+    char escape_char = '~';                                                 // -e
+    bool use_shell_protocol = CanUseFeature(*features, kFeatureShell2);     // -x
     PtyAllocationMode tty = use_shell_protocol ? kPtyAuto : kPtyDefinitely; // -t/-T
 
     // Parse shell-specific command-line options.
@@ -757,7 +758,7 @@ static int adb_shell(int argc, const char** argv) {
     if (!use_shell_protocol) {
         if (shell_type_arg != kShellServiceArgPty) {
             fprintf(stderr, "error: %s only supports allocating a pty\n",
-                    !CanUseFeature(features, kFeatureShell2) ? "device" : "-x");
+                    !CanUseFeature(*features, kFeatureShell2) ? "device" : "-x");
             return 1;
         } else {
             // If we're not using the shell protocol, the type argument must be empty.
@@ -777,11 +778,13 @@ static int adb_shell(int argc, const char** argv) {
 }
 
 static int adb_abb(int argc, const char** argv) {
-    auto&& features = adb_get_feature_set();
-    if (features.empty()) {
+    std::string error;
+    auto&& features = adb_get_feature_set(&error);
+    if (!features) {
+        error_exit("%s", error.c_str());
         return 1;
     }
-    if (!CanUseFeature(features, kFeatureAbb)) {
+    if (!CanUseFeature(*features, kFeatureAbb)) {
         error_exit("abb is not supported by the device");
     }
 
@@ -1159,9 +1162,9 @@ int send_shell_command(const std::string& command, bool disable_shell_protocol,
         // Use shell protocol if it's supported and the caller doesn't explicitly
         // disable it.
         if (!disable_shell_protocol) {
-            auto&& features = adb_get_feature_set();
-            if (!features.empty()) {
-                use_shell_protocol = CanUseFeature(features, kFeatureShell2);
+            auto&& features = adb_get_feature_set(nullptr);
+            if (features) {
+                use_shell_protocol = CanUseFeature(*features, kFeatureShell2);
             } else {
                 // Device was unreachable.
                 attempt_connection = false;
@@ -1810,12 +1813,13 @@ int adb_commandline(int argc, const char** argv) {
         }
         return adb_connect_command(android::base::StringPrintf("tcpip:%d", port));
     } else if (!strcmp(argv[0], "remount")) {
-        auto&& features = adb_get_feature_set();
-        if (features.empty()) {
-            return 1;
+        std::string error;
+        auto&& features = adb_get_feature_set(&error);
+        if (!features) {
+            error_exit("%s", error.c_str());
         }
 
-        if (CanUseFeature(features, kFeatureRemountShell)) {
+        if (CanUseFeature(*features, kFeatureRemountShell)) {
             std::vector<const char*> args = {"shell"};
             args.insert(args.cend(), argv, argv + argc);
             return adb_shell_noinput(args.size(), args.data());
@@ -2034,11 +2038,12 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "track-jdwp")) {
         return adb_connect_command("track-jdwp");
     } else if (!strcmp(argv[0], "track-app")) {
-        auto&& features = adb_get_feature_set();
-        if (features.empty()) {
-            return 1;
+        std::string error;
+        auto&& features = adb_get_feature_set(&error);
+        if (!features) {
+            error_exit("%s", error.c_str());
         }
-        if (!CanUseFeature(features, kFeatureTrackApp)) {
+        if (!CanUseFeature(*features, kFeatureTrackApp)) {
             error_exit("track-app is not supported by the device");
         }
         TrackAppStreamsCallback callback;
@@ -2064,13 +2069,14 @@ int adb_commandline(int argc, const char** argv) {
         return 0;
     } else if (!strcmp(argv[0], "features")) {
         // Only list the features common to both the adb client and the device.
-        auto&& features = adb_get_feature_set();
-        if (features.empty()) {
-            return 1;
+        std::string error;
+        auto&& features = adb_get_feature_set(&error);
+        if (!features) {
+            error_exit("%s", error.c_str());
         }
 
-        for (const std::string& name : features) {
-            if (CanUseFeature(features, name)) {
+        for (const std::string& name : *features) {
+            if (CanUseFeature(*features, name)) {
                 printf("%s\n", name.c_str());
             }
         }
