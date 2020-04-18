@@ -36,7 +36,7 @@ static void ControlService(bool start, const std::string& service) {
 }
 
 static void ControlDefaultServices(bool start) {
-    std::vector<std::string> services = {"netd", "surfaceflinger", "zygote"};
+    std::vector<std::string> services = {"iorapd", "netd", "surfaceflinger", "zygote"};
 
     // Only start zygote_secondary if not single arch.
     std::string zygote_configuration = GetProperty("ro.zygote", "");
