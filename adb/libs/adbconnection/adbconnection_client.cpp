@@ -140,7 +140,13 @@ AdbConnectionClientContext* adbconnection_client_new(
 
   int rc = connect(ctx->control_socket_.get(), reinterpret_cast<sockaddr*>(&addr), addr_len);
   if (rc != 0) {
-    PLOG(ERROR) << "failed to connect to jdwp control socket";
+    if (errno == ECONNREFUSED) {
+      // On userdebug devices, every Java process is debuggable, so if adbd is explicitly turned
+      // off, this would spew enormous amounts of red-herring errors.
+      LOG(DEBUG) << "failed to connect to jdwp control socket, adbd not running?";
+    } else {
+      PLOG(ERROR) << "failed to connect to jdwp control socket";
+    }
     return nullptr;
   }
 
