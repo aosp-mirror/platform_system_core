@@ -203,6 +203,7 @@ static void TurnOffBacklight() {
 }
 
 static Result<void> CallVdc(const std::string& system, const std::string& cmd) {
+    LOG(INFO) << "Calling /system/bin/vdc " << system << " " << cmd;
     const char* vdc_argv[] = {"/system/bin/vdc", system.c_str(), cmd.c_str()};
     int status;
     if (logwrap_fork_execvp(arraysize(vdc_argv), vdc_argv, &status, false, LOG_KLOG, true,
@@ -456,10 +457,14 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
 #define ZRAM_RESET    "/sys/block/zram0/reset"
 #define ZRAM_BACK_DEV "/sys/block/zram0/backing_dev"
 static Result<void> KillZramBackingDevice() {
+    if (access(ZRAM_BACK_DEV, F_OK) != 0 && errno == ENOENT) {
+        LOG(INFO) << "No zram backing device configured";
+        return {};
+    }
     std::string backing_dev;
-    if (!android::base::ReadFileToString(ZRAM_BACK_DEV, &backing_dev)) return {};
-
-    if (!android::base::StartsWith(backing_dev, "/dev/block/loop")) return {};
+    if (!android::base::ReadFileToString(ZRAM_BACK_DEV, &backing_dev)) {
+        return ErrnoError() << "Failed to read " << ZRAM_BACK_DEV;
+    }
 
     // cut the last "\n"
     backing_dev.erase(backing_dev.length() - 1);
@@ -476,6 +481,11 @@ static Result<void> KillZramBackingDevice() {
     if (!WriteStringToFile("1", ZRAM_RESET)) {
         return Error() << "zram_backing_dev: reset (" << backing_dev << ")"
                        << " failed";
+    }
+
+    if (!android::base::StartsWith(backing_dev, "/dev/block/loop")) {
+        LOG(INFO) << backing_dev << " is not a loop device. Exiting early";
+        return {};
     }
 
     // clear loopback device
@@ -785,7 +795,7 @@ static Result<void> DoUserspaceReboot() {
     }
     auto sigterm_timeout = GetMillisProperty("init.userspace_reboot.sigterm.timeoutmillis", 5s);
     auto sigkill_timeout = GetMillisProperty("init.userspace_reboot.sigkill.timeoutmillis", 10s);
-    LOG(INFO) << "Timeout to terminate services : " << sigterm_timeout.count() << "ms"
+    LOG(INFO) << "Timeout to terminate services: " << sigterm_timeout.count() << "ms "
               << "Timeout to kill services: " << sigkill_timeout.count() << "ms";
     StopServicesAndLogViolations(stop_first, sigterm_timeout, true /* SIGTERM */);
     if (int r = StopServicesAndLogViolations(stop_first, sigkill_timeout, false /* SIGKILL */);
