@@ -105,14 +105,16 @@ name:					\
     /* We loaded the jump table and adjuested EDX. Go.  */	\
     jmp		*%ebx
 
-	.section	.gnu.linkonce.t.__x86.get_pc_thunk.bx,"ax",@progbits
+	.section	.text.__x86.get_pc_thunk.bx,"axG",@progbits,__x86.get_pc_thunk.bx,comdat
 	.globl	__x86.get_pc_thunk.bx
 	.hidden	__x86.get_pc_thunk.bx
 	ALIGN (4)
 	.type	__x86.get_pc_thunk.bx,@function
 __x86.get_pc_thunk.bx:
+	cfi_startproc
 	movl	(%esp), %ebx
 	ret
+	cfi_endproc
 #else
 # define ENTRANCE
 # define RETURN_END	ret
