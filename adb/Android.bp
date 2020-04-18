@@ -695,6 +695,7 @@ cc_test {
         "daemon/shell_service_test.cpp",
         "shell_service_protocol.cpp",
         "shell_service_protocol_test.cpp",
+        "mdns_test.cpp",
     ],
 
     shared_libs: [
