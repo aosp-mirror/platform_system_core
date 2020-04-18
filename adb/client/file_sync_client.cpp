@@ -225,21 +225,22 @@ struct TransferLedger {
 
 class SyncConnection {
   public:
-    SyncConnection()
-        : acknowledgement_buffer_(sizeof(sync_status) + SYNC_DATA_MAX),
-          features_(adb_get_feature_set()) {
+    SyncConnection() : acknowledgement_buffer_(sizeof(sync_status) + SYNC_DATA_MAX) {
         acknowledgement_buffer_.resize(0);
         max = SYNC_DATA_MAX; // TODO: decide at runtime.
 
-        if (features_.empty()) {
-            Error("failed to get feature set");
+        std::string error;
+        auto&& features = adb_get_feature_set(&error);
+        if (!features) {
+            Error("failed to get feature set: %s", error.c_str());
         } else {
-            have_stat_v2_ = CanUseFeature(features_, kFeatureStat2);
-            have_ls_v2_ = CanUseFeature(features_, kFeatureLs2);
-            have_sendrecv_v2_ = CanUseFeature(features_, kFeatureSendRecv2);
-            have_sendrecv_v2_brotli_ = CanUseFeature(features_, kFeatureSendRecv2Brotli);
-            have_sendrecv_v2_lz4_ = CanUseFeature(features_, kFeatureSendRecv2LZ4);
-            have_sendrecv_v2_dry_run_send_ = CanUseFeature(features_, kFeatureSendRecv2DryRunSend);
+            features_ = &*features;
+            have_stat_v2_ = CanUseFeature(*features, kFeatureStat2);
+            have_ls_v2_ = CanUseFeature(*features, kFeatureLs2);
+            have_sendrecv_v2_ = CanUseFeature(*features, kFeatureSendRecv2);
+            have_sendrecv_v2_brotli_ = CanUseFeature(*features, kFeatureSendRecv2Brotli);
+            have_sendrecv_v2_lz4_ = CanUseFeature(*features, kFeatureSendRecv2LZ4);
+            have_sendrecv_v2_dry_run_send_ = CanUseFeature(*features, kFeatureSendRecv2DryRunSend);
             std::string error;
             fd.reset(adb_connect("sync:", &error));
             if (fd < 0) {
@@ -283,7 +284,7 @@ class SyncConnection {
         return compression;
     }
 
-    const FeatureSet& Features() const { return features_; }
+    const FeatureSet& Features() const { return *features_; }
 
     bool IsValid() { return fd >= 0; }
 
@@ -921,7 +922,7 @@ class SyncConnection {
   private:
     std::deque<std::pair<std::string, std::string>> deferred_acknowledgements_;
     Block acknowledgement_buffer_;
-    const FeatureSet& features_;
+    const FeatureSet* features_ = nullptr;
     bool have_stat_v2_;
     bool have_ls_v2_;
     bool have_sendrecv_v2_;

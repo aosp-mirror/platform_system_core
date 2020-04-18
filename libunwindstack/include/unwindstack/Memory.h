@@ -44,6 +44,7 @@ class Memory {
   virtual bool IsLocal() const { return false; }
 
   virtual size_t Read(uint64_t addr, void* dst, size_t size) = 0;
+  virtual long ReadTag(uint64_t) { return -1; }
 
   bool ReadFully(uint64_t addr, void* dst, size_t size);
 
