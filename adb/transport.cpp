@@ -505,11 +505,10 @@ bool FdConnection::DoTlsHandshake(RSA* key, std::string* auth_key) {
 
     int osh = cast_handle_to_int(adb_get_os_handle(fd_));
 #if ADB_HOST
-    tls_ = TlsConnection::Create(TlsConnection::Role::Client,
+    tls_ = TlsConnection::Create(TlsConnection::Role::Client, x509_str, evp_str, osh);
 #else
-    tls_ = TlsConnection::Create(TlsConnection::Role::Server,
+    tls_ = TlsConnection::Create(TlsConnection::Role::Server, x509_str, evp_str, osh);
 #endif
-                                 x509_str, evp_str, osh);
     CHECK(tls_);
 #if ADB_HOST
     // TLS 1.3 gives the client no message if the server rejected the

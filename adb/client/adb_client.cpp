@@ -416,14 +416,18 @@ std::string format_host_command(const char* command) {
     return android::base::StringPrintf("%s:%s", prefix, command);
 }
 
-const FeatureSet& adb_get_feature_set() {
-    static const android::base::NoDestructor<FeatureSet> features([] {
-        std::string result;
-        if (!adb_query(format_host_command("features"), &result, &result)) {
-            fprintf(stderr, "failed to get feature set: %s\n", result.c_str());
-            return FeatureSet{};
-        }
-        return StringToFeatureSet(result);
-    }());
-    return *features;
+const std::optional<FeatureSet>& adb_get_feature_set(std::string* error) {
+    static std::string cached_error [[clang::no_destroy]];
+    static const std::optional<FeatureSet> features
+            [[clang::no_destroy]] ([]() -> std::optional<FeatureSet> {
+                std::string result;
+                if (adb_query(format_host_command("features"), &result, &cached_error)) {
+                    return StringToFeatureSet(result);
+                }
+                return std::nullopt;
+            }());
+    if (!features && error) {
+        *error = cached_error;
+    }
+    return features;
 }
