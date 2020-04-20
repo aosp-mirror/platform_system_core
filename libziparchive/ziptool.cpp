@@ -263,12 +263,12 @@ static void ListOne(const ZipEntry64& entry, const std::string& name) {
   snprintf(time, sizeof(time), "%04d-%02d-%02d %02d:%02d", t.tm_year + 1900, t.tm_mon + 1,
            t.tm_mday, t.tm_hour, t.tm_min);
   if (flag_v) {
-    printf("%8" PRIu64 " %s  %8" PRIu64 " %3.0f%% %s %08x  %s\n", entry.uncompressed_length,
+    printf("%8" PRIu64 "  %s %8" PRIu64 " %3.0f%% %s %08x  %s\n", entry.uncompressed_length,
            (entry.method == kCompressStored) ? "Stored" : "Defl:N", entry.compressed_length,
            CompressionRatio(entry.uncompressed_length, entry.compressed_length), time, entry.crc32,
            name.c_str());
   } else {
-    printf("%9" PRIu64 " %s   %s\n", entry.uncompressed_length, time, name.c_str());
+    printf("%9" PRIu64 "  %s   %s\n", entry.uncompressed_length, time, name.c_str());
   }
 }
 
