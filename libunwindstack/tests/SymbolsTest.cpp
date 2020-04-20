@@ -185,18 +185,21 @@ TYPED_TEST_P(SymbolsTest, multiple_entries_nonstandard_size) {
   std::string fake_name;
 
   this->InitSym(&sym, 0x5000, 0x10, 0x40);
+  this->memory_.SetMemoryBlock(offset, entry_size, 0);
   this->memory_.SetMemory(offset, &sym, sizeof(sym));
   fake_name = "function_one";
   this->memory_.SetMemory(0x2040, fake_name.c_str(), fake_name.size() + 1);
   offset += entry_size;
 
   this->InitSym(&sym, 0x3004, 0x200, 0x100);
+  this->memory_.SetMemoryBlock(offset, entry_size, 0);
   this->memory_.SetMemory(offset, &sym, sizeof(sym));
   fake_name = "function_two";
   this->memory_.SetMemory(0x2100, fake_name.c_str(), fake_name.size() + 1);
   offset += entry_size;
 
   this->InitSym(&sym, 0xa010, 0x20, 0x230);
+  this->memory_.SetMemoryBlock(offset, entry_size, 0);
   this->memory_.SetMemory(offset, &sym, sizeof(sym));
   fake_name = "function_three";
   this->memory_.SetMemory(0x2230, fake_name.c_str(), fake_name.size() + 1);
@@ -274,7 +277,9 @@ TYPED_TEST_P(SymbolsTest, symtab_read_cached) {
   // Do call that should cache all of the entries (except the string data).
   std::string name;
   uint64_t func_offset;
-  ASSERT_FALSE(symbols.GetName<TypeParam>(0x6000, &this->memory_, &name, &func_offset));
+  ASSERT_FALSE(symbols.GetName<TypeParam>(0x5000, &this->memory_, &name, &func_offset));
+  ASSERT_FALSE(symbols.GetName<TypeParam>(0x2000, &this->memory_, &name, &func_offset));
+  ASSERT_FALSE(symbols.GetName<TypeParam>(0x1000, &this->memory_, &name, &func_offset));
   this->memory_.Clear();
   ASSERT_FALSE(symbols.GetName<TypeParam>(0x6000, &this->memory_, &name, &func_offset));
 
