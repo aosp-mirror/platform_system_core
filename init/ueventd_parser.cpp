@@ -116,7 +116,6 @@ Result<Success> ParseAliasLine(std::vector<std::string>&& args,
     *it++;
 
     // Format of alias lines: <to> <hex:productId> <hex:vendorId> <major> <minor>
-
     std::string& alias_to = *it++;
     std::string& productId_s = *it++;
     std::string& vendorId_s = *it++;
@@ -125,8 +124,17 @@ Result<Success> ParseAliasLine(std::vector<std::string>&& args,
 
     int productId = std::stoi(productId_s, 0, 16);
     int vendorId = std::stoi(vendorId_s, 0, 16);
-    int major = std::stoi(major_s);
-    int minor = std::stoi(minor_s);
+    int major, minor;
+
+    if (major_s == "*")
+        major = Aliases::ANY;
+    else
+        major = std::stoi(major_s);
+
+    if (minor_s == "*")
+        minor = Aliases::ANY;
+    else
+        minor = std::stoi(minor_s);
 
     aliases->emplace_back(alias_to, productId, vendorId, major, minor);
 

@@ -201,7 +201,9 @@ firmware_directories /more
 
 uevent_socket_rcvbuf_size 6M
 
-alias /dev/test 1 2 3 4
+alias /dev/test1 1 2 3 4
+alias /dev/test2 1 2 * *
+alias /dev/test3 1 2 3 *
 
 #ending comment
 )";
@@ -232,7 +234,9 @@ alias /dev/test 1 2 3 4
     };
 
     auto aliases = std::vector<Aliases>{
-        {"/dev/test", 1, 2, 3, 4}
+        {"/dev/test1", 1, 2, 3, 4},
+        {"/dev/test2", 1, 2, -1, -1},
+        {"/dev/test3", 1, 2, 3, -1}
     };
 
     size_t uevent_socket_rcvbuf_size = 6 * 1024 * 1024;

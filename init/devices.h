@@ -43,15 +43,15 @@ class Aliases {
     std::string alias_to_;
 
     public:
+    static const int ANY;
+
     Aliases(const std::string& to, int productId, int vendorId, int major, int minor);
 
-    friend void TestAliases(const Aliases& expected, const Aliases& test);
-
-    int Minor() const { return minor_; };
-    int Major() const { return major_; };
-    int ProductId() const { return productId_; };
-    int VendorId() const { return vendorId_; };
     std::string AliasTo() const { return alias_to_; };
+
+    bool Matches(int productId, int vendorId, int major, int minor) const;
+
+    friend void TestAliases(const Aliases& expected, const Aliases& test);
 };
 
 class Permissions {
