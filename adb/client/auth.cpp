@@ -502,6 +502,12 @@ void adb_auth_tls_handshake(atransport* t) {
     }).detach();
 }
 
+// Callback given to SSL_set_cert_cb to select a certificate when server requests
+// for a certificate. This is where the server will give us a CA-issuer list, and
+// figure out if the server knows any of our public keys. We currently always return
+// 1 here to indicate success, since we always try a key here (in the case of no auth).
+// See https://commondatastorage.googleapis.com/chromium-boringssl-docs/ssl.h.html#SSL_set_cert_cb
+// for more details.
 int adb_tls_set_certificate(SSL* ssl) {
     LOG(INFO) << __func__;
 
