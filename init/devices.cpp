@@ -537,7 +537,7 @@ bool DeviceHandler::GetDeviceAlias(const std::string &upath, int major, int mino
     // If we can't associate an idVendor for the device, then we
     // silently quit this as we won't ever by able to create an
     // alias..
-    while ((parent_dir != "/" && parent_dir != ".")) {
+    while ((parent_dir != "/sys" && parent_dir != ".")) {
         std::string vendorId_path = parent_dir + "/idVendor";
 
         // Get the vendor ID
