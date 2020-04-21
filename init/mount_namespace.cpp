@@ -240,14 +240,20 @@ bool SetupMountNamespaces() {
     // slave to the /mnt/user mount, and at the same time /mnt/installer in the
     // bootstrap namespace shares a peer group with /mnt/installer in the
     // default namespace.
+    // /mnt/androidwritable is similar to /mnt/installer but serves for
+    // MOUNT_EXTERNAL_ANDROID_WRITABLE apps.
     if (!mkdir_recursive("/mnt/user", 0755)) return false;
     if (!mkdir_recursive("/mnt/installer", 0755)) return false;
+    if (!mkdir_recursive("/mnt/androidwritable", 0755)) return false;
     if (!(BindMount("/mnt/user", "/mnt/installer", true))) return false;
-    // First, make /mnt/installer a slave bind mount
+    if (!(BindMount("/mnt/user", "/mnt/androidwritable", true))) return false;
+    // First, make /mnt/installer and /mnt/androidwritable a slave bind mount
     if (!(MakeSlave("/mnt/installer"))) return false;
+    if (!(MakeSlave("/mnt/androidwritable"))) return false;
     // Then, make it shared again - effectively creating a new peer group, that
     // will be inherited by new mount namespaces.
     if (!(MakeShared("/mnt/installer"))) return false;
+    if (!(MakeShared("/mnt/androidwritable"))) return false;
 
     bootstrap_ns_fd.reset(OpenMountNamespace());
     bootstrap_ns_id = GetMountNamespaceId();
