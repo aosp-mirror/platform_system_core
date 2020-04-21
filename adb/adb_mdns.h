@@ -19,9 +19,14 @@
 
 #include <android-base/macros.h>
 
-const char* kADBServiceType = "_adb._tcp";
-const char* kADBSecurePairingServiceType = "_adb_secure_pairing._tcp";
-const char* kADBSecureConnectServiceType = "_adb_secure_connect._tcp";
+// The rules for Service Names [RFC6335] state that they may be no more
+// than fifteen characters long (not counting the mandatory underscore),
+// consisting of only letters, digits, and hyphens, must begin and end
+// with a letter or digit, must not contain consecutive hyphens, and
+// must contain at least one letter.
+#define ADB_MDNS_SERVICE_TYPE "adb"
+#define ADB_MDNS_TLS_PAIRING_TYPE "adb-tls-pairing"
+#define ADB_MDNS_TLS_CONNECT_TYPE "adb-tls-connect"
 
 const int kADBTransportServiceRefIndex = 0;
 const int kADBSecurePairingServiceRefIndex = 1;
@@ -71,11 +76,10 @@ const char* kADBSecurePairingServiceTxtRecord =
 const char* kADBSecureConnectServiceTxtRecord =
         ADB_SECURE_SERVICE_VERSION_TXT_RECORD(ADB_SECURE_SERVICE_VERSION);
 
-const char* kADBDNSServices[] = {
-        kADBServiceType,
-        kADBSecurePairingServiceType,
-        kADBSecureConnectServiceType,
-};
+#define ADB_FULL_MDNS_SERVICE_TYPE(atype) ("_" atype "._tcp")
+const char* kADBDNSServices[] = {ADB_FULL_MDNS_SERVICE_TYPE(ADB_MDNS_SERVICE_TYPE),
+                                 ADB_FULL_MDNS_SERVICE_TYPE(ADB_MDNS_TLS_PAIRING_TYPE),
+                                 ADB_FULL_MDNS_SERVICE_TYPE(ADB_MDNS_TLS_CONNECT_TYPE)};
 
 const char* kADBDNSServiceTxtRecords[] = {
         nullptr,

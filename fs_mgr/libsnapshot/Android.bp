@@ -26,7 +26,6 @@ cc_defaults {
         "libbase",
         "libcutils",
         "liblog",
-        "liblp",
     ],
     static_libs: [
         "libdm",
