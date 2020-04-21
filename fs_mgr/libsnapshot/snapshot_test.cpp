@@ -41,6 +41,11 @@
 #include <libsnapshot/test_helpers.h>
 #include "utility.h"
 
+// Mock classes are not used. Header included to ensure mocked class definition aligns with the
+// class itself.
+#include <libsnapshot/mock_device_info.h>
+#include <libsnapshot/mock_snapshot.h>
+
 namespace android {
 namespace snapshot {
 
