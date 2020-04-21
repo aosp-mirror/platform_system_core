@@ -149,7 +149,7 @@ void print_packet(const char *label, apacket *p)
     case A_WRTE: tag = "WRTE"; break;
     case A_AUTH: tag = "AUTH"; break;
     case A_STLS:
-        tag = "ATLS";
+        tag = "STLS";
         break;
     default: tag = "????"; break;
     }
