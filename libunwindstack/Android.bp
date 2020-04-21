@@ -395,7 +395,9 @@ cc_benchmark {
 
     srcs: [
         "benchmarks/unwind_benchmarks.cpp",
+        "benchmarks/ElfBenchmark.cpp",
         "benchmarks/SymbolBenchmark.cpp",
+        "benchmarks/Utils.cpp",
     ],
 
     data: [
