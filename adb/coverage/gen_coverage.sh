@@ -1,21 +1,10 @@
 #!/bin/bash
-# Copyright (C) 2020 The Android Open Source Project
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 set -euxo pipefail
 
-ADB_TESTS="adbd_test adb_crypto_test adb_pairing_auth_test adb_pairing_connection_test adb_tls_connection_test"
+OUTPUT_DIR=$(dirname "$0")
+. "$OUTPUT_DIR"/include.sh
+
 TRACEDIR=`mktemp -d`
 
 ### Make sure we can connect to the device.
@@ -78,7 +67,7 @@ adb shell killall adbd
 sleep 5
 
 adb wait-for-device shell rm -rf "/data/misc/trace/*" /data/local/tmp/adb_coverage/
-./test_device.py
+"$OUTPUT_DIR"/../test_device.py
 
 # Do a usb reset to exercise the disconnect code.
 adb_usbreset
@@ -97,7 +86,7 @@ adb connect $REMOTE
 adb -s $REMOTE wait-for-device
 
 # Run test_device.py again.
-ANDROID_SERIAL=$REMOTE ./test_device.py
+ANDROID_SERIAL=$REMOTE "$OUTPUT_DIR"/../test_device.py
 
 # Dump traces again.
 adb disconnect $REMOTE
@@ -121,23 +110,5 @@ for PID in $ADBD_PIDS; do
 done
 unset IFS
 
-ADB_TEST_BINARIES=""
-for TEST in $ADB_TESTS; do
-  ADB_TEST_BINARIES="--object=$ANDROID_PRODUCT_OUT/data/nativetest64/$TEST/$TEST $ADB_TEST_BINARIES"
-done
-
-### Merge the traces and generate a report.
-llvm-profdata merge --output="$TRACEDIR"/adbd.profdata "$TRACEDIR"/adbd_traces/* "$TRACEDIR"/test_traces/*
-
-cd $ANDROID_BUILD_TOP
-llvm-cov report --instr-profile="$TRACEDIR"/adbd.profdata \
-  $ANDROID_PRODUCT_OUT/apex/com.android.adbd/bin/adbd \
-  --show-region-summary=false \
-  /proc/self/cwd/system/core/adb \
-  $ADB_TEST_BINARIES
-
-llvm-cov show --instr-profile="$TRACEDIR"/adbd.profdata \
-  $ANDROID_PRODUCT_OUT/apex/com.android.adbd/bin/adbd \
-  --format=html \
-  /proc/self/cwd/system/core/adb \
-  $ADB_TEST_BINARIES > $TRACEDIR/report.html
+### Merge the traces.
+llvm-profdata merge --output="$OUTPUT_DIR"/adbd.profdata "$TRACEDIR"/adbd_traces/* "$TRACEDIR"/test_traces/*
