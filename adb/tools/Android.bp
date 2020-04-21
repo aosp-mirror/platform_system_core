@@ -34,3 +34,26 @@ cc_binary_host {
         ],
     },
 }
+
+cc_binary_host {
+    name: "adb_usbreset",
+
+    defaults: ["adb_defaults"],
+
+    srcs: [
+        "adb_usbreset.cpp",
+    ],
+
+    static_libs: [
+        "libbase",
+        "libusb",
+    ],
+
+    stl: "libc++_static",
+
+    dist: {
+        targets: [
+            "sdk",
+        ],
+    },
+}
