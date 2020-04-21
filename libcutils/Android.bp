@@ -29,6 +29,10 @@ cc_library_headers {
     vendor_available: true,
     recovery_available: true,
     host_supported: true,
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
     native_bridge_supported: true,
     export_include_dirs: ["include"],
     target: {
@@ -134,6 +138,10 @@ cc_library {
     },
     recovery_available: true,
     host_supported: true,
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
     native_bridge_supported: true,
     srcs: [
         "config_utils.cpp",
