@@ -371,7 +371,7 @@ void ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
       // Look for the .debug_frame and .gnu_debugdata.
       if (shdr.sh_name < sec_size) {
         std::string name;
-        if (memory_->ReadString(sec_offset + shdr.sh_name, &name)) {
+        if (memory_->ReadString(sec_offset + shdr.sh_name, &name, sec_size - shdr.sh_name)) {
           if (name == ".debug_frame") {
             debug_frame_offset_ = shdr.sh_offset;
             debug_frame_size_ = shdr.sh_size;
@@ -405,7 +405,7 @@ void ElfInterface::ReadSectionHeaders(const EhdrType& ehdr) {
     } else if (shdr.sh_type == SHT_NOTE) {
       if (shdr.sh_name < sec_size) {
         std::string name;
-        if (memory_->ReadString(sec_offset + shdr.sh_name, &name) &&
+        if (memory_->ReadString(sec_offset + shdr.sh_name, &name, sec_size - shdr.sh_name) &&
             name == ".note.gnu.build-id") {
           gnu_build_id_offset_ = shdr.sh_offset;
           gnu_build_id_size_ = shdr.sh_size;
@@ -456,10 +456,11 @@ std::string ElfInterface::GetSonameWithTemplate() {
   for (const auto& entry : strtabs_) {
     if (entry.first == strtab_addr) {
       soname_offset = entry.second + soname_offset;
-      if (soname_offset >= entry.second + strtab_size) {
+      uint64_t soname_max = entry.second + strtab_size;
+      if (soname_offset >= soname_max) {
         return "";
       }
-      if (!memory_->ReadString(soname_offset, &soname_)) {
+      if (!memory_->ReadString(soname_offset, &soname_, soname_max - soname_offset)) {
         return "";
       }
       soname_type_ = SONAME_VALID;
@@ -608,7 +609,8 @@ bool GetBuildIDInfo(Memory* memory, uint64_t* build_id_offset, uint64_t* build_i
     }
     std::string name;
     if (shdr.sh_type == SHT_NOTE && shdr.sh_name < sec_size &&
-        memory->ReadString(sec_offset + shdr.sh_name, &name) && name == ".note.gnu.build-id") {
+        memory->ReadString(sec_offset + shdr.sh_name, &name, sec_size - shdr.sh_name) &&
+        name == ".note.gnu.build-id") {
       *build_id_offset = shdr.sh_offset;
       *build_id_size = shdr.sh_size;
       return true;
