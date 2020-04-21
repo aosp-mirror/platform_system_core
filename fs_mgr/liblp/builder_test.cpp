@@ -937,3 +937,85 @@ TEST_F(BuilderTest, ExpandedHeader) {
     EXPECT_EQ(exported->header.header_size, sizeof(LpMetadataHeaderV1_2));
     EXPECT_EQ(exported->header.flags, 0x5e5e5e5e);
 }
+
+static Interval ToInterval(const std::unique_ptr<Extent>& extent) {
+    if (LinearExtent* le = extent->AsLinearExtent()) {
+        return le->AsInterval();
+    }
+    return {0, 0, 0};
+}
+
+static void AddPartition(const std::unique_ptr<MetadataBuilder>& builder,
+                         const std::string& partition_name, uint64_t num_sectors,
+                         uint64_t start_sector, std::vector<Interval>* intervals) {
+    Partition* p = builder->AddPartition(partition_name, "group", 0);
+    ASSERT_NE(p, nullptr);
+    ASSERT_TRUE(builder->AddLinearExtent(p, "super", num_sectors, start_sector));
+    ASSERT_EQ(p->extents().size(), 1);
+
+    if (!intervals) {
+        return;
+    }
+
+    auto new_interval = ToInterval(p->extents().back());
+    std::vector<Interval> new_intervals = {new_interval};
+
+    auto overlap = Interval::Intersect(*intervals, new_intervals);
+    ASSERT_TRUE(overlap.empty());
+
+    intervals->push_back(new_interval);
+}
+
+TEST_F(BuilderTest, CollidedExtents) {
+    BlockDeviceInfo super("super", 8_GiB, 786432, 229376, 4096);
+    std::vector<BlockDeviceInfo> block_devices = {super};
+
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(block_devices, "super", 65536, 2);
+    ASSERT_NE(builder, nullptr);
+
+    ASSERT_TRUE(builder->AddGroup("group", 0));
+
+    std::vector<Interval> old_intervals;
+    AddPartition(builder, "system", 10229008, 2048, &old_intervals);
+    AddPartition(builder, "test_a", 648, 12709888, &old_intervals);
+    AddPartition(builder, "test_b", 625184, 12711936, &old_intervals);
+    AddPartition(builder, "test_c", 130912, 13338624, &old_intervals);
+    AddPartition(builder, "test_d", 888, 13469696, &old_intervals);
+    AddPartition(builder, "test_e", 888, 13471744, &old_intervals);
+    AddPartition(builder, "test_f", 888, 13475840, &old_intervals);
+    AddPartition(builder, "test_g", 888, 13477888, &old_intervals);
+
+    // Don't track the first vendor interval, since it will get extended.
+    AddPartition(builder, "vendor", 2477920, 10231808, nullptr);
+
+    std::vector<Interval> new_intervals;
+
+    Partition* p = builder->FindPartition("vendor");
+    ASSERT_NE(p, nullptr);
+    ASSERT_TRUE(builder->ResizePartition(p, 1282031616));
+    ASSERT_GE(p->extents().size(), 1);
+    for (const auto& extent : p->extents()) {
+        new_intervals.push_back(ToInterval(extent));
+    }
+
+    std::vector<Interval> overlap = Interval::Intersect(old_intervals, new_intervals);
+    ASSERT_TRUE(overlap.empty());
+}
+
+TEST_F(BuilderTest, LinearExtentOverlap) {
+    LinearExtent extent(20, 0, 10);
+
+    EXPECT_TRUE(extent.OverlapsWith(LinearExtent{20, 0, 10}));
+    EXPECT_TRUE(extent.OverlapsWith(LinearExtent{50, 0, 10}));
+    EXPECT_FALSE(extent.OverlapsWith(LinearExtent{20, 0, 30}));
+    EXPECT_FALSE(extent.OverlapsWith(LinearExtent{10, 0, 0}));
+    EXPECT_TRUE(extent.OverlapsWith(LinearExtent{20, 0, 0}));
+    EXPECT_TRUE(extent.OverlapsWith(LinearExtent{40, 0, 0}));
+    EXPECT_TRUE(extent.OverlapsWith(LinearExtent{20, 0, 15}));
+
+    EXPECT_FALSE(extent.OverlapsWith(LinearExtent{20, 1, 0}));
+    EXPECT_FALSE(extent.OverlapsWith(LinearExtent{50, 1, 10}));
+    EXPECT_FALSE(extent.OverlapsWith(LinearExtent{40, 1, 0}));
+    EXPECT_FALSE(extent.OverlapsWith(LinearExtent{20, 1, 15}));
+    EXPECT_FALSE(extent.OverlapsWith(LinearExtent{20, 1, 10}));
+}
