@@ -37,7 +37,7 @@ class Memory {
                                                      uint64_t end);
   static std::unique_ptr<Memory> CreateFileMemory(const std::string& path, uint64_t offset);
 
-  virtual bool ReadString(uint64_t addr, std::string* string, uint64_t max_read = UINT64_MAX);
+  virtual bool ReadString(uint64_t addr, std::string* dst, size_t max_read);
 
   virtual void Clear() {}
 
