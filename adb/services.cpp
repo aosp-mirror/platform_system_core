@@ -202,11 +202,22 @@ static void wait_service(unique_fd fd, std::string serial, TransportId transport
                                       transport_id, &is_ambiguous, &error);
 
         for (const auto& state : states) {
-            // wait-for-disconnect uses kCsOffline, we don't actually want to wait for 'offline'.
-            if ((t == nullptr && state == kCsOffline) || (t != nullptr && state == kCsAny) ||
-                (t != nullptr && state == t->GetConnectionState())) {
-                SendOkay(fd);
-                return;
+            if (state == kCsOffline) {
+                // Special case for wait-for-disconnect:
+                // We want to wait for USB devices to completely disappear, but TCP devices can
+                // go into the offline state, since we automatically reconnect.
+                if (!t) {
+                    SendOkay(fd);
+                    return;
+                } else if (!t->GetUsbHandle()) {
+                    SendOkay(fd);
+                    return;
+                }
+            } else {
+                if (t && (state == kCsAny || state == t->GetConnectionState())) {
+                    SendOkay(fd);
+                    return;
+                }
             }
         }
 
