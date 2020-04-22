@@ -185,14 +185,26 @@ int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fm
  * and sending log messages to user defined loggers specified in __android_log_set_logger().
  */
 struct __android_log_message {
-  size_t
-      struct_size;   /** Must be set to sizeof(__android_log_message) and is used for versioning. */
-  int32_t buffer_id; /** {@link log_id_t} values. */
-  int32_t priority;  /** {@link android_LogPriority} values. */
-  const char* tag;   /** The tag for the log message. */
-  const char* file;  /** Optional file name, may be set to nullptr. */
-  uint32_t line;     /** Optional line number, ignore if file is nullptr. */
-  const char* message; /** The log message itself. */
+  /** Must be set to sizeof(__android_log_message) and is used for versioning. */
+  size_t struct_size;
+
+  /** {@link log_id_t} values. */
+  int32_t buffer_id;
+
+  /** {@link android_LogPriority} values. */
+  int32_t priority;
+
+  /** The tag for the log message. */
+  const char* tag;
+
+  /** Optional file name, may be set to nullptr. */
+  const char* file;
+
+  /** Optional line number, ignore if file is nullptr. */
+  uint32_t line;
+
+  /** The log message itself. */
+  const char* message;
 };
 
 /**
