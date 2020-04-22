@@ -1076,6 +1076,25 @@ void adb_set_reject_kill_server(bool value) {
     g_reject_kill_server = value;
 }
 
+static bool handle_mdns_request(std::string_view service, int reply_fd) {
+    if (!android::base::ConsumePrefix(&service, "mdns:")) {
+        return false;
+    }
+
+    if (service == "check") {
+        std::string check = mdns_check();
+        SendOkay(reply_fd, check);
+        return true;
+    }
+    if (service == "services") {
+        std::string services_list = mdns_list_discovered_services();
+        SendOkay(reply_fd, services_list);
+        return true;
+    }
+
+    return false;
+}
+
 HostRequestResult handle_host_request(std::string_view service, TransportType type,
                                       const char* serial, TransportId transport_id, int reply_fd,
                                       asocket* s) {
@@ -1317,6 +1336,10 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
         }
     };
     if (handle_forward_request(service_str.c_str(), transport_acquirer, reply_fd)) {
+        return HostRequestResult::Handled;
+    }
+
+    if (handle_mdns_request(service, reply_fd)) {
         return HostRequestResult::Handled;
     }
 
