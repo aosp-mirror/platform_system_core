@@ -861,13 +861,16 @@ fi
 BUILD_DESCRIPTION=`get_property ro.build.description`
 [ -z "${BUILD_DESCRIPTION}" ] ||
   echo "${BLUE}[     INFO ]${NORMAL} ${BUILD_DESCRIPTION}" >&2
+KERNEL_VERSION="`adb_su cat /proc/version </dev/null 2>/dev/null`"
+[ -z "${KERNEL_VERSION}" ] ||
+  echo "${BLUE}[     INFO ]${NORMAL} ${KERNEL_VERSION}" >&2
 ACTIVE_SLOT=`get_active_slot`
 [ -z "${ACTIVE_SLOT}" ] ||
   echo "${BLUE}[     INFO ]${NORMAL} active slot is ${ACTIVE_SLOT}" >&2
 
 # Acquire list of system partitions
 
-PARTITIONS=`adb_su cat /vendor/etc/fstab* |
+PARTITIONS=`adb_su cat /vendor/etc/fstab* </dev/null |
               skip_administrative_mounts |
               sed -n "s@^\([^ ${TAB}/][^ ${TAB}/]*\)[ ${TAB}].*[, ${TAB}]ro[, ${TAB}].*@\1@p" |
               sort -u |
@@ -904,6 +907,9 @@ adb_sh ls -l /dev/block/by-name/ /dev/block/mapper/ </dev/null 2>/dev/null |
   done
 
 # If reboot too soon after fresh flash, could trip device update failure logic
+if ${screen_wait}; then
+  echo "${ORANGE}[  WARNING ]${NORMAL} waiting for screen to come up. Consider --no-wait-screen option" >&2
+fi
 if ! wait_for_screen && ${screen_wait}; then
   screen_wait=false
   echo "${ORANGE}[  WARNING ]${NORMAL} not healthy, no launcher, skipping wait for screen" >&2
