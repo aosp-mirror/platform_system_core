@@ -89,18 +89,13 @@ void start_device_log(void) {
 
 int adb_trace_mask;
 
-std::string get_trace_setting_from_env() {
+std::string get_trace_setting() {
+#if ADB_HOST
     const char* setting = getenv("ADB_TRACE");
     if (setting == nullptr) {
         setting = "";
     }
-
-    return std::string(setting);
-}
-
-std::string get_trace_setting() {
-#if ADB_HOST
-    return get_trace_setting_from_env();
+    return setting;
 #else
     return android::base::GetProperty("persist.adb.trace_mask", "");
 #endif
