@@ -311,13 +311,31 @@ __INTRODUCED_IN(30);
  *
  * @param prio         the priority to test, takes {@link android_LogPriority} values.
  * @param tag          the tag to test.
- * @param len          the length of the tag.
  * @param default_prio the default priority to use if no properties or minimum priority are set.
  * @return an integer where 1 indicates that the message is loggable and 0 indicates that it is not.
  *
  * Available since API level 30.
  */
 int __android_log_is_loggable(int prio, const char* tag, int default_prio) __INTRODUCED_IN(30);
+
+/**
+ * Use the per-tag properties "log.tag.<tagname>" along with the minimum priority from
+ * __android_log_set_minimum_priority() to determine if a log message with a given prio and tag will
+ * be printed.  A non-zero result indicates yes, zero indicates false.
+ *
+ * If both a priority for a tag and a minimum priority are set by
+ * __android_log_set_minimum_priority(), then the lowest of the two values are to determine the
+ * minimum priority needed to log.  If only one is set, then that value is used to determine the
+ * minimum priority needed.  If none are set, then default_priority is used.
+ *
+ * @param prio         the priority to test, takes {@link android_LogPriority} values.
+ * @param tag          the tag to test.
+ * @param len          the length of the tag.
+ * @param default_prio the default priority to use if no properties or minimum priority are set.
+ * @return an integer where 1 indicates that the message is loggable and 0 indicates that it is not.
+ *
+ * Available since API level 30.
+ */
 int __android_log_is_loggable_len(int prio, const char* tag, size_t len, int default_prio)
     __INTRODUCED_IN(30);
 
