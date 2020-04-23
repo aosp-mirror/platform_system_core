@@ -29,7 +29,6 @@
 #include <log/log_id.h>
 #include <log/log_main.h>
 #include <log/log_radio.h>
-#include <log/log_read.h>
 #include <log/log_safetynet.h>
 #include <log/log_system.h>
 #include <log/log_time.h>
@@ -63,6 +62,13 @@ extern "C" {
 #define LOG_NDEBUG 0
 #endif
 #endif
+
+/*
+ * The maximum size of the log entry payload that can be
+ * written to the logger. An attempt to write more than
+ * this amount will result in a truncated log entry.
+ */
+#define LOGGER_ENTRY_MAX_PAYLOAD 4068
 
 /*
  * Event logging.
