@@ -171,7 +171,6 @@ libadb_srcs = [
     "sysdeps/errno.cpp",
     "transport.cpp",
     "transport_fd.cpp",
-    "transport_local.cpp",
     "types.cpp",
 ]
 
@@ -217,6 +216,7 @@ cc_library_host_static {
         "client/adb_wifi.cpp",
         "client/usb_libusb.cpp",
         "client/usb_dispatch.cpp",
+        "client/transport_local.cpp",
         "client/transport_mdns.cpp",
         "client/transport_usb.cpp",
         "client/pairing/pairing_client.cpp",
@@ -390,10 +390,11 @@ cc_library_static {
     compile_multilib: "both",
 
     srcs: libadb_srcs + libadb_linux_srcs + libadb_posix_srcs + [
+        "daemon/adb_wifi.cpp",
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
         "daemon/logging.cpp",
-        "daemon/adb_wifi.cpp",
+        "daemon/transport_local.cpp",
     ],
 
     generated_headers: ["platform_tools_version"],
@@ -592,7 +593,6 @@ cc_library {
 cc_binary {
     name: "adbd",
     defaults: ["adbd_defaults", "host_adbd_supported", "libadbd_binary_dependencies"],
-    stl: "libc++_static",
     recovery_available: true,
     apex_available: ["com.android.adbd"],
 
