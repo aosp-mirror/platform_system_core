@@ -28,7 +28,6 @@
 #endif
 
 #include <atomic>
-#include <shared_mutex>
 
 #include <android-base/errno_restorer.h>
 #include <android-base/macros.h>
@@ -38,7 +37,6 @@
 #include "android/log.h"
 #include "log/log_read.h"
 #include "logger.h"
-#include "rwlock.h"
 #include "uio.h"
 
 #ifdef __ANDROID__
@@ -142,10 +140,8 @@ std::string& GetDefaultTag() {
   static std::string default_tag = getprogname();
   return default_tag;
 }
-RwLock default_tag_lock;
 
 void __android_log_set_default_tag(const char* tag) {
-  auto lock = std::unique_lock{default_tag_lock};
   GetDefaultTag().assign(tag, 0, LOGGER_ENTRY_MAX_PAYLOAD);
 }
 
@@ -163,10 +159,8 @@ static __android_logger_function logger_function = __android_log_logd_logger;
 #else
 static __android_logger_function logger_function = __android_log_stderr_logger;
 #endif
-static RwLock logger_function_lock;
 
 void __android_log_set_logger(__android_logger_function logger) {
-  auto lock = std::unique_lock{logger_function_lock};
   logger_function = logger;
 }
 
@@ -180,15 +174,12 @@ void __android_log_default_aborter(const char* abort_message) {
 }
 
 static __android_aborter_function aborter_function = __android_log_default_aborter;
-static RwLock aborter_function_lock;
 
 void __android_log_set_aborter(__android_aborter_function aborter) {
-  auto lock = std::unique_lock{aborter_function_lock};
   aborter_function = aborter;
 }
 
 void __android_log_call_aborter(const char* abort_message) {
-  auto lock = std::shared_lock{aborter_function_lock};
   aborter_function(abort_message);
 }
 
@@ -310,9 +301,7 @@ void __android_log_write_log_message(__android_log_message* log_message) {
     return;
   }
 
-  auto tag_lock = std::shared_lock{default_tag_lock, std::defer_lock};
   if (log_message->tag == nullptr) {
-    tag_lock.lock();
     log_message->tag = GetDefaultTag().c_str();
   }
 
@@ -322,7 +311,6 @@ void __android_log_write_log_message(__android_log_message* log_message) {
   }
 #endif
 
-  auto lock = std::shared_lock{logger_function_lock};
   logger_function(log_message);
 }
 
