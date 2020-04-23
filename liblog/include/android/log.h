@@ -227,7 +227,7 @@ typedef void (*__android_aborter_function)(const char* abort_message);
  * buffers, then pass the message to liblog via this function, and therefore we do not want to
  * duplicate the loggability check here.
  *
- * @param log_message the log message itself, see {@link __android_log_message}.
+ * @param log_message the log message itself, see __android_log_message.
  *
  * Available since API level 30.
  */
@@ -249,7 +249,7 @@ void __android_log_set_logger(__android_logger_function logger) __INTRODUCED_IN(
  * Writes the log message to logd.  This is an __android_logger_function and can be provided to
  * __android_log_set_logger().  It is the default logger when running liblog on a device.
  *
- * @param log_message the log message to write, see {@link __android_log_message}.
+ * @param log_message the log message to write, see __android_log_message.
  *
  * Available since API level 30.
  */
@@ -259,7 +259,7 @@ void __android_log_logd_logger(const struct __android_log_message* log_message) 
  * Writes the log message to stderr.  This is an __android_logger_function and can be provided to
  * __android_log_set_logger().  It is the default logger when running liblog on host.
  *
- * @param log_message the log message to write, see {@link __android_log_message}.
+ * @param log_message the log message to write, see __android_log_message.
  *
  * Available since API level 30.
  */
@@ -271,7 +271,7 @@ void __android_log_stderr_logger(const struct __android_log_message* log_message
  * user defined aborter function is highly recommended to abort and be noreturn, but is not strictly
  * required to.
  *
- * @param aborter the new aborter function, see {@link __android_aborter_function}.
+ * @param aborter the new aborter function, see __android_aborter_function.
  *
  * Available since API level 30.
  */
@@ -309,7 +309,7 @@ __INTRODUCED_IN(30);
  * minimum priority needed to log.  If only one is set, then that value is used to determine the
  * minimum priority needed.  If none are set, then default_priority is used.
  *
- * @param prio         the priority to test, takes {@link android_LogPriority} values.
+ * @param prio         the priority to test, takes android_LogPriority values.
  * @param tag          the tag to test.
  * @param default_prio the default priority to use if no properties or minimum priority are set.
  * @return an integer where 1 indicates that the message is loggable and 0 indicates that it is not.
@@ -328,7 +328,7 @@ int __android_log_is_loggable(int prio, const char* tag, int default_prio) __INT
  * minimum priority needed to log.  If only one is set, then that value is used to determine the
  * minimum priority needed.  If none are set, then default_priority is used.
  *
- * @param prio         the priority to test, takes {@link android_LogPriority} values.
+ * @param prio         the priority to test, takes android_LogPriority values.
  * @param tag          the tag to test.
  * @param len          the length of the tag.
  * @param default_prio the default priority to use if no properties or minimum priority are set.
@@ -342,8 +342,8 @@ int __android_log_is_loggable_len(int prio, const char* tag, size_t len, int def
 /**
  * Sets the minimum priority that will be logged for this process.
  *
- * @param priority the new minimum priority to set, takes @{link android_LogPriority} values.
- * @return the previous set minimum priority as @{link android_LogPriority} values, or
+ * @param priority the new minimum priority to set, takes android_LogPriority values.
+ * @return the previous set minimum priority as android_LogPriority values, or
  *         ANDROID_LOG_DEFAULT if none was set.
  *
  * Available since API level 30.
@@ -354,7 +354,7 @@ int32_t __android_log_set_minimum_priority(int32_t priority) __INTRODUCED_IN(30)
  * Gets the minimum priority that will be logged for this process.  If none has been set by a
  * previous __android_log_set_minimum_priority() call, this returns ANDROID_LOG_DEFAULT.
  *
- * @return the current minimum priority as @{link android_LogPriority} values, or
+ * @return the current minimum priority as android_LogPriority values, or
  *         ANDROID_LOG_DEFAULT if none is set.
  *
  * Available since API level 30.
