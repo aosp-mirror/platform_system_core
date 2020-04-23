@@ -195,7 +195,6 @@ static std::mutex& LoggingLock() {
   return logging_lock;
 }
 
-// Only used for Q fallback.
 static LogFunction& Logger() {
 #ifdef __ANDROID__
   static auto& logger = *new LogFunction(LogdLogger());
@@ -205,7 +204,6 @@ static LogFunction& Logger() {
   return logger;
 }
 
-// Only used for Q fallback.
 static AbortFunction& Aborter() {
   static auto& aborter = *new AbortFunction(DefaultAborter);
   return aborter;
@@ -416,45 +414,27 @@ void InitLogging(char* argv[], LogFunction&& logger, AbortFunction&& aborter) {
 }
 
 void SetLogger(LogFunction&& logger) {
+  Logger() = std::move(logger);
+
   static auto& liblog_functions = GetLibLogFunctions();
   if (liblog_functions) {
-    // We need to atomically swap the old and new pointers since other threads may be logging.
-    // We know all threads will be using the new logger after __android_log_set_logger() returns,
-    // so we can delete it then.
-    // This leaks one std::function<> per instance of libbase if multiple copies of libbase within a
-    // single process call SetLogger().  That is the same cost as having a static
-    // std::function<>, which is the not-thread-safe alternative.
-    static std::atomic<LogFunction*> logger_function(nullptr);
-    auto* old_logger_function = logger_function.exchange(new LogFunction(logger));
     liblog_functions->__android_log_set_logger([](const struct __android_log_message* log_message) {
       auto log_id = log_id_tToLogId(log_message->buffer_id);
       auto severity = PriorityToLogSeverity(log_message->priority);
 
-      auto& function = *logger_function.load(std::memory_order_acquire);
-      function(log_id, severity, log_message->tag, log_message->file, log_message->line,
+      Logger()(log_id, severity, log_message->tag, log_message->file, log_message->line,
                log_message->message);
     });
-    delete old_logger_function;
-  } else {
-    std::lock_guard<std::mutex> lock(LoggingLock());
-    Logger() = std::move(logger);
   }
 }
 
 void SetAborter(AbortFunction&& aborter) {
+  Aborter() = std::move(aborter);
+
   static auto& liblog_functions = GetLibLogFunctions();
   if (liblog_functions) {
-    // See the comment in SetLogger().
-    static std::atomic<AbortFunction*> abort_function(nullptr);
-    auto* old_abort_function = abort_function.exchange(new AbortFunction(aborter));
-    liblog_functions->__android_log_set_aborter([](const char* abort_message) {
-      auto& function = *abort_function.load(std::memory_order_acquire);
-      function(abort_message);
-    });
-    delete old_abort_function;
-  } else {
-    std::lock_guard<std::mutex> lock(LoggingLock());
-    Aborter() = std::move(aborter);
+    liblog_functions->__android_log_set_aborter(
+        [](const char* abort_message) { Aborter()(abort_message); });
   }
 }
 
