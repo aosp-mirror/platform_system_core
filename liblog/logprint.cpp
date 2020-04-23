@@ -19,6 +19,8 @@
 #define HAVE_STRSEP
 #endif
 
+#include <log/logprint.h>
+
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
@@ -37,7 +39,7 @@
 #include <cutils/list.h>
 
 #include <log/log.h>
-#include <log/logprint.h>
+#include <log/log_read.h>
 #include <private/android_logger.h>
 
 #define MS_PER_NSEC 1000000
