@@ -165,6 +165,7 @@ libadb_srcs = [
     "adb_unique_fd.cpp",
     "adb_utils.cpp",
     "fdevent/fdevent.cpp",
+    "fdevent/fdevent_poll.cpp",
     "services.cpp",
     "sockets.cpp",
     "socket_spec.cpp",
@@ -173,17 +174,6 @@ libadb_srcs = [
     "transport_fd.cpp",
     "transport_local.cpp",
     "types.cpp",
-]
-
-libadb_darwin_srcs = [
-    "fdevent/fdevent_poll.cpp",
-]
-
-libadb_windows_srcs = [
-    "fdevent/fdevent_poll.cpp",
-    "sysdeps_win32.cpp",
-    "sysdeps/win32/errno.cpp",
-    "sysdeps/win32/stat.cpp",
 ]
 
 libadb_posix_srcs = [
@@ -229,7 +219,7 @@ cc_library_host_static {
             srcs: ["client/usb_linux.cpp"] + libadb_linux_srcs,
         },
         darwin: {
-            srcs: ["client/usb_osx.cpp"] + libadb_darwin_srcs,
+            srcs: ["client/usb_osx.cpp"],
         },
         not_windows: {
             srcs: libadb_posix_srcs,
@@ -238,7 +228,10 @@ cc_library_host_static {
             enabled: true,
             srcs: [
                 "client/usb_windows.cpp",
-            ] + libadb_windows_srcs,
+                "sysdeps_win32.cpp",
+                "sysdeps/win32/errno.cpp",
+                "sysdeps/win32/stat.cpp",
+            ],
             shared_libs: ["AdbWinApi"],
         },
     },

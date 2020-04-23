@@ -71,8 +71,9 @@ class LinearExtent final : public Extent {
     uint64_t end_sector() const { return physical_sector_ + num_sectors_; }
     uint32_t device_index() const { return device_index_; }
 
-    bool OverlapsWith(const LinearExtent& other) const;
-    bool OverlapsWith(const Interval& interval) const;
+    bool OwnsSector(uint64_t sector) const {
+        return sector >= physical_sector_ && sector < end_sector();
+    }
 
     Interval AsInterval() const;
 

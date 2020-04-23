@@ -27,10 +27,7 @@
 #include "adb_utils.h"
 #include "fdevent.h"
 #include "fdevent_epoll.h"
-
-#if !defined(__linux__)
 #include "fdevent_poll.h"
-#endif
 
 using namespace std::chrono_literals;
 using std::chrono::duration_cast;

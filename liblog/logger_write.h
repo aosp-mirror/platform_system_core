@@ -18,4 +18,7 @@
 
 #include <string>
 
-std::string& GetDefaultTag();
+#include "rwlock.h"
+
+std::string& GetDefaultTag();  // Must read lock default_tag_lock
+extern RwLock default_tag_lock;

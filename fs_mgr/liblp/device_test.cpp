@@ -56,10 +56,6 @@ TEST_F(DeviceTest, BlockDeviceInfo) {
 
     // Having an alignment offset > alignment doesn't really make sense.
     EXPECT_LT(device_info.alignment_offset, device_info.alignment);
-
-    if (IPropertyFetcher::GetInstance()->GetBoolProperty("ro.virtual_ab.enabled", false)) {
-        EXPECT_EQ(device_info.alignment_offset, 0);
-    }
 }
 
 TEST_F(DeviceTest, ReadSuperPartitionCurrentSlot) {
