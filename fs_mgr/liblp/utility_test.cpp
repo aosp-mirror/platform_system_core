@@ -64,9 +64,9 @@ TEST(liblp, AlignTo) {
     EXPECT_EQ(AlignTo(555, 1024), 1024);
     EXPECT_EQ(AlignTo(555, 1000), 1000);
     EXPECT_EQ(AlignTo(0, 1024), 0);
-    EXPECT_EQ(AlignTo(54, 32, 30), 62);
-    EXPECT_EQ(AlignTo(32, 32, 30), 62);
-    EXPECT_EQ(AlignTo(17, 32, 30), 30);
+    EXPECT_EQ(AlignTo(54, 32), 64);
+    EXPECT_EQ(AlignTo(32, 32), 32);
+    EXPECT_EQ(AlignTo(17, 32), 32);
 }
 
 TEST(liblp, GetPartitionSlotSuffix) {
