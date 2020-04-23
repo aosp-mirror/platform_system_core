@@ -492,8 +492,6 @@ static bool FormatDeviceAlias(const Aliases& alias, int minor, std::string bInte
     std::stringstream fmt;
 
     while ((b = alias.AliasTo().find("%", a)) != std::string::npos) {
-        LOG(INFO) << "a: " << a << " b: " << b;
-        LOG(INFO) << "Appending " << alias.AliasTo().substr(a, b - a);
         fmt << alias.AliasTo().substr(a, b - a);
 
         if (alias.AliasTo()[b + 1] == 'i') {
