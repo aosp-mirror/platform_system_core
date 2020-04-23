@@ -40,20 +40,6 @@ bool LinearExtent::AddTo(LpMetadata* out) const {
     return true;
 }
 
-bool LinearExtent::OverlapsWith(const LinearExtent& other) const {
-    if (device_index_ != other.device_index()) {
-        return false;
-    }
-    return physical_sector() < other.end_sector() && other.physical_sector() < end_sector();
-}
-
-bool LinearExtent::OverlapsWith(const Interval& interval) const {
-    if (device_index_ != interval.device_index) {
-        return false;
-    }
-    return physical_sector() < interval.end && interval.start < end_sector();
-}
-
 Interval LinearExtent::AsInterval() const {
     return Interval(device_index(), physical_sector(), end_sector());
 }
@@ -788,7 +774,8 @@ std::unique_ptr<LinearExtent> MetadataBuilder::ExtendFinalExtent(
 bool MetadataBuilder::IsAnyRegionCovered(const std::vector<Interval>& regions,
                                          const LinearExtent& candidate) const {
     for (const auto& region : regions) {
-        if (candidate.OverlapsWith(region)) {
+        if (region.device_index == candidate.device_index() &&
+            (candidate.OwnsSector(region.start) || candidate.OwnsSector(region.end))) {
             return true;
         }
     }
@@ -799,10 +786,11 @@ bool MetadataBuilder::IsAnyRegionAllocated(const LinearExtent& candidate) const 
     for (const auto& partition : partitions_) {
         for (const auto& extent : partition->extents()) {
             LinearExtent* linear = extent->AsLinearExtent();
-            if (!linear) {
+            if (!linear || linear->device_index() != candidate.device_index()) {
                 continue;
             }
-            if (linear->OverlapsWith(candidate)) {
+            if (linear->OwnsSector(candidate.physical_sector()) ||
+                linear->OwnsSector(candidate.end_sector() - 1)) {
                 return true;
             }
         }
