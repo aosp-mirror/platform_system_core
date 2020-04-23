@@ -43,6 +43,7 @@
 #include <android-base/unique_fd.h>
 #include <android/log.h>
 #include <log/log.h>
+#include <log/log_read.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
 #include <unwindstack/DexFiles.h>
