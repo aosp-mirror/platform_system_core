@@ -41,6 +41,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -1204,9 +1205,19 @@ milliseconds llkCheck(bool checkRunning) {
                 }
             }
             // We are here because we have confirmed kernel live-lock
+            std::vector<std::string> threads;
+            auto taskdir = procdir + std::to_string(tid) + "/task/";
+            dir taskDirectory(taskdir);
+            for (auto tp = taskDirectory.read(); tp != nullptr; tp = taskDirectory.read()) {
+                std::string piddir;
+                if (getValidTidDir(tp, &piddir))
+                    threads.push_back(android::base::Basename(piddir));
+            }
             const auto message = state + " "s + llkFormat(procp->count) + " " +
                                  std::to_string(ppid) + "->" + std::to_string(pid) + "->" +
-                                 std::to_string(tid) + " " + process_comm + " [panic]";
+                                 std::to_string(tid) + " " + process_comm + " [panic]\n" +
+                                 "  thread group: {" + android::base::Join(threads, ",") +
+                                 "}";
             llkPanicKernel(dump, tid,
                            (state == 'Z') ? "zombie" : (state == 'D') ? "driver" : "sleeping",
                            message);
