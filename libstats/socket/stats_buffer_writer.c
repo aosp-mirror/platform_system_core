@@ -43,6 +43,10 @@ void stats_log_close() {
     statsd_writer_init_unlock();
 }
 
+int stats_log_is_closed() {
+    return statsdLoggerWrite.isClosed && (*statsdLoggerWrite.isClosed)();
+}
+
 int write_buffer_to_statsd(void* buffer, size_t size, uint32_t atomId) {
     int ret = 1;
 
