@@ -26,6 +26,7 @@
 
 #include <memory>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include <android-base/stringprintf.h>
@@ -42,27 +43,75 @@
 
 static DNSServiceRef service_refs[kNumADBDNSServices];
 static fdevent* service_ref_fdes[kNumADBDNSServices];
+static auto& g_autoconn_whitelist = *new std::unordered_set<int>();
 
-static int adb_DNSServiceIndexByName(const char* regType) {
+static int adb_DNSServiceIndexByName(std::string_view regType) {
     for (int i = 0; i < kNumADBDNSServices; ++i) {
-        if (!strncmp(regType, kADBDNSServices[i], strlen(kADBDNSServices[i]))) {
+        if (!strncmp(regType.data(), kADBDNSServices[i], strlen(kADBDNSServices[i]))) {
             return i;
         }
     }
     return -1;
 }
 
-static bool adb_DNSServiceShouldConnect(const char* regType, const char* serviceName) {
-    int index = adb_DNSServiceIndexByName(regType);
-    if (index == kADBTransportServiceRefIndex) {
-        // Ignore adb-EMULATOR* service names, as it interferes with the
-        // emulator ports that are already connected.
-        if (android::base::StartsWith(serviceName, "adb-EMULATOR")) {
-            LOG(INFO) << "Ignoring emulator transport service [" << serviceName << "]";
-            return false;
+static void config_auto_connect_services() {
+    // ADB_MDNS_AUTO_CONNECT is a comma-delimited list of mdns services
+    // that are allowed to auto-connect. By default, only allow "adb-tls-connect"
+    // to auto-connect, since this is filtered down to auto-connect only to paired
+    // devices.
+    g_autoconn_whitelist.insert(kADBSecureConnectServiceRefIndex);
+    const char* srvs = getenv("ADB_MDNS_AUTO_CONNECT");
+    if (!srvs) {
+        return;
+    }
+
+    if (strcmp(srvs, "0") == 0) {
+        D("Disabling all auto-connecting");
+        g_autoconn_whitelist.clear();
+        return;
+    }
+
+    if (strcmp(srvs, "1") == 0) {
+        D("Allow all auto-connecting");
+        g_autoconn_whitelist.insert(kADBTransportServiceRefIndex);
+        return;
+    }
+
+    // Selectively choose which services to allow auto-connect.
+    // E.g. ADB_MDNS_AUTO_CONNECT=adb,adb-tls-connect would allow
+    // _adb._tcp and _adb-tls-connnect._tcp services to auto-connect.
+    auto srvs_list = android::base::Split(srvs, ",");
+    std::unordered_set<int> new_whitelist;
+    for (const auto& item : srvs_list) {
+        auto full_srv = android::base::StringPrintf("_%s._tcp", item.data());
+        int idx = adb_DNSServiceIndexByName(full_srv);
+        if (idx >= 0) {
+            new_whitelist.insert(idx);
         }
     }
-    return (index == kADBTransportServiceRefIndex || index == kADBSecureConnectServiceRefIndex);
+
+    if (!new_whitelist.empty()) {
+        g_autoconn_whitelist = std::move(new_whitelist);
+    }
+}
+
+static bool adb_DNSServiceShouldAutoConnect(const char* regType, const char* serviceName) {
+    // Try to auto-connect to any "_adb" or "_adb-tls-connect" services excluding emulator services.
+    int index = adb_DNSServiceIndexByName(regType);
+    if (index != kADBTransportServiceRefIndex && index != kADBSecureConnectServiceRefIndex) {
+        return false;
+    }
+    if (g_autoconn_whitelist.find(index) == g_autoconn_whitelist.end()) {
+        D("Auto-connect for regType '%s' disabled", regType);
+        return false;
+    }
+    // Ignore adb-EMULATOR* service names, as it interferes with the
+    // emulator ports that are already connected.
+    if (android::base::StartsWith(serviceName, "adb-EMULATOR")) {
+        LOG(INFO) << "Ignoring emulator transport service [" << serviceName << "]";
+        return false;
+    }
+    return true;
 }
 
 // Use adb_DNSServiceRefSockFD() instead of calling DNSServiceRefSockFD()
@@ -196,7 +245,7 @@ class ResolvedService : public AsyncServiceRef {
 
         // adb secure service needs to do something different from just
         // connecting here.
-        if (adb_DNSServiceShouldConnect(regType_.c_str(), serviceName_.c_str())) {
+        if (adb_DNSServiceShouldAutoConnect(regType_.c_str(), serviceName_.c_str())) {
             std::string response;
             D("Attempting to serviceName=[%s], regtype=[%s] ipaddr=(%s:%hu)", serviceName_.c_str(),
               regType_.c_str(), ip_addr_, port_);
@@ -539,8 +588,15 @@ static void DNSSD_API on_service_browsed(DNSServiceRef sdRef, DNSServiceFlags fl
 }
 
 void init_mdns_transport_discovery_thread(void) {
-    int errorCodes[kNumADBDNSServices];
+    config_auto_connect_services();
+    std::string res;
+    std::for_each(g_autoconn_whitelist.begin(), g_autoconn_whitelist.end(), [&](const int& i) {
+        res += kADBDNSServices[i];
+        res += ",";
+    });
+    D("mdns auto-connect whitelist: [%s]", res.data());
 
+    int errorCodes[kNumADBDNSServices];
     for (int i = 0; i < kNumADBDNSServices; ++i) {
         errorCodes[i] = DNSServiceBrowse(&service_refs[i], 0, 0, kADBDNSServices[i], nullptr,
                                          on_service_browsed, nullptr);
