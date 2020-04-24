@@ -387,13 +387,9 @@ class _NODISCARD_ expected {
 
 template<class T1, class E1, class T2, class E2>
 constexpr bool operator==(const expected<T1, E1>& x, const expected<T2, E2>& y) {
-  if (x.has_value() != y.has_value()) {
-    return false;
-  } else if (!x.has_value()) {
-    return x.error() == y.error();
-  } else {
-    return *x == *y;
-  }
+  if (x.has_value() != y.has_value()) return false;
+  if (!x.has_value()) return x.error() == y.error();
+  return *x == *y;
 }
 
 template<class T1, class E1, class T2, class E2>
@@ -581,35 +577,23 @@ class _NODISCARD_ expected<void, E> {
 
 template<class E1, class E2>
 constexpr bool operator==(const expected<void, E1>& x, const expected<void, E2>& y) {
-  if (x.has_value() != y.has_value()) {
-    return false;
-  } else if (!x.has_value()) {
-    return x.error() == y.error();
-  } else {
-    return true;
-  }
+  if (x.has_value() != y.has_value()) return false;
+  if (!x.has_value()) return x.error() == y.error();
+  return true;
 }
 
 template<class T1, class E1, class E2>
 constexpr bool operator==(const expected<T1, E1>& x, const expected<void, E2>& y) {
-  if (x.has_value() != y.has_value()) {
-    return false;
-  } else if (!x.has_value()) {
-    return x.error() == y.error();
-  } else {
-    return false;
-  }
+  if (x.has_value() != y.has_value()) return false;
+  if (!x.has_value()) return x.error() == y.error();
+  return false;
 }
 
 template<class E1, class T2, class E2>
 constexpr bool operator==(const expected<void, E1>& x, const expected<T2, E2>& y) {
-  if (x.has_value() != y.has_value()) {
-    return false;
-  } else if (!x.has_value()) {
-    return x.error() == y.error();
-  } else {
-    return false;
-  }
+  if (x.has_value() != y.has_value()) return false;
+  if (!x.has_value()) return x.error() == y.error();
+  return false;
 }
 
 template<class E>
