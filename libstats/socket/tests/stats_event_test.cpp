@@ -53,7 +53,12 @@ using std::vector;
 // Side-effect: this function moves the start of the buffer past the read value
 template <class T>
 T readNext(uint8_t** buffer) {
-    T value = *(T*)(*buffer);
+    T value;
+    if ((reinterpret_cast<uintptr_t>(*buffer) % alignof(T)) == 0) {
+        value = *(T*)(*buffer);
+    } else {
+        memcpy(&value, *buffer, sizeof(T));
+    }
     *buffer += sizeof(T);
     return value;
 }
