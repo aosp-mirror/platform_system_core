@@ -131,4 +131,5 @@ cc_test {
             suffix: "64",
         }
     },
+    require_root: true,
 }
