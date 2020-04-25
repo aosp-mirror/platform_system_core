@@ -122,6 +122,18 @@ static int openLogFile(const char* pathname, size_t sizeKB) {
     return fd;
 }
 
+static void closeLogFile(const char* pathname) {
+    int fd = open(pathname, O_WRONLY | O_CLOEXEC);
+    if (fd == -1) {
+        return;
+    }
+
+    // no need to check errors
+    __u32 set = 0;
+    ioctl(fd, F2FS_IOC_SET_PIN_FILE, &set);
+    close(fd);
+}
+
 void Logcat::RotateLogs() {
     // Can't rotate logs if we're not outputting to a file
     if (!output_file_name_) return;
@@ -151,6 +163,8 @@ void Logcat::RotateLogs() {
             perror("while rotating log files");
             break;
         }
+
+        closeLogFile(file0.c_str());
 
         int err = rename(file0.c_str(), file1.c_str());
 
