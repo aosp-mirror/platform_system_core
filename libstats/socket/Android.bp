@@ -122,5 +122,14 @@ cc_test {
         "libcutils",
         "libutils",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["device-tests", "mts"],
+    //TODO(b/153588990): Remove when the build system properly separates 
+    //32bit and 64bit architectures.
+    compile_multilib: "both",
+    multilib: {
+        lib64: {
+            suffix: "64",
+        }
+    },
+    require_root: true,
 }

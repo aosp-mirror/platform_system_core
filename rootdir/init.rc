@@ -544,8 +544,8 @@ on post-fs-data
     enter_default_mount_ns
 
     # /data/apex is now available. Start apexd to scan and activate APEXes.
-    mkdir /data/apex 0750 root system encryption=None
-    mkdir /data/apex/active 0750 root system
+    mkdir /data/apex 0755 root system encryption=None
+    mkdir /data/apex/active 0755 root system
     mkdir /data/apex/backup 0700 root system
     mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
