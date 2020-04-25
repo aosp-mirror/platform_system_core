@@ -23,30 +23,36 @@
 #include <sys/types.h>
 #include <time.h>
 
-#include <shared_mutex>
-
 #include <log/log_properties.h>
 #include <private/android_logger.h>
 
 #include "logger.h"
-#include "rwlock.h"
 #include "uio.h"
 
-static int pmsg_fd;
-static RwLock pmsg_fd_lock;
+static atomic_int pmsg_fd;
 
-static void PmsgOpen() {
-  auto lock = std::unique_lock{pmsg_fd_lock};
-  if (pmsg_fd > 0) {
-    // Someone raced us and opened the socket already.
+// pmsg_fd should only beopened once.  If we see that pmsg_fd is uninitialized, we open "/dev/pmsg0"
+// then attempt to compare/exchange it into pmsg_fd.  If the compare/exchange was successful, then
+// that will be the fd used for the duration of the program, otherwise a different thread has
+// already opened and written the fd to the atomic, so close the new fd and return.
+static void GetPmsgFd() {
+  if (pmsg_fd != 0) {
     return;
   }
 
-  pmsg_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
+  int new_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY | O_CLOEXEC));
+  if (new_fd <= 0) {
+    return;
+  }
+
+  int uninitialized_value = 0;
+  if (!pmsg_fd.compare_exchange_strong(uninitialized_value, new_fd)) {
+    close(new_fd);
+    return;
+  }
 }
 
 void PmsgClose() {
-  auto lock = std::unique_lock{pmsg_fd_lock};
   if (pmsg_fd > 0) {
     close(pmsg_fd);
   }
@@ -77,13 +83,7 @@ int PmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr)
     }
   }
 
-  auto lock = std::shared_lock{pmsg_fd_lock};
-
-  if (pmsg_fd <= 0) {
-    lock.unlock();
-    PmsgOpen();
-    lock.lock();
-  }
+  GetPmsgFd();
 
   if (pmsg_fd <= 0) {
     return -EBADF;
