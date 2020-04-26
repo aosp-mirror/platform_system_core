@@ -101,4 +101,5 @@ cc_test {
         "-Wno-unused-function",
         "-Wno-unused-parameter",
     ],
+    require_root: true,
 }
