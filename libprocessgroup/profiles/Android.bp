@@ -106,3 +106,7 @@ cc_test {
         },
     },
 }
+
+vts_config {
+    name: "VtsProcessgroupValidateTest",
+}
