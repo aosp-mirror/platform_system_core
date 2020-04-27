@@ -108,3 +108,6 @@ cc_test {
     defaults: ["liblp_test_defaults"],
 }
 
+vts_config {
+    name: "VtsKernelLiblpTest",
+}
