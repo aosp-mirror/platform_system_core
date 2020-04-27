@@ -42,7 +42,7 @@ Then enter one of the following sequences:
     $ adb push <source> <destination>
     $ adb reboot
 
-Note that you can replace these two lines:
+Note that you can replace these two lines in the above sequence:
 
     $ adb disable-verity
     $ adb reboot
@@ -51,7 +51,7 @@ with this line:
 
     $ adb remount -R
 
-**Note:** _adb reboot -R_ won’t reboot if the device is already in the adb remount state.
+**Note:** _adb remount -R_ won’t reboot if the device is already in the adb remount state.
 
 None of this changes if OverlayFS needs to be engaged.
 The decisions whether to use traditional direct file-system remount,
