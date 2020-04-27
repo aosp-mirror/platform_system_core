@@ -157,6 +157,7 @@ cc_test {
         "errors_test.cpp",
         "expected_test.cpp",
         "file_test.cpp",
+        "logging_splitters_test.cpp",
         "logging_test.cpp",
         "macros_test.cpp",
         "mapped_file_test.cpp",
