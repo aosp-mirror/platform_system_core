@@ -182,7 +182,7 @@ class _NODISCARD_ expected {
                 !std::is_same_v<unexpected<E>, std::remove_cv_t<std::remove_reference_t<U>>> &&
                 std::is_convertible_v<U&&, T> /* non-explicit */
                 )>
-  // NOLINTNEXTLINE(google-explicit-constructor)
+  // NOLINTNEXTLINE(google-explicit-constructor,bugprone-forwarding-reference-overload)
   constexpr expected(U&& v) : var_(std::in_place_index<0>, std::forward<U>(v)) {}
 
   template <class U = T _ENABLE_IF(
@@ -192,6 +192,7 @@ class _NODISCARD_ expected {
                 !std::is_same_v<unexpected<E>, std::remove_cv_t<std::remove_reference_t<U>>> &&
                 !std::is_convertible_v<U&&, T> /* explicit */
                 )>
+  // NOLINTNEXTLINE(bugprone-forwarding-reference-overload)
   constexpr explicit expected(U&& v) : var_(std::in_place_index<0>, T(std::forward<U>(v))) {}
 
   template<class G = E _ENABLE_IF(
@@ -607,7 +608,7 @@ class unexpected {
                 std::is_constructible_v<E, Err> &&
                 !std::is_same_v<std::remove_cv_t<std::remove_reference_t<E>>, std::in_place_t> &&
                 !std::is_same_v<std::remove_cv_t<std::remove_reference_t<E>>, unexpected>)>
-  // NOLINTNEXTLINE(google-explicit-constructor)
+  // NOLINTNEXTLINE(google-explicit-constructor,bugprone-forwarding-reference-overload)
   constexpr unexpected(Err&& e) : val_(std::forward<Err>(e)) {}
 
   template<class U, class... Args _ENABLE_IF(
