@@ -264,7 +264,7 @@ class IncrementalServer {
     char* pendingBlocks_ = nullptr;
 
     // True when client notifies that all the data has been received
-    bool servingComplete_;
+    bool servingComplete_ = false;
 };
 
 bool IncrementalServer::SkipToRequest(void* buffer, size_t* size, bool blocking) {

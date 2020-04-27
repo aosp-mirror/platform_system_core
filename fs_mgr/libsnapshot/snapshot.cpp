@@ -2685,5 +2685,9 @@ bool SnapshotManager::UpdateForwardMergeIndicator(bool wipe) {
     return true;
 }
 
+ISnapshotMergeStats* SnapshotManager::GetSnapshotMergeStatsInstance() {
+    return SnapshotMergeStats::GetInstance(*this);
+}
+
 }  // namespace snapshot
 }  // namespace android
