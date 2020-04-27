@@ -130,6 +130,7 @@ class Error {
 
   template <typename T>
   Error& operator<<(T&& t) {
+    // NOLINTNEXTLINE(bugprone-suspicious-semicolon)
     if constexpr (std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, ResultError>) {
       errno_ = t.code();
       return (*this) << t.message();
