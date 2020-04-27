@@ -62,6 +62,7 @@
 #include <fs_mgr_overlayfs.h>
 #include <fscrypt/fscrypt.h>
 #include <libdm/dm.h>
+#include <libdm/loop_control.h>
 #include <liblp/metadata_format.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
@@ -105,6 +106,7 @@ using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
 using android::dm::DmTargetLinear;
+using android::dm::LoopControl;
 
 // Realistically, this file should be part of the android::fs_mgr namespace;
 using namespace android::fs_mgr;
@@ -1908,19 +1910,6 @@ static bool PrepareZramDevice(const std::string& loop, off64_t size, const std::
         return InstallZramDevice(bdev);
     }
 
-    // Get free loopback
-    unique_fd loop_fd(TEMP_FAILURE_RETRY(open("/dev/loop-control", O_RDWR | O_CLOEXEC)));
-    if (loop_fd.get() == -1) {
-        PERROR << "Cannot open loop-control";
-        return false;
-    }
-
-    int num = ioctl(loop_fd.get(), LOOP_CTL_GET_FREE);
-    if (num == -1) {
-        PERROR << "Cannot get free loop slot";
-        return false;
-    }
-
     // Prepare target path
     unique_fd target_fd(TEMP_FAILURE_RETRY(open(loop.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600)));
     if (target_fd.get() == -1) {
@@ -1932,25 +1921,21 @@ static bool PrepareZramDevice(const std::string& loop, off64_t size, const std::
         return false;
     }
 
-    // Connect loopback (device_fd) to target path (target_fd)
-    std::string device = android::base::StringPrintf("/dev/block/loop%d", num);
-    unique_fd device_fd(TEMP_FAILURE_RETRY(open(device.c_str(), O_RDWR | O_CLOEXEC)));
-    if (device_fd.get() == -1) {
-        PERROR << "Cannot open /dev/block/loop" << num;
-        return false;
-    }
-
-    if (ioctl(device_fd.get(), LOOP_SET_FD, target_fd.get())) {
-        PERROR << "Cannot set loopback to target path";
+    // Allocate loop device and attach it to file_path.
+    LoopControl loop_control;
+    std::string device;
+    if (!loop_control.Attach(target_fd.get(), 5s, &device)) {
         return false;
     }
 
     // set block size & direct IO
-    if (ioctl(device_fd.get(), LOOP_SET_BLOCK_SIZE, 4096)) {
-        PWARNING << "Cannot set 4KB blocksize to /dev/block/loop" << num;
+    unique_fd device_fd(TEMP_FAILURE_RETRY(open(device.c_str(), O_RDWR | O_CLOEXEC)));
+    if (device_fd.get() == -1) {
+        PERROR << "Cannot open " << device;
+        return false;
     }
-    if (ioctl(device_fd.get(), LOOP_SET_DIRECT_IO, 1)) {
-        PWARNING << "Cannot set direct_io to /dev/block/loop" << num;
+    if (!LoopControl::EnableDirectIo(device_fd.get())) {
+        return false;
     }
 
     return InstallZramDevice(device);

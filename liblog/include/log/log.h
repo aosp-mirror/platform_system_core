@@ -29,7 +29,6 @@
 #include <log/log_id.h>
 #include <log/log_main.h>
 #include <log/log_radio.h>
-#include <log/log_read.h>
 #include <log/log_safetynet.h>
 #include <log/log_system.h>
 #include <log/log_time.h>
@@ -65,6 +64,13 @@ extern "C" {
 #endif
 
 /*
+ * The maximum size of the log entry payload that can be
+ * written to the logger. An attempt to write more than
+ * this amount will result in a truncated log entry.
+ */
+#define LOGGER_ENTRY_MAX_PAYLOAD 4068
+
+/*
  * Event logging.
  */
 
@@ -87,8 +93,6 @@ int __android_log_stats_bwrite(int32_t tag, const void* payload, size_t len);
 /*
  * Event log entry types.
  */
-#ifndef __AndroidEventLogType_defined
-#define __AndroidEventLogType_defined
 typedef enum {
   /* Special markers for android_log_list_element type */
   EVENT_TYPE_LIST_STOP = '\n', /* declare end of list  */
@@ -101,9 +105,6 @@ typedef enum {
   EVENT_TYPE_LIST = 3,
   EVENT_TYPE_FLOAT = 4,
 } AndroidEventLogType;
-#endif
-#define sizeof_AndroidEventLogType sizeof(typeof_AndroidEventLogType)
-#define typeof_AndroidEventLogType unsigned char
 
 #ifndef LOG_EVENT_INT
 #define LOG_EVENT_INT(_tag, _value)                                          \

@@ -165,15 +165,24 @@ libadb_srcs = [
     "adb_unique_fd.cpp",
     "adb_utils.cpp",
     "fdevent/fdevent.cpp",
-    "fdevent/fdevent_poll.cpp",
     "services.cpp",
     "sockets.cpp",
     "socket_spec.cpp",
     "sysdeps/errno.cpp",
     "transport.cpp",
     "transport_fd.cpp",
-    "transport_local.cpp",
     "types.cpp",
+]
+
+libadb_darwin_srcs = [
+    "fdevent/fdevent_poll.cpp",
+]
+
+libadb_windows_srcs = [
+    "fdevent/fdevent_poll.cpp",
+    "sysdeps_win32.cpp",
+    "sysdeps/win32/errno.cpp",
+    "sysdeps/win32/stat.cpp",
 ]
 
 libadb_posix_srcs = [
@@ -207,6 +216,7 @@ cc_library_host_static {
         "client/adb_wifi.cpp",
         "client/usb_libusb.cpp",
         "client/usb_dispatch.cpp",
+        "client/transport_local.cpp",
         "client/transport_mdns.cpp",
         "client/transport_usb.cpp",
         "client/pairing/pairing_client.cpp",
@@ -219,7 +229,7 @@ cc_library_host_static {
             srcs: ["client/usb_linux.cpp"] + libadb_linux_srcs,
         },
         darwin: {
-            srcs: ["client/usb_osx.cpp"],
+            srcs: ["client/usb_osx.cpp"] + libadb_darwin_srcs,
         },
         not_windows: {
             srcs: libadb_posix_srcs,
@@ -228,10 +238,7 @@ cc_library_host_static {
             enabled: true,
             srcs: [
                 "client/usb_windows.cpp",
-                "sysdeps_win32.cpp",
-                "sysdeps/win32/errno.cpp",
-                "sysdeps/win32/stat.cpp",
-            ],
+            ] + libadb_windows_srcs,
             shared_libs: ["AdbWinApi"],
         },
     },
@@ -383,10 +390,11 @@ cc_library_static {
     compile_multilib: "both",
 
     srcs: libadb_srcs + libadb_linux_srcs + libadb_posix_srcs + [
+        "daemon/adb_wifi.cpp",
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
         "daemon/logging.cpp",
-        "daemon/adb_wifi.cpp",
+        "daemon/transport_local.cpp",
     ],
 
     generated_headers: ["platform_tools_version"],
@@ -585,7 +593,6 @@ cc_library {
 cc_binary {
     name: "adbd",
     defaults: ["adbd_defaults", "host_adbd_supported", "libadbd_binary_dependencies"],
-    stl: "libc++_static",
     recovery_available: true,
     apex_available: ["com.android.adbd"],
 
@@ -695,6 +702,7 @@ cc_test {
         "daemon/shell_service_test.cpp",
         "shell_service_protocol.cpp",
         "shell_service_protocol_test.cpp",
+        "mdns_test.cpp",
     ],
 
     shared_libs: [
