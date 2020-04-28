@@ -164,10 +164,8 @@ storaged_t::storaged_t(void) {
 }
 
 void storaged_t::add_user_ce(userid_t user_id) {
-    if (!proto_loaded[user_id]) {
-        load_proto(user_id);
-        proto_loaded[user_id] = true;
-    }
+    load_proto(user_id);
+    proto_loaded[user_id] = true;
 }
 
 void storaged_t::remove_user_ce(userid_t user_id) {

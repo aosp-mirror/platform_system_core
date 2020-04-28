@@ -16,29 +16,26 @@
 
 #pragma once
 
+#include "android-base/macros.h"
+#include "android-base/off64_t.h"
+
 #include <sys/types.h>
 
 #include <memory>
-
-#include "android-base/macros.h"
-#include "android-base/off64_t.h"
-#include "android-base/unique_fd.h"
 
 #if defined(_WIN32)
 #include <windows.h>
 #define PROT_READ 1
 #define PROT_WRITE 2
-using os_handle = HANDLE;
 #else
 #include <sys/mman.h>
-using os_handle = int;
 #endif
 
 namespace android {
 namespace base {
 
 /**
- * A region of a file mapped into memory (for grepping: also known as MmapFile or file mapping).
+ * A region of a file mapped into memory.
  */
 class MappedFile {
  public:
@@ -47,36 +44,18 @@ class MappedFile {
    * `offset` does not need to be page-aligned. If `PROT_WRITE` is set in `prot`, the mapping
    * will be writable, otherwise it will be read-only. Mappings are always `MAP_SHARED`.
    */
-  static std::unique_ptr<MappedFile> FromFd(borrowed_fd fd, off64_t offset, size_t length,
-                                            int prot);
-
-  /**
-   * Same thing, but using the raw OS file handle instead of a CRT wrapper.
-   */
-  static MappedFile FromOsHandle(os_handle h, off64_t offset, size_t length, int prot);
+  static std::unique_ptr<MappedFile> FromFd(int fd, off64_t offset, size_t length, int prot);
 
   /**
    * Removes the mapping.
    */
   ~MappedFile();
 
-  /**
-   * Not copyable but movable.
-   */
-  MappedFile(MappedFile&& other);
-  MappedFile& operator=(MappedFile&& other);
-
-  char* data() const { return base_ + offset_; }
-  size_t size() const { return size_; }
-
-  bool isValid() const { return base_ != nullptr; }
-
-  explicit operator bool() const { return isValid(); }
+  char* data() { return base_ + offset_; }
+  size_t size() { return size_; }
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(MappedFile);
-
-  void Close();
 
   char* base_;
   size_t size_;

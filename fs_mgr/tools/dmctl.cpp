@@ -38,7 +38,15 @@
 #include <vector>
 
 using namespace std::literals::string_literals;
-using namespace android::dm;
+
+using DeviceMapper = ::android::dm::DeviceMapper;
+using DmTable = ::android::dm::DmTable;
+using DmTarget = ::android::dm::DmTarget;
+using DmTargetLinear = ::android::dm::DmTargetLinear;
+using DmTargetZero = ::android::dm::DmTargetZero;
+using DmTargetAndroidVerity = ::android::dm::DmTargetAndroidVerity;
+using DmTargetBow = ::android::dm::DmTargetBow;
+using DmTargetTypeInfo = ::android::dm::DmTargetTypeInfo;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
 static int Usage(void) {
@@ -49,10 +57,6 @@ static int Usage(void) {
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets> [-v]" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
-    std::cerr << "  info <dm-name>" << std::endl;
-    std::cerr << "  status <dm-name>" << std::endl;
-    std::cerr << "  resume <dm-name>" << std::endl;
-    std::cerr << "  suspend <dm-name>" << std::endl;
     std::cerr << "  table <dm-name>" << std::endl;
     std::cerr << "  help" << std::endl;
     std::cerr << std::endl;
@@ -118,62 +122,6 @@ class TargetParser final {
             }
             std::string block_device = NextArg();
             return std::make_unique<DmTargetBow>(start_sector, num_sectors, block_device);
-        } else if (target_type == "snapshot-origin") {
-            if (!HasArgs(1)) {
-                std::cerr << "Expected \"snapshot-origin\" <block_device>" << std::endl;
-                return nullptr;
-            }
-            std::string block_device = NextArg();
-            return std::make_unique<DmTargetSnapshotOrigin>(start_sector, num_sectors,
-                                                            block_device);
-        } else if (target_type == "snapshot") {
-            if (!HasArgs(4)) {
-                std::cerr
-                        << "Expected \"snapshot\" <block_device> <block_device> <mode> <chunk_size>"
-                        << std::endl;
-                return nullptr;
-            }
-            std::string base_device = NextArg();
-            std::string cow_device = NextArg();
-            std::string mode_str = NextArg();
-            std::string chunk_size_str = NextArg();
-
-            SnapshotStorageMode mode;
-            if (mode_str == "P") {
-                mode = SnapshotStorageMode::Persistent;
-            } else if (mode_str == "N") {
-                mode = SnapshotStorageMode::Transient;
-            } else {
-                std::cerr << "Unrecognized mode: " << mode_str << "\n";
-                return nullptr;
-            }
-
-            uint32_t chunk_size;
-            if (!android::base::ParseUint(chunk_size_str, &chunk_size)) {
-                std::cerr << "Chunk size must be an unsigned integer.\n";
-                return nullptr;
-            }
-            return std::make_unique<DmTargetSnapshot>(start_sector, num_sectors, base_device,
-                                                      cow_device, mode, chunk_size);
-        } else if (target_type == "snapshot-merge") {
-            if (!HasArgs(3)) {
-                std::cerr
-                        << "Expected \"snapshot-merge\" <block_device> <block_device> <chunk_size>"
-                        << std::endl;
-                return nullptr;
-            }
-            std::string base_device = NextArg();
-            std::string cow_device = NextArg();
-            std::string chunk_size_str = NextArg();
-            SnapshotStorageMode mode = SnapshotStorageMode::Merge;
-
-            uint32_t chunk_size;
-            if (!android::base::ParseUint(chunk_size_str, &chunk_size)) {
-                std::cerr << "Chunk size must be an unsigned integer.\n";
-                return nullptr;
-            }
-            return std::make_unique<DmTargetSnapshot>(start_sector, num_sectors, base_device,
-                                                      cow_device, mode, chunk_size);
         } else {
             std::cerr << "Unrecognized target type: " << target_type << std::endl;
             return nullptr;
@@ -197,12 +145,19 @@ class TargetParser final {
     char** argv_;
 };
 
-static bool parse_table_args(DmTable* table, int argc, char** argv) {
+static int DmCreateCmdHandler(int argc, char** argv) {
+    if (argc < 1) {
+        std::cerr << "Usage: dmctl create <dm-name> [-ro] <targets...>" << std::endl;
+        return -EINVAL;
+    }
+    std::string name = argv[0];
+
     // Parse extended options first.
+    DmTable table;
     int arg_index = 1;
     while (arg_index < argc && argv[arg_index][0] == '-') {
         if (strcmp(argv[arg_index], "-ro") == 0) {
-            table->set_readonly(true);
+            table.set_readonly(true);
             arg_index++;
         } else {
             std::cerr << "Unrecognized option: " << argv[arg_index] << std::endl;
@@ -214,29 +169,14 @@ static bool parse_table_args(DmTable* table, int argc, char** argv) {
     TargetParser parser(argc - arg_index, argv + arg_index);
     while (parser.More()) {
         std::unique_ptr<DmTarget> target = parser.Next();
-        if (!target || !table->AddTarget(std::move(target))) {
+        if (!target || !table.AddTarget(std::move(target))) {
             return -EINVAL;
         }
     }
 
-    if (table->num_targets() == 0) {
+    if (table.num_targets() == 0) {
         std::cerr << "Must define at least one target." << std::endl;
         return -EINVAL;
-    }
-    return 0;
-}
-
-static int DmCreateCmdHandler(int argc, char** argv) {
-    if (argc < 1) {
-        std::cerr << "Usage: dmctl create <dm-name> [-ro] <targets...>" << std::endl;
-        return -EINVAL;
-    }
-    std::string name = argv[0];
-
-    DmTable table;
-    int ret = parse_table_args(&table, argc, argv);
-    if (ret) {
-        return ret;
     }
 
     DeviceMapper& dm = DeviceMapper::Instance();
@@ -260,27 +200,6 @@ static int DmDeleteCmdHandler(int argc, char** argv) {
         return -EIO;
     }
 
-    return 0;
-}
-
-static int DmReplaceCmdHandler(int argc, char** argv) {
-    if (argc < 1) {
-        std::cerr << "Usage: dmctl replace <dm-name> <targets...>" << std::endl;
-        return -EINVAL;
-    }
-    std::string name = argv[0];
-
-    DmTable table;
-    int ret = parse_table_args(&table, argc, argv);
-    if (ret) {
-        return ret;
-    }
-
-    DeviceMapper& dm = DeviceMapper::Instance();
-    if (!dm.LoadTableAndActivate(name, table)) {
-        std::cerr << "Failed to replace device-mapper table to: " << name << std::endl;
-        return -EIO;
-    }
     return 0;
 }
 
@@ -389,42 +308,7 @@ static int GetPathCmdHandler(int argc, char** argv) {
     return 0;
 }
 
-static int InfoCmdHandler(int argc, char** argv) {
-    if (argc != 1) {
-        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
-        return -EINVAL;
-    }
-
-    DeviceMapper& dm = DeviceMapper::Instance();
-    auto info = dm.GetDetailedInfo(argv[0]);
-    if (!info) {
-        std::cerr << "Invalid device \"" << argv[0] << "\"." << std::endl;
-        return -EINVAL;
-    }
-
-    constexpr int spacing = 14;
-    std::cout << std::left << std::setw(spacing) << "device"
-              << ": " << argv[0] << std::endl;
-    std::cout << std::left << std::setw(spacing) << "active"
-              << ": " << std::boolalpha << !info->IsSuspended() << std::endl;
-    std::cout << std::left << std::setw(spacing) << "access"
-              << ": ";
-    if (info->IsReadOnly()) {
-        std::cout << "ro ";
-    } else {
-        std::cout << "rw ";
-    }
-    std::cout << std::endl;
-    std::cout << std::left << std::setw(spacing) << "activeTable"
-              << ": " << std::boolalpha << info->IsActiveTablePresent() << std::endl;
-    std::cout << std::left << std::setw(spacing) << "inactiveTable"
-              << ": " << std::boolalpha << info->IsInactiveTablePresent() << std::endl;
-    std::cout << std::left << std::setw(spacing) << "bufferFull"
-              << ": " << std::boolalpha << info->IsBufferFull() << std::endl;
-    return 0;
-}
-
-static int DumpTable(const std::string& mode, int argc, char** argv) {
+static int TableCmdHandler(int argc, char** argv) {
     if (argc != 1) {
         std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
         return -EINVAL;
@@ -432,18 +316,9 @@ static int DumpTable(const std::string& mode, int argc, char** argv) {
 
     DeviceMapper& dm = DeviceMapper::Instance();
     std::vector<DeviceMapper::TargetInfo> table;
-    if (mode == "status") {
-        if (!dm.GetTableStatus(argv[0], &table)) {
-            std::cerr << "Could not query table status of device \"" << argv[0] << "\"."
-                      << std::endl;
-            return -EINVAL;
-        }
-    } else if (mode == "table") {
-        if (!dm.GetTableInfo(argv[0], &table)) {
-            std::cerr << "Could not query table status of device \"" << argv[0] << "\"."
-                      << std::endl;
-            return -EINVAL;
-        }
+    if (!dm.GetTableInfo(argv[0], &table)) {
+        std::cerr << "Could not query table status of device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
     }
     std::cout << "Targets in the device-mapper table for " << argv[0] << ":" << std::endl;
     for (const auto& target : table) {
@@ -458,55 +333,14 @@ static int DumpTable(const std::string& mode, int argc, char** argv) {
     return 0;
 }
 
-static int TableCmdHandler(int argc, char** argv) {
-    return DumpTable("table", argc, argv);
-}
-
-static int StatusCmdHandler(int argc, char** argv) {
-    return DumpTable("status", argc, argv);
-}
-
-static int ResumeCmdHandler(int argc, char** argv) {
-    if (argc != 1) {
-        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
-        return -EINVAL;
-    }
-
-    DeviceMapper& dm = DeviceMapper::Instance();
-    if (!dm.ChangeState(argv[0], DmDeviceState::ACTIVE)) {
-        std::cerr << "Could not resume device \"" << argv[0] << "\"." << std::endl;
-        return -EINVAL;
-    }
-    return 0;
-}
-
-static int SuspendCmdHandler(int argc, char** argv) {
-    if (argc != 1) {
-        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
-        return -EINVAL;
-    }
-
-    DeviceMapper& dm = DeviceMapper::Instance();
-    if (!dm.ChangeState(argv[0], DmDeviceState::SUSPENDED)) {
-        std::cerr << "Could not suspend device \"" << argv[0] << "\"." << std::endl;
-        return -EINVAL;
-    }
-    return 0;
-}
-
 static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         // clang-format off
         {"create", DmCreateCmdHandler},
         {"delete", DmDeleteCmdHandler},
-        {"replace", DmReplaceCmdHandler},
         {"list", DmListCmdHandler},
         {"help", HelpCmdHandler},
         {"getpath", GetPathCmdHandler},
-        {"info", InfoCmdHandler},
         {"table", TableCmdHandler},
-        {"status", StatusCmdHandler},
-        {"resume", ResumeCmdHandler},
-        {"suspend", SuspendCmdHandler},
         // clang-format on
 };
 

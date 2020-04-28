@@ -17,12 +17,7 @@
 #ifndef ANDROID_TRACE_H
 #define ANDROID_TRACE_H
 
-#if defined(_WIN32)
-
-#define ATRACE_NAME(...)
-#define ATRACE_CALL()
-
-#else  // !_WIN32
+#if defined(__ANDROID__)
 
 #include <stdint.h>
 
@@ -33,7 +28,7 @@
 // ATRACE_NAME traces from its location until the end of its enclosing scope.
 #define _PASTE(x, y) x ## y
 #define PASTE(x, y) _PASTE(x,y)
-#define ATRACE_NAME(name) ::android::ScopedTrace PASTE(___tracer, __LINE__)(ATRACE_TAG, name)
+#define ATRACE_NAME(name) android::ScopedTrace PASTE(___tracer, __LINE__) (ATRACE_TAG, name)
 
 // ATRACE_CALL is an ATRACE_NAME that uses the current function name.
 #define ATRACE_CALL() ATRACE_NAME(__FUNCTION__)
@@ -56,6 +51,11 @@ private:
 
 }  // namespace android
 
-#endif  // _WIN32
+#else // !__ANDROID__
+
+#define ATRACE_NAME(...)
+#define ATRACE_CALL()
+
+#endif // __ANDROID__
 
 #endif // ANDROID_TRACE_H

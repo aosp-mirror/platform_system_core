@@ -1,0 +1,2 @@
+libfoo.product1.so
+libbar.product1.so

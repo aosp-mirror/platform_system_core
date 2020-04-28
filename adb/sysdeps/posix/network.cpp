@@ -104,13 +104,13 @@ static int _network_loopback_server(bool ipv6, int port, int type, std::string* 
     socklen_t addrlen = sizeof(addr_storage);
     sockaddr* addr = (ipv6 ? loopback_addr6 : loopback_addr4)(&addr_storage, &addrlen, port);
 
-    if (bind(s.get(), addr, addrlen) != 0) {
+    if (bind(s, addr, addrlen) != 0) {
         set_error(error);
         return -1;
     }
 
     if (type == SOCK_STREAM || type == SOCK_SEQPACKET) {
-        if (listen(s.get(), SOMAXCONN) != 0) {
+        if (listen(s, SOMAXCONN) != 0) {
             set_error(error);
             return -1;
         }

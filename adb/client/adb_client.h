@@ -16,13 +16,12 @@
 
 #pragma once
 
-#include <optional>
-#include <string>
-
 #include "adb.h"
-#include "adb_unique_fd.h"
 #include "sysdeps.h"
 #include "transport.h"
+
+#include <optional>
+#include <string>
 
 // Explicitly check the adb server version.
 // All of the commands below do this implicitly.
@@ -34,11 +33,7 @@ bool adb_check_server_version(std::string* _Nonnull error);
 int adb_connect(std::string_view service, std::string* _Nonnull error);
 
 // Same as above, except returning the TransportId for the service that we've connected to.
-// force_switch_device forces the function to attempt to select a device, even if the service
-// string appears to be a host: service (for use with host services that are device specific, like
-// forward).
-int adb_connect(TransportId* _Nullable id, std::string_view service, std::string* _Nonnull error,
-                bool force_switch_device = false);
+int adb_connect(TransportId* _Nullable id, std::string_view service, std::string* _Nonnull error);
 
 // Kill the currently running adb server, if it exists.
 bool adb_kill_server();
@@ -69,7 +64,7 @@ int adb_send_emulator_command(int argc, const char* _Nonnull* _Nonnull argv,
 
 // Reads a standard adb status response (OKAY|FAIL) and returns true in the
 // event of OKAY, false in the event of FAIL or protocol error.
-bool adb_status(borrowed_fd fd, std::string* _Nonnull error);
+bool adb_status(int fd, std::string* _Nonnull error);
 
 // Create a host command corresponding to selected transport type/serial.
 std::string format_host_command(const char* _Nonnull command);

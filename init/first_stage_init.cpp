@@ -24,18 +24,15 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include <filesystem>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <modprobe/modprobe.h>
 #include <private/android_filesystem_config.h>
 
 #include "debug_ramdisk.h"
@@ -78,7 +75,7 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
 
             if (S_ISDIR(info.st_mode)) {
                 is_dir = true;
-                auto fd = openat(dfd, de->d_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+                auto fd = openat(dfd, de->d_name, O_RDONLY | O_DIRECTORY);
                 if (fd >= 0) {
                     auto subdir =
                             std::unique_ptr<DIR, decltype(&closedir)>{fdopendir(fd), closedir};
@@ -94,50 +91,9 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
     }
 }
 
-void StartConsole() {
-    if (mknod("/dev/console", S_IFCHR | 0600, makedev(5, 1))) {
-        PLOG(ERROR) << "unable to create /dev/console";
-        return;
-    }
-    pid_t pid = fork();
-    if (pid != 0) {
-        int status;
-        waitpid(pid, &status, 0);
-        LOG(ERROR) << "console shell exited with status " << status;
-        return;
-    }
-    int fd = -1;
-    int tries = 10;
-    // The device driver for console may not be ready yet so retry for a while in case of failure.
-    while (tries--) {
-        fd = open("/dev/console", O_RDWR);
-        if (fd != -1) {
-            break;
-        }
-        std::this_thread::sleep_for(100ms);
-    }
-    if (fd == -1) {
-        LOG(ERROR) << "Could not open /dev/console, errno = " << errno;
-        _exit(127);
-    }
-    ioctl(fd, TIOCSCTTY, 0);
-    dup2(fd, STDIN_FILENO);
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
-    close(fd);
-
-    const char* path = "/system/bin/sh";
-    const char* args[] = {path, nullptr};
-    int rv = execv(path, const_cast<char**>(args));
-    LOG(ERROR) << "unable to execv, returned " << rv << " errno " << errno;
-    _exit(127);
-}
-
-bool FirstStageConsole(const std::string& cmdline) {
-    return cmdline.find("androidboot.first_stage_console=1") != std::string::npos;
-}
-
-bool ForceNormalBoot(const std::string& cmdline) {
+bool ForceNormalBoot() {
+    std::string cmdline;
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
     return cmdline.find("androidboot.force_normal_boot=1") != std::string::npos;
 }
 
@@ -152,7 +108,7 @@ int FirstStageMain(int argc, char** argv) {
 
     std::vector<std::pair<std::string, int>> errors;
 #define CHECKCALL(x) \
-    if ((x) != 0) errors.emplace_back(#x " failed", errno);
+    if (x != 0) errors.emplace_back(#x " failed", errno);
 
     // Clear the umask.
     umask(0);
@@ -170,8 +126,6 @@ int FirstStageMain(int argc, char** argv) {
 #undef MAKE_STR
     // Don't expose the raw commandline to unprivileged processes.
     CHECKCALL(chmod("/proc/cmdline", 0440));
-    std::string cmdline;
-    android::base::ReadFileToString("/proc/cmdline", &cmdline);
     gid_t groups[] = {AID_READPROC};
     CHECKCALL(setgroups(arraysize(groups), groups));
     CHECKCALL(mount("sysfs", "/sys", "sysfs", 0, NULL));
@@ -238,21 +192,7 @@ int FirstStageMain(int argc, char** argv) {
         old_root_dir.reset();
     }
 
-    Modprobe m({"/lib/modules"});
-    auto want_console = ALLOW_FIRST_STAGE_CONSOLE && FirstStageConsole(cmdline);
-    if (!m.LoadListedModules(!want_console)) {
-        if (want_console) {
-            LOG(ERROR) << "Failed to load kernel modules, starting console";
-        } else {
-            LOG(FATAL) << "Failed to load kernel modules";
-        }
-    }
-
-    if (want_console) {
-        StartConsole();
-    }
-
-    if (ForceNormalBoot(cmdline)) {
+    if (ForceNormalBoot()) {
         mkdir("/first_stage_ramdisk", 0755);
         // SwitchRoot() must be called with a mount point as the target, so we bind mount the
         // target directory to itself here.
@@ -291,15 +231,12 @@ int FirstStageMain(int argc, char** argv) {
 
     SetInitAvbVersionInRecovery();
 
-    setenv(kEnvFirstStageStartedAt, std::to_string(start_time.time_since_epoch().count()).c_str(),
-           1);
+    static constexpr uint32_t kNanosecondsPerMillisecond = 1e6;
+    uint64_t start_ms = start_time.time_since_epoch().count() / kNanosecondsPerMillisecond;
+    setenv("INIT_STARTED_AT", std::to_string(start_ms).c_str(), 1);
 
     const char* path = "/system/bin/init";
     const char* args[] = {path, "selinux_setup", nullptr};
-    auto fd = open("/dev/kmsg", O_WRONLY | O_CLOEXEC);
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
-    close(fd);
     execv(path, const_cast<char**>(args));
 
     // execv() only returns if an error happened, in which case we

@@ -20,7 +20,8 @@
 
 #include <gtest/gtest.h>
 
-#include "MemoryCache.h"
+#include <unwindstack/Memory.h>
+
 #include "MemoryFake.h"
 
 namespace unwindstack {

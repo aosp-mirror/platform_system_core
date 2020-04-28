@@ -47,7 +47,7 @@ typedef struct __attribute__((__packed__)) {
 
 /* Header Structure to logd, and second header for pstore */
 typedef struct __attribute__((__packed__)) {
-  uint8_t id;
+  typeof_log_id_t id;
   uint16_t tid;
   log_time realtime;
 } android_log_header_t;
@@ -56,18 +56,6 @@ typedef struct __attribute__((__packed__)) {
 typedef struct __attribute__((__packed__)) {
   int32_t tag;  // Little Endian Order
 } android_event_header_t;
-
-// Event payload EVENT_TYPE_LIST
-typedef struct __attribute__((__packed__)) {
-  int8_t type;  // EVENT_TYPE_LIST
-  int8_t element_count;
-} android_event_list_t;
-
-// Event payload EVENT_TYPE_FLOAT
-typedef struct __attribute__((__packed__)) {
-  int8_t type;  // EVENT_TYPE_FLOAT
-  float data;
-} android_event_float_t;
 
 /* Event payload EVENT_TYPE_INT */
 typedef struct __attribute__((__packed__)) {

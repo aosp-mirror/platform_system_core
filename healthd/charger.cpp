@@ -14,18 +14,13 @@
  * limitations under the License.
  */
 
-#include "charger.sysprop.h"
 #include "healthd_mode_charger.h"
 #include "healthd_mode_charger_nops.h"
 
-#ifndef CHARGER_FORCE_NO_UI
-#define CHARGER_FORCE_NO_UI 0
-#endif
-
 int main(int argc, char** argv) {
-    if (CHARGER_FORCE_NO_UI || android::sysprop::ChargerProperties::no_ui().value_or(false)) {
-        return healthd_charger_nops(argc, argv);
-    } else {
-        return healthd_charger_main(argc, argv);
-    }
+#ifdef CHARGER_NO_UI
+    return healthd_charger_nops(argc, argv);
+#else
+    return healthd_charger_main(argc, argv);
+#endif
 }

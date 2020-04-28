@@ -17,7 +17,6 @@
 #include <inttypes.h>
 #include <linux/dma-buf.h>
 #include <poll.h>
-#include <string.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -231,7 +230,7 @@ class DmaBufTester : public ::testing::Test {
     DmaBufTester() : ion_fd(ion_open()), ion_heap_mask(get_ion_heap_mask()) {}
 
     ~DmaBufTester() {
-        if (ion_fd >= 0) {
+        if (is_valid()) {
             ion_close(ion_fd);
         }
     }
@@ -242,16 +241,12 @@ class DmaBufTester : public ::testing::Test {
         int fd;
         int err = ion_alloc_fd(ion_fd, size, 0, ion_heap_mask, 0, &fd);
         if (err < 0) {
-            printf("Failed ion_alloc_fd, return value: %d\n", err);
-            return unique_fd{};
+            return unique_fd{err};
         }
 
         if (!name.empty()) {
-            if (ioctl(fd, DMA_BUF_SET_NAME, name.c_str()) == -1) {
-                printf("Failed ioctl(DMA_BUF_SET_NAME): %s\n", strerror(errno));
-                close(fd);
-                return unique_fd{};
-            }
+            err = ioctl(fd, DMA_BUF_SET_NAME, name.c_str());
+            if (err < 0) return unique_fd{-errno};
         }
 
         return unique_fd{fd};
@@ -311,7 +306,7 @@ class DmaBufTester : public ::testing::Test {
         return ret;
     }
 
-    int ion_fd;
+    unique_fd ion_fd;
     const int ion_heap_mask;
 };
 

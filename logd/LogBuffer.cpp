@@ -1185,7 +1185,7 @@ log_time LogBuffer::flushTo(SocketClient* reader, const log_time& start,
         unlock();
 
         // range locking in LastLogTimes looks after us
-        curr = element->flushTo(reader, this, sameTid);
+        curr = element->flushTo(reader, this, privileged, sameTid);
 
         if (curr == element->FLUSH_ERROR) {
             return curr;

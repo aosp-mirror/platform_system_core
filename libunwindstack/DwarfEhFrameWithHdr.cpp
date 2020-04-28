@@ -32,19 +32,14 @@ static inline bool IsEncodingRelative(uint8_t encoding) {
 }
 
 template <typename AddressType>
-bool DwarfEhFrameWithHdr<AddressType>::EhFrameInit(uint64_t offset, uint64_t size,
-                                                   int64_t section_bias) {
-  return DwarfSectionImpl<AddressType>::Init(offset, size, section_bias);
-}
+bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t size, uint64_t load_bias) {
+  load_bias_ = load_bias;
 
-template <typename AddressType>
-bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t, int64_t section_bias) {
   memory_.clear_func_offset();
   memory_.clear_text_offset();
   memory_.set_data_offset(offset);
   memory_.set_cur_offset(offset);
-
-  hdr_section_bias_ = section_bias;
+  pc_offset_ = offset;
 
   // Read the first four bytes all at once.
   uint8_t data[4];
@@ -61,7 +56,7 @@ bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t, int64_t s
     return false;
   }
 
-  uint8_t ptr_encoding = data[1];
+  ptr_encoding_ = data[1];
   uint8_t fde_count_encoding = data[2];
   table_encoding_ = data[3];
   table_entry_size_ = memory_.template GetEncodedSize<AddressType>(table_encoding_);
@@ -75,8 +70,7 @@ bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t, int64_t s
   }
 
   memory_.set_pc_offset(memory_.cur_offset());
-  uint64_t ptr_offset;
-  if (!memory_.template ReadEncodedValue<AddressType>(ptr_encoding, &ptr_offset)) {
+  if (!memory_.template ReadEncodedValue<AddressType>(ptr_encoding_, &ptr_offset_)) {
     last_error_.code = DWARF_ERROR_MEMORY_INVALID;
     last_error_.address = memory_.cur_offset();
     return false;
@@ -94,8 +88,10 @@ bool DwarfEhFrameWithHdr<AddressType>::Init(uint64_t offset, uint64_t, int64_t s
     return false;
   }
 
-  hdr_entries_offset_ = memory_.cur_offset();
-  hdr_entries_data_offset_ = offset;
+  entries_offset_ = memory_.cur_offset();
+  entries_end_ = offset + size;
+  entries_data_offset_ = offset;
+  cur_entries_offset_ = entries_offset_;
 
   return true;
 }
@@ -109,16 +105,6 @@ const DwarfFde* DwarfEhFrameWithHdr<AddressType>::GetFdeFromPc(uint64_t pc) {
   const DwarfFde* fde = this->GetFdeFromOffset(fde_offset);
   if (fde == nullptr) {
     return nullptr;
-  }
-
-  // There is a possibility that this entry points to a zero length FDE
-  // due to a bug. If this happens, try and find the non-zero length FDE
-  // from eh_frame directly. See b/142483624.
-  if (fde->pc_start == fde->pc_end) {
-    fde = DwarfSectionImpl<AddressType>::GetFdeFromPc(pc);
-    if (fde == nullptr) {
-      return nullptr;
-    }
   }
 
   // Guaranteed pc >= pc_start, need to check pc in the fde range.
@@ -138,8 +124,8 @@ DwarfEhFrameWithHdr<AddressType>::GetFdeInfoFromIndex(size_t index) {
   }
   FdeInfo* info = &fde_info_[index];
 
-  memory_.set_data_offset(hdr_entries_data_offset_);
-  memory_.set_cur_offset(hdr_entries_offset_ + 2 * index * table_entry_size_);
+  memory_.set_data_offset(entries_data_offset_);
+  memory_.set_cur_offset(entries_offset_ + 2 * index * table_entry_size_);
   memory_.set_pc_offset(0);
   uint64_t value;
   if (!memory_.template ReadEncodedValue<AddressType>(table_encoding_, &value) ||
@@ -152,7 +138,7 @@ DwarfEhFrameWithHdr<AddressType>::GetFdeInfoFromIndex(size_t index) {
 
   // Relative encodings require adding in the load bias.
   if (IsEncodingRelative(table_encoding_)) {
-    value += hdr_section_bias_;
+    value += load_bias_;
   }
   info->pc = value;
   return info;
@@ -203,16 +189,6 @@ void DwarfEhFrameWithHdr<AddressType>::GetFdes(std::vector<const DwarfFde*>* fde
     const DwarfFde* fde = this->GetFdeFromOffset(info->offset);
     if (fde == nullptr) {
       break;
-    }
-
-    // There is a possibility that this entry points to a zero length FDE
-    // due to a bug. If this happens, try and find the non-zero length FDE
-    // from eh_frame directly. See b/142483624.
-    if (fde->pc_start == fde->pc_end) {
-      const DwarfFde* fde_real = DwarfSectionImpl<AddressType>::GetFdeFromPc(fde->pc_start);
-      if (fde_real != nullptr) {
-        fde = fde_real;
-      }
     }
     fdes->push_back(fde);
   }

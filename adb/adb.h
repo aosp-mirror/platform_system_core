@@ -26,7 +26,7 @@
 #include <android-base/macros.h>
 
 #include "adb_trace.h"
-#include "fdevent/fdevent.h"
+#include "fdevent.h"
 #include "socket.h"
 #include "types.h"
 #include "usb.h"

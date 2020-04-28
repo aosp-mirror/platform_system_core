@@ -88,19 +88,26 @@
 
 using namespace std::chrono_literals;
 
+enum class FileWaitMode { Exists, DoesNotExist };
+
+bool fs_mgr_wait_for_file(const std::string& filename,
+                          const std::chrono::milliseconds relative_timeout,
+                          FileWaitMode wait_mode = FileWaitMode::Exists);
+
 bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly = true);
 bool fs_mgr_update_for_slotselect(android::fs_mgr::Fstab* fstab);
 bool fs_mgr_is_device_unlocked();
 const std::string& get_android_dt_dir();
 bool is_dt_compatible();
+int load_verity_state(const android::fs_mgr::FstabEntry& entry, int* mode);
 
 bool fs_mgr_is_ext4(const std::string& blk_device);
 bool fs_mgr_is_f2fs(const std::string& blk_device);
 
-bool fs_mgr_teardown_verity(android::fs_mgr::FstabEntry* fstab);
+bool fs_mgr_teardown_verity(android::fs_mgr::FstabEntry* fstab, bool wait);
 
 namespace android {
 namespace fs_mgr {
-bool UnmapDevice(const std::string& name);
+bool UnmapDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms);
 }  // namespace fs_mgr
 }  // namespace android

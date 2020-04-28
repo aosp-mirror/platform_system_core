@@ -39,11 +39,7 @@ extern "C" {
 
 /* Current metadata version. */
 #define LP_METADATA_MAJOR_VERSION 10
-#define LP_METADATA_MINOR_VERSION_MIN 0
-#define LP_METADATA_MINOR_VERSION_MAX 1
-
-/* Metadata version needed to use the UPDATED partition attribute. */
-#define LP_METADATA_VERSION_FOR_UPDATED_ATTR 1
+#define LP_METADATA_MINOR_VERSION 0
 
 /* Attributes for the LpMetadataPartition::attributes field.
  *
@@ -62,20 +58,8 @@ extern "C" {
  */
 #define LP_PARTITION_ATTR_SLOT_SUFFIXED (1 << 1)
 
-/* This flag is applied automatically when using MetadataBuilder::NewForUpdate.
- * It signals that the partition was created (or modified) for a snapshot-based
- * update. If this flag is not present, the partition was likely flashed via
- * fastboot.
- */
-#define LP_PARTITION_ATTR_UPDATED (1 << 2)
-
-/* Mask that defines all valid attributes. When changing this, make sure to
- * update ParseMetadata().
- */
-#define LP_PARTITION_ATTRIBUTE_MASK_V0 \
-    (LP_PARTITION_ATTR_READONLY | LP_PARTITION_ATTR_SLOT_SUFFIXED)
-#define LP_PARTITION_ATTRIBUTE_MASK_V1 (LP_PARTITION_ATTRIBUTE_MASK_V0 | LP_PARTITION_ATTR_UPDATED)
-#define LP_PARTITION_ATTRIBUTE_MASK LP_PARTITION_ATTRIBUTE_MASK_V1
+/* Mask that defines all valid attributes. */
+#define LP_PARTITION_ATTRIBUTE_MASK (LP_PARTITION_ATTR_READONLY | LP_PARTITION_ATTR_SLOT_SUFFIXED)
 
 /* Default name of the physical partition that holds logical partition entries.
  * The layout of this partition will look like:

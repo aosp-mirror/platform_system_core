@@ -18,8 +18,9 @@
 
 #include <gtest/gtest.h>
 
+#include <unwindstack/Memory.h>
+
 #include "LogFake.h"
-#include "MemoryOfflineBuffer.h"
 
 namespace unwindstack {
 
@@ -30,7 +31,7 @@ class MemoryOfflineBufferTest : public ::testing::Test {
     memory_.reset(new MemoryOfflineBuffer(buffer_.data(), kStart, kEnd));
   }
 
-  static void SetUpTestSuite() {
+  static void SetUpTestCase() {
     buffer_.resize(kLength);
     for (size_t i = 0; i < kLength; i++) {
       buffer_[i] = i % 189;

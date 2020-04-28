@@ -300,7 +300,6 @@ static void handle_new_connection(atransport* t, apacket* p) {
     handle_online(t);
 #else
     if (!auth_required) {
-        LOG(INFO) << "authentication not required";
         handle_online(t);
         send_connect(t);
     } else {
@@ -1053,9 +1052,9 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
         // New transport selection protocol:
         // This is essentially identical to the previous version, except it returns the selected
         // transport id to the caller as well.
-        if (android::base::ConsumePrefix(&service, "tport:")) {
+        if (ConsumePrefix(&service, "tport:")) {
             legacy = false;
-            if (android::base::ConsumePrefix(&service, "serial:")) {
+            if (ConsumePrefix(&service, "serial:")) {
                 serial_storage = service;
                 serial = serial_storage.c_str();
             } else if (service == "usb") {
@@ -1069,7 +1068,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
             // Selection by id is unimplemented, since you obviously already know the transport id
             // you're connecting to.
         } else {
-            if (android::base::ConsumePrefix(&service, "transport-id:")) {
+            if (ConsumePrefix(&service, "transport-id:")) {
                 if (!ParseUint(&transport_id, service)) {
                     SendFail(reply_fd, "invalid transport id");
                     return HostRequestResult::Handled;
@@ -1080,7 +1079,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
                 type = kTransportLocal;
             } else if (service == "transport-any") {
                 type = kTransportAny;
-            } else if (android::base::ConsumePrefix(&service, "transport:")) {
+            } else if (ConsumePrefix(&service, "transport:")) {
                 serial_storage = service;
                 serial = serial_storage.c_str();
             }
@@ -1132,9 +1131,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
 
     if (service == "features") {
         std::string error;
-        atransport* t =
-                s->transport ? s->transport
-                             : acquire_one_transport(type, serial, transport_id, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t != nullptr) {
             SendOkay(reply_fd, FeatureSetToString(t->features()));
         } else {
@@ -1193,9 +1190,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
     // These always report "unknown" rather than the actual error, for scripts.
     if (service == "get-serialno") {
         std::string error;
-        atransport* t =
-                s->transport ? s->transport
-                             : acquire_one_transport(type, serial, transport_id, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             SendOkay(reply_fd, !t->serial.empty() ? t->serial : "unknown");
         } else {
@@ -1205,9 +1200,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
     }
     if (service == "get-devpath") {
         std::string error;
-        atransport* t =
-                s->transport ? s->transport
-                             : acquire_one_transport(type, serial, transport_id, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             SendOkay(reply_fd, !t->devpath.empty() ? t->devpath : "unknown");
         } else {
@@ -1217,9 +1210,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
     }
     if (service == "get-state") {
         std::string error;
-        atransport* t =
-                s->transport ? s->transport
-                             : acquire_one_transport(type, serial, transport_id, nullptr, &error);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &error);
         if (t) {
             SendOkay(reply_fd, t->connection_state_name());
         } else {
@@ -1229,7 +1220,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
     }
 
     // Indicates a new emulator instance has started.
-    if (android::base::ConsumePrefix(&service, "emulator:")) {
+    if (ConsumePrefix(&service, "emulator:")) {
         unsigned int port;
         if (!ParseUint(&port, service)) {
           LOG(ERROR) << "received invalid port for emulator: " << service;
@@ -1243,9 +1234,7 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
 
     if (service == "reconnect") {
         std::string response;
-        atransport* t = s->transport ? s->transport
-                                     : acquire_one_transport(type, serial, transport_id, nullptr,
-                                                             &response, true);
+        atransport* t = acquire_one_transport(type, serial, transport_id, nullptr, &response, true);
         if (t != nullptr) {
             kick_transport(t, true);
             response =
@@ -1257,15 +1246,12 @@ HostRequestResult handle_host_request(std::string_view service, TransportType ty
 
     // TODO: Switch handle_forward_request to string_view.
     std::string service_str(service);
-    auto transport_acquirer = [=](std::string* error) {
-        if (s->transport) {
-            return s->transport;
-        } else {
-            std::string error;
-            return acquire_one_transport(type, serial, transport_id, nullptr, &error);
-        }
-    };
-    if (handle_forward_request(service_str.c_str(), transport_acquirer, reply_fd)) {
+    if (handle_forward_request(
+                service_str.c_str(),
+                [=](std::string* error) {
+                    return acquire_one_transport(type, serial, transport_id, nullptr, error);
+                },
+                reply_fd)) {
         return HostRequestResult::Handled;
     }
 

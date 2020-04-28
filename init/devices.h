@@ -84,9 +84,9 @@ class Subsystem {
     };
 
     Subsystem() {}
-    Subsystem(std::string name) : name_(std::move(name)) {}
-    Subsystem(std::string name, DevnameSource source, std::string dir_name)
-        : name_(std::move(name)), devname_source_(source), dir_name_(std::move(dir_name)) {}
+    Subsystem(const std::string& name) : name_(name) {}
+    Subsystem(const std::string& name, DevnameSource source, const std::string& dir_name)
+        : name_(name), devname_source_(source), dir_name_(dir_name) {}
 
     // Returns the full path for a uevent of a device that is a member of this subsystem,
     // according to the rules parsed from ueventd.rc
@@ -130,7 +130,6 @@ class DeviceHandler : public UeventHandler {
     void HandleDevice(const std::string& action, const std::string& devpath, bool block, int major,
                       int minor, const std::vector<std::string>& links) const;
     void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
-    void HandleAshmemUevent(const Uevent& uevent);
 
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;

@@ -25,7 +25,6 @@
 #include <unordered_map>
 
 #include <android-base/macros.h>
-#include <android-base/strings.h>
 #include <backtrace.h>
 
 #include "Allocator.h"
@@ -251,8 +250,7 @@ bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings
     } else if (mapping_name == current_lib) {
       // .rodata or .data section
       globals_mappings.emplace_back(*it);
-    } else if (mapping_name == "[anon:libc_malloc]" ||
-               android::base::StartsWith(mapping_name, "[anon:scudo:")) {
+    } else if (mapping_name == "[anon:libc_malloc]") {
       // named malloc mapping
       heap_mappings.emplace_back(*it);
     } else if (has_prefix(mapping_name, "[anon:dalvik-")) {
@@ -282,12 +280,6 @@ static inline const char* plural(T val) {
 }
 
 bool GetUnreachableMemory(UnreachableMemoryInfo& info, size_t limit) {
-  if (info.version > 0) {
-    MEM_ALOGE("unsupported UnreachableMemoryInfo.version %zu in GetUnreachableMemory",
-              info.version);
-    return false;
-  }
-
   int parent_pid = getpid();
   int parent_tid = gettid();
 

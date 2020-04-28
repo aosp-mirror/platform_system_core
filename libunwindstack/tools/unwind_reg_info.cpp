@@ -33,7 +33,6 @@
 #include <unwindstack/Elf.h>
 #include <unwindstack/ElfInterface.h>
 #include <unwindstack/Log.h>
-#include <unwindstack/Memory.h>
 
 #include "ArmExidx.h"
 #include "DwarfOp.h"
@@ -165,8 +164,15 @@ void PrintArmRegInformation(ElfInterfaceArm* interface, uint64_t pc) {
   }
 }
 
-int GetInfo(const char* file, uint64_t offset, uint64_t pc) {
-  Elf elf(Memory::CreateFileMemory(file, offset).release());
+int GetInfo(const char* file, uint64_t pc) {
+  MemoryFileAtOffset* memory = new MemoryFileAtOffset;
+  if (!memory->Init(file, 0)) {
+    // Initializatation failed.
+    printf("Failed to init\n");
+    return 1;
+  }
+
+  Elf elf(memory);
   if (!elf.Init() || !elf.valid()) {
     printf("%s is not a valid elf file.\n", file);
     return 1;
@@ -199,7 +205,7 @@ int GetInfo(const char* file, uint64_t offset, uint64_t pc) {
   DwarfSection* section = interface->eh_frame();
   if (section != nullptr) {
     printf("\neh_frame:\n");
-    PrintRegInformation(section, elf.memory(), pc, elf.class_type());
+    PrintRegInformation(section, memory, pc, elf.class_type());
   } else {
     printf("\nno eh_frame information\n");
   }
@@ -207,7 +213,7 @@ int GetInfo(const char* file, uint64_t offset, uint64_t pc) {
   section = interface->debug_frame();
   if (section != nullptr) {
     printf("\ndebug_frame:\n");
-    PrintRegInformation(section, elf.memory(), pc, elf.class_type());
+    PrintRegInformation(section, memory, pc, elf.class_type());
     printf("\n");
   } else {
     printf("\nno debug_frame information\n");
@@ -243,14 +249,12 @@ int GetInfo(const char* file, uint64_t offset, uint64_t pc) {
 }  // namespace unwindstack
 
 int main(int argc, char** argv) {
-  if (argc != 3 && argc != 4) {
-    printf("Usage: unwind_reg_info ELF_FILE PC [OFFSET]\n");
+  if (argc != 3) {
+    printf("Usage: unwind_reg_info ELF_FILE PC\n");
     printf("  ELF_FILE\n");
     printf("    The path to an elf file.\n");
     printf("  PC\n");
     printf("    The pc for which the register information should be obtained.\n");
-    printf("  OFFSET\n");
-    printf("    Use the offset into the ELF file as the beginning of the elf.\n");
     return 1;
   }
 
@@ -272,15 +276,5 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  uint64_t offset = 0;
-  if (argc == 4) {
-    char* end;
-    offset = strtoull(argv[3], &end, 16);
-    if (*end != '\0') {
-      printf("Malformed OFFSET value: %s\n", argv[3]);
-      return 1;
-    }
-  }
-
-  return unwindstack::GetInfo(argv[1], offset, pc);
+  return unwindstack::GetInfo(argv[1], pc);
 }

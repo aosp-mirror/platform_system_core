@@ -130,14 +130,6 @@ const std::vector<Vma>& ProcMemInfo::MapsWithPageIdle() {
     return maps_;
 }
 
-const std::vector<Vma>& ProcMemInfo::MapsWithoutUsageStats() {
-    if (maps_.empty() && !ReadMaps(get_wss_, false, false)) {
-        LOG(ERROR) << "Failed to read maps for Process " << pid_;
-    }
-
-    return maps_;
-}
-
 const std::vector<Vma>& ProcMemInfo::Smaps(const std::string& path) {
     if (!maps_.empty()) {
         return maps_;
@@ -221,39 +213,29 @@ bool ProcMemInfo::PageMap(const Vma& vma, std::vector<uint64_t>* pagemap) {
     std::string pagemap_file = ::android::base::StringPrintf("/proc/%d/pagemap", pid_);
     ::android::base::unique_fd pagemap_fd(
             TEMP_FAILURE_RETRY(open(pagemap_file.c_str(), O_RDONLY | O_CLOEXEC)));
-    if (pagemap_fd == -1) {
+    if (pagemap_fd < 0) {
         PLOG(ERROR) << "Failed to open " << pagemap_file;
         return false;
     }
 
     uint64_t nr_pages = (vma.end - vma.start) / getpagesize();
-    pagemap->resize(nr_pages);
+    pagemap->reserve(nr_pages);
 
-    size_t bytes_to_read = sizeof(uint64_t) * nr_pages;
-    off64_t start_addr = (vma.start / getpagesize()) * sizeof(uint64_t);
-    ssize_t bytes_read = pread64(pagemap_fd, pagemap->data(), bytes_to_read, start_addr);
-    if (bytes_read == -1) {
-        PLOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_;
-        return false;
-    } else if (static_cast<size_t>(bytes_read) != bytes_to_read) {
-        LOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_
-                   << ": read bytes " << bytes_read << " expected bytes " << bytes_to_read;
-        return false;
+    uint64_t idx = vma.start / getpagesize();
+    uint64_t last = idx + nr_pages;
+    uint64_t val;
+    for (; idx < last; idx++) {
+        if (pread64(pagemap_fd, &val, sizeof(uint64_t), idx * sizeof(uint64_t)) < 0) {
+            PLOG(ERROR) << "Failed to read page frames from page map for pid: " << pid_;
+            return false;
+        }
+        pagemap->emplace_back(val);
     }
 
     return true;
 }
 
-static int GetPagemapFd(pid_t pid) {
-    std::string pagemap_file = ::android::base::StringPrintf("/proc/%d/pagemap", pid);
-    int fd = TEMP_FAILURE_RETRY(open(pagemap_file.c_str(), O_RDONLY | O_CLOEXEC));
-    if (fd == -1) {
-        PLOG(ERROR) << "Failed to open " << pagemap_file;
-    }
-    return fd;
-}
-
-bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle, bool get_usage_stats) {
+bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle) {
     // Each object reads /proc/<pid>/maps only once. This is done to make sure programs that are
     // running for the lifetime of the system can recycle the objects and don't have to
     // unnecessarily retain and update this object in memory (which can get significantly large).
@@ -274,12 +256,11 @@ bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle, bool get_usage_stats
         return false;
     }
 
-    if (!get_usage_stats) {
-        return true;
-    }
-
-    ::android::base::unique_fd pagemap_fd(GetPagemapFd(pid_));
-    if (pagemap_fd == -1) {
+    std::string pagemap_file = ::android::base::StringPrintf("/proc/%d/pagemap", pid_);
+    ::android::base::unique_fd pagemap_fd(
+            TEMP_FAILURE_RETRY(open(pagemap_file.c_str(), O_RDONLY | O_CLOEXEC)));
+    if (pagemap_fd < 0) {
+        PLOG(ERROR) << "Failed to open " << pagemap_file;
         return false;
     }
 
@@ -293,20 +274,6 @@ bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle, bool get_usage_stats
         add_mem_usage(&usage_, vma.usage);
     }
 
-    return true;
-}
-
-bool ProcMemInfo::FillInVmaStats(Vma& vma) {
-    ::android::base::unique_fd pagemap_fd(GetPagemapFd(pid_));
-    if (pagemap_fd == -1) {
-        return false;
-    }
-
-    if (!ReadVmaStats(pagemap_fd.get(), vma, get_wss_, false)) {
-        LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start << "-"
-                   << vma.end << "]";
-        return false;
-    }
     return true;
 }
 

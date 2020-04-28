@@ -34,8 +34,8 @@ class DisableMallocGuard {
 
   void Disable() {
     if (!disabled_) {
-      disabled_ = true;
       malloc_disable();
+      disabled_ = true;
     }
   }
 
@@ -71,7 +71,8 @@ class ScopedDisableMalloc {
 
 class ScopedDisableMallocTimeout {
  public:
-  explicit ScopedDisableMallocTimeout(std::chrono::milliseconds timeout = std::chrono::seconds(10))
+  explicit ScopedDisableMallocTimeout(
+      std::chrono::milliseconds timeout = std::chrono::milliseconds(2000))
       : timeout_(timeout), timed_out_(false), disable_malloc_() {
     Disable();
   }

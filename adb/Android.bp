@@ -26,7 +26,6 @@ cc_defaults {
         "-Wvla",
         "-DADB_HOST=1",         // overridden by adbd_defaults
         "-DALLOW_ADBD_ROOT=0",  // overridden by adbd_defaults
-        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION=1",
     ],
     cpp_std: "experimental",
 
@@ -59,9 +58,6 @@ cc_defaults {
 
                 // MinGW hides some things behind _POSIX_SOURCE.
                 "-D_POSIX_SOURCE",
-
-                // libusb uses __stdcall on a variadic function, which gets ignored.
-                "-Wno-ignored-attributes",
 
                 // Not supported yet.
                 "-Wno-thread-safety",
@@ -124,8 +120,7 @@ libadb_srcs = [
     "adb_trace.cpp",
     "adb_unique_fd.cpp",
     "adb_utils.cpp",
-    "fdevent/fdevent.cpp",
-    "fdevent/fdevent_poll.cpp",
+    "fdevent.cpp",
     "services.cpp",
     "sockets.cpp",
     "socket_spec.cpp",
@@ -141,15 +136,11 @@ libadb_posix_srcs = [
     "sysdeps/posix/network.cpp",
 ]
 
-libadb_linux_srcs = [
-    "fdevent/fdevent_epoll.cpp",
-]
-
 libadb_test_srcs = [
     "adb_io_test.cpp",
     "adb_listeners_test.cpp",
     "adb_utils_test.cpp",
-    "fdevent/fdevent_test.cpp",
+    "fdevent_test.cpp",
     "socket_spec_test.cpp",
     "socket_test.cpp",
     "sysdeps_test.cpp",
@@ -173,11 +164,12 @@ cc_library_host_static {
 
     target: {
         linux: {
-            srcs: ["client/usb_linux.cpp"] + libadb_linux_srcs,
+            srcs: ["client/usb_linux.cpp"],
         },
         darwin: {
             srcs: ["client/usb_osx.cpp"],
         },
+
         not_windows: {
             srcs: libadb_posix_srcs,
         },
@@ -224,7 +216,6 @@ cc_test_host {
     target: {
         windows: {
             enabled: true,
-            ldflags: ["-municode"],
             shared_libs: ["AdbWinApi"],
         },
     },
@@ -252,7 +243,7 @@ cc_benchmark {
         "libbase",
         "libcutils",
         "libcrypto_utils",
-        "libcrypto_static",
+        "libcrypto",
         "libdiagnose_usb",
         "liblog",
         "libusb",
@@ -273,33 +264,22 @@ cc_binary_host {
         "client/console.cpp",
         "client/adb_install.cpp",
         "client/line_printer.cpp",
-        "client/fastdeploy.cpp",
-        "client/fastdeploycallbacks.cpp",
         "shell_service_protocol.cpp",
-    ],
-
-    generated_headers: [
-        "bin2c_fastdeployagent",
-        "bin2c_fastdeployagentscript"
     ],
 
     static_libs: [
         "libadb_host",
-        "libandroidfw",
         "libbase",
         "libcutils",
         "libcrypto_utils",
         "libcrypto",
-        "libfastdeploy_host",
         "libdiagnose_usb",
         "liblog",
         "libmdnssd",
-        "libprotobuf-cpp-lite",
         "libusb",
         "libutils",
         "liblog",
-        "libziparchive",
-        "libz",
+        "libcutils",
     ],
 
     stl: "libc++_static",
@@ -308,6 +288,10 @@ cc_binary_host {
     // on the host adb tool, and shared libraries that link against libc++
     // will violate ODR
     shared_libs: [],
+
+    required: [
+        "deploypatchgenerator",
+    ],
 
     // Archive adb, adb.exe.
     dist: {
@@ -344,7 +328,7 @@ cc_library_static {
     // libminadbd wants both, as it's used to build native tests.
     compile_multilib: "both",
 
-    srcs: libadb_srcs + libadb_linux_srcs + libadb_posix_srcs + [
+    srcs: libadb_srcs + libadb_posix_srcs + [
         "daemon/auth.cpp",
         "daemon/jdwp_service.cpp",
     ],
@@ -360,8 +344,6 @@ cc_library_static {
     ],
 
     shared_libs: [
-        "libadbconnection_server",
-        "libadbd_auth",
         "libasyncio",
         "libbase",
         "libcrypto",
@@ -414,8 +396,6 @@ cc_library {
     ],
 
     shared_libs: [
-        "libadbconnection_server",
-        "libadbd_auth",
         "libasyncio",
         "libbase",
         "libcrypto",
@@ -424,16 +404,34 @@ cc_library {
         "liblog",
     ],
 
+    product_variables: {
+        debuggable: {
+            required: [
+                "remount",
+            ],
+        },
+    },
+
     target: {
         android: {
             srcs: [
                 "daemon/abb_service.cpp",
                 "daemon/framebuffer_service.cpp",
                 "daemon/mdns.cpp",
+                "daemon/reboot_service.cpp",
+                "daemon/remount_service.cpp",
                 "daemon/restart_service.cpp",
+                "daemon/set_verity_enable_state_service.cpp",
+            ],
+            static_libs: [
+                "libavb_user",
             ],
             shared_libs: [
+                "libbootloader_message",
                 "libmdnssd",
+                "libext4_utils",
+                "libfec",
+                "libfs_mgr",
                 "libselinux",
             ],
         },
@@ -462,8 +460,6 @@ cc_library {
     ],
 
     shared_libs: [
-        "libadbconnection_server",
-        "libadbd_auth",
         "libadbd_services",
         "libasyncio",
         "libbase",
@@ -496,43 +492,16 @@ cc_binary {
         keep_symbols: true,
     },
 
-    stl: "libc++_static",
-    static_libs: [
+    shared_libs: [
         "libadbd",
-        "libadbd_auth",
         "libadbd_services",
-        "libasyncio",
         "libbase",
         "libcap",
-        "libcrypto_utils",
+        "libcrypto",
         "libcutils",
-        "libdiagnose_usb",
         "liblog",
-        "libmdnssd",
         "libminijail",
         "libselinux",
-    ],
-
-    shared_libs: [
-        "libadbconnection_server",
-        "libcrypto",
-    ],
-}
-
-phony {
-    name: "adbd_system_binaries",
-    required: [
-        "abb",
-        "libadbd_auth",
-        "reboot",
-        "set-verity-state",
-    ]
-}
-
-phony {
-    name: "adbd_system_binaries_recovery",
-    required: [
-        "reboot.recovery",
     ],
 }
 
@@ -583,11 +552,11 @@ cc_test {
 
     static_libs: [
         "libadbd",
-        "libadbd_auth",
         "libbase",
+        "libbootloader_message",
         "libcutils",
         "libcrypto_utils",
-        "libcrypto_static",
+        "libcrypto",
         "libdiagnose_usb",
         "liblog",
         "libusb",
@@ -595,7 +564,6 @@ cc_test {
         "libselinux",
     ],
     test_suites: ["device-tests"],
-    require_root: true,
 }
 
 python_test_host {
@@ -635,132 +603,4 @@ python_test_host {
             enabled: false,
         },
     },
-}
-
-// Note: using pipe for xxd to control the variable name generated
-// the default name used by xxd is the path to the input file.
-java_genrule {
-    name: "bin2c_fastdeployagent",
-    out: ["deployagent.inc"],
-    srcs: [":deployagent"],
-    cmd: "(echo 'unsigned char kDeployAgent[] = {' && xxd -i <$(in) && echo '};') > $(out)",
-}
-
-genrule {
-    name: "bin2c_fastdeployagentscript",
-    out: ["deployagentscript.inc"],
-    srcs: ["fastdeploy/deployagent/deployagent.sh"],
-    cmd: "(echo 'unsigned char kDeployAgentScript[] = {' && xxd -i <$(in) && echo '};') > $(out)",
-}
-
-cc_library_host_static {
-    name: "libfastdeploy_host",
-    defaults: ["adb_defaults"],
-    srcs: [
-        "fastdeploy/deploypatchgenerator/apk_archive.cpp",
-        "fastdeploy/deploypatchgenerator/deploy_patch_generator.cpp",
-        "fastdeploy/deploypatchgenerator/patch_utils.cpp",
-        "fastdeploy/proto/ApkEntry.proto",
-    ],
-    static_libs: [
-        "libadb_host",
-        "libandroidfw",
-        "libbase",
-        "libcutils",
-        "libcrypto_utils",
-        "libcrypto",
-        "libdiagnose_usb",
-        "liblog",
-        "libmdnssd",
-        "libusb",
-        "libutils",
-        "libziparchive",
-        "libz",
-    ],
-    stl: "libc++_static",
-    proto: {
-        type: "lite",
-        export_proto_headers: true,
-    },
-    target: {
-        windows: {
-            enabled: true,
-            shared_libs: ["AdbWinApi"],
-        },
-    },
-}
-
-cc_test_host {
-    name: "fastdeploy_test",
-    defaults: ["adb_defaults"],
-    srcs: [
-        "fastdeploy/deploypatchgenerator/apk_archive_test.cpp",
-        "fastdeploy/deploypatchgenerator/deploy_patch_generator_test.cpp",
-        "fastdeploy/deploypatchgenerator/patch_utils_test.cpp",
-    ],
-    static_libs: [
-        "libadb_host",
-        "libandroidfw",
-        "libbase",
-        "libcutils",
-        "libcrypto_utils",
-        "libcrypto",
-        "libdiagnose_usb",
-        "libfastdeploy_host",
-        "liblog",
-        "libmdnssd",
-        "libprotobuf-cpp-lite",
-        "libusb",
-        "libutils",
-        "libziparchive",
-        "libz",
-    ],
-    target: {
-        windows: {
-            enabled: true,
-            shared_libs: ["AdbWinApi"],
-        },
-    },
-    data: [
-        "fastdeploy/testdata/rotating_cube-metadata-release.data",
-        "fastdeploy/testdata/rotating_cube-release.apk",
-        "fastdeploy/testdata/sample.apk",
-        "fastdeploy/testdata/sample.cd",
-    ],
-}
-
-prebuilt_etc {
-    name: "com.android.adbd.ld.config.txt",
-    src: "apex/ld.config.txt",
-    filename: "ld.config.txt",
-    installable: false,
-}
-
-apex {
-    name: "com.android.adbd",
-    manifest: "apex/apex_manifest.json",
-
-    binaries: ["adbd"],
-    prebuilts: ["com.android.adbd.init.rc", "com.android.adbd.ld.config.txt"],
-
-    key: "com.android.adbd.key",
-    certificate: ":com.android.adbd.certificate",
-}
-
-apex_key {
-    name: "com.android.adbd.key",
-    public_key: "apex/com.android.adbd.avbpubkey",
-    private_key: "apex/com.android.adbd.pem",
-}
-
-android_app_certificate {
-    name: "com.android.adbd.certificate",
-    certificate: "apex/com.android.adbd",
-}
-
-prebuilt_etc {
-    name: "com.android.adbd.init.rc",
-    src: "apex/adbd.rc",
-    filename: "init.rc",
-    installable: false,
 }

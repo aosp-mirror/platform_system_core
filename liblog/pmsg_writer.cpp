@@ -20,6 +20,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -29,6 +30,7 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
+#include "config_write.h"
 #include "log_portability.h"
 #include "logger.h"
 #include "uio.h"
@@ -39,9 +41,9 @@ static int pmsgAvailable(log_id_t logId);
 static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
 
 struct android_log_transport_write pmsgLoggerWrite = {
-    .name = "pmsg",
-    .logMask = 0,
+    .node = {&pmsgLoggerWrite.node, &pmsgLoggerWrite.node},
     .context.fd = -1,
+    .name = "pmsg",
     .available = pmsgAvailable,
     .open = pmsgOpen,
     .close = pmsgClose,
@@ -86,6 +88,13 @@ static int pmsgAvailable(log_id_t logId) {
   return 1;
 }
 
+/*
+ * Extract a 4-byte value from a byte stream.
+ */
+static inline uint32_t get4LE(const uint8_t* src) {
+  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
+}
+
 static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr) {
   static const unsigned headerLength = 2;
   struct iovec newVec[nr + headerLength];
@@ -99,7 +108,7 @@ static int pmsgWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
       return -EINVAL;
     }
 
-    if (SNET_EVENT_LOG_TAG != *static_cast<uint32_t*>(vec[0].iov_base)) {
+    if (SNET_EVENT_LOG_TAG != get4LE(static_cast<uint8_t*>(vec[0].iov_base))) {
       return -EPERM;
     }
   }

@@ -122,7 +122,6 @@ cc_binary {
 
     shared_libs: [
         "android.hardware.boot@1.0",
-        "android.hardware.boot@1.1",
         "android.hardware.fastboot@1.0",
         "android.hardware.health@2.0",
         "libadbd",
@@ -135,6 +134,8 @@ cc_binary {
         "libfs_mgr",
         "libgsi",
         "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
         "liblog",
         "liblp",
         "libsparse",
@@ -144,10 +145,6 @@ cc_binary {
     static_libs: [
         "libhealthhalutils",
     ],
-
-    header_libs: [
-        "libsnapshot_headers",
-    ]
 }
 
 cc_defaults {
@@ -190,11 +187,7 @@ cc_defaults {
     // will violate ODR.
     shared_libs: [],
 
-    header_libs: [
-        "avb_headers",
-        "bootimg_headers",
-    ],
-
+    header_libs: ["bootimg_headers"],
     static_libs: [
         "libziparchive",
         "libsparse",

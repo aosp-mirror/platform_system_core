@@ -14,9 +14,7 @@
 #define DEBUG_CALLBACKS 0
 
 #include <utils/Looper.h>
-
 #include <sys/eventfd.h>
-#include <cinttypes>
 
 namespace android {
 

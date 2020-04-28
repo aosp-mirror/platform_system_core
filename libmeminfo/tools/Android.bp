@@ -56,7 +56,6 @@ cc_binary {
 
 cc_binary {
     name: "showmap",
-    host_supported: true,
     cflags: [
         "-Wall",
         "-Werror",
@@ -67,12 +66,6 @@ cc_binary {
         "libbase",
         "libmeminfo",
     ],
-
-    target: {
-        darwin: {
-            enabled: false,
-        },
-    },
 }
 
 cc_binary {

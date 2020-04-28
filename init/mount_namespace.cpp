@@ -79,38 +79,6 @@ static bool IsApexUpdatable() {
     return updatable;
 }
 
-static bool ActivateFlattenedApexesIfPossible() {
-    if (IsRecoveryMode() || IsApexUpdatable()) {
-        return true;
-    }
-
-    constexpr const char kSystemApex[] = "/system/apex";
-    constexpr const char kApexTop[] = "/apex";
-    if (mount(kSystemApex, kApexTop, nullptr, MS_BIND, nullptr) != 0) {
-        PLOG(ERROR) << "Could not bind mount " << kSystemApex << " to " << kApexTop;
-        return false;
-    }
-
-    // Special casing for the ART APEX
-    constexpr const char kArtApexMountPath[] = "/system/apex/com.android.art";
-    static const std::vector<std::string> kArtApexDirNames = {"com.android.art.release",
-                                                              "com.android.art.debug"};
-    bool success = false;
-    for (const auto& name : kArtApexDirNames) {
-        std::string path = std::string(kSystemApex) + "/" + name;
-        if (access(path.c_str(), F_OK) == 0) {
-            if (mount(path.c_str(), kArtApexMountPath, nullptr, MS_BIND, nullptr) == 0) {
-                success = true;
-                break;
-            }
-        }
-    }
-    if (!success) {
-        PLOG(ERROR) << "Failed to bind mount the ART APEX to " << kArtApexMountPath;
-    }
-    return success;
-}
-
 static android::base::unique_fd bootstrap_ns_fd;
 static android::base::unique_fd default_ns_fd;
 
@@ -160,8 +128,6 @@ bool SetupMountNamespaces() {
         default_ns_fd.reset(OpenMountNamespace());
         default_ns_id = GetMountNamespaceId();
     }
-
-    success &= ActivateFlattenedApexesIfPossible();
 
     LOG(INFO) << "SetupMountNamespaces done";
     return success;

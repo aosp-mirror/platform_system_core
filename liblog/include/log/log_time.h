@@ -24,6 +24,9 @@
 #define US_PER_SEC 1000000ULL
 #define MS_PER_SEC 1000ULL
 
+#ifndef __struct_log_time_defined
+#define __struct_log_time_defined
+
 #define LOG_TIME_SEC(t) ((t)->tv_sec)
 /* next power of two after NS_PER_SEC */
 #define LOG_TIME_NSEC(t) ((t)->tv_nsec & (UINT32_MAX >> 2))
@@ -32,6 +35,11 @@
 
 extern "C" {
 
+/*
+ * NB: we did NOT define a copy constructor. This will result in structure
+ * no longer being compatible with pass-by-value which is desired
+ * efficient behavior. Also, pass-by-reference breaks C/C++ ABI.
+ */
 struct log_time {
  public:
   uint32_t tv_sec = 0; /* good to Feb 5 2106 */
@@ -161,3 +169,5 @@ typedef struct log_time {
 } __attribute__((__packed__)) log_time;
 
 #endif /* __cplusplus */
+
+#endif /* __struct_log_time_defined */

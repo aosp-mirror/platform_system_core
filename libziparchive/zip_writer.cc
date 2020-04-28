@@ -130,7 +130,7 @@ int32_t ZipWriter::HandleError(int32_t error_code) {
   return error_code;
 }
 
-int32_t ZipWriter::StartEntry(std::string_view path, size_t flags) {
+int32_t ZipWriter::StartEntry(const char* path, size_t flags) {
   uint32_t alignment = 0;
   if (flags & kAlign32) {
     flags &= ~kAlign32;
@@ -139,11 +139,11 @@ int32_t ZipWriter::StartEntry(std::string_view path, size_t flags) {
   return StartAlignedEntryWithTime(path, flags, time_t(), alignment);
 }
 
-int32_t ZipWriter::StartAlignedEntry(std::string_view path, size_t flags, uint32_t alignment) {
+int32_t ZipWriter::StartAlignedEntry(const char* path, size_t flags, uint32_t alignment) {
   return StartAlignedEntryWithTime(path, flags, time_t(), alignment);
 }
 
-int32_t ZipWriter::StartEntryWithTime(std::string_view path, size_t flags, time_t time) {
+int32_t ZipWriter::StartEntryWithTime(const char* path, size_t flags, time_t time) {
   uint32_t alignment = 0;
   if (flags & kAlign32) {
     flags &= ~kAlign32;
@@ -169,8 +169,8 @@ static void ExtractTimeAndDate(time_t when, uint16_t* out_time, uint16_t* out_da
     year = 80;
   }
 
-  *out_date = static_cast<uint16_t>((year - 80) << 9 | (ptm->tm_mon + 1) << 5 | ptm->tm_mday);
-  *out_time = static_cast<uint16_t>(ptm->tm_hour << 11 | ptm->tm_min << 5 | ptm->tm_sec >> 1);
+  *out_date = (year - 80) << 9 | (ptm->tm_mon + 1) << 5 | ptm->tm_mday;
+  *out_time = ptm->tm_hour << 11 | ptm->tm_min << 5 | ptm->tm_sec >> 1;
 }
 
 static void CopyFromFileEntry(const ZipWriter::FileEntry& src, bool use_data_descriptor,
@@ -193,20 +193,14 @@ static void CopyFromFileEntry(const ZipWriter::FileEntry& src, bool use_data_des
   dst->compression_method = src.compression_method;
   dst->last_mod_time = src.last_mod_time;
   dst->last_mod_date = src.last_mod_date;
-  DCHECK_LE(src.path.size(), std::numeric_limits<uint16_t>::max());
-  dst->file_name_length = static_cast<uint16_t>(src.path.size());
+  dst->file_name_length = src.path.size();
   dst->extra_field_length = src.padding_length;
 }
 
-int32_t ZipWriter::StartAlignedEntryWithTime(std::string_view path, size_t flags, time_t time,
+int32_t ZipWriter::StartAlignedEntryWithTime(const char* path, size_t flags, time_t time,
                                              uint32_t alignment) {
   if (state_ != State::kWritingZip) {
     return kInvalidState;
-  }
-
-  // Can only have 16535 entries because of zip records.
-  if (files_.size() == std::numeric_limits<uint16_t>::max()) {
-    return HandleError(kIoError);
   }
 
   if (flags & kAlign32) {
@@ -216,17 +210,10 @@ int32_t ZipWriter::StartAlignedEntryWithTime(std::string_view path, size_t flags
   if (powerof2(alignment) == 0) {
     return kInvalidAlignment;
   }
-  if (alignment > std::numeric_limits<uint16_t>::max()) {
-    return kInvalidAlignment;
-  }
 
   FileEntry file_entry = {};
   file_entry.local_file_header_offset = current_offset_;
   file_entry.path = path;
-  // No support for larger than 4GB files.
-  if (file_entry.local_file_header_offset > std::numeric_limits<uint32_t>::max()) {
-    return HandleError(kIoError);
-  }
 
   if (!IsValidEntryName(reinterpret_cast<const uint8_t*>(file_entry.path.data()),
                         file_entry.path.size())) {
@@ -247,24 +234,13 @@ int32_t ZipWriter::StartAlignedEntryWithTime(std::string_view path, size_t flags
   ExtractTimeAndDate(time, &file_entry.last_mod_time, &file_entry.last_mod_date);
 
   off_t offset = current_offset_ + sizeof(LocalFileHeader) + file_entry.path.size();
-  // prepare a pre-zeroed memory page in case when we need to pad some aligned data.
-  static constexpr auto kPageSize = 4096;
-  static constexpr char kSmallZeroPadding[kPageSize] = {};
-  // use this buffer if our preallocated one is too small
-  std::vector<char> zero_padding_big;
-  const char* zero_padding = nullptr;
-
+  std::vector<char> zero_padding;
   if (alignment != 0 && (offset & (alignment - 1))) {
     // Pad the extra field so the data will be aligned.
-    uint16_t padding = static_cast<uint16_t>(alignment - (offset % alignment));
+    uint16_t padding = alignment - (offset % alignment);
     file_entry.padding_length = padding;
     offset += padding;
-    if (padding <= std::size(kSmallZeroPadding)) {
-        zero_padding = kSmallZeroPadding;
-    } else {
-        zero_padding_big.resize(padding, 0);
-        zero_padding = zero_padding_big.data();
-    }
+    zero_padding.resize(padding, 0);
   }
 
   LocalFileHeader header = {};
@@ -276,11 +252,11 @@ int32_t ZipWriter::StartAlignedEntryWithTime(std::string_view path, size_t flags
     return HandleError(kIoError);
   }
 
-  if (fwrite(path.data(), 1, path.size(), file_) != path.size()) {
+  if (fwrite(path, sizeof(*path), file_entry.path.size(), file_) != file_entry.path.size()) {
     return HandleError(kIoError);
   }
 
-  if (file_entry.padding_length != 0 && fwrite(zero_padding, 1, file_entry.padding_length,
+  if (file_entry.padding_length != 0 && fwrite(zero_padding.data(), 1, file_entry.padding_length,
                                                file_) != file_entry.padding_length) {
     return HandleError(kIoError);
   }
@@ -338,8 +314,7 @@ int32_t ZipWriter::PrepareDeflate() {
   }
 
   z_stream_->next_out = buffer_.data();
-  DCHECK_EQ(buffer_.size(), kBufSize);
-  z_stream_->avail_out = static_cast<uint32_t>(buffer_.size());
+  z_stream_->avail_out = buffer_.size();
   return kNoError;
 }
 
@@ -347,31 +322,25 @@ int32_t ZipWriter::WriteBytes(const void* data, size_t len) {
   if (state_ != State::kWritingEntry) {
     return HandleError(kInvalidState);
   }
-  // Need to be able to mark down data correctly.
-  if (len + static_cast<uint64_t>(current_file_entry_.uncompressed_size) >
-      std::numeric_limits<uint32_t>::max()) {
-    return HandleError(kIoError);
-  }
-  uint32_t len32 = static_cast<uint32_t>(len);
 
   int32_t result = kNoError;
   if (current_file_entry_.compression_method & kCompressDeflated) {
-    result = CompressBytes(&current_file_entry_, data, len32);
+    result = CompressBytes(&current_file_entry_, data, len);
   } else {
-    result = StoreBytes(&current_file_entry_, data, len32);
+    result = StoreBytes(&current_file_entry_, data, len);
   }
 
   if (result != kNoError) {
     return result;
   }
 
-  current_file_entry_.crc32 = static_cast<uint32_t>(
-      crc32(current_file_entry_.crc32, reinterpret_cast<const Bytef*>(data), len32));
-  current_file_entry_.uncompressed_size += len32;
+  current_file_entry_.crc32 =
+      crc32(current_file_entry_.crc32, reinterpret_cast<const Bytef*>(data), len);
+  current_file_entry_.uncompressed_size += len;
   return kNoError;
 }
 
-int32_t ZipWriter::StoreBytes(FileEntry* file, const void* data, uint32_t len) {
+int32_t ZipWriter::StoreBytes(FileEntry* file, const void* data, size_t len) {
   CHECK(state_ == State::kWritingEntry);
 
   if (fwrite(data, 1, len, file_) != len) {
@@ -382,7 +351,7 @@ int32_t ZipWriter::StoreBytes(FileEntry* file, const void* data, uint32_t len) {
   return kNoError;
 }
 
-int32_t ZipWriter::CompressBytes(FileEntry* file, const void* data, uint32_t len) {
+int32_t ZipWriter::CompressBytes(FileEntry* file, const void* data, size_t len) {
   CHECK(state_ == State::kWritingEntry);
   CHECK(z_stream_);
   CHECK(z_stream_->next_out != nullptr);
@@ -410,8 +379,7 @@ int32_t ZipWriter::CompressBytes(FileEntry* file, const void* data, uint32_t len
 
       // Reset the output buffer for the next input.
       z_stream_->next_out = buffer_.data();
-      DCHECK_EQ(buffer_.size(), kBufSize);
-      z_stream_->avail_out = static_cast<uint32_t>(buffer_.size());
+      z_stream_->avail_out = buffer_.size();
     }
   }
   return kNoError;
@@ -436,8 +404,7 @@ int32_t ZipWriter::FlushCompressedBytes(FileEntry* file) {
     current_offset_ += write_bytes;
 
     z_stream_->next_out = buffer_.data();
-    DCHECK_EQ(buffer_.size(), kBufSize);
-    z_stream_->avail_out = static_cast<uint32_t>(buffer_.size());
+    z_stream_->avail_out = buffer_.size();
   }
   if (zerr != Z_STREAM_END) {
     return HandleError(kZlibError);
@@ -455,11 +422,6 @@ int32_t ZipWriter::FlushCompressedBytes(FileEntry* file) {
   return kNoError;
 }
 
-bool ZipWriter::ShouldUseDataDescriptor() const {
-  // Only use a trailing "data descriptor" if the output isn't seekable.
-  return !seekable_;
-}
-
 int32_t ZipWriter::FinishEntry() {
   if (state_ != State::kWritingEntry) {
     return kInvalidState;
@@ -472,7 +434,7 @@ int32_t ZipWriter::FinishEntry() {
     }
   }
 
-  if (ShouldUseDataDescriptor()) {
+  if ((current_file_entry_.compression_method & kCompressDeflated) || !seekable_) {
     // Some versions of ZIP don't allow STORED data to have a trailing DataDescriptor.
     // If this file is not seekable, or if the data is compressed, write a DataDescriptor.
     const uint32_t sig = DataDescriptor::kOptSignature;
@@ -520,7 +482,7 @@ int32_t ZipWriter::Finish() {
   for (FileEntry& file : files_) {
     CentralDirectoryRecord cdr = {};
     cdr.record_signature = CentralDirectoryRecord::kSignature;
-    if (ShouldUseDataDescriptor()) {
+    if ((file.compression_method & kCompressDeflated) || !seekable_) {
       cdr.gpb_flags |= kGPBDDFlagMask;
     }
     cdr.compression_method = file.compression_method;
@@ -529,11 +491,7 @@ int32_t ZipWriter::Finish() {
     cdr.crc32 = file.crc32;
     cdr.compressed_size = file.compressed_size;
     cdr.uncompressed_size = file.uncompressed_size;
-    // Checked in IsValidEntryName.
-    DCHECK_LE(file.path.size(), std::numeric_limits<uint16_t>::max());
-    cdr.file_name_length = static_cast<uint16_t>(file.path.size());
-    // Checked in StartAlignedEntryWithTime.
-    DCHECK_LE(file.local_file_header_offset, std::numeric_limits<uint32_t>::max());
+    cdr.file_name_length = file.path.size();
     cdr.local_file_header_offset = static_cast<uint32_t>(file.local_file_header_offset);
     if (fwrite(&cdr, sizeof(cdr), 1, file_) != 1) {
       return HandleError(kIoError);
@@ -550,15 +508,10 @@ int32_t ZipWriter::Finish() {
   er.eocd_signature = EocdRecord::kSignature;
   er.disk_num = 0;
   er.cd_start_disk = 0;
-  // Checked when adding entries.
-  DCHECK_LE(files_.size(), std::numeric_limits<uint16_t>::max());
-  er.num_records_on_disk = static_cast<uint16_t>(files_.size());
-  er.num_records = static_cast<uint16_t>(files_.size());
-  if (current_offset_ > std::numeric_limits<uint32_t>::max()) {
-    return HandleError(kIoError);
-  }
-  er.cd_size = static_cast<uint32_t>(current_offset_ - startOfCdr);
-  er.cd_start_offset = static_cast<uint32_t>(startOfCdr);
+  er.num_records_on_disk = files_.size();
+  er.num_records = files_.size();
+  er.cd_size = current_offset_ - startOfCdr;
+  er.cd_start_offset = startOfCdr;
 
   if (fwrite(&er, sizeof(er), 1, file_) != 1) {
     return HandleError(kIoError);

@@ -25,8 +25,7 @@
 #include <android-base/strings.h>
 
 #include <private/android_filesystem_config.h>
-
-#include "fs_config.h"
+#include <private/fs_config.h>
 
 extern const fs_path_config* __for_testing_only__android_dirs;
 extern const fs_path_config* __for_testing_only__android_files;
@@ -46,7 +45,7 @@ static const struct fs_config_cmp_test {
         // clang-format off
     { true,  "system/lib",             "system/lib/hw",           true  },
     { true,  "vendor/lib",             "system/vendor/lib/hw",    true  },
-    { true,  "system/vendor/lib",      "vendor/lib/hw",           false },
+    { true,  "system/vendor/lib",      "vendor/lib/hw",           true  },
     { true,  "system/vendor/lib",      "system/vendor/lib/hw",    true  },
     { true,  "foo/*/bar/*",            "foo/1/bar/2",             true  },
     { true,  "foo/*/bar/*",            "foo/1/bar",               true  },
@@ -56,14 +55,13 @@ static const struct fs_config_cmp_test {
     { false, "vendor/bin/wifi",        "system/vendor/bin/wifi",  true  },
     { false, "vendor/bin/wifi",        "system/vendor/bin/wifi2", false },
     { false, "system/vendor/bin/wifi", "system/vendor/bin/wifi",  true, },
-    { false, "odm/bin/wifi",           "system/odm/bin/wifi",     false },
-    { false, "odm/bin/wifi",           "vendor/odm/bin/wifi",     true  },
-    { false, "oem/bin/wifi",           "system/oem/bin/wifi",     false },
+    { false, "odm/bin/wifi",           "system/odm/bin/wifi",     true  },
+    { false, "oem/bin/wifi",           "system/oem/bin/wifi",     true  },
     { false, "data/bin/wifi",          "system/data/bin/wifi",    false },
     { false, "system/bin/*",           "system/bin/wifi",         true  },
     { false, "vendor/bin/*",           "system/vendor/bin/wifi",  true  },
     { false, "system/bin/*",           "system/bin",              false },
-    { false, "system/vendor/bin/*",    "vendor/bin/wifi",         false },
+    { false, "system/vendor/bin/*",    "vendor/bin/wifi",         true  },
     { false, "foo/*/bar/*",            "foo/1/bar/2",             true  },
     { false, "foo/*/bar/*",            "foo/1/bar",               false },
     { false, "foo/*/bar/*",            "foo/1/bar/2/3",           true  },

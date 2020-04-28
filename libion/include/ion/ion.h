@@ -49,7 +49,6 @@ int ion_query_heap_cnt(int fd, int* cnt);
 int ion_query_get_heaps(int fd, int cnt, void* buffers);
 
 int ion_is_legacy(int fd);
-int ion_is_using_modular_heaps(int fd);
 
 __END_DECLS
 

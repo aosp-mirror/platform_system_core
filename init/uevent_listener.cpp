@@ -131,7 +131,7 @@ ListenerAction UeventListener::RegenerateUeventsForDir(DIR* d,
                                                        const ListenerCallback& callback) const {
     int dfd = dirfd(d);
 
-    int fd = openat(dfd, "uevent", O_WRONLY | O_CLOEXEC);
+    int fd = openat(dfd, "uevent", O_WRONLY);
     if (fd >= 0) {
         write(fd, "add\n", 4);
         close(fd);
@@ -146,7 +146,7 @@ ListenerAction UeventListener::RegenerateUeventsForDir(DIR* d,
     while ((de = readdir(d)) != nullptr) {
         if (de->d_type != DT_DIR || de->d_name[0] == '.') continue;
 
-        fd = openat(dfd, de->d_name, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        fd = openat(dfd, de->d_name, O_RDONLY | O_DIRECTORY);
         if (fd < 0) continue;
 
         std::unique_ptr<DIR, decltype(&closedir)> d2(fdopendir(fd), closedir);
@@ -171,7 +171,7 @@ ListenerAction UeventListener::RegenerateUeventsForPath(const std::string& path,
     return RegenerateUeventsForDir(d.get(), callback);
 }
 
-static const char* kRegenerationPaths[] = {"/sys/devices"};
+static const char* kRegenerationPaths[] = {"/sys/class", "/sys/block", "/sys/devices"};
 
 void UeventListener::RegenerateUevents(const ListenerCallback& callback) const {
     for (const auto path : kRegenerationPaths) {

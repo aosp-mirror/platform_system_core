@@ -4,25 +4,19 @@
       "name": "adbd_test"
     },
     {
-      "name": "CtsInitTestCases"
-    },
-    {
       "name": "debuggerd_test"
     },
     {
-      "name": "CtsFsMgrTestCases"
+      "name": "fs_mgr_unit_test"
     },
     {
       "name": "fs_mgr_vendor_overlay_test"
     },
     {
+      "name": "init_tests"
+    },
+    {
       "name": "libbase_test"
-    },
-    {
-      "name": "libpackagelistparser_test"
-    },
-    {
-      "name": "libcutils_test"
     },
     {
       "name": "libprocinfo_test"
@@ -32,13 +26,6 @@
     },
     {
       "name": "memunreachable_test"
-    },
-    {
-      "name": "memunreachable_unit_test"
-    },
-    {
-      "name": "memunreachable_unit_test",
-      "host": true
     },
     {
       "name": "memunreachable_binder_test"

@@ -16,13 +16,8 @@
 
 #include "libdm/dm_target.h"
 
-#include <inttypes.h>
-#include <stdio.h>
-#include <sys/types.h>
-
 #include <android-base/logging.h>
 #include <android-base/macros.h>
-#include <android-base/parseint.h>
 #include <android-base/strings.h>
 
 #include <libdm/dm.h>
@@ -118,134 +113,6 @@ std::string DmTargetVerity::GetParameterString() const {
 
 std::string DmTargetAndroidVerity::GetParameterString() const {
     return keyid_ + " " + block_device_;
-}
-
-std::string DmTargetSnapshot::name() const {
-    if (mode_ == SnapshotStorageMode::Merge) {
-        return "snapshot-merge";
-    }
-    return "snapshot";
-}
-
-std::string DmTargetSnapshot::GetParameterString() const {
-    std::string mode;
-    switch (mode_) {
-        case SnapshotStorageMode::Persistent:
-        case SnapshotStorageMode::Merge:
-            // Note: "O" lets us query for overflow in the status message. This
-            // is only supported on kernels 4.4+. On earlier kernels, an overflow
-            // will be reported as "Invalid" in the status string.
-            mode = "P";
-            if (ReportsOverflow(name())) {
-                mode += "O";
-            }
-            break;
-        case SnapshotStorageMode::Transient:
-            mode = "N";
-            break;
-        default:
-            LOG(ERROR) << "DmTargetSnapshot unknown mode";
-            break;
-    }
-    return base_device_ + " " + cow_device_ + " " + mode + " " + std::to_string(chunk_size_);
-}
-
-// Computes the percentage of complition for snapshot status.
-// @sectors_initial is the number of sectors_allocated stored right before
-// starting the merge.
-double DmTargetSnapshot::MergePercent(const DmTargetSnapshot::Status& status,
-                                      uint64_t sectors_initial) {
-    uint64_t s = status.sectors_allocated;
-    uint64_t t = status.total_sectors;
-    uint64_t m = status.metadata_sectors;
-    uint64_t i = sectors_initial == 0 ? t : sectors_initial;
-
-    if (t <= s || i <= s) {
-        return 0.0;
-    }
-    if (s == 0 || t == 0 || s <= m) {
-        return 100.0;
-    }
-    return 100.0 / (i - m) * (i - s);
-}
-
-bool DmTargetSnapshot::ReportsOverflow(const std::string& target_type) {
-    DeviceMapper& dm = DeviceMapper::Instance();
-    DmTargetTypeInfo info;
-    if (!dm.GetTargetByName(target_type, &info)) {
-        return false;
-    }
-    if (target_type == "snapshot") {
-        return info.IsAtLeast(1, 15, 0);
-    }
-    if (target_type == "snapshot-merge") {
-        return info.IsAtLeast(1, 4, 0);
-    }
-    return false;
-}
-
-bool DmTargetSnapshot::ParseStatusText(const std::string& text, Status* status) {
-    // Try to parse the line as it should be
-    int args = sscanf(text.c_str(), "%" PRIu64 "/%" PRIu64 " %" PRIu64, &status->sectors_allocated,
-                      &status->total_sectors, &status->metadata_sectors);
-    if (args == 3) {
-        return true;
-    }
-    auto sections = android::base::Split(text, " ");
-    if (sections.size() == 0) {
-        LOG(ERROR) << "could not parse empty status";
-        return false;
-    }
-    // Error codes are: "Invalid", "Overflow" and "Merge failed"
-    if (sections.size() == 1) {
-        if (text == "Invalid" || text == "Overflow") {
-            status->error = text;
-            return true;
-        }
-    } else if (sections.size() == 2 && text == "Merge failed") {
-        status->error = text;
-        return true;
-    }
-    LOG(ERROR) << "could not parse snapshot status: wrong format";
-    return false;
-}
-
-bool DmTargetSnapshot::GetDevicesFromParams(const std::string& params, std::string* base_device,
-                                            std::string* cow_device) {
-    auto pieces = android::base::Split(params, " ");
-    if (pieces.size() < 2) {
-        LOG(ERROR) << "Parameter string is invalid: " << params;
-        return false;
-    }
-    *base_device = pieces[0];
-    *cow_device = pieces[1];
-    return true;
-}
-
-std::string DmTargetCrypt::GetParameterString() const {
-    std::vector<std::string> argv = {
-            cipher_,
-            key_,
-            std::to_string(iv_sector_offset_),
-            device_,
-            std::to_string(device_sector_),
-    };
-
-    std::vector<std::string> extra_argv;
-    if (allow_discards_) extra_argv.emplace_back("allow_discards");
-    if (allow_encrypt_override_) extra_argv.emplace_back("allow_encrypt_override");
-    if (iv_large_sectors_) extra_argv.emplace_back("iv_large_sectors");
-    if (sector_size_) extra_argv.emplace_back("sector_size:" + std::to_string(sector_size_));
-
-    if (!extra_argv.empty()) argv.emplace_back(std::to_string(extra_argv.size()));
-
-    argv.insert(argv.end(), extra_argv.begin(), extra_argv.end());
-    return android::base::Join(argv, " ");
-}
-
-std::string DmTargetDefaultKey::GetParameterString() const {
-    return cipher_ + " " + key_ + " " + blockdev_ + " " + std::to_string(start_sector_) +
-           (set_dun_ ? " 1 set_dun" : "");
 }
 
 }  // namespace dm

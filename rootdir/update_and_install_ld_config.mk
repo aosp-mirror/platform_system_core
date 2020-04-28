@@ -38,9 +38,8 @@ endif
 
 llndk_libraries_file := $(library_lists_dir)/llndk.libraries.$(vndk_version).txt
 vndksp_libraries_file := $(library_lists_dir)/vndksp.libraries.$(vndk_version).txt
-vndkcore_libraries_file := $(library_lists_dir)/vndkcore.libraries.$(vndk_version).txt
-vndkprivate_libraries_file := $(library_lists_dir)/vndkprivate.libraries.$(vndk_version).txt
-llndk_moved_to_apex_libraries_file := $(library_lists_dir)/llndkinapex.libraries.txt
+vndkcore_libraries_file := $(library_lists_dir)/vndkcore.libraries.txt
+vndkprivate_libraries_file := $(library_lists_dir)/vndkprivate.libraries.txt
 ifeq ($(my_vndk_use_core_variant),true)
 vndk_using_core_variant_libraries_file := $(library_lists_dir)/vndk_using_core_variant.libraries.$(vndk_version).txt
 endif
@@ -66,34 +65,19 @@ else
   vndksp_libraries_list := $(VNDK_SAMEPROCESS_LIBRARIES)
 endif
 
-# LLNDK libraries that has been moved to an apex package and no longer are present on
-# /system image.
-llndk_libraries_moved_to_apex_list:=$(LLNDK_MOVED_TO_APEX_LIBRARIES)
-
-# Returns the unique installed basenames of a module, or module.so if there are
-# none.  The guess is to handle cases like libc, where the module itself is
-# marked uninstallable but a symlink is installed with the name libc.so.
 # $(1): list of libraries
-# $(2): suffix to to add to each library (not used for guess)
-define module-installed-files-or-guess
-$(foreach lib,$(1),$(or $(strip $(sort $(notdir $(call module-installed-files,$(lib)$(2))))),$(lib).so))
-endef
-
-# $(1): list of libraries
-# $(2): suffix to add to each library
-# $(3): output file to write the list of libraries to
+# $(2): output file to write the list of libraries to
 define write-libs-to-file
-$(3): PRIVATE_LIBRARIES := $(1)
-$(3): PRIVATE_SUFFIX := $(2)
-$(3):
-	echo -n > $$@ && $$(foreach so,$$(call module-installed-files-or-guess,$$(PRIVATE_LIBRARIES),$$(PRIVATE_SUFFIX)),echo $$(so) >> $$@;)
+$(2): PRIVATE_LIBRARIES := $(1)
+$(2):
+	echo -n > $$@ && $$(foreach lib,$$(PRIVATE_LIBRARIES),echo $$(lib).so >> $$@;)
 endef
-$(eval $(call write-libs-to-file,$(llndk_libraries_list),,$(llndk_libraries_file)))
-$(eval $(call write-libs-to-file,$(vndksp_libraries_list),.vendor,$(vndksp_libraries_file)))
-$(eval $(call write-libs-to-file,$(VNDK_CORE_LIBRARIES),.vendor,$(vndkcore_libraries_file)))
-$(eval $(call write-libs-to-file,$(VNDK_PRIVATE_LIBRARIES),.vendor,$(vndkprivate_libraries_file)))
+$(eval $(call write-libs-to-file,$(llndk_libraries_list),$(llndk_libraries_file)))
+$(eval $(call write-libs-to-file,$(vndksp_libraries_list),$(vndksp_libraries_file)))
+$(eval $(call write-libs-to-file,$(VNDK_CORE_LIBRARIES),$(vndkcore_libraries_file)))
+$(eval $(call write-libs-to-file,$(VNDK_PRIVATE_LIBRARIES),$(vndkprivate_libraries_file)))
 ifeq ($(my_vndk_use_core_variant),true)
-$(eval $(call write-libs-to-file,$(VNDK_USING_CORE_VARIANT_LIBRARIES),,$(vndk_using_core_variant_libraries_file)))
+$(eval $(call write-libs-to-file,$(VNDK_USING_CORE_VARIANT_LIBRARIES),$(vndk_using_core_variant_libraries_file)))
 endif
 endif # ifneq ($(lib_list_from_prebuilts),true)
 
@@ -107,14 +91,6 @@ $(LOCAL_BUILT_MODULE): private-filter-out-private-libs = \
   while read -r privatelib; do sed -i.bak "s/$$privatelib//" $(2) ; done < $(PRIVATE_VNDK_PRIVATE_LIBRARIES_FILE) && \
   sed -i.bak -e 's/::\+/:/g ; s/^:\+// ; s/:\+$$//' $(2) && \
   rm -f $(2).bak
-
-# # Given a file with a list of libs in "a:b:c" format, filter-out the LLNDK libraries migrated into apex file
-# # and write resulting list to a new file in "a:b:c" format
- $(LOCAL_BUILT_MODULE): private-filter-out-llndk-in-apex-libs = \
-   for lib in $(PRIVATE_LLNDK_LIBRARIES_MOVED_TO_APEX_LIST); do sed -i.bak s/$$lib.so// $(1); done && \
-   sed -i.bak -e 's/::\+/:/g ; s/^:\+// ; s/:\+$$//' $(1) && \
-   rm -f $(1).bak
-
 $(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES_FILE := $(llndk_libraries_file)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_SP_LIBRARIES_FILE := $(vndksp_libraries_file)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_CORE_LIBRARIES_FILE := $(vndkcore_libraries_file)
@@ -124,11 +100,10 @@ $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_VERSION_SUFFIX := $(vndk_version_suffix)
 $(LOCAL_BUILT_MODULE): PRIVATE_INTERMEDIATES_DIR := $(intermediates_dir)
 $(LOCAL_BUILT_MODULE): PRIVATE_COMP_CHECK_SCRIPT := $(compatibility_check_script)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_VERSION_TAG := \#VNDK$(vndk_version)\#
-$(LOCAL_BUILT_MODULE): PRIVATE_LLNDK_LIBRARIES_MOVED_TO_APEX_LIST := $(llndk_libraries_moved_to_apex_list)
 deps := $(llndk_libraries_file) $(vndksp_libraries_file) $(vndkcore_libraries_file) \
   $(vndkprivate_libraries_file)
 ifeq ($(check_backward_compatibility),true)
-deps += $(compatibility_check_script) $(wildcard prebuilts/vndk/*/*/configs/ld.config.*.txt)
+deps += $(compatibility_check_script)
 endif
 ifeq ($(my_vndk_use_core_variant),true)
 $(LOCAL_BUILT_MODULE): PRIVATE_VNDK_USING_CORE_VARIANT_LIBRARIES_FILE := $(vndk_using_core_variant_libraries_file)
@@ -143,7 +118,6 @@ ifeq ($(check_backward_compatibility),true)
 endif
 	@mkdir -p $(dir $@)
 	$(call private-filter-out-private-libs,$(PRIVATE_LLNDK_LIBRARIES_FILE),$(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)
-	$(call private-filter-out-llndk-in-apex-libs,$(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)
 	$(hide) sed -e "s?%LLNDK_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/llndk_filtered)?g" $< >$@
 	$(call private-filter-out-private-libs,$(PRIVATE_VNDK_SP_LIBRARIES_FILE),$(PRIVATE_INTERMEDIATES_DIR)/vndksp_filtered)
 	$(hide) sed -i.bak -e "s?%VNDK_SAMEPROCESS_LIBRARIES%?$$(cat $(PRIVATE_INTERMEDIATES_DIR)/vndksp_filtered)?g" $@
@@ -174,7 +148,12 @@ endif
 	$(hide) sed -i.bak -e "s?%SANITIZER_RUNTIME_LIBRARIES%?$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES)?g" $@
 	$(hide) sed -i.bak -e "s?%VNDK_VER%?$(PRIVATE_VNDK_VERSION_SUFFIX)?g" $@
 	$(hide) sed -i.bak -e "s?%PRODUCT%?$(TARGET_COPY_OUT_PRODUCT)?g" $@
-	$(hide) sed -i.bak -e "s?%SYSTEM_EXT%?$(TARGET_COPY_OUT_SYSTEM_EXT)?g" $@
+ifeq ($(TARGET_COPY_OUT_PRODUCT),$(TARGET_COPY_OUT_PRODUCT_SERVICES))
+	# Remove lines containing %PRODUCT_SERVICES% (identical to the %PRODUCT% ones)
+	$(hide) sed -i.bak -e "\?%PRODUCT_SERVICES%?d" $@
+else
+	$(hide) sed -i.bak -e "s?%PRODUCT_SERVICES%?$(TARGET_COPY_OUT_PRODUCT_SERVICES)?g" $@
+endif
 	$(hide) sed -i.bak -e "s?^$(PRIVATE_VNDK_VERSION_TAG)??g" $@
 	$(hide) sed -i.bak "/^\#VNDK[0-9]\{2\}\#.*$$/d" $@
 	$(hide) rm -f $@.bak
@@ -188,7 +167,6 @@ compatibility_check_script :=
 intermediates_dir :=
 library_lists_dir :=
 llndk_libraries_file :=
-llndk_moved_to_apex_libraries_file :=
 vndksp_libraries_file :=
 vndkcore_libraries_file :=
 vndkprivate_libraries_file :=

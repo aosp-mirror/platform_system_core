@@ -25,7 +25,6 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <android/hardware/boot/1.1/IBootControl.h>
 #include <cutils/android_reboot.h>
 #include <ext4_utils/wipe.h>
 #include <fs_mgr.h>
@@ -40,15 +39,14 @@
 #include "flashing.h"
 #include "utility.h"
 
-using android::fs_mgr::MetadataBuilder;
 using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::BoolResult;
 using ::android::hardware::boot::V1_0::CommandResult;
 using ::android::hardware::boot::V1_0::Slot;
-using ::android::hardware::boot::V1_1::MergeStatus;
 using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
-using IBootControl1_1 = ::android::hardware::boot::V1_1::IBootControl;
+
+using namespace android::fs_mgr;
 
 struct VariableHandlers {
     // Callback to retrieve the value of a single variable.
@@ -104,8 +102,7 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
             {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
             {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
-            {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}},
-            {FB_VAR_SNAPSHOT_UPDATE_STATUS, {GetSnapshotUpdateStatus, nullptr}}};
+            {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}}};
 
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");
@@ -196,6 +193,23 @@ bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& arg
 
     PLOG(ERROR) << "Couldn't download data";
     return device->WriteStatus(FastbootResult::FAIL, "Couldn't download data");
+}
+
+bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
+    }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "Flashing is not allowed on locked devices");
+    }
+
+    int ret = Flash(device, args[1]);
+    if (ret < 0) {
+        return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
+    }
+    return device->WriteStatus(FastbootResult::OKAY, "Flashing succeeded");
 }
 
 bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& args) {
@@ -326,7 +340,7 @@ class PartitionBuilder {
 PartitionBuilder::PartitionBuilder(FastbootDevice* device, const std::string& partition_name)
     : device_(device) {
     std::string slot_suffix = GetSuperSlotSuffix(device, partition_name);
-    slot_number_ = android::fs_mgr::SlotNumberForSlotSuffix(slot_suffix);
+    slot_number_ = SlotNumberForSlotSuffix(slot_suffix);
     auto super_device = FindPhysicalPartition(fs_mgr_get_super_partition_name(slot_number_));
     if (!super_device) {
         return;
@@ -336,7 +350,7 @@ PartitionBuilder::PartitionBuilder(FastbootDevice* device, const std::string& pa
 }
 
 bool PartitionBuilder::Write() {
-    auto metadata = builder_->Export();
+    std::unique_ptr<LpMetadata> metadata = builder_->Export();
     if (!metadata) {
         return false;
     }
@@ -367,7 +381,7 @@ bool CreatePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Partition already exists");
     }
 
-    auto partition = builder->AddPartition(partition_name, 0);
+    Partition* partition = builder->AddPartition(partition_name, 0);
     if (!partition) {
         return device->WriteFail("Failed to add partition");
     }
@@ -423,15 +437,10 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Could not open super partition");
     }
 
-    auto partition = builder->FindPartition(partition_name);
+    Partition* partition = builder->FindPartition(partition_name);
     if (!partition) {
         return device->WriteFail("Partition does not exist");
     }
-
-    // Remove the updated flag to cancel any snapshots.
-    uint32_t attrs = partition->attributes();
-    partition->set_attributes(attrs & ~LP_PARTITION_ATTR_UPDATED);
-
     if (!builder->ResizePartition(partition, partition_size)) {
         return device->WriteFail("Not enough space to resize partition");
     }
@@ -439,42 +448,6 @@ bool ResizePartitionHandler(FastbootDevice* device, const std::vector<std::strin
         return device->WriteFail("Failed to write partition table");
     }
     return device->WriteOkay("Partition resized");
-}
-
-void CancelPartitionSnapshot(FastbootDevice* device, const std::string& partition_name) {
-    PartitionBuilder builder(device, partition_name);
-    if (!builder.Valid()) return;
-
-    auto partition = builder->FindPartition(partition_name);
-    if (!partition) return;
-
-    // Remove the updated flag to cancel any snapshots.
-    uint32_t attrs = partition->attributes();
-    partition->set_attributes(attrs & ~LP_PARTITION_ATTR_UPDATED);
-
-    builder.Write();
-}
-
-bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) {
-    if (args.size() < 2) {
-        return device->WriteStatus(FastbootResult::FAIL, "Invalid arguments");
-    }
-
-    if (GetDeviceLockStatus()) {
-        return device->WriteStatus(FastbootResult::FAIL,
-                                   "Flashing is not allowed on locked devices");
-    }
-
-    const auto& partition_name = args[1];
-    if (LogicalPartitionExists(device, partition_name)) {
-        CancelPartitionSnapshot(device, partition_name);
-    }
-
-    int ret = Flash(device, partition_name);
-    if (ret < 0) {
-        return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
-    }
-    return device->WriteStatus(FastbootResult::OKAY, "Flashing succeeded");
 }
 
 bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& args) {
@@ -493,7 +466,7 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
 class AutoMountMetadata {
   public:
     AutoMountMetadata() {
-        android::fs_mgr::Fstab proc_mounts;
+        Fstab proc_mounts;
         if (!ReadFstabFromFile("/proc/mounts", &proc_mounts)) {
             LOG(ERROR) << "Could not read /proc/mounts";
             return;
@@ -521,7 +494,7 @@ class AutoMountMetadata {
     explicit operator bool() const { return mounted_; }
 
   private:
-    android::fs_mgr::Fstab fstab_;
+    Fstab fstab_;
     bool mounted_ = false;
     bool should_unmount_ = false;
 };
@@ -548,43 +521,6 @@ bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
         if (!android::gsi::DisableGsi()) {
             return device->WriteStatus(FastbootResult::FAIL, strerror(errno));
         }
-    }
-    return device->WriteStatus(FastbootResult::OKAY, "Success");
-}
-
-bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string>& args) {
-    // Note that we use the HAL rather than mounting /metadata, since we want
-    // our results to match the bootloader.
-    auto hal = device->boot_control_hal();
-    if (!hal) return device->WriteFail("Not supported");
-
-    android::sp<IBootControl1_1> hal11 = IBootControl1_1::castFrom(hal);
-    if (!hal11) return device->WriteFail("Not supported");
-
-    // If no arguments, return the same thing as a getvar. Note that we get the
-    // HAL first so we can return "not supported" before we return the less
-    // specific error message below.
-    if (args.size() < 2 || args[1].empty()) {
-        std::string message;
-        if (!GetSnapshotUpdateStatus(device, {}, &message)) {
-            return device->WriteFail("Could not determine update status");
-        }
-        device->WriteInfo(message);
-        return device->WriteOkay("");
-    }
-
-    if (args.size() != 2 || args[1] != "cancel") {
-        return device->WriteFail("Invalid arguments");
-    }
-
-    MergeStatus status = hal11->getSnapshotMergeStatus();
-    switch (status) {
-        case MergeStatus::SNAPSHOTTED:
-        case MergeStatus::MERGING:
-            hal11->setSnapshotMergeStatus(MergeStatus::CANCELLED);
-            break;
-        default:
-            break;
     }
     return device->WriteStatus(FastbootResult::OKAY, "Success");
 }

@@ -56,7 +56,14 @@ LogBufferElement::LogBufferElement(const LogBufferElement& elem)
       mLogId(elem.mLogId),
       mDropped(elem.mDropped) {
     if (mDropped) {
-        mTag = elem.getTag();
+        if (elem.isBinary() && elem.mMsg != nullptr) {
+            // for the following "len" value, refer to : setDropped(uint16_t value), getTag()
+            const int len = sizeof(android_event_header_t);
+            mMsg = new char[len];
+            memcpy(mMsg, elem.mMsg, len);
+        } else {
+            mMsg = nullptr;
+        }
     } else {
         mMsg = new char[mMsgLen];
         memcpy(mMsg, elem.mMsg, mMsgLen);
@@ -64,43 +71,31 @@ LogBufferElement::LogBufferElement(const LogBufferElement& elem)
 }
 
 LogBufferElement::~LogBufferElement() {
-    if (!mDropped) {
-        delete[] mMsg;
-    }
+    delete[] mMsg;
 }
 
 uint32_t LogBufferElement::getTag() const {
-    // Binary buffers have no tag.
-    if (!isBinary()) {
-        return 0;
-    }
-
-    // Dropped messages store the tag in place of mMsg.
-    if (mDropped) {
-        return mTag;
-    }
-
-    // For non-dropped messages, we get the tag from the message header itself.
-    if (mMsgLen < sizeof(android_event_header_t)) {
-        return 0;
-    }
-
-    return reinterpret_cast<const android_event_header_t*>(mMsg)->tag;
+    return (isBinary() &&
+            ((mDropped && mMsg != nullptr) ||
+             (!mDropped && mMsgLen >= sizeof(android_event_header_t))))
+               ? reinterpret_cast<const android_event_header_t*>(mMsg)->tag
+               : 0;
 }
 
 uint16_t LogBufferElement::setDropped(uint16_t value) {
-    if (mDropped) {
-        return mDroppedCount = value;
+    // The tag information is saved in mMsg data, if the tag is non-zero
+    // save only the information needed to get the tag.
+    if (getTag() != 0) {
+        if (mMsgLen > sizeof(android_event_header_t)) {
+            char* truncated_msg = new char[sizeof(android_event_header_t)];
+            memcpy(truncated_msg, mMsg, sizeof(android_event_header_t));
+            delete[] mMsg;
+            mMsg = truncated_msg;
+        }  // mMsgLen == sizeof(android_event_header_t), already at minimum.
+    } else {
+        delete[] mMsg;
+        mMsg = nullptr;
     }
-
-    // The tag information is saved in mMsg data, which is in a union with mTag, used after mDropped
-    // is set to true. Therefore we save the tag value aside, delete mMsg, then set mTag to the tag
-    // value in its place.
-    auto old_tag = getTag();
-    delete[] mMsg;
-    mMsg = nullptr;
-
-    mTag = old_tag;
     mDropped = true;
     return mDroppedCount = value;
 }
@@ -244,10 +239,14 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
     return retval;
 }
 
-log_time LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent, bool lastSame) {
-    struct logger_entry entry = {};
+log_time LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent,
+                                   bool privileged, bool lastSame) {
+    struct logger_entry_v4 entry;
 
-    entry.hdr_size = sizeof(struct logger_entry);
+    memset(&entry, 0, sizeof(struct logger_entry_v4));
+
+    entry.hdr_size = privileged ? sizeof(struct logger_entry_v4)
+                                : sizeof(struct logger_entry_v3);
     entry.lid = mLogId;
     entry.pid = mPid;
     entry.tid = mTid;

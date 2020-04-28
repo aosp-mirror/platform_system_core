@@ -20,7 +20,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pwd.h>
-#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,25 +34,23 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <selinux/android.h>
 
 #if defined(__ANDROID__)
-#include <android/api-level.h>
-#include <sys/system_properties.h>
-
 #include "reboot_utils.h"
-#include "selabel.h"
 #include "selinux.h"
 #else
 #include "host_init_stubs.h"
 #endif
 
+#ifdef _INIT_INIT_H
+#error "Do not include init.h in files used by ueventd; it will expose init's globals"
+#endif
+
 using android::base::boot_clock;
-using android::base::StartsWith;
 using namespace std::literals::string_literals;
 
 namespace android {
@@ -84,28 +81,32 @@ Result<uid_t> DecodeUid(const std::string& name) {
  * daemon. We communicate the file descriptor's value via the environment
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
-Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_t perm, uid_t uid,
-                         gid_t gid, const std::string& socketcon) {
-    if (!socketcon.empty()) {
-        if (setsockcreatecon(socketcon.c_str()) == -1) {
-            return ErrnoError() << "setsockcreatecon(\"" << socketcon << "\") failed";
+int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
+                 const char* socketcon) {
+    if (socketcon) {
+        if (setsockcreatecon(socketcon) == -1) {
+            PLOG(ERROR) << "setsockcreatecon(\"" << socketcon << "\") failed";
+            return -1;
         }
     }
 
     android::base::unique_fd fd(socket(PF_UNIX, type, 0));
     if (fd < 0) {
-        return ErrnoError() << "Failed to open socket '" << name << "'";
+        PLOG(ERROR) << "Failed to open socket '" << name << "'";
+        return -1;
     }
 
-    if (!socketcon.empty()) setsockcreatecon(nullptr);
+    if (socketcon) setsockcreatecon(NULL);
 
     struct sockaddr_un addr;
     memset(&addr, 0 , sizeof(addr));
     addr.sun_family = AF_UNIX;
-    snprintf(addr.sun_path, sizeof(addr.sun_path), ANDROID_SOCKET_DIR "/%s", name.c_str());
+    snprintf(addr.sun_path, sizeof(addr.sun_path), ANDROID_SOCKET_DIR"/%s",
+             name);
 
     if ((unlink(addr.sun_path) != 0) && (errno != ENOENT)) {
-        return ErrnoError() << "Failed to unlink old socket '" << name << "'";
+        PLOG(ERROR) << "Failed to unlink old socket '" << name << "'";
+        return -1;
     }
 
     std::string secontext;
@@ -116,7 +117,8 @@ Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_
     if (passcred) {
         int on = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on))) {
-            return ErrnoError() << "Failed to set SO_PASSCRED '" << name << "'";
+            PLOG(ERROR) << "Failed to set SO_PASSCRED '" << name << "'";
+            return -1;
         }
     }
 
@@ -127,18 +129,19 @@ Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_
         setfscreatecon(nullptr);
     }
 
-    auto guard = android::base::make_scope_guard([&addr] { unlink(addr.sun_path); });
-
     if (ret) {
         errno = savederrno;
-        return ErrnoError() << "Failed to bind socket '" << name << "'";
+        PLOG(ERROR) << "Failed to bind socket '" << name << "'";
+        goto out_unlink;
     }
 
     if (lchown(addr.sun_path, uid, gid)) {
-        return ErrnoError() << "Failed to lchown socket '" << addr.sun_path << "'";
+        PLOG(ERROR) << "Failed to lchown socket '" << addr.sun_path << "'";
+        goto out_unlink;
     }
     if (fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW)) {
-        return ErrnoError() << "Failed to fchmodat socket '" << addr.sun_path << "'";
+        PLOG(ERROR) << "Failed to fchmodat socket '" << addr.sun_path << "'";
+        goto out_unlink;
     }
 
     LOG(INFO) << "Created socket '" << addr.sun_path << "'"
@@ -146,8 +149,11 @@ Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_
               << ", user " << uid
               << ", group " << gid;
 
-    guard.Disable();
     return fd.release();
+
+out_unlink:
+    unlink(addr.sun_path);
+    return -1;
 }
 
 Result<std::string> ReadFile(const std::string& path) {
@@ -191,7 +197,7 @@ static int OpenFile(const std::string& path, int flags, mode_t mode) {
     return rc;
 }
 
-Result<void> WriteFile(const std::string& path, const std::string& content) {
+Result<Success> WriteFile(const std::string& path, const std::string& content) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(
         OpenFile(path, O_WRONLY | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0600)));
     if (fd == -1) {
@@ -200,7 +206,7 @@ Result<void> WriteFile(const std::string& path, const std::string& content) {
     if (!android::base::WriteStringToFd(content, fd)) {
         return ErrnoError() << "Unable to write file contents";
     }
-    return {};
+    return Success();
 }
 
 bool mkdir_recursive(const std::string& path, mode_t mode) {
@@ -273,10 +279,12 @@ bool is_dir(const char* pathname) {
     return S_ISDIR(info.st_mode);
 }
 
-Result<std::string> ExpandProps(const std::string& src) {
+bool expand_props(const std::string& src, std::string* dst) {
     const char* src_ptr = src.c_str();
 
-    std::string dst;
+    if (!dst) {
+        return false;
+    }
 
     /* - variables can either be $x.y or ${x.y}, in case they are only part
      *   of the string.
@@ -290,19 +298,19 @@ Result<std::string> ExpandProps(const std::string& src) {
 
         c = strchr(src_ptr, '$');
         if (!c) {
-            dst.append(src_ptr);
-            return dst;
+            dst->append(src_ptr);
+            return true;
         }
 
-        dst.append(src_ptr, c);
+        dst->append(src_ptr, c);
         c++;
 
         if (*c == '$') {
-            dst.push_back(*(c++));
+            dst->push_back(*(c++));
             src_ptr = c;
             continue;
         } else if (*c == '\0') {
-            return dst;
+            return true;
         }
 
         std::string prop_name;
@@ -312,7 +320,8 @@ Result<std::string> ExpandProps(const std::string& src) {
             const char* end = strchr(c, '}');
             if (!end) {
                 // failed to find closing brace, abort.
-                return Error() << "unexpected end of string in '" << src << "', looking for }";
+                LOG(ERROR) << "unexpected end of string in '" << src << "', looking for }";
+                return false;
             }
             prop_name = std::string(c, end);
             c = end + 1;
@@ -323,34 +332,29 @@ Result<std::string> ExpandProps(const std::string& src) {
             }
         } else {
             prop_name = c;
-            if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_R__) {
-                return Error() << "using deprecated syntax for specifying property '" << c
-                               << "', use ${name} instead";
-            } else {
-                LOG(ERROR) << "using deprecated syntax for specifying property '" << c
-                           << "', use ${name} instead";
-            }
+            LOG(ERROR) << "using deprecated syntax for specifying property '" << c << "', use ${name} instead";
             c += prop_name.size();
         }
 
         if (prop_name.empty()) {
-            return Error() << "invalid zero-length property name in '" << src << "'";
+            LOG(ERROR) << "invalid zero-length property name in '" << src << "'";
+            return false;
         }
 
         std::string prop_val = android::base::GetProperty(prop_name, "");
         if (prop_val.empty()) {
             if (def_val.empty()) {
-                return Error() << "property '" << prop_name << "' doesn't exist while expanding '"
-                               << src << "'";
+                LOG(ERROR) << "property '" << prop_name << "' doesn't exist while expanding '" << src << "'";
+                return false;
             }
             prop_val = def_val;
         }
 
-        dst.append(prop_val);
+        dst->append(prop_val);
         src_ptr = c;
     }
 
-    return dst;
+    return true;
 }
 
 static std::string init_android_dt_dir() {
@@ -422,194 +426,6 @@ bool IsLegalPropertyName(const std::string& name) {
     return true;
 }
 
-Result<void> IsLegalPropertyValue(const std::string& name, const std::string& value) {
-    if (value.size() >= PROP_VALUE_MAX && !StartsWith(name, "ro.")) {
-        return Error() << "Property value too long";
-    }
-
-    if (mbstowcs(nullptr, value.data(), 0) == static_cast<std::size_t>(-1)) {
-        return Error() << "Value is not a UTF8 encoded string";
-    }
-
-    return {};
-}
-
-static FscryptAction FscryptInferAction(const std::string& dir) {
-    const std::string prefix = "/data/";
-
-    if (!android::base::StartsWith(dir, prefix)) {
-        return FscryptAction::kNone;
-    }
-
-    // Special-case /data/media/obb per b/64566063
-    if (dir == "/data/media/obb") {
-        // Try to set policy on this directory, but if it is non-empty this may fail.
-        return FscryptAction::kAttempt;
-    }
-
-    // Only set policy on first level /data directories
-    // To make this less restrictive, consider using a policy file.
-    // However this is overkill for as long as the policy is simply
-    // to apply a global policy to all /data folders created via makedir
-    if (dir.find_first_of('/', prefix.size()) != std::string::npos) {
-        return FscryptAction::kNone;
-    }
-
-    // Special case various directories that must not be encrypted,
-    // often because their subdirectories must be encrypted.
-    // This isn't a nice way to do this, see b/26641735
-    std::vector<std::string> directories_to_exclude = {
-            "lost+found", "system_ce", "system_de", "misc_ce",     "misc_de",
-            "vendor_ce",  "vendor_de", "media",     "data",        "user",
-            "user_de",    "apex",      "preloads",  "app-staging", "gsi",
-    };
-    for (const auto& d : directories_to_exclude) {
-        if ((prefix + d) == dir) {
-            return FscryptAction::kNone;
-        }
-    }
-    // Empty these directories if policy setting fails.
-    std::vector<std::string> wipe_on_failure = {
-            "rollback", "rollback-observer",  // b/139193659
-    };
-    for (const auto& d : wipe_on_failure) {
-        if ((prefix + d) == dir) {
-            return FscryptAction::kDeleteIfNecessary;
-        }
-    }
-    return FscryptAction::kRequire;
-}
-
-Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args) {
-    mode_t mode = 0755;
-    Result<uid_t> uid = -1;
-    Result<gid_t> gid = -1;
-    FscryptAction fscrypt_inferred_action = FscryptInferAction(args[1]);
-    FscryptAction fscrypt_action = fscrypt_inferred_action;
-    std::string ref_option = "ref";
-    bool set_option_encryption = false;
-    bool set_option_key = false;
-
-    for (size_t i = 2; i < args.size(); i++) {
-        switch (i) {
-            case 2:
-                mode = std::strtoul(args[2].c_str(), 0, 8);
-                break;
-            case 3:
-                uid = DecodeUid(args[3]);
-                if (!uid) {
-                    return Error()
-                           << "Unable to decode UID for '" << args[3] << "': " << uid.error();
-                }
-                break;
-            case 4:
-                gid = DecodeUid(args[4]);
-                if (!gid) {
-                    return Error()
-                           << "Unable to decode GID for '" << args[4] << "': " << gid.error();
-                }
-                break;
-            default:
-                auto parts = android::base::Split(args[i], "=");
-                if (parts.size() != 2) {
-                    return Error() << "Can't parse option: '" << args[i] << "'";
-                }
-                auto optname = parts[0];
-                auto optval = parts[1];
-                if (optname == "encryption") {
-                    if (set_option_encryption) {
-                        return Error() << "Duplicated option: '" << optname << "'";
-                    }
-                    if (optval == "Require") {
-                        fscrypt_action = FscryptAction::kRequire;
-                    } else if (optval == "None") {
-                        fscrypt_action = FscryptAction::kNone;
-                    } else if (optval == "Attempt") {
-                        fscrypt_action = FscryptAction::kAttempt;
-                    } else if (optval == "DeleteIfNecessary") {
-                        fscrypt_action = FscryptAction::kDeleteIfNecessary;
-                    } else {
-                        return Error() << "Unknown encryption option: '" << optval << "'";
-                    }
-                    set_option_encryption = true;
-                } else if (optname == "key") {
-                    if (set_option_key) {
-                        return Error() << "Duplicated option: '" << optname << "'";
-                    }
-                    if (optval == "ref" || optval == "per_boot_ref") {
-                        ref_option = optval;
-                    } else {
-                        return Error() << "Unknown key option: '" << optval << "'";
-                    }
-                    set_option_key = true;
-                } else {
-                    return Error() << "Unknown option: '" << args[i] << "'";
-                }
-        }
-    }
-    if (set_option_key && fscrypt_action == FscryptAction::kNone) {
-        return Error() << "Key option set but encryption action is none";
-    }
-    const std::string prefix = "/data/";
-    if (StartsWith(args[1], prefix) &&
-        args[1].find_first_of('/', prefix.size()) == std::string::npos) {
-        if (!set_option_encryption) {
-            LOG(WARNING) << "Top-level directory needs encryption action, eg mkdir " << args[1]
-                         << " <mode> <uid> <gid> encryption=Require";
-        }
-        if (fscrypt_action == FscryptAction::kNone) {
-            LOG(INFO) << "Not setting encryption policy on: " << args[1];
-        }
-    }
-    if (fscrypt_action != fscrypt_inferred_action) {
-        LOG(WARNING) << "Inferred action different from explicit one, expected "
-                     << static_cast<int>(fscrypt_inferred_action) << " but got "
-                     << static_cast<int>(fscrypt_action);
-    }
-
-    return MkdirOptions{args[1], mode, *uid, *gid, fscrypt_action, ref_option};
-}
-
-Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
-        const std::vector<std::string>& args) {
-    struct flag_type {
-        const char* name;
-        int value;
-    };
-    static const flag_type flags[] = {
-            {"--recursive", SELINUX_ANDROID_RESTORECON_RECURSE},
-            {"--skip-ce", SELINUX_ANDROID_RESTORECON_SKIPCE},
-            {"--cross-filesystems", SELINUX_ANDROID_RESTORECON_CROSS_FILESYSTEMS},
-            {0, 0}};
-
-    int flag = 0;
-    std::vector<std::string> paths;
-
-    bool in_flags = true;
-    for (size_t i = 1; i < args.size(); ++i) {
-        if (android::base::StartsWith(args[i], "--")) {
-            if (!in_flags) {
-                return Error() << "flags must precede paths";
-            }
-            bool found = false;
-            for (size_t j = 0; flags[j].name; ++j) {
-                if (args[i] == flags[j].name) {
-                    flag |= flags[j].value;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return Error() << "bad flag " << args[i];
-            }
-        } else {
-            in_flags = false;
-            paths.emplace_back(args[i]);
-        }
-    }
-    return std::pair(flag, paths);
-}
-
 static void InitAborter(const char* abort_message) {
     // When init forks, it continues to use this aborter for LOG(FATAL), but we want children to
     // simply abort instead of trying to reboot the system.
@@ -618,7 +434,7 @@ static void InitAborter(const char* abort_message) {
         return;
     }
 
-    InitFatalReboot(SIGABRT);
+    InitFatalReboot();
 }
 
 // The kernel opens /dev/console and uses that fd for stdin/stdout/stderr if there is a serial
@@ -638,7 +454,7 @@ static void InitAborter(const char* abort_message) {
 // SetStdioToDevNull() must be called again in second stage init.
 void SetStdioToDevNull(char** argv) {
     // Make stdin/stdout/stderr all point to /dev/null.
-    int fd = open("/dev/null", O_RDWR);  // NOLINT(android-cloexec-open)
+    int fd = open("/dev/null", O_RDWR);
     if (fd == -1) {
         int saved_errno = errno;
         android::base::InitLogging(argv, &android::base::KernelLogger, InitAborter);

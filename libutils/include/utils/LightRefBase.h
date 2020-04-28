@@ -47,6 +47,8 @@ public:
         return mCount.load(std::memory_order_relaxed);
     }
 
+    typedef LightRefBase<T> basetype;
+
 protected:
     inline ~LightRefBase() { }
 

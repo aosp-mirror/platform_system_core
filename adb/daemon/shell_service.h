@@ -48,7 +48,7 @@ unique_fd StartSubprocess(std::string name, const char* terminal_type, Subproces
 // Sets up in/out and error streams to emulate shell-like behavior.
 //
 // Returns an open FD connected to the thread or -1 on failure.
-using Command = int(std::string_view args, borrowed_fd in, borrowed_fd out, borrowed_fd err);
+using Command = int(std::string_view args, int in, int out, int err);
 unique_fd StartCommandInProcess(std::string name, Command command, SubprocessProtocol protocol);
 
 // Create a pipe containing the error.

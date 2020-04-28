@@ -96,6 +96,11 @@ Public Functions and Macros
 
     int android_log_destroy(android_log_context *ctx)
 
+    #include <log/log_transport.h>
+
+    int android_set_log_transport(int transport_flag)
+    int android_get_log_transport()
+
 Description
 -----------
 
@@ -138,6 +143,11 @@ The value returned by `android_logger_open()` can be used as a parameter to the
 size and log buffer format protocol version respectively.  `android_logger_get_id()` returns the id
 that was used when opening the sub-log.  It is recommended to open the log `ANDROID_LOG_RDONLY` in
 these cases.
+
+`android_set_log_transport()` selects transport filters.  Argument is either `LOGGER_DEFAULT`,
+`LOGGER_LOGD`, or `LOGGER_NULL`. Log to logger daemon for default or logd, or drop contents on floor
+respectively.  `Both android_set_log_transport()` and `android_get_log_transport()` return the
+current transport mask, or a negative errno for any problems.
 
 Errors
 ------

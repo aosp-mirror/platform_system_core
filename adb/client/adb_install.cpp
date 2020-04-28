@@ -16,7 +16,6 @@
 
 #include "adb_install.h"
 
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -37,33 +36,22 @@
 #include "commandline.h"
 #include "fastdeploy.h"
 
+#if defined(ENABLE_FASTDEPLOY)
 static constexpr int kFastDeployMinApi = 24;
-
-namespace {
-
-enum InstallMode {
-    INSTALL_DEFAULT,
-    INSTALL_PUSH,
-    INSTALL_STREAM,
-};
-
-}
+#endif
 
 static bool can_use_feature(const char* feature) {
     FeatureSet features;
     std::string error;
     if (!adb_get_feature_set(&features, &error)) {
         fprintf(stderr, "error: %s\n", error.c_str());
-        return false;
+        return true;
     }
     return CanUseFeature(features, feature);
 }
 
-static InstallMode best_install_mode() {
-    if (can_use_feature(kFeatureCmd)) {
-        return INSTALL_STREAM;
-    }
-    return INSTALL_PUSH;
+static bool use_legacy_install() {
+    return !can_use_feature(kFeatureCmd);
 }
 
 static bool is_apex_supported() {
@@ -124,7 +112,7 @@ static int uninstall_app_legacy(int argc, const char** argv) {
 }
 
 int uninstall_app(int argc, const char** argv) {
-    if (best_install_mode() == INSTALL_PUSH) {
+    if (use_legacy_install()) {
         return uninstall_app_legacy(argc, argv);
     }
     return uninstall_app_streamed(argc, argv);
@@ -144,7 +132,15 @@ static void read_status_line(int fd, char* buf, size_t count) {
     *buf = '\0';
 }
 
-static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy) {
+#if defined(ENABLE_FASTDEPLOY)
+static int delete_device_patch_file(const char* apkPath) {
+    std::string patchDevicePath = get_patch_path(apkPath);
+    return delete_device_file(patchDevicePath);
+}
+#endif
+
+static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy,
+                                bool use_localagent) {
     printf("Performing Streamed Install\n");
 
     // The last argument must be the APK file
@@ -166,80 +162,81 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
         error_exit("--fastdeploy doesn't support .apex files");
     }
 
-    if (use_fastdeploy) {
-        auto metadata = extract_metadata(file);
-        if (metadata.has_value()) {
-            // pass all but 1st (command) and last (apk path) parameters through to pm for
-            // session creation
-            std::vector<const char*> pm_args{argv + 1, argv + argc - 1};
-            auto patchFd = install_patch(pm_args.size(), pm_args.data());
-            return stream_patch(file, std::move(metadata.value()), std::move(patchFd));
+    if (use_fastdeploy == true) {
+#if defined(ENABLE_FASTDEPLOY)
+        TemporaryFile metadataTmpFile;
+        std::string patchTmpFilePath;
+        {
+            TemporaryFile patchTmpFile;
+            patchTmpFile.DoNotRemove();
+            patchTmpFilePath = patchTmpFile.path;
         }
-    }
 
-    struct stat sb;
-    if (stat(file, &sb) == -1) {
-        fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
-        return 1;
-    }
+        FILE* metadataFile = fopen(metadataTmpFile.path, "wb");
+        extract_metadata(file, metadataFile);
+        fclose(metadataFile);
 
-    unique_fd local_fd(adb_open(file, O_RDONLY | O_CLOEXEC));
-    if (local_fd < 0) {
-        fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
-        return 1;
-    }
-
-#ifdef __linux__
-    posix_fadvise(local_fd.get(), 0, 0, POSIX_FADV_SEQUENTIAL | POSIX_FADV_NOREUSE);
-#endif
-
-    const bool use_abb = can_use_feature(kFeatureAbbExec);
-    std::string error;
-    std::vector<std::string> cmd_args = {use_abb ? "package" : "exec:cmd package"};
-    cmd_args.reserve(argc + 3);
-
-    // don't copy the APK name, but, copy the rest of the arguments as-is
-    while (argc-- > 1) {
-        if (use_abb) {
-            cmd_args.push_back(*argv++);
-        } else {
-            cmd_args.push_back(escape_arg(*argv++));
-        }
-    }
-
-    // add size parameter [required for streaming installs]
-    // do last to override any user specified value
-    cmd_args.push_back("-S");
-    cmd_args.push_back(android::base::StringPrintf("%" PRIu64, static_cast<uint64_t>(sb.st_size)));
-
-    if (is_apex) {
-        cmd_args.push_back("--apex");
-    }
-
-    unique_fd remote_fd;
-    if (use_abb) {
-        remote_fd = send_abb_exec_command(cmd_args, &error);
-    } else {
-        remote_fd.reset(adb_connect(android::base::Join(cmd_args, " "), &error));
-    }
-    if (remote_fd < 0) {
-        fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
-        return 1;
-    }
-
-    copy_to_file(local_fd.get(), remote_fd.get());
-
-    char buf[BUFSIZ];
-    read_status_line(remote_fd.get(), buf, sizeof(buf));
-    if (!strncmp("Success", buf, 7)) {
-        fputs(buf, stdout);
+        create_patch(file, metadataTmpFile.path, patchTmpFilePath.c_str());
+        // pass all but 1st (command) and last (apk path) parameters through to pm for
+        // session creation
+        std::vector<const char*> pm_args{argv + 1, argv + argc - 1};
+        install_patch(file, patchTmpFilePath.c_str(), pm_args.size(), pm_args.data());
+        adb_unlink(patchTmpFilePath.c_str());
+        delete_device_patch_file(file);
         return 0;
+#else
+        error_exit("fastdeploy is disabled");
+#endif
+    } else {
+        struct stat sb;
+        if (stat(file, &sb) == -1) {
+            fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
+            return 1;
+        }
+
+        unique_fd local_fd(adb_open(file, O_RDONLY | O_CLOEXEC));
+        if (local_fd < 0) {
+            fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
+            return 1;
+        }
+
+        std::string error;
+        std::string cmd = "exec:cmd package";
+
+        // don't copy the APK name, but, copy the rest of the arguments as-is
+        while (argc-- > 1) {
+            cmd += " " + escape_arg(std::string(*argv++));
+        }
+
+        // add size parameter [required for streaming installs]
+        // do last to override any user specified value
+        cmd += " " + android::base::StringPrintf("-S %" PRIu64, static_cast<uint64_t>(sb.st_size));
+
+        if (is_apex) {
+            cmd += " --apex";
+        }
+
+        unique_fd remote_fd(adb_connect(cmd, &error));
+        if (remote_fd < 0) {
+            fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
+            return 1;
+        }
+
+        char buf[BUFSIZ];
+        copy_to_file(local_fd.get(), remote_fd.get());
+        read_status_line(remote_fd.get(), buf, sizeof(buf));
+
+        if (!strncmp("Success", buf, 7)) {
+            fputs(buf, stdout);
+            return 0;
+        }
+        fprintf(stderr, "adb: failed to install %s: %s", file, buf);
+        return 1;
     }
-    fprintf(stderr, "adb: failed to install %s: %s", file, buf);
-    return 1;
 }
 
-static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy) {
+static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy,
+                              bool use_localagent) {
     printf("Performing Push Install\n");
 
     // Find last APK argument.
@@ -259,35 +256,50 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy) 
 
     int result = -1;
     std::vector<const char*> apk_file = {argv[last_apk]};
-    std::string apk_dest = "/data/local/tmp/" + android::base::Basename(argv[last_apk]);
+    std::string apk_dest =
+            "/data/local/tmp/" + android::base::Basename(argv[last_apk]);
+
+    if (use_fastdeploy == true) {
+#if defined(ENABLE_FASTDEPLOY)
+        TemporaryFile metadataTmpFile;
+        TemporaryFile patchTmpFile;
+
+        FILE* metadataFile = fopen(metadataTmpFile.path, "wb");
+        extract_metadata(apk_file[0], metadataFile);
+        fclose(metadataFile);
+
+        create_patch(apk_file[0], metadataTmpFile.path, patchTmpFile.path);
+        apply_patch_on_device(apk_file[0], patchTmpFile.path, apk_dest.c_str());
+#else
+        error_exit("fastdeploy is disabled");
+#endif
+    } else {
+        if (!do_sync_push(apk_file, apk_dest.c_str(), false)) goto cleanup_apk;
+    }
+
     argv[last_apk] = apk_dest.c_str(); /* destination name, not source location */
+    result = pm_command(argc, argv);
 
-    if (use_fastdeploy) {
-        auto metadata = extract_metadata(apk_file[0]);
-        if (metadata.has_value()) {
-            auto patchFd = apply_patch_on_device(apk_dest.c_str());
-            int status = stream_patch(apk_file[0], std::move(metadata.value()), std::move(patchFd));
-
-            result = pm_command(argc, argv);
-            delete_device_file(apk_dest);
-
-            return status;
-        }
+cleanup_apk:
+    if (use_fastdeploy == true) {
+#if defined(ENABLE_FASTDEPLOY)
+        delete_device_patch_file(apk_file[0]);
+#endif
     }
-
-    if (do_sync_push(apk_file, apk_dest.c_str(), false)) {
-        result = pm_command(argc, argv);
-        delete_device_file(apk_dest);
-    }
-
+    delete_device_file(apk_dest);
     return result;
 }
 
 int install_app(int argc, const char** argv) {
     std::vector<int> processedArgIndicies;
-    InstallMode installMode = INSTALL_DEFAULT;
+    enum installMode {
+        INSTALL_DEFAULT,
+        INSTALL_PUSH,
+        INSTALL_STREAM
+    } installMode = INSTALL_DEFAULT;
     bool use_fastdeploy = false;
     bool is_reinstall = false;
+    bool use_localagent = false;
     FastDeploy_AgentUpdateStrategy agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
 
     for (int i = 1; i < argc; i++) {
@@ -316,24 +328,34 @@ int install_app(int argc, const char** argv) {
         } else if (!strcmp(argv[i], "--version-check-agent")) {
             processedArgIndicies.push_back(i);
             agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
+#ifndef _WIN32
+        } else if (!strcmp(argv[i], "--local-agent")) {
+            processedArgIndicies.push_back(i);
+            use_localagent = true;
+#endif
         }
     }
 
     if (installMode == INSTALL_DEFAULT) {
-        installMode = best_install_mode();
+        if (use_legacy_install()) {
+            installMode = INSTALL_PUSH;
+        } else {
+            installMode = INSTALL_STREAM;
+        }
     }
 
-    if (installMode == INSTALL_STREAM && best_install_mode() == INSTALL_PUSH) {
+    if (installMode == INSTALL_STREAM && use_legacy_install() == true) {
         error_exit("Attempting to use streaming install on unsupported device");
     }
 
-    if (use_fastdeploy && get_device_api_level() < kFastDeployMinApi) {
+#if defined(ENABLE_FASTDEPLOY)
+    if (use_fastdeploy == true && get_device_api_level() < kFastDeployMinApi) {
         printf("Fast Deploy is only compatible with devices of API version %d or higher, "
                "ignoring.\n",
                kFastDeployMinApi);
         use_fastdeploy = false;
     }
-    fastdeploy_set_agent_update_strategy(agent_update_strategy);
+#endif
 
     std::vector<const char*> passthrough_argv;
     for (int i = 0; i < argc; i++) {
@@ -346,13 +368,26 @@ int install_app(int argc, const char** argv) {
         error_exit("install requires an apk argument");
     }
 
+    if (use_fastdeploy == true) {
+#if defined(ENABLE_FASTDEPLOY)
+        fastdeploy_set_local_agent(use_localagent);
+        update_agent(agent_update_strategy);
+
+        // The last argument must be the APK file
+        const char* file = passthrough_argv.back();
+        use_fastdeploy = find_package(file);
+#else
+        error_exit("fastdeploy is disabled");
+#endif
+    }
+
     switch (installMode) {
         case INSTALL_PUSH:
             return install_app_legacy(passthrough_argv.size(), passthrough_argv.data(),
-                                      use_fastdeploy);
+                                      use_fastdeploy, use_localagent);
         case INSTALL_STREAM:
             return install_app_streamed(passthrough_argv.size(), passthrough_argv.data(),
-                                        use_fastdeploy);
+                                        use_fastdeploy, use_localagent);
         case INSTALL_DEFAULT:
         default:
             return 1;
@@ -374,8 +409,7 @@ int install_multiple_app(int argc, const char** argv) {
             android::base::EndsWithIgnoreCase(file, ".dm") ||
             android::base::EndsWithIgnoreCase(file, ".fsv_sig")) {
             struct stat sb;
-            if (stat(file, &sb) == -1) perror_exit("failed to stat \"%s\"", file);
-            total_size += sb.st_size;
+            if (stat(file, &sb) != -1) total_size += sb.st_size;
             first_apk = i;
         } else {
             break;
@@ -385,7 +419,7 @@ int install_multiple_app(int argc, const char** argv) {
     if (first_apk == -1) error_exit("need APK file on command line");
 
     std::string install_cmd;
-    if (best_install_mode() == INSTALL_PUSH) {
+    if (use_legacy_install()) {
         install_cmd = "exec:pm";
     } else {
         install_cmd = "exec:cmd package";
@@ -425,13 +459,13 @@ int install_multiple_app(int argc, const char** argv) {
     }
 
     // Valid session, now stream the APKs
-    bool success = true;
+    int success = 1;
     for (int i = first_apk; i < argc; i++) {
         const char* file = argv[i];
         struct stat sb;
         if (stat(file, &sb) == -1) {
-            fprintf(stderr, "adb: failed to stat \"%s\": %s\n", file, strerror(errno));
-            success = false;
+            fprintf(stderr, "adb: failed to stat %s: %s\n", file, strerror(errno));
+            success = 0;
             goto finalize_session;
         }
 
@@ -442,8 +476,8 @@ int install_multiple_app(int argc, const char** argv) {
 
         unique_fd local_fd(adb_open(file, O_RDONLY | O_CLOEXEC));
         if (local_fd < 0) {
-            fprintf(stderr, "adb: failed to open \"%s\": %s\n", file, strerror(errno));
-            success = false;
+            fprintf(stderr, "adb: failed to open %s: %s\n", file, strerror(errno));
+            success = 0;
             goto finalize_session;
         }
 
@@ -451,7 +485,7 @@ int install_multiple_app(int argc, const char** argv) {
         unique_fd remote_fd(adb_connect(cmd, &error));
         if (remote_fd < 0) {
             fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
-            success = false;
+            success = 0;
             goto finalize_session;
         }
 
@@ -459,15 +493,15 @@ int install_multiple_app(int argc, const char** argv) {
         read_status_line(remote_fd.get(), buf, sizeof(buf));
 
         if (strncmp("Success", buf, 7)) {
-            fprintf(stderr, "adb: failed to write \"%s\"\n", file);
+            fprintf(stderr, "adb: failed to write %s\n", file);
             fputs(buf, stderr);
-            success = false;
+            success = 0;
             goto finalize_session;
         }
     }
 
 finalize_session:
-    // Commit session if we streamed everything okay; otherwise abandon.
+    // Commit session if we streamed everything okay; otherwise abandon
     std::string service = android::base::StringPrintf("%s install-%s %d", install_cmd.c_str(),
                                                       success ? "commit" : "abandon", session_id);
     {
@@ -478,16 +512,14 @@ finalize_session:
         }
         read_status_line(fd.get(), buf, sizeof(buf));
     }
-    if (!success) return EXIT_FAILURE;
 
-    if (strncmp("Success", buf, 7)) {
-        fprintf(stderr, "adb: failed to finalize session\n");
-        fputs(buf, stderr);
-        return EXIT_FAILURE;
+    if (!strncmp("Success", buf, 7)) {
+        fputs(buf, stdout);
+        return 0;
     }
-
-    fputs(buf, stdout);
-    return EXIT_SUCCESS;
+    fprintf(stderr, "adb: failed to finalize session\n");
+    fputs(buf, stderr);
+    return EXIT_FAILURE;
 }
 
 int install_multi_package(int argc, const char** argv) {
@@ -510,7 +542,7 @@ int install_multi_package(int argc, const char** argv) {
 
     if (first_package == -1) error_exit("need APK or APEX files on command line");
 
-    if (best_install_mode() == INSTALL_PUSH) {
+    if (use_legacy_install()) {
         fprintf(stderr, "adb: multi-package install is not supported on this device\n");
         return EXIT_FAILURE;
     }
@@ -707,20 +739,6 @@ finalize_multi_package_session:
 }
 
 int delete_device_file(const std::string& filename) {
-    // http://b/17339227 "Sideloading a Readonly File Results in a Prompt to
-    // Delete" caused us to add `-f` here, to avoid the equivalent of the `-i`
-    // prompt that you get from BSD rm (used in Android 5) if you have a
-    // non-writable file and stdin is a tty (which is true for old versions of
-    // adbd).
-    //
-    // Unfortunately, `rm -f` requires Android 4.3, so that workaround broke
-    // earlier Android releases. This was reported as http://b/37704384 "adb
-    // install -r passes invalid argument to rm on Android 4.1" and
-    // http://b/37035817 "ADB Fails: rm failed for -f, No such file or
-    // directory".
-    //
-    // Testing on a variety of devices and emulators shows that redirecting
-    // stdin is sufficient to avoid the pseudo-`-i`, and works on toolbox,
-    // BSD, and toybox versions of rm.
-    return send_shell_command("rm " + escape_arg(filename) + " </dev/null");
+    std::string cmd = "rm -f " + escape_arg(filename);
+    return send_shell_command(cmd);
 }

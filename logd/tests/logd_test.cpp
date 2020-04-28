@@ -241,18 +241,47 @@ TEST(logd, statistics) {
 static void caught_signal(int /* signum */) {
 }
 
-static void dump_log_msg(const char* prefix, log_msg* msg, int lid) {
+static void dump_log_msg(const char* prefix, log_msg* msg, unsigned int version,
+                         int lid) {
     std::cout << std::flush;
     std::cerr << std::flush;
     fflush(stdout);
     fflush(stderr);
-    EXPECT_EQ(sizeof(logger_entry), msg->entry.hdr_size);
+    switch (msg->entry.hdr_size) {
+        case 0:
+            version = 1;
+            break;
 
-    fprintf(stderr, "%s: [%u] ", prefix, msg->len());
-    fprintf(stderr, "hdr_size=%u ", msg->entry.hdr_size);
-    fprintf(stderr, "pid=%u tid=%u %u.%09u ", msg->entry.pid, msg->entry.tid, msg->entry.sec,
-            msg->entry.nsec);
-    lid = msg->entry.lid;
+        case sizeof(msg->entry_v2): /* PLUS case sizeof(msg->entry_v3): */
+            if (version == 0) {
+                version = (msg->entry_v3.lid < LOG_ID_MAX) ? 3 : 2;
+            }
+            break;
+
+        case sizeof(msg->entry_v4):
+            if (version == 0) {
+                version = 4;
+            }
+            break;
+    }
+
+    fprintf(stderr, "%s: v%u[%u] ", prefix, version, msg->len());
+    if (version != 1) {
+        fprintf(stderr, "hdr_size=%u ", msg->entry.hdr_size);
+    }
+    fprintf(stderr, "pid=%u tid=%u %u.%09u ", msg->entry.pid, msg->entry.tid,
+            msg->entry.sec, msg->entry.nsec);
+    switch (version) {
+        case 1:
+            break;
+        case 2:
+            fprintf(stderr, "euid=%u ", msg->entry_v2.euid);
+            break;
+        case 3:
+        default:
+            lid = msg->entry.lid;
+            break;
+    }
 
     switch (lid) {
         case 0:
@@ -319,6 +348,86 @@ static void dump_log_msg(const char* prefix, log_msg* msg, int lid) {
     fflush(stderr);
 }
 #endif
+
+TEST(logd, both) {
+#ifdef __ANDROID__
+    log_msg msg;
+
+    // check if we can read any logs from logd
+    bool user_logger_available = false;
+    bool user_logger_content = false;
+
+    int fd = socket_local_client("logdr", ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                 SOCK_SEQPACKET);
+    if (fd >= 0) {
+        struct sigaction ignore, old_sigaction;
+        memset(&ignore, 0, sizeof(ignore));
+        ignore.sa_handler = caught_signal;
+        sigemptyset(&ignore.sa_mask);
+        sigaction(SIGALRM, &ignore, &old_sigaction);
+        unsigned int old_alarm = alarm(10);
+
+        static const char ask[] = "dumpAndClose lids=0,1,2,3";
+        user_logger_available = write(fd, ask, sizeof(ask)) == sizeof(ask);
+
+        user_logger_content = recv(fd, msg.buf, sizeof(msg), 0) > 0;
+
+        if (user_logger_content) {
+            dump_log_msg("user", &msg, 3, -1);
+        }
+
+        alarm(old_alarm);
+        sigaction(SIGALRM, &old_sigaction, nullptr);
+
+        close(fd);
+    }
+
+    // check if we can read any logs from kernel logger
+    bool kernel_logger_available = false;
+    bool kernel_logger_content = false;
+
+    static const char* loggers[] = {
+        "/dev/log/main",   "/dev/log_main",   "/dev/log/radio",
+        "/dev/log_radio",  "/dev/log/events", "/dev/log_events",
+        "/dev/log/system", "/dev/log_system",
+    };
+
+    for (unsigned int i = 0; i < arraysize(loggers); ++i) {
+        fd = open(loggers[i], O_RDONLY);
+        if (fd < 0) {
+            continue;
+        }
+        kernel_logger_available = true;
+        fcntl(fd, F_SETFL, O_RDONLY | O_NONBLOCK);
+        int result = TEMP_FAILURE_RETRY(read(fd, msg.buf, sizeof(msg)));
+        if (result > 0) {
+            kernel_logger_content = true;
+            dump_log_msg("kernel", &msg, 0, i / 2);
+        }
+        close(fd);
+    }
+
+    static const char yes[] = "\xE2\x9C\x93";
+    static const char no[] = "\xE2\x9c\x98";
+    fprintf(stderr,
+            "LOGGER  Available  Content\n"
+            "user    %-13s%s\n"
+            "kernel  %-13s%s\n"
+            " status %-11s%s\n",
+            (user_logger_available) ? yes : no, (user_logger_content) ? yes : no,
+            (kernel_logger_available) ? yes : no,
+            (kernel_logger_content) ? yes : no,
+            (user_logger_available && kernel_logger_available) ? "ERROR" : "ok",
+            (user_logger_content && kernel_logger_content) ? "ERROR" : "ok");
+
+    EXPECT_EQ(0, user_logger_available && kernel_logger_available);
+    EXPECT_EQ(0, !user_logger_available && !kernel_logger_available);
+    EXPECT_EQ(0, user_logger_content && kernel_logger_content);
+    EXPECT_EQ(0, !user_logger_content && !kernel_logger_content);
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
 
 #ifdef __ANDROID__
 // BAD ROBOT
@@ -555,11 +664,11 @@ void timeout_negative(const char* command) {
     }
 
     if (content_wrap) {
-        dump_log_msg("wrap", &msg_wrap, -1);
+        dump_log_msg("wrap", &msg_wrap, 3, -1);
     }
 
     if (content_timeout) {
-        dump_log_msg("timeout", &msg_timeout, -1);
+        dump_log_msg("timeout", &msg_timeout, 3, -1);
     }
 
     EXPECT_TRUE(written);
@@ -692,11 +801,11 @@ TEST(logd, timeout) {
     }
 
     if (content_wrap) {
-        dump_log_msg("wrap", &msg_wrap, -1);
+        dump_log_msg("wrap", &msg_wrap, 3, -1);
     }
 
     if (content_timeout) {
-        dump_log_msg("timeout", &msg_timeout, -1);
+        dump_log_msg("timeout", &msg_timeout, 3, -1);
     }
 
     if (content_wrap || !content_timeout) {
@@ -747,7 +856,7 @@ TEST(logd, SNDTIMEO) {
 
     EXPECT_TRUE(read_one);
     if (read_one) {
-        dump_log_msg("user", &msg, -1);
+        dump_log_msg("user", &msg, 3, -1);
     }
 
     fprintf(stderr, "Sleep for >%d seconds logd SO_SNDTIMEO ...\n", sndtimeo);
@@ -765,7 +874,7 @@ TEST(logd, SNDTIMEO) {
 
     EXPECT_EQ(0, recv_ret);
     if (recv_ret > 0) {
-        dump_log_msg("user", &msg, -1);
+        dump_log_msg("user", &msg, 3, -1);
     }
     EXPECT_EQ(0, save_errno);
 

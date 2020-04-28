@@ -30,7 +30,7 @@ void WritePersistentProperty(const std::string& name, const std::string& value);
 
 // Exposed only for testing
 Result<PersistentProperties> LoadPersistentPropertyFile();
-Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_properties);
+Result<Success> WritePersistentPropertyFile(const PersistentProperties& persistent_properties);
 extern std::string persistent_property_filename;
 
 }  // namespace init

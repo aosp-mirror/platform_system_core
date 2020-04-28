@@ -17,7 +17,6 @@
 #ifndef _LIBDM_LOOP_CONTROL_H_
 #define _LIBDM_LOOP_CONTROL_H_
 
-#include <chrono>
 #include <string>
 
 #include <android-base/unique_fd.h>
@@ -30,21 +29,11 @@ class LoopControl final {
     LoopControl();
 
     // Attaches the file specified by 'file_fd' to the loop device specified
-    // by 'loopdev'. It is possible that in between allocating and attaching
-    // a loop device, another process attaches to the chosen loop device. If
-    // this happens, Attach() will retry for up to |timeout_ms|. The timeout
-    // should not be zero.
-    //
-    // The caller does not have to call WaitForFile(); it is implicitly called.
-    // The given |timeout_ms| covers both potential sources of timeout.
-    bool Attach(int file_fd, const std::chrono::milliseconds& timeout_ms,
-                std::string* loopdev) const;
+    // by 'loopdev'
+    bool Attach(int file_fd, std::string* loopdev) const;
 
     // Detach the loop device given by 'loopdev' from the attached backing file.
     bool Detach(const std::string& loopdev) const;
-
-    // Enable Direct I/O on a loop device. This requires kernel 4.9+.
-    static bool EnableDirectIo(int fd);
 
     LoopControl(const LoopControl&) = delete;
     LoopControl& operator=(const LoopControl&) = delete;
@@ -64,14 +53,13 @@ class LoopDevice {
   public:
     // Create a loop device for the given file descriptor. It is closed when
     // LoopDevice is destroyed only if auto_close is true.
-    LoopDevice(android::base::borrowed_fd fd, const std::chrono::milliseconds& timeout_ms,
-               bool auto_close = false);
+    LoopDevice(int fd, bool auto_close = false);
     // Create a loop device for the given file path. It will be opened for
     // reading and writing and closed when the loop device is detached.
-    LoopDevice(const std::string& path, const std::chrono::milliseconds& timeout_ms);
+    explicit LoopDevice(const std::string& path);
     ~LoopDevice();
 
-    bool valid() const { return valid_; }
+    bool valid() const { return fd_ != -1 && !device_.empty(); }
     const std::string& device() const { return device_; }
 
     LoopDevice(const LoopDevice&) = delete;
@@ -80,13 +68,12 @@ class LoopDevice {
     LoopDevice(LoopDevice&&) = default;
 
   private:
-    void Init(const std::chrono::milliseconds& timeout_ms);
+    void Init();
 
-    android::base::borrowed_fd fd_;
-    android::base::unique_fd owned_fd_;
+    android::base::unique_fd fd_;
+    bool owns_fd_;
     std::string device_;
     LoopControl control_;
-    bool valid_ = false;
 };
 
 }  // namespace dm

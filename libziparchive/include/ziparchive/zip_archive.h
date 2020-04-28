@@ -25,9 +25,6 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
-#include <string>
-#include <string_view>
-
 #include "android-base/off64_t.h"
 
 /* Zip compression methods we support */
@@ -36,12 +33,38 @@ enum {
   kCompressDeflated = 8,  // standard deflate
 };
 
+struct ZipString {
+  const uint8_t* name;
+  uint16_t name_length;
+
+  ZipString() {}
+
+  /*
+   * entry_name has to be an c-style string with only ASCII characters.
+   */
+  explicit ZipString(const char* entry_name);
+
+  bool operator==(const ZipString& rhs) const {
+    return name && (name_length == rhs.name_length) && (memcmp(name, rhs.name, name_length) == 0);
+  }
+
+  bool StartsWith(const ZipString& prefix) const {
+    return name && (name_length >= prefix.name_length) &&
+           (memcmp(name, prefix.name, prefix.name_length) == 0);
+  }
+
+  bool EndsWith(const ZipString& suffix) const {
+    return name && (name_length >= suffix.name_length) &&
+           (memcmp(name + name_length - suffix.name_length, suffix.name, suffix.name_length) == 0);
+  }
+};
+
 /*
  * Represents information about a zip entry in a zip file.
  */
 struct ZipEntry {
-  // Compression method. One of kCompressStored or kCompressDeflated.
-  // See also `gpbf` for deflate subtypes.
+  // Compression method: One of kCompressStored or
+  // kCompressDeflated.
   uint16_t method;
 
   // Modification time. The zipfile format specifies
@@ -55,7 +78,7 @@ struct ZipEntry {
   struct tm GetModificationTime() const;
 
   // Suggested Unix mode for this entry, from the zip archive if created on
-  // Unix, or a default otherwise. See also `external_file_attributes`.
+  // Unix, or a default otherwise.
   mode_t unix_mode;
 
   // 1 if this entry contains a data descriptor segment, 0
@@ -79,18 +102,6 @@ struct ZipEntry {
 
   // The offset to the start of data for this ZipEntry.
   off64_t offset;
-
-  // The version of zip and the host file system this came from (for zipinfo).
-  uint16_t version_made_by;
-
-  // The raw attributes, whose interpretation depends on the host
-  // file system in `version_made_by` (for zipinfo). See also `unix_mode`.
-  uint32_t external_file_attributes;
-
-  // Specifics about the deflation (for zipinfo).
-  uint16_t gpbf;
-  // Whether this entry is believed to be text or binary (for zipinfo).
-  bool is_text;
 };
 
 struct ZipArchive;
@@ -126,7 +137,7 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle);
 int32_t OpenArchiveFd(const int fd, const char* debugFileName, ZipArchiveHandle* handle,
                       bool assume_ownership = true);
 
-int32_t OpenArchiveFromMemory(const void* address, size_t length, const char* debugFileName,
+int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debugFileName,
                               ZipArchiveHandle* handle);
 /*
  * Close archive, releasing resources associated with it. This will
@@ -137,21 +148,9 @@ int32_t OpenArchiveFromMemory(const void* address, size_t length, const char* de
  */
 void CloseArchive(ZipArchiveHandle archive);
 
-/** See GetArchiveInfo(). */
-struct ZipArchiveInfo {
-  /** The size in bytes of the archive itself. Used by zipinfo. */
-  off64_t archive_size;
-  /** The number of entries in the archive. */
-  size_t entry_count;
-};
-
-/**
- * Returns information about the given archive.
- */
-ZipArchiveInfo GetArchiveInfo(ZipArchiveHandle archive);
-
 /*
- * Find an entry in the Zip archive, by name. |data| must be non-null.
+ * Find an entry in the Zip archive, by name. |entryName| must be a null
+ * terminated string, and |data| must point to a writeable memory location.
  *
  * Returns 0 if an entry is found, and populates |data| with information
  * about this entry. Returns negative values otherwise.
@@ -165,7 +164,7 @@ ZipArchiveInfo GetArchiveInfo(ZipArchiveHandle archive);
  * On non-Windows platforms this method does not modify internal state and
  * can be called concurrently.
  */
-int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryName, ZipEntry* data);
+int32_t FindEntry(const ZipArchiveHandle archive, const ZipString& entryName, ZipEntry* data);
 
 /*
  * Start iterating over all entries of a zip file. The order of iteration
@@ -181,8 +180,7 @@ int32_t FindEntry(const ZipArchiveHandle archive, const std::string_view entryNa
  * Returns 0 on success and negative values on failure.
  */
 int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
-                       const std::string_view optional_prefix = "",
-                       const std::string_view optional_suffix = "");
+                       const ZipString* optional_prefix, const ZipString* optional_suffix);
 
 /*
  * Advance to the next element in the zipfile in iteration order.
@@ -190,8 +188,7 @@ int32_t StartIteration(ZipArchiveHandle archive, void** cookie_ptr,
  * Returns 0 on success, -1 if there are no more elements in this
  * archive and lower negative values on failure.
  */
-int32_t Next(void* cookie, ZipEntry* data, std::string* name);
-int32_t Next(void* cookie, ZipEntry* data, std::string_view* name);
+int32_t Next(void* cookie, ZipEntry* data, ZipString* name);
 
 /*
  * End iteration over all entries of a zip file and frees the memory allocated

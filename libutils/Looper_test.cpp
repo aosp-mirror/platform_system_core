@@ -11,9 +11,8 @@
 
 #include <utils/threads.h>
 
-// b/141212746 - increased for virtual platforms with higher volatility
 // # of milliseconds to fudge stopwatch measurements
-#define TIMING_TOLERANCE_MS 100
+#define TIMING_TOLERANCE_MS 25
 
 namespace android {
 

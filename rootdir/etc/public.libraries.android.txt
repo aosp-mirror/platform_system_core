@@ -17,7 +17,7 @@ liblog.so
 libmediandk.so
 libm.so
 libnativewindow.so
-libneuralnetworks.so nopreload
+libneuralnetworks.so
 libOpenMAXAL.so
 libOpenSLES.so
 libRS.so

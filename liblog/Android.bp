@@ -15,6 +15,8 @@
 //
 
 liblog_sources = [
+    "config_read.cpp",
+    "config_write.cpp",
     "log_event_list.cpp",
     "log_event_write.cpp",
     "logger_lock.cpp",
@@ -22,6 +24,7 @@ liblog_sources = [
     "logger_read.cpp",
     "logger_write.cpp",
     "logprint.cpp",
+    "stderr_write.cpp",
 ]
 liblog_host_sources = [
     "fake_log_device.cpp",
@@ -42,7 +45,6 @@ cc_library_headers {
     host_supported: true,
     vendor_available: true,
     recovery_available: true,
-    native_bridge_supported: true,
     export_include_dirs: ["include"],
     system_shared_libs: [],
     stl: "none",
@@ -65,7 +67,6 @@ cc_library {
     name: "liblog",
     host_supported: true,
     recovery_available: true,
-    native_bridge_supported: true,
     srcs: liblog_sources,
 
     target: {
@@ -105,15 +106,8 @@ cc_library {
         versions: ["10000"],
     },
 
-    // TODO(tomcherry): Renable this before release branch is cut
-    header_abi_checker: {
-        enabled: false,
-    },
-
     cflags: [
-        "-Wall",
         "-Werror",
-        "-Wextra",
         // This is what we want to do:
         //  liblog_cflags := $(shell \
         //   sed -n \
@@ -144,7 +138,6 @@ ndk_library {
 
 llndk_library {
     name: "liblog",
-    native_bridge_supported: true,
     symbol_file: "liblog.map.txt",
     export_include_dirs: ["include_vndk"],
 }

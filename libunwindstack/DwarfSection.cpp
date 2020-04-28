@@ -69,7 +69,6 @@ const DwarfCie* DwarfSectionImpl<AddressType>::GetCieFromOffset(uint64_t offset)
     return &cie_entry->second;
   }
   DwarfCie* cie = &cie_entries_[offset];
-  memory_.set_data_offset(entries_offset_);
   memory_.set_cur_offset(offset);
   if (!FillInCieHeader(cie) || !FillInCie(cie)) {
     // Erase the cached entry.
@@ -252,7 +251,6 @@ const DwarfFde* DwarfSectionImpl<AddressType>::GetFdeFromOffset(uint64_t offset)
     return &fde_entry->second;
   }
   DwarfFde* fde = &fde_entries_[offset];
-  memory_.set_data_offset(entries_offset_);
   memory_.set_cur_offset(offset);
   if (!FillInFdeHeader(fde) || !FillInFde(fde)) {
     fde_entries_.erase(offset);
@@ -335,7 +333,7 @@ bool DwarfSectionImpl<AddressType>::FillInFde(DwarfFde* fde) {
   memory_.set_cur_offset(cur_offset);
 
   // The load bias only applies to the start.
-  memory_.set_pc_offset(section_bias_);
+  memory_.set_pc_offset(load_bias_);
   bool valid = memory_.ReadEncodedValue<AddressType>(cie->fde_address_encoding, &fde->pc_start);
   fde->pc_start = AdjustPcFromFde(fde->pc_start);
 
@@ -593,8 +591,8 @@ bool DwarfSectionImpl<AddressType>::Log(uint8_t indent, uint64_t pc, const Dwarf
 }
 
 template <typename AddressType>
-bool DwarfSectionImpl<AddressType>::Init(uint64_t offset, uint64_t size, int64_t section_bias) {
-  section_bias_ = section_bias;
+bool DwarfSectionImplNoHdr<AddressType>::Init(uint64_t offset, uint64_t size, uint64_t load_bias) {
+  load_bias_ = load_bias;
   entries_offset_ = offset;
   next_entries_offset_ = offset;
   entries_end_ = offset + size;
@@ -602,6 +600,7 @@ bool DwarfSectionImpl<AddressType>::Init(uint64_t offset, uint64_t size, int64_t
   memory_.clear_func_offset();
   memory_.clear_text_offset();
   memory_.set_cur_offset(offset);
+  memory_.set_data_offset(offset);
   pc_offset_ = offset;
 
   return true;
@@ -617,7 +616,7 @@ bool DwarfSectionImpl<AddressType>::Init(uint64_t offset, uint64_t size, int64_t
 // and an fde has a start pc of 0x100 and end pc of 0x500, two new entries
 // will be added: 0x200, 0x100 and 0x500, 0x400.
 template <typename AddressType>
-void DwarfSectionImpl<AddressType>::InsertFde(const DwarfFde* fde) {
+void DwarfSectionImplNoHdr<AddressType>::InsertFde(const DwarfFde* fde) {
   uint64_t start = fde->pc_start;
   uint64_t end = fde->pc_end;
   auto it = fdes_.upper_bound(start);
@@ -654,10 +653,9 @@ void DwarfSectionImpl<AddressType>::InsertFde(const DwarfFde* fde) {
 }
 
 template <typename AddressType>
-bool DwarfSectionImpl<AddressType>::GetNextCieOrFde(const DwarfFde** fde_entry) {
+bool DwarfSectionImplNoHdr<AddressType>::GetNextCieOrFde(DwarfFde** fde_entry) {
   uint64_t start_offset = next_entries_offset_;
 
-  memory_.set_data_offset(entries_offset_);
   memory_.set_cur_offset(next_entries_offset_);
   uint32_t value32;
   if (!memory_.ReadBytes(&value32, sizeof(value32))) {
@@ -690,7 +688,7 @@ bool DwarfSectionImpl<AddressType>::GetNextCieOrFde(const DwarfFde** fde_entry) 
       entry_is_cie = true;
       cie_fde_encoding = DW_EH_PE_sdata8;
     } else {
-      cie_offset = GetCieOffsetFromFde64(value64);
+      cie_offset = this->GetCieOffsetFromFde64(value64);
     }
   } else {
     next_entries_offset_ = memory_.cur_offset() + value32;
@@ -706,45 +704,37 @@ bool DwarfSectionImpl<AddressType>::GetNextCieOrFde(const DwarfFde** fde_entry) 
       entry_is_cie = true;
       cie_fde_encoding = DW_EH_PE_sdata4;
     } else {
-      cie_offset = GetCieOffsetFromFde32(value32);
+      cie_offset = this->GetCieOffsetFromFde32(value32);
     }
   }
 
   if (entry_is_cie) {
-    auto entry = cie_entries_.find(start_offset);
-    if (entry == cie_entries_.end()) {
-      DwarfCie* cie = &cie_entries_[start_offset];
-      cie->lsda_encoding = DW_EH_PE_omit;
-      cie->cfa_instructions_end = next_entries_offset_;
-      cie->fde_address_encoding = cie_fde_encoding;
+    DwarfCie* cie = &cie_entries_[start_offset];
+    cie->lsda_encoding = DW_EH_PE_omit;
+    cie->cfa_instructions_end = next_entries_offset_;
+    cie->fde_address_encoding = cie_fde_encoding;
 
-      if (!FillInCie(cie)) {
-        cie_entries_.erase(start_offset);
-        return false;
-      }
+    if (!this->FillInCie(cie)) {
+      cie_entries_.erase(start_offset);
+      return false;
     }
     *fde_entry = nullptr;
   } else {
-    auto entry = fde_entries_.find(start_offset);
-    if (entry != fde_entries_.end()) {
-      *fde_entry = &entry->second;
-    } else {
-      DwarfFde* fde = &fde_entries_[start_offset];
-      fde->cfa_instructions_end = next_entries_offset_;
-      fde->cie_offset = cie_offset;
+    DwarfFde* fde = &fde_entries_[start_offset];
+    fde->cfa_instructions_end = next_entries_offset_;
+    fde->cie_offset = cie_offset;
 
-      if (!FillInFde(fde)) {
-        fde_entries_.erase(start_offset);
-        return false;
-      }
-      *fde_entry = fde;
+    if (!this->FillInFde(fde)) {
+      fde_entries_.erase(start_offset);
+      return false;
     }
+    *fde_entry = fde;
   }
   return true;
 }
 
 template <typename AddressType>
-void DwarfSectionImpl<AddressType>::GetFdes(std::vector<const DwarfFde*>* fdes) {
+void DwarfSectionImplNoHdr<AddressType>::GetFdes(std::vector<const DwarfFde*>* fdes) {
   // Loop through the already cached entries.
   uint64_t entry_offset = entries_offset_;
   while (entry_offset < next_entries_offset_) {
@@ -763,7 +753,7 @@ void DwarfSectionImpl<AddressType>::GetFdes(std::vector<const DwarfFde*>* fdes) 
   }
 
   while (next_entries_offset_ < entries_end_) {
-    const DwarfFde* fde;
+    DwarfFde* fde;
     if (!GetNextCieOrFde(&fde)) {
       break;
     }
@@ -780,7 +770,7 @@ void DwarfSectionImpl<AddressType>::GetFdes(std::vector<const DwarfFde*>* fdes) 
 }
 
 template <typename AddressType>
-const DwarfFde* DwarfSectionImpl<AddressType>::GetFdeFromPc(uint64_t pc) {
+const DwarfFde* DwarfSectionImplNoHdr<AddressType>::GetFdeFromPc(uint64_t pc) {
   // Search in the list of fdes we already have.
   auto it = fdes_.upper_bound(pc);
   if (it != fdes_.end()) {
@@ -793,7 +783,7 @@ const DwarfFde* DwarfSectionImpl<AddressType>::GetFdeFromPc(uint64_t pc) {
   // to do a linear search of the fdes by pc. As fdes are read, a cached
   // search map is created.
   while (next_entries_offset_ < entries_end_) {
-    const DwarfFde* fde;
+    DwarfFde* fde;
     if (!GetNextCieOrFde(&fde)) {
       return nullptr;
     }
@@ -815,6 +805,10 @@ const DwarfFde* DwarfSectionImpl<AddressType>::GetFdeFromPc(uint64_t pc) {
 // Explicitly instantiate DwarfSectionImpl
 template class DwarfSectionImpl<uint32_t>;
 template class DwarfSectionImpl<uint64_t>;
+
+// Explicitly instantiate DwarfSectionImplNoHdr
+template class DwarfSectionImplNoHdr<uint32_t>;
+template class DwarfSectionImplNoHdr<uint64_t>;
 
 // Explicitly instantiate DwarfDebugFrame
 template class DwarfDebugFrame<uint32_t>;

@@ -234,15 +234,15 @@ std::string perror_str(const char* msg) {
 
 #if !defined(_WIN32)
 // Windows version provided in sysdeps_win32.cpp
-bool set_file_block_mode(borrowed_fd fd, bool block) {
-    int flags = fcntl(fd.get(), F_GETFL, 0);
+bool set_file_block_mode(int fd, bool block) {
+    int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {
-        PLOG(ERROR) << "failed to fcntl(F_GETFL) for fd " << fd.get();
+        PLOG(ERROR) << "failed to fcntl(F_GETFL) for fd " << fd;
         return false;
     }
     flags = block ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
-    if (fcntl(fd.get(), F_SETFL, flags) != 0) {
-        PLOG(ERROR) << "failed to fcntl(F_SETFL) for fd " << fd.get() << ", flags " << flags;
+    if (fcntl(fd, F_SETFL, flags) != 0) {
+        PLOG(ERROR) << "failed to fcntl(F_SETFL) for fd " << fd << ", flags " << flags;
         return false;
     }
     return true;
@@ -320,10 +320,6 @@ std::string adb_get_android_dir_path() {
 }
 
 std::string GetLogFilePath() {
-    // https://issuetracker.google.com/112588493
-    const char* path = getenv("ANDROID_ADB_LOG_PATH");
-    if (path) return path;
-
 #if defined(_WIN32)
     const char log_name[] = "adb.log";
     WCHAR temp_path[MAX_PATH];

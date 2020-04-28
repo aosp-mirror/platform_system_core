@@ -19,8 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <android-base/file.h>
-
-#include "MemoryOffline.h"
+#include <unwindstack/Memory.h>
 
 namespace unwindstack {
 

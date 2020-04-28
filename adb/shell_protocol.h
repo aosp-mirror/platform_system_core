@@ -21,7 +21,6 @@
 #include <android-base/macros.h>
 
 #include "adb.h"
-#include "adb_unique_fd.h"
 
 // Class to send and receive shell protocol packets.
 //
@@ -61,7 +60,7 @@ class ShellProtocol {
     // should be dynamically allocated on the heap instead.
     //
     // |fd| is an open file descriptor to be used to send or receive packets.
-    explicit ShellProtocol(borrowed_fd fd);
+    explicit ShellProtocol(int fd);
     virtual ~ShellProtocol();
 
     // Returns a pointer to the data buffer.
@@ -104,7 +103,7 @@ class ShellProtocol {
         kHeaderSize = sizeof(Id) + sizeof(length_t)
     };
 
-    borrowed_fd fd_;
+    int fd_;
     char buffer_[kBufferSize];
     size_t data_length_ = 0, bytes_left_ = 0;
 

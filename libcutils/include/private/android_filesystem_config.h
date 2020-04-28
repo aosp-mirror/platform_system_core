@@ -28,10 +28,17 @@
  *   mediadrm
  * Whose friendly names do not match the #define statements.
  *
- * This file must only be used for platform (Google managed, and submitted through AOSP), AIDs.  3rd
- * party AIDs must be added via config.fs, which will place them in the corresponding partition's
- * passwd and group files.  There are ranges in this file reserved for AIDs for each 3rd party
- * partition, from which the system reads passwd and group files.
+ * Additionally, AID_OEM_RESERVED_START and AID_OEM_RESERVED_END
+ * can be used to define reserved OEM ranges used for sanity checks
+ * during the build process. The rules are, they must end with START/END
+ * The proper convention is incrementing a number like so:
+ * AID_OEM_RESERVED_START
+ * AID_OEM_RESERVED_1_START
+ * AID_OEM_RESERVED_2_START
+ * ...
+ * The same applies to the END.
+ * They are not required to be in order, but must not overlap each other and
+ * must define a START and END'ing range. START must be smaller than END.
  */
 
 #ifndef _ANDROID_FILESYSTEM_CONFIG_H_
@@ -128,19 +135,14 @@
 #define AID_GPU_SERVICE 1072     /* GPU service daemon */
 #define AID_NETWORK_STACK 1073   /* network stack service */
 #define AID_GSID 1074            /* GSI service daemon */
-#define AID_FSVERITY_CERT 1075   /* fs-verity key ownership in keystore */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
 #define AID_CACHE 2001 /* cache access */
 #define AID_DIAG 2002  /* access to diagnostic resources */
 
-/* The range 2900-2999 is reserved for the vendor partition */
-/* Note that the two 'OEM' ranges pre-dated the vendor partition, so they take the legacy 'OEM'
- * name. Additionally, they pre-dated passwd/group files, so there are users and groups named oem_#
- * created automatically for all values in these ranges.  If there is a user/group in a passwd/group
- * file corresponding to this range, both the oem_# and user/group names will resolve to the same
- * value. */
+/* The range 2900-2999 is reserved for OEM, and must never be
+ * used here */
 #define AID_OEM_RESERVED_START 2900
 #define AID_OEM_RESERVED_END 2999
 
@@ -157,25 +159,9 @@
 #define AID_WAKELOCK 3010     /* Allow system wakelock read/write access */
 #define AID_UHID 3011         /* Allow read/write to /dev/uhid node */
 
-/* The range 5000-5999 is also reserved for vendor partition. */
+/* The range 5000-5999 is also reserved for OEM, and must never be used here. */
 #define AID_OEM_RESERVED_2_START 5000
 #define AID_OEM_RESERVED_2_END 5999
-
-/* The range 6000-6499 is reserved for the system partition. */
-#define AID_SYSTEM_RESERVED_START 6000
-#define AID_SYSTEM_RESERVED_END 6499
-
-/* The range 6500-6999 is reserved for the odm partition. */
-#define AID_ODM_RESERVED_START 6500
-#define AID_ODM_RESERVED_END 6999
-
-/* The range 7000-7499 is reserved for the product partition. */
-#define AID_PRODUCT_RESERVED_START 7000
-#define AID_PRODUCT_RESERVED_END 7499
-
-/* The range 7500-7999 is reserved for the system_ext partition. */
-#define AID_SYSTEM_EXT_RESERVED_START 7500
-#define AID_SYSTEM_EXT_RESERVED_END 7999
 
 #define AID_EVERYBODY 9997 /* shared between all apps in the same profile */
 #define AID_MISC 9998      /* access to misc storage */

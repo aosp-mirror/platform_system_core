@@ -17,6 +17,23 @@
 #pragma once
 
 #include <vector>
+#include "commandline.h"
+
+class DeployAgentFileCallback : public StandardStreamsCallbackInterface {
+  public:
+    DeployAgentFileCallback(FILE* outputFile, std::vector<char>* errBuffer);
+
+    virtual void OnStdout(const char* buffer, int length);
+    virtual void OnStderr(const char* buffer, int length);
+    virtual int Done(int status);
+
+    int getBytesWritten();
+
+  private:
+    FILE* mpOutFile;
+    std::vector<char>* mpErrBuffer;
+    int mBytesWritten;
+};
 
 int capture_shell_command(const char* command, std::vector<char>* outBuffer,
                           std::vector<char>* errBuffer);

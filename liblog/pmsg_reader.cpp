@@ -17,6 +17,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -24,6 +25,7 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
+#include "config_read.h"
 #include "logger.h"
 
 static int pmsgAvailable(log_id_t logId);
@@ -37,12 +39,13 @@ static int pmsgClear(struct android_log_logger* logger,
                      struct android_log_transport_context* transp);
 
 struct android_log_transport_read pmsgLoggerRead = {
+    .node = {&pmsgLoggerRead.node, &pmsgLoggerRead.node},
     .name = "pmsg",
     .available = pmsgAvailable,
     .version = pmsgVersion,
-    .close = pmsgClose,
     .read = pmsgRead,
     .poll = NULL,
+    .close = pmsgClose,
     .clear = pmsgClear,
     .setSize = NULL,
     .getSize = NULL,
@@ -62,9 +65,58 @@ static int pmsgAvailable(log_id_t logId) {
   return -EBADF;
 }
 
+/* Determine the credentials of the caller */
+static bool uid_has_log_permission(uid_t uid) {
+  return (uid == AID_SYSTEM) || (uid == AID_LOG) || (uid == AID_ROOT) || (uid == AID_LOGD);
+}
+
+static uid_t get_best_effective_uid() {
+  uid_t euid;
+  uid_t uid;
+  gid_t gid;
+  ssize_t i;
+  static uid_t last_uid = (uid_t)-1;
+
+  if (last_uid != (uid_t)-1) {
+    return last_uid;
+  }
+  uid = __android_log_uid();
+  if (uid_has_log_permission(uid)) {
+    return last_uid = uid;
+  }
+  euid = geteuid();
+  if (uid_has_log_permission(euid)) {
+    return last_uid = euid;
+  }
+  gid = getgid();
+  if (uid_has_log_permission(gid)) {
+    return last_uid = gid;
+  }
+  gid = getegid();
+  if (uid_has_log_permission(gid)) {
+    return last_uid = gid;
+  }
+  i = getgroups((size_t)0, NULL);
+  if (i > 0) {
+    gid_t list[i];
+
+    getgroups(i, list);
+    while (--i >= 0) {
+      if (uid_has_log_permission(list[i])) {
+        return last_uid = list[i];
+      }
+    }
+  }
+  return last_uid = uid;
+}
+
 static int pmsgClear(struct android_log_logger* logger __unused,
                      struct android_log_transport_context* transp __unused) {
-  return unlink("/sys/fs/pstore/pmsg-ramoops-0");
+  if (uid_has_log_permission(get_best_effective_uid())) {
+    return unlink("/sys/fs/pstore/pmsg-ramoops-0");
+  }
+  errno = EPERM;
+  return -1;
 }
 
 /*
@@ -79,12 +131,15 @@ static int pmsgRead(struct android_log_logger_list* logger_list,
                     struct android_log_transport_context* transp, struct log_msg* log_msg) {
   ssize_t ret;
   off_t current, next;
+  uid_t uid;
+  struct android_log_logger* logger;
   struct __attribute__((__packed__)) {
     android_pmsg_log_header_t p;
     android_log_header_t l;
     uint8_t prio;
   } buf;
   static uint8_t preread_count;
+  bool is_system;
 
   memset(log_msg, 0, sizeof(*log_msg));
 
@@ -144,30 +199,37 @@ static int pmsgRead(struct android_log_logger_list* logger_list,
           ((logger_list->start.tv_sec != buf.l.realtime.tv_sec) ||
            (logger_list->start.tv_nsec <= buf.l.realtime.tv_nsec)))) &&
         (!logger_list->pid || (logger_list->pid == buf.p.pid))) {
-      char* msg = log_msg->entry.msg;
-      *msg = buf.prio;
-      fd = atomic_load(&transp->context.fd);
-      if (fd <= 0) {
-        return -EBADF;
-      }
-      ret = TEMP_FAILURE_RETRY(read(fd, msg + sizeof(buf.prio), buf.p.len - sizeof(buf)));
-      if (ret < 0) {
-        return -errno;
-      }
-      if (ret != (ssize_t)(buf.p.len - sizeof(buf))) {
-        return -EIO;
-      }
+      uid = get_best_effective_uid();
+      is_system = uid_has_log_permission(uid);
+      if (is_system || (uid == buf.p.uid)) {
+        char* msg = is_system ? log_msg->entry_v4.msg : log_msg->entry_v3.msg;
+        *msg = buf.prio;
+        fd = atomic_load(&transp->context.fd);
+        if (fd <= 0) {
+          return -EBADF;
+        }
+        ret = TEMP_FAILURE_RETRY(read(fd, msg + sizeof(buf.prio), buf.p.len - sizeof(buf)));
+        if (ret < 0) {
+          return -errno;
+        }
+        if (ret != (ssize_t)(buf.p.len - sizeof(buf))) {
+          return -EIO;
+        }
 
-      log_msg->entry.len = buf.p.len - sizeof(buf) + sizeof(buf.prio);
-      log_msg->entry.hdr_size = sizeof(log_msg->entry);
-      log_msg->entry.pid = buf.p.pid;
-      log_msg->entry.tid = buf.l.tid;
-      log_msg->entry.sec = buf.l.realtime.tv_sec;
-      log_msg->entry.nsec = buf.l.realtime.tv_nsec;
-      log_msg->entry.lid = buf.l.id;
-      log_msg->entry.uid = buf.p.uid;
+        log_msg->entry_v4.len = buf.p.len - sizeof(buf) + sizeof(buf.prio);
+        log_msg->entry_v4.hdr_size =
+            is_system ? sizeof(log_msg->entry_v4) : sizeof(log_msg->entry_v3);
+        log_msg->entry_v4.pid = buf.p.pid;
+        log_msg->entry_v4.tid = buf.l.tid;
+        log_msg->entry_v4.sec = buf.l.realtime.tv_sec;
+        log_msg->entry_v4.nsec = buf.l.realtime.tv_nsec;
+        log_msg->entry_v4.lid = buf.l.id;
+        if (is_system) {
+          log_msg->entry_v4.uid = buf.p.uid;
+        }
 
-      return ret + sizeof(buf.prio) + log_msg->entry.hdr_size;
+        return ret + sizeof(buf.prio) + log_msg->entry_v4.hdr_size;
+      }
     }
 
     fd = atomic_load(&transp->context.fd);
@@ -215,7 +277,13 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
   struct android_log_transport_context transp;
   struct content {
     struct listnode node;
-    struct logger_entry entry;
+    union {
+      struct logger_entry_v4 entry;
+      struct logger_entry_v4 entry_v4;
+      struct logger_entry_v3 entry_v3;
+      struct logger_entry_v2 entry_v2;
+      struct logger_entry entry_v1;
+    };
   } * content;
   struct names {
     struct listnode node;
@@ -267,26 +335,25 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
   }
 
   /* Read the file content */
-  log_msg log_msg;
-  while (pmsgRead(&logger_list, &transp, &log_msg) > 0) {
+  while (pmsgRead(&logger_list, &transp, &transp.logMsg) > 0) {
     const char* cp;
-    size_t hdr_size = log_msg.entry.hdr_size;
-
-    char* msg = (char*)&log_msg + hdr_size;
+    size_t hdr_size = transp.logMsg.entry.hdr_size ? transp.logMsg.entry.hdr_size
+                                                   : sizeof(transp.logMsg.entry_v1);
+    char* msg = (char*)&transp.logMsg + hdr_size;
     const char* split = NULL;
 
-    if (hdr_size != sizeof(log_msg.entry)) {
+    if ((hdr_size < sizeof(transp.logMsg.entry_v1)) || (hdr_size > sizeof(transp.logMsg.entry))) {
       continue;
     }
     /* Check for invalid sequence number */
-    if (log_msg.entry.nsec % ANDROID_LOG_PMSG_FILE_SEQUENCE ||
-        (log_msg.entry.nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >=
-            ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE) {
+    if ((transp.logMsg.entry.nsec % ANDROID_LOG_PMSG_FILE_SEQUENCE) ||
+        ((transp.logMsg.entry.nsec / ANDROID_LOG_PMSG_FILE_SEQUENCE) >=
+         ANDROID_LOG_PMSG_FILE_MAX_SEQUENCE)) {
       continue;
     }
 
     /* Determine if it has <dirbase>:<filebase> format for tag */
-    len = log_msg.entry.len - sizeof(prio);
+    len = transp.logMsg.entry.len - sizeof(prio);
     for (cp = msg + sizeof(prio); *cp && isprint(*cp) && !isspace(*cp) && --len; ++cp) {
       if (*cp == ':') {
         if (split) {
@@ -332,8 +399,8 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
     /* check if there is an existing entry */
     list_for_each(node, &name_list) {
       names = node_to_item(node, struct names, node);
-      if (!strcmp(names->name, msg + sizeof(prio)) && names->id == log_msg.entry.lid &&
-          names->prio == *msg) {
+      if (!strcmp(names->name, msg + sizeof(prio)) && (names->id == transp.logMsg.entry.lid) &&
+          (names->prio == *msg)) {
         break;
       }
     }
@@ -350,7 +417,7 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
         break;
       }
       strcpy(names->name, msg + sizeof(prio));
-      names->id = static_cast<log_id_t>(log_msg.entry.lid);
+      names->id = static_cast<log_id_t>(transp.logMsg.entry.lid);
       names->prio = *msg;
       list_init(&names->content);
       /*
@@ -403,7 +470,7 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
     /* Remove any file fragments that match our sequence number */
     list_for_each_safe(node, n, &names->content) {
       content = node_to_item(node, struct content, node);
-      if (log_msg.entry.nsec == content->entry.nsec) {
+      if (transp.logMsg.entry.nsec == content->entry.nsec) {
         list_remove(&content->node);
         free(content);
       }
@@ -411,16 +478,16 @@ ssize_t __android_log_pmsg_file_read(log_id_t logId, char prio, const char* pref
 
     /* Add content */
     content = static_cast<struct content*>(
-        calloc(1, sizeof(content->node) + hdr_size + log_msg.entry.len));
+        calloc(1, sizeof(content->node) + hdr_size + transp.logMsg.entry.len));
     if (!content) {
       ret = -ENOMEM;
       break;
     }
-    memcpy(&content->entry, &log_msg.entry, hdr_size + log_msg.entry.len);
+    memcpy(&content->entry, &transp.logMsg.entry, hdr_size + transp.logMsg.entry.len);
 
     /* Insert in sequence number sorted order, to ease reconstruction */
     list_for_each_reverse(node, &names->content) {
-      if ((node_to_item(node, struct content, node))->entry.nsec < log_msg.entry.nsec) {
+      if ((node_to_item(node, struct content, node))->entry.nsec < transp.logMsg.entry.nsec) {
         break;
       }
     }

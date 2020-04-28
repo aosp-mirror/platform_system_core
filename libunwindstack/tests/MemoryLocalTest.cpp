@@ -22,7 +22,7 @@
 
 #include <gtest/gtest.h>
 
-#include "MemoryLocal.h"
+#include <unwindstack/Memory.h>
 
 namespace unwindstack {
 

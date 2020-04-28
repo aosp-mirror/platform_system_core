@@ -101,10 +101,7 @@ static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, uniq
     FAIL() << "failed to contact tombstoned: " << strerror(errno);
   }
 
-  InterceptRequest req = {
-      .dump_type = intercept_type,
-      .pid = target_pid,
-  };
+  InterceptRequest req = {.pid = target_pid, .dump_type = intercept_type};
 
   unique_fd output_pipe_write;
   if (!Pipe(output_fd, &output_pipe_write)) {
@@ -605,8 +602,6 @@ static pid_t seccomp_fork_impl(void (*prejail)()) {
   policy += "\nclone: 1";
   policy += "\nsigaltstack: 1";
   policy += "\nnanosleep: 1";
-  policy += "\ngetrlimit: 1";
-  policy += "\nugetrlimit: 1";
 
   FILE* tmp_file = tmpfile();
   if (!tmp_file) {
@@ -1102,31 +1097,4 @@ TEST(tombstoned, interceptless_backtrace) {
   // We can't be sure that nothing's crash looping in the background.
   // This should be good enough, though...
   ASSERT_LT(diff, 10) << "too many new tombstones; is something crashing in the background?";
-}
-
-static __attribute__((__noinline__)) void overflow_stack(void* p) {
-  void* buf[1];
-  buf[0] = p;
-  static volatile void* global = buf;
-  if (global) {
-    global = buf;
-    overflow_stack(&buf);
-  }
-}
-
-TEST_F(CrasherTest, stack_overflow) {
-  int intercept_result;
-  unique_fd output_fd;
-  StartProcess([]() { overflow_stack(nullptr); });
-
-  StartIntercept(&output_fd);
-  FinishCrasher();
-  AssertDeath(SIGSEGV);
-  FinishIntercept(&intercept_result);
-
-  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
-
-  std::string result;
-  ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(Cause: stack pointer[^\n]*stack overflow.\n)");
 }

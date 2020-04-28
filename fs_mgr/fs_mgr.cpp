@@ -56,9 +56,7 @@
 #include <ext4_utils/ext4_utils.h>
 #include <ext4_utils/wipe.h>
 #include <fs_avb/fs_avb.h>
-#include <fs_mgr/file_wait.h>
 #include <fs_mgr_overlayfs.h>
-#include <fscrypt/fscrypt.h>
 #include <libdm/dm.h>
 #include <liblp/metadata_format.h>
 #include <linux/fs.h>
@@ -84,9 +82,6 @@
 #define ZRAM_BACK_DEV   "/sys/block/zram0/backing_dev"
 
 #define SYSFS_EXT4_VERITY "/sys/fs/ext4/features/verity"
-
-// FIXME: this should be in system/extras
-#define EXT4_FEATURE_COMPAT_STABLE_INODES 0x0800
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
@@ -120,6 +115,28 @@ enum FsStatFlags {
     FS_STAT_ENABLE_ENCRYPTION_FAILED = 0x40000,
     FS_STAT_ENABLE_VERITY_FAILED = 0x80000,
 };
+
+// TODO: switch to inotify()
+bool fs_mgr_wait_for_file(const std::string& filename,
+                          const std::chrono::milliseconds relative_timeout,
+                          FileWaitMode file_wait_mode) {
+    auto start_time = std::chrono::steady_clock::now();
+
+    while (true) {
+        int rv = access(filename.c_str(), F_OK);
+        if (file_wait_mode == FileWaitMode::Exists) {
+            if (!rv || errno != ENOENT) return true;
+        } else if (file_wait_mode == FileWaitMode::DoesNotExist) {
+            if (rv && errno == ENOENT) return true;
+        }
+
+        std::this_thread::sleep_for(50ms);
+
+        auto now = std::chrono::steady_clock::now();
+        auto time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
+        if (time_elapsed > relative_timeout) return false;
+    }
+}
 
 static void log_fs_stat(const std::string& blk_device, int fs_stat) {
     if ((fs_stat & FS_STAT_IS_EXT4) == 0) return; // only log ext4
@@ -226,11 +243,13 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
         } else {
             LINFO << "Running " << E2FSCK_BIN << " on " << realpath(blk_device);
             if (should_force_check(*fs_stat)) {
-                ret = logwrap_fork_execvp(ARRAY_SIZE(e2fsck_forced_argv), e2fsck_forced_argv,
-                                          &status, false, LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
+                ret = android_fork_execvp_ext(
+                    ARRAY_SIZE(e2fsck_forced_argv), const_cast<char**>(e2fsck_forced_argv), &status,
+                    true, LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), nullptr, 0);
             } else {
-                ret = logwrap_fork_execvp(ARRAY_SIZE(e2fsck_argv), e2fsck_argv, &status, false,
-                                          LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
+                ret = android_fork_execvp_ext(
+                    ARRAY_SIZE(e2fsck_argv), const_cast<char**>(e2fsck_argv), &status, true,
+                    LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), nullptr, 0);
             }
 
             if (ret < 0) {
@@ -248,12 +267,14 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
 
         if (should_force_check(*fs_stat)) {
             LINFO << "Running " << F2FS_FSCK_BIN << " -f " << realpath(blk_device);
-            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
-                                      &status, false, LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
+            ret = android_fork_execvp_ext(
+                ARRAY_SIZE(f2fs_fsck_forced_argv), const_cast<char**>(f2fs_fsck_forced_argv), &status,
+                true, LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), nullptr, 0);
         } else {
             LINFO << "Running " << F2FS_FSCK_BIN << " -a " << realpath(blk_device);
-            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
-                                      LOG_KLOG | LOG_FILE, true, FSCK_LOG_FILE);
+            ret = android_fork_execvp_ext(
+                ARRAY_SIZE(f2fs_fsck_argv), const_cast<char**>(f2fs_fsck_argv), &status, true,
+                LOG_KLOG | LOG_FILE, true, const_cast<char*>(FSCK_LOG_FILE), nullptr, 0);
         }
         if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
@@ -331,7 +352,8 @@ static bool tune2fs_available(void) {
 static bool run_tune2fs(const char* argv[], int argc) {
     int ret;
 
-    ret = logwrap_fork_execvp(argc, argv, nullptr, false, LOG_KLOG, true, nullptr);
+    ret = android_fork_execvp_ext(argc, const_cast<char**>(argv), nullptr, true,
+                                  LOG_KLOG | LOG_FILE, true, nullptr, nullptr, 0);
     return ret == 0;
 }
 
@@ -416,43 +438,25 @@ static void tune_reserved_size(const std::string& blk_device, const FstabEntry& 
 // Enable file-based encryption if needed.
 static void tune_encrypt(const std::string& blk_device, const FstabEntry& entry,
                          const struct ext4_super_block* sb, int* fs_stat) {
-    if (!entry.fs_mgr_flags.file_encryption) {
-        return;  // Nothing needs done.
-    }
-    std::vector<std::string> features_needed;
-    if ((sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_ENCRYPT)) == 0) {
-        features_needed.emplace_back("encrypt");
-    }
-    android::fscrypt::EncryptionOptions options;
-    if (!android::fscrypt::ParseOptions(entry.encryption_options, &options)) {
-        LERROR << "Unable to parse encryption options on " << blk_device << ": "
-               << entry.encryption_options;
+    bool has_encrypt = (sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_ENCRYPT)) != 0;
+    bool want_encrypt = entry.fs_mgr_flags.file_encryption;
+
+    if (has_encrypt || !want_encrypt) {
         return;
     }
-    if ((options.flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64) != 0) {
-        // We can only use this policy on ext4 if the "stable_inodes" feature
-        // is set on the filesystem, otherwise shrinking will break encrypted files.
-        if ((sb->s_feature_compat & cpu_to_le32(EXT4_FEATURE_COMPAT_STABLE_INODES)) == 0) {
-            features_needed.emplace_back("stable_inodes");
-        }
-    }
-    if (features_needed.size() == 0) {
-        return;
-    }
+
     if (!tune2fs_available()) {
         LERROR << "Unable to enable ext4 encryption on " << blk_device
                << " because " TUNE2FS_BIN " is missing";
         return;
     }
 
-    auto flags = android::base::Join(features_needed, ',');
-    auto flag_arg = "-O"s + flags;
-    const char* argv[] = {TUNE2FS_BIN, flag_arg.c_str(), blk_device.c_str()};
+    const char* argv[] = {TUNE2FS_BIN, "-Oencrypt", blk_device.c_str()};
 
-    LINFO << "Enabling ext4 flags " << flags << " on " << blk_device;
+    LINFO << "Enabling ext4 encryption on " << blk_device;
     if (!run_tune2fs(argv, ARRAY_SIZE(argv))) {
         LERROR << "Failed to run " TUNE2FS_BIN " to enable "
-               << "ext4 flags " << flags << " on " << blk_device;
+               << "ext4 encryption on " << blk_device;
         *fs_stat |= FS_STAT_ENABLE_ENCRYPTION_FAILED;
     }
 }
@@ -869,22 +873,37 @@ static int handle_encryptable(const FstabEntry& entry) {
     }
 }
 
-static bool call_vdc(const std::vector<std::string>& args, int* ret) {
+static bool call_vdc(const std::vector<std::string>& args) {
     std::vector<char const*> argv;
     argv.emplace_back("/system/bin/vdc");
     for (auto& arg : args) {
         argv.emplace_back(arg.c_str());
     }
     LOG(INFO) << "Calling: " << android::base::Join(argv, ' ');
-    int err = logwrap_fork_execvp(argv.size(), argv.data(), ret, false, LOG_ALOG, false, nullptr);
+    int ret =
+            android_fork_execvp(argv.size(), const_cast<char**>(argv.data()), nullptr, false, true);
+    if (ret != 0) {
+        LOG(ERROR) << "vdc returned error code: " << ret;
+        return false;
+    }
+    LOG(DEBUG) << "vdc finished successfully";
+    return true;
+}
+
+static bool call_vdc_ret(const std::vector<std::string>& args, int* ret) {
+    std::vector<char const*> argv;
+    argv.emplace_back("/system/bin/vdc");
+    for (auto& arg : args) {
+        argv.emplace_back(arg.c_str());
+    }
+    LOG(INFO) << "Calling: " << android::base::Join(argv, ' ');
+    int err = android_fork_execvp(argv.size(), const_cast<char**>(argv.data()), ret, false, true);
     if (err != 0) {
         LOG(ERROR) << "vdc call failed with error code: " << err;
         return false;
     }
     LOG(DEBUG) << "vdc finished successfully";
-    if (ret != nullptr) {
-        *ret = WEXITSTATUS(*ret);
-    }
+    *ret = WEXITSTATUS(*ret);
     return true;
 }
 
@@ -910,27 +929,22 @@ class CheckpointManager {
   public:
     CheckpointManager(int needs_checkpoint = -1) : needs_checkpoint_(needs_checkpoint) {}
 
-    bool NeedsCheckpoint() {
-        if (needs_checkpoint_ != UNKNOWN) {
-            return needs_checkpoint_ == YES;
-        }
-        if (!call_vdc({"checkpoint", "needsCheckpoint"}, &needs_checkpoint_)) {
-            LERROR << "Failed to find if checkpointing is needed. Assuming no.";
-            needs_checkpoint_ = NO;
-        }
-        return needs_checkpoint_ == YES;
-    }
-
     bool Update(FstabEntry* entry, const std::string& block_device = std::string()) {
         if (!entry->fs_mgr_flags.checkpoint_blk && !entry->fs_mgr_flags.checkpoint_fs) {
             return true;
         }
 
         if (entry->fs_mgr_flags.checkpoint_blk) {
-            call_vdc({"checkpoint", "restoreCheckpoint", entry->blk_device}, nullptr);
+            call_vdc({"checkpoint", "restoreCheckpoint", entry->blk_device});
         }
 
-        if (!NeedsCheckpoint()) {
+        if (needs_checkpoint_ == UNKNOWN &&
+            !call_vdc_ret({"checkpoint", "needsCheckpoint"}, &needs_checkpoint_)) {
+            LERROR << "Failed to find if checkpointing is needed. Assuming no.";
+            needs_checkpoint_ = NO;
+        }
+
+        if (needs_checkpoint_ != YES) {
             return true;
         }
 
@@ -1137,7 +1151,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             continue;
         }
 
-        if (current_entry.fs_mgr_flags.wait && !WaitForFile(current_entry.blk_device, 20s)) {
+        if (current_entry.fs_mgr_flags.wait &&
+            !fs_mgr_wait_for_file(current_entry.blk_device, 20s)) {
             LERROR << "Skipping '" << current_entry.blk_device << "' during mount_all";
             continue;
         }
@@ -1200,8 +1215,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 encryptable = status;
                 if (status == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
                     if (!call_vdc({"cryptfs", "encryptFstab", attempted_entry.blk_device,
-                                   attempted_entry.mount_point},
-                                  nullptr)) {
+                                   attempted_entry.mount_point})) {
                         LERROR << "Encryption failed";
                         return FS_MGR_MNTALL_FAIL;
                     }
@@ -1273,8 +1287,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
         } else if (mount_errno != EBUSY && mount_errno != EACCES &&
                    should_use_metadata_encryption(attempted_entry)) {
             if (!call_vdc({"cryptfs", "mountFstab", attempted_entry.blk_device,
-                           attempted_entry.mount_point},
-                          nullptr)) {
+                           attempted_entry.mount_point})) {
                 ++error_count;
             }
             encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
@@ -1340,7 +1353,7 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
                 continue;
             }
         } else if ((current_entry.fs_mgr_flags.verify)) {
-            if (!fs_mgr_teardown_verity(&current_entry)) {
+            if (!fs_mgr_teardown_verity(&current_entry, true /* wait */)) {
                 LERROR << "Failed to tear down verified partition on mount point: "
                        << current_entry.mount_point;
                 ret |= FsMgrUmountStatus::ERROR_VERITY;
@@ -1349,68 +1362,6 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
         }
     }
     return ret;
-}
-
-static std::string GetUserdataBlockDevice() {
-    Fstab fstab;
-    if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
-        LERROR << "Failed to read /proc/mounts";
-        return "";
-    }
-    auto entry = GetEntryForMountPoint(&fstab, "/data");
-    if (entry == nullptr) {
-        LERROR << "Didn't find /data mount point in /proc/mounts";
-        return "";
-    }
-    return entry->blk_device;
-}
-
-int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
-    const std::string& block_device = GetUserdataBlockDevice();
-    LINFO << "Userdata is mounted on " << block_device;
-    auto entry = std::find_if(fstab->begin(), fstab->end(), [&block_device](const FstabEntry& e) {
-        if (e.mount_point != "/data") {
-            return false;
-        }
-        if (e.blk_device == block_device) {
-            return true;
-        }
-        DeviceMapper& dm = DeviceMapper::Instance();
-        std::string path;
-        if (!dm.GetDmDevicePathByName("userdata", &path)) {
-            return false;
-        }
-        return path == block_device;
-    });
-    if (entry == fstab->end()) {
-        LERROR << "Can't find /data in fstab";
-        return -1;
-    }
-    if (!entry->fs_mgr_flags.checkpoint_blk && !entry->fs_mgr_flags.checkpoint_fs) {
-        LINFO << "Userdata doesn't support checkpointing. Nothing to do";
-        return 0;
-    }
-    CheckpointManager checkpoint_manager;
-    if (!checkpoint_manager.NeedsCheckpoint()) {
-        LINFO << "Checkpointing not needed. Don't remount";
-        return 0;
-    }
-    if (entry->fs_mgr_flags.checkpoint_fs) {
-        // Userdata is f2fs, simply remount it.
-        if (!checkpoint_manager.Update(&(*entry))) {
-            LERROR << "Failed to remount userdata in checkpointing mode";
-            return -1;
-        }
-        if (mount(entry->blk_device.c_str(), entry->mount_point.c_str(), "none",
-                  MS_REMOUNT | entry->flags, entry->fs_options.c_str()) != 0) {
-            LERROR << "Failed to remount userdata in checkpointing mode";
-            return -1;
-        }
-    } else {
-        // STOPSHIP(b/143970043): support remounting for ext4.
-        LWARNING << "Remounting into checkpointing is not supported for ex4. Proceed with caution";
-    }
-    return 0;
 }
 
 // wrapper to __mount() and expects a fully prepared fstab_rec,
@@ -1472,7 +1423,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
         }
 
         // First check the filesystem if requested.
-        if (fstab_entry.fs_mgr_flags.wait && !WaitForFile(n_blk_device, 20s)) {
+        if (fstab_entry.fs_mgr_flags.wait && !fs_mgr_wait_for_file(n_blk_device, 20s)) {
             LERROR << "Skipping mounting '" << n_blk_device << "'";
             continue;
         }
@@ -1675,7 +1626,7 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
             fprintf(zram_fp.get(), "%" PRId64 "\n", entry.zram_size);
         }
 
-        if (entry.fs_mgr_flags.wait && !WaitForFile(entry.blk_device, 20s)) {
+        if (entry.fs_mgr_flags.wait && !fs_mgr_wait_for_file(entry.blk_device, 20s)) {
             LERROR << "Skipping mkswap for '" << entry.blk_device << "'";
             ret = false;
             continue;
@@ -1686,8 +1637,10 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
                 MKSWAP_BIN,
                 entry.blk_device.c_str(),
         };
-        int err = logwrap_fork_execvp(ARRAY_SIZE(mkswap_argv), mkswap_argv, nullptr, false,
-                                      LOG_KLOG, false, nullptr);
+        int err = 0;
+        int status;
+        err = android_fork_execvp_ext(ARRAY_SIZE(mkswap_argv), const_cast<char**>(mkswap_argv),
+                                      &status, true, LOG_KLOG, false, nullptr, nullptr, 0);
         if (err) {
             LERROR << "mkswap failed for " << entry.blk_device;
             ret = false;
@@ -1711,6 +1664,38 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
     }
 
     return ret;
+}
+
+bool fs_mgr_load_verity_state(int* mode) {
+    /* return the default mode, unless any of the verified partitions are in
+     * logging mode, in which case return that */
+    *mode = VERITY_MODE_DEFAULT;
+
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        LERROR << "Failed to read default fstab";
+        return false;
+    }
+
+    for (const auto& entry : fstab) {
+        if (entry.fs_mgr_flags.avb) {
+            *mode = VERITY_MODE_RESTART;  // avb only supports restart mode.
+            break;
+        } else if (!entry.fs_mgr_flags.verify) {
+            continue;
+        }
+
+        int current;
+        if (load_verity_state(entry, &current) < 0) {
+            continue;
+        }
+        if (current != VERITY_MODE_DEFAULT) {
+            *mode = current;
+            break;
+        }
+    }
+
+    return true;
 }
 
 bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {

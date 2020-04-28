@@ -18,7 +18,6 @@
 
 #include <sstream>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace android {
@@ -68,22 +67,6 @@ bool EndsWithIgnoreCase(std::string_view s, std::string_view suffix);
 
 // Tests whether 'lhs' equals 'rhs', ignoring case.
 bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs);
-
-// Removes `prefix` from the start of the given string and returns true (if
-// it was present), false otherwise.
-inline bool ConsumePrefix(std::string_view* s, std::string_view prefix) {
-  if (!StartsWith(*s, prefix)) return false;
-  s->remove_prefix(prefix.size());
-  return true;
-}
-
-// Removes `suffix` from the end of the given string and returns true (if
-// it was present), false otherwise.
-inline bool ConsumeSuffix(std::string_view* s, std::string_view suffix) {
-  if (!EndsWith(*s, suffix)) return false;
-  s->remove_suffix(suffix.size());
-  return true;
-}
 
 }  // namespace base
 }  // namespace android

@@ -95,14 +95,14 @@ class MappedZipFile {
   explicit MappedZipFile(const int fd)
       : has_fd_(true), fd_(fd), base_ptr_(nullptr), data_length_(0) {}
 
-  explicit MappedZipFile(const void* address, size_t length)
+  explicit MappedZipFile(void* address, size_t length)
       : has_fd_(false), fd_(-1), base_ptr_(address), data_length_(static_cast<off64_t>(length)) {}
 
   bool HasFd() const { return has_fd_; }
 
   int GetFileDescriptor() const;
 
-  const void* GetBasePtr() const;
+  void* GetBasePtr() const;
 
   off64_t GetFileLength() const;
 
@@ -117,7 +117,7 @@ class MappedZipFile {
 
   const int fd_;
 
-  const void* const base_ptr_;
+  void* const base_ptr_;
   const off64_t data_length_;
 };
 
@@ -129,7 +129,7 @@ class CentralDirectory {
 
   size_t GetMapLength() const { return length_; }
 
-  void Initialize(const void* map_base_ptr, off64_t cd_start_offset, size_t cd_size);
+  void Initialize(void* map_base_ptr, off64_t cd_start_offset, size_t cd_size);
 
  private:
   const uint8_t* base_ptr_;
@@ -137,22 +137,22 @@ class CentralDirectory {
 };
 
 /**
- * More space efficient string representation of strings in an mmaped zipped
- * file than std::string_view. Using std::string_view as an entry in the
- * ZipArchive hash table wastes space. std::string_view stores a pointer to a
- * string (on 64 bit, 8 bytes) and the length to read from that pointer,
- * 2 bytes. Because of alignment, the structure consumes 16 bytes, wasting
- * 6 bytes.
- *
- * ZipStringOffset stores a 4 byte offset from a fixed location in the memory
- * mapped file instead of the entire address, consuming 8 bytes with alignment.
+ * More space efficient string representation of strings in an mmaped zipped file than
+ * std::string_view or ZipString. Using ZipString as an entry in the ZipArchive hashtable wastes
+ * space. ZipString stores a pointer to a string (on 64 bit, 8 bytes) and the length to read from
+ * that pointer, 2 bytes. Because of alignment, the structure consumes 16 bytes, wasting 6 bytes.
+ * ZipStringOffset stores a 4 byte offset from a fixed location in the memory mapped file instead
+ * of the entire address, consuming 8 bytes with alignment.
  */
 struct ZipStringOffset {
   uint32_t name_offset;
   uint16_t name_length;
 
-  const std::string_view ToStringView(const uint8_t* start) const {
-    return std::string_view{reinterpret_cast<const char*>(start + name_offset), name_length};
+  const ZipString GetZipString(const uint8_t* start) const {
+    ZipString zip_string;
+    zip_string.name = start + name_offset;
+    zip_string.name_length = name_length;
+    return zip_string;
   }
 };
 
@@ -177,7 +177,7 @@ struct ZipArchive {
   ZipStringOffset* hash_table;
 
   ZipArchive(const int fd, bool assume_ownership);
-  ZipArchive(const void* address, size_t length);
+  ZipArchive(void* address, size_t length);
   ~ZipArchive();
 
   bool InitializeCentralDirectory(off64_t cd_start_offset, size_t cd_size);

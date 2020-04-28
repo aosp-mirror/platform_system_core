@@ -24,7 +24,7 @@
 #include <string>
 
 #include "adb_unique_fd.h"
-#include "fdevent/fdevent.h"
+#include "fdevent.h"
 #include "types.h"
 
 class atransport;

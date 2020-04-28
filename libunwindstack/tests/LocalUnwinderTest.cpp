@@ -170,10 +170,10 @@ TEST_F(LocalUnwinderTest, unwind_after_dlopen) {
 
   std::string testlib(testing::internal::GetArgvs()[0]);
   auto const value = testlib.find_last_of('/');
-  if (value != std::string::npos) {
-    testlib = testlib.substr(0, value + 1);
+  if (value == std::string::npos) {
+    testlib = "../";
   } else {
-    testlib = "";
+    testlib = testlib.substr(0, value + 1) + "../";
   }
   testlib += "libunwindstack_local.so";
 

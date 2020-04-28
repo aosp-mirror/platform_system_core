@@ -24,22 +24,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.TimeUnit;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.WritableByteChannel;
+import java.util.Set;
 
-import com.android.fastdeploy.PatchFormatException;
-import com.android.fastdeploy.ApkArchive;
-import com.android.fastdeploy.APKDump;
 import com.android.fastdeploy.APKMetaData;
 import com.android.fastdeploy.PatchUtils;
 
-import com.google.protobuf.ByteString;
-
 public final class DeployAgent {
     private static final int BUFFER_SIZE = 128 * 1024;
-    private static final int AGENT_VERSION = 0x00000003;
+    private static final int AGENT_VERSION = 0x00000002;
 
     public static void main(String[] args) {
         int exitCode = 0;
@@ -49,70 +45,68 @@ public final class DeployAgent {
             }
 
             String commandString = args[0];
-            switch (commandString) {
-                case "dump": {
-                    if (args.length != 3) {
-                        showUsage(1);
-                    }
 
-                    String requiredVersion = args[1];
-                    if (AGENT_VERSION == Integer.parseInt(requiredVersion)) {
-                        String packageName = args[2];
-                        String packagePath = getFilenameFromPackageName(packageName);
-                        if (packagePath != null) {
-                            dumpApk(packageName, packagePath);
-                        } else {
-                            exitCode = 3;
-                        }
-                    } else {
-                        System.out.printf("0x%08X\n", AGENT_VERSION);
-                        exitCode = 4;
-                    }
-                    break;
-                }
-                case "apply": {
-                    if (args.length < 3) {
-                        showUsage(1);
-                    }
-
-                    String patchPath = args[1];
-                    String outputParam = args[2];
-
-                    InputStream deltaInputStream = null;
-                    if (patchPath.compareTo("-") == 0) {
-                        deltaInputStream = System.in;
-                    } else {
-                        deltaInputStream = new FileInputStream(patchPath);
-                    }
-
-                    if (outputParam.equals("-o")) {
-                        OutputStream outputStream = null;
-                        if (args.length > 3) {
-                            String outputPath = args[3];
-                            if (!outputPath.equals("-")) {
-                                outputStream = new FileOutputStream(outputPath);
-                            }
-                        }
-                        if (outputStream == null) {
-                            outputStream = System.out;
-                        }
-                        writePatchToStream(deltaInputStream, outputStream);
-                    } else if (outputParam.equals("-pm")) {
-                        String[] sessionArgs = null;
-                        if (args.length > 3) {
-                            int numSessionArgs = args.length - 3;
-                            sessionArgs = new String[numSessionArgs];
-                            for (int i = 0; i < numSessionArgs; i++) {
-                                sessionArgs[i] = args[i + 3];
-                            }
-                        }
-                        exitCode = applyPatch(deltaInputStream, sessionArgs);
-                    }
-                    break;
-                }
-                default:
+            if (commandString.equals("extract")) {
+                if (args.length != 2) {
                     showUsage(1);
-                    break;
+                }
+
+                String packageName = args[1];
+                extractMetaData(packageName);
+            } else if (commandString.equals("find")) {
+                if (args.length != 2) {
+                    showUsage(1);
+                }
+
+                String packageName = args[1];
+                if (getFilenameFromPackageName(packageName) == null) {
+                    exitCode = 3;
+                }
+            } else if (commandString.equals("apply")) {
+                if (args.length < 4) {
+                    showUsage(1);
+                }
+
+                String packageName = args[1];
+                String patchPath = args[2];
+                String outputParam = args[3];
+
+                InputStream deltaInputStream = null;
+                if (patchPath.compareTo("-") == 0) {
+                    deltaInputStream = System.in;
+                } else {
+                    deltaInputStream = new FileInputStream(patchPath);
+                }
+
+                if (outputParam.equals("-o")) {
+                    OutputStream outputStream = null;
+                    if (args.length > 4) {
+                        String outputPath = args[4];
+                        if (!outputPath.equals("-")) {
+                            outputStream = new FileOutputStream(outputPath);
+                        }
+                    }
+                    if (outputStream == null) {
+                        outputStream = System.out;
+                    }
+                    File deviceFile = getFileFromPackageName(packageName);
+                    writePatchToStream(
+                            new RandomAccessFile(deviceFile, "r"), deltaInputStream, outputStream);
+                } else if (outputParam.equals("-pm")) {
+                    String[] sessionArgs = null;
+                    if (args.length > 4) {
+                        int numSessionArgs = args.length-4;
+                        sessionArgs = new String[numSessionArgs];
+                        for (int i=0 ; i<numSessionArgs ; i++) {
+                            sessionArgs[i] = args[i+4];
+                        }
+                    }
+                    exitCode = applyPatch(packageName, deltaInputStream, sessionArgs);
+                }
+            } else if (commandString.equals("version")) {
+                System.out.printf("0x%08X\n", AGENT_VERSION);
+            } else {
+                showUsage(1);
             }
         } catch (Exception e) {
             System.err.println("Error: " + e);
@@ -124,16 +118,16 @@ public final class DeployAgent {
 
     private static void showUsage(int exitCode) {
         System.err.println(
-                "usage: deployagent <command> [<args>]\n\n" +
-                        "commands:\n" +
-                        "dump VERSION PKGNAME  dump info for an installed package given that " +
-                        "VERSION equals current agent's version\n" +
-                        "apply PATCHFILE [-o|-pm]    apply a patch from PATCHFILE " +
-                        "(- for stdin) to an installed package\n" +
-                        " -o <FILE> directs output to FILE, default or - for stdout\n" +
-                        " -pm <ARGS> directs output to package manager, passes <ARGS> to " +
-                        "'pm install-create'\n"
-        );
+            "usage: deployagent <command> [<args>]\n\n" +
+            "commands:\n" +
+            "version                             get the version\n" +
+            "find PKGNAME                        return zero if package found, else non-zero\n" +
+            "extract PKGNAME                     extract an installed package's metadata\n" +
+            "apply PKGNAME PATCHFILE [-o|-pm]    apply a patch from PATCHFILE (- for stdin) to an installed package\n" +
+            " -o <FILE> directs output to FILE, default or - for stdout\n" +
+            " -pm <ARGS> directs output to package manager, passes <ARGS> to 'pm install-create'\n"
+            );
+
         System.exit(exitCode);
     }
 
@@ -168,34 +162,32 @@ public final class DeployAgent {
                 }
                 int equalsIndex = line.lastIndexOf(packageSuffix);
                 String fileName =
-                        line.substring(packageIndex + packagePrefix.length(), equalsIndex);
+                    line.substring(packageIndex + packagePrefix.length(), equalsIndex);
                 return fileName;
             }
         }
         return null;
     }
 
-    private static void dumpApk(String packageName, String packagePath) throws IOException {
-        File apk = new File(packagePath);
-        ApkArchive.Dump dump = new ApkArchive(apk).extractMetadata();
-
-        APKDump.Builder apkDumpBuilder = APKDump.newBuilder();
-        apkDumpBuilder.setName(packageName);
-        if (dump.cd != null) {
-            apkDumpBuilder.setCd(ByteString.copyFrom(dump.cd));
+    private static File getFileFromPackageName(String packageName) throws IOException {
+        String filename = getFilenameFromPackageName(packageName);
+        if (filename == null) {
+            // Should not happen (function is only called when we know the package exists)
+            throw new IOException("package not found");
         }
-        if (dump.signature != null) {
-            apkDumpBuilder.setSignature(ByteString.copyFrom(dump.signature));
-        }
-        apkDumpBuilder.setAbsolutePath(apk.getAbsolutePath());
+        return new File(filename);
+    }
 
-        apkDumpBuilder.build().writeTo(System.out);
+    private static void extractMetaData(String packageName) throws IOException {
+        File apkFile = getFileFromPackageName(packageName);
+        APKMetaData apkMetaData = PatchUtils.getAPKMetaData(apkFile);
+        apkMetaData.writeDelimitedTo(System.out);
     }
 
     private static int createInstallSession(String[] args) throws IOException {
         StringBuilder commandBuilder = new StringBuilder();
         commandBuilder.append("pm install-create ");
-        for (int i = 0; args != null && i < args.length; i++) {
+        for (int i=0 ; args != null && i<args.length ; i++) {
             commandBuilder.append(args[i] + " ");
         }
 
@@ -207,8 +199,7 @@ public final class DeployAgent {
         String successLineEnd = "]";
         while ((line = reader.readLine()) != null) {
             if (line.startsWith(successLineStart) && line.endsWith(successLineEnd)) {
-                return Integer.parseInt(line.substring(successLineStart.length(),
-                        line.lastIndexOf(successLineEnd)));
+                return Integer.parseInt(line.substring(successLineStart.length(), line.lastIndexOf(successLineEnd)));
             }
         }
 
@@ -222,15 +213,17 @@ public final class DeployAgent {
         return p.exitValue();
     }
 
-    private static int applyPatch(InputStream deltaStream, String[] sessionArgs)
+    private static int applyPatch(String packageName, InputStream deltaStream, String[] sessionArgs)
             throws IOException, PatchFormatException {
+        File deviceFile = getFileFromPackageName(packageName);
         int sessionId = createInstallSession(sessionArgs);
         if (sessionId < 0) {
             System.err.println("PM Create Session Failed");
             return -1;
         }
 
-        int writeExitCode = writePatchedDataToSession(deltaStream, sessionId);
+        int writeExitCode = writePatchedDataToSession(new RandomAccessFile(deviceFile, "r"), deltaStream, sessionId);
+
         if (writeExitCode == 0) {
             return commitInstallSession(sessionId);
         } else {
@@ -238,94 +231,85 @@ public final class DeployAgent {
         }
     }
 
-    private static long writePatchToStream(InputStream patchData,
-            OutputStream outputStream) throws IOException, PatchFormatException {
+    private static long writePatchToStream(RandomAccessFile oldData, InputStream patchData,
+        OutputStream outputStream) throws IOException, PatchFormatException {
         long newSize = readPatchHeader(patchData);
-        long bytesWritten = writePatchedDataToStream(newSize, patchData, outputStream);
+        long bytesWritten = writePatchedDataToStream(oldData, newSize, patchData, outputStream);
         outputStream.flush();
         if (bytesWritten != newSize) {
             throw new PatchFormatException(String.format(
-                    "output size mismatch (expected %ld but wrote %ld)", newSize, bytesWritten));
+                "output size mismatch (expected %ld but wrote %ld)", newSize, bytesWritten));
         }
         return bytesWritten;
     }
 
     private static long readPatchHeader(InputStream patchData)
-            throws IOException, PatchFormatException {
+        throws IOException, PatchFormatException {
         byte[] signatureBuffer = new byte[PatchUtils.SIGNATURE.length()];
         try {
-            PatchUtils.readFully(patchData, signatureBuffer);
+            PatchUtils.readFully(patchData, signatureBuffer, 0, signatureBuffer.length);
         } catch (IOException e) {
             throw new PatchFormatException("truncated signature");
         }
 
-        String signature = new String(signatureBuffer);
+        String signature = new String(signatureBuffer, 0, signatureBuffer.length, "US-ASCII");
         if (!PatchUtils.SIGNATURE.equals(signature)) {
             throw new PatchFormatException("bad signature");
         }
 
-        long newSize = PatchUtils.readLELong(patchData);
-        if (newSize < 0) {
-            throw new PatchFormatException("bad newSize: " + newSize);
+        long newSize = PatchUtils.readBsdiffLong(patchData);
+        if (newSize < 0 || newSize > Integer.MAX_VALUE) {
+            throw new PatchFormatException("bad newSize");
         }
 
         return newSize;
     }
 
     // Note that this function assumes patchData has been seek'ed to the start of the delta stream
-    // (i.e. the signature has already been read by readPatchHeader). For a stream that points to
-    // the start of a patch file call writePatchToStream
-    private static long writePatchedDataToStream(long newSize, InputStream patchData,
-            OutputStream outputStream) throws IOException {
-        String deviceFile = PatchUtils.readString(patchData);
-        RandomAccessFile oldDataFile = new RandomAccessFile(deviceFile, "r");
-        FileChannel oldData = oldDataFile.getChannel();
-
-        WritableByteChannel newData = Channels.newChannel(outputStream);
-
+    // (i.e. the signature has already been read by readPatchHeader). For a stream that points to the
+    // start of a patch file call writePatchToStream
+    private static long writePatchedDataToStream(RandomAccessFile oldData, long newSize,
+        InputStream patchData, OutputStream outputStream) throws IOException {
         long newDataBytesWritten = 0;
         byte[] buffer = new byte[BUFFER_SIZE];
 
         while (newDataBytesWritten < newSize) {
-            long newDataLen = PatchUtils.readLELong(patchData);
-            if (newDataLen > 0) {
-                PatchUtils.pipe(patchData, outputStream, buffer, newDataLen);
+            long copyLen = PatchUtils.readFormattedLong(patchData);
+            if (copyLen > 0) {
+                PatchUtils.pipe(patchData, outputStream, buffer, (int) copyLen);
             }
 
-            long oldDataOffset = PatchUtils.readLELong(patchData);
-            long oldDataLen = PatchUtils.readLELong(patchData);
-            if (oldDataLen >= 0) {
-                long offset = oldDataOffset;
-                long len = oldDataLen;
-                while (len > 0) {
-                    long chunkLen = Math.min(len, 1024*1024*1024);
-                    oldData.transferTo(offset, chunkLen, newData);
-                    offset += chunkLen;
-                    len -= chunkLen;
-                }
+            long oldDataOffset = PatchUtils.readFormattedLong(patchData);
+            long oldDataLen = PatchUtils.readFormattedLong(patchData);
+            oldData.seek(oldDataOffset);
+            if (oldDataLen > 0) {
+                PatchUtils.pipe(oldData, outputStream, buffer, (int) oldDataLen);
             }
-            newDataBytesWritten += newDataLen + oldDataLen;
+
+            newDataBytesWritten += copyLen + oldDataLen;
         }
 
         return newDataBytesWritten;
     }
 
-    private static int writePatchedDataToSession(InputStream patchData, int sessionId)
+    private static int writePatchedDataToSession(RandomAccessFile oldData, InputStream patchData, int sessionId)
             throws IOException, PatchFormatException {
         try {
             Process p;
             long newSize = readPatchHeader(patchData);
-            String command = String.format("pm install-write -S %d %d -- -", newSize, sessionId);
+            StringBuilder commandBuilder = new StringBuilder();
+            commandBuilder.append(String.format("pm install-write -S %d %d -- -", newSize, sessionId));
+
+            String command = commandBuilder.toString();
             p = Runtime.getRuntime().exec(command);
 
             OutputStream sessionOutputStream = p.getOutputStream();
-            long bytesWritten = writePatchedDataToStream(newSize, patchData, sessionOutputStream);
+            long bytesWritten = writePatchedDataToStream(oldData, newSize, patchData, sessionOutputStream);
             sessionOutputStream.flush();
             p.waitFor();
             if (bytesWritten != newSize) {
                 throw new PatchFormatException(
-                        String.format("output size mismatch (expected %d but wrote %)", newSize,
-                                bytesWritten));
+                        String.format("output size mismatch (expected %d but wrote %)", newSize, bytesWritten));
             }
             return p.exitValue();
         } catch (InterruptedException e) {

@@ -54,21 +54,20 @@ cc_defaults {
     ],
     srcs: [
         "libc_test.cpp",
-        "liblog_test.cpp",
+        "liblog_test_default.cpp",
+        "liblog_test_stderr.cpp",
         "log_id_test.cpp",
         "log_radio_test.cpp",
         "log_read_test.cpp",
         "log_system_test.cpp",
         "log_time_test.cpp",
         "log_wrap_test.cpp",
-        "logprint_test.cpp",
     ],
     shared_libs: [
         "libcutils",
         "libbase",
     ],
     static_libs: ["liblog"],
-    isolated: true,
 }
 
 // Build tests for the device (with .so). Run with:

@@ -75,7 +75,7 @@ class Elf {
 
   std::string GetBuildID();
 
-  int64_t GetLoadBias() { return load_bias_; }
+  uint64_t GetLoadBias() { return load_bias_; }
 
   bool IsValidPc(uint64_t pc);
 
@@ -101,7 +101,7 @@ class Elf {
 
   static bool GetInfo(Memory* memory, uint64_t* size);
 
-  static int64_t GetLoadBias(Memory* memory);
+  static uint64_t GetLoadBias(Memory* memory);
 
   static std::string GetBuildID(Memory* memory);
 
@@ -116,7 +116,7 @@ class Elf {
 
  protected:
   bool valid_ = false;
-  int64_t load_bias_ = 0;
+  uint64_t load_bias_ = 0;
   std::unique_ptr<ElfInterface> interface_;
   std::unique_ptr<Memory> memory_;
   uint32_t machine_type_;

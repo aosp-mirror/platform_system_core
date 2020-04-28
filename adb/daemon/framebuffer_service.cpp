@@ -33,6 +33,7 @@
 #include "adb.h"
 #include "adb_io.h"
 #include "adb_utils.h"
+#include "fdevent.h"
 
 /* TODO:
 ** - sync with vsync to avoid tearing

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef _INIT_ACTION_MANAGER_H
+#define _INIT_ACTION_MANAGER_H
 
 #include <string>
 #include <vector>
@@ -31,7 +32,6 @@ class ActionManager {
 
     // Exposed for testing
     ActionManager();
-    size_t CheckAllCommands();
 
     void AddAction(std::unique_ptr<Action> action);
     void QueueEventTrigger(const std::string& trigger);
@@ -55,3 +55,5 @@ class ActionManager {
 
 }  // namespace init
 }  // namespace android
+
+#endif

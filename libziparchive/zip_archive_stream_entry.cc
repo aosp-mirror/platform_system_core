@@ -27,7 +27,6 @@
 #include <vector>
 
 #include <android-base/file.h>
-#include <android-base/logging.h>
 #include <log/log.h>
 
 #include <ziparchive/zip_archive.h>
@@ -78,12 +77,6 @@ bool ZipArchiveStreamEntryUncompressed::Init(const ZipEntry& entry) {
 }
 
 const std::vector<uint8_t>* ZipArchiveStreamEntryUncompressed::Read() {
-  // Simple sanity check. The vector should *only* be handled by this code. A caller
-  // should not const-cast and modify the capacity. This may invalidate next_out.
-  //
-  // Note: it would be better to store the results of data() across Read calls.
-  CHECK_EQ(data_.capacity(), kBufSize);
-
   if (length_ == 0) {
     return nullptr;
   }
@@ -104,8 +97,7 @@ const std::vector<uint8_t>* ZipArchiveStreamEntryUncompressed::Read() {
   if (bytes < data_.size()) {
     data_.resize(bytes);
   }
-  computed_crc32_ = static_cast<uint32_t>(
-      crc32(computed_crc32_, data_.data(), static_cast<uint32_t>(data_.size())));
+  computed_crc32_ = crc32(computed_crc32_, data_.data(), data_.size());
   length_ -= bytes;
   offset_ += bytes;
   return &data_;
@@ -200,15 +192,9 @@ bool ZipArchiveStreamEntryCompressed::Verify() {
 }
 
 const std::vector<uint8_t>* ZipArchiveStreamEntryCompressed::Read() {
-  // Simple sanity check. The vector should *only* be handled by this code. A caller
-  // should not const-cast and modify the capacity. This may invalidate next_out.
-  //
-  // Note: it would be better to store the results of data() across Read calls.
-  CHECK_EQ(out_.capacity(), kBufSize);
-
   if (z_stream_.avail_out == 0) {
     z_stream_.next_out = out_.data();
-    z_stream_.avail_out = static_cast<uint32_t>(out_.size());
+    z_stream_.avail_out = out_.size();
     ;
   }
 
@@ -217,9 +203,7 @@ const std::vector<uint8_t>* ZipArchiveStreamEntryCompressed::Read() {
       if (compressed_length_ == 0) {
         return nullptr;
       }
-      DCHECK_LE(in_.size(), std::numeric_limits<uint32_t>::max());  // Should be buf size = 64k.
-      uint32_t bytes = (compressed_length_ > in_.size()) ? static_cast<uint32_t>(in_.size())
-                                                         : compressed_length_;
+      size_t bytes = (compressed_length_ > in_.size()) ? in_.size() : compressed_length_;
       ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle_);
       errno = 0;
       if (!archive->mapped_zip.ReadAtOffset(in_.data(), bytes, offset_)) {
@@ -246,16 +230,14 @@ const std::vector<uint8_t>* ZipArchiveStreamEntryCompressed::Read() {
 
     if (z_stream_.avail_out == 0) {
       uncompressed_length_ -= out_.size();
-      computed_crc32_ = static_cast<uint32_t>(
-          crc32(computed_crc32_, out_.data(), static_cast<uint32_t>(out_.size())));
+      computed_crc32_ = crc32(computed_crc32_, out_.data(), out_.size());
       return &out_;
     }
     if (zerr == Z_STREAM_END) {
       if (z_stream_.avail_out != 0) {
         // Resize the vector down to the actual size of the data.
         out_.resize(out_.size() - z_stream_.avail_out);
-        computed_crc32_ = static_cast<uint32_t>(
-            crc32(computed_crc32_, out_.data(), static_cast<uint32_t>(out_.size())));
+        computed_crc32_ = crc32(computed_crc32_, out_.data(), out_.size());
         uncompressed_length_ -= out_.size();
         return &out_;
       }

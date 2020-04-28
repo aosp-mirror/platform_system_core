@@ -28,45 +28,38 @@
 namespace android {
 
 struct Leak {
-  uintptr_t begin = 0;
-  size_t size = 0;
+  uintptr_t begin;
+  size_t size;
 
-  size_t referenced_count = 0;
-  size_t referenced_size = 0;
+  size_t referenced_count;
+  size_t referenced_size;
 
-  size_t similar_count = 0;
-  size_t similar_size = 0;
-  size_t similar_referenced_count = 0;
-  size_t similar_referenced_size = 0;
+  size_t similar_count;
+  size_t similar_size;
+  size_t similar_referenced_count;
+  size_t similar_referenced_size;
 
-  size_t total_size = 0;
+  size_t total_size;
 
   static const size_t contents_length = 32;
-  char contents[contents_length] = {};
+  char contents[contents_length];
 
   struct Backtrace {
-    size_t num_frames = 0;
+    size_t num_frames;
 
     static const size_t max_frames = 16;
-    uintptr_t frames[max_frames] = {};
-
-    size_t reserved[8] = {};
+    uintptr_t frames[max_frames];
   } backtrace;
-
-  size_t reserved[8] = {};
 
   std::string ToString(bool log_contents) const;
 };
 
 struct UnreachableMemoryInfo {
   std::vector<Leak> leaks;
-  size_t num_leaks = 0;
-  size_t leak_bytes = 0;
-  size_t num_allocations = 0;
-  size_t allocation_bytes = 0;
-
-  size_t version = 0;  // Must be 0
-  size_t reserved[8] = {};
+  size_t num_leaks;
+  size_t leak_bytes;
+  size_t num_allocations;
+  size_t allocation_bytes;
 
   UnreachableMemoryInfo() {}
   ~UnreachableMemoryInfo();

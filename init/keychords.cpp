@@ -41,7 +41,7 @@ Keychords::Keychords() : epoll_(nullptr), inotify_fd_(-1) {}
 
 Keychords::~Keychords() noexcept {
     if (inotify_fd_ >= 0) {
-        epoll_->UnregisterHandler(inotify_fd_);
+        epoll_->UnregisterHandler(inotify_fd_).IgnoreError();
         ::close(inotify_fd_);
     }
     while (!registration_.empty()) GeteventCloseDevice(registration_.begin()->first);
@@ -212,7 +212,7 @@ void Keychords::GeteventCloseDevice(const std::string& device) {
     auto it = registration_.find(device);
     if (it == registration_.end()) return;
     auto fd = (*it).second;
-    epoll_->UnregisterHandler(fd);
+    epoll_->UnregisterHandler(fd).IgnoreError();
     registration_.erase(it);
     ::close(fd);
 }
@@ -285,7 +285,7 @@ void Keychords::Register(const std::vector<int>& keycodes) {
 
 void Keychords::Start(Epoll* epoll, std::function<void(const std::vector<int>&)> handler) {
     epoll_ = epoll;
-    handler_ = std::move(handler);
+    handler_ = handler;
     if (entries_.size()) GeteventOpenDevice();
 }
 

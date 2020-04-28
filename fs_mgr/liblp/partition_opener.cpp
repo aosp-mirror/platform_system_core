@@ -26,7 +26,6 @@
 #include <unistd.h>
 
 #include <android-base/file.h>
-#include <android-base/strings.h>
 
 #include "utility.h"
 
@@ -38,24 +37,10 @@ using android::base::unique_fd;
 namespace {
 
 std::string GetPartitionAbsolutePath(const std::string& path) {
-    if (android::base::StartsWith(path, "/")) {
+    if (path[0] == '/') {
         return path;
     }
-
-    auto by_name = "/dev/block/by-name/" + path;
-    if (access(by_name.c_str(), F_OK) != 0) {
-        // If the by-name symlink doesn't exist, as a special case we allow
-        // certain devices to be used as partition names. This can happen if a
-        // Dynamic System Update is installed to an sdcard, which won't be in
-        // the boot device list.
-        //
-        // We whitelist because most devices in /dev/block are not valid for
-        // storing fiemaps.
-        if (android::base::StartsWith(path, "mmcblk")) {
-            return "/dev/block/" + path;
-        }
-    }
-    return by_name;
+    return "/dev/block/by-name/" + path;
 }
 
 bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device_info) {
@@ -78,12 +63,6 @@ bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device
         PERROR << __PRETTY_FUNCTION__ << "BLKALIGNOFF failed on " << block_device;
         return false;
     }
-    // The kernel can return -1 here when misaligned devices are stacked (i.e.
-    // device-mapper).
-    if (alignment_offset == -1) {
-        alignment_offset = 0;
-    }
-
     int logical_block_size;
     if (ioctl(fd, BLKSSZGET, &logical_block_size) < 0) {
         PERROR << __PRETTY_FUNCTION__ << "BLKSSZGET failed on " << block_device;
@@ -112,10 +91,6 @@ unique_fd PartitionOpener::Open(const std::string& partition_name, int flags) co
 bool PartitionOpener::GetInfo(const std::string& partition_name, BlockDeviceInfo* info) const {
     std::string path = GetPartitionAbsolutePath(partition_name);
     return GetBlockDeviceInfo(path, info);
-}
-
-std::string PartitionOpener::GetDeviceString(const std::string& partition_name) const {
-    return GetPartitionAbsolutePath(partition_name);
 }
 
 }  // namespace fs_mgr

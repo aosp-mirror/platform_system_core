@@ -17,8 +17,6 @@
 #ifndef HEALTHD_BATTERYMONITOR_H
 #define HEALTHD_BATTERYMONITOR_H
 
-#include <memory>
-
 #include <batteryservice/BatteryService.h>
 #include <utils/String8.h>
 #include <utils/Vector.h>
@@ -26,19 +24,6 @@
 #include <healthd/healthd.h>
 
 namespace android {
-namespace hardware {
-namespace health {
-namespace V1_0 {
-struct HealthInfo;
-}  // namespace V1_0
-namespace V2_0 {
-struct HealthInfo;
-}  // namespace V2_0
-namespace V2_1 {
-struct HealthInfo;
-}  // namespace V2_1
-}  // namespace health
-}  // namespace hardware
 
 class BatteryMonitor {
   public:
@@ -52,19 +37,12 @@ class BatteryMonitor {
     };
 
     BatteryMonitor();
-    ~BatteryMonitor();
     void init(struct healthd_config *hc);
+    bool update(void);
     int getChargeStatus();
     status_t getProperty(int id, struct BatteryProperty *val);
     void dumpState(int fd);
-
-    const android::hardware::health::V1_0::HealthInfo& getHealthInfo_1_0() const;
-    const android::hardware::health::V2_0::HealthInfo& getHealthInfo_2_0() const;
-    const android::hardware::health::V2_1::HealthInfo& getHealthInfo_2_1() const;
-
-    void updateValues(void);
-    void logValues(void);
-    bool isChargerOnline();
+    friend struct BatteryProperties getBatteryProperties(BatteryMonitor* batteryMonitor);
 
   private:
     struct healthd_config *mHealthdConfig;
@@ -72,8 +50,10 @@ class BatteryMonitor {
     bool mBatteryDevicePresent;
     int mBatteryFixedCapacity;
     int mBatteryFixedTemperature;
-    std::unique_ptr<android::hardware::health::V2_1::HealthInfo> mHealthInfo;
+    struct BatteryProperties props;
 
+    int getBatteryStatus(const char* status);
+    int getBatteryHealth(const char* status);
     int readFromFile(const String8& path, std::string* buf);
     PowerSupplyType readPowerSupplyType(const String8& path);
     bool getBooleanField(const String8& path);

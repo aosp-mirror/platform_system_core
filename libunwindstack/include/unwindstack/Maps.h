@@ -105,7 +105,7 @@ class LocalUpdatableMaps : public Maps {
 
   const std::string GetMapsFile() const override;
 
- protected:
+ private:
   std::vector<std::unique_ptr<MapInfo>> saved_maps_;
 };
 

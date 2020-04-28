@@ -16,8 +16,6 @@
  * limitations under the License.
  */
 
-#include <linux/usb/functionfs.h>
-
 #include <atomic>
 #include <condition_variable>
 #include <mutex>

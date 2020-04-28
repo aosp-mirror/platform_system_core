@@ -14,32 +14,35 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef _INIT_UTIL_H_
+#define _INIT_UTIL_H_
 
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include <chrono>
 #include <functional>
+#include <ostream>
 #include <string>
 
 #include <android-base/chrono_utils.h>
+#include <selinux/label.h>
 
-#include "fscrypt_init_extensions.h"
 #include "result.h"
 
+#define COLDBOOT_DONE "/dev/.coldboot_done"
+
 using android::base::boot_clock;
+using namespace std::chrono_literals;
 
 namespace android {
 namespace init {
 
-static const char kColdBootDoneProp[] = "ro.cold_boot_done";
-
-Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_t perm, uid_t uid,
-                         gid_t gid, const std::string& socketcon);
+int CreateSocket(const char* name, int type, bool passcred, mode_t perm, uid_t uid, gid_t gid,
+                 const char* socketcon);
 
 Result<std::string> ReadFile(const std::string& path);
-Result<void> WriteFile(const std::string& path, const std::string& content);
+Result<Success> WriteFile(const std::string& path, const std::string& content);
 
 Result<uid_t> DecodeUid(const std::string& name);
 
@@ -49,7 +52,7 @@ void import_kernel_cmdline(bool in_qemu,
                            const std::function<void(const std::string&, const std::string&, bool)>&);
 bool make_dir(const std::string& path, mode_t mode);
 bool is_dir(const char* pathname);
-Result<std::string> ExpandProps(const std::string& src);
+bool expand_props(const std::string& src, std::string* dst);
 
 // Returns the platform's Android DT directory as specified in the kernel cmdline.
 // If the platform does not configure a custom DT path, returns the standard one (based in procfs).
@@ -59,24 +62,11 @@ bool read_android_dt_file(const std::string& sub_path, std::string* dt_content);
 bool is_android_dt_value_expected(const std::string& sub_path, const std::string& expected_content);
 
 bool IsLegalPropertyName(const std::string& name);
-Result<void> IsLegalPropertyValue(const std::string& name, const std::string& value);
-
-struct MkdirOptions {
-    std::string target;
-    mode_t mode;
-    uid_t uid;
-    gid_t gid;
-    FscryptAction fscrypt_action;
-    std::string ref_option;
-};
-
-Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args);
-
-Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
-        const std::vector<std::string>& args);
 
 void SetStdioToDevNull(char** argv);
 void InitKernelLogging(char** argv);
 bool IsRecoveryMode();
 }  // namespace init
 }  // namespace android
+
+#endif

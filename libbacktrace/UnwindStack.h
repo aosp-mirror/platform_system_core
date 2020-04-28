@@ -19,7 +19,6 @@
 
 #include <stdint.h>
 
-#include <memory>
 #include <string>
 
 #include <backtrace/BacktraceMap.h>
@@ -50,7 +49,23 @@ class UnwindStackPtrace : public BacktracePtrace {
   size_t Read(uint64_t addr, uint8_t* buffer, size_t bytes) override;
 
  private:
-  std::shared_ptr<unwindstack::Memory> memory_;
+  unwindstack::MemoryRemote memory_;
+};
+
+class UnwindStackOffline : public Backtrace {
+ public:
+  UnwindStackOffline(ArchEnum arch, pid_t pid, pid_t tid, BacktraceMap* map, bool map_shared);
+
+  bool Unwind(size_t num_ignore_frames, void* context) override;
+
+  std::string GetFunctionNameRaw(uint64_t pc, uint64_t* offset) override;
+
+  size_t Read(uint64_t addr, uint8_t* buffer, size_t bytes) override;
+
+  bool ReadWord(uint64_t ptr, word_t* out_value) override;
+
+ private:
+  ArchEnum arch_;
 };
 
 #endif  // _LIBBACKTRACE_UNWIND_STACK_H

@@ -23,8 +23,7 @@
 #include <unwindstack/Elf.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/Maps.h>
-
-#include "MemoryRange.h"
+#include <unwindstack/Memory.h>
 
 // This implements the JIT Compilation Interface.
 // See https://sourceware.org/gdb/onlinedocs/gdb/JIT-Interface.html

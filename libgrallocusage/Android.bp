@@ -20,7 +20,12 @@ cc_library {
         "-Werror",
     ],
     cppflags: [
-        "-Wextra",
+        "-Weverything",
+        "-Wno-c++98-compat-pedantic",
+        // Hide errors in headers we include
+        "-Wno-global-constructors",
+        "-Wno-exit-time-destructors",
+        "-Wno-padded",
     ],
     srcs: ["GrallocUsageConversion.cpp"],
     export_include_dirs: ["include"],

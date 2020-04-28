@@ -1,4 +1,0 @@
-service vendor.keymaster-4-0 /vendor/bin/hw/android.hardware.keymaster@4.0-service.trusty
-    class early_hal
-    user nobody
-    group drmrpc

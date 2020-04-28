@@ -49,53 +49,28 @@
 #include "android-base/unique_fd.h"
 #include "android-base/utf8.h"
 
-namespace {
-
 #ifdef _WIN32
-static int mkstemp(char* name_template, size_t size_in_chars) {
-  std::wstring path;
-  CHECK(android::base::UTF8ToWide(name_template, &path))
-      << "path can't be converted to wchar: " << name_template;
-  if (_wmktemp_s(path.data(), path.size() + 1) != 0) {
+int mkstemp(char* template_name) {
+  if (_mktemp(template_name) == nullptr) {
     return -1;
   }
-
   // Use open() to match the close() that TemporaryFile's destructor does.
   // Use O_BINARY to match base file APIs.
-  int fd = _wopen(path.c_str(), O_CREAT | O_EXCL | O_RDWR | O_BINARY, S_IRUSR | S_IWUSR);
-  if (fd < 0) {
-    return -1;
-  }
-
-  std::string path_utf8;
-  CHECK(android::base::WideToUTF8(path, &path_utf8)) << "path can't be converted to utf8";
-  CHECK(strcpy_s(name_template, size_in_chars, path_utf8.c_str()) == 0)
-      << "utf8 path can't be assigned back to name_template";
-
-  return fd;
+  return open(template_name, O_CREAT | O_EXCL | O_RDWR | O_BINARY, S_IRUSR | S_IWUSR);
 }
 
-static char* mkdtemp(char* name_template, size_t size_in_chars) {
-  std::wstring path;
-  CHECK(android::base::UTF8ToWide(name_template, &path))
-      << "path can't be converted to wchar: " << name_template;
-
-  if (_wmktemp_s(path.data(), path.size() + 1) != 0) {
+char* mkdtemp(char* template_name) {
+  if (_mktemp(template_name) == nullptr) {
     return nullptr;
   }
-
-  if (_wmkdir(path.c_str()) != 0) {
+  if (_mkdir(template_name) == -1) {
     return nullptr;
   }
-
-  std::string path_utf8;
-  CHECK(android::base::WideToUTF8(path, &path_utf8)) << "path can't be converted to utf8";
-  CHECK(strcpy_s(name_template, size_in_chars, path_utf8.c_str()) == 0)
-      << "utf8 path can't be assigned back to name_template";
-
-  return name_template;
+  return template_name;
 }
 #endif
+
+namespace {
 
 std::string GetSystemTempDir() {
 #if defined(__ANDROID__)
@@ -108,20 +83,15 @@ std::string GetSystemTempDir() {
   // so try current directory if /data/local/tmp is not accessible.
   return ".";
 #elif defined(_WIN32)
-  wchar_t tmp_dir_w[MAX_PATH];
-  DWORD result = GetTempPathW(std::size(tmp_dir_w), tmp_dir_w);  // checks TMP env
-  CHECK_NE(result, 0ul) << "GetTempPathW failed, error: " << GetLastError();
-  CHECK_LT(result, std::size(tmp_dir_w)) << "path truncated to: " << result;
+  char tmp_dir[MAX_PATH];
+  DWORD result = GetTempPathA(sizeof(tmp_dir), tmp_dir);  // checks TMP env
+  CHECK_NE(result, 0ul) << "GetTempPathA failed, error: " << GetLastError();
+  CHECK_LT(result, sizeof(tmp_dir)) << "path truncated to: " << result;
 
   // GetTempPath() returns a path with a trailing slash, but init()
   // does not expect that, so remove it.
-  if (tmp_dir_w[result - 1] == L'\\') {
-    tmp_dir_w[result - 1] = L'\0';
-  }
-
-  std::string tmp_dir;
-  CHECK(android::base::WideToUTF8(tmp_dir_w, &tmp_dir)) << "path can't be converted to utf8";
-
+  CHECK_EQ(tmp_dir[result - 1], '\\');
+  tmp_dir[result - 1] = '\0';
   return tmp_dir;
 #else
   const auto* tmpdir = getenv("TMPDIR");
@@ -157,11 +127,7 @@ int TemporaryFile::release() {
 
 void TemporaryFile::init(const std::string& tmp_dir) {
   snprintf(path, sizeof(path), "%s%cTemporaryFile-XXXXXX", tmp_dir.c_str(), OS_PATH_SEPARATOR);
-#if defined(_WIN32)
-  fd = mkstemp(path, sizeof(path));
-#else
   fd = mkstemp(path);
-#endif
 }
 
 TemporaryDir::TemporaryDir() {
@@ -201,11 +167,7 @@ TemporaryDir::~TemporaryDir() {
 
 bool TemporaryDir::init(const std::string& tmp_dir) {
   snprintf(path, sizeof(path), "%s%cTemporaryDir-XXXXXX", tmp_dir.c_str(), OS_PATH_SEPARATOR);
-#if defined(_WIN32)
-  return (mkdtemp(path, sizeof(path)) != nullptr);
-#else
   return (mkdtemp(path) != nullptr);
-#endif
 }
 
 namespace android {
@@ -214,20 +176,20 @@ namespace base {
 // Versions of standard library APIs that support UTF-8 strings.
 using namespace android::base::utf8;
 
-bool ReadFdToString(borrowed_fd fd, std::string* content) {
+bool ReadFdToString(int fd, std::string* content) {
   content->clear();
 
   // Although original we had small files in mind, this code gets used for
   // very large files too, where the std::string growth heuristics might not
   // be suitable. https://code.google.com/p/android/issues/detail?id=258500.
   struct stat sb;
-  if (fstat(fd.get(), &sb) != -1 && sb.st_size > 0) {
+  if (fstat(fd, &sb) != -1 && sb.st_size > 0) {
     content->reserve(sb.st_size);
   }
 
   char buf[BUFSIZ];
   ssize_t n;
-  while ((n = TEMP_FAILURE_RETRY(read(fd.get(), &buf[0], sizeof(buf)))) > 0) {
+  while ((n = TEMP_FAILURE_RETRY(read(fd, &buf[0], sizeof(buf)))) > 0) {
     content->append(buf, n);
   }
   return (n == 0) ? true : false;
@@ -244,11 +206,11 @@ bool ReadFileToString(const std::string& path, std::string* content, bool follow
   return ReadFdToString(fd, content);
 }
 
-bool WriteStringToFd(const std::string& content, borrowed_fd fd) {
+bool WriteStringToFd(const std::string& content, int fd) {
   const char* p = content.data();
   size_t left = content.size();
   while (left > 0) {
-    ssize_t n = TEMP_FAILURE_RETRY(write(fd.get(), p, left));
+    ssize_t n = TEMP_FAILURE_RETRY(write(fd, p, left));
     if (n == -1) {
       return false;
     }
@@ -307,11 +269,11 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
   return WriteStringToFd(content, fd) || CleanUpAfterFailedWrite(path);
 }
 
-bool ReadFully(borrowed_fd fd, void* data, size_t byte_count) {
+bool ReadFully(int fd, void* data, size_t byte_count) {
   uint8_t* p = reinterpret_cast<uint8_t*>(data);
   size_t remaining = byte_count;
   while (remaining > 0) {
-    ssize_t n = TEMP_FAILURE_RETRY(read(fd.get(), p, remaining));
+    ssize_t n = TEMP_FAILURE_RETRY(read(fd, p, remaining));
     if (n <= 0) return false;
     p += n;
     remaining -= n;
@@ -322,14 +284,14 @@ bool ReadFully(borrowed_fd fd, void* data, size_t byte_count) {
 #if defined(_WIN32)
 // Windows implementation of pread. Note that this DOES move the file descriptors read position,
 // but it does so atomically.
-static ssize_t pread(borrowed_fd fd, void* data, size_t byte_count, off64_t offset) {
+static ssize_t pread(int fd, void* data, size_t byte_count, off64_t offset) {
   DWORD bytes_read;
   OVERLAPPED overlapped;
   memset(&overlapped, 0, sizeof(OVERLAPPED));
   overlapped.Offset = static_cast<DWORD>(offset);
   overlapped.OffsetHigh = static_cast<DWORD>(offset >> 32);
-  if (!ReadFile(reinterpret_cast<HANDLE>(_get_osfhandle(fd.get())), data,
-                static_cast<DWORD>(byte_count), &bytes_read, &overlapped)) {
+  if (!ReadFile(reinterpret_cast<HANDLE>(_get_osfhandle(fd)), data, static_cast<DWORD>(byte_count),
+                &bytes_read, &overlapped)) {
     // In case someone tries to read errno (since this is masquerading as a POSIX call)
     errno = EIO;
     return -1;
@@ -338,10 +300,10 @@ static ssize_t pread(borrowed_fd fd, void* data, size_t byte_count, off64_t offs
 }
 #endif
 
-bool ReadFullyAtOffset(borrowed_fd fd, void* data, size_t byte_count, off64_t offset) {
+bool ReadFullyAtOffset(int fd, void* data, size_t byte_count, off64_t offset) {
   uint8_t* p = reinterpret_cast<uint8_t*>(data);
   while (byte_count > 0) {
-    ssize_t n = TEMP_FAILURE_RETRY(pread(fd.get(), p, byte_count, offset));
+    ssize_t n = TEMP_FAILURE_RETRY(pread(fd, p, byte_count, offset));
     if (n <= 0) return false;
     p += n;
     byte_count -= n;
@@ -350,11 +312,11 @@ bool ReadFullyAtOffset(borrowed_fd fd, void* data, size_t byte_count, off64_t of
   return true;
 }
 
-bool WriteFully(borrowed_fd fd, const void* data, size_t byte_count) {
+bool WriteFully(int fd, const void* data, size_t byte_count) {
   const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
   size_t remaining = byte_count;
   while (remaining > 0) {
-    ssize_t n = TEMP_FAILURE_RETRY(write(fd.get(), p, remaining));
+    ssize_t n = TEMP_FAILURE_RETRY(write(fd, p, remaining));
     if (n == -1) return false;
     p += n;
     remaining -= n;

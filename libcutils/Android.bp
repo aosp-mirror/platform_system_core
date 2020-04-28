@@ -34,7 +34,6 @@ cc_library_headers {
     vendor_available: true,
     recovery_available: true,
     host_supported: true,
-    native_bridge_supported: true,
     export_include_dirs: ["include"],
     target: {
         vendor: {
@@ -58,7 +57,6 @@ cc_library {
     },
     recovery_available: true,
     host_supported: true,
-    native_bridge_supported: true,
     srcs: [
         "config_utils.cpp",
         "canned_fs_config.cpp",
@@ -67,6 +65,8 @@ cc_library {
         "native_handle.cpp",
         "record_stream.cpp",
         "sockets.cpp",
+        "strdup16to8.cpp",
+        "strdup8to16.cpp",
         "strlcpy.c",
         "threads.cpp",
     ],
@@ -244,7 +244,6 @@ cc_test {
     defaults: ["libcutils_test_default"],
     host_supported: true,
     shared_libs: test_libraries,
-    require_root: true,
 }
 
 cc_test {
@@ -256,7 +255,6 @@ cc_test {
         "libcgrouprc_format",
     ] + test_libraries,
     stl: "libc++_static",
-    require_root: true,
 
     target: {
         android: {

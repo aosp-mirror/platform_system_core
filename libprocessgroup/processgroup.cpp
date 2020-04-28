@@ -111,17 +111,45 @@ static bool isMemoryCgroupSupported() {
     return memcg_supported;
 }
 
-void DropTaskProfilesResourceCaching() {
-    TaskProfiles::GetInstance().DropResourceCaching();
-}
-
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles,
                         bool use_fd_cache) {
-    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, use_fd_cache);
+    const TaskProfiles& tp = TaskProfiles::GetInstance();
+
+    for (const auto& name : profiles) {
+        TaskProfile* profile = tp.GetProfile(name);
+        if (profile != nullptr) {
+            if (use_fd_cache) {
+                profile->EnableResourceCaching();
+            }
+            if (!profile->ExecuteForProcess(uid, pid)) {
+                PLOG(WARNING) << "Failed to apply " << name << " process profile";
+            }
+        } else {
+            PLOG(WARNING) << "Failed to find " << name << "process profile";
+        }
+    }
+
+    return true;
 }
 
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache) {
-    return TaskProfiles::GetInstance().SetTaskProfiles(tid, profiles, use_fd_cache);
+    const TaskProfiles& tp = TaskProfiles::GetInstance();
+
+    for (const auto& name : profiles) {
+        TaskProfile* profile = tp.GetProfile(name);
+        if (profile != nullptr) {
+            if (use_fd_cache) {
+                profile->EnableResourceCaching();
+            }
+            if (!profile->ExecuteForTask(tid)) {
+                PLOG(WARNING) << "Failed to apply " << name << " task profile";
+            }
+        } else {
+            PLOG(WARNING) << "Failed to find " << name << "task profile";
+        }
+    }
+
+    return true;
 }
 
 static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {

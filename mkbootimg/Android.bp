@@ -1,0 +1,64 @@
+// Copyright 2012 The Android Open Source Project
+
+cc_library_headers {
+    name: "libmkbootimg_abi_headers",
+    vendor_available: true,
+    export_include_dirs: ["include"],
+}
+
+cc_library_headers {
+    name: "bootimg_headers",
+    vendor_available: true,
+    recovery_available: true,
+    export_include_dirs: ["include/bootimg"],
+    host_supported: true,
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
+}
+
+cc_library {
+    name: "libmkbootimg_abi_check",
+    vendor_available: true,
+    vndk: {
+        enabled: true,
+    },
+    srcs: [
+        "mkbootimg_dummy.cpp",
+    ],
+    header_libs: ["libmkbootimg_abi_headers"],
+    export_header_lib_headers: ["libmkbootimg_abi_headers"],
+}
+
+python_defaults {
+    name: "mkbootimg_defaults",
+
+    version: {
+        py2: {
+            enabled: true,
+            embedded_launcher: true,
+        },
+        py3: {
+            enabled: false,
+            embedded_launcher: false,
+        },
+    },
+}
+
+python_binary_host {
+    name: "mkbootimg",
+    defaults: ["mkbootimg_defaults"],
+    srcs: [
+        "mkbootimg.py",
+    ],
+}
+
+python_binary_host {
+    name: "unpack_bootimg",
+    defaults: ["mkbootimg_defaults"],
+    srcs: [
+        "unpack_bootimg.py",
+    ],
+}

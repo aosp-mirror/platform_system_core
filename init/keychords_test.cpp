@@ -29,6 +29,7 @@
 #include <vector>
 
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <gtest/gtest.h>
 
@@ -212,11 +213,7 @@ TestFrame::TestFrame(const std::vector<const std::vector<int>>& chords, EventHan
 }
 
 void TestFrame::RelaxForMs(std::chrono::milliseconds wait) {
-    auto pending_functions = epoll_.Wait(wait);
-    ASSERT_TRUE(pending_functions) << pending_functions.error();
-    for (const auto& function : *pending_functions) {
-        (*function)();
-    }
+    epoll_.Wait(wait).IgnoreError();
 }
 
 void TestFrame::SetChord(int key, bool value) {

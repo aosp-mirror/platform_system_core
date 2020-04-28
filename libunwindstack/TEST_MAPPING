@@ -1,7 +1,0 @@
-{
-  "presubmit": [
-    {
-      "name": "libunwindstack_unit_test"
-    }
-  ]
-}

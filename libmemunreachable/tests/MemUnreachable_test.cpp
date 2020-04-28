@@ -47,8 +47,7 @@ class HiddenPointer {
 
 // Trick the compiler into thinking a value on the stack is still referenced.
 static void Ref(void** ptr) {
-  void** volatile storage;
-  storage = ptr;
+  write(0, ptr, 0);
 }
 
 class MemunreachableTest : public ::testing::Test {
@@ -263,14 +262,6 @@ TEST_F(MemunreachableTest, leak_lots) {
   hidden_ptrs.resize(1024);
 
   ASSERT_TRUE(LogUnreachableMemory(true, 100));
-}
-
-TEST_F(MemunreachableTest, version) {
-  UnreachableMemoryInfo info;
-  info.version = 1;
-
-  ASSERT_FALSE(GetUnreachableMemory(info));
-  ASSERT_EQ(0U, info.leaks.size());
 }
 
 }  // namespace android

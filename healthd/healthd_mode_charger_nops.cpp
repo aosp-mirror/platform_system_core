@@ -16,14 +16,45 @@
 
 #include "healthd_mode_charger_nops.h"
 
-#include <health2impl/HalHealthLoop.h>
+#include <health2/Health.h>
+#include <healthd/healthd.h>
 
-#include "charger_utils.h"
+#include <stdlib.h>
+#include <string.h>
 
-using android::hardware::health::GetPassthroughHealth;
-using android::hardware::health::V2_1::implementation::HalHealthLoop;
+using namespace android;
+
+// main healthd loop
+extern int healthd_main(void);
+
+// NOPs for modes that need no special action
+
+static void healthd_mode_nop_init(struct healthd_config* config);
+static int healthd_mode_nop_preparetowait(void);
+static void healthd_mode_nop_heartbeat(void);
+static void healthd_mode_nop_battery_update(struct android::BatteryProperties* props);
+
+static struct healthd_mode_ops healthd_nops = {
+        .init = healthd_mode_nop_init,
+        .preparetowait = healthd_mode_nop_preparetowait,
+        .heartbeat = healthd_mode_nop_heartbeat,
+        .battery_update = healthd_mode_nop_battery_update,
+};
+
+static void healthd_mode_nop_init(struct healthd_config* config) {
+    using android::hardware::health::V2_0::implementation::Health;
+    Health::initInstance(config);
+}
+
+static int healthd_mode_nop_preparetowait(void) {
+    return -1;
+}
+
+static void healthd_mode_nop_heartbeat(void) {}
+
+static void healthd_mode_nop_battery_update(struct android::BatteryProperties* /*props*/) {}
 
 int healthd_charger_nops(int /* argc */, char** /* argv */) {
-    HalHealthLoop charger("charger", GetPassthroughHealth());
-    return charger.StartLoop();
+    healthd_mode_ops = &healthd_nops;
+    return healthd_main();
 }

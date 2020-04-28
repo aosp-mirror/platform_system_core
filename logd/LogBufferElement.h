@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef _LOGD_LOG_BUFFER_ELEMENT_H__
+#define _LOGD_LOG_BUFFER_ELEMENT_H__
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -40,10 +41,7 @@ class __attribute__((packed)) LogBufferElement {
     const uint32_t mPid;
     const uint32_t mTid;
     log_time mRealTime;
-    union {
-        char* mMsg;    // mDropped == false
-        int32_t mTag;  // mDropped == true
-    };
+    char* mMsg;
     union {
         const uint16_t mMsgLen;  // mDropped == false
         uint16_t mDroppedCount;  // mDropped == true
@@ -95,5 +93,8 @@ class __attribute__((packed)) LogBufferElement {
     }
 
     static const log_time FLUSH_ERROR;
-    log_time flushTo(SocketClient* writer, LogBuffer* parent, bool lastSame);
+    log_time flushTo(SocketClient* writer, LogBuffer* parent, bool privileged,
+                     bool lastSame);
 };
+
+#endif

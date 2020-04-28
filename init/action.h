@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef _INIT_ACTION_H
+#define _INIT_ACTION_H
 
 #include <map>
 #include <queue>
@@ -30,17 +31,16 @@
 namespace android {
 namespace init {
 
-Result<void> RunBuiltinFunction(const BuiltinFunction& function,
-                                const std::vector<std::string>& args, const std::string& context);
+Result<Success> RunBuiltinFunction(const BuiltinFunction& function,
+                                   const std::vector<std::string>& args, const std::string& context);
 
 class Command {
   public:
     Command(BuiltinFunction f, bool execute_in_subcontext, std::vector<std::string>&& args,
             int line);
 
-    Result<void> InvokeFunc(Subcontext* subcontext) const;
+    Result<Success> InvokeFunc(Subcontext* subcontext) const;
     std::string BuildCommandString() const;
-    Result<void> CheckCommand() const;
 
     int line() const { return line_; }
 
@@ -61,9 +61,9 @@ class Action {
            const std::string& event_trigger,
            const std::map<std::string, std::string>& property_triggers);
 
-    Result<void> AddCommand(std::vector<std::string>&& args, int line);
+    Result<Success> AddCommand(std::vector<std::string>&& args, int line);
     void AddCommand(BuiltinFunction f, std::vector<std::string>&& args, int line);
-    size_t NumCommands() const;
+    std::size_t NumCommands() const;
     void ExecuteOneCommand(std::size_t command) const;
     void ExecuteAllCommands() const;
     bool CheckEvent(const EventTrigger& event_trigger) const;
@@ -71,12 +71,11 @@ class Action {
     bool CheckEvent(const BuiltinAction& builtin_action) const;
     std::string BuildTriggersString() const;
     void DumpState() const;
-    size_t CheckAllCommands() const;
 
     bool oneshot() const { return oneshot_; }
     const std::string& filename() const { return filename_; }
     int line() const { return line_; }
-    static void set_function_map(const BuiltinFunctionMap* function_map) {
+    static void set_function_map(const KeywordFunctionMap* function_map) {
         function_map_ = function_map;
     }
 
@@ -92,8 +91,10 @@ class Action {
     Subcontext* subcontext_;
     std::string filename_;
     int line_;
-    static const BuiltinFunctionMap* function_map_;
+    static const KeywordFunctionMap* function_map_;
 };
 
 }  // namespace init
 }  // namespace android
+
+#endif

@@ -20,14 +20,8 @@ cc_defaults {
         "-Wall",
         "-Werror",
         "-Wextra",
+        "-D_FILE_OFFSET_BITS=64",
     ],
-    target: {
-        android: {
-            cflags: [
-                "-D_FILE_OFFSET_BITS=64",
-            ],
-        },
-    },
 }
 
 cc_library_headers {
@@ -35,7 +29,6 @@ cc_library_headers {
     vendor_available: true,
     recovery_available: true,
     host_supported: true,
-    native_bridge_supported: true,
     export_include_dirs: ["include"],
 
     target: {
@@ -52,15 +45,14 @@ cc_defaults {
     name: "libbase_defaults",
     defaults: ["libbase_cflags_defaults"],
     srcs: [
-        "abi_compatibility.cpp",
         "chrono_utils.cpp",
         "cmsg.cpp",
         "file.cpp",
         "logging.cpp",
         "mapped_file.cpp",
         "parsenetaddress.cpp",
-        "process.cpp",
         "properties.cpp",
+        "quick_exit.cpp",
         "stringprintf.cpp",
         "strings.cpp",
         "threads.cpp",
@@ -108,7 +100,6 @@ cc_library {
     vendor_available: true,
     recovery_available: true,
     host_supported: true,
-    native_bridge_supported: true,
     vndk: {
         enabled: true,
         support_system_process: true,
@@ -117,9 +108,6 @@ cc_library {
         "libbase_headers",
     ],
     export_header_lib_headers: ["libbase_headers"],
-    static_libs: ["fmtlib"],
-    whole_static_libs: ["fmtlib"],
-    export_static_lib_headers: ["fmtlib"],
 }
 
 cc_library_static {
@@ -128,9 +116,6 @@ cc_library_static {
     sdk_version: "current",
     stl: "c++_static",
     export_include_dirs: ["include"],
-    static_libs: ["fmtlib_ndk"],
-    whole_static_libs: ["fmtlib_ndk"],
-    export_static_lib_headers: ["fmtlib_ndk"],
 }
 
 // Tests
@@ -143,7 +128,6 @@ cc_test {
         "cmsg_test.cpp",
         "endian_test.cpp",
         "errors_test.cpp",
-        "expected_test.cpp",
         "file_test.cpp",
         "logging_test.cpp",
         "macros_test.cpp",
@@ -151,9 +135,8 @@ cc_test {
         "parsedouble_test.cpp",
         "parseint_test.cpp",
         "parsenetaddress_test.cpp",
-        "process_test.cpp",
         "properties_test.cpp",
-        "result_test.cpp",
+        "quick_exit_test.cpp",
         "scopeguard_test.cpp",
         "stringprintf_test.cpp",
         "strings_test.cpp",
@@ -187,22 +170,4 @@ cc_test {
         },
     },
     test_suites: ["device-tests"],
-}
-
-cc_benchmark {
-    name: "libbase_benchmark",
-    defaults: ["libbase_cflags_defaults"],
-
-    srcs: ["format_benchmark.cpp"],
-    shared_libs: ["libbase"],
-
-    compile_multilib: "both",
-    multilib: {
-        lib32: {
-            suffix: "32",
-        },
-        lib64: {
-            suffix: "64",
-        },
-    },
 }

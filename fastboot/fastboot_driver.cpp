@@ -122,12 +122,6 @@ RetCode FastBootDriver::SetActive(const std::string& slot, std::string* response
                       response, info);
 }
 
-RetCode FastBootDriver::SnapshotUpdateCommand(const std::string& command, std::string* response,
-                                              std::vector<std::string>* info) {
-    std::string raw = FB_CMD_SNAPSHOT_UPDATE ":" + command;
-    return RawCommand(raw, response, info);
-}
-
 RetCode FastBootDriver::FlashPartition(const std::string& partition,
                                        const std::vector<char>& data) {
     RetCode ret;
@@ -297,7 +291,7 @@ RetCode FastBootDriver::Upload(const std::string& outfile, std::string* response
 RetCode FastBootDriver::UploadInner(const std::string& outfile, std::string* response,
                                     std::vector<std::string>* info) {
     RetCode ret;
-    int dsize = 0;
+    int dsize;
     if ((ret = RawCommand(FB_CMD_UPLOAD, response, info, &dsize))) {
         error_ = "Upload request failed: " + error_;
         return ret;

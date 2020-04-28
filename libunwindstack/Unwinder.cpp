@@ -27,6 +27,8 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
+#include <demangle.h>
+
 #include <unwindstack/Elf.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/MapInfo.h>
@@ -37,9 +39,6 @@
 #if !defined(NO_LIBDEXFILE_SUPPORT)
 #include <unwindstack/DexFiles.h>
 #endif
-
-// Use the demangler from libc++.
-extern "C" char* __cxa_demangle(const char*, char*, size_t*, int* status);
 
 namespace unwindstack {
 
@@ -64,10 +63,7 @@ void Unwinder::FillInDexFrame() {
   if (info != nullptr) {
     frame->map_start = info->start;
     frame->map_end = info->end;
-    // Since this is a dex file frame, the elf_start_offset is not set
-    // by any of the normal code paths. Use the offset of the map since
-    // that matches the actual offset.
-    frame->map_elf_start_offset = info->offset;
+    frame->map_elf_start_offset = info->elf_start_offset;
     frame->map_exact_offset = info->offset;
     frame->map_load_bias = info->load_bias;
     frame->map_flags = info->flags;
@@ -309,7 +305,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
   }
 }
 
-std::string Unwinder::FormatFrame(const FrameData& frame) const {
+std::string Unwinder::FormatFrame(const FrameData& frame) {
   std::string data;
   if (regs_->Is32Bit()) {
     data += android::base::StringPrintf("  #%02zu pc %08" PRIx64, frame.num, frame.rel_pc);
@@ -331,14 +327,7 @@ std::string Unwinder::FormatFrame(const FrameData& frame) const {
   }
 
   if (!frame.function_name.empty()) {
-    char* demangled_name = __cxa_demangle(frame.function_name.c_str(), nullptr, nullptr, nullptr);
-    if (demangled_name == nullptr) {
-      data += " (" + frame.function_name;
-    } else {
-      data += " (";
-      data += demangled_name;
-      free(demangled_name);
-    }
+    data += " (" + demangle(frame.function_name.c_str());
     if (frame.function_offset != 0) {
       data += android::base::StringPrintf("+%" PRId64, frame.function_offset);
     }
@@ -355,7 +344,7 @@ std::string Unwinder::FormatFrame(const FrameData& frame) const {
   return data;
 }
 
-std::string Unwinder::FormatFrame(size_t frame_num) const {
+std::string Unwinder::FormatFrame(size_t frame_num) {
   if (frame_num >= frames_.size()) {
     return "";
   }

@@ -19,6 +19,8 @@
 #include <benchmark/benchmark.h>
 #include <selinux/selinux.h>
 
+#include "test_function_map.h"
+
 namespace android {
 namespace init {
 
@@ -33,11 +35,11 @@ static void BenchmarkSuccess(benchmark::State& state) {
         return;
     }
 
-    auto subcontext = Subcontext({"path"}, context);
+    auto subcontext = Subcontext("path", context);
     free(context);
 
     while (state.KeepRunning()) {
-        subcontext.Execute(std::vector<std::string>{"return_success"});
+        subcontext.Execute(std::vector<std::string>{"return_success"}).IgnoreError();
     }
 
     if (subcontext.pid() > 0) {
@@ -48,11 +50,11 @@ static void BenchmarkSuccess(benchmark::State& state) {
 
 BENCHMARK(BenchmarkSuccess);
 
-BuiltinFunctionMap BuildTestFunctionMap() {
-    auto function = [](const BuiltinArguments& args) { return Result<void>{}; };
-    BuiltinFunctionMap test_function_map = {
-            {"return_success", {0, 0, {true, function}}},
-    };
+TestFunctionMap BuildTestFunctionMap() {
+    TestFunctionMap test_function_map;
+    test_function_map.Add("return_success", 0, 0, true,
+                          [](const BuiltinArguments& args) { return Success(); });
+
     return test_function_map;
 }
 

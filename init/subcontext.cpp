@@ -18,23 +18,20 @@
 
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <selinux/android.h>
 
 #include "action.h"
-#include "builtins.h"
-#include "proto_utils.h"
 #include "util.h"
 
 #if defined(__ANDROID__)
 #include <android/api-level.h>
 #include "property_service.h"
-#include "selabel.h"
 #include "selinux.h"
 #else
 #include "host_init_stubs.h"
@@ -49,11 +46,59 @@ using android::base::unique_fd;
 
 namespace android {
 namespace init {
+
+const std::string kInitContext = "u:r:init:s0";
+const std::string kVendorContext = "u:r:vendor_init:s0";
+
+const char* const paths_and_secontexts[2][2] = {
+    {"/vendor", kVendorContext.c_str()},
+    {"/odm", kVendorContext.c_str()},
+};
+
 namespace {
+
+constexpr size_t kBufferSize = 4096;
+
+Result<std::string> ReadMessage(int socket) {
+    char buffer[kBufferSize] = {};
+    auto result = TEMP_FAILURE_RETRY(recv(socket, buffer, sizeof(buffer), 0));
+    if (result == 0) {
+        return Error();
+    } else if (result < 0) {
+        return ErrnoError();
+    }
+    return std::string(buffer, result);
+}
+
+template <typename T>
+Result<Success> SendMessage(int socket, const T& message) {
+    std::string message_string;
+    if (!message.SerializeToString(&message_string)) {
+        return Error() << "Unable to serialize message";
+    }
+
+    if (message_string.size() > kBufferSize) {
+        return Error() << "Serialized message too long to send";
+    }
+
+    if (auto result =
+            TEMP_FAILURE_RETRY(send(socket, message_string.c_str(), message_string.size(), 0));
+        result != static_cast<long>(message_string.size())) {
+        return ErrnoError() << "send() failed to send message contents";
+    }
+    return Success();
+}
+
+std::vector<std::pair<std::string, std::string>> properties_to_set;
+
+uint32_t SubcontextPropertySet(const std::string& name, const std::string& value) {
+    properties_to_set.emplace_back(name, value);
+    return 0;
+}
 
 class SubcontextProcess {
   public:
-    SubcontextProcess(const BuiltinFunctionMap* function_map, std::string context, int init_fd)
+    SubcontextProcess(const KeywordFunctionMap* function_map, std::string context, int init_fd)
         : function_map_(function_map), context_(std::move(context)), init_fd_(init_fd){};
     void MainLoop();
 
@@ -63,7 +108,7 @@ class SubcontextProcess {
     void ExpandArgs(const SubcontextCommand::ExpandArgsCommand& expand_args_command,
                     SubcontextReply* reply) const;
 
-    const BuiltinFunctionMap* function_map_;
+    const KeywordFunctionMap* function_map_;
     const std::string context_;
     const int init_fd_;
 };
@@ -76,35 +121,43 @@ void SubcontextProcess::RunCommand(const SubcontextCommand::ExecuteCommand& exec
         args.emplace_back(string);
     }
 
-    auto map_result = function_map_->Find(args);
-    Result<void> result;
+    auto map_result = function_map_->FindFunction(args);
+    Result<Success> result;
     if (!map_result) {
         result = Error() << "Cannot find command: " << map_result.error();
     } else {
-        result = RunBuiltinFunction(map_result->function, args, context_);
+        result = RunBuiltinFunction(map_result->second, args, context_);
     }
+
+    for (const auto& [name, value] : properties_to_set) {
+        auto property = reply->add_properties_to_set();
+        property->set_name(name);
+        property->set_value(value);
+    }
+
+    properties_to_set.clear();
 
     if (result) {
         reply->set_success(true);
     } else {
         auto* failure = reply->mutable_failure();
-        failure->set_error_string(result.error().message());
-        failure->set_error_errno(result.error().code());
+        failure->set_error_string(result.error_string());
+        failure->set_error_errno(result.error_errno());
     }
 }
 
 void SubcontextProcess::ExpandArgs(const SubcontextCommand::ExpandArgsCommand& expand_args_command,
                                    SubcontextReply* reply) const {
     for (const auto& arg : expand_args_command.args()) {
-        auto expanded_arg = ExpandProps(arg);
-        if (!expanded_arg) {
+        auto expanded_prop = std::string{};
+        if (!expand_props(arg, &expanded_prop)) {
             auto* failure = reply->mutable_failure();
-            failure->set_error_string(expanded_arg.error().message());
+            failure->set_error_string("Failed to expand '" + arg + "'");
             failure->set_error_errno(0);
             return;
         } else {
             auto* expand_args_reply = reply->mutable_expand_args_reply();
-            expand_args_reply->add_expanded_args(*expanded_arg);
+            expand_args_reply->add_expanded_args(expanded_prop);
         }
     }
 }
@@ -124,7 +177,7 @@ void SubcontextProcess::MainLoop() {
 
         auto init_message = ReadMessage(init_fd_);
         if (!init_message) {
-            if (init_message.error().code() == 0) {
+            if (init_message.error_errno() == 0) {
                 // If the init file descriptor was closed, let's exit quietly. If
                 // this was accidental, init will restart us. If init died, this
                 // avoids calling abort(3) unnecessarily.
@@ -161,7 +214,7 @@ void SubcontextProcess::MainLoop() {
 
 }  // namespace
 
-int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map) {
+int SubcontextMain(int argc, char** argv, const KeywordFunctionMap* function_map) {
     if (argc < 4) LOG(FATAL) << "Fewer than 4 args specified to subcontext (" << argc << ")";
 
     auto context = std::string(argv[2]);
@@ -169,10 +222,7 @@ int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map
 
     SelabelInitialize();
 
-    property_set = [](const std::string& key, const std::string& value) -> uint32_t {
-        android::base::SetProperty(key, value);
-        return 0;
-    };
+    property_set = SubcontextPropertySet;
 
     auto subcontext_process = SubcontextProcess(function_map, context, init_fd);
     subcontext_process.MainLoop();
@@ -195,7 +245,7 @@ void Subcontext::Fork() {
 
         // We explicitly do not use O_CLOEXEC here, such that we can reference this FD by number
         // in the subcontext process after we exec.
-        int child_fd = dup(subcontext_socket);  // NOLINT(android-cloexec-dup)
+        int child_fd = dup(subcontext_socket);
         if (child_fd < 0) {
             PLOG(FATAL) << "Could not dup child_fd";
         }
@@ -228,15 +278,6 @@ void Subcontext::Restart() {
     Fork();
 }
 
-bool Subcontext::PathMatchesSubcontext(const std::string& path) {
-    for (const auto& prefix : path_prefixes_) {
-        if (StartsWith(path, prefix)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 Result<SubcontextReply> Subcontext::TransmitMessage(const SubcontextCommand& subcontext_command) {
     if (auto result = SendMessage(socket_, subcontext_command); !result) {
         Restart();
@@ -257,7 +298,7 @@ Result<SubcontextReply> Subcontext::TransmitMessage(const SubcontextCommand& sub
     return subcontext_reply;
 }
 
-Result<void> Subcontext::Execute(const std::vector<std::string>& args) {
+Result<Success> Subcontext::Execute(const std::vector<std::string>& args) {
     auto subcontext_command = SubcontextCommand();
     std::copy(
         args.begin(), args.end(),
@@ -266,6 +307,15 @@ Result<void> Subcontext::Execute(const std::vector<std::string>& args) {
     auto subcontext_reply = TransmitMessage(subcontext_command);
     if (!subcontext_reply) {
         return subcontext_reply.error();
+    }
+
+    for (const auto& property : subcontext_reply->properties_to_set()) {
+        ucred cr = {.pid = pid_, .uid = 0, .gid = 0};
+        std::string error;
+        if (HandlePropertySet(property.name(), property.value(), context_, cr, &error) != 0) {
+            LOG(ERROR) << "Subcontext init could not set '" << property.name() << "' to '"
+                       << property.value() << "': " << error;
+        }
     }
 
     if (subcontext_reply->reply_case() == SubcontextReply::kFailure) {
@@ -278,7 +328,7 @@ Result<void> Subcontext::Execute(const std::vector<std::string>& args) {
                        << subcontext_reply->reply_case();
     }
 
-    return {};
+    return Success();
 }
 
 Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::string>& args) {
@@ -313,12 +363,13 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
 static std::vector<Subcontext> subcontexts;
 static bool shutting_down;
 
-std::unique_ptr<Subcontext> InitializeSubcontext() {
+std::vector<Subcontext>* InitializeSubcontexts() {
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_P__) {
-        return std::make_unique<Subcontext>(std::vector<std::string>{"/vendor", "/odm"},
-                                            kVendorContext);
+        for (const auto& [path_prefix, secontext] : paths_and_secontexts) {
+            subcontexts.emplace_back(path_prefix, secontext);
+        }
     }
-    return nullptr;
+    return &subcontexts;
 }
 
 bool SubcontextChildReap(pid_t pid) {

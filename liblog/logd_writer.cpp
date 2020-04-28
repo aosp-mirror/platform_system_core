@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -34,9 +35,13 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
+#include "config_write.h"
 #include "log_portability.h"
 #include "logger.h"
 #include "uio.h"
+
+/* branchless on many architectures. */
+#define min(x, y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
 
 static int logdAvailable(log_id_t LogId);
 static int logdOpen();
@@ -44,9 +49,9 @@ static void logdClose();
 static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr);
 
 struct android_log_transport_write logdLoggerWrite = {
-    .name = "logd",
-    .logMask = 0,
+    .node = {&logdLoggerWrite.node, &logdLoggerWrite.node},
     .context.sock = -EBADF,
+    .name = "logd",
     .available = logdAvailable,
     .open = logdOpen,
     .close = logdClose,
@@ -148,6 +153,24 @@ static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
     return 0;
   }
 
+  /*
+   *  struct {
+   *      // what we provide to socket
+   *      android_log_header_t header;
+   *      // caller provides
+   *      union {
+   *          struct {
+   *              char     prio;
+   *              char     payload[];
+   *          } string;
+   *          struct {
+   *              uint32_t tag
+   *              char     payload[];
+   *          } binary;
+   *      };
+   *  };
+   */
+
   header.tid = gettid();
   header.realtime.tv_sec = ts->tv_sec;
   header.realtime.tv_nsec = ts->tv_nsec;
@@ -161,9 +184,9 @@ static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
       android_log_event_int_t buffer;
 
       header.id = LOG_ID_SECURITY;
-      buffer.header.tag = LIBLOG_LOG_TAG;
+      buffer.header.tag = htole32(LIBLOG_LOG_TAG);
       buffer.payload.type = EVENT_TYPE_INT;
-      buffer.payload.data = snapshot;
+      buffer.payload.data = htole32(snapshot);
 
       newVec[headerLength].iov_base = &buffer;
       newVec[headerLength].iov_len = sizeof(buffer);
@@ -179,9 +202,9 @@ static int logdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, siz
       android_log_event_int_t buffer;
 
       header.id = LOG_ID_EVENTS;
-      buffer.header.tag = LIBLOG_LOG_TAG;
+      buffer.header.tag = htole32(LIBLOG_LOG_TAG);
       buffer.payload.type = EVENT_TYPE_INT;
-      buffer.payload.data = snapshot;
+      buffer.payload.data = htole32(snapshot);
 
       newVec[headerLength].iov_base = &buffer;
       newVec[headerLength].iov_len = sizeof(buffer);

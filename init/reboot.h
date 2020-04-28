@@ -23,9 +23,8 @@ namespace android {
 namespace init {
 
 // Parses and handles a setprop sys.powerctl message.
-void HandlePowerctlMessage(const std::string& command);
+bool HandlePowerctlMessage(const std::string& command);
 
-bool IsShuttingDown();
 }  // namespace init
 }  // namespace android
 
