@@ -118,8 +118,10 @@ void DefaultAborter(const char* abort_message);
 
 void SetDefaultTag(const std::string& tag);
 
-// We expose this even though it is the default because a user that wants to
-// override the default log buffer will have to construct this themselves.
+// The LogdLogger sends chunks of up to ~4000 bytes at a time to logd.  It does not prevent other
+// threads from writing to logd between sending each chunk, so other threads may interleave their
+// messages.  If preventing interleaving is required, then a custom logger that takes a lock before
+// calling this logger should be provided.
 class LogdLogger {
  public:
   explicit LogdLogger(LogId default_log_id = android::base::MAIN);
