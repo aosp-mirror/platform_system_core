@@ -78,17 +78,6 @@ constexpr uint64_t AlignTo(uint64_t base, uint32_t alignment) {
     return base + (alignment - remainder);
 }
 
-// Same as the above |AlignTo|, except that |base| is only aligned when added to
-// |alignment_offset|.
-constexpr uint64_t AlignTo(uint64_t base, uint32_t alignment, uint32_t alignment_offset) {
-    uint64_t aligned = AlignTo(base, alignment) + alignment_offset;
-    if (aligned - alignment >= base) {
-        // We overaligned (base < alignment_offset).
-        return aligned - alignment;
-    }
-    return aligned;
-}
-
 // Update names from C++ strings.
 bool UpdateBlockDevicePartitionName(LpMetadataBlockDevice* device, const std::string& name);
 bool UpdatePartitionGroupName(LpMetadataPartitionGroup* group, const std::string& name);
