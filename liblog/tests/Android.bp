@@ -63,8 +63,8 @@ cc_defaults {
         "log_system_test.cpp",
         "log_time_test.cpp",
         "log_wrap_test.cpp",
+        "logd_writer_test.cpp",
         "logprint_test.cpp",
-        "rwlock_test.cpp",
     ],
     shared_libs: [
         "libcutils",
@@ -108,7 +108,6 @@ cc_test_host {
         "liblog_host_test.cpp",
         "liblog_default_tag.cpp",
         "liblog_global_state.cpp",
-        "rwlock_test.cpp",
     ],
     isolated: true,
 }
