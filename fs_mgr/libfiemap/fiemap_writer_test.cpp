@@ -35,6 +35,7 @@
 #include <libdm/loop_control.h>
 #include <libfiemap/fiemap_writer.h>
 #include <libfiemap/split_fiemap_writer.h>
+#include <libgsi/libgsi.h>
 
 #include "utility.h"
 
@@ -148,7 +149,10 @@ TEST_F(FiemapWriterTest, CheckBlockDevicePath) {
     FiemapUniquePtr fptr = FiemapWriter::Open(testfile, gBlockSize);
     EXPECT_EQ(fptr->size(), gBlockSize);
     EXPECT_EQ(fptr->bdev_path().find("/dev/block/"), size_t(0));
-    EXPECT_EQ(fptr->bdev_path().find("/dev/block/dm-"), string::npos);
+
+    if (!android::gsi::IsGsiRunning()) {
+        EXPECT_EQ(fptr->bdev_path().find("/dev/block/dm-"), string::npos);
+    }
 }
 
 TEST_F(FiemapWriterTest, CheckFileCreated) {
