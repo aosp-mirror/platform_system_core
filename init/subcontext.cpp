@@ -52,6 +52,8 @@ namespace init {
 namespace {
 
 std::string shutdown_command;
+static bool subcontext_terminated_by_shutdown;
+static std::unique_ptr<Subcontext> subcontext;
 
 class SubcontextProcess {
   public:
@@ -323,34 +325,30 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
     return expanded_args;
 }
 
-static std::vector<Subcontext> subcontexts;
-static bool shutting_down;
-
-std::unique_ptr<Subcontext> InitializeSubcontext() {
+void InitializeSubcontext() {
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_P__) {
-        return std::make_unique<Subcontext>(std::vector<std::string>{"/vendor", "/odm"},
-                                            kVendorContext);
+        subcontext.reset(
+                new Subcontext(std::vector<std::string>{"/vendor", "/odm"}, kVendorContext));
     }
-    return nullptr;
+}
+
+Subcontext* GetSubcontext() {
+    return subcontext.get();
 }
 
 bool SubcontextChildReap(pid_t pid) {
-    for (auto& subcontext : subcontexts) {
-        if (subcontext.pid() == pid) {
-            if (!shutting_down) {
-                subcontext.Restart();
-            }
-            return true;
+    if (subcontext->pid() == pid) {
+        if (!subcontext_terminated_by_shutdown) {
+            subcontext->Restart();
         }
+        return true;
     }
     return false;
 }
 
 void SubcontextTerminate() {
-    shutting_down = true;
-    for (auto& subcontext : subcontexts) {
-        kill(subcontext.pid(), SIGTERM);
-    }
+    subcontext_terminated_by_shutdown = true;
+    kill(subcontext->pid(), SIGTERM);
 }
 
 }  // namespace init
