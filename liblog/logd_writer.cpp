@@ -32,58 +32,53 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <shared_mutex>
-
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
 #include "logger.h"
-#include "rwlock.h"
 #include "uio.h"
 
-static int logd_socket;
-static RwLock logd_socket_lock;
+static atomic_int logd_socket;
 
-static void OpenSocketLocked() {
-  logd_socket = TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
-  if (logd_socket <= 0) {
-    return;
-  }
-
+// Note that it is safe to call connect() multiple times on DGRAM Unix domain sockets, so this
+// function is used to reconnect to logd without requiring a new socket.
+static void LogdConnect() {
   sockaddr_un un = {};
   un.sun_family = AF_UNIX;
   strcpy(un.sun_path, "/dev/socket/logdw");
-
-  if (TEMP_FAILURE_RETRY(
-          connect(logd_socket, reinterpret_cast<sockaddr*>(&un), sizeof(sockaddr_un))) < 0) {
-    close(logd_socket);
-    logd_socket = 0;
-  }
+  TEMP_FAILURE_RETRY(connect(logd_socket, reinterpret_cast<sockaddr*>(&un), sizeof(sockaddr_un)));
 }
 
-static void OpenSocket() {
-  auto lock = std::unique_lock{logd_socket_lock};
-  if (logd_socket > 0) {
-    // Someone raced us and opened the socket already.
+// logd_socket should only be opened once.  If we see that logd_socket is uninitialized, we create a
+// new socket and attempt to exchange it into the atomic logd_socket.  If the compare/exchange was
+// successful, then that will be the socket used for the duration of the program, otherwise a
+// different thread has already opened and written the socket to the atomic, so close the new socket
+// and return.
+static void GetSocket() {
+  if (logd_socket != 0) {
     return;
   }
 
-  OpenSocketLocked();
-}
-
-static void ResetSocket(int old_socket) {
-  auto lock = std::unique_lock{logd_socket_lock};
-  if (old_socket != logd_socket) {
-    // Someone raced us and reset the socket already.
+  int new_socket =
+      TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+  if (new_socket <= 0) {
     return;
   }
-  close(logd_socket);
-  logd_socket = 0;
-  OpenSocketLocked();
+
+  int uninitialized_value = 0;
+  if (!logd_socket.compare_exchange_strong(uninitialized_value, new_socket)) {
+    close(new_socket);
+    return;
+  }
+
+  LogdConnect();
 }
 
+// This is the one exception to the above.  Zygote uses this to clean up open FD's after fork() and
+// before specialization.  It is single threaded at this point and therefore this function is
+// explicitly not thread safe.  It sets logd_socket to 0, so future logs will be safely initialized
+// whenever they happen.
 void LogdClose() {
-  auto lock = std::unique_lock{logd_socket_lock};
   if (logd_socket > 0) {
     close(logd_socket);
   }
@@ -99,12 +94,7 @@ int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr)
   static atomic_int dropped;
   static atomic_int droppedSecurity;
 
-  auto lock = std::shared_lock{logd_socket_lock};
-  if (logd_socket <= 0) {
-    lock.unlock();
-    OpenSocket();
-    lock.lock();
-  }
+  GetSocket();
 
   if (logd_socket <= 0) {
     return -EBADF;
@@ -183,10 +173,7 @@ int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr)
   // the connection, so we reset it and try again.
   ret = TEMP_FAILURE_RETRY(writev(logd_socket, newVec, i));
   if (ret < 0 && errno != EAGAIN) {
-    int old_socket = logd_socket;
-    lock.unlock();
-    ResetSocket(old_socket);
-    lock.lock();
+    LogdConnect();
 
     ret = TEMP_FAILURE_RETRY(writev(logd_socket, newVec, i));
   }
