@@ -174,7 +174,7 @@ TEST_F(BuilderTest, InternalAlignment) {
     ASSERT_NE(exported, nullptr);
     super_device = GetMetadataSuperBlockDevice(*exported.get());
     ASSERT_NE(super_device, nullptr);
-    EXPECT_EQ(super_device->first_logical_sector, 1472);
+    EXPECT_EQ(super_device->first_logical_sector, 1536);
 
     // Alignment offset without alignment doesn't mean anything.
     device_info.alignment = 0;
@@ -190,7 +190,7 @@ TEST_F(BuilderTest, InternalAlignment) {
     ASSERT_NE(exported, nullptr);
     super_device = GetMetadataSuperBlockDevice(*exported.get());
     ASSERT_NE(super_device, nullptr);
-    EXPECT_EQ(super_device->first_logical_sector, 174);
+    EXPECT_EQ(super_device->first_logical_sector, 168);
 
     // Test a small alignment with no alignment offset.
     device_info.alignment = 11 * 1024;
@@ -200,7 +200,7 @@ TEST_F(BuilderTest, InternalAlignment) {
     ASSERT_NE(exported, nullptr);
     super_device = GetMetadataSuperBlockDevice(*exported.get());
     ASSERT_NE(super_device, nullptr);
-    EXPECT_EQ(super_device->first_logical_sector, 160);
+    EXPECT_EQ(super_device->first_logical_sector, 154);
 }
 
 TEST_F(BuilderTest, InternalPartitionAlignment) {
@@ -229,12 +229,12 @@ TEST_F(BuilderTest, InternalPartitionAlignment) {
         EXPECT_EQ(extent.num_sectors, 80);
 
         uint64_t lba = extent.target_data * LP_SECTOR_SIZE;
-        uint64_t aligned_lba = AlignTo(lba, device_info.alignment, device_info.alignment_offset);
+        uint64_t aligned_lba = AlignTo(lba, device_info.alignment);
         EXPECT_EQ(lba, aligned_lba);
     }
 
     // Sanity check one extent.
-    EXPECT_EQ(exported->extents.back().target_data, 3008);
+    EXPECT_EQ(exported->extents.back().target_data, 3072);
 }
 
 TEST_F(BuilderTest, UseAllDiskSpace) {
@@ -652,7 +652,7 @@ TEST_F(BuilderTest, MultipleBlockDevices) {
     };
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(partitions, "system_a", 65536, 2);
     ASSERT_NE(builder, nullptr);
-    EXPECT_EQ(builder->AllocatableSpace(), 467238912);
+    EXPECT_EQ(builder->AllocatableSpace(), 467402752);
 
     // Create a partition that spans 3 devices.
     Partition* p = builder->AddPartition("system_a", 0);
@@ -675,17 +675,17 @@ TEST_F(BuilderTest, MultipleBlockDevices) {
     EXPECT_EQ(metadata->block_devices[2].alignment, 786432);
     EXPECT_EQ(metadata->block_devices[2].alignment_offset, 753664);
     ASSERT_EQ(metadata->extents.size(), 3);
-    EXPECT_EQ(metadata->extents[0].num_sectors, 522304);
+    EXPECT_EQ(metadata->extents[0].num_sectors, 522752);
     EXPECT_EQ(metadata->extents[0].target_type, LP_TARGET_TYPE_LINEAR);
-    EXPECT_EQ(metadata->extents[0].target_data, 1984);
+    EXPECT_EQ(metadata->extents[0].target_data, 1536);
     EXPECT_EQ(metadata->extents[0].target_source, 0);
-    EXPECT_EQ(metadata->extents[1].num_sectors, 260672);
+    EXPECT_EQ(metadata->extents[1].num_sectors, 260608);
     EXPECT_EQ(metadata->extents[1].target_type, LP_TARGET_TYPE_LINEAR);
-    EXPECT_EQ(metadata->extents[1].target_data, 1472);
+    EXPECT_EQ(metadata->extents[1].target_data, 1536);
     EXPECT_EQ(metadata->extents[1].target_source, 1);
-    EXPECT_EQ(metadata->extents[2].num_sectors, 129088);
+    EXPECT_EQ(metadata->extents[2].num_sectors, 128704);
     EXPECT_EQ(metadata->extents[2].target_type, LP_TARGET_TYPE_LINEAR);
-    EXPECT_EQ(metadata->extents[2].target_data, 1472);
+    EXPECT_EQ(metadata->extents[2].target_data, 1536);
     EXPECT_EQ(metadata->extents[2].target_source, 2);
 }
 
@@ -1018,4 +1018,36 @@ TEST_F(BuilderTest, LinearExtentOverlap) {
     EXPECT_FALSE(extent.OverlapsWith(LinearExtent{40, 1, 0}));
     EXPECT_FALSE(extent.OverlapsWith(LinearExtent{20, 1, 15}));
     EXPECT_FALSE(extent.OverlapsWith(LinearExtent{20, 1, 10}));
+}
+
+TEST_F(BuilderTest, AlignFreeRegion) {
+    BlockDeviceInfo super("super", 8_GiB, 786432, 0, 4096);
+    std::vector<BlockDeviceInfo> block_devices = {super};
+
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(block_devices, "super", 65536, 2);
+    ASSERT_NE(builder, nullptr);
+
+    Partition* p = builder->AddPartition("system", "default", 0);
+    ASSERT_NE(p, nullptr);
+    ASSERT_TRUE(builder->AddLinearExtent(p, "super", 64, (super.alignment + 4096) / 512));
+
+    p = builder->AddPartition("vendor", "default", 0);
+    ASSERT_NE(p, nullptr);
+    ASSERT_TRUE(builder->ResizePartition(p, 2_GiB));
+
+    const auto& extents = p->extents();
+    ASSERT_EQ(extents.size(), 2);
+
+    LinearExtent* e1 = extents[0]->AsLinearExtent();
+    ASSERT_NE(e1, nullptr);
+    LinearExtent* e2 = extents[1]->AsLinearExtent();
+    ASSERT_NE(e2, nullptr);
+
+    // The misaligned partition starting at sector 1544 should not cause any
+    // overlap with previous extents. We should see vendor punch a hole where
+    // "system" is, extending the hole up to the next aligned block.
+    EXPECT_EQ(e1->physical_sector(), 1536);
+    EXPECT_EQ(e1->end_sector(), 1544);
+    EXPECT_EQ(e2->physical_sector(), 3072);
+    EXPECT_EQ(e2->end_sector(), 4197368);
 }
