@@ -100,13 +100,12 @@ cc_test {
         "libjsoncpp",
         "libprotobuf-cpp-full",
     ],
-    target: {
-        android: {
-            test_config: "vts_processgroup_validate_test.xml",
-        },
-    },
+    test_suites: [
+        "vts",
+    ],
 }
 
 vts_config {
     name: "VtsProcessgroupValidateTest",
+    test_config: "vts_processgroup_validate_test.xml",
 }
