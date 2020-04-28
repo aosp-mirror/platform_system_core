@@ -50,16 +50,7 @@ TEST_F(DeviceTest, BlockDeviceInfo) {
     // Sanity check that the device doesn't give us some weird inefficient
     // alignment.
     EXPECT_EQ(device_info.alignment % LP_SECTOR_SIZE, 0);
-    EXPECT_EQ(device_info.alignment_offset % LP_SECTOR_SIZE, 0);
-    EXPECT_LE(device_info.alignment_offset, INT_MAX);
     EXPECT_EQ(device_info.logical_block_size % LP_SECTOR_SIZE, 0);
-
-    // Having an alignment offset > alignment doesn't really make sense.
-    EXPECT_LT(device_info.alignment_offset, device_info.alignment);
-
-    if (IPropertyFetcher::GetInstance()->GetBoolProperty("ro.virtual_ab.enabled", false)) {
-        EXPECT_EQ(device_info.alignment_offset, 0);
-    }
 }
 
 TEST_F(DeviceTest, ReadSuperPartitionCurrentSlot) {
