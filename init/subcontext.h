@@ -60,7 +60,8 @@ class Subcontext {
 };
 
 int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map);
-std::unique_ptr<Subcontext> InitializeSubcontext();
+void InitializeSubcontext();
+Subcontext* GetSubcontext();
 bool SubcontextChildReap(pid_t pid);
 void SubcontextTerminate();
 
