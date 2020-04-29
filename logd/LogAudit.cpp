@@ -251,9 +251,6 @@ int LogAudit::logPrint(const char* fmt, ...) {
         (*cp == ':')) {
         memcpy(timeptr + sizeof(audit_str) - 1, "0.0", 3);
         memmove(timeptr + sizeof(audit_str) - 1 + 3, cp, strlen(cp) + 1);
-        if (android::isMonotonic(now)) {
-            LogKlog::convertMonotonicToReal(now);
-        }
     } else {
         now = log_time(CLOCK_REALTIME);
     }
