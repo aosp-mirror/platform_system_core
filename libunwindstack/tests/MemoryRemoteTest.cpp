@@ -28,6 +28,8 @@
 
 #include <android-base/file.h>
 #include <android-base/test_utils.h>
+#include <bionic/mte.h>
+#include <bionic/mte_kernel.h>
 #include <gtest/gtest.h>
 
 #include "MemoryRemote.h"
