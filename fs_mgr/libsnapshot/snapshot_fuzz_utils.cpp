@@ -250,16 +250,16 @@ std::unique_ptr<AutoDevice> SnapshotFuzzEnv::CheckMapSuper(const std::string& fa
 }
 
 std::unique_ptr<ISnapshotManager> SnapshotFuzzEnv::CheckCreateSnapshotManager(
-        const SnapshotManagerFuzzData& data) {
+        const SnapshotFuzzData& data) {
     auto partition_opener = std::make_unique<TestPartitionOpener>(super());
     auto metadata_dir = fake_root_->tmp_path() + "/snapshot_metadata";
     PCHECK(Mkdir(metadata_dir));
 
-    auto device_info = new SnapshotFuzzDeviceInfo(data.device_info_data,
+    auto device_info = new SnapshotFuzzDeviceInfo(data.device_info_data(),
                                                   std::move(partition_opener), metadata_dir);
     auto snapshot = SnapshotManager::New(device_info /* takes ownership */);
     snapshot->images_ = CheckCreateFakeImageManager(fake_root_->tmp_path());
-    snapshot->has_local_image_manager_ = data.is_local_image_manager;
+    snapshot->has_local_image_manager_ = data.manager_data().is_local_image_manager();
 
     return snapshot;
 }

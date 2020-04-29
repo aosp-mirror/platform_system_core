@@ -21,6 +21,7 @@
 #include <tuple>
 
 #include <android-base/logging.h>
+#include <src/libfuzzer/libfuzzer_macro.h>
 #include <storage_literals/storage_literals.h>
 
 #include "fuzz_utils.h"
@@ -31,11 +32,10 @@ using android::base::LogSeverity;
 using android::base::SetLogger;
 using android::base::StderrLogger;
 using android::base::StdioLogger;
-using android::fuzz::Bool;
-using android::fuzz::FuzzData;
-using android::fuzz::FuzzObject;
+using android::fuzz::CheckedCast;
+using android::snapshot::SnapshotFuzzData;
 using android::snapshot::SnapshotFuzzEnv;
-using android::snapshot::SnapshotManagerFuzzData;
+using google::protobuf::RepeatedPtrField;
 
 // Avoid linking to libgsi since it needs disk I/O.
 namespace android::gsi {
@@ -51,49 +51,49 @@ std::string GetDsuSlot(const std::string& install_dir) {
 
 namespace android::snapshot {
 
-class FuzzSnapshotManager : public FuzzObject<ISnapshotManager, uint8_t> {
-  public:
-    FuzzSnapshotManager();
-};
+FUZZ_CLASS(ISnapshotManager, SnapshotManagerAction);
 
-FuzzSnapshotManager::FuzzSnapshotManager() {
-    AddFunction([this]() { (void)get()->BeginUpdate(); });
-    AddFunction([this]() { (void)get()->CancelUpdate(); });
-    AddFunction<Bool>([this](Bool wipe) { (void)get()->FinishedSnapshotWrites(wipe); });
-    AddFunction([this]() { (void)get()->InitiateMerge(); });
-    AddFunction<Bool, Bool>([this](auto has_before_cancel, auto fail_before_cancel) {
-        std::function<bool()> before_cancel;
-        if (has_before_cancel) {
-            before_cancel = [=]() { return fail_before_cancel; };
-        }
-        (void)get()->ProcessUpdateState({}, before_cancel);
-    });
-    AddFunction<Bool>([this](auto has_progress_arg) {
-        double progress;
-        (void)get()->GetUpdateState(has_progress_arg ? &progress : nullptr);
-    });
-    // TODO add CreateUpdateSnapshots according to proto
-    // TODO add MapUpdateSnapshot
-    // TODO add UnmapUpdateSnapshot using names from the dictionary
-    AddFunction([this]() { (void)get()->NeedSnapshotsInFirstStageMount(); });
-    // TODO add CreateLogicalAndSnapshotPartitions
-    AddFunction<Bool>([this](const Bool& has_callback) {
-        std::function<void()> callback;
-        if (has_callback) {
-            callback = []() {};
-        }
-        (void)get()->HandleImminentDataWipe(callback);
-    });
-    AddFunction([this]() { (void)get()->RecoveryCreateSnapshotDevices(); });
-    // TODO add RecoveryCreateSnapshotDevices with metadata_device arg
-    AddFunction([this]() {
-        std::stringstream ss;
-        (void)get()->Dump(ss);
-    });
-    AddFunction([this]() { (void)get()->EnsureMetadataMounted(); });
-    AddFunction([this]() { (void)get()->GetSnapshotMergeStatsInstance(); });
+using ProcessUpdateStateArgs = SnapshotManagerAction::Proto::ProcessUpdateStateArgs;
 
-    CheckFunctionsSize();
+FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, BeginUpdate);
+FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, CancelUpdate);
+FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, InitiateMerge);
+FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, NeedSnapshotsInFirstStageMount);
+FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, RecoveryCreateSnapshotDevices);
+FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, EnsureMetadataMounted);
+FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, GetSnapshotMergeStatsInstance);
+
+#define SNAPSHOT_FUZZ_FUNCTION(FunctionName, ...) \
+    FUZZ_FUNCTION(SnapshotManagerAction, FunctionName, snapshot, ##__VA_ARGS__)
+
+SNAPSHOT_FUZZ_FUNCTION(FinishedSnapshotWrites, bool wipe) {
+    (void)snapshot->FinishedSnapshotWrites(wipe);
+}
+
+SNAPSHOT_FUZZ_FUNCTION(ProcessUpdateState, const ProcessUpdateStateArgs& args) {
+    std::function<bool()> before_cancel;
+    if (args.has_before_cancel()) {
+        before_cancel = [&]() { return args.fail_before_cancel(); };
+    }
+    (void)snapshot->ProcessUpdateState({}, before_cancel);
+}
+
+SNAPSHOT_FUZZ_FUNCTION(GetUpdateState, bool has_progress_arg) {
+    double progress;
+    (void)snapshot->GetUpdateState(has_progress_arg ? &progress : nullptr);
+}
+
+SNAPSHOT_FUZZ_FUNCTION(HandleImminentDataWipe, bool has_callback) {
+    std::function<void()> callback;
+    if (has_callback) {
+        callback = []() {};
+    }
+    (void)snapshot->HandleImminentDataWipe(callback);
+}
+
+SNAPSHOT_FUZZ_FUNCTION(Dump) {
+    std::stringstream ss;
+    (void)snapshot->Dump(ss);
 }
 
 // During global init, log all messages to stdio. This is only done once.
@@ -111,31 +111,24 @@ void FatalOnlyLogger(LogId logid, LogSeverity severity, const char* tag, const c
 }
 // Stop logging (except fatal messages) after global initialization. This is only done once.
 int StopLoggingAfterGlobalInit() {
+    [[maybe_unused]] static protobuf_mutator::protobuf::LogSilencer log_silincer;
     SetLogger(&FatalOnlyLogger);
     return 0;
 }
 
 }  // namespace android::snapshot
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+DEFINE_PROTO_FUZZER(const SnapshotFuzzData& snapshot_fuzz_data) {
     using namespace android::snapshot;
 
     [[maybe_unused]] static auto allow_logging = AllowLoggingDuringGlobalInit();
     static SnapshotFuzzEnv env;
-    static FuzzSnapshotManager fuzz_snapshot_manager;
     [[maybe_unused]] static auto stop_logging = StopLoggingAfterGlobalInit();
 
     env.CheckSoftReset();
-    FuzzData fuzz_data(data, size);
 
-    auto snapshot_manager_data = fuzz_data.Consume<SnapshotManagerFuzzData>();
-    if (!snapshot_manager_data.has_value()) {
-        return 0;
-    }
-    auto snapshot_manager = env.CheckCreateSnapshotManager(snapshot_manager_data.value());
+    auto snapshot_manager = env.CheckCreateSnapshotManager(snapshot_fuzz_data);
     CHECK(snapshot_manager);
 
-    fuzz_snapshot_manager.DepleteData(snapshot_manager.get(), &fuzz_data);
-
-    return 0;
+    SnapshotManagerAction::ExecuteAll(snapshot_manager.get(), snapshot_fuzz_data.actions());
 }

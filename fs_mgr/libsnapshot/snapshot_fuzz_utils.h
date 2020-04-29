@@ -24,22 +24,9 @@
 // libsnapshot-specific code for fuzzing. Defines fake classes that are depended
 // by SnapshotManager.
 
+#include "android/snapshot/snapshot_fuzz.pb.h"
+
 namespace android::snapshot {
-
-// Controls the behavior of IDeviceInfo.
-typedef struct SnapshotFuzzDeviceInfoData {
-    bool slot_suffix_is_a : 1;
-    bool is_overlayfs_setup : 1;
-    bool allow_set_boot_control_merge_status : 1;
-    bool allow_set_slot_as_unbootable : 1;
-    bool is_recovery : 1;
-} __attribute__((packed)) SnapshotFuzzDeviceInfoData;
-
-// Controls the behavior of the test SnapshotManager.
-typedef struct SnapshotManagerFuzzData {
-    SnapshotFuzzDeviceInfoData device_info_data;
-    bool is_local_image_manager : 1;
-} __attribute__((packed)) SnapshotManagerFuzzData;
 
 class AutoMemBasedDir;
 
@@ -60,8 +47,7 @@ class SnapshotFuzzEnv {
     // Create a snapshot manager for this test run.
     // Client is responsible for maintaining the lifetime of |data| over the life time of
     // ISnapshotManager.
-    std::unique_ptr<ISnapshotManager> CheckCreateSnapshotManager(
-            const SnapshotManagerFuzzData& data);
+    std::unique_ptr<ISnapshotManager> CheckCreateSnapshotManager(const SnapshotFuzzData& data);
 
     // Return path to super partition.
     const std::string& super() const;
@@ -82,10 +68,10 @@ class SnapshotFuzzEnv {
 class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
   public:
     // Client is responsible for maintaining the lifetime of |data|.
-    SnapshotFuzzDeviceInfo(const SnapshotFuzzDeviceInfoData& data,
+    SnapshotFuzzDeviceInfo(const FuzzDeviceInfoData& data,
                            std::unique_ptr<TestPartitionOpener>&& partition_opener,
                            const std::string& metadata_dir)
-        : data_(data),
+        : data_(&data),
           partition_opener_(std::move(partition_opener)),
           metadata_dir_(metadata_dir) {}
 
@@ -101,17 +87,21 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
     }
 
     // Following APIs are fuzzed.
-    std::string GetSlotSuffix() const override { return data_.slot_suffix_is_a ? "_a" : "_b"; }
-    std::string GetOtherSlotSuffix() const override { return data_.slot_suffix_is_a ? "_b" : "_a"; }
-    bool IsOverlayfsSetup() const override { return data_.is_overlayfs_setup; }
-    bool SetBootControlMergeStatus(android::hardware::boot::V1_1::MergeStatus) override {
-        return data_.allow_set_boot_control_merge_status;
+    std::string GetSlotSuffix() const override { return data_->slot_suffix_is_a() ? "_a" : "_b"; }
+    std::string GetOtherSlotSuffix() const override {
+        return data_->slot_suffix_is_a() ? "_b" : "_a";
     }
-    bool SetSlotAsUnbootable(unsigned int) override { return data_.allow_set_slot_as_unbootable; }
-    bool IsRecovery() const override { return data_.is_recovery; }
+    bool IsOverlayfsSetup() const override { return data_->is_overlayfs_setup(); }
+    bool SetBootControlMergeStatus(android::hardware::boot::V1_1::MergeStatus) override {
+        return data_->allow_set_boot_control_merge_status();
+    }
+    bool SetSlotAsUnbootable(unsigned int) override {
+        return data_->allow_set_slot_as_unbootable();
+    }
+    bool IsRecovery() const override { return data_->is_recovery(); }
 
   private:
-    SnapshotFuzzDeviceInfoData data_;
+    const FuzzDeviceInfoData* data_;
     std::unique_ptr<TestPartitionOpener> partition_opener_;
     std::string metadata_dir_;
 };

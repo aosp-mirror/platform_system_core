@@ -254,9 +254,11 @@ cc_fuzz {
 
     native_coverage : true,
     srcs: [
+        // Compile the protobuf definition again with type full.
+        "android/snapshot/snapshot_fuzz.proto",
+        "fuzz_utils.cpp",
         "snapshot_fuzz.cpp",
         "snapshot_fuzz_utils.cpp",
-        "fuzz_utils.cpp",
     ],
     static_libs: [
         "libbase",
@@ -269,12 +271,16 @@ cc_fuzz {
         "liblp",
         "libsnapshot_init", // don't use binder or hwbinder
         "libsnapshot_test_helpers",
-        "libprotobuf-cpp-lite",
+        "libprotobuf-mutator",
         "update_metadata-protos",
     ],
     header_libs: [
         "libstorage_literals_headers",
     ],
+    proto: {
+        type: "full",
+        canonical_path_from_root: false,
+    },
 
     fuzz_config: {
         cc: ["android-virtual-ab+bugs@google.com"],
