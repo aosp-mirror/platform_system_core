@@ -40,6 +40,8 @@ struct android_log_transport_write {
     int (*write)(struct timespec* ts, struct iovec* vec, size_t nr);
     /* note one log drop */
     void (*noteDrop)(int error, int tag);
+    /* checks if the socket is closed */
+    int (*isClosed)();
 };
 
 #endif  // ANDROID_STATS_LOG_STATS_WRITER_H
