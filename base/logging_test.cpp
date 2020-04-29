@@ -24,8 +24,10 @@
 
 #include <regex>
 #include <string>
+#include <thread>
 
 #include "android-base/file.h"
+#include "android-base/scopeguard.h"
 #include "android-base/stringprintf.h"
 #include "android-base/test_utils.h"
 
@@ -596,7 +598,7 @@ TEST(logging, LOG_FATAL_ABORTER_MESSAGE) {
   CapturedStderr cap;
   LOG(FATAL) << "foo\nbar";
 
-  EXPECT_EQ(CountLineAborter::newline_count, 1U + 1U);  // +1 for final '\n'.
+  EXPECT_EQ(CountLineAborter::newline_count, 1U);
 }
 
 __attribute__((constructor)) void TestLoggingInConstructor() {
@@ -616,4 +618,56 @@ TEST(logging, StdioLogger) {
   ASSERT_EQ("out\n", cap_out.str());
   // Whereas ERROR logging includes the program name.
   ASSERT_EQ(android::base::Basename(android::base::GetExecutablePath()) + ": err\n", cap_err.str());
+}
+
+TEST(logging, ForkSafe) {
+#if !defined(_WIN32)
+  using namespace android::base;
+  SetLogger(
+      [&](LogId, LogSeverity, const char*, const char*, unsigned int, const char*) { sleep(3); });
+
+  auto guard = make_scope_guard([&] {
+#ifdef __ANDROID__
+    SetLogger(LogdLogger());
+#else
+    SetLogger(StderrLogger);
+#endif
+  });
+
+  auto thread = std::thread([] {
+    LOG(ERROR) << "This should sleep for 3 seconds, long enough to fork another process, if there "
+                  "is no intervention";
+  });
+  thread.detach();
+
+  auto pid = fork();
+  ASSERT_NE(-1, pid);
+
+  if (pid == 0) {
+    // Reset the logger, so the next message doesn't sleep().
+    SetLogger([](LogId, LogSeverity, const char*, const char*, unsigned int, const char*) {});
+    LOG(ERROR) << "This should succeed in the child, only if libbase is forksafe.";
+    _exit(EXIT_SUCCESS);
+  }
+
+  // Wait for up to 3 seconds for the child to exit.
+  int tries = 3;
+  bool found_child = false;
+  while (tries-- > 0) {
+    auto result = waitpid(pid, nullptr, WNOHANG);
+    EXPECT_NE(-1, result);
+    if (result == pid) {
+      found_child = true;
+      break;
+    }
+    sleep(1);
+  }
+
+  EXPECT_TRUE(found_child);
+
+  // Kill the child if it did not exit.
+  if (!found_child) {
+    kill(pid, SIGKILL);
+  }
+#endif
 }
