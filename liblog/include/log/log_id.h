@@ -23,14 +23,6 @@ extern "C" {
 #endif
 
 /*
- * Send a simple string to the log.
- */
-int __android_log_buf_write(int bufID, int prio, const char* tag,
-                            const char* text);
-int __android_log_buf_print(int bufID, int prio, const char* tag, const char* fmt, ...)
-    __attribute__((__format__(printf, 4, 5)));
-
-/*
  * log_id_t helpers
  */
 log_id_t android_name_to_log_id(const char* logName);
