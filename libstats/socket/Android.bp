@@ -110,7 +110,10 @@ cc_benchmark {
 
 cc_test {
     name: "libstatssocket_test",
-    srcs: ["tests/stats_event_test.cpp"],
+    srcs: [
+        "tests/stats_event_test.cpp",
+        "tests/stats_writer_test.cpp",
+    ],
     cflags: [
         "-Wall",
         "-Werror",
