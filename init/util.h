@@ -78,6 +78,8 @@ Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
 
 void SetStdioToDevNull(char** argv);
 void InitKernelLogging(char** argv);
+void InitSecondStageLogging(char** argv);
+void DumpShutdownDebugInformation();
 bool IsRecoveryMode();
 }  // namespace init
 }  // namespace android
