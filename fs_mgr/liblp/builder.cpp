@@ -401,8 +401,8 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
         // untouched to be compatible code that looks for an MBR. Thus we
         // start counting free sectors at sector 1, not 0.
         uint64_t free_area_start = LP_SECTOR_SIZE;
-        if (out.alignment || out.alignment_offset) {
-            free_area_start = AlignTo(free_area_start, out.alignment, out.alignment_offset);
+        if (out.alignment) {
+            free_area_start = AlignTo(free_area_start, out.alignment);
         } else {
             free_area_start = AlignTo(free_area_start, logical_block_size);
         }
@@ -442,7 +442,7 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
     // Compute the first free sector, factoring in alignment.
     uint64_t free_area_start = total_reserved;
     if (super.alignment || super.alignment_offset) {
-        free_area_start = AlignTo(free_area_start, super.alignment, super.alignment_offset);
+        free_area_start = AlignTo(free_area_start, super.alignment);
     } else {
         free_area_start = AlignTo(free_area_start, logical_block_size);
     }
@@ -930,7 +930,7 @@ uint64_t MetadataBuilder::AlignSector(const LpMetadataBlockDevice& block_device,
     // Note: when reading alignment info from the Kernel, we don't assume it
     // is aligned to the sector size, so we round up to the nearest sector.
     uint64_t lba = sector * LP_SECTOR_SIZE;
-    uint64_t aligned = AlignTo(lba, block_device.alignment, block_device.alignment_offset);
+    uint64_t aligned = AlignTo(lba, block_device.alignment);
     return AlignTo(aligned, LP_SECTOR_SIZE) / LP_SECTOR_SIZE;
 }
 
