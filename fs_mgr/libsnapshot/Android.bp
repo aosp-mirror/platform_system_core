@@ -256,30 +256,38 @@ cc_fuzz {
     srcs: [
         // Compile the protobuf definition again with type full.
         "android/snapshot/snapshot_fuzz.proto",
+        "update_engine/update_metadata.proto",
         "fuzz_utils.cpp",
         "snapshot_fuzz.cpp",
         "snapshot_fuzz_utils.cpp",
+
+        // Compile libsnapshot sources directly to avoid dependency
+        // to update_metadata-protos
+        ":libsnapshot_sources",
     ],
     static_libs: [
         "libbase",
         "libcrypto_static",
         "libcutils",
+        "libext2_uuid",
+        "libext4_utils",
+        "libfstab",
         "libfs_mgr",
         "libgtest", // from libsnapshot_test_helpers
         "libgmock", // from libsnapshot_test_helpers
         "liblog",
         "liblp",
-        "libsnapshot_init", // don't use binder or hwbinder
         "libsnapshot_test_helpers",
         "libprotobuf-mutator",
-        "update_metadata-protos",
     ],
     header_libs: [
+        "libfiemap_headers",
         "libstorage_literals_headers",
     ],
     proto: {
         type: "full",
         canonical_path_from_root: false,
+        local_include_dirs: ["."],
     },
 
     fuzz_config: {

@@ -15,6 +15,8 @@
 syntax = "proto3";
 package android.snapshot;
 
+import "update_engine/update_metadata.proto";
+
 // Controls the behavior of IDeviceInfo.
 // Next: 6
 message FuzzDeviceInfoData {
@@ -49,8 +51,6 @@ message SnapshotManagerActionProto {
         bool has_metadata_device_object = 1;
         bool metadata_mounted = 2;
     }
-    reserved 7;
-    reserved "create_update_snapshots";
     reserved 8;
     reserved "map_update_snapshot";
     oneof value {
@@ -60,6 +60,7 @@ message SnapshotManagerActionProto {
         NoArgs initiate_merge = 4;
         ProcessUpdateStateArgs process_update_state = 5;
         bool get_update_state = 6;
+        chromeos_update_engine.DeltaArchiveManifest create_update_snapshots = 7;
         string unmap_update_snapshot = 9;
         NoArgs need_snapshots_in_first_stage_mount = 10;
         CreateLogicalAndSnapshotPartitionsArgs create_logical_and_snapshot_partitions = 11;
