@@ -46,9 +46,6 @@
 
 void LogBuffer::init() {
     log_id_for_each(i) {
-        mLastSet[i] = false;
-        mLast[i] = mLogElements.begin();
-
         if (setSize(i, __android_logger_get_buffer_size(i))) {
             setSize(i, LOG_BUFFER_MIN_SIZE);
         }
@@ -129,6 +126,20 @@ LogBuffer::~LogBuffer() {
         delete lastLoggedElements[i];
         delete droppedElements[i];
     }
+}
+
+LogBufferElementCollection::iterator LogBuffer::GetOldest(log_id_t log_id) {
+    auto it = mLogElements.begin();
+    if (mOldest[log_id]) {
+        it = *mOldest[log_id];
+    }
+    while (it != mLogElements.end() && (*it)->getLogId() != log_id) {
+        it++;
+    }
+    if (it != mLogElements.end()) {
+        mOldest[log_id] = it;
+    }
+    return it;
 }
 
 enum match_type { DIFFERENT, SAME, SAME_LIBLOG };
@@ -450,9 +461,7 @@ LogBufferElementCollection::iterator LogBuffer::erase(
 
     bool setLast[LOG_ID_MAX];
     bool doSetLast = false;
-    log_id_for_each(i) {
-        doSetLast |= setLast[i] = mLastSet[i] && (it == mLast[i]);
-    }
+    log_id_for_each(i) { doSetLast |= setLast[i] = mOldest[i] && it == *mOldest[i]; }
 #ifdef DEBUG_CHECK_FOR_STALE_ENTRIES
     LogBufferElementCollection::iterator bad = it;
     int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY))
@@ -463,11 +472,11 @@ LogBufferElementCollection::iterator LogBuffer::erase(
     if (doSetLast) {
         log_id_for_each(i) {
             if (setLast[i]) {
-                if (__predict_false(it == mLogElements.end())) {  // impossible
-                    mLastSet[i] = false;
-                    mLast[i] = mLogElements.begin();
+                if (__predict_false(it == mLogElements.end())) {
+                    mOldest[i] = std::nullopt;
                 } else {
-                    mLast[i] = it;  // push down the road as next-best-watermark
+                    mOldest[i] = it;  // Store the next iterator even if it does not correspond to
+                                      // the same log_id, as a starting point for GetOldest().
                 }
             }
         }
@@ -485,11 +494,6 @@ LogBufferElementCollection::iterator LogBuffer::erase(
                 android::prdebug("stale mLastWorstPidOfSystem[%d] pid=%d\n", i,
                                  b.first);
             }
-        }
-        if (mLastSet[i] && (bad == mLast[i])) {
-            android::prdebug("stale mLast[%d]\n", i);
-            mLastSet[i] = false;
-            mLast[i] = mLogElements.begin();
         }
     }
 #endif
@@ -668,7 +672,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     if (__predict_false(caller_uid != AID_ROOT)) {  // unlikely
         // Only here if clear all request from non system source, so chatty
         // filter logistics is not required.
-        it = mLastSet[id] ? mLast[id] : mLogElements.begin();
+        it = GetOldest(id);
         while (it != mLogElements.end()) {
             LogBufferElement* element = *it;
 
@@ -676,11 +680,6 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 (element->getUid() != caller_uid)) {
                 ++it;
                 continue;
-            }
-
-            if (!mLastSet[id] || ((*mLast[id])->getLogId() != id)) {
-                mLast[id] = it;
-                mLastSet[id] = true;
             }
 
             if (oldest && oldest->mStart <= element->getSequence()) {
@@ -734,8 +733,8 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
 
         bool kick = false;
-        bool leading = true;
-        it = mLastSet[id] ? mLast[id] : mLogElements.begin();
+        bool leading = true;  // true if starting from the oldest log entry, false if starting from
+                              // a specific chatty entry.
         // Perform at least one mandatory garbage collection cycle in following
         // - clear leading chatty tags
         // - coalesce chatty tags
@@ -763,6 +762,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 }
             }
         }
+        if (leading) {
+            it = GetOldest(id);
+        }
         static const timespec too_old = { EXPIRE_HOUR_THRESHOLD * 60 * 60, 0 };
         LogBufferElementCollection::iterator lastt;
         lastt = mLogElements.end();
@@ -782,11 +784,6 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
             // below this point element->getLogId() == id
-
-            if (leading && (!mLastSet[id] || ((*mLast[id])->getLogId() != id))) {
-                mLast[id] = it;
-                mLastSet[id] = true;
-            }
 
             uint16_t dropped = element->getDropped();
 
@@ -909,18 +906,13 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
     bool whitelist = false;
     bool hasWhitelist = (id != LOG_ID_SECURITY) && mPrune.nice() && !clearAll;
-    it = mLastSet[id] ? mLast[id] : mLogElements.begin();
+    it = GetOldest(id);
     while ((pruneRows > 0) && (it != mLogElements.end())) {
         LogBufferElement* element = *it;
 
         if (element->getLogId() != id) {
             it++;
             continue;
-        }
-
-        if (!mLastSet[id] || ((*mLast[id])->getLogId() != id)) {
-            mLast[id] = it;
-            mLastSet[id] = true;
         }
 
         if (oldest && oldest->mStart <= element->getSequence()) {
@@ -942,18 +934,13 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
     // Do not save the whitelist if we are reader range limited
     if (whitelist && (pruneRows > 0)) {
-        it = mLastSet[id] ? mLast[id] : mLogElements.begin();
+        it = GetOldest(id);
         while ((it != mLogElements.end()) && (pruneRows > 0)) {
             LogBufferElement* element = *it;
 
             if (element->getLogId() != id) {
                 ++it;
                 continue;
-            }
-
-            if (!mLastSet[id] || ((*mLast[id])->getLogId() != id)) {
-                mLast[id] = it;
-                mLastSet[id] = true;
             }
 
             if (oldest && oldest->mStart <= element->getSequence()) {
