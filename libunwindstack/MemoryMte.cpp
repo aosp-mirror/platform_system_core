@@ -17,6 +17,7 @@
 #if defined(ANDROID_EXPERIMENTAL_MTE)
 
 #include <sys/ptrace.h>
+#include <sys/uio.h>
 
 #include <bionic/mte.h>
 #include <bionic/mte_kernel.h>
@@ -28,7 +29,13 @@ namespace unwindstack {
 
 long MemoryRemote::ReadTag(uint64_t addr) {
 #if defined(__aarch64__)
-  return ptrace(PTRACE_PEEKTAG, pid_, (void*)addr, nullptr);
+  char tag;
+  iovec iov = {&tag, 1};
+  if (ptrace(PTRACE_PEEKMTETAGS, pid_, reinterpret_cast<void*>(addr), &iov) != 0 ||
+      iov.iov_len != 1) {
+    return -1;
+  }
+  return tag;
 #else
   (void)addr;
   return -1;
