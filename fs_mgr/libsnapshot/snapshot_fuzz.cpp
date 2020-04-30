@@ -51,9 +51,15 @@ std::string GetDsuSlot(const std::string& install_dir) {
 
 namespace android::snapshot {
 
+SnapshotFuzzEnv* GetSnapshotFuzzEnv();
+
 FUZZ_CLASS(ISnapshotManager, SnapshotManagerAction);
 
 using ProcessUpdateStateArgs = SnapshotManagerAction::Proto::ProcessUpdateStateArgs;
+using CreateLogicalAndSnapshotPartitionsArgs =
+        SnapshotManagerAction::Proto::CreateLogicalAndSnapshotPartitionsArgs;
+using RecoveryCreateSnapshotDevicesArgs =
+        SnapshotManagerAction::Proto::RecoveryCreateSnapshotDevicesArgs;
 
 FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, BeginUpdate);
 FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, CancelUpdate);
@@ -96,6 +102,31 @@ SNAPSHOT_FUZZ_FUNCTION(Dump) {
     (void)snapshot->Dump(ss);
 }
 
+SNAPSHOT_FUZZ_FUNCTION(UnmapUpdateSnapshot, const std::string& name) {
+    (void)snapshot->UnmapUpdateSnapshot(name);
+}
+
+SNAPSHOT_FUZZ_FUNCTION(CreateLogicalAndSnapshotPartitions,
+                       const CreateLogicalAndSnapshotPartitionsArgs& args) {
+    const std::string* super;
+    if (args.use_correct_super()) {
+        super = &GetSnapshotFuzzEnv()->super();
+    } else {
+        super = &args.super();
+    }
+    (void)snapshot->CreateLogicalAndSnapshotPartitions(
+            *super, std::chrono::milliseconds(args.timeout_millis()));
+}
+
+SNAPSHOT_FUZZ_FUNCTION(RecoveryCreateSnapshotDevicesWithMetadata,
+                       const RecoveryCreateSnapshotDevicesArgs& args) {
+    std::unique_ptr<AutoDevice> device;
+    if (args.has_metadata_device_object()) {
+        device = std::make_unique<DummyAutoDevice>(args.metadata_mounted());
+    }
+    (void)snapshot->RecoveryCreateSnapshotDevices(device);
+}
+
 // During global init, log all messages to stdio. This is only done once.
 int AllowLoggingDuringGlobalInit() {
     SetLogger(&StdioLogger);
@@ -116,18 +147,22 @@ int StopLoggingAfterGlobalInit() {
     return 0;
 }
 
+SnapshotFuzzEnv* GetSnapshotFuzzEnv() {
+    [[maybe_unused]] static auto allow_logging = AllowLoggingDuringGlobalInit();
+    static SnapshotFuzzEnv env;
+    [[maybe_unused]] static auto stop_logging = StopLoggingAfterGlobalInit();
+    return &env;
+}
+
 }  // namespace android::snapshot
 
 DEFINE_PROTO_FUZZER(const SnapshotFuzzData& snapshot_fuzz_data) {
     using namespace android::snapshot;
 
-    [[maybe_unused]] static auto allow_logging = AllowLoggingDuringGlobalInit();
-    static SnapshotFuzzEnv env;
-    [[maybe_unused]] static auto stop_logging = StopLoggingAfterGlobalInit();
+    auto env = GetSnapshotFuzzEnv();
+    env->CheckSoftReset();
 
-    env.CheckSoftReset();
-
-    auto snapshot_manager = env.CheckCreateSnapshotManager(snapshot_fuzz_data);
+    auto snapshot_manager = env->CheckCreateSnapshotManager(snapshot_fuzz_data);
     CHECK(snapshot_manager);
 
     SnapshotManagerAction::ExecuteAll(snapshot_manager.get(), snapshot_fuzz_data.actions());

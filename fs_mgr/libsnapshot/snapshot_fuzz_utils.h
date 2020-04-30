@@ -30,6 +30,11 @@ namespace android::snapshot {
 
 class AutoMemBasedDir;
 
+class DummyAutoDevice : public AutoDevice {
+  public:
+    DummyAutoDevice(bool mounted) : AutoDevice(mounted ? "dummy" : "") {}
+};
+
 // Prepare test environment. This has a heavy overhead and should be done once.
 class SnapshotFuzzEnv {
   public:

@@ -169,6 +169,18 @@ struct ActionPerfomer<FuzzFunction, void()> {
     }
 };
 
+template <typename FuzzFunction>
+struct ActionPerfomer<FuzzFunction, void(const std::string&)> {
+    static void Invoke(typename FuzzFunction::Class* module,
+                       const google::protobuf::Message& action_proto,
+                       const google::protobuf::FieldDescriptor* field_desc) {
+        std::string scratch;
+        const std::string& arg = action_proto.GetReflection()->GetStringReference(
+                action_proto, field_desc, &scratch);
+        FuzzFunction::ImplBody(module, arg);
+    }
+};
+
 }  // namespace android::fuzz
 
 // Fuzz existing C++ class, ClassType, with a collection of functions under the name Action.

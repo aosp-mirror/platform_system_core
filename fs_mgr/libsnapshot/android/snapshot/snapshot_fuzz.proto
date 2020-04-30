@@ -40,16 +40,19 @@ message SnapshotManagerActionProto {
         bool has_before_cancel = 1;
         bool fail_before_cancel = 2;
     }
+    message CreateLogicalAndSnapshotPartitionsArgs {
+        bool use_correct_super = 1;
+        string super = 2;
+        int64 timeout_millis = 3;
+    }
+    message RecoveryCreateSnapshotDevicesArgs {
+        bool has_metadata_device_object = 1;
+        bool metadata_mounted = 2;
+    }
     reserved 7;
     reserved "create_update_snapshots";
     reserved 8;
     reserved "map_update_snapshot";
-    reserved 9;
-    reserved "unmap_update_snapshot";
-    reserved 11;
-    reserved "create_logical_and_snapshot_partitions";
-    reserved 14;
-    reserved "recovery_create_snapshot_devices_with_metadata";
     oneof value {
         NoArgs begin_update = 1;
         NoArgs cancel_update = 2;
@@ -57,9 +60,12 @@ message SnapshotManagerActionProto {
         NoArgs initiate_merge = 4;
         ProcessUpdateStateArgs process_update_state = 5;
         bool get_update_state = 6;
+        string unmap_update_snapshot = 9;
         NoArgs need_snapshots_in_first_stage_mount = 10;
+        CreateLogicalAndSnapshotPartitionsArgs create_logical_and_snapshot_partitions = 11;
         bool handle_imminent_data_wipe = 12;
         NoArgs recovery_create_snapshot_devices = 13;
+        RecoveryCreateSnapshotDevicesArgs recovery_create_snapshot_devices_with_metadata = 14;
         NoArgs dump = 15;
         NoArgs ensure_metadata_mounted = 16;
         NoArgs get_snapshot_merge_stats_instance = 17;
