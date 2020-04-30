@@ -29,6 +29,10 @@ using android::base::unique_fd;
 // socket.  This tests for that behavior.
 TEST(liblog, multi_connect_dgram_socket) {
 #ifdef __ANDROID__
+  if (getuid() != 0) {
+    GTEST_SKIP() << "Skipping test, must be run as root.";
+    return;
+  }
   auto temp_dir = TemporaryDir();
   auto socket_path = StringPrintf("%s/test_socket", temp_dir.path);
 
