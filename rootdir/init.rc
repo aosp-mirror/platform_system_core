@@ -78,6 +78,9 @@ on early-init
     mkdir /dev/boringssl 0755 root root
     mkdir /dev/boringssl/selftest 0755 root root
 
+    # Mount tracefs
+    mount tracefs tracefs /sys/kernel/tracing
+
 # Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
 on early-init && property:ro.product.cpu.abilist32=*
     exec_start boringssl_self_test32
