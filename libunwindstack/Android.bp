@@ -75,12 +75,28 @@ cc_defaults {
     ],
 
     target: {
-        // Always disable optimizations for host to make it easier to debug.
         host: {
+            // Always disable optimizations for host to make it easier to debug.
             cflags: [
                 "-O0",
                 "-g",
             ],
+        },
+        android: {
+            header_libs: ["bionic_libc_platform_headers"],
+            product_variables: {
+                experimental_mte: {
+                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+                },
+            },
+        },
+        linux_bionic: {
+            header_libs: ["bionic_libc_platform_headers"],
+            product_variables: {
+                experimental_mte: {
+                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+                },
+            },
         },
     },
 
@@ -102,16 +118,6 @@ cc_defaults {
         "liblog",
         "liblzma",
     ],
-
-    header_libs: [
-        "bionic_libc_platform_headers",
-    ],
-
-    product_variables: {
-        experimental_mte: {
-            cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
-        },
-    },
 }
 
 cc_library {
@@ -281,13 +287,22 @@ cc_defaults {
         "tests/files/offline/straddle_arm64/*",
     ],
 
-    header_libs: [
-        "bionic_libc_platform_headers",
-    ],
-
-    product_variables: {
-        experimental_mte: {
-            cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+    target: {
+        android: {
+            header_libs: ["bionic_libc_platform_headers"],
+            product_variables: {
+                experimental_mte: {
+                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+                },
+            },
+        },
+        linux_bionic: {
+            header_libs: ["bionic_libc_platform_headers"],
+            product_variables: {
+                experimental_mte: {
+                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+                },
+            },
         },
     },
 }
