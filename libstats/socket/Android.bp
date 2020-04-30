@@ -86,6 +86,7 @@ cc_library_headers {
     export_include_dirs: ["include"],
     host_supported: true,
     apex_available: ["com.android.resolv"],
+    min_sdk_version: "29",
 }
 
 cc_benchmark {
@@ -109,7 +110,10 @@ cc_benchmark {
 
 cc_test {
     name: "libstatssocket_test",
-    srcs: ["tests/stats_event_test.cpp"],
+    srcs: [
+        "tests/stats_event_test.cpp",
+        "tests/stats_writer_test.cpp",
+    ],
     cflags: [
         "-Wall",
         "-Werror",

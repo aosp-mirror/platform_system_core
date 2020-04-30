@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <log/log_id.h>
+#include <android/log.h>
 #include <log/log_time.h>
 
 #ifdef __cplusplus

@@ -76,6 +76,7 @@
 #include "service.h"
 #include "service_parser.h"
 #include "sigchld_handler.h"
+#include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
 
@@ -99,8 +100,6 @@ static int property_triggers_enabled = 0;
 
 static int signal_fd = -1;
 static int property_fd = -1;
-
-static std::unique_ptr<Subcontext> subcontext;
 
 struct PendingControlMessage {
     std::string message;
@@ -216,16 +215,6 @@ void ResetWaitForProp() {
     prop_waiter_state.ResetWaitForProp();
 }
 
-static void UnwindMainThreadStack() {
-    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, 1));
-    if (!backtrace->Unwind(0)) {
-        LOG(ERROR) << __FUNCTION__ << ": Failed to unwind callstack.";
-    }
-    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
-        LOG(ERROR) << backtrace->FormatFrameData(i);
-    }
-}
-
 static class ShutdownState {
   public:
     void TriggerShutdown(const std::string& command) {
@@ -243,13 +232,13 @@ static class ShutdownState {
     std::optional<std::string> CheckShutdown() {
         auto lock = std::lock_guard{shutdown_command_lock_};
         if (do_shutdown_ && !IsShuttingDown()) {
-            do_shutdown_ = false;
             return shutdown_command_;
         }
         return {};
     }
 
     bool do_shutdown() const { return do_shutdown_; }
+    void set_do_shutdown(bool value) { do_shutdown_ = value; }
 
   private:
     std::mutex shutdown_command_lock_;
@@ -257,16 +246,28 @@ static class ShutdownState {
     bool do_shutdown_ = false;
 } shutdown_state;
 
+static void UnwindMainThreadStack() {
+    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, 1));
+    if (!backtrace->Unwind(0)) {
+        LOG(ERROR) << __FUNCTION__ << "sys.powerctl: Failed to unwind callstack.";
+    }
+    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
+        LOG(ERROR) << "sys.powerctl: " << backtrace->FormatFrameData(i);
+    }
+}
+
 void DebugRebootLogging() {
-    LOG(INFO) << "do_shutdown: " << shutdown_state.do_shutdown()
+    LOG(INFO) << "sys.powerctl: do_shutdown: " << shutdown_state.do_shutdown()
               << " IsShuttingDown: " << IsShuttingDown();
     if (shutdown_state.do_shutdown()) {
         LOG(ERROR) << "sys.powerctl set while a previous shutdown command has not been handled";
         UnwindMainThreadStack();
+        DumpShutdownDebugInformation();
     }
     if (IsShuttingDown()) {
         LOG(ERROR) << "sys.powerctl set while init is already shutting down";
         UnwindMainThreadStack();
+        DumpShutdownDebugInformation();
     }
 }
 
@@ -279,9 +280,8 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     Parser parser;
 
     parser.AddSectionParser("service", std::make_unique<ServiceParser>(
-                                               &service_list, subcontext.get(), std::nullopt));
-    parser.AddSectionParser("on",
-                            std::make_unique<ActionParser>(&action_manager, subcontext.get()));
+                                               &service_list, GetSubcontext(), std::nullopt));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, GetSubcontext()));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
     return parser;
@@ -291,9 +291,9 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
 Parser CreateServiceOnlyParser(ServiceList& service_list, bool from_apex) {
     Parser parser;
 
-    parser.AddSectionParser("service",
-                            std::make_unique<ServiceParser>(&service_list, subcontext.get(),
-                                                            std::nullopt, from_apex));
+    parser.AddSectionParser(
+            "service", std::make_unique<ServiceParser>(&service_list, GetSubcontext(), std::nullopt,
+                                                       from_apex));
     return parser;
 }
 
@@ -721,7 +721,7 @@ int SecondStageMain(int argc, char** argv) {
     trigger_shutdown = [](const std::string& command) { shutdown_state.TriggerShutdown(command); };
 
     SetStdioToDevNull(argv);
-    InitKernelLogging(argv);
+    InitSecondStageLogging(argv);
     LOG(INFO) << "init second stage started!";
 
     // Init should not crash because of a dependence on any other process, therefore we ignore
@@ -809,7 +809,7 @@ int SecondStageMain(int argc, char** argv) {
         PLOG(FATAL) << "SetupMountNamespaces failed";
     }
 
-    subcontext = InitializeSubcontext();
+    InitializeSubcontext();
 
     ActionManager& am = ActionManager::GetInstance();
     ServiceList& sm = ServiceList::GetInstance();
@@ -874,6 +874,7 @@ int SecondStageMain(int argc, char** argv) {
             LOG(INFO) << "Got shutdown_command '" << *shutdown_command
                       << "' Calling HandlePowerctlMessage()";
             HandlePowerctlMessage(*shutdown_command);
+            shutdown_state.set_do_shutdown(false);
         }
 
         if (!(prop_waiter_state.MightBeWaiting() || Service::is_exec_service_running())) {
