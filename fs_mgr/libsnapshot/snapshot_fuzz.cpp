@@ -125,14 +125,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     static FuzzSnapshotManager fuzz_snapshot_manager;
     [[maybe_unused]] static auto stop_logging = StopLoggingAfterGlobalInit();
 
-    CHECK(env.InitOk());
+    env.CheckSoftReset();
     FuzzData fuzz_data(data, size);
 
     auto snapshot_manager_data = fuzz_data.Consume<SnapshotManagerFuzzData>();
     if (!snapshot_manager_data.has_value()) {
         return 0;
     }
-    auto snapshot_manager = env.CreateSnapshotManager(snapshot_manager_data.value());
+    auto snapshot_manager = env.CheckCreateSnapshotManager(snapshot_manager_data.value());
     CHECK(snapshot_manager);
 
     fuzz_snapshot_manager.DepleteData(snapshot_manager.get(), &fuzz_data);
