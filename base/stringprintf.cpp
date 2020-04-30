@@ -25,7 +25,7 @@ namespace base {
 
 void StringAppendV(std::string* dst, const char* format, va_list ap) {
   // First try with a small fixed size buffer
-  char space[1024];
+  char space[1024] __attribute__((__uninitialized__));
 
   // It's possible for methods that use a va_list to invalidate
   // the data in it upon use.  The fix is to make a copy
