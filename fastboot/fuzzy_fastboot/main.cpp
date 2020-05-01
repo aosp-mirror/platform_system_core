@@ -261,6 +261,10 @@ TEST_F(LogicalPartitionCompliance, CreateResizeDeleteLP) {
     GTEST_LOG_(INFO) << "Flashing a logical partition..";
     EXPECT_EQ(fb->FlashPartition(test_partition_name, buf), SUCCESS)
             << "flash logical -partition failed";
+
+    GTEST_LOG_(INFO) << "Testing 'fastboot delete-logical-partition' command";
+    EXPECT_EQ(fb->DeletePartition(test_partition_name), SUCCESS)
+            << "delete logical-partition failed";
 }
 
 // Conformance tests
