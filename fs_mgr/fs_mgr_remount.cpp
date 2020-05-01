@@ -105,20 +105,23 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
 
 }  // namespace
 
+enum RemountStatus {
+    REMOUNT_SUCCESS = 0,
+    NOT_USERDEBUG,
+    BADARG,
+    NOT_ROOT,
+    NO_FSTAB,
+    UNKNOWN_PARTITION,
+    INVALID_PARTITION,
+    VERITY_PARTITION,
+    BAD_OVERLAY,
+    NO_MOUNTS,
+    REMOUNT_FAILED,
+    MUST_REBOOT
+};
+
 static int do_remount(int argc, char* argv[]) {
-    enum {
-        SUCCESS = 0,
-        NOT_USERDEBUG,
-        BADARG,
-        NOT_ROOT,
-        NO_FSTAB,
-        UNKNOWN_PARTITION,
-        INVALID_PARTITION,
-        VERITY_PARTITION,
-        BAD_OVERLAY,
-        NO_MOUNTS,
-        REMOUNT_FAILED,
-    } retval = SUCCESS;
+    RemountStatus retval = REMOUNT_SUCCESS;
 
     // If somehow this executable is delivered on a "user" build, it can
     // not function, so providing a clear message to the caller rather than
@@ -304,8 +307,7 @@ static int do_remount(int argc, char* argv[]) {
     if (partitions.empty() || just_disabled_verity) {
         if (reboot_later) reboot(setup_overlayfs);
         if (user_please_reboot_later) {
-            LOG(INFO) << "Now reboot your device for settings to take effect";
-            return 0;
+            return MUST_REBOOT;
         }
         LOG(WARNING) << "No partitions to remount";
         return retval;
@@ -394,6 +396,12 @@ static int do_remount(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     android::base::InitLogging(argv, MyLogger);
     int result = do_remount(argc, argv);
-    printf("remount %s\n", result ? "failed" : "succeeded");
+    if (result == MUST_REBOOT) {
+        LOG(INFO) << "Now reboot your device for settings to take effect";
+    } else if (result == REMOUNT_SUCCESS) {
+        printf("remount succeeded\n");
+    } else {
+        printf("remount failed\n");
+    }
     return result;
 }
