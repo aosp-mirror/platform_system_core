@@ -758,20 +758,24 @@ static std::chrono::milliseconds GetMillisProperty(const std::string& name,
 
 static Result<void> DoUserspaceReboot() {
     LOG(INFO) << "Userspace reboot initiated";
-    auto guard = android::base::make_scope_guard([] {
+    // An ugly way to pass a more precise reason on why fallback to hard reboot was triggered.
+    std::string sub_reason = "";
+    auto guard = android::base::make_scope_guard([&sub_reason] {
         // Leave shutdown so that we can handle a full reboot.
         LeaveShutdown();
-        trigger_shutdown("reboot,userspace_failed,shutdown_aborted");
+        trigger_shutdown("reboot,userspace_failed,shutdown_aborted," + sub_reason);
     });
     // Triggering userspace-reboot-requested will result in a bunch of setprop
     // actions. We should make sure, that all of them are propagated before
     // proceeding with userspace reboot. Synchronously setting sys.init.userspace_reboot.in_progress
     // property is not perfect, but it should do the trick.
     if (!android::sysprop::InitProperties::userspace_reboot_in_progress(true)) {
+        sub_reason = "setprop";
         return Error() << "Failed to set sys.init.userspace_reboot.in_progress property";
     }
     EnterShutdown();
     if (!SetProperty("sys.powerctl", "")) {
+        sub_reason = "resetprop";
         return Error() << "Failed to reset sys.powerctl property";
     }
     std::vector<Service*> stop_first;
@@ -800,18 +804,22 @@ static Result<void> DoUserspaceReboot() {
     StopServicesAndLogViolations(stop_first, sigterm_timeout, true /* SIGTERM */);
     if (int r = StopServicesAndLogViolations(stop_first, sigkill_timeout, false /* SIGKILL */);
         r > 0) {
+        sub_reason = "sigkill";
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
     if (auto result = KillZramBackingDevice(); !result.ok()) {
+        sub_reason = "zram";
         return result;
     }
     if (auto result = CallVdc("volume", "reset"); !result.ok()) {
+        sub_reason = "vold_reset";
         return result;
     }
     if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */),
                                              sigkill_timeout, false /* SIGKILL */);
         r > 0) {
+        sub_reason = "sigkill_debug";
         // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " debugging services are still running";
     }
@@ -822,9 +830,11 @@ static Result<void> DoUserspaceReboot() {
         LOG(INFO) << "sync() took " << sync_timer;
     }
     if (auto result = UnmountAllApexes(); !result.ok()) {
+        sub_reason = "apex";
         return result;
     }
     if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
+        sub_reason = "ns_switch";
         return Error() << "Failed to switch to bootstrap namespace";
     }
     // Remove services that were defined in an APEX.
