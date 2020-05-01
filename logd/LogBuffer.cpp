@@ -92,11 +92,7 @@ void LogBuffer::init() {
         unlock();
     }
 
-    // We may have been triggered by a SIGHUP. Release any sleeping reader
-    // threads to dump their current content.
-    //
-    // NB: this is _not_ performed in the context of a SIGHUP, it is
-    // performed during startup, and in context of reinit administrative thread
+    // Release any sleeping reader threads to dump their current content.
     LogTimeEntry::wrlock();
 
     LastLogTimes::iterator times = mTimes.begin();

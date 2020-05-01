@@ -31,6 +31,7 @@
 
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
+#include <log/log_properties.h>
 #include <private/android_filesystem_config.h>
 #include <sysutils/SocketClient.h>
 
@@ -296,7 +297,20 @@ int CommandListener::ReinitCmd::runCommand(SocketClient* cli, int /*argc*/,
                                            char** /*argv*/) {
     setname();
 
-    reinit_signal_handler(SIGHUP);
+    android::prdebug("logd reinit");
+    buf()->init();
+    buf()->initPrune(nullptr);
+
+    // This only works on userdebug and eng devices to re-read the
+    // /data/misc/logd/event-log-tags file right after /data is mounted.
+    // The operation is near to boot and should only happen once.  There
+    // are races associated with its use since it can trigger a Rebuild
+    // of the file, but that is a can-not-happen since the file was not
+    // read yet.  More dangerous if called later, but if all is well it
+    // should just skip over everything and not write any new entries.
+    if (__android_log_is_debuggable()) {
+        tags()->ReadFileEventLogTags(tags()->debug_event_log_tags);
+    }
 
     cli->sendMsg("success");
 

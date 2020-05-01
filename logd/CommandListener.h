@@ -24,9 +24,6 @@
 #include "LogReader.h"
 #include "LogTags.h"
 
-// See main.cpp for implementation
-void reinit_signal_handler(int /*signal*/);
-
 class CommandListener : public FrameworkListener {
   public:
     CommandListener(LogBuffer* buf, LogTags* tags);
