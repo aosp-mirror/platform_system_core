@@ -48,6 +48,7 @@ cc_library {
     export_include_dirs: ["include"],
     static_libs: ["libgtest_prod"],
     apex_available: ["com.android.resolv"],
+    min_sdk_version: "29",
 }
 
 cc_test {

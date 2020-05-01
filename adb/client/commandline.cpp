@@ -127,6 +127,8 @@ static void help() {
         "       localfilesystem:<unix domain socket name>\n"
         " reverse --remove REMOTE  remove specific reverse socket connection\n"
         " reverse --remove-all     remove all reverse socket connections from device\n"
+        " mdns check               check if mdns discovery is available\n"
+        " mdns services            list all discovered services\n"
         "\n"
         "file transfer:\n"
         " push [--sync] [-z ALGORITHM] [-Z] LOCAL... REMOTE\n"
@@ -238,6 +240,7 @@ static void help() {
         " $ANDROID_SERIAL          serial number to connect to (see -s)\n"
         " $ANDROID_LOG_TAGS        tags to be used by logcat (see logcat --help)\n"
         " $ADB_LOCAL_TRANSPORT_MAX_PORT max emulator scan port (default 5585, 16 emus)\n"
+        " $ADB_MDNS_AUTO_CONNECT   comma-separated list of mdns services to allow auto-connect (default adb-tls-connect)\n"
     );
     // clang-format on
 }
@@ -1910,6 +1913,29 @@ int adb_commandline(int argc, const char** argv) {
 
         ReadOrderlyShutdown(fd);
         return 0;
+    } else if (!strcmp(argv[0], "mdns")) {
+        --argc;
+        if (argc < 1) error_exit("mdns requires an argument");
+        ++argv;
+
+        std::string error;
+        if (!adb_check_server_version(&error)) {
+            error_exit("failed to check server version: %s", error.c_str());
+        }
+
+        std::string query = "host:mdns:";
+        if (!strcmp(argv[0], "check")) {
+            if (argc != 1) error_exit("mdns %s doesn't take any arguments", argv[0]);
+            query += "check";
+        } else if (!strcmp(argv[0], "services")) {
+            if (argc != 1) error_exit("mdns %s doesn't take any arguments", argv[0]);
+            query += "services";
+            printf("List of discovered mdns services\n");
+        } else {
+            error_exit("unknown mdns command [%s]", argv[0]);
+        }
+
+        return adb_query_command(query);
     }
     /* do_sync_*() commands */
     else if (!strcmp(argv[0], "ls")) {

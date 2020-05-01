@@ -40,6 +40,20 @@ bool LinearExtent::AddTo(LpMetadata* out) const {
     return true;
 }
 
+bool LinearExtent::OverlapsWith(const LinearExtent& other) const {
+    if (device_index_ != other.device_index()) {
+        return false;
+    }
+    return physical_sector() < other.end_sector() && other.physical_sector() < end_sector();
+}
+
+bool LinearExtent::OverlapsWith(const Interval& interval) const {
+    if (device_index_ != interval.device_index) {
+        return false;
+    }
+    return physical_sector() < interval.end && interval.start < end_sector();
+}
+
 Interval LinearExtent::AsInterval() const {
     return Interval(device_index(), physical_sector(), end_sector());
 }
@@ -387,8 +401,8 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
         // untouched to be compatible code that looks for an MBR. Thus we
         // start counting free sectors at sector 1, not 0.
         uint64_t free_area_start = LP_SECTOR_SIZE;
-        if (out.alignment || out.alignment_offset) {
-            free_area_start = AlignTo(free_area_start, out.alignment, out.alignment_offset);
+        if (out.alignment) {
+            free_area_start = AlignTo(free_area_start, out.alignment);
         } else {
             free_area_start = AlignTo(free_area_start, logical_block_size);
         }
@@ -428,7 +442,7 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
     // Compute the first free sector, factoring in alignment.
     uint64_t free_area_start = total_reserved;
     if (super.alignment || super.alignment_offset) {
-        free_area_start = AlignTo(free_area_start, super.alignment, super.alignment_offset);
+        free_area_start = AlignTo(free_area_start, super.alignment);
     } else {
         free_area_start = AlignTo(free_area_start, logical_block_size);
     }
@@ -774,8 +788,7 @@ std::unique_ptr<LinearExtent> MetadataBuilder::ExtendFinalExtent(
 bool MetadataBuilder::IsAnyRegionCovered(const std::vector<Interval>& regions,
                                          const LinearExtent& candidate) const {
     for (const auto& region : regions) {
-        if (region.device_index == candidate.device_index() &&
-            (candidate.OwnsSector(region.start) || candidate.OwnsSector(region.end))) {
+        if (candidate.OverlapsWith(region)) {
             return true;
         }
     }
@@ -786,11 +799,10 @@ bool MetadataBuilder::IsAnyRegionAllocated(const LinearExtent& candidate) const 
     for (const auto& partition : partitions_) {
         for (const auto& extent : partition->extents()) {
             LinearExtent* linear = extent->AsLinearExtent();
-            if (!linear || linear->device_index() != candidate.device_index()) {
+            if (!linear) {
                 continue;
             }
-            if (linear->OwnsSector(candidate.physical_sector()) ||
-                linear->OwnsSector(candidate.end_sector() - 1)) {
+            if (linear->OverlapsWith(candidate)) {
                 return true;
             }
         }
@@ -918,7 +930,7 @@ uint64_t MetadataBuilder::AlignSector(const LpMetadataBlockDevice& block_device,
     // Note: when reading alignment info from the Kernel, we don't assume it
     // is aligned to the sector size, so we round up to the nearest sector.
     uint64_t lba = sector * LP_SECTOR_SIZE;
-    uint64_t aligned = AlignTo(lba, block_device.alignment, block_device.alignment_offset);
+    uint64_t aligned = AlignTo(lba, block_device.alignment);
     return AlignTo(aligned, LP_SECTOR_SIZE) / LP_SECTOR_SIZE;
 }
 
