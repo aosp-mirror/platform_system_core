@@ -51,6 +51,7 @@ cc_library_headers {
         "//apex_available:anyapex",
         "//apex_available:platform",
     ],
+    min_sdk_version: "29",
 }
 
 cc_defaults {
@@ -132,6 +133,7 @@ cc_library {
         "//apex_available:anyapex",
         "//apex_available:platform",
     ],
+    min_sdk_version: "29",
 }
 
 cc_library_static {
@@ -157,6 +159,7 @@ cc_test {
         "errors_test.cpp",
         "expected_test.cpp",
         "file_test.cpp",
+        "logging_splitters_test.cpp",
         "logging_test.cpp",
         "macros_test.cpp",
         "mapped_file_test.cpp",
