@@ -605,6 +605,13 @@ Result<void> ServiceParser::EndSection() {
         }
     }
 
+    if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_R__) {
+        if ((service_->flags() & SVC_CRITICAL) != 0 && (service_->flags() & SVC_ONESHOT) != 0) {
+            return Error() << "service '" << service_->name()
+                           << "' can't be both critical and oneshot";
+        }
+    }
+
     Service* old_service = service_list_->FindService(service_->name());
     if (old_service) {
         if (!service_->is_override()) {
