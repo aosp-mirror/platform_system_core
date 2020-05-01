@@ -225,7 +225,7 @@ bool ReadFdToString(borrowed_fd fd, std::string* content) {
     content->reserve(sb.st_size);
   }
 
-  char buf[BUFSIZ];
+  char buf[BUFSIZ] __attribute__((__uninitialized__));
   ssize_t n;
   while ((n = TEMP_FAILURE_RETRY(read(fd.get(), &buf[0], sizeof(buf)))) > 0) {
     content->append(buf, n);
