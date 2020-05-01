@@ -20,6 +20,7 @@
 #include <sys/types.h>
 
 #include <list>
+#include <optional>
 #include <string>
 
 #include <android/log.h>
@@ -81,9 +82,9 @@ class LogBuffer {
     LogStatistics stats;
 
     PruneList mPrune;
-    // watermark for last per log id
-    LogBufferElementCollection::iterator mLast[LOG_ID_MAX];
-    bool mLastSet[LOG_ID_MAX];
+    // Keeps track of the iterator to the oldest log message of a given log type, as an
+    // optimization when pruning logs.  Use GetOldest() to retrieve.
+    std::optional<LogBufferElementCollection::iterator> mOldest[LOG_ID_MAX];
     // watermark of any worst/chatty uid processing
     typedef std::unordered_map<uid_t, LogBufferElementCollection::iterator>
         LogBufferIteratorMap;
@@ -181,6 +182,10 @@ class LogBuffer {
     bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
     LogBufferElementCollection::iterator erase(
         LogBufferElementCollection::iterator it, bool coalesce = false);
+
+    // Returns an iterator to the oldest element for a given log type, or mLogElements.end() if
+    // there are no logs for the given log type. Requires mLogElementsLock to be held.
+    LogBufferElementCollection::iterator GetOldest(log_id_t log_id);
 };
 
 #endif  // _LOGD_LOG_BUFFER_H__
