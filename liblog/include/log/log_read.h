@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <log/log_id.h>
+#include <android/log.h>
 #include <log/log_time.h>
 
 #ifdef __cplusplus
@@ -46,13 +46,6 @@ struct logger_entry {
   uint32_t lid;      /* log id of the payload, bottom 4 bits currently */
   uint32_t uid;      /* generating process's uid */
 };
-
-/*
- * The maximum size of the log entry payload that can be
- * written to the logger. An attempt to write more than
- * this amount will result in a truncated log entry.
- */
-#define LOGGER_ENTRY_MAX_PAYLOAD 4068
 
 /*
  * The maximum size of a log entry which can be read.

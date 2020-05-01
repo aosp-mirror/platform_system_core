@@ -100,6 +100,7 @@ cc_library_static {
 
 cc_library_static {
     name: "libsnapshot_init",
+    native_coverage : true,
     defaults: ["libsnapshot_defaults"],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
@@ -160,23 +161,23 @@ cc_defaults {
         "snapshot_test.cpp",
     ],
     shared_libs: [
-        "android.hardware.boot@1.0",
-        "android.hardware.boot@1.1",
         "libbinder",
         "libcrypto",
         "libhidlbase",
         "libprotobuf-cpp-lite",
-        "libsparse",
         "libutils",
         "libz",
     ],
     static_libs: [
+        "android.hardware.boot@1.0",
+        "android.hardware.boot@1.1",
         "libfs_mgr",
         "libgsi",
         "libgmock",
         "liblp",
         "libsnapshot",
         "libsnapshot_test_helpers",
+        "libsparse",
     ],
     header_libs: [
         "libstorage_literals_headers",
@@ -243,4 +244,44 @@ cc_test {
         "liblog",
     ],
     gtest: false,
+}
+
+cc_fuzz {
+    name: "libsnapshot_fuzzer",
+
+    // TODO(b/154633114): make host supported.
+    // host_supported: true,
+
+    native_coverage : true,
+    srcs: [
+        "snapshot_fuzz.cpp",
+        "snapshot_fuzz_utils.cpp",
+        "fuzz_utils.cpp",
+    ],
+    static_libs: [
+        "libbase",
+        "libcrypto_static",
+        "libcutils",
+        "libfs_mgr",
+        "libgtest", // from libsnapshot_test_helpers
+        "libgmock", // from libsnapshot_test_helpers
+        "liblog",
+        "liblp",
+        "libsnapshot_init", // don't use binder or hwbinder
+        "libsnapshot_test_helpers",
+        "libprotobuf-cpp-lite",
+        "update_metadata-protos",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+
+    fuzz_config: {
+        cc: ["android-virtual-ab+bugs@google.com"],
+        componentid: 30545,
+        hotlists: ["1646452"],
+        fuzz_on_haiku_host: false,
+        // TODO(b/154633114): set to true to run this automatically.
+        fuzz_on_haiku_device: false,
+    },
 }

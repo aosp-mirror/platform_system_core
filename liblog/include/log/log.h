@@ -29,7 +29,6 @@
 #include <log/log_id.h>
 #include <log/log_main.h>
 #include <log/log_radio.h>
-#include <log/log_read.h>
 #include <log/log_safetynet.h>
 #include <log/log_system.h>
 #include <log/log_time.h>
@@ -63,6 +62,13 @@ extern "C" {
 #define LOG_NDEBUG 0
 #endif
 #endif
+
+/*
+ * The maximum size of the log entry payload that can be
+ * written to the logger. An attempt to write more than
+ * this amount will result in a truncated log entry.
+ */
+#define LOGGER_ENTRY_MAX_PAYLOAD 4068
 
 /*
  * Event logging.
@@ -138,8 +144,11 @@ clockid_t android_log_clockid(void);
 /*
  * Release any logger resources (a new log write will immediately re-acquire)
  *
- * May be used to clean up File descriptors after a Fork, the resources are
- * all O_CLOEXEC so wil self clean on exec().
+ * This is specifically meant to be used by Zygote to close open file descriptors after fork()
+ * and before specialization.  O_CLOEXEC is used on file descriptors, so they will be closed upon
+ * exec() in normal use cases.
+ *
+ * Note that this is not safe to call from a multi-threaded program.
  */
 void __android_log_close(void);
 
