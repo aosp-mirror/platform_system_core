@@ -94,7 +94,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     }
 
     LastLogTimes times;
-    LogBuffer log_buffer(&times);
+    LogTags tags;
+    LogBuffer log_buffer(&times, &tags);
     size_t data_left = size;
     const uint8_t** pdata = &data;
 

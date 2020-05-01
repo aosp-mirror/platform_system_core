@@ -109,8 +109,8 @@ void LogBuffer::init() {
     LogTimeEntry::unlock();
 }
 
-LogBuffer::LogBuffer(LastLogTimes* times)
-    : monotonic(android_log_clockid() == CLOCK_MONOTONIC), mTimes(*times) {
+LogBuffer::LogBuffer(LastLogTimes* times, LogTags* tags)
+    : monotonic(android_log_clockid() == CLOCK_MONOTONIC), mTimes(*times), tags_(tags) {
     pthread_rwlock_init(&mLogElementsLock, nullptr);
 
     log_id_for_each(i) {
@@ -232,7 +232,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
     const char* tag = nullptr;
     size_t tag_len = 0;
     if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
-        tag = tagToName(elem->getTag());
+        tag = tags_->tagToName(elem->getTag());
         if (tag) {
             tag_len = strlen(tag);
         }

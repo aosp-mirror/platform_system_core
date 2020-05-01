@@ -14,85 +14,53 @@
  * limitations under the License.
  */
 
-#ifndef _COMMANDLISTENER_H__
-#define _COMMANDLISTENER_H__
+#pragma once
 
 #include <sysutils/FrameworkListener.h>
+
 #include "LogBuffer.h"
 #include "LogCommand.h"
 #include "LogListener.h"
 #include "LogReader.h"
+#include "LogTags.h"
 
 // See main.cpp for implementation
 void reinit_signal_handler(int /*signal*/);
 
 class CommandListener : public FrameworkListener {
-   public:
-    CommandListener(LogBuffer* buf, LogReader* reader, LogListener* swl);
-    virtual ~CommandListener() {
-    }
+  public:
+    CommandListener(LogBuffer* buf, LogTags* tags);
+    virtual ~CommandListener() {}
 
-   private:
+  private:
     static int getLogSocket();
 
-    class ShutdownCmd : public LogCommand {
-        LogReader& mReader;
-        LogListener& mSwl;
+    LogBuffer* buf_;
+    LogTags* tags_;
 
-       public:
-        ShutdownCmd(LogReader* reader, LogListener* swl);
-        virtual ~ShutdownCmd() {
-        }
-        int runCommand(SocketClient* c, int argc, char** argv);
-    };
-
-#define LogBufferCmd(name)                                      \
+#define LogCmd(name, command_string)                            \
     class name##Cmd : public LogCommand {                       \
-        LogBuffer& mBuf;                                        \
+      public:                                                   \
+        explicit name##Cmd(CommandListener* parent)             \
+            : LogCommand(#command_string), parent_(parent) {}   \
+        virtual ~name##Cmd() {}                                 \
+        int runCommand(SocketClient* c, int argc, char** argv); \
                                                                 \
-       public:                                                  \
-        explicit name##Cmd(LogBuffer* buf);                     \
-        virtual ~name##Cmd() {                                  \
-        }                                                       \
-        int runCommand(SocketClient* c, int argc, char** argv); \
+      private:                                                  \
+        LogBuffer* buf() const { return parent_->buf_; }        \
+        LogTags* tags() const { return parent_->tags_; }        \
+        CommandListener* parent_;                               \
     }
 
-    LogBufferCmd(Clear);
-    LogBufferCmd(GetBufSize);
-    LogBufferCmd(SetBufSize);
-    LogBufferCmd(GetBufSizeUsed);
-    LogBufferCmd(GetStatistics);
-    LogBufferCmd(GetPruneList);
-    LogBufferCmd(SetPruneList);
-    LogBufferCmd(GetEventTag);
-
-#define LogCmd(name)                                            \
-    class name##Cmd : public LogCommand {                       \
-       public:                                                  \
-        name##Cmd();                                            \
-        virtual ~name##Cmd() {                                  \
-        }                                                       \
-        int runCommand(SocketClient* c, int argc, char** argv); \
-    }
-
-    LogCmd(Reinit);
-
-#define LogParentCmd(name)                                      \
-    class name##Cmd : public LogCommand {                       \
-        CommandListener& mParent;                               \
-                                                                \
-       public:                                                  \
-        name##Cmd();                                            \
-        explicit name##Cmd(CommandListener* parent);            \
-        virtual ~name##Cmd() {                                  \
-        }                                                       \
-        int runCommand(SocketClient* c, int argc, char** argv); \
-        void release(SocketClient* c) {                         \
-            mParent.release(c);                                 \
-        }                                                       \
-    }
-
-    LogParentCmd(Exit);
+    LogCmd(Clear, clear);
+    LogCmd(GetBufSize, getLogSize);
+    LogCmd(SetBufSize, setLogSize);
+    LogCmd(GetBufSizeUsed, getLogSizeUsed);
+    LogCmd(GetStatistics, getStatistics);
+    LogCmd(GetPruneList, getPruneList);
+    LogCmd(SetPruneList, setPruneList);
+    LogCmd(GetEventTag, getEventTag);
+    LogCmd(Reinit, reinit);
+    LogCmd(Exit, EXIT);
+#undef LogCmd
 };
-
-#endif

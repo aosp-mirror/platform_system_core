@@ -52,6 +52,7 @@
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogListener.h"
+#include "LogTags.h"
 #include "LogUtils.h"
 
 #define KMSG_PRIORITY(PRI)                                 \
@@ -355,6 +356,9 @@ int main(int argc, char* argv[]) {
         pthread_attr_destroy(&attr);
     }
 
+    // A cache of event log tags
+    LogTags log_tags;
+
     // Serves the purpose of managing the last logs times read on a
     // socket connection, and as a reader lock on a range of log
     // entries.
@@ -364,7 +368,7 @@ int main(int argc, char* argv[]) {
     // LogBuffer is the object which is responsible for holding all
     // log entries.
 
-    logBuf = new LogBuffer(times);
+    logBuf = new LogBuffer(times, &log_tags);
 
     signal(SIGHUP, reinit_signal_handler);
 
@@ -396,7 +400,7 @@ int main(int argc, char* argv[]) {
     // Command listener listens on /dev/socket/logd for incoming logd
     // administrative commands.
 
-    CommandListener* cl = new CommandListener(logBuf, reader, swl);
+    CommandListener* cl = new CommandListener(logBuf, &log_tags);
     if (cl->startListener()) {
         return EXIT_FAILURE;
     }
