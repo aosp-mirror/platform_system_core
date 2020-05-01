@@ -53,6 +53,8 @@ std::string GetDsuSlot(const std::string& install_dir) {
 
 namespace android::snapshot {
 
+const SnapshotFuzzData* current_data = nullptr;
+
 SnapshotFuzzEnv* GetSnapshotFuzzEnv();
 
 FUZZ_CLASS(ISnapshotManager, SnapshotManagerAction);
@@ -164,6 +166,22 @@ void FatalOnlyLogger(LogId logid, LogSeverity severity, const char* tag, const c
                      unsigned int line, const char* message) {
     if (severity == LogSeverity::FATAL) {
         StderrLogger(logid, severity, tag, file, line, message);
+
+        // If test fails by a LOG(FATAL) or CHECK(), log the corpus. If it abort()'s, there's
+        // nothing else we can do.
+        StderrLogger(logid, severity, tag, __FILE__, __LINE__,
+                     "Attempting to dump current corpus:");
+        if (current_data == nullptr) {
+            StderrLogger(logid, severity, tag, __FILE__, __LINE__, "Current corpus is nullptr.");
+        } else {
+            std::string content;
+            if (!google::protobuf::TextFormat::PrintToString(*current_data, &content)) {
+                StderrLogger(logid, severity, tag, __FILE__, __LINE__,
+                             "Failed to print corpus to string.");
+            } else {
+                StderrLogger(logid, severity, tag, __FILE__, __LINE__, content.c_str());
+            }
+        }
     }
 }
 // Stop logging (except fatal messages) after global initialization. This is only done once.
@@ -184,6 +202,8 @@ SnapshotFuzzEnv* GetSnapshotFuzzEnv() {
 
 DEFINE_PROTO_FUZZER(const SnapshotFuzzData& snapshot_fuzz_data) {
     using namespace android::snapshot;
+
+    current_data = &snapshot_fuzz_data;
 
     auto env = GetSnapshotFuzzEnv();
     env->CheckSoftReset();
