@@ -38,6 +38,7 @@
 #include "adb_trace.h"
 #include "adb_utils.h"
 #include "adb_wifi.h"
+#include "client/mdns_utils.h"
 #include "fdevent/fdevent.h"
 #include "sysdeps.h"
 
@@ -319,7 +320,7 @@ class ResolvedService : public AsyncServiceRef {
 
     static void initAdbServiceRegistries();
 
-    static void forEachService(const ServiceRegistry& services, const std::string& hostname,
+    static void forEachService(const ServiceRegistry& services, std::string_view hostname,
                                adb_secure_foreach_service_callback cb);
 
     static bool connectByServiceName(const ServiceRegistry& services,
@@ -362,7 +363,7 @@ void ResolvedService::initAdbServiceRegistries() {
 
 // static
 void ResolvedService::forEachService(const ServiceRegistry& services,
-                                     const std::string& wanted_service_name,
+                                     std::string_view wanted_service_name,
                                      adb_secure_foreach_service_callback cb) {
     initAdbServiceRegistries();
 
@@ -372,7 +373,7 @@ void ResolvedService::forEachService(const ServiceRegistry& services,
         auto ip = service->ipAddress();
         auto port = service->port();
 
-        if (wanted_service_name == "") {
+        if (wanted_service_name.empty()) {
             cb(service_name.c_str(), reg_type.c_str(), ip.c_str(), port);
         } else if (service_name == wanted_service_name) {
             cb(service_name.c_str(), reg_type.c_str(), ip.c_str(), port);
@@ -396,14 +397,12 @@ bool ResolvedService::connectByServiceName(const ServiceRegistry& services,
 
 void adb_secure_foreach_pairing_service(const char* service_name,
                                         adb_secure_foreach_service_callback cb) {
-    ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices,
-                                    service_name ? service_name : "", cb);
+    ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices, service_name, cb);
 }
 
 void adb_secure_foreach_connect_service(const char* service_name,
                                         adb_secure_foreach_service_callback cb) {
-    ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices,
-                                    service_name ? service_name : "", cb);
+    ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices, service_name, cb);
 }
 
 bool adb_secure_connect_by_service_name(const char* service_name) {
@@ -675,4 +674,49 @@ std::string mdns_list_discovered_services() {
     ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices, "", cb);
     ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices, "", cb);
     return result;
+}
+
+std::optional<MdnsInfo> mdns_get_connect_service_info(std::string_view name) {
+    CHECK(!name.empty());
+
+    auto mdns_instance = mdns::mdns_parse_instance_name(name);
+    if (!mdns_instance.has_value()) {
+        D("Failed to parse mDNS name [%s]", name.data());
+        return std::nullopt;
+    }
+
+    std::optional<MdnsInfo> info;
+    auto cb = [&](const char* service_name, const char* reg_type, const char* ip_addr,
+                  uint16_t port) { info.emplace(service_name, reg_type, ip_addr, port); };
+
+    std::string reg_type;
+    if (!mdns_instance->service_name.empty()) {
+        reg_type = android::base::StringPrintf("%s.%s", mdns_instance->service_name.data(),
+                                               mdns_instance->transport_type.data());
+        int index = adb_DNSServiceIndexByName(reg_type);
+        switch (index) {
+            case kADBTransportServiceRefIndex:
+                ResolvedService::forEachService(*ResolvedService::sAdbTransportServices,
+                                                mdns_instance->instance_name, cb);
+                break;
+            case kADBSecureConnectServiceRefIndex:
+                ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices,
+                                                mdns_instance->instance_name, cb);
+                break;
+            default:
+                D("Unknown reg_type [%s]", reg_type.data());
+                return std::nullopt;
+        }
+        return info;
+    }
+
+    for (const auto& service :
+         {ResolvedService::sAdbTransportServices, ResolvedService::sAdbSecureConnectServices}) {
+        ResolvedService::forEachService(*service, name, cb);
+        if (info.has_value()) {
+            return info;
+        }
+    }
+
+    return std::nullopt;
 }
