@@ -170,6 +170,8 @@ class Service {
 
     std::vector<std::string> writepid_files_;
 
+    std::vector<std::string> task_profiles_;
+
     std::set<std::string> interfaces_;  // e.g. some.package.foo@1.0::IBaz/instance-name
 
     // keycodes for triggering this service via /dev/input/input*
