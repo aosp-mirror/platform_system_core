@@ -21,8 +21,15 @@
 namespace android {
 namespace init {
 
+enum FirstStageConsoleParam {
+    DISABLED = 0,
+    CONSOLE_ON_FAILURE = 1,
+    IGNORE_FAILURE = 2,
+    MAX_PARAM_VALUE = IGNORE_FAILURE,
+};
+
 void StartConsole();
-bool FirstStageConsole(const std::string& cmdline);
+int FirstStageConsole(const std::string& cmdline);
 
 }  // namespace init
 }  // namespace android
