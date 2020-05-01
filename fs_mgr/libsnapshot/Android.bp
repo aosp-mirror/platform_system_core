@@ -295,7 +295,6 @@ cc_fuzz {
         componentid: 30545,
         hotlists: ["1646452"],
         fuzz_on_haiku_host: false,
-        // TODO(b/154633114): set to true to run this automatically.
-        fuzz_on_haiku_device: false,
+        fuzz_on_haiku_device: true,
     },
 }
