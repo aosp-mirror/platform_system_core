@@ -33,6 +33,19 @@ message FuzzSnapshotManagerData {
     bool is_local_image_manager = 1;
 }
 
+// A simplified version of CreateLogicalPartitionParams for fuzzing.
+// Next: 9
+message CreateLogicalPartitionParamsProto {
+    bool use_correct_super = 1;
+    string block_device = 2;
+    bool has_metadata_slot = 3;
+    uint32 metadata_slot = 4;
+    string partition_name = 5;
+    bool force_writable = 6;
+    int64 timeout_millis = 7;
+    string device_name = 8;
+}
+
 // Mimics the API of ISnapshotManager. Defines one action on the snapshot
 // manager.
 // Next: 18
@@ -51,8 +64,6 @@ message SnapshotManagerActionProto {
         bool has_metadata_device_object = 1;
         bool metadata_mounted = 2;
     }
-    reserved 8;
-    reserved "map_update_snapshot";
     oneof value {
         NoArgs begin_update = 1;
         NoArgs cancel_update = 2;
@@ -61,6 +72,7 @@ message SnapshotManagerActionProto {
         ProcessUpdateStateArgs process_update_state = 5;
         bool get_update_state = 6;
         chromeos_update_engine.DeltaArchiveManifest create_update_snapshots = 7;
+        CreateLogicalPartitionParamsProto map_update_snapshot = 8;
         string unmap_update_snapshot = 9;
         NoArgs need_snapshots_in_first_stage_mount = 10;
         CreateLogicalAndSnapshotPartitionsArgs create_logical_and_snapshot_partitions = 11;
