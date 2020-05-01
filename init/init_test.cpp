@@ -239,6 +239,28 @@ TEST(init, EventTriggerOrderMultipleFiles) {
     EXPECT_EQ(6, num_executed);
 }
 
+TEST(init, RejectsCriticalAndOneshotService) {
+    std::string init_script =
+            R"init(
+service A something
+  class first
+  critical
+  oneshot
+)init";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(android::base::WriteStringToFd(init_script, tf.fd));
+
+    ServiceList service_list;
+    Parser parser;
+    parser.AddSectionParser("service",
+                            std::make_unique<ServiceParser>(&service_list, nullptr, std::nullopt));
+
+    ASSERT_TRUE(parser.ParseConfig(tf.path));
+    ASSERT_EQ(1u, parser.parse_error_count());
+}
+
 }  // namespace init
 }  // namespace android
 
