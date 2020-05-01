@@ -77,7 +77,15 @@ message SnapshotManagerActionProto {
 message SnapshotFuzzData {
     FuzzDeviceInfoData device_info_data = 1;
     FuzzSnapshotManagerData manager_data = 2;
+
+    // If true:
+    // - if super_data is empty, create empty super partition metadata.
+    // - otherwise, create super partition metadata accordingly.
+    // If false, no valid super partition metadata (it is zeroed)
+    bool is_super_metadata_valid = 3;
+    chromeos_update_engine.DeltaArchiveManifest super_data = 4;
+
     // More data used to prep the test before running actions.
-    reserved 3 to 9999;
+    reserved 5 to 9999;
     repeated SnapshotManagerActionProto actions = 10000;
 }

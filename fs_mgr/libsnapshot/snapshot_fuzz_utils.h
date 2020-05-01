@@ -16,8 +16,10 @@
 
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
+#include <android/snapshot/snapshot_fuzz.pb.h>
 #include <libdm/loop_control.h>
 #include <libfiemap/image_manager.h>
+#include <liblp/liblp.h>
 #include <libsnapshot/auto_device.h>
 #include <libsnapshot/test_helpers.h>
 
@@ -68,6 +70,9 @@ class SnapshotFuzzEnv {
     static std::unique_ptr<AutoDevice> CheckMapSuper(const std::string& fake_persist_path,
                                                      android::dm::LoopControl* control,
                                                      std::string* fake_super);
+
+    void CheckWriteSuperMetadata(const SnapshotFuzzData& proto,
+                                 const android::fs_mgr::IPartitionOpener& opener);
 };
 
 class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
