@@ -360,6 +360,12 @@ Result<void> ServiceParser::ParseShutdown(std::vector<std::string>&& args) {
     return Error() << "Invalid shutdown option";
 }
 
+Result<void> ServiceParser::ParseTaskProfiles(std::vector<std::string>&& args) {
+    args.erase(args.begin());
+    service_->task_profiles_ = std::move(args);
+    return {};
+}
+
 Result<void> ServiceParser::ParseTimeoutPeriod(std::vector<std::string>&& args) {
     int period;
     if (!ParseInt(args[1], &period, 1)) {
@@ -529,6 +535,7 @@ const KeywordMap<ServiceParser::OptionParser>& ServiceParser::GetParserMap() con
         {"sigstop",                 {0,     0,    &ServiceParser::ParseSigstop}},
         {"socket",                  {3,     6,    &ServiceParser::ParseSocket}},
         {"stdio_to_kmsg",           {0,     0,    &ServiceParser::ParseStdioToKmsg}},
+        {"task_profiles",           {1,     kMax, &ServiceParser::ParseTaskProfiles}},
         {"timeout_period",          {1,     1,    &ServiceParser::ParseTimeoutPeriod}},
         {"updatable",               {0,     0,    &ServiceParser::ParseUpdatable}},
         {"user",                    {1,     1,    &ServiceParser::ParseUser}},
@@ -595,6 +602,13 @@ Result<void> ServiceParser::EndSection() {
                     service_->interfaces(), *interface_inheritance_hierarchy_);
             !check_hierarchy_result.ok()) {
             return Error() << check_hierarchy_result.error();
+        }
+    }
+
+    if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_R__) {
+        if ((service_->flags() & SVC_CRITICAL) != 0 && (service_->flags() & SVC_ONESHOT) != 0) {
+            return Error() << "service '" << service_->name()
+                           << "' can't be both critical and oneshot";
         }
     }
 
