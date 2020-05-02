@@ -181,6 +181,13 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     ret.snapshot_status.set_device_size(target_partition->size());
     ret.snapshot_status.set_snapshot_size(target_partition->size());
 
+    if (ret.snapshot_status.snapshot_size() == 0) {
+        LOG(INFO) << "Not creating snapshot for partition " << ret.snapshot_status.name();
+        ret.snapshot_status.set_cow_partition_size(0);
+        ret.snapshot_status.set_cow_file_size(0);
+        return ret;
+    }
+
     // Being the COW partition virtual, its size doesn't affect the storage
     // memory that will be occupied by the target.
     // The actual storage space is affected by the COW file, whose size depends
