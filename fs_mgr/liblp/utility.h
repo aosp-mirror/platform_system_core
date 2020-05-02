@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -66,16 +67,26 @@ int64_t SeekFile64(int fd, int64_t offset, int whence);
 void SHA256(const void* data, size_t length, uint8_t out[32]);
 
 // Align |base| such that it is evenly divisible by |alignment|, which does not
-// have to be a power of two.
-constexpr uint64_t AlignTo(uint64_t base, uint32_t alignment) {
+// have to be a power of two. Return false on overflow.
+template <typename T>
+bool AlignTo(T base, uint32_t alignment, T* out) {
+    static_assert(std::numeric_limits<T>::is_integer);
+    static_assert(!std::numeric_limits<T>::is_signed);
     if (!alignment) {
-        return base;
+        *out = base;
+        return true;
     }
-    uint64_t remainder = base % alignment;
+    T remainder = base % alignment;
     if (remainder == 0) {
-        return base;
+        *out = base;
+        return true;
     }
-    return base + (alignment - remainder);
+    T to_add = alignment - remainder;
+    if (to_add > std::numeric_limits<T>::max() - base) {
+        return false;
+    }
+    *out = base + to_add;
+    return true;
 }
 
 // Update names from C++ strings.
