@@ -18,8 +18,8 @@ build_normal() (
 
 build_cov() {
     pushd $(gettop)
-    ret=$?
     NATIVE_COVERAGE="true" NATIVE_LINE_COVERAGE="true" COVERAGE_PATHS="${PROJECT_PATH}" m ${FUZZ_TARGET}
+    ret=$?
     popd
     return ${ret}
 }
@@ -46,7 +46,7 @@ prepare_host() {
 }
 
 # run_snapshot_fuzz -runs=10000
-generate_corpse() {
+generate_corpus() {
     [[ "$@" ]] || { echo "run with -runs=X"; return 1; }
 
     prepare_device &&
