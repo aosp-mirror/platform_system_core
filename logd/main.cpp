@@ -289,6 +289,8 @@ int main(int argc, char* argv[]) {
 
     // A cache of event log tags
     LogTags log_tags;
+    // Pruning configuration.
+    PruneList prune_list;
 
     // Serves the purpose of managing the last logs times read on a
     // socket connection, and as a reader lock on a range of log
@@ -299,7 +301,7 @@ int main(int argc, char* argv[]) {
     // LogBuffer is the object which is responsible for holding all
     // log entries.
 
-    LogBuffer* logBuf = new LogBuffer(times, &log_tags);
+    LogBuffer* logBuf = new LogBuffer(times, &log_tags, &prune_list);
 
     if (__android_logger_property_get_bool(
             "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
@@ -329,7 +331,7 @@ int main(int argc, char* argv[]) {
     // Command listener listens on /dev/socket/logd for incoming logd
     // administrative commands.
 
-    CommandListener* cl = new CommandListener(logBuf, &log_tags);
+    CommandListener* cl = new CommandListener(logBuf, &log_tags, &prune_list);
     if (cl->startListener()) {
         return EXIT_FAILURE;
     }

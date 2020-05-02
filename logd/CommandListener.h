@@ -23,10 +23,11 @@
 #include "LogListener.h"
 #include "LogReader.h"
 #include "LogTags.h"
+#include "LogWhiteBlackList.h"
 
 class CommandListener : public FrameworkListener {
   public:
-    CommandListener(LogBuffer* buf, LogTags* tags);
+    CommandListener(LogBuffer* buf, LogTags* tags, PruneList* prune);
     virtual ~CommandListener() {}
 
   private:
@@ -34,6 +35,7 @@ class CommandListener : public FrameworkListener {
 
     LogBuffer* buf_;
     LogTags* tags_;
+    PruneList* prune_;
 
 #define LogCmd(name, command_string)                            \
     class name##Cmd : public LogCommand {                       \
@@ -46,6 +48,7 @@ class CommandListener : public FrameworkListener {
       private:                                                  \
         LogBuffer* buf() const { return parent_->buf_; }        \
         LogTags* tags() const { return parent_->tags_; }        \
+        PruneList* prune() const { return parent_->prune_; }    \
         CommandListener* parent_;                               \
     }
 

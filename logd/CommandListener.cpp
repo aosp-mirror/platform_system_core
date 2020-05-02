@@ -39,8 +39,8 @@
 #include "LogCommand.h"
 #include "LogUtils.h"
 
-CommandListener::CommandListener(LogBuffer* buf, LogTags* tags)
-    : FrameworkListener(getLogSocket()), buf_(buf), tags_(tags) {
+CommandListener::CommandListener(LogBuffer* buf, LogTags* tags, PruneList* prune)
+    : FrameworkListener(getLogSocket()), buf_(buf), tags_(tags), prune_(prune) {
     registerCmd(new ClearCmd(this));
     registerCmd(new GetBufSizeCmd(this));
     registerCmd(new SetBufSizeCmd(this));
@@ -216,7 +216,7 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient* cli, int argc,
 int CommandListener::GetPruneListCmd::runCommand(SocketClient* cli,
                                                  int /*argc*/, char** /*argv*/) {
     setname();
-    cli->sendMsg(PackageString(buf()->formatPrune()).c_str());
+    cli->sendMsg(PackageString(prune()->format()).c_str());
     return 0;
 }
 
@@ -236,7 +236,7 @@ int CommandListener::SetPruneListCmd::runCommand(SocketClient* cli, int argc,
         str += argv[i];
     }
 
-    int ret = buf()->initPrune(str.c_str());
+    int ret = prune()->init(str.c_str());
 
     if (ret) {
         cli->sendMsg("Invalid");
@@ -299,7 +299,7 @@ int CommandListener::ReinitCmd::runCommand(SocketClient* cli, int /*argc*/,
 
     android::prdebug("logd reinit");
     buf()->init();
-    buf()->initPrune(nullptr);
+    prune()->init(nullptr);
 
     // This only works on userdebug and eng devices to re-read the
     // /data/misc/logd/event-log-tags file right after /data is mounted.

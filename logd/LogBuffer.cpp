@@ -105,8 +105,11 @@ void LogBuffer::init() {
     LogTimeEntry::unlock();
 }
 
-LogBuffer::LogBuffer(LastLogTimes* times, LogTags* tags)
-    : monotonic(android_log_clockid() == CLOCK_MONOTONIC), mTimes(*times), tags_(tags) {
+LogBuffer::LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune)
+    : monotonic(android_log_clockid() == CLOCK_MONOTONIC),
+      mTimes(*times),
+      tags_(tags),
+      prune_(prune) {
     pthread_rwlock_init(&mLogElementsLock, nullptr);
 
     log_id_for_each(i) {
@@ -694,7 +697,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     }
 
     // prune by worst offenders; by blacklist, UID, and by PID of system UID
-    bool hasBlacklist = (id != LOG_ID_SECURITY) && mPrune.naughty();
+    bool hasBlacklist = (id != LOG_ID_SECURITY) && prune_->naughty();
     while (!clearAll && (pruneRows > 0)) {
         // recalculate the worst offender on every batched pass
         int worst = -1;  // not valid for getUid() or getKey()
@@ -702,7 +705,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         size_t second_worst_sizes = 0;
         pid_t worstPid = 0;  // POSIX guarantees PID != 0
 
-        if (worstUidEnabledForLogid(id) && mPrune.worstUidEnabled()) {
+        if (worstUidEnabledForLogid(id) && prune_->worstUidEnabled()) {
             // Calculate threshold as 12.5% of available storage
             size_t threshold = log_buffer_size(id) / 8;
 
@@ -716,7 +719,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                     .findWorst(worst, worst_sizes, second_worst_sizes,
                                threshold);
 
-                if ((worst == AID_SYSTEM) && mPrune.worstPidOfSystemEnabled()) {
+                if ((worst == AID_SYSTEM) && prune_->worstPidOfSystemEnabled()) {
                     stats.sortPids(worst, (pid_t)0, 2, id)
                         .findWorst(worstPid, worst_sizes, second_worst_sizes);
                 }
@@ -798,7 +801,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                           ? element->getTag()
                           : element->getUid();
 
-            if (hasBlacklist && mPrune.naughty(element)) {
+            if (hasBlacklist && prune_->naughty(element)) {
                 last.clear(element);
                 it = erase(it);
                 if (dropped) {
@@ -895,13 +898,13 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
         last.clear();
 
-        if (!kick || !mPrune.worstUidEnabled()) {
+        if (!kick || !prune_->worstUidEnabled()) {
             break;  // the following loop will ask bad clients to skip/drop
         }
     }
 
     bool whitelist = false;
-    bool hasWhitelist = (id != LOG_ID_SECURITY) && mPrune.nice() && !clearAll;
+    bool hasWhitelist = (id != LOG_ID_SECURITY) && prune_->nice() && !clearAll;
     it = GetOldest(id);
     while ((pruneRows > 0) && (it != mLogElements.end())) {
         LogBufferElement* element = *it;
@@ -917,7 +920,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             break;
         }
 
-        if (hasWhitelist && !element->getDropped() && mPrune.nice(element)) {
+        if (hasWhitelist && !element->getDropped() && prune_->nice(element)) {
             // WhiteListed
             whitelist = true;
             it++;
