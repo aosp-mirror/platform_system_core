@@ -322,6 +322,10 @@ runs the service.
   This is mutually exclusive with the console option, which additionally connects stdin to the
   given console.
 
+`task_profiles <profile> [ <profile>\* ]`
+> Set task profiles for the process when it forks. This is designed to replace the use of
+  writepid option for moving a process into a cgroup.
+
 `timeout_period <seconds>`
 > Provide a timeout after which point the service will be killed. The oneshot keyword is respected
   here, so oneshot services do not automatically restart, however all other services will.
@@ -356,6 +360,8 @@ runs the service.
   cgroup/cpuset usage. If no files under /dev/cpuset/ are specified, but the
   system property 'ro.cpuset.default' is set to a non-empty cpuset name (e.g.
   '/foreground'), then the pid is written to file /dev/cpuset/_cpuset\_name_/tasks.
+  The use of this option for moving a process into a cgroup is obsolete. Please
+  use task_profiles option instead.
 
 
 Triggers
