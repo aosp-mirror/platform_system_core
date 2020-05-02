@@ -22,4 +22,17 @@ void CheckInternal(bool value, std::string_view msg) {
     CHECK(value) << msg;
 }
 
+const google::protobuf::OneofDescriptor* GetProtoValueDescriptor(
+        const google::protobuf::Descriptor* action_desc) {
+    CHECK(action_desc);
+    CHECK(action_desc->oneof_decl_count() == 1)
+            << action_desc->oneof_decl_count() << " oneof fields found in " << action_desc->name()
+            << "; only one is expected.";
+    auto* oneof_value_desc = action_desc->oneof_decl(0);
+    CHECK(oneof_value_desc);
+    CHECK(oneof_value_desc->name() == "value")
+            << "oneof field has name " << oneof_value_desc->name();
+    return oneof_value_desc;
+}
+
 }  // namespace android::fuzz
