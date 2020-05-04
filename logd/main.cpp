@@ -52,6 +52,7 @@
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogListener.h"
+#include "LogTags.h"
 #include "LogUtils.h"
 
 #define KMSG_PRIORITY(PRI)                                 \
@@ -150,50 +151,6 @@ void android::prdebug(const char* fmt, ...) {
     }
 }
 
-static sem_t reinit;
-static bool reinit_running = false;
-static LogBuffer* logBuf = nullptr;
-
-static void* reinit_thread_start(void* /*obj*/) {
-    prctl(PR_SET_NAME, "logd.daemon");
-
-    while (reinit_running && !sem_wait(&reinit) && reinit_running) {
-        if (fdDmesg >= 0) {
-            static const char reinit_message[] = { KMSG_PRIORITY(LOG_INFO),
-                                                   'l',
-                                                   'o',
-                                                   'g',
-                                                   'd',
-                                                   '.',
-                                                   'd',
-                                                   'a',
-                                                   'e',
-                                                   'm',
-                                                   'o',
-                                                   'n',
-                                                   ':',
-                                                   ' ',
-                                                   'r',
-                                                   'e',
-                                                   'i',
-                                                   'n',
-                                                   'i',
-                                                   't',
-                                                   '\n' };
-            write(fdDmesg, reinit_message, sizeof(reinit_message));
-        }
-
-        // Anything that reads persist.<property>
-        if (logBuf) {
-            logBuf->init();
-            logBuf->initPrune(nullptr);
-        }
-        android::ReReadEventLogTags();
-    }
-
-    return nullptr;
-}
-
 char* android::uidToName(uid_t u) {
     struct Userdata {
         uid_t uid;
@@ -218,12 +175,6 @@ char* android::uidToName(uid_t u) {
             &userdata);
 
     return userdata.name;
-}
-
-// Serves as a global method to trigger reinitialization
-// and as a function that can be provided to signal().
-void reinit_signal_handler(int /*signal*/) {
-    sem_post(&reinit);
 }
 
 static void readDmesg(LogAudit* al, LogKlog* kl) {
@@ -336,24 +287,10 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Reinit Thread
-    sem_init(&reinit, 0, 0);
-    pthread_attr_t attr;
-    if (!pthread_attr_init(&attr)) {
-        struct sched_param param;
-
-        memset(&param, 0, sizeof(param));
-        pthread_attr_setschedparam(&attr, &param);
-        pthread_attr_setschedpolicy(&attr, SCHED_BATCH);
-        if (!pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
-            pthread_t thread;
-            reinit_running = true;
-            if (pthread_create(&thread, &attr, reinit_thread_start, nullptr)) {
-                reinit_running = false;
-            }
-        }
-        pthread_attr_destroy(&attr);
-    }
+    // A cache of event log tags
+    LogTags log_tags;
+    // Pruning configuration.
+    PruneList prune_list;
 
     // Serves the purpose of managing the last logs times read on a
     // socket connection, and as a reader lock on a range of log
@@ -364,9 +301,7 @@ int main(int argc, char* argv[]) {
     // LogBuffer is the object which is responsible for holding all
     // log entries.
 
-    logBuf = new LogBuffer(times);
-
-    signal(SIGHUP, reinit_signal_handler);
+    LogBuffer* logBuf = new LogBuffer(times, &log_tags, &prune_list);
 
     if (__android_logger_property_get_bool(
             "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
@@ -396,7 +331,7 @@ int main(int argc, char* argv[]) {
     // Command listener listens on /dev/socket/logd for incoming logd
     // administrative commands.
 
-    CommandListener* cl = new CommandListener(logBuf, reader, swl);
+    CommandListener* cl = new CommandListener(logBuf, &log_tags, &prune_list);
     if (cl->startListener()) {
         return EXIT_FAILURE;
     }
