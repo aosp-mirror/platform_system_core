@@ -62,14 +62,22 @@ class SnapshotFuzzEnv {
   private:
     std::unique_ptr<AutoMemBasedDir> fake_root_;
     std::unique_ptr<android::dm::LoopControl> loop_control_;
+    std::string fake_data_mount_point_;
+    std::unique_ptr<AutoDevice> auto_delete_data_mount_point_;
     std::unique_ptr<AutoDevice> mapped_super_;
     std::string fake_super_;
+    std::unique_ptr<AutoDevice> mapped_data_;
+    std::string fake_data_block_device_;
+    std::unique_ptr<AutoDevice> mounted_data_;
 
     static std::unique_ptr<android::fiemap::IImageManager> CheckCreateFakeImageManager(
-            const std::string& fake_tmp_path);
-    static std::unique_ptr<AutoDevice> CheckMapSuper(const std::string& fake_persist_path,
+            const std::string& metadata_dir, const std::string& data_dir);
+    static std::unique_ptr<AutoDevice> CheckMapImage(const std::string& fake_persist_path,
+                                                     uint64_t size,
                                                      android::dm::LoopControl* control,
-                                                     std::string* fake_super);
+                                                     std::string* mapped_path);
+    static std::unique_ptr<AutoDevice> CheckMountFormatData(const std::string& blk_device,
+                                                            const std::string& mount_point);
 
     void CheckWriteSuperMetadata(const SnapshotFuzzData& proto,
                                  const android::fs_mgr::IPartitionOpener& opener);

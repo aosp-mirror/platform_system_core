@@ -25,6 +25,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <fs_mgr.h>
 #include <libsnapshot/auto_device.h>
 #include <libsnapshot/snapshot.h>
 #include <storage_literals/storage_literals.h>
@@ -48,14 +49,15 @@ using android::dm::LoopControl;
 using android::fiemap::IImageManager;
 using android::fiemap::ImageManager;
 using android::fs_mgr::BlockDeviceInfo;
+using android::fs_mgr::FstabEntry;
 using android::fs_mgr::IPartitionOpener;
 using chromeos_update_engine::DynamicPartitionMetadata;
 
-// This directory is exempted from pinning in ImageManager.
-static const char MNT_DIR[] = "/data/gsi/ota/test/";
+static const char MNT_DIR[] = "/mnt";
 
 static const char FAKE_ROOT_NAME[] = "snapshot_fuzz";
 static const auto SUPER_IMAGE_SIZE = 16_MiB;
+static const auto DATA_IMAGE_SIZE = 16_MiB;
 static const auto FAKE_ROOT_SIZE = 64_MiB;
 
 namespace android::snapshot {
@@ -119,6 +121,17 @@ class AutoDeleteDir : public AutoDevice {
 
 class AutoUnmount : public AutoDevice {
   public:
+    ~AutoUnmount() {
+        if (!HasDevice()) return;
+        if (umount(name_.c_str()) == -1) {
+            PLOG(ERROR) << "Cannot umount " << name_;
+        }
+    }
+    AutoUnmount(const std::string& path) : AutoDevice(path) {}
+};
+
+class AutoUnmountTmpfs : public AutoUnmount {
+  public:
     static std::unique_ptr<AutoUnmount> New(const std::string& path, uint64_t size) {
         if (mount("tmpfs", path.c_str(), "tmpfs", 0,
                   (void*)StringPrintf("size=%" PRIu64, size).data()) == -1) {
@@ -127,30 +140,20 @@ class AutoUnmount : public AutoDevice {
         }
         return std::unique_ptr<AutoUnmount>(new AutoUnmount(path));
     }
-    ~AutoUnmount() {
-        if (!HasDevice()) return;
-        if (umount(name_.c_str()) == -1) {
-            PLOG(ERROR) << "Cannot umount " << name_;
-        }
-    }
-
   private:
-    AutoUnmount(const std::string& path) : AutoDevice(path) {}
+    using AutoUnmount::AutoUnmount;
 };
 
 // A directory on tmpfs. Upon destruct, it is unmounted and deleted.
 class AutoMemBasedDir : public AutoDevice {
   public:
     static std::unique_ptr<AutoMemBasedDir> New(const std::string& name, uint64_t size) {
-        if (!Mkdir(MNT_DIR)) {
-            return std::unique_ptr<AutoMemBasedDir>(new AutoMemBasedDir(""));
-        }
         auto ret = std::unique_ptr<AutoMemBasedDir>(new AutoMemBasedDir(name));
         ret->auto_delete_mount_dir_ = AutoDeleteDir::New(ret->mount_path());
         if (!ret->auto_delete_mount_dir_->HasDevice()) {
             return std::unique_ptr<AutoMemBasedDir>(new AutoMemBasedDir(""));
         }
-        ret->auto_umount_mount_point_ = AutoUnmount::New(ret->mount_path(), size);
+        ret->auto_umount_mount_point_ = AutoUnmountTmpfs::New(ret->mount_path(), size);
         if (!ret->auto_umount_mount_point_->HasDevice()) {
             return std::unique_ptr<AutoMemBasedDir>(new AutoMemBasedDir(""));
         }
@@ -195,7 +198,18 @@ SnapshotFuzzEnv::SnapshotFuzzEnv() {
     CHECK(fake_root_ != nullptr);
     CHECK(fake_root_->HasDevice());
     loop_control_ = std::make_unique<LoopControl>();
-    mapped_super_ = CheckMapSuper(fake_root_->persist_path(), loop_control_.get(), &fake_super_);
+
+    fake_data_mount_point_ = MNT_DIR + "/snapshot_fuzz_data"s;
+    auto_delete_data_mount_point_ = AutoDeleteDir::New(fake_data_mount_point_);
+    CHECK(auto_delete_data_mount_point_ != nullptr);
+    CHECK(auto_delete_data_mount_point_->HasDevice());
+
+    const auto& fake_persist_path = fake_root_->persist_path();
+    mapped_super_ = CheckMapImage(fake_persist_path + "/super.img", SUPER_IMAGE_SIZE,
+                                  loop_control_.get(), &fake_super_);
+    mapped_data_ = CheckMapImage(fake_persist_path + "/data.img", DATA_IMAGE_SIZE,
+                                 loop_control_.get(), &fake_data_block_device_);
+    mounted_data_ = CheckMountFormatData(fake_data_block_device_, fake_data_mount_point_);
 }
 
 SnapshotFuzzEnv::~SnapshotFuzzEnv() = default;
@@ -211,12 +225,7 @@ void SnapshotFuzzEnv::CheckSoftReset() {
 }
 
 std::unique_ptr<IImageManager> SnapshotFuzzEnv::CheckCreateFakeImageManager(
-        const std::string& path) {
-    auto images_dir = path + "/images";
-    auto metadata_dir = images_dir + "/metadata";
-    auto data_dir = images_dir + "/data";
-
-    PCHECK(Mkdir(images_dir));
+        const std::string& metadata_dir, const std::string& data_dir) {
     PCHECK(Mkdir(metadata_dir));
     PCHECK(Mkdir(data_dir));
     return ImageManager::Open(metadata_dir, data_dir);
@@ -242,14 +251,13 @@ class AutoDetachLoopDevice : public AutoDevice {
     LoopControl* control_;
 };
 
-std::unique_ptr<AutoDevice> SnapshotFuzzEnv::CheckMapSuper(const std::string& fake_persist_path,
-                                                           LoopControl* control,
-                                                           std::string* fake_super) {
-    auto super_img = fake_persist_path + "/super.img";
-    CheckZeroFill(super_img, SUPER_IMAGE_SIZE);
-    CheckCreateLoopDevice(control, super_img, 1s, fake_super);
+std::unique_ptr<AutoDevice> SnapshotFuzzEnv::CheckMapImage(const std::string& img_path,
+                                                           uint64_t size, LoopControl* control,
+                                                           std::string* mapped_path) {
+    CheckZeroFill(img_path, size);
+    CheckCreateLoopDevice(control, img_path, 1s, mapped_path);
 
-    return std::make_unique<AutoDetachLoopDevice>(control, *fake_super);
+    return std::make_unique<AutoDetachLoopDevice>(control, *mapped_path);
 }
 
 std::unique_ptr<ISnapshotManager> SnapshotFuzzEnv::CheckCreateSnapshotManager(
@@ -265,7 +273,9 @@ std::unique_ptr<ISnapshotManager> SnapshotFuzzEnv::CheckCreateSnapshotManager(
     auto device_info = new SnapshotFuzzDeviceInfo(data.device_info_data(),
                                                   std::move(partition_opener), metadata_dir);
     auto snapshot = SnapshotManager::New(device_info /* takes ownership */);
-    snapshot->images_ = CheckCreateFakeImageManager(fake_root_->tmp_path());
+    snapshot->images_ =
+            CheckCreateFakeImageManager(fake_root_->tmp_path() + "/images_manager_metadata",
+                                        fake_data_mount_point_ + "/image_manager_data");
     snapshot->has_local_image_manager_ = data.manager_data().is_local_image_manager();
 
     return snapshot;
@@ -312,6 +322,19 @@ void SnapshotFuzzEnv::CheckWriteSuperMetadata(const SnapshotFuzzData& data,
         CHECK(metadata != nullptr);
     }
     CHECK(FlashPartitionTable(opener, super(), *metadata.get()));
+}
+
+std::unique_ptr<AutoDevice> SnapshotFuzzEnv::CheckMountFormatData(const std::string& blk_device,
+                                                                  const std::string& mount_point) {
+    FstabEntry entry{
+            .blk_device = blk_device,
+            .length = static_cast<off64_t>(DATA_IMAGE_SIZE),
+            .fs_type = "ext4",
+            .mount_point = mount_point,
+    };
+    CHECK(0 == fs_mgr_do_format(entry, false /* crypt_footer */));
+    CHECK(0 == fs_mgr_do_mount_one(entry));
+    return std::make_unique<AutoUnmount>(mount_point);
 }
 
 }  // namespace android::snapshot
