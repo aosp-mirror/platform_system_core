@@ -24,11 +24,14 @@
 #include <cutils/sockets.h>
 #include <private/android_logger.h>
 
-#include "FlushCommand.h"
 #include "LogBuffer.h"
 #include "LogBufferElement.h"
 #include "LogReader.h"
 #include "LogUtils.h"
+
+static bool CanReadSecurityLogs(SocketClient* client) {
+    return client->getUid() == AID_SYSTEM || client->getGid() == AID_SYSTEM;
+}
 
 LogReader::LogReader(LogBuffer* logbuf)
     : SocketListener(getLogSocket(), true), mLogbuf(*logbuf) {
@@ -36,9 +39,20 @@ LogReader::LogReader(LogBuffer* logbuf)
 
 // When we are notified a new log entry is available, inform
 // listening sockets who are watching this entry's log id.
-void LogReader::notifyNewLog(log_mask_t logMask) {
-    FlushCommand command(*this, logMask);
-    runOnEachSocket(&command);
+void LogReader::notifyNewLog(log_mask_t log_mask) {
+    LastLogTimes& times = mLogbuf.mTimes;
+
+    LogTimeEntry::wrlock();
+    for (const auto& entry : times) {
+        if (!entry->isWatchingMultiple(log_mask)) {
+            continue;
+        }
+        if (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec) {
+            continue;
+        }
+        entry->triggerReader_Locked();
+    }
+    LogTimeEntry::unlock();
 }
 
 // Note returning false will release the SocketClient instance.
@@ -129,6 +143,9 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         nonBlock = true;
     }
 
+    bool privileged = clientHasLogCredentials(cli);
+    bool can_read_security = CanReadSecurityLogs(cli);
+
     uint64_t sequence = 1;
     // Convert realtime to sequence number
     if (start != log_time::EPOCH) {
@@ -178,8 +195,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         } logFindStart(logMask, pid, start, sequence,
                        logbuf().isMonotonic() && android::isMonotonic(start));
 
-        logbuf().flushTo(cli, sequence, nullptr, FlushCommand::hasReadLogs(cli),
-                         FlushCommand::hasSecurityLogs(cli),
+        logbuf().flushTo(cli, sequence, nullptr, privileged, can_read_security,
                          logFindStart.callback, &logFindStart);
 
         if (!logFindStart.found()) {
@@ -203,7 +219,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
 
     LogTimeEntry::wrlock();
     auto entry = std::make_unique<LogTimeEntry>(*this, cli, nonBlock, tail, logMask, pid, start,
-                                                sequence, timeout);
+                                                sequence, timeout, privileged, can_read_security);
     if (!entry->startReader_Locked()) {
         LogTimeEntry::unlock();
         return false;
