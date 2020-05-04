@@ -92,11 +92,7 @@ void LogBuffer::init() {
         unlock();
     }
 
-    // We may have been triggered by a SIGHUP. Release any sleeping reader
-    // threads to dump their current content.
-    //
-    // NB: this is _not_ performed in the context of a SIGHUP, it is
-    // performed during startup, and in context of reinit administrative thread
+    // Release any sleeping reader threads to dump their current content.
     LogTimeEntry::wrlock();
 
     LastLogTimes::iterator times = mTimes.begin();
@@ -109,8 +105,11 @@ void LogBuffer::init() {
     LogTimeEntry::unlock();
 }
 
-LogBuffer::LogBuffer(LastLogTimes* times)
-    : monotonic(android_log_clockid() == CLOCK_MONOTONIC), mTimes(*times) {
+LogBuffer::LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune)
+    : monotonic(android_log_clockid() == CLOCK_MONOTONIC),
+      mTimes(*times),
+      tags_(tags),
+      prune_(prune) {
     pthread_rwlock_init(&mLogElementsLock, nullptr);
 
     log_id_for_each(i) {
@@ -130,14 +129,14 @@ LogBuffer::~LogBuffer() {
 
 LogBufferElementCollection::iterator LogBuffer::GetOldest(log_id_t log_id) {
     auto it = mLogElements.begin();
-    if (mOldest[log_id]) {
-        it = *mOldest[log_id];
+    if (oldest_[log_id]) {
+        it = *oldest_[log_id];
     }
     while (it != mLogElements.end() && (*it)->getLogId() != log_id) {
         it++;
     }
     if (it != mLogElements.end()) {
-        mOldest[log_id] = it;
+        oldest_[log_id] = it;
     }
     return it;
 }
@@ -232,7 +231,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
     const char* tag = nullptr;
     size_t tag_len = 0;
     if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
-        tag = tagToName(elem->getTag());
+        tag = tags_->tagToName(elem->getTag());
         if (tag) {
             tag_len = strlen(tag);
         }
@@ -461,7 +460,7 @@ LogBufferElementCollection::iterator LogBuffer::erase(
 
     bool setLast[LOG_ID_MAX];
     bool doSetLast = false;
-    log_id_for_each(i) { doSetLast |= setLast[i] = mOldest[i] && it == *mOldest[i]; }
+    log_id_for_each(i) { doSetLast |= setLast[i] = oldest_[i] && it == *oldest_[i]; }
 #ifdef DEBUG_CHECK_FOR_STALE_ENTRIES
     LogBufferElementCollection::iterator bad = it;
     int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY))
@@ -473,9 +472,9 @@ LogBufferElementCollection::iterator LogBuffer::erase(
         log_id_for_each(i) {
             if (setLast[i]) {
                 if (__predict_false(it == mLogElements.end())) {
-                    mOldest[i] = std::nullopt;
+                    oldest_[i] = std::nullopt;
                 } else {
-                    mOldest[i] = it;  // Store the next iterator even if it does not correspond to
+                    oldest_[i] = it;  // Store the next iterator even if it does not correspond to
                                       // the same log_id, as a starting point for GetOldest().
                 }
             }
@@ -698,7 +697,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     }
 
     // prune by worst offenders; by blacklist, UID, and by PID of system UID
-    bool hasBlacklist = (id != LOG_ID_SECURITY) && mPrune.naughty();
+    bool hasBlacklist = (id != LOG_ID_SECURITY) && prune_->naughty();
     while (!clearAll && (pruneRows > 0)) {
         // recalculate the worst offender on every batched pass
         int worst = -1;  // not valid for getUid() or getKey()
@@ -706,7 +705,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         size_t second_worst_sizes = 0;
         pid_t worstPid = 0;  // POSIX guarantees PID != 0
 
-        if (worstUidEnabledForLogid(id) && mPrune.worstUidEnabled()) {
+        if (worstUidEnabledForLogid(id) && prune_->worstUidEnabled()) {
             // Calculate threshold as 12.5% of available storage
             size_t threshold = log_buffer_size(id) / 8;
 
@@ -720,7 +719,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                     .findWorst(worst, worst_sizes, second_worst_sizes,
                                threshold);
 
-                if ((worst == AID_SYSTEM) && mPrune.worstPidOfSystemEnabled()) {
+                if ((worst == AID_SYSTEM) && prune_->worstPidOfSystemEnabled()) {
                     stats.sortPids(worst, (pid_t)0, 2, id)
                         .findWorst(worstPid, worst_sizes, second_worst_sizes);
                 }
@@ -802,7 +801,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                           ? element->getTag()
                           : element->getUid();
 
-            if (hasBlacklist && mPrune.naughty(element)) {
+            if (hasBlacklist && prune_->naughty(element)) {
                 last.clear(element);
                 it = erase(it);
                 if (dropped) {
@@ -899,13 +898,13 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
         last.clear();
 
-        if (!kick || !mPrune.worstUidEnabled()) {
+        if (!kick || !prune_->worstUidEnabled()) {
             break;  // the following loop will ask bad clients to skip/drop
         }
     }
 
     bool whitelist = false;
-    bool hasWhitelist = (id != LOG_ID_SECURITY) && mPrune.nice() && !clearAll;
+    bool hasWhitelist = (id != LOG_ID_SECURITY) && prune_->nice() && !clearAll;
     it = GetOldest(id);
     while ((pruneRows > 0) && (it != mLogElements.end())) {
         LogBufferElement* element = *it;
@@ -921,7 +920,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             break;
         }
 
-        if (hasWhitelist && !element->getDropped() && mPrune.nice(element)) {
+        if (hasWhitelist && !element->getDropped() && prune_->nice(element)) {
             // WhiteListed
             whitelist = true;
             it++;

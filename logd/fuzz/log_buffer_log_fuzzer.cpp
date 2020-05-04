@@ -94,12 +94,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     }
 
     LastLogTimes times;
-    LogBuffer log_buffer(&times);
+    LogTags tags;
+    PruneList prune_list;
+    LogBuffer log_buffer(&times, &tags, &prune_list);
     size_t data_left = size;
     const uint8_t** pdata = &data;
 
     log_buffer.enableStatistics();
-    log_buffer.initPrune(nullptr);
+    prune_list.init(nullptr);
     // We want to get pruning code to get called.
     log_id_for_each(i) { log_buffer.setSize(i, 10000); }
 
