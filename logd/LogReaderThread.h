@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_TIMES_H__
-#define _LOGD_LOG_TIMES_H__
+#pragma once
 
 #include <pthread.h>
 #include <sys/socket.h>
@@ -33,7 +32,7 @@ typedef unsigned int log_mask_t;
 class LogReader;
 class LogBufferElement;
 
-class LogTimeEntry {
+class LogReaderThread {
     static pthread_mutex_t timesLock;
     bool mRelease = false;
     bool leadingDropped;
@@ -50,9 +49,9 @@ class LogTimeEntry {
     unsigned long mIndex;
 
   public:
-    LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock, unsigned long tail,
-                 log_mask_t logMask, pid_t pid, log_time start_time, uint64_t sequence,
-                 uint64_t timeout, bool privileged, bool can_read_security_logs);
+    LogReaderThread(LogReader& reader, SocketClient* client, bool non_block, unsigned long tail,
+                    log_mask_t log_mask, pid_t pid, log_time start_time, uint64_t sequence,
+                    uint64_t timeout, bool privileged, bool can_read_security_logs);
 
     SocketClient* mClient;
     log_time mStartTime;
@@ -61,40 +60,26 @@ class LogTimeEntry {
     const bool mNonBlock;
 
     // Protect List manipulations
-    static void wrlock(void) {
-        pthread_mutex_lock(&timesLock);
-    }
-    static void rdlock(void) {
-        pthread_mutex_lock(&timesLock);
-    }
-    static void unlock(void) {
-        pthread_mutex_unlock(&timesLock);
-    }
+    static void wrlock() { pthread_mutex_lock(&timesLock); }
+    static void rdlock() { pthread_mutex_lock(&timesLock); }
+    static void unlock() { pthread_mutex_unlock(&timesLock); }
 
     bool startReader_Locked();
 
-    void triggerReader_Locked(void) {
-        pthread_cond_signal(&threadTriggeredCondition);
-    }
+    void triggerReader_Locked() { pthread_cond_signal(&threadTriggeredCondition); }
 
-    void triggerSkip_Locked(log_id_t id, unsigned int skip) {
-        skipAhead[id] = skip;
-    }
-    void cleanSkip_Locked(void);
+    void triggerSkip_Locked(log_id_t id, unsigned int skip) { skipAhead[id] = skip; }
+    void cleanSkip_Locked();
 
-    void release_Locked(void) {
+    void release_Locked() {
         // gracefully shut down the socket.
         shutdown(mClient->getSocket(), SHUT_RDWR);
         mRelease = true;
         pthread_cond_signal(&threadTriggeredCondition);
     }
 
-    bool isWatching(log_id_t id) const {
-        return mLogMask & (1 << id);
-    }
-    bool isWatchingMultiple(log_mask_t logMask) const {
-        return mLogMask & logMask;
-    }
+    bool isWatching(log_id_t id) const { return mLogMask & (1 << id); }
+    bool isWatchingMultiple(log_mask_t log_mask) const { return mLogMask & log_mask; }
     // flushTo filter callbacks
     static int FilterFirstPass(const LogBufferElement* element, void* me);
     static int FilterSecondPass(const LogBufferElement* element, void* me);
@@ -104,6 +89,4 @@ class LogTimeEntry {
     bool can_read_security_logs_;
 };
 
-typedef std::list<std::unique_ptr<LogTimeEntry>> LastLogTimes;
-
-#endif  // _LOGD_LOG_TIMES_H__
+typedef std::list<std::unique_ptr<LogReaderThread>> LastLogTimes;

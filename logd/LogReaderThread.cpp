@@ -14,23 +14,24 @@
  * limitations under the License.
  */
 
+#include "LogReaderThread.h"
+
 #include <errno.h>
 #include <string.h>
 #include <sys/prctl.h>
 
 #include "LogBuffer.h"
 #include "LogReader.h"
-#include "LogTimes.h"
 
-pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t LogReaderThread::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
-LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock,
-                           unsigned long tail, log_mask_t logMask, pid_t pid, log_time start_time,
-                           uint64_t start, uint64_t timeout, bool privileged,
-                           bool can_read_security_logs)
+LogReaderThread::LogReaderThread(LogReader& reader, SocketClient* client, bool non_block,
+                                 unsigned long tail, log_mask_t log_mask, pid_t pid,
+                                 log_time start_time, uint64_t start, uint64_t timeout,
+                                 bool privileged, bool can_read_security_logs)
     : leadingDropped(false),
       mReader(reader),
-      mLogMask(logMask),
+      mLogMask(log_mask),
       mPid(pid),
       mCount(0),
       mTail(tail),
@@ -38,7 +39,7 @@ LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBloc
       mClient(client),
       mStartTime(start_time),
       mStart(start),
-      mNonBlock(nonBlock),
+      mNonBlock(non_block),
       privileged_(privileged),
       can_read_security_logs_(can_read_security_logs) {
     mTimeout.tv_sec = timeout / NS_PER_SEC;
@@ -48,13 +49,12 @@ LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBloc
     cleanSkip_Locked();
 }
 
-bool LogTimeEntry::startReader_Locked() {
+bool LogReaderThread::startReader_Locked() {
     pthread_attr_t attr;
 
     if (!pthread_attr_init(&attr)) {
         if (!pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
-            if (!pthread_create(&mThread, &attr, LogTimeEntry::threadStart,
-                                this)) {
+            if (!pthread_create(&mThread, &attr, LogReaderThread::threadStart, this)) {
                 pthread_attr_destroy(&attr);
                 return true;
             }
@@ -65,10 +65,10 @@ bool LogTimeEntry::startReader_Locked() {
     return false;
 }
 
-void* LogTimeEntry::threadStart(void* obj) {
+void* LogReaderThread::threadStart(void* obj) {
     prctl(PR_SET_NAME, "logd.reader.per");
 
-    LogTimeEntry* me = reinterpret_cast<LogTimeEntry*>(obj);
+    LogReaderThread* me = reinterpret_cast<LogReaderThread*>(obj);
 
     SocketClient* client = me->mClient;
 
@@ -136,9 +136,8 @@ void* LogTimeEntry::threadStart(void* obj) {
     client->decRef();
 
     LastLogTimes& times = reader.logbuf().mTimes;
-    auto it =
-        std::find_if(times.begin(), times.end(),
-                     [&me](const auto& other) { return other.get() == me; });
+    auto it = std::find_if(times.begin(), times.end(),
+                           [&me](const auto& other) { return other.get() == me; });
 
     if (it != times.end()) {
         times.erase(it);
@@ -150,14 +149,14 @@ void* LogTimeEntry::threadStart(void* obj) {
 }
 
 // A first pass to count the number of elements
-int LogTimeEntry::FilterFirstPass(const LogBufferElement* element, void* obj) {
-    LogTimeEntry* me = reinterpret_cast<LogTimeEntry*>(obj);
+int LogReaderThread::FilterFirstPass(const LogBufferElement* element, void* obj) {
+    LogReaderThread* me = reinterpret_cast<LogReaderThread*>(obj);
 
-    LogTimeEntry::wrlock();
+    LogReaderThread::wrlock();
 
     if (me->leadingDropped) {
         if (element->getDropped()) {
-            LogTimeEntry::unlock();
+            LogReaderThread::unlock();
             return false;
         }
         me->leadingDropped = false;
@@ -172,16 +171,16 @@ int LogTimeEntry::FilterFirstPass(const LogBufferElement* element, void* obj) {
         ++me->mCount;
     }
 
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
 
     return false;
 }
 
 // A second pass to send the selected elements
-int LogTimeEntry::FilterSecondPass(const LogBufferElement* element, void* obj) {
-    LogTimeEntry* me = reinterpret_cast<LogTimeEntry*>(obj);
+int LogReaderThread::FilterSecondPass(const LogBufferElement* element, void* obj) {
+    LogReaderThread* me = reinterpret_cast<LogReaderThread*>(obj);
 
-    LogTimeEntry::wrlock();
+    LogReaderThread::wrlock();
 
     me->mStart = element->getSequence();
 
@@ -234,20 +233,20 @@ int LogTimeEntry::FilterSecondPass(const LogBufferElement* element, void* obj) {
 
 ok:
     if (!me->skipAhead[element->getLogId()]) {
-        LogTimeEntry::unlock();
+        LogReaderThread::unlock();
         return true;
     }
-// FALLTHRU
+    // FALLTHRU
 
 skip:
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
     return false;
 
 stop:
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
     return -1;
 }
 
-void LogTimeEntry::cleanSkip_Locked(void) {
+void LogReaderThread::cleanSkip_Locked(void) {
     memset(skipAhead, 0, sizeof(skipAhead));
 }

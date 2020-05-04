@@ -42,7 +42,7 @@ LogReader::LogReader(LogBuffer* logbuf)
 void LogReader::notifyNewLog(log_mask_t log_mask) {
     LastLogTimes& times = mLogbuf.mTimes;
 
-    LogTimeEntry::wrlock();
+    LogReaderThread::wrlock();
     for (const auto& entry : times) {
         if (!entry->isWatchingMultiple(log_mask)) {
             continue;
@@ -52,7 +52,7 @@ void LogReader::notifyNewLog(log_mask_t log_mask) {
         }
         entry->triggerReader_Locked();
     }
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
 }
 
 // Note returning false will release the SocketClient instance.
@@ -74,15 +74,15 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
 
     // Clients are only allowed to send one command, disconnect them if they
     // send another.
-    LogTimeEntry::wrlock();
+    LogReaderThread::wrlock();
     for (const auto& entry : mLogbuf.mTimes) {
         if (entry->mClient == cli) {
             entry->release_Locked();
-            LogTimeEntry::unlock();
+            LogReaderThread::unlock();
             return false;
         }
     }
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
 
     unsigned long tail = 0;
     static const char _tail[] = " tail=";
@@ -137,8 +137,8 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     if (!fastcmp<strncmp>(buffer, "dumpAndClose", 12)) {
         // Allow writer to get some cycles, and wait for pending notifications
         sched_yield();
-        LogTimeEntry::wrlock();
-        LogTimeEntry::unlock();
+        LogReaderThread::wrlock();
+        LogReaderThread::unlock();
         sched_yield();
         nonBlock = true;
     }
@@ -217,11 +217,12 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         timeout = 0;
     }
 
-    LogTimeEntry::wrlock();
-    auto entry = std::make_unique<LogTimeEntry>(*this, cli, nonBlock, tail, logMask, pid, start,
-                                                sequence, timeout, privileged, can_read_security);
+    LogReaderThread::wrlock();
+    auto entry =
+            std::make_unique<LogReaderThread>(*this, cli, nonBlock, tail, logMask, pid, start,
+                                              sequence, timeout, privileged, can_read_security);
     if (!entry->startReader_Locked()) {
-        LogTimeEntry::unlock();
+        LogReaderThread::unlock();
         return false;
     }
 
@@ -234,24 +235,24 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     setsockopt(cli->getSocket(), SOL_SOCKET, SO_SNDTIMEO, (const char*)&t,
                sizeof(t));
 
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
 
     return true;
 }
 
 void LogReader::doSocketDelete(SocketClient* cli) {
     LastLogTimes& times = mLogbuf.mTimes;
-    LogTimeEntry::wrlock();
+    LogReaderThread::wrlock();
     LastLogTimes::iterator it = times.begin();
     while (it != times.end()) {
-        LogTimeEntry* entry = it->get();
+        LogReaderThread* entry = it->get();
         if (entry->mClient == cli) {
             entry->release_Locked();
             break;
         }
         it++;
     }
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
 }
 
 int LogReader::getLogSocket() {

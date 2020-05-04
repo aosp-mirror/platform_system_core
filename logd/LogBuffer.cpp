@@ -93,16 +93,16 @@ void LogBuffer::init() {
     }
 
     // Release any sleeping reader threads to dump their current content.
-    LogTimeEntry::wrlock();
+    LogReaderThread::wrlock();
 
     LastLogTimes::iterator times = mTimes.begin();
     while (times != mTimes.end()) {
-        LogTimeEntry* entry = times->get();
+        LogReaderThread* entry = times->get();
         entry->triggerReader_Locked();
         times++;
     }
 
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
 }
 
 LogBuffer::LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune)
@@ -579,7 +579,7 @@ class LogBufferElementLast {
 
 // If the selected reader is blocking our pruning progress, decide on
 // what kind of mitigation is necessary to unblock the situation.
-void LogBuffer::kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows) {
+void LogBuffer::kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows) {
     if (stats.sizes(id) > (2 * log_buffer_size(id))) {  // +100%
         // A misbehaving or slow reader has its connection
         // dropped if we hit too much memory pressure.
@@ -647,16 +647,16 @@ void LogBuffer::kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows) {
 // LogBuffer::wrlock() must be held when this function is called.
 //
 bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
-    LogTimeEntry* oldest = nullptr;
+    LogReaderThread* oldest = nullptr;
     bool busy = false;
     bool clearAll = pruneRows == ULONG_MAX;
 
-    LogTimeEntry::rdlock();
+    LogReaderThread::rdlock();
 
     // Region locked?
     LastLogTimes::iterator times = mTimes.begin();
     while (times != mTimes.end()) {
-        LogTimeEntry* entry = times->get();
+        LogReaderThread* entry = times->get();
         if (entry->isWatching(id) &&
             (!oldest || (oldest->mStart > entry->mStart) ||
              ((oldest->mStart == entry->mStart) &&
@@ -692,7 +692,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 break;
             }
         }
-        LogTimeEntry::unlock();
+        LogReaderThread::unlock();
         return busy;
     }
 
@@ -953,7 +953,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
     }
 
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
 
     return (pruneRows > 0) && busy;
 }
@@ -976,10 +976,10 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
             // readers and let the clear run (below) deal with determining
             // if we are still blocked and return an error code to caller.
             if (busy) {
-                LogTimeEntry::wrlock();
+                LogReaderThread::wrlock();
                 LastLogTimes::iterator times = mTimes.begin();
                 while (times != mTimes.end()) {
-                    LogTimeEntry* entry = times->get();
+                    LogReaderThread* entry = times->get();
                     // Killer punch
                     if (entry->isWatching(id)) {
                         android::prdebug(
@@ -989,7 +989,7 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
                     }
                     times++;
                 }
-                LogTimeEntry::unlock();
+                LogReaderThread::unlock();
             }
         }
         wrlock();

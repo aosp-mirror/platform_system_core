@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_WRITER_H__
-#define _LOGD_LOG_WRITER_H__
+#pragma once
 
 #include <sysutils/SocketListener.h>
 
-#include "LogTimes.h"
+#include "LogReaderThread.h"
 
 #define LOGD_SNDTIMEO 32
 
@@ -44,5 +43,3 @@ class LogReader : public SocketListener {
 
     void doSocketDelete(SocketClient* cli);
 };
-
-#endif

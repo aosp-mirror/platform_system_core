@@ -27,9 +27,9 @@
 #include <sysutils/SocketClient.h>
 
 #include "LogBufferElement.h"
+#include "LogReaderThread.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
-#include "LogTimes.h"
 #include "LogWhiteBlackList.h"
 
 //
@@ -152,7 +152,7 @@ class LogBuffer {
     static constexpr size_t maxPrune = 256;
 
     void maybePrune(log_id_t id);
-    void kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows);
+    void kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows);
 
     bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
     LogBufferElementCollection::iterator erase(
