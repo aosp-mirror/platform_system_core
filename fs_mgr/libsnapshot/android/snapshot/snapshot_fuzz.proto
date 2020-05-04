@@ -64,6 +64,7 @@ message SnapshotManagerActionProto {
         bool has_metadata_device_object = 1;
         bool metadata_mounted = 2;
     }
+    reserved 18 to 9999;
     oneof value {
         NoArgs begin_update = 1;
         NoArgs cancel_update = 2;
@@ -82,6 +83,9 @@ message SnapshotManagerActionProto {
         NoArgs dump = 15;
         NoArgs ensure_metadata_mounted = 16;
         NoArgs get_snapshot_merge_stats_instance = 17;
+
+        // Test directives that has nothing to do with ISnapshotManager API surface.
+        NoArgs switch_slot = 10000;
     }
 }
 

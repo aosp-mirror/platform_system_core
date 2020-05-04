@@ -260,9 +260,10 @@ std::unique_ptr<AutoDevice> SnapshotFuzzEnv::CheckMapImage(const std::string& im
     return std::make_unique<AutoDetachLoopDevice>(control, *mapped_path);
 }
 
-std::unique_ptr<ISnapshotManager> SnapshotFuzzEnv::CheckCreateSnapshotManager(
-        const SnapshotFuzzData& data) {
+SnapshotTestModule SnapshotFuzzEnv::CheckCreateSnapshotManager(const SnapshotFuzzData& data) {
+    SnapshotTestModule ret;
     auto partition_opener = std::make_unique<TestPartitionOpener>(super());
+    ret.opener = partition_opener.get();
     CheckWriteSuperMetadata(data, *partition_opener);
     auto metadata_dir = fake_root_->tmp_path() + "/snapshot_metadata";
     PCHECK(Mkdir(metadata_dir));
@@ -270,15 +271,16 @@ std::unique_ptr<ISnapshotManager> SnapshotFuzzEnv::CheckCreateSnapshotManager(
         PCHECK(Mkdir(metadata_dir + "/snapshots"));
     }
 
-    auto device_info = new SnapshotFuzzDeviceInfo(data.device_info_data(),
-                                                  std::move(partition_opener), metadata_dir);
-    auto snapshot = SnapshotManager::New(device_info /* takes ownership */);
+    ret.device_info = new SnapshotFuzzDeviceInfo(data.device_info_data(),
+                                                 std::move(partition_opener), metadata_dir);
+    auto snapshot = SnapshotManager::New(ret.device_info /* takes ownership */);
     snapshot->images_ =
             CheckCreateFakeImageManager(fake_root_->tmp_path() + "/images_manager_metadata",
                                         fake_data_mount_point_ + "/image_manager_data");
     snapshot->has_local_image_manager_ = data.manager_data().is_local_image_manager();
+    ret.snapshot = std::move(snapshot);
 
-    return snapshot;
+    return ret;
 }
 
 const std::string& SnapshotFuzzEnv::super() const {

@@ -54,6 +54,7 @@ std::string GetDsuSlot(const std::string& install_dir) {
 namespace android::snapshot {
 
 const SnapshotFuzzData* current_data = nullptr;
+const SnapshotTestModule* current_module = nullptr;
 
 SnapshotFuzzEnv* GetSnapshotFuzzEnv();
 
@@ -155,6 +156,13 @@ SNAPSHOT_FUZZ_FUNCTION(MapUpdateSnapshot, const CreateLogicalPartitionParamsProt
     (void)snapshot->MapUpdateSnapshot(params, &path);
 }
 
+SNAPSHOT_FUZZ_FUNCTION(SwitchSlot) {
+    (void)snapshot;
+    CHECK(current_module != nullptr);
+    CHECK(current_module->device_info != nullptr);
+    current_module->device_info->SwitchSlot();
+}
+
 // During global init, log all messages to stdio. This is only done once.
 int AllowLoggingDuringGlobalInit() {
     SetLogger(&StdioLogger);
@@ -208,8 +216,12 @@ DEFINE_PROTO_FUZZER(const SnapshotFuzzData& snapshot_fuzz_data) {
     auto env = GetSnapshotFuzzEnv();
     env->CheckSoftReset();
 
-    auto snapshot_manager = env->CheckCreateSnapshotManager(snapshot_fuzz_data);
-    CHECK(snapshot_manager);
+    auto test_module = env->CheckCreateSnapshotManager(snapshot_fuzz_data);
+    current_module = &test_module;
+    CHECK(test_module.snapshot);
 
-    SnapshotManagerAction::ExecuteAll(snapshot_manager.get(), snapshot_fuzz_data.actions());
+    SnapshotManagerAction::ExecuteAll(test_module.snapshot.get(), snapshot_fuzz_data.actions());
+
+    current_module = nullptr;
+    current_data = nullptr;
 }
