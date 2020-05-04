@@ -97,7 +97,10 @@ message SnapshotFuzzData {
     bool is_super_metadata_valid = 3;
     chromeos_update_engine.DeltaArchiveManifest super_data = 4;
 
+    // Whether the directory that mocks /metadata/ota/snapshot is created.
+    bool has_metadata_snapshots_dir = 5;
+
     // More data used to prep the test before running actions.
-    reserved 5 to 9999;
+    reserved 6 to 9999;
     repeated SnapshotManagerActionProto actions = 10000;
 }

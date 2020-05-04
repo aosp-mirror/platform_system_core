@@ -258,6 +258,9 @@ std::unique_ptr<ISnapshotManager> SnapshotFuzzEnv::CheckCreateSnapshotManager(
     CheckWriteSuperMetadata(data, *partition_opener);
     auto metadata_dir = fake_root_->tmp_path() + "/snapshot_metadata";
     PCHECK(Mkdir(metadata_dir));
+    if (data.has_metadata_snapshots_dir()) {
+        PCHECK(Mkdir(metadata_dir + "/snapshots"));
+    }
 
     auto device_info = new SnapshotFuzzDeviceInfo(data.device_info_data(),
                                                   std::move(partition_opener), metadata_dir);
