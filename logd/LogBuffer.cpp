@@ -129,14 +129,14 @@ LogBuffer::~LogBuffer() {
 
 LogBufferElementCollection::iterator LogBuffer::GetOldest(log_id_t log_id) {
     auto it = mLogElements.begin();
-    if (mOldest[log_id]) {
-        it = *mOldest[log_id];
+    if (oldest_[log_id]) {
+        it = *oldest_[log_id];
     }
     while (it != mLogElements.end() && (*it)->getLogId() != log_id) {
         it++;
     }
     if (it != mLogElements.end()) {
-        mOldest[log_id] = it;
+        oldest_[log_id] = it;
     }
     return it;
 }
@@ -460,7 +460,7 @@ LogBufferElementCollection::iterator LogBuffer::erase(
 
     bool setLast[LOG_ID_MAX];
     bool doSetLast = false;
-    log_id_for_each(i) { doSetLast |= setLast[i] = mOldest[i] && it == *mOldest[i]; }
+    log_id_for_each(i) { doSetLast |= setLast[i] = oldest_[i] && it == *oldest_[i]; }
 #ifdef DEBUG_CHECK_FOR_STALE_ENTRIES
     LogBufferElementCollection::iterator bad = it;
     int key = ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY))
@@ -472,9 +472,9 @@ LogBufferElementCollection::iterator LogBuffer::erase(
         log_id_for_each(i) {
             if (setLast[i]) {
                 if (__predict_false(it == mLogElements.end())) {
-                    mOldest[i] = std::nullopt;
+                    oldest_[i] = std::nullopt;
                 } else {
-                    mOldest[i] = it;  // Store the next iterator even if it does not correspond to
+                    oldest_[i] = it;  // Store the next iterator even if it does not correspond to
                                       // the same log_id, as a starting point for GetOldest().
                 }
             }

@@ -80,9 +80,6 @@ class LogBuffer {
 
     LogStatistics stats;
 
-    // Keeps track of the iterator to the oldest log message of a given log type, as an
-    // optimization when pruning logs.  Use GetOldest() to retrieve.
-    std::optional<LogBufferElementCollection::iterator> mOldest[LOG_ID_MAX];
     // watermark of any worst/chatty uid processing
     typedef std::unordered_map<uid_t, LogBufferElementCollection::iterator>
         LogBufferIteratorMap;
@@ -167,4 +164,8 @@ class LogBuffer {
 
     LogTags* tags_;
     PruneList* prune_;
+
+    // Keeps track of the iterator to the oldest log message of a given log type, as an
+    // optimization when pruning logs.  Use GetOldest() to retrieve.
+    std::optional<LogBufferElementCollection::iterator> oldest_[LOG_ID_MAX];
 };
