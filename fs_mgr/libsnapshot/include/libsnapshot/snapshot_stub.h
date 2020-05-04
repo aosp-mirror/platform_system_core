@@ -41,6 +41,7 @@ class SnapshotManagerStub : public ISnapshotManager {
             const std::string& super_device,
             const std::chrono::milliseconds& timeout_ms = {}) override;
     bool HandleImminentDataWipe(const std::function<void()>& callback = {}) override;
+    bool FinishMergeInRecovery() override;
     CreateResult RecoveryCreateSnapshotDevices() override;
     CreateResult RecoveryCreateSnapshotDevices(
             const std::unique_ptr<AutoDevice>& metadata_device) override;
