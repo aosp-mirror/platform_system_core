@@ -18,7 +18,6 @@
 #include <string.h>
 #include <sys/prctl.h>
 
-#include "FlushCommand.h"
 #include "LogBuffer.h"
 #include "LogReader.h"
 #include "LogTimes.h"
@@ -27,7 +26,8 @@ pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
 LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock,
                            unsigned long tail, log_mask_t logMask, pid_t pid, log_time start_time,
-                           uint64_t start, uint64_t timeout)
+                           uint64_t start, uint64_t timeout, bool privileged,
+                           bool can_read_security_logs)
     : leadingDropped(false),
       mReader(reader),
       mLogMask(logMask),
@@ -38,7 +38,9 @@ LogTimeEntry::LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBloc
       mClient(client),
       mStartTime(start_time),
       mStart(start),
-      mNonBlock(nonBlock) {
+      mNonBlock(nonBlock),
+      privileged_(privileged),
+      can_read_security_logs_(can_read_security_logs) {
     mTimeout.tv_sec = timeout / NS_PER_SEC;
     mTimeout.tv_nsec = timeout % NS_PER_SEC;
     memset(mLastTid, 0, sizeof(mLastTid));
@@ -72,9 +74,6 @@ void* LogTimeEntry::threadStart(void* obj) {
 
     LogBuffer& logbuf = me->mReader.logbuf();
 
-    bool privileged = FlushCommand::hasReadLogs(client);
-    bool security = FlushCommand::hasSecurityLogs(client);
-
     me->leadingDropped = true;
 
     wrlock();
@@ -96,12 +95,12 @@ void* LogTimeEntry::threadStart(void* obj) {
         unlock();
 
         if (me->mTail) {
-            logbuf.flushTo(client, start, nullptr, privileged, security,
+            logbuf.flushTo(client, start, nullptr, me->privileged_, me->can_read_security_logs_,
                            FilterFirstPass, me);
             me->leadingDropped = true;
         }
-        start = logbuf.flushTo(client, start, me->mLastTid, privileged,
-                               security, FilterSecondPass, me);
+        start = logbuf.flushTo(client, start, me->mLastTid, me->privileged_,
+                               me->can_read_security_logs_, FilterSecondPass, me);
 
         // We only ignore entries before the original start time for the first flushTo(), if we
         // get entries after this first flush before the original start time, then the client

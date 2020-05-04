@@ -52,7 +52,7 @@ class LogTimeEntry {
   public:
     LogTimeEntry(LogReader& reader, SocketClient* client, bool nonBlock, unsigned long tail,
                  log_mask_t logMask, pid_t pid, log_time start_time, uint64_t sequence,
-                 uint64_t timeout);
+                 uint64_t timeout, bool privileged, bool can_read_security_logs);
 
     SocketClient* mClient;
     log_time mStartTime;
@@ -98,6 +98,10 @@ class LogTimeEntry {
     // flushTo filter callbacks
     static int FilterFirstPass(const LogBufferElement* element, void* me);
     static int FilterSecondPass(const LogBufferElement* element, void* me);
+
+  private:
+    bool privileged_;
+    bool can_read_security_logs_;
 };
 
 typedef std::list<std::unique_ptr<LogTimeEntry>> LastLogTimes;
