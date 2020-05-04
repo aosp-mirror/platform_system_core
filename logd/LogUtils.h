@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_UTILS_H__
-#define _LOGD_LOG_UTILS_H__
+#pragma once
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
@@ -41,7 +40,6 @@ char* tidToName(pid_t tid);
 
 // Furnished in LogTags.cpp. Thread safe.
 const char* tagToName(uint32_t tag);
-void ReReadEventLogTags();
 
 // Furnished by LogKlog.cpp
 char* log_strntok_r(char* s, ssize_t& len, char*& saveptr, ssize_t& sublen);
@@ -72,5 +70,3 @@ static inline bool worstUidEnabledForLogid(log_id_t id) {
     return (id == LOG_ID_MAIN) || (id == LOG_ID_SYSTEM) ||
            (id == LOG_ID_RADIO) || (id == LOG_ID_EVENTS);
 }
-
-#endif  // _LOGD_LOG_UTILS_H__

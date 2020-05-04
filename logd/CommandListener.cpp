@@ -31,6 +31,7 @@
 
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
+#include <log/log_properties.h>
 #include <private/android_filesystem_config.h>
 #include <sysutils/SocketClient.h>
 
@@ -38,35 +39,18 @@
 #include "LogCommand.h"
 #include "LogUtils.h"
 
-CommandListener::CommandListener(LogBuffer* buf, LogReader* /*reader*/,
-                                 LogListener* /*swl*/)
-    : FrameworkListener(getLogSocket()) {
-    // registerCmd(new ShutdownCmd(buf, writer, swl));
-    registerCmd(new ClearCmd(buf));
-    registerCmd(new GetBufSizeCmd(buf));
-    registerCmd(new SetBufSizeCmd(buf));
-    registerCmd(new GetBufSizeUsedCmd(buf));
-    registerCmd(new GetStatisticsCmd(buf));
-    registerCmd(new SetPruneListCmd(buf));
-    registerCmd(new GetPruneListCmd(buf));
-    registerCmd(new GetEventTagCmd(buf));
-    registerCmd(new ReinitCmd());
+CommandListener::CommandListener(LogBuffer* buf, LogTags* tags, PruneList* prune)
+    : FrameworkListener(getLogSocket()), buf_(buf), tags_(tags), prune_(prune) {
+    registerCmd(new ClearCmd(this));
+    registerCmd(new GetBufSizeCmd(this));
+    registerCmd(new SetBufSizeCmd(this));
+    registerCmd(new GetBufSizeUsedCmd(this));
+    registerCmd(new GetStatisticsCmd(this));
+    registerCmd(new SetPruneListCmd(this));
+    registerCmd(new GetPruneListCmd(this));
+    registerCmd(new GetEventTagCmd(this));
+    registerCmd(new ReinitCmd(this));
     registerCmd(new ExitCmd(this));
-}
-
-CommandListener::ShutdownCmd::ShutdownCmd(LogReader* reader, LogListener* swl)
-    : LogCommand("shutdown"), mReader(*reader), mSwl(*swl) {
-}
-
-int CommandListener::ShutdownCmd::runCommand(SocketClient* /*cli*/,
-                                             int /*argc*/, char** /*argv*/) {
-    mSwl.stopListener();
-    mReader.stopListener();
-    exit(0);
-}
-
-CommandListener::ClearCmd::ClearCmd(LogBuffer* buf)
-    : LogCommand("clear"), mBuf(*buf) {
 }
 
 static void setname() {
@@ -96,12 +80,8 @@ int CommandListener::ClearCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    cli->sendMsg(mBuf.clear((log_id_t)id, uid) ? "busy" : "success");
+    cli->sendMsg(buf()->clear((log_id_t)id, uid) ? "busy" : "success");
     return 0;
-}
-
-CommandListener::GetBufSizeCmd::GetBufSizeCmd(LogBuffer* buf)
-    : LogCommand("getLogSize"), mBuf(*buf) {
 }
 
 int CommandListener::GetBufSizeCmd::runCommand(SocketClient* cli, int argc,
@@ -118,15 +98,11 @@ int CommandListener::GetBufSizeCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    unsigned long size = mBuf.getSize((log_id_t)id);
+    unsigned long size = buf()->getSize((log_id_t)id);
     char buf[512];
     snprintf(buf, sizeof(buf), "%lu", size);
     cli->sendMsg(buf);
     return 0;
-}
-
-CommandListener::SetBufSizeCmd::SetBufSizeCmd(LogBuffer* buf)
-    : LogCommand("setLogSize"), mBuf(*buf) {
 }
 
 int CommandListener::SetBufSizeCmd::runCommand(SocketClient* cli, int argc,
@@ -149,17 +125,13 @@ int CommandListener::SetBufSizeCmd::runCommand(SocketClient* cli, int argc,
     }
 
     unsigned long size = atol(argv[2]);
-    if (mBuf.setSize((log_id_t)id, size)) {
+    if (buf()->setSize((log_id_t)id, size)) {
         cli->sendMsg("Range Error");
         return 0;
     }
 
     cli->sendMsg("success");
     return 0;
-}
-
-CommandListener::GetBufSizeUsedCmd::GetBufSizeUsedCmd(LogBuffer* buf)
-    : LogCommand("getLogSizeUsed"), mBuf(*buf) {
 }
 
 int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient* cli, int argc,
@@ -176,15 +148,11 @@ int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    unsigned long size = mBuf.getSizeUsed((log_id_t)id);
+    unsigned long size = buf()->getSizeUsed((log_id_t)id);
     char buf[512];
     snprintf(buf, sizeof(buf), "%lu", size);
     cli->sendMsg(buf);
     return 0;
-}
-
-CommandListener::GetStatisticsCmd::GetStatisticsCmd(LogBuffer* buf)
-    : LogCommand("getStatistics"), mBuf(*buf) {
 }
 
 // This returns a string with a length prefix with the format <length>\n<data>\n\f.  The length
@@ -241,23 +209,15 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient* cli, int argc,
         }
     }
 
-    cli->sendMsg(PackageString(mBuf.formatStatistics(uid, pid, logMask)).c_str());
+    cli->sendMsg(PackageString(buf()->formatStatistics(uid, pid, logMask)).c_str());
     return 0;
-}
-
-CommandListener::GetPruneListCmd::GetPruneListCmd(LogBuffer* buf)
-    : LogCommand("getPruneList"), mBuf(*buf) {
 }
 
 int CommandListener::GetPruneListCmd::runCommand(SocketClient* cli,
                                                  int /*argc*/, char** /*argv*/) {
     setname();
-    cli->sendMsg(PackageString(mBuf.formatPrune()).c_str());
+    cli->sendMsg(PackageString(prune()->format()).c_str());
     return 0;
-}
-
-CommandListener::SetPruneListCmd::SetPruneListCmd(LogBuffer* buf)
-    : LogCommand("setPruneList"), mBuf(*buf) {
 }
 
 int CommandListener::SetPruneListCmd::runCommand(SocketClient* cli, int argc,
@@ -276,7 +236,7 @@ int CommandListener::SetPruneListCmd::runCommand(SocketClient* cli, int argc,
         str += argv[i];
     }
 
-    int ret = mBuf.initPrune(str.c_str());
+    int ret = prune()->init(str.c_str());
 
     if (ret) {
         cli->sendMsg("Invalid");
@@ -286,10 +246,6 @@ int CommandListener::SetPruneListCmd::runCommand(SocketClient* cli, int argc,
     cli->sendMsg("success");
 
     return 0;
-}
-
-CommandListener::GetEventTagCmd::GetEventTagCmd(LogBuffer* buf)
-    : LogCommand("getEventTag"), mBuf(*buf) {
 }
 
 int CommandListener::GetEventTagCmd::runCommand(SocketClient* cli, int argc,
@@ -328,31 +284,37 @@ int CommandListener::GetEventTagCmd::runCommand(SocketClient* cli, int argc,
             cli->sendMsg("can not mix id= with either format= or name=");
             return 0;
         }
-        cli->sendMsg(PackageString(mBuf.formatEntry(atoi(id), uid)).c_str());
+        cli->sendMsg(PackageString(tags()->formatEntry(atoi(id), uid)).c_str());
         return 0;
     }
 
-    cli->sendMsg(PackageString(mBuf.formatGetEventTag(uid, name, format)).c_str());
+    cli->sendMsg(PackageString(tags()->formatGetEventTag(uid, name, format)).c_str());
 
     return 0;
-}
-
-CommandListener::ReinitCmd::ReinitCmd() : LogCommand("reinit") {
 }
 
 int CommandListener::ReinitCmd::runCommand(SocketClient* cli, int /*argc*/,
                                            char** /*argv*/) {
     setname();
 
-    reinit_signal_handler(SIGHUP);
+    android::prdebug("logd reinit");
+    buf()->init();
+    prune()->init(nullptr);
+
+    // This only works on userdebug and eng devices to re-read the
+    // /data/misc/logd/event-log-tags file right after /data is mounted.
+    // The operation is near to boot and should only happen once.  There
+    // are races associated with its use since it can trigger a Rebuild
+    // of the file, but that is a can-not-happen since the file was not
+    // read yet.  More dangerous if called later, but if all is well it
+    // should just skip over everything and not write any new entries.
+    if (__android_log_is_debuggable()) {
+        tags()->ReadFileEventLogTags(tags()->debug_event_log_tags);
+    }
 
     cli->sendMsg("success");
 
     return 0;
-}
-
-CommandListener::ExitCmd::ExitCmd(CommandListener* parent)
-    : LogCommand("EXIT"), mParent(*parent) {
 }
 
 int CommandListener::ExitCmd::runCommand(SocketClient* cli, int /*argc*/,
@@ -360,7 +322,7 @@ int CommandListener::ExitCmd::runCommand(SocketClient* cli, int /*argc*/,
     setname();
 
     cli->sendMsg("success");
-    release(cli);
+    parent_->release(cli);
 
     return 0;
 }
