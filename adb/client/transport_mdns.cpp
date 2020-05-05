@@ -222,7 +222,7 @@ class ResolvedService : public AsyncServiceRef {
         }
 
         std::string response;
-        connect_device(android::base::StringPrintf(addr_format_.c_str(), ip_addr_, port_),
+        connect_device(android::base::StringPrintf("%s.%s", serviceName_.c_str(), regType_.c_str()),
                        &response);
         D("Secure connect to %s regtype %s (%s:%hu) : %s", serviceName_.c_str(), regType_.c_str(),
           ip_addr_, port_, response.c_str());
@@ -249,26 +249,8 @@ class ResolvedService : public AsyncServiceRef {
             return false;
         }
 
-        // adb secure service needs to do something different from just
-        // connecting here.
-        if (adb_DNSServiceShouldAutoConnect(regType_.c_str(), serviceName_.c_str())) {
-            std::string response;
-            D("Attempting to serviceName=[%s], regtype=[%s] ipaddr=(%s:%hu)", serviceName_.c_str(),
-              regType_.c_str(), ip_addr_, port_);
-            int index = adb_DNSServiceIndexByName(regType_.c_str());
-            if (index == kADBSecureConnectServiceRefIndex) {
-                ConnectSecureWifiDevice();
-            } else {
-                connect_device(android::base::StringPrintf(addr_format_.c_str(), ip_addr_, port_),
-                               &response);
-                D("Connect to %s regtype %s (%s:%hu) : %s", serviceName_.c_str(), regType_.c_str(),
-                  ip_addr_, port_, response.c_str());
-            }
-        } else {
-            D("Not immediately connecting to serviceName=[%s], regtype=[%s] ipaddr=(%s:%hu)",
-              serviceName_.c_str(), regType_.c_str(), ip_addr_, port_);
-        }
-
+        // Add to the service registry before trying to auto-connect, since socket_spec_connect will
+        // check these registries for the ip address when connecting via mdns instance name.
         int adbSecureServiceType = serviceIndex();
         ServiceRegistry* services = nullptr;
         switch (adbSecureServiceType) {
@@ -294,6 +276,25 @@ class ResolvedService : public AsyncServiceRef {
                                            }));
         }
         services->push_back(std::unique_ptr<ResolvedService>(this));
+
+        if (adb_DNSServiceShouldAutoConnect(regType_.c_str(), serviceName_.c_str())) {
+            std::string response;
+            D("Attempting to connect serviceName=[%s], regtype=[%s] ipaddr=(%s:%hu)",
+              serviceName_.c_str(), regType_.c_str(), ip_addr_, port_);
+            int index = adb_DNSServiceIndexByName(regType_.c_str());
+            if (index == kADBSecureConnectServiceRefIndex) {
+                ConnectSecureWifiDevice();
+            } else {
+                connect_device(android::base::StringPrintf("%s.%s", serviceName_.c_str(),
+                                                           regType_.c_str()),
+                               &response);
+                D("Connect to %s regtype %s (%s:%hu) : %s", serviceName_.c_str(), regType_.c_str(),
+                  ip_addr_, port_, response.c_str());
+            }
+        } else {
+            D("Not immediately connecting to serviceName=[%s], regtype=[%s] ipaddr=(%s:%hu)",
+              serviceName_.c_str(), regType_.c_str(), ip_addr_, port_);
+        }
 
         return true;
     }
