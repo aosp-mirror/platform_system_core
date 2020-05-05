@@ -198,7 +198,7 @@ void atrace_update_tags()
 }
 
 #define WRITE_MSG(format_begin, format_end, name, value) { \
-    char buf[ATRACE_MESSAGE_LENGTH]; \
+    char buf[ATRACE_MESSAGE_LENGTH] __attribute__((uninitialized));     \
     int pid = getpid(); \
     int len = snprintf(buf, sizeof(buf), format_begin "%s" format_end, pid, \
         name, value); \
