@@ -42,6 +42,7 @@ struct MdnsInfo {
 };
 
 std::optional<MdnsInfo> mdns_get_connect_service_info(std::string_view name);
+std::optional<MdnsInfo> mdns_get_pairing_service_info(std::string_view name);
 
 #else  // !ADB_HOST
 

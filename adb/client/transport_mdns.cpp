@@ -720,3 +720,34 @@ std::optional<MdnsInfo> mdns_get_connect_service_info(std::string_view name) {
 
     return std::nullopt;
 }
+
+std::optional<MdnsInfo> mdns_get_pairing_service_info(std::string_view name) {
+    CHECK(!name.empty());
+
+    auto mdns_instance = mdns::mdns_parse_instance_name(name);
+    if (!mdns_instance.has_value()) {
+        D("Failed to parse mDNS pairing name [%s]", name.data());
+        return std::nullopt;
+    }
+
+    std::optional<MdnsInfo> info;
+    auto cb = [&](const char* service_name, const char* reg_type, const char* ip_addr,
+                  uint16_t port) { info.emplace(service_name, reg_type, ip_addr, port); };
+
+    // Verify it's a pairing service if user explicitly inputs it.
+    if (!mdns_instance->service_name.empty()) {
+        auto reg_type = android::base::StringPrintf("%s.%s", mdns_instance->service_name.data(),
+                                                    mdns_instance->transport_type.data());
+        int index = adb_DNSServiceIndexByName(reg_type);
+        switch (index) {
+            case kADBSecurePairingServiceRefIndex:
+                break;
+            default:
+                D("Not an adb pairing reg_type [%s]", reg_type.data());
+                return std::nullopt;
+        }
+    }
+
+    ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices, name, cb);
+    return info;
+}
