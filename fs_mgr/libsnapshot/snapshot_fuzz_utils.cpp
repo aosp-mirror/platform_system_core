@@ -24,7 +24,10 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
+#include <cutils/properties.h>
 #include <fs_mgr.h>
 #include <libsnapshot/auto_device.h>
 #include <libsnapshot/snapshot.h>
@@ -42,9 +45,16 @@ using namespace android::storage_literals;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
+using android::base::Basename;
+using android::base::ReadFileToString;
+using android::base::SetProperty;
+using android::base::Split;
+using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 using android::base::WriteStringToFile;
+using android::dm::DeviceMapper;
+using android::dm::DmTarget;
 using android::dm::LoopControl;
 using android::fiemap::IImageManager;
 using android::fiemap::ImageManager;
@@ -54,6 +64,7 @@ using android::fs_mgr::IPartitionOpener;
 using chromeos_update_engine::DynamicPartitionMetadata;
 
 static const char MNT_DIR[] = "/mnt";
+static const char BLOCK_SYSFS[] = "/sys/block";
 
 static const char FAKE_ROOT_NAME[] = "snapshot_fuzz";
 static const auto SUPER_IMAGE_SIZE = 16_MiB;
@@ -100,6 +111,149 @@ bool RmdirRecursive(const std::string& path) {
     return nftw(path.c_str(), callback, 128, FTW_DEPTH | FTW_MOUNT | FTW_PHYS) == 0;
 }
 
+std::string GetLinearBaseDeviceString(const DeviceMapper::TargetInfo& target) {
+    if (target.spec.target_type != "linear"s) return {};
+    auto tokens = Split(target.data, " ");
+    CHECK_EQ(2, tokens.size());
+    return tokens[0];
+}
+
+std::vector<std::string> GetSnapshotBaseDeviceStrings(const DeviceMapper::TargetInfo& target) {
+    if (target.spec.target_type != "snapshot"s && target.spec.target_type != "snapshot-merge"s)
+        return {};
+    auto tokens = Split(target.data, " ");
+    CHECK_EQ(4, tokens.size());
+    return {tokens[0], tokens[1]};
+}
+
+bool ShouldDeleteLoopDevice(const std::string& node) {
+    std::string backing_file;
+    if (ReadFileToString(StringPrintf("%s/loop/backing_file", node.data()), &backing_file)) {
+        if (StartsWith(backing_file, std::string(MNT_DIR) + "/" + FAKE_ROOT_NAME)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<DeviceMapper::TargetInfo> GetTableInfoIfExists(const std::string& dev_name) {
+    auto& dm = DeviceMapper::Instance();
+    std::vector<DeviceMapper::TargetInfo> table;
+    if (!dm.GetTableInfo(dev_name, &table)) {
+        PCHECK(errno == ENODEV);
+        return {};
+    }
+    return table;
+}
+
+std::set<std::string> GetAllBaseDeviceStrings(const std::string& child_dev) {
+    std::set<std::string> ret;
+    for (const auto& child_target : GetTableInfoIfExists(child_dev)) {
+        auto snapshot_bases = GetSnapshotBaseDeviceStrings(child_target);
+        ret.insert(snapshot_bases.begin(), snapshot_bases.end());
+
+        auto linear_base = GetLinearBaseDeviceString(child_target);
+        if (!linear_base.empty()) {
+            ret.insert(linear_base);
+        }
+    }
+    return ret;
+}
+
+using PropertyList = std::set<std::string>;
+void InsertProperty(const char* key, const char* /*name*/, void* cookie) {
+    reinterpret_cast<PropertyList*>(cookie)->insert(key);
+}
+
+void CheckUnsetGsidProps() {
+    PropertyList list;
+    property_list(&InsertProperty, reinterpret_cast<void*>(&list));
+    for (const auto& key : list) {
+        SetProperty(key, "");
+    }
+}
+
+// Attempt to delete all devices that is based on dev_name, including itself.
+void CheckDeleteDeviceMapperTree(const std::string& dev_name, bool known_allow_delete = false,
+                                 uint64_t depth = 100) {
+    CHECK(depth > 0) << "Reaching max depth when deleting " << dev_name
+                     << ". There may be devices referencing itself. Check `dmctl list devices -v`.";
+
+    auto& dm = DeviceMapper::Instance();
+    auto table = GetTableInfoIfExists(dev_name);
+    if (table.empty()) {
+        PCHECK(dm.DeleteDeviceIfExists(dev_name)) << dev_name;
+        return;
+    }
+
+    if (!known_allow_delete) {
+        for (const auto& target : table) {
+            auto base_device_string = GetLinearBaseDeviceString(target);
+            if (base_device_string.empty()) continue;
+            if (ShouldDeleteLoopDevice(
+                        StringPrintf("/sys/dev/block/%s", base_device_string.data()))) {
+                known_allow_delete = true;
+                break;
+            }
+        }
+    }
+    if (!known_allow_delete) {
+        return;
+    }
+
+    std::string dev_string;
+    PCHECK(dm.GetDeviceString(dev_name, &dev_string));
+
+    std::vector<DeviceMapper::DmBlockDevice> devices;
+    PCHECK(dm.GetAvailableDevices(&devices));
+    for (const auto& child_dev : devices) {
+        auto child_bases = GetAllBaseDeviceStrings(child_dev.name());
+        if (child_bases.find(dev_string) != child_bases.end()) {
+            CheckDeleteDeviceMapperTree(child_dev.name(), true /* known_allow_delete */, depth - 1);
+        }
+    }
+
+    PCHECK(dm.DeleteDeviceIfExists(dev_name)) << dev_name;
+}
+
+// Attempt to clean up residues from previous runs.
+void CheckCleanupDeviceMapperDevices() {
+    auto& dm = DeviceMapper::Instance();
+    std::vector<DeviceMapper::DmBlockDevice> devices;
+    PCHECK(dm.GetAvailableDevices(&devices));
+
+    for (const auto& dev : devices) {
+        CheckDeleteDeviceMapperTree(dev.name());
+    }
+}
+
+void CheckUmount(const std::string& path) {
+    PCHECK(TEMP_FAILURE_RETRY(umount(path.data()) == 0) || errno == ENOENT || errno == EINVAL)
+            << path;
+}
+
+void CheckDetachLoopDevices(const std::set<std::string>& exclude_names = {}) {
+    // ~SnapshotFuzzEnv automatically does the following.
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(BLOCK_SYSFS), closedir);
+    PCHECK(dir != nullptr) << BLOCK_SYSFS;
+    LoopControl loop_control;
+    dirent* dp;
+    while ((dp = readdir(dir.get())) != nullptr) {
+        if (exclude_names.find(dp->d_name) != exclude_names.end()) {
+            continue;
+        }
+        if (!ShouldDeleteLoopDevice(StringPrintf("%s/%s", BLOCK_SYSFS, dp->d_name).data())) {
+            continue;
+        }
+        PCHECK(loop_control.Detach(StringPrintf("/dev/block/%s", dp->d_name).data()));
+    }
+}
+
+void CheckUmountAll() {
+    CheckUmount(std::string(MNT_DIR) + "/snapshot_fuzz_data");
+    CheckUmount(std::string(MNT_DIR) + "/" + FAKE_ROOT_NAME);
+}
+
 class AutoDeleteDir : public AutoDevice {
   public:
     static std::unique_ptr<AutoDeleteDir> New(const std::string& path) {
@@ -110,9 +264,7 @@ class AutoDeleteDir : public AutoDevice {
     }
     ~AutoDeleteDir() {
         if (!HasDevice()) return;
-        if (rmdir(name_.c_str()) == -1) {
-            PLOG(ERROR) << "Cannot remove " << name_;
-        }
+        PCHECK(rmdir(name_.c_str()) == 0 || errno == ENOENT) << name_;
     }
 
   private:
@@ -123,9 +275,7 @@ class AutoUnmount : public AutoDevice {
   public:
     ~AutoUnmount() {
         if (!HasDevice()) return;
-        if (umount(name_.c_str()) == -1) {
-            PLOG(ERROR) << "Cannot umount " << name_;
-        }
+        CheckUmount(name_);
     }
     AutoUnmount(const std::string& path) : AutoDevice(path) {}
 };
@@ -194,6 +344,11 @@ class AutoMemBasedDir : public AutoDevice {
 };
 
 SnapshotFuzzEnv::SnapshotFuzzEnv() {
+    CheckUnsetGsidProps();
+    CheckCleanupDeviceMapperDevices();
+    CheckDetachLoopDevices();
+    CheckUmountAll();
+
     fake_root_ = AutoMemBasedDir::New(FAKE_ROOT_NAME, FAKE_ROOT_SIZE);
     CHECK(fake_root_ != nullptr);
     CHECK(fake_root_->HasDevice());
@@ -212,7 +367,18 @@ SnapshotFuzzEnv::SnapshotFuzzEnv() {
     mounted_data_ = CheckMountFormatData(fake_data_block_device_, fake_data_mount_point_);
 }
 
-SnapshotFuzzEnv::~SnapshotFuzzEnv() = default;
+SnapshotFuzzEnv::~SnapshotFuzzEnv() {
+    CheckUnsetGsidProps();
+    CheckCleanupDeviceMapperDevices();
+    mounted_data_ = nullptr;
+    auto_delete_data_mount_point_ = nullptr;
+    mapped_data_ = nullptr;
+    mapped_super_ = nullptr;
+    CheckDetachLoopDevices();
+    loop_control_ = nullptr;
+    fake_root_ = nullptr;
+    CheckUmountAll();
+}
 
 void CheckZeroFill(const std::string& file, size_t size) {
     std::string zeros(size, '\0');
@@ -222,6 +388,8 @@ void CheckZeroFill(const std::string& file, size_t size) {
 void SnapshotFuzzEnv::CheckSoftReset() {
     fake_root_->CheckSoftReset();
     CheckZeroFill(super(), SUPER_IMAGE_SIZE);
+    CheckCleanupDeviceMapperDevices();
+    CheckDetachLoopDevices({Basename(fake_super_), Basename(fake_data_block_device_)});
 }
 
 std::unique_ptr<IImageManager> SnapshotFuzzEnv::CheckCreateFakeImageManager(
@@ -245,7 +413,7 @@ class AutoDetachLoopDevice : public AutoDevice {
   public:
     AutoDetachLoopDevice(LoopControl* control, const std::string& device)
         : AutoDevice(device), control_(control) {}
-    ~AutoDetachLoopDevice() { control_->Detach(name_); }
+    ~AutoDetachLoopDevice() { PCHECK(control_->Detach(name_)) << name_; }
 
   private:
     LoopControl* control_;
