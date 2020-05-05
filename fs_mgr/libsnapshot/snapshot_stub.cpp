@@ -89,6 +89,11 @@ bool SnapshotManagerStub::HandleImminentDataWipe(const std::function<void()>&) {
     return false;
 }
 
+bool SnapshotManagerStub::FinishMergeInRecovery() {
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
+    return false;
+}
+
 CreateResult SnapshotManagerStub::RecoveryCreateSnapshotDevices() {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return CreateResult::ERROR;
