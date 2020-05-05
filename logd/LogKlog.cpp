@@ -819,7 +819,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
 
     // notify readers
     if (rc > 0) {
-        reader->notifyNewLog(static_cast<log_mask_t>(1 << LOG_ID_KERNEL));
+        reader->notifyNewLog(static_cast<unsigned int>(1 << LOG_ID_KERNEL));
     }
 
     return rc;

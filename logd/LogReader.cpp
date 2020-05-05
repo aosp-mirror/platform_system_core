@@ -39,15 +39,15 @@ LogReader::LogReader(LogBuffer* logbuf)
 
 // When we are notified a new log entry is available, inform
 // listening sockets who are watching this entry's log id.
-void LogReader::notifyNewLog(log_mask_t log_mask) {
+void LogReader::notifyNewLog(unsigned int log_mask) {
     LastLogTimes& times = mLogbuf.mTimes;
 
     LogReaderThread::wrlock();
     for (const auto& entry : times) {
-        if (!entry->isWatchingMultiple(log_mask)) {
+        if (!entry->IsWatchingMultiple(log_mask)) {
             continue;
         }
-        if (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec) {
+        if (entry->timeout().tv_sec || entry->timeout().tv_nsec) {
             continue;
         }
         entry->triggerReader_Locked();
@@ -76,7 +76,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     // send another.
     LogReaderThread::wrlock();
     for (const auto& entry : mLogbuf.mTimes) {
-        if (entry->mClient == cli) {
+        if (entry->client() == cli) {
             entry->release_Locked();
             LogReaderThread::unlock();
             return false;
@@ -227,7 +227,7 @@ void LogReader::doSocketDelete(SocketClient* cli) {
     LastLogTimes::iterator it = times.begin();
     while (it != times.end()) {
         LogReaderThread* entry = it->get();
-        if (entry->mClient == cli) {
+        if (entry->client() == cli) {
             entry->release_Locked();
             break;
         }

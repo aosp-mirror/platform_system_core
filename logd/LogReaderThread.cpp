@@ -20,6 +20,8 @@
 #include <string.h>
 #include <sys/prctl.h>
 
+#include <thread>
+
 #include "LogBuffer.h"
 #include "LogReader.h"
 
@@ -28,82 +30,71 @@ using namespace std::placeholders;
 pthread_mutex_t LogReaderThread::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
 LogReaderThread::LogReaderThread(LogReader& reader, SocketClient* client, bool non_block,
-                                 unsigned long tail, log_mask_t log_mask, pid_t pid,
+                                 unsigned long tail, unsigned int log_mask, pid_t pid,
                                  log_time start_time, uint64_t start, uint64_t timeout,
                                  bool privileged, bool can_read_security_logs)
-    : leadingDropped(false),
-      mReader(reader),
-      mLogMask(log_mask),
-      mPid(pid),
-      mCount(0),
-      mTail(tail),
-      mIndex(0),
-      mClient(client),
-      mStartTime(start_time),
-      mStart(start),
-      mNonBlock(non_block),
+    : leading_dropped_(false),
+      reader_(reader),
+      log_mask_(log_mask),
+      pid_(pid),
+      tail_(tail),
+      count_(0),
+      index_(0),
+      client_(client),
+      start_time_(start_time),
+      start_(start),
+      non_block_(non_block),
       privileged_(privileged),
       can_read_security_logs_(can_read_security_logs) {
-    mTimeout.tv_sec = timeout / NS_PER_SEC;
-    mTimeout.tv_nsec = timeout % NS_PER_SEC;
-    memset(mLastTid, 0, sizeof(mLastTid));
-    pthread_cond_init(&threadTriggeredCondition, nullptr);
+    timeout_.tv_sec = timeout / NS_PER_SEC;
+    timeout_.tv_nsec = timeout % NS_PER_SEC;
+    memset(last_tid_, 0, sizeof(last_tid_));
+    pthread_cond_init(&thread_triggered_condition_, nullptr);
     cleanSkip_Locked();
 }
 
 bool LogReaderThread::startReader_Locked() {
-    pthread_attr_t attr;
-
-    if (!pthread_attr_init(&attr)) {
-        if (!pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
-            if (!pthread_create(&mThread, &attr, LogReaderThread::threadStart, this)) {
-                pthread_attr_destroy(&attr);
-                return true;
-            }
-        }
-        pthread_attr_destroy(&attr);
-    }
-
-    return false;
+    auto thread = std::thread{&LogReaderThread::ThreadFunction, this};
+    thread.detach();
+    return true;
 }
 
-void* LogReaderThread::threadStart(void* obj) {
+void LogReaderThread::ThreadFunction() {
     prctl(PR_SET_NAME, "logd.reader.per");
 
-    LogReaderThread* me = reinterpret_cast<LogReaderThread*>(obj);
+    SocketClient* client = client_;
 
-    SocketClient* client = me->mClient;
+    LogBuffer& logbuf = reader_.logbuf();
 
-    LogBuffer& logbuf = me->mReader.logbuf();
-
-    me->leadingDropped = true;
+    leading_dropped_ = true;
 
     wrlock();
 
-    uint64_t start = me->mStart;
+    uint64_t start = start_;
 
-    while (!me->mRelease) {
-        if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
-            if (pthread_cond_clockwait(&me->threadTriggeredCondition, &timesLock, CLOCK_MONOTONIC,
-                                       &me->mTimeout) == ETIMEDOUT) {
-                me->mTimeout.tv_sec = 0;
-                me->mTimeout.tv_nsec = 0;
+    while (!release_) {
+        if (timeout_.tv_sec || timeout_.tv_nsec) {
+            if (pthread_cond_clockwait(&thread_triggered_condition_, &timesLock, CLOCK_MONOTONIC,
+                                       &timeout_) == ETIMEDOUT) {
+                timeout_.tv_sec = 0;
+                timeout_.tv_nsec = 0;
             }
-            if (me->mRelease) {
+            if (release_) {
                 break;
             }
         }
 
         unlock();
 
-        if (me->mTail) {
-            logbuf.flushTo(client, start, nullptr, me->privileged_, me->can_read_security_logs_,
-                           std::bind(&LogReaderThread::FilterFirstPass, _1, me));
-            me->leadingDropped = true;
+        if (tail_) {
+            logbuf.flushTo(client, start, nullptr, privileged_, can_read_security_logs_,
+                           std::bind(&LogReaderThread::FilterFirstPass, this, _1));
+            leading_dropped_ =
+                    true;  // TODO: Likely a bug, if leading_dropped_ was not true before calling
+                           // flushTo(), then it should not be reset to true after.
         }
-        start = logbuf.flushTo(client, start, me->mLastTid, me->privileged_,
-                               me->can_read_security_logs_,
-                               std::bind(&LogReaderThread::FilterSecondPass, _1, me));
+        start = logbuf.flushTo(client, start, last_tid_, privileged_, can_read_security_logs_,
+                               std::bind(&LogReaderThread::FilterSecondPass, this, _1));
 
         // We only ignore entries before the original start time for the first flushTo(), if we
         // get entries after this first flush before the original start time, then the client
@@ -111,8 +102,8 @@ void* LogReaderThread::threadStart(void* obj) {
         // Note: this is still racy and may skip out of order events that came in since the last
         // time the client disconnected and then reconnected with the new start time.  The long term
         // solution here is that clients must request events since a specific sequence number.
-        me->mStartTime.tv_sec = 0;
-        me->mStartTime.tv_nsec = 0;
+        start_time_.tv_sec = 0;
+        start_time_.tv_nsec = 0;
 
         wrlock();
 
@@ -120,58 +111,54 @@ void* LogReaderThread::threadStart(void* obj) {
             break;
         }
 
-        me->mStart = start + 1;
+        start_ = start + 1;
 
-        if (me->mNonBlock || me->mRelease) {
+        if (non_block_ || release_) {
             break;
         }
 
-        me->cleanSkip_Locked();
+        cleanSkip_Locked();
 
-        if (!me->mTimeout.tv_sec && !me->mTimeout.tv_nsec) {
-            pthread_cond_wait(&me->threadTriggeredCondition, &timesLock);
+        if (!timeout_.tv_sec && !timeout_.tv_nsec) {
+            pthread_cond_wait(&thread_triggered_condition_, &timesLock);
         }
     }
 
-    LogReader& reader = me->mReader;
+    LogReader& reader = reader_;
     reader.release(client);
 
     client->decRef();
 
     LastLogTimes& times = reader.logbuf().mTimes;
     auto it = std::find_if(times.begin(), times.end(),
-                           [&me](const auto& other) { return other.get() == me; });
+                           [this](const auto& other) { return other.get() == this; });
 
     if (it != times.end()) {
         times.erase(it);
     }
 
     unlock();
-
-    return nullptr;
 }
 
 // A first pass to count the number of elements
-int LogReaderThread::FilterFirstPass(const LogBufferElement* element, void* obj) {
-    LogReaderThread* me = reinterpret_cast<LogReaderThread*>(obj);
-
+int LogReaderThread::FilterFirstPass(const LogBufferElement* element) {
     LogReaderThread::wrlock();
 
-    if (me->leadingDropped) {
+    if (leading_dropped_) {
         if (element->getDropped()) {
             LogReaderThread::unlock();
             return false;
         }
-        me->leadingDropped = false;
+        leading_dropped_ = false;
     }
 
-    if (me->mCount == 0) {
-        me->mStart = element->getSequence();
+    if (count_ == 0) {
+        start_ = element->getSequence();
     }
 
-    if ((!me->mPid || me->mPid == element->getPid()) && me->isWatching(element->getLogId()) &&
-        (me->mStartTime == log_time::EPOCH || me->mStartTime <= element->getRealTime())) {
-        ++me->mCount;
+    if ((!pid_ || pid_ == element->getPid()) && IsWatching(element->getLogId()) &&
+        (start_time_ == log_time::EPOCH || start_time_ <= element->getRealTime())) {
+        ++count_;
     }
 
     LogReaderThread::unlock();
@@ -180,62 +167,60 @@ int LogReaderThread::FilterFirstPass(const LogBufferElement* element, void* obj)
 }
 
 // A second pass to send the selected elements
-int LogReaderThread::FilterSecondPass(const LogBufferElement* element, void* obj) {
-    LogReaderThread* me = reinterpret_cast<LogReaderThread*>(obj);
-
+int LogReaderThread::FilterSecondPass(const LogBufferElement* element) {
     LogReaderThread::wrlock();
 
-    me->mStart = element->getSequence();
+    start_ = element->getSequence();
 
-    if (me->skipAhead[element->getLogId()]) {
-        me->skipAhead[element->getLogId()]--;
+    if (skip_ahead_[element->getLogId()]) {
+        skip_ahead_[element->getLogId()]--;
         goto skip;
     }
 
-    if (me->leadingDropped) {
+    if (leading_dropped_) {
         if (element->getDropped()) {
             goto skip;
         }
-        me->leadingDropped = false;
+        leading_dropped_ = false;
     }
 
     // Truncate to close race between first and second pass
-    if (me->mNonBlock && me->mTail && (me->mIndex >= me->mCount)) {
+    if (non_block_ && tail_ && index_ >= count_) {
         goto stop;
     }
 
-    if (!me->isWatching(element->getLogId())) {
+    if (!IsWatching(element->getLogId())) {
         goto skip;
     }
 
-    if (me->mPid && (me->mPid != element->getPid())) {
+    if (pid_ && pid_ != element->getPid()) {
         goto skip;
     }
 
-    if (me->mStartTime != log_time::EPOCH && element->getRealTime() <= me->mStartTime) {
+    if (start_time_ != log_time::EPOCH && element->getRealTime() <= start_time_) {
         goto skip;
     }
 
-    if (me->mRelease) {
+    if (release_) {
         goto stop;
     }
 
-    if (!me->mTail) {
+    if (!tail_) {
         goto ok;
     }
 
-    ++me->mIndex;
+    ++index_;
 
-    if ((me->mCount > me->mTail) && (me->mIndex <= (me->mCount - me->mTail))) {
+    if (count_ > tail_ && index_ <= (count_ - tail_)) {
         goto skip;
     }
 
-    if (!me->mNonBlock) {
-        me->mTail = 0;
+    if (!non_block_) {
+        tail_ = 0;
     }
 
 ok:
-    if (!me->skipAhead[element->getLogId()]) {
+    if (!skip_ahead_[element->getLogId()]) {
         LogReaderThread::unlock();
         return true;
     }
@@ -251,5 +236,5 @@ stop:
 }
 
 void LogReaderThread::cleanSkip_Locked(void) {
-    memset(skipAhead, 0, sizeof(skipAhead));
+    memset(skip_ahead_, 0, sizeof(skip_ahead_));
 }

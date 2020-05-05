@@ -584,9 +584,9 @@ void LogBuffer::kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows
         // A misbehaving or slow reader has its connection
         // dropped if we hit too much memory pressure.
         android::prdebug("Kicking blocked reader, pid %d, from LogBuffer::kickMe()\n",
-                         me->mClient->getPid());
+                         me->client()->getPid());
         me->release_Locked();
-    } else if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
+    } else if (me->timeout().tv_sec || me->timeout().tv_nsec) {
         // Allow a blocked WRAP timeout reader to
         // trigger and start reporting the log data.
         me->triggerReader_Locked();
@@ -594,7 +594,7 @@ void LogBuffer::kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows
         // tell slow reader to skip entries to catch up
         android::prdebug(
                 "Skipping %lu entries from slow reader, pid %d, from LogBuffer::kickMe()\n",
-                pruneRows, me->mClient->getPid());
+                pruneRows, me->client()->getPid());
         me->triggerSkip_Locked(id, pruneRows);
     }
 }
@@ -657,10 +657,9 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LastLogTimes::iterator times = mTimes.begin();
     while (times != mTimes.end()) {
         LogReaderThread* entry = times->get();
-        if (entry->isWatching(id) &&
-            (!oldest || (oldest->mStart > entry->mStart) ||
-             ((oldest->mStart == entry->mStart) &&
-              (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec)))) {
+        if (entry->IsWatching(id) && (!oldest || oldest->start() > entry->start() ||
+                                      (oldest->start() == entry->start() &&
+                                       (entry->timeout().tv_sec || entry->timeout().tv_nsec)))) {
             oldest = entry;
         }
         times++;
@@ -681,7 +680,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            if (oldest && oldest->mStart <= element->getSequence()) {
+            if (oldest && oldest->start() <= element->getSequence()) {
                 busy = true;
                 kickMe(oldest, id, pruneRows);
                 break;
@@ -772,7 +771,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         while (it != mLogElements.end()) {
             LogBufferElement* element = *it;
 
-            if (oldest && oldest->mStart <= element->getSequence()) {
+            if (oldest && oldest->start() <= element->getSequence()) {
                 busy = true;
                 // Do not let chatty eliding trigger any reader mitigation
                 break;
@@ -914,7 +913,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             continue;
         }
 
-        if (oldest && oldest->mStart <= element->getSequence()) {
+        if (oldest && oldest->start() <= element->getSequence()) {
             busy = true;
             if (!whitelist) kickMe(oldest, id, pruneRows);
             break;
@@ -942,7 +941,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            if (oldest && oldest->mStart <= element->getSequence()) {
+            if (oldest && oldest->start() <= element->getSequence()) {
                 busy = true;
                 kickMe(oldest, id, pruneRows);
                 break;
@@ -981,10 +980,10 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
                 while (times != mTimes.end()) {
                     LogReaderThread* entry = times->get();
                     // Killer punch
-                    if (entry->isWatching(id)) {
+                    if (entry->IsWatching(id)) {
                         android::prdebug(
                                 "Kicking blocked reader, pid %d, from LogBuffer::clear()\n",
-                                entry->mClient->getPid());
+                                entry->client()->getPid());
                         entry->release_Locked();
                     }
                     times++;

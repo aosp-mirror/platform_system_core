@@ -29,7 +29,7 @@ class LogReader : public SocketListener {
 
    public:
     explicit LogReader(LogBuffer* logbuf);
-    void notifyNewLog(log_mask_t logMask);
+    void notifyNewLog(unsigned int logMask);
 
     LogBuffer& logbuf(void) const {
         return mLogbuf;

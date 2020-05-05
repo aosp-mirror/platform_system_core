@@ -27,37 +27,16 @@
 #include <log/log.h>
 #include <sysutils/SocketClient.h>
 
-typedef unsigned int log_mask_t;
-
 class LogReader;
 class LogBufferElement;
 
 class LogReaderThread {
     static pthread_mutex_t timesLock;
-    bool mRelease = false;
-    bool leadingDropped;
-    pthread_cond_t threadTriggeredCondition;
-    pthread_t mThread;
-    LogReader& mReader;
-    static void* threadStart(void* me);
-    const log_mask_t mLogMask;
-    const pid_t mPid;
-    unsigned int skipAhead[LOG_ID_MAX];
-    pid_t mLastTid[LOG_ID_MAX];
-    unsigned long mCount;
-    unsigned long mTail;
-    unsigned long mIndex;
 
   public:
     LogReaderThread(LogReader& reader, SocketClient* client, bool non_block, unsigned long tail,
-                    log_mask_t log_mask, pid_t pid, log_time start_time, uint64_t sequence,
+                    unsigned int log_mask, pid_t pid, log_time start_time, uint64_t sequence,
                     uint64_t timeout, bool privileged, bool can_read_security_logs);
-
-    SocketClient* mClient;
-    log_time mStartTime;
-    uint64_t mStart;
-    struct timespec mTimeout;  // CLOCK_MONOTONIC based timeout used for log wrapping.
-    const bool mNonBlock;
 
     // Protect List manipulations
     static void wrlock() { pthread_mutex_lock(&timesLock); }
@@ -66,26 +45,81 @@ class LogReaderThread {
 
     bool startReader_Locked();
 
-    void triggerReader_Locked() { pthread_cond_signal(&threadTriggeredCondition); }
+    void triggerReader_Locked() { pthread_cond_signal(&thread_triggered_condition_); }
 
-    void triggerSkip_Locked(log_id_t id, unsigned int skip) { skipAhead[id] = skip; }
+    void triggerSkip_Locked(log_id_t id, unsigned int skip) { skip_ahead_[id] = skip; }
     void cleanSkip_Locked();
 
     void release_Locked() {
         // gracefully shut down the socket.
-        shutdown(mClient->getSocket(), SHUT_RDWR);
-        mRelease = true;
-        pthread_cond_signal(&threadTriggeredCondition);
+        shutdown(client_->getSocket(), SHUT_RDWR);
+        release_ = true;
+        pthread_cond_signal(&thread_triggered_condition_);
     }
 
-    bool isWatching(log_id_t id) const { return mLogMask & (1 << id); }
-    bool isWatchingMultiple(log_mask_t log_mask) const { return mLogMask & log_mask; }
-    // flushTo filter callbacks
-    static int FilterFirstPass(const LogBufferElement* element, void* me);
-    static int FilterSecondPass(const LogBufferElement* element, void* me);
+    bool IsWatching(log_id_t id) const { return log_mask_ & (1 << id); }
+    bool IsWatchingMultiple(unsigned int log_mask) const { return log_mask_ & log_mask; }
+
+    const SocketClient* client() const { return client_; }
+    uint64_t start() const { return start_; }
+    const timespec& timeout() const { return timeout_; }
 
   private:
+    void ThreadFunction();
+    // flushTo filter callbacks
+    int FilterFirstPass(const LogBufferElement* element);
+    int FilterSecondPass(const LogBufferElement* element);
+
+    // Set to true to cause the thread to end and the LogReaderThread to delete itself.
+    bool release_ = false;
+    // Indicates whether or not 'leading' (first logs seen starting from start_) 'dropped' (chatty)
+    // messages should be ignored.
+    bool leading_dropped_;
+
+    // Condition variable for waking the reader thread if there are messages pending for its client.
+    pthread_cond_t thread_triggered_condition_;
+
+    // Reference to the parent thread that manages log reader sockets.
+    LogReader& reader_;
+    // A mask of the logs buffers that are read by this reader.
+    const unsigned int log_mask_;
+    // If set to non-zero, only pids equal to this are read by the reader.
+    const pid_t pid_;
+    // When a reader is referencing (via start_) old elements in the log buffer, and the log
+    // buffer's size grows past its memory limit, the log buffer may request the reader to skip
+    // ahead a specified number of logs.
+    unsigned int skip_ahead_[LOG_ID_MAX];
+    // Used for distinguishing 'dropped' messages for duplicate logs vs chatty drops
+    pid_t last_tid_[LOG_ID_MAX];
+
+    // These next three variables are used for reading only the most recent lines aka `adb logcat
+    // -t` / `adb logcat -T`.
+    // tail_ is the number of most recent lines to print.
+    unsigned long tail_;
+    // count_ is the result of a first pass through the log buffer to determine how many total
+    // messages there are.
+    unsigned long count_;
+    // index_ is used along with count_ to only start sending lines once index_ > (count_ - tail_)
+    // and to disconnect the reader (if it is dumpAndClose, `adb logcat -t`), when index_ >= count_.
+    unsigned long index_;
+
+    // A pointer to the socket for this reader.
+    SocketClient* client_;
+    // When a reader requests logs starting from a given timestamp, its stored here for the first
+    // pass, such that logs before this time stamp that are accumulated in the buffer are ignored.
+    log_time start_time_;
+    // The point from which the reader will read logs once awoken.
+    uint64_t start_;
+    // CLOCK_MONOTONIC based timeout used for log wrapping.  If this timeout expires before logs
+    // wrap, then wake up and send the logs to the reader anyway.
+    timespec timeout_;
+    // If this reader is 'dumpAndClose' and will disconnect once it has read its intended logs.
+    const bool non_block_;
+
+    // Whether or not this reader can read logs from all UIDs or only its own UID.  See
+    // clientHasLogCredentials().
     bool privileged_;
+    // Whether or not this reader can read security logs.  See CanReadSecurityLogs().
     bool can_read_security_logs_;
 };
 
