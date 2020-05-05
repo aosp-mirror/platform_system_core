@@ -23,6 +23,8 @@
 #include "LogBuffer.h"
 #include "LogReader.h"
 
+using namespace std::placeholders;
+
 pthread_mutex_t LogReaderThread::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
 LogReaderThread::LogReaderThread(LogReader& reader, SocketClient* client, bool non_block,
@@ -96,11 +98,12 @@ void* LogReaderThread::threadStart(void* obj) {
 
         if (me->mTail) {
             logbuf.flushTo(client, start, nullptr, me->privileged_, me->can_read_security_logs_,
-                           FilterFirstPass, me);
+                           std::bind(&LogReaderThread::FilterFirstPass, _1, me));
             me->leadingDropped = true;
         }
         start = logbuf.flushTo(client, start, me->mLastTid, me->privileged_,
-                               me->can_read_security_logs_, FilterSecondPass, me);
+                               me->can_read_security_logs_,
+                               std::bind(&LogReaderThread::FilterSecondPass, _1, me));
 
         // We only ignore entries before the original start time for the first flushTo(), if we
         // get entries after this first flush before the original start time, then the client

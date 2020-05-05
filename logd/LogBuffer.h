@@ -115,8 +115,7 @@ class LogBuffer {
     uint64_t flushTo(SocketClient* writer, uint64_t start,
                      pid_t* lastTid,  // &lastTid[LOG_ID_MAX] or nullptr
                      bool privileged, bool security,
-                     int (*filter)(const LogBufferElement* element, void* arg) = nullptr,
-                     void* arg = nullptr);
+                     const std::function<int(const LogBufferElement* element)>& filter);
 
     bool clear(log_id_t id, uid_t uid = AID_ROOT);
     unsigned long getSize(log_id_t id);

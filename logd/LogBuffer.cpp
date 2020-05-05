@@ -1033,7 +1033,7 @@ unsigned long LogBuffer::getSize(log_id_t id) {
 
 uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid, bool privileged,
                             bool security,
-                            int (*filter)(const LogBufferElement* element, void* arg), void* arg) {
+                            const std::function<int(const LogBufferElement* element)>& filter) {
     LogBufferElementCollection::iterator it;
     uid_t uid = reader->getUid();
 
@@ -1071,7 +1071,7 @@ uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid
 
         // NB: calling out to another object with wrlock() held (safe)
         if (filter) {
-            int ret = (*filter)(element, arg);
+            int ret = filter(element);
             if (ret == false) {
                 continue;
             }
