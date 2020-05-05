@@ -91,6 +91,7 @@ cc_test {
 cc_test {
     name: "fiemap_image_test",
     static_libs: [
+        "libcrypto_utils",
         "libdm",
         "libext4_utils",
         "libfs_mgr",
@@ -99,7 +100,6 @@ cc_test {
     shared_libs: [
         "libbase",
         "libcrypto",
-        "libcrypto_utils",
         "libcutils",
         "liblog",
     ],
@@ -118,6 +118,7 @@ cc_test {
         "-DSKIP_TEST_IN_PRESUBMIT",
     ],
     static_libs: [
+        "libcrypto_utils",
         "libdm",
         "libext4_utils",
         "libfs_mgr",
@@ -126,7 +127,6 @@ cc_test {
     shared_libs: [
         "libbase",
         "libcrypto",
-        "libcrypto_utils",
         "libcutils",
         "liblog",
     ],

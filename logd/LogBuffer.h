@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_BUFFER_H__
-#define _LOGD_LOG_BUFFER_H__
+#pragma once
 
 #include <sys/types.h>
 
@@ -81,10 +80,6 @@ class LogBuffer {
 
     LogStatistics stats;
 
-    PruneList mPrune;
-    // Keeps track of the iterator to the oldest log message of a given log type, as an
-    // optimization when pruning logs.  Use GetOldest() to retrieve.
-    std::optional<LogBufferElementCollection::iterator> mOldest[LOG_ID_MAX];
     // watermark of any worst/chatty uid processing
     typedef std::unordered_map<uid_t, LogBufferElementCollection::iterator>
         LogBufferIteratorMap;
@@ -98,8 +93,6 @@ class LogBuffer {
 
     bool monotonic;
 
-    LogTags tags;
-
     LogBufferElement* lastLoggedElements[LOG_ID_MAX];
     LogBufferElement* droppedElements[LOG_ID_MAX];
     void log(LogBufferElement* elem);
@@ -107,7 +100,7 @@ class LogBuffer {
    public:
     LastLogTimes& mTimes;
 
-    explicit LogBuffer(LastLogTimes* times);
+    LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune);
     ~LogBuffer();
     void init();
     bool isMonotonic() {
@@ -134,24 +127,6 @@ class LogBuffer {
 
     void enableStatistics() {
         stats.enableStatistics();
-    }
-
-    int initPrune(const char* cp) {
-        return mPrune.init(cp);
-    }
-    std::string formatPrune() {
-        return mPrune.format();
-    }
-
-    std::string formatGetEventTag(uid_t uid, const char* name,
-                                  const char* format) {
-        return tags.formatGetEventTag(uid, name, format);
-    }
-    std::string formatEntry(uint32_t tag, uid_t uid) {
-        return tags.formatEntry(tag, uid);
-    }
-    const char* tagToName(uint32_t tag) {
-        return tags.tagToName(tag);
     }
 
     // helper must be protected directly or implicitly by wrlock()/unlock()
@@ -186,6 +161,11 @@ class LogBuffer {
     // Returns an iterator to the oldest element for a given log type, or mLogElements.end() if
     // there are no logs for the given log type. Requires mLogElementsLock to be held.
     LogBufferElementCollection::iterator GetOldest(log_id_t log_id);
-};
 
-#endif  // _LOGD_LOG_BUFFER_H__
+    LogTags* tags_;
+    PruneList* prune_;
+
+    // Keeps track of the iterator to the oldest log message of a given log type, as an
+    // optimization when pruning logs.  Use GetOldest() to retrieve.
+    std::optional<LogBufferElementCollection::iterator> oldest_[LOG_ID_MAX];
+};
