@@ -16,7 +16,7 @@
 #include <string>
 
 #include "../LogBuffer.h"
-#include "../LogTimes.h"
+#include "../LogReaderThread.h"
 
 // We don't want to waste a lot of entropy on messages
 #define MAX_MSG_LENGTH 5

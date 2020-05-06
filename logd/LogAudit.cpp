@@ -277,7 +277,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
                   : LOGGER_ENTRY_MAX_PAYLOAD;
     size_t message_len = str_len + sizeof(android_log_event_string_t);
 
-    log_mask_t notify = 0;
+    unsigned int notify = 0;
 
     if (events) {  // begin scope for event buffer
         uint32_t buffer[(message_len + sizeof(uint32_t) - 1) / sizeof(uint32_t)];
