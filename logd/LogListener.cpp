@@ -45,11 +45,7 @@ bool LogListener::StartListener() {
 }
 
 void LogListener::ThreadFunction() {
-    static bool name_set;
-    if (!name_set) {
-        prctl(PR_SET_NAME, "logd.writer");
-        name_set = true;
-    }
+    prctl(PR_SET_NAME, "logd.writer");
 
     while (true) {
         HandleData();
