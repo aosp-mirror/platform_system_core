@@ -200,16 +200,16 @@ int FirstStageMain(int argc, char** argv) {
     }
 
     Modprobe m({"/lib/modules"}, module_load_file);
-    auto want_console = ALLOW_FIRST_STAGE_CONSOLE ? FirstStageConsole(cmdline) : 0;
+    auto want_console = ALLOW_FIRST_STAGE_CONSOLE && FirstStageConsole(cmdline);
     if (!m.LoadListedModules(!want_console)) {
-        if (want_console != FirstStageConsoleParam::DISABLED) {
+        if (want_console) {
             LOG(ERROR) << "Failed to load kernel modules, starting console";
         } else {
             LOG(FATAL) << "Failed to load kernel modules";
         }
     }
 
-    if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
+    if (want_console) {
         StartConsole();
     }
 

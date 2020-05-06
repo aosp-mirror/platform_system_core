@@ -16,7 +16,6 @@
 
 #include "first_stage_console.h"
 
-#include <stdio.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
@@ -88,18 +87,8 @@ void StartConsole() {
     _exit(127);
 }
 
-int FirstStageConsole(const std::string& cmdline) {
-    auto pos = cmdline.find("androidboot.first_stage_console=");
-    if (pos != std::string::npos) {
-        int val = 0;
-        if (sscanf(cmdline.c_str() + pos, "androidboot.first_stage_console=%d", &val) != 1) {
-            return FirstStageConsoleParam::DISABLED;
-        }
-        if (val <= FirstStageConsoleParam::MAX_PARAM_VALUE && val >= 0) {
-            return val;
-        }
-    }
-    return FirstStageConsoleParam::DISABLED;
+bool FirstStageConsole(const std::string& cmdline) {
+    return cmdline.find("androidboot.first_stage_console=1") != std::string::npos;
 }
 
 }  // namespace init
