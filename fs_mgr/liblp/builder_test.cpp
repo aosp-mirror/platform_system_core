@@ -228,8 +228,9 @@ TEST_F(BuilderTest, InternalPartitionAlignment) {
         ASSERT_EQ(extent.target_type, LP_TARGET_TYPE_LINEAR);
         EXPECT_EQ(extent.num_sectors, 80);
 
+        uint64_t aligned_lba;
         uint64_t lba = extent.target_data * LP_SECTOR_SIZE;
-        uint64_t aligned_lba = AlignTo(lba, device_info.alignment);
+        ASSERT_TRUE(AlignTo(lba, device_info.alignment, &aligned_lba));
         EXPECT_EQ(lba, aligned_lba);
     }
 
@@ -1050,4 +1051,18 @@ TEST_F(BuilderTest, AlignFreeRegion) {
     EXPECT_EQ(e1->end_sector(), 1544);
     EXPECT_EQ(e2->physical_sector(), 3072);
     EXPECT_EQ(e2->end_sector(), 4197368);
+}
+
+TEST_F(BuilderTest, ResizeOverflow) {
+    BlockDeviceInfo super("super", 8_GiB, 786432, 229376, 4096);
+    std::vector<BlockDeviceInfo> block_devices = {super};
+
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(block_devices, "super", 65536, 2);
+    ASSERT_NE(builder, nullptr);
+
+    ASSERT_TRUE(builder->AddGroup("group", 0));
+
+    Partition* p = builder->AddPartition("system", "default", 0);
+    ASSERT_NE(p, nullptr);
+    ASSERT_FALSE(builder->ResizePartition(p, 18446744073709551615ULL));
 }
