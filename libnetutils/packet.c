@@ -40,7 +40,7 @@
 int fatal(const char*);
 
 int open_raw_socket(const char* ifname __unused, uint8_t hwaddr[ETH_ALEN], int if_index) {
-    int s = socket(PF_PACKET, SOCK_DGRAM, 0);
+    int s = socket(PF_PACKET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     if (s < 0) return fatal("socket(PF_PACKET)");
 
     struct sockaddr_ll bindaddr = {
