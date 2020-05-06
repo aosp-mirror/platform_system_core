@@ -155,6 +155,14 @@ static void read_status_line(int fd, char* buf, size_t count) {
     *buf = '\0';
 }
 
+static unique_fd send_command(const std::vector<std::string>& cmd_args, std::string* error) {
+    if (is_abb_exec_supported()) {
+        return send_abb_exec_command(cmd_args, error);
+    } else {
+        return unique_fd(adb_connect(android::base::Join(cmd_args, " "), error));
+    }
+}
+
 static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy) {
     printf("Performing Streamed Install\n");
 
@@ -227,12 +235,7 @@ static int install_app_streamed(int argc, const char** argv, bool use_fastdeploy
         cmd_args.push_back("--apex");
     }
 
-    unique_fd remote_fd;
-    if (use_abb_exec) {
-        remote_fd = send_abb_exec_command(cmd_args, &error);
-    } else {
-        remote_fd.reset(adb_connect(android::base::Join(cmd_args, " "), &error));
-    }
+    unique_fd remote_fd = send_command(cmd_args, &error);
     if (remote_fd < 0) {
         fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
         return 1;
@@ -548,24 +551,28 @@ int install_multiple_app(int argc, const char** argv) {
 
     if (first_apk == -1) error_exit("need APK file on command line");
 
-    std::string install_cmd;
-    if (best_install_mode() == INSTALL_PUSH) {
-        install_cmd = "exec:pm";
-    } else {
-        install_cmd = "exec:cmd package";
-    }
+    const bool use_abb_exec = is_abb_exec_supported();
 
-    std::string cmd = android::base::StringPrintf("%s install-create -S %" PRIu64,
-                                                  install_cmd.c_str(), total_size);
+    const std::string install_cmd =
+            use_abb_exec ? "package"
+                         : best_install_mode() == INSTALL_PUSH ? "exec:pm" : "exec:cmd package";
+
+    std::vector<std::string> cmd_args = {install_cmd, "install-create", "-S",
+                                         std::to_string(total_size)};
+    cmd_args.reserve(first_apk + 4);
     for (int i = 1; i < first_apk; i++) {
-        cmd += " " + escape_arg(argv[i]);
+        if (use_abb_exec) {
+            cmd_args.push_back(argv[i]);
+        } else {
+            cmd_args.push_back(escape_arg(argv[i]));
+        }
     }
 
     // Create install session
     std::string error;
     char buf[BUFSIZ];
     {
-        unique_fd fd(adb_connect(cmd, &error));
+        unique_fd fd = send_command(cmd_args, &error);
         if (fd < 0) {
             fprintf(stderr, "adb: connect error for create: %s\n", error.c_str());
             return EXIT_FAILURE;
@@ -587,6 +594,7 @@ int install_multiple_app(int argc, const char** argv) {
         fputs(buf, stderr);
         return EXIT_FAILURE;
     }
+    const auto session_id_str = std::to_string(session_id);
 
     // Valid session, now stream the APKs
     bool success = true;
@@ -599,10 +607,15 @@ int install_multiple_app(int argc, const char** argv) {
             goto finalize_session;
         }
 
-        std::string cmd =
-                android::base::StringPrintf("%s install-write -S %" PRIu64 " %d %s -",
-                                            install_cmd.c_str(), static_cast<uint64_t>(sb.st_size),
-                                            session_id, android::base::Basename(file).c_str());
+        std::vector<std::string> cmd_args = {
+                install_cmd,
+                "install-write",
+                "-S",
+                std::to_string(sb.st_size),
+                session_id_str,
+                android::base::Basename(file),
+                "-",
+        };
 
         unique_fd local_fd(adb_open(file, O_RDONLY | O_CLOEXEC));
         if (local_fd < 0) {
@@ -612,7 +625,7 @@ int install_multiple_app(int argc, const char** argv) {
         }
 
         std::string error;
-        unique_fd remote_fd(adb_connect(cmd, &error));
+        unique_fd remote_fd = send_command(cmd_args, &error);
         if (remote_fd < 0) {
             fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
             success = false;
@@ -637,10 +650,13 @@ int install_multiple_app(int argc, const char** argv) {
 
 finalize_session:
     // Commit session if we streamed everything okay; otherwise abandon.
-    std::string service = android::base::StringPrintf("%s install-%s %d", install_cmd.c_str(),
-                                                      success ? "commit" : "abandon", session_id);
+    std::vector<std::string> service_args = {
+            install_cmd,
+            success ? "install-commit" : "install-abandon",
+            session_id_str,
+    };
     {
-        unique_fd fd(adb_connect(service, &error));
+        unique_fd fd = send_command(service_args, &error);
         if (fd < 0) {
             fprintf(stderr, "adb: connect error for finalize: %s\n", error.c_str());
             return EXIT_FAILURE;
