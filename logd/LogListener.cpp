@@ -108,7 +108,7 @@ bool LogListener::onDataAvailable(SocketClient* cli) {
     int res = logbuf->log(logId, header->realtime, cred->uid, cred->pid, header->tid, msg,
                           ((size_t)n <= UINT16_MAX) ? (uint16_t)n : UINT16_MAX);
     if (res > 0) {
-        reader->notifyNewLog(static_cast<log_mask_t>(1 << logId));
+        reader->notifyNewLog(static_cast<unsigned int>(1 << logId));
     }
 
     return true;
