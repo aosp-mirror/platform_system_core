@@ -359,7 +359,7 @@ class MetadataBuilder {
     bool GrowPartition(Partition* partition, uint64_t aligned_size,
                        const std::vector<Interval>& free_region_hint);
     void ShrinkPartition(Partition* partition, uint64_t aligned_size);
-    uint64_t AlignSector(const LpMetadataBlockDevice& device, uint64_t sector) const;
+    bool AlignSector(const LpMetadataBlockDevice& device, uint64_t sector, uint64_t* out) const;
     uint64_t TotalSizeOfGroup(PartitionGroup* group) const;
     bool UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo& info);
     bool FindBlockDeviceByName(const std::string& partition_name, uint32_t* index) const;
