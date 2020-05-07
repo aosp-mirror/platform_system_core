@@ -109,21 +109,6 @@ static int drop_privs(bool klogd, bool auditd) {
     return 0;
 }
 
-// Property helper
-static bool check_flag(const char* prop, const char* flag) {
-    const char* cp = strcasestr(prop, flag);
-    if (!cp) {
-        return false;
-    }
-    // We only will document comma (,)
-    static const char sep[] = ",:;|+ \t\f";
-    if ((cp != prop) && !strchr(sep, cp[-1])) {
-        return false;
-    }
-    cp += strlen(flag);
-    return !*cp || !!strchr(sep, *cp);
-}
-
 static int fdDmesg = -1;
 void android::prdebug(const char* fmt, ...) {
     if (fdDmesg < 0) {
@@ -200,10 +185,6 @@ static void readDmesg(LogAudit* al, LogKlog* kl) {
         len = rc + 1;
     }
     buf[--len] = '\0';
-
-    if (kl && kl->isMonotonic()) {
-        kl->synchronize(buf.get(), len);
-    }
 
     ssize_t sublen;
     for (char *ptr = nullptr, *tok = buf.get();

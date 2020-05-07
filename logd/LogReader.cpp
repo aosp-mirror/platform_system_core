@@ -150,9 +150,8 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     // Convert realtime to sequence number
     if (start != log_time::EPOCH) {
         bool start_time_set = false;
-        bool is_monotonic = logbuf().isMonotonic() && android::isMonotonic(start);
         uint64_t last = sequence;
-        auto log_find_start = [pid, logMask, start, is_monotonic, &sequence, &start_time_set,
+        auto log_find_start = [pid, logMask, start, &sequence, &start_time_set,
                                &last](const LogBufferElement* element) -> int {
             if (pid && pid != element->getPid()) {
                 return 0;
@@ -164,14 +163,12 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
                 sequence = element->getSequence();
                 start_time_set = true;
                 return -1;
-            } else if (!is_monotonic || android::isMonotonic(element->getRealTime())) {
+            } else {
                 if (start < element->getRealTime()) {
                     sequence = last;
                     start_time_set = true;
                     return -1;
                 }
-                last = element->getSequence();
-            } else {
                 last = element->getSequence();
             }
             return 0;
