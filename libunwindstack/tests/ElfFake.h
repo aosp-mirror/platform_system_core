@@ -55,6 +55,8 @@ class ElfFake : public Elf {
 
   void FakeSetLoadBias(uint64_t load_bias) { load_bias_ = load_bias; }
 
+  void FakeSetArch(ArchEnum arch) { arch_ = arch; }
+
   void FakeSetInterface(ElfInterface* interface) { interface_.reset(interface); }
   void FakeSetGnuDebugdataInterface(ElfInterface* interface) {
     gnu_debugdata_interface_.reset(interface);
