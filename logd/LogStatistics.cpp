@@ -297,6 +297,49 @@ const char* LogStatistics::uidToName(uid_t uid) const {
     return name;
 }
 
+template <typename TKey, typename TEntry>
+void LogStatistics::WorstTwoWithThreshold(const LogHashtable<TKey, TEntry>& table, size_t threshold,
+                                          int* worst, size_t* worst_sizes,
+                                          size_t* second_worst_sizes) {
+    std::array<const TEntry*, 2> max_entries;
+    table.MaxEntries(AID_ROOT, 0, &max_entries);
+    if (max_entries[0] == nullptr || max_entries[1] == nullptr) {
+        return;
+    }
+    *worst_sizes = max_entries[0]->getSizes();
+    // b/24782000: Allow time horizon to extend roughly tenfold, assume average entry length is
+    // 100 characters.
+    if (*worst_sizes > threshold && *worst_sizes > (10 * max_entries[0]->getDropped())) {
+        *worst = max_entries[0]->getKey();
+        *second_worst_sizes = max_entries[1]->getSizes();
+        if (*second_worst_sizes < threshold) {
+            *second_worst_sizes = threshold;
+        }
+    }
+}
+
+void LogStatistics::WorstTwoUids(log_id id, size_t threshold, int* worst, size_t* worst_sizes,
+                                 size_t* second_worst_sizes) {
+    WorstTwoWithThreshold(uidTable[id], threshold, worst, worst_sizes, second_worst_sizes);
+}
+
+void LogStatistics::WorstTwoTags(size_t threshold, int* worst, size_t* worst_sizes,
+                                 size_t* second_worst_sizes) {
+    WorstTwoWithThreshold(tagTable, threshold, worst, worst_sizes, second_worst_sizes);
+}
+
+void LogStatistics::WorstTwoSystemPids(log_id id, size_t worst_uid_sizes, int* worst,
+                                       size_t* second_worst_sizes) {
+    std::array<const PidEntry*, 2> max_entries;
+    pidSystemTable[id].MaxEntries(AID_SYSTEM, 0, &max_entries);
+    if (max_entries[0] == nullptr || max_entries[1] == nullptr) {
+        return;
+    }
+
+    *worst = max_entries[0]->getKey();
+    *second_worst_sizes = worst_uid_sizes - max_entries[0]->getSizes() + max_entries[1]->getSizes();
+}
+
 std::string UidEntry::formatHeader(const std::string& name, log_id_t id) const {
     bool isprune = worstUidEnabledForLogid(id);
     return formatLine(android::base::StringPrintf(name.c_str(),
@@ -401,12 +444,9 @@ std::string UidEntry::format(const LogStatistics& stat, log_id_t id) const {
     }
 
     static const size_t maximum_sorted_entries = 32;
-    std::unique_ptr<const PidEntry* []> sorted =
-        stat.pidSystemTable[id].sort(uid, (pid_t)0, maximum_sorted_entries);
+    std::array<const PidEntry*, maximum_sorted_entries> sorted;
+    stat.pidSystemTable[id].MaxEntries(uid, 0, &sorted);
 
-    if (!sorted.get()) {
-        return output;
-    }
     std::string byPid;
     size_t index;
     bool hasDropped = false;

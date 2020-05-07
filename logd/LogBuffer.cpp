@@ -663,19 +663,14 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             // Calculate threshold as 12.5% of available storage
             size_t threshold = log_buffer_size(id) / 8;
 
-            if ((id == LOG_ID_EVENTS) || (id == LOG_ID_SECURITY)) {
-                stats.sortTags(AID_ROOT, (pid_t)0, 2, id)
-                    .findWorst(worst, worst_sizes, second_worst_sizes,
-                               threshold);
+            if (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) {
+                stats.WorstTwoTags(threshold, &worst, &worst_sizes, &second_worst_sizes);
                 // per-pid filter for AID_SYSTEM sources is too complex
             } else {
-                stats.sort(AID_ROOT, (pid_t)0, 2, id)
-                    .findWorst(worst, worst_sizes, second_worst_sizes,
-                               threshold);
+                stats.WorstTwoUids(id, threshold, &worst, &worst_sizes, &second_worst_sizes);
 
-                if ((worst == AID_SYSTEM) && prune_->worstPidOfSystemEnabled()) {
-                    stats.sortPids(worst, (pid_t)0, 2, id)
-                        .findWorst(worstPid, worst_sizes, second_worst_sizes);
+                if (worst == AID_SYSTEM && prune_->worstPidOfSystemEnabled()) {
+                    stats.WorstTwoSystemPids(id, worst_sizes, &worstPid, &second_worst_sizes);
                 }
             }
         }

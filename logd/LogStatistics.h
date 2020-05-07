@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_STATISTICS_H__
-#define _LOGD_LOG_STATISTICS_H__
+#pragma once
 
 #include <ctype.h>
 #include <inttypes.h>
@@ -25,6 +24,7 @@
 #include <sys/types.h>
 
 #include <algorithm>  // std::max
+#include <array>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -79,16 +79,12 @@ class LogHashtable {
     typedef
         typename std::unordered_map<TKey, TEntry>::const_iterator const_iterator;
 
-    std::unique_ptr<const TEntry* []> sort(uid_t uid, pid_t pid,
-                                           size_t len) const {
-        if (!len) {
-            std::unique_ptr<const TEntry* []> sorted(nullptr);
-            return sorted;
-        }
-
-        const TEntry** retval = new const TEntry*[len];
-        memset(retval, 0, sizeof(*retval) * len);
-
+    // Returns a sorted array of up to len highest entries sorted by size.  If fewer than len
+    // entries are found, their positions are set to nullptr.
+    template <size_t len>
+    void MaxEntries(uid_t uid, pid_t pid, std::array<const TEntry*, len>* out) const {
+        auto& retval = *out;
+        retval.fill(nullptr);
         for (const_iterator it = map.begin(); it != map.end(); ++it) {
             const TEntry& entry = it->second;
 
@@ -113,8 +109,6 @@ class LogHashtable {
                 retval[index] = &entry;
             }
         }
-        std::unique_ptr<const TEntry* []> sorted(retval);
-        return sorted;
     }
 
     inline iterator add(const TKey& key, const LogBufferElement* element) {
@@ -176,11 +170,8 @@ class LogHashtable {
                        log_id_t id = LOG_ID_MAX) const {
         static const size_t maximum_sorted_entries = 32;
         std::string output;
-        std::unique_ptr<const TEntry* []> sorted =
-            sort(uid, pid, maximum_sorted_entries);
-        if (!sorted.get()) {
-            return output;
-        }
+        std::array<const TEntry*, maximum_sorted_entries> sorted;
+        MaxEntries(uid, pid, &sorted);
         bool headerPrinted = false;
         for (size_t index = 0; index < maximum_sorted_entries; ++index) {
             const TEntry* entry = sorted[index];
@@ -627,41 +618,6 @@ struct TagNameEntry : public EntryBase {
     std::string format(const LogStatistics& stat, log_id_t id) const;
 };
 
-template <typename TEntry>
-class LogFindWorst {
-    std::unique_ptr<const TEntry* []> sorted;
-
-   public:
-    explicit LogFindWorst(std::unique_ptr<const TEntry* []>&& sorted)
-        : sorted(std::move(sorted)) {
-    }
-
-    void findWorst(int& worst, size_t& worst_sizes, size_t& second_worst_sizes,
-                   size_t threshold) {
-        if (sorted.get() && sorted[0] && sorted[1]) {
-            worst_sizes = sorted[0]->getSizes();
-            if ((worst_sizes > threshold)
-                // Allow time horizon to extend roughly tenfold, assume
-                // average entry length is 100 characters.
-                && (worst_sizes > (10 * sorted[0]->getDropped()))) {
-                worst = sorted[0]->getKey();
-                second_worst_sizes = sorted[1]->getSizes();
-                if (second_worst_sizes < threshold) {
-                    second_worst_sizes = threshold;
-                }
-            }
-        }
-    }
-
-    void findWorst(int& worst, size_t worst_sizes, size_t& second_worst_sizes) {
-        if (sorted.get() && sorted[0] && sorted[1]) {
-            worst = sorted[0]->getKey();
-            second_worst_sizes =
-                worst_sizes - sorted[0]->getSizes() + sorted[1]->getSizes();
-        }
-    }
-};
-
 // Log Statistics
 class LogStatistics {
     friend UidEntry;
@@ -748,16 +704,12 @@ class LogStatistics {
         --mDroppedElements[log_id];
     }
 
-    LogFindWorst<UidEntry> sort(uid_t uid, pid_t pid, size_t len, log_id id) {
-        return LogFindWorst<UidEntry>(uidTable[id].sort(uid, pid, len));
-    }
-    LogFindWorst<PidEntry> sortPids(uid_t uid, pid_t pid, size_t len,
-                                    log_id id) {
-        return LogFindWorst<PidEntry>(pidSystemTable[id].sort(uid, pid, len));
-    }
-    LogFindWorst<TagEntry> sortTags(uid_t uid, pid_t pid, size_t len, log_id) {
-        return LogFindWorst<TagEntry>(tagTable.sort(uid, pid, len));
-    }
+    void WorstTwoUids(log_id id, size_t threshold, int* worst, size_t* worst_sizes,
+                      size_t* second_worst_sizes);
+    void WorstTwoTags(size_t threshold, int* worst, size_t* worst_sizes,
+                      size_t* second_worst_sizes);
+    void WorstTwoSystemPids(log_id id, size_t worst_uid_sizes, int* worst,
+                            size_t* second_worst_sizes);
 
     // fast track current value by id only
     size_t sizes(log_id_t id) const {
@@ -785,6 +737,9 @@ class LogStatistics {
     const char* pidToName(pid_t pid) const;
     uid_t pidToUid(pid_t pid);
     const char* uidToName(uid_t uid) const;
-};
 
-#endif  // _LOGD_LOG_STATISTICS_H__
+  private:
+    template <typename TKey, typename TEntry>
+    void WorstTwoWithThreshold(const LogHashtable<TKey, TEntry>& table, size_t threshold,
+                               int* worst, size_t* worst_sizes, size_t* second_worst_sizes);
+};
