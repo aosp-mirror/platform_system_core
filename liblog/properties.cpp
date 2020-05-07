@@ -365,29 +365,6 @@ static inline unsigned char do_cache2_char(struct cache2_char* self) {
   return c;
 }
 
-static unsigned char evaluate_persist_ro(const struct cache2_char* self) {
-  unsigned char c = self->cache_persist.c;
-
-  if (c) {
-    return c;
-  }
-
-  return self->cache_ro.c;
-}
-
-/*
- * Timestamp state generally remains constant, but can change at any time
- * to handle developer requirements.
- */
-clockid_t android_log_clockid() {
-  static struct cache2_char clockid = {PTHREAD_MUTEX_INITIALIZER, 0,
-                                       "persist.logd.timestamp",  {{NULL, 0xFFFFFFFF}, '\0'},
-                                       "ro.logd.timestamp",       {{NULL, 0xFFFFFFFF}, '\0'},
-                                       evaluate_persist_ro};
-
-  return (tolower(do_cache2_char(&clockid)) == 'm') ? CLOCK_MONOTONIC : CLOCK_REALTIME;
-}
-
 /*
  * Security state generally remains constant, but the DO must be able
  * to turn off logging should it become spammy after an attack is detected.

@@ -60,8 +60,6 @@ Public Functions and Macros
     LOG_EVENT_INT(tag, value)
     LOG_EVENT_LONG(tag, value)
 
-    clockid_t android_log_clockid()
-
     log_id_t android_logger_get_id(struct logger *logger)
     int android_logger_clear(struct logger *logger)
     int android_logger_get_log_size(struct logger *logger)
@@ -119,7 +117,7 @@ finally a call closing the logs.  A single log can be opened with `android_logge
 multiple logs can be opened with `android_logger_list_alloc()`, calling in turn the
 `android_logger_open()` for each log id.  Each entry can be retrieved with
 `android_logger_list_read()`.  The log(s) can be closed with `android_logger_list_free()`.
-`ANDROID_LOG_NONBLOCK` mode will report when the log reading is done with an `EAGAIN` error return 
+`ANDROID_LOG_NONBLOCK` mode will report when the log reading is done with an `EAGAIN` error return
 code, otherwise the `android_logger_list_read()` call will block for new entries.
 
 The `ANDROID_LOG_WRAP` mode flag to the `android_logger_list_alloc_time()` signals logd to quiesce

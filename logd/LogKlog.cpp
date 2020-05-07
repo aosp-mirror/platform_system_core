@@ -309,8 +309,6 @@ log_time LogKlog::sniffTime(const char*& buf, ssize_t len, bool reverse) {
         }
         buf = cp;
 
-        if (isMonotonic()) return now;
-
         const char* b;
         if (((b = android::strnstr(cp, len, suspendStr))) &&
             (((b += strlen(suspendStr)) - cp) < len)) {
@@ -356,11 +354,7 @@ log_time LogKlog::sniffTime(const char*& buf, ssize_t len, bool reverse) {
 
         convertMonotonicToReal(now);
     } else {
-        if (isMonotonic()) {
-            now = log_time(CLOCK_MONOTONIC);
-        } else {
-            now = log_time(CLOCK_REALTIME);
-        }
+        now = log_time(CLOCK_REALTIME);
     }
     return now;
 }
@@ -429,45 +423,6 @@ static int parseKernelPrio(const char*& buf, ssize_t len) {
         buf = cp;
     }
     return pri;
-}
-
-// Passed the entire SYSLOG_ACTION_READ_ALL buffer and interpret a
-// compensated start time.
-void LogKlog::synchronize(const char* buf, ssize_t len) {
-    const char* cp = android::strnstr(buf, len, suspendStr);
-    if (!cp) {
-        cp = android::strnstr(buf, len, resumeStr);
-        if (!cp) return;
-    } else {
-        const char* rp = android::strnstr(buf, len, resumeStr);
-        if (rp && (rp < cp)) cp = rp;
-    }
-
-    do {
-        --cp;
-    } while ((cp > buf) && (*cp != '\n'));
-    if (*cp == '\n') {
-        ++cp;
-    }
-    parseKernelPrio(cp, len - (cp - buf));
-
-    log_time now = sniffTime(cp, len - (cp - buf), true);
-
-    const char* suspended = android::strnstr(buf, len, suspendedStr);
-    if (!suspended || (suspended > cp)) {
-        return;
-    }
-    cp = suspended;
-
-    do {
-        --cp;
-    } while ((cp > buf) && (*cp != '\n'));
-    if (*cp == '\n') {
-        ++cp;
-    }
-    parseKernelPrio(cp, len - (cp - buf));
-
-    sniffTime(cp, len - (cp - buf), true);
 }
 
 // Convert kernel log priority number into an Android Logger priority number
@@ -789,7 +744,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
     memcpy(np, p, b);
     np[b] = '\0';
 
-    if (!isMonotonic()) {
+    {
         // Watch out for singular race conditions with timezone causing near
         // integer quarter-hour jumps in the time and compensate accordingly.
         // Entries will be temporal within near_seconds * 2. b/21868540
