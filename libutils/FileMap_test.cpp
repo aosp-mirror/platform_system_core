@@ -32,3 +32,23 @@ TEST(FileMap, zero_length_mapping) {
     ASSERT_EQ(0u, m.getDataLength());
     ASSERT_EQ(4096, m.getDataOffset());
 }
+
+TEST(FileMap, large_offset) {
+    // Make sure that an offset > INT32_MAX will not fail the create
+    // function. See http://b/155662887.
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+
+    off64_t offset = INT32_MAX + 1024LL;
+
+    // Make the temporary file large enough to pass the mmap.
+    ASSERT_EQ(offset, lseek64(tf.fd, offset, SEEK_SET));
+    char value = 0;
+    ASSERT_EQ(1, write(tf.fd, &value, 1));
+
+    android::FileMap m;
+    ASSERT_TRUE(m.create("test", tf.fd, offset, 0, true));
+    ASSERT_STREQ("test", m.getFileName());
+    ASSERT_EQ(0u, m.getDataLength());
+    ASSERT_EQ(offset, m.getDataOffset());
+}
