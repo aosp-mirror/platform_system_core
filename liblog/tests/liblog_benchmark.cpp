@@ -184,7 +184,7 @@ static void BM_pmsg_short(benchmark::State& state) {
    */
 
   struct timespec ts;
-  clock_gettime(android_log_clockid(), &ts);
+  clock_gettime(CLOCK_REALTIME, &ts);
 
   android_pmsg_log_header_t pmsg_header;
   pmsg_header.magic = LOGGER_MAGIC;
@@ -260,7 +260,7 @@ static void BM_pmsg_short_aligned(benchmark::State& state) {
    */
 
   struct timespec ts;
-  clock_gettime(android_log_clockid(), &ts);
+  clock_gettime(CLOCK_REALTIME, &ts);
 
   struct packet {
     android_pmsg_log_header_t pmsg_header;
@@ -335,7 +335,7 @@ static void BM_pmsg_short_unaligned1(benchmark::State& state) {
    */
 
   struct timespec ts;
-  clock_gettime(android_log_clockid(), &ts);
+  clock_gettime(CLOCK_REALTIME, &ts);
 
   struct packet {
     android_pmsg_log_header_t pmsg_header;
@@ -410,7 +410,7 @@ static void BM_pmsg_long_aligned(benchmark::State& state) {
    */
 
   struct timespec ts;
-  clock_gettime(android_log_clockid(), &ts);
+  clock_gettime(CLOCK_REALTIME, &ts);
 
   struct packet {
     android_pmsg_log_header_t pmsg_header;
@@ -483,7 +483,7 @@ static void BM_pmsg_long_unaligned1(benchmark::State& state) {
    */
 
   struct timespec ts;
-  clock_gettime(android_log_clockid(), &ts);
+  clock_gettime(CLOCK_REALTIME, &ts);
 
   struct packet {
     android_pmsg_log_header_t pmsg_header;
@@ -790,16 +790,6 @@ static void BM_is_loggable(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_is_loggable);
-
-/*
- *	Measure the time it takes for android_log_clockid.
- */
-static void BM_clockid(benchmark::State& state) {
-  while (state.KeepRunning()) {
-    android_log_clockid();
-  }
-}
-BENCHMARK(BM_clockid);
 
 /*
  *	Measure the time it takes for __android_log_security.

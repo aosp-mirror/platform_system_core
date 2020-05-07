@@ -44,10 +44,6 @@ ro.logd.filter       string "~! ~1000/!" default for persist.logd.filter.
                                          oldest entries of chattiest UID, and
                                          the chattiest PID of system
                                          (1000, or AID_SYSTEM).
-persist.logd.timestamp     string  ro    The recording timestamp source.
-                                         "m[onotonic]" is the only supported
-                                         key character, otherwise realtime.
-ro.logd.timestamp        string realtime default for persist.logd.timestamp
 log.tag                   string persist The global logging level, VERBOSE,
                                          DEBUG, INFO, WARN, ERROR, ASSERT or
                                          SILENT. Only the first character is
