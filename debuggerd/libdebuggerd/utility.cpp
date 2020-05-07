@@ -35,6 +35,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <bionic/mte_kernel.h>
 #include <bionic/reserved_signals.h>
 #include <debuggerd/handler.h>
 #include <log/log.h>
@@ -374,6 +375,12 @@ const char* get_sigcode(const siginfo_t* si) {
           return "SEGV_ADIDERR";
         case SEGV_ADIPERR:
           return "SEGV_ADIPERR";
+#if defined(ANDROID_EXPERIMENTAL_MTE)
+        case SEGV_MTEAERR:
+          return "SEGV_MTEAERR";
+        case SEGV_MTESERR:
+          return "SEGV_MTESERR";
+#endif
       }
       static_assert(NSIGSEGV == SEGV_ADIPERR, "missing SEGV_* si_code");
       break;
