@@ -42,16 +42,9 @@ class LogKlog : public SocketListener {
     LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead,
             bool auditd);
     int log(const char* buf, ssize_t len);
-    void synchronize(const char* buf, ssize_t len);
 
-    bool isMonotonic() {
-        return logbuf->isMonotonic();
-    }
     static void convertMonotonicToReal(log_time& real) {
         real += correction;
-    }
-    static void convertRealToMonotonic(log_time& real) {
-        real -= correction;
     }
 
    protected:

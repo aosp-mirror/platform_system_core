@@ -52,7 +52,9 @@ cc_library_static {
 
     export_include_dirs: ["."],
 
-    cflags: ["-Werror"] + event_flag,
+    cflags: [
+        "-Wextra",
+    ] + event_flag,
 }
 
 cc_binary {
@@ -75,7 +77,9 @@ cc_binary {
         "libcap",
     ],
 
-    cflags: ["-Werror"],
+    cflags: [
+        "-Wextra",
+    ],
 }
 
 cc_binary {
@@ -90,10 +94,8 @@ cc_binary {
     shared_libs: ["libbase"],
 
     cflags: [
-        "-Wall",
+        "-Wconversion",
         "-Wextra",
-        "-Werror",
-        "-Wconversion"
     ],
 }
 

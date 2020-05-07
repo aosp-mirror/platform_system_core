@@ -606,7 +606,7 @@ TEST(logd, timeout) {
     // A few tries to get it right just in case wrap kicks in due to
     // content providers being active during the test.
     int i = 5;
-    log_time start(android_log_clockid());
+    log_time start(CLOCK_REALTIME);
     start.tv_sec -= 30;  // reach back a moderate period of time
 
     while (--i) {
@@ -682,7 +682,7 @@ TEST(logd, timeout) {
             if (msg > start) {
                 start = msg;
                 start.tv_sec += 30;
-                log_time now = log_time(android_log_clockid());
+                log_time now = log_time(CLOCK_REALTIME);
                 if (start > now) {
                     start = now;
                     --start.tv_sec;
