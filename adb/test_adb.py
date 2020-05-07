@@ -659,14 +659,14 @@ class MdnsTest(unittest.TestCase):
                 print(f"Registering {serv_instance}.{serv_type} ...")
                 with zeroconf_register_service(zc, service_info) as info:
                     """Give adb some time to register the service"""
-                    time.sleep(0.25)
+                    time.sleep(1)
                     print(f"services={_mdns_services(server_port)}")
                     self.assertTrue(any((serv_instance in line and serv_type in line)
                         for line in _mdns_services(server_port)))
 
                 """Give adb some time to unregister the service"""
                 print("Unregistering mdns service...")
-                time.sleep(0.25)
+                time.sleep(1)
                 print(f"services={_mdns_services(server_port)}")
                 self.assertFalse(any((serv_instance in line and serv_type in line)
                     for line in _mdns_services(server_port)))
