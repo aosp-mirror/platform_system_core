@@ -26,11 +26,13 @@
 #include <algorithm>  // std::max
 #include <array>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 
 #include <android-base/stringprintf.h>
+#include <android-base/thread_annotations.h>
 #include <android/log.h>
 #include <log/log_time.h>
 #include <private/android_filesystem_config.h>
@@ -163,32 +165,6 @@ class LogHashtable {
     }
     inline const_iterator end() const {
         return map.end();
-    }
-
-    std::string format(const LogStatistics& stat, uid_t uid, pid_t pid,
-                       const std::string& name = std::string(""),
-                       log_id_t id = LOG_ID_MAX) const {
-        static const size_t maximum_sorted_entries = 32;
-        std::string output;
-        std::array<const TEntry*, maximum_sorted_entries> sorted;
-        MaxEntries(uid, pid, &sorted);
-        bool headerPrinted = false;
-        for (size_t index = 0; index < maximum_sorted_entries; ++index) {
-            const TEntry* entry = sorted[index];
-            if (!entry) {
-                break;
-            }
-            if (entry->getSizes() <= (sorted[0]->getSizes() / 100)) {
-                break;
-            }
-            if (!headerPrinted) {
-                output += "\n\n";
-                output += entry->formatHeader(name, id);
-                headerPrinted = true;
-            }
-            output += entry->format(stat, id);
-        }
-        return output;
     }
 };
 
@@ -621,46 +597,48 @@ struct TagNameEntry : public EntryBase {
 // Log Statistics
 class LogStatistics {
     friend UidEntry;
+    friend PidEntry;
+    friend TidEntry;
 
-    size_t mSizes[LOG_ID_MAX];
-    size_t mElements[LOG_ID_MAX];
-    size_t mDroppedElements[LOG_ID_MAX];
-    size_t mSizesTotal[LOG_ID_MAX];
-    size_t mElementsTotal[LOG_ID_MAX];
-    log_time mOldest[LOG_ID_MAX];
-    log_time mNewest[LOG_ID_MAX];
-    log_time mNewestDropped[LOG_ID_MAX];
-    static size_t SizesTotal;
+    size_t mSizes[LOG_ID_MAX] GUARDED_BY(lock_);
+    size_t mElements[LOG_ID_MAX] GUARDED_BY(lock_);
+    size_t mDroppedElements[LOG_ID_MAX] GUARDED_BY(lock_);
+    size_t mSizesTotal[LOG_ID_MAX] GUARDED_BY(lock_);
+    size_t mElementsTotal[LOG_ID_MAX] GUARDED_BY(lock_);
+    log_time mOldest[LOG_ID_MAX] GUARDED_BY(lock_);
+    log_time mNewest[LOG_ID_MAX] GUARDED_BY(lock_);
+    log_time mNewestDropped[LOG_ID_MAX] GUARDED_BY(lock_);
+    static std::atomic<size_t> SizesTotal;
     bool enable;
 
     // uid to size list
     typedef LogHashtable<uid_t, UidEntry> uidTable_t;
-    uidTable_t uidTable[LOG_ID_MAX];
+    uidTable_t uidTable[LOG_ID_MAX] GUARDED_BY(lock_);
 
     // pid of system to size list
     typedef LogHashtable<pid_t, PidEntry> pidSystemTable_t;
-    pidSystemTable_t pidSystemTable[LOG_ID_MAX];
+    pidSystemTable_t pidSystemTable[LOG_ID_MAX] GUARDED_BY(lock_);
 
     // pid to uid list
     typedef LogHashtable<pid_t, PidEntry> pidTable_t;
-    pidTable_t pidTable;
+    pidTable_t pidTable GUARDED_BY(lock_);
 
     // tid to uid list
     typedef LogHashtable<pid_t, TidEntry> tidTable_t;
-    tidTable_t tidTable;
+    tidTable_t tidTable GUARDED_BY(lock_);
 
     // tag list
     typedef LogHashtable<uint32_t, TagEntry> tagTable_t;
-    tagTable_t tagTable;
+    tagTable_t tagTable GUARDED_BY(lock_);
 
     // security tag list
-    tagTable_t securityTagTable;
+    tagTable_t securityTagTable GUARDED_BY(lock_);
 
     // global tag list
     typedef LogHashtable<TagNameKey, TagNameEntry> tagNameTable_t;
     tagNameTable_t tagNameTable;
 
-    size_t sizeOf() const {
+    size_t sizeOf() const REQUIRES(lock_) {
         size_t size = sizeof(*this) + pidTable.sizeOf() + tidTable.sizeOf() +
                       tagTable.sizeOf() + securityTagTable.sizeOf() +
                       tagNameTable.sizeOf() +
@@ -685,61 +663,59 @@ class LogStatistics {
         return size;
     }
 
-   public:
-    LogStatistics();
+  public:
+    LogStatistics(bool enable_statistics);
 
-    void enableStatistics() {
-        enable = true;
-    }
-
-    void addTotal(LogBufferElement* entry);
-    void add(LogBufferElement* entry);
-    void subtract(LogBufferElement* entry);
+    void AddTotal(LogBufferElement* entry) EXCLUDES(lock_);
+    void Add(LogBufferElement* entry) EXCLUDES(lock_);
+    void Subtract(LogBufferElement* entry) EXCLUDES(lock_);
     // entry->setDropped(1) must follow this call
-    void drop(LogBufferElement* entry);
+    void Drop(LogBufferElement* entry) EXCLUDES(lock_);
     // Correct for coalescing two entries referencing dropped content
-    void erase(LogBufferElement* element) {
+    void Erase(LogBufferElement* element) EXCLUDES(lock_) {
+        auto lock = std::lock_guard{lock_};
         log_id_t log_id = element->getLogId();
         --mElements[log_id];
         --mDroppedElements[log_id];
     }
 
     void WorstTwoUids(log_id id, size_t threshold, int* worst, size_t* worst_sizes,
-                      size_t* second_worst_sizes);
+                      size_t* second_worst_sizes) const EXCLUDES(lock_);
     void WorstTwoTags(size_t threshold, int* worst, size_t* worst_sizes,
-                      size_t* second_worst_sizes);
+                      size_t* second_worst_sizes) const EXCLUDES(lock_);
     void WorstTwoSystemPids(log_id id, size_t worst_uid_sizes, int* worst,
-                            size_t* second_worst_sizes);
+                            size_t* second_worst_sizes) const EXCLUDES(lock_);
 
-    // fast track current value by id only
-    size_t sizes(log_id_t id) const {
+    bool ShouldPrune(log_id id, unsigned long max_size, unsigned long* prune_rows) const
+            EXCLUDES(lock_);
+
+    // Snapshot of the sizes for a given log buffer.
+    size_t Sizes(log_id_t id) const EXCLUDES(lock_) {
+        auto lock = std::lock_guard{lock_};
         return mSizes[id];
     }
-    size_t elements(log_id_t id) const {
-        return mElements[id];
-    }
-    size_t realElements(log_id_t id) const {
-        return mElements[id] - mDroppedElements[id];
-    }
-    size_t sizesTotal(log_id_t id) const {
-        return mSizesTotal[id];
-    }
-    size_t elementsTotal(log_id_t id) const {
-        return mElementsTotal[id];
-    }
+    // TODO: Get rid of this entirely.
     static size_t sizesTotal() {
         return SizesTotal;
     }
 
-    std::string format(uid_t uid, pid_t pid, unsigned int logMask) const;
+    std::string Format(uid_t uid, pid_t pid, unsigned int logMask) const EXCLUDES(lock_);
 
-    // helper (must be locked directly or implicitly by mLogElementsLock)
-    const char* pidToName(pid_t pid) const;
-    uid_t pidToUid(pid_t pid);
-    const char* uidToName(uid_t uid) const;
+    const char* PidToName(pid_t pid) const EXCLUDES(lock_);
+    uid_t PidToUid(pid_t pid) EXCLUDES(lock_);
+    const char* UidToName(uid_t uid) const EXCLUDES(lock_);
 
   private:
     template <typename TKey, typename TEntry>
     void WorstTwoWithThreshold(const LogHashtable<TKey, TEntry>& table, size_t threshold,
-                               int* worst, size_t* worst_sizes, size_t* second_worst_sizes);
+                               int* worst, size_t* worst_sizes, size_t* second_worst_sizes) const;
+    template <typename TKey, typename TEntry>
+    std::string FormatTable(const LogHashtable<TKey, TEntry>& table, uid_t uid, pid_t pid,
+                            const std::string& name = std::string(""),
+                            log_id_t id = LOG_ID_MAX) const REQUIRES(lock_);
+    void FormatTmp(const char* nameTmp, uid_t uid, std::string& name, std::string& size,
+                   size_t nameLen) const REQUIRES(lock_);
+    const char* UidToNameLocked(uid_t uid) const REQUIRES(lock_);
+
+    mutable std::mutex lock_;
 };

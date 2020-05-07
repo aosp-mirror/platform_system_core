@@ -63,8 +63,8 @@ void LogBuffer::init() {
     LogReaderThread::unlock();
 }
 
-LogBuffer::LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune)
-    : mTimes(*times), tags_(tags), prune_(prune) {
+LogBuffer::LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune, LogStatistics* stats)
+    : mTimes(*times), tags_(tags), prune_(prune), stats_(stats) {
     pthread_rwlock_init(&mLogElementsLock, nullptr);
 
     log_id_for_each(i) {
@@ -197,9 +197,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
     }
     if (!__android_log_is_loggable_len(prio, tag, tag_len, ANDROID_LOG_VERBOSE)) {
         // Log traffic received to total
-        wrlock();
-        stats.addTotal(elem);
-        unlock();
+        stats_->AddTotal(elem);
         delete elem;
         return -EACCES;
     }
@@ -308,7 +306,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
                         unlock();
                         return len;
                     }
-                    stats.addTotal(currentLast);
+                    stats_->AddTotal(currentLast);
                     delete currentLast;
                     swab = total;
                     event->payload.data = htole32(swab);
@@ -324,7 +322,7 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
                 }
             }
             if (count) {
-                stats.addTotal(currentLast);
+                stats_->AddTotal(currentLast);
                 currentLast->setDropped(count);
             }
             droppedElements[log_id] = currentLast;
@@ -355,31 +353,15 @@ int LogBuffer::log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
 // assumes LogBuffer::wrlock() held, owns elem, look after garbage collection
 void LogBuffer::log(LogBufferElement* elem) {
     mLogElements.push_back(elem);
-    stats.add(elem);
+    stats_->Add(elem);
     maybePrune(elem->getLogId());
 }
 
-// Prune at most 10% of the log entries or maxPrune, whichever is less.
-//
 // LogBuffer::wrlock() must be held when this function is called.
 void LogBuffer::maybePrune(log_id_t id) {
-    size_t sizes = stats.sizes(id);
-    unsigned long maxSize = log_buffer_size(id);
-    if (sizes > maxSize) {
-        size_t sizeOver = sizes - ((maxSize * 9) / 10);
-        size_t elements = stats.realElements(id);
-        size_t minElements = elements / 100;
-        if (minElements < minPrune) {
-            minElements = minPrune;
-        }
-        unsigned long pruneRows = elements * sizeOver / sizes;
-        if (pruneRows < minElements) {
-            pruneRows = minElements;
-        }
-        if (pruneRows > maxPrune) {
-            pruneRows = maxPrune;
-        }
-        prune(id, pruneRows);
+    unsigned long prune_rows;
+    if (stats_->ShouldPrune(id, log_buffer_size(id), &prune_rows)) {
+        prune(id, prune_rows);
     }
 }
 
@@ -452,9 +434,9 @@ LogBufferElementCollection::iterator LogBuffer::erase(
     }
 #endif
     if (coalesce) {
-        stats.erase(element);
+        stats_->Erase(element);
     } else {
-        stats.subtract(element);
+        stats_->Subtract(element);
     }
     delete element;
 
@@ -535,7 +517,7 @@ class LogBufferElementLast {
 // If the selected reader is blocking our pruning progress, decide on
 // what kind of mitigation is necessary to unblock the situation.
 void LogBuffer::kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows) {
-    if (stats.sizes(id) > (2 * log_buffer_size(id))) {  // +100%
+    if (stats_->Sizes(id) > (2 * log_buffer_size(id))) {  // +100%
         // A misbehaving or slow reader has its connection
         // dropped if we hit too much memory pressure.
         android::prdebug("Kicking blocked reader, pid %d, from LogBuffer::kickMe()\n",
@@ -664,13 +646,13 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             size_t threshold = log_buffer_size(id) / 8;
 
             if (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) {
-                stats.WorstTwoTags(threshold, &worst, &worst_sizes, &second_worst_sizes);
+                stats_->WorstTwoTags(threshold, &worst, &worst_sizes, &second_worst_sizes);
                 // per-pid filter for AID_SYSTEM sources is too complex
             } else {
-                stats.WorstTwoUids(id, threshold, &worst, &worst_sizes, &second_worst_sizes);
+                stats_->WorstTwoUids(id, threshold, &worst, &worst_sizes, &second_worst_sizes);
 
                 if (worst == AID_SYSTEM && prune_->worstPidOfSystemEnabled()) {
-                    stats.WorstTwoSystemPids(id, worst_sizes, &worstPid, &second_worst_sizes);
+                    stats_->WorstTwoSystemPids(id, worst_sizes, &worstPid, &second_worst_sizes);
                 }
             }
         }
@@ -819,7 +801,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             if (leading) {
                 it = erase(it);
             } else {
-                stats.drop(element);
+                stats_->Drop(element);
                 element->setDropped(1);
                 if (last.coalesce(element, 1)) {
                     it = erase(it, true);
@@ -952,14 +934,6 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
     return busy;
 }
 
-// get the used space associated with "id".
-unsigned long LogBuffer::getSizeUsed(log_id_t id) {
-    rdlock();
-    size_t retval = stats.sizes(id);
-    unlock();
-    return retval;
-}
-
 // set the total space allocated to "id"
 int LogBuffer::setSize(log_id_t id, unsigned long size) {
     // Reasonable limits ...
@@ -1044,7 +1018,7 @@ uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid
         unlock();
 
         // range locking in LastLogTimes looks after us
-        curr = element->flushTo(reader, this, sameTid);
+        curr = element->flushTo(reader, stats_, sameTid);
 
         if (curr == element->FLUSH_ERROR) {
             return curr;
@@ -1055,15 +1029,4 @@ uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid
     unlock();
 
     return curr;
-}
-
-std::string LogBuffer::formatStatistics(uid_t uid, pid_t pid,
-                                        unsigned int logMask) {
-    wrlock();
-
-    std::string ret = stats.format(uid, pid, logMask);
-
-    unlock();
-
-    return ret;
 }

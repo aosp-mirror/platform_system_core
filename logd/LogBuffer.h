@@ -38,8 +38,6 @@ class LogBuffer {
     LogBufferElementCollection mLogElements;
     pthread_rwlock_t mLogElementsLock;
 
-    LogStatistics stats;
-
     // watermark of any worst/chatty uid processing
     typedef std::unordered_map<uid_t, LogBufferElementCollection::iterator>
         LogBufferIteratorMap;
@@ -58,7 +56,7 @@ class LogBuffer {
    public:
     LastLogTimes& mTimes;
 
-    LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune);
+    LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune, LogStatistics* stats);
     ~LogBuffer();
     void init();
 
@@ -75,22 +73,8 @@ class LogBuffer {
     bool clear(log_id_t id, uid_t uid = AID_ROOT);
     unsigned long getSize(log_id_t id);
     int setSize(log_id_t id, unsigned long size);
-    unsigned long getSizeUsed(log_id_t id);
 
-    std::string formatStatistics(uid_t uid, pid_t pid, unsigned int logMask);
-
-    void enableStatistics() {
-        stats.enableStatistics();
-    }
-
-    // helper must be protected directly or implicitly by wrlock()/unlock()
-    const char* pidToName(pid_t pid) {
-        return stats.pidToName(pid);
-    }
-    uid_t pidToUid(pid_t pid) { return stats.pidToUid(pid); }
-    const char* uidToName(uid_t uid) {
-        return stats.uidToName(uid);
-    }
+  private:
     void wrlock() {
         pthread_rwlock_wrlock(&mLogElementsLock);
     }
@@ -100,10 +84,6 @@ class LogBuffer {
     void unlock() {
         pthread_rwlock_unlock(&mLogElementsLock);
     }
-
-   private:
-    static constexpr size_t minPrune = 4;
-    static constexpr size_t maxPrune = 256;
 
     void maybePrune(log_id_t id);
     void kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows);
@@ -118,6 +98,7 @@ class LogBuffer {
 
     LogTags* tags_;
     PruneList* prune_;
+    LogStatistics* stats_;
 
     // Keeps track of the iterator to the oldest log message of a given log type, as an
     // optimization when pruning logs.  Use GetOldest() to retrieve.
