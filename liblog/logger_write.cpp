@@ -192,7 +192,7 @@ static int write_to_log(log_id_t log_id, struct iovec* vec, size_t nr) {
     return -EINVAL;
   }
 
-  clock_gettime(android_log_clockid(), &ts);
+  clock_gettime(CLOCK_REALTIME, &ts);
 
   if (log_id == LOG_ID_SECURITY) {
     if (vec[0].iov_len < 4) {
