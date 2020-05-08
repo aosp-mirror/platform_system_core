@@ -1454,6 +1454,52 @@ TEST_F(SnapshotUpdateTest, MergeInRecovery) {
     ASSERT_EQ(new_sm->GetUpdateState(), UpdateState::None);
 }
 
+// Test that a merge does not clear the snapshot state in fastboot.
+TEST_F(SnapshotUpdateTest, MergeInFastboot) {
+    // Execute the first update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(MapUpdateSnapshots());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+    init = nullptr;
+
+    // Initiate the merge and then immediately stop it to simulate a reboot.
+    auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_TRUE(new_sm->InitiateMerge());
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate a reboot into recovery.
+    auto test_device = std::make_unique<TestDeviceInfo>(fake_super, "_b");
+    test_device->set_recovery(true);
+    new_sm = SnapshotManager::NewForFirstStageMount(test_device.release());
+
+    ASSERT_TRUE(new_sm->FinishMergeInRecovery());
+
+    auto mount = new_sm->EnsureMetadataMounted();
+    ASSERT_TRUE(mount && mount->HasDevice());
+    ASSERT_EQ(new_sm->ProcessUpdateState(), UpdateState::MergeCompleted);
+
+    // Finish the merge in a normal boot.
+    test_device = std::make_unique<TestDeviceInfo>(fake_super, "_b");
+    init = SnapshotManager::NewForFirstStageMount(test_device.release());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+    init = nullptr;
+
+    test_device = std::make_unique<TestDeviceInfo>(fake_super, "_b");
+    new_sm = SnapshotManager::NewForFirstStageMount(test_device.release());
+    ASSERT_EQ(new_sm->ProcessUpdateState(), UpdateState::MergeCompleted);
+    ASSERT_EQ(new_sm->ProcessUpdateState(), UpdateState::None);
+}
+
 // Test that after an OTA, before a merge, we can wipe data in recovery.
 TEST_F(SnapshotUpdateTest, DataWipeRollbackInRecovery) {
     // Execute the first update.
