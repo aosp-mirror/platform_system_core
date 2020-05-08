@@ -577,8 +577,16 @@ bool SnapshotManager::InitiateMerge() {
         return false;
     }
 
+    auto other_suffix = device_->GetOtherSlotSuffix();
+
     auto& dm = DeviceMapper::Instance();
     for (const auto& snapshot : snapshots) {
+        if (android::base::EndsWith(snapshot, other_suffix)) {
+            // Allow the merge to continue, but log this unexpected case.
+            LOG(ERROR) << "Unexpected snapshot found during merge: " << snapshot;
+            continue;
+        }
+
         // The device has to be mapped, since everything should be merged at
         // the same time. This is a fairly serious error. We could forcefully
         // map everything here, but it should have been mapped during first-
@@ -1008,6 +1016,15 @@ std::string SnapshotManager::GetForwardMergeIndicatorPath() {
 }
 
 void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
+    // It's not possible to remove update state in recovery, so write an
+    // indicator that cleanup is needed on reboot. If a factory data reset
+    // was requested, it doesn't matter, everything will get wiped anyway.
+    // To make testing easier we consider a /data wipe as cleaned up.
+    if (device_->IsRecovery() && !in_factory_data_reset_) {
+        WriteUpdateState(lock, UpdateState::MergeCompleted);
+        return;
+    }
+
     RemoveAllUpdateState(lock);
 }
 
@@ -2528,7 +2545,43 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
         }
         return true;
     };
-    if (!ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback)) {
+
+    in_factory_data_reset_ = true;
+    bool ok = ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback);
+    in_factory_data_reset_ = false;
+
+    if (!ok) {
+        return false;
+    }
+
+    // Nothing should be depending on partitions now, so unmap them all.
+    if (!UnmapAllPartitions()) {
+        LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
+    }
+    return true;
+}
+
+bool SnapshotManager::FinishMergeInRecovery() {
+    if (!device_->IsRecovery()) {
+        LOG(ERROR) << "Data wipes are only allowed in recovery.";
+        return false;
+    }
+
+    auto mount = EnsureMetadataMounted();
+    if (!mount || !mount->HasDevice()) {
+        return false;
+    }
+
+    auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+    auto super_path = device_->GetSuperDevice(slot_number);
+    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+        LOG(ERROR) << "Unable to map partitions to complete merge.";
+        return false;
+    }
+
+    UpdateState state = ProcessUpdateState();
+    if (state != UpdateState::MergeCompleted) {
+        LOG(ERROR) << "Merge returned unexpected status: " << state;
         return false;
     }
 
