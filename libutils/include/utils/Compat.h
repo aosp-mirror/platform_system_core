@@ -19,11 +19,19 @@
 
 #include <unistd.h>
 
+#if !defined(__MINGW32__)
+#include <sys/mman.h>
+#endif
+
 #if defined(__APPLE__)
 
 /* Mac OS has always had a 64-bit off_t, so it doesn't have off64_t. */
-
+static_assert(sizeof(off_t) >= 8, "This code requires that Mac OS have at least a 64-bit off_t.");
 typedef off_t off64_t;
+
+static inline void* mmap64(void* addr, size_t length, int prot, int flags, int fd, off64_t offset) {
+    return mmap(addr, length, prot, flags, fd, offset);
+}
 
 static inline off64_t lseek64(int fd, off64_t offset, int whence) {
     return lseek(fd, offset, whence);
