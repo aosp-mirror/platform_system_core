@@ -223,6 +223,10 @@ class SnapshotManager final {
     // optional callback fires periodically to query progress via GetUpdateState.
     bool HandleImminentDataWipe(const std::function<void()>& callback = {});
 
+    // Force a merge to complete in recovery. This is similar to HandleImminentDataWipe
+    // but does not expect a data wipe after.
+    bool FinishMergeInRecovery();
+
     // This method is only allowed in recovery and is used as a helper to
     // initialize the snapshot devices as a requirement to mount a snapshotted
     // /system in recovery.
@@ -541,6 +545,7 @@ class SnapshotManager final {
     std::unique_ptr<IDeviceInfo> device_;
     std::unique_ptr<IImageManager> images_;
     bool has_local_image_manager_ = false;
+    bool in_factory_data_reset_ = false;
 };
 
 }  // namespace snapshot
