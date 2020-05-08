@@ -379,7 +379,12 @@ TEST_F(CrasherTest, mte_uaf) {
   ConsumeFd(std::move(output_fd), &result);
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 9 \(SEGV_MTESERR\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a 16-byte allocation)");
+  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a 16-byte allocation.*
+
+allocated by thread .*
+      #00 pc)");
+  ASSERT_MATCH(result, R"(deallocated by thread .*
+      #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
 #endif
@@ -410,7 +415,10 @@ TEST_F(CrasherTest, mte_overflow) {
   ConsumeFd(std::move(output_fd), &result);
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a 16-byte allocation)");
+  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a 16-byte allocation.*
+
+allocated by thread .*
+      #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
 #endif
@@ -441,7 +449,10 @@ TEST_F(CrasherTest, mte_underflow) {
   ConsumeFd(std::move(output_fd), &result);
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 9 \(SEGV_MTESERR\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Underflow, 4 bytes left of a 16-byte allocation)");
+  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Underflow, 4 bytes left of a 16-byte allocation.*
+
+allocated by thread .*
+      #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
 #endif
