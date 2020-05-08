@@ -99,8 +99,7 @@ bool LogTags::RebuildFileEventLogTags(const char* filename, bool warn) {
             struct tm tm;
             localtime_r(&now, &tm);
             char timebuf[20];
-            size_t len =
-                strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm);
+            strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm);
             android::base::WriteStringToFd(
                 android::base::StringPrintf(
                     "# Rebuilt %.20s, content owned by logd\n", timebuf),
@@ -189,7 +188,6 @@ void LogTags::AddEventLogTags(uint32_t tag, uid_t uid, const std::string& Name,
 // Read the event log tags file, and build up our internal database
 void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
     bool etc = !strcmp(filename, system_event_log_tags);
-    bool debug = !etc && !strcmp(filename, debug_event_log_tags);
 
     if (!etc) {
         RebuildFileEventLogTags(filename, warn);
@@ -548,7 +546,7 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
      */
 
     struct timespec ts;
-    clock_gettime(android_log_clockid(), &ts);
+    clock_gettime(CLOCK_REALTIME, &ts);
 
     android_log_header_t header = {
         .id = LOG_ID_EVENTS,

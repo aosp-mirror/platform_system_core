@@ -289,6 +289,8 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
       process_info->fdsan_table_address = crash_info->data.d.fdsan_table_address;
       process_info->gwp_asan_state = crash_info->data.d.gwp_asan_state;
       process_info->gwp_asan_metadata = crash_info->data.d.gwp_asan_metadata;
+      process_info->scudo_stack_depot = crash_info->data.d.scudo_stack_depot;
+      process_info->scudo_region_info = crash_info->data.d.scudo_region_info;
       FALLTHROUGH_INTENDED;
     case 1:
     case 2:

@@ -50,66 +50,21 @@ void LogBuffer::init() {
             setSize(i, LOG_BUFFER_MIN_SIZE);
         }
     }
-    bool lastMonotonic = monotonic;
-    monotonic = android_log_clockid() == CLOCK_MONOTONIC;
-    if (lastMonotonic != monotonic) {
-        //
-        // Fixup all timestamps, may not be 100% accurate, but better than
-        // throwing what we have away when we get 'surprised' by a change.
-        // In-place element fixup so no need to check reader-lock. Entries
-        // should already be in timestamp order, but we could end up with a
-        // few out-of-order entries if new monotonics come in before we
-        // are notified of the reinit change in status. A Typical example would
-        // be:
-        //  --------- beginning of system
-        //      10.494082   184   201 D Cryptfs : Just triggered post_fs_data
-        //  --------- beginning of kernel
-        //       0.000000     0     0 I         : Initializing cgroup subsys
-        // as the act of mounting /data would trigger persist.logd.timestamp to
-        // be corrected. 1/30 corner case YMMV.
-        //
-        rdlock();
-        LogBufferElementCollection::iterator it = mLogElements.begin();
-        while ((it != mLogElements.end())) {
-            LogBufferElement* e = *it;
-            if (monotonic) {
-                if (!android::isMonotonic(e->mRealTime)) {
-                    LogKlog::convertRealToMonotonic(e->mRealTime);
-                    if ((e->mRealTime.tv_nsec % 1000) == 0) {
-                        e->mRealTime.tv_nsec++;
-                    }
-                }
-            } else {
-                if (android::isMonotonic(e->mRealTime)) {
-                    LogKlog::convertMonotonicToReal(e->mRealTime);
-                    if ((e->mRealTime.tv_nsec % 1000) == 0) {
-                        e->mRealTime.tv_nsec++;
-                    }
-                }
-            }
-            ++it;
-        }
-        unlock();
-    }
-
     // Release any sleeping reader threads to dump their current content.
-    LogTimeEntry::wrlock();
+    LogReaderThread::wrlock();
 
     LastLogTimes::iterator times = mTimes.begin();
     while (times != mTimes.end()) {
-        LogTimeEntry* entry = times->get();
+        LogReaderThread* entry = times->get();
         entry->triggerReader_Locked();
         times++;
     }
 
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
 }
 
 LogBuffer::LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune)
-    : monotonic(android_log_clockid() == CLOCK_MONOTONIC),
-      mTimes(*times),
-      tags_(tags),
-      prune_(prune) {
+    : mTimes(*times), tags_(tags), prune_(prune) {
     pthread_rwlock_init(&mLogElementsLock, nullptr);
 
     log_id_for_each(i) {
@@ -579,14 +534,14 @@ class LogBufferElementLast {
 
 // If the selected reader is blocking our pruning progress, decide on
 // what kind of mitigation is necessary to unblock the situation.
-void LogBuffer::kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows) {
+void LogBuffer::kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows) {
     if (stats.sizes(id) > (2 * log_buffer_size(id))) {  // +100%
         // A misbehaving or slow reader has its connection
         // dropped if we hit too much memory pressure.
         android::prdebug("Kicking blocked reader, pid %d, from LogBuffer::kickMe()\n",
-                         me->mClient->getPid());
+                         me->client()->getPid());
         me->release_Locked();
-    } else if (me->mTimeout.tv_sec || me->mTimeout.tv_nsec) {
+    } else if (me->timeout().tv_sec || me->timeout().tv_nsec) {
         // Allow a blocked WRAP timeout reader to
         // trigger and start reporting the log data.
         me->triggerReader_Locked();
@@ -594,7 +549,7 @@ void LogBuffer::kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows) {
         // tell slow reader to skip entries to catch up
         android::prdebug(
                 "Skipping %lu entries from slow reader, pid %d, from LogBuffer::kickMe()\n",
-                pruneRows, me->mClient->getPid());
+                pruneRows, me->client()->getPid());
         me->triggerSkip_Locked(id, pruneRows);
     }
 }
@@ -647,20 +602,19 @@ void LogBuffer::kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows) {
 // LogBuffer::wrlock() must be held when this function is called.
 //
 bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
-    LogTimeEntry* oldest = nullptr;
+    LogReaderThread* oldest = nullptr;
     bool busy = false;
     bool clearAll = pruneRows == ULONG_MAX;
 
-    LogTimeEntry::rdlock();
+    LogReaderThread::rdlock();
 
     // Region locked?
     LastLogTimes::iterator times = mTimes.begin();
     while (times != mTimes.end()) {
-        LogTimeEntry* entry = times->get();
-        if (entry->isWatching(id) &&
-            (!oldest || (oldest->mStart > entry->mStart) ||
-             ((oldest->mStart == entry->mStart) &&
-              (entry->mTimeout.tv_sec || entry->mTimeout.tv_nsec)))) {
+        LogReaderThread* entry = times->get();
+        if (entry->IsWatching(id) && (!oldest || oldest->start() > entry->start() ||
+                                      (oldest->start() == entry->start() &&
+                                       (entry->timeout().tv_sec || entry->timeout().tv_nsec)))) {
             oldest = entry;
         }
         times++;
@@ -681,7 +635,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            if (oldest && oldest->mStart <= element->getSequence()) {
+            if (oldest && oldest->start() <= element->getSequence()) {
                 busy = true;
                 kickMe(oldest, id, pruneRows);
                 break;
@@ -692,7 +646,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 break;
             }
         }
-        LogTimeEntry::unlock();
+        LogReaderThread::unlock();
         return busy;
     }
 
@@ -772,7 +726,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         while (it != mLogElements.end()) {
             LogBufferElement* element = *it;
 
-            if (oldest && oldest->mStart <= element->getSequence()) {
+            if (oldest && oldest->start() <= element->getSequence()) {
                 busy = true;
                 // Do not let chatty eliding trigger any reader mitigation
                 break;
@@ -914,7 +868,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             continue;
         }
 
-        if (oldest && oldest->mStart <= element->getSequence()) {
+        if (oldest && oldest->start() <= element->getSequence()) {
             busy = true;
             if (!whitelist) kickMe(oldest, id, pruneRows);
             break;
@@ -942,7 +896,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            if (oldest && oldest->mStart <= element->getSequence()) {
+            if (oldest && oldest->start() <= element->getSequence()) {
                 busy = true;
                 kickMe(oldest, id, pruneRows);
                 break;
@@ -953,7 +907,7 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
     }
 
-    LogTimeEntry::unlock();
+    LogReaderThread::unlock();
 
     return (pruneRows > 0) && busy;
 }
@@ -976,20 +930,20 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
             // readers and let the clear run (below) deal with determining
             // if we are still blocked and return an error code to caller.
             if (busy) {
-                LogTimeEntry::wrlock();
+                LogReaderThread::wrlock();
                 LastLogTimes::iterator times = mTimes.begin();
                 while (times != mTimes.end()) {
-                    LogTimeEntry* entry = times->get();
+                    LogReaderThread* entry = times->get();
                     // Killer punch
-                    if (entry->isWatching(id)) {
+                    if (entry->IsWatching(id)) {
                         android::prdebug(
                                 "Kicking blocked reader, pid %d, from LogBuffer::clear()\n",
-                                entry->mClient->getPid());
+                                entry->client()->getPid());
                         entry->release_Locked();
                     }
                     times++;
                 }
-                LogTimeEntry::unlock();
+                LogReaderThread::unlock();
             }
         }
         wrlock();
@@ -1033,7 +987,7 @@ unsigned long LogBuffer::getSize(log_id_t id) {
 
 uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid, bool privileged,
                             bool security,
-                            int (*filter)(const LogBufferElement* element, void* arg), void* arg) {
+                            const std::function<int(const LogBufferElement* element)>& filter) {
     LogBufferElementCollection::iterator it;
     uid_t uid = reader->getUid();
 
@@ -1071,7 +1025,7 @@ uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid
 
         // NB: calling out to another object with wrlock() held (safe)
         if (filter) {
-            int ret = (*filter)(element, arg);
+            int ret = filter(element);
             if (ret == false) {
                 continue;
             }

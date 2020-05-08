@@ -27,50 +27,10 @@
 #include <sysutils/SocketClient.h>
 
 #include "LogBufferElement.h"
+#include "LogReaderThread.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
-#include "LogTimes.h"
 #include "LogWhiteBlackList.h"
-
-//
-// We are either in 1970ish (MONOTONIC) or 2016+ish (REALTIME) so to
-// differentiate without prejudice, we use 1972 to delineate, earlier
-// is likely monotonic, later is real. Otherwise we start using a
-// dividing line between monotonic and realtime if more than a minute
-// difference between them.
-//
-namespace android {
-
-static bool isMonotonic(const log_time& mono) {
-    static const uint32_t EPOCH_PLUS_2_YEARS = 2 * 24 * 60 * 60 * 1461 / 4;
-    static const uint32_t EPOCH_PLUS_MINUTE = 60;
-
-    if (mono.tv_sec >= EPOCH_PLUS_2_YEARS) {
-        return false;
-    }
-
-    log_time now(CLOCK_REALTIME);
-
-    /* Timezone and ntp time setup? */
-    if (now.tv_sec >= EPOCH_PLUS_2_YEARS) {
-        return true;
-    }
-
-    /* no way to differentiate realtime from monotonic time */
-    if (now.tv_sec < EPOCH_PLUS_MINUTE) {
-        return false;
-    }
-
-    log_time cpu(CLOCK_MONOTONIC);
-    /* too close to call to differentiate monotonic times from realtime */
-    if ((cpu.tv_sec + EPOCH_PLUS_MINUTE) >= now.tv_sec) {
-        return false;
-    }
-
-    /* dividing line half way between monotonic and realtime */
-    return mono.tv_sec < ((cpu.tv_sec + now.tv_sec) / 2);
-}
-}
 
 typedef std::list<LogBufferElement*> LogBufferElementCollection;
 
@@ -91,8 +51,6 @@ class LogBuffer {
 
     unsigned long mMaxSize[LOG_ID_MAX];
 
-    bool monotonic;
-
     LogBufferElement* lastLoggedElements[LOG_ID_MAX];
     LogBufferElement* droppedElements[LOG_ID_MAX];
     void log(LogBufferElement* elem);
@@ -103,9 +61,6 @@ class LogBuffer {
     LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune);
     ~LogBuffer();
     void init();
-    bool isMonotonic() {
-        return monotonic;
-    }
 
     int log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
             uint16_t len);
@@ -115,8 +70,7 @@ class LogBuffer {
     uint64_t flushTo(SocketClient* writer, uint64_t start,
                      pid_t* lastTid,  // &lastTid[LOG_ID_MAX] or nullptr
                      bool privileged, bool security,
-                     int (*filter)(const LogBufferElement* element, void* arg) = nullptr,
-                     void* arg = nullptr);
+                     const std::function<int(const LogBufferElement* element)>& filter);
 
     bool clear(log_id_t id, uid_t uid = AID_ROOT);
     unsigned long getSize(log_id_t id);
@@ -152,7 +106,7 @@ class LogBuffer {
     static constexpr size_t maxPrune = 256;
 
     void maybePrune(log_id_t id);
-    void kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows);
+    void kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows);
 
     bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
     LogBufferElementCollection::iterator erase(
