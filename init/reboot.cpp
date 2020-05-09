@@ -66,8 +66,6 @@
 #include "sigchld_handler.h"
 #include "util.h"
 
-#define PROC_SYSRQ "/proc/sysrq-trigger"
-
 using namespace std::literals;
 
 using android::base::boot_clock;
