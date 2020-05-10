@@ -37,25 +37,22 @@
 
 #include "dhcpmsg.h"
 
-int fatal();
+int fatal(const char*);
 
-int open_raw_socket(const char *ifname __attribute__((unused)), uint8_t *hwaddr, int if_index)
-{
-    int s;
-    struct sockaddr_ll bindaddr;
+int open_raw_socket(const char* ifname __unused, uint8_t hwaddr[ETH_ALEN], int if_index) {
+    int s = socket(PF_PACKET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    if (s < 0) return fatal("socket(PF_PACKET)");
 
-    if((s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_IP))) < 0) {
-        return fatal("socket(PF_PACKET)");
-    }
-
-    memset(&bindaddr, 0, sizeof(bindaddr));
-    bindaddr.sll_family = AF_PACKET;
-    bindaddr.sll_protocol = htons(ETH_P_IP);
-    bindaddr.sll_halen = ETH_ALEN;
+    struct sockaddr_ll bindaddr = {
+            .sll_family = AF_PACKET,
+            .sll_protocol = htons(ETH_P_IP),
+            .sll_ifindex = if_index,
+            .sll_halen = ETH_ALEN,
+    };
     memcpy(bindaddr.sll_addr, hwaddr, ETH_ALEN);
-    bindaddr.sll_ifindex = if_index;
 
     if (bind(s, (struct sockaddr *)&bindaddr, sizeof(bindaddr)) < 0) {
+        close(s);
         return fatal("Cannot bind raw socket to interface");
     }
 
