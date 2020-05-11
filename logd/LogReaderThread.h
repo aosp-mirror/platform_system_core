@@ -21,31 +21,30 @@
 #include <sys/types.h>
 #include <time.h>
 
+#include <chrono>
+#include <condition_variable>
 #include <list>
 #include <memory>
 
 #include <log/log.h>
 #include <sysutils/SocketClient.h>
 
+#include "LogBuffer.h"
+
 class LogReader;
 class LogBufferElement;
 
 class LogReaderThread {
-    static pthread_mutex_t timesLock;
-
   public:
-    LogReaderThread(LogReader& reader, SocketClient* client, bool non_block, unsigned long tail,
-                    unsigned int log_mask, pid_t pid, log_time start_time, uint64_t sequence,
-                    uint64_t timeout, bool privileged, bool can_read_security_logs);
-
-    // Protect List manipulations
-    static void wrlock() { pthread_mutex_lock(&timesLock); }
-    static void rdlock() { pthread_mutex_lock(&timesLock); }
-    static void unlock() { pthread_mutex_unlock(&timesLock); }
+    LogReaderThread(LogReader& reader, LogReaderList& reader_list, SocketClient* client,
+                    bool non_block, unsigned long tail, unsigned int log_mask, pid_t pid,
+                    log_time start_time, uint64_t sequence,
+                    std::chrono::steady_clock::time_point deadline, bool privileged,
+                    bool can_read_security_logs);
 
     bool startReader_Locked();
 
-    void triggerReader_Locked() { pthread_cond_signal(&thread_triggered_condition_); }
+    void triggerReader_Locked() { thread_triggered_condition_.notify_all(); }
 
     void triggerSkip_Locked(log_id_t id, unsigned int skip) { skip_ahead_[id] = skip; }
     void cleanSkip_Locked();
@@ -54,7 +53,7 @@ class LogReaderThread {
         // gracefully shut down the socket.
         shutdown(client_->getSocket(), SHUT_RDWR);
         release_ = true;
-        pthread_cond_signal(&thread_triggered_condition_);
+        thread_triggered_condition_.notify_all();
     }
 
     bool IsWatching(log_id_t id) const { return log_mask_ & (1 << id); }
@@ -62,13 +61,13 @@ class LogReaderThread {
 
     const SocketClient* client() const { return client_; }
     uint64_t start() const { return start_; }
-    const timespec& timeout() const { return timeout_; }
+    std::chrono::steady_clock::time_point deadline() const { return deadline_; }
 
   private:
     void ThreadFunction();
     // flushTo filter callbacks
-    int FilterFirstPass(const LogBufferElement* element);
-    int FilterSecondPass(const LogBufferElement* element);
+    FlushToResult FilterFirstPass(const LogBufferElement* element);
+    FlushToResult FilterSecondPass(const LogBufferElement* element);
 
     // Set to true to cause the thread to end and the LogReaderThread to delete itself.
     bool release_ = false;
@@ -77,10 +76,12 @@ class LogReaderThread {
     bool leading_dropped_;
 
     // Condition variable for waking the reader thread if there are messages pending for its client.
-    pthread_cond_t thread_triggered_condition_;
+    std::condition_variable thread_triggered_condition_;
 
     // Reference to the parent thread that manages log reader sockets.
     LogReader& reader_;
+    // Reference to the parent list that shares its lock with each instance
+    LogReaderList& reader_list_;
     // A mask of the logs buffers that are read by this reader.
     const unsigned int log_mask_;
     // If set to non-zero, only pids equal to this are read by the reader.
@@ -110,9 +111,9 @@ class LogReaderThread {
     log_time start_time_;
     // The point from which the reader will read logs once awoken.
     uint64_t start_;
-    // CLOCK_MONOTONIC based timeout used for log wrapping.  If this timeout expires before logs
+    // CLOCK_MONOTONIC based deadline used for log wrapping.  If this deadline expires before logs
     // wrap, then wake up and send the logs to the reader anyway.
-    timespec timeout_;
+    std::chrono::steady_clock::time_point deadline_;
     // If this reader is 'dumpAndClose' and will disconnect once it has read its intended logs.
     const bool non_block_;
 
@@ -122,5 +123,3 @@ class LogReaderThread {
     // Whether or not this reader can read security logs.  See CanReadSecurityLogs().
     bool can_read_security_logs_;
 };
-
-typedef std::list<std::unique_ptr<LogReaderThread>> LastLogTimes;

@@ -16,6 +16,7 @@
 #include <string>
 
 #include "../LogBuffer.h"
+#include "../LogReaderList.h"
 #include "../LogReaderThread.h"
 #include "../LogStatistics.h"
 
@@ -95,11 +96,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         return 0;
     }
 
-    LastLogTimes times;
+    LogReaderList reader_list;
     LogTags tags;
     PruneList prune_list;
     LogStatistics stats(true);
-    LogBuffer log_buffer(&times, &tags, &prune_list, &stats);
+    LogBuffer log_buffer(&reader_list, &tags, &prune_list, &stats);
     size_t data_left = size;
     const uint8_t** pdata = &data;
 

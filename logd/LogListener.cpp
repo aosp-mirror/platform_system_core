@@ -32,8 +32,7 @@
 #include "LogListener.h"
 #include "LogUtils.h"
 
-LogListener::LogListener(LogBuffer* buf, LogReader* reader)
-    : socket_(GetLogSocket()), logbuf_(buf), reader_(reader) {}
+LogListener::LogListener(LogBuffer* buf) : socket_(GetLogSocket()), logbuf_(buf) {}
 
 bool LogListener::StartListener() {
     if (socket_ <= 0) {
@@ -121,13 +120,8 @@ void LogListener::HandleData() {
     // NB: hdr.msg_flags & MSG_TRUNC is not tested, silently passing a
     // truncated message to the logs.
 
-    int res = logbuf_->log(logId, header->realtime, cred->uid, cred->pid, header->tid, msg,
-                           ((size_t)n <= UINT16_MAX) ? (uint16_t)n : UINT16_MAX);
-    if (res > 0) {
-        reader_->notifyNewLog(static_cast<unsigned int>(1 << logId));
-    }
-
-    return;
+    logbuf_->log(logId, header->realtime, cred->uid, cred->pid, header->tid, msg,
+                 ((size_t)n <= UINT16_MAX) ? (uint16_t)n : UINT16_MAX);
 }
 
 int LogListener::GetLogSocket() {

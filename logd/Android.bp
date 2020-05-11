@@ -36,6 +36,7 @@ cc_library_static {
         "CommandListener.cpp",
         "LogListener.cpp",
         "LogReader.cpp",
+        "LogReaderList.cpp",
         "LogReaderThread.cpp",
         "LogBuffer.cpp",
         "LogBufferElement.cpp",

@@ -51,20 +51,15 @@ void LogBuffer::init() {
         }
     }
     // Release any sleeping reader threads to dump their current content.
-    LogReaderThread::wrlock();
-
-    LastLogTimes::iterator times = mTimes.begin();
-    while (times != mTimes.end()) {
-        LogReaderThread* entry = times->get();
-        entry->triggerReader_Locked();
-        times++;
+    auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
+    for (const auto& reader_thread : reader_list_->reader_threads()) {
+        reader_thread->triggerReader_Locked();
     }
-
-    LogReaderThread::unlock();
 }
 
-LogBuffer::LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune, LogStatistics* stats)
-    : mTimes(*times), tags_(tags), prune_(prune), stats_(stats) {
+LogBuffer::LogBuffer(LogReaderList* reader_list, LogTags* tags, PruneList* prune,
+                     LogStatistics* stats)
+    : reader_list_(reader_list), tags_(tags), prune_(prune), stats_(stats) {
     pthread_rwlock_init(&mLogElementsLock, nullptr);
 
     log_id_for_each(i) {
@@ -355,6 +350,7 @@ void LogBuffer::log(LogBufferElement* elem) {
     mLogElements.push_back(elem);
     stats_->Add(elem);
     maybePrune(elem->getLogId());
+    reader_list_->NotifyNewLog(1 << elem->getLogId());
 }
 
 // LogBuffer::wrlock() must be held when this function is called.
@@ -523,9 +519,8 @@ void LogBuffer::kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows
         android::prdebug("Kicking blocked reader, pid %d, from LogBuffer::kickMe()\n",
                          me->client()->getPid());
         me->release_Locked();
-    } else if (me->timeout().tv_sec || me->timeout().tv_nsec) {
-        // Allow a blocked WRAP timeout reader to
-        // trigger and start reporting the log data.
+    } else if (me->deadline().time_since_epoch().count() != 0) {
+        // Allow a blocked WRAP deadline reader to trigger and start reporting the log data.
         me->triggerReader_Locked();
     } else {
         // tell slow reader to skip entries to catch up
@@ -588,18 +583,18 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     bool busy = false;
     bool clearAll = pruneRows == ULONG_MAX;
 
-    LogReaderThread::rdlock();
+    auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
 
     // Region locked?
-    LastLogTimes::iterator times = mTimes.begin();
-    while (times != mTimes.end()) {
-        LogReaderThread* entry = times->get();
-        if (entry->IsWatching(id) && (!oldest || oldest->start() > entry->start() ||
-                                      (oldest->start() == entry->start() &&
-                                       (entry->timeout().tv_sec || entry->timeout().tv_nsec)))) {
-            oldest = entry;
+    for (const auto& reader_thread : reader_list_->reader_threads()) {
+        if (!reader_thread->IsWatching(id)) {
+            continue;
         }
-        times++;
+        if (!oldest || oldest->start() > reader_thread->start() ||
+            (oldest->start() == reader_thread->start() &&
+             reader_thread->deadline().time_since_epoch().count() != 0)) {
+            oldest = reader_thread.get();
+        }
     }
 
     LogBufferElementCollection::iterator it;
@@ -628,7 +623,6 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 break;
             }
         }
-        LogReaderThread::unlock();
         return busy;
     }
 
@@ -884,8 +878,6 @@ bool LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
     }
 
-    LogReaderThread::unlock();
-
     return (pruneRows > 0) && busy;
 }
 
@@ -907,20 +899,15 @@ bool LogBuffer::clear(log_id_t id, uid_t uid) {
             // readers and let the clear run (below) deal with determining
             // if we are still blocked and return an error code to caller.
             if (busy) {
-                LogReaderThread::wrlock();
-                LastLogTimes::iterator times = mTimes.begin();
-                while (times != mTimes.end()) {
-                    LogReaderThread* entry = times->get();
-                    // Killer punch
-                    if (entry->IsWatching(id)) {
+                auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
+                for (const auto& reader_thread : reader_list_->reader_threads()) {
+                    if (reader_thread->IsWatching(id)) {
                         android::prdebug(
                                 "Kicking blocked reader, pid %d, from LogBuffer::clear()\n",
-                                entry->client()->getPid());
-                        entry->release_Locked();
+                                reader_thread->client()->getPid());
+                        reader_thread->release_Locked();
                     }
-                    times++;
                 }
-                LogReaderThread::unlock();
             }
         }
         wrlock();
@@ -954,9 +941,9 @@ unsigned long LogBuffer::getSize(log_id_t id) {
     return retval;
 }
 
-uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid, bool privileged,
-                            bool security,
-                            const std::function<int(const LogBufferElement* element)>& filter) {
+uint64_t LogBuffer::flushTo(
+        SocketClient* reader, uint64_t start, pid_t* lastTid, bool privileged, bool security,
+        const std::function<FlushToResult(const LogBufferElement* element)>& filter) {
     LogBufferElementCollection::iterator it;
     uid_t uid = reader->getUid();
 
@@ -994,11 +981,11 @@ uint64_t LogBuffer::flushTo(SocketClient* reader, uint64_t start, pid_t* lastTid
 
         // NB: calling out to another object with wrlock() held (safe)
         if (filter) {
-            int ret = filter(element);
-            if (ret == false) {
+            FlushToResult ret = filter(element);
+            if (ret == FlushToResult::kSkip) {
                 continue;
             }
-            if (ret != true) {
+            if (ret == FlushToResult::kStop) {
                 break;
             }
         }

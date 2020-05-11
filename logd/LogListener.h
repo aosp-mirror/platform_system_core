@@ -21,7 +21,7 @@
 
 class LogListener {
   public:
-    LogListener(LogBuffer* buf, LogReader* reader);
+    LogListener(LogBuffer* buf);
     bool StartListener();
 
   private:
@@ -31,5 +31,4 @@ class LogListener {
 
     int socket_;
     LogBuffer* logbuf_;
-    LogReader* reader_;
 };

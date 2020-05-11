@@ -27,12 +27,20 @@
 #include <sysutils/SocketClient.h>
 
 #include "LogBufferElement.h"
-#include "LogReaderThread.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogWhiteBlackList.h"
 
 typedef std::list<LogBufferElement*> LogBufferElementCollection;
+
+class LogReaderList;
+class LogReaderThread;
+
+enum class FlushToResult {
+    kSkip,
+    kStop,
+    kWrite,
+};
 
 class LogBuffer {
     LogBufferElementCollection mLogElements;
@@ -53,10 +61,8 @@ class LogBuffer {
     LogBufferElement* droppedElements[LOG_ID_MAX];
     void log(LogBufferElement* elem);
 
-   public:
-    LastLogTimes& mTimes;
-
-    LogBuffer(LastLogTimes* times, LogTags* tags, PruneList* prune, LogStatistics* stats);
+  public:
+    LogBuffer(LogReaderList* reader_list, LogTags* tags, PruneList* prune, LogStatistics* stats);
     ~LogBuffer();
     void init();
 
@@ -68,7 +74,7 @@ class LogBuffer {
     uint64_t flushTo(SocketClient* writer, uint64_t start,
                      pid_t* lastTid,  // &lastTid[LOG_ID_MAX] or nullptr
                      bool privileged, bool security,
-                     const std::function<int(const LogBufferElement* element)>& filter);
+                     const std::function<FlushToResult(const LogBufferElement* element)>& filter);
 
     bool clear(log_id_t id, uid_t uid = AID_ROOT);
     unsigned long getSize(log_id_t id);
@@ -96,6 +102,7 @@ class LogBuffer {
     // there are no logs for the given log type. Requires mLogElementsLock to be held.
     LogBufferElementCollection::iterator GetOldest(log_id_t log_id);
 
+    LogReaderList* reader_list_;
     LogTags* tags_;
     PruneList* prune_;
     LogStatistics* stats_;
