@@ -180,7 +180,7 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
     struct ifa_cacheinfo *cacheinfo = nullptr;
     char addrstr[INET6_ADDRSTRLEN] = "";
     char ifname[IFNAMSIZ] = "";
-    uint32_t flags = 0;
+    uint32_t flags;
 
     if (!checkRtNetlinkLength(nh, sizeof(*ifaddr)))
         return false;
@@ -194,6 +194,9 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
 
     // For log messages.
     const char *msgtype = rtMessageName(type);
+
+    // First 8 bits of flags. In practice will always be overridden when parsing IFA_FLAGS below.
+    flags = ifaddr->ifa_flags;
 
     struct rtattr *rta;
     int len = IFA_PAYLOAD(nh);
@@ -231,10 +234,6 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
                 SLOGD("Unknown ifindex %d in %s", ifaddr->ifa_index, msgtype);
             }
 
-            // First 8 bits of flags. In practice will always be overridden by the IFA_FLAGS below,
-            // because that always appears after IFA_ADDRESS. But just in case, support both orders.
-            flags = (flags & 0xffffff00) | ifaddr->ifa_flags;
-
         } else if (rta->rta_type == IFA_CACHEINFO) {
             // Address lifetime information.
             if (maybeLogDuplicateAttribute(cacheinfo, "IFA_CACHEINFO", msgtype))
@@ -249,7 +248,6 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
             cacheinfo = (struct ifa_cacheinfo *) RTA_DATA(rta);
 
         } else if (rta->rta_type == IFA_FLAGS) {
-            // In practice IFA_FLAGS is always after IFA_ADDRESS, so this will overwrite the flags.
             flags = *(uint32_t*)RTA_DATA(rta);
         }
     }
