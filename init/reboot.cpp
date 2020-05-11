@@ -799,11 +799,19 @@ static Result<void> DoUserspaceReboot() {
     auto sigkill_timeout = GetMillisProperty("init.userspace_reboot.sigkill.timeoutmillis", 10s);
     LOG(INFO) << "Timeout to terminate services: " << sigterm_timeout.count() << "ms "
               << "Timeout to kill services: " << sigkill_timeout.count() << "ms";
+    std::string services_file_name = "/metadata/userspacereboot/services.txt";
+    const int flags = O_RDWR | O_CREAT | O_SYNC | O_APPEND | O_CLOEXEC;
     StopServicesAndLogViolations(stop_first, sigterm_timeout, true /* SIGTERM */);
     if (int r = StopServicesAndLogViolations(stop_first, sigkill_timeout, false /* SIGKILL */);
         r > 0) {
+        auto fd = unique_fd(TEMP_FAILURE_RETRY(open(services_file_name.c_str(), flags, 0666)));
+        android::base::WriteStringToFd("Post-data services still running: \n", fd);
+        for (const auto& s : stop_first) {
+            if (s->IsRunning()) {
+                android::base::WriteStringToFd(s->name() + "\n", fd);
+            }
+        }
         sub_reason = "sigkill";
-        // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
     if (auto result = KillZramBackingDevice(); !result.ok()) {
@@ -817,8 +825,14 @@ static Result<void> DoUserspaceReboot() {
     if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */),
                                              sigkill_timeout, false /* SIGKILL */);
         r > 0) {
+        auto fd = unique_fd(TEMP_FAILURE_RETRY(open(services_file_name.c_str(), flags, 0666)));
+        android::base::WriteStringToFd("Debugging services still running: \n", fd);
+        for (const auto& s : GetDebuggingServices(true)) {
+            if (s->IsRunning()) {
+                android::base::WriteStringToFd(s->name() + "\n", fd);
+            }
+        }
         sub_reason = "sigkill_debug";
-        // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " debugging services are still running";
     }
     {

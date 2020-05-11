@@ -511,6 +511,7 @@ on post-fs
     mkdir /metadata/bootstat 0750 system log
     mkdir /metadata/ota 0700 root system
     mkdir /metadata/ota/snapshots 0700 root system
+    mkdir /metadata/userspacereboot 0770 root system
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
