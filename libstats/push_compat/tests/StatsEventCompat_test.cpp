@@ -21,16 +21,7 @@
 
 using android::base::GetProperty;
 
-/* Checking ro.build.version.release is fragile, as the release field is
- * an opaque string without structural guarantees. However, testing confirms
- * that on Q devices, the property is "10," and on R, it is "R." Until
- * android_get_device_api_level() is updated, this is the only solution.
- *
- *
- * TODO(b/146019024): migrate to android_get_device_api_level()
- */
-const static bool mPlatformAtLeastR = GetProperty("ro.build.version.codename", "") == "R" ||
-                                      android_get_device_api_level() > __ANDROID_API_Q__;
+const static bool mPlatformAtLeastR = android_get_device_api_level() >= __ANDROID_API_R__;
 
 TEST(StatsEventCompatTest, TestDynamicLoading) {
     StatsEventCompat event;
