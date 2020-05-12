@@ -112,7 +112,6 @@ int android_logger_list_read(struct logger_list* logger_list,
 
 /* Multiple log_id_t opens */
 struct logger* android_logger_open(struct logger_list* logger_list, log_id_t id);
-#define android_logger_close android_logger_free
 /* Single log_id_t open */
 struct logger_list* android_logger_list_open(log_id_t id, int mode,
                                              unsigned int tail, pid_t pid);
