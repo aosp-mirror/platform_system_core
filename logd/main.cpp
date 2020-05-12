@@ -52,6 +52,7 @@
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogListener.h"
+#include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogUtils.h"
 
@@ -272,6 +273,11 @@ int main(int argc, char* argv[]) {
     LogTags log_tags;
     // Pruning configuration.
     PruneList prune_list;
+    // Partial (required for chatty) or full logging statistics.
+    bool enable_full_log_statistics = __android_logger_property_get_bool(
+            "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
+                                       BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
+    LogStatistics log_statistics(enable_full_log_statistics);
 
     // Serves the purpose of managing the last logs times read on a
     // socket connection, and as a reader lock on a range of log
@@ -282,14 +288,7 @@ int main(int argc, char* argv[]) {
     // LogBuffer is the object which is responsible for holding all
     // log entries.
 
-    LogBuffer* logBuf = new LogBuffer(times, &log_tags, &prune_list);
-
-    if (__android_logger_property_get_bool(
-            "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
-                                   BOOL_DEFAULT_FLAG_ENG |
-                                   BOOL_DEFAULT_FLAG_SVELTE)) {
-        logBuf->enableStatistics();
-    }
+    LogBuffer* logBuf = new LogBuffer(times, &log_tags, &prune_list, &log_statistics);
 
     // LogReader listens on /dev/socket/logdr. When a client
     // connects, log entries in the LogBuffer are written to the client.
@@ -311,7 +310,7 @@ int main(int argc, char* argv[]) {
     // Command listener listens on /dev/socket/logd for incoming logd
     // administrative commands.
 
-    CommandListener* cl = new CommandListener(logBuf, &log_tags, &prune_list);
+    CommandListener* cl = new CommandListener(logBuf, &log_tags, &prune_list, &log_statistics);
     if (cl->startListener()) {
         return EXIT_FAILURE;
     }
@@ -322,16 +321,17 @@ int main(int argc, char* argv[]) {
 
     LogAudit* al = nullptr;
     if (auditd) {
-        al = new LogAudit(logBuf, reader,
-                          __android_logger_property_get_bool(
-                              "ro.logd.auditd.dmesg", BOOL_DEFAULT_TRUE)
-                              ? fdDmesg
-                              : -1);
+        al = new LogAudit(
+                logBuf, reader,
+                __android_logger_property_get_bool("ro.logd.auditd.dmesg", BOOL_DEFAULT_TRUE)
+                        ? fdDmesg
+                        : -1,
+                &log_statistics);
     }
 
     LogKlog* kl = nullptr;
     if (klogd) {
-        kl = new LogKlog(logBuf, reader, fdDmesg, fdPmesg, al != nullptr);
+        kl = new LogKlog(logBuf, reader, fdDmesg, fdPmesg, al != nullptr, &log_statistics);
     }
 
     readDmesg(al, kl);
