@@ -47,6 +47,7 @@
 #include <processgroup/sched_policy.h>
 #include <utils/threads.h>
 
+#include "ChattyLogBuffer.h"
 #include "CommandListener.h"
 #include "LogAudit.h"
 #include "LogBuffer.h"
@@ -288,7 +289,7 @@ int main(int argc, char* argv[]) {
 
     // LogBuffer is the object which is responsible for holding all
     // log entries.
-    LogBuffer* logBuf = new LogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
+    LogBuffer* logBuf = new ChattyLogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
 
     // LogReader listens on /dev/socket/logdr. When a client
     // connects, log entries in the LogBuffer are written to the client.

@@ -24,6 +24,7 @@
 #include <chrono>
 
 #include <cutils/sockets.h>
+#include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
 #include "LogBuffer.h"
@@ -158,7 +159,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
             return FlushToResult::kSkip;
         };
 
-        log_buffer_->flushTo(cli, sequence, nullptr, privileged, can_read_security, log_find_start);
+        log_buffer_->FlushTo(cli, sequence, nullptr, privileged, can_read_security, log_find_start);
 
         if (!start_time_set) {
             if (nonBlock) {

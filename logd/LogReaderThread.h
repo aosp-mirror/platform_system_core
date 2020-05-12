@@ -33,6 +33,7 @@
 
 class LogReader;
 class LogBufferElement;
+class LogReaderList;
 
 class LogReaderThread {
   public:

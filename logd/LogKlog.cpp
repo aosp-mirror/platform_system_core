@@ -767,7 +767,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
     }
 
     // Log message
-    int rc = logbuf->log(LOG_ID_KERNEL, now, uid, pid, tid, newstr, (uint16_t)n);
+    int rc = logbuf->Log(LOG_ID_KERNEL, now, uid, pid, tid, newstr, (uint16_t)n);
 
     return rc;
 }

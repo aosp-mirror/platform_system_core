@@ -120,7 +120,7 @@ void LogListener::HandleData() {
     // NB: hdr.msg_flags & MSG_TRUNC is not tested, silently passing a
     // truncated message to the logs.
 
-    logbuf_->log(logId, header->realtime, cred->uid, cred->pid, header->tid, msg,
+    logbuf_->Log(logId, header->realtime, cred->uid, cred->pid, header->tid, msg,
                  ((size_t)n <= UINT16_MAX) ? (uint16_t)n : UINT16_MAX);
 }
 
