@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __ADB_LISTENERS_H
-#define __ADB_LISTENERS_H
+#pragma once
 
 #include "adb.h"
 
@@ -44,7 +43,7 @@ std::string format_listeners();
 InstallStatus remove_listener(const char* local_name, atransport* transport);
 void remove_all_listeners(void);
 
-void enable_daemon_sockets();
+#if ADB_HOST
+void enable_server_sockets();
 void close_smartsockets();
-
-#endif /* __ADB_LISTENERS_H */
+#endif
