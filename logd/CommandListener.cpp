@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "CommandListener.h"
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <dirent.h>
@@ -35,12 +37,11 @@
 #include <private/android_filesystem_config.h>
 #include <sysutils/SocketClient.h>
 
-#include "CommandListener.h"
-#include "LogCommand.h"
 #include "LogUtils.h"
 
-CommandListener::CommandListener(LogBuffer* buf, LogTags* tags, PruneList* prune)
-    : FrameworkListener(getLogSocket()), buf_(buf), tags_(tags), prune_(prune) {
+CommandListener::CommandListener(LogBuffer* buf, LogTags* tags, PruneList* prune,
+                                 LogStatistics* stats)
+    : FrameworkListener(getLogSocket()), buf_(buf), tags_(tags), prune_(prune), stats_(stats) {
     registerCmd(new ClearCmd(this));
     registerCmd(new GetBufSizeCmd(this));
     registerCmd(new SetBufSizeCmd(this));
@@ -148,7 +149,7 @@ int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    unsigned long size = buf()->getSizeUsed((log_id_t)id);
+    unsigned long size = stats()->Sizes((log_id_t)id);
     char buf[512];
     snprintf(buf, sizeof(buf), "%lu", size);
     cli->sendMsg(buf);
@@ -209,7 +210,7 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient* cli, int argc,
         }
     }
 
-    cli->sendMsg(PackageString(buf()->formatStatistics(uid, pid, logMask)).c_str());
+    cli->sendMsg(PackageString(stats()->Format(uid, pid, logMask)).c_str());
     return 0;
 }
 
