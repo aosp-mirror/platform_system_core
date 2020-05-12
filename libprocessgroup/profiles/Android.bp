@@ -89,15 +89,15 @@ cc_test {
         "test_vendor.cpp",
     ],
     static_libs: [
+        "libbase",
         "libgmock",
+        "liblog",
+        "libjsoncpp",
         "libjsonpbverify",
         "libjsonpbparse",
         "libprocessgroup_proto",
     ],
     shared_libs: [
-        "libbase",
-        "liblog",
-        "libjsoncpp",
         "libprotobuf-cpp-full",
     ],
     test_suites: [
