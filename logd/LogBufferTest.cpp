@@ -335,4 +335,4 @@ TEST_P(LogBufferTest, random_messages) {
     CompareLogMessages(log_messages, read_log_messages);
 }
 
-INSTANTIATE_TEST_CASE_P(LogBufferTests, LogBufferTest, testing::Values("chatty"));
+INSTANTIATE_TEST_CASE_P(LogBufferTests, LogBufferTest, testing::Values("chatty", "simple"));

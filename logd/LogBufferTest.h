@@ -26,6 +26,7 @@
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogWhiteBlackList.h"
+#include "SimpleLogBuffer.h"
 
 struct LogMessage {
     logger_entry entry;
@@ -66,6 +67,8 @@ class LogBufferTest : public testing::TestWithParam<std::string> {
     void SetUp() override {
         if (GetParam() == "chatty") {
             log_buffer_.reset(new ChattyLogBuffer(&reader_list_, &tags_, &prune_, &stats_));
+        } else if (GetParam() == "simple") {
+            log_buffer_.reset(new SimpleLogBuffer(&reader_list_, &tags_, &stats_));
         } else {
             FAIL() << "Unknown buffer type selected for test";
         }
