@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "LogAudit.h"
+
 #include <ctype.h>
 #include <endian.h>
 #include <errno.h>
@@ -34,8 +36,6 @@
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
-#include "LogAudit.h"
-#include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogReader.h"
 #include "LogUtils.h"
@@ -45,16 +45,15 @@
     '<', '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) / 10, \
         '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) % 10, '>'
 
-LogAudit::LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg)
+LogAudit::LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg, LogStatistics* stats)
     : SocketListener(getLogSocket(), false),
       logbuf(buf),
       reader(reader),
       fdDmesg(fdDmesg),
-      main(__android_logger_property_get_bool("ro.logd.auditd.main",
-                                              BOOL_DEFAULT_TRUE)),
-      events(__android_logger_property_get_bool("ro.logd.auditd.events",
-                                                BOOL_DEFAULT_TRUE)),
-      initialized(false) {
+      main(__android_logger_property_get_bool("ro.logd.auditd.main", BOOL_DEFAULT_TRUE)),
+      events(__android_logger_property_get_bool("ro.logd.auditd.events", BOOL_DEFAULT_TRUE)),
+      initialized(false),
+      stats_(stats) {
     static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
                                            'l',
                                            'o',
@@ -211,9 +210,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
             ++cp;
         }
         tid = pid;
-        logbuf->wrlock();
-        uid = logbuf->pidToUid(pid);
-        logbuf->unlock();
+        uid = stats_->PidToUid(pid);
         memmove(pidptr, cp, strlen(cp) + 1);
     }
 
@@ -301,9 +298,7 @@ int LogAudit::logPrint(const char* fmt, ...) {
         pid = tid;
         comm = "auditd";
     } else {
-        logbuf->wrlock();
-        comm = commfree = logbuf->pidToName(pid);
-        logbuf->unlock();
+        comm = commfree = stats_->PidToName(pid);
         if (!comm) {
             comm = "unknown";
         }
