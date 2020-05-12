@@ -17,10 +17,10 @@ LOCAL_SERIAL=$(adb shell getprop ro.serialno)
 
 # Check that we can connect to it.
 adb disconnect
-adb tcpip $REMOTE_PORT
 
-# TODO: Add `adb transport-id` and wait-for-offline on it.
-sleep 5
+TRANSPORT_ID=$(adb transport-id)
+adb tcpip $REMOTE_PORT
+adb -t $TRANSPORT_ID wait-for-disconnect
 
 adb connect $REMOTE
 
@@ -32,13 +32,16 @@ if [[ "$LOCAL_SERIAL" != "$REMOTE_FETCHED_SERIAL" ]]; then
 fi
 
 # Back to USB, and make sure adbd is root.
+adb -s $REMOTE usb
 adb disconnect $REMOTE
 
+adb wait-for-device root
 adb root
-adb wait-for-device usb
+adb wait-for-device
 
-# TODO: Add `adb transport-id` and wait-for-offline on it.
-sleep 5
+TRANSPORT_ID=$(adb transport-id)
+adb usb
+adb -t $TRANSPORT_ID wait-for-disconnect
 
 adb wait-for-device
 
@@ -61,10 +64,9 @@ adb shell logcat -c -G128M
 adb shell setprop persist.adb.trace_mask 1
 
 ### Run test_device.py over USB.
+TRANSPORT_ID=$(adb transport-id)
 adb shell killall adbd
-
-# TODO: Add `adb transport-id` and wait-for-offline on it.
-sleep 5
+adb -t $TRANSPORT_ID wait-for-disconnect
 
 adb wait-for-device shell rm -rf "/data/misc/trace/*" /data/local/tmp/adb_coverage/
 "$OUTPUT_DIR"/../test_device.py
@@ -80,8 +82,10 @@ echo Waiting for adbd to finish dumping traces
 sleep 5
 
 # Restart adbd in tcp mode.
+TRANSPORT_ID=$(adb transport-id)
 adb tcpip $REMOTE_PORT
-sleep 5
+adb -t $TRANSPORT_ID wait-for-disconnect
+
 adb connect $REMOTE
 adb -s $REMOTE wait-for-device
 
