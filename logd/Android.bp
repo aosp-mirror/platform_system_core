@@ -54,6 +54,7 @@ cc_library_static {
 
     cflags: [
         "-Wextra",
+        "-Wthread-safety",
     ] + event_flag,
 }
 

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "LogStatistics.h"
+
 #include <ctype.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -27,14 +29,12 @@
 
 #include <private/android_logger.h>
 
-#include "LogStatistics.h"
-
 static const uint64_t hourSec = 60 * 60;
 static const uint64_t monthSec = 31 * 24 * hourSec;
 
-size_t LogStatistics::SizesTotal;
+std::atomic<size_t> LogStatistics::SizesTotal;
 
-LogStatistics::LogStatistics() : enable(false) {
+LogStatistics::LogStatistics(bool enable_statistics) : enable(enable_statistics) {
     log_time now(CLOCK_REALTIME);
     log_id_for_each(id) {
         mSizes[id] = 0;
@@ -79,7 +79,8 @@ char* pidToName(pid_t pid) {
 }
 }
 
-void LogStatistics::addTotal(LogBufferElement* element) {
+void LogStatistics::AddTotal(LogBufferElement* element) {
+    auto lock = std::lock_guard{lock_};
     if (element->getDropped()) return;
 
     log_id_t log_id = element->getLogId();
@@ -89,7 +90,8 @@ void LogStatistics::addTotal(LogBufferElement* element) {
     ++mElementsTotal[log_id];
 }
 
-void LogStatistics::add(LogBufferElement* element) {
+void LogStatistics::Add(LogBufferElement* element) {
+    auto lock = std::lock_guard{lock_};
     log_id_t log_id = element->getLogId();
     uint16_t size = element->getMsgLen();
     mSizes[log_id] += size;
@@ -159,7 +161,8 @@ void LogStatistics::add(LogBufferElement* element) {
     }
 }
 
-void LogStatistics::subtract(LogBufferElement* element) {
+void LogStatistics::Subtract(LogBufferElement* element) {
+    auto lock = std::lock_guard{lock_};
     log_id_t log_id = element->getLogId();
     uint16_t size = element->getMsgLen();
     mSizes[log_id] -= size;
@@ -204,7 +207,8 @@ void LogStatistics::subtract(LogBufferElement* element) {
 
 // Atomically set an entry to drop
 // entry->setDropped(1) must follow this call, caller should do this explicitly.
-void LogStatistics::drop(LogBufferElement* element) {
+void LogStatistics::Drop(LogBufferElement* element) {
+    auto lock = std::lock_guard{lock_};
     log_id_t log_id = element->getLogId();
     uint16_t size = element->getMsgLen();
     mSizes[log_id] -= size;
@@ -238,9 +242,13 @@ void LogStatistics::drop(LogBufferElement* element) {
     tagNameTable.subtract(TagNameKey(element), element);
 }
 
+const char* LogStatistics::UidToName(uid_t uid) const {
+    auto lock = std::lock_guard{lock_};
+    return UidToNameLocked(uid);
+}
+
 // caller must own and free character string
-// Requires parent LogBuffer::wrlock() to be held
-const char* LogStatistics::uidToName(uid_t uid) const {
+const char* LogStatistics::UidToNameLocked(uid_t uid) const {
     // Local hard coded favourites
     if (uid == AID_LOGD) {
         return strdup("auditd");
@@ -297,6 +305,80 @@ const char* LogStatistics::uidToName(uid_t uid) const {
     return name;
 }
 
+template <typename TKey, typename TEntry>
+void LogStatistics::WorstTwoWithThreshold(const LogHashtable<TKey, TEntry>& table, size_t threshold,
+                                          int* worst, size_t* worst_sizes,
+                                          size_t* second_worst_sizes) const {
+    std::array<const TEntry*, 2> max_entries;
+    table.MaxEntries(AID_ROOT, 0, &max_entries);
+    if (max_entries[0] == nullptr || max_entries[1] == nullptr) {
+        return;
+    }
+    *worst_sizes = max_entries[0]->getSizes();
+    // b/24782000: Allow time horizon to extend roughly tenfold, assume average entry length is
+    // 100 characters.
+    if (*worst_sizes > threshold && *worst_sizes > (10 * max_entries[0]->getDropped())) {
+        *worst = max_entries[0]->getKey();
+        *second_worst_sizes = max_entries[1]->getSizes();
+        if (*second_worst_sizes < threshold) {
+            *second_worst_sizes = threshold;
+        }
+    }
+}
+
+void LogStatistics::WorstTwoUids(log_id id, size_t threshold, int* worst, size_t* worst_sizes,
+                                 size_t* second_worst_sizes) const {
+    auto lock = std::lock_guard{lock_};
+    WorstTwoWithThreshold(uidTable[id], threshold, worst, worst_sizes, second_worst_sizes);
+}
+
+void LogStatistics::WorstTwoTags(size_t threshold, int* worst, size_t* worst_sizes,
+                                 size_t* second_worst_sizes) const {
+    auto lock = std::lock_guard{lock_};
+    WorstTwoWithThreshold(tagTable, threshold, worst, worst_sizes, second_worst_sizes);
+}
+
+void LogStatistics::WorstTwoSystemPids(log_id id, size_t worst_uid_sizes, int* worst,
+                                       size_t* second_worst_sizes) const {
+    auto lock = std::lock_guard{lock_};
+    std::array<const PidEntry*, 2> max_entries;
+    pidSystemTable[id].MaxEntries(AID_SYSTEM, 0, &max_entries);
+    if (max_entries[0] == nullptr || max_entries[1] == nullptr) {
+        return;
+    }
+
+    *worst = max_entries[0]->getKey();
+    *second_worst_sizes = worst_uid_sizes - max_entries[0]->getSizes() + max_entries[1]->getSizes();
+}
+
+// Prune at most 10% of the log entries or maxPrune, whichever is less.
+bool LogStatistics::ShouldPrune(log_id id, unsigned long max_size,
+                                unsigned long* prune_rows) const {
+    static constexpr size_t kMinPrune = 4;
+    static constexpr size_t kMaxPrune = 256;
+
+    auto lock = std::lock_guard{lock_};
+    size_t sizes = mSizes[id];
+    if (sizes <= max_size) {
+        return false;
+    }
+    size_t size_over = sizes - ((max_size * 9) / 10);
+    size_t elements = mElements[id] - mDroppedElements[id];
+    size_t min_elements = elements / 100;
+    if (min_elements < kMinPrune) {
+        min_elements = kMinPrune;
+    }
+    *prune_rows = elements * size_over / sizes;
+    if (*prune_rows < min_elements) {
+        *prune_rows = min_elements;
+    }
+    if (*prune_rows > kMaxPrune) {
+        *prune_rows = kMaxPrune;
+    }
+
+    return true;
+}
+
 std::string UidEntry::formatHeader(const std::string& name, log_id_t id) const {
     bool isprune = worstUidEnabledForLogid(id);
     return formatLine(android::base::StringPrintf(name.c_str(),
@@ -308,10 +390,10 @@ std::string UidEntry::formatHeader(const std::string& name, log_id_t id) const {
 }
 
 // Helper to truncate name, if too long, and add name dressings
-static void formatTmp(const LogStatistics& stat, const char* nameTmp, uid_t uid,
-                      std::string& name, std::string& size, size_t nameLen) {
+void LogStatistics::FormatTmp(const char* nameTmp, uid_t uid, std::string& name, std::string& size,
+                              size_t nameLen) const {
     const char* allocNameTmp = nullptr;
-    if (!nameTmp) nameTmp = allocNameTmp = stat.uidToName(uid);
+    if (!nameTmp) nameTmp = allocNameTmp = UidToNameLocked(uid);
     if (nameTmp) {
         size_t lenSpace = std::max(nameLen - name.length(), (size_t)1);
         size_t len = EntryBaseConstants::total_len -
@@ -332,12 +414,12 @@ static void formatTmp(const LogStatistics& stat, const char* nameTmp, uid_t uid,
     }
 }
 
-std::string UidEntry::format(const LogStatistics& stat, log_id_t id) const {
+std::string UidEntry::format(const LogStatistics& stat, log_id_t id) const REQUIRES(stat.lock_) {
     uid_t uid = getUid();
     std::string name = android::base::StringPrintf("%u", uid);
     std::string size = android::base::StringPrintf("%zu", getSizes());
 
-    formatTmp(stat, nullptr, uid, name, size, 6);
+    stat.FormatTmp(nullptr, uid, name, size, 6);
 
     std::string pruned = "";
     if (worstUidEnabledForLogid(id)) {
@@ -347,9 +429,9 @@ std::string UidEntry::format(const LogStatistics& stat, log_id_t id) const {
              it != stat.uidTable[id].end(); ++it) {
             totalDropped += it->second.getDropped();
         }
-        size_t sizes = stat.sizes(id);
-        size_t totalSize = stat.sizesTotal(id);
-        size_t totalElements = stat.elementsTotal(id);
+        size_t sizes = stat.mSizes[id];
+        size_t totalSize = stat.mSizesTotal[id];
+        size_t totalElements = stat.mElementsTotal[id];
         float totalVirtualSize =
             (float)sizes + (float)totalDropped * totalSize / totalElements;
         size_t entrySize = getSizes();
@@ -401,12 +483,9 @@ std::string UidEntry::format(const LogStatistics& stat, log_id_t id) const {
     }
 
     static const size_t maximum_sorted_entries = 32;
-    std::unique_ptr<const PidEntry* []> sorted =
-        stat.pidSystemTable[id].sort(uid, (pid_t)0, maximum_sorted_entries);
+    std::array<const PidEntry*, maximum_sorted_entries> sorted;
+    stat.pidSystemTable[id].MaxEntries(uid, 0, &sorted);
 
-    if (!sorted.get()) {
-        return output;
-    }
     std::string byPid;
     size_t index;
     bool hasDropped = false;
@@ -440,14 +519,14 @@ std::string PidEntry::formatHeader(const std::string& name,
                       std::string("BYTES"), std::string("NUM"));
 }
 
-std::string PidEntry::format(const LogStatistics& stat,
-                             log_id_t /* id */) const {
+std::string PidEntry::format(const LogStatistics& stat, log_id_t /* id */) const
+        REQUIRES(stat.lock_) {
     uid_t uid = getUid();
     pid_t pid = getPid();
     std::string name = android::base::StringPrintf("%5u/%u", pid, uid);
     std::string size = android::base::StringPrintf("%zu", getSizes());
 
-    formatTmp(stat, getName(), uid, name, size, 12);
+    stat.FormatTmp(getName(), uid, name, size, 12);
 
     std::string pruned = "";
     size_t dropped = getDropped();
@@ -465,13 +544,13 @@ std::string TidEntry::formatHeader(const std::string& name,
                       std::string("NUM"));
 }
 
-std::string TidEntry::format(const LogStatistics& stat,
-                             log_id_t /* id */) const {
+std::string TidEntry::format(const LogStatistics& stat, log_id_t /* id */) const
+        REQUIRES(stat.lock_) {
     uid_t uid = getUid();
     std::string name = android::base::StringPrintf("%5u/%u", getTid(), uid);
     std::string size = android::base::StringPrintf("%zu", getSizes());
 
-    formatTmp(stat, getName(), uid, name, size, 12);
+    stat.FormatTmp(getName(), uid, name, size, 12);
 
     std::string pruned = "";
     size_t dropped = getDropped();
@@ -611,8 +690,36 @@ static std::string formatMsec(uint64_t val) {
     return output;
 }
 
-std::string LogStatistics::format(uid_t uid, pid_t pid,
-                                  unsigned int logMask) const {
+template <typename TKey, typename TEntry>
+std::string LogStatistics::FormatTable(const LogHashtable<TKey, TEntry>& table, uid_t uid,
+                                       pid_t pid, const std::string& name, log_id_t id) const
+        REQUIRES(lock_) {
+    static const size_t maximum_sorted_entries = 32;
+    std::string output;
+    std::array<const TEntry*, maximum_sorted_entries> sorted;
+    table.MaxEntries(uid, pid, &sorted);
+    bool header_printed = false;
+    for (size_t index = 0; index < maximum_sorted_entries; ++index) {
+        const TEntry* entry = sorted[index];
+        if (!entry) {
+            break;
+        }
+        if (entry->getSizes() <= (sorted[0]->getSizes() / 100)) {
+            break;
+        }
+        if (!header_printed) {
+            output += "\n\n";
+            output += entry->formatHeader(name, id);
+            header_printed = true;
+        }
+        output += entry->format(*this, id);
+    }
+    return output;
+}
+
+std::string LogStatistics::Format(uid_t uid, pid_t pid, unsigned int logMask) const {
+    auto lock = std::lock_guard{lock_};
+
     static const uint16_t spaces_total = 19;
 
     // Report on total logging, current and for all time
@@ -642,9 +749,9 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
         if (!(logMask & (1 << id))) continue;
         oldLength = output.length();
         if (spaces < 0) spaces = 0;
-        size_t szs = sizesTotal(id);
+        size_t szs = mSizesTotal[id];
         totalSize += szs;
-        size_t els = elementsTotal(id);
+        size_t els = mElementsTotal[id];
         totalEls += els;
         output +=
             android::base::StringPrintf("%*s%zu/%zu", spaces, "", szs, els);
@@ -663,11 +770,11 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
     log_id_for_each(id) {
         if (!(logMask & (1 << id))) continue;
 
-        size_t els = elements(id);
+        size_t els = mElements[id];
         if (els) {
             oldLength = output.length();
             if (spaces < 0) spaces = 0;
-            size_t szs = sizes(id);
+            size_t szs = mSizes[id];
             totalSize += szs;
             totalEls += els;
             output +=
@@ -749,7 +856,7 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
     log_id_for_each(id) {
         if (!(logMask & (1 << id))) continue;
 
-        size_t els = elements(id);
+        size_t els = mElements[id];
         if (els) {
             oldLength = output.length();
             if (spaces < 0) spaces = 0;
@@ -758,7 +865,7 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
                 ((sizeof(LogBufferElement) + sizeof(uint64_t) - 1) &
                  -sizeof(uint64_t)) +
                 sizeof(std::list<LogBufferElement*>);
-            size_t szs = sizes(id) + els * overhead;
+            size_t szs = mSizes[id] + els * overhead;
             totalSize += szs;
             output += android::base::StringPrintf("%*s%zu", spaces, "", szs);
             spaces -= output.length() - oldLength;
@@ -779,39 +886,38 @@ std::string LogStatistics::format(uid_t uid, pid_t pid,
 
         name = (uid == AID_ROOT) ? "Chattiest UIDs in %s log buffer:"
                                  : "Logging for your UID in %s log buffer:";
-        output += uidTable[id].format(*this, uid, pid, name, id);
+        output += FormatTable(uidTable[id], uid, pid, name, id);
     }
 
     if (enable) {
         name = ((uid == AID_ROOT) && !pid) ? "Chattiest PIDs:"
                                            : "Logging for this PID:";
-        output += pidTable.format(*this, uid, pid, name);
+        output += FormatTable(pidTable, uid, pid, name);
         name = "Chattiest TIDs";
         if (pid) name += android::base::StringPrintf(" for PID %d", pid);
         name += ":";
-        output += tidTable.format(*this, uid, pid, name);
+        output += FormatTable(tidTable, uid, pid, name);
     }
 
     if (enable && (logMask & (1 << LOG_ID_EVENTS))) {
         name = "Chattiest events log buffer TAGs";
         if (pid) name += android::base::StringPrintf(" for PID %d", pid);
         name += ":";
-        output += tagTable.format(*this, uid, pid, name, LOG_ID_EVENTS);
+        output += FormatTable(tagTable, uid, pid, name, LOG_ID_EVENTS);
     }
 
     if (enable && (logMask & (1 << LOG_ID_SECURITY))) {
         name = "Chattiest security log buffer TAGs";
         if (pid) name += android::base::StringPrintf(" for PID %d", pid);
         name += ":";
-        output +=
-            securityTagTable.format(*this, uid, pid, name, LOG_ID_SECURITY);
+        output += FormatTable(securityTagTable, uid, pid, name, LOG_ID_SECURITY);
     }
 
     if (enable) {
         name = "Chattiest TAGs";
         if (pid) name += android::base::StringPrintf(" for PID %d", pid);
         name += ":";
-        output += tagNameTable.format(*this, uid, pid, name);
+        output += FormatTable(tagNameTable, uid, pid, name);
     }
 
     return output;
@@ -839,12 +945,14 @@ uid_t pidToUid(pid_t pid) {
 }
 }
 
-uid_t LogStatistics::pidToUid(pid_t pid) {
+uid_t LogStatistics::PidToUid(pid_t pid) {
+    auto lock = std::lock_guard{lock_};
     return pidTable.add(pid)->second.getUid();
 }
 
 // caller must free character string
-const char* LogStatistics::pidToName(pid_t pid) const {
+const char* LogStatistics::PidToName(pid_t pid) const {
+    auto lock = std::lock_guard{lock_};
     // An inconvenient truth ... getName() can alter the object
     pidTable_t& writablePidTable = const_cast<pidTable_t&>(pidTable);
     const char* name = writablePidTable.add(pid)->second.getName();

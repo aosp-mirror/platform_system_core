@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_KLOG_H__
-#define _LOGD_LOG_KLOG_H__
+#pragma once
 
 #include <private/android_logger.h>
 #include <sysutils/SocketListener.h>
+
+#include "LogStatistics.h"
 
 class LogBuffer;
 class LogReader;
@@ -38,20 +39,19 @@ class LogKlog : public SocketListener {
 
     static log_time correction;
 
-   public:
-    LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead,
-            bool auditd);
+  public:
+    LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead, bool auditd,
+            LogStatistics* stats);
     int log(const char* buf, ssize_t len);
 
-    static void convertMonotonicToReal(log_time& real) {
-        real += correction;
-    }
+    static void convertMonotonicToReal(log_time& real) { real += correction; }
 
-   protected:
-     log_time sniffTime(const char*& buf, ssize_t len, bool reverse);
-     pid_t sniffPid(const char*& buf, ssize_t len);
-     void calculateCorrection(const log_time& monotonic, const char* real_string, ssize_t len);
-     virtual bool onDataAvailable(SocketClient* cli);
+  protected:
+    log_time sniffTime(const char*& buf, ssize_t len, bool reverse);
+    pid_t sniffPid(const char*& buf, ssize_t len);
+    void calculateCorrection(const log_time& monotonic, const char* real_string, ssize_t len);
+    virtual bool onDataAvailable(SocketClient* cli);
+
+  private:
+    LogStatistics* stats_;
 };
-
-#endif
