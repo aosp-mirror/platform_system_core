@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "LogBufferElement.h"
+
 #include <ctype.h>
 #include <endian.h>
 #include <fcntl.h>
@@ -26,7 +28,6 @@
 #include <private/android_logger.h>
 
 #include "LogBuffer.h"
-#include "LogBufferElement.h"
 #include "LogCommand.h"
 #include "LogReader.h"
 #include "LogUtils.h"
@@ -153,7 +154,7 @@ char* android::tidToName(pid_t tid) {
 }
 
 // assumption: mMsg == NULL
-size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent,
+size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogStatistics* stats,
                                                 bool lastSame) {
     static const char tag[] = "chatty";
 
@@ -163,17 +164,13 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
     }
 
     static const char format_uid[] = "uid=%u%s%s %s %u line%s";
-    parent->wrlock();
-    const char* name = parent->uidToName(mUid);
-    parent->unlock();
+    const char* name = stats->UidToName(mUid);
     const char* commName = android::tidToName(mTid);
     if (!commName && (mTid != mPid)) {
         commName = android::tidToName(mPid);
     }
     if (!commName) {
-        parent->wrlock();
-        commName = parent->pidToName(mPid);
-        parent->unlock();
+        commName = stats->PidToName(mPid);
     }
     if (name && name[0] && commName && (name[0] == commName[0])) {
         size_t len = strlen(name + 1);
@@ -246,7 +243,7 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogBuffer* parent
     return retval;
 }
 
-uint64_t LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent, bool lastSame) {
+uint64_t LogBufferElement::flushTo(SocketClient* reader, LogStatistics* stats, bool lastSame) {
     struct logger_entry entry = {};
 
     entry.hdr_size = sizeof(struct logger_entry);
@@ -264,7 +261,7 @@ uint64_t LogBufferElement::flushTo(SocketClient* reader, LogBuffer* parent, bool
     char* buffer = nullptr;
 
     if (mDropped) {
-        entry.len = populateDroppedMessage(buffer, parent, lastSame);
+        entry.len = populateDroppedMessage(buffer, stats, lastSame);
         if (!entry.len) return mSequence;
         iovec[1].iov_base = buffer;
     } else {
