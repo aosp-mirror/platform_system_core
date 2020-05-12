@@ -26,4 +26,5 @@ cc_library {
     export_include_dirs: ["include"],
     shared_libs: ["android.hardware.graphics.allocator@2.0"],
     header_libs: ["libhardware_headers"],
+    min_sdk_version: "29",
 }
