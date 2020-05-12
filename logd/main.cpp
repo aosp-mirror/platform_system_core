@@ -304,8 +304,7 @@ int main(int argc, char* argv[]) {
     // and LogReader is notified to send updates to connected clients.
 
     LogListener* swl = new LogListener(logBuf, reader);
-    // Backlog and /proc/sys/net/unix/max_dgram_qlen set to large value
-    if (swl->startListener(600)) {
+    if (!swl->StartListener()) {
         return EXIT_FAILURE;
     }
 
