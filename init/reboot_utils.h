@@ -18,6 +18,8 @@
 
 #include <string>
 
+#define PROC_SYSRQ "/proc/sysrq-trigger"
+
 namespace android {
 namespace init {
 
