@@ -262,9 +262,12 @@ class atransport : public enable_weak_from_this<atransport> {
         : id(NextTransportId()),
           kicked_(false),
           connection_state_(state),
-          connection_waitable_(std::make_shared<ConnectionWaitable>()),
           connection_(nullptr),
           reconnect_(std::move(reconnect)) {
+#if ADB_HOST
+        connection_waitable_ = std::make_shared<ConnectionWaitable>();
+#endif
+
         // Initialize protocol to min version for compatibility with older versions.
         // Version will be updated post-connect.
         protocol_version = A_VERSION_MIN;
@@ -350,6 +353,7 @@ class atransport : public enable_weak_from_this<atransport> {
     void RemoveDisconnect(adisconnect* disconnect);
     void RunDisconnects();
 
+#if ADB_HOST
     // Returns true if |target| matches this transport. A matching |target| can be any of:
     //   * <serial>
     //   * <devpath>
@@ -374,6 +378,7 @@ class atransport : public enable_weak_from_this<atransport> {
 
     // Attempts to reconnect with the underlying Connection.
     ReconnectResult Reconnect();
+#endif
 
   private:
     std::atomic<bool> kicked_;
@@ -392,9 +397,11 @@ class atransport : public enable_weak_from_this<atransport> {
     std::deque<std::shared_ptr<RSA>> keys_;
 #endif
 
+#if ADB_HOST
     // A sharable object that can be used to wait for the atransport's
     // connection to be established.
     std::shared_ptr<ConnectionWaitable> connection_waitable_;
+#endif
 
     // The underlying connection object.
     std::shared_ptr<Connection> connection_ GUARDED_BY(mutex_);
@@ -434,10 +441,17 @@ void init_reconnect_handler(void);
 void init_transport_registration(void);
 void init_mdns_transport_discovery(void);
 std::string list_transports(bool long_listing);
+
+#if ADB_HOST
 atransport* find_transport(const char* serial);
+
 void kick_all_tcp_devices();
+#endif
+
 void kick_all_transports();
+
 void kick_all_tcp_tls_transports();
+
 #if !ADB_HOST
 void kick_all_transports_by_auth_key(std::string_view auth_key);
 #endif

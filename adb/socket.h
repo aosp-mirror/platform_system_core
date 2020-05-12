@@ -108,7 +108,10 @@ asocket* create_local_service_socket(std::string_view destination, atransport* t
 
 asocket *create_remote_socket(unsigned id, atransport *t);
 void connect_to_remote(asocket* s, std::string_view destination);
+
+#if ADB_HOST
 void connect_to_smartsocket(asocket *s);
+#endif
 
 // Internal functions that are only made available here for testing purposes.
 namespace internal {

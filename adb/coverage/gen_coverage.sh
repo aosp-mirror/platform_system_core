@@ -89,8 +89,9 @@ adb -t $TRANSPORT_ID wait-for-disconnect
 adb connect $REMOTE
 adb -s $REMOTE wait-for-device
 
-# Run test_device.py again.
-ANDROID_SERIAL=$REMOTE "$OUTPUT_DIR"/../test_device.py
+# Instead of running test_device.py again, which takes forever, do some I/O back and forth instead.
+dd if=/dev/zero bs=1024 count=10240 | adb -s $REMOTE raw sink:10485760
+adb -s $REMOTE raw source:10485760 | dd of=/dev/null bs=1024 count=10240
 
 # Dump traces again.
 adb disconnect $REMOTE
