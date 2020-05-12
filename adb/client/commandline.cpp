@@ -1712,14 +1712,21 @@ int adb_commandline(int argc, const char** argv) {
         }
         printf("List of devices attached\n");
         return adb_query_command(query);
-    }
-    else if (!strcmp(argv[0], "connect")) {
+    } else if (!strcmp(argv[0], "transport-id")) {
+        TransportId transport_id;
+        std::string error;
+        unique_fd fd(adb_connect(&transport_id, "host:features", &error, true));
+        if (fd == -1) {
+            error_exit("%s", error.c_str());
+        }
+        printf("%" PRIu64 "\n", transport_id);
+        return 0;
+    } else if (!strcmp(argv[0], "connect")) {
         if (argc != 2) error_exit("usage: adb connect HOST[:PORT]");
 
         std::string query = android::base::StringPrintf("host:connect:%s", argv[1]);
         return adb_query_command(query);
-    }
-    else if (!strcmp(argv[0], "disconnect")) {
+    } else if (!strcmp(argv[0], "disconnect")) {
         if (argc > 2) error_exit("usage: adb disconnect [HOST[:PORT]]");
 
         std::string query = android::base::StringPrintf("host:disconnect:%s",
