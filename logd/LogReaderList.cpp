@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,31 +14,20 @@
  * limitations under the License.
  */
 
-#pragma once
-
-#include <sysutils/SocketListener.h>
-
 #include "LogReaderList.h"
-#include "LogReaderThread.h"
 
-#define LOGD_SNDTIMEO 32
+// When we are notified a new log entry is available, inform
+// listening sockets who are watching this entry's log id.
+void LogReaderList::NotifyNewLog(unsigned int log_mask) const {
+    auto lock = std::lock_guard{reader_threads_lock_};
 
-class LogBuffer;
-
-class LogReader : public SocketListener {
-  public:
-    explicit LogReader(LogBuffer* logbuf, LogReaderList* reader_list);
-
-    LogBuffer* log_buffer() const { return log_buffer_; }
-
-  protected:
-    virtual bool onDataAvailable(SocketClient* cli);
-
-  private:
-    static int getLogSocket();
-
-    void doSocketDelete(SocketClient* cli);
-
-    LogBuffer* log_buffer_;
-    LogReaderList* reader_list_;
-};
+    for (const auto& entry : reader_threads_) {
+        if (!entry->IsWatchingMultiple(log_mask)) {
+            continue;
+        }
+        if (entry->deadline().time_since_epoch().count() != 0) {
+            continue;
+        }
+        entry->triggerReader_Locked();
+    }
+}
