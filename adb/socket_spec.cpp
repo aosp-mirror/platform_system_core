@@ -103,12 +103,6 @@ bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* po
         if (!android::base::ParseNetAddress(addr, &hostname_value, &port_value, serial, error)) {
             return false;
         }
-
-        if (port_value == -1) {
-            *error = "missing port in specification: ";
-            *error += spec;
-            return false;
-        }
     }
 
     if (hostname) {
