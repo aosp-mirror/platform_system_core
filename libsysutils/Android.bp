@@ -43,6 +43,7 @@ cc_library {
         "//apex_available:anyapex",
         "//apex_available:platform",
     ],
+    min_sdk_version: "apex_inherit",
 }
 
 cc_test {
