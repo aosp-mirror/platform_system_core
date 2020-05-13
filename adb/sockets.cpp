@@ -520,6 +520,7 @@ void connect_to_remote(asocket* s, std::string_view destination) {
     send_packet(p, s->transport);
 }
 
+#if ADB_HOST
 /* this is used by magic sockets to rig local sockets to
    send the go-ahead message when they connect */
 static void local_socket_ready_notify(asocket* s) {
@@ -583,8 +584,6 @@ static unsigned unhex(const char* s, int len) {
 
     return n;
 }
-
-#if ADB_HOST
 
 namespace internal {
 
@@ -714,15 +713,11 @@ bool parse_host_service(std::string_view* out_serial, std::string_view* out_comm
 
 }  // namespace internal
 
-#endif  // ADB_HOST
-
 static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
-#if ADB_HOST
     std::string_view service;
     std::string_view serial;
     TransportId transport_id = 0;
     TransportType type = kTransportAny;
-#endif
 
     D("SS(%d): enqueue %zu", s->id, data.size());
 
@@ -755,7 +750,6 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
 
     D("SS(%d): '%s'", s->id, (char*)(s->smart_socket_data.data() + 4));
 
-#if ADB_HOST
     service = std::string_view(s->smart_socket_data).substr(4);
 
     // TODO: These should be handled in handle_host_request.
@@ -841,16 +835,6 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
         s2->ready(s2);
         return 0;
     }
-#else /* !ADB_HOST */
-    if (s->transport == nullptr) {
-        std::string error_msg = "unknown failure";
-        s->transport = acquire_one_transport(kTransportAny, nullptr, 0, nullptr, &error_msg);
-        if (s->transport == nullptr) {
-            SendFail(s->peer->fd, error_msg);
-            goto fail;
-        }
-    }
-#endif
 
     if (!s->transport) {
         SendFail(s->peer->fd, "device offline (no transport)");
@@ -922,6 +906,7 @@ void connect_to_smartsocket(asocket* s) {
     ss->peer = s;
     s->ready(s);
 }
+#endif
 
 size_t asocket::get_max_payload() const {
     size_t max_payload = MAX_PAYLOAD;

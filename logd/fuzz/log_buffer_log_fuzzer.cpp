@@ -17,6 +17,7 @@
 
 #include "../LogBuffer.h"
 #include "../LogReaderThread.h"
+#include "../LogStatistics.h"
 
 // We don't want to waste a lot of entropy on messages
 #define MAX_MSG_LENGTH 5
@@ -36,7 +37,8 @@ struct LogInput {
     unsigned int log_mask;
 };
 
-int write_log_messages(const uint8_t** pdata, size_t* data_left, LogBuffer* log_buffer) {
+int write_log_messages(const uint8_t** pdata, size_t* data_left, LogBuffer* log_buffer,
+                       LogStatistics* stats) {
     const uint8_t* data = *pdata;
     const LogInput* logInput = reinterpret_cast<const LogInput*>(data);
     data += sizeof(LogInput);
@@ -71,7 +73,7 @@ int write_log_messages(const uint8_t** pdata, size_t* data_left, LogBuffer* log_
     log_id_t log_id = static_cast<log_id_t>(unsigned(logInput->log_id) % (LOG_ID_MAX + 1));
     log_buffer->log(log_id, logInput->realtime, logInput->uid, logInput->pid, logInput->tid, msg,
                     sizeof(uint32_t) + msg_length + 1);
-    log_buffer->formatStatistics(logInput->uid, logInput->pid, logInput->log_mask);
+    stats->Format(logInput->uid, logInput->pid, logInput->log_mask);
     *pdata = data;
     return 1;
 }
@@ -96,17 +98,17 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     LastLogTimes times;
     LogTags tags;
     PruneList prune_list;
-    LogBuffer log_buffer(&times, &tags, &prune_list);
+    LogStatistics stats(true);
+    LogBuffer log_buffer(&times, &tags, &prune_list, &stats);
     size_t data_left = size;
     const uint8_t** pdata = &data;
 
-    log_buffer.enableStatistics();
     prune_list.init(nullptr);
     // We want to get pruning code to get called.
     log_id_for_each(i) { log_buffer.setSize(i, 10000); }
 
     while (data_left >= sizeof(LogInput) + 2 * sizeof(uint8_t)) {
-        if (!write_log_messages(pdata, &data_left, &log_buffer)) {
+        if (!write_log_messages(pdata, &data_left, &log_buffer, &stats)) {
             return 0;
         }
     }

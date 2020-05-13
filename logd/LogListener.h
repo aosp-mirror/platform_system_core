@@ -14,24 +14,22 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_LISTENER_H__
-#define _LOGD_LOG_LISTENER_H__
+#pragma once
 
-#include <sysutils/SocketListener.h>
+#include "LogBuffer.h"
 #include "LogReader.h"
 
-class LogListener : public SocketListener {
-    LogBuffer* logbuf;
-    LogReader* reader;
+class LogListener {
+  public:
+    LogListener(LogBuffer* buf, LogReader* reader);
+    bool StartListener();
 
-   public:
-     LogListener(LogBuffer* buf, LogReader* reader);
+  private:
+    void ThreadFunction();
+    void HandleData();
+    static int GetLogSocket();
 
-   protected:
-    virtual bool onDataAvailable(SocketClient* cli);
-
-   private:
-    static int getLogSocket();
+    int socket_;
+    LogBuffer* logbuf_;
+    LogReader* reader_;
 };
-
-#endif
