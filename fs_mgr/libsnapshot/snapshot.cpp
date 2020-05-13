@@ -1691,7 +1691,7 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         return false;
     }
     std::string cow_device;
-    if (!dm.GetDeviceString(cow_name, &cow_device)) {
+    if (!GetMappedImageDeviceStringOrPath(cow_name, &cow_device)) {
         LOG(ERROR) << "Could not determine major/minor for: " << cow_name;
         return false;
     }
@@ -1788,7 +1788,7 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
     // If the COW image exists, append it as the last extent.
     if (snapshot_status.cow_file_size() > 0) {
         std::string cow_image_device;
-        if (!dm.GetDeviceString(cow_image_name, &cow_image_device)) {
+        if (!GetMappedImageDeviceStringOrPath(cow_image_name, &cow_image_device)) {
             LOG(ERROR) << "Cannot determine major/minor for: " << cow_image_name;
             return false;
         }
@@ -2364,7 +2364,6 @@ Return SnapshotManager::InitializeUpdateSnapshots(
         const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
     CHECK(lock);
 
-    auto& dm = DeviceMapper::Instance();
     CreateLogicalPartitionParams cow_params{
             .block_device = LP_METADATA_DEFAULT_PARTITION_NAME,
             .metadata = exported_target_metadata,
@@ -2389,7 +2388,7 @@ Return SnapshotManager::InitializeUpdateSnapshots(
         }
 
         std::string cow_path;
-        if (!dm.GetDmDevicePathByName(cow_name, &cow_path)) {
+        if (!images_->GetMappedImageDevice(cow_name, &cow_path)) {
             LOG(ERROR) << "Cannot determine path for " << cow_name;
             return Return::Error();
         }
@@ -2735,6 +2734,25 @@ bool SnapshotManager::UpdateForwardMergeIndicator(bool wipe) {
         return false;
     }
 
+    return true;
+}
+
+bool SnapshotManager::GetMappedImageDeviceStringOrPath(const std::string& device_name,
+                                                       std::string* device_string_or_mapped_path) {
+    auto& dm = DeviceMapper::Instance();
+    // Try getting the device string if it is a device mapper device.
+    if (dm.GetState(device_name) != DmDeviceState::INVALID) {
+        return dm.GetDeviceString(device_name, device_string_or_mapped_path);
+    }
+
+    // Otherwise, get path from IImageManager.
+    if (!images_->GetMappedImageDevice(device_name, device_string_or_mapped_path)) {
+        return false;
+    }
+
+    LOG(WARNING) << "Calling GetMappedImageDevice with local image manager; device "
+                 << (device_string_or_mapped_path ? *device_string_or_mapped_path : "(nullptr)")
+                 << "may not be available in first stage init! ";
     return true;
 }
 
