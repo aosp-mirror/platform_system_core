@@ -540,6 +540,10 @@ class SnapshotManager final {
     bool ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
                                       const std::function<bool()>& callback);
 
+    // Return device string of a mapped image, or if it is not available, the mapped image path.
+    bool GetMappedImageDeviceStringOrPath(const std::string& device_name,
+                                          std::string* device_string_or_mapped_path);
+
     std::string gsid_dir_;
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;
