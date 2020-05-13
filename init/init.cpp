@@ -537,7 +537,9 @@ static Result<void> queue_property_triggers_action(const BuiltinArguments& args)
 // Set the UDC controller for the ConfigFS USB Gadgets.
 // Read the UDC controller in use from "/sys/class/udc".
 // In case of multiple UDC controllers select the first one.
-static void set_usb_controller() {
+static void SetUsbController() {
+    static auto controller_set = false;
+    if (controller_set) return;
     std::unique_ptr<DIR, decltype(&closedir)>dir(opendir("/sys/class/udc"), closedir);
     if (!dir) return;
 
@@ -546,6 +548,7 @@ static void set_usb_controller() {
         if (dp->d_name[0] == '.') continue;
 
         SetProperty("sys.usb.controller", dp->d_name);
+        controller_set = true;
         break;
     }
 }
@@ -800,7 +803,7 @@ int SecondStageMain(int argc, char** argv) {
     fs_mgr_vendor_overlay_mount_all();
     export_oem_lock_status();
     MountHandler mount_handler(&epoll);
-    set_usb_controller();
+    SetUsbController();
 
     const BuiltinFunctionMap& function_map = GetBuiltinFunctionMap();
     Action::set_function_map(&function_map);
@@ -910,6 +913,7 @@ int SecondStageMain(int argc, char** argv) {
         }
         if (!IsShuttingDown()) {
             HandleControlMessages();
+            SetUsbController();
         }
     }
 
