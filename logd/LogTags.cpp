@@ -37,6 +37,7 @@
 #include <log/log_read.h>
 #include <private/android_filesystem_config.h>
 
+#include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogUtils.h"
 
@@ -493,7 +494,7 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
 
     // Every 16K (half the smallest configurable pmsg buffer size) record
     static const size_t rate_to_pmsg = 16 * 1024;
-    if (lastTotal && ((android::sizesTotal() - lastTotal) < rate_to_pmsg)) {
+    if (lastTotal && (LogStatistics::sizesTotal() - lastTotal) < rate_to_pmsg) {
         return;
     }
 
@@ -663,7 +664,7 @@ void LogTags::WritePersistEventLogTags(uint32_t tag, uid_t uid,
         }
     }
 
-    lastTotal = android::sizesTotal();
+    lastTotal = LogStatistics::sizesTotal();
     if (!lastTotal) ++lastTotal;
 
     // record totals for next watermark.

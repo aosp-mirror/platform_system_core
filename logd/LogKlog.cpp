@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "LogKlog.h"
+
 #include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -29,7 +31,6 @@
 #include <private/android_logger.h>
 
 #include "LogBuffer.h"
-#include "LogKlog.h"
 #include "LogReader.h"
 
 #define KMSG_PRIORITY(PRI) \
@@ -201,15 +202,16 @@ log_time LogKlog::correction = (log_time(CLOCK_REALTIME) < log_time(CLOCK_MONOTO
                                        ? log_time(log_time::EPOCH)
                                        : (log_time(CLOCK_REALTIME) - log_time(CLOCK_MONOTONIC));
 
-LogKlog::LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead,
-                 bool auditd)
+LogKlog::LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead, bool auditd,
+                 LogStatistics* stats)
     : SocketListener(fdRead, false),
       logbuf(buf),
       reader(reader),
       signature(CLOCK_MONOTONIC),
       initialized(false),
       enableLogging(true),
-      auditd(auditd) {
+      auditd(auditd),
+      stats_(stats) {
     static const char klogd_message[] = "%s%s%" PRIu64 "\n";
     char buffer[strlen(priority_message) + strlen(klogdStr) +
                 strlen(klogd_message) + 20];
@@ -528,9 +530,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
     const pid_t tid = pid;
     uid_t uid = AID_ROOT;
     if (pid) {
-        logbuf->wrlock();
-        uid = logbuf->pidToUid(pid);
-        logbuf->unlock();
+        uid = stats_->PidToUid(pid);
     }
 
     // Parse (rules at top) to pull out a tag from the incoming kernel message.
