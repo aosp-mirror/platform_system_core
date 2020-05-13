@@ -22,11 +22,9 @@
 #include "LogStatistics.h"
 
 class LogBuffer;
-class LogReader;
 
 class LogKlog : public SocketListener {
     LogBuffer* logbuf;
-    LogReader* reader;
     const log_time signature;
     // Set once thread is started, separates KLOG_ACTION_READ_ALL
     // and KLOG_ACTION_READ phases.
@@ -40,8 +38,7 @@ class LogKlog : public SocketListener {
     static log_time correction;
 
   public:
-    LogKlog(LogBuffer* buf, LogReader* reader, int fdWrite, int fdRead, bool auditd,
-            LogStatistics* stats);
+    LogKlog(LogBuffer* buf, int fdWrite, int fdRead, bool auditd, LogStatistics* stats);
     int log(const char* buf, ssize_t len);
 
     static void convertMonotonicToReal(log_time& real) { real += correction; }

@@ -33,11 +33,12 @@ cc_library_static {
 
     srcs: [
         "LogCommand.cpp",
+        "ChattyLogBuffer.cpp",
         "CommandListener.cpp",
         "LogListener.cpp",
         "LogReader.cpp",
+        "LogReaderList.cpp",
         "LogReaderThread.cpp",
-        "LogBuffer.cpp",
         "LogBufferElement.cpp",
         "LogStatistics.cpp",
         "LogWhiteBlackList.cpp",
