@@ -24,7 +24,6 @@
 #include <log/log.h>
 #include <sysutils/SocketClient.h>
 
-class LogBuffer;
 class LogStatistics;
 
 #define EXPIRE_HOUR_THRESHOLD 24  // Only expire chatty UID logs to preserve
@@ -34,8 +33,6 @@ class LogStatistics;
 #define EXPIRE_RATELIMIT 10  // maximum rate in seconds to report expiration
 
 class __attribute__((packed)) LogBufferElement {
-    friend LogBuffer;
-
     // sized to match reality of incoming log packets
     const uint32_t mUid;
     const uint32_t mPid;
