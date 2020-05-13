@@ -47,6 +47,7 @@
 #include <processgroup/sched_policy.h>
 #include <utils/threads.h>
 
+#include "ChattyLogBuffer.h"
 #include "CommandListener.h"
 #include "LogAudit.h"
 #include "LogBuffer.h"
@@ -271,8 +272,10 @@ int main(int argc, char* argv[]) {
 
     // A cache of event log tags
     LogTags log_tags;
+
     // Pruning configuration.
     PruneList prune_list;
+
     // Partial (required for chatty) or full logging statistics.
     bool enable_full_log_statistics = __android_logger_property_get_bool(
             "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
@@ -282,18 +285,15 @@ int main(int argc, char* argv[]) {
     // Serves the purpose of managing the last logs times read on a
     // socket connection, and as a reader lock on a range of log
     // entries.
-
-    LastLogTimes* times = new LastLogTimes();
+    LogReaderList reader_list;
 
     // LogBuffer is the object which is responsible for holding all
     // log entries.
-
-    LogBuffer* logBuf = new LogBuffer(times, &log_tags, &prune_list, &log_statistics);
+    LogBuffer* logBuf = new ChattyLogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
 
     // LogReader listens on /dev/socket/logdr. When a client
     // connects, log entries in the LogBuffer are written to the client.
-
-    LogReader* reader = new LogReader(logBuf);
+    LogReader* reader = new LogReader(logBuf, &reader_list);
     if (reader->startListener()) {
         return EXIT_FAILURE;
     }
@@ -301,15 +301,13 @@ int main(int argc, char* argv[]) {
     // LogListener listens on /dev/socket/logdw for client
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
-
-    LogListener* swl = new LogListener(logBuf, reader);
+    LogListener* swl = new LogListener(logBuf);
     if (!swl->StartListener()) {
         return EXIT_FAILURE;
     }
 
     // Command listener listens on /dev/socket/logd for incoming logd
     // administrative commands.
-
     CommandListener* cl = new CommandListener(logBuf, &log_tags, &prune_list, &log_statistics);
     if (cl->startListener()) {
         return EXIT_FAILURE;
@@ -318,26 +316,22 @@ int main(int argc, char* argv[]) {
     // LogAudit listens on NETLINK_AUDIT socket for selinux
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
-
     LogAudit* al = nullptr;
     if (auditd) {
-        al = new LogAudit(
-                logBuf, reader,
-                __android_logger_property_get_bool("ro.logd.auditd.dmesg", BOOL_DEFAULT_TRUE)
-                        ? fdDmesg
-                        : -1,
-                &log_statistics);
+        int dmesg_fd = __android_logger_property_get_bool("ro.logd.auditd.dmesg", BOOL_DEFAULT_TRUE)
+                               ? fdDmesg
+                               : -1;
+        al = new LogAudit(logBuf, dmesg_fd, &log_statistics);
     }
 
     LogKlog* kl = nullptr;
     if (klogd) {
-        kl = new LogKlog(logBuf, reader, fdDmesg, fdPmesg, al != nullptr, &log_statistics);
+        kl = new LogKlog(logBuf, fdDmesg, fdPmesg, al != nullptr, &log_statistics);
     }
 
     readDmesg(al, kl);
 
     // failure is an option ... messages are in dmesg (required by standard)
-
     if (kl && kl->startListener()) {
         delete kl;
     }
