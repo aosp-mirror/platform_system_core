@@ -195,7 +195,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
     int prot = PROT_READ;
     if (!readOnly) prot |= PROT_WRITE;
 
-    void* ptr = mmap(nullptr, adjLength, prot, flags, fd, adjOffset);
+    void* ptr = mmap64(nullptr, adjLength, prot, flags, fd, adjOffset);
     if (ptr == MAP_FAILED) {
         if (errno == EINVAL && length == 0) {
             ptr = nullptr;
