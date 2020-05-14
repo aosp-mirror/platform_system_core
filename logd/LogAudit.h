@@ -23,18 +23,15 @@
 #include "LogBuffer.h"
 #include "LogStatistics.h"
 
-class LogReader;
-
 class LogAudit : public SocketListener {
     LogBuffer* logbuf;
-    LogReader* reader;
     int fdDmesg;  // fdDmesg >= 0 is functionally bool dmesg
     bool main;
     bool events;
     bool initialized;
 
   public:
-    LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg, LogStatistics* stats);
+    LogAudit(LogBuffer* buf, int fdDmesg, LogStatistics* stats);
     int log(char* buf, size_t len);
 
   protected:

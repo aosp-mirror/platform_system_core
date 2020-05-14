@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,20 @@
 
 #pragma once
 
-#include <sysutils/SocketListener.h>
+#include <list>
+#include <memory>
+#include <mutex>
 
-#include "LogReaderList.h"
 #include "LogReaderThread.h"
 
-#define LOGD_SNDTIMEO 32
-
-class LogBuffer;
-
-class LogReader : public SocketListener {
+class LogReaderList {
   public:
-    explicit LogReader(LogBuffer* logbuf, LogReaderList* reader_list);
+    void NotifyNewLog(unsigned int log_mask) const;
 
-    LogBuffer* log_buffer() const { return log_buffer_; }
-
-  protected:
-    virtual bool onDataAvailable(SocketClient* cli);
+    std::list<std::unique_ptr<LogReaderThread>>& reader_threads() { return reader_threads_; }
+    std::mutex& reader_threads_lock() { return reader_threads_lock_; }
 
   private:
-    static int getLogSocket();
-
-    void doSocketDelete(SocketClient* cli);
-
-    LogBuffer* log_buffer_;
-    LogReaderList* reader_list_;
+    std::list<std::unique_ptr<LogReaderThread>> reader_threads_;
+    mutable std::mutex reader_threads_lock_;
 };

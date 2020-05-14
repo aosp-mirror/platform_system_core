@@ -24,6 +24,13 @@
 #include <android-base/stringprintf.h>
 #include <gtest/gtest.h>
 
+TEST(socket_spec, parse_tcp_socket_spec_failure) {
+    std::string hostname, error, serial;
+    int port;
+    EXPECT_FALSE(parse_tcp_socket_spec("sneakernet:5037", &hostname, &port, &serial, &error));
+    EXPECT_TRUE(error.find("sneakernet") != std::string::npos);
+}
+
 TEST(socket_spec, parse_tcp_socket_spec_just_port) {
     std::string hostname, error, serial;
     int port;
@@ -134,6 +141,19 @@ TEST(socket_spec, socket_spec_listen_connect_tcp) {
     EXPECT_NE(client_fd.get(), -1);
 }
 
+TEST(socket_spec, socket_spec_connect_failure) {
+    std::string error, serial;
+    int port;
+    unique_fd client_fd;
+    EXPECT_FALSE(socket_spec_connect(&client_fd, "tcp:", &port, &serial, &error));
+    EXPECT_FALSE(socket_spec_connect(&client_fd, "acceptfd:", &port, &serial, &error));
+    EXPECT_FALSE(socket_spec_connect(&client_fd, "vsock:", &port, &serial, &error));
+    EXPECT_FALSE(socket_spec_connect(&client_fd, "vsock:x", &port, &serial, &error));
+    EXPECT_FALSE(socket_spec_connect(&client_fd, "vsock:5", &port, &serial, &error));
+    EXPECT_FALSE(socket_spec_connect(&client_fd, "vsock:5:x", &port, &serial, &error));
+    EXPECT_FALSE(socket_spec_connect(&client_fd, "sneakernet:", &port, &serial, &error));
+}
+
 TEST(socket_spec, socket_spec_listen_connect_localfilesystem) {
     std::string error, serial;
     int port;
@@ -151,4 +171,17 @@ TEST(socket_spec, socket_spec_listen_connect_localfilesystem) {
         EXPECT_TRUE(socket_spec_connect(&client_fd, sock_addr, &port, &serial, &error));
         EXPECT_NE(client_fd.get(), -1);
     }
+}
+
+TEST(socket_spec, is_socket_spec) {
+    EXPECT_TRUE(is_socket_spec("tcp:blah"));
+    EXPECT_TRUE(is_socket_spec("acceptfd:blah"));
+    EXPECT_TRUE(is_socket_spec("local:blah"));
+    EXPECT_TRUE(is_socket_spec("localreserved:blah"));
+}
+
+TEST(socket_spec, is_local_socket_spec) {
+    EXPECT_TRUE(is_local_socket_spec("local:blah"));
+    EXPECT_TRUE(is_local_socket_spec("tcp:localhost"));
+    EXPECT_FALSE(is_local_socket_spec("tcp:www.google.com"));
 }

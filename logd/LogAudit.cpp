@@ -37,7 +37,6 @@
 #include <private/android_logger.h>
 
 #include "LogKlog.h"
-#include "LogReader.h"
 #include "LogUtils.h"
 #include "libaudit.h"
 
@@ -45,10 +44,9 @@
     '<', '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) / 10, \
         '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) % 10, '>'
 
-LogAudit::LogAudit(LogBuffer* buf, LogReader* reader, int fdDmesg, LogStatistics* stats)
+LogAudit::LogAudit(LogBuffer* buf, int fdDmesg, LogStatistics* stats)
     : SocketListener(getLogSocket(), false),
       logbuf(buf),
-      reader(reader),
       fdDmesg(fdDmesg),
       main(__android_logger_property_get_bool("ro.logd.auditd.main", BOOL_DEFAULT_TRUE)),
       events(__android_logger_property_get_bool("ro.logd.auditd.events", BOOL_DEFAULT_TRUE)),
@@ -276,9 +274,8 @@ int LogAudit::logPrint(const char* fmt, ...) {
         memcpy(event->data + str_len - denial_metadata.length(),
                denial_metadata.c_str(), denial_metadata.length());
 
-        rc = logbuf->log(
-            LOG_ID_EVENTS, now, uid, pid, tid, reinterpret_cast<char*>(event),
-            (message_len <= UINT16_MAX) ? (uint16_t)message_len : UINT16_MAX);
+        rc = logbuf->Log(LOG_ID_EVENTS, now, uid, pid, tid, reinterpret_cast<char*>(event),
+                         (message_len <= UINT16_MAX) ? (uint16_t)message_len : UINT16_MAX);
         if (rc >= 0) {
             notify |= 1 << LOG_ID_EVENTS;
         }
@@ -330,9 +327,8 @@ int LogAudit::logPrint(const char* fmt, ...) {
         strncpy(newstr + 1 + str_len + prefix_len + suffix_len,
                 denial_metadata.c_str(), denial_metadata.length());
 
-        rc = logbuf->log(
-            LOG_ID_MAIN, now, uid, pid, tid, newstr,
-            (message_len <= UINT16_MAX) ? (uint16_t)message_len : UINT16_MAX);
+        rc = logbuf->Log(LOG_ID_MAIN, now, uid, pid, tid, newstr,
+                         (message_len <= UINT16_MAX) ? (uint16_t)message_len : UINT16_MAX);
 
         if (rc >= 0) {
             notify |= 1 << LOG_ID_MAIN;
@@ -344,7 +340,6 @@ int LogAudit::logPrint(const char* fmt, ...) {
     free(str);
 
     if (notify) {
-        reader->notifyNewLog(notify);
         if (rc < 0) {
             rc = message_len;
         }
