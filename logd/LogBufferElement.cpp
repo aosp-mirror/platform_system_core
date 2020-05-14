@@ -27,9 +27,9 @@
 #include <log/log_read.h>
 #include <private/android_logger.h>
 
-#include "LogBuffer.h"
 #include "LogCommand.h"
 #include "LogReader.h"
+#include "LogStatistics.h"
 #include "LogUtils.h"
 
 const uint64_t LogBufferElement::FLUSH_ERROR(0);

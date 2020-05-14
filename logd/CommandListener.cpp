@@ -81,7 +81,7 @@ int CommandListener::ClearCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    cli->sendMsg(buf()->clear((log_id_t)id, uid) ? "busy" : "success");
+    cli->sendMsg(buf()->Clear((log_id_t)id, uid) ? "busy" : "success");
     return 0;
 }
 
@@ -99,7 +99,7 @@ int CommandListener::GetBufSizeCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    unsigned long size = buf()->getSize((log_id_t)id);
+    unsigned long size = buf()->GetSize((log_id_t)id);
     char buf[512];
     snprintf(buf, sizeof(buf), "%lu", size);
     cli->sendMsg(buf);
@@ -126,7 +126,7 @@ int CommandListener::SetBufSizeCmd::runCommand(SocketClient* cli, int argc,
     }
 
     unsigned long size = atol(argv[2]);
-    if (buf()->setSize((log_id_t)id, size)) {
+    if (buf()->SetSize((log_id_t)id, size)) {
         cli->sendMsg("Range Error");
         return 0;
     }
@@ -299,7 +299,7 @@ int CommandListener::ReinitCmd::runCommand(SocketClient* cli, int /*argc*/,
     setname();
 
     android::prdebug("logd reinit");
-    buf()->init();
+    buf()->Init();
     prune()->init(nullptr);
 
     // This only works on userdebug and eng devices to re-read the
