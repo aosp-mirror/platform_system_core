@@ -64,6 +64,7 @@ message SnapshotManagerActionProto {
         bool has_metadata_device_object = 1;
         bool metadata_mounted = 2;
     }
+    reserved 18 to 9999;
     oneof value {
         NoArgs begin_update = 1;
         NoArgs cancel_update = 2;
@@ -82,6 +83,9 @@ message SnapshotManagerActionProto {
         NoArgs dump = 15;
         NoArgs ensure_metadata_mounted = 16;
         NoArgs get_snapshot_merge_stats_instance = 17;
+
+        // Test directives that has nothing to do with ISnapshotManager API surface.
+        NoArgs switch_slot = 10000;
     }
 }
 
@@ -97,7 +101,10 @@ message SnapshotFuzzData {
     bool is_super_metadata_valid = 3;
     chromeos_update_engine.DeltaArchiveManifest super_data = 4;
 
+    // Whether the directory that mocks /metadata/ota/snapshot is created.
+    bool has_metadata_snapshots_dir = 5;
+
     // More data used to prep the test before running actions.
-    reserved 5 to 9999;
+    reserved 6 to 9999;
     repeated SnapshotManagerActionProto actions = 10000;
 }
