@@ -891,14 +891,21 @@ void PropertyLoadBootDefaults() {
     }
     load_properties_from_file("/system/build.prop", nullptr, &properties);
     load_properties_from_file("/system_ext/build.prop", nullptr, &properties);
-    load_properties_from_file("/vendor/default.prop", nullptr, &properties);
+
+    // TODO(b/117892318): uncomment the following condition when vendor.imgs for
+    // aosp_* targets are all updated.
+//    if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_R__) {
+        load_properties_from_file("/vendor/default.prop", nullptr, &properties);
+//    }
     load_properties_from_file("/vendor/build.prop", nullptr, &properties);
+
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_Q__) {
         load_properties_from_file("/odm/etc/build.prop", nullptr, &properties);
     } else {
         load_properties_from_file("/odm/default.prop", nullptr, &properties);
         load_properties_from_file("/odm/build.prop", nullptr, &properties);
     }
+
     load_properties_from_file("/product/build.prop", nullptr, &properties);
     load_properties_from_file("/factory/factory.prop", "ro.*", &properties);
 
