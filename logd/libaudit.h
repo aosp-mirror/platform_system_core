@@ -17,8 +17,7 @@
  * Written by William Roberts <w.roberts@sta.samsung.com>
  */
 
-#ifndef _LIBAUDIT_H_
-#define _LIBAUDIT_H_
+#pragma once
 
 #include <stdint.h>
 #include <sys/cdefs.h>
@@ -102,5 +101,3 @@ extern int audit_setup(int fd, pid_t pid);
 extern int audit_rate_limit(int fd, uint32_t limit);
 
 __END_DECLS
-
-#endif
