@@ -21,21 +21,14 @@
 #include <tuple>
 
 #include <android-base/logging.h>
-#include <android-base/properties.h>
-#include <android-base/result.h>
-#include <gtest/gtest.h>
 #include <src/libfuzzer/libfuzzer_macro.h>
 #include <storage_literals/storage_literals.h>
 
 #include "fuzz_utils.h"
 #include "snapshot_fuzz_utils.h"
 
-using android::base::Error;
-using android::base::GetBoolProperty;
 using android::base::LogId;
 using android::base::LogSeverity;
-using android::base::ReadFileToString;
-using android::base::Result;
 using android::base::SetLogger;
 using android::base::StderrLogger;
 using android::base::StdioLogger;
@@ -44,8 +37,6 @@ using android::fuzz::CheckedCast;
 using android::snapshot::SnapshotFuzzData;
 using android::snapshot::SnapshotFuzzEnv;
 using chromeos_update_engine::DeltaArchiveManifest;
-using google::protobuf::FieldDescriptor;
-using google::protobuf::Message;
 using google::protobuf::RepeatedPtrField;
 
 // Avoid linking to libgsi since it needs disk I/O.
@@ -83,49 +74,48 @@ FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, RecoveryCreateSnapshotDevices);
 FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, EnsureMetadataMounted);
 FUZZ_SIMPLE_FUNCTION(SnapshotManagerAction, GetSnapshotMergeStatsInstance);
 
-#define SNAPSHOT_FUZZ_FUNCTION(FunctionName, ReturnType, ...)                                  \
-    FUZZ_FUNCTION(SnapshotManagerAction, FunctionName, ReturnType, ISnapshotManager* snapshot, \
-                  ##__VA_ARGS__)
+#define SNAPSHOT_FUZZ_FUNCTION(FunctionName, ...) \
+    FUZZ_FUNCTION(SnapshotManagerAction, FunctionName, snapshot, ##__VA_ARGS__)
 
-SNAPSHOT_FUZZ_FUNCTION(FinishedSnapshotWrites, bool, bool wipe) {
-    return snapshot->FinishedSnapshotWrites(wipe);
+SNAPSHOT_FUZZ_FUNCTION(FinishedSnapshotWrites, bool wipe) {
+    (void)snapshot->FinishedSnapshotWrites(wipe);
 }
 
-SNAPSHOT_FUZZ_FUNCTION(ProcessUpdateState, bool, const ProcessUpdateStateArgs& args) {
+SNAPSHOT_FUZZ_FUNCTION(ProcessUpdateState, const ProcessUpdateStateArgs& args) {
     std::function<bool()> before_cancel;
     if (args.has_before_cancel()) {
         before_cancel = [&]() { return args.fail_before_cancel(); };
     }
-    return snapshot->ProcessUpdateState({}, before_cancel);
+    (void)snapshot->ProcessUpdateState({}, before_cancel);
 }
 
-SNAPSHOT_FUZZ_FUNCTION(GetUpdateState, UpdateState, bool has_progress_arg) {
+SNAPSHOT_FUZZ_FUNCTION(GetUpdateState, bool has_progress_arg) {
     double progress;
-    return snapshot->GetUpdateState(has_progress_arg ? &progress : nullptr);
+    (void)snapshot->GetUpdateState(has_progress_arg ? &progress : nullptr);
 }
 
-SNAPSHOT_FUZZ_FUNCTION(HandleImminentDataWipe, bool, bool has_callback) {
+SNAPSHOT_FUZZ_FUNCTION(HandleImminentDataWipe, bool has_callback) {
     std::function<void()> callback;
     if (has_callback) {
         callback = []() {};
     }
-    return snapshot->HandleImminentDataWipe(callback);
+    (void)snapshot->HandleImminentDataWipe(callback);
 }
 
-SNAPSHOT_FUZZ_FUNCTION(Dump, bool) {
+SNAPSHOT_FUZZ_FUNCTION(Dump) {
     std::stringstream ss;
-    return snapshot->Dump(ss);
+    (void)snapshot->Dump(ss);
 }
 
-SNAPSHOT_FUZZ_FUNCTION(CreateUpdateSnapshots, bool, const DeltaArchiveManifest& manifest) {
-    return snapshot->CreateUpdateSnapshots(manifest);
+SNAPSHOT_FUZZ_FUNCTION(CreateUpdateSnapshots, const DeltaArchiveManifest& manifest) {
+    (void)snapshot->CreateUpdateSnapshots(manifest);
 }
 
-SNAPSHOT_FUZZ_FUNCTION(UnmapUpdateSnapshot, bool, const std::string& name) {
-    return snapshot->UnmapUpdateSnapshot(name);
+SNAPSHOT_FUZZ_FUNCTION(UnmapUpdateSnapshot, const std::string& name) {
+    (void)snapshot->UnmapUpdateSnapshot(name);
 }
 
-SNAPSHOT_FUZZ_FUNCTION(CreateLogicalAndSnapshotPartitions, bool,
+SNAPSHOT_FUZZ_FUNCTION(CreateLogicalAndSnapshotPartitions,
                        const CreateLogicalAndSnapshotPartitionsArgs& args) {
     const std::string* super;
     if (args.use_correct_super()) {
@@ -133,21 +123,20 @@ SNAPSHOT_FUZZ_FUNCTION(CreateLogicalAndSnapshotPartitions, bool,
     } else {
         super = &args.super();
     }
-    return snapshot->CreateLogicalAndSnapshotPartitions(
+    (void)snapshot->CreateLogicalAndSnapshotPartitions(
             *super, std::chrono::milliseconds(args.timeout_millis()));
 }
 
-SNAPSHOT_FUZZ_FUNCTION(RecoveryCreateSnapshotDevicesWithMetadata, CreateResult,
+SNAPSHOT_FUZZ_FUNCTION(RecoveryCreateSnapshotDevicesWithMetadata,
                        const RecoveryCreateSnapshotDevicesArgs& args) {
     std::unique_ptr<AutoDevice> device;
     if (args.has_metadata_device_object()) {
         device = std::make_unique<DummyAutoDevice>(args.metadata_mounted());
     }
-    return snapshot->RecoveryCreateSnapshotDevices(device);
+    (void)snapshot->RecoveryCreateSnapshotDevices(device);
 }
 
-SNAPSHOT_FUZZ_FUNCTION(MapUpdateSnapshot, bool,
-                       const CreateLogicalPartitionParamsProto& params_proto) {
+SNAPSHOT_FUZZ_FUNCTION(MapUpdateSnapshot, const CreateLogicalPartitionParamsProto& params_proto) {
     auto partition_opener = std::make_unique<TestPartitionOpener>(GetSnapshotFuzzEnv()->super());
     CreateLogicalPartitionParams params;
     if (params_proto.use_correct_super()) {
@@ -164,10 +153,10 @@ SNAPSHOT_FUZZ_FUNCTION(MapUpdateSnapshot, bool,
     params.device_name = params_proto.device_name();
     params.partition_opener = partition_opener.get();
     std::string path;
-    return snapshot->MapUpdateSnapshot(params, &path);
+    (void)snapshot->MapUpdateSnapshot(params, &path);
 }
 
-SNAPSHOT_FUZZ_FUNCTION(SwitchSlot, void) {
+SNAPSHOT_FUZZ_FUNCTION(SwitchSlot) {
     (void)snapshot;
     CHECK(current_module != nullptr);
     CHECK(current_module->device_info != nullptr);
@@ -205,8 +194,7 @@ void FatalOnlyLogger(LogId logid, LogSeverity severity, const char* tag, const c
 }
 // Stop logging (except fatal messages) after global initialization. This is only done once.
 int StopLoggingAfterGlobalInit() {
-    (void)GetSnapshotFuzzEnv();
-    [[maybe_unused]] static protobuf_mutator::protobuf::LogSilencer log_silencer;
+    [[maybe_unused]] static protobuf_mutator::protobuf::LogSilencer log_silincer;
     SetLogger(&FatalOnlyLogger);
     return 0;
 }
@@ -214,10 +202,15 @@ int StopLoggingAfterGlobalInit() {
 SnapshotFuzzEnv* GetSnapshotFuzzEnv() {
     [[maybe_unused]] static auto allow_logging = AllowLoggingDuringGlobalInit();
     static SnapshotFuzzEnv env;
+    [[maybe_unused]] static auto stop_logging = StopLoggingAfterGlobalInit();
     return &env;
 }
 
-SnapshotTestModule SetUpTest(const SnapshotFuzzData& snapshot_fuzz_data) {
+}  // namespace android::snapshot
+
+DEFINE_PROTO_FUZZER(const SnapshotFuzzData& snapshot_fuzz_data) {
+    using namespace android::snapshot;
+
     current_data = &snapshot_fuzz_data;
 
     auto env = GetSnapshotFuzzEnv();
@@ -226,127 +219,9 @@ SnapshotTestModule SetUpTest(const SnapshotFuzzData& snapshot_fuzz_data) {
     auto test_module = env->CheckCreateSnapshotManager(snapshot_fuzz_data);
     current_module = &test_module;
     CHECK(test_module.snapshot);
-    return test_module;
-}
 
-void TearDownTest() {
+    SnapshotManagerAction::ExecuteAll(test_module.snapshot.get(), snapshot_fuzz_data.actions());
+
     current_module = nullptr;
     current_data = nullptr;
 }
-
-}  // namespace android::snapshot
-
-DEFINE_PROTO_FUZZER(const SnapshotFuzzData& snapshot_fuzz_data) {
-    using namespace android::snapshot;
-
-    [[maybe_unused]] static auto stop_logging = StopLoggingAfterGlobalInit();
-    auto test_module = SetUpTest(snapshot_fuzz_data);
-    SnapshotManagerAction::ExecuteAll(test_module.snapshot.get(), snapshot_fuzz_data.actions());
-    TearDownTest();
-}
-
-namespace android::snapshot {
-
-// Work-around to cast a 'void' value to Result<void>.
-template <typename T>
-struct GoodResult {
-    template <typename F>
-    static Result<T> Cast(F&& f) {
-        return f();
-    }
-};
-
-template <>
-struct GoodResult<void> {
-    template <typename F>
-    static Result<void> Cast(F&& f) {
-        f();
-        return {};
-    }
-};
-
-class LibsnapshotFuzzerTest : public ::testing::Test {
-  protected:
-    static void SetUpTestCase() {
-        // Do initialization once.
-        (void)GetSnapshotFuzzEnv();
-    }
-    void SetUp() override {
-        bool is_virtual_ab = GetBoolProperty("ro.virtual_ab.enabled", false);
-        if (!is_virtual_ab) GTEST_SKIP() << "Test only runs on Virtual A/B devices.";
-    }
-    void SetUpFuzzData(const std::string& fn) {
-        auto path = android::base::GetExecutableDirectory() + "/corpus/"s + fn;
-        std::string proto_text;
-        ASSERT_TRUE(ReadFileToString(path, &proto_text));
-        snapshot_fuzz_data_ = std::make_unique<SnapshotFuzzData>();
-        ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(proto_text,
-                                                                  snapshot_fuzz_data_.get()));
-        test_module_ = android::snapshot::SetUpTest(*snapshot_fuzz_data_);
-    }
-    void TearDown() override { android::snapshot::TearDownTest(); }
-    template <typename FuzzFunction>
-    Result<typename FuzzFunction::ReturnType> Execute(int action_index) {
-        if (action_index >= snapshot_fuzz_data_->actions_size()) {
-            return Error() << "Index " << action_index << " is out of bounds ("
-                           << snapshot_fuzz_data_->actions_size() << " actions in corpus";
-        }
-        const auto& action_proto = snapshot_fuzz_data_->actions(action_index);
-        const auto* field_desc =
-                android::fuzz::GetValueFieldDescriptor<typename FuzzFunction::ActionType>(
-                        action_proto);
-        if (field_desc == nullptr) {
-            return Error() << "Action at index " << action_index << " has no value defined.";
-        }
-        if (FuzzFunction::tag != field_desc->number()) {
-            return Error() << "Action at index " << action_index << " is expected to be "
-                           << FuzzFunction::name << ", but it is " << field_desc->name()
-                           << " in corpus.";
-        }
-        return GoodResult<typename FuzzFunction::ReturnType>::Cast([&]() {
-            return android::fuzz::ActionPerformer<FuzzFunction>::Invoke(test_module_.snapshot.get(),
-                                                                        action_proto, field_desc);
-        });
-    }
-
-    std::unique_ptr<SnapshotFuzzData> snapshot_fuzz_data_;
-    SnapshotTestModule test_module_;
-};
-
-#define SNAPSHOT_FUZZ_FN_NAME(name) FUZZ_FUNCTION_CLASS_NAME(SnapshotManagerAction, name)
-
-MATCHER_P(ResultIs, expected, "") {
-    if (!arg.ok()) {
-        *result_listener << arg.error();
-        return false;
-    }
-    *result_listener << "expected: " << expected;
-    return arg.value() == expected;
-}
-
-#define ASSERT_RESULT_TRUE(actual) ASSERT_THAT(actual, ResultIs(true))
-
-// Check that launch_device.txt is executed correctly.
-TEST_F(LibsnapshotFuzzerTest, LaunchDevice) {
-    SetUpFuzzData("launch_device.txt");
-
-    int i = 0;
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(BeginUpdate)>(i++));
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(CreateUpdateSnapshots)>(i++));
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(MapUpdateSnapshot)>(i++)) << "sys_b";
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(MapUpdateSnapshot)>(i++)) << "vnd_b";
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(MapUpdateSnapshot)>(i++)) << "prd_b";
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(FinishedSnapshotWrites)>(i++));
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(UnmapUpdateSnapshot)>(i++)) << "sys_b";
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(UnmapUpdateSnapshot)>(i++)) << "vnd_b";
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(UnmapUpdateSnapshot)>(i++)) << "prd_b";
-    ASSERT_RESULT_OK(Execute<SNAPSHOT_FUZZ_FN_NAME(SwitchSlot)>(i++));
-    ASSERT_EQ("_b", test_module_.device_info->GetSlotSuffix());
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(NeedSnapshotsInFirstStageMount)>(i++));
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(CreateLogicalAndSnapshotPartitions)>(i++));
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(InitiateMerge)>(i++));
-    ASSERT_RESULT_TRUE(Execute<SNAPSHOT_FUZZ_FN_NAME(ProcessUpdateState)>(i++));
-    ASSERT_EQ(i, snapshot_fuzz_data_->actions_size()) << "Not all actions are executed.";
-}
-
-}  // namespace android::snapshot
