@@ -150,12 +150,10 @@ static std::pair<unique_fd, std::string> read_and_encode_signature(Size file_siz
 
 // Send install-incremental to the device along with properly configured file descriptors in
 // streaming format. Once connection established, send all fs-verity tree bytes.
-static unique_fd start_install(const Files& files, bool silent) {
+static unique_fd start_install(const Files& files, const Args& passthrough_args, bool silent) {
     std::vector<std::string> command_args{"package", "install-incremental"};
+    command_args.insert(command_args.end(), passthrough_args.begin(), passthrough_args.end());
 
-    // fd's with positions at the beginning of fs-verity
-    std::vector<unique_fd> signature_fds;
-    signature_fds.reserve(files.size());
     for (int i = 0, size = files.size(); i < size; ++i) {
         const auto& file = files[i];
 
@@ -176,8 +174,6 @@ static unique_fd start_install(const Files& files, bool silent) {
                 StringPrintf("%s:%lld:%s:%s", android::base::Basename(file).c_str(),
                              (long long)st.st_size, std::to_string(i).c_str(), signature.c_str());
         command_args.push_back(std::move(file_desc));
-
-        signature_fds.push_back(std::move(signature_fd));
     }
 
     std::string error;
@@ -220,8 +216,8 @@ bool can_install(const Files& files) {
     return true;
 }
 
-std::optional<Process> install(const Files& files, bool silent) {
-    auto connection_fd = start_install(files, silent);
+std::optional<Process> install(const Files& files, const Args& passthrough_args, bool silent) {
+    auto connection_fd = start_install(files, passthrough_args, silent);
     if (connection_fd < 0) {
         if (!silent) {
             fprintf(stderr, "adb: failed to initiate installation on device.\n");
