@@ -21,7 +21,6 @@
 #include "LogBuffer.h"
 #include "LogCommand.h"
 #include "LogListener.h"
-#include "LogReader.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogWhiteBlackList.h"

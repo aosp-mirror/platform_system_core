@@ -25,6 +25,8 @@
 
 #include "LogBufferElement.h"
 
+class LogWriter;
+
 enum class FlushToResult {
     kSkip,
     kStop,
@@ -42,10 +44,10 @@ class LogBuffer {
     // lastTid is an optional context to help detect if the last previous
     // valid message was from the same source so we can differentiate chatty
     // filter types (identical or expired)
+    static const uint64_t FLUSH_ERROR = 0;
     virtual uint64_t FlushTo(
-            SocketClient* writer, uint64_t start,
+            LogWriter* writer, uint64_t start,
             pid_t* last_tid,  // nullable
-            bool privileged, bool security,
             const std::function<FlushToResult(const LogBufferElement* element)>& filter) = 0;
 
     virtual bool Clear(log_id_t id, uid_t uid) = 0;
