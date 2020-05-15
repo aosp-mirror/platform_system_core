@@ -23,6 +23,7 @@
 
 #include <chrono>
 
+#include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
@@ -31,10 +32,47 @@
 #include "LogBufferElement.h"
 #include "LogReader.h"
 #include "LogUtils.h"
+#include "LogWriter.h"
 
 static bool CanReadSecurityLogs(SocketClient* client) {
     return client->getUid() == AID_SYSTEM || client->getGid() == AID_SYSTEM;
 }
+
+static std::string SocketClientToName(SocketClient* client) {
+    return android::base::StringPrintf("pid %d, fd %d", client->getPid(), client->getSocket());
+}
+
+class SocketLogWriter : public LogWriter {
+  public:
+    SocketLogWriter(LogReader* reader, SocketClient* client, bool privileged,
+                    bool can_read_security_logs)
+        : LogWriter(client->getUid(), privileged, can_read_security_logs),
+          reader_(reader),
+          client_(client) {}
+
+    bool Write(const logger_entry& entry, const char* msg) override {
+        struct iovec iovec[2];
+        iovec[0].iov_base = const_cast<logger_entry*>(&entry);
+        iovec[0].iov_len = entry.hdr_size;
+        iovec[1].iov_base = const_cast<char*>(msg);
+        iovec[1].iov_len = entry.len;
+
+        return client_->sendDatav(iovec, 1 + (entry.len != 0)) == 0;
+    }
+
+    void Release() override {
+        reader_->release(client_);
+        client_->decRef();
+    }
+
+    void Shutdown() override { shutdown(client_->getSocket(), SHUT_RDWR); }
+
+    std::string name() const override { return SocketClientToName(client_); }
+
+  private:
+    LogReader* reader_;
+    SocketClient* client_;
+};
 
 LogReader::LogReader(LogBuffer* logbuf, LogReaderList* reader_list)
     : SocketListener(getLogSocket(), true), log_buffer_(logbuf), reader_list_(reader_list) {}
@@ -51,21 +89,14 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
 
     int len = read(cli->getSocket(), buffer, sizeof(buffer) - 1);
     if (len <= 0) {
-        doSocketDelete(cli);
+        DoSocketDelete(cli);
         return false;
     }
     buffer[len] = '\0';
 
-    // Clients are only allowed to send one command, disconnect them if they
-    // send another.
-    {
-        auto lock = std::lock_guard{reader_list_->reader_threads_lock()};
-        for (const auto& entry : reader_list_->reader_threads()) {
-            if (entry->client() == cli) {
-                entry->release_Locked();
-                return false;
-            }
-        }
+    // Clients are only allowed to send one command, disconnect them if they send another.
+    if (DoSocketDelete(cli)) {
+        return false;
     }
 
     unsigned long tail = 0;
@@ -131,6 +162,9 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     bool privileged = clientHasLogCredentials(cli);
     bool can_read_security = CanReadSecurityLogs(cli);
 
+    std::unique_ptr<LogWriter> socket_log_writer(
+            new SocketLogWriter(this, cli, privileged, can_read_security));
+
     uint64_t sequence = 1;
     // Convert realtime to sequence number
     if (start != log_time::EPOCH) {
@@ -159,11 +193,10 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
             return FlushToResult::kSkip;
         };
 
-        log_buffer_->FlushTo(cli, sequence, nullptr, privileged, can_read_security, log_find_start);
+        log_buffer_->FlushTo(socket_log_writer.get(), sequence, nullptr, log_find_start);
 
         if (!start_time_set) {
             if (nonBlock) {
-                doSocketDelete(cli);
                 return false;
             }
             sequence = LogBufferElement::getCurrentSequence();
@@ -181,13 +214,9 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     }
 
     auto lock = std::lock_guard{reader_list_->reader_threads_lock()};
-    auto entry = std::make_unique<LogReaderThread>(*this, *reader_list_, cli, nonBlock, tail,
-                                                   logMask, pid, start, sequence, deadline,
-                                                   privileged, can_read_security);
-    if (!entry->startReader_Locked()) {
-        return false;
-    }
-
+    auto entry = std::make_unique<LogReaderThread>(log_buffer_, reader_list_,
+                                                   std::move(socket_log_writer), nonBlock, tail,
+                                                   logMask, pid, start, sequence, deadline);
     // release client and entry reference counts once done
     cli->incRef();
     reader_list_->reader_threads().emplace_front(std::move(entry));
@@ -200,17 +229,16 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     return true;
 }
 
-void LogReader::doSocketDelete(SocketClient* cli) {
+bool LogReader::DoSocketDelete(SocketClient* cli) {
+    auto cli_name = SocketClientToName(cli);
     auto lock = std::lock_guard{reader_list_->reader_threads_lock()};
-    auto it = reader_list_->reader_threads().begin();
-    while (it != reader_list_->reader_threads().end()) {
-        LogReaderThread* entry = it->get();
-        if (entry->client() == cli) {
-            entry->release_Locked();
-            break;
+    for (const auto& reader : reader_list_->reader_threads()) {
+        if (reader->name() == cli_name) {
+            reader->release_Locked();
+            return true;
         }
-        it++;
     }
+    return false;
 }
 
 int LogReader::getLogSocket() {
