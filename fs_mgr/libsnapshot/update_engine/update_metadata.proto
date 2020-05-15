@@ -45,7 +45,12 @@ message PartitionInfo {
 }
 
 message InstallOperation {
-    enum Type { SOURCE_COPY = 4; }
+    enum Type {
+        SOURCE_COPY = 4;
+        // Not used by libsnapshot. Declared here so that the fuzzer has an
+        // alternative value to use for |type|.
+        ZERO = 6;
+    }
     required Type type = 1;
     repeated Extent src_extents = 4;
     repeated Extent dst_extents = 6;
