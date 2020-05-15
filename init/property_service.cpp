@@ -877,18 +877,19 @@ static void property_derive_build_fingerprint() {
 }
 
 void PropertyLoadBootDefaults() {
-    // TODO(b/117892318): merge prop.default and build.prop files into one
     // We read the properties and their values into a map, in order to always allow properties
     // loaded in the later property files to override the properties in loaded in the earlier
     // property files, regardless of if they are "ro." properties or not.
     std::map<std::string, std::string> properties;
-    if (!load_properties_from_file("/system/etc/prop.default", nullptr, &properties)) {
-        // Try recovery path
-        if (!load_properties_from_file("/prop.default", nullptr, &properties)) {
-            // Try legacy path
-            load_properties_from_file("/default.prop", nullptr, &properties);
-        }
+
+    if (IsRecoveryMode()) {
+        load_properties_from_file("/prop.default", nullptr, &properties);
     }
+
+    // Try legacy (non-Treble) path. This file might not exist in most of the
+    // post-Oreo devices. Absence of the file is not an error.
+    load_properties_from_file("/default.prop", nullptr, &properties);
+
     load_properties_from_file("/system/build.prop", nullptr, &properties);
     load_properties_from_file("/system_ext/build.prop", nullptr, &properties);
 
