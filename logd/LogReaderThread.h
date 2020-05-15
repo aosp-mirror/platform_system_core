@@ -30,21 +30,17 @@
 #include <sysutils/SocketClient.h>
 
 #include "LogBuffer.h"
+#include "LogBufferElement.h"
+#include "LogWriter.h"
 
-class LogReader;
-class LogBufferElement;
 class LogReaderList;
 
 class LogReaderThread {
   public:
-    LogReaderThread(LogReader& reader, LogReaderList& reader_list, SocketClient* client,
-                    bool non_block, unsigned long tail, unsigned int log_mask, pid_t pid,
-                    log_time start_time, uint64_t sequence,
-                    std::chrono::steady_clock::time_point deadline, bool privileged,
-                    bool can_read_security_logs);
-
-    bool startReader_Locked();
-
+    LogReaderThread(LogBuffer* log_buffer, LogReaderList* reader_list,
+                    std::unique_ptr<LogWriter> writer, bool non_block, unsigned long tail,
+                    unsigned int log_mask, pid_t pid, log_time start_time, uint64_t sequence,
+                    std::chrono::steady_clock::time_point deadline);
     void triggerReader_Locked() { thread_triggered_condition_.notify_all(); }
 
     void triggerSkip_Locked(log_id_t id, unsigned int skip) { skip_ahead_[id] = skip; }
@@ -52,7 +48,7 @@ class LogReaderThread {
 
     void release_Locked() {
         // gracefully shut down the socket.
-        shutdown(client_->getSocket(), SHUT_RDWR);
+        writer_->Shutdown();
         release_ = true;
         thread_triggered_condition_.notify_all();
     }
@@ -60,7 +56,7 @@ class LogReaderThread {
     bool IsWatching(log_id_t id) const { return log_mask_ & (1 << id); }
     bool IsWatchingMultiple(unsigned int log_mask) const { return log_mask_ & log_mask; }
 
-    const SocketClient* client() const { return client_; }
+    std::string name() const { return writer_->name(); }
     uint64_t start() const { return start_; }
     std::chrono::steady_clock::time_point deadline() const { return deadline_; }
 
@@ -70,19 +66,17 @@ class LogReaderThread {
     FlushToResult FilterFirstPass(const LogBufferElement* element);
     FlushToResult FilterSecondPass(const LogBufferElement* element);
 
+    std::condition_variable thread_triggered_condition_;
+    LogBuffer* log_buffer_;
+    LogReaderList* reader_list_;
+    std::unique_ptr<LogWriter> writer_;
+
     // Set to true to cause the thread to end and the LogReaderThread to delete itself.
     bool release_ = false;
     // Indicates whether or not 'leading' (first logs seen starting from start_) 'dropped' (chatty)
     // messages should be ignored.
     bool leading_dropped_;
 
-    // Condition variable for waking the reader thread if there are messages pending for its client.
-    std::condition_variable thread_triggered_condition_;
-
-    // Reference to the parent thread that manages log reader sockets.
-    LogReader& reader_;
-    // Reference to the parent list that shares its lock with each instance
-    LogReaderList& reader_list_;
     // A mask of the logs buffers that are read by this reader.
     const unsigned int log_mask_;
     // If set to non-zero, only pids equal to this are read by the reader.
@@ -105,8 +99,6 @@ class LogReaderThread {
     // and to disconnect the reader (if it is dumpAndClose, `adb logcat -t`), when index_ >= count_.
     unsigned long index_;
 
-    // A pointer to the socket for this reader.
-    SocketClient* client_;
     // When a reader requests logs starting from a given timestamp, its stored here for the first
     // pass, such that logs before this time stamp that are accumulated in the buffer are ignored.
     log_time start_time_;
@@ -117,10 +109,4 @@ class LogReaderThread {
     std::chrono::steady_clock::time_point deadline_;
     // If this reader is 'dumpAndClose' and will disconnect once it has read its intended logs.
     const bool non_block_;
-
-    // Whether or not this reader can read logs from all UIDs or only its own UID.  See
-    // clientHasLogCredentials().
-    bool privileged_;
-    // Whether or not this reader can read security logs.  See CanReadSecurityLogs().
-    bool can_read_security_logs_;
 };
