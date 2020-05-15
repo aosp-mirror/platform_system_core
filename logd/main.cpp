@@ -53,6 +53,7 @@
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogListener.h"
+#include "LogReader.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogUtils.h"
