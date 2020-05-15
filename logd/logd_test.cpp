@@ -39,7 +39,7 @@
 #include <selinux/selinux.h>
 #endif
 
-#include "../LogReader.h"  // pickup LOGD_SNDTIMEO
+#include "LogReader.h"  // pickup LOGD_SNDTIMEO
 
 #ifdef __ANDROID__
 static void send_to_control(char* buf, size_t len) {
