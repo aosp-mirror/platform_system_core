@@ -17,7 +17,6 @@
 #pragma once
 
 #include "LogBuffer.h"
-#include "LogReader.h"
 
 class LogListener {
   public:
