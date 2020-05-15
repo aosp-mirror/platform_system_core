@@ -3,7 +3,8 @@ PROJECT_PATH=system/core/fs_mgr/libsnapshot
 FUZZ_TARGET=libsnapshot_fuzzer
 TARGET_ARCH=$(get_build_var TARGET_ARCH)
 FUZZ_BINARY=/data/fuzz/${TARGET_ARCH}/${FUZZ_TARGET}/${FUZZ_TARGET}
-DEVICE_CORPSE_DIR=/data/local/tmp/${FUZZ_TARGET}
+DEVICE_INIT_CORPUS_DIR=/data/fuzz/${TARGET_ARCH}/${FUZZ_TARGET}/corpus
+DEVICE_GENERATED_CORPUS_DIR=/data/local/tmp/${FUZZ_TARGET}/corpus
 DEVICE_GCOV_DIR=/data/local/tmp/${FUZZ_TARGET}/gcov
 HOST_SCRATCH_DIR=/tmp/${FUZZ_TARGET}
 GCOV_TOOL=${HOST_SCRATCH_DIR}/llvm-gcov
@@ -26,13 +27,14 @@ build_cov() {
 
 prepare_device() {
     adb root && adb remount &&
-    adb shell mkdir -p ${DEVICE_CORPSE_DIR} &&
+    adb shell mkdir -p ${DEVICE_GENERATED_CORPUS_DIR} &&
     adb shell rm -rf ${DEVICE_GCOV_DIR} &&
     adb shell mkdir -p ${DEVICE_GCOV_DIR}
 }
 
 push_binary() {
-    adb push ${ANDROID_PRODUCT_OUT}/${FUZZ_BINARY} ${FUZZ_BINARY}
+    adb push ${ANDROID_PRODUCT_OUT}/${FUZZ_BINARY} ${FUZZ_BINARY} &&
+    adb push ${ANDROID_PRODUCT_OUT}/${DEVICE_INIT_CORPUS_DIR} $(dirname ${FUZZ_BINARY})
 }
 
 prepare_host() {
@@ -52,7 +54,7 @@ generate_corpus() {
     prepare_device &&
     build_normal &&
     push_binary &&
-    adb shell ${FUZZ_BINARY} "$@" ${DEVICE_CORPSE_DIR}
+    adb shell ${FUZZ_BINARY} "$@" ${DEVICE_INIT_CORPUS_DIR} ${DEVICE_GENERATED_CORPUS_DIR}
 }
 
 run_snapshot_fuzz() {
@@ -62,7 +64,7 @@ run_snapshot_fuzz() {
     adb shell GCOV_PREFIX=${DEVICE_GCOV_DIR} GCOV_PREFIX_STRIP=3 \
         ${FUZZ_BINARY} \
         -runs=0 \
-        ${DEVICE_CORPSE_DIR}
+        ${DEVICE_INIT_CORPUS_DIR} ${DEVICE_GENERATED_CORPUS_DIR}
 }
 
 show_fuzz_result() {
@@ -82,7 +84,7 @@ exec llvm-cov gcov "$@"
 
 # run_snapshot_fuzz -runs=10000
 run_snapshot_fuzz_all() {
-    generate_corpse "$@" &&
+    generate_corpus "$@" &&
     run_snapshot_fuzz &&
     show_fuzz_result
 }
