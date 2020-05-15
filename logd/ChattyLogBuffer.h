@@ -28,14 +28,14 @@
 
 #include "LogBuffer.h"
 #include "LogBufferElement.h"
+#include "LogReaderList.h"
+#include "LogReaderThread.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogWhiteBlackList.h"
+#include "LogWriter.h"
 
 typedef std::list<LogBufferElement*> LogBufferElementCollection;
-
-class LogReaderList;
-class LogReaderThread;
 
 class ChattyLogBuffer : public LogBuffer {
     LogBufferElementCollection mLogElements;
@@ -63,7 +63,7 @@ class ChattyLogBuffer : public LogBuffer {
     int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
             uint16_t len) override;
     uint64_t FlushTo(
-            SocketClient* writer, uint64_t start, pid_t* lastTid, bool privileged, bool security,
+            LogWriter* writer, uint64_t start, pid_t* lastTid,
             const std::function<FlushToResult(const LogBufferElement* element)>& filter) override;
 
     bool Clear(log_id_t id, uid_t uid = AID_ROOT) override;
