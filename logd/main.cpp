@@ -38,7 +38,6 @@
 
 #include <android-base/macros.h>
 #include <cutils/android_get_control_file.h>
-#include <cutils/properties.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
 #include <packagelistparser/packagelistparser.h>
