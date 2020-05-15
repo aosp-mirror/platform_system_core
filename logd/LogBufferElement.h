@@ -22,7 +22,8 @@
 #include <sys/types.h>
 
 #include <log/log.h>
-#include <sysutils/SocketClient.h>
+
+#include "LogWriter.h"
 
 class LogStatistics;
 
@@ -94,6 +95,5 @@ class __attribute__((packed)) LogBufferElement {
         return mRealTime;
     }
 
-    static const uint64_t FLUSH_ERROR;
-    uint64_t flushTo(SocketClient* writer, LogStatistics* parent, bool lastSame);
+    bool FlushTo(LogWriter* writer, LogStatistics* parent, bool lastSame);
 };

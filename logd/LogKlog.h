@@ -19,9 +19,8 @@
 #include <private/android_logger.h>
 #include <sysutils/SocketListener.h>
 
+#include "LogBuffer.h"
 #include "LogStatistics.h"
-
-class LogBuffer;
 
 class LogKlog : public SocketListener {
     LogBuffer* logbuf;
