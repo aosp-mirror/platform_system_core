@@ -45,7 +45,7 @@ cc_defaults {
 cc_library_static {
     name: "liblogd",
     defaults: ["logd_defaults"],
-
+    host_supported: true,
     srcs: [
         "ChattyLogBuffer.cpp",
         "LogReaderList.cpp",
@@ -148,6 +148,7 @@ cc_defaults {
 //   adb shell /data/nativetest/logd-unit-tests/logd-unit-tests
 cc_test {
     name: "logd-unit-tests",
+    host_supported: true,
     defaults: ["logd-unit-test-defaults"],
 }
 

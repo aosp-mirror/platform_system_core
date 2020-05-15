@@ -183,16 +183,16 @@ size_t LogBufferElement::populateDroppedMessage(char*& buffer, LogStatistics* st
     }
     if (name) {
         char* buf = nullptr;
-        asprintf(&buf, "(%s)", name);
-        if (buf) {
+        int result = asprintf(&buf, "(%s)", name);
+        if (result != -1) {
             free(const_cast<char*>(name));
             name = buf;
         }
     }
     if (commName) {
         char* buf = nullptr;
-        asprintf(&buf, " %s", commName);
-        if (buf) {
+        int result = asprintf(&buf, " %s", commName);
+        if (result != -1) {
             free(const_cast<char*>(commName));
             commName = buf;
         }
