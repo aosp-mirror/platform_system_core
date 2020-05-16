@@ -886,10 +886,6 @@ void PropertyLoadBootDefaults() {
         load_properties_from_file("/prop.default", nullptr, &properties);
     }
 
-    // Try legacy (non-Treble) path. This file might not exist in most of the
-    // post-Oreo devices. Absence of the file is not an error.
-    load_properties_from_file("/default.prop", nullptr, &properties);
-
     load_properties_from_file("/system/build.prop", nullptr, &properties);
     load_properties_from_file("/system_ext/build.prop", nullptr, &properties);
 
