@@ -311,7 +311,7 @@ static int install_app_incremental(int argc, const char** argv, bool wait, bool 
     const auto start = clock::now();
     int first_apk = -1;
     int last_apk = -1;
-    std::vector<std::string_view> args = {"package"sv};
+    incremental::Args passthrough_args = {};
     for (int i = 0; i < argc; ++i) {
         const auto arg = std::string_view(argv[i]);
         if (android::base::EndsWithIgnoreCase(arg, ".apk"sv)) {
@@ -319,12 +319,11 @@ static int install_app_incremental(int argc, const char** argv, bool wait, bool 
             if (first_apk == -1) {
                 first_apk = i;
             }
-        } else if (arg.starts_with("install-"sv)) {
+        } else if (arg.starts_with("install"sv)) {
             // incremental installation command on the device is the same for all its variations in
             // the adb, e.g. install-multiple or install-multi-package
-            args.push_back("install"sv);
         } else {
-            args.push_back(arg);
+            passthrough_args.push_back(arg);
         }
     }
 
@@ -345,7 +344,7 @@ static int install_app_incremental(int argc, const char** argv, bool wait, bool 
     }
 
     printf("Performing Incremental Install\n");
-    auto server_process = incremental::install(files, silent);
+    auto server_process = incremental::install(files, passthrough_args, silent);
     if (!server_process) {
         return -1;
     }
