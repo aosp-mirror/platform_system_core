@@ -74,5 +74,15 @@ std::unique_ptr<FsAvbHashtreeDescriptor> GetHashtreeDescriptor(
     return GetHashtreeDescriptor(avb_partition_name, vbmeta_images);
 }
 
+// Given a path, loads and verifies the vbmeta, to extract the Avb Hash descriptor.
+std::unique_ptr<FsAvbHashDescriptor> GetHashDescriptor(const std::string& avb_partition_name,
+                                                       VBMetaData&& vbmeta) {
+    if (!vbmeta.size()) return nullptr;
+
+    std::vector<VBMetaData> vbmeta_images;
+    vbmeta_images.emplace_back(std::move(vbmeta));
+    return GetHashDescriptor(avb_partition_name, vbmeta_images);
+}
+
 }  // namespace fs_mgr
 }  // namespace android
