@@ -289,7 +289,7 @@ cc_fuzz {
         canonical_path_from_root: false,
         local_include_dirs: ["."],
     },
-
+    corpus: ["corpus/*"],
     fuzz_config: {
         cc: ["android-virtual-ab+bugs@google.com"],
         componentid: 30545,

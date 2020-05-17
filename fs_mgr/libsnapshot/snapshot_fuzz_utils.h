@@ -31,10 +31,17 @@
 namespace android::snapshot {
 
 class AutoMemBasedDir;
+class SnapshotFuzzDeviceInfo;
 
 class DummyAutoDevice : public AutoDevice {
   public:
     DummyAutoDevice(bool mounted) : AutoDevice(mounted ? "dummy" : "") {}
+};
+
+struct SnapshotTestModule {
+    std::unique_ptr<ISnapshotManager> snapshot;
+    SnapshotFuzzDeviceInfo* device_info = nullptr;
+    TestPartitionOpener* opener = nullptr;
 };
 
 // Prepare test environment. This has a heavy overhead and should be done once.
@@ -54,7 +61,7 @@ class SnapshotFuzzEnv {
     // Create a snapshot manager for this test run.
     // Client is responsible for maintaining the lifetime of |data| over the life time of
     // ISnapshotManager.
-    std::unique_ptr<ISnapshotManager> CheckCreateSnapshotManager(const SnapshotFuzzData& data);
+    SnapshotTestModule CheckCreateSnapshotManager(const SnapshotFuzzData& data);
 
     // Return path to super partition.
     const std::string& super() const;
@@ -62,14 +69,22 @@ class SnapshotFuzzEnv {
   private:
     std::unique_ptr<AutoMemBasedDir> fake_root_;
     std::unique_ptr<android::dm::LoopControl> loop_control_;
+    std::string fake_data_mount_point_;
+    std::unique_ptr<AutoDevice> auto_delete_data_mount_point_;
     std::unique_ptr<AutoDevice> mapped_super_;
     std::string fake_super_;
+    std::unique_ptr<AutoDevice> mapped_data_;
+    std::string fake_data_block_device_;
+    std::unique_ptr<AutoDevice> mounted_data_;
 
     static std::unique_ptr<android::fiemap::IImageManager> CheckCreateFakeImageManager(
-            const std::string& fake_tmp_path);
-    static std::unique_ptr<AutoDevice> CheckMapSuper(const std::string& fake_persist_path,
+            const std::string& metadata_dir, const std::string& data_dir);
+    static std::unique_ptr<AutoDevice> CheckMapImage(const std::string& fake_persist_path,
+                                                     uint64_t size,
                                                      android::dm::LoopControl* control,
-                                                     std::string* fake_super);
+                                                     std::string* mapped_path);
+    static std::unique_ptr<AutoDevice> CheckMountFormatData(const std::string& blk_device,
+                                                            const std::string& mount_point);
 
     void CheckWriteSuperMetadata(const SnapshotFuzzData& proto,
                                  const android::fs_mgr::IPartitionOpener& opener);
@@ -97,10 +112,8 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
     }
 
     // Following APIs are fuzzed.
-    std::string GetSlotSuffix() const override { return data_->slot_suffix_is_a() ? "_a" : "_b"; }
-    std::string GetOtherSlotSuffix() const override {
-        return data_->slot_suffix_is_a() ? "_b" : "_a";
-    }
+    std::string GetSlotSuffix() const override { return CurrentSlotIsA() ? "_a" : "_b"; }
+    std::string GetOtherSlotSuffix() const override { return CurrentSlotIsA() ? "_b" : "_a"; }
     bool IsOverlayfsSetup() const override { return data_->is_overlayfs_setup(); }
     bool SetBootControlMergeStatus(android::hardware::boot::V1_1::MergeStatus) override {
         return data_->allow_set_boot_control_merge_status();
@@ -110,10 +123,15 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
     }
     bool IsRecovery() const override { return data_->is_recovery(); }
 
+    void SwitchSlot() { switched_slot_ = !switched_slot_; }
+
   private:
     const FuzzDeviceInfoData* data_;
     std::unique_ptr<TestPartitionOpener> partition_opener_;
     std::string metadata_dir_;
+    bool switched_slot_ = false;
+
+    bool CurrentSlotIsA() const { return data_->slot_suffix_is_a() != switched_slot_; }
 };
 
 }  // namespace android::snapshot
