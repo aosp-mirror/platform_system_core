@@ -30,7 +30,7 @@
 
 #include "LogBuffer.h"
 #include "LogListener.h"
-#include "LogUtils.h"
+#include "LogPermissions.h"
 
 LogListener::LogListener(LogBuffer* buf) : socket_(GetLogSocket()), logbuf_(buf) {}
 
