@@ -68,17 +68,25 @@ int CheckConsistency() {
     return 0;
 }
 
+// Get the field descriptor for the oneof field in the action message. If no oneof field is set,
+// return nullptr.
 template <typename Action>
-void ExecuteActionProto(typename Action::Class* module,
-                        const typename Action::Proto& action_proto) {
+const google::protobuf::FieldDescriptor* GetValueFieldDescriptor(
+        const typename Action::Proto& action_proto) {
     static auto* action_value_desc = GetProtoValueDescriptor(Action::Proto::GetDescriptor());
 
     auto* action_refl = Action::Proto::GetReflection();
     if (!action_refl->HasOneof(action_proto, action_value_desc)) {
-        return;
+        return nullptr;
     }
+    return action_refl->GetOneofFieldDescriptor(action_proto, action_value_desc);
+}
 
-    const auto* field_desc = action_refl->GetOneofFieldDescriptor(action_proto, action_value_desc);
+template <typename Action>
+void ExecuteActionProto(typename Action::ClassType* module,
+                        const typename Action::Proto& action_proto) {
+    const auto* field_desc = GetValueFieldDescriptor<Action>(action_proto);
+    if (field_desc == nullptr) return;
     auto number = field_desc->number();
     const auto& map = *Action::GetFunctionMap();
     auto it = map.find(number);
@@ -89,7 +97,7 @@ void ExecuteActionProto(typename Action::Class* module,
 
 template <typename Action>
 void ExecuteAllActionProtos(
-        typename Action::Class* module,
+        typename Action::ClassType* module,
         const google::protobuf::RepeatedPtrField<typename Action::Proto>& action_protos) {
     for (const auto& proto : action_protos) {
         ExecuteActionProto<Action>(module, proto);
@@ -134,52 +142,56 @@ FUZZ_DEFINE_PRIMITIVE_GETTER(float, GetFloat);
 // ActionPerformer extracts arguments from the protobuf message, and then call FuzzFunction
 // with these arguments.
 template <typename FuzzFunction, typename Signature, typename Enabled = void>
-struct ActionPerfomer;  // undefined
+struct ActionPerformerImpl;  // undefined
 
 template <typename FuzzFunction, typename MessageProto>
-struct ActionPerfomer<
+struct ActionPerformerImpl<
         FuzzFunction, void(const MessageProto&),
         typename std::enable_if_t<std::is_base_of_v<google::protobuf::Message, MessageProto>>> {
-    static void Invoke(typename FuzzFunction::Class* module,
-                       const google::protobuf::Message& action_proto,
-                       const google::protobuf::FieldDescriptor* field_desc) {
+    static typename FuzzFunction::ReturnType Invoke(
+            typename FuzzFunction::ClassType* module, const google::protobuf::Message& action_proto,
+            const google::protobuf::FieldDescriptor* field_desc) {
         const MessageProto& arg = CheckedCast<std::remove_reference_t<MessageProto>>(
                 action_proto.GetReflection()->GetMessage(action_proto, field_desc));
-        FuzzFunction::ImplBody(module, arg);
+        return FuzzFunction::ImplBody(module, arg);
     }
 };
 
 template <typename FuzzFunction, typename Primitive>
-struct ActionPerfomer<FuzzFunction, void(Primitive),
-                      typename std::enable_if_t<std::is_arithmetic_v<Primitive>>> {
-    static void Invoke(typename FuzzFunction::Class* module,
-                       const google::protobuf::Message& action_proto,
-                       const google::protobuf::FieldDescriptor* field_desc) {
+struct ActionPerformerImpl<FuzzFunction, void(Primitive),
+                           typename std::enable_if_t<std::is_arithmetic_v<Primitive>>> {
+    static typename FuzzFunction::ReturnType Invoke(
+            typename FuzzFunction::ClassType* module, const google::protobuf::Message& action_proto,
+            const google::protobuf::FieldDescriptor* field_desc) {
         Primitive arg = std::invoke(PrimitiveGetter<Primitive>::fp, action_proto.GetReflection(),
                                     action_proto, field_desc);
-        FuzzFunction::ImplBody(module, arg);
+        return FuzzFunction::ImplBody(module, arg);
     }
 };
 
 template <typename FuzzFunction>
-struct ActionPerfomer<FuzzFunction, void()> {
-    static void Invoke(typename FuzzFunction::Class* module, const google::protobuf::Message&,
-                       const google::protobuf::FieldDescriptor*) {
-        FuzzFunction::ImplBody(module);
+struct ActionPerformerImpl<FuzzFunction, void()> {
+    static typename FuzzFunction::ReturnType Invoke(typename FuzzFunction::ClassType* module,
+                                                    const google::protobuf::Message&,
+                                                    const google::protobuf::FieldDescriptor*) {
+        return FuzzFunction::ImplBody(module);
     }
 };
 
 template <typename FuzzFunction>
-struct ActionPerfomer<FuzzFunction, void(const std::string&)> {
-    static void Invoke(typename FuzzFunction::Class* module,
-                       const google::protobuf::Message& action_proto,
-                       const google::protobuf::FieldDescriptor* field_desc) {
+struct ActionPerformerImpl<FuzzFunction, void(const std::string&)> {
+    static typename FuzzFunction::ReturnType Invoke(
+            typename FuzzFunction::ClassType* module, const google::protobuf::Message& action_proto,
+            const google::protobuf::FieldDescriptor* field_desc) {
         std::string scratch;
         const std::string& arg = action_proto.GetReflection()->GetStringReference(
                 action_proto, field_desc, &scratch);
-        FuzzFunction::ImplBody(module, arg);
+        return FuzzFunction::ImplBody(module, arg);
     }
 };
+
+template <typename FuzzFunction>
+struct ActionPerformer : ActionPerformerImpl<FuzzFunction, typename FuzzFunction::Signature> {};
 
 }  // namespace android::fuzz
 
@@ -197,11 +209,11 @@ struct ActionPerfomer<FuzzFunction, void(const std::string&)> {
 //   FUZZ_CLASS(Foo, FooAction)
 // After linking functions of Foo to FooAction, execute all actions by:
 //   FooAction::ExecuteAll(foo_object, action_protos)
-#define FUZZ_CLASS(ClassType, Action)                                                            \
+#define FUZZ_CLASS(Class, Action)                                                                \
     class Action {                                                                               \
       public:                                                                                    \
         using Proto = Action##Proto;                                                             \
-        using Class = ClassType;                                                                 \
+        using ClassType = Class;                                                                 \
         using FunctionMap = android::fuzz::FunctionMap<Class>;                                   \
         static FunctionMap* GetFunctionMap() {                                                   \
             static Action::FunctionMap map;                                                      \
@@ -225,29 +237,33 @@ struct ActionPerfomer<FuzzFunction, void(const std::string&)> {
 // }
 // class Foo { public: void DoAwesomeFoo(bool arg); };
 // FUZZ_OBJECT(FooAction, Foo);
-// FUZZ_FUNCTION(FooAction, DoFoo, module, bool arg) {
+// FUZZ_FUNCTION(FooAction, DoFoo, void, IFoo* module, bool arg) {
 //   module->DoAwesomeFoo(arg);
 // }
 // The name DoFoo is the camel case name of the action in protobuf definition of FooActionProto.
-#define FUZZ_FUNCTION(Action, FunctionName, module, ...)                                         \
-    class FUZZ_FUNCTION_CLASS_NAME(Action, FunctionName) {                                       \
-      public:                                                                                    \
-        using Class = Action::Class;                                                             \
-        static void ImplBody(Action::Class*, ##__VA_ARGS__);                                     \
-                                                                                                 \
-      private:                                                                                   \
-        static bool registered_;                                                                 \
-    };                                                                                           \
-    auto FUZZ_FUNCTION_CLASS_NAME(Action, FunctionName)::registered_ = ([] {                     \
-        auto tag = Action::Proto::ValueCase::FUZZ_FUNCTION_TAG_NAME(FunctionName);               \
-        auto func =                                                                              \
-                &::android::fuzz::ActionPerfomer<FUZZ_FUNCTION_CLASS_NAME(Action, FunctionName), \
-                                                 void(__VA_ARGS__)>::Invoke;                     \
-        Action::GetFunctionMap()->CheckEmplace(tag, func);                                       \
-        return true;                                                                             \
-    })();                                                                                        \
-    void FUZZ_FUNCTION_CLASS_NAME(Action, FunctionName)::ImplBody(Action::Class* module,         \
-                                                                  ##__VA_ARGS__)
+#define FUZZ_FUNCTION(Action, FunctionName, Return, ModuleArg, ...)             \
+    class FUZZ_FUNCTION_CLASS_NAME(Action, FunctionName) {                      \
+      public:                                                                   \
+        using ActionType = Action;                                              \
+        using ClassType = Action::ClassType;                                    \
+        using ReturnType = Return;                                              \
+        using Signature = void(__VA_ARGS__);                                    \
+        static constexpr const char name[] = #FunctionName;                     \
+        static constexpr const auto tag =                                       \
+                Action::Proto::ValueCase::FUZZ_FUNCTION_TAG_NAME(FunctionName); \
+        static ReturnType ImplBody(ModuleArg, ##__VA_ARGS__);                   \
+                                                                                \
+      private:                                                                  \
+        static bool registered_;                                                \
+    };                                                                          \
+    auto FUZZ_FUNCTION_CLASS_NAME(Action, FunctionName)::registered_ = ([] {    \
+        auto tag = FUZZ_FUNCTION_CLASS_NAME(Action, FunctionName)::tag;         \
+        auto func = &::android::fuzz::ActionPerformer<FUZZ_FUNCTION_CLASS_NAME( \
+                Action, FunctionName)>::Invoke;                                 \
+        Action::GetFunctionMap()->CheckEmplace(tag, func);                      \
+        return true;                                                            \
+    })();                                                                       \
+    Return FUZZ_FUNCTION_CLASS_NAME(Action, FunctionName)::ImplBody(ModuleArg, ##__VA_ARGS__)
 
 // Implement a simple action by linking it to the function with the same name. Example:
 // message FooActionProto {
@@ -261,5 +277,9 @@ struct ActionPerfomer<FuzzFunction, void(const std::string&)> {
 // FUZZ_FUNCTION(FooAction, DoBar);
 // The name DoBar is the camel case name of the action in protobuf definition of FooActionProto, and
 // also the name of the function of Foo.
-#define FUZZ_SIMPLE_FUNCTION(Action, FunctionName) \
-    FUZZ_FUNCTION(Action, FunctionName, module) { (void)module->FunctionName(); }
+#define FUZZ_SIMPLE_FUNCTION(Action, FunctionName)                            \
+    FUZZ_FUNCTION(Action, FunctionName,                                       \
+                  decltype(std::declval<Action::ClassType>().FunctionName()), \
+                  Action::ClassType* module) {                                \
+        return module->FunctionName();                                        \
+    }

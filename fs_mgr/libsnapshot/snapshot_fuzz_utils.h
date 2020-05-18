@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <memory>
+#include <set>
 #include <string>
 
 #include <android-base/file.h>
@@ -132,6 +134,70 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
     bool switched_slot_ = false;
 
     bool CurrentSlotIsA() const { return data_->slot_suffix_is_a() != switched_slot_; }
+};
+
+// A spy class on ImageManager implementation. Upon destruction, unmaps all images
+// map through this object.
+class SnapshotFuzzImageManager : public android::fiemap::IImageManager {
+  public:
+    static std::unique_ptr<SnapshotFuzzImageManager> Open(const std::string& metadata_dir,
+                                                          const std::string& data_dir) {
+        auto impl = android::fiemap::ImageManager::Open(metadata_dir, data_dir);
+        if (impl == nullptr) return nullptr;
+        return std::unique_ptr<SnapshotFuzzImageManager>(
+                new SnapshotFuzzImageManager(std::move(impl)));
+    }
+
+    ~SnapshotFuzzImageManager();
+
+    // Spied APIs.
+    bool MapImageDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms,
+                        std::string* path) override;
+
+    // Other functions call through.
+    android::fiemap::FiemapStatus CreateBackingImage(
+            const std::string& name, uint64_t size, int flags,
+            std::function<bool(uint64_t, uint64_t)>&& on_progress) override {
+        return impl_->CreateBackingImage(name, size, flags, std::move(on_progress));
+    }
+    bool DeleteBackingImage(const std::string& name) override {
+        return impl_->DeleteBackingImage(name);
+    }
+    bool UnmapImageDevice(const std::string& name) override {
+        return impl_->UnmapImageDevice(name);
+    }
+    bool BackingImageExists(const std::string& name) override {
+        return impl_->BackingImageExists(name);
+    }
+    bool IsImageMapped(const std::string& name) override { return impl_->IsImageMapped(name); }
+    bool MapImageWithDeviceMapper(const IPartitionOpener& opener, const std::string& name,
+                                  std::string* dev) override {
+        return impl_->MapImageWithDeviceMapper(opener, name, dev);
+    }
+    bool GetMappedImageDevice(const std::string& name, std::string* device) override {
+        return impl_->GetMappedImageDevice(name, device);
+    }
+    bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) override {
+        return impl_->MapAllImages(init);
+    }
+    bool DisableImage(const std::string& name) override { return impl_->DisableImage(name); }
+    bool RemoveDisabledImages() override { return impl_->RemoveDisabledImages(); }
+    std::vector<std::string> GetAllBackingImages() override { return impl_->GetAllBackingImages(); }
+    android::fiemap::FiemapStatus ZeroFillNewImage(const std::string& name,
+                                                   uint64_t bytes) override {
+        return impl_->ZeroFillNewImage(name, bytes);
+    }
+    bool RemoveAllImages() override { return impl_->RemoveAllImages(); }
+    bool UnmapImageIfExists(const std::string& name) override {
+        return impl_->UnmapImageIfExists(name);
+    }
+
+  private:
+    std::unique_ptr<android::fiemap::IImageManager> impl_;
+    std::set<std::string> mapped_;
+
+    SnapshotFuzzImageManager(std::unique_ptr<android::fiemap::IImageManager>&& impl)
+        : impl_(std::move(impl)) {}
 };
 
 }  // namespace android::snapshot

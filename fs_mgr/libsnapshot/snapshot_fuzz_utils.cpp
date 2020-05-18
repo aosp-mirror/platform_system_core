@@ -27,7 +27,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <cutils/properties.h>
 #include <fs_mgr.h>
 #include <libsnapshot/auto_device.h>
 #include <libsnapshot/snapshot.h>
@@ -163,14 +162,6 @@ std::set<std::string> GetAllBaseDeviceStrings(const std::string& child_dev) {
 using PropertyList = std::set<std::string>;
 void InsertProperty(const char* key, const char* /*name*/, void* cookie) {
     reinterpret_cast<PropertyList*>(cookie)->insert(key);
-}
-
-void CheckUnsetGsidProps() {
-    PropertyList list;
-    property_list(&InsertProperty, reinterpret_cast<void*>(&list));
-    for (const auto& key : list) {
-        SetProperty(key, "");
-    }
 }
 
 // Attempt to delete all devices that is based on dev_name, including itself.
@@ -344,7 +335,6 @@ class AutoMemBasedDir : public AutoDevice {
 };
 
 SnapshotFuzzEnv::SnapshotFuzzEnv() {
-    CheckUnsetGsidProps();
     CheckCleanupDeviceMapperDevices();
     CheckDetachLoopDevices();
     CheckUmountAll();
@@ -368,7 +358,6 @@ SnapshotFuzzEnv::SnapshotFuzzEnv() {
 }
 
 SnapshotFuzzEnv::~SnapshotFuzzEnv() {
-    CheckUnsetGsidProps();
     CheckCleanupDeviceMapperDevices();
     mounted_data_ = nullptr;
     auto_delete_data_mount_point_ = nullptr;
@@ -396,7 +385,7 @@ std::unique_ptr<IImageManager> SnapshotFuzzEnv::CheckCreateFakeImageManager(
         const std::string& metadata_dir, const std::string& data_dir) {
     PCHECK(Mkdir(metadata_dir));
     PCHECK(Mkdir(data_dir));
-    return ImageManager::Open(metadata_dir, data_dir);
+    return SnapshotFuzzImageManager::Open(metadata_dir, data_dir);
 }
 
 // Helper to create a loop device for a file.
@@ -505,6 +494,23 @@ std::unique_ptr<AutoDevice> SnapshotFuzzEnv::CheckMountFormatData(const std::str
     CHECK(0 == fs_mgr_do_format(entry, false /* crypt_footer */));
     CHECK(0 == fs_mgr_do_mount_one(entry));
     return std::make_unique<AutoUnmount>(mount_point);
+}
+
+SnapshotFuzzImageManager::~SnapshotFuzzImageManager() {
+    // Remove relevant gsid.mapped_images.* props.
+    for (const auto& name : mapped_) {
+        CHECK(UnmapImageIfExists(name)) << "Cannot unmap " << name;
+    }
+}
+
+bool SnapshotFuzzImageManager::MapImageDevice(const std::string& name,
+                                              const std::chrono::milliseconds& timeout_ms,
+                                              std::string* path) {
+    if (impl_->MapImageDevice(name, timeout_ms, path)) {
+        mapped_.insert(name);
+        return true;
+    }
+    return false;
 }
 
 }  // namespace android::snapshot
