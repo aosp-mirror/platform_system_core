@@ -27,7 +27,6 @@
 #include <log/log_read.h>
 #include <private/android_logger.h>
 
-#include "LogCommand.h"
 #include "LogStatistics.h"
 #include "LogUtils.h"
 

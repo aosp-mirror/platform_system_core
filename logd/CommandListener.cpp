@@ -37,7 +37,7 @@
 #include <private/android_filesystem_config.h>
 #include <sysutils/SocketClient.h>
 
-#include "LogUtils.h"
+#include "LogPermissions.h"
 
 CommandListener::CommandListener(LogBuffer* buf, LogTags* tags, PruneList* prune,
                                  LogStatistics* stats)

@@ -32,10 +32,10 @@ cc_library_static {
     name: "liblogd",
 
     srcs: [
-        "LogCommand.cpp",
         "ChattyLogBuffer.cpp",
         "CommandListener.cpp",
         "LogListener.cpp",
+        "LogPermissions.cpp",
         "LogReader.cpp",
         "LogReaderList.cpp",
         "LogReaderThread.cpp",
