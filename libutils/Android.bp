@@ -175,8 +175,8 @@ cc_library {
     ],
 
     shared_libs: [
-         "libutils",
-         "libbacktrace",
+        "libutils",
+        "libbacktrace",
     ],
 
     target: {
@@ -192,6 +192,45 @@ cc_library {
             enabled: false,
         },
     },
+}
+
+cc_defaults {
+    name: "libutils_fuzz_defaults",
+    host_supported: true,
+    shared_libs: [
+        "libutils",
+        "libbase",
+    ],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_bitset",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["BitSet_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_filemap",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["FileMap_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_string8",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["String8_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_string16",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["String16_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_vector",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["Vector_fuzz.cpp"],
 }
 
 cc_test {
