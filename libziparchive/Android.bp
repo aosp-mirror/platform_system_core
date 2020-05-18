@@ -109,6 +109,12 @@ cc_library {
             enabled: true,
         },
     },
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.art.debug",
+        "com.android.art.release",
+    ],
 }
 
 // Tests.
