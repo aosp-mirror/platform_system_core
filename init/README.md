@@ -644,7 +644,8 @@ provides the `aidl_lazy_test_1` interface.
 `wait <path> [ <timeout> ]`
 > Poll for the existence of the given file and return when found,
   or the timeout has been reached. If timeout is not specified it
-  currently defaults to five seconds.
+  currently defaults to five seconds. The timeout value can be
+  fractional seconds, specified in floating point notation.
 
 `wait_for_prop <name> <value>`
 > Wait for system property _name_ to be _value_. Properties are expanded
