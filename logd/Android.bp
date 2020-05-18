@@ -28,46 +28,53 @@ event_flag = [
     "-DLIBLOG_LOG_TAG=1006",
 ]
 
-cc_library_static {
-    name: "liblogd",
-
-    srcs: [
-        "ChattyLogBuffer.cpp",
-        "CommandListener.cpp",
-        "LogListener.cpp",
-        "LogPermissions.cpp",
-        "LogReader.cpp",
-        "LogReaderList.cpp",
-        "LogReaderThread.cpp",
-        "LogBufferElement.cpp",
-        "LogStatistics.cpp",
-        "LogWhiteBlackList.cpp",
-        "libaudit.c",
-        "LogAudit.cpp",
-        "LogKlog.cpp",
-        "LogTags.cpp",
-    ],
-    logtags: ["event.logtags"],
+cc_defaults {
+    name: "logd_defaults",
 
     shared_libs: ["libbase"],
-
-    export_include_dirs: ["."],
-
     cflags: [
         "-Wextra",
         "-Wthread-safety",
     ] + event_flag,
 
     lto: {
-        thin: true
-    }
+        thin: true,
+    },
+}
+
+cc_library_static {
+    name: "liblogd",
+    defaults: ["logd_defaults"],
+
+    srcs: [
+        "ChattyLogBuffer.cpp",
+        "LogReaderList.cpp",
+        "LogReaderThread.cpp",
+        "LogBufferElement.cpp",
+        "LogStatistics.cpp",
+        "LogWhiteBlackList.cpp",
+        "LogTags.cpp",
+    ],
+    logtags: ["event.logtags"],
+
+    export_include_dirs: ["."],
 }
 
 cc_binary {
     name: "logd",
+    defaults: ["logd_defaults"],
     init_rc: ["logd.rc"],
 
-    srcs: ["main.cpp"],
+    srcs: [
+        "main.cpp",
+        "LogPermissions.cpp",
+        "CommandListener.cpp",
+        "LogListener.cpp",
+        "LogReader.cpp",
+        "LogAudit.cpp",
+        "LogKlog.cpp",
+        "libaudit.cpp",
+    ],
 
     static_libs: [
         "liblog",
@@ -77,34 +84,23 @@ cc_binary {
     shared_libs: [
         "libsysutils",
         "libcutils",
-        "libbase",
         "libpackagelistparser",
         "libprocessgroup",
         "libcap",
     ],
-
-    cflags: [
-        "-Wextra",
-    ],
-
-    lto: {
-        thin: true
-    }
 }
 
 cc_binary {
     name: "auditctl",
 
-    srcs: ["auditctl.cpp"],
-
-    static_libs: [
-        "liblogd",
+    srcs: [
+        "auditctl.cpp",
+        "libaudit.cpp",
     ],
 
     shared_libs: ["libbase"],
 
     cflags: [
-        "-Wconversion",
         "-Wextra",
     ],
 }
