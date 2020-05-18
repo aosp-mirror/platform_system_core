@@ -40,6 +40,9 @@ struct ChainInfo {
 std::string GetAvbPropertyDescriptor(const std::string& key,
                                      const std::vector<VBMetaData>& vbmeta_images);
 
+std::unique_ptr<FsAvbHashDescriptor> GetHashDescriptor(
+        const std::string& partition_name, const std::vector<VBMetaData>& vbmeta_images);
+
 // AvbHashtreeDescriptor to dm-verity table setup.
 std::unique_ptr<FsAvbHashtreeDescriptor> GetHashtreeDescriptor(
         const std::string& partition_name, const std::vector<VBMetaData>& vbmeta_images);
