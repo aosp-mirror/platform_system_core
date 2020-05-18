@@ -30,6 +30,7 @@
 
 #include "LogBuffer.h"
 #include "LogBufferElement.h"
+#include "LogPermissions.h"
 #include "LogReader.h"
 #include "LogUtils.h"
 #include "LogWriter.h"
