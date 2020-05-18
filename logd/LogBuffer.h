@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2014 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,178 +14,43 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_BUFFER_H__
-#define _LOGD_LOG_BUFFER_H__
+#pragma once
 
 #include <sys/types.h>
 
-#include <list>
-#include <optional>
-#include <string>
+#include <functional>
 
-#include <android/log.h>
-#include <private/android_filesystem_config.h>
+#include <log/log.h>
 #include <sysutils/SocketClient.h>
 
 #include "LogBufferElement.h"
-#include "LogStatistics.h"
-#include "LogTags.h"
-#include "LogTimes.h"
-#include "LogWhiteBlackList.h"
 
-//
-// We are either in 1970ish (MONOTONIC) or 2016+ish (REALTIME) so to
-// differentiate without prejudice, we use 1972 to delineate, earlier
-// is likely monotonic, later is real. Otherwise we start using a
-// dividing line between monotonic and realtime if more than a minute
-// difference between them.
-//
-namespace android {
+class LogWriter;
 
-static bool isMonotonic(const log_time& mono) {
-    static const uint32_t EPOCH_PLUS_2_YEARS = 2 * 24 * 60 * 60 * 1461 / 4;
-    static const uint32_t EPOCH_PLUS_MINUTE = 60;
-
-    if (mono.tv_sec >= EPOCH_PLUS_2_YEARS) {
-        return false;
-    }
-
-    log_time now(CLOCK_REALTIME);
-
-    /* Timezone and ntp time setup? */
-    if (now.tv_sec >= EPOCH_PLUS_2_YEARS) {
-        return true;
-    }
-
-    /* no way to differentiate realtime from monotonic time */
-    if (now.tv_sec < EPOCH_PLUS_MINUTE) {
-        return false;
-    }
-
-    log_time cpu(CLOCK_MONOTONIC);
-    /* too close to call to differentiate monotonic times from realtime */
-    if ((cpu.tv_sec + EPOCH_PLUS_MINUTE) >= now.tv_sec) {
-        return false;
-    }
-
-    /* dividing line half way between monotonic and realtime */
-    return mono.tv_sec < ((cpu.tv_sec + now.tv_sec) / 2);
-}
-}
-
-typedef std::list<LogBufferElement*> LogBufferElementCollection;
+enum class FlushToResult {
+    kSkip,
+    kStop,
+    kWrite,
+};
 
 class LogBuffer {
-    LogBufferElementCollection mLogElements;
-    pthread_rwlock_t mLogElementsLock;
+  public:
+    virtual ~LogBuffer() {}
 
-    LogStatistics stats;
+    virtual void Init() = 0;
 
-    PruneList mPrune;
-    // Keeps track of the iterator to the oldest log message of a given log type, as an
-    // optimization when pruning logs.  Use GetOldest() to retrieve.
-    std::optional<LogBufferElementCollection::iterator> mOldest[LOG_ID_MAX];
-    // watermark of any worst/chatty uid processing
-    typedef std::unordered_map<uid_t, LogBufferElementCollection::iterator>
-        LogBufferIteratorMap;
-    LogBufferIteratorMap mLastWorst[LOG_ID_MAX];
-    // watermark of any worst/chatty pid of system processing
-    typedef std::unordered_map<pid_t, LogBufferElementCollection::iterator>
-        LogBufferPidIteratorMap;
-    LogBufferPidIteratorMap mLastWorstPidOfSystem[LOG_ID_MAX];
-
-    unsigned long mMaxSize[LOG_ID_MAX];
-
-    bool monotonic;
-
-    LogTags tags;
-
-    LogBufferElement* lastLoggedElements[LOG_ID_MAX];
-    LogBufferElement* droppedElements[LOG_ID_MAX];
-    void log(LogBufferElement* elem);
-
-   public:
-    LastLogTimes& mTimes;
-
-    explicit LogBuffer(LastLogTimes* times);
-    ~LogBuffer();
-    void init();
-    bool isMonotonic() {
-        return monotonic;
-    }
-
-    int log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
-            uint16_t len);
+    virtual int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
+                    const char* msg, uint16_t len) = 0;
     // lastTid is an optional context to help detect if the last previous
     // valid message was from the same source so we can differentiate chatty
     // filter types (identical or expired)
-    uint64_t flushTo(SocketClient* writer, uint64_t start,
-                     pid_t* lastTid,  // &lastTid[LOG_ID_MAX] or nullptr
-                     bool privileged, bool security,
-                     int (*filter)(const LogBufferElement* element, void* arg) = nullptr,
-                     void* arg = nullptr);
+    static const uint64_t FLUSH_ERROR = 0;
+    virtual uint64_t FlushTo(
+            LogWriter* writer, uint64_t start,
+            pid_t* last_tid,  // nullable
+            const std::function<FlushToResult(const LogBufferElement* element)>& filter) = 0;
 
-    bool clear(log_id_t id, uid_t uid = AID_ROOT);
-    unsigned long getSize(log_id_t id);
-    int setSize(log_id_t id, unsigned long size);
-    unsigned long getSizeUsed(log_id_t id);
-
-    std::string formatStatistics(uid_t uid, pid_t pid, unsigned int logMask);
-
-    void enableStatistics() {
-        stats.enableStatistics();
-    }
-
-    int initPrune(const char* cp) {
-        return mPrune.init(cp);
-    }
-    std::string formatPrune() {
-        return mPrune.format();
-    }
-
-    std::string formatGetEventTag(uid_t uid, const char* name,
-                                  const char* format) {
-        return tags.formatGetEventTag(uid, name, format);
-    }
-    std::string formatEntry(uint32_t tag, uid_t uid) {
-        return tags.formatEntry(tag, uid);
-    }
-    const char* tagToName(uint32_t tag) {
-        return tags.tagToName(tag);
-    }
-
-    // helper must be protected directly or implicitly by wrlock()/unlock()
-    const char* pidToName(pid_t pid) {
-        return stats.pidToName(pid);
-    }
-    uid_t pidToUid(pid_t pid) { return stats.pidToUid(pid); }
-    const char* uidToName(uid_t uid) {
-        return stats.uidToName(uid);
-    }
-    void wrlock() {
-        pthread_rwlock_wrlock(&mLogElementsLock);
-    }
-    void rdlock() {
-        pthread_rwlock_rdlock(&mLogElementsLock);
-    }
-    void unlock() {
-        pthread_rwlock_unlock(&mLogElementsLock);
-    }
-
-   private:
-    static constexpr size_t minPrune = 4;
-    static constexpr size_t maxPrune = 256;
-
-    void maybePrune(log_id_t id);
-    void kickMe(LogTimeEntry* me, log_id_t id, unsigned long pruneRows);
-
-    bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
-    LogBufferElementCollection::iterator erase(
-        LogBufferElementCollection::iterator it, bool coalesce = false);
-
-    // Returns an iterator to the oldest element for a given log type, or mLogElements.end() if
-    // there are no logs for the given log type. Requires mLogElementsLock to be held.
-    LogBufferElementCollection::iterator GetOldest(log_id_t log_id);
+    virtual bool Clear(log_id_t id, uid_t uid) = 0;
+    virtual unsigned long GetSize(log_id_t id) = 0;
+    virtual int SetSize(log_id_t id, unsigned long size) = 0;
 };
-
-#endif  // _LOGD_LOG_BUFFER_H__

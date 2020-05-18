@@ -32,14 +32,14 @@ cc_library_static {
     name: "liblogd",
 
     srcs: [
-        "LogCommand.cpp",
+        "ChattyLogBuffer.cpp",
         "CommandListener.cpp",
         "LogListener.cpp",
+        "LogPermissions.cpp",
         "LogReader.cpp",
-        "FlushCommand.cpp",
-        "LogBuffer.cpp",
+        "LogReaderList.cpp",
+        "LogReaderThread.cpp",
         "LogBufferElement.cpp",
-        "LogTimes.cpp",
         "LogStatistics.cpp",
         "LogWhiteBlackList.cpp",
         "libaudit.c",
@@ -53,7 +53,14 @@ cc_library_static {
 
     export_include_dirs: ["."],
 
-    cflags: ["-Werror"] + event_flag,
+    cflags: [
+        "-Wextra",
+        "-Wthread-safety",
+    ] + event_flag,
+
+    lto: {
+        thin: true
+    }
 }
 
 cc_binary {
@@ -76,7 +83,13 @@ cc_binary {
         "libcap",
     ],
 
-    cflags: ["-Werror"],
+    cflags: [
+        "-Wextra",
+    ],
+
+    lto: {
+        thin: true
+    }
 }
 
 cc_binary {
@@ -91,10 +104,8 @@ cc_binary {
     shared_libs: ["libbase"],
 
     cflags: [
-        "-Wall",
+        "-Wconversion",
         "-Wextra",
-        "-Werror",
-        "-Wconversion"
     ],
 }
 

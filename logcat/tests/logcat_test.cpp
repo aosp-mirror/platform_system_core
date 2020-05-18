@@ -174,11 +174,6 @@ static size_t inject(ssize_t count) {
 }
 
 TEST(logcat, year) {
-    if (android_log_clockid() == CLOCK_MONOTONIC) {
-        fprintf(stderr, "Skipping test, logd is monotonic time\n");
-        return;
-    }
-
     int count;
     int tries = 3;  // in case run too soon after system start or buffer clear
 
@@ -249,11 +244,6 @@ static char* fgetLongTime(char* buffer, size_t buflen, FILE* fp) {
 }
 
 TEST(logcat, tz) {
-    if (android_log_clockid() == CLOCK_MONOTONIC) {
-        fprintf(stderr, "Skipping test, logd is monotonic time\n");
-        return;
-    }
-
     int tries = 4;  // in case run too soon after system start or buffer clear
     int count;
 

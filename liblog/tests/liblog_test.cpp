@@ -329,8 +329,6 @@ static void bswrite_test(const char* message) {
 #ifdef __ANDROID__
   pid_t pid = getpid();
 
-  log_time ts(android_log_clockid());
-
   size_t num_lines = 1, size = 0, length = 0, total = 0;
   const char* cp = message;
   while (*cp) {
@@ -432,7 +430,6 @@ static void buf_write_test(const char* message) {
   pid_t pid = getpid();
 
   static const char tag[] = "TEST__android_log_buf_write";
-  log_time ts(android_log_clockid());
 
   auto write_function = [&] {
     EXPECT_LT(0, __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_INFO, tag, message));
