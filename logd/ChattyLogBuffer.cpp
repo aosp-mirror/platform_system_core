@@ -660,7 +660,7 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         if (leading) {
             it = GetOldest(id);
         }
-        static const timespec too_old = {EXPIRE_HOUR_THRESHOLD * 60 * 60, 0};
+        static const log_time too_old{EXPIRE_HOUR_THRESHOLD * 60 * 60, 0};
         LogBufferElementCollection::iterator lastt;
         lastt = mLogElements.end();
         --lastt;

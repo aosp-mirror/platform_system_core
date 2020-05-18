@@ -904,10 +904,10 @@ void __android_log_btwrite_multiple__helper(int count) {
             (log_msg.entry.len == (4 + 1 + 8))) {
             if (tag != 0) continue;
 
-            log_time tx(eventData + 4 + 1);
-            if (ts == tx) {
+            log_time* tx = reinterpret_cast<log_time*>(eventData + 4 + 1);
+            if (ts == *tx) {
                 ++count;
-            } else if (ts1 == tx) {
+            } else if (ts1 == *tx) {
                 ++second_count;
             }
         } else if (eventData[4] == EVENT_TYPE_STRING) {
