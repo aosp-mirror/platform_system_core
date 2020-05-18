@@ -31,7 +31,6 @@
 #include <unordered_map>
 #include <utility>
 
-#include <cutils/properties.h>
 #include <private/android_logger.h>
 
 #include "LogUtils.h"
