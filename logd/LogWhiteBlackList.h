@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_WHITE_BLACK_LIST_H__
-#define _LOGD_LOG_WHITE_BLACK_LIST_H__
+#pragma once
 
 #include <sys/types.h>
 
@@ -23,8 +22,6 @@
 #include <list>
 
 #include "LogBufferElement.h"
-
-// White and Blacklist
 
 class Prune {
     friend class PruneList;
@@ -84,5 +81,3 @@ class PruneList {
 
     std::string format();
 };
-
-#endif  // _LOGD_LOG_WHITE_BLACK_LIST_H__
