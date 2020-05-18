@@ -73,6 +73,7 @@ static auto& listener_list_mutex = *new std::mutex();
 typedef std::list<std::unique_ptr<alistener>> ListenerList;
 static ListenerList& listener_list GUARDED_BY(listener_list_mutex) = *new ListenerList();
 
+#if ADB_HOST
 static void ss_listener_event_func(int _fd, unsigned ev, void *_l) {
     if (ev & FDE_READ) {
         unique_fd fd(adb_socket_accept(_fd, nullptr, nullptr));
@@ -88,6 +89,7 @@ static void ss_listener_event_func(int _fd, unsigned ev, void *_l) {
         }
     }
 }
+#endif
 
 static void listener_event_func(int _fd, unsigned ev, void* _l)
 {
@@ -164,7 +166,7 @@ void remove_all_listeners() EXCLUDES(listener_list_mutex) {
     }
 }
 
-void enable_daemon_sockets() EXCLUDES(listener_list_mutex) {
+void enable_server_sockets() EXCLUDES(listener_list_mutex) {
     std::lock_guard<std::mutex> lock(listener_list_mutex);
     for (auto& l : listener_list) {
         if (l->connect_to == "*smartsocket*") {
@@ -173,6 +175,7 @@ void enable_daemon_sockets() EXCLUDES(listener_list_mutex) {
     }
 }
 
+#if ADB_HOST
 void close_smartsockets() EXCLUDES(listener_list_mutex) {
     std::lock_guard<std::mutex> lock(listener_list_mutex);
     auto pred = [](const std::unique_ptr<alistener>& listener) {
@@ -180,6 +183,7 @@ void close_smartsockets() EXCLUDES(listener_list_mutex) {
     };
     listener_list.remove_if(pred);
 }
+#endif
 
 InstallStatus install_listener(const std::string& local_name, const char* connect_to,
                                atransport* transport, int flags, int* resolved_tcp_port,
@@ -188,7 +192,7 @@ InstallStatus install_listener(const std::string& local_name, const char* connec
     for (auto& l : listener_list) {
         if (local_name == l->local_name) {
             // Can't repurpose a smartsocket.
-            if(l->connect_to[0] == '*') {
+            if (l->connect_to[0] == '*') {
                 *error = "cannot repurpose smartsocket";
                 return INSTALL_STATUS_INTERNAL_ERROR;
             }
@@ -227,7 +231,11 @@ InstallStatus install_listener(const std::string& local_name, const char* connec
 
     close_on_exec(listener->fd);
     if (listener->connect_to == "*smartsocket*") {
+#if ADB_HOST
         listener->fde = fdevent_create(listener->fd, ss_listener_event_func, listener.get());
+#else
+        LOG(FATAL) << "attempted to connect to *smartsocket* in daemon";
+#endif
     } else {
         listener->fde = fdevent_create(listener->fd, listener_event_func, listener.get());
     }

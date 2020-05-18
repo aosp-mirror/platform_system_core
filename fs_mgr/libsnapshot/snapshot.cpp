@@ -577,8 +577,16 @@ bool SnapshotManager::InitiateMerge() {
         return false;
     }
 
+    auto other_suffix = device_->GetOtherSlotSuffix();
+
     auto& dm = DeviceMapper::Instance();
     for (const auto& snapshot : snapshots) {
+        if (android::base::EndsWith(snapshot, other_suffix)) {
+            // Allow the merge to continue, but log this unexpected case.
+            LOG(ERROR) << "Unexpected snapshot found during merge: " << snapshot;
+            continue;
+        }
+
         // The device has to be mapped, since everything should be merged at
         // the same time. This is a fairly serious error. We could forcefully
         // map everything here, but it should have been mapped during first-
@@ -1008,6 +1016,15 @@ std::string SnapshotManager::GetForwardMergeIndicatorPath() {
 }
 
 void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
+    // It's not possible to remove update state in recovery, so write an
+    // indicator that cleanup is needed on reboot. If a factory data reset
+    // was requested, it doesn't matter, everything will get wiped anyway.
+    // To make testing easier we consider a /data wipe as cleaned up.
+    if (device_->IsRecovery() && !in_factory_data_reset_) {
+        WriteUpdateState(lock, UpdateState::MergeCompleted);
+        return;
+    }
+
     RemoveAllUpdateState(lock);
 }
 
@@ -1674,7 +1691,7 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         return false;
     }
     std::string cow_device;
-    if (!dm.GetDeviceString(cow_name, &cow_device)) {
+    if (!GetMappedImageDeviceStringOrPath(cow_name, &cow_device)) {
         LOG(ERROR) << "Could not determine major/minor for: " << cow_name;
         return false;
     }
@@ -1771,7 +1788,7 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
     // If the COW image exists, append it as the last extent.
     if (snapshot_status.cow_file_size() > 0) {
         std::string cow_image_device;
-        if (!dm.GetDeviceString(cow_image_name, &cow_image_device)) {
+        if (!GetMappedImageDeviceStringOrPath(cow_image_name, &cow_image_device)) {
             LOG(ERROR) << "Cannot determine major/minor for: " << cow_image_name;
             return false;
         }
@@ -2347,7 +2364,6 @@ Return SnapshotManager::InitializeUpdateSnapshots(
         const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
     CHECK(lock);
 
-    auto& dm = DeviceMapper::Instance();
     CreateLogicalPartitionParams cow_params{
             .block_device = LP_METADATA_DEFAULT_PARTITION_NAME,
             .metadata = exported_target_metadata,
@@ -2372,7 +2388,7 @@ Return SnapshotManager::InitializeUpdateSnapshots(
         }
 
         std::string cow_path;
-        if (!dm.GetDmDevicePathByName(cow_name, &cow_path)) {
+        if (!images_->GetMappedImageDevice(cow_name, &cow_path)) {
             LOG(ERROR) << "Cannot determine path for " << cow_name;
             return Return::Error();
         }
@@ -2528,7 +2544,43 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
         }
         return true;
     };
-    if (!ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback)) {
+
+    in_factory_data_reset_ = true;
+    bool ok = ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback);
+    in_factory_data_reset_ = false;
+
+    if (!ok) {
+        return false;
+    }
+
+    // Nothing should be depending on partitions now, so unmap them all.
+    if (!UnmapAllPartitions()) {
+        LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
+    }
+    return true;
+}
+
+bool SnapshotManager::FinishMergeInRecovery() {
+    if (!device_->IsRecovery()) {
+        LOG(ERROR) << "Data wipes are only allowed in recovery.";
+        return false;
+    }
+
+    auto mount = EnsureMetadataMounted();
+    if (!mount || !mount->HasDevice()) {
+        return false;
+    }
+
+    auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+    auto super_path = device_->GetSuperDevice(slot_number);
+    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+        LOG(ERROR) << "Unable to map partitions to complete merge.";
+        return false;
+    }
+
+    UpdateState state = ProcessUpdateState();
+    if (state != UpdateState::MergeCompleted) {
+        LOG(ERROR) << "Merge returned unexpected status: " << state;
         return false;
     }
 
@@ -2687,6 +2739,25 @@ bool SnapshotManager::UpdateForwardMergeIndicator(bool wipe) {
 
 ISnapshotMergeStats* SnapshotManager::GetSnapshotMergeStatsInstance() {
     return SnapshotMergeStats::GetInstance(*this);
+}
+
+bool SnapshotManager::GetMappedImageDeviceStringOrPath(const std::string& device_name,
+                                                       std::string* device_string_or_mapped_path) {
+    auto& dm = DeviceMapper::Instance();
+    // Try getting the device string if it is a device mapper device.
+    if (dm.GetState(device_name) != DmDeviceState::INVALID) {
+        return dm.GetDeviceString(device_name, device_string_or_mapped_path);
+    }
+
+    // Otherwise, get path from IImageManager.
+    if (!images_->GetMappedImageDevice(device_name, device_string_or_mapped_path)) {
+        return false;
+    }
+
+    LOG(WARNING) << "Calling GetMappedImageDevice with local image manager; device "
+                 << (device_string_or_mapped_path ? *device_string_or_mapped_path : "(nullptr)")
+                 << "may not be available in first stage init! ";
+    return true;
 }
 
 }  // namespace snapshot

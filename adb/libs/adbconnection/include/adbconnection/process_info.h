@@ -21,7 +21,7 @@
 #include <string>
 
 struct ProcessInfo {
-  const static size_t kMaxArchNameLength = 16;
+  static constexpr size_t kMaxArchNameLength = 16;
 
   uint64_t pid;
   bool debuggable;

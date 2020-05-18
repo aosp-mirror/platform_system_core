@@ -22,9 +22,10 @@
 #include <sys/types.h>
 
 #include <log/log.h>
-#include <sysutils/SocketClient.h>
 
-class LogBuffer;
+#include "LogWriter.h"
+
+class LogStatistics;
 
 #define EXPIRE_HOUR_THRESHOLD 24  // Only expire chatty UID logs to preserve
                                   // non-chatty UIDs less than this age in hours
@@ -33,8 +34,6 @@ class LogBuffer;
 #define EXPIRE_RATELIMIT 10  // maximum rate in seconds to report expiration
 
 class __attribute__((packed)) LogBufferElement {
-    friend LogBuffer;
-
     // sized to match reality of incoming log packets
     const uint32_t mUid;
     const uint32_t mPid;
@@ -55,10 +54,9 @@ class __attribute__((packed)) LogBufferElement {
     static atomic_int_fast64_t sequence;
 
     // assumption: mDropped == true
-    size_t populateDroppedMessage(char*& buffer, LogBuffer* parent,
-                                  bool lastSame);
+    size_t populateDroppedMessage(char*& buffer, LogStatistics* parent, bool lastSame);
 
-   public:
+  public:
     LogBufferElement(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
                      pid_t tid, const char* msg, uint16_t len);
     LogBufferElement(const LogBufferElement& elem);
@@ -97,6 +95,5 @@ class __attribute__((packed)) LogBufferElement {
         return mRealTime;
     }
 
-    static const uint64_t FLUSH_ERROR;
-    uint64_t flushTo(SocketClient* writer, LogBuffer* parent, bool lastSame);
+    bool FlushTo(LogWriter* writer, LogStatistics* parent, bool lastSame);
 };

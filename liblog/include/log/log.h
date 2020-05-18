@@ -133,12 +133,6 @@ typedef enum {
   (void)__android_log_bswrite(_tag, _value);
 #endif
 
-#ifdef __linux__
-
-clockid_t android_log_clockid(void);
-
-#endif /* __linux__ */
-
 /* --------------------------------------------------------------------- */
 
 /*

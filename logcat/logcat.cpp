@@ -459,7 +459,7 @@ static log_time lastLogTime(const char* outputFileName) {
                                             closedir);
     if (!dir.get()) return retval;
 
-    log_time now(android_log_clockid());
+    log_time now(CLOCK_REALTIME);
 
     size_t len = strlen(file);
     log_time modulo(0, NS_PER_SEC);

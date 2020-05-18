@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2014 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,22 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_COMMAND_H
-#define _LOGD_COMMAND_H
+#pragma once
 
-#include <sysutils/FrameworkCommand.h>
-#include <sysutils/SocketClient.h>
+#include <list>
+#include <memory>
+#include <mutex>
 
-class LogCommand : public FrameworkCommand {
-   public:
-    explicit LogCommand(const char* cmd);
-    virtual ~LogCommand() {
-    }
+#include "LogReaderThread.h"
+
+class LogReaderList {
+  public:
+    void NotifyNewLog(unsigned int log_mask) const;
+
+    std::list<std::unique_ptr<LogReaderThread>>& reader_threads() { return reader_threads_; }
+    std::mutex& reader_threads_lock() { return reader_threads_lock_; }
+
+  private:
+    std::list<std::unique_ptr<LogReaderThread>> reader_threads_;
+    mutable std::mutex reader_threads_lock_;
 };
-
-#endif

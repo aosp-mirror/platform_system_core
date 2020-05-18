@@ -95,6 +95,8 @@ struct __attribute__((__packed__)) CrashInfoDataDynamic : public CrashInfoDataSt
   uintptr_t fdsan_table_address;
   uintptr_t gwp_asan_state;
   uintptr_t gwp_asan_metadata;
+  uintptr_t scudo_stack_depot;
+  uintptr_t scudo_region_info;
 };
 
 struct __attribute__((__packed__)) CrashInfo {
