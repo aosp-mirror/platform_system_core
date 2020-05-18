@@ -25,6 +25,7 @@
 #include <sys/time.h>
 
 #include <android-base/logging.h>
+#include <android-base/parsedouble.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
 
@@ -205,8 +206,8 @@ Result<void> check_sysclktz(const BuiltinArguments& args) {
 
 Result<void> check_wait(const BuiltinArguments& args) {
     if (args.size() == 3 && !args[2].empty()) {
-        int timeout_int;
-        if (!android::base::ParseInt(args[2], &timeout_int)) {
+        double timeout_double;
+        if (!android::base::ParseDouble(args[2], &timeout_double, 0)) {
             return Error() << "failed to parse timeout";
         }
     }
