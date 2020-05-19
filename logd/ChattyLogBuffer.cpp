@@ -426,31 +426,14 @@ LogBufferElementCollection::iterator ChattyLogBuffer::erase(LogBufferElementColl
 // Define a temporary mechanism to report the last LogBufferElement pointer
 // for the specified uid, pid and tid. Used below to help merge-sort when
 // pruning for worst UID.
-class LogBufferElementKey {
-    const union {
-        struct {
-            uint32_t uid;
-            uint16_t pid;
-            uint16_t tid;
-        } __packed;
-        uint64_t value;
-    } __packed;
-
-  public:
-    LogBufferElementKey(uid_t uid, pid_t pid, pid_t tid) : uid(uid), pid(pid), tid(tid) {}
-    explicit LogBufferElementKey(uint64_t key) : value(key) {}
-
-    uint64_t getKey() { return value; }
-};
-
 class LogBufferElementLast {
     typedef std::unordered_map<uint64_t, LogBufferElement*> LogBufferElementMap;
     LogBufferElementMap map;
 
   public:
     bool coalesce(LogBufferElement* element, uint16_t dropped) {
-        LogBufferElementKey key(element->getUid(), element->getPid(), element->getTid());
-        LogBufferElementMap::iterator it = map.find(key.getKey());
+        uint64_t key = LogBufferElementKey(element->getUid(), element->getPid(), element->getTid());
+        LogBufferElementMap::iterator it = map.find(key);
         if (it != map.end()) {
             LogBufferElement* found = it->second;
             uint16_t moreDropped = found->getDropped();
@@ -465,8 +448,8 @@ class LogBufferElementLast {
     }
 
     void add(LogBufferElement* element) {
-        LogBufferElementKey key(element->getUid(), element->getPid(), element->getTid());
-        map[key.getKey()] = element;
+        uint64_t key = LogBufferElementKey(element->getUid(), element->getPid(), element->getTid());
+        map[key] = element;
     }
 
     void clear() { map.clear(); }
@@ -482,6 +465,11 @@ class LogBufferElementLast {
                 ++it;
             }
         }
+    }
+
+  private:
+    uint64_t LogBufferElementKey(uid_t uid, pid_t pid, pid_t tid) {
+        return uint64_t(uid) << 32 | uint64_t(pid) << 16 | uint64_t(tid);
     }
 };
 
@@ -660,7 +648,7 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         if (leading) {
             it = GetOldest(id);
         }
-        static const timespec too_old = {EXPIRE_HOUR_THRESHOLD * 60 * 60, 0};
+        static const log_time too_old{EXPIRE_HOUR_THRESHOLD * 60 * 60, 0};
         LogBufferElementCollection::iterator lastt;
         lastt = mLogElements.end();
         --lastt;

@@ -32,6 +32,7 @@
 #include <android-base/macros.h>
 #include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
+#include <android-base/threads.h>
 #include <log/log_event_list.h>
 #include <log/log_properties.h>
 #include <log/log_read.h>
@@ -550,10 +551,10 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
     clock_gettime(CLOCK_REALTIME, &ts);
 
     android_log_header_t header = {
-        .id = LOG_ID_EVENTS,
-        .tid = (uint16_t)gettid(),
-        .realtime.tv_sec = (uint32_t)ts.tv_sec,
-        .realtime.tv_nsec = (uint32_t)ts.tv_nsec,
+            .id = LOG_ID_EVENTS,
+            .tid = static_cast<uint16_t>(android::base::GetThreadId()),
+            .realtime.tv_sec = static_cast<uint32_t>(ts.tv_sec),
+            .realtime.tv_nsec = static_cast<uint32_t>(ts.tv_nsec),
     };
 
     uint32_t outTag = TAG_DEF_LOG_TAG;
