@@ -52,17 +52,27 @@ using DmTarget = android::dm::DmTarget;
 using DmTargetZero = android::dm::DmTargetZero;
 using DmTargetLinear = android::dm::DmTargetLinear;
 
-static bool GetPhysicalPartitionDevicePath(const IPartitionOpener& opener,
-                                           const LpMetadata& metadata,
+static bool GetPhysicalPartitionDevicePath(const CreateLogicalPartitionParams& params,
                                            const LpMetadataBlockDevice& block_device,
                                            const std::string& super_device, std::string* result) {
     // If the super device is the source of this block device's metadata,
     // make sure we use the correct super device (and not just "super",
     // which might not exist.)
     std::string name = GetBlockDevicePartitionName(block_device);
-    std::string dev_string = opener.GetDeviceString(name);
-    if (GetMetadataSuperBlockDevice(metadata) == &block_device) {
-        dev_string = opener.GetDeviceString(super_device);
+    if (android::base::StartsWith(name, "dm-")) {
+        // Device-mapper nodes are not normally allowed in LpMetadata, since
+        // they are not consistent across reboots. However for the purposes of
+        // testing it's useful to handle them. For example when running DSUs,
+        // userdata is a device-mapper device, and some stacking will result
+        // when using libfiemap.
+        *result = "/dev/block/" + name;
+        return true;
+    }
+
+    auto opener = params.partition_opener;
+    std::string dev_string = opener->GetDeviceString(name);
+    if (GetMetadataSuperBlockDevice(*params.metadata) == &block_device) {
+        dev_string = opener->GetDeviceString(super_device);
     }
 
     // Note: device-mapper will not accept symlinks, so we must use realpath
@@ -93,8 +103,8 @@ bool CreateDmTableInternal(const CreateLogicalPartitionParams& params, DmTable* 
             case LP_TARGET_TYPE_LINEAR: {
                 const auto& block_device = params.metadata->block_devices[extent.target_source];
                 std::string dev_string;
-                if (!GetPhysicalPartitionDevicePath(*params.partition_opener, *params.metadata,
-                                                    block_device, super_device, &dev_string)) {
+                if (!GetPhysicalPartitionDevicePath(params, block_device, super_device,
+                                                    &dev_string)) {
                     LOG(ERROR) << "Unable to complete device-mapper table, unknown block device";
                     return false;
                 }
