@@ -135,6 +135,12 @@ cc_library {
             exclude_shared_libs: ["libdexfile_support"],
         },
     },
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.art.debug",
+        "com.android.art.release",
+    ],
 }
 
 // Static library without DEX support to avoid dependencies on the ART APEX.
