@@ -148,6 +148,7 @@ cc_binary {
     ],
 
     header_libs: [
+        "avb_headers",
         "libsnapshot_headers",
     ]
 }
