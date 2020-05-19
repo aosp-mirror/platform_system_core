@@ -37,9 +37,7 @@ struct log_time {
   uint32_t tv_sec = 0; /* good to Feb 5 2106 */
   uint32_t tv_nsec = 0;
 
-  static const uint32_t tv_sec_max = 0xFFFFFFFFUL;
-  static const uint32_t tv_nsec_max = 999999999UL;
-  static const timespec EPOCH;
+  static constexpr timespec EPOCH = {0, 0};
 
   log_time() {}
   explicit log_time(const timespec& T)
@@ -55,16 +53,6 @@ struct log_time {
     tv_nsec = static_cast<uint32_t>(T.tv_nsec);
   }
 #endif
-  explicit log_time(const char* T) {
-    const uint8_t* c = reinterpret_cast<const uint8_t*>(T);
-    tv_sec = c[0] | (static_cast<uint32_t>(c[1]) << 8) |
-             (static_cast<uint32_t>(c[2]) << 16) |
-             (static_cast<uint32_t>(c[3]) << 24);
-    tv_nsec = c[4] | (static_cast<uint32_t>(c[5]) << 8) |
-              (static_cast<uint32_t>(c[6]) << 16) |
-              (static_cast<uint32_t>(c[7]) << 24);
-  }
-
   /* timespec */
   bool operator==(const timespec& T) const {
     return (tv_sec == static_cast<uint32_t>(T.tv_sec)) &&
@@ -90,17 +78,6 @@ struct log_time {
     return !(*this > T);
   }
 
-  log_time operator-=(const timespec& T);
-  log_time operator-(const timespec& T) const {
-    log_time local(*this);
-    return local -= T;
-  }
-  log_time operator+=(const timespec& T);
-  log_time operator+(const timespec& T) const {
-    log_time local(*this);
-    return local += T;
-  }
-
   /* log_time */
   bool operator==(const log_time& T) const {
     return (tv_sec == T.tv_sec) && (tv_nsec == T.tv_nsec);
@@ -123,12 +100,36 @@ struct log_time {
     return !(*this > T);
   }
 
-  log_time operator-=(const log_time& T);
+  log_time operator-=(const log_time& T) {
+    // No concept of negative time, clamp to EPOCH
+    if (*this <= T) {
+      return *this = log_time(EPOCH);
+    }
+
+    if (this->tv_nsec < T.tv_nsec) {
+      --this->tv_sec;
+      this->tv_nsec = NS_PER_SEC + this->tv_nsec - T.tv_nsec;
+    } else {
+      this->tv_nsec -= T.tv_nsec;
+    }
+    this->tv_sec -= T.tv_sec;
+
+    return *this;
+  }
   log_time operator-(const log_time& T) const {
     log_time local(*this);
     return local -= T;
   }
-  log_time operator+=(const log_time& T);
+  log_time operator+=(const log_time& T) {
+    this->tv_nsec += T.tv_nsec;
+    if (this->tv_nsec >= NS_PER_SEC) {
+      this->tv_nsec -= NS_PER_SEC;
+      ++this->tv_sec;
+    }
+    this->tv_sec += T.tv_sec;
+
+    return *this;
+  }
   log_time operator+(const log_time& T) const {
     log_time local(*this);
     return local += T;
@@ -146,10 +147,8 @@ struct log_time {
            tv_nsec / (NS_PER_SEC / MS_PER_SEC);
   }
 
-  static const char default_format[];
-
   /* Add %#q for the fraction of a second to the standard library functions */
-  char* strptime(const char* s, const char* format = default_format);
+  char* strptime(const char* s, const char* format);
 } __attribute__((__packed__));
 }
 

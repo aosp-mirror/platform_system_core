@@ -45,7 +45,7 @@ cc_defaults {
 cc_library_static {
     name: "liblogd",
     defaults: ["logd_defaults"],
-
+    host_supported: true,
     srcs: [
         "ChattyLogBuffer.cpp",
         "LogReaderList.cpp",
@@ -109,4 +109,62 @@ prebuilt_etc {
     name: "logtagd.rc",
     src: "logtagd.rc",
     sub_dir: "init",
+}
+
+// -----------------------------------------------------------------------------
+// Unit tests.
+// -----------------------------------------------------------------------------
+
+cc_defaults {
+    name: "logd-unit-test-defaults",
+
+    cflags: [
+        "-fstack-protector-all",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-fno-builtin",
+
+        "-DAUDITD_LOG_TAG=1003",
+        "-DCHATTY_LOG_TAG=1004",
+    ],
+
+    srcs: [
+        "logd_test.cpp",
+        "LogBufferTest.cpp",
+    ],
+
+    static_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+        "liblogd",
+        "libselinux",
+    ],
+}
+
+// Build tests for the logger. Run with:
+//   adb shell /data/nativetest/logd-unit-tests/logd-unit-tests
+cc_test {
+    name: "logd-unit-tests",
+    host_supported: true,
+    defaults: ["logd-unit-test-defaults"],
+}
+
+cc_test {
+    name: "CtsLogdTestCases",
+    defaults: ["logd-unit-test-defaults"],
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
+    test_suites: [
+        "cts",
+        "vts10",
+    ],
 }
