@@ -49,6 +49,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parsedouble.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -1065,11 +1066,12 @@ static Result<void> do_load_system_props(const BuiltinArguments& args) {
 static Result<void> do_wait(const BuiltinArguments& args) {
     auto timeout = kCommandRetryTimeout;
     if (args.size() == 3) {
-        int timeout_int;
-        if (!android::base::ParseInt(args[2], &timeout_int)) {
+        double timeout_double;
+        if (!android::base::ParseDouble(args[2], &timeout_double, 0)) {
             return Error() << "failed to parse timeout";
         }
-        timeout = std::chrono::seconds(timeout_int);
+        timeout = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::duration<double>(timeout_double));
     }
 
     if (wait_for_file(args[1].c_str(), timeout) != 0) {
