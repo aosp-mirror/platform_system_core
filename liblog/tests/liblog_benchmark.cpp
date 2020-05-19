@@ -684,8 +684,8 @@ static void BM_log_latency(benchmark::State& state) {
       if (!eventData || (eventData[4] != EVENT_TYPE_LONG)) {
         continue;
       }
-      log_time tx(eventData + 4 + 1);
-      if (ts != tx) {
+      log_time* tx = reinterpret_cast<log_time*>(eventData + 4 + 1);
+      if (ts != *tx) {
         if (0xDEADBEEFA55A5AA5ULL == caught_convert(eventData + 4 + 1)) {
           state.SkipWithError("signal");
           break;
@@ -757,8 +757,8 @@ static void BM_log_delay(benchmark::State& state) {
       if (!eventData || (eventData[4] != EVENT_TYPE_LONG)) {
         continue;
       }
-      log_time tx(eventData + 4 + 1);
-      if (ts != tx) {
+      log_time* tx = reinterpret_cast<log_time*>(eventData + 4 + 1);
+      if (ts != *tx) {
         if (0xDEADBEEFA55A5AA6ULL == caught_convert(eventData + 4 + 1)) {
           state.SkipWithError("signal");
           break;
