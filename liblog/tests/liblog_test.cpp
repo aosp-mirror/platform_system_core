@@ -270,10 +270,10 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
       return;
     }
 
-    log_time tx(reinterpret_cast<char*>(&eventData->payload.data));
-    if (ts == tx) {
+    log_time* tx = reinterpret_cast<log_time*>(&eventData->payload.data);
+    if (ts == *tx) {
       ++count;
-    } else if (ts1 == tx) {
+    } else if (ts1 == *tx) {
       ++second_count;
     }
 
