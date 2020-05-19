@@ -14,17 +14,11 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_COMMAND_H
-#define _LOGD_COMMAND_H
+#pragma once
 
-#include <sysutils/FrameworkCommand.h>
+#include <sys/types.h>
+
 #include <sysutils/SocketClient.h>
 
-class LogCommand : public FrameworkCommand {
-   public:
-    explicit LogCommand(const char* cmd);
-    virtual ~LogCommand() {
-    }
-};
-
-#endif
+bool clientHasLogCredentials(uid_t uid, gid_t gid, pid_t pid);
+bool clientHasLogCredentials(SocketClient* cli);

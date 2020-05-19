@@ -14,18 +14,14 @@
  * limitations under the License.
  */
 
+#include "LogPermissions.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <private/android_filesystem_config.h>
-
-#include "LogCommand.h"
-#include "LogUtils.h"
-
-LogCommand::LogCommand(const char* cmd) : FrameworkCommand(cmd) {
-}
 
 // gets a list of supplementary group IDs associated with
 // the socket peer.  This is implemented by opening
