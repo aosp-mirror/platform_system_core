@@ -104,7 +104,8 @@ static void help() {
         " connect HOST[:PORT]      connect to a device via TCP/IP [default port=5555]\n"
         " disconnect [HOST[:PORT]]\n"
         "     disconnect from given TCP/IP device [default port=5555], or all\n"
-        " pair HOST[:PORT]         pair with a device for secure TCP/IP communication\n"
+        " pair HOST[:PORT] [PAIRING CODE]\n"
+        "     pair with a device for secure TCP/IP communication\n"
         " forward --list           list all forward socket connections\n"
         " forward [--no-rebind] LOCAL REMOTE\n"
         "     forward socket connection using:\n"
@@ -1735,13 +1736,17 @@ int adb_commandline(int argc, const char** argv) {
     } else if (!strcmp(argv[0], "abb")) {
         return adb_abb(argc, argv);
     } else if (!strcmp(argv[0], "pair")) {
-        if (argc != 2) error_exit("usage: adb pair <host>[:<port>]");
+        if (argc < 2 || argc > 3) error_exit("usage: adb pair HOST[:PORT] [PAIRING CODE]");
 
         std::string password;
-        printf("Enter pairing code: ");
-        fflush(stdout);
-        if (!std::getline(std::cin, password) || password.empty()) {
-            error_exit("No pairing code provided");
+        if (argc == 2) {
+            printf("Enter pairing code: ");
+            fflush(stdout);
+            if (!std::getline(std::cin, password) || password.empty()) {
+                error_exit("No pairing code provided");
+            }
+        } else {
+            password = argv[2];
         }
         std::string query =
                 android::base::StringPrintf("host:pair:%s:%s", password.c_str(), argv[1]);
