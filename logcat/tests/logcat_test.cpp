@@ -475,8 +475,8 @@ TEST(logcat, End_to_End) {
             continue;
         }
 
-        log_time tx((const char*)&t);
-        if (ts == tx) {
+        log_time* tx = reinterpret_cast<log_time*>(&t);
+        if (ts == *tx) {
             ++count;
         }
     }
@@ -521,8 +521,8 @@ TEST(logcat, End_to_End_multitude) {
                 continue;
             }
 
-            log_time tx((const char*)&t);
-            if (ts == tx) {
+            log_time* tx = reinterpret_cast<log_time*>(&t);
+            if (ts == *tx) {
                 ++count;
             }
         }
