@@ -25,6 +25,7 @@ import os
 import random
 import select
 import socket
+import string
 import struct
 import subprocess
 import sys
@@ -628,21 +629,49 @@ def zeroconf_register_service(zeroconf_ctx, info):
 class MdnsTest(unittest.TestCase):
     """Tests for adb mdns."""
 
+    @staticmethod
+    def _mdns_services(port):
+        output = subprocess.check_output(["adb", "-P", str(port), "mdns", "services"])
+        return [x.split("\t") for x in output.decode("utf8").strip().splitlines()[1:]]
+
+    @staticmethod
+    def _devices(port):
+        output = subprocess.check_output(["adb", "-P", str(port), "devices"])
+        return [x.split("\t") for x in output.decode("utf8").strip().splitlines()[1:]]
+
+    @contextlib.contextmanager
+    def _adb_mdns_connect(self, server_port, mdns_instance, serial, should_connect):
+        """Context manager for an ADB connection.
+
+        This automatically disconnects when done with the connection.
+        """
+
+        output = subprocess.check_output(["adb", "-P", str(server_port), "connect", mdns_instance])
+        if should_connect:
+            self.assertEqual(output.strip(), "connected to {}".format(serial).encode("utf8"))
+        else:
+            self.assertTrue(output.startswith("failed to resolve host: '{}'"
+                .format(mdns_instance).encode("utf8")))
+
+        try:
+            yield
+        finally:
+            # Perform best-effort disconnection. Discard the output.
+            subprocess.Popen(["adb", "disconnect", serial],
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE).communicate()
+
+
     @unittest.skipIf(not is_zeroconf_installed(), "zeroconf library not installed")
     def test_mdns_services_register_unregister(self):
         """Ensure that `adb mdns services` correctly adds and removes a service
         """
         from zeroconf import IPVersion, ServiceInfo
- 
-        def _mdns_services(port):
-            output = subprocess.check_output(["adb", "-P", str(port), "mdns", "services"])
-            return [x.split("\t") for x in output.decode("utf8").strip().splitlines()[1:]]
 
         with adb_server() as server_port:
             output = subprocess.check_output(["adb", "-P", str(server_port),
                                               "mdns", "services"]).strip()
             self.assertTrue(output.startswith(b"List of discovered mdns services"))
-            print(f"services={_mdns_services(server_port)}")
 
             """TODO(joshuaduong): Add ipv6 tests once we have it working in adb"""
             """Register/Unregister a service"""
@@ -656,20 +685,52 @@ class MdnsTest(unittest.TestCase):
                         name=serv_instance + "." + serv_type + "local.",
                         addresses=[serv_ipaddr],
                         port=serv_port)
-                print(f"Registering {serv_instance}.{serv_type} ...")
                 with zeroconf_register_service(zc, service_info) as info:
                     """Give adb some time to register the service"""
                     time.sleep(1)
-                    print(f"services={_mdns_services(server_port)}")
                     self.assertTrue(any((serv_instance in line and serv_type in line)
-                        for line in _mdns_services(server_port)))
+                        for line in MdnsTest._mdns_services(server_port)))
 
                 """Give adb some time to unregister the service"""
-                print("Unregistering mdns service...")
                 time.sleep(1)
-                print(f"services={_mdns_services(server_port)}")
                 self.assertFalse(any((serv_instance in line and serv_type in line)
-                    for line in _mdns_services(server_port)))
+                    for line in MdnsTest._mdns_services(server_port)))
+
+    @unittest.skipIf(not is_zeroconf_installed(), "zeroconf library not installed")
+    def test_mdns_connect(self):
+        """Ensure that `adb connect` by mdns instance name works (for non-pairing services)
+        """
+        from zeroconf import IPVersion, ServiceInfo
+
+        with adb_server() as server_port:
+            with zeroconf_context(IPVersion.V4Only) as zc:
+                serv_instance = "fakeadbd-" + ''.join(
+                        random.choice(string.ascii_letters) for i in range(4))
+                serv_type = "_" + self.service_name + "._tcp."
+                serv_ipaddr = socket.inet_aton("127.0.0.1")
+                should_connect = self.service_name != "adb-tls-pairing"
+                with fake_adbd() as (port, _):
+                    service_info = ServiceInfo(
+                            serv_type + "local.",
+                            name=serv_instance + "." + serv_type + "local.",
+                            addresses=[serv_ipaddr],
+                            port=port)
+                    with zeroconf_register_service(zc, service_info) as info:
+                        """Give adb some time to register the service"""
+                        time.sleep(1)
+                        self.assertTrue(any((serv_instance in line and serv_type in line)
+                            for line in MdnsTest._mdns_services(server_port)))
+                        full_name = '.'.join([serv_instance, serv_type])
+                        with self._adb_mdns_connect(server_port, serv_instance, full_name,
+                                should_connect):
+                            if should_connect:
+                                self.assertEqual(MdnsTest._devices(server_port),
+                                        [[full_name, "device"]])
+
+                    """Give adb some time to unregister the service"""
+                    time.sleep(1)
+                    self.assertFalse(any((serv_instance in line and serv_type in line)
+                        for line in MdnsTest._mdns_services(server_port)))
 
 def main():
     """Main entrypoint."""
