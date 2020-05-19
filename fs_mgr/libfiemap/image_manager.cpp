@@ -51,6 +51,7 @@ using android::fs_mgr::GetBlockDevicePartitionNames;
 using android::fs_mgr::GetPartitionName;
 
 static constexpr char kTestImageMetadataDir[] = "/metadata/gsi/test";
+static constexpr char kOtaTestImageMetadataDir[] = "/metadata/gsi/ota/test";
 
 std::unique_ptr<ImageManager> ImageManager::Open(const std::string& dir_prefix) {
     auto metadata_dir = "/metadata/gsi/" + dir_prefix;
@@ -135,10 +136,13 @@ bool ImageManager::BackingImageExists(const std::string& name) {
     return !!FindPartition(*metadata.get(), name);
 }
 
+static bool IsTestDir(const std::string& path) {
+    return android::base::StartsWith(path, kTestImageMetadataDir) ||
+           android::base::StartsWith(path, kOtaTestImageMetadataDir);
+}
+
 static bool IsUnreliablePinningAllowed(const std::string& path) {
-    return android::base::StartsWith(path, "/data/gsi/dsu/") ||
-           android::base::StartsWith(path, "/data/gsi/test/") ||
-           android::base::StartsWith(path, "/data/gsi/ota/test/");
+    return android::base::StartsWith(path, "/data/gsi/dsu/") || IsTestDir(path);
 }
 
 FiemapStatus ImageManager::CreateBackingImage(
@@ -174,8 +178,7 @@ FiemapStatus ImageManager::CreateBackingImage(
     // if device-mapper is stacked in some complex way not supported by
     // FiemapWriter.
     auto device_path = GetDevicePathForFile(fw.get());
-    if (android::base::StartsWith(device_path, "/dev/block/dm-") &&
-        !android::base::StartsWith(metadata_dir_, kTestImageMetadataDir)) {
+    if (android::base::StartsWith(device_path, "/dev/block/dm-") && !IsTestDir(metadata_dir_)) {
         LOG(ERROR) << "Cannot persist images against device-mapper device: " << device_path;
 
         fw = {};
