@@ -302,7 +302,7 @@ static int install_app_legacy(int argc, const char** argv, bool use_fastdeploy) 
 }
 
 template <class TimePoint>
-static int msBetween(TimePoint start, TimePoint end) {
+static int ms_between(TimePoint start, TimePoint end) {
     return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 }
 
@@ -350,7 +350,7 @@ static int install_app_incremental(int argc, const char** argv, bool wait, bool 
     }
 
     const auto end = clock::now();
-    printf("Install command complete in %d ms\n", msBetween(start, end));
+    printf("Install command complete in %d ms\n", ms_between(start, end));
 
     if (wait) {
         (*server_process).wait();
@@ -359,9 +359,9 @@ static int install_app_incremental(int argc, const char** argv, bool wait, bool 
     return 0;
 }
 
-static std::pair<InstallMode, std::optional<InstallMode>> calculateInstallMode(
-        InstallMode modeFromArgs, bool fastdeploy, CmdlineOption incrementalRequest) {
-    if (incrementalRequest == CmdlineOption::Enable) {
+static std::pair<InstallMode, std::optional<InstallMode>> calculate_install_mode(
+        InstallMode modeFromArgs, bool fastdeploy, CmdlineOption incremental_request) {
+    if (incremental_request == CmdlineOption::Enable) {
         if (fastdeploy) {
             error_exit(
                     "--incremental and --fast-deploy options are incompatible. "
@@ -370,30 +370,30 @@ static std::pair<InstallMode, std::optional<InstallMode>> calculateInstallMode(
     }
 
     if (modeFromArgs != INSTALL_DEFAULT) {
-        if (incrementalRequest == CmdlineOption::Enable) {
+        if (incremental_request == CmdlineOption::Enable) {
             error_exit("--incremental is not compatible with other installation modes");
         }
         return {modeFromArgs, std::nullopt};
     }
 
-    if (incrementalRequest != CmdlineOption::Disable && !is_abb_exec_supported()) {
-        if (incrementalRequest == CmdlineOption::None) {
-            incrementalRequest = CmdlineOption::Disable;
+    if (incremental_request != CmdlineOption::Disable && !is_abb_exec_supported()) {
+        if (incremental_request == CmdlineOption::None) {
+            incremental_request = CmdlineOption::Disable;
         } else {
             error_exit("Device doesn't support incremental installations");
         }
     }
-    if (incrementalRequest == CmdlineOption::None) {
+    if (incremental_request == CmdlineOption::None) {
         // check if the host is ok with incremental by default
         if (const char* incrementalFromEnv = getenv("ADB_INSTALL_DEFAULT_INCREMENTAL")) {
             using namespace android::base;
             auto val = ParseBool(incrementalFromEnv);
             if (val == ParseBoolResult::kFalse) {
-                incrementalRequest = CmdlineOption::Disable;
+                incremental_request = CmdlineOption::Disable;
             }
         }
     }
-    if (incrementalRequest == CmdlineOption::None) {
+    if (incremental_request == CmdlineOption::None) {
         // still ok: let's see if the device allows using incremental by default
         // it starts feeling like we're looking for an excuse to not to use incremental...
         std::string error;
@@ -409,17 +409,17 @@ static std::pair<InstallMode, std::optional<InstallMode>> calculateInstallMode(
             using namespace android::base;
             auto val = ParseBool(buf);
             if (val == ParseBoolResult::kFalse) {
-                incrementalRequest = CmdlineOption::Disable;
+                incremental_request = CmdlineOption::Disable;
             }
         }
     }
 
-    if (incrementalRequest == CmdlineOption::Enable) {
+    if (incremental_request == CmdlineOption::Enable) {
         // explicitly requested - no fallback
         return {INSTALL_INCREMENTAL, std::nullopt};
     }
     const auto bestMode = best_install_mode();
-    if (incrementalRequest == CmdlineOption::None) {
+    if (incremental_request == CmdlineOption::None) {
         // no opinion - use incremental, fallback to regular on a failure.
         return {INSTALL_INCREMENTAL, bestMode};
     }
@@ -427,57 +427,75 @@ static std::pair<InstallMode, std::optional<InstallMode>> calculateInstallMode(
     return {bestMode, std::nullopt};
 }
 
-int install_app(int argc, const char** argv) {
-    std::vector<int> processedArgIndices;
-    InstallMode installMode = INSTALL_DEFAULT;
-    bool use_fastdeploy = false;
-    bool is_reinstall = false;
-    bool wait = false;
-    auto incremental_request = CmdlineOption::None;
-    FastDeploy_AgentUpdateStrategy agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
+static std::vector<const char*> parse_install_mode(std::vector<const char*> argv,
+                                                   InstallMode* install_mode,
+                                                   CmdlineOption* incremental_request,
+                                                   bool* incremental_wait) {
+    *install_mode = INSTALL_DEFAULT;
+    *incremental_request = CmdlineOption::None;
+    *incremental_wait = false;
 
-    for (int i = 1; i < argc; i++) {
-        if (argv[i] == "--streaming"sv) {
-            processedArgIndices.push_back(i);
-            installMode = INSTALL_STREAM;
-        } else if (argv[i] == "--no-streaming"sv) {
-            processedArgIndices.push_back(i);
-            installMode = INSTALL_PUSH;
-        } else if (argv[i] == "-r"sv) {
-            // Note that this argument is not added to processedArgIndices because it
-            // must be passed through to pm
-            is_reinstall = true;
-        } else if (argv[i] == "--fastdeploy"sv) {
-            processedArgIndices.push_back(i);
-            use_fastdeploy = true;
-        } else if (argv[i] == "--no-fastdeploy"sv) {
-            processedArgIndices.push_back(i);
-            use_fastdeploy = false;
-        } else if (argv[i] == "--force-agent"sv) {
-            processedArgIndices.push_back(i);
-            agent_update_strategy = FastDeploy_AgentUpdateAlways;
-        } else if (argv[i] == "--date-check-agent"sv) {
-            processedArgIndices.push_back(i);
-            agent_update_strategy = FastDeploy_AgentUpdateNewerTimeStamp;
-        } else if (argv[i] == "--version-check-agent"sv) {
-            processedArgIndices.push_back(i);
-            agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
-        } else if (strlen(argv[i]) >= "--incr"sv.size() && "--incremental"sv.starts_with(argv[i])) {
-            processedArgIndices.push_back(i);
-            incremental_request = CmdlineOption::Enable;
-        } else if (strlen(argv[i]) >= "--no-incr"sv.size() &&
-                   "--no-incremental"sv.starts_with(argv[i])) {
-            processedArgIndices.push_back(i);
-            incremental_request = CmdlineOption::Disable;
-        } else if (argv[i] == "--wait"sv) {
-            processedArgIndices.push_back(i);
-            wait = true;
+    std::vector<const char*> passthrough;
+    for (auto&& arg : argv) {
+        if (arg == "--streaming"sv) {
+            *install_mode = INSTALL_STREAM;
+        } else if (arg == "--no-streaming"sv) {
+            *install_mode = INSTALL_PUSH;
+        } else if (strlen(arg) >= "--incr"sv.size() && "--incremental"sv.starts_with(arg)) {
+            *incremental_request = CmdlineOption::Enable;
+        } else if (strlen(arg) >= "--no-incr"sv.size() && "--no-incremental"sv.starts_with(arg)) {
+            *incremental_request = CmdlineOption::Disable;
+        } else if (arg == "--wait"sv) {
+            *incremental_wait = true;
+        } else {
+            passthrough.push_back(arg);
         }
     }
+    return passthrough;
+}
 
-    auto [primaryMode, fallbackMode] =
-            calculateInstallMode(installMode, use_fastdeploy, incremental_request);
-    if ((primaryMode == INSTALL_STREAM || fallbackMode.value_or(INSTALL_PUSH) == INSTALL_STREAM) &&
+static std::vector<const char*> parse_fast_deploy_mode(
+        std::vector<const char*> argv, bool* use_fastdeploy,
+        FastDeploy_AgentUpdateStrategy* agent_update_strategy) {
+    *use_fastdeploy = false;
+    *agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
+
+    std::vector<const char*> passthrough;
+    for (auto&& arg : argv) {
+        if (arg == "--fastdeploy"sv) {
+            *use_fastdeploy = true;
+        } else if (arg == "--no-fastdeploy"sv) {
+            *use_fastdeploy = false;
+        } else if (arg == "--force-agent"sv) {
+            *agent_update_strategy = FastDeploy_AgentUpdateAlways;
+        } else if (arg == "--date-check-agent"sv) {
+            *agent_update_strategy = FastDeploy_AgentUpdateNewerTimeStamp;
+        } else if (arg == "--version-check-agent"sv) {
+            *agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
+        } else {
+            passthrough.push_back(arg);
+        }
+    }
+    return passthrough;
+}
+
+int install_app(int argc, const char** argv) {
+    InstallMode install_mode = INSTALL_DEFAULT;
+    auto incremental_request = CmdlineOption::None;
+    bool incremental_wait = false;
+
+    bool use_fastdeploy = false;
+    FastDeploy_AgentUpdateStrategy agent_update_strategy = FastDeploy_AgentUpdateDifferentVersion;
+
+    auto unused_argv = parse_install_mode({argv, argv + argc}, &install_mode, &incremental_request,
+                                          &incremental_wait);
+    auto passthrough_argv =
+            parse_fast_deploy_mode(std::move(unused_argv), &use_fastdeploy, &agent_update_strategy);
+
+    auto [primary_mode, fallback_mode] =
+            calculate_install_mode(install_mode, use_fastdeploy, incremental_request);
+    if ((primary_mode == INSTALL_STREAM ||
+         fallback_mode.value_or(INSTALL_PUSH) == INSTALL_STREAM) &&
         best_install_mode() == INSTALL_PUSH) {
         error_exit("Attempting to use streaming install on unsupported device");
     }
@@ -491,19 +509,12 @@ int install_app(int argc, const char** argv) {
     }
     fastdeploy_set_agent_update_strategy(agent_update_strategy);
 
-    std::vector<const char*> passthrough_argv;
-    for (int i = 0; i < argc; i++) {
-        if (std::find(processedArgIndices.begin(), processedArgIndices.end(), i) ==
-            processedArgIndices.end()) {
-            passthrough_argv.push_back(argv[i]);
-        }
-    }
     if (passthrough_argv.size() < 2) {
         error_exit("install requires an apk argument");
     }
 
-    auto runInstallMode = [&](InstallMode installMode, bool silent) {
-        switch (installMode) {
+    auto run_install_mode = [&](InstallMode install_mode, bool silent) {
+        switch (install_mode) {
             case INSTALL_PUSH:
                 return install_app_legacy(passthrough_argv.size(), passthrough_argv.data(),
                                           use_fastdeploy);
@@ -512,20 +523,20 @@ int install_app(int argc, const char** argv) {
                                             use_fastdeploy);
             case INSTALL_INCREMENTAL:
                 return install_app_incremental(passthrough_argv.size(), passthrough_argv.data(),
-                                               wait, silent);
+                                               incremental_wait, silent);
             case INSTALL_DEFAULT:
             default:
-                return 1;
+                error_exit("invalid install mode");
         }
     };
-    auto res = runInstallMode(primaryMode, fallbackMode.has_value());
-    if (res && fallbackMode.value_or(primaryMode) != primaryMode) {
-        res = runInstallMode(*fallbackMode, false);
+    auto res = run_install_mode(primary_mode, fallback_mode.has_value());
+    if (res && fallback_mode.value_or(primary_mode) != primary_mode) {
+        res = run_install_mode(*fallback_mode, false);
     }
     return res;
 }
 
-int install_multiple_app(int argc, const char** argv) {
+static int install_multiple_app_streamed(int argc, const char** argv) {
     // Find all APK arguments starting at end.
     // All other arguments passed through verbatim.
     int first_apk = -1;
@@ -551,7 +562,6 @@ int install_multiple_app(int argc, const char** argv) {
     if (first_apk == -1) error_exit("need APK file on command line");
 
     const bool use_abb_exec = is_abb_exec_supported();
-
     const std::string install_cmd =
             use_abb_exec ? "package"
                          : best_install_mode() == INSTALL_PUSH ? "exec:pm" : "exec:cmd package";
@@ -674,6 +684,44 @@ finalize_session:
     return EXIT_SUCCESS;
 }
 
+int install_multiple_app(int argc, const char** argv) {
+    InstallMode install_mode = INSTALL_DEFAULT;
+    auto incremental_request = CmdlineOption::None;
+    bool incremental_wait = false;
+    bool use_fastdeploy = false;
+
+    auto passthrough_argv = parse_install_mode({argv + 1, argv + argc}, &install_mode,
+                                               &incremental_request, &incremental_wait);
+
+    auto [primary_mode, fallback_mode] =
+            calculate_install_mode(install_mode, use_fastdeploy, incremental_request);
+    if ((primary_mode == INSTALL_STREAM ||
+         fallback_mode.value_or(INSTALL_PUSH) == INSTALL_STREAM) &&
+        best_install_mode() == INSTALL_PUSH) {
+        error_exit("Attempting to use streaming install on unsupported device");
+    }
+
+    auto run_install_mode = [&](InstallMode install_mode, bool silent) {
+        switch (install_mode) {
+            case INSTALL_PUSH:
+            case INSTALL_STREAM:
+                return install_multiple_app_streamed(passthrough_argv.size(),
+                                                     passthrough_argv.data());
+            case INSTALL_INCREMENTAL:
+                return install_app_incremental(passthrough_argv.size(), passthrough_argv.data(),
+                                               incremental_wait, silent);
+            case INSTALL_DEFAULT:
+            default:
+                error_exit("invalid install mode");
+        }
+    };
+    auto res = run_install_mode(primary_mode, fallback_mode.has_value());
+    if (res && fallback_mode.value_or(primary_mode) != primary_mode) {
+        res = run_install_mode(*fallback_mode, false);
+    }
+    return res;
+}
+
 int install_multi_package(int argc, const char** argv) {
     // Find all APK arguments starting at end.
     // All other arguments passed through verbatim.
@@ -698,23 +746,31 @@ int install_multi_package(int argc, const char** argv) {
         fprintf(stderr, "adb: multi-package install is not supported on this device\n");
         return EXIT_FAILURE;
     }
-    std::string install_cmd = "exec:cmd package";
 
-    std::string multi_package_cmd =
-            android::base::StringPrintf("%s install-create --multi-package", install_cmd.c_str());
+    const bool use_abb_exec = is_abb_exec_supported();
+    const std::string install_cmd = use_abb_exec ? "package" : "exec:cmd package";
+
+    std::vector<std::string> multi_package_cmd_args = {install_cmd, "install-create",
+                                                       "--multi-package"};
+
+    multi_package_cmd_args.reserve(first_package + 4);
     for (int i = 1; i < first_package; i++) {
-        multi_package_cmd += " " + escape_arg(argv[i]);
+        if (use_abb_exec) {
+            multi_package_cmd_args.push_back(argv[i]);
+        } else {
+            multi_package_cmd_args.push_back(escape_arg(argv[i]));
+        }
     }
 
     if (apex_found) {
-        multi_package_cmd += " --staged";
+        multi_package_cmd_args.emplace_back("--staged");
     }
 
     // Create multi-package install session
     std::string error;
     char buf[BUFSIZ];
     {
-        unique_fd fd(adb_connect(multi_package_cmd, &error));
+        unique_fd fd = send_command(multi_package_cmd_args, &error);
         if (fd < 0) {
             fprintf(stderr, "adb: connect error for create multi-package: %s\n", error.c_str());
             return EXIT_FAILURE;
@@ -736,6 +792,7 @@ int install_multi_package(int argc, const char** argv) {
         fputs(buf, stderr);
         return EXIT_FAILURE;
     }
+    const auto parent_session_id_str = std::to_string(parent_session_id);
 
     fprintf(stdout, "Created parent session ID %d.\n", parent_session_id);
 
@@ -743,17 +800,30 @@ int install_multi_package(int argc, const char** argv) {
 
     // Valid session, now create the individual sessions and stream the APKs
     int success = EXIT_FAILURE;
-    std::string individual_cmd =
-            android::base::StringPrintf("%s install-create", install_cmd.c_str());
-    std::string all_session_ids = "";
+    std::vector<std::string> individual_cmd_args = {install_cmd, "install-create"};
     for (int i = 1; i < first_package; i++) {
-        individual_cmd += " " + escape_arg(argv[i]);
+        if (use_abb_exec) {
+            individual_cmd_args.push_back(argv[i]);
+        } else {
+            individual_cmd_args.push_back(escape_arg(argv[i]));
+        }
     }
     if (apex_found) {
-        individual_cmd += " --staged";
+        individual_cmd_args.emplace_back("--staged");
     }
-    std::string individual_apex_cmd = individual_cmd + " --apex";
-    std::string cmd = "";
+
+    std::vector<std::string> individual_apex_cmd_args;
+    if (apex_found) {
+        individual_apex_cmd_args = individual_cmd_args;
+        individual_apex_cmd_args.emplace_back("--apex");
+    }
+
+    std::vector<std::string> add_session_cmd_args = {
+            install_cmd,
+            "install-add-session",
+            parent_session_id_str,
+    };
+
     for (int i = first_package; i < argc; i++) {
         const char* file = argv[i];
         char buf[BUFSIZ];
@@ -761,9 +831,9 @@ int install_multi_package(int argc, const char** argv) {
             unique_fd fd;
             // Create individual install session
             if (android::base::EndsWithIgnoreCase(file, ".apex")) {
-                fd.reset(adb_connect(individual_apex_cmd, &error));
+                fd = send_command(individual_apex_cmd_args, &error);
             } else {
-                fd.reset(adb_connect(individual_cmd, &error));
+                fd = send_command(individual_cmd_args, &error);
             }
             if (fd < 0) {
                 fprintf(stderr, "adb: connect error for create: %s\n", error.c_str());
@@ -786,6 +856,7 @@ int install_multi_package(int argc, const char** argv) {
             fputs(buf, stderr);
             goto finalize_multi_package_session;
         }
+        const auto session_id_str = std::to_string(session_id);
 
         fprintf(stdout, "Created child session ID %d.\n", session_id);
         session_ids.push_back(session_id);
@@ -800,10 +871,15 @@ int install_multi_package(int argc, const char** argv) {
                 goto finalize_multi_package_session;
             }
 
-            std::string cmd = android::base::StringPrintf(
-                    "%s install-write -S %" PRIu64 " %d %d_%s -", install_cmd.c_str(),
-                    static_cast<uint64_t>(sb.st_size), session_id, i,
-                    android::base::Basename(split).c_str());
+            std::vector<std::string> cmd_args = {
+                    install_cmd,
+                    "install-write",
+                    "-S",
+                    std::to_string(sb.st_size),
+                    session_id_str,
+                    android::base::StringPrintf("%d_%s", i, android::base::Basename(file).c_str()),
+                    "-",
+            };
 
             unique_fd local_fd(adb_open(split.c_str(), O_RDONLY | O_CLOEXEC));
             if (local_fd < 0) {
@@ -812,7 +888,7 @@ int install_multi_package(int argc, const char** argv) {
             }
 
             std::string error;
-            unique_fd remote_fd(adb_connect(cmd, &error));
+            unique_fd remote_fd = send_command(cmd_args, &error);
             if (remote_fd < 0) {
                 fprintf(stderr, "adb: connect error for write: %s\n", error.c_str());
                 goto finalize_multi_package_session;
@@ -831,13 +907,11 @@ int install_multi_package(int argc, const char** argv) {
                 goto finalize_multi_package_session;
             }
         }
-        all_session_ids += android::base::StringPrintf(" %d", session_id);
+        add_session_cmd_args.push_back(std::to_string(session_id));
     }
 
-    cmd = android::base::StringPrintf("%s install-add-session %d%s", install_cmd.c_str(),
-                                      parent_session_id, all_session_ids.c_str());
     {
-        unique_fd fd(adb_connect(cmd, &error));
+        unique_fd fd = send_command(add_session_cmd_args, &error);
         if (fd < 0) {
             fprintf(stderr, "adb: connect error for install-add-session: %s\n", error.c_str());
             goto finalize_multi_package_session;
@@ -846,7 +920,8 @@ int install_multi_package(int argc, const char** argv) {
     }
 
     if (strncmp("Success", buf, 7)) {
-        fprintf(stderr, "adb: failed to link sessions (%s)\n", cmd.c_str());
+        fprintf(stderr, "adb: failed to link sessions (%s)\n",
+                android::base::Join(add_session_cmd_args, " ").c_str());
         fputs(buf, stderr);
         goto finalize_multi_package_session;
     }
@@ -856,11 +931,14 @@ int install_multi_package(int argc, const char** argv) {
 
 finalize_multi_package_session:
     // Commit session if we streamed everything okay; otherwise abandon
-    std::string service =
-            android::base::StringPrintf("%s install-%s %d", install_cmd.c_str(),
-                                        success == 0 ? "commit" : "abandon", parent_session_id);
+    std::vector<std::string> service_args = {
+            install_cmd,
+            success == 0 ? "install-commit" : "install-abandon",
+            parent_session_id_str,
+    };
+
     {
-        unique_fd fd(adb_connect(service, &error));
+        unique_fd fd = send_command(service_args, &error);
         if (fd < 0) {
             fprintf(stderr, "adb: connect error for finalize: %s\n", error.c_str());
             return EXIT_FAILURE;
@@ -881,10 +959,13 @@ finalize_multi_package_session:
     session_ids.push_back(parent_session_id);
     // try to abandon all remaining sessions
     for (std::size_t i = 0; i < session_ids.size(); i++) {
-        service = android::base::StringPrintf("%s install-abandon %d", install_cmd.c_str(),
-                                              session_ids[i]);
+        std::vector<std::string> service_args = {
+                install_cmd,
+                "install-abandon",
+                std::to_string(session_ids[i]),
+        };
         fprintf(stderr, "Attempting to abandon session ID %d\n", session_ids[i]);
-        unique_fd fd(adb_connect(service, &error));
+        unique_fd fd = send_command(service_args, &error);
         if (fd < 0) {
             fprintf(stderr, "adb: connect error for finalize: %s\n", error.c_str());
             continue;
