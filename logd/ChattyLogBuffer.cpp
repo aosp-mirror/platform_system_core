@@ -59,20 +59,10 @@ void ChattyLogBuffer::Init() {
 ChattyLogBuffer::ChattyLogBuffer(LogReaderList* reader_list, LogTags* tags, PruneList* prune,
                                  LogStatistics* stats)
     : reader_list_(reader_list), tags_(tags), prune_(prune), stats_(stats) {
-    log_id_for_each(i) {
-        lastLoggedElements[i] = nullptr;
-        droppedElements[i] = nullptr;
-    }
-
     Init();
 }
 
-ChattyLogBuffer::~ChattyLogBuffer() {
-    log_id_for_each(i) {
-        delete lastLoggedElements[i];
-        delete droppedElements[i];
-    }
-}
+ChattyLogBuffer::~ChattyLogBuffer() {}
 
 LogBufferElementCollection::iterator ChattyLogBuffer::GetOldest(log_id_t log_id) {
     auto it = mLogElements.begin();
@@ -145,31 +135,20 @@ static enum match_type identical(LogBufferElement* elem, LogBufferElement* last)
     return SAME;
 }
 
-int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
-                         const char* msg, uint16_t len) {
-    if (log_id >= LOG_ID_MAX) {
-        return -EINVAL;
-    }
-
-    // Slip the time by 1 nsec if the incoming lands on xxxxxx000 ns.
-    // This prevents any chance that an outside source can request an
-    // exact entry with time specified in ms or us precision.
-    if ((realtime.tv_nsec % 1000) == 0) ++realtime.tv_nsec;
-
-    LogBufferElement* elem = new LogBufferElement(log_id, realtime, uid, pid, tid, msg, len);
-
-    // b/137093665: don't coalesce security messages.
+bool ChattyLogBuffer::ShouldLog(log_id_t log_id, const char* msg, uint16_t len) {
     if (log_id == LOG_ID_SECURITY) {
-        auto lock = std::lock_guard{lock_};
-        log(elem);
-        return len;
+        return true;
     }
 
     int prio = ANDROID_LOG_INFO;
     const char* tag = nullptr;
     size_t tag_len = 0;
     if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
-        tag = tags_->tagToName(elem->getTag());
+        if (len < sizeof(android_event_header_t)) {
+            return false;
+        }
+        int32_t numeric_tag = reinterpret_cast<const android_event_header_t*>(msg)->tag;
+        tag = tags_->tagToName(numeric_tag);
         if (tag) {
             tag_len = strlen(tag);
         }
@@ -178,160 +157,111 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
         tag = msg + 1;
         tag_len = strnlen(tag, len - 1);
     }
-    if (!__android_log_is_loggable_len(prio, tag, tag_len, ANDROID_LOG_VERBOSE)) {
+    return __android_log_is_loggable_len(prio, tag, tag_len, ANDROID_LOG_VERBOSE);
+}
+
+int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
+                         const char* msg, uint16_t len) {
+    if (log_id >= LOG_ID_MAX) {
+        return -EINVAL;
+    }
+
+    if (!ShouldLog(log_id, msg, len)) {
         // Log traffic received to total
-        stats_->AddTotal(elem);
-        delete elem;
+        stats_->AddTotal(log_id, len);
         return -EACCES;
     }
 
-    auto lock = std::lock_guard{lock_};
-    LogBufferElement* currentLast = lastLoggedElements[log_id];
-    if (currentLast) {
-        LogBufferElement* dropped = droppedElements[log_id];
-        uint16_t count = dropped ? dropped->getDropped() : 0;
-        //
-        // State Init
-        //     incoming:
-        //         dropped = nullptr
-        //         currentLast = nullptr;
-        //         elem = incoming message
-        //     outgoing:
-        //         dropped = nullptr -> State 0
-        //         currentLast = copy of elem
-        //         log elem
-        // State 0
-        //     incoming:
-        //         count = 0
-        //         dropped = nullptr
-        //         currentLast = copy of last message
-        //         elem = incoming message
-        //     outgoing: if match != DIFFERENT
-        //         dropped = copy of first identical message -> State 1
-        //         currentLast = reference to elem
-        //     break: if match == DIFFERENT
-        //         dropped = nullptr -> State 0
-        //         delete copy of last message (incoming currentLast)
-        //         currentLast = copy of elem
-        //         log elem
-        // State 1
-        //     incoming:
-        //         count = 0
-        //         dropped = copy of first identical message
-        //         currentLast = reference to last held-back incoming
-        //                       message
-        //         elem = incoming message
-        //     outgoing: if match == SAME
-        //         delete copy of first identical message (dropped)
-        //         dropped = reference to last held-back incoming
-        //                   message set to chatty count of 1 -> State 2
-        //         currentLast = reference to elem
-        //     outgoing: if match == SAME_LIBLOG
-        //         dropped = copy of first identical message -> State 1
-        //         take sum of currentLast and elem
-        //         if sum overflows:
-        //             log currentLast
-        //             currentLast = reference to elem
-        //         else
-        //             delete currentLast
-        //             currentLast = reference to elem, sum liblog.
-        //     break: if match == DIFFERENT
-        //         delete dropped
-        //         dropped = nullptr -> State 0
-        //         log reference to last held-back (currentLast)
-        //         currentLast = copy of elem
-        //         log elem
-        // State 2
-        //     incoming:
-        //         count = chatty count
-        //         dropped = chatty message holding count
-        //         currentLast = reference to last held-back incoming
-        //                       message.
-        //         dropped = chatty message holding count
-        //         elem = incoming message
-        //     outgoing: if match != DIFFERENT
-        //         delete chatty message holding count
-        //         dropped = reference to last held-back incoming
-        //                   message, set to chatty count + 1
-        //         currentLast = reference to elem
-        //     break: if match == DIFFERENT
-        //         log dropped (chatty message)
-        //         dropped = nullptr -> State 0
-        //         log reference to last held-back (currentLast)
-        //         currentLast = copy of elem
-        //         log elem
-        //
-        enum match_type match = identical(elem, currentLast);
-        if (match != DIFFERENT) {
-            if (dropped) {
-                // Sum up liblog tag messages?
-                if ((count == 0) /* at Pass 1 */ && (match == SAME_LIBLOG)) {
-                    android_log_event_int_t* event = reinterpret_cast<android_log_event_int_t*>(
-                            const_cast<char*>(currentLast->getMsg()));
-                    //
-                    // To unit test, differentiate with something like:
-                    //    event->header.tag = htole32(CHATTY_LOG_TAG);
-                    // here, then instead of delete currentLast below,
-                    // log(currentLast) to see the incremental sums form.
-                    //
-                    uint32_t swab = event->payload.data;
-                    unsigned long long total = htole32(swab);
-                    event = reinterpret_cast<android_log_event_int_t*>(
-                            const_cast<char*>(elem->getMsg()));
-                    swab = event->payload.data;
+    // Slip the time by 1 nsec if the incoming lands on xxxxxx000 ns.
+    // This prevents any chance that an outside source can request an
+    // exact entry with time specified in ms or us precision.
+    if ((realtime.tv_nsec % 1000) == 0) ++realtime.tv_nsec;
 
-                    lastLoggedElements[LOG_ID_EVENTS] = elem;
-                    total += htole32(swab);
-                    // check for overflow
-                    if (total >= std::numeric_limits<int32_t>::max()) {
-                        log(currentLast);
-                        return len;
-                    }
-                    stats_->AddTotal(currentLast);
-                    delete currentLast;
-                    swab = total;
-                    event->payload.data = htole32(swab);
-                    return len;
-                }
-                if (count == USHRT_MAX) {
-                    log(dropped);
-                    count = 1;
-                } else {
-                    delete dropped;
-                    ++count;
-                }
+    std::unique_ptr<LogBufferElement> elem(
+            new LogBufferElement(log_id, realtime, uid, pid, tid, msg, len));
+
+    // b/137093665: don't coalesce security messages.
+    if (log_id == LOG_ID_SECURITY) {
+        auto lock = std::lock_guard{lock_};
+        Log(std::move(elem));
+        return len;
+    }
+
+    auto lock = std::lock_guard{lock_};
+    // Initialize last_logged_elements_ to a copy of elem if logging the first element for a log_id.
+    if (!last_logged_elements_[log_id]) {
+        last_logged_elements_[log_id].reset(new LogBufferElement(*elem));
+        Log(std::move(elem));
+        return len;
+    }
+
+    std::unique_ptr<LogBufferElement> current_last = std::move(last_logged_elements_[log_id]);
+    enum match_type match = identical(elem.get(), current_last.get());
+
+    if (match == DIFFERENT) {
+        if (duplicate_elements_[log_id]) {
+            auto dropped_element = std::move(duplicate_elements_[log_id]);
+            // If we previously had 3+ identical messages, log the chatty message.
+            if (dropped_element && dropped_element->getDropped() > 0) {
+                Log(std::move(dropped_element));
             }
-            if (count) {
-                stats_->AddTotal(currentLast);
-                currentLast->setDropped(count);
-            }
-            droppedElements[log_id] = currentLast;
-            lastLoggedElements[log_id] = elem;
+            // Log the saved copy of the last identical message seen.
+            Log(std::move(current_last));
+        }
+        last_logged_elements_[log_id].reset(new LogBufferElement(*elem));
+        Log(std::move(elem));
+        return len;
+    }
+
+    // 2 identical message: set duplicate_elements_ appropriately.
+    if (!duplicate_elements_[log_id]) {
+        duplicate_elements_[log_id] = std::move(current_last);
+        last_logged_elements_[log_id] = std::move(elem);
+        return len;
+    }
+
+    // 3+ identical LIBLOG event messages: coalesce them into last_logged_elements_.
+    if (match == SAME_LIBLOG) {
+        const android_log_event_int_t* current_last_event =
+                reinterpret_cast<const android_log_event_int_t*>(current_last->getMsg());
+        int64_t current_last_count = current_last_event->payload.data;
+        android_log_event_int_t* elem_event =
+                reinterpret_cast<android_log_event_int_t*>(const_cast<char*>(elem->getMsg()));
+        int64_t elem_count = elem_event->payload.data;
+
+        int64_t total = current_last_count + elem_count;
+        if (total > std::numeric_limits<int32_t>::max()) {
+            last_logged_elements_[log_id] = std::move(elem);
+            Log(std::move(current_last));
             return len;
         }
-        if (dropped) {         // State 1 or 2
-            if (count) {       // State 2
-                log(dropped);  // report chatty
-            } else {           // State 1
-                delete dropped;
-            }
-            droppedElements[log_id] = nullptr;
-            log(currentLast);  // report last message in the series
-        } else {               // State 0
-            delete currentLast;
-        }
+        stats_->AddTotal(current_last->getLogId(), current_last->getMsgLen());
+        elem_event->payload.data = total;
+        last_logged_elements_[log_id] = std::move(elem);
+        return len;
     }
-    lastLoggedElements[log_id] = new LogBufferElement(*elem);
 
-    log(elem);
+    // 3+ identical messages (not LIBLOG) messages: increase the drop count.
+    uint16_t dropped_count = duplicate_elements_[log_id]->getDropped();
+    if (dropped_count == std::numeric_limits<uint16_t>::max()) {
+        Log(std::move(duplicate_elements_[log_id]));
+        dropped_count = 0;
+    }
+    // We're dropping the current_last log so add its stats to the total.
+    stats_->AddTotal(current_last->getLogId(), current_last->getMsgLen());
+    // Use current_last for tracking the dropped count to always use the latest timestamp.
+    current_last->setDropped(dropped_count + 1);
+    duplicate_elements_[log_id] = std::move(current_last);
+    last_logged_elements_[log_id] = std::move(elem);
     return len;
 }
 
-void ChattyLogBuffer::log(LogBufferElement* elem) {
-    mLogElements.push_back(elem);
-    stats_->Add(elem);
-    maybePrune(elem->getLogId());
-    reader_list_->NotifyNewLog(1 << elem->getLogId());
+void ChattyLogBuffer::Log(std::unique_ptr<LogBufferElement> elem) {
+    log_id_t log_id = elem->getLogId();
+    mLogElements.push_back(elem.release());
+    stats_->Add(mLogElements.back());
+    maybePrune(log_id);
+    reader_list_->NotifyNewLog(1 << log_id);
 }
 
 void ChattyLogBuffer::maybePrune(log_id_t id) {
