@@ -39,55 +39,122 @@ class BenchmarkLocalUpdatableMaps : public unwindstack::LocalUpdatableMaps {
   std::string maps_file_;
 };
 
-constexpr size_t kNumMaps = 10000;
+static constexpr size_t kNumSmallMaps = 100;
+static constexpr size_t kNumLargeMaps = 10000;
 
-static void CreateInitialMap(const char* filename) {
+static void CreateMap(const char* filename, size_t num_maps, size_t increment = 1) {
   std::string maps;
-  for (size_t i = 0; i < kNumMaps; i += 2) {
+  for (size_t i = 0; i < num_maps; i += increment) {
     maps += android::base::StringPrintf("%zu-%zu r-xp 0000 00:00 0 name%zu\n", i * 1000,
-                                        (i + 1) * 1000, i);
+                                        (i + 1) * 1000 * increment, i * increment);
   }
   if (!android::base::WriteStringToFile(maps, filename)) {
     errx(1, "WriteStringToFile failed");
   }
 }
 
-static void CreateReparseMap(const char* filename) {
-  std::string maps;
-  for (size_t i = 0; i < kNumMaps; i++) {
-    maps += android::base::StringPrintf("%zu-%zu r-xp 0000 00:00 0 name%zu\n", i * 2000,
-                                        (i + 1) * 2000, 2 * i);
-  }
-  if (!android::base::WriteStringToFile(maps, filename)) {
-    errx(1, "WriteStringToFile failed");
-  }
-}
-
-void BM_local_updatable_maps_reparse(benchmark::State& state) {
-  TemporaryFile initial_map;
-  CreateInitialMap(initial_map.path);
-
-  TemporaryFile reparse_map;
-  CreateReparseMap(reparse_map.path);
-
+static void ReparseBenchmark(benchmark::State& state, const char* maps1, size_t maps1_total,
+                             const char* maps2, size_t maps2_total) {
   for (auto _ : state) {
     BenchmarkLocalUpdatableMaps maps;
-    maps.BenchmarkSetMapsFile(initial_map.path);
+    maps.BenchmarkSetMapsFile(maps1);
     if (!maps.Reparse()) {
       errx(1, "Internal Error: reparse of initial maps filed.");
     }
-    if (maps.Total() != (kNumMaps / 2)) {
+    if (maps.Total() != maps1_total) {
       errx(1, "Internal Error: Incorrect total number of maps %zu, expected %zu.", maps.Total(),
-           kNumMaps / 2);
+           maps1_total);
     }
-    maps.BenchmarkSetMapsFile(reparse_map.path);
+    maps.BenchmarkSetMapsFile(maps2);
     if (!maps.Reparse()) {
       errx(1, "Internal Error: reparse of second set of maps filed.");
     }
-    if (maps.Total() != kNumMaps) {
+    if (maps.Total() != maps2_total) {
       errx(1, "Internal Error: Incorrect total number of maps %zu, expected %zu.", maps.Total(),
-           kNumMaps);
+           maps2_total);
     }
   }
 }
-BENCHMARK(BM_local_updatable_maps_reparse);
+
+void BM_local_updatable_maps_reparse_double_initial_small(benchmark::State& state) {
+  TemporaryFile initial_maps;
+  CreateMap(initial_maps.path, kNumSmallMaps, 2);
+
+  TemporaryFile reparse_maps;
+  CreateMap(reparse_maps.path, kNumSmallMaps);
+
+  ReparseBenchmark(state, initial_maps.path, kNumSmallMaps / 2, reparse_maps.path, kNumSmallMaps);
+}
+BENCHMARK(BM_local_updatable_maps_reparse_double_initial_small);
+
+void BM_local_updatable_maps_reparse_double_initial_large(benchmark::State& state) {
+  TemporaryFile initial_maps;
+  CreateMap(initial_maps.path, kNumLargeMaps, 2);
+
+  TemporaryFile reparse_maps;
+  CreateMap(reparse_maps.path, kNumLargeMaps);
+
+  ReparseBenchmark(state, initial_maps.path, kNumLargeMaps / 2, reparse_maps.path, kNumLargeMaps);
+}
+BENCHMARK(BM_local_updatable_maps_reparse_double_initial_large);
+
+void BM_local_updatable_maps_reparse_same_maps_small(benchmark::State& state) {
+  static constexpr size_t kNumSmallMaps = 100;
+  TemporaryFile maps;
+  CreateMap(maps.path, kNumSmallMaps);
+
+  ReparseBenchmark(state, maps.path, kNumSmallMaps, maps.path, kNumSmallMaps);
+}
+BENCHMARK(BM_local_updatable_maps_reparse_same_maps_small);
+
+void BM_local_updatable_maps_reparse_same_maps_large(benchmark::State& state) {
+  TemporaryFile maps;
+  CreateMap(maps.path, kNumLargeMaps);
+
+  ReparseBenchmark(state, maps.path, kNumLargeMaps, maps.path, kNumLargeMaps);
+}
+BENCHMARK(BM_local_updatable_maps_reparse_same_maps_large);
+
+void BM_local_updatable_maps_reparse_few_extra_small(benchmark::State& state) {
+  TemporaryFile maps1;
+  CreateMap(maps1.path, kNumSmallMaps - 4);
+
+  TemporaryFile maps2;
+  CreateMap(maps2.path, kNumSmallMaps);
+
+  ReparseBenchmark(state, maps1.path, kNumSmallMaps - 4, maps2.path, kNumSmallMaps);
+}
+BENCHMARK(BM_local_updatable_maps_reparse_few_extra_small);
+
+void BM_local_updatable_maps_reparse_few_extra_large(benchmark::State& state) {
+  TemporaryFile maps1;
+  CreateMap(maps1.path, kNumLargeMaps - 4);
+
+  TemporaryFile maps2;
+  CreateMap(maps2.path, kNumLargeMaps);
+
+  ReparseBenchmark(state, maps1.path, kNumLargeMaps - 4, maps2.path, kNumLargeMaps);
+}
+BENCHMARK(BM_local_updatable_maps_reparse_few_extra_large);
+
+void BM_local_updatable_maps_reparse_few_less_small(benchmark::State& state) {
+  TemporaryFile maps1;
+  CreateMap(maps1.path, kNumSmallMaps);
+
+  TemporaryFile maps2;
+  CreateMap(maps2.path, kNumSmallMaps - 4);
+
+  ReparseBenchmark(state, maps1.path, kNumSmallMaps, maps2.path, kNumSmallMaps - 4);
+}
+BENCHMARK(BM_local_updatable_maps_reparse_few_less_small);
+
+void BM_local_updatable_maps_reparse_few_less_large(benchmark::State& state) {
+  TemporaryFile maps1;
+  CreateMap(maps1.path, kNumLargeMaps);
+
+  TemporaryFile maps2;
+  CreateMap(maps2.path, kNumLargeMaps - 4);
+
+  ReparseBenchmark(state, maps1.path, kNumLargeMaps, maps2.path, kNumLargeMaps - 4);
+}
+BENCHMARK(BM_local_updatable_maps_reparse_few_less_large);
