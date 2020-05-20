@@ -19,6 +19,7 @@
 #include <algorithm>
 
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
 #include <android/hardware/fastboot/1.0/IFastboot.h>
@@ -28,6 +29,7 @@
 
 #include "constants.h"
 #include "flashing.h"
+#include "tcp_client.h"
 #include "usb_client.h"
 
 using android::fs_mgr::EnsurePathUnmounted;
@@ -60,11 +62,16 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_GSI, GsiHandler},
               {FB_CMD_SNAPSHOT_UPDATE, SnapshotUpdateHandler},
       }),
-      transport_(std::make_unique<ClientUsbTransport>()),
       boot_control_hal_(IBootControl::getService()),
       health_hal_(get_health_service()),
       fastboot_hal_(IFastboot::getService()),
       active_slot_("") {
+    if (android::base::GetProperty("fastbootd.protocol", "usb") == "tcp") {
+        transport_ = std::make_unique<ClientTcpTransport>();
+    } else {
+        transport_ = std::make_unique<ClientUsbTransport>();
+    }
+
     if (boot_control_hal_) {
         boot1_1_ = android::hardware::boot::V1_1::IBootControl::castFrom(boot_control_hal_);
     }
