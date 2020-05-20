@@ -69,7 +69,7 @@ LogBufferElementCollection::iterator ChattyLogBuffer::GetOldest(log_id_t log_id)
     if (oldest_[log_id]) {
         it = *oldest_[log_id];
     }
-    while (it != mLogElements.end() && (*it)->getLogId() != log_id) {
+    while (it != mLogElements.end() && it->getLogId() != log_id) {
         it++;
     }
     if (it != mLogElements.end()) {
@@ -177,8 +177,7 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
     // exact entry with time specified in ms or us precision.
     if ((realtime.tv_nsec % 1000) == 0) ++realtime.tv_nsec;
 
-    std::unique_ptr<LogBufferElement> elem(
-            new LogBufferElement(log_id, realtime, uid, pid, tid, msg, len));
+    LogBufferElement elem(log_id, realtime, uid, pid, tid, msg, len);
 
     // b/137093665: don't coalesce security messages.
     if (log_id == LOG_ID_SECURITY) {
@@ -190,76 +189,76 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
     auto lock = std::lock_guard{lock_};
     // Initialize last_logged_elements_ to a copy of elem if logging the first element for a log_id.
     if (!last_logged_elements_[log_id]) {
-        last_logged_elements_[log_id].reset(new LogBufferElement(*elem));
+        last_logged_elements_[log_id].emplace(elem);
         Log(std::move(elem));
         return len;
     }
 
-    std::unique_ptr<LogBufferElement> current_last = std::move(last_logged_elements_[log_id]);
-    enum match_type match = identical(elem.get(), current_last.get());
+    LogBufferElement& current_last = *last_logged_elements_[log_id];
+    enum match_type match = identical(&elem, &current_last);
 
     if (match == DIFFERENT) {
         if (duplicate_elements_[log_id]) {
-            auto dropped_element = std::move(duplicate_elements_[log_id]);
             // If we previously had 3+ identical messages, log the chatty message.
-            if (dropped_element && dropped_element->getDropped() > 0) {
-                Log(std::move(dropped_element));
+            if (duplicate_elements_[log_id]->getDropped() > 0) {
+                Log(std::move(*duplicate_elements_[log_id]));
             }
+            duplicate_elements_[log_id].reset();
             // Log the saved copy of the last identical message seen.
             Log(std::move(current_last));
         }
-        last_logged_elements_[log_id].reset(new LogBufferElement(*elem));
+        last_logged_elements_[log_id].emplace(elem);
         Log(std::move(elem));
         return len;
     }
 
     // 2 identical message: set duplicate_elements_ appropriately.
     if (!duplicate_elements_[log_id]) {
-        duplicate_elements_[log_id] = std::move(current_last);
-        last_logged_elements_[log_id] = std::move(elem);
+        duplicate_elements_[log_id].emplace(std::move(current_last));
+        last_logged_elements_[log_id].emplace(std::move(elem));
         return len;
     }
 
     // 3+ identical LIBLOG event messages: coalesce them into last_logged_elements_.
     if (match == SAME_LIBLOG) {
         const android_log_event_int_t* current_last_event =
-                reinterpret_cast<const android_log_event_int_t*>(current_last->getMsg());
+                reinterpret_cast<const android_log_event_int_t*>(current_last.getMsg());
         int64_t current_last_count = current_last_event->payload.data;
         android_log_event_int_t* elem_event =
-                reinterpret_cast<android_log_event_int_t*>(const_cast<char*>(elem->getMsg()));
+                reinterpret_cast<android_log_event_int_t*>(const_cast<char*>(elem.getMsg()));
         int64_t elem_count = elem_event->payload.data;
 
         int64_t total = current_last_count + elem_count;
         if (total > std::numeric_limits<int32_t>::max()) {
-            last_logged_elements_[log_id] = std::move(elem);
             Log(std::move(current_last));
+            last_logged_elements_[log_id].emplace(std::move(elem));
             return len;
         }
-        stats_->AddTotal(current_last->getLogId(), current_last->getMsgLen());
+        stats_->AddTotal(current_last.getLogId(), current_last.getMsgLen());
         elem_event->payload.data = total;
-        last_logged_elements_[log_id] = std::move(elem);
+        last_logged_elements_[log_id].emplace(std::move(elem));
         return len;
     }
 
     // 3+ identical messages (not LIBLOG) messages: increase the drop count.
     uint16_t dropped_count = duplicate_elements_[log_id]->getDropped();
     if (dropped_count == std::numeric_limits<uint16_t>::max()) {
-        Log(std::move(duplicate_elements_[log_id]));
+        Log(std::move(*duplicate_elements_[log_id]));
         dropped_count = 0;
     }
     // We're dropping the current_last log so add its stats to the total.
-    stats_->AddTotal(current_last->getLogId(), current_last->getMsgLen());
+    stats_->AddTotal(current_last.getLogId(), current_last.getMsgLen());
     // Use current_last for tracking the dropped count to always use the latest timestamp.
-    current_last->setDropped(dropped_count + 1);
-    duplicate_elements_[log_id] = std::move(current_last);
-    last_logged_elements_[log_id] = std::move(elem);
+    current_last.setDropped(dropped_count + 1);
+    duplicate_elements_[log_id].emplace(std::move(current_last));
+    last_logged_elements_[log_id].emplace(std::move(elem));
     return len;
 }
 
-void ChattyLogBuffer::Log(std::unique_ptr<LogBufferElement> elem) {
-    log_id_t log_id = elem->getLogId();
-    mLogElements.push_back(elem.release());
-    stats_->Add(mLogElements.back());
+void ChattyLogBuffer::Log(LogBufferElement&& elem) {
+    log_id_t log_id = elem.getLogId();
+    mLogElements.push_back(std::move(elem));
+    stats_->Add(&mLogElements.back());
     maybePrune(log_id);
     reader_list_->NotifyNewLog(1 << log_id);
 }
@@ -273,15 +272,15 @@ void ChattyLogBuffer::maybePrune(log_id_t id) {
 
 LogBufferElementCollection::iterator ChattyLogBuffer::erase(LogBufferElementCollection::iterator it,
                                                             bool coalesce) {
-    LogBufferElement* element = *it;
-    log_id_t id = element->getLogId();
+    LogBufferElement& element = *it;
+    log_id_t id = element.getLogId();
 
     // Remove iterator references in the various lists that will become stale
     // after the element is erased from the main logging list.
 
     {  // start of scope for found iterator
-        int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element->getTag()
-                                                                 : element->getUid();
+        int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element.getTag()
+                                                                 : element.getUid();
         LogBufferIteratorMap::iterator found = mLastWorst[id].find(key);
         if ((found != mLastWorst[id].end()) && (it == found->second)) {
             mLastWorst[id].erase(found);
@@ -292,7 +291,7 @@ LogBufferElementCollection::iterator ChattyLogBuffer::erase(LogBufferElementColl
         // element->getUid() may not be AID_SYSTEM for next-best-watermark.
         // will not assume id != LOG_ID_EVENTS or LOG_ID_SECURITY for KISS and
         // long term code stability, find() check should be fast for those ids.
-        LogBufferPidIteratorMap::iterator found = mLastWorstPidOfSystem[id].find(element->getPid());
+        LogBufferPidIteratorMap::iterator found = mLastWorstPidOfSystem[id].find(element.getPid());
         if (found != mLastWorstPidOfSystem[id].end() && it == found->second) {
             mLastWorstPidOfSystem[id].erase(found);
         }
@@ -306,7 +305,15 @@ LogBufferElementCollection::iterator ChattyLogBuffer::erase(LogBufferElementColl
     int key =
             (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element->getTag() : element->getUid();
 #endif
+
+    if (coalesce) {
+        stats_->Erase(&element);
+    } else {
+        stats_->Subtract(&element);
+    }
+
     it = mLogElements.erase(it);
+
     if (doSetLast) {
         log_id_for_each(i) {
             if (setLast[i]) {
@@ -333,13 +340,6 @@ LogBufferElementCollection::iterator ChattyLogBuffer::erase(LogBufferElementColl
         }
     }
 #endif
-    if (coalesce) {
-        stats_->Erase(element);
-    } else {
-        stats_->Subtract(element);
-    }
-    delete element;
-
     return it;
 }
 
@@ -485,14 +485,14 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         // filter logistics is not required.
         it = GetOldest(id);
         while (it != mLogElements.end()) {
-            LogBufferElement* element = *it;
+            LogBufferElement& element = *it;
 
-            if (element->getLogId() != id || element->getUid() != caller_uid) {
+            if (element.getLogId() != id || element.getUid() != caller_uid) {
                 ++it;
                 continue;
             }
 
-            if (oldest && oldest->start() <= element->getSequence()) {
+            if (oldest && oldest->start() <= element.getSequence()) {
                 busy = true;
                 kickMe(oldest, id, pruneRows);
                 break;
@@ -572,21 +572,21 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         --lastt;
         LogBufferElementLast last;
         while (it != mLogElements.end()) {
-            LogBufferElement* element = *it;
+            LogBufferElement& element = *it;
 
-            if (oldest && oldest->start() <= element->getSequence()) {
+            if (oldest && oldest->start() <= element.getSequence()) {
                 busy = true;
                 // Do not let chatty eliding trigger any reader mitigation
                 break;
             }
 
-            if (element->getLogId() != id) {
+            if (element.getLogId() != id) {
                 ++it;
                 continue;
             }
             // below this point element->getLogId() == id
 
-            uint16_t dropped = element->getDropped();
+            uint16_t dropped = element.getDropped();
 
             // remove any leading drops
             if (leading && dropped) {
@@ -594,16 +594,16 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
                 continue;
             }
 
-            if (dropped && last.coalesce(element, dropped)) {
+            if (dropped && last.coalesce(&element, dropped)) {
                 it = erase(it, true);
                 continue;
             }
 
-            int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element->getTag()
-                                                                     : element->getUid();
+            int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element.getTag()
+                                                                     : element.getUid();
 
-            if (hasBlacklist && prune_->naughty(element)) {
-                last.clear(element);
+            if (hasBlacklist && prune_->naughty(&element)) {
+                last.clear(&element);
                 it = erase(it);
                 if (dropped) {
                     continue;
@@ -619,25 +619,25 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
                     if (worst_sizes < second_worst_sizes) {
                         break;
                     }
-                    worst_sizes -= element->getMsgLen();
+                    worst_sizes -= element.getMsgLen();
                 }
                 continue;
             }
 
-            if ((element->getRealTime() < ((*lastt)->getRealTime() - too_old)) ||
-                (element->getRealTime() > (*lastt)->getRealTime())) {
+            if (element.getRealTime() < (lastt->getRealTime() - too_old) ||
+                element.getRealTime() > lastt->getRealTime()) {
                 break;
             }
 
             if (dropped) {
-                last.add(element);
-                if (worstPid && ((!gc && element->getPid() == worstPid) ||
-                                 mLastWorstPidOfSystem[id].find(element->getPid()) ==
+                last.add(&element);
+                if (worstPid && ((!gc && element.getPid() == worstPid) ||
+                                 mLastWorstPidOfSystem[id].find(element.getPid()) ==
                                          mLastWorstPidOfSystem[id].end())) {
                     // element->getUid() may not be AID_SYSTEM, next best
                     // watermark if current one empty. id is not LOG_ID_EVENTS
                     // or LOG_ID_SECURITY because of worstPid check.
-                    mLastWorstPidOfSystem[id][element->getPid()] = it;
+                    mLastWorstPidOfSystem[id][element.getPid()] = it;
                 }
                 if ((!gc && !worstPid && (key == worst)) ||
                     (mLastWorst[id].find(key) == mLastWorst[id].end())) {
@@ -647,9 +647,9 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
                 continue;
             }
 
-            if (key != worst || (worstPid && element->getPid() != worstPid)) {
+            if (key != worst || (worstPid && element.getPid() != worstPid)) {
                 leading = false;
-                last.clear(element);
+                last.clear(&element);
                 ++it;
                 continue;
             }
@@ -663,18 +663,18 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
 
             kick = true;
 
-            uint16_t len = element->getMsgLen();
+            uint16_t len = element.getMsgLen();
 
             // do not create any leading drops
             if (leading) {
                 it = erase(it);
             } else {
-                stats_->Drop(element);
-                element->setDropped(1);
-                if (last.coalesce(element, 1)) {
+                stats_->Drop(&element);
+                element.setDropped(1);
+                if (last.coalesce(&element, 1)) {
                     it = erase(it, true);
                 } else {
-                    last.add(element);
+                    last.add(&element);
                     if (worstPid && (!gc || mLastWorstPidOfSystem[id].find(worstPid) ==
                                                     mLastWorstPidOfSystem[id].end())) {
                         // element->getUid() may not be AID_SYSTEM, next best
@@ -704,20 +704,20 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
     bool hasWhitelist = (id != LOG_ID_SECURITY) && prune_->nice() && !clearAll;
     it = GetOldest(id);
     while ((pruneRows > 0) && (it != mLogElements.end())) {
-        LogBufferElement* element = *it;
+        LogBufferElement& element = *it;
 
-        if (element->getLogId() != id) {
+        if (element.getLogId() != id) {
             it++;
             continue;
         }
 
-        if (oldest && oldest->start() <= element->getSequence()) {
+        if (oldest && oldest->start() <= element.getSequence()) {
             busy = true;
             if (!whitelist) kickMe(oldest, id, pruneRows);
             break;
         }
 
-        if (hasWhitelist && !element->getDropped() && prune_->nice(element)) {
+        if (hasWhitelist && !element.getDropped() && prune_->nice(&element)) {
             // WhiteListed
             whitelist = true;
             it++;
@@ -732,14 +732,14 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
     if (whitelist && (pruneRows > 0)) {
         it = GetOldest(id);
         while ((it != mLogElements.end()) && (pruneRows > 0)) {
-            LogBufferElement* element = *it;
+            LogBufferElement& element = *it;
 
-            if (element->getLogId() != id) {
+            if (element.getLogId() != id) {
                 ++it;
                 continue;
             }
 
-            if (oldest && oldest->start() <= element->getSequence()) {
+            if (oldest && oldest->start() <= element.getSequence()) {
                 busy = true;
                 kickMe(oldest, id, pruneRows);
                 break;
@@ -830,8 +830,7 @@ uint64_t ChattyLogBuffer::FlushTo(
         for (it = mLogElements.end(); it != mLogElements.begin();
              /* do nothing */) {
             --it;
-            LogBufferElement* element = *it;
-            if (element->getSequence() <= start) {
+            if (it->getSequence() <= start) {
                 it++;
                 break;
             }
@@ -841,19 +840,19 @@ uint64_t ChattyLogBuffer::FlushTo(
     uint64_t curr = start;
 
     for (; it != mLogElements.end(); ++it) {
-        LogBufferElement* element = *it;
+        LogBufferElement& element = *it;
 
-        if (!writer->privileged() && element->getUid() != uid) {
+        if (!writer->privileged() && element.getUid() != uid) {
             continue;
         }
 
-        if (!writer->can_read_security_logs() && element->getLogId() == LOG_ID_SECURITY) {
+        if (!writer->can_read_security_logs() && element.getLogId() == LOG_ID_SECURITY) {
             continue;
         }
 
         // NB: calling out to another object with wrlock() held (safe)
         if (filter) {
-            FlushToResult ret = filter(element);
+            FlushToResult ret = filter(&element);
             if (ret == FlushToResult::kSkip) {
                 continue;
             }
@@ -864,21 +863,20 @@ uint64_t ChattyLogBuffer::FlushTo(
 
         bool sameTid = false;
         if (lastTid) {
-            sameTid = lastTid[element->getLogId()] == element->getTid();
+            sameTid = lastTid[element.getLogId()] == element.getTid();
             // Dropped (chatty) immediately following a valid log from the
             // same source in the same log buffer indicates we have a
             // multiple identical squash.  chatty that differs source
             // is due to spam filter.  chatty to chatty of different
             // source is also due to spam filter.
-            lastTid[element->getLogId()] =
-                    (element->getDropped() && !sameTid) ? 0 : element->getTid();
+            lastTid[element.getLogId()] = (element.getDropped() && !sameTid) ? 0 : element.getTid();
         }
 
         shared_lock.unlock();
 
-        curr = element->getSequence();
+        curr = element.getSequence();
         // range locking in LastLogTimes looks after us
-        if (!element->FlushTo(writer, stats_, sameTid)) {
+        if (!element.FlushTo(writer, stats_, sameTid)) {
             return FLUSH_ERROR;
         }
 

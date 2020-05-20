@@ -37,7 +37,7 @@
 #include "LogWriter.h"
 #include "rwlock.h"
 
-typedef std::list<LogBufferElement*> LogBufferElementCollection;
+typedef std::list<LogBufferElement> LogBufferElementCollection;
 
 class ChattyLogBuffer : public LogBuffer {
     LogBufferElementCollection mLogElements GUARDED_BY(lock_);
@@ -75,7 +75,7 @@ class ChattyLogBuffer : public LogBuffer {
     LogBufferElementCollection::iterator erase(LogBufferElementCollection::iterator it,
                                                bool coalesce = false) REQUIRES(lock_);
     bool ShouldLog(log_id_t log_id, const char* msg, uint16_t len);
-    void Log(std::unique_ptr<LogBufferElement> elem) REQUIRES(lock_);
+    void Log(LogBufferElement&& elem) REQUIRES(lock_);
 
     // Returns an iterator to the oldest element for a given log type, or mLogElements.end() if
     // there are no logs for the given log type. Requires mLogElementsLock to be held.
@@ -93,8 +93,8 @@ class ChattyLogBuffer : public LogBuffer {
     RwLock lock_;
 
     // This always contains a copy of the last message logged, for deduplication.
-    std::unique_ptr<LogBufferElement> last_logged_elements_[LOG_ID_MAX] GUARDED_BY(lock_);
+    std::optional<LogBufferElement> last_logged_elements_[LOG_ID_MAX] GUARDED_BY(lock_);
     // This contains an element if duplicate messages are seen.
     // Its `dropped` count is `duplicates seen - 1`.
-    std::unique_ptr<LogBufferElement> duplicate_elements_[LOG_ID_MAX] GUARDED_BY(lock_);
+    std::optional<LogBufferElement> duplicate_elements_[LOG_ID_MAX] GUARDED_BY(lock_);
 };
