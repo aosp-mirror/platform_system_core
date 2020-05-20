@@ -32,11 +32,13 @@ Result<void> check_interface_stop(const BuiltinArguments& args);
 Result<void> check_load_system_props(const BuiltinArguments& args);
 Result<void> check_loglevel(const BuiltinArguments& args);
 Result<void> check_mkdir(const BuiltinArguments& args);
+Result<void> check_mount_all(const BuiltinArguments& args);
 Result<void> check_restorecon(const BuiltinArguments& args);
 Result<void> check_restorecon_recursive(const BuiltinArguments& args);
 Result<void> check_setprop(const BuiltinArguments& args);
 Result<void> check_setrlimit(const BuiltinArguments& args);
 Result<void> check_sysclktz(const BuiltinArguments& args);
+Result<void> check_umount_all(const BuiltinArguments& args);
 Result<void> check_wait(const BuiltinArguments& args);
 Result<void> check_wait_for_prop(const BuiltinArguments& args);
 
