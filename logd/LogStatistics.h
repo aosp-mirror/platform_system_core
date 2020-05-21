@@ -666,7 +666,7 @@ class LogStatistics {
   public:
     LogStatistics(bool enable_statistics);
 
-    void AddTotal(LogBufferElement* entry) EXCLUDES(lock_);
+    void AddTotal(log_id_t log_id, uint16_t size) EXCLUDES(lock_);
     void Add(LogBufferElement* entry) EXCLUDES(lock_);
     void Subtract(LogBufferElement* entry) EXCLUDES(lock_);
     // entry->setDropped(1) must follow this call
