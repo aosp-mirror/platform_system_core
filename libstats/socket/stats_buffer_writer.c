@@ -50,24 +50,16 @@ int stats_log_is_closed() {
 int write_buffer_to_statsd(void* buffer, size_t size, uint32_t atomId) {
     int ret = 1;
 
-#ifdef __ANDROID__
-    bool statsdEnabled = property_get_bool("ro.statsd.enable", true);
-#else
-    bool statsdEnabled = false;
-#endif
+    struct iovec vecs[2];
+    vecs[0].iov_base = (void*)&kStatsEventTag;
+    vecs[0].iov_len = sizeof(kStatsEventTag);
+    vecs[1].iov_base = buffer;
+    vecs[1].iov_len = size;
 
-    if (statsdEnabled) {
-        struct iovec vecs[2];
-        vecs[0].iov_base = (void*)&kStatsEventTag;
-        vecs[0].iov_len = sizeof(kStatsEventTag);
-        vecs[1].iov_base = buffer;
-        vecs[1].iov_len = size;
+    ret = __write_to_statsd(vecs, 2);
 
-        ret = __write_to_statsd(vecs, 2);
-
-        if (ret < 0) {
-            note_log_drop(ret, atomId);
-        }
+    if (ret < 0) {
+        note_log_drop(ret, atomId);
     }
 
     return ret;
