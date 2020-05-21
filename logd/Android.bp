@@ -125,10 +125,7 @@ cc_defaults {
         "-Wextra",
         "-Werror",
         "-fno-builtin",
-
-        "-DAUDITD_LOG_TAG=1003",
-        "-DCHATTY_LOG_TAG=1004",
-    ],
+    ] + event_flag,
 
     srcs: [
         "logd_test.cpp",
