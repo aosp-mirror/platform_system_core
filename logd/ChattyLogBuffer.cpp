@@ -28,6 +28,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <limits>
 #include <unordered_map>
 #include <utility>
 
@@ -286,7 +287,7 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
                     lastLoggedElements[LOG_ID_EVENTS] = elem;
                     total += htole32(swab);
                     // check for overflow
-                    if (total >= UINT32_MAX) {
+                    if (total >= std::numeric_limits<int32_t>::max()) {
                         log(currentLast);
                         unlock();
                         return len;
