@@ -117,8 +117,10 @@ cc_binary {
         "device/main.cpp",
         "device/usb.cpp",
         "device/usb_client.cpp",
+        "device/tcp_client.cpp",
         "device/utility.cpp",
         "device/variables.cpp",
+        "socket.cpp",
     ],
 
     shared_libs: [
@@ -143,6 +145,7 @@ cc_binary {
     ],
 
     static_libs: [
+        "libgtest_prod",
         "libhealthhalutils",
         "libsnapshot_nobinder",
     ],
