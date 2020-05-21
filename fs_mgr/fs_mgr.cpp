@@ -454,7 +454,8 @@ static void tune_encrypt(const std::string& blk_device, const FstabEntry& entry,
                << entry.encryption_options;
         return;
     }
-    if ((options.flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64) != 0) {
+    if ((options.flags &
+         (FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 | FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32)) != 0) {
         // We can only use this policy on ext4 if the "stable_inodes" feature
         // is set on the filesystem, otherwise shrinking will break encrypted files.
         if ((sb->s_feature_compat & cpu_to_le32(EXT4_FEATURE_COMPAT_STABLE_INODES)) == 0) {
