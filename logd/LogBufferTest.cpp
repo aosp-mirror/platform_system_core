@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "LogBuffer.h"
+#include "LogBufferTest.h"
 
 #include <unistd.h>
 
@@ -25,14 +25,8 @@
 
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <gtest/gtest.h>
 
-#include "ChattyLogBuffer.h"
-#include "LogReaderList.h"
 #include "LogReaderThread.h"
-#include "LogStatistics.h"
-#include "LogTags.h"
-#include "LogWhiteBlackList.h"
 #include "LogWriter.h"
 
 using android::base::Join;
@@ -61,15 +55,8 @@ char* android::uidToName(uid_t) {
     return nullptr;
 }
 
-struct LogMessage {
-    logger_entry entry;
-    std::string message;
-    bool regex_compare = false;  // Only set for expected messages, when true 'message' should be
-                                 // interpretted as a regex.
-};
-
-std::vector<std::string> CompareLoggerEntries(const logger_entry& expected,
-                                              const logger_entry& result, bool ignore_len) {
+static std::vector<std::string> CompareLoggerEntries(const logger_entry& expected,
+                                                     const logger_entry& result, bool ignore_len) {
     std::vector<std::string> errors;
     if (!ignore_len && expected.len != result.len) {
         errors.emplace_back(
@@ -106,7 +93,7 @@ std::vector<std::string> CompareLoggerEntries(const logger_entry& expected,
     return errors;
 }
 
-std::string MakePrintable(std::string in) {
+static std::string MakePrintable(std::string in) {
     if (in.size() > 80) {
         in = in.substr(0, 80) + "...";
     }
@@ -121,7 +108,7 @@ std::string MakePrintable(std::string in) {
     return result;
 }
 
-std::string CompareMessages(const std::string& expected, const std::string& result) {
+static std::string CompareMessages(const std::string& expected, const std::string& result) {
     if (expected == result) {
         return {};
     }
@@ -145,7 +132,7 @@ std::string CompareMessages(const std::string& expected, const std::string& resu
                         result_short.c_str());
 }
 
-std::string CompareRegexMessages(const std::string& expected, const std::string& result) {
+static std::string CompareRegexMessages(const std::string& expected, const std::string& result) {
     auto expected_pieces = Split(expected, std::string("\0", 1));
     auto result_pieces = Split(result, std::string("\0", 1));
 
@@ -197,54 +184,14 @@ void CompareLogMessages(const std::vector<LogMessage>& expected,
     EXPECT_EQ(0U, num_errors);
 }
 
-class TestWriter : public LogWriter {
-  public:
-    TestWriter(std::vector<LogMessage>* msgs, bool* released)
-        : LogWriter(0, true, true), msgs_(msgs), released_(released) {}
-    bool Write(const logger_entry& entry, const char* message) override {
-        msgs_->emplace_back(LogMessage{entry, std::string(message, entry.len), false});
-        return true;
+void FixupMessages(std::vector<LogMessage>* messages) {
+    for (auto& [entry, message, _] : *messages) {
+        entry.hdr_size = sizeof(logger_entry);
+        entry.len = message.size();
     }
+}
 
-    void Release() {
-        if (released_) *released_ = true;
-    }
-
-    std::string name() const override { return "test_writer"; }
-
-  private:
-    std::vector<LogMessage>* msgs_;
-    bool* released_;
-};
-
-class LogBufferTest : public testing::Test {
-  protected:
-    void SetUp() override {
-        log_buffer_.reset(new ChattyLogBuffer(&reader_list_, &tags_, &prune_, &stats_));
-    }
-
-    void FixupMessages(std::vector<LogMessage>* messages) {
-        for (auto& [entry, message, _] : *messages) {
-            entry.hdr_size = sizeof(logger_entry);
-            entry.len = message.size();
-        }
-    }
-
-    void LogMessages(const std::vector<LogMessage>& messages) {
-        for (auto& [entry, message, _] : messages) {
-            log_buffer_->Log(static_cast<log_id_t>(entry.lid), log_time(entry.sec, entry.nsec),
-                             entry.uid, entry.pid, entry.tid, message.c_str(), message.size());
-        }
-    }
-
-    LogReaderList reader_list_;
-    LogTags tags_;
-    PruneList prune_;
-    LogStatistics stats_{false};
-    std::unique_ptr<LogBuffer> log_buffer_;
-};
-
-TEST_F(LogBufferTest, smoke) {
+TEST_P(LogBufferTest, smoke) {
     std::vector<LogMessage> log_messages = {
             {{
                      .pid = 1,
@@ -266,7 +213,7 @@ TEST_F(LogBufferTest, smoke) {
     CompareLogMessages(log_messages, read_log_messages);
 }
 
-TEST_F(LogBufferTest, smoke_with_reader_thread) {
+TEST_P(LogBufferTest, smoke_with_reader_thread) {
     std::vector<LogMessage> log_messages = {
             {{.pid = 1, .tid = 2, .sec = 10000, .nsec = 20001, .lid = LOG_ID_MAIN, .uid = 0},
              "first"},
@@ -358,7 +305,7 @@ LogMessage GenerateRandomLogMessage(uint32_t sec) {
     return {entry, message};
 }
 
-TEST_F(LogBufferTest, random_messages) {
+TEST_P(LogBufferTest, random_messages) {
     srand(1);
     std::vector<LogMessage> log_messages;
     for (size_t i = 0; i < 1000; ++i) {
@@ -388,183 +335,4 @@ TEST_F(LogBufferTest, random_messages) {
     CompareLogMessages(log_messages, read_log_messages);
 }
 
-TEST_F(LogBufferTest, deduplication_simple) {
-    auto make_message = [&](uint32_t sec, const char* tag, const char* msg,
-                            bool regex = false) -> LogMessage {
-        logger_entry entry = {
-                .pid = 1, .tid = 1, .sec = sec, .nsec = 1, .lid = LOG_ID_MAIN, .uid = 0};
-        std::string message;
-        message.push_back(ANDROID_LOG_INFO);
-        message.append(tag);
-        message.push_back('\0');
-        message.append(msg);
-        message.push_back('\0');
-        return {entry, message, regex};
-    };
-
-    // clang-format off
-    std::vector<LogMessage> log_messages = {
-            make_message(0, "test_tag", "duplicate"),
-            make_message(1, "test_tag", "duplicate"),
-            make_message(2, "test_tag", "not_same"),
-            make_message(3, "test_tag", "duplicate"),
-            make_message(4, "test_tag", "duplicate"),
-            make_message(5, "test_tag", "not_same"),
-            make_message(6, "test_tag", "duplicate"),
-            make_message(7, "test_tag", "duplicate"),
-            make_message(8, "test_tag", "duplicate"),
-            make_message(9, "test_tag", "not_same"),
-            make_message(10, "test_tag", "duplicate"),
-            make_message(11, "test_tag", "duplicate"),
-            make_message(12, "test_tag", "duplicate"),
-            make_message(13, "test_tag", "duplicate"),
-            make_message(14, "test_tag", "duplicate"),
-            make_message(15, "test_tag", "duplicate"),
-            make_message(16, "test_tag", "not_same"),
-            make_message(100, "test_tag", "duplicate"),
-            make_message(200, "test_tag", "duplicate"),
-            make_message(300, "test_tag", "duplicate"),
-    };
-    // clang-format on
-    FixupMessages(&log_messages);
-    LogMessages(log_messages);
-
-    std::vector<LogMessage> read_log_messages;
-    std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
-
-    std::vector<LogMessage> expected_log_messages = {
-            make_message(0, "test_tag", "duplicate"),
-            make_message(1, "test_tag", "duplicate"),
-            make_message(2, "test_tag", "not_same"),
-            make_message(3, "test_tag", "duplicate"),
-            make_message(4, "test_tag", "duplicate"),
-            make_message(5, "test_tag", "not_same"),
-            // 3 duplicate logs together print the first, a 1 count chatty message, then the last.
-            make_message(6, "test_tag", "duplicate"),
-            make_message(7, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ expire 1 line", true),
-            make_message(8, "test_tag", "duplicate"),
-            make_message(9, "test_tag", "not_same"),
-            // 6 duplicate logs together print the first, a 4 count chatty message, then the last.
-            make_message(10, "test_tag", "duplicate"),
-            make_message(14, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ expire 4 lines", true),
-            make_message(15, "test_tag", "duplicate"),
-            make_message(16, "test_tag", "not_same"),
-            // duplicate logs > 1 minute apart are not deduplicated.
-            make_message(100, "test_tag", "duplicate"),
-            make_message(200, "test_tag", "duplicate"),
-            make_message(300, "test_tag", "duplicate"),
-    };
-    FixupMessages(&expected_log_messages);
-    CompareLogMessages(expected_log_messages, read_log_messages);
-};
-
-TEST_F(LogBufferTest, deduplication_overflow) {
-    auto make_message = [&](uint32_t sec, const char* tag, const char* msg,
-                            bool regex = false) -> LogMessage {
-        logger_entry entry = {
-                .pid = 1, .tid = 1, .sec = sec, .nsec = 1, .lid = LOG_ID_MAIN, .uid = 0};
-        std::string message;
-        message.push_back(ANDROID_LOG_INFO);
-        message.append(tag);
-        message.push_back('\0');
-        message.append(msg);
-        message.push_back('\0');
-        return {entry, message, regex};
-    };
-
-    uint32_t sec = 0;
-    std::vector<LogMessage> log_messages = {
-            make_message(sec++, "test_tag", "normal"),
-    };
-    size_t expired_per_chatty_message = std::numeric_limits<uint16_t>::max();
-    for (size_t i = 0; i < expired_per_chatty_message + 3; ++i) {
-        log_messages.emplace_back(make_message(sec++, "test_tag", "duplicate"));
-    }
-    log_messages.emplace_back(make_message(sec++, "test_tag", "normal"));
-    FixupMessages(&log_messages);
-    LogMessages(log_messages);
-
-    std::vector<LogMessage> read_log_messages;
-    std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
-
-    std::vector<LogMessage> expected_log_messages = {
-            make_message(0, "test_tag", "normal"),
-            make_message(1, "test_tag", "duplicate"),
-            make_message(expired_per_chatty_message + 1, "chatty",
-                         "uid=0\\([^\\)]+\\) [^ ]+ expire 65535 lines", true),
-            make_message(expired_per_chatty_message + 2, "chatty",
-                         "uid=0\\([^\\)]+\\) [^ ]+ expire 1 line", true),
-            make_message(expired_per_chatty_message + 3, "test_tag", "duplicate"),
-            make_message(expired_per_chatty_message + 4, "test_tag", "normal"),
-    };
-    FixupMessages(&expected_log_messages);
-    CompareLogMessages(expected_log_messages, read_log_messages);
-}
-
-TEST_F(LogBufferTest, deduplication_liblog) {
-    auto make_message = [&](uint32_t sec, int32_t tag, int32_t count) -> LogMessage {
-        logger_entry entry = {
-                .pid = 1, .tid = 1, .sec = sec, .nsec = 1, .lid = LOG_ID_EVENTS, .uid = 0};
-        android_log_event_int_t liblog_event = {
-                .header.tag = tag, .payload.type = EVENT_TYPE_INT, .payload.data = count};
-        return {entry, std::string(reinterpret_cast<char*>(&liblog_event), sizeof(liblog_event)),
-                false};
-    };
-
-    // LIBLOG_LOG_TAG
-    std::vector<LogMessage> log_messages = {
-            make_message(0, 1234, 1),
-            make_message(1, LIBLOG_LOG_TAG, 3),
-            make_message(2, 1234, 2),
-            make_message(3, LIBLOG_LOG_TAG, 3),
-            make_message(4, LIBLOG_LOG_TAG, 4),
-            make_message(5, 1234, 223),
-            make_message(6, LIBLOG_LOG_TAG, 2),
-            make_message(7, LIBLOG_LOG_TAG, 3),
-            make_message(8, LIBLOG_LOG_TAG, 4),
-            make_message(9, 1234, 227),
-            make_message(10, LIBLOG_LOG_TAG, 1),
-            make_message(11, LIBLOG_LOG_TAG, 3),
-            make_message(12, LIBLOG_LOG_TAG, 2),
-            make_message(13, LIBLOG_LOG_TAG, 3),
-            make_message(14, LIBLOG_LOG_TAG, 5),
-            make_message(15, 1234, 227),
-            make_message(16, LIBLOG_LOG_TAG, 2),
-            make_message(17, LIBLOG_LOG_TAG, std::numeric_limits<int32_t>::max()),
-            make_message(18, LIBLOG_LOG_TAG, 3),
-            make_message(19, LIBLOG_LOG_TAG, 5),
-            make_message(20, 1234, 227),
-    };
-    FixupMessages(&log_messages);
-    LogMessages(log_messages);
-
-    std::vector<LogMessage> read_log_messages;
-    std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
-
-    std::vector<LogMessage> expected_log_messages = {
-            make_message(0, 1234, 1),
-            make_message(1, LIBLOG_LOG_TAG, 3),
-            make_message(2, 1234, 2),
-            make_message(3, LIBLOG_LOG_TAG, 3),
-            make_message(4, LIBLOG_LOG_TAG, 4),
-            make_message(5, 1234, 223),
-            // More than 2 liblog events (3 here), sum their value into the third message.
-            make_message(6, LIBLOG_LOG_TAG, 2),
-            make_message(8, LIBLOG_LOG_TAG, 7),
-            make_message(9, 1234, 227),
-            // More than 2 liblog events (5 here), sum their value into the third message.
-            make_message(10, LIBLOG_LOG_TAG, 1),
-            make_message(14, LIBLOG_LOG_TAG, 13),
-            make_message(15, 1234, 227),
-            // int32_t max is the max for a chatty message, beyond that we must use new messages.
-            make_message(16, LIBLOG_LOG_TAG, 2),
-            make_message(17, LIBLOG_LOG_TAG, std::numeric_limits<int32_t>::max()),
-            make_message(19, LIBLOG_LOG_TAG, 8),
-            make_message(20, 1234, 227),
-    };
-    FixupMessages(&expected_log_messages);
-    CompareLogMessages(expected_log_messages, read_log_messages);
-};
+INSTANTIATE_TEST_CASE_P(LogBufferTests, LogBufferTest, testing::Values("chatty"));
