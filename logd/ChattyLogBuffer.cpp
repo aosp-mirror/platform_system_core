@@ -59,8 +59,6 @@ void ChattyLogBuffer::Init() {
 ChattyLogBuffer::ChattyLogBuffer(LogReaderList* reader_list, LogTags* tags, PruneList* prune,
                                  LogStatistics* stats)
     : reader_list_(reader_list), tags_(tags), prune_(prune), stats_(stats) {
-    pthread_rwlock_init(&mLogElementsLock, nullptr);
-
     log_id_for_each(i) {
         lastLoggedElements[i] = nullptr;
         droppedElements[i] = nullptr;
@@ -162,10 +160,8 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
 
     // b/137093665: don't coalesce security messages.
     if (log_id == LOG_ID_SECURITY) {
-        wrlock();
+        auto lock = std::lock_guard{lock_};
         log(elem);
-        unlock();
-
         return len;
     }
 
@@ -189,7 +185,7 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
         return -EACCES;
     }
 
-    wrlock();
+    auto lock = std::lock_guard{lock_};
     LogBufferElement* currentLast = lastLoggedElements[log_id];
     if (currentLast) {
         LogBufferElement* dropped = droppedElements[log_id];
@@ -289,14 +285,12 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
                     // check for overflow
                     if (total >= std::numeric_limits<int32_t>::max()) {
                         log(currentLast);
-                        unlock();
                         return len;
                     }
                     stats_->AddTotal(currentLast);
                     delete currentLast;
                     swab = total;
                     event->payload.data = htole32(swab);
-                    unlock();
                     return len;
                 }
                 if (count == USHRT_MAX) {
@@ -313,7 +307,6 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
             }
             droppedElements[log_id] = currentLast;
             lastLoggedElements[log_id] = elem;
-            unlock();
             return len;
         }
         if (dropped) {         // State 1 or 2
@@ -331,12 +324,9 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
     lastLoggedElements[log_id] = new LogBufferElement(*elem);
 
     log(elem);
-    unlock();
-
     return len;
 }
 
-// assumes ChattyLogBuffer::wrlock() held, owns elem, look after garbage collection
 void ChattyLogBuffer::log(LogBufferElement* elem) {
     mLogElements.push_back(elem);
     stats_->Add(elem);
@@ -344,7 +334,6 @@ void ChattyLogBuffer::log(LogBufferElement* elem) {
     reader_list_->NotifyNewLog(1 << elem->getLogId());
 }
 
-// ChattyLogBuffer::wrlock() must be held when this function is called.
 void ChattyLogBuffer::maybePrune(log_id_t id) {
     unsigned long prune_rows;
     if (stats_->ShouldPrune(id, log_buffer_size(id), &prune_rows)) {
@@ -539,8 +528,6 @@ void ChattyLogBuffer::kickMe(LogReaderThread* me, log_id_t id, unsigned long pru
 //
 // The third thread is optional, and only gets hit if there was a whitelist
 // and more needs to be pruned against the backstop of the region lock.
-//
-// ChattyLogBuffer::wrlock() must be held when this function is called.
 //
 bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogReaderThread* oldest = nullptr;
@@ -846,9 +833,10 @@ bool ChattyLogBuffer::Clear(log_id_t id, uid_t uid) {
             // one entry, not another clear run, so we are looking for
             // the quick side effect of the return value to tell us if
             // we have a _blocked_ reader.
-            wrlock();
-            busy = prune(id, 1, uid);
-            unlock();
+            {
+                auto lock = std::lock_guard{lock_};
+                busy = prune(id, 1, uid);
+            }
             // It is still busy, blocked reader(s), lets kill them all!
             // otherwise, lets be a good citizen and preserve the slow
             // readers and let the clear run (below) deal with determining
@@ -865,9 +853,10 @@ bool ChattyLogBuffer::Clear(log_id_t id, uid_t uid) {
                 }
             }
         }
-        wrlock();
-        busy = prune(id, ULONG_MAX, uid);
-        unlock();
+        {
+            auto lock = std::lock_guard{lock_};
+            busy = prune(id, ULONG_MAX, uid);
+        }
         if (!busy || !--retry) {
             break;
         }
@@ -882,17 +871,15 @@ int ChattyLogBuffer::SetSize(log_id_t id, unsigned long size) {
     if (!__android_logger_valid_buffer_size(size)) {
         return -1;
     }
-    wrlock();
+    auto lock = std::lock_guard{lock_};
     log_buffer_size(id) = size;
-    unlock();
     return 0;
 }
 
 // get the total space allocated to "id"
 unsigned long ChattyLogBuffer::GetSize(log_id_t id) {
-    rdlock();
+    auto shared_lock = SharedLock{lock_};
     size_t retval = log_buffer_size(id);
-    unlock();
     return retval;
 }
 
@@ -902,7 +889,7 @@ uint64_t ChattyLogBuffer::FlushTo(
     LogBufferElementCollection::iterator it;
     uid_t uid = writer->uid();
 
-    rdlock();
+    auto shared_lock = SharedLock{lock_};
 
     if (start <= 1) {
         // client wants to start from the beginning
@@ -957,7 +944,7 @@ uint64_t ChattyLogBuffer::FlushTo(
                     (element->getDropped() && !sameTid) ? 0 : element->getTid();
         }
 
-        unlock();
+        shared_lock.unlock();
 
         curr = element->getSequence();
         // range locking in LastLogTimes looks after us
@@ -965,9 +952,7 @@ uint64_t ChattyLogBuffer::FlushTo(
             return FLUSH_ERROR;
         }
 
-        rdlock();
+        shared_lock.lock_shared();
     }
-    unlock();
-
     return curr;
 }
