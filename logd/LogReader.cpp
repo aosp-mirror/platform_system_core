@@ -200,7 +200,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
             if (nonBlock) {
                 return false;
             }
-            sequence = LogBufferElement::getCurrentSequence();
+            sequence = log_buffer_->sequence();
         }
     }
 

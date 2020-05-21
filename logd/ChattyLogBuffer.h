@@ -18,6 +18,7 @@
 
 #include <sys/types.h>
 
+#include <atomic>
 #include <list>
 #include <optional>
 #include <string>
@@ -67,6 +68,8 @@ class ChattyLogBuffer : public LogBuffer {
     unsigned long GetSize(log_id_t id) override;
     int SetSize(log_id_t id, unsigned long size) override;
 
+    uint64_t sequence() const override { return sequence_.load(std::memory_order_relaxed); }
+
   private:
     void maybePrune(log_id_t id) REQUIRES(lock_);
     void kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows) REQUIRES_SHARED(lock_);
@@ -91,6 +94,8 @@ class ChattyLogBuffer : public LogBuffer {
     std::optional<LogBufferElementCollection::iterator> oldest_[LOG_ID_MAX];
 
     RwLock lock_;
+
+    std::atomic<uint64_t> sequence_ = 1;
 
     // This always contains a copy of the last message logged, for deduplication.
     std::optional<LogBufferElement> last_logged_elements_[LOG_ID_MAX] GUARDED_BY(lock_);

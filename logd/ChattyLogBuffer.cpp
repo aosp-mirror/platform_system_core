@@ -177,7 +177,8 @@ int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
     // exact entry with time specified in ms or us precision.
     if ((realtime.tv_nsec % 1000) == 0) ++realtime.tv_nsec;
 
-    LogBufferElement elem(log_id, realtime, uid, pid, tid, msg, len);
+    auto sequence = sequence_.fetch_add(1, std::memory_order_relaxed);
+    LogBufferElement elem(log_id, realtime, uid, pid, tid, sequence, msg, len);
 
     // b/137093665: don't coalesce security messages.
     if (log_id == LOG_ID_SECURITY) {
