@@ -63,6 +63,23 @@ LogBufferElement::LogBufferElement(const LogBufferElement& elem)
     }
 }
 
+LogBufferElement::LogBufferElement(LogBufferElement&& elem)
+    : mUid(elem.mUid),
+      mPid(elem.mPid),
+      mTid(elem.mTid),
+      mSequence(elem.mSequence),
+      mRealTime(elem.mRealTime),
+      mMsgLen(elem.mMsgLen),
+      mLogId(elem.mLogId),
+      mDropped(elem.mDropped) {
+    if (mDropped) {
+        mTag = elem.getTag();
+    } else {
+        mMsg = elem.mMsg;
+        elem.mMsg = nullptr;
+    }
+}
+
 LogBufferElement::~LogBufferElement() {
     if (!mDropped) {
         delete[] mMsg;
