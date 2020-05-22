@@ -28,9 +28,6 @@
       "name": "fs_mgr_vendor_overlay_test"
     },
     {
-      "name": "libbase_test"
-    },
-    {
       "name": "libpackagelistparser_test"
     },
     {
@@ -60,15 +57,6 @@
     },
     {
       "name": "propertyinfoserializer_tests"
-    },
-    {
-      "name": "ziparchive-tests"
-    }
-  ],
-
-  "postsubmit": [
-    {
-      "name": "ziparchive_tests_large"
     }
   ]
 }
