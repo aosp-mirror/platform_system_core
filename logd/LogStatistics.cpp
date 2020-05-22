@@ -79,12 +79,9 @@ char* pidToName(pid_t pid) {
 }
 }
 
-void LogStatistics::AddTotal(LogBufferElement* element) {
+void LogStatistics::AddTotal(log_id_t log_id, uint16_t size) {
     auto lock = std::lock_guard{lock_};
-    if (element->getDropped()) return;
 
-    log_id_t log_id = element->getLogId();
-    uint16_t size = element->getMsgLen();
     mSizesTotal[log_id] += size;
     SizesTotal += size;
     ++mElementsTotal[log_id];
