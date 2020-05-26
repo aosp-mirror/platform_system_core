@@ -190,6 +190,10 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
     adjust = offset % mPageSize;
     adjOffset = offset - adjust;
     adjLength = length + adjust;
+    if (__builtin_add_overflow(length, adjust, &adjLength)) {
+        ALOGE("adjusted length overflow: length %zu adjust %d", length, adjust);
+        return false;
+    }
 
     flags = MAP_SHARED;
     prot = PROT_READ;
