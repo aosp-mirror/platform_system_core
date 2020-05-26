@@ -54,6 +54,7 @@ cc_library_static {
         "LogStatistics.cpp",
         "LogWhiteBlackList.cpp",
         "LogTags.cpp",
+        "SimpleLogBuffer.cpp",
     ],
     logtags: ["event.logtags"],
 
@@ -128,6 +129,7 @@ cc_defaults {
     ] + event_flag,
 
     srcs: [
+        "ChattyLogBufferTest.cpp",
         "logd_test.cpp",
         "LogBufferTest.cpp",
     ],

@@ -56,6 +56,7 @@
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogUtils.h"
+#include "SimpleLogBuffer.h"
 
 #define KMSG_PRIORITY(PRI)                                 \
     '<', '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) / 10, \
@@ -287,9 +288,13 @@ int main(int argc, char* argv[]) {
     // entries.
     LogReaderList reader_list;
 
-    // LogBuffer is the object which is responsible for holding all
-    // log entries.
-    LogBuffer* logBuf = new ChattyLogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
+    // LogBuffer is the object which is responsible for holding all log entries.
+    LogBuffer* logBuf;
+    if (true) {
+        logBuf = new ChattyLogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
+    } else {
+        logBuf = new SimpleLogBuffer(&reader_list, &log_tags, &log_statistics);
+    }
 
     // LogReader listens on /dev/socket/logdr. When a client
     // connects, log entries in the LogBuffer are written to the client.
