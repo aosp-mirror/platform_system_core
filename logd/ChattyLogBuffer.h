@@ -35,13 +35,12 @@
 #include "LogTags.h"
 #include "LogWhiteBlackList.h"
 #include "LogWriter.h"
+#include "SimpleLogBuffer.h"
 #include "rwlock.h"
 
 typedef std::list<LogBufferElement> LogBufferElementCollection;
 
-class ChattyLogBuffer : public LogBuffer {
-    LogBufferElementCollection mLogElements GUARDED_BY(lock_);
-
+class ChattyLogBuffer : public SimpleLogBuffer {
     // watermark of any worst/chatty uid processing
     typedef std::unordered_map<uid_t, LogBufferElementCollection::iterator> LogBufferIteratorMap;
     LogBufferIteratorMap mLastWorst[LOG_ID_MAX] GUARDED_BY(lock_);
@@ -49,48 +48,20 @@ class ChattyLogBuffer : public LogBuffer {
     typedef std::unordered_map<pid_t, LogBufferElementCollection::iterator> LogBufferPidIteratorMap;
     LogBufferPidIteratorMap mLastWorstPidOfSystem[LOG_ID_MAX] GUARDED_BY(lock_);
 
-    unsigned long mMaxSize[LOG_ID_MAX] GUARDED_BY(lock_);
-
   public:
     ChattyLogBuffer(LogReaderList* reader_list, LogTags* tags, PruneList* prune,
                     LogStatistics* stats);
     ~ChattyLogBuffer();
-    void Init() override;
 
-    int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
-            uint16_t len) override;
-    uint64_t FlushTo(
-            LogWriter* writer, uint64_t start, pid_t* lastTid,
-            const std::function<FlushToResult(const LogBufferElement* element)>& filter) override;
-
-    bool Clear(log_id_t id, uid_t uid = AID_ROOT) override;
-    unsigned long GetSize(log_id_t id) override;
-    int SetSize(log_id_t id, unsigned long size) override;
+  protected:
+    bool Prune(log_id_t id, unsigned long pruneRows, uid_t uid) REQUIRES(lock_) override;
+    void LogInternal(LogBufferElement&& elem) REQUIRES(lock_) override;
 
   private:
-    void maybePrune(log_id_t id) REQUIRES(lock_);
-    void kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows) REQUIRES_SHARED(lock_);
-
-    bool prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT) REQUIRES(lock_);
-    LogBufferElementCollection::iterator erase(LogBufferElementCollection::iterator it,
+    LogBufferElementCollection::iterator Erase(LogBufferElementCollection::iterator it,
                                                bool coalesce = false) REQUIRES(lock_);
-    bool ShouldLog(log_id_t log_id, const char* msg, uint16_t len);
-    void Log(LogBufferElement&& elem) REQUIRES(lock_);
 
-    // Returns an iterator to the oldest element for a given log type, or mLogElements.end() if
-    // there are no logs for the given log type. Requires mLogElementsLock to be held.
-    LogBufferElementCollection::iterator GetOldest(log_id_t log_id) REQUIRES(lock_);
-
-    LogReaderList* reader_list_;
-    LogTags* tags_;
     PruneList* prune_;
-    LogStatistics* stats_;
-
-    // Keeps track of the iterator to the oldest log message of a given log type, as an
-    // optimization when pruning logs.  Use GetOldest() to retrieve.
-    std::optional<LogBufferElementCollection::iterator> oldest_[LOG_ID_MAX];
-
-    RwLock lock_;
 
     // This always contains a copy of the last message logged, for deduplication.
     std::optional<LogBufferElement> last_logged_elements_[LOG_ID_MAX] GUARDED_BY(lock_);
