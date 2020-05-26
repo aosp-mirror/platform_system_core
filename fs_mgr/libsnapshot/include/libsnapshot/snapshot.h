@@ -148,7 +148,7 @@ class SnapshotManager final {
 
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
-    bool InitiateMerge();
+    bool InitiateMerge(uint64_t* cow_file_size = nullptr);
 
     // Perform any necessary post-boot actions. This should be run soon after
     // /data is mounted.
