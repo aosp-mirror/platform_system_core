@@ -30,14 +30,12 @@
 #include "LogStatistics.h"
 #include "LogUtils.h"
 
-atomic_int_fast64_t LogBufferElement::sequence(1);
-
 LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid,
-                                   pid_t tid, const char* msg, uint16_t len)
+                                   pid_t tid, uint64_t sequence, const char* msg, uint16_t len)
     : mUid(uid),
       mPid(pid),
       mTid(tid),
-      mSequence(sequence.fetch_add(1, memory_order_relaxed)),
+      mSequence(sequence),
       mRealTime(realtime),
       mMsgLen(len),
       mLogId(log_id),
