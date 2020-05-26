@@ -32,3 +32,16 @@ TEST(FileMap, zero_length_mapping) {
     ASSERT_EQ(0u, m.getDataLength());
     ASSERT_EQ(4096, m.getDataOffset());
 }
+
+TEST(FileMap, offset_overflow) {
+    // Make sure that an end that overflows SIZE_MAX will not abort.
+    // See http://b/156997193.
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+
+    off64_t offset = 200;
+    size_t length = SIZE_MAX;
+
+    android::FileMap m;
+    ASSERT_FALSE(m.create("test", tf.fd, offset, length, true));
+}
