@@ -144,7 +144,6 @@ class Partition final {
     std::vector<std::unique_ptr<Extent>> extents_;
     uint32_t attributes_;
     uint64_t size_;
-    bool disabled_;
 };
 
 // An interval in the metadata. This is similar to a LinearExtent with one difference.
@@ -320,9 +319,6 @@ class MetadataBuilder {
     void SetAutoSlotSuffixing();
     // Set the LP_HEADER_FLAG_VIRTUAL_AB_DEVICE flag.
     void SetVirtualABDeviceFlag();
-
-    // If set, checks for slot suffixes will be ignored internally.
-    void IgnoreSlotSuffixing();
 
     bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
