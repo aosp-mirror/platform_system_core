@@ -27,7 +27,7 @@
 
 class LogWriter;
 
-enum class FlushToResult {
+enum class FilterResult {
     kSkip,
     kStop,
     kWrite,
@@ -48,7 +48,7 @@ class LogBuffer {
     virtual uint64_t FlushTo(
             LogWriter* writer, uint64_t start,
             pid_t* last_tid,  // nullable
-            const std::function<FlushToResult(const LogBufferElement* element)>& filter) = 0;
+            const std::function<FilterResult(const LogBufferElement* element)>& filter) = 0;
 
     virtual bool Clear(log_id_t id, uid_t uid) = 0;
     virtual unsigned long GetSize(log_id_t id) = 0;

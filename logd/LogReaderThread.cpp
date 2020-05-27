@@ -123,12 +123,12 @@ void LogReaderThread::ThreadFunction() {
 }
 
 // A first pass to count the number of elements
-FlushToResult LogReaderThread::FilterFirstPass(const LogBufferElement* element) {
+FilterResult LogReaderThread::FilterFirstPass(const LogBufferElement* element) {
     auto lock = std::lock_guard{reader_list_->reader_threads_lock()};
 
     if (leading_dropped_) {
         if (element->getDropped()) {
-            return FlushToResult::kSkip;
+            return FilterResult::kSkip;
         }
         leading_dropped_ = false;
     }
@@ -142,46 +142,46 @@ FlushToResult LogReaderThread::FilterFirstPass(const LogBufferElement* element) 
         ++count_;
     }
 
-    return FlushToResult::kSkip;
+    return FilterResult::kSkip;
 }
 
 // A second pass to send the selected elements
-FlushToResult LogReaderThread::FilterSecondPass(const LogBufferElement* element) {
+FilterResult LogReaderThread::FilterSecondPass(const LogBufferElement* element) {
     auto lock = std::lock_guard{reader_list_->reader_threads_lock()};
 
     start_ = element->getSequence();
 
     if (skip_ahead_[element->getLogId()]) {
         skip_ahead_[element->getLogId()]--;
-        return FlushToResult::kSkip;
+        return FilterResult::kSkip;
     }
 
     if (leading_dropped_) {
         if (element->getDropped()) {
-            return FlushToResult::kSkip;
+            return FilterResult::kSkip;
         }
         leading_dropped_ = false;
     }
 
     // Truncate to close race between first and second pass
     if (non_block_ && tail_ && index_ >= count_) {
-        return FlushToResult::kStop;
+        return FilterResult::kStop;
     }
 
     if (!IsWatching(element->getLogId())) {
-        return FlushToResult::kSkip;
+        return FilterResult::kSkip;
     }
 
     if (pid_ && pid_ != element->getPid()) {
-        return FlushToResult::kSkip;
+        return FilterResult::kSkip;
     }
 
     if (start_time_ != log_time::EPOCH && element->getRealTime() <= start_time_) {
-        return FlushToResult::kSkip;
+        return FilterResult::kSkip;
     }
 
     if (release_) {
-        return FlushToResult::kStop;
+        return FilterResult::kStop;
     }
 
     if (!tail_) {
@@ -191,7 +191,7 @@ FlushToResult LogReaderThread::FilterSecondPass(const LogBufferElement* element)
     ++index_;
 
     if (count_ > tail_ && index_ <= (count_ - tail_)) {
-        return FlushToResult::kSkip;
+        return FilterResult::kSkip;
     }
 
     if (!non_block_) {
@@ -200,9 +200,9 @@ FlushToResult LogReaderThread::FilterSecondPass(const LogBufferElement* element)
 
 ok:
     if (!skip_ahead_[element->getLogId()]) {
-        return FlushToResult::kWrite;
+        return FilterResult::kWrite;
     }
-    return FlushToResult::kSkip;
+    return FilterResult::kSkip;
 }
 
 void LogReaderThread::cleanSkip_Locked(void) {

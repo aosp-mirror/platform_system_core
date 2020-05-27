@@ -172,26 +172,26 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         bool start_time_set = false;
         uint64_t last = sequence;
         auto log_find_start = [pid, logMask, start, &sequence, &start_time_set,
-                               &last](const LogBufferElement* element) -> FlushToResult {
+                               &last](const LogBufferElement* element) -> FilterResult {
             if (pid && pid != element->getPid()) {
-                return FlushToResult::kSkip;
+                return FilterResult::kSkip;
             }
             if ((logMask & (1 << element->getLogId())) == 0) {
-                return FlushToResult::kSkip;
+                return FilterResult::kSkip;
             }
             if (start == element->getRealTime()) {
                 sequence = element->getSequence();
                 start_time_set = true;
-                return FlushToResult::kStop;
+                return FilterResult::kStop;
             } else {
                 if (start < element->getRealTime()) {
                     sequence = last;
                     start_time_set = true;
-                    return FlushToResult::kStop;
+                    return FilterResult::kStop;
                 }
                 last = element->getSequence();
             }
-            return FlushToResult::kSkip;
+            return FilterResult::kSkip;
         };
 
         log_buffer_->FlushTo(socket_log_writer.get(), sequence, nullptr, log_find_start);

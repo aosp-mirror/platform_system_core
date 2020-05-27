@@ -63,8 +63,8 @@ class LogReaderThread {
   private:
     void ThreadFunction();
     // flushTo filter callbacks
-    FlushToResult FilterFirstPass(const LogBufferElement* element);
-    FlushToResult FilterSecondPass(const LogBufferElement* element);
+    FilterResult FilterFirstPass(const LogBufferElement* element);
+    FilterResult FilterSecondPass(const LogBufferElement* element);
 
     std::condition_variable thread_triggered_condition_;
     LogBuffer* log_buffer_;

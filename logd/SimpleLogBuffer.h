@@ -37,7 +37,7 @@ class SimpleLogBuffer : public LogBuffer {
             uint16_t len) override;
     uint64_t FlushTo(
             LogWriter* writer, uint64_t start, pid_t* lastTid,
-            const std::function<FlushToResult(const LogBufferElement* element)>& filter) override;
+            const std::function<FilterResult(const LogBufferElement* element)>& filter) override;
 
     bool Clear(log_id_t id, uid_t uid) override;
     unsigned long GetSize(log_id_t id) override;
