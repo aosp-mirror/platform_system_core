@@ -14,35 +14,28 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_WRITER_H__
-#define _LOGD_LOG_WRITER_H__
+#pragma once
 
 #include <sysutils/SocketListener.h>
 
-#include "LogTimes.h"
+#include "LogBuffer.h"
+#include "LogReaderList.h"
+#include "LogReaderThread.h"
 
 #define LOGD_SNDTIMEO 32
 
-class LogBuffer;
-
 class LogReader : public SocketListener {
-    LogBuffer& mLogbuf;
+  public:
+    explicit LogReader(LogBuffer* logbuf, LogReaderList* reader_list);
 
-   public:
-    explicit LogReader(LogBuffer* logbuf);
-    void notifyNewLog(log_mask_t logMask);
-
-    LogBuffer& logbuf(void) const {
-        return mLogbuf;
-    }
-
-   protected:
+  protected:
     virtual bool onDataAvailable(SocketClient* cli);
 
-   private:
+  private:
     static int getLogSocket();
 
-    void doSocketDelete(SocketClient* cli);
-};
+    bool DoSocketDelete(SocketClient* cli);
 
-#endif
+    LogBuffer* log_buffer_;
+    LogReaderList* reader_list_;
+};

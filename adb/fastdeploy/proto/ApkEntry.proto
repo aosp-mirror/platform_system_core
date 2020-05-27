@@ -5,7 +5,6 @@ package com.android.fastdeploy;
 option java_package = "com.android.fastdeploy";
 option java_outer_classname = "ApkEntryProto";
 option java_multiple_files = true;
-option optimize_for = LITE_RUNTIME;
 
 message APKDump {
     string name = 1;

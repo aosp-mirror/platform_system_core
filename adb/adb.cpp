@@ -109,7 +109,9 @@ void handle_online(atransport *t)
 {
     D("adb: online");
     t->online = 1;
+#if ADB_HOST
     t->SetConnectionEstablished(true);
+#endif
 }
 
 void handle_offline(atransport *t)

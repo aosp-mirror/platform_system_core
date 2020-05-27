@@ -180,6 +180,7 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
     struct ifa_cacheinfo *cacheinfo = nullptr;
     char addrstr[INET6_ADDRSTRLEN] = "";
     char ifname[IFNAMSIZ] = "";
+    uint32_t flags;
 
     if (!checkRtNetlinkLength(nh, sizeof(*ifaddr)))
         return false;
@@ -193,6 +194,9 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
 
     // For log messages.
     const char *msgtype = rtMessageName(type);
+
+    // First 8 bits of flags. In practice will always be overridden when parsing IFA_FLAGS below.
+    flags = ifaddr->ifa_flags;
 
     struct rtattr *rta;
     int len = IFA_PAYLOAD(nh);
@@ -242,6 +246,9 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
             }
 
             cacheinfo = (struct ifa_cacheinfo *) RTA_DATA(rta);
+
+        } else if (rta->rta_type == IFA_FLAGS) {
+            flags = *(uint32_t*)RTA_DATA(rta);
         }
     }
 
@@ -256,7 +263,7 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
     mSubsystem = strdup("net");
     asprintf(&mParams[0], "ADDRESS=%s/%d", addrstr, ifaddr->ifa_prefixlen);
     asprintf(&mParams[1], "INTERFACE=%s", ifname);
-    asprintf(&mParams[2], "FLAGS=%u", ifaddr->ifa_flags);
+    asprintf(&mParams[2], "FLAGS=%u", flags);
     asprintf(&mParams[3], "SCOPE=%u", ifaddr->ifa_scope);
     asprintf(&mParams[4], "IFINDEX=%u", ifaddr->ifa_index);
 

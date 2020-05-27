@@ -32,9 +32,20 @@ std::unique_ptr<VBMetaData> LoadAndVerifyVbmeta(const FstabEntry& fstab_entry,
                                                 std::string* out_avb_partition_name,
                                                 VBMetaVerifyResult* out_verify_result);
 
+// Loads the single vbmeta from a given path.
+std::unique_ptr<VBMetaData> LoadAndVerifyVbmetaByPath(
+        const std::string& image_path, const std::string& partition_name,
+        const std::string& expected_public_key_blob, bool allow_verification_error,
+        bool rollback_protection, bool is_chained_vbmeta, std::string* out_public_key_data,
+        bool* out_verification_disabled, VBMetaVerifyResult* out_verify_result);
+
 // Gets the hashtree descriptor for avb_partition_name from the vbmeta.
 std::unique_ptr<FsAvbHashtreeDescriptor> GetHashtreeDescriptor(
         const std::string& avb_partition_name, VBMetaData&& vbmeta);
+
+// Gets the hash descriptor for avb_partition_name from the vbmeta.
+std::unique_ptr<FsAvbHashDescriptor> GetHashDescriptor(const std::string& avb_partition_name,
+                                                       VBMetaData&& vbmeta);
 
 }  // namespace fs_mgr
 }  // namespace android

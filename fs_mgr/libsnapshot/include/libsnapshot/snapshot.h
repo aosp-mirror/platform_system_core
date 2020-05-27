@@ -173,6 +173,7 @@ class ISnapshotManager {
 
     // Map a snapshotted partition for OTA clients to write to. Write-protected regions are
     // determined previously in CreateSnapshots.
+    // |snapshot_path| must not be nullptr.
     virtual bool MapUpdateSnapshot(const android::fs_mgr::CreateLogicalPartitionParams& params,
                                    std::string* snapshot_path) = 0;
 
@@ -200,6 +201,10 @@ class ISnapshotManager {
     // Returns true on success (or nothing to do), false on failure. The
     // optional callback fires periodically to query progress via GetUpdateState.
     virtual bool HandleImminentDataWipe(const std::function<void()>& callback = {}) = 0;
+
+    // Force a merge to complete in recovery. This is similar to HandleImminentDataWipe
+    // but does not expect a data wipe after.
+    virtual bool FinishMergeInRecovery() = 0;
 
     // This method is only allowed in recovery and is used as a helper to
     // initialize the snapshot devices as a requirement to mount a snapshotted
@@ -289,6 +294,7 @@ class SnapshotManager final : public ISnapshotManager {
             const std::string& super_device,
             const std::chrono::milliseconds& timeout_ms = {}) override;
     bool HandleImminentDataWipe(const std::function<void()>& callback = {}) override;
+    bool FinishMergeInRecovery() override;
     CreateResult RecoveryCreateSnapshotDevices() override;
     CreateResult RecoveryCreateSnapshotDevices(
             const std::unique_ptr<AutoDevice>& metadata_device) override;
@@ -318,6 +324,7 @@ class SnapshotManager final : public ISnapshotManager {
     friend class SnapshotUpdateTest;
     friend class FlashAfterUpdateTest;
     friend class LockTestConsumer;
+    friend class SnapshotFuzzEnv;
     friend struct AutoDeleteCowImage;
     friend struct AutoDeleteSnapshot;
     friend struct PartitionCowCreator;
@@ -573,11 +580,16 @@ class SnapshotManager final : public ISnapshotManager {
     bool ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
                                       const std::function<bool()>& callback);
 
+    // Return device string of a mapped image, or if it is not available, the mapped image path.
+    bool GetMappedImageDeviceStringOrPath(const std::string& device_name,
+                                          std::string* device_string_or_mapped_path);
+
     std::string gsid_dir_;
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;
     std::unique_ptr<IImageManager> images_;
     bool has_local_image_manager_ = false;
+    bool in_factory_data_reset_ = false;
 };
 
 }  // namespace snapshot

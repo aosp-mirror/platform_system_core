@@ -38,6 +38,7 @@
 #include "adb_trace.h"
 #include "adb_utils.h"
 #include "adb_wifi.h"
+#include "client/mdns_utils.h"
 #include "fdevent/fdevent.h"
 #include "sysdeps.h"
 
@@ -144,7 +145,7 @@ class AsyncServiceRef {
         return initialized_;
     }
 
-    virtual ~AsyncServiceRef() {
+    void DestroyServiceRef() {
         if (!initialized_) {
             return;
         }
@@ -152,8 +153,12 @@ class AsyncServiceRef {
         // Order matters here! Must destroy the fdevent first since it has a
         // reference to |sdRef_|.
         fdevent_destroy(fde_);
+        D("DNSServiceRefDeallocate(sdRef=%p)", sdRef_);
         DNSServiceRefDeallocate(sdRef_);
+        initialized_ = false;
     }
+
+    virtual ~AsyncServiceRef() { DestroyServiceRef(); }
 
   protected:
     DNSServiceRef sdRef_;
@@ -203,6 +208,7 @@ class ResolvedService : public AsyncServiceRef {
         if (ret != kDNSServiceErr_NoError) {
             D("Got %d from DNSServiceGetAddrInfo.", ret);
         } else {
+            D("DNSServiceGetAddrInfo(sdRef=%p, hosttarget=%s)", sdRef_, hosttarget);
             Initialize();
         }
 
@@ -216,14 +222,14 @@ class ResolvedService : public AsyncServiceRef {
         }
 
         std::string response;
-        connect_device(android::base::StringPrintf(addr_format_.c_str(), ip_addr_, port_),
+        connect_device(android::base::StringPrintf("%s.%s", serviceName_.c_str(), regType_.c_str()),
                        &response);
         D("Secure connect to %s regtype %s (%s:%hu) : %s", serviceName_.c_str(), regType_.c_str(),
           ip_addr_, port_, response.c_str());
         return true;
     }
 
-    void Connect(const sockaddr* address) {
+    bool AddToServiceRegistry(const sockaddr* address) {
         sa_family_ = address->sa_family;
 
         if (sa_family_ == AF_INET) {
@@ -234,26 +240,53 @@ class ResolvedService : public AsyncServiceRef {
             addr_format_ = "[%s]:%hu";
         } else {  // Should be impossible
             D("mDNS resolved non-IP address.");
-            return;
+            return false;
         }
 
         // Winsock version requires the const cast Because Microsoft.
         if (!inet_ntop(sa_family_, const_cast<void*>(ip_addr_data_), ip_addr_, sizeof(ip_addr_))) {
             D("Could not convert IP address to string.");
-            return;
+            return false;
         }
 
-        // adb secure service needs to do something different from just
-        // connecting here.
+        // Add to the service registry before trying to auto-connect, since socket_spec_connect will
+        // check these registries for the ip address when connecting via mdns instance name.
+        int adbSecureServiceType = serviceIndex();
+        ServiceRegistry* services = nullptr;
+        switch (adbSecureServiceType) {
+            case kADBTransportServiceRefIndex:
+                services = sAdbTransportServices;
+                break;
+            case kADBSecurePairingServiceRefIndex:
+                services = sAdbSecurePairingServices;
+                break;
+            case kADBSecureConnectServiceRefIndex:
+                services = sAdbSecureConnectServices;
+                break;
+            default:
+                LOG(WARNING) << "No registry available for reg_type=[" << regType_ << "]";
+                return false;
+        }
+
+        if (!services->empty()) {
+            // Remove the previous resolved service, if any.
+            services->erase(std::remove_if(services->begin(), services->end(),
+                                           [&](std::unique_ptr<ResolvedService>& service) {
+                                               return (serviceName_ == service->serviceName());
+                                           }));
+        }
+        services->push_back(std::unique_ptr<ResolvedService>(this));
+
         if (adb_DNSServiceShouldAutoConnect(regType_.c_str(), serviceName_.c_str())) {
             std::string response;
-            D("Attempting to serviceName=[%s], regtype=[%s] ipaddr=(%s:%hu)", serviceName_.c_str(),
-              regType_.c_str(), ip_addr_, port_);
+            D("Attempting to connect serviceName=[%s], regtype=[%s] ipaddr=(%s:%hu)",
+              serviceName_.c_str(), regType_.c_str(), ip_addr_, port_);
             int index = adb_DNSServiceIndexByName(regType_.c_str());
             if (index == kADBSecureConnectServiceRefIndex) {
                 ConnectSecureWifiDevice();
             } else {
-                connect_device(android::base::StringPrintf(addr_format_.c_str(), ip_addr_, port_),
+                connect_device(android::base::StringPrintf("%s.%s", serviceName_.c_str(),
+                                                           regType_.c_str()),
                                &response);
                 D("Connect to %s regtype %s (%s:%hu) : %s", serviceName_.c_str(), regType_.c_str(),
                   ip_addr_, port_, response.c_str());
@@ -263,20 +296,7 @@ class ResolvedService : public AsyncServiceRef {
               serviceName_.c_str(), regType_.c_str(), ip_addr_, port_);
         }
 
-        int adbSecureServiceType = serviceIndex();
-        switch (adbSecureServiceType) {
-            case kADBTransportServiceRefIndex:
-                sAdbTransportServices->push_back(this);
-                break;
-            case kADBSecurePairingServiceRefIndex:
-                sAdbSecurePairingServices->push_back(this);
-                break;
-            case kADBSecureConnectServiceRefIndex:
-                sAdbSecureConnectServices->push_back(this);
-                break;
-            default:
-                break;
-        }
+        return true;
     }
 
     int serviceIndex() const { return adb_DNSServiceIndexByName(regType_.c_str()); }
@@ -291,7 +311,7 @@ class ResolvedService : public AsyncServiceRef {
 
     uint16_t port() const { return port_; }
 
-    using ServiceRegistry = std::vector<ResolvedService*>;
+    using ServiceRegistry = std::vector<std::unique_ptr<ResolvedService>>;
 
     // unencrypted tcp connections
     static ServiceRegistry* sAdbTransportServices;
@@ -301,7 +321,7 @@ class ResolvedService : public AsyncServiceRef {
 
     static void initAdbServiceRegistries();
 
-    static void forEachService(const ServiceRegistry& services, const std::string& hostname,
+    static void forEachService(const ServiceRegistry& services, std::string_view hostname,
                                adb_secure_foreach_service_callback cb);
 
     static bool connectByServiceName(const ServiceRegistry& services,
@@ -321,13 +341,13 @@ class ResolvedService : public AsyncServiceRef {
 };
 
 // static
-std::vector<ResolvedService*>* ResolvedService::sAdbTransportServices = NULL;
+ResolvedService::ServiceRegistry* ResolvedService::sAdbTransportServices = NULL;
 
 // static
-std::vector<ResolvedService*>* ResolvedService::sAdbSecurePairingServices = NULL;
+ResolvedService::ServiceRegistry* ResolvedService::sAdbSecurePairingServices = NULL;
 
 // static
-std::vector<ResolvedService*>* ResolvedService::sAdbSecureConnectServices = NULL;
+ResolvedService::ServiceRegistry* ResolvedService::sAdbSecureConnectServices = NULL;
 
 // static
 void ResolvedService::initAdbServiceRegistries() {
@@ -344,17 +364,17 @@ void ResolvedService::initAdbServiceRegistries() {
 
 // static
 void ResolvedService::forEachService(const ServiceRegistry& services,
-                                     const std::string& wanted_service_name,
+                                     std::string_view wanted_service_name,
                                      adb_secure_foreach_service_callback cb) {
     initAdbServiceRegistries();
 
-    for (auto service : services) {
+    for (const auto& service : services) {
         auto service_name = service->serviceName();
         auto reg_type = service->regType();
         auto ip = service->ipAddress();
         auto port = service->port();
 
-        if (wanted_service_name == "") {
+        if (wanted_service_name.empty()) {
             cb(service_name.c_str(), reg_type.c_str(), ip.c_str(), port);
         } else if (service_name == wanted_service_name) {
             cb(service_name.c_str(), reg_type.c_str(), ip.c_str(), port);
@@ -366,7 +386,7 @@ void ResolvedService::forEachService(const ServiceRegistry& services,
 bool ResolvedService::connectByServiceName(const ServiceRegistry& services,
                                            const std::string& service_name) {
     initAdbServiceRegistries();
-    for (auto service : services) {
+    for (const auto& service : services) {
         if (service_name == service->serviceName()) {
             D("Got service_name match [%s]", service->serviceName().c_str());
             return service->ConnectSecureWifiDevice();
@@ -378,14 +398,12 @@ bool ResolvedService::connectByServiceName(const ServiceRegistry& services,
 
 void adb_secure_foreach_pairing_service(const char* service_name,
                                         adb_secure_foreach_service_callback cb) {
-    ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices,
-                                    service_name ? service_name : "", cb);
+    ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices, service_name, cb);
 }
 
 void adb_secure_foreach_connect_service(const char* service_name,
                                         adb_secure_foreach_service_callback cb) {
-    ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices,
-                                    service_name ? service_name : "", cb);
+    ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices, service_name, cb);
 }
 
 bool adb_secure_connect_by_service_name(const char* service_name) {
@@ -393,23 +411,28 @@ bool adb_secure_connect_by_service_name(const char* service_name) {
                                                  service_name);
 }
 
-static void DNSSD_API register_service_ip(DNSServiceRef /*sdRef*/,
-                                          DNSServiceFlags /*flags*/,
+static void DNSSD_API register_service_ip(DNSServiceRef sdRef, DNSServiceFlags flags,
                                           uint32_t /*interfaceIndex*/,
-                                          DNSServiceErrorType /*errorCode*/,
-                                          const char* /*hostname*/,
-                                          const sockaddr* address,
-                                          uint32_t /*ttl*/,
-                                          void* context) {
-    D("Got IP for service.");
+                                          DNSServiceErrorType errorCode, const char* hostname,
+                                          const sockaddr* address, uint32_t ttl, void* context) {
+    D("%s: sdRef=%p flags=0x%08x errorCode=%u ttl=%u", __func__, sdRef, flags, errorCode, ttl);
     std::unique_ptr<ResolvedService> data(
         reinterpret_cast<ResolvedService*>(context));
-    data->Connect(address);
+    // Only resolve the address once. If the address or port changes, we'll just get another
+    // registration.
+    data->DestroyServiceRef();
 
-    // For ADB Secure services, keep those ResolvedService's around
-    // for later processing with secure connection establishment.
-    if (data->serviceIndex() != kADBTransportServiceRefIndex) {
-        data.release();
+    if (errorCode != kDNSServiceErr_NoError) {
+        D("Got error while looking up ipaddr [%u]", errorCode);
+        return;
+    }
+
+    if (flags & kDNSServiceFlagsAdd) {
+        D("Resolved IP address for [%s]. Adding to service registry.", hostname);
+        auto* ptr = data.release();
+        if (!ptr->AddToServiceRegistry(address)) {
+            data.reset(ptr);
+        }
     }
 }
 
@@ -459,6 +482,7 @@ class DiscoveredService : public AsyncServiceRef {
 };
 
 static void adb_RemoveDNSService(const char* regType, const char* serviceName) {
+    D("%s: regType=[%s] serviceName=[%s]", __func__, regType, serviceName);
     int index = adb_DNSServiceIndexByName(regType);
     ResolvedService::ServiceRegistry* services;
     switch (index) {
@@ -475,10 +499,15 @@ static void adb_RemoveDNSService(const char* regType, const char* serviceName) {
             return;
     }
 
+    if (services->empty()) {
+        return;
+    }
+
     std::string sName(serviceName);
-    services->erase(std::remove_if(
-            services->begin(), services->end(),
-            [&sName](ResolvedService* service) { return (sName == service->serviceName()); }));
+    services->erase(std::remove_if(services->begin(), services->end(),
+                                   [&sName](std::unique_ptr<ResolvedService>& service) {
+                                       return (sName == service->serviceName());
+                                   }));
 }
 
 // Returns the version the device wanted to advertise,
@@ -646,4 +675,80 @@ std::string mdns_list_discovered_services() {
     ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices, "", cb);
     ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices, "", cb);
     return result;
+}
+
+std::optional<MdnsInfo> mdns_get_connect_service_info(std::string_view name) {
+    CHECK(!name.empty());
+
+    auto mdns_instance = mdns::mdns_parse_instance_name(name);
+    if (!mdns_instance.has_value()) {
+        D("Failed to parse mDNS name [%s]", name.data());
+        return std::nullopt;
+    }
+
+    std::optional<MdnsInfo> info;
+    auto cb = [&](const char* service_name, const char* reg_type, const char* ip_addr,
+                  uint16_t port) { info.emplace(service_name, reg_type, ip_addr, port); };
+
+    std::string reg_type;
+    if (!mdns_instance->service_name.empty()) {
+        reg_type = android::base::StringPrintf("%s.%s", mdns_instance->service_name.data(),
+                                               mdns_instance->transport_type.data());
+        int index = adb_DNSServiceIndexByName(reg_type);
+        switch (index) {
+            case kADBTransportServiceRefIndex:
+                ResolvedService::forEachService(*ResolvedService::sAdbTransportServices,
+                                                mdns_instance->instance_name, cb);
+                break;
+            case kADBSecureConnectServiceRefIndex:
+                ResolvedService::forEachService(*ResolvedService::sAdbSecureConnectServices,
+                                                mdns_instance->instance_name, cb);
+                break;
+            default:
+                D("Unknown reg_type [%s]", reg_type.data());
+                return std::nullopt;
+        }
+        return info;
+    }
+
+    for (const auto& service :
+         {ResolvedService::sAdbTransportServices, ResolvedService::sAdbSecureConnectServices}) {
+        ResolvedService::forEachService(*service, name, cb);
+        if (info.has_value()) {
+            return info;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<MdnsInfo> mdns_get_pairing_service_info(std::string_view name) {
+    CHECK(!name.empty());
+
+    auto mdns_instance = mdns::mdns_parse_instance_name(name);
+    if (!mdns_instance.has_value()) {
+        D("Failed to parse mDNS pairing name [%s]", name.data());
+        return std::nullopt;
+    }
+
+    std::optional<MdnsInfo> info;
+    auto cb = [&](const char* service_name, const char* reg_type, const char* ip_addr,
+                  uint16_t port) { info.emplace(service_name, reg_type, ip_addr, port); };
+
+    // Verify it's a pairing service if user explicitly inputs it.
+    if (!mdns_instance->service_name.empty()) {
+        auto reg_type = android::base::StringPrintf("%s.%s", mdns_instance->service_name.data(),
+                                                    mdns_instance->transport_type.data());
+        int index = adb_DNSServiceIndexByName(reg_type);
+        switch (index) {
+            case kADBSecurePairingServiceRefIndex:
+                break;
+            default:
+                D("Not an adb pairing reg_type [%s]", reg_type.data());
+                return std::nullopt;
+        }
+    }
+
+    ResolvedService::forEachService(*ResolvedService::sAdbSecurePairingServices, name, cb);
+    return info;
 }
