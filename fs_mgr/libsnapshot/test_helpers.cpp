@@ -212,8 +212,8 @@ AssertionResult LowSpaceUserdata::ReadUserdataStats() {
         return AssertionFailure() << strerror(errno);
     }
     bsize_ = buf.f_bsize;
-    free_space_ = buf.f_bsize * buf.f_bfree;
-    available_space_ = buf.f_bsize * buf.f_bavail;
+    free_space_ = bsize_ * buf.f_bfree;
+    available_space_ = bsize_ * buf.f_bavail;
     return AssertionSuccess();
 }
 

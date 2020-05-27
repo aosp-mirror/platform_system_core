@@ -89,24 +89,23 @@ cc_test {
         "test_vendor.cpp",
     ],
     static_libs: [
+        "libbase",
         "libgmock",
+        "liblog",
+        "libjsoncpp",
         "libjsonpbverify",
         "libjsonpbparse",
         "libprocessgroup_proto",
     ],
     shared_libs: [
-        "libbase",
-        "liblog",
-        "libjsoncpp",
         "libprotobuf-cpp-full",
     ],
-    target: {
-        android: {
-            test_config: "vts_processgroup_validate_test.xml",
-        },
-    },
+    test_suites: [
+        "vts",
+    ],
 }
 
 vts_config {
     name: "VtsProcessgroupValidateTest",
+    test_config: "vts_processgroup_validate_test.xml",
 }

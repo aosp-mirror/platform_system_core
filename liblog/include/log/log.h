@@ -133,19 +133,16 @@ typedef enum {
   (void)__android_log_bswrite(_tag, _value);
 #endif
 
-#ifdef __linux__
-
-clockid_t android_log_clockid(void);
-
-#endif /* __linux__ */
-
 /* --------------------------------------------------------------------- */
 
 /*
  * Release any logger resources (a new log write will immediately re-acquire)
  *
- * May be used to clean up File descriptors after a Fork, the resources are
- * all O_CLOEXEC so wil self clean on exec().
+ * This is specifically meant to be used by Zygote to close open file descriptors after fork()
+ * and before specialization.  O_CLOEXEC is used on file descriptors, so they will be closed upon
+ * exec() in normal use cases.
+ *
+ * Note that this is not safe to call from a multi-threaded program.
  */
 void __android_log_close(void);
 

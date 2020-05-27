@@ -14,6 +14,9 @@
     },
     {
       "name": "vts_libsnapshot_test"
+    },
+    {
+      "name": "libsnapshot_fuzzer_test"
     }
   ]
 }

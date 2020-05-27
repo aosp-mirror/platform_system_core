@@ -78,6 +78,7 @@ class ServiceParser : public SectionParser {
     Result<void> ParseSigstop(std::vector<std::string>&& args);
     Result<void> ParseSocket(std::vector<std::string>&& args);
     Result<void> ParseStdioToKmsg(std::vector<std::string>&& args);
+    Result<void> ParseTaskProfiles(std::vector<std::string>&& args);
     Result<void> ParseTimeoutPeriod(std::vector<std::string>&& args);
     Result<void> ParseFile(std::vector<std::string>&& args);
     Result<void> ParseUser(std::vector<std::string>&& args);

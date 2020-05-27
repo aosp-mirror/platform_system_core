@@ -38,7 +38,6 @@
 
 #include <android-base/macros.h>
 #include <cutils/android_get_control_file.h>
-#include <cutils/properties.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
 #include <packagelistparser/packagelistparser.h>
@@ -47,12 +46,17 @@
 #include <processgroup/sched_policy.h>
 #include <utils/threads.h>
 
+#include "ChattyLogBuffer.h"
 #include "CommandListener.h"
 #include "LogAudit.h"
 #include "LogBuffer.h"
 #include "LogKlog.h"
 #include "LogListener.h"
+#include "LogReader.h"
+#include "LogStatistics.h"
+#include "LogTags.h"
 #include "LogUtils.h"
+#include "SimpleLogBuffer.h"
 
 #define KMSG_PRIORITY(PRI)                                 \
     '<', '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) / 10, \
@@ -108,21 +112,6 @@ static int drop_privs(bool klogd, bool auditd) {
     return 0;
 }
 
-// Property helper
-static bool check_flag(const char* prop, const char* flag) {
-    const char* cp = strcasestr(prop, flag);
-    if (!cp) {
-        return false;
-    }
-    // We only will document comma (,)
-    static const char sep[] = ",:;|+ \t\f";
-    if ((cp != prop) && !strchr(sep, cp[-1])) {
-        return false;
-    }
-    cp += strlen(flag);
-    return !*cp || !!strchr(sep, *cp);
-}
-
 static int fdDmesg = -1;
 void android::prdebug(const char* fmt, ...) {
     if (fdDmesg < 0) {
@@ -148,50 +137,6 @@ void android::prdebug(const char* fmt, ...) {
         }
         write(fdDmesg, buffer, strlen(buffer));
     }
-}
-
-static sem_t reinit;
-static bool reinit_running = false;
-static LogBuffer* logBuf = nullptr;
-
-static void* reinit_thread_start(void* /*obj*/) {
-    prctl(PR_SET_NAME, "logd.daemon");
-
-    while (reinit_running && !sem_wait(&reinit) && reinit_running) {
-        if (fdDmesg >= 0) {
-            static const char reinit_message[] = { KMSG_PRIORITY(LOG_INFO),
-                                                   'l',
-                                                   'o',
-                                                   'g',
-                                                   'd',
-                                                   '.',
-                                                   'd',
-                                                   'a',
-                                                   'e',
-                                                   'm',
-                                                   'o',
-                                                   'n',
-                                                   ':',
-                                                   ' ',
-                                                   'r',
-                                                   'e',
-                                                   'i',
-                                                   'n',
-                                                   'i',
-                                                   't',
-                                                   '\n' };
-            write(fdDmesg, reinit_message, sizeof(reinit_message));
-        }
-
-        // Anything that reads persist.<property>
-        if (logBuf) {
-            logBuf->init();
-            logBuf->initPrune(nullptr);
-        }
-        android::ReReadEventLogTags();
-    }
-
-    return nullptr;
 }
 
 char* android::uidToName(uid_t u) {
@@ -220,12 +165,6 @@ char* android::uidToName(uid_t u) {
     return userdata.name;
 }
 
-// Serves as a global method to trigger reinitialization
-// and as a function that can be provided to signal().
-void reinit_signal_handler(int /*signal*/) {
-    sem_post(&reinit);
-}
-
 static void readDmesg(LogAudit* al, LogKlog* kl) {
     if (!al && !kl) {
         return;
@@ -249,10 +188,6 @@ static void readDmesg(LogAudit* al, LogKlog* kl) {
         len = rc + 1;
     }
     buf[--len] = '\0';
-
-    if (kl && kl->isMonotonic()) {
-        kl->synchronize(buf.get(), len);
-    }
 
     ssize_t sublen;
     for (char *ptr = nullptr, *tok = buf.get();
@@ -336,49 +271,34 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Reinit Thread
-    sem_init(&reinit, 0, 0);
-    pthread_attr_t attr;
-    if (!pthread_attr_init(&attr)) {
-        struct sched_param param;
+    // A cache of event log tags
+    LogTags log_tags;
 
-        memset(&param, 0, sizeof(param));
-        pthread_attr_setschedparam(&attr, &param);
-        pthread_attr_setschedpolicy(&attr, SCHED_BATCH);
-        if (!pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
-            pthread_t thread;
-            reinit_running = true;
-            if (pthread_create(&thread, &attr, reinit_thread_start, nullptr)) {
-                reinit_running = false;
-            }
-        }
-        pthread_attr_destroy(&attr);
-    }
+    // Pruning configuration.
+    PruneList prune_list;
+
+    // Partial (required for chatty) or full logging statistics.
+    bool enable_full_log_statistics = __android_logger_property_get_bool(
+            "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
+                                       BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
+    LogStatistics log_statistics(enable_full_log_statistics);
 
     // Serves the purpose of managing the last logs times read on a
     // socket connection, and as a reader lock on a range of log
     // entries.
+    LogReaderList reader_list;
 
-    LastLogTimes* times = new LastLogTimes();
-
-    // LogBuffer is the object which is responsible for holding all
-    // log entries.
-
-    logBuf = new LogBuffer(times);
-
-    signal(SIGHUP, reinit_signal_handler);
-
-    if (__android_logger_property_get_bool(
-            "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
-                                   BOOL_DEFAULT_FLAG_ENG |
-                                   BOOL_DEFAULT_FLAG_SVELTE)) {
-        logBuf->enableStatistics();
+    // LogBuffer is the object which is responsible for holding all log entries.
+    LogBuffer* logBuf;
+    if (true) {
+        logBuf = new ChattyLogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
+    } else {
+        logBuf = new SimpleLogBuffer(&reader_list, &log_tags, &log_statistics);
     }
 
     // LogReader listens on /dev/socket/logdr. When a client
     // connects, log entries in the LogBuffer are written to the client.
-
-    LogReader* reader = new LogReader(logBuf);
+    LogReader* reader = new LogReader(logBuf, &reader_list);
     if (reader->startListener()) {
         return EXIT_FAILURE;
     }
@@ -386,17 +306,14 @@ int main(int argc, char* argv[]) {
     // LogListener listens on /dev/socket/logdw for client
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
-
-    LogListener* swl = new LogListener(logBuf, reader);
-    // Backlog and /proc/sys/net/unix/max_dgram_qlen set to large value
-    if (swl->startListener(600)) {
+    LogListener* swl = new LogListener(logBuf);
+    if (!swl->StartListener()) {
         return EXIT_FAILURE;
     }
 
     // Command listener listens on /dev/socket/logd for incoming logd
     // administrative commands.
-
-    CommandListener* cl = new CommandListener(logBuf, reader, swl);
+    CommandListener* cl = new CommandListener(logBuf, &log_tags, &prune_list, &log_statistics);
     if (cl->startListener()) {
         return EXIT_FAILURE;
     }
@@ -404,25 +321,22 @@ int main(int argc, char* argv[]) {
     // LogAudit listens on NETLINK_AUDIT socket for selinux
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
-
     LogAudit* al = nullptr;
     if (auditd) {
-        al = new LogAudit(logBuf, reader,
-                          __android_logger_property_get_bool(
-                              "ro.logd.auditd.dmesg", BOOL_DEFAULT_TRUE)
-                              ? fdDmesg
-                              : -1);
+        int dmesg_fd = __android_logger_property_get_bool("ro.logd.auditd.dmesg", BOOL_DEFAULT_TRUE)
+                               ? fdDmesg
+                               : -1;
+        al = new LogAudit(logBuf, dmesg_fd, &log_statistics);
     }
 
     LogKlog* kl = nullptr;
     if (klogd) {
-        kl = new LogKlog(logBuf, reader, fdDmesg, fdPmesg, al != nullptr);
+        kl = new LogKlog(logBuf, fdDmesg, fdPmesg, al != nullptr, &log_statistics);
     }
 
     readDmesg(al, kl);
 
     // failure is an option ... messages are in dmesg (required by standard)
-
     if (kl && kl->startListener()) {
         delete kl;
     }

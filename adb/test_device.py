@@ -82,10 +82,13 @@ class DeviceTest(unittest.TestCase):
 
 class AbbTest(DeviceTest):
     def test_smoke(self):
-        result = subprocess.run(['adb', 'abb'], capture_output=True)
-        self.assertEqual(1, result.returncode)
-        expected_output = b"cmd: No service specified; use -l to list all services\n"
-        self.assertEqual(expected_output, result.stderr)
+        abb = subprocess.run(['adb', 'abb'], capture_output=True)
+        cmd = subprocess.run(['adb', 'shell', 'cmd'], capture_output=True)
+
+        # abb squashes all failures to 1.
+        self.assertEqual(abb.returncode == 0, cmd.returncode == 0)
+        self.assertEqual(abb.stdout, cmd.stdout)
+        self.assertEqual(abb.stderr, cmd.stderr)
 
 class ForwardReverseTest(DeviceTest):
     def _test_no_rebind(self, description, direction_list, direction,

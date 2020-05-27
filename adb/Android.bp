@@ -218,6 +218,7 @@ cc_library_host_static {
         "client/usb_dispatch.cpp",
         "client/transport_local.cpp",
         "client/transport_mdns.cpp",
+        "client/mdns_utils.cpp",
         "client/transport_usb.cpp",
         "client/pairing/pairing_client.cpp",
     ],
@@ -264,7 +265,10 @@ cc_library_host_static {
 cc_test_host {
     name: "adb_test",
     defaults: ["adb_defaults"],
-    srcs: libadb_test_srcs,
+    srcs: libadb_test_srcs + [
+        "client/mdns_utils_test.cpp",
+    ],
+
     static_libs: [
         "libadb_crypto_static",
         "libadb_host",

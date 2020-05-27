@@ -30,6 +30,7 @@
 
 #include "adb.h"
 #include "adb_utils.h"
+#include "adb_wifi.h"
 #include "sysdeps.h"
 
 using namespace std::string_literals;
@@ -101,12 +102,6 @@ bool parse_tcp_socket_spec(std::string_view spec, std::string* hostname, int* po
         // FIXME: ParseNetAddress rejects port 0. This currently doesn't hurt, because listening
         //        on an address that isn't 'localhost' is unsupported.
         if (!android::base::ParseNetAddress(addr, &hostname_value, &port_value, serial, error)) {
-            return false;
-        }
-
-        if (port_value == -1) {
-            *error = "missing port in specification: ";
-            *error += spec;
             return false;
         }
     }
@@ -201,7 +196,24 @@ bool socket_spec_connect(unique_fd* fd, std::string_view address, int* port, std
             fd->reset(network_loopback_client(port_value, SOCK_STREAM, error));
         } else {
 #if ADB_HOST
-            fd->reset(network_connect(hostname, port_value, SOCK_STREAM, 0, error));
+            // Check if the address is an mdns service we can connect to.
+            if (auto mdns_info = mdns_get_connect_service_info(address.substr(4));
+                mdns_info != std::nullopt) {
+                fd->reset(network_connect(mdns_info->addr, mdns_info->port, SOCK_STREAM, 0, error));
+                if (fd->get() != -1) {
+                    // TODO(joshuaduong): We still show the ip address for the serial. Change it to
+                    // use the mdns instance name, so we can adjust to address changes on
+                    // reconnects.
+                    port_value = mdns_info->port;
+                    if (serial) {
+                        *serial = android::base::StringPrintf("%s.%s",
+                                                              mdns_info->service_name.c_str(),
+                                                              mdns_info->service_type.c_str());
+                    }
+                }
+            } else {
+                fd->reset(network_connect(hostname, port_value, SOCK_STREAM, 0, error));
+            }
 #else
             // Disallow arbitrary connections in adbd.
             *error = "adbd does not support arbitrary tcp connections";

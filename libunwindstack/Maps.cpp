@@ -159,6 +159,8 @@ bool LocalUpdatableMaps::Reparse() {
         search_map_idx = old_map_idx + 1;
         if (new_map_idx + 1 < maps_.size()) {
           maps_[new_map_idx + 1]->prev_map = info.get();
+          maps_[new_map_idx + 1]->prev_real_map =
+              info->IsBlank() ? info->prev_real_map : info.get();
         }
         maps_[new_map_idx] = nullptr;
         total_entries--;

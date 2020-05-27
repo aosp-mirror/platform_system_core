@@ -79,8 +79,8 @@ struct fdevent_context {
     unique_fd Destroy(fdevent* fde);
 
   protected:
-    virtual void Register(fdevent*) {}
-    virtual void Unregister(fdevent*) {}
+    virtual void Register(fdevent*) = 0;
+    virtual void Unregister(fdevent*) = 0;
 
   public:
     // Change which events should cause notifications.
