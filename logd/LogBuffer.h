@@ -53,4 +53,6 @@ class LogBuffer {
     virtual bool Clear(log_id_t id, uid_t uid) = 0;
     virtual unsigned long GetSize(log_id_t id) = 0;
     virtual int SetSize(log_id_t id, unsigned long size) = 0;
+
+    virtual uint64_t sequence() const = 0;
 };

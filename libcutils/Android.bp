@@ -152,6 +152,7 @@ cc_library {
         "iosched_policy.cpp",
         "load_file.cpp",
         "native_handle.cpp",
+        "properties.cpp",
         "record_stream.cpp",
         "strlcpy.c",
         "threads.cpp",
@@ -187,7 +188,6 @@ cc_library {
                 "fs_config.cpp",
                 "klog.cpp",
                 "partition_utils.cpp",
-                "properties.cpp",
                 "qtaguid.cpp",
                 "trace-dev.cpp",
                 "uevent.cpp",
@@ -258,6 +258,7 @@ cc_defaults {
     name: "libcutils_test_default",
     srcs: [
         "native_handle_test.cpp",
+        "properties_test.cpp",
         "sockets_test.cpp",
     ],
 
@@ -269,7 +270,6 @@ cc_defaults {
                 "ashmem_test.cpp",
                 "fs_config_test.cpp",
                 "multiuser_test.cpp",
-                "properties_test.cpp",
                 "sched_policy_test.cpp",
                 "str_parms_test.cpp",
                 "trace-dev_test.cpp",
