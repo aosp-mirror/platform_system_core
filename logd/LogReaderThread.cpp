@@ -75,13 +75,21 @@ void LogReaderThread::ThreadFunction() {
 
         if (tail_) {
             log_buffer_->FlushTo(writer_.get(), start, nullptr,
-                                 std::bind(&LogReaderThread::FilterFirstPass, this, _1));
+                                 [this](log_id_t log_id, pid_t pid, uint64_t sequence,
+                                        log_time realtime, uint16_t dropped_count) {
+                                     return FilterFirstPass(log_id, pid, sequence, realtime,
+                                                            dropped_count);
+                                 });
             leading_dropped_ =
                     true;  // TODO: Likely a bug, if leading_dropped_ was not true before calling
                            // flushTo(), then it should not be reset to true after.
         }
         start = log_buffer_->FlushTo(writer_.get(), start, last_tid_,
-                                     std::bind(&LogReaderThread::FilterSecondPass, this, _1));
+                                     [this](log_id_t log_id, pid_t pid, uint64_t sequence,
+                                            log_time realtime, uint16_t dropped_count) {
+                                         return FilterSecondPass(log_id, pid, sequence, realtime,
+                                                                 dropped_count);
+                                     });
 
         // We only ignore entries before the original start time for the first flushTo(), if we
         // get entries after this first flush before the original start time, then the client
@@ -123,22 +131,23 @@ void LogReaderThread::ThreadFunction() {
 }
 
 // A first pass to count the number of elements
-FilterResult LogReaderThread::FilterFirstPass(const LogBufferElement* element) {
+FilterResult LogReaderThread::FilterFirstPass(log_id_t log_id, pid_t pid, uint64_t sequence,
+                                              log_time realtime, uint16_t dropped_count) {
     auto lock = std::lock_guard{reader_list_->reader_threads_lock()};
 
     if (leading_dropped_) {
-        if (element->getDropped()) {
+        if (dropped_count) {
             return FilterResult::kSkip;
         }
         leading_dropped_ = false;
     }
 
     if (count_ == 0) {
-        start_ = element->getSequence();
+        start_ = sequence;
     }
 
-    if ((!pid_ || pid_ == element->getPid()) && IsWatching(element->getLogId()) &&
-        (start_time_ == log_time::EPOCH || start_time_ <= element->getRealTime())) {
+    if ((!pid_ || pid_ == pid) && IsWatching(log_id) &&
+        (start_time_ == log_time::EPOCH || start_time_ <= realtime)) {
         ++count_;
     }
 
@@ -146,18 +155,19 @@ FilterResult LogReaderThread::FilterFirstPass(const LogBufferElement* element) {
 }
 
 // A second pass to send the selected elements
-FilterResult LogReaderThread::FilterSecondPass(const LogBufferElement* element) {
+FilterResult LogReaderThread::FilterSecondPass(log_id_t log_id, pid_t pid, uint64_t sequence,
+                                               log_time realtime, uint16_t dropped_count) {
     auto lock = std::lock_guard{reader_list_->reader_threads_lock()};
 
-    start_ = element->getSequence();
+    start_ = sequence;
 
-    if (skip_ahead_[element->getLogId()]) {
-        skip_ahead_[element->getLogId()]--;
+    if (skip_ahead_[log_id]) {
+        skip_ahead_[log_id]--;
         return FilterResult::kSkip;
     }
 
     if (leading_dropped_) {
-        if (element->getDropped()) {
+        if (dropped_count) {
             return FilterResult::kSkip;
         }
         leading_dropped_ = false;
@@ -168,15 +178,15 @@ FilterResult LogReaderThread::FilterSecondPass(const LogBufferElement* element) 
         return FilterResult::kStop;
     }
 
-    if (!IsWatching(element->getLogId())) {
+    if (!IsWatching(log_id)) {
         return FilterResult::kSkip;
     }
 
-    if (pid_ && pid_ != element->getPid()) {
+    if (pid_ && pid_ != pid) {
         return FilterResult::kSkip;
     }
 
-    if (start_time_ != log_time::EPOCH && element->getRealTime() <= start_time_) {
+    if (start_time_ != log_time::EPOCH && realtime <= start_time_) {
         return FilterResult::kSkip;
     }
 
@@ -199,7 +209,7 @@ FilterResult LogReaderThread::FilterSecondPass(const LogBufferElement* element) 
     }
 
 ok:
-    if (!skip_ahead_[element->getLogId()]) {
+    if (!skip_ahead_[log_id]) {
         return FilterResult::kWrite;
     }
     return FilterResult::kSkip;

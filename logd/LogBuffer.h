@@ -21,11 +21,9 @@
 #include <functional>
 
 #include <log/log.h>
-#include <sysutils/SocketClient.h>
+#include <log/log_read.h>
 
-#include "LogBufferElement.h"
-
-class LogWriter;
+#include "LogWriter.h"
 
 enum class FilterResult {
     kSkip,
@@ -45,10 +43,11 @@ class LogBuffer {
     // valid message was from the same source so we can differentiate chatty
     // filter types (identical or expired)
     static const uint64_t FLUSH_ERROR = 0;
-    virtual uint64_t FlushTo(
-            LogWriter* writer, uint64_t start,
-            pid_t* last_tid,  // nullable
-            const std::function<FilterResult(const LogBufferElement* element)>& filter) = 0;
+    virtual uint64_t FlushTo(LogWriter* writer, uint64_t start,
+                             pid_t* last_tid,  // nullable
+                             const std::function<FilterResult(log_id_t log_id, pid_t pid,
+                                                              uint64_t sequence, log_time realtime,
+                                                              uint16_t dropped_count)>& filter) = 0;
 
     virtual bool Clear(log_id_t id, uid_t uid) = 0;
     virtual unsigned long GetSize(log_id_t id) = 0;
