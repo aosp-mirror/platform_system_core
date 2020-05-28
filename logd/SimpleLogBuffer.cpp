@@ -112,7 +112,8 @@ void SimpleLogBuffer::LogInternal(LogBufferElement&& elem) {
 
 uint64_t SimpleLogBuffer::FlushTo(
         LogWriter* writer, uint64_t start, pid_t* last_tid,
-        const std::function<FlushToResult(const LogBufferElement* element)>& filter) {
+        const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
+                                         log_time realtime, uint16_t dropped_count)>& filter) {
     auto shared_lock = SharedLock{lock_};
 
     std::list<LogBufferElement>::iterator it;
@@ -146,11 +147,12 @@ uint64_t SimpleLogBuffer::FlushTo(
         }
 
         if (filter) {
-            FlushToResult ret = filter(&element);
-            if (ret == FlushToResult::kSkip) {
+            FilterResult ret = filter(element.getLogId(), element.getPid(), element.getSequence(),
+                                      element.getRealTime(), element.getDropped());
+            if (ret == FilterResult::kSkip) {
                 continue;
             }
-            if (ret == FlushToResult::kStop) {
+            if (ret == FilterResult::kStop) {
                 break;
             }
         }

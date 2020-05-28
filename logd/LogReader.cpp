@@ -171,27 +171,29 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     if (start != log_time::EPOCH) {
         bool start_time_set = false;
         uint64_t last = sequence;
-        auto log_find_start = [pid, logMask, start, &sequence, &start_time_set,
-                               &last](const LogBufferElement* element) -> FlushToResult {
-            if (pid && pid != element->getPid()) {
-                return FlushToResult::kSkip;
+        auto log_find_start = [pid, logMask, start, &sequence, &start_time_set, &last](
+                                      log_id_t element_log_id, pid_t element_pid,
+                                      uint64_t element_sequence, log_time element_realtime,
+                                      uint16_t) -> FilterResult {
+            if (pid && pid != element_pid) {
+                return FilterResult::kSkip;
             }
-            if ((logMask & (1 << element->getLogId())) == 0) {
-                return FlushToResult::kSkip;
+            if ((logMask & (1 << element_log_id)) == 0) {
+                return FilterResult::kSkip;
             }
-            if (start == element->getRealTime()) {
-                sequence = element->getSequence();
+            if (start == element_realtime) {
+                sequence = element_sequence;
                 start_time_set = true;
-                return FlushToResult::kStop;
+                return FilterResult::kStop;
             } else {
-                if (start < element->getRealTime()) {
+                if (start < element_realtime) {
                     sequence = last;
                     start_time_set = true;
-                    return FlushToResult::kStop;
+                    return FilterResult::kStop;
                 }
-                last = element->getSequence();
+                last = element_sequence;
             }
-            return FlushToResult::kSkip;
+            return FilterResult::kSkip;
         };
 
         log_buffer_->FlushTo(socket_log_writer.get(), sequence, nullptr, log_find_start);
