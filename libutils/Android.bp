@@ -246,6 +246,7 @@ cc_test {
         "String8_test.cpp",
         "String16_test.cpp",
         "StrongPointer_test.cpp",
+        "Timers_test.cpp",
         "Unicode_test.cpp",
         "Vector_test.cpp",
     ],
