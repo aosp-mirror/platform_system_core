@@ -231,7 +231,14 @@ struct UsbFfsConnection : public Connection {
                 offset += write_size;
             }
         }
-        SubmitWrites();
+
+        // Wake up the worker thread to submit writes.
+        uint64_t notify = 1;
+        ssize_t rc = adb_write(worker_event_fd_.get(), &notify, sizeof(notify));
+        if (rc < 0) {
+            PLOG(FATAL) << "failed to notify worker eventfd to submit writes";
+        }
+
         return true;
     }
 
@@ -443,6 +450,9 @@ struct UsbFfsConnection : public Connection {
                 }
 
                 ReadEvents();
+
+                std::lock_guard<std::mutex> lock(write_mutex_);
+                SubmitWrites();
             }
         });
     }
@@ -626,8 +636,6 @@ struct UsbFfsConnection : public Connection {
         write_requests_.erase(it);
         size_t outstanding_writes = --writes_submitted_;
         LOG(DEBUG) << "USB write: reaped, down to " << outstanding_writes;
-
-        SubmitWrites();
     }
 
     IoWriteBlock CreateWriteBlock(std::shared_ptr<Block> payload, size_t offset, size_t len,
