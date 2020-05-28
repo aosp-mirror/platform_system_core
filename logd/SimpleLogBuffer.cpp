@@ -110,14 +110,34 @@ void SimpleLogBuffer::LogInternal(LogBufferElement&& elem) {
     reader_list_->NotifyNewLog(1 << log_id);
 }
 
-uint64_t SimpleLogBuffer::FlushTo(
-        LogWriter* writer, uint64_t start, pid_t* last_tid,
+// These extra parameters are only required for chatty, but since they're a no-op for
+// SimpleLogBuffer, it's easier to include them here, then to duplicate FlushTo() for
+// ChattyLogBuffer.
+class ChattyFlushToState : public FlushToState {
+  public:
+    ChattyFlushToState(uint64_t start, LogMask log_mask) : FlushToState(start, log_mask) {}
+
+    pid_t* last_tid() { return last_tid_; }
+
+  private:
+    pid_t last_tid_[LOG_ID_MAX] = {};
+};
+
+std::unique_ptr<FlushToState> SimpleLogBuffer::CreateFlushToState(uint64_t start,
+                                                                  LogMask log_mask) {
+    return std::make_unique<ChattyFlushToState>(start, log_mask);
+}
+
+bool SimpleLogBuffer::FlushTo(
+        LogWriter* writer, FlushToState& abstract_state,
         const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
                                          log_time realtime, uint16_t dropped_count)>& filter) {
     auto shared_lock = SharedLock{lock_};
 
+    auto& state = reinterpret_cast<ChattyFlushToState&>(abstract_state);
+
     std::list<LogBufferElement>::iterator it;
-    if (start <= 1) {
+    if (state.start() <= 1) {
         // client wants to start from the beginning
         it = logs_.begin();
     } else {
@@ -126,25 +146,29 @@ uint64_t SimpleLogBuffer::FlushTo(
         for (it = logs_.end(); it != logs_.begin();
              /* do nothing */) {
             --it;
-            if (it->getSequence() == start) {
+            if (it->getSequence() == state.start()) {
                 break;
-            } else if (it->getSequence() < start) {
+            } else if (it->getSequence() < state.start()) {
                 it++;
                 break;
             }
         }
     }
 
-    uint64_t curr = start;
-
     for (; it != logs_.end(); ++it) {
         LogBufferElement& element = *it;
+
+        state.set_start(element.getSequence());
 
         if (!writer->privileged() && element.getUid() != writer->uid()) {
             continue;
         }
 
         if (!writer->can_read_security_logs() && element.getLogId() == LOG_ID_SECURITY) {
+            continue;
+        }
+
+        if (((1 << element.getLogId()) & state.log_mask()) == 0) {
             continue;
         }
 
@@ -159,31 +183,24 @@ uint64_t SimpleLogBuffer::FlushTo(
             }
         }
 
-        bool same_tid = false;
-        if (last_tid) {
-            same_tid = last_tid[element.getLogId()] == element.getTid();
-            // Dropped (chatty) immediately following a valid log from the
-            // same source in the same log buffer indicates we have a
-            // multiple identical squash.  chatty that differs source
-            // is due to spam filter.  chatty to chatty of different
-            // source is also due to spam filter.
-            last_tid[element.getLogId()] =
-                    (element.getDropped() && !same_tid) ? 0 : element.getTid();
-        }
+        bool same_tid = state.last_tid()[element.getLogId()] == element.getTid();
+        // Dropped (chatty) immediately following a valid log from the same source in the same log
+        // buffer indicates we have a multiple identical squash.  chatty that differs source is due
+        // to spam filter.  chatty to chatty of different source is also due to spam filter.
+        state.last_tid()[element.getLogId()] =
+                (element.getDropped() && !same_tid) ? 0 : element.getTid();
 
         shared_lock.unlock();
-
         // We never prune logs equal to or newer than any LogReaderThreads' `start` value, so the
         // `element` pointer is safe here without the lock
-        curr = element.getSequence();
         if (!element.FlushTo(writer, stats_, same_tid)) {
-            return FLUSH_ERROR;
+            return false;
         }
-
         shared_lock.lock_shared();
     }
 
-    return curr;
+    state.set_start(state.start() + 1);
+    return true;
 }
 
 // clear all rows of type "id" from the buffer.

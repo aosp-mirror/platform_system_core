@@ -38,7 +38,7 @@ class LogReaderThread {
   public:
     LogReaderThread(LogBuffer* log_buffer, LogReaderList* reader_list,
                     std::unique_ptr<LogWriter> writer, bool non_block, unsigned long tail,
-                    unsigned int log_mask, pid_t pid, log_time start_time, uint64_t sequence,
+                    LogMask log_mask, pid_t pid, log_time start_time, uint64_t sequence,
                     std::chrono::steady_clock::time_point deadline);
     void triggerReader_Locked() { thread_triggered_condition_.notify_all(); }
 
@@ -52,11 +52,13 @@ class LogReaderThread {
         thread_triggered_condition_.notify_all();
     }
 
-    bool IsWatching(log_id_t id) const { return log_mask_ & (1 << id); }
-    bool IsWatchingMultiple(unsigned int log_mask) const { return log_mask_ & log_mask; }
+    bool IsWatching(log_id_t id) const { return flush_to_state_->log_mask() & (1 << id); }
+    bool IsWatchingMultiple(LogMask log_mask) const {
+        return flush_to_state_->log_mask() & log_mask;
+    }
 
     std::string name() const { return writer_->name(); }
-    uint64_t start() const { return start_; }
+    uint64_t start() const { return flush_to_state_->start(); }
     std::chrono::steady_clock::time_point deadline() const { return deadline_; }
 
   private:
@@ -78,16 +80,14 @@ class LogReaderThread {
     // messages should be ignored.
     bool leading_dropped_;
 
-    // A mask of the logs buffers that are read by this reader.
-    const unsigned int log_mask_;
     // If set to non-zero, only pids equal to this are read by the reader.
     const pid_t pid_;
     // When a reader is referencing (via start_) old elements in the log buffer, and the log
     // buffer's size grows past its memory limit, the log buffer may request the reader to skip
     // ahead a specified number of logs.
     unsigned int skip_ahead_[LOG_ID_MAX];
-    // Used for distinguishing 'dropped' messages for duplicate logs vs chatty drops
-    pid_t last_tid_[LOG_ID_MAX];
+    // LogBuffer::FlushTo() needs to store state across subsequent calls.
+    std::unique_ptr<FlushToState> flush_to_state_;
 
     // These next three variables are used for reading only the most recent lines aka `adb logcat
     // -t` / `adb logcat -T`.
@@ -103,8 +103,6 @@ class LogReaderThread {
     // When a reader requests logs starting from a given timestamp, its stored here for the first
     // pass, such that logs before this time stamp that are accumulated in the buffer are ignored.
     log_time start_time_;
-    // The point from which the reader will read logs once awoken.
-    uint64_t start_;
     // CLOCK_MONOTONIC based deadline used for log wrapping.  If this deadline expires before logs
     // wrap, then wake up and send the logs to the reader anyway.
     std::chrono::steady_clock::time_point deadline_;

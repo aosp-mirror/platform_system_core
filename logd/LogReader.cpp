@@ -171,14 +171,10 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     if (start != log_time::EPOCH) {
         bool start_time_set = false;
         uint64_t last = sequence;
-        auto log_find_start = [pid, logMask, start, &sequence, &start_time_set, &last](
-                                      log_id_t element_log_id, pid_t element_pid,
-                                      uint64_t element_sequence, log_time element_realtime,
-                                      uint16_t) -> FilterResult {
+        auto log_find_start = [pid, start, &sequence, &start_time_set, &last](
+                                      log_id_t, pid_t element_pid, uint64_t element_sequence,
+                                      log_time element_realtime, uint16_t) -> FilterResult {
             if (pid && pid != element_pid) {
-                return FilterResult::kSkip;
-            }
-            if ((logMask & (1 << element_log_id)) == 0) {
                 return FilterResult::kSkip;
             }
             if (start == element_realtime) {
@@ -195,8 +191,8 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
             }
             return FilterResult::kSkip;
         };
-
-        log_buffer_->FlushTo(socket_log_writer.get(), sequence, nullptr, log_find_start);
+        auto flush_to_state = log_buffer_->CreateFlushToState(sequence, logMask);
+        log_buffer_->FlushTo(socket_log_writer.get(), *flush_to_state, log_find_start);
 
         if (!start_time_set) {
             if (nonBlock) {
