@@ -678,9 +678,12 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // Reap subcontext pids.
     ReapAnyOutstandingChildren();
 
-    // 3. send volume shutdown to vold
+    // 3. send volume abort_fuse and volume shutdown to vold
     Service* vold_service = ServiceList::GetInstance().FindService("vold");
     if (vold_service != nullptr && vold_service->IsRunning()) {
+        // Manually abort FUSE connections, since the FUSE daemon is already dead
+        // at this point, and unmounting it might hang.
+        CallVdc("volume", "abort_fuse");
         CallVdc("volume", "shutdown");
         vold_service->Stop();
     } else {
