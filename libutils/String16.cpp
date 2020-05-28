@@ -402,7 +402,7 @@ status_t String16::remove(size_t len, size_t begin)
         mString = getEmptyString();
         return NO_ERROR;
     }
-    if ((begin+len) > N) len = N-begin;
+    if (len > N || len > N - begin) len = N - begin;
     if (begin == 0 && len == N) {
         return NO_ERROR;
     }
