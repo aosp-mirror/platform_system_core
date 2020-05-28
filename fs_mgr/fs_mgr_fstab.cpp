@@ -403,16 +403,17 @@ std::string ReadFstabFromDt() {
     return fstab_result;
 }
 
-// Identify path to fstab file. Lookup is based on pattern fstab.<hardware>,
-// fstab.<hardware.platform> in folders /odm/etc, vendor/etc, or /.
+// Identify path to fstab file. Lookup is based on pattern
+// fstab.<fstab_suffix>, fstab.<hardware>, fstab.<hardware.platform> in
+// folders /odm/etc, vendor/etc, or /.
 std::string GetFstabPath() {
-    for (const char* prop : {"hardware", "hardware.platform"}) {
-        std::string hw;
+    for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
+        std::string suffix;
 
-        if (!fs_mgr_get_boot_config(prop, &hw)) continue;
+        if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
 
         for (const char* prefix : {"/odm/etc/fstab.", "/vendor/etc/fstab.", "/fstab."}) {
-            std::string fstab_path = prefix + hw;
+            std::string fstab_path = prefix + suffix;
             if (access(fstab_path.c_str(), F_OK) == 0) {
                 return fstab_path;
             }
