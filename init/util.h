@@ -22,6 +22,7 @@
 #include <chrono>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include <android-base/chrono_utils.h>
 
@@ -32,6 +33,12 @@ using android::base::boot_clock;
 
 namespace android {
 namespace init {
+
+enum mount_mode {
+    MOUNT_MODE_DEFAULT = 0,
+    MOUNT_MODE_EARLY = 1,
+    MOUNT_MODE_LATE = 2,
+};
 
 static const char kColdBootDoneProp[] = "ro.cold_boot_done";
 
@@ -73,8 +80,19 @@ struct MkdirOptions {
 
 Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args);
 
+struct MountAllOptions {
+    std::vector<std::string> rc_paths;
+    std::string fstab_path;
+    mount_mode mode;
+    bool import_rc;
+};
+
+Result<MountAllOptions> ParseMountAll(const std::vector<std::string>& args);
+
 Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
         const std::vector<std::string>& args);
+
+Result<std::string> ParseUmountAll(const std::vector<std::string>& args);
 
 void SetStdioToDevNull(char** argv);
 void InitKernelLogging(char** argv);

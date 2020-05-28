@@ -572,6 +572,48 @@ Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args) {
     return MkdirOptions{args[1], mode, *uid, *gid, fscrypt_action, ref_option};
 }
 
+Result<MountAllOptions> ParseMountAll(const std::vector<std::string>& args) {
+    bool compat_mode = false;
+    bool import_rc = false;
+    if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
+        if (args.size() <= 1) {
+            return Error() << "mount_all requires at least 1 argument";
+        }
+        compat_mode = true;
+        import_rc = true;
+    }
+
+    std::size_t first_option_arg = args.size();
+    enum mount_mode mode = MOUNT_MODE_DEFAULT;
+
+    // If we are <= Q, then stop looking for non-fstab arguments at slot 2.
+    // Otherwise, stop looking at slot 1 (as the fstab path argument is optional >= R).
+    for (std::size_t na = args.size() - 1; na > (compat_mode ? 1 : 0); --na) {
+        if (args[na] == "--early") {
+            first_option_arg = na;
+            mode = MOUNT_MODE_EARLY;
+        } else if (args[na] == "--late") {
+            first_option_arg = na;
+            mode = MOUNT_MODE_LATE;
+            import_rc = false;
+        }
+    }
+
+    std::string fstab_path;
+    if (first_option_arg > 1) {
+        fstab_path = args[1];
+    } else if (compat_mode) {
+        return Error() << "mount_all argument 1 must be the fstab path";
+    }
+
+    std::vector<std::string> rc_paths;
+    for (std::size_t na = 2; na < first_option_arg; ++na) {
+        rc_paths.push_back(args[na]);
+    }
+
+    return MountAllOptions{rc_paths, fstab_path, mode, import_rc};
+}
+
 Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
         const std::vector<std::string>& args) {
     struct flag_type {
@@ -610,6 +652,15 @@ Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
         }
     }
     return std::pair(flag, paths);
+}
+
+Result<std::string> ParseUmountAll(const std::vector<std::string>& args) {
+    if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
+        if (args.size() <= 1) {
+            return Error() << "umount_all requires at least 1 argument";
+        }
+    }
+    return args[1];
 }
 
 static void InitAborter(const char* abort_message) {
