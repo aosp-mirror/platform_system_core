@@ -123,6 +123,14 @@ Result<void> check_loglevel(const BuiltinArguments& args) {
     return {};
 }
 
+Result<void> check_mount_all(const BuiltinArguments& args) {
+    auto options = ParseMountAll(args.args);
+    if (!options.ok()) {
+        return options.error();
+    }
+    return {};
+}
+
 Result<void> check_mkdir(const BuiltinArguments& args) {
     auto options = ParseMkdir(args.args);
     if (!options.ok()) {
@@ -200,6 +208,14 @@ Result<void> check_sysclktz(const BuiltinArguments& args) {
     struct timezone tz = {};
     if (!android::base::ParseInt(args[1], &tz.tz_minuteswest)) {
         return Error() << "Unable to parse mins_west_of_gmt";
+    }
+    return {};
+}
+
+Result<void> check_umount_all(const BuiltinArguments& args) {
+    auto options = ParseUmountAll(args.args);
+    if (!options.ok()) {
+        return options.error();
     }
     return {};
 }
