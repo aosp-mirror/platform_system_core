@@ -567,7 +567,6 @@ cc_library {
 cc_binary {
     name: "adbd",
     defaults: ["adbd_defaults", "host_adbd_supported", "libadbd_binary_dependencies"],
-    stl: "libc++_static",
     recovery_available: true,
     apex_available: ["com.android.adbd"],
 
