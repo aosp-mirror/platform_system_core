@@ -30,7 +30,6 @@
 #include <sysutils/SocketClient.h>
 
 #include "LogBuffer.h"
-#include "LogBufferElement.h"
 #include "LogWriter.h"
 
 class LogReaderList;
@@ -63,8 +62,10 @@ class LogReaderThread {
   private:
     void ThreadFunction();
     // flushTo filter callbacks
-    FlushToResult FilterFirstPass(const LogBufferElement* element);
-    FlushToResult FilterSecondPass(const LogBufferElement* element);
+    FilterResult FilterFirstPass(log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime,
+                                 uint16_t dropped_count);
+    FilterResult FilterSecondPass(log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime,
+                                  uint16_t dropped_count);
 
     std::condition_variable thread_triggered_condition_;
     LogBuffer* log_buffer_;
