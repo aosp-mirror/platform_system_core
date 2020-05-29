@@ -119,8 +119,12 @@ class ChattyFlushToState : public FlushToState {
 
     pid_t* last_tid() { return last_tid_; }
 
+    bool drop_chatty_messages() const { return drop_chatty_messages_; }
+    void set_drop_chatty_messages(bool value) { drop_chatty_messages_ = value; }
+
   private:
     pid_t last_tid_[LOG_ID_MAX] = {};
+    bool drop_chatty_messages_ = true;
 };
 
 std::unique_ptr<FlushToState> SimpleLogBuffer::CreateFlushToState(uint64_t start,
@@ -131,7 +135,7 @@ std::unique_ptr<FlushToState> SimpleLogBuffer::CreateFlushToState(uint64_t start
 bool SimpleLogBuffer::FlushTo(
         LogWriter* writer, FlushToState& abstract_state,
         const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
-                                         log_time realtime, uint16_t dropped_count)>& filter) {
+                                         log_time realtime)>& filter) {
     auto shared_lock = SharedLock{lock_};
 
     auto& state = reinterpret_cast<ChattyFlushToState&>(abstract_state);
@@ -169,14 +173,24 @@ bool SimpleLogBuffer::FlushTo(
         }
 
         if (filter) {
-            FilterResult ret = filter(element.log_id(), element.pid(), element.sequence(),
-                                      element.realtime(), element.dropped_count());
+            FilterResult ret =
+                    filter(element.log_id(), element.pid(), element.sequence(), element.realtime());
             if (ret == FilterResult::kSkip) {
                 continue;
             }
             if (ret == FilterResult::kStop) {
                 break;
             }
+        }
+
+        // drop_chatty_messages is initialized to true, so if the first message that we attempt to
+        // flush is a chatty message, we drop it.  Once we see a non-chatty message it gets set to
+        // false to let further chatty messages be printed.
+        if (state.drop_chatty_messages()) {
+            if (element.dropped_count() != 0) {
+                continue;
+            }
+            state.set_drop_chatty_messages(false);
         }
 
         bool same_tid = state.last_tid()[element.log_id()] == element.tid();
