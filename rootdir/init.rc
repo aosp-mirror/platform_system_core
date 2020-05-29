@@ -177,6 +177,9 @@ on init
     mount binder binder /dev/binderfs stats=global
     chmod 0755 /dev/binderfs
 
+    # Mount fusectl
+    mount fusectl none /sys/fs/fuse/connections
+
     symlink /dev/binderfs/binder /dev/binder
     symlink /dev/binderfs/hwbinder /dev/hwbinder
     symlink /dev/binderfs/vndbinder /dev/vndbinder
