@@ -164,10 +164,6 @@ bool SimpleLogBuffer::FlushTo(
             continue;
         }
 
-        if (!writer->can_read_security_logs() && element.getLogId() == LOG_ID_SECURITY) {
-            continue;
-        }
-
         if (((1 << element.getLogId()) & state.log_mask()) == 0) {
             continue;
         }

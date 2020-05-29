@@ -45,11 +45,8 @@ static std::string SocketClientToName(SocketClient* client) {
 
 class SocketLogWriter : public LogWriter {
   public:
-    SocketLogWriter(LogReader* reader, SocketClient* client, bool privileged,
-                    bool can_read_security_logs)
-        : LogWriter(client->getUid(), privileged, can_read_security_logs),
-          reader_(reader),
-          client_(client) {}
+    SocketLogWriter(LogReader* reader, SocketClient* client, bool privileged)
+        : LogWriter(client->getUid(), privileged), reader_(reader), client_(client) {}
 
     bool Write(const logger_entry& entry, const char* msg) override {
         struct iovec iovec[2];
@@ -162,9 +159,11 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
 
     bool privileged = clientHasLogCredentials(cli);
     bool can_read_security = CanReadSecurityLogs(cli);
+    if (!can_read_security) {
+        logMask &= ~(1 << LOG_ID_SECURITY);
+    }
 
-    std::unique_ptr<LogWriter> socket_log_writer(
-            new SocketLogWriter(this, cli, privileged, can_read_security));
+    std::unique_ptr<LogWriter> socket_log_writer(new SocketLogWriter(this, cli, privileged));
 
     uint64_t sequence = 1;
     // Convert realtime to sequence number
