@@ -140,4 +140,7 @@ message SnapshotMergeReport {
     // Number of reboots that occurred after issuing and before completeing the
     // merge of all the snapshot devices.
     int32 resume_count = 2;
+
+    // Total size of all the COW images before the update.
+    uint64 cow_file_size = 4;
 }
