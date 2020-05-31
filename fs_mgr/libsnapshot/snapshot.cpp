@@ -555,7 +555,7 @@ bool SnapshotManager::DeleteSnapshot(LockedFile* lock, const std::string& name) 
     return true;
 }
 
-bool SnapshotManager::InitiateMerge() {
+bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
     auto lock = LockExclusive();
     if (!lock) return false;
 
@@ -618,6 +618,7 @@ bool SnapshotManager::InitiateMerge() {
         }
     }
 
+    uint64_t total_cow_file_size = 0;
     DmTargetSnapshot::Status initial_target_values = {};
     for (const auto& snapshot : snapshots) {
         DmTargetSnapshot::Status current_status;
@@ -627,6 +628,16 @@ bool SnapshotManager::InitiateMerge() {
         initial_target_values.sectors_allocated += current_status.sectors_allocated;
         initial_target_values.total_sectors += current_status.total_sectors;
         initial_target_values.metadata_sectors += current_status.metadata_sectors;
+
+        SnapshotStatus snapshot_status;
+        if (!ReadSnapshotStatus(lock.get(), snapshot, &snapshot_status)) {
+            return false;
+        }
+        total_cow_file_size += snapshot_status.cow_file_size();
+    }
+
+    if (cow_file_size) {
+        *cow_file_size = total_cow_file_size;
     }
 
     SnapshotUpdateStatus initial_status;
