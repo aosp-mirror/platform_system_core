@@ -88,6 +88,15 @@ void SnapshotMergeStats::set_state(android::snapshot::UpdateState state) {
     report_.set_state(state);
 }
 
+void SnapshotMergeStats::set_cow_file_size(uint64_t cow_file_size) {
+    report_.set_cow_file_size(cow_file_size);
+    WriteState();
+}
+
+uint64_t SnapshotMergeStats::cow_file_size() {
+    return report_.cow_file_size();
+}
+
 class SnapshotMergeStatsResultImpl : public SnapshotMergeStats::Result {
   public:
     SnapshotMergeStatsResultImpl(const SnapshotMergeReport& report,
