@@ -124,7 +124,7 @@ class ISnapshotManager {
 
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
-    virtual bool InitiateMerge() = 0;
+    virtual bool InitiateMerge(uint64_t* cow_file_size = nullptr) = 0;
 
     // Perform any necessary post-boot actions. This should be run soon after
     // /data is mounted.
@@ -281,7 +281,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool BeginUpdate() override;
     bool CancelUpdate() override;
     bool FinishedSnapshotWrites(bool wipe) override;
-    bool InitiateMerge() override;
+    bool InitiateMerge(uint64_t* cow_file_size = nullptr) override;
     UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                    const std::function<bool()>& before_cancel = {}) override;
     UpdateState GetUpdateState(double* progress = nullptr) override;
