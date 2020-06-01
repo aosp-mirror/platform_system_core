@@ -126,7 +126,9 @@ uint64_t SimpleLogBuffer::FlushTo(
         for (it = logs_.end(); it != logs_.begin();
              /* do nothing */) {
             --it;
-            if (it->getSequence() <= start) {
+            if (it->getSequence() == start) {
+                break;
+            } else if (it->getSequence() < start) {
                 it++;
                 break;
             }
