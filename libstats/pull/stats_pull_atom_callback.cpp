@@ -131,7 +131,11 @@ class StatsPullAtomCallbackInternal : public BnPullAtomCallback {
             parcels.push_back(std::move(p));
         }
 
-        resultReceiver->pullFinished(atomTag, success, parcels);
+        Status status = resultReceiver->pullFinished(atomTag, success, parcels);
+        if (!status.isOk()) {
+            std::vector<StatsEventParcel> emptyParcels;
+            resultReceiver->pullFinished(atomTag, /*success=*/false, emptyParcels);
+        }
         for (int i = 0; i < statsEventList.data.size(); i++) {
             AStatsEvent_release(statsEventList.data[i]);
         }
