@@ -38,6 +38,9 @@ using android::base::unique_fd;
 namespace {
 
 std::string GetPartitionAbsolutePath(const std::string& path) {
+#if !defined(__ANDROID__)
+    return path;
+#else
     if (android::base::StartsWith(path, "/")) {
         return path;
     }
@@ -56,6 +59,7 @@ std::string GetPartitionAbsolutePath(const std::string& path) {
         }
     }
     return by_name;
+#endif
 }
 
 bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device_info) {
