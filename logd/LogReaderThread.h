@@ -64,10 +64,8 @@ class LogReaderThread {
   private:
     void ThreadFunction();
     // flushTo filter callbacks
-    FilterResult FilterFirstPass(log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime,
-                                 uint16_t dropped_count);
-    FilterResult FilterSecondPass(log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime,
-                                  uint16_t dropped_count);
+    FilterResult FilterFirstPass(log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime);
+    FilterResult FilterSecondPass(log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime);
 
     std::condition_variable thread_triggered_condition_;
     LogBuffer* log_buffer_;
@@ -76,9 +74,6 @@ class LogReaderThread {
 
     // Set to true to cause the thread to end and the LogReaderThread to delete itself.
     bool release_ = false;
-    // Indicates whether or not 'leading' (first logs seen starting from start_) 'dropped' (chatty)
-    // messages should be ignored.
-    bool leading_dropped_;
 
     // If set to non-zero, only pids equal to this are read by the reader.
     const pid_t pid_;
