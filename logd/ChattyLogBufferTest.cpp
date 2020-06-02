@@ -61,7 +61,8 @@ TEST_P(ChattyLogBufferTest, deduplication_simple) {
 
     std::vector<LogMessage> read_log_messages;
     std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
+    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
+    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
 
     std::vector<LogMessage> expected_log_messages = {
             make_message(0, "test_tag", "duplicate"),
@@ -72,12 +73,12 @@ TEST_P(ChattyLogBufferTest, deduplication_simple) {
             make_message(5, "test_tag", "not_same"),
             // 3 duplicate logs together print the first, a 1 count chatty message, then the last.
             make_message(6, "test_tag", "duplicate"),
-            make_message(7, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ expire 1 line", true),
+            make_message(7, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ identical 1 line", true),
             make_message(8, "test_tag", "duplicate"),
             make_message(9, "test_tag", "not_same"),
             // 6 duplicate logs together print the first, a 4 count chatty message, then the last.
             make_message(10, "test_tag", "duplicate"),
-            make_message(14, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ expire 4 lines", true),
+            make_message(14, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ identical 4 lines", true),
             make_message(15, "test_tag", "duplicate"),
             make_message(16, "test_tag", "not_same"),
             // duplicate logs > 1 minute apart are not deduplicated.
@@ -117,15 +118,16 @@ TEST_P(ChattyLogBufferTest, deduplication_overflow) {
 
     std::vector<LogMessage> read_log_messages;
     std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
+    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
+    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
 
     std::vector<LogMessage> expected_log_messages = {
             make_message(0, "test_tag", "normal"),
             make_message(1, "test_tag", "duplicate"),
             make_message(expired_per_chatty_message + 1, "chatty",
-                         "uid=0\\([^\\)]+\\) [^ ]+ expire 65535 lines", true),
+                         "uid=0\\([^\\)]+\\) [^ ]+ identical 65535 lines", true),
             make_message(expired_per_chatty_message + 2, "chatty",
-                         "uid=0\\([^\\)]+\\) [^ ]+ expire 1 line", true),
+                         "uid=0\\([^\\)]+\\) [^ ]+ identical 1 line", true),
             make_message(expired_per_chatty_message + 3, "test_tag", "duplicate"),
             make_message(expired_per_chatty_message + 4, "test_tag", "normal"),
     };
@@ -172,7 +174,8 @@ TEST_P(ChattyLogBufferTest, deduplication_liblog) {
 
     std::vector<LogMessage> read_log_messages;
     std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
+    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
+    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
 
     std::vector<LogMessage> expected_log_messages = {
             make_message(0, 1234, 1),

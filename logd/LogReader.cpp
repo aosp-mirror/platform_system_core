@@ -45,11 +45,8 @@ static std::string SocketClientToName(SocketClient* client) {
 
 class SocketLogWriter : public LogWriter {
   public:
-    SocketLogWriter(LogReader* reader, SocketClient* client, bool privileged,
-                    bool can_read_security_logs)
-        : LogWriter(client->getUid(), privileged, can_read_security_logs),
-          reader_(reader),
-          client_(client) {}
+    SocketLogWriter(LogReader* reader, SocketClient* client, bool privileged)
+        : LogWriter(client->getUid(), privileged), reader_(reader), client_(client) {}
 
     bool Write(const logger_entry& entry, const char* msg) override {
         struct iovec iovec[2];
@@ -162,23 +159,21 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
 
     bool privileged = clientHasLogCredentials(cli);
     bool can_read_security = CanReadSecurityLogs(cli);
+    if (!can_read_security) {
+        logMask &= ~(1 << LOG_ID_SECURITY);
+    }
 
-    std::unique_ptr<LogWriter> socket_log_writer(
-            new SocketLogWriter(this, cli, privileged, can_read_security));
+    std::unique_ptr<LogWriter> socket_log_writer(new SocketLogWriter(this, cli, privileged));
 
     uint64_t sequence = 1;
     // Convert realtime to sequence number
     if (start != log_time::EPOCH) {
         bool start_time_set = false;
         uint64_t last = sequence;
-        auto log_find_start = [pid, logMask, start, &sequence, &start_time_set, &last](
-                                      log_id_t element_log_id, pid_t element_pid,
-                                      uint64_t element_sequence, log_time element_realtime,
-                                      uint16_t) -> FilterResult {
+        auto log_find_start = [pid, start, &sequence, &start_time_set, &last](
+                                      log_id_t, pid_t element_pid, uint64_t element_sequence,
+                                      log_time element_realtime, uint16_t) -> FilterResult {
             if (pid && pid != element_pid) {
-                return FilterResult::kSkip;
-            }
-            if ((logMask & (1 << element_log_id)) == 0) {
                 return FilterResult::kSkip;
             }
             if (start == element_realtime) {
@@ -195,8 +190,8 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
             }
             return FilterResult::kSkip;
         };
-
-        log_buffer_->FlushTo(socket_log_writer.get(), sequence, nullptr, log_find_start);
+        auto flush_to_state = log_buffer_->CreateFlushToState(sequence, logMask);
+        log_buffer_->FlushTo(socket_log_writer.get(), *flush_to_state, log_find_start);
 
         if (!start_time_set) {
             if (nonBlock) {
