@@ -44,7 +44,7 @@ std::list<LogBufferElement>::iterator SimpleLogBuffer::GetOldest(log_id_t log_id
     if (oldest_[log_id]) {
         it = *oldest_[log_id];
     }
-    while (it != logs().end() && it->getLogId() != log_id) {
+    while (it != logs().end() && it->log_id() != log_id) {
         it++;
     }
     if (it != logs().end()) {
@@ -102,10 +102,10 @@ int SimpleLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
 }
 
 void SimpleLogBuffer::LogInternal(LogBufferElement&& elem) {
-    log_id_t log_id = elem.getLogId();
+    log_id_t log_id = elem.log_id();
 
     logs_.emplace_back(std::move(elem));
-    stats_->Add(&logs_.back());
+    stats_->Add(logs_.back());
     MaybePrune(log_id);
     reader_list_->NotifyNewLog(1 << log_id);
 }
@@ -146,9 +146,9 @@ bool SimpleLogBuffer::FlushTo(
         for (it = logs_.end(); it != logs_.begin();
              /* do nothing */) {
             --it;
-            if (it->getSequence() == state.start()) {
+            if (it->sequence() == state.start()) {
                 break;
-            } else if (it->getSequence() < state.start()) {
+            } else if (it->sequence() < state.start()) {
                 it++;
                 break;
             }
@@ -158,19 +158,19 @@ bool SimpleLogBuffer::FlushTo(
     for (; it != logs_.end(); ++it) {
         LogBufferElement& element = *it;
 
-        state.set_start(element.getSequence());
+        state.set_start(element.sequence());
 
-        if (!writer->privileged() && element.getUid() != writer->uid()) {
+        if (!writer->privileged() && element.uid() != writer->uid()) {
             continue;
         }
 
-        if (((1 << element.getLogId()) & state.log_mask()) == 0) {
+        if (((1 << element.log_id()) & state.log_mask()) == 0) {
             continue;
         }
 
         if (filter) {
-            FilterResult ret = filter(element.getLogId(), element.getPid(), element.getSequence(),
-                                      element.getRealTime(), element.getDropped());
+            FilterResult ret = filter(element.log_id(), element.pid(), element.sequence(),
+                                      element.realtime(), element.dropped_count());
             if (ret == FilterResult::kSkip) {
                 continue;
             }
@@ -179,12 +179,12 @@ bool SimpleLogBuffer::FlushTo(
             }
         }
 
-        bool same_tid = state.last_tid()[element.getLogId()] == element.getTid();
+        bool same_tid = state.last_tid()[element.log_id()] == element.tid();
         // Dropped (chatty) immediately following a valid log from the same source in the same log
         // buffer indicates we have a multiple identical squash.  chatty that differs source is due
         // to spam filter.  chatty to chatty of different source is also due to spam filter.
-        state.last_tid()[element.getLogId()] =
-                (element.getDropped() && !same_tid) ? 0 : element.getTid();
+        state.last_tid()[element.log_id()] =
+                (element.dropped_count() && !same_tid) ? 0 : element.tid();
 
         shared_lock.unlock();
         // We never prune logs equal to or newer than any LogReaderThreads' `start` value, so the
@@ -288,22 +288,22 @@ bool SimpleLogBuffer::Prune(log_id_t id, unsigned long prune_rows, uid_t caller_
     while (it != logs_.end()) {
         LogBufferElement& element = *it;
 
-        if (element.getLogId() != id) {
+        if (element.log_id() != id) {
             ++it;
             continue;
         }
 
-        if (caller_uid != 0 && element.getUid() != caller_uid) {
+        if (caller_uid != 0 && element.uid() != caller_uid) {
             ++it;
             continue;
         }
 
-        if (oldest && oldest->start() <= element.getSequence()) {
+        if (oldest && oldest->start() <= element.sequence()) {
             KickReader(oldest, id, prune_rows);
             return true;
         }
 
-        stats_->Subtract(&element);
+        stats_->Subtract(element);
         it = Erase(it);
         if (--prune_rows == 0) {
             return false;
