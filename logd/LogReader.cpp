@@ -172,7 +172,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         uint64_t last = sequence;
         auto log_find_start = [pid, start, &sequence, &start_time_set, &last](
                                       log_id_t, pid_t element_pid, uint64_t element_sequence,
-                                      log_time element_realtime, uint16_t) -> FilterResult {
+                                      log_time element_realtime) -> FilterResult {
             if (pid && pid != element_pid) {
                 return FilterResult::kSkip;
             }
