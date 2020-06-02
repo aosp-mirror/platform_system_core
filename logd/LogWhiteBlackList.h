@@ -43,9 +43,7 @@ class Prune {
         return mPid;
     }
 
-    int cmp(LogBufferElement* e) const {
-        return cmp(e->getUid(), e->getPid());
-    }
+    int cmp(LogBufferElement* e) const { return cmp(e->uid(), e->pid()); }
 
     std::string format();
 };

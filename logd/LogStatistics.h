@@ -65,7 +65,7 @@ class LogHashtable {
     static const size_t unordered_map_per_entry_overhead = sizeof(void*);
     static const size_t unordered_map_bucket_overhead = sizeof(void*);
 
-   public:
+  public:
     size_t size() const {
         return map.size();
     }
@@ -90,10 +90,10 @@ class LogHashtable {
         for (const_iterator it = map.begin(); it != map.end(); ++it) {
             const TEntry& entry = it->second;
 
-            if ((uid != AID_ROOT) && (uid != entry.getUid())) {
+            if (uid != AID_ROOT && uid != entry.uid()) {
                 continue;
             }
-            if (pid && entry.getPid() && (pid != entry.getPid())) {
+            if (pid && entry.pid() && pid != entry.pid()) {
                 continue;
             }
 
@@ -113,95 +113,67 @@ class LogHashtable {
         }
     }
 
-    inline iterator add(const TKey& key, const LogBufferElement* element) {
+    iterator Add(const TKey& key, const LogBufferElement& element) {
         iterator it = map.find(key);
         if (it == map.end()) {
             it = map.insert(std::make_pair(key, TEntry(element))).first;
         } else {
-            it->second.add(element);
+            it->second.Add(element);
         }
         return it;
     }
 
-    inline iterator add(TKey key) {
+    iterator Add(const TKey& key) {
         iterator it = map.find(key);
         if (it == map.end()) {
             it = map.insert(std::make_pair(key, TEntry(key))).first;
         } else {
-            it->second.add(key);
+            it->second.Add(key);
         }
         return it;
     }
 
-    void subtract(TKey&& key, const LogBufferElement* element) {
-        iterator it = map.find(std::move(key));
-        if ((it != map.end()) && it->second.subtract(element)) {
-            map.erase(it);
-        }
-    }
-
-    void subtract(const TKey& key, const LogBufferElement* element) {
+    void Subtract(const TKey& key, const LogBufferElement& element) {
         iterator it = map.find(key);
-        if ((it != map.end()) && it->second.subtract(element)) {
+        if (it != map.end() && it->second.Subtract(element)) {
             map.erase(it);
         }
     }
 
-    inline void drop(TKey key, const LogBufferElement* element) {
+    void Drop(const TKey& key, const LogBufferElement& element) {
         iterator it = map.find(key);
         if (it != map.end()) {
-            it->second.drop(element);
+            it->second.Drop(element);
         }
     }
 
-    inline iterator begin() {
-        return map.begin();
-    }
-    inline const_iterator begin() const {
-        return map.begin();
-    }
-    inline iterator end() {
-        return map.end();
-    }
-    inline const_iterator end() const {
-        return map.end();
-    }
+    iterator begin() { return map.begin(); }
+    const_iterator begin() const { return map.begin(); }
+    iterator end() { return map.end(); }
+    const_iterator end() const { return map.end(); }
 };
 
-namespace EntryBaseConstants {
-static constexpr size_t pruned_len = 14;
-static constexpr size_t total_len = 80;
-}
+class EntryBase {
+  public:
+    EntryBase() : size_(0) {}
+    explicit EntryBase(const LogBufferElement& element) : size_(element.msg_len()) {}
 
-struct EntryBase {
-    size_t size;
+    size_t getSizes() const { return size_; }
 
-    EntryBase() : size(0) {
-    }
-    explicit EntryBase(const LogBufferElement* element)
-        : size(element->getMsgLen()) {
-    }
-
-    size_t getSizes() const {
-        return size;
+    void Add(const LogBufferElement& element) { size_ += element.msg_len(); }
+    bool Subtract(const LogBufferElement& element) {
+        size_ -= element.msg_len();
+        return !size_;
     }
 
-    inline void add(const LogBufferElement* element) {
-        size += element->getMsgLen();
-    }
-    inline bool subtract(const LogBufferElement* element) {
-        size -= element->getMsgLen();
-        return !size;
-    }
+    static constexpr size_t PRUNED_LEN = 14;
+    static constexpr size_t TOTAL_LEN = 80;
 
     static std::string formatLine(const std::string& name,
                                   const std::string& size,
                                   const std::string& pruned) {
-        ssize_t drop_len =
-            std::max(pruned.length() + 1, EntryBaseConstants::pruned_len);
-        ssize_t size_len =
-            std::max(size.length() + 1, EntryBaseConstants::total_len -
-                                            name.length() - drop_len - 1);
+        ssize_t drop_len = std::max(pruned.length() + 1, PRUNED_LEN);
+        ssize_t size_len = std::max(size.length() + 1, TOTAL_LEN - name.length() - drop_len - 1);
 
         std::string ret = android::base::StringPrintf(
             "%s%*s%*s", name.c_str(), (int)size_len, size.c_str(),
@@ -213,258 +185,220 @@ struct EntryBase {
         if (len) ret.erase(pos + 1, len);
         return ret + "\n";
     }
+
+  private:
+    size_t size_;
 };
 
-struct EntryBaseDropped : public EntryBase {
-    size_t dropped;
+class EntryBaseDropped : public EntryBase {
+  public:
+    EntryBaseDropped() : dropped_(0) {}
+    explicit EntryBaseDropped(const LogBufferElement& element)
+        : EntryBase(element), dropped_(element.dropped_count()) {}
 
-    EntryBaseDropped() : dropped(0) {
+    size_t dropped_count() const { return dropped_; }
+
+    void Add(const LogBufferElement& element) {
+        dropped_ += element.dropped_count();
+        EntryBase::Add(element);
     }
-    explicit EntryBaseDropped(const LogBufferElement* element)
-        : EntryBase(element), dropped(element->getDropped()) {
+    bool Subtract(const LogBufferElement& element) {
+        dropped_ -= element.dropped_count();
+        return EntryBase::Subtract(element) && !dropped_;
+    }
+    void Drop(const LogBufferElement& element) {
+        dropped_ += 1;
+        EntryBase::Subtract(element);
     }
 
-    size_t getDropped() const {
-        return dropped;
-    }
-
-    inline void add(const LogBufferElement* element) {
-        dropped += element->getDropped();
-        EntryBase::add(element);
-    }
-    inline bool subtract(const LogBufferElement* element) {
-        dropped -= element->getDropped();
-        return EntryBase::subtract(element) && !dropped;
-    }
-    inline void drop(const LogBufferElement* element) {
-        dropped += 1;
-        EntryBase::subtract(element);
-    }
+  private:
+    size_t dropped_;
 };
 
-struct UidEntry : public EntryBaseDropped {
-    const uid_t uid;
-    pid_t pid;
+class UidEntry : public EntryBaseDropped {
+  public:
+    explicit UidEntry(const LogBufferElement& element)
+        : EntryBaseDropped(element), uid_(element.uid()), pid_(element.pid()) {}
 
-    explicit UidEntry(const LogBufferElement* element)
-        : EntryBaseDropped(element),
-          uid(element->getUid()),
-          pid(element->getPid()) {
-    }
+    uid_t key() const { return uid_; }
+    uid_t uid() const { return key(); }
+    pid_t pid() const { return pid_; }
 
-    inline const uid_t& getKey() const {
-        return uid;
-    }
-    inline const uid_t& getUid() const {
-        return getKey();
-    }
-    inline const pid_t& getPid() const {
-        return pid;
-    }
-
-    inline void add(const LogBufferElement* element) {
-        if (pid != element->getPid()) {
-            pid = -1;
+    void Add(const LogBufferElement& element) {
+        if (pid_ != element.pid()) {
+            pid_ = -1;
         }
-        EntryBaseDropped::add(element);
+        EntryBaseDropped::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
     std::string format(const LogStatistics& stat, log_id_t id) const;
+
+  private:
+    const uid_t uid_;
+    pid_t pid_;
 };
 
 namespace android {
 uid_t pidToUid(pid_t pid);
 }
 
-struct PidEntry : public EntryBaseDropped {
-    const pid_t pid;
-    uid_t uid;
-    char* name;
-
+class PidEntry : public EntryBaseDropped {
+  public:
     explicit PidEntry(pid_t pid)
         : EntryBaseDropped(),
-          pid(pid),
-          uid(android::pidToUid(pid)),
-          name(android::pidToName(pid)) {
-    }
-    explicit PidEntry(const LogBufferElement* element)
+          pid_(pid),
+          uid_(android::pidToUid(pid)),
+          name_(android::pidToName(pid)) {}
+    explicit PidEntry(const LogBufferElement& element)
         : EntryBaseDropped(element),
-          pid(element->getPid()),
-          uid(element->getUid()),
-          name(android::pidToName(pid)) {
-    }
+          pid_(element.pid()),
+          uid_(element.uid()),
+          name_(android::pidToName(pid_)) {}
     PidEntry(const PidEntry& element)
         : EntryBaseDropped(element),
-          pid(element.pid),
-          uid(element.uid),
-          name(element.name ? strdup(element.name) : nullptr) {
-    }
-    ~PidEntry() {
-        free(name);
-    }
+          pid_(element.pid_),
+          uid_(element.uid_),
+          name_(element.name_ ? strdup(element.name_) : nullptr) {}
+    ~PidEntry() { free(name_); }
 
-    const pid_t& getKey() const {
-        return pid;
-    }
-    const pid_t& getPid() const {
-        return getKey();
-    }
-    const uid_t& getUid() const {
-        return uid;
-    }
-    const char* getName() const {
-        return name;
-    }
+    pid_t key() const { return pid_; }
+    pid_t pid() const { return key(); }
+    uid_t uid() const { return uid_; }
+    const char* name() const { return name_; }
 
-    inline void add(pid_t newPid) {
-        if (name && !fastcmp<strncmp>(name, "zygote", 6)) {
-            free(name);
-            name = nullptr;
+    void Add(pid_t new_pid) {
+        if (name_ && !fastcmp<strncmp>(name_, "zygote", 6)) {
+            free(name_);
+            name_ = nullptr;
         }
-        if (!name) {
-            name = android::pidToName(newPid);
+        if (!name_) {
+            name_ = android::pidToName(new_pid);
         }
     }
 
-    inline void add(const LogBufferElement* element) {
-        uid_t incomingUid = element->getUid();
-        if (getUid() != incomingUid) {
-            uid = incomingUid;
-            free(name);
-            name = android::pidToName(element->getPid());
+    void Add(const LogBufferElement& element) {
+        uid_t incoming_uid = element.uid();
+        if (uid() != incoming_uid) {
+            uid_ = incoming_uid;
+            free(name_);
+            name_ = android::pidToName(element.pid());
         } else {
-            add(element->getPid());
+            Add(element.pid());
         }
-        EntryBaseDropped::add(element);
+        EntryBaseDropped::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
     std::string format(const LogStatistics& stat, log_id_t id) const;
+
+  private:
+    const pid_t pid_;
+    uid_t uid_;
+    char* name_;
 };
 
-struct TidEntry : public EntryBaseDropped {
-    const pid_t tid;
-    pid_t pid;
-    uid_t uid;
-    char* name;
-
+class TidEntry : public EntryBaseDropped {
+  public:
     TidEntry(pid_t tid, pid_t pid)
         : EntryBaseDropped(),
-          tid(tid),
-          pid(pid),
-          uid(android::pidToUid(tid)),
-          name(android::tidToName(tid)) {
-    }
-    explicit TidEntry(const LogBufferElement* element)
+          tid_(tid),
+          pid_(pid),
+          uid_(android::pidToUid(tid)),
+          name_(android::tidToName(tid)) {}
+    explicit TidEntry(const LogBufferElement& element)
         : EntryBaseDropped(element),
-          tid(element->getTid()),
-          pid(element->getPid()),
-          uid(element->getUid()),
-          name(android::tidToName(tid)) {
-    }
+          tid_(element.tid()),
+          pid_(element.pid()),
+          uid_(element.uid()),
+          name_(android::tidToName(tid_)) {}
     TidEntry(const TidEntry& element)
         : EntryBaseDropped(element),
-          tid(element.tid),
-          pid(element.pid),
-          uid(element.uid),
-          name(element.name ? strdup(element.name) : nullptr) {
-    }
-    ~TidEntry() {
-        free(name);
-    }
+          tid_(element.tid_),
+          pid_(element.pid_),
+          uid_(element.uid_),
+          name_(element.name_ ? strdup(element.name_) : nullptr) {}
+    ~TidEntry() { free(name_); }
 
-    const pid_t& getKey() const {
-        return tid;
-    }
-    const pid_t& getTid() const {
-        return getKey();
-    }
-    const pid_t& getPid() const {
-        return pid;
-    }
-    const uid_t& getUid() const {
-        return uid;
-    }
-    const char* getName() const {
-        return name;
-    }
+    pid_t key() const { return tid_; }
+    pid_t tid() const { return key(); }
+    pid_t pid() const { return pid_; }
+    uid_t uid() const { return uid_; }
+    const char* name() const { return name_; }
 
-    inline void add(pid_t incomingTid) {
-        if (name && !fastcmp<strncmp>(name, "zygote", 6)) {
-            free(name);
-            name = nullptr;
+    void Add(pid_t incomingTid) {
+        if (name_ && !fastcmp<strncmp>(name_, "zygote", 6)) {
+            free(name_);
+            name_ = nullptr;
         }
-        if (!name) {
-            name = android::tidToName(incomingTid);
+        if (!name_) {
+            name_ = android::tidToName(incomingTid);
         }
     }
 
-    inline void add(const LogBufferElement* element) {
-        uid_t incomingUid = element->getUid();
-        pid_t incomingPid = element->getPid();
-        if ((getUid() != incomingUid) || (getPid() != incomingPid)) {
-            uid = incomingUid;
-            pid = incomingPid;
-            free(name);
-            name = android::tidToName(element->getTid());
+    void Add(const LogBufferElement& element) {
+        uid_t incoming_uid = element.uid();
+        pid_t incoming_pid = element.pid();
+        if (uid() != incoming_uid || pid() != incoming_pid) {
+            uid_ = incoming_uid;
+            pid_ = incoming_pid;
+            free(name_);
+            name_ = android::tidToName(element.tid());
         } else {
-            add(element->getTid());
+            Add(element.tid());
         }
-        EntryBaseDropped::add(element);
+        EntryBaseDropped::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
     std::string format(const LogStatistics& stat, log_id_t id) const;
+
+  private:
+    const pid_t tid_;
+    pid_t pid_;
+    uid_t uid_;
+    char* name_;
 };
 
-struct TagEntry : public EntryBaseDropped {
-    const uint32_t tag;
-    pid_t pid;
-    uid_t uid;
-
-    explicit TagEntry(const LogBufferElement* element)
+class TagEntry : public EntryBaseDropped {
+  public:
+    explicit TagEntry(const LogBufferElement& element)
         : EntryBaseDropped(element),
-          tag(element->getTag()),
-          pid(element->getPid()),
-          uid(element->getUid()) {
-    }
+          tag_(element.GetTag()),
+          pid_(element.pid()),
+          uid_(element.uid()) {}
 
-    const uint32_t& getKey() const {
-        return tag;
-    }
-    const pid_t& getPid() const {
-        return pid;
-    }
-    const uid_t& getUid() const {
-        return uid;
-    }
-    const char* getName() const {
-        return android::tagToName(tag);
-    }
+    uint32_t key() const { return tag_; }
+    pid_t pid() const { return pid_; }
+    uid_t uid() const { return uid_; }
+    const char* name() const { return android::tagToName(tag_); }
 
-    inline void add(const LogBufferElement* element) {
-        if (uid != element->getUid()) {
-            uid = -1;
+    void Add(const LogBufferElement& element) {
+        if (uid_ != element.uid()) {
+            uid_ = -1;
         }
-        if (pid != element->getPid()) {
-            pid = -1;
+        if (pid_ != element.pid()) {
+            pid_ = -1;
         }
-        EntryBaseDropped::add(element);
+        EntryBaseDropped::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
     std::string format(const LogStatistics& stat, log_id_t id) const;
+
+  private:
+    const uint32_t tag_;
+    pid_t pid_;
+    uid_t uid_;
 };
 
 struct TagNameKey {
     std::string* alloc;
     std::string_view name;  // Saves space if const char*
 
-    explicit TagNameKey(const LogBufferElement* element)
-        : alloc(nullptr), name("", strlen("")) {
-        if (element->isBinary()) {
-            uint32_t tag = element->getTag();
+    explicit TagNameKey(const LogBufferElement& element) : alloc(nullptr), name("", strlen("")) {
+        if (element.IsBinary()) {
+            uint32_t tag = element.GetTag();
             if (tag) {
                 const char* cp = android::tagToName(tag);
                 if (cp) {
@@ -478,13 +412,13 @@ struct TagNameKey {
             name = std::string_view(alloc->c_str(), alloc->size());
             return;
         }
-        const char* msg = element->getMsg();
+        const char* msg = element.msg();
         if (!msg) {
             name = std::string_view("chatty", strlen("chatty"));
             return;
         }
         ++msg;
-        uint16_t len = element->getMsgLen();
+        uint16_t len = element.msg_len();
         len = (len <= 1) ? 0 : strnlen(msg, len - 1);
         if (!len) {
             name = std::string_view("<NULL>", strlen("<NULL>"));
@@ -544,54 +478,43 @@ struct std::hash<TagNameKey>
     }
 };
 
-struct TagNameEntry : public EntryBase {
-    pid_t tid;
-    pid_t pid;
-    uid_t uid;
-    TagNameKey name;
-
-    explicit TagNameEntry(const LogBufferElement* element)
+class TagNameEntry : public EntryBase {
+  public:
+    explicit TagNameEntry(const LogBufferElement& element)
         : EntryBase(element),
-          tid(element->getTid()),
-          pid(element->getPid()),
-          uid(element->getUid()),
-          name(element) {
-    }
+          tid_(element.tid()),
+          pid_(element.pid()),
+          uid_(element.uid()),
+          name_(element) {}
 
-    const TagNameKey& getKey() const {
-        return name;
-    }
-    const pid_t& getTid() const {
-        return tid;
-    }
-    const pid_t& getPid() const {
-        return pid;
-    }
-    const uid_t& getUid() const {
-        return uid;
-    }
-    const char* getName() const {
-        return name.data();
-    }
-    size_t getNameAllocLength() const {
-        return name.getAllocLength();
-    }
+    const TagNameKey& key() const { return name_; }
+    pid_t tid() const { return tid_; }
+    pid_t pid() const { return pid_; }
+    uid_t uid() const { return uid_; }
+    const char* name() const { return name_.data(); }
+    size_t getNameAllocLength() const { return name_.getAllocLength(); }
 
-    inline void add(const LogBufferElement* element) {
-        if (uid != element->getUid()) {
-            uid = -1;
+    void Add(const LogBufferElement& element) {
+        if (uid_ != element.uid()) {
+            uid_ = -1;
         }
-        if (pid != element->getPid()) {
-            pid = -1;
+        if (pid_ != element.pid()) {
+            pid_ = -1;
         }
-        if (tid != element->getTid()) {
-            tid = -1;
+        if (tid_ != element.tid()) {
+            tid_ = -1;
         }
-        EntryBase::add(element);
+        EntryBase::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
     std::string format(const LogStatistics& stat, log_id_t id) const;
+
+  private:
+    pid_t tid_;
+    pid_t pid_;
+    uid_t uid_;
+    TagNameKey name_;
 };
 
 // Log Statistics
@@ -645,11 +568,11 @@ class LogStatistics {
                       (pidTable.size() * sizeof(pidTable_t::iterator)) +
                       (tagTable.size() * sizeof(tagTable_t::iterator));
         for (auto it : pidTable) {
-            const char* name = it.second.getName();
+            const char* name = it.second.name();
             if (name) size += strlen(name) + 1;
         }
         for (auto it : tidTable) {
-            const char* name = it.second.getName();
+            const char* name = it.second.name();
             if (name) size += strlen(name) + 1;
         }
         for (auto it : tagNameTable) size += it.second.getNameAllocLength();
@@ -667,14 +590,14 @@ class LogStatistics {
     LogStatistics(bool enable_statistics);
 
     void AddTotal(log_id_t log_id, uint16_t size) EXCLUDES(lock_);
-    void Add(LogBufferElement* entry) EXCLUDES(lock_);
-    void Subtract(LogBufferElement* entry) EXCLUDES(lock_);
+    void Add(const LogBufferElement& entry) EXCLUDES(lock_);
+    void Subtract(const LogBufferElement& entry) EXCLUDES(lock_);
     // entry->setDropped(1) must follow this call
-    void Drop(LogBufferElement* entry) EXCLUDES(lock_);
+    void Drop(const LogBufferElement& entry) EXCLUDES(lock_);
     // Correct for coalescing two entries referencing dropped content
-    void Erase(LogBufferElement* element) EXCLUDES(lock_) {
+    void Erase(const LogBufferElement& element) EXCLUDES(lock_) {
         auto lock = std::lock_guard{lock_};
-        log_id_t log_id = element->getLogId();
+        log_id_t log_id = element.log_id();
         --mElements[log_id];
         --mDroppedElements[log_id];
     }
