@@ -25,6 +25,27 @@
 
 #include "LogWriter.h"
 
+// A mask to represent which log buffers a reader is watching, values are (1 << LOG_ID_MAIN), etc.
+using LogMask = uint32_t;
+constexpr uint32_t kLogMaskAll = 0xFFFFFFFF;
+
+// State that a LogBuffer may want to persist across calls to FlushTo().
+class FlushToState {
+  public:
+    FlushToState(uint64_t start, LogMask log_mask) : start_(start), log_mask_(log_mask) {}
+    virtual ~FlushToState() {}
+
+    uint64_t start() const { return start_; }
+    void set_start(uint64_t start) { start_ = start; }
+
+    LogMask log_mask() const { return log_mask_; }
+
+  private:
+    uint64_t start_;
+    LogMask log_mask_;
+};
+
+// Enum for the return values of the `filter` function passed to FlushTo().
 enum class FilterResult {
     kSkip,
     kStop,
@@ -39,15 +60,12 @@ class LogBuffer {
 
     virtual int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
                     const char* msg, uint16_t len) = 0;
-    // lastTid is an optional context to help detect if the last previous
-    // valid message was from the same source so we can differentiate chatty
-    // filter types (identical or expired)
-    static const uint64_t FLUSH_ERROR = 0;
-    virtual uint64_t FlushTo(LogWriter* writer, uint64_t start,
-                             pid_t* last_tid,  // nullable
-                             const std::function<FilterResult(log_id_t log_id, pid_t pid,
-                                                              uint64_t sequence, log_time realtime,
-                                                              uint16_t dropped_count)>& filter) = 0;
+
+    virtual std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask) = 0;
+    virtual bool FlushTo(LogWriter* writer, FlushToState& state,
+                         const std::function<FilterResult(log_id_t log_id, pid_t pid,
+                                                          uint64_t sequence, log_time realtime,
+                                                          uint16_t dropped_count)>& filter) = 0;
 
     virtual bool Clear(log_id_t id, uid_t uid) = 0;
     virtual unsigned long GetSize(log_id_t id) = 0;
