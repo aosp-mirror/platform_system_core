@@ -18,7 +18,7 @@
 
 // When we are notified a new log entry is available, inform
 // listening sockets who are watching this entry's log id.
-void LogReaderList::NotifyNewLog(unsigned int log_mask) const {
+void LogReaderList::NotifyNewLog(LogMask log_mask) const {
     auto lock = std::lock_guard{reader_threads_lock_};
 
     for (const auto& entry : reader_threads_) {
