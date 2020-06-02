@@ -35,10 +35,11 @@ class SimpleLogBuffer : public LogBuffer {
 
     int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
             uint16_t len) override;
-    uint64_t FlushTo(LogWriter* writer, uint64_t start, pid_t* lastTid,
-                     const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
-                                                      log_time realtime, uint16_t dropped_count)>&
-                             filter) override;
+    std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask) override;
+    bool FlushTo(LogWriter* writer, FlushToState& state,
+                 const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
+                                                  log_time realtime, uint16_t dropped_count)>&
+                         filter) override;
 
     bool Clear(log_id_t id, uid_t uid) override;
     unsigned long GetSize(log_id_t id) override;
