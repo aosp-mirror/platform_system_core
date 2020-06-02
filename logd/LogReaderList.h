@@ -20,11 +20,12 @@
 #include <memory>
 #include <mutex>
 
+#include "LogBuffer.h"
 #include "LogReaderThread.h"
 
 class LogReaderList {
   public:
-    void NotifyNewLog(unsigned int log_mask) const;
+    void NotifyNewLog(LogMask log_mask) const;
 
     std::list<std::unique_ptr<LogReaderThread>>& reader_threads() { return reader_threads_; }
     std::mutex& reader_threads_lock() { return reader_threads_lock_; }
