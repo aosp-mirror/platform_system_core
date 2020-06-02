@@ -24,7 +24,7 @@
 
 #include "LogWriter.h"
 
-class LogStatistics;
+#include "LogStatistics.h"
 
 #define EXPIRE_HOUR_THRESHOLD 24  // Only expire chatty UID logs to preserve
                                   // non-chatty UIDs less than this age in hours
@@ -40,12 +40,12 @@ class __attribute__((packed)) LogBufferElement {
     LogBufferElement(LogBufferElement&& elem);
     ~LogBufferElement();
 
-    bool IsBinary() const { return (log_id_ == LOG_ID_EVENTS) || (log_id_ == LOG_ID_SECURITY); }
-
     uint32_t GetTag() const;
     uint16_t SetDropped(uint16_t value);
 
     bool FlushTo(LogWriter* writer, LogStatistics* parent, bool lastSame);
+
+    LogStatisticsElement ToLogStatisticsElement() const;
 
     log_id_t log_id() const { return static_cast<log_id_t>(log_id_); }
     uid_t uid() const { return uid_; }
