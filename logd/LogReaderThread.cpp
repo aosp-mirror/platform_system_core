@@ -35,7 +35,6 @@ LogReaderThread::LogReaderThread(LogBuffer* log_buffer, LogReaderList* reader_li
     : log_buffer_(log_buffer),
       reader_list_(reader_list),
       writer_(std::move(writer)),
-      leading_dropped_(false),
       pid_(pid),
       tail_(tail),
       count_(0),
@@ -51,8 +50,6 @@ LogReaderThread::LogReaderThread(LogBuffer* log_buffer, LogReaderList* reader_li
 
 void LogReaderThread::ThreadFunction() {
     prctl(PR_SET_NAME, "logd.reader.per");
-
-    leading_dropped_ = true;
 
     auto lock = std::unique_lock{reader_list_->reader_threads_lock()};
 
@@ -72,21 +69,16 @@ void LogReaderThread::ThreadFunction() {
         if (tail_) {
             auto first_pass_state = log_buffer_->CreateFlushToState(flush_to_state_->start(),
                                                                     flush_to_state_->log_mask());
-            log_buffer_->FlushTo(writer_.get(), *first_pass_state,
-                                 [this](log_id_t log_id, pid_t pid, uint64_t sequence,
-                                        log_time realtime, uint16_t dropped_count) {
-                                     return FilterFirstPass(log_id, pid, sequence, realtime,
-                                                            dropped_count);
-                                 });
-            leading_dropped_ =
-                    true;  // TODO: Likely a bug, if leading_dropped_ was not true before calling
-                           // flushTo(), then it should not be reset to true after.
+            log_buffer_->FlushTo(
+                    writer_.get(), *first_pass_state,
+                    [this](log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime) {
+                        return FilterFirstPass(log_id, pid, sequence, realtime);
+                    });
         }
         bool flush_success = log_buffer_->FlushTo(
                 writer_.get(), *flush_to_state_,
-                [this](log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime,
-                       uint16_t dropped_count) {
-                    return FilterSecondPass(log_id, pid, sequence, realtime, dropped_count);
+                [this](log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime) {
+                    return FilterSecondPass(log_id, pid, sequence, realtime);
                 });
 
         // We only ignore entries before the original start time for the first flushTo(), if we
@@ -127,16 +119,8 @@ void LogReaderThread::ThreadFunction() {
 }
 
 // A first pass to count the number of elements
-FilterResult LogReaderThread::FilterFirstPass(log_id_t, pid_t pid, uint64_t, log_time realtime,
-                                              uint16_t dropped_count) {
+FilterResult LogReaderThread::FilterFirstPass(log_id_t, pid_t pid, uint64_t, log_time realtime) {
     auto lock = std::lock_guard{reader_list_->reader_threads_lock()};
-
-    if (leading_dropped_) {
-        if (dropped_count) {
-            return FilterResult::kSkip;
-        }
-        leading_dropped_ = false;
-    }
 
     if ((!pid_ || pid_ == pid) && (start_time_ == log_time::EPOCH || start_time_ <= realtime)) {
         ++count_;
@@ -147,19 +131,12 @@ FilterResult LogReaderThread::FilterFirstPass(log_id_t, pid_t pid, uint64_t, log
 
 // A second pass to send the selected elements
 FilterResult LogReaderThread::FilterSecondPass(log_id_t log_id, pid_t pid, uint64_t,
-                                               log_time realtime, uint16_t dropped_count) {
+                                               log_time realtime) {
     auto lock = std::lock_guard{reader_list_->reader_threads_lock()};
 
     if (skip_ahead_[log_id]) {
         skip_ahead_[log_id]--;
         return FilterResult::kSkip;
-    }
-
-    if (leading_dropped_) {
-        if (dropped_count) {
-            return FilterResult::kSkip;
-        }
-        leading_dropped_ = false;
     }
 
     // Truncate to close race between first and second pass

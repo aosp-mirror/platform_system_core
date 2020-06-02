@@ -119,7 +119,7 @@ static std::string CompareMessages(const std::string& expected, const std::strin
         }
     }
 
-    if (diff_index < 10) {
+    if (diff_index < 80) {
         auto expected_short = MakePrintable(expected);
         auto result_short = MakePrintable(result);
         return StringPrintf("msg: expected '%s' vs '%s'", expected_short.c_str(),
