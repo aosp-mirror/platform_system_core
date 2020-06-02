@@ -208,8 +208,9 @@ TEST_P(LogBufferTest, smoke) {
 
     std::vector<LogMessage> read_log_messages;
     std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    uint64_t flush_result = log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
-    EXPECT_EQ(1ULL, flush_result);
+    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
+    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
+    EXPECT_EQ(2ULL, flush_to_state->start());
     CompareLogMessages(log_messages, read_log_messages);
 }
 
@@ -333,6 +334,41 @@ TEST_P(LogBufferTest, random_messages) {
         EXPECT_EQ(0U, reader_list_.reader_threads().size());
     }
     CompareLogMessages(log_messages, read_log_messages);
+}
+
+TEST_P(LogBufferTest, read_last_sequence) {
+    std::vector<LogMessage> log_messages = {
+            {{.pid = 1, .tid = 2, .sec = 10000, .nsec = 20001, .lid = LOG_ID_MAIN, .uid = 0},
+             "first"},
+            {{.pid = 10, .tid = 2, .sec = 10000, .nsec = 20002, .lid = LOG_ID_MAIN, .uid = 0},
+             "second"},
+            {{.pid = 100, .tid = 2, .sec = 10000, .nsec = 20003, .lid = LOG_ID_MAIN, .uid = 0},
+             "third"},
+    };
+    FixupMessages(&log_messages);
+    LogMessages(log_messages);
+
+    std::vector<LogMessage> read_log_messages;
+    bool released = false;
+
+    {
+        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, &released));
+        std::unique_ptr<LogReaderThread> log_reader(
+                new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(test_writer), true,
+                                    0, ~0, 0, {}, 3, {}));
+        reader_list_.reader_threads().emplace_back(std::move(log_reader));
+    }
+
+    while (!released) {
+        usleep(5000);
+    }
+    {
+        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        EXPECT_EQ(0U, reader_list_.reader_threads().size());
+    }
+    std::vector<LogMessage> expected_log_messages = {log_messages.back()};
+    CompareLogMessages(expected_log_messages, read_log_messages);
 }
 
 INSTANTIATE_TEST_CASE_P(LogBufferTests, LogBufferTest, testing::Values("chatty", "simple"));
