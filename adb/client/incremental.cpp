@@ -42,7 +42,7 @@ static std::pair<unique_fd, std::vector<char>> read_signature(Size file_size,
     struct stat st;
     if (stat(signature_file.c_str(), &st)) {
         if (!silent) {
-            fprintf(stderr, "Failed to stat signature file %s. Abort.\n", signature_file.c_str());
+            fprintf(stderr, "Failed to stat signature file %s.\n", signature_file.c_str());
         }
         return {};
     }
@@ -50,9 +50,19 @@ static std::pair<unique_fd, std::vector<char>> read_signature(Size file_size,
     unique_fd fd(adb_open(signature_file.c_str(), O_RDONLY));
     if (fd < 0) {
         if (!silent) {
-            fprintf(stderr, "Failed to open signature file: %s. Abort.\n", signature_file.c_str());
+            fprintf(stderr, "Failed to open signature file: %s.\n", signature_file.c_str());
         }
         return {};
+    }
+
+    std::vector<char> invalid_signature;
+
+    if (st.st_size > kMaxSignatureSize) {
+        if (!silent) {
+            fprintf(stderr, "Signature is too long. Max allowed is %d. Abort.\n",
+                    kMaxSignatureSize);
+        }
+        return {std::move(fd), std::move(invalid_signature)};
     }
 
     auto [signature, tree_size] = read_id_sig_headers(fd);
@@ -62,7 +72,7 @@ static std::pair<unique_fd, std::vector<char>> read_signature(Size file_size,
                     "Verity tree size mismatch in signature file: %s [was %lld, expected %lld].\n",
                     signature_file.c_str(), (long long)tree_size, (long long)expected);
         }
-        return {};
+        return {std::move(fd), std::move(invalid_signature)};
     }
 
     return {std::move(fd), std::move(signature)};
@@ -72,9 +82,11 @@ static std::pair<unique_fd, std::vector<char>> read_signature(Size file_size,
 static std::pair<unique_fd, std::string> read_and_encode_signature(Size file_size,
                                                                    std::string signature_file,
                                                                    bool silent) {
+    std::string encoded_signature;
+
     auto [fd, signature] = read_signature(file_size, std::move(signature_file), silent);
-    if (!fd.ok()) {
-        return {};
+    if (!fd.ok() || signature.empty()) {
+        return {std::move(fd), std::move(encoded_signature)};
     }
 
     size_t base64_len = 0;
@@ -82,9 +94,10 @@ static std::pair<unique_fd, std::string> read_and_encode_signature(Size file_siz
         if (!silent) {
             fprintf(stderr, "Fail to estimate base64 encoded length. Abort.\n");
         }
-        return {};
+        return {std::move(fd), std::move(encoded_signature)};
     }
-    std::string encoded_signature(base64_len, '\0');
+
+    encoded_signature.resize(base64_len, '\0');
     encoded_signature.resize(EVP_EncodeBlock((uint8_t*)encoded_signature.data(),
                                              (const uint8_t*)signature.data(), signature.size()));
 
@@ -109,7 +122,7 @@ static unique_fd start_install(const Files& files, const Args& passthrough_args,
         }
 
         auto [signature_fd, signature] = read_and_encode_signature(st.st_size, file, silent);
-        if (!signature_fd.ok()) {
+        if (signature_fd.ok() && signature.empty()) {
             return {};
         }
 
@@ -138,9 +151,12 @@ bool can_install(const Files& files) {
             return false;
         }
 
-        auto [fd, _] = read_signature(st.st_size, file, true);
-        if (!fd.ok()) {
-            return false;
+        if (android::base::EndsWithIgnoreCase(file, ".apk")) {
+            // Signature has to be present for APKs.
+            auto [fd, _] = read_signature(st.st_size, file, /*silent=*/true);
+            if (!fd.ok()) {
+                return false;
+            }
         }
     }
     return true;
