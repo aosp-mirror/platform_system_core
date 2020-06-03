@@ -61,7 +61,8 @@ TEST_P(ChattyLogBufferTest, deduplication_simple) {
 
     std::vector<LogMessage> read_log_messages;
     std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
+    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
+    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
 
     std::vector<LogMessage> expected_log_messages = {
             make_message(0, "test_tag", "duplicate"),
@@ -72,12 +73,12 @@ TEST_P(ChattyLogBufferTest, deduplication_simple) {
             make_message(5, "test_tag", "not_same"),
             // 3 duplicate logs together print the first, a 1 count chatty message, then the last.
             make_message(6, "test_tag", "duplicate"),
-            make_message(7, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ expire 1 line", true),
+            make_message(7, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ identical 1 line", true),
             make_message(8, "test_tag", "duplicate"),
             make_message(9, "test_tag", "not_same"),
             // 6 duplicate logs together print the first, a 4 count chatty message, then the last.
             make_message(10, "test_tag", "duplicate"),
-            make_message(14, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ expire 4 lines", true),
+            make_message(14, "chatty", "uid=0\\([^\\)]+\\) [^ ]+ identical 4 lines", true),
             make_message(15, "test_tag", "duplicate"),
             make_message(16, "test_tag", "not_same"),
             // duplicate logs > 1 minute apart are not deduplicated.
@@ -117,15 +118,16 @@ TEST_P(ChattyLogBufferTest, deduplication_overflow) {
 
     std::vector<LogMessage> read_log_messages;
     std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
+    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
+    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
 
     std::vector<LogMessage> expected_log_messages = {
             make_message(0, "test_tag", "normal"),
             make_message(1, "test_tag", "duplicate"),
             make_message(expired_per_chatty_message + 1, "chatty",
-                         "uid=0\\([^\\)]+\\) [^ ]+ expire 65535 lines", true),
+                         "uid=0\\([^\\)]+\\) [^ ]+ identical 65535 lines", true),
             make_message(expired_per_chatty_message + 2, "chatty",
-                         "uid=0\\([^\\)]+\\) [^ ]+ expire 1 line", true),
+                         "uid=0\\([^\\)]+\\) [^ ]+ identical 1 line", true),
             make_message(expired_per_chatty_message + 3, "test_tag", "duplicate"),
             make_message(expired_per_chatty_message + 4, "test_tag", "normal"),
     };
@@ -172,7 +174,8 @@ TEST_P(ChattyLogBufferTest, deduplication_liblog) {
 
     std::vector<LogMessage> read_log_messages;
     std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    log_buffer_->FlushTo(test_writer.get(), 1, nullptr, nullptr);
+    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
+    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
 
     std::vector<LogMessage> expected_log_messages = {
             make_message(0, 1234, 1),
@@ -198,5 +201,135 @@ TEST_P(ChattyLogBufferTest, deduplication_liblog) {
     FixupMessages(&expected_log_messages);
     CompareLogMessages(expected_log_messages, read_log_messages);
 };
+
+TEST_P(ChattyLogBufferTest, no_leading_chatty_simple) {
+    auto make_message = [&](uint32_t sec, int32_t pid, uint32_t uid, uint32_t lid, const char* tag,
+                            const char* msg, bool regex = false) -> LogMessage {
+        logger_entry entry = {.pid = pid, .tid = 1, .sec = sec, .nsec = 1, .lid = lid, .uid = uid};
+        std::string message;
+        message.push_back(ANDROID_LOG_INFO);
+        message.append(tag);
+        message.push_back('\0');
+        message.append(msg);
+        message.push_back('\0');
+        return {entry, message, regex};
+    };
+
+    // clang-format off
+    std::vector<LogMessage> log_messages = {
+            make_message(1, 1, 1, LOG_ID_MAIN, "test_tag", "duplicate1"),
+            make_message(2, 2, 2, LOG_ID_SYSTEM, "test_tag", "duplicate2"),
+            make_message(3, 2, 2, LOG_ID_SYSTEM, "test_tag", "duplicate2"),
+            make_message(4, 2, 2, LOG_ID_SYSTEM, "test_tag", "duplicate2"),
+            make_message(6, 2, 2, LOG_ID_SYSTEM, "test_tag", "not duplicate2"),
+            make_message(7, 1, 1, LOG_ID_MAIN, "test_tag", "duplicate1"),
+            make_message(8, 1, 1, LOG_ID_MAIN, "test_tag", "duplicate1"),
+            make_message(9, 1, 1, LOG_ID_MAIN, "test_tag", "duplicate1"),
+            make_message(10, 1, 1, LOG_ID_MAIN, "test_tag", "not duplicate1"),
+    };
+    // clang-format on
+    FixupMessages(&log_messages);
+    LogMessages(log_messages);
+
+    // After logging log_messages, the below is what should be in the buffer:
+    // PID=1, LOG_ID_MAIN duplicate1
+    // [1] PID=2, LOG_ID_SYSTEM duplicate2
+    // PID=2, LOG_ID_SYSTEM chatty drop
+    // PID=2, LOG_ID_SYSTEM duplicate2
+    // PID=2, LOG_ID_SYSTEM not duplicate2
+    // [2] PID=1, LOG_ID_MAIN chatty drop
+    // [3] PID=1, LOG_ID_MAIN duplicate1
+    // PID=1, LOG_ID_MAIN not duplicate1
+
+    // We then read from the 2nd sequence number, starting from log message [1], but filtering out
+    // everything but PID=1, which results in us starting with log message [2], which is a chatty
+    // drop.  Code prior to this test case would erroneously print it.  The intended behavior that
+    // this test checks prints logs starting from log message [3].
+
+    // clang-format off
+    std::vector<LogMessage> expected_log_messages = {
+            make_message(9, 1, 1, LOG_ID_MAIN, "test_tag", "duplicate1"),
+            make_message(10, 1, 1, LOG_ID_MAIN, "test_tag", "not duplicate1"),
+    };
+    FixupMessages(&expected_log_messages);
+    // clang-format on
+
+    std::vector<LogMessage> read_log_messages;
+    bool released = false;
+    {
+        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, &released));
+        std::unique_ptr<LogReaderThread> log_reader(
+                new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(test_writer), true,
+                                    0, ~0, 1, {}, 2, {}));
+        reader_list_.reader_threads().emplace_back(std::move(log_reader));
+    }
+
+    while (!released) {
+        usleep(5000);
+    }
+
+    CompareLogMessages(expected_log_messages, read_log_messages);
+}
+
+TEST_P(ChattyLogBufferTest, no_leading_chatty_tail) {
+    auto make_message = [&](uint32_t sec, const char* tag, const char* msg,
+                            bool regex = false) -> LogMessage {
+        logger_entry entry = {
+                .pid = 1, .tid = 1, .sec = sec, .nsec = 1, .lid = LOG_ID_MAIN, .uid = 0};
+        std::string message;
+        message.push_back(ANDROID_LOG_INFO);
+        message.append(tag);
+        message.push_back('\0');
+        message.append(msg);
+        message.push_back('\0');
+        return {entry, message, regex};
+    };
+
+    // clang-format off
+    std::vector<LogMessage> log_messages = {
+            make_message(1, "test_tag", "duplicate"),
+            make_message(2, "test_tag", "duplicate"),
+            make_message(3, "test_tag", "duplicate"),
+            make_message(4, "test_tag", "not_duplicate"),
+    };
+    // clang-format on
+    FixupMessages(&log_messages);
+    LogMessages(log_messages);
+
+    // After logging log_messages, the below is what should be in the buffer:
+    // "duplicate"
+    // chatty
+    // "duplicate"
+    // "not duplicate"
+
+    // We then read the tail 3 messages expecting there to not be a chatty message, meaning that we
+    // should only see the last two messages.
+
+    // clang-format off
+    std::vector<LogMessage> expected_log_messages = {
+            make_message(3, "test_tag", "duplicate"),
+            make_message(4, "test_tag", "not_duplicate"),
+    };
+    FixupMessages(&expected_log_messages);
+    // clang-format on
+
+    std::vector<LogMessage> read_log_messages;
+    bool released = false;
+    {
+        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, &released));
+        std::unique_ptr<LogReaderThread> log_reader(
+                new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(test_writer), true,
+                                    3, ~0, 0, {}, 1, {}));
+        reader_list_.reader_threads().emplace_back(std::move(log_reader));
+    }
+
+    while (!released) {
+        usleep(5000);
+    }
+
+    CompareLogMessages(expected_log_messages, read_log_messages);
+}
 
 INSTANTIATE_TEST_CASE_P(ChattyLogBufferTests, ChattyLogBufferTest, testing::Values("chatty"));
