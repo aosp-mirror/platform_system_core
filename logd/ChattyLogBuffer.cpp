@@ -74,7 +74,8 @@ static enum match_type Identical(const LogBufferElement& elem, const LogBufferEl
     }
 
     // audit message (except sequence number) identical?
-    if (last.IsBinary() && lenl > static_cast<ssize_t>(sizeof(android_log_event_string_t)) &&
+    if (IsBinary(last.log_id()) &&
+        lenl > static_cast<ssize_t>(sizeof(android_log_event_string_t)) &&
         lenr > static_cast<ssize_t>(sizeof(android_log_event_string_t))) {
         if (fastcmp<memcmp>(msgl, msgr, sizeof(android_log_event_string_t) - sizeof(int32_t))) {
             return DIFFERENT;
@@ -205,9 +206,9 @@ LogBufferElementCollection::iterator ChattyLogBuffer::Erase(LogBufferElementColl
 #endif
 
     if (coalesce) {
-        stats()->Erase(element);
+        stats()->Erase(element.ToLogStatisticsElement());
     } else {
-        stats()->Subtract(element);
+        stats()->Subtract(element.ToLogStatisticsElement());
     }
 
     it = SimpleLogBuffer::Erase(it);
@@ -533,7 +534,7 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
             if (leading) {
                 it = Erase(it);
             } else {
-                stats()->Drop(element);
+                stats()->Drop(element.ToLogStatisticsElement());
                 element.SetDropped(1);
                 if (last.coalesce(&element, 1)) {
                     it = Erase(it, true);
