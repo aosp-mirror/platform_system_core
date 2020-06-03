@@ -36,6 +36,30 @@ static const uint64_t monthSec = 31 * 24 * hourSec;
 
 std::atomic<size_t> LogStatistics::SizesTotal;
 
+static std::string TagNameKey(const LogStatisticsElement& element) {
+    if (IsBinary(element.log_id)) {
+        uint32_t tag = element.tag;
+        if (tag) {
+            const char* cp = android::tagToName(tag);
+            if (cp) {
+                return std::string(cp);
+            }
+        }
+        return android::base::StringPrintf("[%" PRIu32 "]", tag);
+    }
+    const char* msg = element.msg;
+    if (!msg) {
+        return "chatty";
+    }
+    ++msg;
+    uint16_t len = element.msg_len;
+    len = (len <= 1) ? 0 : strnlen(msg, len - 1);
+    if (!len) {
+        return "<NULL>";
+    }
+    return std::string(msg, len);
+}
+
 LogStatistics::LogStatistics(bool enable_statistics) : enable(enable_statistics) {
     log_time now(CLOCK_REALTIME);
     log_id_for_each(id) {
@@ -597,7 +621,8 @@ std::string TagNameEntry::formatHeader(const std::string& name,
                       std::string("BYTES"), std::string(""));
 }
 
-std::string TagNameEntry::format(const LogStatistics&, log_id_t, const TagNameKey& key_name) const {
+std::string TagNameEntry::format(const LogStatistics&, log_id_t,
+                                 const std::string& key_name) const {
     std::string name;
     std::string pidstr;
     if (pid_ != (pid_t)-1) {

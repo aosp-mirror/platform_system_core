@@ -397,93 +397,6 @@ class TagEntry : public EntryBaseDropped {
     uid_t uid_;
 };
 
-struct TagNameKey {
-    std::string* alloc;
-    std::string_view name;  // Saves space if const char*
-
-    explicit TagNameKey(const LogStatisticsElement& element)
-        : alloc(nullptr), name("", strlen("")) {
-        if (IsBinary(element.log_id)) {
-            uint32_t tag = element.tag;
-            if (tag) {
-                const char* cp = android::tagToName(tag);
-                if (cp) {
-                    name = std::string_view(cp, strlen(cp));
-                    return;
-                }
-            }
-            alloc = new std::string(
-                android::base::StringPrintf("[%" PRIu32 "]", tag));
-            if (!alloc) return;
-            name = std::string_view(alloc->c_str(), alloc->size());
-            return;
-        }
-        const char* msg = element.msg;
-        if (!msg) {
-            name = std::string_view("chatty", strlen("chatty"));
-            return;
-        }
-        ++msg;
-        uint16_t len = element.msg_len;
-        len = (len <= 1) ? 0 : strnlen(msg, len - 1);
-        if (!len) {
-            name = std::string_view("<NULL>", strlen("<NULL>"));
-            return;
-        }
-        alloc = new std::string(msg, len);
-        if (!alloc) return;
-        name = std::string_view(alloc->c_str(), alloc->size());
-    }
-
-    explicit TagNameKey(TagNameKey&& rval) noexcept
-        : alloc(rval.alloc), name(rval.name.data(), rval.name.length()) {
-        rval.alloc = nullptr;
-    }
-
-    explicit TagNameKey(const TagNameKey& rval)
-        : alloc(rval.alloc ? new std::string(*rval.alloc) : nullptr),
-          name(alloc ? alloc->data() : rval.name.data(), rval.name.length()) {
-    }
-
-    ~TagNameKey() {
-        if (alloc) delete alloc;
-    }
-
-    operator const std::string_view() const {
-        return name;
-    }
-
-    const char* data() const {
-        return name.data();
-    }
-    size_t length() const {
-        return name.length();
-    }
-
-    bool operator==(const TagNameKey& rval) const {
-        if (length() != rval.length()) return false;
-        if (length() == 0) return true;
-        return fastcmp<strncmp>(data(), rval.data(), length()) == 0;
-    }
-    bool operator!=(const TagNameKey& rval) const {
-        return !(*this == rval);
-    }
-
-    size_t getAllocLength() const {
-        return alloc ? alloc->length() + 1 + sizeof(std::string) : 0;
-    }
-};
-
-// Hash for TagNameKey
-template <>
-struct std::hash<TagNameKey>
-    : public std::unary_function<const TagNameKey&, size_t> {
-    size_t operator()(const TagNameKey& __t) const noexcept {
-        if (!__t.length()) return 0;
-        return std::hash<std::string_view>()(std::string_view(__t));
-    }
-};
-
 class TagNameEntry : public EntryBase {
   public:
     explicit TagNameEntry(const LogStatisticsElement& element)
@@ -507,7 +420,7 @@ class TagNameEntry : public EntryBase {
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
-    std::string format(const LogStatistics& stat, log_id_t id, const TagNameKey& key_name) const;
+    std::string format(const LogStatistics& stat, log_id_t id, const std::string& key_name) const;
 
   private:
     pid_t tid_;
@@ -515,7 +428,6 @@ class TagNameEntry : public EntryBase {
     uid_t uid_;
 };
 
-// Log Statistics
 class LogStatistics {
     friend UidEntry;
     friend PidEntry;
@@ -556,7 +468,7 @@ class LogStatistics {
     tagTable_t securityTagTable GUARDED_BY(lock_);
 
     // global tag list
-    typedef LogHashtable<TagNameKey, TagNameEntry> tagNameTable_t;
+    typedef LogHashtable<std::string, TagNameEntry> tagNameTable_t;
     tagNameTable_t tagNameTable;
 
     size_t sizeOf() const REQUIRES(lock_) {
@@ -573,13 +485,21 @@ class LogStatistics {
             const char* name = it.second.name();
             if (name) size += strlen(name) + 1;
         }
-        for (auto it : tagNameTable) size += it.first.getAllocLength();
+        for (auto it : tagNameTable) {
+            size += sizeof(std::string);
+            size_t len = it.first.size();
+            // Account for short string optimization: if the string's length is <= 22 bytes for 64
+            // bit or <= 10 bytes for 32 bit, then there is no additional allocation.
+            if ((sizeof(std::string) == 24 && len > 22) ||
+                (sizeof(std::string) != 24 && len > 10)) {
+                size += len;
+            }
+        }
         log_id_for_each(id) {
             size += uidTable[id].sizeOf();
             size += uidTable[id].size() * sizeof(uidTable_t::iterator);
             size += pidSystemTable[id].sizeOf();
-            size +=
-                pidSystemTable[id].size() * sizeof(pidSystemTable_t::iterator);
+            size += pidSystemTable[id].size() * sizeof(pidSystemTable_t::iterator);
         }
         return size;
     }
