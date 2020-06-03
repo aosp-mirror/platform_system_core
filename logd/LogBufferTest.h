@@ -45,7 +45,7 @@ void FixupMessages(std::vector<LogMessage>* messages);
 class TestWriter : public LogWriter {
   public:
     TestWriter(std::vector<LogMessage>* msgs, bool* released)
-        : LogWriter(0, true, true), msgs_(msgs), released_(released) {}
+        : LogWriter(0, true), msgs_(msgs), released_(released) {}
     bool Write(const logger_entry& entry, const char* message) override {
         msgs_->emplace_back(LogMessage{entry, std::string(message, entry.len), false});
         return true;
