@@ -93,6 +93,7 @@ enum SyncFlag : uint32_t {
     kSyncFlagNone = 0,
     kSyncFlagBrotli = 1,
     kSyncFlagLZ4 = 2,
+    kSyncFlagZstd = 4,
     kSyncFlagDryRun = 0x8000'0000U,
 };
 
@@ -101,6 +102,7 @@ enum class CompressionType {
     Any,
     Brotli,
     LZ4,
+    Zstd,
 };
 
 // send_v1 sent the path in a buffer, followed by a comma and the mode as a string.
