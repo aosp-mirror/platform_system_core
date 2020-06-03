@@ -517,6 +517,8 @@ on post-fs
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
+
+    mkdir /metadata/staged-install 0770 root system
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
