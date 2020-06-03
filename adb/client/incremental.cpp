@@ -180,7 +180,7 @@ std::optional<Process> install(const Files& files, const Args& passthrough_args,
     int print_fds[2];
     if (adb_socketpair(print_fds) != 0) {
         if (!silent) {
-            fprintf(stderr, "Failed to create socket pair for child to print to parent\n");
+            fprintf(stderr, "adb: failed to create socket pair for child to print to parent\n");
         }
         return {};
     }
@@ -207,10 +207,15 @@ std::optional<Process> install(const Files& files, const Args& passthrough_args,
     Result result = wait_for_installation(pipe_read_fd);
     adb_close(pipe_read_fd);
 
-    if (result == Result::Success) {
-        // adb client exits now but inc-server can continue
-        serverKiller.release();
+    if (result != Result::Success) {
+        if (!silent) {
+            fprintf(stderr, "adb: install command failed");
+        }
+        return {};
     }
+
+    // adb client exits now but inc-server can continue
+    serverKiller.release();
     return child;
 }
 
