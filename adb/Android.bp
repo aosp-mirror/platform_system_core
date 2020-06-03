@@ -124,11 +124,12 @@ cc_defaults {
         "libadbd_core",
         "libadbconnection_server",
         "libasyncio",
+        "libbase",
         "libbrotli",
         "libcutils_sockets",
         "libdiagnose_usb",
         "libmdnssd",
-        "libbase",
+        "libzstd",
 
         "libadb_protos",
         "libapp_processes_protos_lite",
@@ -351,6 +352,7 @@ cc_binary_host {
         "liblog",
         "libziparchive",
         "libz",
+        "libzstd",
     ],
 
     // Don't add anything here, we don't want additional shared dependencies
@@ -483,6 +485,7 @@ cc_library {
         "libbrotli",
         "libdiagnose_usb",
         "liblz4",
+        "libzstd",
     ],
 
     shared_libs: [
@@ -586,6 +589,7 @@ cc_library {
         "libdiagnose_usb",
         "liblz4",
         "libmdnssd",
+        "libzstd",
     ],
 
     visibility: [
