@@ -171,6 +171,8 @@ class File {
 
     const std::vector<BlockIdx>& PriorityBlocks() const { return priority_blocks_; }
 
+    bool hasTree() const { return tree_fd_.ok(); }
+
     std::vector<bool> sentBlocks;
     NumBlocks sentBlocksCount = 0;
 
@@ -349,6 +351,9 @@ std::optional<RequestCommand> IncrementalServer::ReadRequest(bool blocking) {
 
 bool IncrementalServer::SendTreeBlocksForDataBlock(const FileId fileId, const BlockIdx blockIdx) {
     auto& file = files_[fileId];
+    if (!file.hasTree()) {
+        return true;
+    }
     const int32_t data_block_count = numBytesToNumBlocks(file.size);
 
     const int32_t total_nodes_count(file.sentTreeBlocks.size());
@@ -670,7 +675,8 @@ static std::pair<unique_fd, int64_t> open_signature(int64_t file_size, const cha
 
     unique_fd fd(adb_open(signature_file.c_str(), O_RDONLY));
     if (fd < 0) {
-        error_exit("inc-server: failed to open file '%s'.", signature_file.c_str());
+        D("No signature file found for '%s'('%s')", filepath, signature_file.c_str());
+        return {};
     }
 
     auto [tree_offset, tree_size] = skip_id_sig_headers(fd);
