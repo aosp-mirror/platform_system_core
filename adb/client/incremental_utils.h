@@ -31,6 +31,7 @@ using Size = int64_t;
 constexpr int kBlockSize = 4096;
 constexpr int kSha256DigestSize = 32;
 constexpr int kDigestSize = kSha256DigestSize;
+constexpr int kMaxSignatureSize = 8096;  // incrementalfs.h
 
 constexpr std::string_view IDSIG = ".idsig";
 
