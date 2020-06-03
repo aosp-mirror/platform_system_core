@@ -24,6 +24,7 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 #include <filesystem>
@@ -98,6 +99,77 @@ bool ForceNormalBoot(const std::string& cmdline) {
 }
 
 }  // namespace
+
+std::string GetModuleLoadList(bool recovery, const std::string& dir_path) {
+    auto module_load_file = "modules.load";
+    if (recovery) {
+        struct stat fileStat;
+        std::string recovery_load_path = dir_path + "/modules.load.recovery";
+        if (!stat(recovery_load_path.c_str(), &fileStat)) {
+            module_load_file = "modules.load.recovery";
+        }
+    }
+
+    return module_load_file;
+}
+
+#define MODULE_BASE_DIR "/lib/modules"
+bool LoadKernelModules(bool recovery, bool want_console) {
+    struct utsname uts;
+    if (uname(&uts)) {
+        LOG(FATAL) << "Failed to get kernel version.";
+    }
+    int major, minor;
+    if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
+        LOG(FATAL) << "Failed to parse kernel version " << uts.release;
+    }
+
+    std::unique_ptr<DIR, decltype(&closedir)> base_dir(opendir(MODULE_BASE_DIR), closedir);
+    if (!base_dir) {
+        LOG(INFO) << "Unable to open /lib/modules, skipping module loading.";
+        return true;
+    }
+    dirent* entry;
+    std::vector<std::string> module_dirs;
+    while ((entry = readdir(base_dir.get()))) {
+        if (entry->d_type != DT_DIR) {
+            continue;
+        }
+        int dir_major, dir_minor;
+        if (sscanf(entry->d_name, "%d.%d", &dir_major, &dir_minor) != 2 || dir_major != major ||
+            dir_minor != minor) {
+            continue;
+        }
+        module_dirs.emplace_back(entry->d_name);
+    }
+
+    // Sort the directories so they are iterated over during module loading
+    // in a consistent order. Alphabetical sorting is fine here because the
+    // kernel version at the beginning of the directory name must match the
+    // current kernel version, so the sort only applies to a label that
+    // follows the kernel version, for example /lib/modules/5.4 vs.
+    // /lib/modules/5.4-gki.
+    std::sort(module_dirs.begin(), module_dirs.end());
+
+    for (const auto& module_dir : module_dirs) {
+        std::string dir_path = MODULE_BASE_DIR "/";
+        dir_path.append(module_dir);
+        Modprobe m({dir_path}, GetModuleLoadList(recovery, dir_path));
+        bool retval = m.LoadListedModules(!want_console);
+        int modules_loaded = m.GetModuleCount();
+        if (modules_loaded > 0) {
+            return retval;
+        }
+    }
+
+    Modprobe m({MODULE_BASE_DIR}, GetModuleLoadList(recovery, MODULE_BASE_DIR));
+    bool retval = m.LoadListedModules(!want_console);
+    int modules_loaded = m.GetModuleCount();
+    if (modules_loaded > 0) {
+        return retval;
+    }
+    return true;
+}
 
 int FirstStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
@@ -190,18 +262,9 @@ int FirstStageMain(int argc, char** argv) {
         old_root_dir.reset();
     }
 
-    std::string module_load_file = "modules.load";
-    if (IsRecoveryMode() && !ForceNormalBoot(cmdline)) {
-        struct stat fileStat;
-        std::string recovery_load_path = "/lib/modules/modules.load.recovery";
-        if (!stat(recovery_load_path.c_str(), &fileStat)) {
-            module_load_file = "modules.load.recovery";
-        }
-    }
-
-    Modprobe m({"/lib/modules"}, module_load_file);
     auto want_console = ALLOW_FIRST_STAGE_CONSOLE ? FirstStageConsole(cmdline) : 0;
-    if (!m.LoadListedModules(!want_console)) {
+
+    if (!LoadKernelModules(IsRecoveryMode() && !ForceNormalBoot(cmdline), want_console)) {
         if (want_console != FirstStageConsoleParam::DISABLED) {
             LOG(ERROR) << "Failed to load kernel modules, starting console";
         } else {
