@@ -29,6 +29,8 @@
 
 #include <private/android_logger.h>
 
+#include "LogBufferElement.h"
+
 static const uint64_t hourSec = 60 * 60;
 static const uint64_t monthSec = 31 * 24 * hourSec;
 
@@ -87,10 +89,10 @@ void LogStatistics::AddTotal(log_id_t log_id, uint16_t size) {
     ++mElementsTotal[log_id];
 }
 
-void LogStatistics::Add(const LogBufferElement& element) {
+void LogStatistics::Add(const LogStatisticsElement& element) {
     auto lock = std::lock_guard{lock_};
-    log_id_t log_id = element.log_id();
-    uint16_t size = element.msg_len();
+    log_id_t log_id = element.log_id;
+    uint16_t size = element.msg_len;
     mSizes[log_id] += size;
     ++mElements[log_id];
 
@@ -99,7 +101,7 @@ void LogStatistics::Add(const LogBufferElement& element) {
     // evaluated and trimmed, thus recording size and number of
     // elements, but we must recognize the manufactured dropped
     // entry as not contributing to the lifetime totals.
-    if (element.dropped_count()) {
+    if (element.dropped_count) {
         ++mDroppedElements[log_id];
     } else {
         mSizesTotal[log_id] += size;
@@ -107,7 +109,7 @@ void LogStatistics::Add(const LogBufferElement& element) {
         ++mElementsTotal[log_id];
     }
 
-    log_time stamp(element.realtime());
+    log_time stamp(element.realtime);
     if (mNewest[log_id] < stamp) {
         // A major time update invalidates the statistics :-(
         log_time diff = stamp - mNewest[log_id];
@@ -132,19 +134,19 @@ void LogStatistics::Add(const LogBufferElement& element) {
         return;
     }
 
-    uidTable[log_id].Add(element.uid(), element);
-    if (element.uid() == AID_SYSTEM) {
-        pidSystemTable[log_id].Add(element.pid(), element);
+    uidTable[log_id].Add(element.uid, element);
+    if (element.uid == AID_SYSTEM) {
+        pidSystemTable[log_id].Add(element.pid, element);
     }
 
     if (!enable) {
         return;
     }
 
-    pidTable.Add(element.pid(), element);
-    tidTable.Add(element.tid(), element);
+    pidTable.Add(element.pid, element);
+    tidTable.Add(element.tid, element);
 
-    uint32_t tag = element.GetTag();
+    uint32_t tag = element.tag;
     if (tag) {
         if (log_id == LOG_ID_SECURITY) {
             securityTagTable.Add(tag, element);
@@ -153,42 +155,42 @@ void LogStatistics::Add(const LogBufferElement& element) {
         }
     }
 
-    if (!element.dropped_count()) {
+    if (!element.dropped_count) {
         tagNameTable.Add(TagNameKey(element), element);
     }
 }
 
-void LogStatistics::Subtract(const LogBufferElement& element) {
+void LogStatistics::Subtract(const LogStatisticsElement& element) {
     auto lock = std::lock_guard{lock_};
-    log_id_t log_id = element.log_id();
-    uint16_t size = element.msg_len();
+    log_id_t log_id = element.log_id;
+    uint16_t size = element.msg_len;
     mSizes[log_id] -= size;
     --mElements[log_id];
-    if (element.dropped_count()) {
+    if (element.dropped_count) {
         --mDroppedElements[log_id];
     }
 
-    if (mOldest[log_id] < element.realtime()) {
-        mOldest[log_id] = element.realtime();
+    if (mOldest[log_id] < element.realtime) {
+        mOldest[log_id] = element.realtime;
     }
 
     if (log_id == LOG_ID_KERNEL) {
         return;
     }
 
-    uidTable[log_id].Subtract(element.uid(), element);
-    if (element.uid() == AID_SYSTEM) {
-        pidSystemTable[log_id].Subtract(element.pid(), element);
+    uidTable[log_id].Subtract(element.uid, element);
+    if (element.uid == AID_SYSTEM) {
+        pidSystemTable[log_id].Subtract(element.pid, element);
     }
 
     if (!enable) {
         return;
     }
 
-    pidTable.Subtract(element.pid(), element);
-    tidTable.Subtract(element.tid(), element);
+    pidTable.Subtract(element.pid, element);
+    tidTable.Subtract(element.tid, element);
 
-    uint32_t tag = element.GetTag();
+    uint32_t tag = element.tag;
     if (tag) {
         if (log_id == LOG_ID_SECURITY) {
             securityTagTable.Subtract(tag, element);
@@ -197,37 +199,37 @@ void LogStatistics::Subtract(const LogBufferElement& element) {
         }
     }
 
-    if (!element.dropped_count()) {
+    if (!element.dropped_count) {
         tagNameTable.Subtract(TagNameKey(element), element);
     }
 }
 
 // Atomically set an entry to drop
 // entry->setDropped(1) must follow this call, caller should do this explicitly.
-void LogStatistics::Drop(const LogBufferElement& element) {
+void LogStatistics::Drop(const LogStatisticsElement& element) {
     auto lock = std::lock_guard{lock_};
-    log_id_t log_id = element.log_id();
-    uint16_t size = element.msg_len();
+    log_id_t log_id = element.log_id;
+    uint16_t size = element.msg_len;
     mSizes[log_id] -= size;
     ++mDroppedElements[log_id];
 
-    if (mNewestDropped[log_id] < element.realtime()) {
-        mNewestDropped[log_id] = element.realtime();
+    if (mNewestDropped[log_id] < element.realtime) {
+        mNewestDropped[log_id] = element.realtime;
     }
 
-    uidTable[log_id].Drop(element.uid(), element);
-    if (element.uid() == AID_SYSTEM) {
-        pidSystemTable[log_id].Drop(element.pid(), element);
+    uidTable[log_id].Drop(element.uid, element);
+    if (element.uid == AID_SYSTEM) {
+        pidSystemTable[log_id].Drop(element.pid, element);
     }
 
     if (!enable) {
         return;
     }
 
-    pidTable.Drop(element.pid(), element);
-    tidTable.Drop(element.tid(), element);
+    pidTable.Drop(element.pid, element);
+    tidTable.Drop(element.tid, element);
 
-    uint32_t tag = element.GetTag();
+    uint32_t tag = element.tag;
     if (tag) {
         if (log_id == LOG_ID_SECURITY) {
             securityTagTable.Drop(tag, element);
