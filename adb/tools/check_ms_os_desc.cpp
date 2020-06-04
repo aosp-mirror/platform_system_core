@@ -131,8 +131,6 @@ static void check_ms_os_desc_v1(libusb_device_handle* device_handle, const std::
         errx(1, "failed to retrieve MS OS v1 compat descriptor: %s", libusb_error_name(rc));
     }
 
-    memcpy(&hdr, data.data(), data.size());
-
     struct __attribute__((packed)) ms_os_desc_v1_function {
         uint8_t bFirstInterfaceNumber;
         uint8_t reserved1;

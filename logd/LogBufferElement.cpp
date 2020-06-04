@@ -86,7 +86,7 @@ LogBufferElement::~LogBufferElement() {
 
 uint32_t LogBufferElement::GetTag() const {
     // Binary buffers have no tag.
-    if (!IsBinary()) {
+    if (!IsBinary(log_id())) {
         return 0;
     }
 
@@ -95,12 +95,21 @@ uint32_t LogBufferElement::GetTag() const {
         return tag_;
     }
 
-    // For non-dropped messages, we get the tag from the message header itself.
-    if (msg_len_ < sizeof(android_event_header_t)) {
-        return 0;
-    }
+    return MsgToTag(msg(), msg_len());
+}
 
-    return reinterpret_cast<const android_event_header_t*>(msg_)->tag;
+LogStatisticsElement LogBufferElement::ToLogStatisticsElement() const {
+    return LogStatisticsElement{
+            .uid = uid(),
+            .pid = pid(),
+            .tid = tid(),
+            .tag = GetTag(),
+            .realtime = realtime(),
+            .msg = msg(),
+            .msg_len = msg_len(),
+            .dropped_count = dropped_count(),
+            .log_id = log_id(),
+    };
 }
 
 uint16_t LogBufferElement::SetDropped(uint16_t value) {
@@ -218,7 +227,7 @@ size_t LogBufferElement::PopulateDroppedMessage(char*& buffer, LogStatistics* st
                           type, dropped_count(), (dropped_count() > 1) ? "s" : "");
 
     size_t hdrLen;
-    if (IsBinary()) {
+    if (IsBinary(log_id())) {
         hdrLen = sizeof(android_log_event_string_t);
     } else {
         hdrLen = 1 + sizeof(tag);
@@ -232,7 +241,7 @@ size_t LogBufferElement::PopulateDroppedMessage(char*& buffer, LogStatistics* st
     }
 
     size_t retval = hdrLen + len;
-    if (IsBinary()) {
+    if (IsBinary(log_id())) {
         android_log_event_string_t* event =
             reinterpret_cast<android_log_event_string_t*>(buffer);
 

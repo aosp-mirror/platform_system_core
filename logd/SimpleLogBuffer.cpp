@@ -61,11 +61,8 @@ bool SimpleLogBuffer::ShouldLog(log_id_t log_id, const char* msg, uint16_t len) 
     int prio = ANDROID_LOG_INFO;
     const char* tag = nullptr;
     size_t tag_len = 0;
-    if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
-        if (len < sizeof(android_event_header_t)) {
-            return false;
-        }
-        int32_t numeric_tag = reinterpret_cast<const android_event_header_t*>(msg)->tag;
+    if (IsBinary(log_id)) {
+        int32_t numeric_tag = MsgToTag(msg, len);
         tag = tags_->tagToName(numeric_tag);
         if (tag) {
             tag_len = strlen(tag);
@@ -105,7 +102,7 @@ void SimpleLogBuffer::LogInternal(LogBufferElement&& elem) {
     log_id_t log_id = elem.log_id();
 
     logs_.emplace_back(std::move(elem));
-    stats_->Add(logs_.back());
+    stats_->Add(logs_.back().ToLogStatisticsElement());
     MaybePrune(log_id);
     reader_list_->NotifyNewLog(1 << log_id);
 }
@@ -317,7 +314,7 @@ bool SimpleLogBuffer::Prune(log_id_t id, unsigned long prune_rows, uid_t caller_
             return true;
         }
 
-        stats_->Subtract(element);
+        stats_->Subtract(element.ToLogStatisticsElement());
         it = Erase(it);
         if (--prune_rows == 0) {
             return false;
