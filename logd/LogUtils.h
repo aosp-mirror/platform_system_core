@@ -60,6 +60,20 @@ static inline const char* strnstr(const char* s, ssize_t len,
 }
 }
 
+// Returns true if the log buffer is meant for binary logs.
+static inline bool IsBinary(log_id_t log_id) {
+    return log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS || log_id == LOG_ID_SECURITY;
+}
+
+// Returns the numeric log tag for binary log messages.
+static inline uint32_t MsgToTag(const char* msg, uint16_t msg_len) {
+    if (msg_len < sizeof(android_event_header_t)) {
+        return 0;
+    }
+
+    return reinterpret_cast<const android_event_header_t*>(msg)->tag;
+}
+
 static inline bool worstUidEnabledForLogid(log_id_t id) {
     return (id == LOG_ID_MAIN) || (id == LOG_ID_SYSTEM) ||
            (id == LOG_ID_RADIO) || (id == LOG_ID_EVENTS);

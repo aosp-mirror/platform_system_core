@@ -1362,6 +1362,10 @@ class FileOperationsTestLZ4(FileOperationsTest.Base):
     compression = "lz4"
 
 
+class FileOperationsTestZstd(FileOperationsTest.Base):
+    compression = "zstd"
+
+
 class DeviceOfflineTest(DeviceTest):
     def _get_device_state(self, serialno):
         output = subprocess.check_output(self.device.adb_cmd + ['devices'])
