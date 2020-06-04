@@ -56,6 +56,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
     }
 
     modules_loaded.emplace_back(path_name + options);
+    module_count_++;
     return true;
 }
 
