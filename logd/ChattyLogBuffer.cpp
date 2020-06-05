@@ -217,12 +217,12 @@ LogBufferElementCollection::iterator ChattyLogBuffer::Erase(LogBufferElementColl
     log_id_for_each(i) {
         for (auto b : mLastWorst[i]) {
             if (bad == b.second) {
-                android::prdebug("stale mLastWorst[%d] key=%d mykey=%d\n", i, b.first, key);
+                LOG(ERROR) << StringPrintf("stale mLastWorst[%d] key=%d mykey=%d", i, b.first, key);
             }
         }
         for (auto b : mLastWorstPidOfSystem[i]) {
             if (bad == b.second) {
-                android::prdebug("stale mLastWorstPidOfSystem[%d] pid=%d\n", i, b.first);
+                LOG(ERROR) << StringPrintf("stale mLastWorstPidOfSystem[%d] pid=%d", i, b.first);
             }
         }
     }

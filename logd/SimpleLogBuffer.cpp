@@ -16,6 +16,8 @@
 
 #include "SimpleLogBuffer.h"
 
+#include <android-base/logging.h>
+
 #include "LogBufferElement.h"
 
 SimpleLogBuffer::SimpleLogBuffer(LogReaderList* reader_list, LogTags* tags, LogStatistics* stats)
@@ -232,8 +234,8 @@ bool SimpleLogBuffer::Clear(log_id_t id, uid_t uid) {
                 auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
                 for (const auto& reader_thread : reader_list_->reader_threads()) {
                     if (reader_thread->IsWatching(id)) {
-                        android::prdebug("Kicking blocked reader, %s, from LogBuffer::clear()\n",
-                                         reader_thread->name().c_str());
+                        LOG(WARNING) << "Kicking blocked reader, " << reader_thread->name()
+                                     << ", from LogBuffer::clear()";
                         reader_thread->release_Locked();
                     }
                 }
@@ -350,16 +352,16 @@ void SimpleLogBuffer::KickReader(LogReaderThread* reader, log_id_t id, unsigned 
     if (stats_->Sizes(id) > (2 * max_size_[id])) {  // +100%
         // A misbehaving or slow reader has its connection
         // dropped if we hit too much memory pressure.
-        android::prdebug("Kicking blocked reader, %s, from LogBuffer::kickMe()\n",
-                         reader->name().c_str());
+        LOG(WARNING) << "Kicking blocked reader, " << reader->name()
+                     << ", from LogBuffer::kickMe()";
         reader->release_Locked();
     } else if (reader->deadline().time_since_epoch().count() != 0) {
         // Allow a blocked WRAP deadline reader to trigger and start reporting the log data.
         reader->triggerReader_Locked();
     } else {
         // tell slow reader to skip entries to catch up
-        android::prdebug("Skipping %lu entries from slow reader, %s, from LogBuffer::kickMe()\n",
-                         prune_rows, reader->name().c_str());
+        LOG(WARNING) << "Skipping " << prune_rows << " entries from slow reader, " << reader->name()
+                     << ", from LogBuffer::kickMe()";
         reader->triggerSkip_Locked(id, prune_rows);
     }
 }
