@@ -30,7 +30,6 @@ namespace android {
 
 // Furnished in main.cpp. Caller must own and free returned value
 char* uidToName(uid_t uid);
-void prdebug(const char* fmt, ...) __attribute__((__format__(printf, 1, 2)));
 
 // Caller must own and free returned value
 char* pidToName(pid_t pid);

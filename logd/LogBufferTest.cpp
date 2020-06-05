@@ -43,14 +43,6 @@ bool __android_logger_valid_buffer_size(unsigned long) {
 }
 #endif
 
-void android::prdebug(const char* fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
-    va_end(ap);
-}
-
 char* android::uidToName(uid_t) {
     return nullptr;
 }
