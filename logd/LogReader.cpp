@@ -23,6 +23,7 @@
 
 #include <chrono>
 
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
@@ -201,9 +202,9 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
         }
     }
 
-    android::prdebug(
+    LOG(INFO) << android::base::StringPrintf(
             "logdr: UID=%d GID=%d PID=%d %c tail=%lu logMask=%x pid=%d "
-            "start=%" PRIu64 "ns deadline=%" PRIi64 "ns\n",
+            "start=%" PRIu64 "ns deadline=%" PRIi64 "ns",
             cli->getUid(), cli->getGid(), cli->getPid(), nonBlock ? 'n' : 'b', tail, logMask,
             (int)pid, start.nsec(), static_cast<int64_t>(deadline.time_since_epoch().count()));
 
