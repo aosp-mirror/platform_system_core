@@ -136,10 +136,22 @@ static int write_all_blocks(struct sparse_file* s, struct output_file* out) {
   return 0;
 }
 
+/*
+ * This is a workaround for 32-bit Windows: Limit the block size to 64 MB before
+ * fastboot executable binary for windows 64-bit is released (b/156057250).
+ */
+#define MAX_BACKED_BLOCK_SIZE ((unsigned int) (64UL << 20))
+
 int sparse_file_write(struct sparse_file* s, int fd, bool gz, bool sparse, bool crc) {
+  struct backed_block* bb;
   int ret;
   int chunks;
   struct output_file* out;
+
+  for (bb = backed_block_iter_new(s->backed_block_list); bb; bb = backed_block_iter_next(bb)) {
+    ret = backed_block_split(s->backed_block_list, bb, MAX_BACKED_BLOCK_SIZE);
+    if (ret) return ret;
+  }
 
   chunks = sparse_count_chunks(s);
   out = output_file_open_fd(fd, s->block_size, s->len, gz, sparse, chunks, crc);
