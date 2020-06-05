@@ -79,13 +79,6 @@ int write_log_messages(const uint8_t** pdata, size_t* data_left, LogBuffer* log_
     return 1;
 }
 
-// Because system/core/logd/main.cpp redefines these.
-void prdebug(char const* fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
 char* uidToName(uid_t) {
     return strdup("fake");
 }

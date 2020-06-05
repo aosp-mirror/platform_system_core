@@ -31,6 +31,7 @@
 
 #include <string>
 
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <log/log_properties.h>
@@ -298,7 +299,7 @@ int CommandListener::ReinitCmd::runCommand(SocketClient* cli, int /*argc*/,
                                            char** /*argv*/) {
     setname();
 
-    android::prdebug("logd reinit");
+    LOG(INFO) << "logd reinit";
     buf()->Init();
     prune()->init(nullptr);
 
