@@ -1229,7 +1229,7 @@ static void reboot_to_userspace_fastboot() {
 static void CancelSnapshotIfNeeded() {
     std::string merge_status = "none";
     if (fb->GetVar(FB_VAR_SNAPSHOT_UPDATE_STATUS, &merge_status) == fastboot::SUCCESS &&
-        merge_status != "none") {
+        !merge_status.empty() && merge_status != "none") {
         fb->SnapshotUpdateCommand("cancel");
     }
 }
