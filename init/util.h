@@ -92,6 +92,8 @@ Result<MountAllOptions> ParseMountAll(const std::vector<std::string>& args);
 Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
         const std::vector<std::string>& args);
 
+Result<std::string> ParseSwaponAll(const std::vector<std::string>& args);
+
 Result<std::string> ParseUmountAll(const std::vector<std::string>& args);
 
 void SetStdioToDevNull(char** argv);

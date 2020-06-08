@@ -37,6 +37,7 @@ Result<void> check_restorecon(const BuiltinArguments& args);
 Result<void> check_restorecon_recursive(const BuiltinArguments& args);
 Result<void> check_setprop(const BuiltinArguments& args);
 Result<void> check_setrlimit(const BuiltinArguments& args);
+Result<void> check_swapon_all(const BuiltinArguments& args);
 Result<void> check_sysclktz(const BuiltinArguments& args);
 Result<void> check_umount_all(const BuiltinArguments& args);
 Result<void> check_wait(const BuiltinArguments& args);
