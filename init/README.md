@@ -623,8 +623,11 @@ provides the `aidl_lazy_test_1` interface.
 `stop <service>`
 > Stop a service from running if it is currently running.
 
-`swapon_all <fstab>`
+`swapon_all [ <fstab> ]`
 > Calls fs\_mgr\_swapon\_all on the given fstab file.
+  If the fstab parameter is not specified, fstab.${ro.boot.fstab_suffix},
+  fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
+  under /odm/etc, /vendor/etc, or / at runtime, in that order.
 
 `symlink <target> <path>`
 > Create a symbolic link at _path_ with the value _target_
