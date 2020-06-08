@@ -120,6 +120,11 @@ std::string DmTargetAndroidVerity::GetParameterString() const {
     return keyid_ + " " + block_device_;
 }
 
+std::string DmTargetBow::GetParameterString() const {
+    if (!block_size_) return target_string_;
+    return target_string_ + " 1 block_size:" + std::to_string(block_size_);
+}
+
 std::string DmTargetSnapshot::name() const {
     if (mode_ == SnapshotStorageMode::Merge) {
         return "snapshot-merge";
