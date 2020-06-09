@@ -126,7 +126,10 @@ cc_library {
 // Static library without DEX support to avoid dependencies on the ART APEX.
 cc_library_static {
     name: "libbacktrace_no_dex",
-    visibility: ["//system/core/debuggerd"],
+    visibility: [
+        "//system/core/debuggerd",
+        "//system/core/init",
+    ],
     defaults: ["libbacktrace_defaults"],
     cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
     target: {
