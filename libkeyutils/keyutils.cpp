@@ -32,17 +32,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-// Deliberately not exposed. Callers should use the typed APIs instead.
-static long keyctl(int cmd, ...) {
-  va_list va;
-  va_start(va, cmd);
-  unsigned long arg2 = va_arg(va, unsigned long);
-  unsigned long arg3 = va_arg(va, unsigned long);
-  unsigned long arg4 = va_arg(va, unsigned long);
-  unsigned long arg5 = va_arg(va, unsigned long);
-  va_end(va);
-  return syscall(__NR_keyctl, cmd, arg2, arg3, arg4, arg5);
-}
+// keyctl(2) is deliberately not exposed. Callers should use the typed APIs instead.
 
 key_serial_t add_key(const char* type, const char* description, const void* payload,
                      size_t payload_length, key_serial_t ring_id) {
@@ -50,30 +40,30 @@ key_serial_t add_key(const char* type, const char* description, const void* payl
 }
 
 key_serial_t keyctl_get_keyring_ID(key_serial_t id, int create) {
-  return keyctl(KEYCTL_GET_KEYRING_ID, id, create);
+  return syscall(__NR_keyctl, KEYCTL_GET_KEYRING_ID, id, create);
 }
 
 long keyctl_revoke(key_serial_t id) {
-  return keyctl(KEYCTL_REVOKE, id);
+  return syscall(__NR_keyctl, KEYCTL_REVOKE, id);
 }
 
 long keyctl_search(key_serial_t ring_id, const char* type, const char* description,
                    key_serial_t dest_ring_id) {
-  return keyctl(KEYCTL_SEARCH, ring_id, type, description, dest_ring_id);
+  return syscall(__NR_keyctl, KEYCTL_SEARCH, ring_id, type, description, dest_ring_id);
 }
 
 long keyctl_setperm(key_serial_t id, int permissions) {
-  return keyctl(KEYCTL_SETPERM, id, permissions);
+  return syscall(__NR_keyctl, KEYCTL_SETPERM, id, permissions);
 }
 
 long keyctl_unlink(key_serial_t key, key_serial_t keyring) {
-  return keyctl(KEYCTL_UNLINK, key, keyring);
+  return syscall(__NR_keyctl, KEYCTL_UNLINK, key, keyring);
 }
 
 long keyctl_restrict_keyring(key_serial_t keyring, const char* type, const char* restriction) {
-  return keyctl(KEYCTL_RESTRICT_KEYRING, keyring, type, restriction);
+  return syscall(__NR_keyctl, KEYCTL_RESTRICT_KEYRING, keyring, type, restriction);
 }
 
 long keyctl_get_security(key_serial_t id, char* buffer, size_t buflen) {
-  return keyctl(KEYCTL_GET_SECURITY, id, buffer, buflen);
+  return syscall(__NR_keyctl, KEYCTL_GET_SECURITY, id, buffer, buflen);
 }
