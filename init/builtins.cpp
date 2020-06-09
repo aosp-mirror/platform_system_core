@@ -1221,6 +1221,20 @@ static Result<void> GenerateLinkerConfiguration() {
     return {};
 }
 
+static Result<void> MountLinkerConfigForDefaultNamespace() {
+    // No need to mount linkerconfig for default mount namespace if the path does not exist (which
+    // would mean it is already mounted)
+    if (access("/linkerconfig/default", 0) != 0) {
+        return {};
+    }
+
+    if (mount("/linkerconfig/default", "/linkerconfig", nullptr, MS_BIND | MS_REC, nullptr) != 0) {
+        return ErrnoError() << "Failed to mount linker configuration for default mount namespace.";
+    }
+
+    return {};
+}
+
 static bool IsApexUpdatable() {
     static bool updatable = android::sysprop::ApexProperties::updatable().value_or(false);
     return updatable;
@@ -1319,11 +1333,14 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
 }
 
 static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
-    if (SwitchToDefaultMountNamespace()) {
-        return {};
-    } else {
-        return Error() << "Failed to enter into default mount namespace";
+    if (auto result = SwitchToMountNamespaceIfNeeded(NS_DEFAULT); !result.ok()) {
+        return result.error();
     }
+    if (auto result = MountLinkerConfigForDefaultNamespace(); !result.ok()) {
+        return result.error();
+    }
+    LOG(INFO) << "Switched to default mount namespace";
+    return {};
 }
 
 // Builtin-function-map start
