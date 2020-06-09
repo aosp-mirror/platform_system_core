@@ -1756,6 +1756,11 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
 // wrapper to __mount() and expects a fully prepared fstab_rec,
 // unlike fs_mgr_do_mount which does more things with avb / verity etc.
 int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point) {
+    // First check the filesystem if requested.
+    if (entry.fs_mgr_flags.wait && !WaitForFile(entry.blk_device, 20s)) {
+        LERROR << "Skipping mounting '" << entry.blk_device << "'";
+    }
+
     // Run fsck if needed
     prepare_fs_for_mount(entry.blk_device, entry);
 
