@@ -708,10 +708,20 @@ static Result<void> do_umount_all(const BuiltinArguments& args) {
     return {};
 }
 
+/* swapon_all [ <fstab> ] */
 static Result<void> do_swapon_all(const BuiltinArguments& args) {
+    auto swapon_all = ParseSwaponAll(args.args);
+    if (!swapon_all.ok()) return swapon_all.error();
+
     Fstab fstab;
-    if (!ReadFstabFromFile(args[1], &fstab)) {
-        return Error() << "Could not read fstab '" << args[1] << "'";
+    if (swapon_all->empty()) {
+        if (!ReadDefaultFstab(&fstab)) {
+            return Error() << "Could not read default fstab";
+        }
+    } else {
+        if (!ReadFstabFromFile(*swapon_all, &fstab)) {
+            return Error() << "Could not read fstab '" << *swapon_all << "'";
+        }
     }
 
     if (!fs_mgr_swapon_all(fstab)) {
@@ -1371,7 +1381,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"setrlimit",               {3,     3,    {false,  do_setrlimit}}},
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},
-        {"swapon_all",              {1,     1,    {false,  do_swapon_all}}},
+        {"swapon_all",              {0,     1,    {false,  do_swapon_all}}},
         {"enter_default_mount_ns",  {0,     0,    {false,  do_enter_default_mount_ns}}},
         {"symlink",                 {2,     2,    {true,   do_symlink}}},
         {"sysclktz",                {1,     1,    {false,  do_sysclktz}}},
