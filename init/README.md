@@ -639,6 +639,12 @@ provides the `aidl_lazy_test_1` interface.
 `umount <path>`
 > Unmount the filesystem mounted at that path.
 
+`umount_all [ <fstab> ]`
+> Calls fs\_mgr\_umount\_all on the given fstab file.
+  If the fstab parameter is not specified, fstab.${ro.boot.fstab_suffix},
+  fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
+  under /odm/etc, /vendor/etc, or / at runtime, in that order.
+
 `verity_update_state <mount-point>`
 > Internal implementation detail used to update dm-verity state and
   set the partition._mount-point_.verified properties used by adb remount
