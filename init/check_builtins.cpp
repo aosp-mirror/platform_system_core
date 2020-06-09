@@ -202,6 +202,14 @@ Result<void> check_setrlimit(const BuiltinArguments& args) {
     return {};
 }
 
+Result<void> check_swapon_all(const BuiltinArguments& args) {
+    auto options = ParseSwaponAll(args.args);
+    if (!options.ok()) {
+        return options.error();
+    }
+    return {};
+}
+
 Result<void> check_sysclktz(const BuiltinArguments& args) {
     ReturnIfAnyArgsEmpty();
 

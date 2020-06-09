@@ -36,6 +36,7 @@
 
 #include <memory>
 #include <regex>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -358,6 +359,10 @@ Filtering:
   -T '<time>'                 Print the lines since specified time (not imply -d).
                               count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'
                               'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format.
+  --uid=<uids>                Only display log messages from UIDs present in the comma separate list
+                              <uids>. No name look-up is performed, so UIDs must be provided as
+                              numeric values. This option is only useful for the 'root', 'log', and
+                              'system' users since only those users can view logs from other users.
 )init");
 
     fprintf(stderr, "\nfilterspecs are a series of \n"
@@ -535,6 +540,7 @@ int Logcat::Run(int argc, char** argv) {
     size_t pid = 0;
     bool got_t = false;
     unsigned id_mask = 0;
+    std::set<uid_t> uids;
 
     if (argc == 2 && !strcmp(argv[1], "--help")) {
         show_help();
@@ -554,6 +560,7 @@ int Logcat::Run(int argc, char** argv) {
         static const char id_str[] = "id";
         static const char wrap_str[] = "wrap";
         static const char print_str[] = "print";
+        static const char uid_str[] = "uid";
         // clang-format off
         static const struct option long_options[] = {
           { "binary",        no_argument,       nullptr, 'B' },
@@ -581,6 +588,7 @@ int Logcat::Run(int argc, char** argv) {
           { "statistics",    no_argument,       nullptr, 'S' },
           // hidden and undocumented reserved alias for -t
           { "tail",          required_argument, nullptr, 't' },
+          { uid_str,         required_argument, nullptr, 0 },
           // support, but ignore and do not document, the optional argument
           { wrap_str,        optional_argument, nullptr, 0 },
           { nullptr,         0,                 nullptr, 0 }
@@ -630,6 +638,17 @@ int Logcat::Run(int argc, char** argv) {
                 }
                 if (long_options[option_index].name == id_str) {
                     setId = (optarg && optarg[0]) ? optarg : nullptr;
+                }
+                if (long_options[option_index].name == uid_str) {
+                    auto uid_strings = Split(optarg, delimiters);
+                    for (const auto& uid_string : uid_strings) {
+                        uid_t uid;
+                        if (!ParseUint(uid_string, &uid)) {
+                            error(EXIT_FAILURE, 0, "Unable to parse UID '%s'", uid_string.c_str());
+                        }
+                        uids.emplace(uid);
+                    }
+                    break;
                 }
                 break;
 
@@ -1162,6 +1181,10 @@ If you have enabled significant logging, look into using the -G option to increa
         if (log_msg.id() > LOG_ID_MAX) {
             error(EXIT_FAILURE, 0, "Unexpected log id (%d) over LOG_ID_MAX (%d).", log_msg.id(),
                   LOG_ID_MAX);
+        }
+
+        if (!uids.empty() && uids.count(log_msg.entry.uid) == 0) {
+            continue;
         }
 
         PrintDividers(log_msg.id(), printDividers);
