@@ -764,7 +764,7 @@ The _commands_ are listed below.
 These are equivalent to using the `start`, `restart`, and `stop` commands on the service specified
 by the _value_ of the property.
 
-`oneshot_one` and `oneshot_off` will turn on or off the _oneshot_
+`oneshot_on` and `oneshot_off` will turn on or off the _oneshot_
 flag for the service specified by the _value_ of the property.  This is
 particularly intended for services that are conditionally lazy HALs.  When
 they are lazy HALs, oneshot must be on, otherwise oneshot should be off.
