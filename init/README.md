@@ -564,9 +564,11 @@ provides the `aidl_lazy_test_1` interface.
   _options_ include "barrier=1", "noauto\_da\_alloc", "discard", ... as
   a comma separated string, e.g. barrier=1,noauto\_da\_alloc
 
-`parse_apex_configs`
-> Parses config file(s) from the mounted APEXes. Intended to be used only once
-  when apexd notifies the mount event by setting apexd.status to ready.
+`perform_apex_config`
+> Performs tasks after APEXes are mounted. For example, creates data directories
+  for the mounted APEXes, parses config file(s) from them, and updates linker
+  configurations. Intended to be used only once when apexd notifies the mount
+  event by setting `apexd.status` to ready.
 
 `restart <service>`
 > Stops and restarts a running service, does nothing if the service is currently
