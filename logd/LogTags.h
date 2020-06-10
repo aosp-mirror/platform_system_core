@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_TAGS_H__
-#define _LOGD_LOG_TAGS_H__
+#pragma once
 
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 
+#include <private/android_filesystem_config.h>
 #include <utils/RWLock.h>
 
 class LogTags {
@@ -120,5 +120,3 @@ class LogTags {
     std::string formatGetEventTag(uid_t uid, const char* name,
                                   const char* format);
 };
-
-#endif  // _LOGD_LOG_TAGS_H__

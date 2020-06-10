@@ -29,13 +29,17 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
+#include <android-base/threads.h>
 #include <log/log_event_list.h>
 #include <log/log_properties.h>
+#include <log/log_read.h>
 #include <private/android_filesystem_config.h>
 
+#include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogUtils.h"
 
@@ -98,8 +102,7 @@ bool LogTags::RebuildFileEventLogTags(const char* filename, bool warn) {
             struct tm tm;
             localtime_r(&now, &tm);
             char timebuf[20];
-            size_t len =
-                strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm);
+            strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm);
             android::base::WriteStringToFd(
                 android::base::StringPrintf(
                     "# Rebuilt %.20s, content owned by logd\n", timebuf),
@@ -113,10 +116,11 @@ bool LogTags::RebuildFileEventLogTags(const char* filename, bool warn) {
     }
 
     if (warn) {
-        android::prdebug(
-            ((fd < 0) ? "%s failed to rebuild"
-                      : "%s missing, damaged or truncated; rebuilt"),
-            filename);
+        if (fd < 0) {
+            LOG(ERROR) << filename << " failed to rebuild";
+        } else {
+            LOG(ERROR) << filename << " missing, damaged or truncated; rebuilt";
+        }
     }
 
     if (fd >= 0) {
@@ -180,15 +184,13 @@ void LogTags::AddEventLogTags(uint32_t tag, uid_t uid, const std::string& Name,
         WritePersistEventLogTags(tag, uid, source);
     } else if (warn && !newOne && source) {
         // For the files, we want to report dupes.
-        android::prdebug("Multiple tag %" PRIu32 " %s %s %s", tag, Name.c_str(),
-                         Format.c_str(), source);
+        LOG(DEBUG) << "Multiple tag " << tag << " " << Name << " " << Format << " " << source;
     }
 }
 
 // Read the event log tags file, and build up our internal database
 void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
     bool etc = !strcmp(filename, system_event_log_tags);
-    bool debug = !etc && !strcmp(filename, debug_event_log_tags);
 
     if (!etc) {
         RebuildFileEventLogTags(filename, warn);
@@ -215,7 +217,7 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                 } else if (isdigit(*cp)) {
                     unsigned long Tag = strtoul(cp, &cp, 10);
                     if (warn && (Tag > emptyTag)) {
-                        android::prdebug("tag too large %lu", Tag);
+                        LOG(WARNING) << "tag too large " << Tag;
                     }
                     while ((cp < endp) && (*cp != '\n') && isspace(*cp)) ++cp;
                     if (cp >= endp) break;
@@ -230,9 +232,8 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                     std::string Name(name, cp - name);
 #ifdef ALLOW_NOISY_LOGGING_OF_PROBLEM_WITH_LOTS_OF_TECHNICAL_DEBT
                     static const size_t maximum_official_tag_name_size = 24;
-                    if (warn &&
-                        (Name.length() > maximum_official_tag_name_size)) {
-                        android::prdebug("tag name too long %s", Name.c_str());
+                    if (warn && (Name.length() > maximum_official_tag_name_size)) {
+                        LOG(WARNING) << "tag name too long " << Name;
                     }
 #endif
                     if (hasAlpha &&
@@ -263,8 +264,8 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                                         filename, warn);
                     } else {
                         if (warn) {
-                            android::prdebug("tag name invalid %.*s",
-                                             (int)(cp - name + 1), name);
+                            LOG(ERROR) << android::base::StringPrintf("tag name invalid %.*s",
+                                                                      (int)(cp - name + 1), name);
                         }
                         lineStart = nullptr;
                     }
@@ -275,7 +276,7 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
             cp++;
         }
     } else if (warn) {
-        android::prdebug("Cannot read %s", filename);
+        LOG(ERROR) << "Cannot read " << filename;
     }
 }
 
@@ -390,23 +391,6 @@ const char* android::tagToName(uint32_t tag) {
     return me->tagToName(tag);
 }
 
-// Prototype in LogUtils.h allowing external access to our database.
-//
-// This only works on userdebug and eng devices to re-read the
-// /data/misc/logd/event-log-tags file right after /data is mounted.
-// The operation is near to boot and should only happen once.  There
-// are races associated with its use since it can trigger a Rebuild
-// of the file, but that is a can-not-happen since the file was not
-// read yet.  More dangerous if called later, but if all is well it
-// should just skip over everything and not write any new entries.
-void android::ReReadEventLogTags() {
-    LogTags* me = logtags;
-
-    if (me && __android_log_is_debuggable()) {
-        me->ReadFileEventLogTags(me->debug_event_log_tags);
-    }
-}
-
 // converts an event tag into a format
 const char* LogTags::tagToFormat(uint32_t tag) const {
     tag2format_const_iterator iform;
@@ -495,8 +479,8 @@ uint32_t LogTags::nameToTag_locked(const std::string& name, const char* format,
 
 static int openFile(const char* name, int mode, bool warning) {
     int fd = TEMP_FAILURE_RETRY(open(name, mode));
-    if ((fd < 0) && warning) {
-        android::prdebug("Failed open %s (%d)", name, errno);
+    if (fd < 0 && warning) {
+        PLOG(ERROR) << "Failed to open " << name;
     }
     return fd;
 }
@@ -511,7 +495,7 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
 
     // Every 16K (half the smallest configurable pmsg buffer size) record
     static const size_t rate_to_pmsg = 16 * 1024;
-    if (lastTotal && ((android::sizesTotal() - lastTotal) < rate_to_pmsg)) {
+    if (lastTotal && (LogStatistics::sizesTotal() - lastTotal) < rate_to_pmsg) {
         return;
     }
 
@@ -564,13 +548,13 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
      */
 
     struct timespec ts;
-    clock_gettime(android_log_clockid(), &ts);
+    clock_gettime(CLOCK_REALTIME, &ts);
 
     android_log_header_t header = {
-        .id = LOG_ID_EVENTS,
-        .tid = (uint16_t)gettid(),
-        .realtime.tv_sec = (uint32_t)ts.tv_sec,
-        .realtime.tv_nsec = (uint32_t)ts.tv_nsec,
+            .id = LOG_ID_EVENTS,
+            .tid = static_cast<uint16_t>(android::base::GetThreadId()),
+            .realtime.tv_sec = static_cast<uint32_t>(ts.tv_sec),
+            .realtime.tv_nsec = static_cast<uint32_t>(ts.tv_nsec),
     };
 
     uint32_t outTag = TAG_DEF_LOG_TAG;
@@ -681,7 +665,7 @@ void LogTags::WritePersistEventLogTags(uint32_t tag, uid_t uid,
         }
     }
 
-    lastTotal = android::sizesTotal();
+    lastTotal = LogStatistics::sizesTotal();
     if (!lastTotal) ++lastTotal;
 
     // record totals for next watermark.

@@ -625,7 +625,7 @@ bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string
         if (!sm) {
             return device->WriteFail("Unable to create SnapshotManager");
         }
-        if (!sm->HandleImminentDataWipe()) {
+        if (!sm->FinishMergeInRecovery()) {
             return device->WriteFail("Unable to finish snapshot merge");
         }
     } else {

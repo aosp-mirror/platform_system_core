@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_WHITE_BLACK_LIST_H__
-#define _LOGD_LOG_WHITE_BLACK_LIST_H__
+#pragma once
 
 #include <sys/types.h>
 
@@ -23,8 +22,6 @@
 #include <list>
 
 #include "LogBufferElement.h"
-
-// White and Blacklist
 
 class Prune {
     friend class PruneList;
@@ -46,9 +43,7 @@ class Prune {
         return mPid;
     }
 
-    int cmp(LogBufferElement* e) const {
-        return cmp(e->getUid(), e->getPid());
-    }
+    int cmp(LogBufferElement* e) const { return cmp(e->uid(), e->pid()); }
 
     std::string format();
 };
@@ -84,5 +79,3 @@ class PruneList {
 
     std::string format();
 };
-
-#endif  // _LOGD_LOG_WHITE_BLACK_LIST_H__

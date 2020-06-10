@@ -19,6 +19,8 @@
 #define HAVE_STRSEP
 #endif
 
+#include <log/logprint.h>
+
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
@@ -37,7 +39,7 @@
 #include <cutils/list.h>
 
 #include <log/log.h>
-#include <log/logprint.h>
+#include <log/log_read.h>
 #include <private/android_logger.h>
 
 #define MS_PER_NSEC 1000000
@@ -214,11 +216,7 @@ AndroidLogFormat* android_log_format_new() {
   p_ret->year_output = false;
   p_ret->zone_output = false;
   p_ret->epoch_output = false;
-#ifdef __ANDROID__
-  p_ret->monotonic_output = android_log_clockid() == CLOCK_MONOTONIC;
-#else
   p_ret->monotonic_output = false;
-#endif
   p_ret->uid_output = false;
   p_ret->descriptive_output = false;
   descriptive_output = false;
@@ -1463,13 +1461,10 @@ char* android_log_formatLogLine(AndroidLogFormat* p_format, char* defaultBuffer,
   nsec = entry->tv_nsec;
 #if __ANDROID__
   if (p_format->monotonic_output) {
-    /* prevent convertMonotonic from being called if logd is monotonic */
-    if (android_log_clockid() != CLOCK_MONOTONIC) {
-      struct timespec time;
-      convertMonotonic(&time, entry);
-      now = time.tv_sec;
-      nsec = time.tv_nsec;
-    }
+    struct timespec time;
+    convertMonotonic(&time, entry);
+    now = time.tv_sec;
+    nsec = time.tv_nsec;
   }
 #endif
   if (now < 0) {

@@ -63,6 +63,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
 
     LOG(INFO) << "Loaded kernel module " << path_name;
     module_loaded_.emplace(canonical_name);
+    module_count_++;
     return true;
 }
 

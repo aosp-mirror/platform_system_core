@@ -37,13 +37,14 @@ class Memory {
                                                      uint64_t end);
   static std::unique_ptr<Memory> CreateFileMemory(const std::string& path, uint64_t offset);
 
-  virtual bool ReadString(uint64_t addr, std::string* string, uint64_t max_read = UINT64_MAX);
+  virtual bool ReadString(uint64_t addr, std::string* dst, size_t max_read);
 
   virtual void Clear() {}
 
   virtual bool IsLocal() const { return false; }
 
   virtual size_t Read(uint64_t addr, void* dst, size_t size) = 0;
+  virtual long ReadTag(uint64_t) { return -1; }
 
   bool ReadFully(uint64_t addr, void* dst, size_t size);
 

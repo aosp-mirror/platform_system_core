@@ -189,13 +189,17 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
 
     int adjust = offset % mPageSize;
     off64_t adjOffset = offset - adjust;
-    size_t adjLength = length + adjust;
+    size_t adjLength;
+    if (__builtin_add_overflow(length, adjust, &adjLength)) {
+        ALOGE("adjusted length overflow: length %zu adjust %d", length, adjust);
+        return false;
+    }
 
     int flags = MAP_SHARED;
     int prot = PROT_READ;
     if (!readOnly) prot |= PROT_WRITE;
 
-    void* ptr = mmap(nullptr, adjLength, prot, flags, fd, adjOffset);
+    void* ptr = mmap64(nullptr, adjLength, prot, flags, fd, adjOffset);
     if (ptr == MAP_FAILED) {
         if (errno == EINVAL && length == 0) {
             ptr = nullptr;

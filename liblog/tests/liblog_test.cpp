@@ -40,6 +40,7 @@
 #include <gtest/gtest.h>
 #include <log/log_event_list.h>
 #include <log/log_properties.h>
+#include <log/log_read.h>
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
@@ -269,10 +270,10 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
       return;
     }
 
-    log_time tx(reinterpret_cast<char*>(&eventData->payload.data));
-    if (ts == tx) {
+    log_time* tx = reinterpret_cast<log_time*>(&eventData->payload.data);
+    if (ts == *tx) {
       ++count;
-    } else if (ts1 == tx) {
+    } else if (ts1 == *tx) {
       ++second_count;
     }
 
@@ -327,8 +328,6 @@ TEST(liblog, __android_log_write__android_logger_list_read) {
 static void bswrite_test(const char* message) {
 #ifdef __ANDROID__
   pid_t pid = getpid();
-
-  log_time ts(android_log_clockid());
 
   size_t num_lines = 1, size = 0, length = 0, total = 0;
   const char* cp = message;
@@ -431,7 +430,6 @@ static void buf_write_test(const char* message) {
   pid_t pid = getpid();
 
   static const char tag[] = "TEST__android_log_buf_write";
-  log_time ts(android_log_clockid());
 
   auto write_function = [&] {
     EXPECT_LT(0, __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_INFO, tag, message));

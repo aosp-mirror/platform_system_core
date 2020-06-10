@@ -23,14 +23,14 @@
 namespace android {
 namespace snapshot {
 
-class SnapshotMergeStats {
+class ISnapshotMergeStats {
   public:
-    // Not thread safe.
-    static SnapshotMergeStats* GetInstance(SnapshotManager& manager);
-
+    virtual ~ISnapshotMergeStats() = default;
     // Called when merge starts or resumes.
-    bool Start();
-    void set_state(android::snapshot::UpdateState state);
+    virtual bool Start() = 0;
+    virtual void set_state(android::snapshot::UpdateState state) = 0;
+    virtual void set_cow_file_size(uint64_t cow_file_size) = 0;
+    virtual uint64_t cow_file_size() = 0;
 
     // Called when merge ends. Properly clean up permanent storage.
     class Result {
@@ -40,7 +40,21 @@ class SnapshotMergeStats {
         // Time between successful Start() / Resume() to Finish().
         virtual std::chrono::steady_clock::duration merge_time() const = 0;
     };
-    std::unique_ptr<Result> Finish();
+    // Return nullptr if any failure.
+    virtual std::unique_ptr<Result> Finish() = 0;
+};
+
+class SnapshotMergeStats : public ISnapshotMergeStats {
+  public:
+    // Not thread safe.
+    static SnapshotMergeStats* GetInstance(SnapshotManager& manager);
+
+    // ISnapshotMergeStats overrides
+    bool Start() override;
+    void set_state(android::snapshot::UpdateState state) override;
+    void set_cow_file_size(uint64_t cow_file_size) override;
+    uint64_t cow_file_size() override;
+    std::unique_ptr<Result> Finish() override;
 
   private:
     bool ReadState();

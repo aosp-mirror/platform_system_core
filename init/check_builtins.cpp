@@ -25,6 +25,7 @@
 #include <sys/time.h>
 
 #include <android-base/logging.h>
+#include <android-base/parsedouble.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
 
@@ -122,6 +123,14 @@ Result<void> check_loglevel(const BuiltinArguments& args) {
     return {};
 }
 
+Result<void> check_mount_all(const BuiltinArguments& args) {
+    auto options = ParseMountAll(args.args);
+    if (!options.ok()) {
+        return options.error();
+    }
+    return {};
+}
+
 Result<void> check_mkdir(const BuiltinArguments& args) {
     auto options = ParseMkdir(args.args);
     if (!options.ok()) {
@@ -193,6 +202,14 @@ Result<void> check_setrlimit(const BuiltinArguments& args) {
     return {};
 }
 
+Result<void> check_swapon_all(const BuiltinArguments& args) {
+    auto options = ParseSwaponAll(args.args);
+    if (!options.ok()) {
+        return options.error();
+    }
+    return {};
+}
+
 Result<void> check_sysclktz(const BuiltinArguments& args) {
     ReturnIfAnyArgsEmpty();
 
@@ -203,10 +220,18 @@ Result<void> check_sysclktz(const BuiltinArguments& args) {
     return {};
 }
 
+Result<void> check_umount_all(const BuiltinArguments& args) {
+    auto options = ParseUmountAll(args.args);
+    if (!options.ok()) {
+        return options.error();
+    }
+    return {};
+}
+
 Result<void> check_wait(const BuiltinArguments& args) {
     if (args.size() == 3 && !args[2].empty()) {
-        int timeout_int;
-        if (!android::base::ParseInt(args[2], &timeout_int)) {
+        double timeout_double;
+        if (!android::base::ParseDouble(args[2], &timeout_double, 0)) {
             return Error() << "failed to parse timeout";
         }
     }

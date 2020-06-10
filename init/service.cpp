@@ -513,6 +513,10 @@ Result<void> Service::Start() {
             LOG(ERROR) << "failed to write pid to files: " << result.error();
         }
 
+        if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
+            LOG(ERROR) << "failed to set task profiles";
+        }
+
         // As requested, set our gid, supplemental gids, uid, context, and
         // priority. Aborts on failure.
         SetProcessAttributesAndCaps();

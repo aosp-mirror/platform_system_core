@@ -49,6 +49,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parsedouble.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
@@ -517,21 +518,21 @@ static Result<void> do_mount(const BuiltinArguments& args) {
 
 /* Imports .rc files from the specified paths. Default ones are applied if none is given.
  *
- * start_index: index of the first path in the args list
+ * rc_paths: list of paths to rc files to import
  */
-static void import_late(const std::vector<std::string>& args, size_t start_index, size_t end_index) {
+static void import_late(const std::vector<std::string>& rc_paths) {
     auto& action_manager = ActionManager::GetInstance();
     auto& service_list = ServiceList::GetInstance();
     Parser parser = CreateParser(action_manager, service_list);
-    if (end_index <= start_index) {
+    if (rc_paths.empty()) {
         // Fallbacks for partitions on which early mount isn't enabled.
         for (const auto& path : late_import_paths) {
             parser.ParseConfig(path);
         }
         late_import_paths.clear();
     } else {
-        for (size_t i = start_index; i < end_index; ++i) {
-            parser.ParseConfig(args[i]);
+        for (const auto& rc_path : rc_paths) {
+            parser.ParseConfig(rc_path);
         }
     }
 
@@ -632,48 +633,44 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
 
 static int initial_mount_fstab_return_code = -1;
 
-/* mount_all <fstab> [ <path> ]* [--<options>]*
+/* <= Q: mount_all <fstab> [ <path> ]* [--<options>]*
+ * >= R: mount_all [ <fstab> ] [--<options>]*
  *
  * This function might request a reboot, in which case it will
  * not return.
  */
 static Result<void> do_mount_all(const BuiltinArguments& args) {
-    std::size_t na = 0;
-    bool import_rc = true;
-    bool queue_event = true;
-    int mount_mode = MOUNT_MODE_DEFAULT;
-    const auto& fstab_file = args[1];
-    std::size_t path_arg_end = args.size();
-    const char* prop_post_fix = "default";
+    auto mount_all = ParseMountAll(args.args);
+    if (!mount_all.ok()) return mount_all.error();
 
-    for (na = args.size() - 1; na > 1; --na) {
-        if (args[na] == "--early") {
-            path_arg_end = na;
-            queue_event = false;
-            mount_mode = MOUNT_MODE_EARLY;
-            prop_post_fix = "early";
-        } else if (args[na] == "--late") {
-            path_arg_end = na;
-            import_rc = false;
-            mount_mode = MOUNT_MODE_LATE;
-            prop_post_fix = "late";
-        }
+    const char* prop_post_fix = "default";
+    bool queue_event = true;
+    if (mount_all->mode == MOUNT_MODE_EARLY) {
+        prop_post_fix = "early";
+        queue_event = false;
+    } else if (mount_all->mode == MOUNT_MODE_LATE) {
+        prop_post_fix = "late";
     }
 
     std::string prop_name = "ro.boottime.init.mount_all."s + prop_post_fix;
     android::base::Timer t;
 
     Fstab fstab;
-    if (!ReadFstabFromFile(fstab_file, &fstab)) {
-        return Error() << "Could not read fstab";
+    if (mount_all->fstab_path.empty()) {
+        if (!ReadDefaultFstab(&fstab)) {
+            return Error() << "Could not read default fstab";
+        }
+    } else {
+        if (!ReadFstabFromFile(mount_all->fstab_path, &fstab)) {
+            return Error() << "Could not read fstab";
+        }
     }
 
-    auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_mode);
+    auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_all->mode);
     SetProperty(prop_name, std::to_string(t.duration().count()));
 
-    if (import_rc && SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
-        /* Paths of .rc files are specified at the 2nd argument and beyond */
-        import_late(args.args, 2, path_arg_end);
+    if (mount_all->import_rc) {
+        import_late(mount_all->rc_paths);
     }
 
     if (queue_event) {
@@ -689,11 +686,20 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     return {};
 }
 
-/* umount_all <fstab> */
+/* umount_all [ <fstab> ] */
 static Result<void> do_umount_all(const BuiltinArguments& args) {
+    auto umount_all = ParseUmountAll(args.args);
+    if (!umount_all.ok()) return umount_all.error();
+
     Fstab fstab;
-    if (!ReadFstabFromFile(args[1], &fstab)) {
-        return Error() << "Could not read fstab";
+    if (umount_all->empty()) {
+        if (!ReadDefaultFstab(&fstab)) {
+            return Error() << "Could not read default fstab";
+        }
+    } else {
+        if (!ReadFstabFromFile(*umount_all, &fstab)) {
+            return Error() << "Could not read fstab";
+        }
     }
 
     if (auto result = fs_mgr_umount_all(&fstab); result != 0) {
@@ -702,10 +708,20 @@ static Result<void> do_umount_all(const BuiltinArguments& args) {
     return {};
 }
 
+/* swapon_all [ <fstab> ] */
 static Result<void> do_swapon_all(const BuiltinArguments& args) {
+    auto swapon_all = ParseSwaponAll(args.args);
+    if (!swapon_all.ok()) return swapon_all.error();
+
     Fstab fstab;
-    if (!ReadFstabFromFile(args[1], &fstab)) {
-        return Error() << "Could not read fstab '" << args[1] << "'";
+    if (swapon_all->empty()) {
+        if (!ReadDefaultFstab(&fstab)) {
+            return Error() << "Could not read default fstab";
+        }
+    } else {
+        if (!ReadFstabFromFile(*swapon_all, &fstab)) {
+            return Error() << "Could not read fstab '" << *swapon_all << "'";
+        }
     }
 
     if (!fs_mgr_swapon_all(fstab)) {
@@ -1065,11 +1081,12 @@ static Result<void> do_load_system_props(const BuiltinArguments& args) {
 static Result<void> do_wait(const BuiltinArguments& args) {
     auto timeout = kCommandRetryTimeout;
     if (args.size() == 3) {
-        int timeout_int;
-        if (!android::base::ParseInt(args[2], &timeout_int)) {
+        double timeout_double;
+        if (!android::base::ParseDouble(args[2], &timeout_double, 0)) {
             return Error() << "failed to parse timeout";
         }
-        timeout = std::chrono::seconds(timeout_int);
+        timeout = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::duration<double>(timeout_double));
     }
 
     if (wait_for_file(args[1].c_str(), timeout) != 0) {
@@ -1347,11 +1364,11 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         // mount_all is currently too complex to run in vendor_init as it queues action triggers,
         // imports rc scripts, etc.  It should be simplified and run in vendor_init context.
         // mount and umount are run in the same context as mount_all for symmetry.
-        {"mount_all",               {1,     kMax, {false,  do_mount_all}}},
+        {"mount_all",               {0,     kMax, {false,  do_mount_all}}},
         {"mount",                   {3,     kMax, {false,  do_mount}}},
         {"perform_apex_config",     {0,     0,    {false,  do_perform_apex_config}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
-        {"umount_all",              {1,     1,    {false,  do_umount_all}}},
+        {"umount_all",              {0,     1,    {false,  do_umount_all}}},
         {"update_linker_config",    {0,     0,    {false,  do_update_linker_config}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},
         {"remount_userdata",        {0,     0,    {false,  do_remount_userdata}}},
@@ -1364,7 +1381,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"setrlimit",               {3,     3,    {false,  do_setrlimit}}},
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},
-        {"swapon_all",              {1,     1,    {false,  do_swapon_all}}},
+        {"swapon_all",              {0,     1,    {false,  do_swapon_all}}},
         {"enter_default_mount_ns",  {0,     0,    {false,  do_enter_default_mount_ns}}},
         {"symlink",                 {2,     2,    {true,   do_symlink}}},
         {"sysclktz",                {1,     1,    {false,  do_sysclktz}}},
