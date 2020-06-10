@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _LOGD_LOG_STATISTICS_H__
-#define _LOGD_LOG_STATISTICS_H__
+#pragma once
 
 #include <ctype.h>
 #include <inttypes.h>
@@ -25,24 +24,40 @@
 #include <sys/types.h>
 
 #include <algorithm>  // std::max
+#include <array>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 
 #include <android-base/stringprintf.h>
+#include <android-base/thread_annotations.h>
 #include <android/log.h>
 #include <log/log_time.h>
 #include <private/android_filesystem_config.h>
 #include <utils/FastStrcmp.h>
 
-#include "LogBufferElement.h"
 #include "LogUtils.h"
 
 #define log_id_for_each(i) \
     for (log_id_t i = LOG_ID_MIN; (i) < LOG_ID_MAX; (i) = (log_id_t)((i) + 1))
 
 class LogStatistics;
+class UidEntry;
+class PidEntry;
+
+struct LogStatisticsElement {
+    uid_t uid;
+    pid_t pid;
+    pid_t tid;
+    uint32_t tag;
+    log_time realtime;
+    const char* msg;
+    uint16_t msg_len;
+    uint16_t dropped_count;
+    log_id_t log_id;
+};
 
 template <typename TKey, typename TEntry>
 class LogHashtable {
@@ -63,7 +78,7 @@ class LogHashtable {
     static const size_t unordered_map_per_entry_overhead = sizeof(void*);
     static const size_t unordered_map_bucket_overhead = sizeof(void*);
 
-   public:
+  public:
     size_t size() const {
         return map.size();
     }
@@ -79,162 +94,111 @@ class LogHashtable {
     typedef
         typename std::unordered_map<TKey, TEntry>::const_iterator const_iterator;
 
-    std::unique_ptr<const TEntry* []> sort(uid_t uid, pid_t pid,
-                                           size_t len) const {
-        if (!len) {
-            std::unique_ptr<const TEntry* []> sorted(nullptr);
-            return sorted;
-        }
-
-        const TEntry** retval = new const TEntry*[len];
-        memset(retval, 0, sizeof(*retval) * len);
-
-        for (const_iterator it = map.begin(); it != map.end(); ++it) {
-            const TEntry& entry = it->second;
-
-            if ((uid != AID_ROOT) && (uid != entry.getUid())) {
+    // Returns a sorted array of up to len highest entries sorted by size.  If fewer than len
+    // entries are found, their positions are set to nullptr.
+    template <size_t len>
+    void MaxEntries(uid_t uid, pid_t pid, std::array<const TKey*, len>& out_keys,
+                    std::array<const TEntry*, len>& out_entries) const {
+        out_keys.fill(nullptr);
+        out_entries.fill(nullptr);
+        for (const auto& [key, entry] : map) {
+            uid_t entry_uid = 0;
+            if constexpr (std::is_same_v<TEntry, UidEntry>) {
+                entry_uid = key;
+            } else {
+                entry_uid = entry.uid();
+            }
+            if (uid != AID_ROOT && uid != entry_uid) {
                 continue;
             }
-            if (pid && entry.getPid() && (pid != entry.getPid())) {
+            pid_t entry_pid = 0;
+            if constexpr (std::is_same_v<TEntry, PidEntry>) {
+                entry_pid = key;
+            } else {
+                entry_pid = entry.pid();
+            }
+            if (pid && entry_pid && pid != entry_pid) {
                 continue;
             }
 
             size_t sizes = entry.getSizes();
             ssize_t index = len - 1;
-            while ((!retval[index] || (sizes > retval[index]->getSizes())) &&
-                   (--index >= 0))
+            while ((!out_entries[index] || sizes > out_entries[index]->getSizes()) && --index >= 0)
                 ;
             if (++index < (ssize_t)len) {
                 size_t num = len - index - 1;
                 if (num) {
-                    memmove(&retval[index + 1], &retval[index],
-                            num * sizeof(retval[0]));
+                    memmove(&out_keys[index + 1], &out_keys[index], num * sizeof(out_keys[0]));
+                    memmove(&out_entries[index + 1], &out_entries[index],
+                            num * sizeof(out_entries[0]));
                 }
-                retval[index] = &entry;
+                out_keys[index] = &key;
+                out_entries[index] = &entry;
             }
         }
-        std::unique_ptr<const TEntry* []> sorted(retval);
-        return sorted;
     }
 
-    inline iterator add(const TKey& key, const LogBufferElement* element) {
+    iterator Add(const TKey& key, const LogStatisticsElement& element) {
         iterator it = map.find(key);
         if (it == map.end()) {
             it = map.insert(std::make_pair(key, TEntry(element))).first;
         } else {
-            it->second.add(element);
+            it->second.Add(element);
         }
         return it;
     }
 
-    inline iterator add(TKey key) {
+    iterator Add(const TKey& key) {
         iterator it = map.find(key);
         if (it == map.end()) {
             it = map.insert(std::make_pair(key, TEntry(key))).first;
         } else {
-            it->second.add(key);
+            it->second.Add(key);
         }
         return it;
     }
 
-    void subtract(TKey&& key, const LogBufferElement* element) {
-        iterator it = map.find(std::move(key));
-        if ((it != map.end()) && it->second.subtract(element)) {
-            map.erase(it);
-        }
-    }
-
-    void subtract(const TKey& key, const LogBufferElement* element) {
+    void Subtract(const TKey& key, const LogStatisticsElement& element) {
         iterator it = map.find(key);
-        if ((it != map.end()) && it->second.subtract(element)) {
+        if (it != map.end() && it->second.Subtract(element)) {
             map.erase(it);
         }
     }
 
-    inline void drop(TKey key, const LogBufferElement* element) {
+    void Drop(const TKey& key, const LogStatisticsElement& element) {
         iterator it = map.find(key);
         if (it != map.end()) {
-            it->second.drop(element);
+            it->second.Drop(element);
         }
     }
 
-    inline iterator begin() {
-        return map.begin();
-    }
-    inline const_iterator begin() const {
-        return map.begin();
-    }
-    inline iterator end() {
-        return map.end();
-    }
-    inline const_iterator end() const {
-        return map.end();
-    }
-
-    std::string format(const LogStatistics& stat, uid_t uid, pid_t pid,
-                       const std::string& name = std::string(""),
-                       log_id_t id = LOG_ID_MAX) const {
-        static const size_t maximum_sorted_entries = 32;
-        std::string output;
-        std::unique_ptr<const TEntry* []> sorted =
-            sort(uid, pid, maximum_sorted_entries);
-        if (!sorted.get()) {
-            return output;
-        }
-        bool headerPrinted = false;
-        for (size_t index = 0; index < maximum_sorted_entries; ++index) {
-            const TEntry* entry = sorted[index];
-            if (!entry) {
-                break;
-            }
-            if (entry->getSizes() <= (sorted[0]->getSizes() / 100)) {
-                break;
-            }
-            if (!headerPrinted) {
-                output += "\n\n";
-                output += entry->formatHeader(name, id);
-                headerPrinted = true;
-            }
-            output += entry->format(stat, id);
-        }
-        return output;
-    }
+    iterator begin() { return map.begin(); }
+    const_iterator begin() const { return map.begin(); }
+    iterator end() { return map.end(); }
+    const_iterator end() const { return map.end(); }
 };
 
-namespace EntryBaseConstants {
-static constexpr size_t pruned_len = 14;
-static constexpr size_t total_len = 80;
-}
+class EntryBase {
+  public:
+    EntryBase() : size_(0) {}
+    explicit EntryBase(const LogStatisticsElement& element) : size_(element.msg_len) {}
 
-struct EntryBase {
-    size_t size;
+    size_t getSizes() const { return size_; }
 
-    EntryBase() : size(0) {
-    }
-    explicit EntryBase(const LogBufferElement* element)
-        : size(element->getMsgLen()) {
-    }
-
-    size_t getSizes() const {
-        return size;
+    void Add(const LogStatisticsElement& element) { size_ += element.msg_len; }
+    bool Subtract(const LogStatisticsElement& element) {
+        size_ -= element.msg_len;
+        return !size_;
     }
 
-    inline void add(const LogBufferElement* element) {
-        size += element->getMsgLen();
-    }
-    inline bool subtract(const LogBufferElement* element) {
-        size -= element->getMsgLen();
-        return !size;
-    }
+    static constexpr size_t PRUNED_LEN = 14;
+    static constexpr size_t TOTAL_LEN = 80;
 
     static std::string formatLine(const std::string& name,
                                   const std::string& size,
                                   const std::string& pruned) {
-        ssize_t drop_len =
-            std::max(pruned.length() + 1, EntryBaseConstants::pruned_len);
-        ssize_t size_len =
-            std::max(size.length() + 1, EntryBaseConstants::total_len -
-                                            name.length() - drop_len - 1);
+        ssize_t drop_len = std::max(pruned.length() + 1, PRUNED_LEN);
+        ssize_t size_len = std::max(size.length() + 1, TOTAL_LEN - name.length() - drop_len - 1);
 
         std::string ret = android::base::StringPrintf(
             "%s%*s%*s", name.c_str(), (int)size_len, size.c_str(),
@@ -246,545 +210,353 @@ struct EntryBase {
         if (len) ret.erase(pos + 1, len);
         return ret + "\n";
     }
+
+  private:
+    size_t size_;
 };
 
-struct EntryBaseDropped : public EntryBase {
-    size_t dropped;
+class EntryBaseDropped : public EntryBase {
+  public:
+    EntryBaseDropped() : dropped_(0) {}
+    explicit EntryBaseDropped(const LogStatisticsElement& element)
+        : EntryBase(element), dropped_(element.dropped_count) {}
 
-    EntryBaseDropped() : dropped(0) {
+    size_t dropped_count() const { return dropped_; }
+
+    void Add(const LogStatisticsElement& element) {
+        dropped_ += element.dropped_count;
+        EntryBase::Add(element);
     }
-    explicit EntryBaseDropped(const LogBufferElement* element)
-        : EntryBase(element), dropped(element->getDropped()) {
+    bool Subtract(const LogStatisticsElement& element) {
+        dropped_ -= element.dropped_count;
+        return EntryBase::Subtract(element) && !dropped_;
+    }
+    void Drop(const LogStatisticsElement& element) {
+        dropped_ += 1;
+        EntryBase::Subtract(element);
     }
 
-    size_t getDropped() const {
-        return dropped;
-    }
-
-    inline void add(const LogBufferElement* element) {
-        dropped += element->getDropped();
-        EntryBase::add(element);
-    }
-    inline bool subtract(const LogBufferElement* element) {
-        dropped -= element->getDropped();
-        return EntryBase::subtract(element) && !dropped;
-    }
-    inline void drop(const LogBufferElement* element) {
-        dropped += 1;
-        EntryBase::subtract(element);
-    }
+  private:
+    size_t dropped_;
 };
 
-struct UidEntry : public EntryBaseDropped {
-    const uid_t uid;
-    pid_t pid;
+class UidEntry : public EntryBaseDropped {
+  public:
+    explicit UidEntry(const LogStatisticsElement& element)
+        : EntryBaseDropped(element), pid_(element.pid) {}
 
-    explicit UidEntry(const LogBufferElement* element)
-        : EntryBaseDropped(element),
-          uid(element->getUid()),
-          pid(element->getPid()) {
-    }
+    pid_t pid() const { return pid_; }
 
-    inline const uid_t& getKey() const {
-        return uid;
-    }
-    inline const uid_t& getUid() const {
-        return getKey();
-    }
-    inline const pid_t& getPid() const {
-        return pid;
-    }
-
-    inline void add(const LogBufferElement* element) {
-        if (pid != element->getPid()) {
-            pid = -1;
+    void Add(const LogStatisticsElement& element) {
+        if (pid_ != element.pid) {
+            pid_ = -1;
         }
-        EntryBaseDropped::add(element);
+        EntryBaseDropped::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
-    std::string format(const LogStatistics& stat, log_id_t id) const;
+    std::string format(const LogStatistics& stat, log_id_t id, uid_t uid) const;
+
+  private:
+    pid_t pid_;
 };
 
 namespace android {
 uid_t pidToUid(pid_t pid);
 }
 
-struct PidEntry : public EntryBaseDropped {
-    const pid_t pid;
-    uid_t uid;
-    char* name;
-
+class PidEntry : public EntryBaseDropped {
+  public:
     explicit PidEntry(pid_t pid)
         : EntryBaseDropped(),
-          pid(pid),
-          uid(android::pidToUid(pid)),
-          name(android::pidToName(pid)) {
-    }
-    explicit PidEntry(const LogBufferElement* element)
-        : EntryBaseDropped(element),
-          pid(element->getPid()),
-          uid(element->getUid()),
-          name(android::pidToName(pid)) {
-    }
+          uid_(android::pidToUid(pid)),
+          name_(android::pidToName(pid)) {}
+    explicit PidEntry(const LogStatisticsElement& element)
+        : EntryBaseDropped(element), uid_(element.uid), name_(android::pidToName(element.pid)) {}
     PidEntry(const PidEntry& element)
         : EntryBaseDropped(element),
-          pid(element.pid),
-          uid(element.uid),
-          name(element.name ? strdup(element.name) : nullptr) {
-    }
-    ~PidEntry() {
-        free(name);
-    }
+          uid_(element.uid_),
+          name_(element.name_ ? strdup(element.name_) : nullptr) {}
+    ~PidEntry() { free(name_); }
 
-    const pid_t& getKey() const {
-        return pid;
-    }
-    const pid_t& getPid() const {
-        return getKey();
-    }
-    const uid_t& getUid() const {
-        return uid;
-    }
-    const char* getName() const {
-        return name;
-    }
+    uid_t uid() const { return uid_; }
+    const char* name() const { return name_; }
 
-    inline void add(pid_t newPid) {
-        if (name && !fastcmp<strncmp>(name, "zygote", 6)) {
-            free(name);
-            name = nullptr;
+    void Add(pid_t new_pid) {
+        if (name_ && !fastcmp<strncmp>(name_, "zygote", 6)) {
+            free(name_);
+            name_ = nullptr;
         }
-        if (!name) {
-            name = android::pidToName(newPid);
+        if (!name_) {
+            name_ = android::pidToName(new_pid);
         }
     }
 
-    inline void add(const LogBufferElement* element) {
-        uid_t incomingUid = element->getUid();
-        if (getUid() != incomingUid) {
-            uid = incomingUid;
-            free(name);
-            name = android::pidToName(element->getPid());
+    void Add(const LogStatisticsElement& element) {
+        uid_t incoming_uid = element.uid;
+        if (uid() != incoming_uid) {
+            uid_ = incoming_uid;
+            free(name_);
+            name_ = android::pidToName(element.pid);
         } else {
-            add(element->getPid());
+            Add(element.pid);
         }
-        EntryBaseDropped::add(element);
+        EntryBaseDropped::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
-    std::string format(const LogStatistics& stat, log_id_t id) const;
+    std::string format(const LogStatistics& stat, log_id_t id, pid_t pid) const;
+
+  private:
+    uid_t uid_;
+    char* name_;
 };
 
-struct TidEntry : public EntryBaseDropped {
-    const pid_t tid;
-    pid_t pid;
-    uid_t uid;
-    char* name;
-
+class TidEntry : public EntryBaseDropped {
+  public:
     TidEntry(pid_t tid, pid_t pid)
         : EntryBaseDropped(),
-          tid(tid),
-          pid(pid),
-          uid(android::pidToUid(tid)),
-          name(android::tidToName(tid)) {
-    }
-    explicit TidEntry(const LogBufferElement* element)
+          pid_(pid),
+          uid_(android::pidToUid(tid)),
+          name_(android::tidToName(tid)) {}
+    explicit TidEntry(const LogStatisticsElement& element)
         : EntryBaseDropped(element),
-          tid(element->getTid()),
-          pid(element->getPid()),
-          uid(element->getUid()),
-          name(android::tidToName(tid)) {
-    }
+          pid_(element.pid),
+          uid_(element.uid),
+          name_(android::tidToName(element.tid)) {}
     TidEntry(const TidEntry& element)
         : EntryBaseDropped(element),
-          tid(element.tid),
-          pid(element.pid),
-          uid(element.uid),
-          name(element.name ? strdup(element.name) : nullptr) {
-    }
-    ~TidEntry() {
-        free(name);
-    }
+          pid_(element.pid_),
+          uid_(element.uid_),
+          name_(element.name_ ? strdup(element.name_) : nullptr) {}
+    ~TidEntry() { free(name_); }
 
-    const pid_t& getKey() const {
-        return tid;
-    }
-    const pid_t& getTid() const {
-        return getKey();
-    }
-    const pid_t& getPid() const {
-        return pid;
-    }
-    const uid_t& getUid() const {
-        return uid;
-    }
-    const char* getName() const {
-        return name;
-    }
+    pid_t pid() const { return pid_; }
+    uid_t uid() const { return uid_; }
+    const char* name() const { return name_; }
 
-    inline void add(pid_t incomingTid) {
-        if (name && !fastcmp<strncmp>(name, "zygote", 6)) {
-            free(name);
-            name = nullptr;
+    void Add(pid_t incomingTid) {
+        if (name_ && !fastcmp<strncmp>(name_, "zygote", 6)) {
+            free(name_);
+            name_ = nullptr;
         }
-        if (!name) {
-            name = android::tidToName(incomingTid);
+        if (!name_) {
+            name_ = android::tidToName(incomingTid);
         }
     }
 
-    inline void add(const LogBufferElement* element) {
-        uid_t incomingUid = element->getUid();
-        pid_t incomingPid = element->getPid();
-        if ((getUid() != incomingUid) || (getPid() != incomingPid)) {
-            uid = incomingUid;
-            pid = incomingPid;
-            free(name);
-            name = android::tidToName(element->getTid());
+    void Add(const LogStatisticsElement& element) {
+        uid_t incoming_uid = element.uid;
+        pid_t incoming_pid = element.pid;
+        if (uid() != incoming_uid || pid() != incoming_pid) {
+            uid_ = incoming_uid;
+            pid_ = incoming_pid;
+            free(name_);
+            name_ = android::tidToName(element.tid);
         } else {
-            add(element->getTid());
+            Add(element.tid);
         }
-        EntryBaseDropped::add(element);
+        EntryBaseDropped::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
-    std::string format(const LogStatistics& stat, log_id_t id) const;
+    std::string format(const LogStatistics& stat, log_id_t id, pid_t pid) const;
+
+  private:
+    pid_t pid_;
+    uid_t uid_;
+    char* name_;
 };
 
-struct TagEntry : public EntryBaseDropped {
-    const uint32_t tag;
-    pid_t pid;
-    uid_t uid;
+class TagEntry : public EntryBaseDropped {
+  public:
+    explicit TagEntry(const LogStatisticsElement& element)
+        : EntryBaseDropped(element), tag_(element.tag), pid_(element.pid), uid_(element.uid) {}
 
-    explicit TagEntry(const LogBufferElement* element)
-        : EntryBaseDropped(element),
-          tag(element->getTag()),
-          pid(element->getPid()),
-          uid(element->getUid()) {
-    }
+    uint32_t key() const { return tag_; }
+    pid_t pid() const { return pid_; }
+    uid_t uid() const { return uid_; }
+    const char* name() const { return android::tagToName(tag_); }
 
-    const uint32_t& getKey() const {
-        return tag;
-    }
-    const pid_t& getPid() const {
-        return pid;
-    }
-    const uid_t& getUid() const {
-        return uid;
-    }
-    const char* getName() const {
-        return android::tagToName(tag);
-    }
-
-    inline void add(const LogBufferElement* element) {
-        if (uid != element->getUid()) {
-            uid = -1;
+    void Add(const LogStatisticsElement& element) {
+        if (uid_ != element.uid) {
+            uid_ = -1;
         }
-        if (pid != element->getPid()) {
-            pid = -1;
+        if (pid_ != element.pid) {
+            pid_ = -1;
         }
-        EntryBaseDropped::add(element);
+        EntryBaseDropped::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
-    std::string format(const LogStatistics& stat, log_id_t id) const;
+    std::string format(const LogStatistics& stat, log_id_t id, uint32_t) const;
+
+  private:
+    const uint32_t tag_;
+    pid_t pid_;
+    uid_t uid_;
 };
 
-struct TagNameKey {
-    std::string* alloc;
-    std::string_view name;  // Saves space if const char*
+class TagNameEntry : public EntryBase {
+  public:
+    explicit TagNameEntry(const LogStatisticsElement& element)
+        : EntryBase(element), tid_(element.tid), pid_(element.pid), uid_(element.uid) {}
 
-    explicit TagNameKey(const LogBufferElement* element)
-        : alloc(nullptr), name("", strlen("")) {
-        if (element->isBinary()) {
-            uint32_t tag = element->getTag();
-            if (tag) {
-                const char* cp = android::tagToName(tag);
-                if (cp) {
-                    name = std::string_view(cp, strlen(cp));
-                    return;
-                }
-            }
-            alloc = new std::string(
-                android::base::StringPrintf("[%" PRIu32 "]", tag));
-            if (!alloc) return;
-            name = std::string_view(alloc->c_str(), alloc->size());
-            return;
+    pid_t tid() const { return tid_; }
+    pid_t pid() const { return pid_; }
+    uid_t uid() const { return uid_; }
+
+    void Add(const LogStatisticsElement& element) {
+        if (uid_ != element.uid) {
+            uid_ = -1;
         }
-        const char* msg = element->getMsg();
-        if (!msg) {
-            name = std::string_view("chatty", strlen("chatty"));
-            return;
+        if (pid_ != element.pid) {
+            pid_ = -1;
         }
-        ++msg;
-        uint16_t len = element->getMsgLen();
-        len = (len <= 1) ? 0 : strnlen(msg, len - 1);
-        if (!len) {
-            name = std::string_view("<NULL>", strlen("<NULL>"));
-            return;
+        if (tid_ != element.tid) {
+            tid_ = -1;
         }
-        alloc = new std::string(msg, len);
-        if (!alloc) return;
-        name = std::string_view(alloc->c_str(), alloc->size());
-    }
-
-    explicit TagNameKey(TagNameKey&& rval) noexcept
-        : alloc(rval.alloc), name(rval.name.data(), rval.name.length()) {
-        rval.alloc = nullptr;
-    }
-
-    explicit TagNameKey(const TagNameKey& rval)
-        : alloc(rval.alloc ? new std::string(*rval.alloc) : nullptr),
-          name(alloc ? alloc->data() : rval.name.data(), rval.name.length()) {
-    }
-
-    ~TagNameKey() {
-        if (alloc) delete alloc;
-    }
-
-    operator const std::string_view() const {
-        return name;
-    }
-
-    const char* data() const {
-        return name.data();
-    }
-    size_t length() const {
-        return name.length();
-    }
-
-    bool operator==(const TagNameKey& rval) const {
-        if (length() != rval.length()) return false;
-        if (length() == 0) return true;
-        return fastcmp<strncmp>(data(), rval.data(), length()) == 0;
-    }
-    bool operator!=(const TagNameKey& rval) const {
-        return !(*this == rval);
-    }
-
-    size_t getAllocLength() const {
-        return alloc ? alloc->length() + 1 + sizeof(std::string) : 0;
-    }
-};
-
-// Hash for TagNameKey
-template <>
-struct std::hash<TagNameKey>
-    : public std::unary_function<const TagNameKey&, size_t> {
-    size_t operator()(const TagNameKey& __t) const noexcept {
-        if (!__t.length()) return 0;
-        return std::hash<std::string_view>()(std::string_view(__t));
-    }
-};
-
-struct TagNameEntry : public EntryBase {
-    pid_t tid;
-    pid_t pid;
-    uid_t uid;
-    TagNameKey name;
-
-    explicit TagNameEntry(const LogBufferElement* element)
-        : EntryBase(element),
-          tid(element->getTid()),
-          pid(element->getPid()),
-          uid(element->getUid()),
-          name(element) {
-    }
-
-    const TagNameKey& getKey() const {
-        return name;
-    }
-    const pid_t& getTid() const {
-        return tid;
-    }
-    const pid_t& getPid() const {
-        return pid;
-    }
-    const uid_t& getUid() const {
-        return uid;
-    }
-    const char* getName() const {
-        return name.data();
-    }
-    size_t getNameAllocLength() const {
-        return name.getAllocLength();
-    }
-
-    inline void add(const LogBufferElement* element) {
-        if (uid != element->getUid()) {
-            uid = -1;
-        }
-        if (pid != element->getPid()) {
-            pid = -1;
-        }
-        if (tid != element->getTid()) {
-            tid = -1;
-        }
-        EntryBase::add(element);
+        EntryBase::Add(element);
     }
 
     std::string formatHeader(const std::string& name, log_id_t id) const;
-    std::string format(const LogStatistics& stat, log_id_t id) const;
+    std::string format(const LogStatistics& stat, log_id_t id, const std::string& key_name) const;
+
+  private:
+    pid_t tid_;
+    pid_t pid_;
+    uid_t uid_;
 };
 
-template <typename TEntry>
-class LogFindWorst {
-    std::unique_ptr<const TEntry* []> sorted;
-
-   public:
-    explicit LogFindWorst(std::unique_ptr<const TEntry* []>&& sorted)
-        : sorted(std::move(sorted)) {
-    }
-
-    void findWorst(int& worst, size_t& worst_sizes, size_t& second_worst_sizes,
-                   size_t threshold) {
-        if (sorted.get() && sorted[0] && sorted[1]) {
-            worst_sizes = sorted[0]->getSizes();
-            if ((worst_sizes > threshold)
-                // Allow time horizon to extend roughly tenfold, assume
-                // average entry length is 100 characters.
-                && (worst_sizes > (10 * sorted[0]->getDropped()))) {
-                worst = sorted[0]->getKey();
-                second_worst_sizes = sorted[1]->getSizes();
-                if (second_worst_sizes < threshold) {
-                    second_worst_sizes = threshold;
-                }
-            }
-        }
-    }
-
-    void findWorst(int& worst, size_t worst_sizes, size_t& second_worst_sizes) {
-        if (sorted.get() && sorted[0] && sorted[1]) {
-            worst = sorted[0]->getKey();
-            second_worst_sizes =
-                worst_sizes - sorted[0]->getSizes() + sorted[1]->getSizes();
-        }
-    }
-};
-
-// Log Statistics
 class LogStatistics {
     friend UidEntry;
+    friend PidEntry;
+    friend TidEntry;
 
-    size_t mSizes[LOG_ID_MAX];
-    size_t mElements[LOG_ID_MAX];
-    size_t mDroppedElements[LOG_ID_MAX];
-    size_t mSizesTotal[LOG_ID_MAX];
-    size_t mElementsTotal[LOG_ID_MAX];
-    log_time mOldest[LOG_ID_MAX];
-    log_time mNewest[LOG_ID_MAX];
-    log_time mNewestDropped[LOG_ID_MAX];
-    static size_t SizesTotal;
+    size_t mSizes[LOG_ID_MAX] GUARDED_BY(lock_);
+    size_t mElements[LOG_ID_MAX] GUARDED_BY(lock_);
+    size_t mDroppedElements[LOG_ID_MAX] GUARDED_BY(lock_);
+    size_t mSizesTotal[LOG_ID_MAX] GUARDED_BY(lock_);
+    size_t mElementsTotal[LOG_ID_MAX] GUARDED_BY(lock_);
+    log_time mOldest[LOG_ID_MAX] GUARDED_BY(lock_);
+    log_time mNewest[LOG_ID_MAX] GUARDED_BY(lock_);
+    log_time mNewestDropped[LOG_ID_MAX] GUARDED_BY(lock_);
+    static std::atomic<size_t> SizesTotal;
     bool enable;
 
     // uid to size list
     typedef LogHashtable<uid_t, UidEntry> uidTable_t;
-    uidTable_t uidTable[LOG_ID_MAX];
+    uidTable_t uidTable[LOG_ID_MAX] GUARDED_BY(lock_);
 
     // pid of system to size list
     typedef LogHashtable<pid_t, PidEntry> pidSystemTable_t;
-    pidSystemTable_t pidSystemTable[LOG_ID_MAX];
+    pidSystemTable_t pidSystemTable[LOG_ID_MAX] GUARDED_BY(lock_);
 
     // pid to uid list
     typedef LogHashtable<pid_t, PidEntry> pidTable_t;
-    pidTable_t pidTable;
+    pidTable_t pidTable GUARDED_BY(lock_);
 
     // tid to uid list
     typedef LogHashtable<pid_t, TidEntry> tidTable_t;
-    tidTable_t tidTable;
+    tidTable_t tidTable GUARDED_BY(lock_);
 
     // tag list
     typedef LogHashtable<uint32_t, TagEntry> tagTable_t;
-    tagTable_t tagTable;
+    tagTable_t tagTable GUARDED_BY(lock_);
 
     // security tag list
-    tagTable_t securityTagTable;
+    tagTable_t securityTagTable GUARDED_BY(lock_);
 
     // global tag list
-    typedef LogHashtable<TagNameKey, TagNameEntry> tagNameTable_t;
+    typedef LogHashtable<std::string, TagNameEntry> tagNameTable_t;
     tagNameTable_t tagNameTable;
 
-    size_t sizeOf() const {
+    size_t sizeOf() const REQUIRES(lock_) {
         size_t size = sizeof(*this) + pidTable.sizeOf() + tidTable.sizeOf() +
                       tagTable.sizeOf() + securityTagTable.sizeOf() +
                       tagNameTable.sizeOf() +
                       (pidTable.size() * sizeof(pidTable_t::iterator)) +
                       (tagTable.size() * sizeof(tagTable_t::iterator));
         for (auto it : pidTable) {
-            const char* name = it.second.getName();
+            const char* name = it.second.name();
             if (name) size += strlen(name) + 1;
         }
         for (auto it : tidTable) {
-            const char* name = it.second.getName();
+            const char* name = it.second.name();
             if (name) size += strlen(name) + 1;
         }
-        for (auto it : tagNameTable) size += it.second.getNameAllocLength();
+        for (auto it : tagNameTable) {
+            size += sizeof(std::string);
+            size_t len = it.first.size();
+            // Account for short string optimization: if the string's length is <= 22 bytes for 64
+            // bit or <= 10 bytes for 32 bit, then there is no additional allocation.
+            if ((sizeof(std::string) == 24 && len > 22) ||
+                (sizeof(std::string) != 24 && len > 10)) {
+                size += len;
+            }
+        }
         log_id_for_each(id) {
             size += uidTable[id].sizeOf();
             size += uidTable[id].size() * sizeof(uidTable_t::iterator);
             size += pidSystemTable[id].sizeOf();
-            size +=
-                pidSystemTable[id].size() * sizeof(pidSystemTable_t::iterator);
+            size += pidSystemTable[id].size() * sizeof(pidSystemTable_t::iterator);
         }
         return size;
     }
 
-   public:
-    LogStatistics();
+  public:
+    LogStatistics(bool enable_statistics);
 
-    void enableStatistics() {
-        enable = true;
-    }
-
-    void addTotal(LogBufferElement* entry);
-    void add(LogBufferElement* entry);
-    void subtract(LogBufferElement* entry);
+    void AddTotal(log_id_t log_id, uint16_t size) EXCLUDES(lock_);
+    void Add(const LogStatisticsElement& entry) EXCLUDES(lock_);
+    void Subtract(const LogStatisticsElement& entry) EXCLUDES(lock_);
     // entry->setDropped(1) must follow this call
-    void drop(LogBufferElement* entry);
+    void Drop(const LogStatisticsElement& entry) EXCLUDES(lock_);
     // Correct for coalescing two entries referencing dropped content
-    void erase(LogBufferElement* element) {
-        log_id_t log_id = element->getLogId();
+    void Erase(const LogStatisticsElement& element) EXCLUDES(lock_) {
+        auto lock = std::lock_guard{lock_};
+        log_id_t log_id = element.log_id;
         --mElements[log_id];
         --mDroppedElements[log_id];
     }
 
-    LogFindWorst<UidEntry> sort(uid_t uid, pid_t pid, size_t len, log_id id) {
-        return LogFindWorst<UidEntry>(uidTable[id].sort(uid, pid, len));
-    }
-    LogFindWorst<PidEntry> sortPids(uid_t uid, pid_t pid, size_t len,
-                                    log_id id) {
-        return LogFindWorst<PidEntry>(pidSystemTable[id].sort(uid, pid, len));
-    }
-    LogFindWorst<TagEntry> sortTags(uid_t uid, pid_t pid, size_t len, log_id) {
-        return LogFindWorst<TagEntry>(tagTable.sort(uid, pid, len));
-    }
+    void WorstTwoUids(log_id id, size_t threshold, int* worst, size_t* worst_sizes,
+                      size_t* second_worst_sizes) const EXCLUDES(lock_);
+    void WorstTwoTags(size_t threshold, int* worst, size_t* worst_sizes,
+                      size_t* second_worst_sizes) const EXCLUDES(lock_);
+    void WorstTwoSystemPids(log_id id, size_t worst_uid_sizes, int* worst,
+                            size_t* second_worst_sizes) const EXCLUDES(lock_);
 
-    // fast track current value by id only
-    size_t sizes(log_id_t id) const {
+    bool ShouldPrune(log_id id, unsigned long max_size, unsigned long* prune_rows) const
+            EXCLUDES(lock_);
+
+    // Snapshot of the sizes for a given log buffer.
+    size_t Sizes(log_id_t id) const EXCLUDES(lock_) {
+        auto lock = std::lock_guard{lock_};
         return mSizes[id];
     }
-    size_t elements(log_id_t id) const {
-        return mElements[id];
-    }
-    size_t realElements(log_id_t id) const {
-        return mElements[id] - mDroppedElements[id];
-    }
-    size_t sizesTotal(log_id_t id) const {
-        return mSizesTotal[id];
-    }
-    size_t elementsTotal(log_id_t id) const {
-        return mElementsTotal[id];
-    }
+    // TODO: Get rid of this entirely.
     static size_t sizesTotal() {
         return SizesTotal;
     }
 
-    std::string format(uid_t uid, pid_t pid, unsigned int logMask) const;
+    std::string Format(uid_t uid, pid_t pid, unsigned int logMask) const EXCLUDES(lock_);
 
-    // helper (must be locked directly or implicitly by mLogElementsLock)
-    const char* pidToName(pid_t pid) const;
-    uid_t pidToUid(pid_t pid);
-    const char* uidToName(uid_t uid) const;
+    const char* PidToName(pid_t pid) const EXCLUDES(lock_);
+    uid_t PidToUid(pid_t pid) EXCLUDES(lock_);
+    const char* UidToName(uid_t uid) const EXCLUDES(lock_);
+
+  private:
+    template <typename TKey, typename TEntry>
+    void WorstTwoWithThreshold(const LogHashtable<TKey, TEntry>& table, size_t threshold,
+                               int* worst, size_t* worst_sizes, size_t* second_worst_sizes) const;
+    template <typename TKey, typename TEntry>
+    std::string FormatTable(const LogHashtable<TKey, TEntry>& table, uid_t uid, pid_t pid,
+                            const std::string& name = std::string(""),
+                            log_id_t id = LOG_ID_MAX) const REQUIRES(lock_);
+    void FormatTmp(const char* nameTmp, uid_t uid, std::string& name, std::string& size,
+                   size_t nameLen) const REQUIRES(lock_);
+    const char* UidToNameLocked(uid_t uid) const REQUIRES(lock_);
+
+    mutable std::mutex lock_;
 };
-
-#endif  // _LOGD_LOG_STATISTICS_H__

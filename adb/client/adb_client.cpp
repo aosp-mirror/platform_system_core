@@ -416,14 +416,20 @@ std::string format_host_command(const char* command) {
     return android::base::StringPrintf("%s:%s", prefix, command);
 }
 
-const FeatureSet& adb_get_feature_set() {
-    static const android::base::NoDestructor<FeatureSet> features([] {
+const std::optional<FeatureSet>& adb_get_feature_set(std::string* error) {
+    static std::mutex feature_mutex [[clang::no_destroy]];
+    static std::optional<FeatureSet> features [[clang::no_destroy]] GUARDED_BY(feature_mutex);
+    std::lock_guard<std::mutex> lock(feature_mutex);
+    if (!features) {
         std::string result;
-        if (!adb_query(format_host_command("features"), &result, &result)) {
-            fprintf(stderr, "failed to get feature set: %s\n", result.c_str());
-            return FeatureSet{};
+        std::string err;
+        if (adb_query(format_host_command("features"), &result, &err)) {
+            features = StringToFeatureSet(result);
+        } else {
+            if (error) {
+                *error = err;
+            }
         }
-        return StringToFeatureSet(result);
-    }());
-    return *features;
+    }
+    return features;
 }

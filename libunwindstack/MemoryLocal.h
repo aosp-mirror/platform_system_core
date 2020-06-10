@@ -31,6 +31,7 @@ class MemoryLocal : public Memory {
   bool IsLocal() const override { return true; }
 
   size_t Read(uint64_t addr, void* dst, size_t size) override;
+  long ReadTag(uint64_t addr) override;
 };
 
 }  // namespace unwindstack

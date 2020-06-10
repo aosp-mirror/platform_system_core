@@ -122,16 +122,7 @@ AdbConnectionClientContext* adbconnection_client_new(
     return nullptr;
   }
 
-#if defined(__APPLE__)
-  ctx->control_socket_.reset(socket(AF_UNIX, SOCK_SEQPACKET, 0));
-  // TODO: find a better home for all these copies of the mac CLOEXEC workaround.
-  if (int fd = ctx->control_socket_.get(), flags = fcntl(fd, F_GETFD);
-      flags != -1 && (flags & FD_CLOEXEC) == 0) {
-    fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
-  }
-#else
   ctx->control_socket_.reset(socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0));
-#endif
   if (ctx->control_socket_ < 0) {
     PLOG(ERROR) << "failed to create Unix domain socket";
     return nullptr;
@@ -149,7 +140,13 @@ AdbConnectionClientContext* adbconnection_client_new(
 
   int rc = connect(ctx->control_socket_.get(), reinterpret_cast<sockaddr*>(&addr), addr_len);
   if (rc != 0) {
-    PLOG(ERROR) << "failed to connect to jdwp control socket";
+    if (errno == ECONNREFUSED) {
+      // On userdebug devices, every Java process is debuggable, so if adbd is explicitly turned
+      // off, this would spew enormous amounts of red-herring errors.
+      LOG(DEBUG) << "failed to connect to jdwp control socket, adbd not running?";
+    } else {
+      PLOG(ERROR) << "failed to connect to jdwp control socket";
+    }
     return nullptr;
   }
 

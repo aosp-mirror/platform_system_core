@@ -161,6 +161,7 @@ TEST(libmodprobe, Test) {
 
     EXPECT_TRUE(modules_loaded == expected_modules_loaded);
 
+    EXPECT_TRUE(m.GetModuleCount() == 15);
     EXPECT_TRUE(m.Remove("test4"));
 
     GTEST_LOG_(INFO) << "Expected modules loaded after removing test4 (in order):";

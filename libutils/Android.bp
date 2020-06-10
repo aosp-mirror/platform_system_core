@@ -22,6 +22,7 @@ cc_library_headers {
         "//apex_available:platform",
         "//apex_available:anyapex",
     ],
+    min_sdk_version: "apex_inherit",
 
     header_libs: [
         "liblog_headers",
@@ -162,6 +163,7 @@ cc_library {
         "//apex_available:anyapex",
         "//apex_available:platform",
     ],
+    min_sdk_version: "apex_inherit",
 }
 
 cc_library {
@@ -173,8 +175,8 @@ cc_library {
     ],
 
     shared_libs: [
-         "libutils",
-         "libbacktrace",
+        "libutils",
+        "libbacktrace",
     ],
 
     target: {
@@ -192,6 +194,45 @@ cc_library {
     },
 }
 
+cc_defaults {
+    name: "libutils_fuzz_defaults",
+    host_supported: true,
+    shared_libs: [
+        "libutils",
+        "libbase",
+    ],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_bitset",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["BitSet_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_filemap",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["FileMap_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_string8",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["String8_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_string16",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["String16_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_vector",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["Vector_fuzz.cpp"],
+}
+
 cc_test {
     name: "libutils_test",
     host_supported: true,
@@ -205,6 +246,7 @@ cc_test {
         "String8_test.cpp",
         "String16_test.cpp",
         "StrongPointer_test.cpp",
+        "Timers_test.cpp",
         "Unicode_test.cpp",
         "Vector_test.cpp",
     ],

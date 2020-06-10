@@ -158,20 +158,30 @@ bool Memory::ReadFully(uint64_t addr, void* dst, size_t size) {
   return rc == size;
 }
 
-bool Memory::ReadString(uint64_t addr, std::string* string, uint64_t max_read) {
-  string->clear();
-  uint64_t bytes_read = 0;
-  while (bytes_read < max_read) {
-    uint8_t value;
-    if (!ReadFully(addr, &value, sizeof(value))) {
-      return false;
+bool Memory::ReadString(uint64_t addr, std::string* dst, size_t max_read) {
+  char buffer[256];  // Large enough for 99% of symbol names.
+  size_t size = 0;   // Number of bytes which were read into the buffer.
+  for (size_t offset = 0; offset < max_read; offset += size) {
+    // Look for null-terminator first, so we can allocate string of exact size.
+    // If we know the end of valid memory range, do the reads in larger blocks.
+    size_t read = std::min(sizeof(buffer), max_read - offset);
+    size = Read(addr + offset, buffer, read);
+    if (size == 0) {
+      return false;  // We have not found end of string yet and we can not read more data.
     }
-    if (value == '\0') {
-      return true;
+    size_t length = strnlen(buffer, size);  // Index of the null-terminator.
+    if (length < size) {
+      // We found the null-terminator. Allocate the string and set its content.
+      if (offset == 0) {
+        // We did just single read, so the buffer already contains the whole string.
+        dst->assign(buffer, length);
+        return true;
+      } else {
+        // The buffer contains only the last block. Read the whole string again.
+        dst->assign(offset + length, '\0');
+        return ReadFully(addr, dst->data(), dst->size());
+      }
     }
-    string->push_back(value);
-    addr++;
-    bytes_read++;
   }
   return false;
 }
@@ -323,6 +333,16 @@ size_t MemoryRemote::Read(uint64_t addr, void* dst, size_t size) {
 size_t MemoryLocal::Read(uint64_t addr, void* dst, size_t size) {
   return ProcessVmRead(getpid(), addr, dst, size);
 }
+
+#if !defined(ANDROID_EXPERIMENTAL_MTE)
+long MemoryRemote::ReadTag(uint64_t) {
+  return -1;
+}
+
+long MemoryLocal::ReadTag(uint64_t) {
+  return -1;
+}
+#endif
 
 MemoryRange::MemoryRange(const std::shared_ptr<Memory>& memory, uint64_t begin, uint64_t length,
                          uint64_t offset)

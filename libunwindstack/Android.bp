@@ -57,6 +57,7 @@ cc_defaults {
         "MapInfo.cpp",
         "Maps.cpp",
         "Memory.cpp",
+        "MemoryMte.cpp",
         "LocalUnwinder.cpp",
         "Regs.cpp",
         "RegsArm.cpp",
@@ -74,12 +75,28 @@ cc_defaults {
     ],
 
     target: {
-        // Always disable optimizations for host to make it easier to debug.
         host: {
+            // Always disable optimizations for host to make it easier to debug.
             cflags: [
                 "-O0",
                 "-g",
             ],
+        },
+        android: {
+            header_libs: ["bionic_libc_platform_headers"],
+            product_variables: {
+                experimental_mte: {
+                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+                },
+            },
+        },
+        linux_bionic: {
+            header_libs: ["bionic_libc_platform_headers"],
+            product_variables: {
+                experimental_mte: {
+                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+                },
+            },
         },
     },
 
@@ -129,6 +146,12 @@ cc_library {
             exclude_shared_libs: ["libdexfile_support"],
         },
     },
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.art.debug",
+        "com.android.art.release",
+    ],
 }
 
 // Static library without DEX support to avoid dependencies on the ART APEX.
@@ -213,6 +236,7 @@ cc_defaults {
         "tests/MemoryRangesTest.cpp",
         "tests/MemoryRemoteTest.cpp",
         "tests/MemoryTest.cpp",
+        "tests/MemoryMteTest.cpp",
         "tests/RegsInfoTest.cpp",
         "tests/RegsIterateTest.cpp",
         "tests/RegsStepIfSignalHandlerTest.cpp",
@@ -268,6 +292,25 @@ cc_defaults {
         "tests/files/offline/straddle_arm/*",
         "tests/files/offline/straddle_arm64/*",
     ],
+
+    target: {
+        android: {
+            header_libs: ["bionic_libc_platform_headers"],
+            product_variables: {
+                experimental_mte: {
+                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+                },
+            },
+        },
+        linux_bionic: {
+            header_libs: ["bionic_libc_platform_headers"],
+            product_variables: {
+                experimental_mte: {
+                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+                },
+            },
+        },
+    },
 }
 
 cc_test {
@@ -373,7 +416,10 @@ cc_benchmark {
 
     srcs: [
         "benchmarks/unwind_benchmarks.cpp",
+        "benchmarks/ElfBenchmark.cpp",
+        "benchmarks/MapsBenchmark.cpp",
         "benchmarks/SymbolBenchmark.cpp",
+        "benchmarks/Utils.cpp",
     ],
 
     data: [

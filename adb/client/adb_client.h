@@ -76,7 +76,7 @@ bool adb_status(borrowed_fd fd, std::string* _Nonnull error);
 std::string format_host_command(const char* _Nonnull command);
 
 // Get the feature set of the current preferred transport.
-const FeatureSet& adb_get_feature_set();
+const std::optional<FeatureSet>& adb_get_feature_set(std::string* _Nullable error);
 
 #if defined(__linux__)
 // Get the path of a file containing the path to the server executable, if the socket spec set via
@@ -90,8 +90,9 @@ extern const char* _Nullable * _Nullable __adb_envp;
 
 // ADB Secure DNS service interface. Used to query what ADB Secure DNS services have been
 // resolved, and to run some kind of callback for each one.
-using adb_secure_foreach_service_callback = std::function<void(
-        const char* _Nonnull service_name, const char* _Nonnull ip_address, uint16_t port)>;
+using adb_secure_foreach_service_callback =
+        std::function<void(const char* _Nonnull service_name, const char* _Nonnull reg_type,
+                           const char* _Nonnull ip_address, uint16_t port)>;
 
 // Queries pairing/connect services that have been discovered and resolved.
 // If |host_name| is not null, run |cb| only for services

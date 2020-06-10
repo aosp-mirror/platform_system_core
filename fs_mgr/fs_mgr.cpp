@@ -62,6 +62,7 @@
 #include <fs_mgr_overlayfs.h>
 #include <fscrypt/fscrypt.h>
 #include <libdm/dm.h>
+#include <libdm/loop_control.h>
 #include <liblp/metadata_format.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
@@ -105,6 +106,7 @@ using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
 using android::dm::DmTargetLinear;
+using android::dm::LoopControl;
 
 // Realistically, this file should be part of the android::fs_mgr namespace;
 using namespace android::fs_mgr;
@@ -452,7 +454,8 @@ static void tune_encrypt(const std::string& blk_device, const FstabEntry& entry,
                << entry.encryption_options;
         return;
     }
-    if ((options.flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64) != 0) {
+    if ((options.flags &
+         (FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 | FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32)) != 0) {
         // We can only use this policy on ext4 if the "stable_inodes" feature
         // is set on the filesystem, otherwise shrinking will break encrypted files.
         if ((sb->s_feature_compat & cpu_to_le32(EXT4_FEATURE_COMPAT_STABLE_INODES)) == 0) {
@@ -1096,8 +1099,28 @@ class CheckpointManager {
                 }
 
                 android::dm::DmTable table;
-                if (!table.AddTarget(std::make_unique<android::dm::DmTargetBow>(
-                            0, size, entry->blk_device))) {
+                auto bowTarget =
+                        std::make_unique<android::dm::DmTargetBow>(0, size, entry->blk_device);
+
+                // dm-bow uses the first block as a log record, and relocates the real first block
+                // elsewhere. For metadata encrypted devices, dm-bow sits below dm-default-key, and
+                // for post Android Q devices dm-default-key uses a block size of 4096 always.
+                // So if dm-bow's block size, which by default is the block size of the underlying
+                // hardware, is less than dm-default-key's, blocks will get broken up and I/O will
+                // fail as it won't be data_unit_size aligned.
+                // However, since it is possible there is an already shipping non
+                // metadata-encrypted device with smaller blocks, we must not change this for
+                // devices shipped with Q or earlier unless they explicitly selected dm-default-key
+                // v2
+                constexpr unsigned int pre_gki_level = __ANDROID_API_Q__;
+                unsigned int options_format_version = android::base::GetUintProperty<unsigned int>(
+                        "ro.crypto.dm_default_key.options_format.version",
+                        (android::fscrypt::GetFirstApiLevel() <= pre_gki_level ? 1 : 2));
+                if (options_format_version > 1) {
+                    bowTarget->SetBlockSize(4096);
+                }
+
+                if (!table.AddTarget(std::move(bowTarget))) {
                     LERROR << "Failed to add bow target";
                     return false;
                 }
@@ -1733,6 +1756,11 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
 // wrapper to __mount() and expects a fully prepared fstab_rec,
 // unlike fs_mgr_do_mount which does more things with avb / verity etc.
 int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point) {
+    // First check the filesystem if requested.
+    if (entry.fs_mgr_flags.wait && !WaitForFile(entry.blk_device, 20s)) {
+        LERROR << "Skipping mounting '" << entry.blk_device << "'";
+    }
+
     // Run fsck if needed
     prepare_fs_for_mount(entry.blk_device, entry);
 
@@ -1908,19 +1936,6 @@ static bool PrepareZramDevice(const std::string& loop, off64_t size, const std::
         return InstallZramDevice(bdev);
     }
 
-    // Get free loopback
-    unique_fd loop_fd(TEMP_FAILURE_RETRY(open("/dev/loop-control", O_RDWR | O_CLOEXEC)));
-    if (loop_fd.get() == -1) {
-        PERROR << "Cannot open loop-control";
-        return false;
-    }
-
-    int num = ioctl(loop_fd.get(), LOOP_CTL_GET_FREE);
-    if (num == -1) {
-        PERROR << "Cannot get free loop slot";
-        return false;
-    }
-
     // Prepare target path
     unique_fd target_fd(TEMP_FAILURE_RETRY(open(loop.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600)));
     if (target_fd.get() == -1) {
@@ -1932,25 +1947,21 @@ static bool PrepareZramDevice(const std::string& loop, off64_t size, const std::
         return false;
     }
 
-    // Connect loopback (device_fd) to target path (target_fd)
-    std::string device = android::base::StringPrintf("/dev/block/loop%d", num);
-    unique_fd device_fd(TEMP_FAILURE_RETRY(open(device.c_str(), O_RDWR | O_CLOEXEC)));
-    if (device_fd.get() == -1) {
-        PERROR << "Cannot open /dev/block/loop" << num;
-        return false;
-    }
-
-    if (ioctl(device_fd.get(), LOOP_SET_FD, target_fd.get())) {
-        PERROR << "Cannot set loopback to target path";
+    // Allocate loop device and attach it to file_path.
+    LoopControl loop_control;
+    std::string device;
+    if (!loop_control.Attach(target_fd.get(), 5s, &device)) {
         return false;
     }
 
     // set block size & direct IO
-    if (ioctl(device_fd.get(), LOOP_SET_BLOCK_SIZE, 4096)) {
-        PWARNING << "Cannot set 4KB blocksize to /dev/block/loop" << num;
+    unique_fd device_fd(TEMP_FAILURE_RETRY(open(device.c_str(), O_RDWR | O_CLOEXEC)));
+    if (device_fd.get() == -1) {
+        PERROR << "Cannot open " << device;
+        return false;
     }
-    if (ioctl(device_fd.get(), LOOP_SET_DIRECT_IO, 1)) {
-        PWARNING << "Cannot set direct_io to /dev/block/loop" << num;
+    if (!LoopControl::EnableDirectIo(device_fd.get())) {
+        return false;
     }
 
     return InstallZramDevice(device);

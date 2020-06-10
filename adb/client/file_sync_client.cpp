@@ -225,21 +225,23 @@ struct TransferLedger {
 
 class SyncConnection {
   public:
-    SyncConnection()
-        : acknowledgement_buffer_(sizeof(sync_status) + SYNC_DATA_MAX),
-          features_(adb_get_feature_set()) {
+    SyncConnection() : acknowledgement_buffer_(sizeof(sync_status) + SYNC_DATA_MAX) {
         acknowledgement_buffer_.resize(0);
         max = SYNC_DATA_MAX; // TODO: decide at runtime.
 
-        if (features_.empty()) {
-            Error("failed to get feature set");
+        std::string error;
+        auto&& features = adb_get_feature_set(&error);
+        if (!features) {
+            Error("failed to get feature set: %s", error.c_str());
         } else {
-            have_stat_v2_ = CanUseFeature(features_, kFeatureStat2);
-            have_ls_v2_ = CanUseFeature(features_, kFeatureLs2);
-            have_sendrecv_v2_ = CanUseFeature(features_, kFeatureSendRecv2);
-            have_sendrecv_v2_brotli_ = CanUseFeature(features_, kFeatureSendRecv2Brotli);
-            have_sendrecv_v2_lz4_ = CanUseFeature(features_, kFeatureSendRecv2LZ4);
-            have_sendrecv_v2_dry_run_send_ = CanUseFeature(features_, kFeatureSendRecv2DryRunSend);
+            features_ = &*features;
+            have_stat_v2_ = CanUseFeature(*features, kFeatureStat2);
+            have_ls_v2_ = CanUseFeature(*features, kFeatureLs2);
+            have_sendrecv_v2_ = CanUseFeature(*features, kFeatureSendRecv2);
+            have_sendrecv_v2_brotli_ = CanUseFeature(*features, kFeatureSendRecv2Brotli);
+            have_sendrecv_v2_lz4_ = CanUseFeature(*features, kFeatureSendRecv2LZ4);
+            have_sendrecv_v2_zstd_ = CanUseFeature(*features, kFeatureSendRecv2Zstd);
+            have_sendrecv_v2_dry_run_send_ = CanUseFeature(*features, kFeatureSendRecv2DryRunSend);
             std::string error;
             fd.reset(adb_connect("sync:", &error));
             if (fd < 0) {
@@ -267,13 +269,16 @@ class SyncConnection {
     bool HaveSendRecv2() const { return have_sendrecv_v2_; }
     bool HaveSendRecv2Brotli() const { return have_sendrecv_v2_brotli_; }
     bool HaveSendRecv2LZ4() const { return have_sendrecv_v2_lz4_; }
+    bool HaveSendRecv2Zstd() const { return have_sendrecv_v2_zstd_; }
     bool HaveSendRecv2DryRunSend() const { return have_sendrecv_v2_dry_run_send_; }
 
     // Resolve a compression type which might be CompressionType::Any to a specific compression
     // algorithm.
     CompressionType ResolveCompressionType(CompressionType compression) const {
         if (compression == CompressionType::Any) {
-            if (HaveSendRecv2LZ4()) {
+            if (HaveSendRecv2Zstd()) {
+                return CompressionType::Zstd;
+            } else if (HaveSendRecv2LZ4()) {
                 return CompressionType::LZ4;
             } else if (HaveSendRecv2Brotli()) {
                 return CompressionType::Brotli;
@@ -283,7 +288,7 @@ class SyncConnection {
         return compression;
     }
 
-    const FeatureSet& Features() const { return features_; }
+    const FeatureSet& Features() const { return *features_; }
 
     bool IsValid() { return fd >= 0; }
 
@@ -373,6 +378,10 @@ class SyncConnection {
                 msg.send_v2_setup.flags = kSyncFlagLZ4;
                 break;
 
+            case CompressionType::Zstd:
+                msg.send_v2_setup.flags = kSyncFlagZstd;
+                break;
+
             case CompressionType::Any:
                 LOG(FATAL) << "unexpected CompressionType::Any";
         }
@@ -418,6 +427,10 @@ class SyncConnection {
 
             case CompressionType::LZ4:
                 msg.recv_v2_setup.flags |= kSyncFlagLZ4;
+                break;
+
+            case CompressionType::Zstd:
+                msg.recv_v2_setup.flags |= kSyncFlagZstd;
                 break;
 
             case CompressionType::Any:
@@ -630,7 +643,8 @@ class SyncConnection {
         syncsendbuf sbuf;
         sbuf.id = ID_DATA;
 
-        std::variant<std::monostate, NullEncoder, BrotliEncoder, LZ4Encoder> encoder_storage;
+        std::variant<std::monostate, NullEncoder, BrotliEncoder, LZ4Encoder, ZstdEncoder>
+                encoder_storage;
         Encoder* encoder = nullptr;
         switch (compression) {
             case CompressionType::None:
@@ -643,6 +657,10 @@ class SyncConnection {
 
             case CompressionType::LZ4:
                 encoder = &encoder_storage.emplace<LZ4Encoder>(SYNC_DATA_MAX);
+                break;
+
+            case CompressionType::Zstd:
+                encoder = &encoder_storage.emplace<ZstdEncoder>(SYNC_DATA_MAX);
                 break;
 
             case CompressionType::Any:
@@ -921,12 +939,13 @@ class SyncConnection {
   private:
     std::deque<std::pair<std::string, std::string>> deferred_acknowledgements_;
     Block acknowledgement_buffer_;
-    const FeatureSet& features_;
+    const FeatureSet* features_ = nullptr;
     bool have_stat_v2_;
     bool have_ls_v2_;
     bool have_sendrecv_v2_;
     bool have_sendrecv_v2_brotli_;
     bool have_sendrecv_v2_lz4_;
+    bool have_sendrecv_v2_zstd_;
     bool have_sendrecv_v2_dry_run_send_;
 
     TransferLedger global_ledger_;
@@ -1132,7 +1151,8 @@ static bool sync_recv_v2(SyncConnection& sc, const char* rpath, const char* lpat
     uint64_t bytes_copied = 0;
 
     Block buffer(SYNC_DATA_MAX);
-    std::variant<std::monostate, NullDecoder, BrotliDecoder, LZ4Decoder> decoder_storage;
+    std::variant<std::monostate, NullDecoder, BrotliDecoder, LZ4Decoder, ZstdDecoder>
+            decoder_storage;
     Decoder* decoder = nullptr;
 
     std::span buffer_span(buffer.data(), buffer.size());
@@ -1147,6 +1167,10 @@ static bool sync_recv_v2(SyncConnection& sc, const char* rpath, const char* lpat
 
         case CompressionType::LZ4:
             decoder = &decoder_storage.emplace<LZ4Decoder>(buffer_span);
+            break;
+
+        case CompressionType::Zstd:
+            decoder = &decoder_storage.emplace<ZstdDecoder>(buffer_span);
             break;
 
         case CompressionType::Any:

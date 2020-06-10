@@ -71,9 +71,8 @@ class LinearExtent final : public Extent {
     uint64_t end_sector() const { return physical_sector_ + num_sectors_; }
     uint32_t device_index() const { return device_index_; }
 
-    bool OwnsSector(uint64_t sector) const {
-        return sector >= physical_sector_ && sector < end_sector();
-    }
+    bool OverlapsWith(const LinearExtent& other) const;
+    bool OverlapsWith(const Interval& interval) const;
 
     Interval AsInterval() const;
 
@@ -145,7 +144,6 @@ class Partition final {
     std::vector<std::unique_ptr<Extent>> extents_;
     uint32_t attributes_;
     uint64_t size_;
-    bool disabled_;
 };
 
 // An interval in the metadata. This is similar to a LinearExtent with one difference.
@@ -322,9 +320,6 @@ class MetadataBuilder {
     // Set the LP_HEADER_FLAG_VIRTUAL_AB_DEVICE flag.
     void SetVirtualABDeviceFlag();
 
-    // If set, checks for slot suffixes will be ignored internally.
-    void IgnoreSlotSuffixing();
-
     bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
 
@@ -360,7 +355,7 @@ class MetadataBuilder {
     bool GrowPartition(Partition* partition, uint64_t aligned_size,
                        const std::vector<Interval>& free_region_hint);
     void ShrinkPartition(Partition* partition, uint64_t aligned_size);
-    uint64_t AlignSector(const LpMetadataBlockDevice& device, uint64_t sector) const;
+    bool AlignSector(const LpMetadataBlockDevice& device, uint64_t sector, uint64_t* out) const;
     uint64_t TotalSizeOfGroup(PartitionGroup* group) const;
     bool UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo& info);
     bool FindBlockDeviceByName(const std::string& partition_name, uint32_t* index) const;

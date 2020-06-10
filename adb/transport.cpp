@@ -85,6 +85,7 @@ const char* const kFeatureTrackApp = "track_app";
 const char* const kFeatureSendRecv2 = "sendrecv_v2";
 const char* const kFeatureSendRecv2Brotli = "sendrecv_v2_brotli";
 const char* const kFeatureSendRecv2LZ4 = "sendrecv_v2_lz4";
+const char* const kFeatureSendRecv2Zstd = "sendrecv_v2_zstd";
 const char* const kFeatureSendRecv2DryRunSend = "sendrecv_v2_dry_run_send";
 
 namespace {
@@ -505,11 +506,10 @@ bool FdConnection::DoTlsHandshake(RSA* key, std::string* auth_key) {
 
     int osh = cast_handle_to_int(adb_get_os_handle(fd_));
 #if ADB_HOST
-    tls_ = TlsConnection::Create(TlsConnection::Role::Client,
+    tls_ = TlsConnection::Create(TlsConnection::Role::Client, x509_str, evp_str, osh);
 #else
-    tls_ = TlsConnection::Create(TlsConnection::Role::Server,
+    tls_ = TlsConnection::Create(TlsConnection::Role::Server, x509_str, evp_str, osh);
 #endif
-                                 x509_str, evp_str, osh);
     CHECK(tls_);
 #if ADB_HOST
     // TLS 1.3 gives the client no message if the server rejected the
@@ -929,6 +929,7 @@ static void transport_destroy(atransport* t) {
     remove_transport(t);
 }
 
+#if ADB_HOST
 static int qual_match(const std::string& to_test, const char* prefix, const std::string& qual,
                       bool sanitize_qual) {
     if (to_test.empty()) /* Return true if both the qual and to_test are empty strings. */
@@ -1084,10 +1085,13 @@ void ConnectionWaitable::SetConnectionEstablished(bool success) {
     }
     cv_.notify_one();
 }
+#endif
 
 atransport::~atransport() {
+#if ADB_HOST
     // If the connection callback had not been run before, run it now.
     SetConnectionEstablished(false);
+#endif
 }
 
 int atransport::Write(apacket* p) {
@@ -1186,6 +1190,7 @@ const FeatureSet& supported_features() {
                 kFeatureSendRecv2,
                 kFeatureSendRecv2Brotli,
                 kFeatureSendRecv2LZ4,
+                kFeatureSendRecv2Zstd,
                 kFeatureSendRecv2DryRunSend,
                 // Increment ADB_SERVER_VERSION when adding a feature that adbd needs
                 // to know about. Otherwise, the client can be stuck running an old
@@ -1241,6 +1246,7 @@ void atransport::RunDisconnects() {
     disconnects_.clear();
 }
 
+#if ADB_HOST
 bool atransport::MatchesTarget(const std::string& target) const {
     if (!serial.empty()) {
         if (target == serial) {
@@ -1283,8 +1289,6 @@ void atransport::SetConnectionEstablished(bool success) {
 ReconnectResult atransport::Reconnect() {
     return reconnect_(this);
 }
-
-#if ADB_HOST
 
 // We use newline as our delimiter, make sure to never output it.
 static std::string sanitize(std::string str, bool alphanumeric) {
@@ -1367,7 +1371,7 @@ void close_usb_devices(std::function<bool(const atransport*)> predicate, bool re
 void close_usb_devices(bool reset) {
     close_usb_devices([](const atransport*) { return true; }, reset);
 }
-#endif  // ADB_HOST
+#endif
 
 bool register_socket_transport(unique_fd s, std::string serial, int port, int local,
                                atransport::ReconnectCallback reconnect, bool use_tls, int* error) {
@@ -1407,7 +1411,9 @@ bool register_socket_transport(unique_fd s, std::string serial, int port, int lo
 
     lock.unlock();
 
+#if ADB_HOST
     auto waitable = t->connection_waitable();
+#endif
     register_transport(t);
 
     if (local == 1) {
@@ -1415,6 +1421,7 @@ bool register_socket_transport(unique_fd s, std::string serial, int port, int lo
         return true;
     }
 
+#if ADB_HOST
     if (!waitable->WaitForConnection(std::chrono::seconds(10))) {
         if (error) *error = ETIMEDOUT;
         return false;
@@ -1424,6 +1431,7 @@ bool register_socket_transport(unique_fd s, std::string serial, int port, int lo
         if (error) *error = EPERM;
         return false;
     }
+#endif
 
     return true;
 }
@@ -1454,14 +1462,9 @@ void kick_all_tcp_devices() {
             t->Kick();
         }
     }
-#if ADB_HOST
     reconnect_handler.CheckForKicked();
-#endif
 }
 
-#endif
-
-#if ADB_HOST
 void register_usb_transport(usb_handle* usb, const char* serial, const char* devpath,
                             unsigned writeable) {
     atransport* t = new atransport(writeable ? kCsOffline : kCsNoPerm);
@@ -1483,9 +1486,7 @@ void register_usb_transport(usb_handle* usb, const char* serial, const char* dev
 
     register_transport(t);
 }
-#endif
 
-#if ADB_HOST
 // This should only be used for transports with connection_state == kCsNoPerm.
 void unregister_usb_transport(usb_handle* usb) {
     std::lock_guard<std::recursive_mutex> lock(transport_lock);
