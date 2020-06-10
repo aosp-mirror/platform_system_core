@@ -1120,8 +1120,28 @@ class CheckpointManager {
                 }
 
                 android::dm::DmTable table;
-                if (!table.AddTarget(std::make_unique<android::dm::DmTargetBow>(
-                            0, size, entry->blk_device))) {
+                auto bowTarget =
+                        std::make_unique<android::dm::DmTargetBow>(0, size, entry->blk_device);
+
+                // dm-bow uses the first block as a log record, and relocates the real first block
+                // elsewhere. For metadata encrypted devices, dm-bow sits below dm-default-key, and
+                // for post Android Q devices dm-default-key uses a block size of 4096 always.
+                // So if dm-bow's block size, which by default is the block size of the underlying
+                // hardware, is less than dm-default-key's, blocks will get broken up and I/O will
+                // fail as it won't be data_unit_size aligned.
+                // However, since it is possible there is an already shipping non
+                // metadata-encrypted device with smaller blocks, we must not change this for
+                // devices shipped with Q or earlier unless they explicitly selected dm-default-key
+                // v2
+                constexpr unsigned int pre_gki_level = __ANDROID_API_Q__;
+                unsigned int options_format_version = android::base::GetUintProperty<unsigned int>(
+                        "ro.crypto.dm_default_key.options_format.version",
+                        (android::fscrypt::GetFirstApiLevel() <= pre_gki_level ? 1 : 2));
+                if (options_format_version > 1) {
+                    bowTarget->SetBlockSize(4096);
+                }
+
+                if (!table.AddTarget(std::move(bowTarget))) {
                     LERROR << "Failed to add bow target";
                     return false;
                 }
@@ -1757,6 +1777,11 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
 // wrapper to __mount() and expects a fully prepared fstab_rec,
 // unlike fs_mgr_do_mount which does more things with avb / verity etc.
 int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point) {
+    // First check the filesystem if requested.
+    if (entry.fs_mgr_flags.wait && !WaitForFile(entry.blk_device, 20s)) {
+        LERROR << "Skipping mounting '" << entry.blk_device << "'";
+    }
+
     // Run fsck if needed
     prepare_fs_for_mount(entry.blk_device, entry);
 

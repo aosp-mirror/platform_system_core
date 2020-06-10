@@ -224,7 +224,6 @@ void StatsEventCompat::addInt32Annotation(uint8_t annotationId, int32_t value) {
 
 int StatsEventCompat::writeToSocket() {
     if (useRSchema()) {
-        mAStatsEventApi.build(mEventR);
         return mAStatsEventApi.write(mEventR);
     }
 
