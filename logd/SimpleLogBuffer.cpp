@@ -212,46 +212,38 @@ bool SimpleLogBuffer::FlushTo(
     return true;
 }
 
-// clear all rows of type "id" from the buffer.
 bool SimpleLogBuffer::Clear(log_id_t id, uid_t uid) {
-    bool busy = true;
-    // If it takes more than 4 tries (seconds) to clear, then kill reader(s)
-    for (int retry = 4;;) {
-        if (retry == 1) {  // last pass
-            // Check if it is still busy after the sleep, we say prune
-            // one entry, not another clear run, so we are looking for
-            // the quick side effect of the return value to tell us if
-            // we have a _blocked_ reader.
-            {
-                auto lock = std::lock_guard{lock_};
-                busy = Prune(id, 1, uid);
-            }
-            // It is still busy, blocked reader(s), lets kill them all!
-            // otherwise, lets be a good citizen and preserve the slow
-            // readers and let the clear run (below) deal with determining
-            // if we are still blocked and return an error code to caller.
-            if (busy) {
-                auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
-                for (const auto& reader_thread : reader_list_->reader_threads()) {
-                    if (reader_thread->IsWatching(id)) {
-                        LOG(WARNING) << "Kicking blocked reader, " << reader_thread->name()
-                                     << ", from LogBuffer::clear()";
-                        reader_thread->release_Locked();
-                    }
-                }
-            }
-        }
+    // Try three times to clear, then disconnect the readers and try one final time.
+    for (int retry = 0; retry < 3; ++retry) {
         {
             auto lock = std::lock_guard{lock_};
-            busy = Prune(id, ULONG_MAX, uid);
+            if (Prune(id, ULONG_MAX, uid)) {
+                return true;
+            }
         }
-
-        if (!busy || !--retry) {
-            break;
-        }
-        sleep(1);  // Let reader(s) catch up after notification
+        sleep(1);
     }
-    return busy;
+    // Check if it is still busy after the sleep, we try to prune one entry, not another clear run,
+    // so we are looking for the quick side effect of the return value to tell us if we have a
+    // _blocked_ reader.
+    bool busy = false;
+    {
+        auto lock = std::lock_guard{lock_};
+        busy = !Prune(id, 1, uid);
+    }
+    // It is still busy, disconnect all readers.
+    if (busy) {
+        auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
+        for (const auto& reader_thread : reader_list_->reader_threads()) {
+            if (reader_thread->IsWatching(id)) {
+                LOG(WARNING) << "Kicking blocked reader, " << reader_thread->name()
+                             << ", from LogBuffer::clear()";
+                reader_thread->release_Locked();
+            }
+        }
+    }
+    auto lock = std::lock_guard{lock_};
+    return Prune(id, ULONG_MAX, uid);
 }
 
 // get the total space allocated to "id"
@@ -313,16 +305,16 @@ bool SimpleLogBuffer::Prune(log_id_t id, unsigned long prune_rows, uid_t caller_
 
         if (oldest && oldest->start() <= element.sequence()) {
             KickReader(oldest, id, prune_rows);
-            return true;
+            return false;
         }
 
         stats_->Subtract(element.ToLogStatisticsElement());
         it = Erase(it);
         if (--prune_rows == 0) {
-            return false;
+            return true;
         }
     }
-    return false;
+    return true;
 }
 
 std::list<LogBufferElement>::iterator SimpleLogBuffer::Erase(
