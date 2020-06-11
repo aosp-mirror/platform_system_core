@@ -76,7 +76,6 @@ struct AStatsEvent {
     uint32_t numElements;
     uint32_t atomId;
     uint32_t errors;
-    bool truncate;
     bool built;
     size_t bufSize;
 };
@@ -95,7 +94,6 @@ AStatsEvent* AStatsEvent_obtain() {
     event->numElements = 0;
     event->atomId = 0;
     event->errors = 0;
-    event->truncate = true;  // truncate for both pulled and pushed atoms
     event->built = false;
     event->bufSize = MAX_PUSH_EVENT_PAYLOAD;
     event->buf = (uint8_t*)calloc(event->bufSize, 1);
@@ -318,10 +316,6 @@ uint32_t AStatsEvent_getErrors(AStatsEvent* event) {
     return event->errors;
 }
 
-void AStatsEvent_truncateBuffer(AStatsEvent* event, bool truncate) {
-    event->truncate = truncate;
-}
-
 static void build_internal(AStatsEvent* event, const bool push) {
     if (event->numElements > MAX_BYTE_VALUE) event->errors |= ERROR_TOO_MANY_FIELDS;
     if (0 == event->atomId) event->errors |= ERROR_NO_ATOM_ID;
@@ -341,13 +335,6 @@ static void build_internal(AStatsEvent* event, const bool push) {
     }
 
     event->buf[POS_NUM_ELEMENTS] = event->numElements;
-
-    // Truncate the buffer to the appropriate length in order to limit our
-    // memory usage.
-    if (event->truncate) {
-        event->buf = (uint8_t*)realloc(event->buf, event->numBytesWritten);
-        event->bufSize = event->numBytesWritten;
-    }
 }
 
 void AStatsEvent_build(AStatsEvent* event) {
