@@ -200,8 +200,10 @@ static std::string find_item(const std::string& item) {
 double last_start_time;
 
 static void Status(const std::string& message) {
-    static constexpr char kStatusFormat[] = "%-50s ";
-    fprintf(stderr, kStatusFormat, message.c_str());
+    if (!message.empty()) {
+        static constexpr char kStatusFormat[] = "%-50s ";
+        fprintf(stderr, kStatusFormat, message.c_str());
+    }
     last_start_time = now();
 }
 
