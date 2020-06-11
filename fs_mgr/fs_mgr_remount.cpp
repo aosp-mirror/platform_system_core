@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -31,6 +32,8 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <android/os/IVold.h>
+#include <binder/IServiceManager.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
 #include <fec/io.h>
@@ -103,7 +106,22 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
     ::exit(0);  // SUCCESS
 }
 
+static android::sp<android::os::IVold> GetVold() {
+    while (true) {
+        if (auto sm = android::defaultServiceManager()) {
+            if (auto binder = sm->getService(android::String16("vold"))) {
+                if (auto vold = android::interface_cast<android::os::IVold>(binder)) {
+                    return vold;
+                }
+            }
+        }
+        std::this_thread::sleep_for(2s);
+    }
+}
+
 }  // namespace
+
+using namespace std::chrono_literals;
 
 static int do_remount(int argc, char* argv[]) {
     enum {
@@ -118,6 +136,9 @@ static int do_remount(int argc, char* argv[]) {
         BAD_OVERLAY,
         NO_MOUNTS,
         REMOUNT_FAILED,
+        MUST_REBOOT,
+        BINDER_ERROR,
+        CHECKPOINTING
     } retval = SUCCESS;
 
     // If somehow this executable is delivered on a "user" build, it can
@@ -189,6 +210,22 @@ static int do_remount(int argc, char* argv[]) {
     if (!fstab_read || fstab.empty()) {
         PLOG(ERROR) << "Failed to read fstab";
         return NO_FSTAB;
+    }
+
+    if (android::base::GetBoolProperty("ro.virtual_ab.enabled", false) &&
+        !android::base::GetBoolProperty("ro.virtual_ab.retrofit", false)) {
+        // Virtual A/B devices can use /data as backing storage; make sure we're
+        // not checkpointing.
+        auto vold = GetVold();
+        bool checkpointing = false;
+        if (!vold->isCheckpointing(&checkpointing).isOk()) {
+            LOG(ERROR) << "Could not determine checkpointing status.";
+            return BINDER_ERROR;
+        }
+        if (checkpointing) {
+            LOG(ERROR) << "Cannot use remount when a checkpoint is in progress.";
+            return CHECKPOINTING;
+        }
     }
 
     // Generate the list of supported overlayfs mount points.
