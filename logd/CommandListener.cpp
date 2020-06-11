@@ -82,7 +82,7 @@ int CommandListener::ClearCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    cli->sendMsg(buf()->Clear((log_id_t)id, uid) ? "busy" : "success");
+    cli->sendMsg(buf()->Clear((log_id_t)id, uid) ? "success" : "busy");
     return 0;
 }
 
