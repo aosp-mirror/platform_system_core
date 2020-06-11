@@ -711,8 +711,8 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
                 if (it == properties->end()) {
                     (*properties)[key] = value;
                 } else if (it->second != value) {
-                    LOG(WARNING) << "Overriding previous 'ro.' property '" << key << "':'"
-                                 << it->second << "' with new value '" << value << "'";
+                    LOG(WARNING) << "Overriding previous property '" << key << "':'" << it->second
+                                 << "' with new value '" << value << "'";
                     it->second = value;
                 }
             } else {
