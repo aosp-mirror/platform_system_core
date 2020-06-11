@@ -157,9 +157,6 @@ uint32_t AStatsEvent_getAtomId(AStatsEvent* event);
 uint8_t* AStatsEvent_getBuffer(AStatsEvent* event, size_t* size);
 uint32_t AStatsEvent_getErrors(AStatsEvent* event);
 
-// exposed for benchmarking only
-void AStatsEvent_truncateBuffer(struct AStatsEvent* event, bool truncate);
-
 #ifdef __cplusplus
 }
 #endif  // __CPLUSPLUS
