@@ -327,7 +327,6 @@ class LogBufferElementLast {
 //
 bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogReaderThread* oldest = nullptr;
-    bool busy = false;
     bool clearAll = pruneRows == ULONG_MAX;
 
     auto reader_threads_lock = std::lock_guard{reader_list()->reader_threads_lock()};
@@ -359,17 +358,16 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
             }
 
             if (oldest && oldest->start() <= element.sequence()) {
-                busy = true;
                 KickReader(oldest, id, pruneRows);
-                break;
+                return false;
             }
 
             it = Erase(it);
             if (--pruneRows == 0) {
-                break;
+                return true;
             }
         }
-        return busy;
+        return true;
     }
 
     // prune by worst offenders; by blacklist, UID, and by PID of system UID
@@ -440,7 +438,6 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
             LogBufferElement& element = *it;
 
             if (oldest && oldest->start() <= element.sequence()) {
-                busy = true;
                 // Do not let chatty eliding trigger any reader mitigation
                 break;
             }
@@ -577,7 +574,6 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         }
 
         if (oldest && oldest->start() <= element.sequence()) {
-            busy = true;
             if (!whitelist) KickReader(oldest, id, pruneRows);
             break;
         }
@@ -605,7 +601,6 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
             }
 
             if (oldest && oldest->start() <= element.sequence()) {
-                busy = true;
                 KickReader(oldest, id, pruneRows);
                 break;
             }
@@ -615,5 +610,5 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         }
     }
 
-    return (pruneRows > 0) && busy;
+    return pruneRows == 0 || it == logs().end();
 }
