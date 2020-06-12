@@ -194,7 +194,8 @@ Result<Descriptor> FileDescriptor::Create() const {
     return Descriptor(ANDROID_FILE_ENV_PREFIX + name, std::move(fd));
 }
 
-Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name, bool pre_apexd) {
+Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name,
+                             std::optional<MountNamespace> override_mount_namespace) {
     for (const auto& [nstype, path] : info.namespaces_to_enter) {
         if (auto result = EnterNamespace(nstype, path.c_str()); !result.ok()) {
             return result;
@@ -202,9 +203,10 @@ Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name,
     }
 
 #if defined(__ANDROID__)
-    if (pre_apexd) {
-        if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
-            return Error() << "could not enter into the bootstrap mount namespace";
+    if (override_mount_namespace.has_value()) {
+        if (auto result = SwitchToMountNamespaceIfNeeded(override_mount_namespace.value());
+            !result.ok()) {
+            return result;
         }
     }
 #endif
