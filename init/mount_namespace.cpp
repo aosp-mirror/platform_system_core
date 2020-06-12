@@ -176,20 +176,6 @@ static bool ActivateFlattenedApexesIfPossible() {
     return true;
 }
 
-static Result<void> MountLinkerConfigForDefaultNamespace() {
-    // No need to mount linkerconfig for default mount namespace if the path does not exist (which
-    // would mean it is already mounted)
-    if (access("/linkerconfig/default", 0) != 0) {
-        return {};
-    }
-
-    if (mount("/linkerconfig/default", "/linkerconfig", nullptr, MS_BIND | MS_REC, nullptr) != 0) {
-        return ErrnoError() << "Failed to mount linker configuration for default mount namespace.";
-    }
-
-    return {};
-}
-
 static android::base::unique_fd bootstrap_ns_fd;
 static android::base::unique_fd default_ns_fd;
 
@@ -290,40 +276,20 @@ bool SetupMountNamespaces() {
     return success;
 }
 
-bool SwitchToDefaultMountNamespace() {
-    if (IsRecoveryMode()) {
-        // we don't have multiple namespaces in recovery mode
-        return true;
+Result<void> SwitchToMountNamespaceIfNeeded(MountNamespace target_mount_namespace) {
+    if (IsRecoveryMode() || !IsApexUpdatable()) {
+        // we don't have multiple namespaces in recovery mode or if apex is not updatable
+        return {};
     }
-    if (default_ns_id != GetMountNamespaceId()) {
-        if (setns(default_ns_fd.get(), CLONE_NEWNS) == -1) {
-            PLOG(ERROR) << "Failed to switch back to the default mount namespace.";
-            return false;
-        }
-
-        if (auto result = MountLinkerConfigForDefaultNamespace(); !result.ok()) {
-            LOG(ERROR) << result.error();
-            return false;
+    const auto& ns_id = target_mount_namespace == NS_BOOTSTRAP ? bootstrap_ns_id : default_ns_id;
+    const auto& ns_fd = target_mount_namespace == NS_BOOTSTRAP ? bootstrap_ns_fd : default_ns_fd;
+    const auto& ns_name = target_mount_namespace == NS_BOOTSTRAP ? "bootstrap" : "default";
+    if (ns_id != GetMountNamespaceId() && ns_fd.get() != -1) {
+        if (setns(ns_fd.get(), CLONE_NEWNS) == -1) {
+            return ErrnoError() << "Failed to switch to " << ns_name << " mount namespace.";
         }
     }
-
-    LOG(INFO) << "Switched to default mount namespace";
-    return true;
-}
-
-bool SwitchToBootstrapMountNamespaceIfNeeded() {
-    if (IsRecoveryMode()) {
-        // we don't have multiple namespaces in recovery mode
-        return true;
-    }
-    if (bootstrap_ns_id != GetMountNamespaceId() && bootstrap_ns_fd.get() != -1 &&
-        IsApexUpdatable()) {
-        if (setns(bootstrap_ns_fd.get(), CLONE_NEWNS) == -1) {
-            PLOG(ERROR) << "Failed to switch to bootstrap mount namespace.";
-            return false;
-        }
-    }
-    return true;
+    return {};
 }
 
 }  // namespace init
