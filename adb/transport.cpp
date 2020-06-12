@@ -1531,8 +1531,7 @@ std::shared_ptr<RSA> atransport::NextKey() {
         keys_.pop_front();
     }
 
-    std::shared_ptr<RSA> result = keys_[0];
-    return result;
+    return Key();
 }
 
 void atransport::ResetKeys() {
