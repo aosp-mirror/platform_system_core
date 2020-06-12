@@ -193,7 +193,8 @@ bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_d
     while (directory != "/" && directory != ".") {
         std::string subsystem_link_path;
         if (Realpath(directory + "/subsystem", &subsystem_link_path) &&
-            subsystem_link_path == sysfs_mount_point_ + "/bus/platform") {
+            (subsystem_link_path == sysfs_mount_point_ + "/bus/platform" ||
+             subsystem_link_path == sysfs_mount_point_ + "/bus/amba")) {
             // We need to remove the mount point that we added above before returning.
             directory.erase(0, sysfs_mount_point_.size());
             *platform_device_path = directory;
