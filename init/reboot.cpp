@@ -831,7 +831,7 @@ static Result<void> DoUserspaceReboot() {
         sub_reason = "apex";
         return result;
     }
-    if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
+    if (!SwitchToMountNamespaceIfNeeded(NS_BOOTSTRAP)) {
         sub_reason = "ns_switch";
         return Error() << "Failed to switch to bootstrap namespace";
     }
