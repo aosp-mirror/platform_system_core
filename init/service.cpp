@@ -465,6 +465,16 @@ Result<void> Service::Start() {
         pre_apexd_ = true;
     }
 
+    // For pre-apexd services, override mount namespace as "bootstrap" one before starting.
+    // Note: "ueventd" is supposed to be run in "default" mount namespace even if it's pre-apexd
+    // to support loading firmwares from APEXes.
+    std::optional<MountNamespace> override_mount_namespace;
+    if (name_ == "ueventd") {
+        override_mount_namespace = NS_DEFAULT;
+    } else if (pre_apexd_) {
+        override_mount_namespace = NS_BOOTSTRAP;
+    }
+
     post_data_ = ServiceList::GetInstance().IsPostData();
 
     LOG(INFO) << "starting service '" << name_ << "'...";
@@ -496,7 +506,8 @@ Result<void> Service::Start() {
     if (pid == 0) {
         umask(077);
 
-        if (auto result = EnterNamespaces(namespaces_, name_, pre_apexd_); !result.ok()) {
+        if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace);
+            !result.ok()) {
             LOG(FATAL) << "Service '" << name_
                        << "' failed to set up namespaces: " << result.error();
         }
