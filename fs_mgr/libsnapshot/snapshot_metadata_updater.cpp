@@ -62,6 +62,8 @@ SnapshotMetadataUpdater::SnapshotMetadataUpdater(MetadataBuilder* builder, uint3
                                                std::string(it->second) + target_suffix_, &p});
         }
     }
+
+    partial_update_ = manifest.partial_update();
 }
 
 bool SnapshotMetadataUpdater::ShrinkPartitions() const {
@@ -82,6 +84,18 @@ bool SnapshotMetadataUpdater::ShrinkPartitions() const {
 }
 
 bool SnapshotMetadataUpdater::DeletePartitions() const {
+    // For partial update, not all dynamic partitions are included in the payload.
+    // TODO(xunchang) delete the untouched partitions whose group is in the payload.
+    // e.g. Delete vendor in the following scenario
+    // On device:
+    //   Group A: system, vendor
+    // In payload:
+    //   Group A: system
+    if (partial_update_) {
+        LOG(INFO) << "Skip deleting partitions for partial update";
+        return true;
+    }
+
     std::vector<std::string> partitions_to_delete;
     // Don't delete partitions in groups where the group name doesn't have target_suffix,
     // e.g. default.
@@ -139,6 +153,11 @@ bool SnapshotMetadataUpdater::ShrinkGroups() const {
 }
 
 bool SnapshotMetadataUpdater::DeleteGroups() const {
+    if (partial_update_) {
+        LOG(INFO) << "Skip deleting groups for partial update";
+        return true;
+    }
+
     std::vector<std::string> existing_groups = builder_->ListGroups();
     for (const auto& existing_group_name : existing_groups) {
         // Don't delete groups without target suffix, e.g. default.
