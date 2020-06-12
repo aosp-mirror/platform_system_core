@@ -301,10 +301,13 @@ static bool is_ext4_superblock_valid(const struct ext4_super_block* es) {
     return true;
 }
 
+static bool needs_block_encryption(const FstabEntry& entry);
+static bool should_use_metadata_encryption(const FstabEntry& entry);
+
 // Read the primary superblock from an ext4 filesystem.  On failure return
 // false.  If it's not an ext4 filesystem, also set FS_STAT_INVALID_MAGIC.
-static bool read_ext4_superblock(const std::string& blk_device, struct ext4_super_block* sb,
-                                 int* fs_stat) {
+static bool read_ext4_superblock(const std::string& blk_device, const FstabEntry& entry,
+                                 struct ext4_super_block* sb, int* fs_stat) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device.c_str(), O_RDONLY | O_CLOEXEC)));
 
     if (fd < 0) {
@@ -321,7 +324,29 @@ static bool read_ext4_superblock(const std::string& blk_device, struct ext4_supe
         LINFO << "Invalid ext4 superblock on '" << blk_device << "'";
         // not a valid fs, tune2fs, fsck, and mount  will all fail.
         *fs_stat |= FS_STAT_INVALID_MAGIC;
-        return false;
+
+        bool encrypted = should_use_metadata_encryption(entry) || needs_block_encryption(entry);
+        if (entry.mount_point == "/data" &&
+            (!encrypted || android::base::StartsWith(blk_device, "/dev/block/dm-"))) {
+            // try backup superblock, if main superblock is corrupted
+            for (unsigned int blocksize = EXT4_MIN_BLOCK_SIZE; blocksize <= EXT4_MAX_BLOCK_SIZE;
+                 blocksize *= 2) {
+                unsigned int superblock = blocksize * 8;
+                if (blocksize == EXT4_MIN_BLOCK_SIZE) superblock++;
+
+                if (TEMP_FAILURE_RETRY(pread(fd, sb, sizeof(*sb), superblock * blocksize)) !=
+                    sizeof(*sb)) {
+                    PERROR << "Can't read '" << blk_device << "' superblock";
+                    return false;
+                }
+                if (is_ext4_superblock_valid(sb) &&
+                    (1 << (10 + sb->s_log_block_size) == blocksize)) {
+                    *fs_stat &= ~FS_STAT_INVALID_MAGIC;
+                    break;
+                }
+            }
+        }
+        if (*fs_stat & FS_STAT_INVALID_MAGIC) return false;
     }
     *fs_stat |= FS_STAT_IS_EXT4;
     LINFO << "superblock s_max_mnt_count:" << sb->s_max_mnt_count << "," << blk_device;
@@ -662,7 +687,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
     if (is_extfs(entry.fs_type)) {
         struct ext4_super_block sb;
 
-        if (read_ext4_superblock(blk_device, &sb, &fs_stat)) {
+        if (read_ext4_superblock(blk_device, entry, &sb, &fs_stat)) {
             if ((sb.s_feature_incompat & EXT4_FEATURE_INCOMPAT_RECOVER) != 0 ||
                 (sb.s_state & EXT4_VALID_FS) == 0) {
                 LINFO << "Filesystem on " << blk_device << " was not cleanly shutdown; "
@@ -692,7 +717,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
          entry.fs_mgr_flags.fs_verity || entry.fs_mgr_flags.ext_meta_csum)) {
         struct ext4_super_block sb;
 
-        if (read_ext4_superblock(blk_device, &sb, &fs_stat)) {
+        if (read_ext4_superblock(blk_device, entry, &sb, &fs_stat)) {
             tune_reserved_size(blk_device, entry, &sb, &fs_stat);
             tune_encrypt(blk_device, entry, &sb, &fs_stat);
             tune_verity(blk_device, entry, &sb, &fs_stat);
