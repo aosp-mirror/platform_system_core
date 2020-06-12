@@ -2277,6 +2277,10 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
         auto operations_it = install_operation_map.find(target_partition->name());
         if (operations_it != install_operation_map.end()) {
             cow_creator->operations = operations_it->second;
+        } else {
+            LOG(INFO) << target_partition->name()
+                      << " isn't included in the payload, skipping the cow creation.";
+            continue;
         }
 
         cow_creator->extra_extents.clear();
