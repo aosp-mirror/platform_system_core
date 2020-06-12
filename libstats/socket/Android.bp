@@ -89,25 +89,6 @@ cc_library_headers {
     min_sdk_version: "29",
 }
 
-cc_benchmark {
-    name: "libstatssocket_benchmark",
-    srcs: [
-        "benchmark/main.cpp",
-        "benchmark/stats_event_benchmark.cpp",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-    static_libs: [
-        "libstatssocket_private",
-    ],
-    shared_libs: [
-        "libcutils",
-        "libgtest_prod",
-    ],
-}
-
 cc_test {
     name: "libstatssocket_test",
     srcs: [
@@ -128,7 +109,7 @@ cc_test {
     ],
     test_suites: ["device-tests", "mts"],
     test_config: "libstatssocket_test.xml",
-    //TODO(b/153588990): Remove when the build system properly separates 
+    //TODO(b/153588990): Remove when the build system properly separates.
     //32bit and 64bit architectures.
     compile_multilib: "both",
     multilib: {
