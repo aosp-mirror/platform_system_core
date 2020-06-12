@@ -18,7 +18,7 @@
 #include <gtest/gtest.h>
 #include <utils/SystemClock.h>
 
-// Keep in sync stats_event.c. Consider moving to separate header file to avoid duplication.
+// Keep in sync with stats_event.c. Consider moving to separate header file to avoid duplication.
 /* ERRORS */
 #define ERROR_NO_TIMESTAMP 0x1
 #define ERROR_NO_ATOM_ID 0x2
