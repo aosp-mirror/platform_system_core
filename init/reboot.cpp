@@ -544,6 +544,18 @@ static int StopServicesAndLogViolations(const std::vector<Service*>& services,
     return still_running;
 }
 
+static Result<void> UnmountAllApexes() {
+    const char* args[] = {"/system/bin/apexd", "--unmount-all"};
+    int status;
+    if (logwrap_fork_execvp(arraysize(args), args, &status, false, LOG_KLOG, true, nullptr) != 0) {
+        return ErrnoError() << "Failed to call '/system/bin/apexd --unmount-all'";
+    }
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        return {};
+    }
+    return Error() << "'/system/bin/apexd --unmount-all' failed : " << status;
+}
+
 //* Reboot / shutdown the system.
 // cmd ANDROID_RB_* as defined in android_reboot.h
 // reason Reason string like "reboot", "shutdown,userrequested"
@@ -701,6 +713,11 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // 5. drop caches and disable zram backing device, if exist
     KillZramBackingDevice();
 
+    LOG(INFO) << "Ready to unmount apexes. So far shutdown sequence took " << t;
+    // 6. unmount active apexes, otherwise they might prevent clean unmount of /data.
+    if (auto ret = UnmountAllApexes(); !ret.ok()) {
+        LOG(ERROR) << ret.error();
+    }
     UmountStat stat =
             TryUmountAndFsck(cmd, run_fsck, shutdown_timeout - t.duration(), &reboot_semaphore);
     // Follow what linux shutdown is doing: one more sync with little bit delay
@@ -737,18 +754,6 @@ static void LeaveShutdown() {
     LOG(INFO) << "Leaving shutdown mode";
     shutting_down = false;
     StartSendingMessages();
-}
-
-static Result<void> UnmountAllApexes() {
-    const char* args[] = {"/system/bin/apexd", "--unmount-all"};
-    int status;
-    if (logwrap_fork_execvp(arraysize(args), args, &status, false, LOG_KLOG, true, nullptr) != 0) {
-        return ErrnoError() << "Failed to call '/system/bin/apexd --unmount-all'";
-    }
-    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-        return {};
-    }
-    return Error() << "'/system/bin/apexd --unmount-all' failed : " << status;
 }
 
 static std::chrono::milliseconds GetMillisProperty(const std::string& name,
