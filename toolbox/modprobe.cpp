@@ -36,7 +36,7 @@ static void print_usage(void) {
     std::cerr << "  modprobe [-alrqvsDb] [-d DIR] MODULE [symbol=value][...]" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Options:" << std::endl;
-    std::cerr << "  -b: Apply blacklist to module names too" << std::endl;
+    std::cerr << "  -b: Apply blocklist to module names too" << std::endl;
     std::cerr << "  -d: Load modules from DIR, option may be used multiple times" << std::endl;
     std::cerr << "  -D: Print dependencies for modules only, do not load";
     std::cerr << "  -h: Print this help" << std::endl;
@@ -59,7 +59,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
     std::string module_parameters;
     std::vector<std::string> mod_dirs;
     modprobe_mode mode = AddModulesMode;
-    bool blacklist = false;
+    bool blocklist = false;
     bool verbose = false;
     int rv = EXIT_SUCCESS;
 
@@ -72,7 +72,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
                 check_mode();
                 break;
             case 'b':
-                blacklist = true;
+                blocklist = true;
                 break;
             case 'd':
                 mod_dirs.emplace_back(optarg);
@@ -151,8 +151,8 @@ extern "C" int modprobe_main(int argc, char** argv) {
 
     Modprobe m(mod_dirs);
     m.EnableVerbose(verbose);
-    if (blacklist) {
-        m.EnableBlacklist(true);
+    if (blocklist) {
+        m.EnableBlocklist(true);
     }
 
     for (const auto& module : modules) {
