@@ -493,6 +493,9 @@ on post-fs
     chown root log /proc/slabinfo
     chmod 0440 /proc/slabinfo
 
+    chown root log /proc/pagetypeinfo
+    chmod 0440 /proc/pagetypeinfo
+
     #change permissions on kmsg & sysrq-trigger so bugreports can grab kthread stacks
     chown root system /proc/kmsg
     chmod 0440 /proc/kmsg
