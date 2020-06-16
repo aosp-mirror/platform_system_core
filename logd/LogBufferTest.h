@@ -25,7 +25,7 @@
 #include "LogReaderList.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
-#include "LogWhiteBlackList.h"
+#include "PruneList.h"
 #include "SerializedLogBuffer.h"
 #include "SimpleLogBuffer.h"
 
