@@ -331,7 +331,7 @@ static bool read_ext4_superblock(const std::string& blk_device, const FstabEntry
             // try backup superblock, if main superblock is corrupted
             for (unsigned int blocksize = EXT4_MIN_BLOCK_SIZE; blocksize <= EXT4_MAX_BLOCK_SIZE;
                  blocksize *= 2) {
-                unsigned int superblock = blocksize * 8;
+                uint64_t superblock = blocksize * 8;
                 if (blocksize == EXT4_MIN_BLOCK_SIZE) superblock++;
 
                 if (TEMP_FAILURE_RETRY(pread(fd, sb, sizeof(*sb), superblock * blocksize)) !=
