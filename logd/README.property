@@ -65,8 +65,8 @@ NB:
 - number - support multipliers (K or M) for convenience. Range is limited
   to between 64K and 256M for log buffer sizes. Individual log buffer ids
   such as main, system, ... override global default.
-- Pruning filter is of form of a space-separated list of [~][UID][/PID]
-  references, where '~' prefix means to blacklist otherwise whitelist. For
-  blacklisting, UID or PID may be a '!' to instead reference the chattiest
-  client, with the restriction that the PID must be in the UID group 1000
-  (system or AID_SYSTEM).
+- Pruning filter rules are specified as UID, UID/PID or /PID. A '~' prefix indicates that elements
+  matching the rule should be pruned with higher priority otherwise they're pruned with lower
+  priority. All other pruning activity is oldest first. Special case ~! represents an automatic
+  pruning for the noisiest UID as determined by the current statistics.  Special case ~1000/!
+  represents pruning of the worst PID within AID_SYSTEM when AID_SYSTEM is the noisiest UID.
