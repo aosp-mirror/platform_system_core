@@ -35,7 +35,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
     android::base::unique_fd fd(
             TEMP_FAILURE_RETRY(open(path_name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (fd == -1) {
-        LOG(ERROR) << "Could not open module '" << path_name << "'";
+        PLOG(ERROR) << "Could not open module '" << path_name << "'";
         return false;
     }
 
@@ -49,7 +49,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
         options = options + " " + parameters;
     }
 
-    LOG(INFO) << "Loading module " << path_name << " with args \"" << options << "\"";
+    LOG(INFO) << "Loading module " << path_name << " with args '" << options << "'";
     int ret = syscall(__NR_finit_module, fd.get(), options.c_str(), 0);
     if (ret != 0) {
         if (errno == EEXIST) {
@@ -57,7 +57,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
             module_loaded_.emplace(canonical_name);
             return true;
         }
-        LOG(ERROR) << "Failed to insmod '" << path_name << "' with args '" << options << "'";
+        PLOG(ERROR) << "Failed to insmod '" << path_name << "' with args '" << options << "'";
         return false;
     }
 
