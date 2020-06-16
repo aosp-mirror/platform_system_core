@@ -97,7 +97,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     size_t data_left = size;
     const uint8_t** pdata = &data;
 
-    prune_list.init(nullptr);
+    prune_list.Init(nullptr);
     // We want to get pruning code to get called.
     log_id_for_each(i) { log_buffer->SetSize(i, 10000); }
 
