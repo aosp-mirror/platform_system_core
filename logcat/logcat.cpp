@@ -333,14 +333,14 @@ Logd control:
                               This can individually control each buffer's size with -b.
   -S, --statistics            Output statistics.
                               --pid can be used to provide pid specific stats.
-  -p, --prune                 Print prune white and ~black list. Service is specified as UID,
-                              UID/PID or /PID. Weighed for quicker pruning if prefix with ~,
-                              otherwise weighed for longevity if unadorned. All other pruning
-                              activity is oldest first. Special case ~! represents an automatic
-                              quicker pruning for the noisiest UID as determined by the current
-                              statistics.
-  -P, --prune='<list> ...'    Set prune white and ~black list, using same format as listed above.
-                              Must be quoted.
+  -p, --prune                 Print prune rules. Each rule is specified as UID, UID/PID or /PID. A
+                              '~' prefix indicates that elements matching the rule should be pruned
+                              with higher priority otherwise they're pruned with lower priority. All
+                              other pruning activity is oldest first. Special case ~! represents an
+                              automatic pruning for the noisiest UID as determined by the current
+                              statistics.  Special case ~1000/! represents pruning of the worst PID
+                              within AID_SYSTEM when AID_SYSTEM is the noisiest UID.
+  -P, --prune='<list> ...'    Set prune rules, using same format as listed above. Must be quoted.
 
 Filtering:
   -s                          Set default filter to silent. Equivalent to filterspec '*:S'

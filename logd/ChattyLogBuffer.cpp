@@ -298,33 +298,37 @@ class LogBufferElementLast {
 // invariably move the logs value down faster as less chatty sources would be
 // expired in the noise.
 //
-// The first loop performs blacklisting and worst offender pruning. Falling
-// through when there are no notable worst offenders and have not hit the
-// region lock preventing further worst offender pruning. This loop also looks
-// after managing the chatty log entries and merging to help provide
-// statistical basis for blame. The chatty entries are not a notification of
-// how much logs you may have, but instead represent how much logs you would
-// have had in a virtual log buffer that is extended to cover all the in-memory
-// logs without loss. They last much longer than the represented pruned logs
-// since they get multiplied by the gains in the non-chatty log sources.
+// The first pass prunes elements that match 3 possible rules:
+// 1) A high priority prune rule, for example ~100/20, which indicates elements from UID 100 and PID
+//    20 should be pruned in this first pass.
+// 2) The default chatty pruning rule, ~!.  This rule sums the total size spent on log messages for
+//    each UID this log buffer.  If the highest sum consumes more than 12.5% of the log buffer, then
+//    these elements from that UID are pruned.
+// 3) The default AID_SYSTEM pruning rule, ~1000/!.  This rule is a special case to 2), if
+//    AID_SYSTEM is the top consumer of the log buffer, then this rule sums the total size spent on
+//    log messages for each PID in AID_SYSTEM in this log buffer and prunes elements from the PID
+//    with the highest sum.
+// This pass reevaluates the sums for rules 2) and 3) for every log message pruned. It creates
+// 'chatty' entries for the elements that it prunes and merges related chatty entries together. It
+// completes when one of three conditions have been met:
+// 1) The requested element count has been pruned.
+// 2) There are no elements that match any of these rules.
+// 3) A reader is referencing the oldest element that would match these rules.
 //
-// The second loop get complicated because an algorithm of watermarks and
-// history is maintained to reduce the order and keep processing time
-// down to a minimum at scale. These algorithms can be costly in the face
-// of larger log buffers, or severly limited processing time granted to a
-// background task at lowest priority.
+// The second pass prunes elements starting from the beginning of the log.  It skips elements that
+// match any low priority prune rules.  It completes when one of three conditions have been met:
+// 1) The requested element count has been pruned.
+// 2) All elements except those mwatching low priority prune rules have been pruned.
+// 3) A reader is referencing the oldest element that would match these rules.
 //
-// This second loop does straight-up expiration from the end of the logs
-// (again, remember for the specified log buffer id) but does some whitelist
-// preservation. Thus whitelist is a Hail Mary low priority, blacklists and
-// spam filtration all take priority. This second loop also checks if a region
-// lock is causing us to buffer too much in the logs to help the reader(s),
-// and will tell the slowest reader thread to skip log entries, and if
-// persistent and hits a further threshold, kill the reader thread.
+// The final pass only happens if there are any low priority prune rules and if the first two passes
+// were unable to prune the requested number of elements.  It prunes elements all starting from the
+// beginning of the log, regardless of if they match any low priority prune rules.
 //
-// The third thread is optional, and only gets hit if there was a whitelist
-// and more needs to be pruned against the backstop of the region lock.
-//
+// If the requested number of logs was unable to be pruned, KickReader() is called to mitigate the
+// situation before the next call to Prune() and the function returns false.  Otherwise, if the
+// requested number of logs or all logs present in the buffer are pruned, in the case of Clear(),
+// it returns true.
 bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogReaderThread* oldest = nullptr;
     bool clearAll = pruneRows == ULONG_MAX;
@@ -370,8 +374,8 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         return true;
     }
 
-    // prune by worst offenders; by blacklist, UID, and by PID of system UID
-    bool hasBlacklist = (id != LOG_ID_SECURITY) && prune_->naughty();
+    // First prune pass.
+    bool check_high_priority = id != LOG_ID_SECURITY && prune_->HasHighPriorityPruneRules();
     while (!clearAll && (pruneRows > 0)) {
         // recalculate the worst offender on every batched pass
         int worst = -1;  // not valid for uid() or getKey()
@@ -379,7 +383,7 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         size_t second_worst_sizes = 0;
         pid_t worstPid = 0;  // POSIX guarantees PID != 0
 
-        if (worstUidEnabledForLogid(id) && prune_->worstUidEnabled()) {
+        if (worstUidEnabledForLogid(id) && prune_->worst_uid_enabled()) {
             // Calculate threshold as 12.5% of available storage
             size_t threshold = max_size(id) / 8;
 
@@ -389,14 +393,14 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
             } else {
                 stats()->WorstTwoUids(id, threshold, &worst, &worst_sizes, &second_worst_sizes);
 
-                if (worst == AID_SYSTEM && prune_->worstPidOfSystemEnabled()) {
+                if (worst == AID_SYSTEM && prune_->worst_pid_of_system_enabled()) {
                     stats()->WorstTwoSystemPids(id, worst_sizes, &worstPid, &second_worst_sizes);
                 }
             }
         }
 
-        // skip if we have neither worst nor naughty filters
-        if ((worst == -1) && !hasBlacklist) {
+        // skip if we have neither a worst UID or high priority prune rules
+        if (worst == -1 && !check_high_priority) {
             break;
         }
 
@@ -464,7 +468,7 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
             int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element.GetTag()
                                                                      : element.uid();
 
-            if (hasBlacklist && prune_->naughty(&element)) {
+            if (check_high_priority && prune_->IsHighPriority(&element)) {
                 last.clear(&element);
                 it = Erase(it);
                 if (dropped) {
@@ -557,15 +561,17 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         }
         last.clear();
 
-        if (!kick || !prune_->worstUidEnabled()) {
+        if (!kick || !prune_->worst_uid_enabled()) {
             break;  // the following loop will ask bad clients to skip/drop
         }
     }
 
-    bool whitelist = false;
-    bool hasWhitelist = (id != LOG_ID_SECURITY) && prune_->nice() && !clearAll;
+    // Second prune pass.
+    bool skipped_low_priority_prune = false;
+    bool check_low_priority =
+            id != LOG_ID_SECURITY && prune_->HasLowPriorityPruneRules() && !clearAll;
     it = GetOldest(id);
-    while ((pruneRows > 0) && (it != logs().end())) {
+    while (pruneRows > 0 && it != logs().end()) {
         LogBufferElement& element = *it;
 
         if (element.log_id() != id) {
@@ -574,13 +580,12 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         }
 
         if (oldest && oldest->start() <= element.sequence()) {
-            if (!whitelist) KickReader(oldest, id, pruneRows);
+            if (!skipped_low_priority_prune) KickReader(oldest, id, pruneRows);
             break;
         }
 
-        if (hasWhitelist && !element.dropped_count() && prune_->nice(&element)) {
-            // WhiteListed
-            whitelist = true;
+        if (check_low_priority && !element.dropped_count() && prune_->IsLowPriority(&element)) {
+            skipped_low_priority_prune = true;
             it++;
             continue;
         }
@@ -589,10 +594,10 @@ bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         pruneRows--;
     }
 
-    // Do not save the whitelist if we are reader range limited
-    if (whitelist && (pruneRows > 0)) {
+    // Third prune pass.
+    if (skipped_low_priority_prune && pruneRows > 0) {
         it = GetOldest(id);
-        while ((it != logs().end()) && (pruneRows > 0)) {
+        while (it != logs().end() && pruneRows > 0) {
             LogBufferElement& element = *it;
 
             if (element.log_id() != id) {
