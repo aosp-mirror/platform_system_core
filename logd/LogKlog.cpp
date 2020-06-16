@@ -665,10 +665,9 @@ int LogKlog::log(const char* buf, ssize_t len) {
         ((size == 2) && (isdigit(tag[0]) || isdigit(tag[1]))) ||
         // register names like x18 but not driver names like en0
         ((size == 3) && (isdigit(tag[1]) && isdigit(tag[2]))) ||
-        // blacklist
+        // ignore
         ((size == cpuLen) && !fastcmp<strncmp>(tag, cpu, cpuLen)) ||
-        ((size == warningLen) &&
-         !fastcmp<strncasecmp>(tag, warning, warningLen)) ||
+        ((size == warningLen) && !fastcmp<strncasecmp>(tag, warning, warningLen)) ||
         ((size == errorLen) && !fastcmp<strncasecmp>(tag, error, errorLen)) ||
         ((size == infoLen) && !fastcmp<strncasecmp>(tag, info, infoLen))) {
         p = start;
