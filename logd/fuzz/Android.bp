@@ -26,6 +26,8 @@ cc_fuzz {
         "liblogd",
         "libcutils",
         "libsysutils",
+        "libz",
+        "libzstd",
     ],
     cflags: ["-Werror"],
 }
