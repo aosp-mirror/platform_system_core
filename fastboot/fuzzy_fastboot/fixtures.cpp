@@ -45,6 +45,7 @@
 #include <vector>
 
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <gtest/gtest.h>
 
 #include "fastboot_driver.h"
@@ -76,8 +77,7 @@ int FastBootTest::MatchFastboot(usb_ifc_info* info, const std::string& local_ser
 }
 
 bool FastBootTest::IsFastbootOverTcp() {
-    // serial contains ":" is treated as host ip and port number
-    return (device_serial.find(":") != std::string::npos);
+    return android::base::StartsWith(device_serial, "tcp:");
 }
 
 bool FastBootTest::UsbStillAvailible() {
@@ -182,19 +182,14 @@ void FastBootTest::TearDownSerial() {
 }
 
 void FastBootTest::ConnectTcpFastbootDevice() {
-    std::size_t found = device_serial.find(":");
-    if (found != std::string::npos) {
-        for (int i = 0; i < MAX_TCP_TRIES && !transport; i++) {
-            std::string error;
-            std::unique_ptr<Transport> tcp(
-                    tcp::Connect(device_serial.substr(0, found), tcp::kDefaultPort, &error)
-                            .release());
-            if (tcp)
-                transport =
-                        std::unique_ptr<TransportSniffer>(new TransportSniffer(std::move(tcp), 0));
-            if (transport != nullptr) break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
+    for (int i = 0; i < MAX_TCP_TRIES && !transport; i++) {
+        std::string error;
+        std::unique_ptr<Transport> tcp(
+                tcp::Connect(device_serial.substr(4), tcp::kDefaultPort, &error).release());
+        if (tcp)
+            transport = std::unique_ptr<TransportSniffer>(new TransportSniffer(std::move(tcp), 0));
+        if (transport != nullptr) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
