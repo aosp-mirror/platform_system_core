@@ -31,7 +31,11 @@ event_flag = [
 cc_defaults {
     name: "logd_defaults",
 
-    shared_libs: ["libbase"],
+    shared_libs: [
+        "libbase",
+        "libz",
+    ],
+    static_libs: ["libzstd"],
     cflags: [
         "-Wextra",
         "-Wthread-safety",
@@ -40,6 +44,7 @@ cc_defaults {
     lto: {
         thin: true,
     },
+    cpp_std: "experimental",
 }
 
 cc_library_static {
@@ -48,12 +53,16 @@ cc_library_static {
     host_supported: true,
     srcs: [
         "ChattyLogBuffer.cpp",
+        "CompressionEngine.cpp",
         "LogReaderList.cpp",
         "LogReaderThread.cpp",
         "LogBufferElement.cpp",
         "LogStatistics.cpp",
         "LogWhiteBlackList.cpp",
         "LogTags.cpp",
+        "SerializedFlushToState.cpp",
+        "SerializedLogBuffer.cpp",
+        "SerializedLogChunk.cpp",
         "SimpleLogBuffer.cpp",
     ],
     logtags: ["event.logtags"],
@@ -132,6 +141,8 @@ cc_defaults {
         "ChattyLogBufferTest.cpp",
         "logd_test.cpp",
         "LogBufferTest.cpp",
+        "SerializedLogChunkTest.cpp",
+        "SerializedFlushToStateTest.cpp",
     ],
 
     static_libs: [
@@ -140,6 +151,8 @@ cc_defaults {
         "liblog",
         "liblogd",
         "libselinux",
+        "libz",
+        "libzstd",
     ],
 }
 

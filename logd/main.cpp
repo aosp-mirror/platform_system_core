@@ -58,6 +58,7 @@
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogUtils.h"
+#include "SerializedLogBuffer.h"
 #include "SimpleLogBuffer.h"
 
 #define KMSG_PRIORITY(PRI)                                 \
