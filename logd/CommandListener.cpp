@@ -215,15 +215,13 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient* cli, int argc,
     return 0;
 }
 
-int CommandListener::GetPruneListCmd::runCommand(SocketClient* cli,
-                                                 int /*argc*/, char** /*argv*/) {
+int CommandListener::GetPruneListCmd::runCommand(SocketClient* cli, int, char**) {
     setname();
-    cli->sendMsg(PackageString(prune()->format()).c_str());
+    cli->sendMsg(PackageString(prune()->Format()).c_str());
     return 0;
 }
 
-int CommandListener::SetPruneListCmd::runCommand(SocketClient* cli, int argc,
-                                                 char** argv) {
+int CommandListener::SetPruneListCmd::runCommand(SocketClient* cli, int argc, char** argv) {
     setname();
     if (!clientHasLogCredentials(cli)) {
         cli->sendMsg("Permission Denied");
@@ -238,15 +236,12 @@ int CommandListener::SetPruneListCmd::runCommand(SocketClient* cli, int argc,
         str += argv[i];
     }
 
-    int ret = prune()->init(str.c_str());
-
-    if (ret) {
+    if (!prune()->Init(str.c_str())) {
         cli->sendMsg("Invalid");
         return 0;
     }
 
     cli->sendMsg("success");
-
     return 0;
 }
 
@@ -301,7 +296,7 @@ int CommandListener::ReinitCmd::runCommand(SocketClient* cli, int /*argc*/,
 
     LOG(INFO) << "logd reinit";
     buf()->Init();
-    prune()->init(nullptr);
+    prune()->Init(nullptr);
 
     // This only works on userdebug and eng devices to re-read the
     // /data/misc/logd/event-log-tags file right after /data is mounted.
