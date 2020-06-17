@@ -23,7 +23,7 @@
 #include <zstd.h>
 
 CompressionEngine& CompressionEngine::GetInstance() {
-    CompressionEngine* engine = new ZstdCompressionEngine();
+    static CompressionEngine* engine = new ZstdCompressionEngine();
     return *engine;
 }
 
