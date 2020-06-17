@@ -25,7 +25,7 @@
 
 class SerializedLogChunk {
   public:
-    SerializedLogChunk(size_t size) : contents_(size) {}
+    explicit SerializedLogChunk(size_t size) : contents_(size) {}
     ~SerializedLogChunk();
 
     void Compress();

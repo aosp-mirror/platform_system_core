@@ -33,7 +33,7 @@
 #include "SerializedLogEntry.h"
 #include "rwlock.h"
 
-class SerializedLogBuffer : public LogBuffer {
+class SerializedLogBuffer final : public LogBuffer {
   public:
     SerializedLogBuffer(LogReaderList* reader_list, LogTags* tags, LogStatistics* stats);
     ~SerializedLogBuffer();
