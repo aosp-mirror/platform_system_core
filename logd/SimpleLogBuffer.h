@@ -31,7 +31,7 @@ class SimpleLogBuffer : public LogBuffer {
   public:
     SimpleLogBuffer(LogReaderList* reader_list, LogTags* tags, LogStatistics* stats);
     ~SimpleLogBuffer();
-    void Init() override;
+    void Init() override final;
 
     int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
             uint16_t len) override;
@@ -42,7 +42,7 @@ class SimpleLogBuffer : public LogBuffer {
 
     bool Clear(log_id_t id, uid_t uid) override;
     unsigned long GetSize(log_id_t id) override;
-    int SetSize(log_id_t id, unsigned long size) override;
+    int SetSize(log_id_t id, unsigned long size) override final;
 
     uint64_t sequence() const override { return sequence_.load(std::memory_order_relaxed); }
 
