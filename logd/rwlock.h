@@ -43,7 +43,7 @@ class SHARED_CAPABILITY("mutex") RwLock {
 
 class SCOPED_CAPABILITY SharedLock {
   public:
-    SharedLock(RwLock& lock) ACQUIRE_SHARED(lock) : lock_(lock) { lock_.lock_shared(); }
+    explicit SharedLock(RwLock& lock) ACQUIRE_SHARED(lock) : lock_(lock) { lock_.lock_shared(); }
     ~SharedLock() RELEASE() { lock_.unlock(); }
 
     void lock_shared() ACQUIRE_SHARED() { lock_.lock_shared(); }
