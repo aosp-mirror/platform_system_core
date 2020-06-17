@@ -208,6 +208,7 @@ bool SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid
     }
 
     // Otherwise we are stuck due to a reader, so mitigate it.
+    CHECK(oldest != nullptr);
     KickReader(oldest, log_id, bytes_to_free);
     return false;
 }
