@@ -37,7 +37,7 @@ class __attribute__((packed)) LogBufferElement {
     LogBufferElement(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
                      uint64_t sequence, const char* msg, uint16_t len);
     LogBufferElement(const LogBufferElement& elem);
-    LogBufferElement(LogBufferElement&& elem);
+    LogBufferElement(LogBufferElement&& elem) noexcept;
     ~LogBufferElement();
 
     uint32_t GetTag() const;

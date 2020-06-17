@@ -127,7 +127,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     if (cp) {
         logMask = 0;
         cp += sizeof(_logIds) - 1;
-        while (*cp && *cp != '\0') {
+        while (*cp != '\0') {
             int val = 0;
             while (isdigit(*cp)) {
                 val = val * 10 + *cp - '0';

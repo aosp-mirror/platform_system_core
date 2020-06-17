@@ -25,8 +25,6 @@
 #include "LogBuffer.h"
 #include "LogReaderList.h"
 
-using namespace std::placeholders;
-
 LogReaderThread::LogReaderThread(LogBuffer* log_buffer, LogReaderList* reader_list,
                                  std::unique_ptr<LogWriter> writer, bool non_block,
                                  unsigned long tail, LogMask log_mask, pid_t pid,
