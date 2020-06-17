@@ -35,7 +35,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
     android::base::unique_fd fd(
             TEMP_FAILURE_RETRY(open(path_name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
     if (fd == -1) {
-        LOG(ERROR) << "Could not open module '" << path_name << "'";
+        PLOG(ERROR) << "Could not open module '" << path_name << "'";
         return false;
     }
 
@@ -49,7 +49,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
         options = options + " " + parameters;
     }
 
-    LOG(INFO) << "Loading module " << path_name << " with args \"" << options << "\"";
+    LOG(INFO) << "Loading module " << path_name << " with args '" << options << "'";
     int ret = syscall(__NR_finit_module, fd.get(), options.c_str(), 0);
     if (ret != 0) {
         if (errno == EEXIST) {
@@ -57,7 +57,7 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
             module_loaded_.emplace(canonical_name);
             return true;
         }
-        LOG(ERROR) << "Failed to insmod '" << path_name << "' with args '" << options << "'";
+        PLOG(ERROR) << "Failed to insmod '" << path_name << "' with args '" << options << "'";
         return false;
     }
 
@@ -80,8 +80,8 @@ bool Modprobe::Rmmod(const std::string& module_name) {
 
 bool Modprobe::ModuleExists(const std::string& module_name) {
     struct stat fileStat;
-    if (blacklist_enabled && module_blacklist_.count(module_name)) {
-        LOG(INFO) << "module " << module_name << " is blacklisted";
+    if (blocklist_enabled && module_blocklist_.count(module_name)) {
+        LOG(INFO) << "module " << module_name << " is blocklisted";
         return false;
     }
     auto deps = GetDependencies(module_name);

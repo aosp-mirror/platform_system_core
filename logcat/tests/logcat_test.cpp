@@ -1301,7 +1301,7 @@ TEST(logcat, blocking_clear) {
 }
 #endif
 
-static bool get_white_black(char** list) {
+static bool get_prune_rules(char** list) {
     FILE* fp = popen(logcat_executable " -p 2>/dev/null", "r");
     if (fp == NULL) {
         fprintf(stderr, "ERROR: logcat -p 2>/dev/null\n");
@@ -1334,7 +1334,7 @@ static bool get_white_black(char** list) {
     return *list != NULL;
 }
 
-static bool set_white_black(const char* list) {
+static bool set_prune_rules(const char* list) {
     char buffer[BIG_BUFFER];
     snprintf(buffer, sizeof(buffer), logcat_executable " -P '%s' 2>&1",
              list ? list : "");
@@ -1363,28 +1363,28 @@ static bool set_white_black(const char* list) {
     return pclose(fp) == 0;
 }
 
-TEST(logcat, white_black_adjust) {
+TEST(logcat, prune_rules_adjust) {
     char* list = NULL;
     char* adjust = NULL;
 
-    get_white_black(&list);
+    get_prune_rules(&list);
 
     static const char adjustment[] = "~! 300/20 300/25 2000 ~1000/5 ~1000/30";
-    ASSERT_EQ(true, set_white_black(adjustment));
-    ASSERT_EQ(true, get_white_black(&adjust));
+    ASSERT_EQ(true, set_prune_rules(adjustment));
+    ASSERT_EQ(true, get_prune_rules(&adjust));
     EXPECT_STREQ(adjustment, adjust);
     free(adjust);
     adjust = NULL;
 
     static const char adjustment2[] = "300/20 300/21 2000 ~1000";
-    ASSERT_EQ(true, set_white_black(adjustment2));
-    ASSERT_EQ(true, get_white_black(&adjust));
+    ASSERT_EQ(true, set_prune_rules(adjustment2));
+    ASSERT_EQ(true, get_prune_rules(&adjust));
     EXPECT_STREQ(adjustment2, adjust);
     free(adjust);
     adjust = NULL;
 
-    ASSERT_EQ(true, set_white_black(list));
-    get_white_black(&adjust);
+    ASSERT_EQ(true, set_prune_rules(list));
+    get_prune_rules(&adjust);
     EXPECT_STREQ(list ? list : "", adjust ? adjust : "");
     free(adjust);
     adjust = NULL;

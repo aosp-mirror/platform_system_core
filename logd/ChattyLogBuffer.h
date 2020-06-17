@@ -33,8 +33,8 @@
 #include "LogReaderThread.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
-#include "LogWhiteBlackList.h"
 #include "LogWriter.h"
+#include "PruneList.h"
 #include "SimpleLogBuffer.h"
 #include "rwlock.h"
 
