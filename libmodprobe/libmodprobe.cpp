@@ -194,17 +194,18 @@ bool Modprobe::ParseOptionsCallback(const std::vector<std::string>& args) {
     return true;
 }
 
-bool Modprobe::ParseBlacklistCallback(const std::vector<std::string>& args) {
+bool Modprobe::ParseBlocklistCallback(const std::vector<std::string>& args) {
     auto it = args.begin();
     const std::string& type = *it++;
 
-    if (type != "blacklist") {
-        LOG(ERROR) << "non-blacklist line encountered in modules.blacklist";
+    // +Legacy
+    if ((type != "blocklist") && (type != "blacklist")) {
+        LOG(ERROR) << "non-blocklist line encountered in modules.blocklist";
         return false;
     }
 
     if (args.size() != 2) {
-        LOG(ERROR) << "lines in modules.blacklist must have exactly 2 entries, not " << args.size();
+        LOG(ERROR) << "lines in modules.blocklist must have exactly 2 entries, not " << args.size();
         return false;
     }
 
@@ -214,7 +215,7 @@ bool Modprobe::ParseBlacklistCallback(const std::vector<std::string>& args) {
     if (canonical_name.empty()) {
         return false;
     }
-    this->module_blacklist_.emplace(canonical_name);
+    this->module_blocklist_.emplace(canonical_name);
 
     return true;
 }
@@ -331,16 +332,18 @@ Modprobe::Modprobe(const std::vector<std::string>& base_paths, const std::string
         auto options_callback = std::bind(&Modprobe::ParseOptionsCallback, this, _1);
         ParseCfg(base_path + "/modules.options", options_callback);
 
-        auto blacklist_callback = std::bind(&Modprobe::ParseBlacklistCallback, this, _1);
-        ParseCfg(base_path + "/modules.blacklist", blacklist_callback);
+        auto blocklist_callback = std::bind(&Modprobe::ParseBlocklistCallback, this, _1);
+        ParseCfg(base_path + "/modules.blocklist", blocklist_callback);
+        // Legacy
+        ParseCfg(base_path + "/modules.blacklist", blocklist_callback);
     }
 
     ParseKernelCmdlineOptions();
     android::base::SetMinimumLogSeverity(android::base::INFO);
 }
 
-void Modprobe::EnableBlacklist(bool enable) {
-    blacklist_enabled = enable;
+void Modprobe::EnableBlocklist(bool enable) {
+    blocklist_enabled = enable;
 }
 
 void Modprobe::EnableVerbose(bool enable) {
