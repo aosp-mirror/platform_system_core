@@ -50,6 +50,10 @@ class FuseBridgeLoop final {
     // thread from one which invokes |Start|.
     bool AddBridge(int mount_id, base::unique_fd dev_fd, base::unique_fd proxy_fd);
 
+    static void Lock();
+
+    static void Unlock();
+
   private:
     bool ProcessEventLocked(const std::unordered_set<FuseBridgeEntry*>& entries,
                             FuseBridgeLoopCallback* callback);
@@ -60,7 +64,7 @@ class FuseBridgeLoop final {
     std::map<int, std::unique_ptr<FuseBridgeEntry>> bridges_;
 
     // Lock for multi-threading.
-    std::mutex mutex_;
+    static std::recursive_mutex mutex_;
 
     bool opened_;
 
