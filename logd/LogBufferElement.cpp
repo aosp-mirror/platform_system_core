@@ -61,7 +61,7 @@ LogBufferElement::LogBufferElement(const LogBufferElement& elem)
     }
 }
 
-LogBufferElement::LogBufferElement(LogBufferElement&& elem)
+LogBufferElement::LogBufferElement(LogBufferElement&& elem) noexcept
     : uid_(elem.uid_),
       pid_(elem.pid_),
       tid_(elem.tid_),
@@ -134,7 +134,7 @@ char* android::tidToName(pid_t tid) {
     char* retval = nullptr;
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "/proc/%u/comm", tid);
-    int fd = open(buffer, O_RDONLY);
+    int fd = open(buffer, O_RDONLY | O_CLOEXEC);
     if (fd >= 0) {
         ssize_t ret = read(fd, buffer, sizeof(buffer));
         if (ret >= (ssize_t)sizeof(buffer)) {
