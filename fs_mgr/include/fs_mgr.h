@@ -69,7 +69,7 @@ int fs_mgr_mount_all(android::fs_mgr::Fstab* fstab, int mount_mode);
 int fs_mgr_do_mount(android::fs_mgr::Fstab* fstab, const char* n_name, char* n_blk_device,
                     char* tmp_mount_point);
 int fs_mgr_do_mount(android::fs_mgr::Fstab* fstab, const char* n_name, char* n_blk_device,
-                    char* tmp_mount_point, bool need_cp);
+                    char* tmp_mount_point, bool need_cp, bool metadata_encrypted);
 int fs_mgr_do_mount_one(const android::fs_mgr::FstabEntry& entry,
                         const std::string& mount_point = "");
 int fs_mgr_do_tmpfs_mount(const char *n_name);
