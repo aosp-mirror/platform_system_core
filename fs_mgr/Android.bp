@@ -162,10 +162,13 @@ cc_binary {
     defaults: ["fs_mgr_defaults"],
     static_libs: [
         "libavb_user",
+        "libutils",
+        "libvold_binder",
     ],
     shared_libs: [
         "libbootloader_message",
         "libbase",
+        "libbinder",
         "libcutils",
         "libcrypto",
         "libext4_utils",
