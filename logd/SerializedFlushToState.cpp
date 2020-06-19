@@ -60,7 +60,7 @@ void SerializedFlushToState::CreateLogPosition(log_id_t log_id) {
     }
     log_position.read_offset = read_offset;
 
-    log_positions_[log_id].emplace(std::move(log_position));
+    log_positions_[log_id].emplace(log_position);
 }
 
 void SerializedFlushToState::AddMinHeapEntry(log_id_t log_id) {
@@ -149,7 +149,7 @@ void SerializedFlushToState::Prune(log_id_t log_id,
         min_heap_.pop();
     }
     for (auto&& element : old_elements) {
-        min_heap_.emplace(std::move(element));
+        min_heap_.emplace(element);
     }
 
     // Finally set logs_needed_from_next_position_, so CheckForNewLogs() will re-create the

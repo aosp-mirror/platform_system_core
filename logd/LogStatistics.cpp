@@ -88,7 +88,7 @@ char* pidToName(pid_t pid) {
     } else {
         char buffer[512];
         snprintf(buffer, sizeof(buffer), "/proc/%u/cmdline", pid);
-        int fd = open(buffer, O_RDONLY);
+        int fd = open(buffer, O_RDONLY | O_CLOEXEC);
         if (fd >= 0) {
             ssize_t ret = read(fd, buffer, sizeof(buffer));
             if (ret > 0) {
@@ -944,7 +944,7 @@ namespace android {
 uid_t pidToUid(pid_t pid) {
     char buffer[512];
     snprintf(buffer, sizeof(buffer), "/proc/%u/status", pid);
-    FILE* fp = fopen(buffer, "r");
+    FILE* fp = fopen(buffer, "re");
     if (fp) {
         while (fgets(buffer, sizeof(buffer), fp)) {
             int uid = AID_LOGD;

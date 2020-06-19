@@ -128,9 +128,9 @@ class LogHashtable {
             if (++index < (ssize_t)len) {
                 size_t num = len - index - 1;
                 if (num) {
-                    memmove(&out_keys[index + 1], &out_keys[index], num * sizeof(out_keys[0]));
+                    memmove(&out_keys[index + 1], &out_keys[index], num * sizeof(const TKey*));
                     memmove(&out_entries[index + 1], &out_entries[index],
-                            num * sizeof(out_entries[0]));
+                            num * sizeof(const TEntry*));
                 }
                 out_keys[index] = &key;
                 out_entries[index] = &entry;
@@ -477,15 +477,15 @@ class LogStatistics {
                       tagNameTable.sizeOf() +
                       (pidTable.size() * sizeof(pidTable_t::iterator)) +
                       (tagTable.size() * sizeof(tagTable_t::iterator));
-        for (auto it : pidTable) {
+        for (const auto& it : pidTable) {
             const char* name = it.second.name();
             if (name) size += strlen(name) + 1;
         }
-        for (auto it : tidTable) {
+        for (const auto& it : tidTable) {
             const char* name = it.second.name();
             if (name) size += strlen(name) + 1;
         }
-        for (auto it : tagNameTable) {
+        for (const auto& it : tagNameTable) {
             size += sizeof(std::string);
             size_t len = it.first.size();
             // Account for short string optimization: if the string's length is <= 22 bytes for 64
@@ -505,7 +505,7 @@ class LogStatistics {
     }
 
   public:
-    LogStatistics(bool enable_statistics);
+    explicit LogStatistics(bool enable_statistics);
 
     void AddTotal(log_id_t log_id, uint16_t size) EXCLUDES(lock_);
     void Add(const LogStatisticsElement& entry) EXCLUDES(lock_);
