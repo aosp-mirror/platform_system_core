@@ -276,7 +276,9 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
             cp++;
         }
     } else if (warn) {
+#ifdef __ANDROID__
         LOG(ERROR) << "Cannot read " << filename;
+#endif
     }
 }
 
