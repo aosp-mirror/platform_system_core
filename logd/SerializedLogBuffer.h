@@ -61,6 +61,7 @@ class SerializedLogBuffer final : public LogBuffer {
             REQUIRES_SHARED(lock_);
     void NotifyReadersOfPrune(log_id_t log_id, const std::list<SerializedLogChunk>::iterator& chunk)
             REQUIRES(reader_list_->reader_threads_lock());
+    unsigned long GetSizeUsed(log_id_t id) REQUIRES(lock_);
 
     void StartDeleterThread() REQUIRES(lock_);
     void DeleterThread();

@@ -259,7 +259,7 @@ int main(int argc, char* argv[]) {
     bool enable_full_log_statistics = __android_logger_property_get_bool(
             "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
                                        BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
-    LogStatistics log_statistics(enable_full_log_statistics);
+    LogStatistics log_statistics(enable_full_log_statistics, false);
 
     // Serves the purpose of managing the last logs times read on a
     // socket connection, and as a reader lock on a range of log
