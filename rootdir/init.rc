@@ -448,6 +448,9 @@ on late-init
     # Load persist properties and override properties (if enabled) from /data.
     trigger load_persist_props_action
 
+    # Should be before netd, but after apex, properties and logging is available.
+    trigger load_bpf_programs
+
     # Now we can start zygote for devices with file based encryption
     trigger zygote-start
 
