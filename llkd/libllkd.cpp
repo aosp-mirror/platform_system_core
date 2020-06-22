@@ -98,26 +98,26 @@ seconds khtTimeout = duration_cast<seconds>(llkTimeoutMs * (1 + LLK_CHECKS_PER_T
 std::unordered_set<std::string> llkCheckStackSymbols;
 #endif
 
-// Blacklist variables, initialized with comma separated lists of high false
+// Ignorelist variables, initialized with comma separated lists of high false
 // positive and/or dangerous references, e.g. without self restart, for pid,
 // ppid, name and uid:
 
 // list of pids, or tids or names to skip. kernel pid (0), init pid (1),
 // [kthreadd] pid (2), ourselves, "init", "[kthreadd]", "lmkd", "llkd" or
 // combinations of watchdogd in kernel and user space.
-std::unordered_set<std::string> llkBlacklistProcess;
+std::unordered_set<std::string> llkIgnorelistProcess;
 // list of parent pids, comm or cmdline names to skip. default:
 // kernel pid (0), [kthreadd] (2), or ourselves, enforced and implied
-std::unordered_set<std::string> llkBlacklistParent;
+std::unordered_set<std::string> llkIgnorelistParent;
 // list of parent and target processes to skip. default:
 // adbd *and* [setsid]
-std::unordered_map<std::string, std::unordered_set<std::string>> llkBlacklistParentAndChild;
+std::unordered_map<std::string, std::unordered_set<std::string>> llkIgnorelistParentAndChild;
 // list of uids, and uid names, to skip, default nothing
-std::unordered_set<std::string> llkBlacklistUid;
+std::unordered_set<std::string> llkIgnorelistUid;
 #ifdef __PTRACE_ENABLED__
 // list of names to skip stack checking. "init", "lmkd", "llkd", "keystore" or
 // "logd" (if not userdebug).
-std::unordered_set<std::string> llkBlacklistStack;
+std::unordered_set<std::string> llkIgnorelistStack;
 #endif
 
 class dir {
@@ -626,9 +626,9 @@ std::string llkFormat(bool flag) {
     return flag ? "true" : "false";
 }
 
-std::string llkFormat(const std::unordered_set<std::string>& blacklist) {
+std::string llkFormat(const std::unordered_set<std::string>& ignorelist) {
     std::string ret;
-    for (const auto& entry : blacklist) {
+    for (const auto& entry : ignorelist) {
         if (!ret.empty()) ret += ",";
         ret += entry;
     }
@@ -636,10 +636,10 @@ std::string llkFormat(const std::unordered_set<std::string>& blacklist) {
 }
 
 std::string llkFormat(
-        const std::unordered_map<std::string, std::unordered_set<std::string>>& blacklist,
+        const std::unordered_map<std::string, std::unordered_set<std::string>>& ignorelist,
         bool leading_comma = false) {
     std::string ret;
-    for (const auto& entry : blacklist) {
+    for (const auto& entry : ignorelist) {
         for (const auto& target : entry.second) {
             if (leading_comma || !ret.empty()) ret += ",";
             ret += entry.first + "&" + target;
@@ -699,61 +699,61 @@ std::unordered_set<std::string> llkSplit(const std::string& prop, const std::str
 }
 
 bool llkSkipName(const std::string& name,
-                 const std::unordered_set<std::string>& blacklist = llkBlacklistProcess) {
-    if (name.empty() || blacklist.empty()) return false;
+                 const std::unordered_set<std::string>& ignorelist = llkIgnorelistProcess) {
+    if (name.empty() || ignorelist.empty()) return false;
 
-    return blacklist.find(name) != blacklist.end();
+    return ignorelist.find(name) != ignorelist.end();
 }
 
 bool llkSkipProc(proc* procp,
-                 const std::unordered_set<std::string>& blacklist = llkBlacklistProcess) {
+                 const std::unordered_set<std::string>& ignorelist = llkIgnorelistProcess) {
     if (!procp) return false;
-    if (llkSkipName(std::to_string(procp->pid), blacklist)) return true;
-    if (llkSkipName(procp->getComm(), blacklist)) return true;
-    if (llkSkipName(procp->getCmdline(), blacklist)) return true;
-    if (llkSkipName(android::base::Basename(procp->getCmdline()), blacklist)) return true;
+    if (llkSkipName(std::to_string(procp->pid), ignorelist)) return true;
+    if (llkSkipName(procp->getComm(), ignorelist)) return true;
+    if (llkSkipName(procp->getCmdline(), ignorelist)) return true;
+    if (llkSkipName(android::base::Basename(procp->getCmdline()), ignorelist)) return true;
     return false;
 }
 
 const std::unordered_set<std::string>& llkSkipName(
         const std::string& name,
-        const std::unordered_map<std::string, std::unordered_set<std::string>>& blacklist) {
+        const std::unordered_map<std::string, std::unordered_set<std::string>>& ignorelist) {
     static const std::unordered_set<std::string> empty;
-    if (name.empty() || blacklist.empty()) return empty;
-    auto found = blacklist.find(name);
-    if (found == blacklist.end()) return empty;
+    if (name.empty() || ignorelist.empty()) return empty;
+    auto found = ignorelist.find(name);
+    if (found == ignorelist.end()) return empty;
     return found->second;
 }
 
 bool llkSkipPproc(proc* pprocp, proc* procp,
                   const std::unordered_map<std::string, std::unordered_set<std::string>>&
-                          blacklist = llkBlacklistParentAndChild) {
-    if (!pprocp || !procp || blacklist.empty()) return false;
-    if (llkSkipProc(procp, llkSkipName(std::to_string(pprocp->pid), blacklist))) return true;
-    if (llkSkipProc(procp, llkSkipName(pprocp->getComm(), blacklist))) return true;
-    if (llkSkipProc(procp, llkSkipName(pprocp->getCmdline(), blacklist))) return true;
+                          ignorelist = llkIgnorelistParentAndChild) {
+    if (!pprocp || !procp || ignorelist.empty()) return false;
+    if (llkSkipProc(procp, llkSkipName(std::to_string(pprocp->pid), ignorelist))) return true;
+    if (llkSkipProc(procp, llkSkipName(pprocp->getComm(), ignorelist))) return true;
+    if (llkSkipProc(procp, llkSkipName(pprocp->getCmdline(), ignorelist))) return true;
     return llkSkipProc(procp,
-                       llkSkipName(android::base::Basename(pprocp->getCmdline()), blacklist));
+                       llkSkipName(android::base::Basename(pprocp->getCmdline()), ignorelist));
 }
 
 bool llkSkipPid(pid_t pid) {
-    return llkSkipName(std::to_string(pid), llkBlacklistProcess);
+    return llkSkipName(std::to_string(pid), llkIgnorelistProcess);
 }
 
 bool llkSkipPpid(pid_t ppid) {
-    return llkSkipName(std::to_string(ppid), llkBlacklistParent);
+    return llkSkipName(std::to_string(ppid), llkIgnorelistParent);
 }
 
 bool llkSkipUid(uid_t uid) {
     // Match by number?
-    if (llkSkipName(std::to_string(uid), llkBlacklistUid)) {
+    if (llkSkipName(std::to_string(uid), llkIgnorelistUid)) {
         return true;
     }
 
     // Match by name?
     auto pwd = ::getpwuid(uid);
     return (pwd != nullptr) && __predict_true(pwd->pw_name != nullptr) &&
-           __predict_true(pwd->pw_name[0] != '\0') && llkSkipName(pwd->pw_name, llkBlacklistUid);
+           __predict_true(pwd->pw_name[0] != '\0') && llkSkipName(pwd->pw_name, llkIgnorelistUid);
 }
 
 bool getValidTidDir(dirent* dp, std::string* piddir) {
@@ -811,7 +811,7 @@ bool llkCheckStack(proc* procp, const std::string& piddir) {
     }
 
     // Don't check process that are known to block ptrace, save sepolicy noise.
-    if (llkSkipProc(procp, llkBlacklistStack)) return false;
+    if (llkSkipProc(procp, llkIgnorelistStack)) return false;
     auto kernel_stack = ReadFile(piddir + "/stack");
     if (kernel_stack.empty()) {
         LOG(VERBOSE) << piddir << "/stack empty comm=" << procp->getComm()
@@ -917,12 +917,12 @@ void llkLogConfig(void) {
               << LLK_CHECK_MS_PROPERTY "=" << llkFormat(llkCheckMs) << "\n"
 #ifdef __PTRACE_ENABLED__
               << LLK_CHECK_STACK_PROPERTY "=" << llkFormat(llkCheckStackSymbols) << "\n"
-              << LLK_BLACKLIST_STACK_PROPERTY "=" << llkFormat(llkBlacklistStack) << "\n"
+              << LLK_IGNORELIST_STACK_PROPERTY "=" << llkFormat(llkIgnorelistStack) << "\n"
 #endif
-              << LLK_BLACKLIST_PROCESS_PROPERTY "=" << llkFormat(llkBlacklistProcess) << "\n"
-              << LLK_BLACKLIST_PARENT_PROPERTY "=" << llkFormat(llkBlacklistParent)
-              << llkFormat(llkBlacklistParentAndChild, true) << "\n"
-              << LLK_BLACKLIST_UID_PROPERTY "=" << llkFormat(llkBlacklistUid);
+              << LLK_IGNORELIST_PROCESS_PROPERTY "=" << llkFormat(llkIgnorelistProcess) << "\n"
+              << LLK_IGNORELIST_PARENT_PROPERTY "=" << llkFormat(llkIgnorelistParent)
+              << llkFormat(llkIgnorelistParentAndChild, true) << "\n"
+              << LLK_IGNORELIST_UID_PROPERTY "=" << llkFormat(llkIgnorelistUid);
 }
 
 void* llkThread(void* obj) {
@@ -932,14 +932,14 @@ void* llkThread(void* obj) {
 
     std::string name = std::to_string(::gettid());
     if (!llkSkipName(name)) {
-        llkBlacklistProcess.emplace(name);
+        llkIgnorelistProcess.emplace(name);
     }
     name = static_cast<const char*>(obj);
     prctl(PR_SET_NAME, name.c_str());
     if (__predict_false(!llkSkipName(name))) {
-        llkBlacklistProcess.insert(name);
+        llkIgnorelistProcess.insert(name);
     }
-    // No longer modifying llkBlacklistProcess.
+    // No longer modifying llkIgnorelistProcess.
     llkRunning = true;
     llkLogConfig();
     while (llkRunning) {
@@ -1122,12 +1122,12 @@ milliseconds llkCheck(bool checkRunning) {
             }
             if (pprocp) {
                 if (llkSkipPproc(pprocp, procp)) break;
-                if (llkSkipProc(pprocp, llkBlacklistParent)) break;
+                if (llkSkipProc(pprocp, llkIgnorelistParent)) break;
             } else {
-                if (llkSkipName(std::to_string(ppid), llkBlacklistParent)) break;
+                if (llkSkipName(std::to_string(ppid), llkIgnorelistParent)) break;
             }
 
-            if ((llkBlacklistUid.size() != 0) && llkSkipUid(procp->getUid())) {
+            if ((llkIgnorelistUid.size() != 0) && llkSkipUid(procp->getUid())) {
                 continue;
             }
 
@@ -1320,29 +1320,29 @@ bool llkInit(const char* threadname) {
     if (debuggable) {
         llkCheckStackSymbols = llkSplit(LLK_CHECK_STACK_PROPERTY, LLK_CHECK_STACK_DEFAULT);
     }
-    std::string defaultBlacklistStack(LLK_BLACKLIST_STACK_DEFAULT);
-    if (!debuggable) defaultBlacklistStack += ",logd,/system/bin/logd";
-    llkBlacklistStack = llkSplit(LLK_BLACKLIST_STACK_PROPERTY, defaultBlacklistStack);
+    std::string defaultIgnorelistStack(LLK_IGNORELIST_STACK_DEFAULT);
+    if (!debuggable) defaultIgnorelistStack += ",logd,/system/bin/logd";
+    llkIgnorelistStack = llkSplit(LLK_IGNORELIST_STACK_PROPERTY, defaultIgnorelistStack);
 #endif
-    std::string defaultBlacklistProcess(
-        std::to_string(kernelPid) + "," + std::to_string(initPid) + "," +
-        std::to_string(kthreaddPid) + "," + std::to_string(::getpid()) + "," +
-        std::to_string(::gettid()) + "," LLK_BLACKLIST_PROCESS_DEFAULT);
+    std::string defaultIgnorelistProcess(
+            std::to_string(kernelPid) + "," + std::to_string(initPid) + "," +
+            std::to_string(kthreaddPid) + "," + std::to_string(::getpid()) + "," +
+            std::to_string(::gettid()) + "," LLK_IGNORELIST_PROCESS_DEFAULT);
     if (threadname) {
-        defaultBlacklistProcess += ","s + threadname;
+        defaultIgnorelistProcess += ","s + threadname;
     }
     for (int cpu = 1; cpu < get_nprocs_conf(); ++cpu) {
-        defaultBlacklistProcess += ",[watchdog/" + std::to_string(cpu) + "]";
+        defaultIgnorelistProcess += ",[watchdog/" + std::to_string(cpu) + "]";
     }
-    llkBlacklistProcess = llkSplit(LLK_BLACKLIST_PROCESS_PROPERTY, defaultBlacklistProcess);
+    llkIgnorelistProcess = llkSplit(LLK_IGNORELIST_PROCESS_PROPERTY, defaultIgnorelistProcess);
     if (!llkSkipName("[khungtaskd]")) {  // ALWAYS ignore as special
-        llkBlacklistProcess.emplace("[khungtaskd]");
+        llkIgnorelistProcess.emplace("[khungtaskd]");
     }
-    llkBlacklistParent = llkSplit(LLK_BLACKLIST_PARENT_PROPERTY,
-                                  std::to_string(kernelPid) + "," + std::to_string(kthreaddPid) +
-                                          "," LLK_BLACKLIST_PARENT_DEFAULT);
-    // derive llkBlacklistParentAndChild by moving entries with '&' from above
-    for (auto it = llkBlacklistParent.begin(); it != llkBlacklistParent.end();) {
+    llkIgnorelistParent = llkSplit(LLK_IGNORELIST_PARENT_PROPERTY,
+                                   std::to_string(kernelPid) + "," + std::to_string(kthreaddPid) +
+                                           "," LLK_IGNORELIST_PARENT_DEFAULT);
+    // derive llkIgnorelistParentAndChild by moving entries with '&' from above
+    for (auto it = llkIgnorelistParent.begin(); it != llkIgnorelistParent.end();) {
         auto pos = it->find('&');
         if (pos == std::string::npos) {
             ++it;
@@ -1350,18 +1350,18 @@ bool llkInit(const char* threadname) {
         }
         auto parent = it->substr(0, pos);
         auto child = it->substr(pos + 1);
-        it = llkBlacklistParent.erase(it);
+        it = llkIgnorelistParent.erase(it);
 
-        auto found = llkBlacklistParentAndChild.find(parent);
-        if (found == llkBlacklistParentAndChild.end()) {
-            llkBlacklistParentAndChild.emplace(std::make_pair(
+        auto found = llkIgnorelistParentAndChild.find(parent);
+        if (found == llkIgnorelistParentAndChild.end()) {
+            llkIgnorelistParentAndChild.emplace(std::make_pair(
                     std::move(parent), std::unordered_set<std::string>({std::move(child)})));
         } else {
             found->second.emplace(std::move(child));
         }
     }
 
-    llkBlacklistUid = llkSplit(LLK_BLACKLIST_UID_PROPERTY, LLK_BLACKLIST_UID_DEFAULT);
+    llkIgnorelistUid = llkSplit(LLK_IGNORELIST_UID_PROPERTY, LLK_IGNORELIST_UID_DEFAULT);
 
     // internal watchdog
     ::signal(SIGALRM, llkAlarmHandler);
