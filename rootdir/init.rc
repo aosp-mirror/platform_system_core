@@ -517,6 +517,12 @@ on post-fs
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
+    # On some devices we see a weird behaviour in which /metadata/apex doesn't
+    # have a correct label. To workaround this bug, explicitly call restorecon
+    # on /metadata/apex. For most of the boot sequences /metadata/apex will
+    # already have a correct selinux label, meaning that this call will be a
+    # no-op.
+    restorecon_recursive /metadata/apex
 
     mkdir /metadata/staged-install 0770 root system
 on late-fs
