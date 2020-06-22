@@ -423,34 +423,60 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
         if (GetDeviceAlias(upath, major, minor, alias_link))
             all_links.push_back(alias_link);
 
-        // Make sure /dev/aliases exists for later.
+        // Make sure /dev/aliases exists for later...
         mkdir_recursive("/dev/aliases", 0755);
 
         MakeDevice(devpath, block, major, minor, all_links);
-        for (const auto& link : all_links) {
-            if (!mkdir_recursive(Dirname(link), 0755)) {
-                PLOG(ERROR) << "Failed to create directory " << Dirname(link);
-            }
 
-            if (symlink(devpath.c_str(), link.c_str())) {
-                if (errno != EEXIST) {
-                    PLOG(ERROR) << "Failed to symlink " << devpath << " to " << link;
-                } else if (std::string link_path;
-                           Readlink(link, &link_path) && link_path != devpath) {
-                    PLOG(ERROR) << "Failed to symlink " << devpath << " to " << link
-                                << ", which already links to: " << link_path;
-                }
+        for (const auto& link : all_links) {
+            std::string link_path, aliases_linkpath;
+            std::stringstream slfmt;
+
+            if (!mkdir_recursive(Dirname(link), 0755))
+                PLOG(ERROR) << "Failed to create directory " << Dirname(link);
+
+            // Create a symlink in /dev/aliases that will point to the
+            // alias.
+            slfmt << "/dev/aliases/" << major << "_" << minor;
+            aliases_linkpath = slfmt.str();
+
+            if (symlink(link.c_str(), aliases_linkpath.c_str())) {
+                if (errno != EEXIST)
+                    PLOG(ERROR) << "Failed to create alias symlink from "
+                                << aliases_linkpath
+                                << " to "
+                                << link;
+
+                else if (Readlink(link, &link_path) && link_path != devpath)
+                    PLOG(ERROR) << "Failed to create alias symlink from "
+                                << aliases_linkpath
+                                << " to "
+                                << link
+                                << ", which already links to: "
+                                << link_path;
             }
             else {
-                std::stringstream slfmt;
+                // If it succeeded, then we can create the proper
+                // symlink.
 
-                LOG(INFO) << "Device symlink: " << link << " ==> " << devpath;
+                if (symlink(devpath.c_str(), link.c_str())) {
+                    if (errno != EEXIST)
+                        PLOG(ERROR) << "Failed to symlink "
+                                    << devpath
+                                    << " to "
+                                    << link;
+                    else if (Readlink(link, &link_path) && link_path != devpath)
+                        PLOG(ERROR) << "Failed to symlink "
+                                    << devpath
+                                    << " to "
+                                    << link
+                                    << ", which already links to: " << link_path;
 
-                // Create a symlink in /dev/aliases.
-                slfmt << "/dev/aliases/" << major << "_" << minor;
-
-                if (std::string link_path; !Readlink(slfmt.str(), &link_path))
-                    symlink(link.c_str(), slfmt.str().c_str());
+                    // Delete the link in /dev/aliases
+                    unlink(slfmt.str().c_str());
+                }
+                else
+                    LOG(INFO) << "Device symlink: " << link << " ==> " << devpath;
             }
         }
     }
@@ -469,12 +495,12 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
             }
         }
 
-        slfmt << "/dev/aliases/" << major << "_" << minor << "_";
+        slfmt << "/dev/aliases/" << major << "_" << minor;
 
-        // If no alias for that major/minor exists, bail out of
+        // If no alias for that major/minor exists.
         if (Readlink(slfmt.str(), &alias_link)) {
 
-            // Try to read what the link in /dev/aliases points
+            // Try to read what the link in /dev/aliases points to
             if (Readlink(alias_link, &alias_target)) {
 
                 // ... and if that links points to the right
@@ -546,7 +572,7 @@ static bool FormatDeviceAlias(const Aliases& alias, int minor, int interfaceNumb
         fmt << alias.AliasTo().substr(a, b - a);
 
         if (alias.AliasTo()[b + 1] == 'i') {
-            if (interfaceNumber != -1)
+            if (interfaceNumber >= 0)
                 fmt << interfaceNumber;
             else {
                 LOG(ERROR) << "No bInterfaceNumber found for device, can't create alias";
@@ -628,8 +654,6 @@ bool DeviceHandler::GetDeviceAlias(const std::string &upath, int major, int mino
         std::string dev_s, sAliasPath;
 
         if (alias.Matches(productId, vendorId, major, minor)) {
-            std::string alias_link;
-
 #ifdef DEBUG
             LOG(INFO) << "productId:" << productId << " "
                       << "vendorId:" << vendorId << " "
