@@ -414,6 +414,14 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
 void DeviceHandler::HandleDevice(const std::string& action, const std::string& devpath,
                                  const std::string& upath, bool block,
                                  int major, int minor, const std::vector<std::string>& links) const {
+    std::string aliases_linkpath;
+    std::stringstream slfmt;
+
+    // Create a symlink in /dev/aliases that will point to the
+    // alias.
+    slfmt << "/dev/aliases/" << major << "_" << minor;
+    aliases_linkpath = slfmt.str();
+
     if (action == "add") {
         std::string alias_link;
         std::vector<std::string> all_links(links);
@@ -429,16 +437,10 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
         MakeDevice(devpath, block, major, minor, all_links);
 
         for (const auto& link : all_links) {
-            std::string link_path, aliases_linkpath;
-            std::stringstream slfmt;
+            std::string link_path;
 
             if (!mkdir_recursive(Dirname(link), 0755))
                 PLOG(ERROR) << "Failed to create directory " << Dirname(link);
-
-            // Create a symlink in /dev/aliases that will point to the
-            // alias.
-            slfmt << "/dev/aliases/" << major << "_" << minor;
-            aliases_linkpath = slfmt.str();
 
             if (symlink(link.c_str(), aliases_linkpath.c_str())) {
                 if (errno != EEXIST)
@@ -482,7 +484,6 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     }
 
     if (action == "remove") {
-        std::stringstream slfmt;
         std::string alias_link, alias_target;
 
         LOG(ERROR) << "Removing device: " << devpath;
@@ -498,7 +499,7 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
         slfmt << "/dev/aliases/" << major << "_" << minor;
 
         // If no alias for that major/minor exists.
-        if (Readlink(slfmt.str(), &alias_link)) {
+        if (Readlink(aliases_linkpath, &alias_link)) {
 
             // Try to read what the link in /dev/aliases points to
             if (Readlink(alias_link, &alias_target)) {
@@ -507,7 +508,7 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
                 // device, erase both the link in /dev/aliases,
                 // and what it points to.
                 if (alias_target == devpath) {
-                    unlink(slfmt.str().c_str());
+                    unlink(aliases_linkpath.c_str());
                     unlink(alias_link.c_str());
                 }
             }
