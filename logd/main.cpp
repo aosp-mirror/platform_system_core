@@ -69,49 +69,42 @@
 // has a 'sigstop' feature that sends SIGSTOP to a service immediately before calling exec().  This
 // allows debuggers, etc to be attached to logd at the very beginning, while still having init
 // handle the user, groups, capabilities, files, etc setup.
-static int drop_privs(bool klogd, bool auditd) {
-    sched_param param = {};
-
+static void DropPrivs(bool klogd, bool auditd) {
     if (set_sched_policy(0, SP_BACKGROUND) < 0) {
-        PLOG(ERROR) << "failed to set background scheduling policy";
-        return -1;
+        PLOG(FATAL) << "failed to set background scheduling policy";
     }
 
+    sched_param param = {};
     if (sched_setscheduler((pid_t)0, SCHED_BATCH, &param) < 0) {
-        PLOG(ERROR) << "failed to set batch scheduler";
-        return -1;
+        PLOG(FATAL) << "failed to set batch scheduler";
     }
 
     if (!__android_logger_property_get_bool("ro.debuggable", BOOL_DEFAULT_FALSE) &&
         prctl(PR_SET_DUMPABLE, 0) == -1) {
-        PLOG(ERROR) << "failed to clear PR_SET_DUMPABLE";
-        return -1;
+        PLOG(FATAL) << "failed to clear PR_SET_DUMPABLE";
     }
 
     std::unique_ptr<struct _cap_struct, int (*)(void*)> caps(cap_init(), cap_free);
     if (cap_clear(caps.get()) < 0) {
-        return -1;
+        PLOG(FATAL) << "cap_clear() failed";
     }
-    std::vector<cap_value_t> cap_value;
     if (klogd) {
-        cap_value.emplace_back(CAP_SYSLOG);
+        cap_value_t cap_syslog = CAP_SYSLOG;
+        if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, &cap_syslog, CAP_SET) < 0 ||
+            cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, &cap_syslog, CAP_SET) < 0) {
+            PLOG(FATAL) << "Failed to set CAP_SYSLOG";
+        }
     }
     if (auditd) {
-        cap_value.emplace_back(CAP_AUDIT_CONTROL);
-    }
-
-    if (cap_set_flag(caps.get(), CAP_PERMITTED, cap_value.size(), cap_value.data(), CAP_SET) < 0) {
-        return -1;
-    }
-    if (cap_set_flag(caps.get(), CAP_EFFECTIVE, cap_value.size(), cap_value.data(), CAP_SET) < 0) {
-        return -1;
+        cap_value_t cap_audit_control = CAP_AUDIT_CONTROL;
+        if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, &cap_audit_control, CAP_SET) < 0 ||
+            cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, &cap_audit_control, CAP_SET) < 0) {
+            PLOG(FATAL) << "Failed to set CAP_AUDIT_CONTROL";
+        }
     }
     if (cap_set_proc(caps.get()) < 0) {
-        PLOG(ERROR) << "failed to set CAP_SYSLOG or CAP_AUDIT_CONTROL";
-        return -1;
+        PLOG(FATAL) << "cap_set_proc() failed";
     }
-
-    return 0;
 }
 
 char* android::uidToName(uid_t u) {
@@ -254,9 +247,7 @@ int main(int argc, char* argv[]) {
     }
 
     bool auditd = __android_logger_property_get_bool("ro.logd.auditd", BOOL_DEFAULT_TRUE);
-    if (drop_privs(klogd, auditd) != 0) {
-        return EXIT_FAILURE;
-    }
+    DropPrivs(klogd, auditd);
 
     // A cache of event log tags
     LogTags log_tags;
