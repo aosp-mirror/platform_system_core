@@ -61,6 +61,18 @@ namespace init {
 
 const int Aliases::ANY = -1;
 
+std::string Aliases::ToString() const {
+    std::stringstream fmt;
+
+    fmt << "AliasTo:" << alias_to_ << " "
+        << "Major:" << (major_ == Aliases::ANY ? "Any" : std::to_string(major_)) << " "
+        << "Minor:" << (minor_ == Aliases::ANY ? "Any" : std::to_string(minor_)) << " "
+        << "ProductId:" << productId_ << " "
+        << "VendorId:" << vendorId_;
+
+    return fmt.str();
+}
+
 bool Aliases::Matches(int productId, int vendorId, int major, int minor) const {
     return
         ((this->minor_ == Aliases::ANY) || this->minor_ == minor) &&
@@ -402,15 +414,18 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
 void DeviceHandler::HandleDevice(const std::string& action, const std::string& devpath,
                                  const std::string& upath, bool block,
                                  int major, int minor, const std::vector<std::string>& links) const {
-    std::vector<std::string> all_links(links);
-    std::string alias_link;
-
-    // Add the alias link to the device to the list of links to
-    // create.
-    if (GetDeviceAlias(upath, major, minor, alias_link))
-        all_links.push_back(alias_link);
-
     if (action == "add") {
+        std::string alias_link;
+        std::vector<std::string> all_links(links);
+
+        // Add the alias link to the device to the list of links to
+        // create.
+        if (GetDeviceAlias(upath, major, minor, alias_link))
+            all_links.push_back(alias_link);
+
+        // Make sure /dev/aliases exists for later.
+        mkdir_recursive("/dev/aliases", 0755);
+
         MakeDevice(devpath, block, major, minor, all_links);
         for (const auto& link : all_links) {
             if (!mkdir_recursive(Dirname(link), 0755)) {
@@ -426,16 +441,52 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
                                 << ", which already links to: " << link_path;
                 }
             }
+            else {
+                std::stringstream slfmt;
+
+                LOG(INFO) << "Device symlink: " << link << " ==> " << devpath;
+
+                // Create a symlink in /dev/aliases.
+                slfmt << "/dev/aliases/" << major << "_" << minor;
+
+                if (std::string link_path; !Readlink(slfmt.str(), &link_path))
+                    symlink(link.c_str(), slfmt.str().c_str());
+            }
         }
     }
 
     if (action == "remove") {
-        for (const auto& link : all_links) {
+        std::stringstream slfmt;
+        std::string alias_link, alias_target;
+
+        LOG(ERROR) << "Removing device: " << devpath;
+
+        for (const auto& link : links) {
+            LOG(ERROR) << "Remove: looking at: " << link;
             std::string link_path;
             if (Readlink(link, &link_path) && link_path == devpath) {
                 unlink(link.c_str());
             }
         }
+
+        slfmt << "/dev/aliases/" << major << "_" << minor << "_";
+
+        // If no alias for that major/minor exists, bail out of
+        if (Readlink(slfmt.str(), &alias_link)) {
+
+            // Try to read what the link in /dev/aliases points
+            if (Readlink(alias_link, &alias_target)) {
+
+                // ... and if that links points to the right
+                // device, erase both the link in /dev/aliases,
+                // and what it points to.
+                if (alias_target == devpath) {
+                    unlink(slfmt.str().c_str());
+                    unlink(alias_link.c_str());
+                }
+            }
+        }
+
         unlink(devpath.c_str());
     }
 }
@@ -486,7 +537,7 @@ void DeviceHandler::HandleUevent(const Uevent& uevent) {
     HandleDevice(uevent.action, devpath, uevent.path, block, uevent.major, uevent.minor, links);
 }
 
-static bool FormatDeviceAlias(const Aliases& alias, int minor, std::string bInterfaceNumber_s,
+static bool FormatDeviceAlias(const Aliases& alias, int minor, int interfaceNumber,
                               std::string& alias_link) {
     std::string::size_type a = 0, b;
     std::stringstream fmt;
@@ -495,14 +546,12 @@ static bool FormatDeviceAlias(const Aliases& alias, int minor, std::string bInte
         fmt << alias.AliasTo().substr(a, b - a);
 
         if (alias.AliasTo()[b + 1] == 'i') {
-            // Remove newline at the end of bInterfaceNumber_s.
-            bInterfaceNumber_s.erase(bInterfaceNumber_s.find_last_not_of("\n") + 1);
-
-            if (bInterfaceNumber_s.empty()) {
-                PLOG(ERROR) << "No bInterfaceNumber for device, not creating symlink";
+            if (interfaceNumber != -1)
+                fmt << interfaceNumber;
+            else {
+                LOG(ERROR) << "No bInterfaceNumber found for device, can't create alias";
                 return false;
             }
-            else fmt << bInterfaceNumber_s;
         }
         else if (alias.AliasTo()[b + 1] == 'm')
             fmt << minor;
@@ -519,16 +568,18 @@ static bool FormatDeviceAlias(const Aliases& alias, int minor, std::string bInte
     else
         alias_link = fmt.str();
 
-    LOG(INFO) << "Returning " << fmt.str();
-
     return true;
 }
 
 bool DeviceHandler::GetDeviceAlias(const std::string &upath, int major, int minor,
                                    std::string& alias_link) const {
     bool found = false;
-    std::string parent_dir;
+    std::string sys_path;
+    std::string parent_dir, iface_dir;
     std::string vendorId_s, vendorId_path;
+    std::string bInterfaceNumber_path, bInterfaceNumber_s;
+    std::string productId_s, productId_path;
+    int vendorId = -1, productId = -1, interfaceNumber = -1;
 
     parent_dir = Dirname("/sys" + upath);
 
@@ -552,37 +603,43 @@ bool DeviceHandler::GetDeviceAlias(const std::string &upath, int major, int mino
 
     if (!found) return false;
 
+    // Look in /sys for the information we need.
+    sys_path = "/sys" + upath;
+    productId_path = parent_dir + "/idProduct";
+    bInterfaceNumber_path = sys_path + "/device/bInterfaceNumber";
+
+    // Get the product ID or fail because we need that.
+    if (!android::base::ReadFileToString(productId_path, &productId_s)) {
+        PLOG(ERROR) << "Failed to read product ID " << productId_path;
+        return false;
+    }
+
+    // Try to get the bInterfaceNumber.
+    android::base::ReadFileToString(bInterfaceNumber_path, &bInterfaceNumber_s);
+
+    vendorId = std::stoi(vendorId_s, 0, 16);
+    productId = std::stoi(productId_s, 0, 16);
+
+    if (!bInterfaceNumber_s.empty())
+        interfaceNumber = std::stoi(bInterfaceNumber_s, 0, 16);
+
     // Iterate through all the configured aliases.
     for (const auto& alias : aliases_) {
-        std::string sys_path;
-        std::string productId_s, bInterfaceNumber_s, dev_s;
-        std::string productId_path, bInterfaceNumber_path;
-        std::string sAliasPath;
-        int vendorId, productId;
+        std::string dev_s, sAliasPath;
 
-        // Look in /sys for the information we need.
-        sys_path = "/sys" + upath;
-        productId_path = parent_dir + "/idProduct";
-        bInterfaceNumber_path = sys_path + "/device/bInterfaceNumber";
+        if (alias.Matches(productId, vendorId, major, minor)) {
+            std::string alias_link;
 
-        // Get the product ID or fail because we need that.
-        if (!android::base::ReadFileToString(productId_path, &productId_s)) {
-            PLOG(ERROR) << "Failed to read product ID " << productId_path;
-            continue;
+#ifdef DEBUG
+            LOG(INFO) << "productId:" << productId << " "
+                      << "vendorId:" << vendorId << " "
+                      << "major:" << major << " "
+                      << "minor:" << minor << " "
+                      << "interfaceNumber:" << interfaceNumber;
+#endif
+
+            return FormatDeviceAlias(alias, minor, interfaceNumber, alias_link);
         }
-
-        // We only need the bInterfaceNumber if it's specified in the
-        // alias format string so that's why we ignore the possible
-        // error here.
-        android::base::ReadFileToString(bInterfaceNumber_path, &bInterfaceNumber_s);
-
-        vendorId = std::stoi(vendorId_s, 0, 16);
-        productId = std::stoi(productId_s, 0, 16);
-
-        // Check if the configured alias matches the device that we
-        // just detected.
-        if (alias.Matches(productId, vendorId, major, minor))
-            return FormatDeviceAlias(alias, minor, bInterfaceNumber_s, alias_link);
     }
 
     return false;

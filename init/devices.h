@@ -51,6 +51,8 @@ class Aliases {
 
     bool Matches(int productId, int vendorId, int major, int minor) const;
 
+    std::string ToString() const;
+
     friend void TestAliases(const Aliases& expected, const Aliases& test);
 };
 
@@ -153,7 +155,8 @@ class DeviceHandler : public UeventHandler {
                       const std::string& upath, bool block, int major,
                       int minor, const std::vector<std::string>& links) const;
     void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
-    bool GetDeviceAlias(const std::string &upath, int major, int minor, std::string& alias_link) const;
+    bool GetDeviceAlias(const std::string &upath, int major, int minor,
+                        std::string &alias_link) const;
 
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;
