@@ -13,11 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-cc_fuzz {
-    name: "log_buffer_log_fuzzer",
-    srcs: [
-        "log_buffer_log_fuzzer.cpp",
-    ],
+
+cc_defaults {
+    name: "log_fuzzer_defaults",
     static_libs: [
         "libbase",
         "libcutils",
@@ -25,9 +23,25 @@ cc_fuzz {
         "liblog",
         "liblogd",
         "libcutils",
-        "libsysutils",
         "libz",
         "libzstd",
     ],
-    cflags: ["-Werror"],
+    cflags: ["-Wextra"],
+    host_supported: true,
+}
+
+cc_fuzz {
+    name: "log_buffer_log_fuzzer",
+    defaults: ["log_fuzzer_defaults"],
+    srcs: [
+        "log_buffer_log_fuzzer.cpp",
+    ],
+}
+
+cc_fuzz {
+    name: "serialized_log_buffer_fuzzer",
+    defaults: ["log_fuzzer_defaults"],
+    srcs: [
+        "serialized_log_buffer_fuzzer.cpp",
+    ],
 }
