@@ -442,43 +442,35 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
             if (!mkdir_recursive(Dirname(link), 0755))
                 PLOG(ERROR) << "Failed to create directory " << Dirname(link);
 
-            if (symlink(link.c_str(), aliases_linkpath.c_str())) {
+            // Only create a link in /dev/aliases for device
+            // aliases. Ordinary device symlinks will be created
+            // within the 'else'.
+            if (!alias_link.empty()
+                && link == alias_link
+                && symlink(link.c_str(), aliases_linkpath.c_str())) {
+
                 if (errno != EEXIST)
-                    PLOG(ERROR) << "Failed to create alias symlink from "
-                                << aliases_linkpath
-                                << " to "
-                                << link;
+                    PLOG(ERROR) << "Failed to create alias symlink from " << aliases_linkpath
+                                << " to " << link;
 
                 else if (Readlink(link, &link_path) && link_path != devpath)
-                    PLOG(ERROR) << "Failed to create alias symlink from "
-                                << aliases_linkpath
-                                << " to "
-                                << link
-                                << ", which already links to: "
-                                << link_path;
+                    PLOG(ERROR) << "Failed to create alias symlink from " << aliases_linkpath
+                                << " to " << link << ", which already links to: " << link_path;
             }
             else {
-                // If it succeeded, then we can create the proper
-                // symlink.
-
                 if (symlink(devpath.c_str(), link.c_str())) {
                     if (errno != EEXIST)
-                        PLOG(ERROR) << "Failed to symlink "
-                                    << devpath
-                                    << " to "
-                                    << link;
+                        PLOG(ERROR) << "Failed to symlink " << devpath
+                                    << " to " << link;
+
                     else if (Readlink(link, &link_path) && link_path != devpath)
-                        PLOG(ERROR) << "Failed to symlink "
-                                    << devpath
-                                    << " to "
-                                    << link
-                                    << ", which already links to: " << link_path;
+                        PLOG(ERROR) << "Failed to symlink " << devpath
+                                    << " to " << link << ", which already links to: " << link_path;
 
                     // Delete the link in /dev/aliases
-                    unlink(slfmt.str().c_str());
+                    unlink(aliases_linkpath.c_str());
                 }
-                else
-                    LOG(INFO) << "Device symlink: " << link << " ==> " << devpath;
+                else LOG(INFO) << "Device symlink: " << link << " ==> " << devpath;
             }
         }
     }
@@ -486,10 +478,9 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     if (action == "remove") {
         std::string alias_link, alias_target;
 
-        LOG(ERROR) << "Removing device: " << devpath;
+        LOG(INFO) << "Removing device: " << devpath;
 
         for (const auto& link : links) {
-            LOG(ERROR) << "Remove: looking at: " << link;
             std::string link_path;
             if (Readlink(link, &link_path) && link_path == devpath) {
                 unlink(link.c_str());
@@ -508,6 +499,8 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
                 // device, erase both the link in /dev/aliases,
                 // and what it points to.
                 if (alias_target == devpath) {
+                    LOG(INFO) << "Removing alias: " << alias_link;
+
                     unlink(aliases_linkpath.c_str());
                     unlink(alias_link.c_str());
                 }
