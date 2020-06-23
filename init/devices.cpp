@@ -431,9 +431,6 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
         if (GetDeviceAlias(upath, major, minor, alias_link))
             all_links.push_back(alias_link);
 
-        // Make sure /dev/aliases exists for later...
-        mkdir_recursive("/dev/aliases", 0755);
-
         MakeDevice(devpath, block, major, minor, all_links);
 
         for (const auto& link : all_links) {
