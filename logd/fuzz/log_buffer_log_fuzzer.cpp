@@ -15,10 +15,13 @@
  */
 #include <string>
 
+#include <android-base/logging.h>
+
 #include "../ChattyLogBuffer.h"
 #include "../LogReaderList.h"
 #include "../LogReaderThread.h"
 #include "../LogStatistics.h"
+#include "../SerializedLogBuffer.h"
 
 // We don't want to waste a lot of entropy on messages
 #define MAX_MSG_LENGTH 5
@@ -27,7 +30,20 @@
 #define MIN_TAG_ID 1000
 #define TAG_MOD 10
 
-namespace android {
+#ifndef __ANDROID__
+unsigned long __android_logger_get_buffer_size(log_id_t) {
+    return 1024 * 1024;
+}
+
+bool __android_logger_valid_buffer_size(unsigned long) {
+    return true;
+}
+#endif
+
+char* android::uidToName(uid_t) {
+    return strdup("fake");
+}
+
 struct LogInput {
   public:
     log_id_t log_id;
@@ -79,9 +95,13 @@ int write_log_messages(const uint8_t** pdata, size_t* data_left, LogBuffer* log_
     return 1;
 }
 
-char* uidToName(uid_t) {
-    return strdup("fake");
-}
+class NoopWriter : public LogWriter {
+  public:
+    NoopWriter() : LogWriter(0, true) {}
+    bool Write(const logger_entry&, const char*) override { return true; }
+
+    std::string name() const override { return "noop_writer"; }
+};
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // We want a random tag length and a random remaining message length
@@ -89,11 +109,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         return 0;
     }
 
+    android::base::SetMinimumLogSeverity(android::base::ERROR);
+
     LogReaderList reader_list;
     LogTags tags;
     PruneList prune_list;
     LogStatistics stats(true);
-    LogBuffer* log_buffer = new ChattyLogBuffer(&reader_list, &tags, &prune_list, &stats);
+    std::unique_ptr<LogBuffer> log_buffer;
+#ifdef FUZZ_SERIALIZED
+    log_buffer.reset(new SerializedLogBuffer(&reader_list, &tags, &stats));
+#else
+    log_buffer.reset(new ChattyLogBuffer(&reader_list, &tags, &prune_list, &stats));
+#endif
     size_t data_left = size;
     const uint8_t** pdata = &data;
 
@@ -102,12 +129,30 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     log_id_for_each(i) { log_buffer->SetSize(i, 10000); }
 
     while (data_left >= sizeof(LogInput) + 2 * sizeof(uint8_t)) {
-        if (!write_log_messages(pdata, &data_left, log_buffer, &stats)) {
+        if (!write_log_messages(pdata, &data_left, log_buffer.get(), &stats)) {
             return 0;
+        }
+    }
+
+    // Read out all of the logs.
+    {
+        auto lock = std::unique_lock{reader_list.reader_threads_lock()};
+        std::unique_ptr<LogWriter> test_writer(new NoopWriter());
+        std::unique_ptr<LogReaderThread> log_reader(
+                new LogReaderThread(log_buffer.get(), &reader_list, std::move(test_writer), true, 0,
+                                    kLogMaskAll, 0, {}, 1, {}));
+        reader_list.reader_threads().emplace_back(std::move(log_reader));
+    }
+
+    // Wait until the reader has finished.
+    while (true) {
+        usleep(50);
+        auto lock = std::unique_lock{reader_list.reader_threads_lock()};
+        if (reader_list.reader_threads().size() == 0) {
+            break;
         }
     }
 
     log_id_for_each(i) { log_buffer->Clear(i, 0); }
     return 0;
 }
-}  // namespace android
