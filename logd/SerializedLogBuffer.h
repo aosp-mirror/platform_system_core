@@ -21,6 +21,7 @@
 #include <list>
 #include <mutex>
 #include <queue>
+#include <thread>
 #include <vector>
 
 #include <android-base/thread_annotations.h>
@@ -60,7 +61,9 @@ class SerializedLogBuffer final : public LogBuffer {
             REQUIRES_SHARED(lock_);
     void NotifyReadersOfPrune(log_id_t log_id, const std::list<SerializedLogChunk>::iterator& chunk)
             REQUIRES(reader_list_->reader_threads_lock());
-    void DeleteLogChunks(std::list<SerializedLogChunk>&& chunks, log_id_t log_id);
+
+    void StartDeleterThread() REQUIRES(lock_);
+    void DeleterThread();
 
     LogReaderList* reader_list_;
     LogTags* tags_;
@@ -69,6 +72,10 @@ class SerializedLogBuffer final : public LogBuffer {
     unsigned long max_size_[LOG_ID_MAX] GUARDED_BY(lock_) = {};
     std::list<SerializedLogChunk> logs_[LOG_ID_MAX] GUARDED_BY(lock_);
     RwLock lock_;
+
+    std::list<SerializedLogChunk> chunks_to_delete_[LOG_ID_MAX] GUARDED_BY(lock_);
+    std::thread deleter_thread_ GUARDED_BY(lock_);
+    bool deleter_thread_running_ GUARDED_BY(lock_) = false;
 
     std::atomic<uint64_t> sequence_ = 1;
 };
