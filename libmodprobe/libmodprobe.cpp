@@ -198,8 +198,7 @@ bool Modprobe::ParseBlocklistCallback(const std::vector<std::string>& args) {
     auto it = args.begin();
     const std::string& type = *it++;
 
-    // +Legacy
-    if ((type != "blocklist") && (type != "blacklist")) {
+    if (type != "blocklist") {
         LOG(ERROR) << "non-blocklist line encountered in modules.blocklist";
         return false;
     }
@@ -334,8 +333,6 @@ Modprobe::Modprobe(const std::vector<std::string>& base_paths, const std::string
 
         auto blocklist_callback = std::bind(&Modprobe::ParseBlocklistCallback, this, _1);
         ParseCfg(base_path + "/modules.blocklist", blocklist_callback);
-        // Legacy
-        ParseCfg(base_path + "/modules.blacklist", blocklist_callback);
     }
 
     ParseKernelCmdlineOptions();
