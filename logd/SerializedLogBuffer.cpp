@@ -16,8 +16,9 @@
 
 #include "SerializedLogBuffer.h"
 
+#include <sys/prctl.h>
+
 #include <limits>
-#include <thread>
 
 #include <android-base/logging.h>
 #include <android-base/scopeguard.h>
@@ -31,7 +32,11 @@ SerializedLogBuffer::SerializedLogBuffer(LogReaderList* reader_list, LogTags* ta
     Init();
 }
 
-SerializedLogBuffer::~SerializedLogBuffer() {}
+SerializedLogBuffer::~SerializedLogBuffer() {
+    if (deleter_thread_.joinable()) {
+        deleter_thread_.join();
+    }
+}
 
 void SerializedLogBuffer::Init() {
     log_id_for_each(i) {
@@ -119,15 +124,44 @@ void SerializedLogBuffer::MaybePrune(log_id_t log_id) {
     }
 }
 
+void SerializedLogBuffer::StartDeleterThread() {
+    if (deleter_thread_running_) {
+        return;
+    }
+    if (deleter_thread_.joinable()) {
+        deleter_thread_.join();
+    }
+    auto new_thread = std::thread([this] { DeleterThread(); });
+    deleter_thread_.swap(new_thread);
+    deleter_thread_running_ = true;
+}
+
 // Decompresses the chunks, call LogStatistics::Subtract() on each entry, then delete the chunks and
 // the list.  Note that the SerializedLogChunk objects have been removed from logs_ and their
 // references have been deleted from any SerializedFlushToState objects, so this can be safely done
-// without holding lock_.  It is done in a separate thread to avoid delaying the writer thread.  The
-// lambda for the thread takes ownership of the 'chunks' list and thus when the thread ends and the
-// lambda is deleted, the objects are deleted.
-void SerializedLogBuffer::DeleteLogChunks(std::list<SerializedLogChunk>&& chunks, log_id_t log_id) {
-    auto delete_thread = std::thread{[chunks = std::move(chunks), log_id, this]() mutable {
-        for (auto& chunk : chunks) {
+// without holding lock_.  It is done in a separate thread to avoid delaying the writer thread.
+void SerializedLogBuffer::DeleterThread() {
+    prctl(PR_SET_NAME, "logd.deleter");
+    while (true) {
+        std::list<SerializedLogChunk> local_chunks_to_delete;
+        log_id_t log_id;
+        {
+            auto lock = std::lock_guard{lock_};
+            log_id_for_each(i) {
+                if (!chunks_to_delete_[i].empty()) {
+                    local_chunks_to_delete = std::move(chunks_to_delete_[i]);
+                    chunks_to_delete_[i].clear();
+                    log_id = i;
+                    break;
+                }
+            }
+            if (local_chunks_to_delete.empty()) {
+                deleter_thread_running_ = false;
+                return;
+            }
+        }
+
+        for (auto& chunk : local_chunks_to_delete) {
             chunk.IncReaderRefCount();
             int read_offset = 0;
             while (read_offset < chunk.write_offset()) {
@@ -137,8 +171,7 @@ void SerializedLogBuffer::DeleteLogChunks(std::list<SerializedLogChunk>&& chunks
             }
             chunk.DecReaderRefCount(false);
         }
-    }};
-    delete_thread.detach();
+    }
 }
 
 void SerializedLogBuffer::NotifyReadersOfPrune(
@@ -164,13 +197,9 @@ bool SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid
         }
     }
 
+    StartDeleterThread();
+
     auto& log_buffer = logs_[log_id];
-
-    std::list<SerializedLogChunk> chunks_to_prune;
-    auto prune_chunks = android::base::make_scope_guard([&chunks_to_prune, log_id, this] {
-        DeleteLogChunks(std::move(chunks_to_prune), log_id);
-    });
-
     auto it = log_buffer.begin();
     while (it != log_buffer.end()) {
         if (oldest != nullptr && it->highest_sequence_number() >= oldest->start()) {
@@ -193,7 +222,8 @@ bool SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid
             }
         } else {
             size_t buffer_size = it_to_prune->PruneSize();
-            chunks_to_prune.splice(chunks_to_prune.end(), log_buffer, it_to_prune);
+            chunks_to_delete_[log_id].splice(chunks_to_delete_[log_id].end(), log_buffer,
+                                             it_to_prune);
             if (buffer_size >= bytes_to_free) {
                 return true;
             }
