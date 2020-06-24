@@ -60,6 +60,9 @@ class SerializedLogChunk {
     int write_offset() const { return write_offset_; }
     uint64_t highest_sequence_number() const { return highest_sequence_number_; }
 
+    // Exposed for testing
+    uint32_t reader_ref_count() const { return reader_ref_count_; }
+
   private:
     // The decompressed contents of this log buffer.  Deallocated when the ref_count reaches 0 and
     // writer_active_ is false.
