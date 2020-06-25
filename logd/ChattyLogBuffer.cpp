@@ -28,6 +28,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <limits>
 #include <unordered_map>
 #include <utility>
 
@@ -39,90 +40,42 @@
 #define __predict_false(exp) __builtin_expect((exp) != 0, 0)
 #endif
 
-// Default
-#define log_buffer_size(id) mMaxSize[id]
-
-void ChattyLogBuffer::Init() {
-    log_id_for_each(i) {
-        if (SetSize(i, __android_logger_get_buffer_size(i))) {
-            SetSize(i, LOG_BUFFER_MIN_SIZE);
-        }
-    }
-    // Release any sleeping reader threads to dump their current content.
-    auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
-    for (const auto& reader_thread : reader_list_->reader_threads()) {
-        reader_thread->triggerReader_Locked();
-    }
-}
-
 ChattyLogBuffer::ChattyLogBuffer(LogReaderList* reader_list, LogTags* tags, PruneList* prune,
                                  LogStatistics* stats)
-    : reader_list_(reader_list), tags_(tags), prune_(prune), stats_(stats) {
-    pthread_rwlock_init(&mLogElementsLock, nullptr);
+    : SimpleLogBuffer(reader_list, tags, stats), prune_(prune) {}
 
-    log_id_for_each(i) {
-        lastLoggedElements[i] = nullptr;
-        droppedElements[i] = nullptr;
-    }
-
-    Init();
-}
-
-ChattyLogBuffer::~ChattyLogBuffer() {
-    log_id_for_each(i) {
-        delete lastLoggedElements[i];
-        delete droppedElements[i];
-    }
-}
-
-LogBufferElementCollection::iterator ChattyLogBuffer::GetOldest(log_id_t log_id) {
-    auto it = mLogElements.begin();
-    if (oldest_[log_id]) {
-        it = *oldest_[log_id];
-    }
-    while (it != mLogElements.end() && (*it)->getLogId() != log_id) {
-        it++;
-    }
-    if (it != mLogElements.end()) {
-        oldest_[log_id] = it;
-    }
-    return it;
-}
+ChattyLogBuffer::~ChattyLogBuffer() {}
 
 enum match_type { DIFFERENT, SAME, SAME_LIBLOG };
 
-static enum match_type identical(LogBufferElement* elem, LogBufferElement* last) {
-    // is it mostly identical?
-    //  if (!elem) return DIFFERENT;
-    ssize_t lenl = elem->getMsgLen();
+static enum match_type Identical(const LogBufferElement& elem, const LogBufferElement& last) {
+    ssize_t lenl = elem.msg_len();
     if (lenl <= 0) return DIFFERENT;  // value if this represents a chatty elem
-    //  if (!last) return DIFFERENT;
-    ssize_t lenr = last->getMsgLen();
+    ssize_t lenr = last.msg_len();
     if (lenr <= 0) return DIFFERENT;  // value if this represents a chatty elem
-    //  if (elem->getLogId() != last->getLogId()) return DIFFERENT;
-    if (elem->getUid() != last->getUid()) return DIFFERENT;
-    if (elem->getPid() != last->getPid()) return DIFFERENT;
-    if (elem->getTid() != last->getTid()) return DIFFERENT;
+    if (elem.uid() != last.uid()) return DIFFERENT;
+    if (elem.pid() != last.pid()) return DIFFERENT;
+    if (elem.tid() != last.tid()) return DIFFERENT;
 
     // last is more than a minute old, stop squashing identical messages
-    if (elem->getRealTime().nsec() > (last->getRealTime().nsec() + 60 * NS_PER_SEC))
-        return DIFFERENT;
+    if (elem.realtime().nsec() > (last.realtime().nsec() + 60 * NS_PER_SEC)) return DIFFERENT;
 
     // Identical message
-    const char* msgl = elem->getMsg();
-    const char* msgr = last->getMsg();
+    const char* msgl = elem.msg();
+    const char* msgr = last.msg();
     if (lenl == lenr) {
         if (!fastcmp<memcmp>(msgl, msgr, lenl)) return SAME;
         // liblog tagged messages (content gets summed)
-        if (elem->getLogId() == LOG_ID_EVENTS && lenl == sizeof(android_log_event_int_t) &&
+        if (elem.log_id() == LOG_ID_EVENTS && lenl == sizeof(android_log_event_int_t) &&
             !fastcmp<memcmp>(msgl, msgr, sizeof(android_log_event_int_t) - sizeof(int32_t)) &&
-            elem->getTag() == LIBLOG_LOG_TAG) {
+            elem.GetTag() == LIBLOG_LOG_TAG) {
             return SAME_LIBLOG;
         }
     }
 
     // audit message (except sequence number) identical?
-    if (last->isBinary() && lenl > static_cast<ssize_t>(sizeof(android_log_event_string_t)) &&
+    if (IsBinary(last.log_id()) &&
+        lenl > static_cast<ssize_t>(sizeof(android_log_event_string_t)) &&
         lenr > static_cast<ssize_t>(sizeof(android_log_event_string_t))) {
         if (fastcmp<memcmp>(msgl, msgr, sizeof(android_log_event_string_t) - sizeof(int32_t))) {
             return DIFFERENT;
@@ -146,222 +99,91 @@ static enum match_type identical(LogBufferElement* elem, LogBufferElement* last)
     return SAME;
 }
 
-int ChattyLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
-                         const char* msg, uint16_t len) {
-    if (log_id >= LOG_ID_MAX) {
-        return -EINVAL;
-    }
-
-    // Slip the time by 1 nsec if the incoming lands on xxxxxx000 ns.
-    // This prevents any chance that an outside source can request an
-    // exact entry with time specified in ms or us precision.
-    if ((realtime.tv_nsec % 1000) == 0) ++realtime.tv_nsec;
-
-    LogBufferElement* elem = new LogBufferElement(log_id, realtime, uid, pid, tid, msg, len);
-
+void ChattyLogBuffer::LogInternal(LogBufferElement&& elem) {
     // b/137093665: don't coalesce security messages.
-    if (log_id == LOG_ID_SECURITY) {
-        wrlock();
-        log(elem);
-        unlock();
+    if (elem.log_id() == LOG_ID_SECURITY) {
+        SimpleLogBuffer::LogInternal(std::move(elem));
+        return;
+    }
+    int log_id = elem.log_id();
 
-        return len;
+    // Initialize last_logged_elements_ to a copy of elem if logging the first element for a log_id.
+    if (!last_logged_elements_[log_id]) {
+        last_logged_elements_[log_id].emplace(elem);
+        SimpleLogBuffer::LogInternal(std::move(elem));
+        return;
     }
 
-    int prio = ANDROID_LOG_INFO;
-    const char* tag = nullptr;
-    size_t tag_len = 0;
-    if (log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS) {
-        tag = tags_->tagToName(elem->getTag());
-        if (tag) {
-            tag_len = strlen(tag);
-        }
-    } else {
-        prio = *msg;
-        tag = msg + 1;
-        tag_len = strnlen(tag, len - 1);
-    }
-    if (!__android_log_is_loggable_len(prio, tag, tag_len, ANDROID_LOG_VERBOSE)) {
-        // Log traffic received to total
-        stats_->AddTotal(elem);
-        delete elem;
-        return -EACCES;
-    }
+    LogBufferElement& current_last = *last_logged_elements_[log_id];
+    enum match_type match = Identical(elem, current_last);
 
-    wrlock();
-    LogBufferElement* currentLast = lastLoggedElements[log_id];
-    if (currentLast) {
-        LogBufferElement* dropped = droppedElements[log_id];
-        uint16_t count = dropped ? dropped->getDropped() : 0;
-        //
-        // State Init
-        //     incoming:
-        //         dropped = nullptr
-        //         currentLast = nullptr;
-        //         elem = incoming message
-        //     outgoing:
-        //         dropped = nullptr -> State 0
-        //         currentLast = copy of elem
-        //         log elem
-        // State 0
-        //     incoming:
-        //         count = 0
-        //         dropped = nullptr
-        //         currentLast = copy of last message
-        //         elem = incoming message
-        //     outgoing: if match != DIFFERENT
-        //         dropped = copy of first identical message -> State 1
-        //         currentLast = reference to elem
-        //     break: if match == DIFFERENT
-        //         dropped = nullptr -> State 0
-        //         delete copy of last message (incoming currentLast)
-        //         currentLast = copy of elem
-        //         log elem
-        // State 1
-        //     incoming:
-        //         count = 0
-        //         dropped = copy of first identical message
-        //         currentLast = reference to last held-back incoming
-        //                       message
-        //         elem = incoming message
-        //     outgoing: if match == SAME
-        //         delete copy of first identical message (dropped)
-        //         dropped = reference to last held-back incoming
-        //                   message set to chatty count of 1 -> State 2
-        //         currentLast = reference to elem
-        //     outgoing: if match == SAME_LIBLOG
-        //         dropped = copy of first identical message -> State 1
-        //         take sum of currentLast and elem
-        //         if sum overflows:
-        //             log currentLast
-        //             currentLast = reference to elem
-        //         else
-        //             delete currentLast
-        //             currentLast = reference to elem, sum liblog.
-        //     break: if match == DIFFERENT
-        //         delete dropped
-        //         dropped = nullptr -> State 0
-        //         log reference to last held-back (currentLast)
-        //         currentLast = copy of elem
-        //         log elem
-        // State 2
-        //     incoming:
-        //         count = chatty count
-        //         dropped = chatty message holding count
-        //         currentLast = reference to last held-back incoming
-        //                       message.
-        //         dropped = chatty message holding count
-        //         elem = incoming message
-        //     outgoing: if match != DIFFERENT
-        //         delete chatty message holding count
-        //         dropped = reference to last held-back incoming
-        //                   message, set to chatty count + 1
-        //         currentLast = reference to elem
-        //     break: if match == DIFFERENT
-        //         log dropped (chatty message)
-        //         dropped = nullptr -> State 0
-        //         log reference to last held-back (currentLast)
-        //         currentLast = copy of elem
-        //         log elem
-        //
-        enum match_type match = identical(elem, currentLast);
-        if (match != DIFFERENT) {
-            if (dropped) {
-                // Sum up liblog tag messages?
-                if ((count == 0) /* at Pass 1 */ && (match == SAME_LIBLOG)) {
-                    android_log_event_int_t* event = reinterpret_cast<android_log_event_int_t*>(
-                            const_cast<char*>(currentLast->getMsg()));
-                    //
-                    // To unit test, differentiate with something like:
-                    //    event->header.tag = htole32(CHATTY_LOG_TAG);
-                    // here, then instead of delete currentLast below,
-                    // log(currentLast) to see the incremental sums form.
-                    //
-                    uint32_t swab = event->payload.data;
-                    unsigned long long total = htole32(swab);
-                    event = reinterpret_cast<android_log_event_int_t*>(
-                            const_cast<char*>(elem->getMsg()));
-                    swab = event->payload.data;
-
-                    lastLoggedElements[LOG_ID_EVENTS] = elem;
-                    total += htole32(swab);
-                    // check for overflow
-                    if (total >= UINT32_MAX) {
-                        log(currentLast);
-                        unlock();
-                        return len;
-                    }
-                    stats_->AddTotal(currentLast);
-                    delete currentLast;
-                    swab = total;
-                    event->payload.data = htole32(swab);
-                    unlock();
-                    return len;
-                }
-                if (count == USHRT_MAX) {
-                    log(dropped);
-                    count = 1;
-                } else {
-                    delete dropped;
-                    ++count;
-                }
+    if (match == DIFFERENT) {
+        if (duplicate_elements_[log_id]) {
+            // If we previously had 3+ identical messages, log the chatty message.
+            if (duplicate_elements_[log_id]->dropped_count() > 0) {
+                SimpleLogBuffer::LogInternal(std::move(*duplicate_elements_[log_id]));
             }
-            if (count) {
-                stats_->AddTotal(currentLast);
-                currentLast->setDropped(count);
-            }
-            droppedElements[log_id] = currentLast;
-            lastLoggedElements[log_id] = elem;
-            unlock();
-            return len;
+            duplicate_elements_[log_id].reset();
+            // Log the saved copy of the last identical message seen.
+            SimpleLogBuffer::LogInternal(std::move(current_last));
         }
-        if (dropped) {         // State 1 or 2
-            if (count) {       // State 2
-                log(dropped);  // report chatty
-            } else {           // State 1
-                delete dropped;
-            }
-            droppedElements[log_id] = nullptr;
-            log(currentLast);  // report last message in the series
-        } else {               // State 0
-            delete currentLast;
-        }
+        last_logged_elements_[log_id].emplace(elem);
+        SimpleLogBuffer::LogInternal(std::move(elem));
+        return;
     }
-    lastLoggedElements[log_id] = new LogBufferElement(*elem);
 
-    log(elem);
-    unlock();
+    // 2 identical message: set duplicate_elements_ appropriately.
+    if (!duplicate_elements_[log_id]) {
+        duplicate_elements_[log_id].emplace(std::move(current_last));
+        last_logged_elements_[log_id].emplace(std::move(elem));
+        return;
+    }
 
-    return len;
+    // 3+ identical LIBLOG event messages: coalesce them into last_logged_elements_.
+    if (match == SAME_LIBLOG) {
+        const android_log_event_int_t* current_last_event =
+                reinterpret_cast<const android_log_event_int_t*>(current_last.msg());
+        int64_t current_last_count = current_last_event->payload.data;
+        android_log_event_int_t* elem_event =
+                reinterpret_cast<android_log_event_int_t*>(const_cast<char*>(elem.msg()));
+        int64_t elem_count = elem_event->payload.data;
+
+        int64_t total = current_last_count + elem_count;
+        if (total > std::numeric_limits<int32_t>::max()) {
+            SimpleLogBuffer::LogInternal(std::move(current_last));
+            last_logged_elements_[log_id].emplace(std::move(elem));
+            return;
+        }
+        stats()->AddTotal(current_last.log_id(), current_last.msg_len());
+        elem_event->payload.data = total;
+        last_logged_elements_[log_id].emplace(std::move(elem));
+        return;
+    }
+
+    // 3+ identical messages (not LIBLOG) messages: increase the drop count.
+    uint16_t dropped_count = duplicate_elements_[log_id]->dropped_count();
+    if (dropped_count == std::numeric_limits<uint16_t>::max()) {
+        SimpleLogBuffer::LogInternal(std::move(*duplicate_elements_[log_id]));
+        dropped_count = 0;
+    }
+    // We're dropping the current_last log so add its stats to the total.
+    stats()->AddTotal(current_last.log_id(), current_last.msg_len());
+    // Use current_last for tracking the dropped count to always use the latest timestamp.
+    current_last.SetDropped(dropped_count + 1);
+    duplicate_elements_[log_id].emplace(std::move(current_last));
+    last_logged_elements_[log_id].emplace(std::move(elem));
 }
 
-// assumes ChattyLogBuffer::wrlock() held, owns elem, look after garbage collection
-void ChattyLogBuffer::log(LogBufferElement* elem) {
-    mLogElements.push_back(elem);
-    stats_->Add(elem);
-    maybePrune(elem->getLogId());
-    reader_list_->NotifyNewLog(1 << elem->getLogId());
-}
-
-// ChattyLogBuffer::wrlock() must be held when this function is called.
-void ChattyLogBuffer::maybePrune(log_id_t id) {
-    unsigned long prune_rows;
-    if (stats_->ShouldPrune(id, log_buffer_size(id), &prune_rows)) {
-        prune(id, prune_rows);
-    }
-}
-
-LogBufferElementCollection::iterator ChattyLogBuffer::erase(LogBufferElementCollection::iterator it,
+LogBufferElementCollection::iterator ChattyLogBuffer::Erase(LogBufferElementCollection::iterator it,
                                                             bool coalesce) {
-    LogBufferElement* element = *it;
-    log_id_t id = element->getLogId();
+    LogBufferElement& element = *it;
+    log_id_t id = element.log_id();
 
     // Remove iterator references in the various lists that will become stale
     // after the element is erased from the main logging list.
 
     {  // start of scope for found iterator
-        int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element->getTag()
-                                                                 : element->getUid();
+        int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element.GetTag() : element.uid();
         LogBufferIteratorMap::iterator found = mLastWorst[id].find(key);
         if ((found != mLastWorst[id].end()) && (it == found->second)) {
             mLastWorst[id].erase(found);
@@ -369,95 +191,63 @@ LogBufferElementCollection::iterator ChattyLogBuffer::erase(LogBufferElementColl
     }
 
     {  // start of scope for pid found iterator
-        // element->getUid() may not be AID_SYSTEM for next-best-watermark.
+        // element->uid() may not be AID_SYSTEM for next-best-watermark.
         // will not assume id != LOG_ID_EVENTS or LOG_ID_SECURITY for KISS and
         // long term code stability, find() check should be fast for those ids.
-        LogBufferPidIteratorMap::iterator found = mLastWorstPidOfSystem[id].find(element->getPid());
+        LogBufferPidIteratorMap::iterator found = mLastWorstPidOfSystem[id].find(element.pid());
         if (found != mLastWorstPidOfSystem[id].end() && it == found->second) {
             mLastWorstPidOfSystem[id].erase(found);
         }
     }
 
-    bool setLast[LOG_ID_MAX];
-    bool doSetLast = false;
-    log_id_for_each(i) { doSetLast |= setLast[i] = oldest_[i] && it == *oldest_[i]; }
 #ifdef DEBUG_CHECK_FOR_STALE_ENTRIES
     LogBufferElementCollection::iterator bad = it;
-    int key =
-            (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element->getTag() : element->getUid();
+    int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element->GetTag() : element->uid();
 #endif
-    it = mLogElements.erase(it);
-    if (doSetLast) {
-        log_id_for_each(i) {
-            if (setLast[i]) {
-                if (__predict_false(it == mLogElements.end())) {
-                    oldest_[i] = std::nullopt;
-                } else {
-                    oldest_[i] = it;  // Store the next iterator even if it does not correspond to
-                                      // the same log_id, as a starting point for GetOldest().
-                }
-            }
-        }
+
+    if (coalesce) {
+        stats()->Erase(element.ToLogStatisticsElement());
+    } else {
+        stats()->Subtract(element.ToLogStatisticsElement());
     }
+
+    it = SimpleLogBuffer::Erase(it);
+
 #ifdef DEBUG_CHECK_FOR_STALE_ENTRIES
     log_id_for_each(i) {
         for (auto b : mLastWorst[i]) {
             if (bad == b.second) {
-                android::prdebug("stale mLastWorst[%d] key=%d mykey=%d\n", i, b.first, key);
+                LOG(ERROR) << StringPrintf("stale mLastWorst[%d] key=%d mykey=%d", i, b.first, key);
             }
         }
         for (auto b : mLastWorstPidOfSystem[i]) {
             if (bad == b.second) {
-                android::prdebug("stale mLastWorstPidOfSystem[%d] pid=%d\n", i, b.first);
+                LOG(ERROR) << StringPrintf("stale mLastWorstPidOfSystem[%d] pid=%d", i, b.first);
             }
         }
     }
 #endif
-    if (coalesce) {
-        stats_->Erase(element);
-    } else {
-        stats_->Subtract(element);
-    }
-    delete element;
-
     return it;
 }
 
 // Define a temporary mechanism to report the last LogBufferElement pointer
 // for the specified uid, pid and tid. Used below to help merge-sort when
 // pruning for worst UID.
-class LogBufferElementKey {
-    const union {
-        struct {
-            uint32_t uid;
-            uint16_t pid;
-            uint16_t tid;
-        } __packed;
-        uint64_t value;
-    } __packed;
-
-  public:
-    LogBufferElementKey(uid_t uid, pid_t pid, pid_t tid) : uid(uid), pid(pid), tid(tid) {}
-    explicit LogBufferElementKey(uint64_t key) : value(key) {}
-
-    uint64_t getKey() { return value; }
-};
-
 class LogBufferElementLast {
     typedef std::unordered_map<uint64_t, LogBufferElement*> LogBufferElementMap;
     LogBufferElementMap map;
 
   public:
     bool coalesce(LogBufferElement* element, uint16_t dropped) {
-        LogBufferElementKey key(element->getUid(), element->getPid(), element->getTid());
-        LogBufferElementMap::iterator it = map.find(key.getKey());
+        uint64_t key = LogBufferElementKey(element->uid(), element->pid(), element->tid());
+        LogBufferElementMap::iterator it = map.find(key);
         if (it != map.end()) {
             LogBufferElement* found = it->second;
-            uint16_t moreDropped = found->getDropped();
+            uint16_t moreDropped = found->dropped_count();
             if ((dropped + moreDropped) > USHRT_MAX) {
                 map.erase(it);
             } else {
-                found->setDropped(dropped + moreDropped);
+                found->SetDropped(dropped + moreDropped);
                 return true;
             }
         }
@@ -465,46 +255,30 @@ class LogBufferElementLast {
     }
 
     void add(LogBufferElement* element) {
-        LogBufferElementKey key(element->getUid(), element->getPid(), element->getTid());
-        map[key.getKey()] = element;
+        uint64_t key = LogBufferElementKey(element->uid(), element->pid(), element->tid());
+        map[key] = element;
     }
 
     void clear() { map.clear(); }
 
     void clear(LogBufferElement* element) {
-        uint64_t current = element->getRealTime().nsec() - (EXPIRE_RATELIMIT * NS_PER_SEC);
+        uint64_t current = element->realtime().nsec() - (EXPIRE_RATELIMIT * NS_PER_SEC);
         for (LogBufferElementMap::iterator it = map.begin(); it != map.end();) {
             LogBufferElement* mapElement = it->second;
-            if (mapElement->getDropped() >= EXPIRE_THRESHOLD &&
-                current > mapElement->getRealTime().nsec()) {
+            if (mapElement->dropped_count() >= EXPIRE_THRESHOLD &&
+                current > mapElement->realtime().nsec()) {
                 it = map.erase(it);
             } else {
                 ++it;
             }
         }
     }
-};
 
-// If the selected reader is blocking our pruning progress, decide on
-// what kind of mitigation is necessary to unblock the situation.
-void ChattyLogBuffer::kickMe(LogReaderThread* me, log_id_t id, unsigned long pruneRows) {
-    if (stats_->Sizes(id) > (2 * log_buffer_size(id))) {  // +100%
-        // A misbehaving or slow reader has its connection
-        // dropped if we hit too much memory pressure.
-        android::prdebug("Kicking blocked reader, %s, from ChattyLogBuffer::kickMe()\n",
-                         me->name().c_str());
-        me->release_Locked();
-    } else if (me->deadline().time_since_epoch().count() != 0) {
-        // Allow a blocked WRAP deadline reader to trigger and start reporting the log data.
-        me->triggerReader_Locked();
-    } else {
-        // tell slow reader to skip entries to catch up
-        android::prdebug(
-                "Skipping %lu entries from slow reader, %s, from ChattyLogBuffer::kickMe()\n",
-                pruneRows, me->name().c_str());
-        me->triggerSkip_Locked(id, pruneRows);
+  private:
+    uint64_t LogBufferElementKey(uid_t uid, pid_t pid, pid_t tid) {
+        return uint64_t(uid) << 32 | uint64_t(pid) << 16 | uint64_t(tid);
     }
-}
+};
 
 // prune "pruneRows" of type "id" from the buffer.
 //
@@ -524,44 +298,45 @@ void ChattyLogBuffer::kickMe(LogReaderThread* me, log_id_t id, unsigned long pru
 // invariably move the logs value down faster as less chatty sources would be
 // expired in the noise.
 //
-// The first loop performs blacklisting and worst offender pruning. Falling
-// through when there are no notable worst offenders and have not hit the
-// region lock preventing further worst offender pruning. This loop also looks
-// after managing the chatty log entries and merging to help provide
-// statistical basis for blame. The chatty entries are not a notification of
-// how much logs you may have, but instead represent how much logs you would
-// have had in a virtual log buffer that is extended to cover all the in-memory
-// logs without loss. They last much longer than the represented pruned logs
-// since they get multiplied by the gains in the non-chatty log sources.
+// The first pass prunes elements that match 3 possible rules:
+// 1) A high priority prune rule, for example ~100/20, which indicates elements from UID 100 and PID
+//    20 should be pruned in this first pass.
+// 2) The default chatty pruning rule, ~!.  This rule sums the total size spent on log messages for
+//    each UID this log buffer.  If the highest sum consumes more than 12.5% of the log buffer, then
+//    these elements from that UID are pruned.
+// 3) The default AID_SYSTEM pruning rule, ~1000/!.  This rule is a special case to 2), if
+//    AID_SYSTEM is the top consumer of the log buffer, then this rule sums the total size spent on
+//    log messages for each PID in AID_SYSTEM in this log buffer and prunes elements from the PID
+//    with the highest sum.
+// This pass reevaluates the sums for rules 2) and 3) for every log message pruned. It creates
+// 'chatty' entries for the elements that it prunes and merges related chatty entries together. It
+// completes when one of three conditions have been met:
+// 1) The requested element count has been pruned.
+// 2) There are no elements that match any of these rules.
+// 3) A reader is referencing the oldest element that would match these rules.
 //
-// The second loop get complicated because an algorithm of watermarks and
-// history is maintained to reduce the order and keep processing time
-// down to a minimum at scale. These algorithms can be costly in the face
-// of larger log buffers, or severly limited processing time granted to a
-// background task at lowest priority.
+// The second pass prunes elements starting from the beginning of the log.  It skips elements that
+// match any low priority prune rules.  It completes when one of three conditions have been met:
+// 1) The requested element count has been pruned.
+// 2) All elements except those mwatching low priority prune rules have been pruned.
+// 3) A reader is referencing the oldest element that would match these rules.
 //
-// This second loop does straight-up expiration from the end of the logs
-// (again, remember for the specified log buffer id) but does some whitelist
-// preservation. Thus whitelist is a Hail Mary low priority, blacklists and
-// spam filtration all take priority. This second loop also checks if a region
-// lock is causing us to buffer too much in the logs to help the reader(s),
-// and will tell the slowest reader thread to skip log entries, and if
-// persistent and hits a further threshold, kill the reader thread.
+// The final pass only happens if there are any low priority prune rules and if the first two passes
+// were unable to prune the requested number of elements.  It prunes elements all starting from the
+// beginning of the log, regardless of if they match any low priority prune rules.
 //
-// The third thread is optional, and only gets hit if there was a whitelist
-// and more needs to be pruned against the backstop of the region lock.
-//
-// ChattyLogBuffer::wrlock() must be held when this function is called.
-//
-bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
+// If the requested number of logs was unable to be pruned, KickReader() is called to mitigate the
+// situation before the next call to Prune() and the function returns false.  Otherwise, if the
+// requested number of logs or all logs present in the buffer are pruned, in the case of Clear(),
+// it returns true.
+bool ChattyLogBuffer::Prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogReaderThread* oldest = nullptr;
-    bool busy = false;
     bool clearAll = pruneRows == ULONG_MAX;
 
-    auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
+    auto reader_threads_lock = std::lock_guard{reader_list()->reader_threads_lock()};
 
     // Region locked?
-    for (const auto& reader_thread : reader_list_->reader_threads()) {
+    for (const auto& reader_thread : reader_list()->reader_threads()) {
         if (!reader_thread->IsWatching(id)) {
             continue;
         }
@@ -578,55 +353,54 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         // Only here if clear all request from non system source, so chatty
         // filter logistics is not required.
         it = GetOldest(id);
-        while (it != mLogElements.end()) {
-            LogBufferElement* element = *it;
+        while (it != logs().end()) {
+            LogBufferElement& element = *it;
 
-            if (element->getLogId() != id || element->getUid() != caller_uid) {
+            if (element.log_id() != id || element.uid() != caller_uid) {
                 ++it;
                 continue;
             }
 
-            if (oldest && oldest->start() <= element->getSequence()) {
-                busy = true;
-                kickMe(oldest, id, pruneRows);
-                break;
+            if (oldest && oldest->start() <= element.sequence()) {
+                KickReader(oldest, id, pruneRows);
+                return false;
             }
 
-            it = erase(it);
+            it = Erase(it);
             if (--pruneRows == 0) {
-                break;
+                return true;
             }
         }
-        return busy;
+        return true;
     }
 
-    // prune by worst offenders; by blacklist, UID, and by PID of system UID
-    bool hasBlacklist = (id != LOG_ID_SECURITY) && prune_->naughty();
+    // First prune pass.
+    bool check_high_priority = id != LOG_ID_SECURITY && prune_->HasHighPriorityPruneRules();
     while (!clearAll && (pruneRows > 0)) {
         // recalculate the worst offender on every batched pass
-        int worst = -1;  // not valid for getUid() or getKey()
+        int worst = -1;  // not valid for uid() or getKey()
         size_t worst_sizes = 0;
         size_t second_worst_sizes = 0;
         pid_t worstPid = 0;  // POSIX guarantees PID != 0
 
-        if (worstUidEnabledForLogid(id) && prune_->worstUidEnabled()) {
+        if (worstUidEnabledForLogid(id) && prune_->worst_uid_enabled()) {
             // Calculate threshold as 12.5% of available storage
-            size_t threshold = log_buffer_size(id) / 8;
+            size_t threshold = max_size(id) / 8;
 
             if (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) {
-                stats_->WorstTwoTags(threshold, &worst, &worst_sizes, &second_worst_sizes);
+                stats()->WorstTwoTags(threshold, &worst, &worst_sizes, &second_worst_sizes);
                 // per-pid filter for AID_SYSTEM sources is too complex
             } else {
-                stats_->WorstTwoUids(id, threshold, &worst, &worst_sizes, &second_worst_sizes);
+                stats()->WorstTwoUids(id, threshold, &worst, &worst_sizes, &second_worst_sizes);
 
-                if (worst == AID_SYSTEM && prune_->worstPidOfSystemEnabled()) {
-                    stats_->WorstTwoSystemPids(id, worst_sizes, &worstPid, &second_worst_sizes);
+                if (worst == AID_SYSTEM && prune_->worst_pid_of_system_enabled()) {
+                    stats()->WorstTwoSystemPids(id, worst_sizes, &worstPid, &second_worst_sizes);
                 }
             }
         }
 
-        // skip if we have neither worst nor naughty filters
-        if ((worst == -1) && !hasBlacklist) {
+        // skip if we have neither a worst UID or high priority prune rules
+        if (worst == -1 && !check_high_priority) {
             break;
         }
 
@@ -641,7 +415,7 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         if (!gc && (worst != -1)) {
             {  // begin scope for worst found iterator
                 LogBufferIteratorMap::iterator found = mLastWorst[id].find(worst);
-                if (found != mLastWorst[id].end() && found->second != mLogElements.end()) {
+                if (found != mLastWorst[id].end() && found->second != logs().end()) {
                     leading = false;
                     it = found->second;
                 }
@@ -650,8 +424,7 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
                 // FYI: worstPid only set if !LOG_ID_EVENTS and
                 //      !LOG_ID_SECURITY, not going to make that assumption ...
                 LogBufferPidIteratorMap::iterator found = mLastWorstPidOfSystem[id].find(worstPid);
-                if (found != mLastWorstPidOfSystem[id].end() &&
-                    found->second != mLogElements.end()) {
+                if (found != mLastWorstPidOfSystem[id].end() && found->second != logs().end()) {
                     leading = false;
                     it = found->second;
                 }
@@ -660,45 +433,44 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         if (leading) {
             it = GetOldest(id);
         }
-        static const timespec too_old = {EXPIRE_HOUR_THRESHOLD * 60 * 60, 0};
+        static const log_time too_old{EXPIRE_HOUR_THRESHOLD * 60 * 60, 0};
         LogBufferElementCollection::iterator lastt;
-        lastt = mLogElements.end();
+        lastt = logs().end();
         --lastt;
         LogBufferElementLast last;
-        while (it != mLogElements.end()) {
-            LogBufferElement* element = *it;
+        while (it != logs().end()) {
+            LogBufferElement& element = *it;
 
-            if (oldest && oldest->start() <= element->getSequence()) {
-                busy = true;
+            if (oldest && oldest->start() <= element.sequence()) {
                 // Do not let chatty eliding trigger any reader mitigation
                 break;
             }
 
-            if (element->getLogId() != id) {
+            if (element.log_id() != id) {
                 ++it;
                 continue;
             }
-            // below this point element->getLogId() == id
+            // below this point element->log_id() == id
 
-            uint16_t dropped = element->getDropped();
+            uint16_t dropped = element.dropped_count();
 
             // remove any leading drops
             if (leading && dropped) {
-                it = erase(it);
+                it = Erase(it);
                 continue;
             }
 
-            if (dropped && last.coalesce(element, dropped)) {
-                it = erase(it, true);
+            if (dropped && last.coalesce(&element, dropped)) {
+                it = Erase(it, true);
                 continue;
             }
 
-            int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element->getTag()
-                                                                     : element->getUid();
+            int key = (id == LOG_ID_EVENTS || id == LOG_ID_SECURITY) ? element.GetTag()
+                                                                     : element.uid();
 
-            if (hasBlacklist && prune_->naughty(element)) {
-                last.clear(element);
-                it = erase(it);
+            if (check_high_priority && prune_->IsHighPriority(&element)) {
+                last.clear(&element);
+                it = Erase(it);
                 if (dropped) {
                     continue;
                 }
@@ -713,25 +485,25 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
                     if (worst_sizes < second_worst_sizes) {
                         break;
                     }
-                    worst_sizes -= element->getMsgLen();
+                    worst_sizes -= element.msg_len();
                 }
                 continue;
             }
 
-            if ((element->getRealTime() < ((*lastt)->getRealTime() - too_old)) ||
-                (element->getRealTime() > (*lastt)->getRealTime())) {
+            if (element.realtime() < (lastt->realtime() - too_old) ||
+                element.realtime() > lastt->realtime()) {
                 break;
             }
 
             if (dropped) {
-                last.add(element);
-                if (worstPid && ((!gc && element->getPid() == worstPid) ||
-                                 mLastWorstPidOfSystem[id].find(element->getPid()) ==
+                last.add(&element);
+                if (worstPid && ((!gc && element.pid() == worstPid) ||
+                                 mLastWorstPidOfSystem[id].find(element.pid()) ==
                                          mLastWorstPidOfSystem[id].end())) {
-                    // element->getUid() may not be AID_SYSTEM, next best
+                    // element->uid() may not be AID_SYSTEM, next best
                     // watermark if current one empty. id is not LOG_ID_EVENTS
                     // or LOG_ID_SECURITY because of worstPid check.
-                    mLastWorstPidOfSystem[id][element->getPid()] = it;
+                    mLastWorstPidOfSystem[id][element.pid()] = it;
                 }
                 if ((!gc && !worstPid && (key == worst)) ||
                     (mLastWorst[id].find(key) == mLastWorst[id].end())) {
@@ -741,14 +513,14 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
                 continue;
             }
 
-            if (key != worst || (worstPid && element->getPid() != worstPid)) {
+            if (key != worst || (worstPid && element.pid() != worstPid)) {
                 leading = false;
-                last.clear(element);
+                last.clear(&element);
                 ++it;
                 continue;
             }
             // key == worst below here
-            // If worstPid set, then element->getPid() == worstPid below here
+            // If worstPid set, then element->pid() == worstPid below here
 
             pruneRows--;
             if (pruneRows == 0) {
@@ -757,21 +529,21 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
 
             kick = true;
 
-            uint16_t len = element->getMsgLen();
+            uint16_t len = element.msg_len();
 
             // do not create any leading drops
             if (leading) {
-                it = erase(it);
+                it = Erase(it);
             } else {
-                stats_->Drop(element);
-                element->setDropped(1);
-                if (last.coalesce(element, 1)) {
-                    it = erase(it, true);
+                stats()->Drop(element.ToLogStatisticsElement());
+                element.SetDropped(1);
+                if (last.coalesce(&element, 1)) {
+                    it = Erase(it, true);
                 } else {
-                    last.add(element);
+                    last.add(&element);
                     if (worstPid && (!gc || mLastWorstPidOfSystem[id].find(worstPid) ==
                                                     mLastWorstPidOfSystem[id].end())) {
-                        // element->getUid() may not be AID_SYSTEM, next best
+                        // element->uid() may not be AID_SYSTEM, next best
                         // watermark if current one empty. id is not
                         // LOG_ID_EVENTS or LOG_ID_SECURITY because of worstPid.
                         mLastWorstPidOfSystem[id][worstPid] = it;
@@ -789,196 +561,59 @@ bool ChattyLogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_u
         }
         last.clear();
 
-        if (!kick || !prune_->worstUidEnabled()) {
+        if (!kick || !prune_->worst_uid_enabled()) {
             break;  // the following loop will ask bad clients to skip/drop
         }
     }
 
-    bool whitelist = false;
-    bool hasWhitelist = (id != LOG_ID_SECURITY) && prune_->nice() && !clearAll;
+    // Second prune pass.
+    bool skipped_low_priority_prune = false;
+    bool check_low_priority =
+            id != LOG_ID_SECURITY && prune_->HasLowPriorityPruneRules() && !clearAll;
     it = GetOldest(id);
-    while ((pruneRows > 0) && (it != mLogElements.end())) {
-        LogBufferElement* element = *it;
+    while (pruneRows > 0 && it != logs().end()) {
+        LogBufferElement& element = *it;
 
-        if (element->getLogId() != id) {
+        if (element.log_id() != id) {
             it++;
             continue;
         }
 
-        if (oldest && oldest->start() <= element->getSequence()) {
-            busy = true;
-            if (!whitelist) kickMe(oldest, id, pruneRows);
+        if (oldest && oldest->start() <= element.sequence()) {
+            if (!skipped_low_priority_prune) KickReader(oldest, id, pruneRows);
             break;
         }
 
-        if (hasWhitelist && !element->getDropped() && prune_->nice(element)) {
-            // WhiteListed
-            whitelist = true;
+        if (check_low_priority && !element.dropped_count() && prune_->IsLowPriority(&element)) {
+            skipped_low_priority_prune = true;
             it++;
             continue;
         }
 
-        it = erase(it);
+        it = Erase(it);
         pruneRows--;
     }
 
-    // Do not save the whitelist if we are reader range limited
-    if (whitelist && (pruneRows > 0)) {
+    // Third prune pass.
+    if (skipped_low_priority_prune && pruneRows > 0) {
         it = GetOldest(id);
-        while ((it != mLogElements.end()) && (pruneRows > 0)) {
-            LogBufferElement* element = *it;
+        while (it != logs().end() && pruneRows > 0) {
+            LogBufferElement& element = *it;
 
-            if (element->getLogId() != id) {
+            if (element.log_id() != id) {
                 ++it;
                 continue;
             }
 
-            if (oldest && oldest->start() <= element->getSequence()) {
-                busy = true;
-                kickMe(oldest, id, pruneRows);
+            if (oldest && oldest->start() <= element.sequence()) {
+                KickReader(oldest, id, pruneRows);
                 break;
             }
 
-            it = erase(it);
+            it = Erase(it);
             pruneRows--;
         }
     }
 
-    return (pruneRows > 0) && busy;
-}
-
-// clear all rows of type "id" from the buffer.
-bool ChattyLogBuffer::Clear(log_id_t id, uid_t uid) {
-    bool busy = true;
-    // If it takes more than 4 tries (seconds) to clear, then kill reader(s)
-    for (int retry = 4;;) {
-        if (retry == 1) {  // last pass
-            // Check if it is still busy after the sleep, we say prune
-            // one entry, not another clear run, so we are looking for
-            // the quick side effect of the return value to tell us if
-            // we have a _blocked_ reader.
-            wrlock();
-            busy = prune(id, 1, uid);
-            unlock();
-            // It is still busy, blocked reader(s), lets kill them all!
-            // otherwise, lets be a good citizen and preserve the slow
-            // readers and let the clear run (below) deal with determining
-            // if we are still blocked and return an error code to caller.
-            if (busy) {
-                auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
-                for (const auto& reader_thread : reader_list_->reader_threads()) {
-                    if (reader_thread->IsWatching(id)) {
-                        android::prdebug(
-                                "Kicking blocked reader, %s, from ChattyLogBuffer::clear()\n",
-                                reader_thread->name().c_str());
-                        reader_thread->release_Locked();
-                    }
-                }
-            }
-        }
-        wrlock();
-        busy = prune(id, ULONG_MAX, uid);
-        unlock();
-        if (!busy || !--retry) {
-            break;
-        }
-        sleep(1);  // Let reader(s) catch up after notification
-    }
-    return busy;
-}
-
-// set the total space allocated to "id"
-int ChattyLogBuffer::SetSize(log_id_t id, unsigned long size) {
-    // Reasonable limits ...
-    if (!__android_logger_valid_buffer_size(size)) {
-        return -1;
-    }
-    wrlock();
-    log_buffer_size(id) = size;
-    unlock();
-    return 0;
-}
-
-// get the total space allocated to "id"
-unsigned long ChattyLogBuffer::GetSize(log_id_t id) {
-    rdlock();
-    size_t retval = log_buffer_size(id);
-    unlock();
-    return retval;
-}
-
-uint64_t ChattyLogBuffer::FlushTo(
-        LogWriter* writer, uint64_t start, pid_t* lastTid,
-        const std::function<FlushToResult(const LogBufferElement* element)>& filter) {
-    LogBufferElementCollection::iterator it;
-    uid_t uid = writer->uid();
-
-    rdlock();
-
-    if (start <= 1) {
-        // client wants to start from the beginning
-        it = mLogElements.begin();
-    } else {
-        // Client wants to start from some specified time. Chances are
-        // we are better off starting from the end of the time sorted list.
-        for (it = mLogElements.end(); it != mLogElements.begin();
-             /* do nothing */) {
-            --it;
-            LogBufferElement* element = *it;
-            if (element->getSequence() <= start) {
-                it++;
-                break;
-            }
-        }
-    }
-
-    uint64_t curr = start;
-
-    for (; it != mLogElements.end(); ++it) {
-        LogBufferElement* element = *it;
-
-        if (!writer->privileged() && element->getUid() != uid) {
-            continue;
-        }
-
-        if (!writer->can_read_security_logs() && element->getLogId() == LOG_ID_SECURITY) {
-            continue;
-        }
-
-        // NB: calling out to another object with wrlock() held (safe)
-        if (filter) {
-            FlushToResult ret = filter(element);
-            if (ret == FlushToResult::kSkip) {
-                continue;
-            }
-            if (ret == FlushToResult::kStop) {
-                break;
-            }
-        }
-
-        bool sameTid = false;
-        if (lastTid) {
-            sameTid = lastTid[element->getLogId()] == element->getTid();
-            // Dropped (chatty) immediately following a valid log from the
-            // same source in the same log buffer indicates we have a
-            // multiple identical squash.  chatty that differs source
-            // is due to spam filter.  chatty to chatty of different
-            // source is also due to spam filter.
-            lastTid[element->getLogId()] =
-                    (element->getDropped() && !sameTid) ? 0 : element->getTid();
-        }
-
-        unlock();
-
-        curr = element->getSequence();
-        // range locking in LastLogTimes looks after us
-        if (!element->FlushTo(writer, stats_, sameTid)) {
-            return FLUSH_ERROR;
-        }
-
-        rdlock();
-    }
-    unlock();
-
-    return curr;
+    return pruneRows == 0 || it == logs().end();
 }

@@ -77,4 +77,5 @@ message DynamicPartitionMetadata {
 message DeltaArchiveManifest {
     repeated PartitionUpdate partitions = 13;
     optional DynamicPartitionMetadata dynamic_partition_metadata = 15;
+    optional bool partial_update = 16;
 }

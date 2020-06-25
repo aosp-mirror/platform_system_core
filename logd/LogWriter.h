@@ -23,8 +23,7 @@
 // An interface for writing logs to a reader.
 class LogWriter {
   public:
-    LogWriter(uid_t uid, bool privileged, bool can_read_security_logs)
-        : uid_(uid), privileged_(privileged), can_read_security_logs_(can_read_security_logs) {}
+    LogWriter(uid_t uid, bool privileged) : uid_(uid), privileged_(privileged) {}
     virtual ~LogWriter() {}
 
     virtual bool Write(const logger_entry& entry, const char* msg) = 0;
@@ -35,12 +34,10 @@ class LogWriter {
     uid_t uid() const { return uid_; }
 
     bool privileged() const { return privileged_; }
-    bool can_read_security_logs() const { return can_read_security_logs_; }
 
   private:
     uid_t uid_;
 
     // If this writer sees logs from all UIDs or only its own UID.  See clientHasLogCredentials().
     bool privileged_;
-    bool can_read_security_logs_;  // If this writer sees security logs.  See CanReadSecurityLogs().
 };

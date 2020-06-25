@@ -169,6 +169,8 @@ cc_library {
 cc_library {
     name: "libutilscallstack",
     defaults: ["libutils_defaults"],
+    // TODO(b/153609531): remove when no longer needed.
+    native_bridge_supported: true,
 
     srcs: [
         "CallStack.cpp",
@@ -246,6 +248,7 @@ cc_test {
         "String8_test.cpp",
         "String16_test.cpp",
         "StrongPointer_test.cpp",
+        "Timers_test.cpp",
         "Unicode_test.cpp",
         "Vector_test.cpp",
     ],

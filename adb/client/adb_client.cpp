@@ -417,17 +417,19 @@ std::string format_host_command(const char* command) {
 }
 
 const std::optional<FeatureSet>& adb_get_feature_set(std::string* error) {
-    static std::string cached_error [[clang::no_destroy]];
-    static const std::optional<FeatureSet> features
-            [[clang::no_destroy]] ([]() -> std::optional<FeatureSet> {
-                std::string result;
-                if (adb_query(format_host_command("features"), &result, &cached_error)) {
-                    return StringToFeatureSet(result);
-                }
-                return std::nullopt;
-            }());
-    if (!features && error) {
-        *error = cached_error;
+    static std::mutex feature_mutex [[clang::no_destroy]];
+    static std::optional<FeatureSet> features [[clang::no_destroy]] GUARDED_BY(feature_mutex);
+    std::lock_guard<std::mutex> lock(feature_mutex);
+    if (!features) {
+        std::string result;
+        std::string err;
+        if (adb_query(format_host_command("features"), &result, &err)) {
+            features = StringToFeatureSet(result);
+        } else {
+            if (error) {
+                *error = err;
+            }
+        }
     }
     return features;
 }

@@ -248,10 +248,6 @@ cc_test {
 
 cc_defaults {
     name: "libsnapshot_fuzzer_defaults",
-
-    // TODO(b/154633114): make host supported.
-    // host_supported: true,
-
     native_coverage : true,
     srcs: [
         // Compile the protobuf definition again with type full.

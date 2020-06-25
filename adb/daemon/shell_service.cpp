@@ -646,15 +646,21 @@ unique_fd* Subprocess::PollLoop(SubprocessPollfds* pfds) {
         }
 
         // After handling all of the events we've received, check to see if any fds have died.
-        if (stdinout_pfd.revents & (POLLHUP | POLLRDHUP | POLLERR | POLLNVAL)) {
+        auto poll_finished = [](int events) {
+            // Don't return failure until we've read out all of the fd's incoming data.
+            return (events & POLLIN) == 0 &&
+                   (events & (POLLHUP | POLLRDHUP | POLLERR | POLLNVAL)) != 0;
+        };
+
+        if (poll_finished(stdinout_pfd.revents)) {
             return &stdinout_sfd_;
         }
 
-        if (stderr_pfd.revents & (POLLHUP | POLLRDHUP | POLLERR | POLLNVAL)) {
+        if (poll_finished(stderr_pfd.revents)) {
             return &stderr_sfd_;
         }
 
-        if (protocol_pfd.revents & (POLLHUP | POLLRDHUP | POLLERR | POLLNVAL)) {
+        if (poll_finished(protocol_pfd.revents)) {
             return &protocol_sfd_;
         }
     }  // while (!dead_sfd)

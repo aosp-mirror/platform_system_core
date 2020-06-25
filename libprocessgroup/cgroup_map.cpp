@@ -115,7 +115,13 @@ bool CgroupController::GetTaskGroup(int tid, std::string* group) const {
         return true;
     }
 
-    std::string cg_tag = StringPrintf(":%s:", name());
+    std::string cg_tag;
+
+    if (version() == 2) {
+        cg_tag = "0::";
+    } else {
+        cg_tag = StringPrintf(":%s:", name());
+    }
     size_t start_pos = content.find(cg_tag);
     if (start_pos == std::string::npos) {
         return false;

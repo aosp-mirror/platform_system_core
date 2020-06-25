@@ -25,7 +25,6 @@ cc_defaults {
         "-Wthread-safety",
         "-Wvla",
         "-DADB_HOST=1",         // overridden by adbd_defaults
-        "-DALLOW_ADBD_ROOT=0",  // overridden by adbd_defaults
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION=1",
     ],
     cpp_std: "experimental",
@@ -81,16 +80,6 @@ cc_defaults {
     defaults: ["adb_defaults"],
 
     cflags: ["-UADB_HOST", "-DADB_HOST=0"],
-    product_variables: {
-        debuggable: {
-            cflags: [
-                "-UALLOW_ADBD_ROOT",
-                "-DALLOW_ADBD_ROOT=1",
-                "-DALLOW_ADBD_DISABLE_VERITY",
-                "-DALLOW_ADBD_NO_AUTH",
-            ],
-        },
-    },
 }
 
 cc_defaults {
@@ -124,11 +113,12 @@ cc_defaults {
         "libadbd_core",
         "libadbconnection_server",
         "libasyncio",
+        "libbase",
         "libbrotli",
         "libcutils_sockets",
         "libdiagnose_usb",
         "libmdnssd",
-        "libbase",
+        "libzstd",
 
         "libadb_protos",
         "libapp_processes_protos_lite",
@@ -218,6 +208,7 @@ cc_library_host_static {
         "client/usb_dispatch.cpp",
         "client/transport_local.cpp",
         "client/transport_mdns.cpp",
+        "client/mdns_utils.cpp",
         "client/transport_usb.cpp",
         "client/pairing/pairing_client.cpp",
     ],
@@ -264,7 +255,10 @@ cc_library_host_static {
 cc_test_host {
     name: "adb_test",
     defaults: ["adb_defaults"],
-    srcs: libadb_test_srcs,
+    srcs: libadb_test_srcs + [
+        "client/mdns_utils_test.cpp",
+    ],
+
     static_libs: [
         "libadb_crypto_static",
         "libadb_host",
@@ -347,6 +341,7 @@ cc_binary_host {
         "liblog",
         "libziparchive",
         "libz",
+        "libzstd",
     ],
 
     // Don't add anything here, we don't want additional shared dependencies
@@ -479,6 +474,7 @@ cc_library {
         "libbrotli",
         "libdiagnose_usb",
         "liblz4",
+        "libzstd",
     ],
 
     shared_libs: [
@@ -582,6 +578,7 @@ cc_library {
         "libdiagnose_usb",
         "liblz4",
         "libmdnssd",
+        "libzstd",
     ],
 
     visibility: [
@@ -632,16 +629,14 @@ cc_binary {
             ],
         }
     },
-
-    required: [
-        "libadbd_auth",
-        "libadbd_fs",
-    ],
 }
 
 phony {
-    name: "adbd_system_binaries",
+    // Interface between adbd in a module and the system.
+    name: "adbd_system_api",
     required: [
+        "libadbd_auth",
+        "libadbd_fs",
         "abb",
         "reboot",
         "set-verity-state",
@@ -649,8 +644,10 @@ phony {
 }
 
 phony {
-    name: "adbd_system_binaries_recovery",
+    name: "adbd_system_api_recovery",
     required: [
+        "libadbd_auth",
+        "libadbd_fs",
         "reboot.recovery",
     ],
 }

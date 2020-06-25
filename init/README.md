@@ -547,13 +547,16 @@ provides the `aidl_lazy_test_1` interface.
   * `ref`: use the systemwide DE key
   * `per_boot_ref`: use the key freshly generated on each boot.
 
-`mount_all <fstab> [ <path> ]\* [--<option>]`
+`mount_all [ <fstab> ] [--<option>]`
 > Calls fs\_mgr\_mount\_all on the given fs\_mgr-format fstab with optional
   options "early" and "late".
   With "--early" set, the init executable will skip mounting entries with
   "latemount" flag and triggering fs encryption state event. With "--late" set,
   init executable will only mount entries with "latemount" flag. By default,
   no option is set, and mount\_all will process all entries in the given fstab.
+  If the fstab parameter is not specified, fstab.${ro.boot.fstab_suffix},
+  fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
+  under /odm/etc, /vendor/etc, or / at runtime, in that order.
 
 `mount <type> <device> <dir> [ <flag>\* ] [<options>]`
 > Attempt to mount the named device at the directory _dir_
@@ -561,9 +564,11 @@ provides the `aidl_lazy_test_1` interface.
   _options_ include "barrier=1", "noauto\_da\_alloc", "discard", ... as
   a comma separated string, e.g. barrier=1,noauto\_da\_alloc
 
-`parse_apex_configs`
-> Parses config file(s) from the mounted APEXes. Intended to be used only once
-  when apexd notifies the mount event by setting apexd.status to ready.
+`perform_apex_config`
+> Performs tasks after APEXes are mounted. For example, creates data directories
+  for the mounted APEXes, parses config file(s) from them, and updates linker
+  configurations. Intended to be used only once when apexd notifies the mount
+  event by setting `apexd.status` to ready.
 
 `restart <service>`
 > Stops and restarts a running service, does nothing if the service is currently
@@ -620,8 +625,11 @@ provides the `aidl_lazy_test_1` interface.
 `stop <service>`
 > Stop a service from running if it is currently running.
 
-`swapon_all <fstab>`
+`swapon_all [ <fstab> ]`
 > Calls fs\_mgr\_swapon\_all on the given fstab file.
+  If the fstab parameter is not specified, fstab.${ro.boot.fstab_suffix},
+  fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
+  under /odm/etc, /vendor/etc, or / at runtime, in that order.
 
 `symlink <target> <path>`
 > Create a symbolic link at _path_ with the value _target_
@@ -635,6 +643,12 @@ provides the `aidl_lazy_test_1` interface.
 
 `umount <path>`
 > Unmount the filesystem mounted at that path.
+
+`umount_all [ <fstab> ]`
+> Calls fs\_mgr\_umount\_all on the given fstab file.
+  If the fstab parameter is not specified, fstab.${ro.boot.fstab_suffix},
+  fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
+  under /odm/etc, /vendor/etc, or / at runtime, in that order.
 
 `verity_update_state <mount-point>`
 > Internal implementation detail used to update dm-verity state and
@@ -750,7 +764,7 @@ The _commands_ are listed below.
 These are equivalent to using the `start`, `restart`, and `stop` commands on the service specified
 by the _value_ of the property.
 
-`oneshot_one` and `oneshot_off` will turn on or off the _oneshot_
+`oneshot_on` and `oneshot_off` will turn on or off the _oneshot_
 flag for the service specified by the _value_ of the property.  This is
 particularly intended for services that are conditionally lazy HALs.  When
 they are lazy HALs, oneshot must be on, otherwise oneshot should be off.

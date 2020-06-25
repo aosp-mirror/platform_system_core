@@ -23,6 +23,7 @@
 
 #include <chrono>
 
+#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
@@ -45,11 +46,8 @@ static std::string SocketClientToName(SocketClient* client) {
 
 class SocketLogWriter : public LogWriter {
   public:
-    SocketLogWriter(LogReader* reader, SocketClient* client, bool privileged,
-                    bool can_read_security_logs)
-        : LogWriter(client->getUid(), privileged, can_read_security_logs),
-          reader_(reader),
-          client_(client) {}
+    SocketLogWriter(LogReader* reader, SocketClient* client, bool privileged)
+        : LogWriter(client->getUid(), privileged), reader_(reader), client_(client) {}
 
     bool Write(const logger_entry& entry, const char* msg) override {
         struct iovec iovec[2];
@@ -129,7 +127,7 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
     if (cp) {
         logMask = 0;
         cp += sizeof(_logIds) - 1;
-        while (*cp && *cp != '\0') {
+        while (*cp != '\0') {
             int val = 0;
             while (isdigit(*cp)) {
                 val = val * 10 + *cp - '0';
@@ -162,51 +160,51 @@ bool LogReader::onDataAvailable(SocketClient* cli) {
 
     bool privileged = clientHasLogCredentials(cli);
     bool can_read_security = CanReadSecurityLogs(cli);
+    if (!can_read_security) {
+        logMask &= ~(1 << LOG_ID_SECURITY);
+    }
 
-    std::unique_ptr<LogWriter> socket_log_writer(
-            new SocketLogWriter(this, cli, privileged, can_read_security));
+    std::unique_ptr<LogWriter> socket_log_writer(new SocketLogWriter(this, cli, privileged));
 
     uint64_t sequence = 1;
     // Convert realtime to sequence number
     if (start != log_time::EPOCH) {
         bool start_time_set = false;
         uint64_t last = sequence;
-        auto log_find_start = [pid, logMask, start, &sequence, &start_time_set,
-                               &last](const LogBufferElement* element) -> FlushToResult {
-            if (pid && pid != element->getPid()) {
-                return FlushToResult::kSkip;
+        auto log_find_start = [pid, start, &sequence, &start_time_set, &last](
+                                      log_id_t, pid_t element_pid, uint64_t element_sequence,
+                                      log_time element_realtime) -> FilterResult {
+            if (pid && pid != element_pid) {
+                return FilterResult::kSkip;
             }
-            if ((logMask & (1 << element->getLogId())) == 0) {
-                return FlushToResult::kSkip;
-            }
-            if (start == element->getRealTime()) {
-                sequence = element->getSequence();
+            if (start == element_realtime) {
+                sequence = element_sequence;
                 start_time_set = true;
-                return FlushToResult::kStop;
+                return FilterResult::kStop;
             } else {
-                if (start < element->getRealTime()) {
+                if (start < element_realtime) {
                     sequence = last;
                     start_time_set = true;
-                    return FlushToResult::kStop;
+                    return FilterResult::kStop;
                 }
-                last = element->getSequence();
+                last = element_sequence;
             }
-            return FlushToResult::kSkip;
+            return FilterResult::kSkip;
         };
-
-        log_buffer_->FlushTo(socket_log_writer.get(), sequence, nullptr, log_find_start);
+        auto flush_to_state = log_buffer_->CreateFlushToState(sequence, logMask);
+        log_buffer_->FlushTo(socket_log_writer.get(), *flush_to_state, log_find_start);
 
         if (!start_time_set) {
             if (nonBlock) {
                 return false;
             }
-            sequence = LogBufferElement::getCurrentSequence();
+            sequence = log_buffer_->sequence();
         }
     }
 
-    android::prdebug(
+    LOG(INFO) << android::base::StringPrintf(
             "logdr: UID=%d GID=%d PID=%d %c tail=%lu logMask=%x pid=%d "
-            "start=%" PRIu64 "ns deadline=%" PRIi64 "ns\n",
+            "start=%" PRIu64 "ns deadline=%" PRIi64 "ns",
             cli->getUid(), cli->getGid(), cli->getPid(), nonBlock ? 'n' : 'b', tail, logMask,
             (int)pid, start.nsec(), static_cast<int64_t>(deadline.time_since_epoch().count()));
 
