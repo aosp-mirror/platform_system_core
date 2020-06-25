@@ -65,10 +65,10 @@ std::string Aliases::ToString() const {
     std::stringstream fmt;
 
     fmt << "AliasTo:" << alias_to_ << " "
-        << "Major:" << (major_ == Aliases::ANY ? "Any" : std::to_string(major_)) << " "
-        << "Minor:" << (minor_ == Aliases::ANY ? "Any" : std::to_string(minor_)) << " "
-        << "ProductId:" << productId_ << " "
-        << "VendorId:" << vendorId_;
+        << "Major:" << std::hex << (major_ == Aliases::ANY ? "Any" : std::to_string(major_)) << " "
+        << "Minor:" << std::hex << (minor_ == Aliases::ANY ? "Any" : std::to_string(minor_)) << " "
+        << "ProductId:" << std::hex << productId_ << " "
+        << "VendorId:" << std::hex << vendorId_;
 
     return fmt.str();
 }
@@ -411,100 +411,112 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
     return links;
 }
 
-void DeviceHandler::HandleDevice(const std::string& action, const std::string& devpath,
+void DeviceHandler::HandleDevice(const std::string& action, const std::string& dev_path,
                                  const std::string& upath, bool block,
                                  int major, int minor, const std::vector<std::string>& links) const {
-    std::string aliases_linkpath;
+    std::string state_link_path, alias_link_path;
     std::stringstream slfmt;
 
     // Create a symlink in /dev/aliases that will point to the
     // alias.
     slfmt << "/dev/aliases/" << major << "_" << minor;
-    aliases_linkpath = slfmt.str();
+    state_link_path = slfmt.str();
 
     if (action == "add") {
-        std::string alias_link;
+        std::string alias_path;
         std::vector<std::string> all_links(links);
 
         // Add the alias link to the device to the list of links to
         // create.
-        if (GetDeviceAlias(upath, major, minor, alias_link))
-            all_links.push_back(alias_link);
+        if (GetDeviceAlias(upath, major, minor, alias_link_path))
+            all_links.push_back(alias_link_path);
 
-        MakeDevice(devpath, block, major, minor, all_links);
+        MakeDevice(dev_path, block, major, minor, all_links);
 
-        for (const auto& link : all_links) {
-            std::string link_path;
+        for (const auto& link_path : all_links) {
+            std::string link_target;
 
-            if (!mkdir_recursive(Dirname(link), 0755))
-                PLOG(ERROR) << "Failed to create directory " << Dirname(link);
+            if (!mkdir_recursive(Dirname(link_path), 0755))
+                PLOG(ERROR) << "Failed to create directory " << Dirname(link_path);
 
-            // Only create a link in /dev/aliases for device
-            // aliases. Ordinary device symlinks will be created
-            // within the 'else'.
-            if (!alias_link.empty()
-                && link == alias_link
-                && symlink(link.c_str(), aliases_linkpath.c_str())) {
+            // Only create a link in /dev/aliases for the device
+            // aliases we created from an 'alias' line in the
+            // configuration. This is a way to save what aliases we've
+            // created in /dev for a specific device and allow use to
+            // find the exact aliases we created without keeping state
+            // within ueventd.
+
+            // alias_link is the link (eg: /dev/modem -> /dev/ttyACM0)
+            // that we want to be creating.
+            if (!alias_link_path.empty()
+                && link_path == alias_link_path
+                && symlink(alias_link_path.c_str(), state_link_path.c_str())) {
+
+                // If creating the symlink failed, it can be because
+                // of a misc error, or it can be because the file
+                // already exists. We don't want to replace the file
+                // so we make it an explicit error message that the
+                // configuration is wrong.
 
                 if (errno != EEXIST)
-                    PLOG(ERROR) << "Failed to create alias symlink from " << aliases_linkpath
-                                << " to " << link;
+                    PLOG(ERROR) << "Failed to create alias symlink from " << state_link_path
+                                << " to " << alias_link_path;
 
-                else if (Readlink(link, &link_path) && link_path != devpath)
-                    PLOG(ERROR) << "Failed to create alias symlink from " << aliases_linkpath
-                                << " to " << link << ", which already links to: " << link_path;
+                else if (Readlink(state_link_path, &link_target) && link_target != alias_link_path)
+                    PLOG(ERROR) << "Failed to create alias symlink from " << state_link_path
+                                << " to " << alias_link_path << ", which already links to: " << link_target;
             }
             else {
-                if (symlink(devpath.c_str(), link.c_str())) {
+                if (symlink(dev_path.c_str(), link_path.c_str())) {
                     if (errno != EEXIST)
-                        PLOG(ERROR) << "Failed to symlink " << devpath
-                                    << " to " << link;
+                        PLOG(ERROR) << "Failed to symlink " << dev_path
+                                    << " to " << link_path;
 
-                    else if (Readlink(link, &link_path) && link_path != devpath)
-                        PLOG(ERROR) << "Failed to symlink " << devpath
-                                    << " to " << link << ", which already links to: " << link_path;
+                    else if (Readlink(link_path, &link_target) && link_target != dev_path)
+                        PLOG(ERROR) << "Failed to symlink " << dev_path
+                                    << " to " << link_path << ", which already links to: " << link_target;
 
                     // Delete the link in /dev/aliases
-                    unlink(aliases_linkpath.c_str());
+                    unlink(alias_link_path.c_str());
                 }
-                else LOG(INFO) << "Device symlink: " << link << " ==> " << devpath;
+                else LOG(INFO) << "Device symlink: " << link_path << " ==> " << dev_path;
             }
         }
     }
 
     if (action == "remove") {
-        std::string alias_link, alias_target;
+        std::string state_link_target;
 
-        LOG(INFO) << "Removing device: " << devpath;
+        LOG(INFO) << "Removing device: " << dev_path;
 
         for (const auto& link : links) {
             std::string link_path;
-            if (Readlink(link, &link_path) && link_path == devpath) {
+            if (Readlink(link, &link_path) && link_path == dev_path) {
                 unlink(link.c_str());
             }
         }
 
         slfmt << "/dev/aliases/" << major << "_" << minor;
 
-        // If no alias for that major/minor exists.
-        if (Readlink(aliases_linkpath, &alias_link)) {
+        // If an alias for that major/minor exists...
+        if (Readlink(state_link_path, &state_link_target)) {
 
-            // Try to read what the link in /dev/aliases points to
-            if (Readlink(alias_link, &alias_target)) {
+            // Read what the alias link points.
+            if (Readlink(state_link_target, &alias_link_path)) {
 
                 // ... and if that links points to the right
                 // device, erase both the link in /dev/aliases,
                 // and what it points to.
-                if (alias_target == devpath) {
-                    LOG(INFO) << "Removing alias: " << alias_link;
+                if (alias_link_path == dev_path) {
+                    LOG(INFO) << "Removing alias: " << state_link_target;
 
-                    unlink(aliases_linkpath.c_str());
-                    unlink(alias_link.c_str());
+                    unlink(state_link_path.c_str());
+                    unlink(state_link_target.c_str());
                 }
             }
         }
 
-        unlink(devpath.c_str());
+        unlink(dev_path.c_str());
     }
 }
 
@@ -646,10 +658,10 @@ bool DeviceHandler::GetDeviceAlias(const std::string &upath, int major, int mino
 
         if (alias.Matches(productId, vendorId, major, minor)) {
 #ifdef DEBUG
-            LOG(INFO) << "productId:" << productId << " "
-                      << "vendorId:" << vendorId << " "
-                      << "major:" << major << " "
-                      << "minor:" << minor << " "
+            LOG(INFO) << "productId:" << std::hex << productId << " "
+                      << "vendorId:" << std::hex << vendorId << " "
+                      << "major:" << std::hex << major << " "
+                      << "minor:" << std::hex << minor << " "
                       << "interfaceNumber:" << interfaceNumber;
 #endif
 
