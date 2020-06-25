@@ -62,13 +62,17 @@ namespace init {
 const int Aliases::ANY = -1;
 
 std::string Aliases::ToString() const {
-    std::stringstream fmt;
+    std::stringstream fmt, major_hex, minor_hex;
 
-    fmt << "AliasTo:" << alias_to_ << " "
-        << "Major:" << std::hex << (major_ == Aliases::ANY ? "Any" : std::to_string(major_)) << " "
-        << "Minor:" << std::hex << (minor_ == Aliases::ANY ? "Any" : std::to_string(minor_)) << " "
-        << "ProductId:" << std::hex << productId_ << " "
-        << "VendorId:" << std::hex << vendorId_;
+    major_hex << std::hex << major_;
+    minor_hex << std::hex << minor_;
+
+    fmt << std::hex
+        << "AliasTo:" << alias_to_ << " "
+        << "Major:" << (major_ == Aliases::ANY ? "Any" : major_hex.str()) << " "
+        << "Minor:" << (minor_ == Aliases::ANY ? "Any" : minor_hex.str()) << " "
+        << "ProductId:" << productId_ << " "
+        << "VendorId:" << vendorId_;
 
     return fmt.str();
 }
@@ -658,11 +662,12 @@ bool DeviceHandler::GetDeviceAlias(const std::string &upath, int major, int mino
 
         if (alias.Matches(productId, vendorId, major, minor)) {
 #ifdef DEBUG
-            LOG(INFO) << "productId:" << std::hex << productId << " "
-                      << "vendorId:" << std::hex << vendorId << " "
-                      << "major:" << std::hex << major << " "
-                      << "minor:" << std::hex << minor << " "
-                      << "interfaceNumber:" << interfaceNumber;
+            LOG(INFO) << std::hex
+                      << "productId:" << productId << " "
+                      << "vendorId:" << vendorId << " "
+                      << "major:" << major << " "
+                      << "minor:" << minor << " "
+                      << "interfaceNumber:" << std::dec << interfaceNumber;
 #endif
 
             return FormatDeviceAlias(alias, minor, interfaceNumber, alias_link);
