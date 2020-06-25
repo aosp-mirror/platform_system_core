@@ -27,7 +27,7 @@ CompressionEngine& CompressionEngine::GetInstance() {
     return *engine;
 }
 
-bool ZlibCompressionEngine::Compress(std::span<uint8_t> in, std::vector<uint8_t>& out) {
+bool ZlibCompressionEngine::Compress(SerializedData& in, size_t data_length, SerializedData& out) {
     z_stream strm;
     strm.zalloc = Z_NULL;
     strm.zfree = Z_NULL;
@@ -37,34 +37,34 @@ bool ZlibCompressionEngine::Compress(std::span<uint8_t> in, std::vector<uint8_t>
         LOG(FATAL) << "deflateInit() failed";
     }
 
-    CHECK_LE(in.size(), static_cast<int64_t>(std::numeric_limits<uint32_t>::max()));
-    uint32_t out_size = deflateBound(&strm, in.size());
+    CHECK_LE(data_length, in.size());
+    CHECK_LE(in.size(), std::numeric_limits<uint32_t>::max());
+    uint32_t deflate_bound = deflateBound(&strm, in.size());
 
-    out.resize(out_size);
-    strm.avail_in = in.size();
-    strm.next_in = const_cast<uint8_t*>(in.data());
-    strm.avail_out = out_size;
+    out.Resize(deflate_bound);
+
+    strm.avail_in = data_length;
+    strm.next_in = in.data();
+    strm.avail_out = out.size();
     strm.next_out = out.data();
     ret = deflate(&strm, Z_FINISH);
     CHECK_EQ(ret, Z_STREAM_END);
 
-    uint32_t compressed_data_size = strm.total_out;
+    uint32_t compressed_size = strm.total_out;
     deflateEnd(&strm);
-    out.resize(compressed_data_size);
+
+    out.Resize(compressed_size);
 
     return true;
 }
 
-bool ZlibCompressionEngine::Decompress(const std::vector<uint8_t>& in, std::vector<uint8_t>& out,
-                                       size_t out_size) {
-    out.resize(out_size);
-
+bool ZlibCompressionEngine::Decompress(SerializedData& in, SerializedData& out) {
     z_stream strm;
     strm.zalloc = Z_NULL;
     strm.zfree = Z_NULL;
     strm.opaque = Z_NULL;
     strm.avail_in = in.size();
-    strm.next_in = const_cast<uint8_t*>(in.data());
+    strm.next_in = in.data();
     strm.avail_out = out.size();
     strm.next_out = out.data();
 
@@ -79,22 +79,22 @@ bool ZlibCompressionEngine::Decompress(const std::vector<uint8_t>& in, std::vect
     return true;
 }
 
-bool ZstdCompressionEngine::Compress(std::span<uint8_t> in, std::vector<uint8_t>& out) {
-    size_t out_size = ZSTD_compressBound(in.size());
-    out.resize(out_size);
+bool ZstdCompressionEngine::Compress(SerializedData& in, size_t data_length, SerializedData& out) {
+    CHECK_LE(data_length, in.size());
 
-    out_size = ZSTD_compress(out.data(), out_size, in.data(), in.size(), 1);
+    size_t compress_bound = ZSTD_compressBound(data_length);
+    out.Resize(compress_bound);
+
+    size_t out_size = ZSTD_compress(out.data(), out.size(), in.data(), data_length, 1);
     if (ZSTD_isError(out_size)) {
         LOG(FATAL) << "ZSTD_compress failed: " << ZSTD_getErrorName(out_size);
     }
-    out.resize(out_size);
+    out.Resize(out_size);
 
     return true;
 }
 
-bool ZstdCompressionEngine::Decompress(const std::vector<uint8_t>& in, std::vector<uint8_t>& out,
-                                       size_t out_size) {
-    out.resize(out_size);
+bool ZstdCompressionEngine::Decompress(SerializedData& in, SerializedData& out) {
     size_t result = ZSTD_decompress(out.data(), out.size(), in.data(), in.size());
     if (ZSTD_isError(result)) {
         LOG(FATAL) << "ZSTD_decompress failed: " << ZSTD_getErrorName(result);
