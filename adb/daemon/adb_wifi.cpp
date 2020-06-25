@@ -42,7 +42,8 @@ static struct adisconnect adb_disconnect = {adb_disconnected, nullptr};
 
 static void adb_disconnected(void* unused, atransport* t) {
     LOG(INFO) << "ADB wifi device disconnected";
-    adbd_auth_tls_device_disconnected(auth_ctx, kAdbTransportTypeWifi, t->auth_id);
+    CHECK(t->auth_id.has_value());
+    adbd_auth_tls_device_disconnected(auth_ctx, kAdbTransportTypeWifi, t->auth_id.value());
 }
 
 // TODO(b/31559095): need bionic host so that we can use 'prop_info' returned
