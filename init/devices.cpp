@@ -500,8 +500,6 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
             }
         }
 
-        slfmt << "/dev/aliases/" << major << "_" << minor;
-
         // If an alias for that major/minor exists...
         if (Readlink(state_link_path, &state_link_target)) {
 
