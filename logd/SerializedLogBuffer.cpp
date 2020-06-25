@@ -276,7 +276,6 @@ bool SerializedLogBuffer::FlushTo(
 
     auto& state = reinterpret_cast<SerializedFlushToState&>(abstract_state);
     state.InitializeLogs(logs_);
-    state.CheckForNewLogs();
 
     while (state.HasUnreadLogs()) {
         MinHeapElement top = state.PopNextUnreadLog();
@@ -309,10 +308,6 @@ bool SerializedLogBuffer::FlushTo(
             return false;
         }
         lock.lock();
-
-        // Since we released the log above, buffers that aren't in our min heap may now have had
-        // logs added, so re-check them.
-        state.CheckForNewLogs();
     }
 
     state.set_start(state.start() + 1);
