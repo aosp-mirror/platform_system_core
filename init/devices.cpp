@@ -481,7 +481,7 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
                                     << " to " << dev_path << ", it already links to: " << link_target;
 
                     // Delete the link in /dev/aliases
-                    unlink(alias_link_path.c_str());
+                    unlink(state_link_path.c_str());
                 }
                 else LOG(INFO) << "Device symlink: " << link_path << " ==> " << dev_path;
             }
