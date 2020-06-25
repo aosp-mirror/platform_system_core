@@ -44,4 +44,7 @@ cc_fuzz {
     srcs: [
         "serialized_log_buffer_fuzzer.cpp",
     ],
+    corpus: [
+        "corpus/logentry_use_after_compress",
+    ]
 }

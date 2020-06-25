@@ -121,7 +121,7 @@ MinHeapElement SerializedFlushToState::PopNextUnreadLog() {
 
     log_positions_[log_id]->read_offset += entry->total_len();
 
-    AddMinHeapEntry(log_id);
+    logs_needed_from_next_position_[log_id] = true;
 
     return top;
 }
