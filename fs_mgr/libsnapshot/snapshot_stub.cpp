@@ -42,7 +42,7 @@ bool SnapshotManagerStub::FinishedSnapshotWrites(bool) {
     return false;
 }
 
-bool SnapshotManagerStub::InitiateMerge() {
+bool SnapshotManagerStub::InitiateMerge(uint64_t*) {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return false;
 }
@@ -118,6 +118,8 @@ std::unique_ptr<AutoDevice> SnapshotManagerStub::EnsureMetadataMounted() {
 class SnapshotMergeStatsStub : public ISnapshotMergeStats {
     bool Start() override { return false; }
     void set_state(android::snapshot::UpdateState) override {}
+    void set_cow_file_size(uint64_t) override {}
+    uint64_t cow_file_size() override { return 0; }
     std::unique_ptr<Result> Finish() override { return nullptr; }
 };
 

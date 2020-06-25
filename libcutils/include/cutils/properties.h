@@ -14,27 +14,30 @@
  * limitations under the License.
  */
 
-#ifndef __CUTILS_PROPERTIES_H
-#define __CUTILS_PROPERTIES_H
+#pragma once
 
 #include <sys/cdefs.h>
 #include <stddef.h>
-#include <sys/system_properties.h>
 #include <stdint.h>
+
+#if __has_include(<sys/system_properties.h>)
+#include <sys/system_properties.h>
+#else
+#define PROP_VALUE_MAX 92
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* System properties are *small* name value pairs managed by the
-** property service.  If your data doesn't fit in the provided
-** space it is not appropriate for a system property.
-**
-** WARNING: system/bionic/include/sys/system_properties.h also defines
-**          these, but with different names.  (TODO: fix that)
-*/
-#define PROPERTY_KEY_MAX   PROP_NAME_MAX
-#define PROPERTY_VALUE_MAX  PROP_VALUE_MAX
+//
+// Deprecated.
+//
+// See <android-base/properties.h> for better API.
+//
+
+#define PROPERTY_KEY_MAX PROP_NAME_MAX
+#define PROPERTY_VALUE_MAX PROP_VALUE_MAX
 
 /* property_get: returns the length of the value which will never be
 ** greater than PROPERTY_VALUE_MAX - 1 and will always be zero terminated.
@@ -145,6 +148,4 @@ int property_get(const char *key, char *value, const char *default_value) {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

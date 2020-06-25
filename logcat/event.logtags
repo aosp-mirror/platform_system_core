@@ -116,6 +116,9 @@
 # audio
 # 61000 - 61199 reserved for audioserver
 
+# input
+# 62000 - 62199 reserved for inputflinger
+
 # com.android.server.policy
 # 70000 - 70199 reserved for PhoneWindowManager and other policies
 

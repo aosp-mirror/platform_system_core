@@ -29,9 +29,11 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
+#include <android-base/threads.h>
 #include <log/log_event_list.h>
 #include <log/log_properties.h>
 #include <log/log_read.h>
@@ -114,10 +116,11 @@ bool LogTags::RebuildFileEventLogTags(const char* filename, bool warn) {
     }
 
     if (warn) {
-        android::prdebug(
-            ((fd < 0) ? "%s failed to rebuild"
-                      : "%s missing, damaged or truncated; rebuilt"),
-            filename);
+        if (fd < 0) {
+            LOG(ERROR) << filename << " failed to rebuild";
+        } else {
+            LOG(ERROR) << filename << " missing, damaged or truncated; rebuilt";
+        }
     }
 
     if (fd >= 0) {
@@ -181,8 +184,7 @@ void LogTags::AddEventLogTags(uint32_t tag, uid_t uid, const std::string& Name,
         WritePersistEventLogTags(tag, uid, source);
     } else if (warn && !newOne && source) {
         // For the files, we want to report dupes.
-        android::prdebug("Multiple tag %" PRIu32 " %s %s %s", tag, Name.c_str(),
-                         Format.c_str(), source);
+        LOG(DEBUG) << "Multiple tag " << tag << " " << Name << " " << Format << " " << source;
     }
 }
 
@@ -215,7 +217,7 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                 } else if (isdigit(*cp)) {
                     unsigned long Tag = strtoul(cp, &cp, 10);
                     if (warn && (Tag > emptyTag)) {
-                        android::prdebug("tag too large %lu", Tag);
+                        LOG(WARNING) << "tag too large " << Tag;
                     }
                     while ((cp < endp) && (*cp != '\n') && isspace(*cp)) ++cp;
                     if (cp >= endp) break;
@@ -230,9 +232,8 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                     std::string Name(name, cp - name);
 #ifdef ALLOW_NOISY_LOGGING_OF_PROBLEM_WITH_LOTS_OF_TECHNICAL_DEBT
                     static const size_t maximum_official_tag_name_size = 24;
-                    if (warn &&
-                        (Name.length() > maximum_official_tag_name_size)) {
-                        android::prdebug("tag name too long %s", Name.c_str());
+                    if (warn && (Name.length() > maximum_official_tag_name_size)) {
+                        LOG(WARNING) << "tag name too long " << Name;
                     }
 #endif
                     if (hasAlpha &&
@@ -263,8 +264,8 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
                                         filename, warn);
                     } else {
                         if (warn) {
-                            android::prdebug("tag name invalid %.*s",
-                                             (int)(cp - name + 1), name);
+                            LOG(ERROR) << android::base::StringPrintf("tag name invalid %.*s",
+                                                                      (int)(cp - name + 1), name);
                         }
                         lineStart = nullptr;
                     }
@@ -275,7 +276,9 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
             cp++;
         }
     } else if (warn) {
-        android::prdebug("Cannot read %s", filename);
+#ifdef __ANDROID__
+        LOG(ERROR) << "Cannot read " << filename;
+#endif
     }
 }
 
@@ -478,8 +481,8 @@ uint32_t LogTags::nameToTag_locked(const std::string& name, const char* format,
 
 static int openFile(const char* name, int mode, bool warning) {
     int fd = TEMP_FAILURE_RETRY(open(name, mode));
-    if ((fd < 0) && warning) {
-        android::prdebug("Failed open %s (%d)", name, errno);
+    if (fd < 0 && warning) {
+        PLOG(ERROR) << "Failed to open " << name;
     }
     return fd;
 }
@@ -550,10 +553,10 @@ void LogTags::WritePmsgEventLogTags(uint32_t tag, uid_t uid) {
     clock_gettime(CLOCK_REALTIME, &ts);
 
     android_log_header_t header = {
-        .id = LOG_ID_EVENTS,
-        .tid = (uint16_t)gettid(),
-        .realtime.tv_sec = (uint32_t)ts.tv_sec,
-        .realtime.tv_nsec = (uint32_t)ts.tv_nsec,
+            .id = LOG_ID_EVENTS,
+            .tid = static_cast<uint16_t>(android::base::GetThreadId()),
+            .realtime.tv_sec = static_cast<uint32_t>(ts.tv_sec),
+            .realtime.tv_nsec = static_cast<uint32_t>(ts.tv_nsec),
     };
 
     uint32_t outTag = TAG_DEF_LOG_TAG;

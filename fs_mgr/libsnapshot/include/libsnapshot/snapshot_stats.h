@@ -29,6 +29,8 @@ class ISnapshotMergeStats {
     // Called when merge starts or resumes.
     virtual bool Start() = 0;
     virtual void set_state(android::snapshot::UpdateState state) = 0;
+    virtual void set_cow_file_size(uint64_t cow_file_size) = 0;
+    virtual uint64_t cow_file_size() = 0;
 
     // Called when merge ends. Properly clean up permanent storage.
     class Result {
@@ -50,6 +52,8 @@ class SnapshotMergeStats : public ISnapshotMergeStats {
     // ISnapshotMergeStats overrides
     bool Start() override;
     void set_state(android::snapshot::UpdateState state) override;
+    void set_cow_file_size(uint64_t cow_file_size) override;
+    uint64_t cow_file_size() override;
     std::unique_ptr<Result> Finish() override;
 
   private:
