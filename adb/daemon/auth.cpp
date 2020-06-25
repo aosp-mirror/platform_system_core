@@ -207,15 +207,27 @@ void adbd_cloexec_auth_socket() {
 }
 
 static void adbd_auth_key_authorized(void* arg, uint64_t id) {
-    LOG(INFO) << "adb client authorized";
+    LOG(INFO) << "adb client " << id << " authorized";
     fdevent_run_on_main_thread([=]() {
-        LOG(INFO) << "arg = " << reinterpret_cast<uintptr_t>(arg);
         auto* transport = transport_from_callback_arg(arg);
         if (!transport) {
-            LOG(ERROR) << "authorization received for deleted transport, ignoring";
+            LOG(ERROR) << "authorization received for deleted transport (" << id << "), ignoring";
             return;
         }
-        transport->auth_id = id;
+
+        if (transport->auth_id.has_value()) {
+            if (transport->auth_id.value() != id) {
+                LOG(ERROR)
+                        << "authorization received, but auth id doesn't match, ignoring (expected "
+                        << transport->auth_id.value() << ", got " << id << ")";
+                return;
+            }
+        } else {
+            // Older versions (i.e. dogfood/beta builds) of libadbd_auth didn't pass the initial
+            // auth id to us, so we'll just have to trust it until R ships and we can retcon this.
+            transport->auth_id = id;
+        }
+
         adbd_auth_verified(transport);
     });
 }
@@ -265,14 +277,20 @@ void adbd_auth_verified(atransport* t) {
 
 static void adb_disconnected(void* unused, atransport* t) {
     LOG(INFO) << "ADB disconnect";
-    adbd_auth_notify_disconnect(auth_ctx, t->auth_id);
+    CHECK(t->auth_id.has_value());
+    adbd_auth_notify_disconnect(auth_ctx, t->auth_id.value());
 }
 
 void adbd_auth_confirm_key(atransport* t) {
     LOG(INFO) << "prompting user to authorize key";
     t->AddDisconnect(&adb_disconnect);
-    adbd_auth_prompt_user(auth_ctx, t->auth_key.data(), t->auth_key.size(),
-                          transport_to_callback_arg(t));
+    if (adbd_auth_prompt_user_with_id) {
+        t->auth_id = adbd_auth_prompt_user_with_id(auth_ctx, t->auth_key.data(), t->auth_key.size(),
+                                                   transport_to_callback_arg(t));
+    } else {
+        adbd_auth_prompt_user(auth_ctx, t->auth_key.data(), t->auth_key.size(),
+                              transport_to_callback_arg(t));
+    }
 }
 
 void adbd_notify_framework_connected_key(atransport* t) {
