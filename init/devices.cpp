@@ -459,22 +459,22 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
                 // configuration is wrong.
 
                 if (errno != EEXIST)
-                    PLOG(ERROR) << "Failed to create alias symlink from " << state_link_path
+                    PLOG(ERROR) << "Failed to create symlink from " << state_link_path
                                 << " to " << alias_link_path;
 
                 else if (Readlink(state_link_path, &link_target) && link_target != alias_link_path)
-                    PLOG(ERROR) << "Failed to create alias symlink from " << state_link_path
-                                << " to " << alias_link_path << ", which already links to: " << link_target;
+                    PLOG(ERROR) << "Failed to create symlink from " << state_link_path
+                                << " to " << alias_link_path << ", it already links to " << link_target;
             }
             else {
                 if (symlink(dev_path.c_str(), link_path.c_str())) {
                     if (errno != EEXIST)
-                        PLOG(ERROR) << "Failed to symlink " << dev_path
-                                    << " to " << link_path;
+                        PLOG(ERROR) << "Failed to create symlink from " << link_path
+                                    << " to " << dev_path;
 
                     else if (Readlink(link_path, &link_target) && link_target != dev_path)
-                        PLOG(ERROR) << "Failed to symlink " << dev_path
-                                    << " to " << link_path << ", which already links to: " << link_target;
+                        PLOG(ERROR) << "Failed to create symlink from " << link_path
+                                    << " to " << dev_path << ", it already links to: " << link_target;
 
                     // Delete the link in /dev/aliases
                     unlink(alias_link_path.c_str());
