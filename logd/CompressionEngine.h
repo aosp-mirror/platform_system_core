@@ -16,8 +16,9 @@
 
 #pragma once
 
-#include <span>
-#include <vector>
+#include <memory>
+
+#include "SerializedData.h"
 
 class CompressionEngine {
   public:
@@ -25,23 +26,20 @@ class CompressionEngine {
 
     virtual ~CompressionEngine(){};
 
-    virtual bool Compress(std::span<uint8_t> in, std::vector<uint8_t>& out) = 0;
-    // Decompress the contents of `in` into `out`.  `out_size` must be set to the decompressed size
-    // of the contents.
-    virtual bool Decompress(const std::vector<uint8_t>& in, std::vector<uint8_t>& out,
-                            size_t out_size) = 0;
+    virtual bool Compress(SerializedData& in, size_t data_length, SerializedData& out) = 0;
+    // Decompress the contents of `in` into `out`.  `out.size()` must be set to the decompressed
+    // size of the contents.
+    virtual bool Decompress(SerializedData& in, SerializedData& out) = 0;
 };
 
 class ZlibCompressionEngine : public CompressionEngine {
   public:
-    bool Compress(std::span<uint8_t> in, std::vector<uint8_t>& out) override;
-    bool Decompress(const std::vector<uint8_t>& in, std::vector<uint8_t>& out,
-                    size_t out_size) override;
+    bool Compress(SerializedData& in, size_t data_length, SerializedData& out) override;
+    bool Decompress(SerializedData& in, SerializedData& out) override;
 };
 
 class ZstdCompressionEngine : public CompressionEngine {
   public:
-    bool Compress(std::span<uint8_t> in, std::vector<uint8_t>& out) override;
-    bool Decompress(const std::vector<uint8_t>& in, std::vector<uint8_t>& out,
-                    size_t out_size) override;
+    bool Compress(SerializedData& in, size_t data_length, SerializedData& out) override;
+    bool Decompress(SerializedData& in, SerializedData& out) override;
 };

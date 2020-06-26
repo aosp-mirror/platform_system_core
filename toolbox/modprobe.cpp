@@ -17,10 +17,14 @@
 #include <ctype.h>
 #include <getopt.h>
 #include <stdlib.h>
+
 #include <iostream>
 
+#include <android-base/file.h>
 #include <android-base/strings.h>
 #include <modprobe/modprobe.h>
+
+namespace {
 
 enum modprobe_mode {
     AddModulesMode,
@@ -29,21 +33,24 @@ enum modprobe_mode {
     ShowDependenciesMode,
 };
 
-static void print_usage(void) {
+void print_usage(void) {
     std::cerr << "Usage:" << std::endl;
     std::cerr << std::endl;
-    std::cerr << "  modprobe [-alrqvsDb] [-d DIR] [MODULE]+" << std::endl;
-    std::cerr << "  modprobe [-alrqvsDb] [-d DIR] MODULE [symbol=value][...]" << std::endl;
+    // -d option is required on Android
+    std::cerr << "  modprobe [options] -d DIR MODULE..." << std::endl;
+    std::cerr << "  modprobe [options] -d DIR MODULE [symbol=value]..." << std::endl;
     std::cerr << std::endl;
     std::cerr << "Options:" << std::endl;
-    std::cerr << "  -b: Apply blocklist to module names too" << std::endl;
-    std::cerr << "  -d: Load modules from DIR, option may be used multiple times" << std::endl;
-    std::cerr << "  -D: Print dependencies for modules only, do not load";
-    std::cerr << "  -h: Print this help" << std::endl;
-    std::cerr << "  -l: List modules matching pattern" << std::endl;
-    std::cerr << "  -r: Remove MODULE (multiple modules may be specified)" << std::endl;
-    std::cerr << "  -q: Quiet" << std::endl;
-    std::cerr << "  -v: Verbose" << std::endl;
+    std::cerr << "  -b, --use-blocklist: Apply blocklist to module names too" << std::endl;
+    std::cerr << "  -d, --dirname=DIR: Load modules from DIR, option may be used multiple times"
+              << std::endl;
+    std::cerr << "  -D, --show-depends: Print dependencies for modules only, do not load"
+              << std::endl;
+    std::cerr << "  -h, --help: Print this help" << std::endl;
+    std::cerr << "  -l, --list: List modules matching pattern" << std::endl;
+    std::cerr << "  -r, --remove: Remove MODULE (multiple modules may be specified)" << std::endl;
+    std::cerr << "  -q, --quiet: disable messages" << std::endl;
+    std::cerr << "  -v, --verbose: enable more messages" << std::endl;
     std::cerr << std::endl;
 }
 
@@ -53,6 +60,8 @@ static void print_usage(void) {
         print_usage();                                                    \
         return EXIT_FAILURE;                                              \
     }
+
+}  // anonymous namespace
 
 extern "C" int modprobe_main(int argc, char** argv) {
     std::vector<std::string> modules;
@@ -64,7 +73,23 @@ extern "C" int modprobe_main(int argc, char** argv) {
     int rv = EXIT_SUCCESS;
 
     int opt;
-    while ((opt = getopt(argc, argv, "abd:Dhlqrv")) != -1) {
+    int option_index = 0;
+    // NB: We have non-standard short options -l and -D to make it easier for
+    // OEMs to transition from toybox.
+    // clang-format off
+    static struct option long_options[] = {
+        { "all",                 no_argument,       0, 'a' },
+        { "use-blocklist",       no_argument,       0, 'b' },
+        { "dirname",             required_argument, 0, 'd' },
+        { "show-depends",        no_argument,       0, 'D' },
+        { "help",                no_argument,       0, 'h' },
+        { "list",                no_argument,       0, 'l' },
+        { "quiet",               no_argument,       0, 'q' },
+        { "remove",              no_argument,       0, 'r' },
+        { "verbose",             no_argument,       0, 'v' },
+    };
+    // clang-format on
+    while ((opt = getopt_long(argc, argv, "abd:Dhlqrv", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
                 // toybox modprobe supported -a to load multiple modules, this
@@ -121,9 +146,9 @@ extern "C" int modprobe_main(int argc, char** argv) {
     if (verbose) {
         std::cout << "mode is " << mode << std::endl;
         std::cout << "verbose is " << verbose << std::endl;
-        std::cout << "mod_dirs is: " << android::base::Join(mod_dirs, "") << std::endl;
-        std::cout << "modules is: " << android::base::Join(modules, "") << std::endl;
-        std::cout << "module parameters is: " << android::base::Join(module_parameters, "")
+        std::cout << "mod_dirs is: " << android::base::Join(mod_dirs, " ") << std::endl;
+        std::cout << "modules is: " << android::base::Join(modules, " ") << std::endl;
+        std::cout << "module parameters is: " << android::base::Join(module_parameters, " ")
                   << std::endl;
     }
 
@@ -159,13 +184,13 @@ extern "C" int modprobe_main(int argc, char** argv) {
         switch (mode) {
             case AddModulesMode:
                 if (!m.LoadWithAliases(module, true, module_parameters)) {
-                    std::cerr << "Failed to load module " << module;
+                    std::cerr << "Failed to load module " << module << std::endl;
                     rv = EXIT_FAILURE;
                 }
                 break;
             case RemoveModulesMode:
                 if (!m.Remove(module)) {
-                    std::cerr << "Failed to remove module " << module;
+                    std::cerr << "Failed to remove module " << module << std::endl;
                     rv = EXIT_FAILURE;
                 }
                 break;
@@ -192,7 +217,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
                 break;
             }
             default:
-                std::cerr << "Bad mode";
+                std::cerr << "Bad mode" << std::endl;
                 rv = EXIT_FAILURE;
         }
     }
