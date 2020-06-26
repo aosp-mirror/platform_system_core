@@ -18,14 +18,14 @@
 
 #include <sys/types.h>
 
-#include <vector>
-
 #include "LogWriter.h"
+#include "SerializedData.h"
 #include "SerializedLogEntry.h"
 
 class SerializedLogChunk {
   public:
     explicit SerializedLogChunk(size_t size) : contents_(size) {}
+    SerializedLogChunk(SerializedLogChunk&& other) noexcept = default;
     ~SerializedLogChunk();
 
     void Compress();
@@ -60,13 +60,16 @@ class SerializedLogChunk {
     int write_offset() const { return write_offset_; }
     uint64_t highest_sequence_number() const { return highest_sequence_number_; }
 
+    // Exposed for testing
+    uint32_t reader_ref_count() const { return reader_ref_count_; }
+
   private:
     // The decompressed contents of this log buffer.  Deallocated when the ref_count reaches 0 and
     // writer_active_ is false.
-    std::vector<uint8_t> contents_;
+    SerializedData contents_;
     int write_offset_ = 0;
     uint32_t reader_ref_count_ = 0;
     bool writer_active_ = true;
     uint64_t highest_sequence_number_ = 1;
-    std::vector<uint8_t> compressed_log_;
+    SerializedData compressed_log_;
 };

@@ -61,15 +61,13 @@ class SerializedFlushToState : public FlushToState {
         if (logs_ == nullptr) logs_ = logs;
     }
 
-    // Checks to see if any log buffers set in logs_needed_from_next_position_ have new logs and
-    // calls AddMinHeapEntry() if so.
-    void CheckForNewLogs();
+    bool HasUnreadLogs() {
+        CheckForNewLogs();
+        return !min_heap_.empty();
+    }
 
-    bool HasUnreadLogs() { return !min_heap_.empty(); }
-
-    // Pops the next unread log from the min heap.  Add the next log for that log_id to the min heap
-    // if one is available otherwise set logs_needed_from_next_position_ to indicate that we're
-    // waiting for more logs.
+    // Pops the next unread log from the min heap and sets logs_needed_from_next_position_ to
+    // indicate that we're waiting for more logs from the associated log buffer.
     MinHeapElement PopNextUnreadLog();
 
     // If the parent log buffer prunes logs, the reference that this class contains may become
@@ -85,6 +83,10 @@ class SerializedFlushToState : public FlushToState {
     // Create a LogPosition object for the given log_id by searching through the log chunks for the
     // first chunk and then first log entry within that chunk that is greater or equal to start().
     void CreateLogPosition(log_id_t log_id);
+
+    // Checks to see if any log buffers set in logs_needed_from_next_position_ have new logs and
+    // calls AddMinHeapEntry() if so.
+    void CheckForNewLogs();
 
     std::list<SerializedLogChunk>* logs_ = nullptr;
     // An optional structure that contains an iterator to the serialized log buffer and offset into
