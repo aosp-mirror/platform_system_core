@@ -578,7 +578,7 @@ static bool FormatDeviceAlias(const Aliases& alias, int minor, int interfaceNumb
 
         if (alias.AliasTo()[b + 1] == 'i') {
             if (interfaceNumber >= 0)
-                fmt << interfaceNumber;
+                fmt << std::setfill('0') << std::setw(2) << interfaceNumber;
             else {
                 LOG(ERROR) << "No bInterfaceNumber found for device, can't create alias";
                 return false;
