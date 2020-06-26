@@ -15,10 +15,13 @@
  */
 
 #include <ctype.h>
+#include <errno.h>
 #include <getopt.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <iostream>
+#include <string>
 
 #include <android-base/file.h>
 #include <android-base/strings.h>
@@ -37,10 +40,11 @@ void print_usage(void) {
     std::cerr << "Usage:" << std::endl;
     std::cerr << std::endl;
     // -d option is required on Android
-    std::cerr << "  modprobe [options] -d DIR MODULE..." << std::endl;
+    std::cerr << "  modprobe [options] -d DIR [--all=FILE|MODULE]..." << std::endl;
     std::cerr << "  modprobe [options] -d DIR MODULE [symbol=value]..." << std::endl;
     std::cerr << std::endl;
     std::cerr << "Options:" << std::endl;
+    std::cerr << "  --all=FILE: FILE to acquire module names from" << std::endl;
     std::cerr << "  -b, --use-blocklist: Apply blocklist to module names too" << std::endl;
     std::cerr << "  -d, --dirname=DIR: Load modules from DIR, option may be used multiple times"
               << std::endl;
@@ -61,11 +65,23 @@ void print_usage(void) {
         return EXIT_FAILURE;                                              \
     }
 
+std::string stripComments(const std::string& str) {
+    for (std::string rv = str;;) {
+        auto comment = rv.find('#');
+        if (comment == std::string::npos) return rv;
+        auto end = rv.find('\n', comment);
+        if (end != std::string::npos) end = end - comment;
+        rv.erase(comment, end);
+    }
+    /* NOTREACHED */
+}
+
 }  // anonymous namespace
 
 extern "C" int modprobe_main(int argc, char** argv) {
     std::vector<std::string> modules;
     std::string module_parameters;
+    std::string mods;
     std::vector<std::string> mod_dirs;
     modprobe_mode mode = AddModulesMode;
     bool blocklist = false;
@@ -78,7 +94,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
     // OEMs to transition from toybox.
     // clang-format off
     static struct option long_options[] = {
-        { "all",                 no_argument,       0, 'a' },
+        { "all",                 optional_argument, 0, 'a' },
         { "use-blocklist",       no_argument,       0, 'b' },
         { "dirname",             required_argument, 0, 'd' },
         { "show-depends",        no_argument,       0, 'D' },
@@ -89,12 +105,24 @@ extern "C" int modprobe_main(int argc, char** argv) {
         { "verbose",             no_argument,       0, 'v' },
     };
     // clang-format on
-    while ((opt = getopt_long(argc, argv, "abd:Dhlqrv", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "a::bd:Dhlqrv", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
                 // toybox modprobe supported -a to load multiple modules, this
-                // is supported here by default, ignore flag
+                // is supported here by default, ignore flag if no argument.
                 check_mode();
+                if (optarg == NULL) break;
+                if (!android::base::ReadFileToString(optarg, &mods)) {
+                    std::cerr << "Failed to open " << optarg << ": " << strerror(errno)
+                              << std::endl;
+                    rv = EXIT_FAILURE;
+                }
+                for (auto mod : android::base::Split(stripComments(mods), "\n")) {
+                    mod = android::base::Trim(mod);
+                    if (mod == "") continue;
+                    if (std::find(modules.begin(), modules.end(), mod) != modules.end()) continue;
+                    modules.emplace_back(mod);
+                }
                 break;
             case 'b':
                 blocklist = true;
