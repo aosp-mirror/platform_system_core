@@ -15,15 +15,13 @@
  */
 
 #include <ctype.h>
-#include <errno.h>
 #include <getopt.h>
 #include <stdlib.h>
-#include <string.h>
 
-#include <iostream>
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <modprobe/modprobe.h>
 
@@ -37,32 +35,31 @@ enum modprobe_mode {
 };
 
 void print_usage(void) {
-    std::cerr << "Usage:" << std::endl;
-    std::cerr << std::endl;
+    LOG(INFO) << "Usage:";
+    LOG(INFO);
     // -d option is required on Android
-    std::cerr << "  modprobe [options] -d DIR [--all=FILE|MODULE]..." << std::endl;
-    std::cerr << "  modprobe [options] -d DIR MODULE [symbol=value]..." << std::endl;
-    std::cerr << std::endl;
-    std::cerr << "Options:" << std::endl;
-    std::cerr << "  --all=FILE: FILE to acquire module names from" << std::endl;
-    std::cerr << "  -b, --use-blocklist: Apply blocklist to module names too" << std::endl;
-    std::cerr << "  -d, --dirname=DIR: Load modules from DIR, option may be used multiple times"
-              << std::endl;
-    std::cerr << "  -D, --show-depends: Print dependencies for modules only, do not load"
-              << std::endl;
-    std::cerr << "  -h, --help: Print this help" << std::endl;
-    std::cerr << "  -l, --list: List modules matching pattern" << std::endl;
-    std::cerr << "  -r, --remove: Remove MODULE (multiple modules may be specified)" << std::endl;
-    std::cerr << "  -q, --quiet: disable messages" << std::endl;
-    std::cerr << "  -v, --verbose: enable more messages" << std::endl;
-    std::cerr << std::endl;
+    LOG(INFO) << "  modprobe [options] -d DIR [--all=FILE|MODULE]...";
+    LOG(INFO) << "  modprobe [options] -d DIR MODULE [symbol=value]...";
+    LOG(INFO);
+    LOG(INFO) << "Options:";
+    LOG(INFO) << "  --all=FILE: FILE to acquire module names from";
+    LOG(INFO) << "  -b, --use-blocklist: Apply blocklist to module names too";
+    LOG(INFO) << "  -d, --dirname=DIR: Load modules from DIR, option may be used multiple times";
+    LOG(INFO) << "  -D, --show-depends: Print dependencies for modules only, do not load";
+    LOG(INFO) << "  -h, --help: Print this help";
+    LOG(INFO) << "  -l, --list: List modules matching pattern";
+    LOG(INFO) << "  -r, --remove: Remove MODULE (multiple modules may be specified)";
+    LOG(INFO) << "  -s, --syslog: print to syslog also";
+    LOG(INFO) << "  -q, --quiet: disable messages";
+    LOG(INFO) << "  -v, --verbose: enable more messages, even more with a second -v";
+    LOG(INFO);
 }
 
-#define check_mode()                                                      \
-    if (mode != AddModulesMode) {                                         \
-        std::cerr << "Error, multiple mode flags specified" << std::endl; \
-        print_usage();                                                    \
-        return EXIT_FAILURE;                                              \
+#define check_mode()                                   \
+    if (mode != AddModulesMode) {                      \
+        LOG(ERROR) << "multiple mode flags specified"; \
+        print_usage();                                 \
+        return EXIT_FAILURE;                           \
     }
 
 std::string stripComments(const std::string& str) {
@@ -76,16 +73,28 @@ std::string stripComments(const std::string& str) {
     /* NOTREACHED */
 }
 
+auto syslog = false;
+
+void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
+              const char* file, unsigned int line, const char* message) {
+    android::base::StdioLogger(id, severity, tag, file, line, message);
+    if (syslog && message[0]) {
+        android::base::KernelLogger(id, severity, tag, file, line, message);
+    }
+}
+
 }  // anonymous namespace
 
 extern "C" int modprobe_main(int argc, char** argv) {
+    android::base::InitLogging(argv, MyLogger);
+    android::base::SetMinimumLogSeverity(android::base::INFO);
+
     std::vector<std::string> modules;
     std::string module_parameters;
     std::string mods;
     std::vector<std::string> mod_dirs;
     modprobe_mode mode = AddModulesMode;
     bool blocklist = false;
-    bool verbose = false;
     int rv = EXIT_SUCCESS;
 
     int opt;
@@ -102,10 +111,11 @@ extern "C" int modprobe_main(int argc, char** argv) {
         { "list",                no_argument,       0, 'l' },
         { "quiet",               no_argument,       0, 'q' },
         { "remove",              no_argument,       0, 'r' },
+        { "syslog",              no_argument,       0, 's' },
         { "verbose",             no_argument,       0, 'v' },
     };
     // clang-format on
-    while ((opt = getopt_long(argc, argv, "a::bd:Dhlqrv", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "a::bd:Dhlqrsv", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
                 // toybox modprobe supported -a to load multiple modules, this
@@ -113,8 +123,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
                 check_mode();
                 if (optarg == NULL) break;
                 if (!android::base::ReadFileToString(optarg, &mods)) {
-                    std::cerr << "Failed to open " << optarg << ": " << strerror(errno)
-                              << std::endl;
+                    PLOG(ERROR) << "Failed to open " << optarg;
                     rv = EXIT_FAILURE;
                 }
                 for (auto mod : android::base::Split(stripComments(mods), "\n")) {
@@ -135,24 +144,33 @@ extern "C" int modprobe_main(int argc, char** argv) {
                 mode = ShowDependenciesMode;
                 break;
             case 'h':
+                android::base::SetMinimumLogSeverity(android::base::INFO);
                 print_usage();
-                return EXIT_SUCCESS;
+                return rv;
             case 'l':
                 check_mode();
                 mode = ListModulesMode;
                 break;
             case 'q':
-                verbose = false;
+                android::base::SetMinimumLogSeverity(android::base::WARNING);
                 break;
             case 'r':
                 check_mode();
                 mode = RemoveModulesMode;
                 break;
+            case 's':
+                syslog = true;
+                break;
             case 'v':
-                verbose = true;
+                if (android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
+                    android::base::SetMinimumLogSeverity(android::base::VERBOSE);
+                } else {
+                    android::base::SetMinimumLogSeverity(android::base::DEBUG);
+                }
                 break;
             default:
-                std::cerr << "Unrecognized option: " << opt << std::endl;
+                LOG(ERROR) << "Unrecognized option: " << opt;
+                print_usage();
                 return EXIT_FAILURE;
         }
     }
@@ -171,39 +189,33 @@ extern "C" int modprobe_main(int argc, char** argv) {
         }
     }
 
-    if (verbose) {
-        std::cout << "mode is " << mode << std::endl;
-        std::cout << "verbose is " << verbose << std::endl;
-        std::cout << "mod_dirs is: " << android::base::Join(mod_dirs, " ") << std::endl;
-        std::cout << "modules is: " << android::base::Join(modules, " ") << std::endl;
-        std::cout << "module parameters is: " << android::base::Join(module_parameters, " ")
-                  << std::endl;
-    }
+    LOG(DEBUG) << "mode is " << mode;
+    LOG(DEBUG) << "mod_dirs is: " << android::base::Join(mod_dirs, " ");
+    LOG(DEBUG) << "modules is: " << android::base::Join(modules, " ");
+    LOG(DEBUG) << "module parameters is: " << android::base::Join(module_parameters, " ");
 
     if (modules.empty()) {
         if (mode == ListModulesMode) {
             // emulate toybox modprobe list with no pattern (list all)
             modules.emplace_back("*");
         } else {
-            std::cerr << "No modules given." << std::endl;
+            LOG(ERROR) << "No modules given.";
             print_usage();
             return EXIT_FAILURE;
         }
     }
     if (mod_dirs.empty()) {
-        std::cerr << "No module configuration directories given." << std::endl;
+        LOG(ERROR) << "No module configuration directories given.";
         print_usage();
         return EXIT_FAILURE;
     }
     if (parameter_count && modules.size() > 1) {
-        std::cerr << "Only one module may be loaded when specifying module parameters."
-                  << std::endl;
+        LOG(ERROR) << "Only one module may be loaded when specifying module parameters.";
         print_usage();
         return EXIT_FAILURE;
     }
 
     Modprobe m(mod_dirs);
-    m.EnableVerbose(verbose);
     if (blocklist) {
         m.EnableBlocklist(true);
     }
@@ -212,19 +224,19 @@ extern "C" int modprobe_main(int argc, char** argv) {
         switch (mode) {
             case AddModulesMode:
                 if (!m.LoadWithAliases(module, true, module_parameters)) {
-                    std::cerr << "Failed to load module " << module << std::endl;
+                    PLOG(ERROR) << "Failed to load module " << module;
                     rv = EXIT_FAILURE;
                 }
                 break;
             case RemoveModulesMode:
                 if (!m.Remove(module)) {
-                    std::cerr << "Failed to remove module " << module << std::endl;
+                    PLOG(ERROR) << "Failed to remove module " << module;
                     rv = EXIT_FAILURE;
                 }
                 break;
             case ListModulesMode: {
                 std::vector<std::string> list = m.ListModules(module);
-                std::cout << android::base::Join(list, "\n") << std::endl;
+                LOG(INFO) << android::base::Join(list, "\n");
                 break;
             }
             case ShowDependenciesMode: {
@@ -235,17 +247,17 @@ extern "C" int modprobe_main(int argc, char** argv) {
                     rv = EXIT_FAILURE;
                     break;
                 }
-                std::cout << "Dependencies for " << module << ":" << std::endl;
-                std::cout << "Soft pre-dependencies:" << std::endl;
-                std::cout << android::base::Join(pre_deps, "\n") << std::endl;
-                std::cout << "Hard dependencies:" << std::endl;
-                std::cout << android::base::Join(deps, "\n") << std::endl;
-                std::cout << "Soft post-dependencies:" << std::endl;
-                std::cout << android::base::Join(post_deps, "\n") << std::endl;
+                LOG(INFO) << "Dependencies for " << module << ":";
+                LOG(INFO) << "Soft pre-dependencies:";
+                LOG(INFO) << android::base::Join(pre_deps, "\n");
+                LOG(INFO) << "Hard dependencies:";
+                LOG(INFO) << android::base::Join(deps, "\n");
+                LOG(INFO) << "Soft post-dependencies:";
+                LOG(INFO) << android::base::Join(post_deps, "\n");
                 break;
             }
             default:
-                std::cerr << "Bad mode" << std::endl;
+                LOG(ERROR) << "Bad mode";
                 rv = EXIT_FAILURE;
         }
     }
