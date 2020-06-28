@@ -27,6 +27,7 @@
 #include <list>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -320,7 +321,7 @@ class atransport : public enable_weak_from_this<atransport> {
 #if !ADB_HOST
     // Used to provide the key to the framework.
     std::string auth_key;
-    uint64_t auth_id;
+    std::optional<uint64_t> auth_id;
 #endif
 
     bool IsTcpDevice() const { return type == kTransportLocal; }
