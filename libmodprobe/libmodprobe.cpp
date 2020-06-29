@@ -343,14 +343,6 @@ void Modprobe::EnableBlocklist(bool enable) {
     blocklist_enabled = enable;
 }
 
-void Modprobe::EnableVerbose(bool enable) {
-    if (enable) {
-        android::base::SetMinimumLogSeverity(android::base::VERBOSE);
-    } else {
-        android::base::SetMinimumLogSeverity(android::base::INFO);
-    }
-}
-
 std::vector<std::string> Modprobe::GetDependencies(const std::string& module) {
     auto it = module_deps_.find(module);
     if (it == module_deps_.end()) {
