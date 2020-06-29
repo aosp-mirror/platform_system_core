@@ -37,7 +37,6 @@ class Modprobe {
     void ResetModuleCount() { module_count_ = 0; }
     int GetModuleCount() { return module_count_; }
     void EnableBlocklist(bool enable);
-    void EnableVerbose(bool enable);
 
   private:
     std::string MakeCanonical(const std::string& module_path);
