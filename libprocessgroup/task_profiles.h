@@ -33,6 +33,7 @@ class ProfileAttribute {
 
     const CgroupController* controller() const { return &controller_; }
     const std::string& file_name() const { return file_name_; }
+    void Reset(const CgroupController& controller, const std::string& file_name);
 
     bool GetPathForTask(int tid, std::string* path) const;
 
