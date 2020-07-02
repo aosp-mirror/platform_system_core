@@ -205,6 +205,7 @@ cc_defaults {
     shared_libs: [
         "libutils",
         "libbase",
+        "liblog",
     ],
 }
 
@@ -236,6 +237,66 @@ cc_fuzz {
     name: "libutils_fuzz_vector",
     defaults: ["libutils_fuzz_defaults"],
     srcs: ["Vector_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_printer",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["Printer_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_callstack",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["CallStack_fuzz.cpp"],
+    shared_libs: [
+        "libutilscallstack",
+    ],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_process_callstack",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["ProcessCallStack_fuzz.cpp"],
+    shared_libs: [
+        "libutilscallstack",
+    ],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_stopwatch",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["StopWatch_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_propertymap",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["PropertyMap_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_rwlock",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["RWLock_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_refbase",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["RefBase_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_lrucache",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["LruCache_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_looper",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["Looper_fuzz.cpp"],
 }
 
 cc_test {
