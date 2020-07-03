@@ -61,8 +61,9 @@ TEST(util, ReadFileWorldWiteable) {
 
 TEST(util, ReadFileSymbolicLink) {
     errno = 0;
-    // lrw------- 1 root root 23 2008-12-31 19:00 default.prop -> system/etc/prop.default
-    auto file_contents = ReadFile("/default.prop");
+    // lrwxrwxrwx 1 root shell 6 2020-06-26 09:55 /system/bin/ps -> toybox
+    auto file_contents = ReadFile("/system/bin/ps");
+
     EXPECT_EQ(ELOOP, errno);
     ASSERT_FALSE(file_contents.ok());
     EXPECT_EQ("open() failed: Too many symbolic links encountered",
