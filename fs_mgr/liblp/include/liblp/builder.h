@@ -209,8 +209,10 @@ class MetadataBuilder {
     // metadata may not have the target slot's devices listed yet, in which
     // case, it is automatically upgraded to include all available block
     // devices.
-    // If |always_keep_source_slot| is set, on a Virtual A/B device, source slot
-    // partitions are kept. This is useful when applying a downgrade package.
+    // If |always_keep_source_slot| is set, on a Virtual A/B device
+    // - source slot partitions are kept.
+    // - UPDATED flag is cleared.
+    // This is useful when applying a downgrade package.
     static std::unique_ptr<MetadataBuilder> NewForUpdate(const IPartitionOpener& opener,
                                                          const std::string& source_partition,
                                                          uint32_t source_slot_number,
