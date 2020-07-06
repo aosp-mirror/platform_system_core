@@ -249,6 +249,9 @@ class ResolvedService : public AsyncServiceRef {
             return false;
         }
 
+        // Remove any services with the same instance name, as it may be a stale registration.
+        removeDNSService(regType_.c_str(), serviceName_.c_str());
+
         // Add to the service registry before trying to auto-connect, since socket_spec_connect will
         // check these registries for the ip address when connecting via mdns instance name.
         int adbSecureServiceType = serviceIndex();
@@ -268,13 +271,6 @@ class ResolvedService : public AsyncServiceRef {
                 return false;
         }
 
-        if (!services->empty()) {
-            // Remove the previous resolved service, if any.
-            services->erase(std::remove_if(services->begin(), services->end(),
-                                           [&](std::unique_ptr<ResolvedService>& service) {
-                                               return (serviceName_ == service->serviceName());
-                                           }));
-        }
         services->push_back(std::unique_ptr<ResolvedService>(this));
 
         if (adb_DNSServiceShouldAutoConnect(regType_.c_str(), serviceName_.c_str())) {
@@ -326,6 +322,8 @@ class ResolvedService : public AsyncServiceRef {
 
     static bool connectByServiceName(const ServiceRegistry& services,
                                      const std::string& service_name);
+
+    static void removeDNSService(const char* regType, const char* serviceName);
 
   private:
     int clientVersion_ = ADB_SECURE_CLIENT_VERSION;
@@ -394,6 +392,37 @@ bool ResolvedService::connectByServiceName(const ServiceRegistry& services,
     }
     D("No registered serviceNames matched [%s]", service_name.c_str());
     return false;
+}
+
+// static
+void ResolvedService::removeDNSService(const char* regType, const char* serviceName) {
+    D("%s: regType=[%s] serviceName=[%s]", __func__, regType, serviceName);
+    int index = adb_DNSServiceIndexByName(regType);
+    ServiceRegistry* services;
+    switch (index) {
+        case kADBTransportServiceRefIndex:
+            services = sAdbTransportServices;
+            break;
+        case kADBSecurePairingServiceRefIndex:
+            services = sAdbSecurePairingServices;
+            break;
+        case kADBSecureConnectServiceRefIndex:
+            services = sAdbSecureConnectServices;
+            break;
+        default:
+            return;
+    }
+
+    if (services->empty()) {
+        return;
+    }
+
+    std::string sName(serviceName);
+    services->erase(std::remove_if(services->begin(), services->end(),
+                                   [&sName](std::unique_ptr<ResolvedService>& service) {
+                                       return (sName == service->serviceName());
+                                   }),
+                    services->end());
 }
 
 void adb_secure_foreach_pairing_service(const char* service_name,
@@ -480,35 +509,6 @@ class DiscoveredService : public AsyncServiceRef {
     std::string serviceName_;
     std::string regType_;
 };
-
-static void adb_RemoveDNSService(const char* regType, const char* serviceName) {
-    D("%s: regType=[%s] serviceName=[%s]", __func__, regType, serviceName);
-    int index = adb_DNSServiceIndexByName(regType);
-    ResolvedService::ServiceRegistry* services;
-    switch (index) {
-        case kADBTransportServiceRefIndex:
-            services = ResolvedService::sAdbTransportServices;
-            break;
-        case kADBSecurePairingServiceRefIndex:
-            services = ResolvedService::sAdbSecurePairingServices;
-            break;
-        case kADBSecureConnectServiceRefIndex:
-            services = ResolvedService::sAdbSecureConnectServices;
-            break;
-        default:
-            return;
-    }
-
-    if (services->empty()) {
-        return;
-    }
-
-    std::string sName(serviceName);
-    services->erase(std::remove_if(services->begin(), services->end(),
-                                   [&sName](std::unique_ptr<ResolvedService>& service) {
-                                       return (sName == service->serviceName());
-                                   }));
-}
 
 // Returns the version the device wanted to advertise,
 // or -1 if parsing fails.
@@ -612,7 +612,7 @@ static void DNSSD_API on_service_browsed(DNSServiceRef sdRef, DNSServiceFlags fl
     } else {
         D("%s: Discover lost serviceName=[%s] regtype=[%s] domain=[%s]", __func__, serviceName,
           regtype, domain);
-        adb_RemoveDNSService(regtype, serviceName);
+        ResolvedService::removeDNSService(regtype, serviceName);
     }
 }
 

@@ -618,21 +618,37 @@ def zeroconf_register_service(zeroconf_ctx, info):
     finally:
         zeroconf_ctx.unregister_service(info)
 
+@contextlib.contextmanager
+def zeroconf_register_services(zeroconf_ctx, infos):
+    """Context manager for multiple zeroconf services
+
+    Registers all services given and unregisters all on cleanup. Returns the ServiceInfo
+    list supplied.
+    """
+
+    try:
+        for info in infos:
+            zeroconf_ctx.register_service(info)
+        yield infos
+    finally:
+        for info in infos:
+            zeroconf_ctx.unregister_service(info)
+
 """Should match the service names listed in adb_mdns.h"""
 class MdnsTest:
     """Tests for adb mdns."""
+    @staticmethod
+    def _mdns_services(port):
+        output = subprocess.check_output(["adb", "-P", str(port), "mdns", "services"])
+        return [x.split("\t") for x in output.decode("utf8").strip().splitlines()[1:]]
+
+    @staticmethod
+    def _devices(port):
+        output = subprocess.check_output(["adb", "-P", str(port), "devices"])
+        return [x.split("\t") for x in output.decode("utf8").strip().splitlines()[1:]]
+
 
     class Base(unittest.TestCase):
-        @staticmethod
-        def _mdns_services(port):
-            output = subprocess.check_output(["adb", "-P", str(port), "mdns", "services"])
-            return [x.split("\t") for x in output.decode("utf8").strip().splitlines()[1:]]
-
-        @staticmethod
-        def _devices(port):
-            output = subprocess.check_output(["adb", "-P", str(port), "devices"])
-            return [x.split("\t") for x in output.decode("utf8").strip().splitlines()[1:]]
-
         @contextlib.contextmanager
         def _adb_mdns_connect(self, server_port, mdns_instance, serial, should_connect):
             """Context manager for an ADB connection.
@@ -689,6 +705,50 @@ class MdnsTest:
                     time.sleep(1)
                     self.assertFalse(any((serv_instance in line and serv_type in line)
                         for line in MdnsTest._mdns_services(server_port)))
+
+        @unittest.skipIf(not is_zeroconf_installed(), "zeroconf library not installed")
+        def test_mdns_services_register_unregister_multiple(self):
+            """Ensure that `adb mdns services` correctly adds and removes multiple services
+            """
+            from zeroconf import IPVersion, ServiceInfo
+
+            with adb_server() as server_port:
+                output = subprocess.check_output(["adb", "-P", str(server_port),
+                                                  "mdns", "services"]).strip()
+                self.assertTrue(output.startswith(b"List of discovered mdns services"))
+
+                """TODO(joshuaduong): Add ipv6 tests once we have it working in adb"""
+                """Register/Unregister a service"""
+                with zeroconf_context(IPVersion.V4Only) as zc:
+                    srvs = {
+                        'mdns_name': ["testservice0", "testservice1", "testservice2"],
+                        'mdns_type': "_" + self.service_name + "._tcp.",
+                        'ipaddr': [
+                            socket.inet_aton("192.168.0.1"),
+                            socket.inet_aton("10.0.0.255"),
+                            socket.inet_aton("172.16.1.100")],
+                        'port': [10000, 20000, 65535]}
+                    srv_infos = []
+                    for i in range(len(srvs['mdns_name'])):
+                        srv_infos.append(ServiceInfo(
+                                srvs['mdns_type'] + "local.",
+                                name=srvs['mdns_name'][i] + "." + srvs['mdns_type'] + "local.",
+                                addresses=[srvs['ipaddr'][i]],
+                                port=srvs['port'][i]))
+
+                    """ Register all devices, then unregister"""
+                    with zeroconf_register_services(zc, srv_infos) as infos:
+                        """Give adb some time to register the service"""
+                        time.sleep(1)
+                        for i in range(len(srvs['mdns_name'])):
+                            self.assertTrue(any((srvs['mdns_name'][i] in line and srvs['mdns_type'] in line)
+                                for line in MdnsTest._mdns_services(server_port)))
+
+                    """Give adb some time to unregister the service"""
+                    time.sleep(1)
+                    for i in range(len(srvs['mdns_name'])):
+                        self.assertFalse(any((srvs['mdns_name'][i] in line and srvs['mdns_type'] in line)
+                            for line in MdnsTest._mdns_services(server_port)))
 
         @unittest.skipIf(not is_zeroconf_installed(), "zeroconf library not installed")
         def test_mdns_connect(self):
