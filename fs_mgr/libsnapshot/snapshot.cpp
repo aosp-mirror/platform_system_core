@@ -2516,7 +2516,19 @@ std::unique_ptr<AutoDevice> SnapshotManager::EnsureMetadataMounted() {
         LOG(INFO) << "EnsureMetadataMounted does nothing in Android mode.";
         return std::unique_ptr<AutoUnmountDevice>(new AutoUnmountDevice());
     }
-    return AutoUnmountDevice::New(device_->GetMetadataDir());
+    auto ret = AutoUnmountDevice::New(device_->GetMetadataDir());
+    if (ret == nullptr) return nullptr;
+
+    // In rescue mode, it is possible to erase and format metadata, but /metadata/ota is not
+    // created to execute snapshot updates. Hence, subsequent calls is likely to fail because
+    // Lock*() fails. By failing early and returning nullptr here, update_engine_sideload can
+    // treat this case as if /metadata is not mounted.
+    if (!LockShared()) {
+        LOG(WARNING) << "/metadata is mounted, but errors occur when acquiring a shared lock. "
+                        "Subsequent calls to SnapshotManager will fail. Unmounting /metadata now.";
+        return nullptr;
+    }
+    return ret;
 }
 
 bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callback) {
