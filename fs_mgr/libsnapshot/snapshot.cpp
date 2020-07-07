@@ -1846,7 +1846,7 @@ auto SnapshotManager::OpenFile(const std::string& file, int lock_flags)
         PLOG(ERROR) << "Open failed: " << file;
         return nullptr;
     }
-    if (lock_flags != 0 && flock(fd, lock_flags) < 0) {
+    if (lock_flags != 0 && TEMP_FAILURE_RETRY(flock(fd, lock_flags)) < 0) {
         PLOG(ERROR) << "Acquire flock failed: " << file;
         return nullptr;
     }
@@ -1857,7 +1857,7 @@ auto SnapshotManager::OpenFile(const std::string& file, int lock_flags)
 }
 
 SnapshotManager::LockedFile::~LockedFile() {
-    if (flock(fd_, LOCK_UN) < 0) {
+    if (TEMP_FAILURE_RETRY(flock(fd_, LOCK_UN)) < 0) {
         PLOG(ERROR) << "Failed to unlock file: " << path_;
     }
 }
