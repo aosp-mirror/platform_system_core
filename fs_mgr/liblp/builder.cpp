@@ -205,11 +205,18 @@ std::unique_ptr<MetadataBuilder> MetadataBuilder::NewForUpdate(const IPartitionO
         }
     }
 
-    if (IPropertyFetcher::GetInstance()->GetBoolProperty("ro.virtual_ab.enabled", false) &&
-        !always_keep_source_slot) {
-        if (!UpdateMetadataForInPlaceSnapshot(metadata.get(), source_slot_number,
-                                              target_slot_number)) {
-            return nullptr;
+    if (IPropertyFetcher::GetInstance()->GetBoolProperty("ro.virtual_ab.enabled", false)) {
+        if (always_keep_source_slot) {
+            // always_keep_source_slot implies the target build does not support snapshots.
+            // Clear unsupported attributes.
+            SetMetadataHeaderV0(metadata.get());
+        } else {
+            // !always_keep_source_slot implies the target build supports snapshots. Do snapshot
+            // updates.
+            if (!UpdateMetadataForInPlaceSnapshot(metadata.get(), source_slot_number,
+                                                  target_slot_number)) {
+                return nullptr;
+            }
         }
     }
 
