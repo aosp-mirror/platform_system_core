@@ -78,6 +78,9 @@ cc_defaults {
         "libcutils",
         "liblog",
     ],
+    sanitize: {
+        misc_undefined: ["integer"],
+    },
 
     target: {
         android: {
