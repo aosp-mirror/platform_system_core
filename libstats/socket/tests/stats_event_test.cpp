@@ -183,6 +183,31 @@ TEST(StatsEventTest, TestStrings) {
     AStatsEvent_release(event);
 }
 
+TEST(StatsEventTest, TestNullString) {
+    uint32_t atomId = 100;
+    char* str = nullptr;
+
+    int64_t startTime = android::elapsedRealtimeNano();
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, atomId);
+    AStatsEvent_writeString(event, str);
+    AStatsEvent_build(event);
+    int64_t endTime = android::elapsedRealtimeNano();
+
+    size_t bufferSize;
+    uint8_t* buffer = AStatsEvent_getBuffer(event, &bufferSize);
+    uint8_t* bufferEnd = buffer + bufferSize;
+
+    checkMetadata(&buffer, /*numElements=*/1, startTime, endTime, atomId);
+
+    checkTypeHeader(&buffer, STRING_TYPE);
+    checkString(&buffer, "");
+
+    EXPECT_EQ(buffer, bufferEnd);  // ensure that we have read the entire buffer
+    EXPECT_EQ(AStatsEvent_getErrors(event), 0);
+    AStatsEvent_release(event);
+}
+
 TEST(StatsEventTest, TestByteArrays) {
     uint32_t atomId = 100;
     vector<uint8_t> message = {'b', 'y', 't', '\0', 'e', 's'};
@@ -191,6 +216,32 @@ TEST(StatsEventTest, TestByteArrays) {
     AStatsEvent* event = AStatsEvent_obtain();
     AStatsEvent_setAtomId(event, atomId);
     AStatsEvent_writeByteArray(event, message.data(), message.size());
+    AStatsEvent_build(event);
+    int64_t endTime = android::elapsedRealtimeNano();
+
+    size_t bufferSize;
+    uint8_t* buffer = AStatsEvent_getBuffer(event, &bufferSize);
+    uint8_t* bufferEnd = buffer + bufferSize;
+
+    checkMetadata(&buffer, /*numElements=*/1, startTime, endTime, atomId);
+
+    checkTypeHeader(&buffer, BYTE_ARRAY_TYPE);
+    checkByteArray(&buffer, message);
+
+    EXPECT_EQ(buffer, bufferEnd);  // ensure that we have read the entire buffer
+    EXPECT_EQ(AStatsEvent_getErrors(event), 0);
+    AStatsEvent_release(event);
+}
+
+TEST(StatsEventTest, TestNullByteArrays) {
+    uint32_t atomId = 100;
+    uint8_t* buf = nullptr;
+    vector<uint8_t> message;
+
+    int64_t startTime = android::elapsedRealtimeNano();
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, atomId);
+    AStatsEvent_writeByteArray(event, buf, 2);
     AStatsEvent_build(event);
     int64_t endTime = android::elapsedRealtimeNano();
 
@@ -217,8 +268,13 @@ TEST(StatsEventTest, TestAttributionChains) {
     const char* cTags[numNodes];
     for (int i = 0; i < (int)numNodes; i++) {
         uids[i] = i;
-        tags.push_back("test" + std::to_string(i));
-        cTags[i] = tags[i].c_str();
+        if (0 == i) {
+            tags.push_back("");
+            cTags[i] = nullptr;
+        } else {
+            tags.push_back("test" + std::to_string(i));
+            cTags[i] = tags[i].c_str();
+        }
     }
 
     int64_t startTime = android::elapsedRealtimeNano();
