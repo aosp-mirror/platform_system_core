@@ -310,3 +310,36 @@ cc_test {
     auto_gen_config: true,
     require_root: true,
 }
+
+cc_defaults {
+    name: "snapuserd_defaults",
+    srcs: [
+        "snapuserd.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror"
+    ],
+
+    static_libs: [
+        "libbase",
+        "liblog",
+        "libdm",
+    ],
+}
+
+cc_binary {
+    name: "snapuserd",
+    defaults: ["snapuserd_defaults"],
+}
+
+cc_binary {
+    name: "snapuserd_ramdisk",
+    stem: "snapuserd",
+    defaults: ["snapuserd_defaults"],
+
+    ramdisk: true,
+    static_executable: true,
+    system_shared_libs: [],
+}
