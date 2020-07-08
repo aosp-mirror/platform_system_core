@@ -16,6 +16,7 @@
 
 #include <ctype.h>
 #include <dirent.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -28,10 +29,12 @@
 #include <unistd.h>
 
 #include <memory>
+#include <regex>
 #include <string>
 
 #include <android-base/file.h>
 #include <android-base/macros.h>
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <gtest/gtest.h>
@@ -1298,7 +1301,7 @@ TEST(logcat, blocking_clear) {
 }
 #endif
 
-static bool get_white_black(char** list) {
+static bool get_prune_rules(char** list) {
     FILE* fp = popen(logcat_executable " -p 2>/dev/null", "r");
     if (fp == NULL) {
         fprintf(stderr, "ERROR: logcat -p 2>/dev/null\n");
@@ -1331,7 +1334,7 @@ static bool get_white_black(char** list) {
     return *list != NULL;
 }
 
-static bool set_white_black(const char* list) {
+static bool set_prune_rules(const char* list) {
     char buffer[BIG_BUFFER];
     snprintf(buffer, sizeof(buffer), logcat_executable " -P '%s' 2>&1",
              list ? list : "");
@@ -1360,28 +1363,28 @@ static bool set_white_black(const char* list) {
     return pclose(fp) == 0;
 }
 
-TEST(logcat, white_black_adjust) {
+TEST(logcat, prune_rules_adjust) {
     char* list = NULL;
     char* adjust = NULL;
 
-    get_white_black(&list);
+    get_prune_rules(&list);
 
     static const char adjustment[] = "~! 300/20 300/25 2000 ~1000/5 ~1000/30";
-    ASSERT_EQ(true, set_white_black(adjustment));
-    ASSERT_EQ(true, get_white_black(&adjust));
+    ASSERT_EQ(true, set_prune_rules(adjustment));
+    ASSERT_EQ(true, get_prune_rules(&adjust));
     EXPECT_STREQ(adjustment, adjust);
     free(adjust);
     adjust = NULL;
 
     static const char adjustment2[] = "300/20 300/21 2000 ~1000";
-    ASSERT_EQ(true, set_white_black(adjustment2));
-    ASSERT_EQ(true, get_white_black(&adjust));
+    ASSERT_EQ(true, set_prune_rules(adjustment2));
+    ASSERT_EQ(true, get_prune_rules(&adjust));
     EXPECT_STREQ(adjustment2, adjust);
     free(adjust);
     adjust = NULL;
 
-    ASSERT_EQ(true, set_white_black(list));
-    get_white_black(&adjust);
+    ASSERT_EQ(true, set_prune_rules(list));
+    get_prune_rules(&adjust);
     EXPECT_STREQ(list ? list : "", adjust ? adjust : "");
     free(adjust);
     adjust = NULL;
@@ -1747,4 +1750,84 @@ TEST(logcat, invalid_buffer) {
   pclose(fp);
 
   ASSERT_TRUE(android::base::StartsWith(output, "unknown buffer foo\n"));
+}
+
+static void SniffUid(const std::string& line, uid_t& uid) {
+    auto uid_regex = std::regex{"\\S+\\s+\\S+\\s+(\\S+).*"};
+
+    auto trimmed_line = android::base::Trim(line);
+
+    std::smatch match_results;
+    ASSERT_TRUE(std::regex_match(trimmed_line, match_results, uid_regex))
+            << "Unable to find UID in line '" << trimmed_line << "'";
+    auto uid_string = match_results[1];
+    if (!android::base::ParseUint(uid_string, &uid)) {
+        auto pwd = getpwnam(uid_string.str().c_str());
+        ASSERT_NE(nullptr, pwd) << "uid '" << uid_string << "' in line '" << trimmed_line << "'";
+        uid = pwd->pw_uid;
+    }
+}
+
+static void UidsInLog(std::optional<std::vector<uid_t>> filter_uid, std::map<uid_t, size_t>& uids) {
+    std::string command;
+    if (filter_uid) {
+        std::vector<std::string> uid_strings;
+        for (const auto& uid : *filter_uid) {
+            uid_strings.emplace_back(std::to_string(uid));
+        }
+        command = android::base::StringPrintf(logcat_executable
+                                              " -v uid -b all -d 2>/dev/null --uid=%s",
+                                              android::base::Join(uid_strings, ",").c_str());
+    } else {
+        command = logcat_executable " -v uid -b all -d 2>/dev/null";
+    }
+    auto fp = std::unique_ptr<FILE, decltype(&pclose)>(popen(command.c_str(), "r"), pclose);
+    ASSERT_NE(nullptr, fp);
+
+    char buffer[BIG_BUFFER];
+    while (fgets(buffer, sizeof(buffer), fp.get())) {
+        // Ignore dividers, e.g. '--------- beginning of radio'
+        if (android::base::StartsWith(buffer, "---------")) {
+            continue;
+        }
+        uid_t uid;
+        SniffUid(buffer, uid);
+        uids[uid]++;
+    }
+}
+
+static std::vector<uid_t> TopTwoInMap(const std::map<uid_t, size_t>& uids) {
+    std::pair<uid_t, size_t> top = {0, 0};
+    std::pair<uid_t, size_t> second = {0, 0};
+    for (const auto& [uid, count] : uids) {
+        if (count > top.second) {
+            top = second;
+            top = {uid, count};
+        } else if (count > second.second) {
+            second = {uid, count};
+        }
+    }
+    return {top.first, second.first};
+}
+
+TEST(logcat, uid_filter) {
+    std::map<uid_t, size_t> uids;
+    UidsInLog({}, uids);
+
+    ASSERT_GT(uids.size(), 2U);
+    auto top_uids = TopTwoInMap(uids);
+
+    // Test filtering with --uid=<top uid>
+    std::map<uid_t, size_t> uids_only_top;
+    std::vector<uid_t> top_uid = {top_uids[0]};
+    UidsInLog(top_uid, uids_only_top);
+
+    EXPECT_EQ(1U, uids_only_top.size());
+
+    // Test filtering with --uid=<top uid>,<2nd top uid>
+    std::map<uid_t, size_t> uids_only_top2;
+    std::vector<uid_t> top2_uids = {top_uids[0], top_uids[1]};
+    UidsInLog(top2_uids, uids_only_top2);
+
+    EXPECT_EQ(2U, uids_only_top2.size());
 }

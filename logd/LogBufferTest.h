@@ -25,7 +25,8 @@
 #include "LogReaderList.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
-#include "LogWhiteBlackList.h"
+#include "PruneList.h"
+#include "SerializedLogBuffer.h"
 #include "SimpleLogBuffer.h"
 
 struct LogMessage {
@@ -45,7 +46,7 @@ void FixupMessages(std::vector<LogMessage>* messages);
 class TestWriter : public LogWriter {
   public:
     TestWriter(std::vector<LogMessage>* msgs, bool* released)
-        : LogWriter(0, true, true), msgs_(msgs), released_(released) {}
+        : LogWriter(0, true), msgs_(msgs), released_(released) {}
     bool Write(const logger_entry& entry, const char* message) override {
         msgs_->emplace_back(LogMessage{entry, std::string(message, entry.len), false});
         return true;
@@ -67,6 +68,8 @@ class LogBufferTest : public testing::TestWithParam<std::string> {
     void SetUp() override {
         if (GetParam() == "chatty") {
             log_buffer_.reset(new ChattyLogBuffer(&reader_list_, &tags_, &prune_, &stats_));
+        } else if (GetParam() == "serialized") {
+            log_buffer_.reset(new SerializedLogBuffer(&reader_list_, &tags_, &stats_));
         } else if (GetParam() == "simple") {
             log_buffer_.reset(new SimpleLogBuffer(&reader_list_, &tags_, &stats_));
         } else {

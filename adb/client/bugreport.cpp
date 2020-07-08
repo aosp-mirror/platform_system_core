@@ -104,7 +104,9 @@ class BugreportStandardStreamsCallback : public StandardStreamsCallbackInterface
             SetLineMessage("pulling");
             status_ =
                 br_->DoSyncPull(srcs, destination.c_str(), false, line_message_.c_str()) ? 0 : 1;
-            if (status_ != 0) {
+            if (status_ == 0) {
+                printf("Bug report copied to %s\n", destination.c_str());
+            } else {
                 fprintf(stderr,
                         "Bug report finished but could not be copied to '%s'.\n"
                         "Try to run 'adb pull %s <directory>'\n"
