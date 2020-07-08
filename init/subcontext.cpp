@@ -18,6 +18,8 @@
 
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
 #include <android-base/file.h>
@@ -181,6 +183,8 @@ int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map
     trigger_shutdown = [](const std::string& command) { shutdown_command = command; };
 
     auto subcontext_process = SubcontextProcess(function_map, context, init_fd);
+    // Restore prio before main loop
+    setpriority(PRIO_PROCESS, 0, 0);
     subcontext_process.MainLoop();
     return 0;
 }
