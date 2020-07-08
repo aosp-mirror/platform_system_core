@@ -51,6 +51,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -74,6 +75,7 @@
 using namespace std::literals;
 
 using android::base::GetProperty;
+using android::base::ParseInt;
 using android::base::ReadFileToString;
 using android::base::Split;
 using android::base::StartsWith;
@@ -886,24 +888,60 @@ void PropertyLoadBootDefaults() {
         load_properties_from_file("/prop.default", nullptr, &properties);
     }
 
+    // /<part>/etc/build.prop is the canonical location of the build-time properties since S.
+    // Falling back to /<part>/defalt.prop and /<part>/build.prop only when legacy path has to
+    // be supported, which is controlled by the support_legacy_path_until argument.
+    const auto load_properties_from_partition = [&properties](const std::string& partition,
+                                                              int support_legacy_path_until) {
+        auto path = "/" + partition + "/etc/build.prop";
+        if (load_properties_from_file(path.c_str(), nullptr, &properties)) {
+            return;
+        }
+        // To read ro.<partition>.build.version.sdk, temporarily load the legacy paths into a
+        // separate map. Then by comparing its value with legacy_version, we know that if the
+        // partition is old enough so that we need to respect the legacy paths.
+        std::map<std::string, std::string> temp;
+        auto legacy_path1 = "/" + partition + "/default.prop";
+        auto legacy_path2 = "/" + partition + "/build.prop";
+        load_properties_from_file(legacy_path1.c_str(), nullptr, &temp);
+        load_properties_from_file(legacy_path2.c_str(), nullptr, &temp);
+        bool support_legacy_path = false;
+        auto version_prop_name = "ro." + partition + ".build.version.sdk";
+        auto it = temp.find(version_prop_name);
+        if (it == temp.end()) {
+            // This is embarassing. Without the prop, we can't determine how old the partition is.
+            // Let's be conservative by assuming it is very very old.
+            support_legacy_path = true;
+        } else if (int value;
+                   ParseInt(it->second.c_str(), &value) && value <= support_legacy_path_until) {
+            support_legacy_path = true;
+        }
+        if (support_legacy_path) {
+            // We don't update temp into properties directly as it might skip any (future) logic
+            // for resolving duplicates implemented in load_properties_from_file.  Instead, read
+            // the files again into the properties map.
+            load_properties_from_file(legacy_path1.c_str(), nullptr, &properties);
+            load_properties_from_file(legacy_path2.c_str(), nullptr, &properties);
+        } else {
+            LOG(FATAL) << legacy_path1 << " and " << legacy_path2 << " were not loaded "
+                       << "because " << version_prop_name << "(" << it->second << ") is newer "
+                       << "than " << support_legacy_path_until;
+        }
+    };
+
+    // Order matters here. The more the partition is specific to a product, the higher its
+    // precedence is.
     load_properties_from_file("/system/build.prop", nullptr, &properties);
-    load_properties_from_file("/system_ext/build.prop", nullptr, &properties);
-
-    // TODO(b/117892318): uncomment the following condition when vendor.imgs for
-    // aosp_* targets are all updated.
-//    if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_R__) {
-        load_properties_from_file("/vendor/default.prop", nullptr, &properties);
-//    }
+    load_properties_from_partition("system_ext", /* support_legacy_path_until */ 30);
+    // TODO(b/117892318): uncomment the following condition when vendor.imgs for aosp_* targets are
+    // all updated.
+    // if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_R__) {
+    load_properties_from_file("/vendor/default.prop", nullptr, &properties);
+    // }
     load_properties_from_file("/vendor/build.prop", nullptr, &properties);
+    load_properties_from_partition("odm", /* support_legacy_path_until */ 28);
+    load_properties_from_partition("product", /* support_legacy_path_until */ 30);
 
-    if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_Q__) {
-        load_properties_from_file("/odm/etc/build.prop", nullptr, &properties);
-    } else {
-        load_properties_from_file("/odm/default.prop", nullptr, &properties);
-        load_properties_from_file("/odm/build.prop", nullptr, &properties);
-    }
-
-    load_properties_from_file("/product/build.prop", nullptr, &properties);
     load_properties_from_file("/factory/factory.prop", "ro.*", &properties);
 
     if (access(kDebugRamdiskProp, R_OK) == 0) {
