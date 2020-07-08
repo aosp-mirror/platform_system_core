@@ -175,11 +175,14 @@ class DmTargetBow final : public DmTarget {
     DmTargetBow(uint64_t start, uint64_t length, const std::string& target_string)
         : DmTarget(start, length), target_string_(target_string) {}
 
+    void SetBlockSize(uint32_t block_size) { block_size_ = block_size; }
+
     std::string name() const override { return "bow"; }
-    std::string GetParameterString() const override { return target_string_; }
+    std::string GetParameterString() const override;
 
   private:
     std::string target_string_;
+    uint32_t block_size_ = 0;
 };
 
 enum class SnapshotStorageMode {

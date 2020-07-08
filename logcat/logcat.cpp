@@ -36,6 +36,7 @@
 
 #include <memory>
 #include <regex>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -332,14 +333,14 @@ Logd control:
                               This can individually control each buffer's size with -b.
   -S, --statistics            Output statistics.
                               --pid can be used to provide pid specific stats.
-  -p, --prune                 Print prune white and ~black list. Service is specified as UID,
-                              UID/PID or /PID. Weighed for quicker pruning if prefix with ~,
-                              otherwise weighed for longevity if unadorned. All other pruning
-                              activity is oldest first. Special case ~! represents an automatic
-                              quicker pruning for the noisiest UID as determined by the current
-                              statistics.
-  -P, --prune='<list> ...'    Set prune white and ~black list, using same format as listed above.
-                              Must be quoted.
+  -p, --prune                 Print prune rules. Each rule is specified as UID, UID/PID or /PID. A
+                              '~' prefix indicates that elements matching the rule should be pruned
+                              with higher priority otherwise they're pruned with lower priority. All
+                              other pruning activity is oldest first. Special case ~! represents an
+                              automatic pruning for the noisiest UID as determined by the current
+                              statistics.  Special case ~1000/! represents pruning of the worst PID
+                              within AID_SYSTEM when AID_SYSTEM is the noisiest UID.
+  -P, --prune='<list> ...'    Set prune rules, using same format as listed above. Must be quoted.
 
 Filtering:
   -s                          Set default filter to silent. Equivalent to filterspec '*:S'
@@ -358,6 +359,10 @@ Filtering:
   -T '<time>'                 Print the lines since specified time (not imply -d).
                               count is pure numerical, time is 'MM-DD hh:mm:ss.mmm...'
                               'YYYY-MM-DD hh:mm:ss.mmm...' or 'sssss.mmm...' format.
+  --uid=<uids>                Only display log messages from UIDs present in the comma separate list
+                              <uids>. No name look-up is performed, so UIDs must be provided as
+                              numeric values. This option is only useful for the 'root', 'log', and
+                              'system' users since only those users can view logs from other users.
 )init");
 
     fprintf(stderr, "\nfilterspecs are a series of \n"
@@ -397,8 +402,8 @@ static void show_format_help() {
         "  time       — Display the date, invocation time, priority/tag, and PID of the\n"
         "             process issuing the message.\n"
         "\nAdverb modifiers can be used in combination:\n"
-        "  color       — Display in highlighted color to match priority. i.e. \x1B[38;5;231mVERBOSE\n"
-        "                \x1B[38;5;75mDEBUG \x1B[38;5;40mINFO \x1B[38;5;166mWARNING \x1B[38;5;196mERROR FATAL\x1B[0m\n"
+        "  color       — Display in highlighted color to match priority. i.e. \x1B[39mVERBOSE\n"
+        "                \x1B[34mDEBUG \x1B[32mINFO \x1B[33mWARNING \x1B[31mERROR FATAL\x1B[0m\n"
         "  descriptive — events logs only, descriptions from event-log-tags database.\n"
         "  epoch       — Display time as seconds since Jan 1 1970.\n"
         "  monotonic   — Display time as cpu seconds since last boot.\n"
@@ -535,6 +540,7 @@ int Logcat::Run(int argc, char** argv) {
     size_t pid = 0;
     bool got_t = false;
     unsigned id_mask = 0;
+    std::set<uid_t> uids;
 
     if (argc == 2 && !strcmp(argv[1], "--help")) {
         show_help();
@@ -554,6 +560,7 @@ int Logcat::Run(int argc, char** argv) {
         static const char id_str[] = "id";
         static const char wrap_str[] = "wrap";
         static const char print_str[] = "print";
+        static const char uid_str[] = "uid";
         // clang-format off
         static const struct option long_options[] = {
           { "binary",        no_argument,       nullptr, 'B' },
@@ -581,6 +588,7 @@ int Logcat::Run(int argc, char** argv) {
           { "statistics",    no_argument,       nullptr, 'S' },
           // hidden and undocumented reserved alias for -t
           { "tail",          required_argument, nullptr, 't' },
+          { uid_str,         required_argument, nullptr, 0 },
           // support, but ignore and do not document, the optional argument
           { wrap_str,        optional_argument, nullptr, 0 },
           { nullptr,         0,                 nullptr, 0 }
@@ -630,6 +638,17 @@ int Logcat::Run(int argc, char** argv) {
                 }
                 if (long_options[option_index].name == id_str) {
                     setId = (optarg && optarg[0]) ? optarg : nullptr;
+                }
+                if (long_options[option_index].name == uid_str) {
+                    auto uid_strings = Split(optarg, delimiters);
+                    for (const auto& uid_string : uid_strings) {
+                        uid_t uid;
+                        if (!ParseUint(uid_string, &uid)) {
+                            error(EXIT_FAILURE, 0, "Unable to parse UID '%s'", uid_string.c_str());
+                        }
+                        uids.emplace(uid);
+                    }
+                    break;
                 }
                 break;
 
@@ -1162,6 +1181,10 @@ If you have enabled significant logging, look into using the -G option to increa
         if (log_msg.id() > LOG_ID_MAX) {
             error(EXIT_FAILURE, 0, "Unexpected log id (%d) over LOG_ID_MAX (%d).", log_msg.id(),
                   LOG_ID_MAX);
+        }
+
+        if (!uids.empty() && uids.count(log_msg.entry.uid) == 0) {
+            continue;
         }
 
         PrintDividers(log_msg.id(), printDividers);

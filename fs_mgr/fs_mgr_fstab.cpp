@@ -408,16 +408,17 @@ std::string ReadFstabFromDt() {
     return fstab_result;
 }
 
-// Identify path to fstab file. Lookup is based on pattern fstab.<hardware>,
-// fstab.<hardware.platform> in folders /odm/etc, vendor/etc, or /.
+// Identify path to fstab file. Lookup is based on pattern
+// fstab.<fstab_suffix>, fstab.<hardware>, fstab.<hardware.platform> in
+// folders /odm/etc, vendor/etc, or /.
 std::string GetFstabPath() {
-    for (const char* prop : {"hardware", "hardware.platform"}) {
-        std::string hw;
+    for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
+        std::string suffix;
 
-        if (!fs_mgr_get_boot_config(prop, &hw)) continue;
+        if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
 
         for (const char* prefix : {"/odm/etc/fstab.", "/vendor/etc/fstab.", "/fstab."}) {
-            std::string fstab_path = prefix + hw;
+            std::string fstab_path = prefix + suffix;
             if (access(fstab_path.c_str(), F_OK) == 0) {
                 return fstab_path;
             }
@@ -695,7 +696,9 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
         TransformFstabForDsu(fstab, Split(lp_names, ","));
     }
 
+#ifndef NO_SKIP_MOUNT
     SkipMountingPartitions(fstab);
+#endif
     EnableMandatoryFlags(fstab);
 
     return true;
@@ -725,11 +728,14 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
         return false;
     }
 
+#ifndef NO_SKIP_MOUNT
     SkipMountingPartitions(fstab);
+#endif
 
     return true;
 }
 
+#ifndef NO_SKIP_MOUNT
 // For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
 // between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
 // device-specific /product and /system_ext. skip_mount.cfg belongs to system_ext partition because
@@ -761,6 +767,7 @@ bool SkipMountingPartitions(Fstab* fstab) {
 
     return true;
 }
+#endif
 
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {

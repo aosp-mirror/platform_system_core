@@ -162,7 +162,7 @@ on init
     chmod 0664 /dev/blkio/tasks
     chmod 0664 /dev/blkio/background/tasks
     write /dev/blkio/blkio.weight 1000
-    write /dev/blkio/background/blkio.weight 500
+    write /dev/blkio/background/blkio.weight 200
     write /dev/blkio/blkio.group_idle 0
     write /dev/blkio/background/blkio.group_idle 0
 
@@ -445,6 +445,9 @@ on late-init
     # Load persist properties and override properties (if enabled) from /data.
     trigger load_persist_props_action
 
+    # Should be before netd, but after apex, properties and logging is available.
+    trigger load_bpf_programs
+
     # Now we can start zygote for devices with file based encryption
     trigger zygote-start
 
@@ -490,6 +493,9 @@ on post-fs
     chown root log /proc/slabinfo
     chmod 0440 /proc/slabinfo
 
+    chown root log /proc/pagetypeinfo
+    chmod 0440 /proc/pagetypeinfo
+
     #change permissions on kmsg & sysrq-trigger so bugreports can grab kthread stacks
     chown root system /proc/kmsg
     chmod 0440 /proc/kmsg
@@ -514,6 +520,13 @@ on post-fs
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
+    # On some devices we see a weird behaviour in which /metadata/apex doesn't
+    # have a correct label. To workaround this bug, explicitly call restorecon
+    # on /metadata/apex. For most of the boot sequences /metadata/apex will
+    # already have a correct selinux label, meaning that this call will be a
+    # no-op.
+    restorecon_recursive /metadata/apex
+
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.

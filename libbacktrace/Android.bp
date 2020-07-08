@@ -96,6 +96,8 @@ cc_defaults {
 cc_library {
     name: "libbacktrace",
     vendor_available: false,
+    // TODO(b/153609531): remove when no longer needed.
+    native_bridge_supported: true,
     recovery_available: true,
     apex_available: [
         "//apex_available:platform",
@@ -120,13 +122,19 @@ cc_library {
         recovery: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
         },
+        native_bridge: {
+            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+        },
     },
 }
 
 // Static library without DEX support to avoid dependencies on the ART APEX.
 cc_library_static {
     name: "libbacktrace_no_dex",
-    visibility: ["//system/core/debuggerd"],
+    visibility: [
+        "//system/core/debuggerd",
+        "//system/core/init",
+    ],
     defaults: ["libbacktrace_defaults"],
     cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
     target: {

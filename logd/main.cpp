@@ -36,7 +36,9 @@
 
 #include <memory>
 
+#include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/stringprintf.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
 #include <log/event_tag_map.h>
@@ -56,6 +58,7 @@
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogUtils.h"
+#include "SerializedLogBuffer.h"
 #include "SimpleLogBuffer.h"
 
 #define KMSG_PRIORITY(PRI)                                 \
@@ -66,76 +69,41 @@
 // has a 'sigstop' feature that sends SIGSTOP to a service immediately before calling exec().  This
 // allows debuggers, etc to be attached to logd at the very beginning, while still having init
 // handle the user, groups, capabilities, files, etc setup.
-static int drop_privs(bool klogd, bool auditd) {
-    sched_param param = {};
-
+static void DropPrivs(bool klogd, bool auditd) {
     if (set_sched_policy(0, SP_BACKGROUND) < 0) {
-        android::prdebug("failed to set background scheduling policy");
-        return -1;
+        PLOG(FATAL) << "failed to set background scheduling policy";
     }
 
+    sched_param param = {};
     if (sched_setscheduler((pid_t)0, SCHED_BATCH, &param) < 0) {
-        android::prdebug("failed to set batch scheduler");
-        return -1;
+        PLOG(FATAL) << "failed to set batch scheduler";
     }
 
-    if (!__android_logger_property_get_bool("ro.debuggable",
-                                            BOOL_DEFAULT_FALSE) &&
+    if (!__android_logger_property_get_bool("ro.debuggable", BOOL_DEFAULT_FALSE) &&
         prctl(PR_SET_DUMPABLE, 0) == -1) {
-        android::prdebug("failed to clear PR_SET_DUMPABLE");
-        return -1;
+        PLOG(FATAL) << "failed to clear PR_SET_DUMPABLE";
     }
 
     std::unique_ptr<struct _cap_struct, int (*)(void*)> caps(cap_init(), cap_free);
     if (cap_clear(caps.get()) < 0) {
-        return -1;
+        PLOG(FATAL) << "cap_clear() failed";
     }
-    std::vector<cap_value_t> cap_value;
     if (klogd) {
-        cap_value.emplace_back(CAP_SYSLOG);
+        cap_value_t cap_syslog = CAP_SYSLOG;
+        if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, &cap_syslog, CAP_SET) < 0 ||
+            cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, &cap_syslog, CAP_SET) < 0) {
+            PLOG(FATAL) << "Failed to set CAP_SYSLOG";
+        }
     }
     if (auditd) {
-        cap_value.emplace_back(CAP_AUDIT_CONTROL);
-    }
-
-    if (cap_set_flag(caps.get(), CAP_PERMITTED, cap_value.size(), cap_value.data(), CAP_SET) < 0) {
-        return -1;
-    }
-    if (cap_set_flag(caps.get(), CAP_EFFECTIVE, cap_value.size(), cap_value.data(), CAP_SET) < 0) {
-        return -1;
+        cap_value_t cap_audit_control = CAP_AUDIT_CONTROL;
+        if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, &cap_audit_control, CAP_SET) < 0 ||
+            cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, &cap_audit_control, CAP_SET) < 0) {
+            PLOG(FATAL) << "Failed to set CAP_AUDIT_CONTROL";
+        }
     }
     if (cap_set_proc(caps.get()) < 0) {
-        android::prdebug("failed to set CAP_SYSLOG or CAP_AUDIT_CONTROL (%d)", errno);
-        return -1;
-    }
-
-    return 0;
-}
-
-static int fdDmesg = -1;
-void android::prdebug(const char* fmt, ...) {
-    if (fdDmesg < 0) {
-        return;
-    }
-
-    static const char message[] = {
-        KMSG_PRIORITY(LOG_DEBUG), 'l', 'o', 'g', 'd', ':', ' '
-    };
-    char buffer[256];
-    memcpy(buffer, message, sizeof(message));
-
-    va_list ap;
-    va_start(ap, fmt);
-    int n = vsnprintf(buffer + sizeof(message),
-                      sizeof(buffer) - sizeof(message), fmt, ap);
-    va_end(ap);
-    if (n > 0) {
-        buffer[sizeof(buffer) - 1] = '\0';
-        if (!strchr(buffer, '\n')) {
-            buffer[sizeof(buffer) - 2] = '\0';
-            strlcat(buffer, "\n", sizeof(buffer));
-        }
-        write(fdDmesg, buffer, strlen(buffer));
+        PLOG(FATAL) << "cap_set_proc() failed";
     }
 }
 
@@ -246,8 +214,20 @@ int main(int argc, char* argv[]) {
         return issueReinit();
     }
 
+    android::base::InitLogging(
+            argv, [](android::base::LogId log_id, android::base::LogSeverity severity,
+                     const char* tag, const char* file, unsigned int line, const char* message) {
+                if (tag && strcmp(tag, "logd") != 0) {
+                    auto prefixed_message = android::base::StringPrintf("%s: %s", tag, message);
+                    android::base::KernelLogger(log_id, severity, "logd", file, line,
+                                                prefixed_message.c_str());
+                } else {
+                    android::base::KernelLogger(log_id, severity, "logd", file, line, message);
+                }
+            });
+
     static const char dev_kmsg[] = "/dev/kmsg";
-    fdDmesg = android_get_control_file(dev_kmsg);
+    int fdDmesg = android_get_control_file(dev_kmsg);
     if (fdDmesg < 0) {
         fdDmesg = TEMP_FAILURE_RETRY(open(dev_kmsg, O_WRONLY | O_CLOEXEC));
     }
@@ -263,13 +243,11 @@ int main(int argc, char* argv[]) {
             fdPmesg = TEMP_FAILURE_RETRY(
                 open(proc_kmsg, O_RDONLY | O_NDELAY | O_CLOEXEC));
         }
-        if (fdPmesg < 0) android::prdebug("Failed to open %s\n", proc_kmsg);
+        if (fdPmesg < 0) PLOG(ERROR) << "Failed to open " << proc_kmsg;
     }
 
     bool auditd = __android_logger_property_get_bool("ro.logd.auditd", BOOL_DEFAULT_TRUE);
-    if (drop_privs(klogd, auditd) != 0) {
-        return EXIT_FAILURE;
-    }
+    DropPrivs(klogd, auditd);
 
     // A cache of event log tags
     LogTags log_tags;

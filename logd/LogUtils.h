@@ -30,7 +30,6 @@ namespace android {
 
 // Furnished in main.cpp. Caller must own and free returned value
 char* uidToName(uid_t uid);
-void prdebug(const char* fmt, ...) __attribute__((__format__(printf, 1, 2)));
 
 // Caller must own and free returned value
 char* pidToName(pid_t pid);
@@ -58,6 +57,20 @@ static inline const char* strnstr(const char* s, ssize_t len,
     s--;
     return s;
 }
+}
+
+// Returns true if the log buffer is meant for binary logs.
+static inline bool IsBinary(log_id_t log_id) {
+    return log_id == LOG_ID_EVENTS || log_id == LOG_ID_STATS || log_id == LOG_ID_SECURITY;
+}
+
+// Returns the numeric log tag for binary log messages.
+static inline uint32_t MsgToTag(const char* msg, uint16_t msg_len) {
+    if (msg_len < sizeof(android_event_header_t)) {
+        return 0;
+    }
+
+    return reinterpret_cast<const android_event_header_t*>(msg)->tag;
 }
 
 static inline bool worstUidEnabledForLogid(log_id_t id) {
