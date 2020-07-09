@@ -662,7 +662,9 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
         TransformFstabForGsi(fstab);
     }
 
+#ifndef NO_SKIP_MOUNT
     SkipMountingPartitions(fstab);
+#endif
 
     return true;
 }
@@ -691,11 +693,14 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
         return false;
     }
 
+#ifndef NO_SKIP_MOUNT
     SkipMountingPartitions(fstab);
+#endif
 
     return true;
 }
 
+#ifndef NO_SKIP_MOUNT
 // For GSI to skip mounting /product and /product_services, until there are
 // well-defined interfaces between them and /system. Otherwise, the GSI flashed
 // on /system might not be able to work with /product and /product_services.
@@ -725,6 +730,7 @@ bool SkipMountingPartitions(Fstab* fstab) {
 
     return true;
 }
+#endif
 
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {
