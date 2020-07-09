@@ -947,9 +947,10 @@ static Interval ToInterval(const std::unique_ptr<Extent>& extent) {
 }
 
 static void AddPartition(const std::unique_ptr<MetadataBuilder>& builder,
-                         const std::string& partition_name, uint64_t num_sectors,
-                         uint64_t start_sector, std::vector<Interval>* intervals) {
-    Partition* p = builder->AddPartition(partition_name, "group", 0);
+                         const std::string& partition_name, const std::string& group_name,
+                         uint64_t num_sectors, uint64_t start_sector,
+                         std::vector<Interval>* intervals = nullptr) {
+    Partition* p = builder->AddPartition(partition_name, group_name, 0);
     ASSERT_NE(p, nullptr);
     ASSERT_TRUE(builder->AddLinearExtent(p, "super", num_sectors, start_sector));
     ASSERT_EQ(p->extents().size(), 1);
@@ -977,17 +978,17 @@ TEST_F(BuilderTest, CollidedExtents) {
     ASSERT_TRUE(builder->AddGroup("group", 0));
 
     std::vector<Interval> old_intervals;
-    AddPartition(builder, "system", 10229008, 2048, &old_intervals);
-    AddPartition(builder, "test_a", 648, 12709888, &old_intervals);
-    AddPartition(builder, "test_b", 625184, 12711936, &old_intervals);
-    AddPartition(builder, "test_c", 130912, 13338624, &old_intervals);
-    AddPartition(builder, "test_d", 888, 13469696, &old_intervals);
-    AddPartition(builder, "test_e", 888, 13471744, &old_intervals);
-    AddPartition(builder, "test_f", 888, 13475840, &old_intervals);
-    AddPartition(builder, "test_g", 888, 13477888, &old_intervals);
+    AddPartition(builder, "system", "group", 10229008, 2048, &old_intervals);
+    AddPartition(builder, "test_a", "group", 648, 12709888, &old_intervals);
+    AddPartition(builder, "test_b", "group", 625184, 12711936, &old_intervals);
+    AddPartition(builder, "test_c", "group", 130912, 13338624, &old_intervals);
+    AddPartition(builder, "test_d", "group", 888, 13469696, &old_intervals);
+    AddPartition(builder, "test_e", "group", 888, 13471744, &old_intervals);
+    AddPartition(builder, "test_f", "group", 888, 13475840, &old_intervals);
+    AddPartition(builder, "test_g", "group", 888, 13477888, &old_intervals);
 
     // Don't track the first vendor interval, since it will get extended.
-    AddPartition(builder, "vendor", 2477920, 10231808, nullptr);
+    AddPartition(builder, "vendor", "group", 2477920, 10231808, nullptr);
 
     std::vector<Interval> new_intervals;
 
@@ -1065,4 +1066,31 @@ TEST_F(BuilderTest, ResizeOverflow) {
     Partition* p = builder->AddPartition("system", "default", 0);
     ASSERT_NE(p, nullptr);
     ASSERT_FALSE(builder->ResizePartition(p, 18446744073709551615ULL));
+}
+
+TEST_F(BuilderTest, VerifyExtent) {
+    auto source_builder = MetadataBuilder::New(4096 * 50, 40960, 2);
+    ASSERT_NE(source_builder, nullptr);
+    ASSERT_TRUE(source_builder->AddGroup("test_group_a", 40960));
+    ASSERT_TRUE(source_builder->AddGroup("test_group_b", 40960));
+    AddPartition(source_builder, "system_a", "test_group_a", 8192, 2048);
+    AddPartition(source_builder, "vendor_a", "test_group_a", 10240, 10240);
+    AddPartition(source_builder, "system_b", "test_group_b", 8192, 20480);
+
+    auto target_builder = MetadataBuilder::New(4096 * 50, 40960, 2);
+    ASSERT_NE(target_builder, nullptr);
+    ASSERT_TRUE(target_builder->AddGroup("test_group_b", 40960));
+    AddPartition(target_builder, "system_b", "test_group_b", 8192, 2048);
+    AddPartition(target_builder, "vendor_b", "test_group_b", 10240, 10240);
+
+    ASSERT_TRUE(MetadataBuilder::VerifyExtentsAgainstSourceMetadata(
+            *source_builder, 0, *target_builder, 1, std::vector<std::string>{"system", "vendor"}));
+
+    target_builder->RemovePartition("vendor_b");
+    ASSERT_FALSE(target_builder->VerifyExtentsAgainstSourceMetadata(
+            *source_builder, 0, *target_builder, 1, std::vector<std::string>{"vendor"}));
+
+    AddPartition(target_builder, "vendor_b", "test_group_b", 1000, 10240);
+    ASSERT_FALSE(target_builder->VerifyExtentsAgainstSourceMetadata(
+            *source_builder, 0, *target_builder, 1, std::vector<std::string>{"vendor"}));
 }
