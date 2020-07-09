@@ -23,6 +23,21 @@ cc_library_shared {
     export_include_dirs: ["include"],
 }
 
+cc_library_static {
+    name: "libipchecksum",
+
+    srcs: [
+        "checksum.c",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    export_include_dirs: ["include"],
+}
+
 cc_binary {
     name: "dhcpdbg",
 
