@@ -248,6 +248,7 @@ cc_test {
         "LruCache_test.cpp",
         "Mutex_test.cpp",
         "SharedBuffer_test.cpp",
+        "Singleton_test.cpp",
         "String8_test.cpp",
         "String16_test.cpp",
         "StrongPointer_test.cpp",
@@ -284,6 +285,11 @@ cc_test {
         },
     },
 
+    data_libs: [
+        "libutils_test_singleton1",
+        "libutils_test_singleton2",
+    ],
+
     cflags: [
         "-Wall",
         "-Wextra",
@@ -294,29 +300,10 @@ cc_test {
     test_suites: ["device-tests"],
 }
 
-// TODO: the test infrastructure isn't yet capable of running this,
-// so it's broken out into its own test so that the main libutils_tests
-// can be in presubmit even if this can't.
-
-cc_test {
-    name: "libutils_singleton_test",
-    srcs: ["Singleton_test.cpp"],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-    shared_libs: ["libbase"],
-
-    required: [
-        ":libutils_test_singleton1",
-        ":libutils_test_singleton2",
-    ],
-}
-
 cc_test_library {
     name: "libutils_test_singleton1",
     host_supported: true,
-    relative_install_path: "libutils_test",
+    installable: false,
     srcs: ["Singleton_test1.cpp"],
     cflags: [
         "-Wall",
@@ -327,7 +314,7 @@ cc_test_library {
 cc_test_library {
     name: "libutils_test_singleton2",
     host_supported: true,
-    relative_install_path: "libutils_test",
+    installable: false,
     srcs: ["Singleton_test2.cpp"],
     cflags: [
         "-Wall",
