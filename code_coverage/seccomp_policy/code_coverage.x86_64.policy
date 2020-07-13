@@ -6,6 +6,7 @@ openat: 1
 write: 1
 fcntl: 1
 fstat: 1
+ftruncate: 1
 geteuid: 1
 lseek: 1
 mmap: 1
