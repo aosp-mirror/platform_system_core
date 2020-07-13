@@ -57,6 +57,7 @@ struct LogStatisticsElement {
     uint16_t msg_len;
     uint16_t dropped_count;
     log_id_t log_id;
+    uint16_t total_len;
 };
 
 template <typename TKey, typename TEntry>
@@ -172,6 +173,13 @@ class LogHashtable {
         }
     }
 
+    void Erase(const TKey& key, const LogStatisticsElement& element) {
+        iterator it = map.find(key);
+        if (it != map.end()) {
+            it->second.Erase(element);
+        }
+    }
+
     iterator begin() { return map.begin(); }
     const_iterator begin() const { return map.begin(); }
     iterator end() { return map.end(); }
@@ -181,15 +189,17 @@ class LogHashtable {
 class EntryBase {
   public:
     EntryBase() : size_(0) {}
-    explicit EntryBase(const LogStatisticsElement& element) : size_(element.msg_len) {}
+    explicit EntryBase(const LogStatisticsElement& element) : size_(element.total_len) {}
 
     size_t getSizes() const { return size_; }
 
-    void Add(const LogStatisticsElement& element) { size_ += element.msg_len; }
+    void Add(const LogStatisticsElement& element) { size_ += element.total_len; }
     bool Subtract(const LogStatisticsElement& element) {
-        size_ -= element.msg_len;
-        return !size_;
+        size_ -= element.total_len;
+        return size_ == 0;
     }
+    void Drop(const LogStatisticsElement& element) { size_ -= element.msg_len; }
+    void Erase(const LogStatisticsElement& element) { size_ -= element.total_len; }
 
     static constexpr size_t PRUNED_LEN = 14;
     static constexpr size_t TOTAL_LEN = 80;
@@ -229,11 +239,11 @@ class EntryBaseDropped : public EntryBase {
     }
     bool Subtract(const LogStatisticsElement& element) {
         dropped_ -= element.dropped_count;
-        return EntryBase::Subtract(element) && !dropped_;
+        return EntryBase::Subtract(element) && dropped_ == 0;
     }
     void Drop(const LogStatisticsElement& element) {
         dropped_ += 1;
-        EntryBase::Subtract(element);
+        EntryBase::Drop(element);
     }
 
   private:
@@ -505,20 +515,23 @@ class LogStatistics {
     }
 
   public:
-    explicit LogStatistics(bool enable_statistics);
+    LogStatistics(bool enable_statistics, bool track_total_size);
 
     void AddTotal(log_id_t log_id, uint16_t size) EXCLUDES(lock_);
-    void Add(const LogStatisticsElement& entry) EXCLUDES(lock_);
-    void Subtract(const LogStatisticsElement& entry) EXCLUDES(lock_);
-    // entry->setDropped(1) must follow this call
-    void Drop(const LogStatisticsElement& entry) EXCLUDES(lock_);
-    // Correct for coalescing two entries referencing dropped content
-    void Erase(const LogStatisticsElement& element) EXCLUDES(lock_) {
-        auto lock = std::lock_guard{lock_};
-        log_id_t log_id = element.log_id;
-        --mElements[log_id];
-        --mDroppedElements[log_id];
-    }
+
+    // Add is for adding an element to the log buffer.  It may be a chatty element in the case of
+    // log deduplication.  Add the total size of the element to statistics.
+    void Add(LogStatisticsElement entry) EXCLUDES(lock_);
+    // Subtract is for removing an element from the log buffer.  It may be a chatty element.
+    // Subtract the total size of the element from statistics.
+    void Subtract(LogStatisticsElement entry) EXCLUDES(lock_);
+    // Drop is for converting a normal element into a chatty element. entry->setDropped(1) must
+    // follow this call.  Subtract only msg_len from statistics, since a chatty element will remain.
+    void Drop(LogStatisticsElement entry) EXCLUDES(lock_);
+    // Erase is for coalescing two chatty elements into one.  Erase() is called on the element that
+    // is removed from the log buffer.  Subtract the total size of the element, which is by
+    // definition only the size of the LogBufferElement + list overhead for chatty elements.
+    void Erase(LogStatisticsElement element) EXCLUDES(lock_);
 
     void WorstTwoUids(log_id id, size_t threshold, int* worst, size_t* worst_sizes,
                       size_t* second_worst_sizes) const EXCLUDES(lock_);
@@ -533,6 +546,9 @@ class LogStatistics {
     // Snapshot of the sizes for a given log buffer.
     size_t Sizes(log_id_t id) const EXCLUDES(lock_) {
         auto lock = std::lock_guard{lock_};
+        if (overhead_[id]) {
+            return *overhead_[id];
+        }
         return mSizes[id];
     }
     // TODO: Get rid of this entirely.
@@ -545,6 +561,11 @@ class LogStatistics {
     const char* PidToName(pid_t pid) const EXCLUDES(lock_);
     uid_t PidToUid(pid_t pid) EXCLUDES(lock_);
     const char* UidToName(uid_t uid) const EXCLUDES(lock_);
+
+    void set_overhead(log_id_t id, size_t size) {
+        auto lock = std::lock_guard{lock_};
+        overhead_[id] = size;
+    }
 
   private:
     template <typename TKey, typename TEntry>
@@ -559,4 +580,7 @@ class LogStatistics {
     const char* UidToNameLocked(uid_t uid) const REQUIRES(lock_);
 
     mutable std::mutex lock_;
+    bool track_total_size_;
+
+    std::optional<size_t> overhead_[LOG_ID_MAX] GUARDED_BY(lock_);
 };

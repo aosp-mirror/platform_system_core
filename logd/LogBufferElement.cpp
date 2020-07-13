@@ -99,6 +99,10 @@ uint32_t LogBufferElement::GetTag() const {
 }
 
 LogStatisticsElement LogBufferElement::ToLogStatisticsElement() const {
+    // Estimate the size of this element in the parent std::list<> by adding two void*'s
+    // corresponding to the next/prev pointers and aligning to 64 bit.
+    uint16_t element_in_list_size =
+            (sizeof(*this) + 2 * sizeof(void*) + sizeof(uint64_t) - 1) & -sizeof(uint64_t);
     return LogStatisticsElement{
             .uid = uid(),
             .pid = pid(),
@@ -109,6 +113,7 @@ LogStatisticsElement LogBufferElement::ToLogStatisticsElement() const {
             .msg_len = msg_len(),
             .dropped_count = dropped_count(),
             .log_id = log_id(),
+            .total_len = static_cast<uint16_t>(element_in_list_size + msg_len()),
     };
 }
 
