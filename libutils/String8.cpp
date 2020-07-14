@@ -424,7 +424,7 @@ void String8::toLower(size_t start, size_t length)
     char* buf = lockBuffer(len);
     buf += start;
     while (length > 0) {
-        *buf = tolower(*buf);
+        *buf = static_cast<char>(tolower(*buf));
         buf++;
         length--;
     }
@@ -448,7 +448,7 @@ void String8::toUpper(size_t start, size_t length)
     char* buf = lockBuffer(len);
     buf += start;
     while (length > 0) {
-        *buf = toupper(*buf);
+        *buf = static_cast<char>(toupper(*buf));
         buf++;
         length--;
     }
