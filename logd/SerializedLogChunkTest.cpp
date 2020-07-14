@@ -27,7 +27,7 @@ using android::base::StringPrintf;
 TEST(SerializedLogChunk, smoke) {
     size_t chunk_size = 10 * 4096;
     auto chunk = SerializedLogChunk{chunk_size};
-    EXPECT_EQ(chunk_size, chunk.PruneSize());
+    EXPECT_EQ(chunk_size + sizeof(SerializedLogChunk), chunk.PruneSize());
 
     static const char log_message[] = "log message";
     size_t expected_total_len = sizeof(SerializedLogEntry) + sizeof(log_message);
@@ -58,7 +58,7 @@ TEST(SerializedLogChunk, fill_log_exactly) {
     size_t individual_message_size = sizeof(SerializedLogEntry) + sizeof(log_message);
     size_t chunk_size = individual_message_size * 3;
     auto chunk = SerializedLogChunk{chunk_size};
-    EXPECT_EQ(chunk_size, chunk.PruneSize());
+    EXPECT_EQ(chunk_size + sizeof(SerializedLogChunk), chunk.PruneSize());
 
     ASSERT_TRUE(chunk.CanLog(individual_message_size));
     EXPECT_NE(nullptr, chunk.Log(1, log_time(), 1000, 1, 1, log_message, sizeof(log_message)));
