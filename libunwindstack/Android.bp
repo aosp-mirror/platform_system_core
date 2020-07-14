@@ -113,6 +113,8 @@ cc_library {
     name: "libunwindstack",
     vendor_available: true,
     recovery_available: true,
+    // TODO(b/153609531): remove when no longer needed.
+    native_bridge_supported: true,
     vndk: {
         enabled: true,
         support_system_process: true,
@@ -130,6 +132,11 @@ cc_library {
             exclude_shared_libs: ["libdexfile_support"],
         },
         recovery: {
+            cflags: ["-UDEXFILE_SUPPORT"],
+            exclude_srcs: ["DexFile.cpp"],
+            exclude_shared_libs: ["libdexfile_support"],
+        },
+        native_bridge: {
             cflags: ["-UDEXFILE_SUPPORT"],
             exclude_srcs: ["DexFile.cpp"],
             exclude_shared_libs: ["libdexfile_support"],
