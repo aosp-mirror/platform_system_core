@@ -166,6 +166,10 @@ static Image images[] = {
                   "vendor_boot.img",  "vendor_boot.sig",
                                                       "vendor_boot",
                                                                   true,  ImageType::BootCritical },
+    { "vendor_dlkm",
+                  "vendor_dlkm.img",  "vendor_dlkm.sig",
+                                                      "vendor_dlkm",
+                                                                  true,  ImageType::Normal },
     { nullptr,    "vendor_other.img", "vendor.sig",   "vendor",   true,  ImageType::Normal },
         // clang-format on
 };
