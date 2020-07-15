@@ -109,19 +109,16 @@ int SerializedLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_
 }
 
 void SerializedLogBuffer::MaybePrune(log_id_t log_id) {
-    auto get_total_size = [](const auto& buffer) {
-        size_t total_size = 0;
-        for (const auto& chunk : buffer) {
-            total_size += chunk.PruneSize();
-        }
-        return total_size;
-    };
-    size_t total_size = get_total_size(logs_[log_id]);
+    size_t total_size = GetSizeUsed(log_id);
+    size_t after_size = total_size;
     if (total_size > max_size_[log_id]) {
         Prune(log_id, total_size - max_size_[log_id], 0);
+        after_size = GetSizeUsed(log_id);
         LOG(INFO) << "Pruned Logs from log_id: " << log_id << ", previous size: " << total_size
-                  << " after size: " << get_total_size(logs_[log_id]);
+                  << " after size: " << after_size;
     }
+
+    stats_->set_overhead(log_id, after_size);
 }
 
 void SerializedLogBuffer::StartDeleterThread() {
@@ -349,19 +346,22 @@ bool SerializedLogBuffer::Clear(log_id_t id, uid_t uid) {
     return Prune(id, ULONG_MAX, uid);
 }
 
+unsigned long SerializedLogBuffer::GetSizeUsed(log_id_t id) {
+    size_t total_size = 0;
+    for (const auto& chunk : logs_[id]) {
+        total_size += chunk.PruneSize();
+    }
+    return total_size;
+}
+
 unsigned long SerializedLogBuffer::GetSize(log_id_t id) {
     auto lock = std::lock_guard{lock_};
-    size_t retval = 2 * max_size_[id] / 3;  // See the comment in SetSize().
-    return retval;
+    return max_size_[id];
 }
 
 // New SerializedLogChunk objects will be allocated according to the new size, but older one are
 // unchanged.  MaybePrune() is called on the log buffer to reduce it to an appropriate size if the
 // new size is lower.
-// ChattyLogBuffer/SimpleLogBuffer don't consider the 'Overhead' of LogBufferElement or the
-// std::list<> overhead as part of the log size.  SerializedLogBuffer does by its very nature, so
-// the 'size' metric is not compatible between them.  Their actual memory usage is between 1.5x and
-// 2x of what they claim to use, so we conservatively set our internal size as size + size / 2.
 int SerializedLogBuffer::SetSize(log_id_t id, unsigned long size) {
     // Reasonable limits ...
     if (!__android_logger_valid_buffer_size(size)) {
@@ -369,7 +369,7 @@ int SerializedLogBuffer::SetSize(log_id_t id, unsigned long size) {
     }
 
     auto lock = std::lock_guard{lock_};
-    max_size_[id] = size + size / 2;
+    max_size_[id] = size;
 
     MaybePrune(id);
 
