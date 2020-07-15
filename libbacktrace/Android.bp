@@ -96,6 +96,8 @@ cc_defaults {
 cc_library {
     name: "libbacktrace",
     vendor_available: false,
+    // TODO(b/153609531): remove when no longer needed.
+    native_bridge_supported: true,
     recovery_available: true,
     apex_available: [
         "//apex_available:platform",
@@ -118,6 +120,9 @@ cc_library {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
         },
         recovery: {
+            cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
+        },
+        native_bridge: {
             cflags: ["-DNO_LIBDEXFILE_SUPPORT"],
         },
     },
