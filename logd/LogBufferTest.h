@@ -87,6 +87,6 @@ class LogBufferTest : public testing::TestWithParam<std::string> {
     LogReaderList reader_list_;
     LogTags tags_;
     PruneList prune_;
-    LogStatistics stats_{false};
+    LogStatistics stats_{false, true};
     std::unique_ptr<LogBuffer> log_buffer_;
 };

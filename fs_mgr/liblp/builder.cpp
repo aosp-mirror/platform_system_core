@@ -31,6 +31,22 @@
 namespace android {
 namespace fs_mgr {
 
+std::ostream& operator<<(std::ostream& os, const Extent& extent) {
+    switch (extent.GetExtentType()) {
+        case ExtentType::kZero: {
+            os << "type: Zero";
+            break;
+        }
+        case ExtentType::kLinear: {
+            auto linear_extent = static_cast<const LinearExtent*>(&extent);
+            os << "type: Linear, physical sectors: " << linear_extent->physical_sector()
+               << ", end sectors: " << linear_extent->end_sector();
+            break;
+        }
+    }
+    return os;
+}
+
 bool LinearExtent::AddTo(LpMetadata* out) const {
     if (device_index_ >= out->block_devices.size()) {
         LERROR << "Extent references unknown block device.";
@@ -39,6 +55,17 @@ bool LinearExtent::AddTo(LpMetadata* out) const {
     out->extents.emplace_back(
             LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_LINEAR, physical_sector_, device_index_});
     return true;
+}
+
+bool LinearExtent::operator==(const android::fs_mgr::Extent& other) const {
+    if (other.GetExtentType() != ExtentType::kLinear) {
+        return false;
+    }
+
+    auto other_ptr = static_cast<const LinearExtent*>(&other);
+    return num_sectors_ == other_ptr->num_sectors_ &&
+           physical_sector_ == other_ptr->physical_sector_ &&
+           device_index_ == other_ptr->device_index_;
 }
 
 bool LinearExtent::OverlapsWith(const LinearExtent& other) const {
@@ -62,6 +89,10 @@ Interval LinearExtent::AsInterval() const {
 bool ZeroExtent::AddTo(LpMetadata* out) const {
     out->extents.emplace_back(LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_ZERO, 0, 0});
     return true;
+}
+
+bool ZeroExtent::operator==(const android::fs_mgr::Extent& other) const {
+    return other.GetExtentType() == ExtentType::kZero && num_sectors_ == other.num_sectors();
 }
 
 Partition::Partition(std::string_view name, std::string_view group_name, uint32_t attributes)
@@ -518,7 +549,7 @@ Partition* MetadataBuilder::AddPartition(std::string_view name, std::string_view
     return partitions_.back().get();
 }
 
-Partition* MetadataBuilder::FindPartition(std::string_view name) {
+Partition* MetadataBuilder::FindPartition(std::string_view name) const {
     for (const auto& partition : partitions_) {
         if (partition->name() == name) {
             return partition.get();
@@ -527,7 +558,7 @@ Partition* MetadataBuilder::FindPartition(std::string_view name) {
     return nullptr;
 }
 
-PartitionGroup* MetadataBuilder::FindGroup(std::string_view group_name) {
+PartitionGroup* MetadataBuilder::FindGroup(std::string_view group_name) const {
     for (const auto& group : groups_) {
         if (group->name() == group_name) {
             return group.get();
@@ -1268,6 +1299,51 @@ std::string MetadataBuilder::GetBlockDevicePartitionName(uint64_t index) const {
 
 uint64_t MetadataBuilder::logical_block_size() const {
     return geometry_.logical_block_size;
+}
+
+bool MetadataBuilder::VerifyExtentsAgainstSourceMetadata(
+        const MetadataBuilder& source_metadata, uint32_t source_slot_number,
+        const MetadataBuilder& target_metadata, uint32_t target_slot_number,
+        const std::vector<std::string>& partitions) {
+    for (const auto& base_name : partitions) {
+        // Find the partition in metadata with the slot suffix.
+        auto target_partition_name = base_name + SlotSuffixForSlotNumber(target_slot_number);
+        const auto target_partition = target_metadata.FindPartition(target_partition_name);
+        if (!target_partition) {
+            LERROR << "Failed to find partition " << target_partition_name << " in metadata slot "
+                   << target_slot_number;
+            return false;
+        }
+
+        auto source_partition_name = base_name + SlotSuffixForSlotNumber(source_slot_number);
+        const auto source_partition = source_metadata.FindPartition(source_partition_name);
+        if (!source_partition) {
+            LERROR << "Failed to find partition " << source_partition << " in metadata slot "
+                   << source_slot_number;
+            return false;
+        }
+
+        // We expect the partitions in the target metadata to have the identical extents as the
+        // one in the source metadata. Because they are copied in NewForUpdate.
+        if (target_partition->extents().size() != source_partition->extents().size()) {
+            LERROR << "Extents count mismatch for partition " << base_name << " target slot has "
+                   << target_partition->extents().size() << ", source slot has "
+                   << source_partition->extents().size();
+            return false;
+        }
+
+        for (size_t i = 0; i < target_partition->extents().size(); i++) {
+            const auto& src_extent = *source_partition->extents()[i];
+            const auto& tgt_extent = *target_partition->extents()[i];
+            if (tgt_extent != src_extent) {
+                LERROR << "Extents " << i << " is different for partition " << base_name;
+                LERROR << "tgt extent " << tgt_extent << "; src extent " << src_extent;
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 }  // namespace fs_mgr
