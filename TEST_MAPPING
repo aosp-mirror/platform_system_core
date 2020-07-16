@@ -28,6 +28,9 @@
       "name": "fs_mgr_vendor_overlay_test"
     },
     {
+      "name": "init_kill_services_test"
+    },
+    {
       "name": "libpackagelistparser_test"
     },
     {
