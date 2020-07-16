@@ -21,9 +21,12 @@
 #include <utils/TypeHelpers.h>
 
 /*
- * Contains some bit manipulation helpers.
+ * A class to provide efficient manipulation of bitsets.
  *
- * DO NOT USE: std::bitset<32> or std::bitset<64> preferred
+ * Consider using std::bitset<32> or std::bitset<64> if all you want is a class to do basic bit
+ * manipulation (i.e. AND / OR / XOR / flip / etc). These classes are only needed if you want to
+ * efficiently perform operations like finding the first set bit in a bitset and you want to
+ * avoid using the built-in functions (e.g. __builtin_clz) on std::bitset::to_ulong.
  */
 
 namespace android {
