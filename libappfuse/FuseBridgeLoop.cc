@@ -311,6 +311,8 @@ class BridgeEpollController : private EpollController {
     }
 };
 
+std::recursive_mutex FuseBridgeLoop::mutex_;
+
 FuseBridgeLoop::FuseBridgeLoop() : opened_(true) {
     base::unique_fd epoll_fd(epoll_create1(EPOLL_CLOEXEC));
     if (epoll_fd.get() == -1) {
@@ -328,7 +330,7 @@ bool FuseBridgeLoop::AddBridge(int mount_id, base::unique_fd dev_fd, base::uniqu
 
     std::unique_ptr<FuseBridgeEntry> bridge(
         new FuseBridgeEntry(mount_id, std::move(dev_fd), std::move(proxy_fd)));
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (!opened_) {
         LOG(ERROR) << "Tried to add a mount to a closed bridge";
         return false;
@@ -372,7 +374,7 @@ void FuseBridgeLoop::Start(FuseBridgeLoopCallback* callback) {
         const bool wait_result = epoll_controller_->Wait(bridges_.size(), &entries);
         LOG(VERBOSE) << "Receive epoll events";
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::lock_guard<std::recursive_mutex> lock(mutex_);
             if (!(wait_result && ProcessEventLocked(entries, callback))) {
                 for (auto it = bridges_.begin(); it != bridges_.end();) {
                     callback->OnClosed(it->second->mount_id());
@@ -383,6 +385,14 @@ void FuseBridgeLoop::Start(FuseBridgeLoopCallback* callback) {
             }
         }
     }
+}
+
+void FuseBridgeLoop::Lock() {
+    mutex_.lock();
+}
+
+void FuseBridgeLoop::Unlock() {
+    mutex_.unlock();
 }
 
 }  // namespace fuse

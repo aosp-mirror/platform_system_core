@@ -23,7 +23,9 @@
 #define LOGGER_ENTRY_MAX_PAYLOAD 4068
 // Max payload size is 4 bytes less as 4 bytes are reserved for stats_eventTag.
 // See android_util_Stats_Log.cpp
-#define MAX_EVENT_PAYLOAD (LOGGER_ENTRY_MAX_PAYLOAD - 4)
+#define MAX_PUSH_EVENT_PAYLOAD (LOGGER_ENTRY_MAX_PAYLOAD - 4)
+
+#define MAX_PULL_EVENT_PAYLOAD (50 * 1024)  // 50 KB
 
 /* POSITIONS */
 #define POS_NUM_ELEMENTS 1
@@ -70,12 +72,12 @@ struct AStatsEvent {
     // metadata field (e.g. timestamp) or an atom field.
     size_t lastFieldPos;
     // Number of valid bytes within the buffer.
-    size_t size;
+    size_t numBytesWritten;
     uint32_t numElements;
     uint32_t atomId;
     uint32_t errors;
-    bool truncate;
     bool built;
+    size_t bufSize;
 };
 
 static int64_t get_elapsed_realtime_ns() {
@@ -87,14 +89,14 @@ static int64_t get_elapsed_realtime_ns() {
 
 AStatsEvent* AStatsEvent_obtain() {
     AStatsEvent* event = malloc(sizeof(AStatsEvent));
-    event->buf = (uint8_t*)calloc(MAX_EVENT_PAYLOAD, 1);
     event->lastFieldPos = 0;
-    event->size = 2;  // reserve first two bytes for outer event type and number of elements
+    event->numBytesWritten = 2;  // reserve first 2 bytes for root event type and number of elements
     event->numElements = 0;
     event->atomId = 0;
     event->errors = 0;
-    event->truncate = true;  // truncate for both pulled and pushed atoms
     event->built = false;
+    event->bufSize = MAX_PUSH_EVENT_PAYLOAD;
+    event->buf = (uint8_t*)calloc(event->bufSize, 1);
 
     event->buf[0] = OBJECT_TYPE;
     AStatsEvent_writeInt64(event, get_elapsed_realtime_ns());  // write the timestamp
@@ -128,19 +130,33 @@ void AStatsEvent_overwriteTimestamp(AStatsEvent* event, uint64_t timestampNs) {
 
 // Side-effect: modifies event->errors if the buffer would overflow
 static bool overflows(AStatsEvent* event, size_t size) {
-    if (event->size + size > MAX_EVENT_PAYLOAD) {
+    const size_t totalBytesNeeded = event->numBytesWritten + size;
+    if (totalBytesNeeded > MAX_PULL_EVENT_PAYLOAD) {
         event->errors |= ERROR_OVERFLOW;
         return true;
+    }
+
+    // Expand buffer if needed.
+    if (event->bufSize < MAX_PULL_EVENT_PAYLOAD && totalBytesNeeded > event->bufSize) {
+        do {
+            event->bufSize *= 2;
+        } while (event->bufSize <= totalBytesNeeded);
+
+        if (event->bufSize > MAX_PULL_EVENT_PAYLOAD) {
+            event->bufSize = MAX_PULL_EVENT_PAYLOAD;
+        }
+
+        event->buf = (uint8_t*)realloc(event->buf, event->bufSize);
     }
     return false;
 }
 
-// Side-effect: all append functions increment event->size if there is
+// Side-effect: all append functions increment event->numBytesWritten if there is
 // sufficient space within the buffer to place the value
 static void append_byte(AStatsEvent* event, uint8_t value) {
     if (!overflows(event, sizeof(value))) {
-        event->buf[event->size] = value;
-        event->size += sizeof(value);
+        event->buf[event->numBytesWritten] = value;
+        event->numBytesWritten += sizeof(value);
     }
 }
 
@@ -150,36 +166,36 @@ static void append_bool(AStatsEvent* event, bool value) {
 
 static void append_int32(AStatsEvent* event, int32_t value) {
     if (!overflows(event, sizeof(value))) {
-        memcpy(&event->buf[event->size], &value, sizeof(value));
-        event->size += sizeof(value);
+        memcpy(&event->buf[event->numBytesWritten], &value, sizeof(value));
+        event->numBytesWritten += sizeof(value);
     }
 }
 
 static void append_int64(AStatsEvent* event, int64_t value) {
     if (!overflows(event, sizeof(value))) {
-        memcpy(&event->buf[event->size], &value, sizeof(value));
-        event->size += sizeof(value);
+        memcpy(&event->buf[event->numBytesWritten], &value, sizeof(value));
+        event->numBytesWritten += sizeof(value);
     }
 }
 
 static void append_float(AStatsEvent* event, float value) {
     if (!overflows(event, sizeof(value))) {
-        memcpy(&event->buf[event->size], &value, sizeof(value));
-        event->size += sizeof(float);
+        memcpy(&event->buf[event->numBytesWritten], &value, sizeof(value));
+        event->numBytesWritten += sizeof(float);
     }
 }
 
 static void append_byte_array(AStatsEvent* event, const uint8_t* buf, size_t size) {
     if (!overflows(event, size)) {
-        memcpy(&event->buf[event->size], buf, size);
-        event->size += size;
+        memcpy(&event->buf[event->numBytesWritten], buf, size);
+        event->numBytesWritten += size;
     }
 }
 
 // Side-effect: modifies event->errors if buf is not properly null-terminated
 static void append_string(AStatsEvent* event, const char* buf) {
-    size_t size = strnlen(buf, MAX_EVENT_PAYLOAD);
-    if (size == MAX_EVENT_PAYLOAD) {
+    size_t size = strnlen(buf, MAX_PULL_EVENT_PAYLOAD);
+    if (size == MAX_PULL_EVENT_PAYLOAD) {
         event->errors |= ERROR_STRING_NOT_NULL_TERMINATED;
         return;
     }
@@ -189,7 +205,7 @@ static void append_string(AStatsEvent* event, const char* buf) {
 }
 
 static void start_field(AStatsEvent* event, uint8_t typeId) {
-    event->lastFieldPos = event->size;
+    event->lastFieldPos = event->numBytesWritten;
     append_byte(event, typeId);
     event->numElements++;
 }
@@ -292,7 +308,7 @@ uint32_t AStatsEvent_getAtomId(AStatsEvent* event) {
 }
 
 uint8_t* AStatsEvent_getBuffer(AStatsEvent* event, size_t* size) {
-    if (size) *size = event->size;
+    if (size) *size = event->numBytesWritten;
     return event->buf;
 }
 
@@ -300,14 +316,10 @@ uint32_t AStatsEvent_getErrors(AStatsEvent* event) {
     return event->errors;
 }
 
-void AStatsEvent_truncateBuffer(AStatsEvent* event, bool truncate) {
-    event->truncate = truncate;
-}
-
-void AStatsEvent_build(AStatsEvent* event) {
-    if (event->built) return;
-
+static void build_internal(AStatsEvent* event, const bool push) {
     if (event->numElements > MAX_BYTE_VALUE) event->errors |= ERROR_TOO_MANY_FIELDS;
+    if (0 == event->atomId) event->errors |= ERROR_NO_ATOM_ID;
+    if (push && event->numBytesWritten > MAX_PUSH_EVENT_PAYLOAD) event->errors |= ERROR_OVERFLOW;
 
     // If there are errors, rewrite buffer.
     if (event->errors) {
@@ -317,21 +329,23 @@ void AStatsEvent_build(AStatsEvent* event) {
         // Reset number of atom-level annotations to 0.
         event->buf[POS_ATOM_ID] = INT32_TYPE;
         // Now, write errors to the buffer immediately after the atom id.
-        event->size = POS_ATOM_ID + sizeof(uint8_t) + sizeof(uint32_t);
+        event->numBytesWritten = POS_ATOM_ID + sizeof(uint8_t) + sizeof(uint32_t);
         start_field(event, ERROR_TYPE);
         append_int32(event, event->errors);
     }
 
     event->buf[POS_NUM_ELEMENTS] = event->numElements;
+}
 
-    // Truncate the buffer to the appropriate length in order to limit our
-    // memory usage.
-    if (event->truncate) event->buf = (uint8_t*)realloc(event->buf, event->size);
+void AStatsEvent_build(AStatsEvent* event) {
+    if (event->built) return;
+
+    build_internal(event, false /* push */);
 
     event->built = true;
 }
 
 int AStatsEvent_write(AStatsEvent* event) {
-    AStatsEvent_build(event);
-    return write_buffer_to_statsd(event->buf, event->size, event->atomId);
+    build_internal(event, true /* push */);
+    return write_buffer_to_statsd(event->buf, event->numBytesWritten, event->atomId);
 }

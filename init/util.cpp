@@ -652,11 +652,22 @@ Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
     return std::pair(flag, paths);
 }
 
+Result<std::string> ParseSwaponAll(const std::vector<std::string>& args) {
+    if (args.size() <= 1) {
+        if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
+            return Error() << "swapon_all requires at least 1 argument";
+        }
+        return {};
+    }
+    return args[1];
+}
+
 Result<std::string> ParseUmountAll(const std::vector<std::string>& args) {
-    if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
-        if (args.size() <= 1) {
+    if (args.size() <= 1) {
+        if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_Q__) {
             return Error() << "umount_all requires at least 1 argument";
         }
+        return {};
     }
     return args[1];
 }

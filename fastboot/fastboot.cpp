@@ -986,9 +986,68 @@ static bool has_vbmeta_partition() {
            fb->GetVar("partition-type:vbmeta_b", &partition_type) == fastboot::SUCCESS;
 }
 
+static std::string fb_fix_numeric_var(std::string var) {
+    // Some bootloaders (angler, for example), send spurious leading whitespace.
+    var = android::base::Trim(var);
+    // Some bootloaders (hammerhead, for example) use implicit hex.
+    // This code used to use strtol with base 16.
+    if (!android::base::StartsWith(var, "0x")) var = "0x" + var;
+    return var;
+}
+
+static void copy_boot_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
+    if (buf->sz < AVB_FOOTER_SIZE) {
+        return;
+    }
+
+    std::string partition_size_str;
+    if (fb->GetVar("partition-size:" + partition, &partition_size_str) != fastboot::SUCCESS) {
+        die("cannot get boot partition size");
+    }
+
+    partition_size_str = fb_fix_numeric_var(partition_size_str);
+    int64_t partition_size;
+    if (!android::base::ParseInt(partition_size_str, &partition_size)) {
+        die("Couldn't parse partition size '%s'.", partition_size_str.c_str());
+    }
+    if (partition_size == buf->sz) {
+        return;
+    }
+    if (partition_size < buf->sz) {
+        die("boot partition is smaller than boot image");
+    }
+
+    std::string data;
+    if (!android::base::ReadFdToString(buf->fd, &data)) {
+        die("Failed reading from boot");
+    }
+
+    uint64_t footer_offset = buf->sz - AVB_FOOTER_SIZE;
+    if (0 != data.compare(footer_offset, AVB_FOOTER_MAGIC_LEN, AVB_FOOTER_MAGIC)) {
+        return;
+    }
+
+    int fd = make_temporary_fd("boot rewriting");
+    if (!android::base::WriteStringToFd(data, fd)) {
+        die("Failed writing to modified boot");
+    }
+    lseek(fd, partition_size - AVB_FOOTER_SIZE, SEEK_SET);
+    if (!android::base::WriteStringToFd(data.substr(footer_offset), fd)) {
+        die("Failed copying AVB footer in boot");
+    }
+    close(buf->fd);
+    buf->fd = fd;
+    buf->sz = partition_size;
+    lseek(fd, 0, SEEK_SET);
+}
+
 static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
 {
     sparse_file** s;
+
+    if (partition == "boot" || partition == "boot_a" || partition == "boot_b") {
+        copy_boot_avb_footer(partition, buf);
+    }
 
     // Rewrite vbmeta if that's what we're flashing and modification has been requested.
     if (g_disable_verity || g_disable_verification) {
@@ -1483,15 +1542,6 @@ static void do_oem_command(const std::string& cmd, std::vector<std::string>* arg
         command += " " + next_arg(args);
     }
     fb->RawCommand(command, "");
-}
-
-static std::string fb_fix_numeric_var(std::string var) {
-    // Some bootloaders (angler, for example), send spurious leading whitespace.
-    var = android::base::Trim(var);
-    // Some bootloaders (hammerhead, for example) use implicit hex.
-    // This code used to use strtol with base 16.
-    if (!android::base::StartsWith(var, "0x")) var = "0x" + var;
-    return var;
 }
 
 static unsigned fb_get_flash_block_size(std::string name) {

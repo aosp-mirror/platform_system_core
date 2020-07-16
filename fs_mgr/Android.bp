@@ -149,6 +149,14 @@ cc_library_static {
         darwin: {
             enabled: false,
         },
+        vendor: {
+            cflags: [
+                // Skipping entries in fstab should only be done in a system
+                // process as the config file is in /system_ext.
+                // Remove the op from the vendor variant.
+                "-DNO_SKIP_MOUNT",
+            ],
+        },
     },
     export_include_dirs: ["include_fstab"],
     header_libs: [
@@ -162,10 +170,13 @@ cc_binary {
     defaults: ["fs_mgr_defaults"],
     static_libs: [
         "libavb_user",
+        "libutils",
+        "libvold_binder",
     ],
     shared_libs: [
         "libbootloader_message",
         "libbase",
+        "libbinder",
         "libcutils",
         "libcrypto",
         "libext4_utils",

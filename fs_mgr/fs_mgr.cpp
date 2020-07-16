@@ -301,10 +301,13 @@ static bool is_ext4_superblock_valid(const struct ext4_super_block* es) {
     return true;
 }
 
+static bool needs_block_encryption(const FstabEntry& entry);
+static bool should_use_metadata_encryption(const FstabEntry& entry);
+
 // Read the primary superblock from an ext4 filesystem.  On failure return
 // false.  If it's not an ext4 filesystem, also set FS_STAT_INVALID_MAGIC.
-static bool read_ext4_superblock(const std::string& blk_device, struct ext4_super_block* sb,
-                                 int* fs_stat) {
+static bool read_ext4_superblock(const std::string& blk_device, const FstabEntry& entry,
+                                 struct ext4_super_block* sb, int* fs_stat) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device.c_str(), O_RDONLY | O_CLOEXEC)));
 
     if (fd < 0) {
@@ -321,7 +324,29 @@ static bool read_ext4_superblock(const std::string& blk_device, struct ext4_supe
         LINFO << "Invalid ext4 superblock on '" << blk_device << "'";
         // not a valid fs, tune2fs, fsck, and mount  will all fail.
         *fs_stat |= FS_STAT_INVALID_MAGIC;
-        return false;
+
+        bool encrypted = should_use_metadata_encryption(entry) || needs_block_encryption(entry);
+        if (entry.mount_point == "/data" &&
+            (!encrypted || android::base::StartsWith(blk_device, "/dev/block/dm-"))) {
+            // try backup superblock, if main superblock is corrupted
+            for (unsigned int blocksize = EXT4_MIN_BLOCK_SIZE; blocksize <= EXT4_MAX_BLOCK_SIZE;
+                 blocksize *= 2) {
+                uint64_t superblock = blocksize * 8;
+                if (blocksize == EXT4_MIN_BLOCK_SIZE) superblock++;
+
+                if (TEMP_FAILURE_RETRY(pread(fd, sb, sizeof(*sb), superblock * blocksize)) !=
+                    sizeof(*sb)) {
+                    PERROR << "Can't read '" << blk_device << "' superblock";
+                    return false;
+                }
+                if (is_ext4_superblock_valid(sb) &&
+                    (1 << (10 + sb->s_log_block_size) == blocksize)) {
+                    *fs_stat &= ~FS_STAT_INVALID_MAGIC;
+                    break;
+                }
+            }
+        }
+        if (*fs_stat & FS_STAT_INVALID_MAGIC) return false;
     }
     *fs_stat |= FS_STAT_IS_EXT4;
     LINFO << "superblock s_max_mnt_count:" << sb->s_max_mnt_count << "," << blk_device;
@@ -663,7 +688,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
     if (is_extfs(entry.fs_type)) {
         struct ext4_super_block sb;
 
-        if (read_ext4_superblock(blk_device, &sb, &fs_stat)) {
+        if (read_ext4_superblock(blk_device, entry, &sb, &fs_stat)) {
             if ((sb.s_feature_incompat & EXT4_FEATURE_INCOMPAT_RECOVER) != 0 ||
                 (sb.s_state & EXT4_VALID_FS) == 0) {
                 LINFO << "Filesystem on " << blk_device << " was not cleanly shutdown; "
@@ -693,7 +718,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
          entry.fs_mgr_flags.fs_verity || entry.fs_mgr_flags.ext_meta_csum)) {
         struct ext4_super_block sb;
 
-        if (read_ext4_superblock(blk_device, &sb, &fs_stat)) {
+        if (read_ext4_superblock(blk_device, entry, &sb, &fs_stat)) {
             tune_reserved_size(blk_device, entry, &sb, &fs_stat);
             tune_encrypt(blk_device, entry, &sb, &fs_stat);
             tune_verity(blk_device, entry, &sb, &fs_stat);
@@ -1040,7 +1065,8 @@ static bool SupportsCheckpoint(FstabEntry* entry) {
 
 class CheckpointManager {
   public:
-    CheckpointManager(int needs_checkpoint = -1) : needs_checkpoint_(needs_checkpoint) {}
+    CheckpointManager(int needs_checkpoint = -1, bool metadata_encrypted = false)
+        : needs_checkpoint_(needs_checkpoint), metadata_encrypted_(metadata_encrypted) {}
 
     bool NeedsCheckpoint() {
         if (needs_checkpoint_ != UNKNOWN) {
@@ -1058,7 +1084,7 @@ class CheckpointManager {
             return true;
         }
 
-        if (entry->fs_mgr_flags.checkpoint_blk) {
+        if (entry->fs_mgr_flags.checkpoint_blk && !metadata_encrypted_) {
             call_vdc({"checkpoint", "restoreCheckpoint", entry->blk_device}, nullptr);
         }
 
@@ -1120,8 +1146,28 @@ class CheckpointManager {
                 }
 
                 android::dm::DmTable table;
-                if (!table.AddTarget(std::make_unique<android::dm::DmTargetBow>(
-                            0, size, entry->blk_device))) {
+                auto bowTarget =
+                        std::make_unique<android::dm::DmTargetBow>(0, size, entry->blk_device);
+
+                // dm-bow uses the first block as a log record, and relocates the real first block
+                // elsewhere. For metadata encrypted devices, dm-bow sits below dm-default-key, and
+                // for post Android Q devices dm-default-key uses a block size of 4096 always.
+                // So if dm-bow's block size, which by default is the block size of the underlying
+                // hardware, is less than dm-default-key's, blocks will get broken up and I/O will
+                // fail as it won't be data_unit_size aligned.
+                // However, since it is possible there is an already shipping non
+                // metadata-encrypted device with smaller blocks, we must not change this for
+                // devices shipped with Q or earlier unless they explicitly selected dm-default-key
+                // v2
+                constexpr unsigned int pre_gki_level = __ANDROID_API_Q__;
+                unsigned int options_format_version = android::base::GetUintProperty<unsigned int>(
+                        "ro.crypto.dm_default_key.options_format.version",
+                        (android::fscrypt::GetFirstApiLevel() <= pre_gki_level ? 1 : 2));
+                if (options_format_version > 1) {
+                    bowTarget->SetBlockSize(4096);
+                }
+
+                if (!table.AddTarget(std::move(bowTarget))) {
                     LERROR << "Failed to add bow target";
                     return false;
                 }
@@ -1147,6 +1193,7 @@ class CheckpointManager {
 
     enum { UNKNOWN = -1, NO = 0, YES = 1 };
     int needs_checkpoint_;
+    bool metadata_encrypted_;
     std::map<std::string, std::string> device_map_;
 };
 
@@ -1757,6 +1804,11 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
 // wrapper to __mount() and expects a fully prepared fstab_rec,
 // unlike fs_mgr_do_mount which does more things with avb / verity etc.
 int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point) {
+    // First check the filesystem if requested.
+    if (entry.fs_mgr_flags.wait && !WaitForFile(entry.blk_device, 20s)) {
+        LERROR << "Skipping mounting '" << entry.blk_device << "'";
+    }
+
     // Run fsck if needed
     prepare_fs_for_mount(entry.blk_device, entry);
 
@@ -1775,11 +1827,11 @@ int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point)
 // in turn, and stop on 1st success, or no more match.
 static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
                                   const std::string& n_blk_device, const char* tmp_mount_point,
-                                  int needs_checkpoint) {
+                                  int needs_checkpoint, bool metadata_encrypted) {
     int mount_errors = 0;
     int first_mount_errno = 0;
     std::string mount_point;
-    CheckpointManager checkpoint_manager(needs_checkpoint);
+    CheckpointManager checkpoint_manager(needs_checkpoint, metadata_encrypted);
     AvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
@@ -1889,12 +1941,13 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
 }
 
 int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point) {
-    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1);
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1, false);
 }
 
 int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
-                    bool needs_checkpoint) {
-    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_checkpoint);
+                    bool needs_checkpoint, bool metadata_encrypted) {
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_checkpoint,
+                                  metadata_encrypted);
 }
 
 /*

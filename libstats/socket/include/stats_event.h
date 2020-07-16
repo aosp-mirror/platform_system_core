@@ -35,7 +35,6 @@
  *      AStatsEvent_addInt32Annotation(event, 2, 128);
  *      AStatsEvent_writeFloat(event, 2.0);
  *
- *      AStatsEvent_build(event);
  *      AStatsEvent_write(event);
  *      AStatsEvent_release(event);
  *
@@ -61,10 +60,11 @@ typedef struct AStatsEvent AStatsEvent;
 AStatsEvent* AStatsEvent_obtain();
 
 /**
- * Builds and finalizes the StatsEvent.
+ * Builds and finalizes the AStatsEvent for a pulled event.
+ * This should only be called for pulled AStatsEvents.
  *
  * After this function, the StatsEvent must not be modified in any way other than calling release or
- * write. Build must be always be called before AStatsEvent_write.
+ * write.
  *
  * Build can be called multiple times without error.
  * If the event has been built before, this function is a no-op.
@@ -156,9 +156,6 @@ uint32_t AStatsEvent_getAtomId(AStatsEvent* event);
 // Size is an output parameter.
 uint8_t* AStatsEvent_getBuffer(AStatsEvent* event, size_t* size);
 uint32_t AStatsEvent_getErrors(AStatsEvent* event);
-
-// exposed for benchmarking only
-void AStatsEvent_truncateBuffer(struct AStatsEvent* event, bool truncate);
 
 #ifdef __cplusplus
 }

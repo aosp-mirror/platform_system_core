@@ -25,7 +25,6 @@ cc_defaults {
         "-Wthread-safety",
         "-Wvla",
         "-DADB_HOST=1",         // overridden by adbd_defaults
-        "-DALLOW_ADBD_ROOT=0",  // overridden by adbd_defaults
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION=1",
     ],
     cpp_std: "experimental",
@@ -81,16 +80,6 @@ cc_defaults {
     defaults: ["adb_defaults"],
 
     cflags: ["-UADB_HOST", "-DADB_HOST=0"],
-    product_variables: {
-        debuggable: {
-            cflags: [
-                "-UALLOW_ADBD_ROOT",
-                "-DALLOW_ADBD_ROOT=1",
-                "-DALLOW_ADBD_DISABLE_VERITY",
-                "-DALLOW_ADBD_NO_AUTH",
-            ],
-        },
-    },
 }
 
 cc_defaults {
@@ -605,16 +594,14 @@ cc_binary {
             ],
         }
     },
-
-    required: [
-        "libadbd_auth",
-        "libadbd_fs",
-    ],
 }
 
 phony {
-    name: "adbd_system_binaries",
+    // Interface between adbd in a module and the system.
+    name: "adbd_system_api",
     required: [
+        "libadbd_auth",
+        "libadbd_fs",
         "abb",
         "reboot",
         "set-verity-state",
@@ -622,8 +609,10 @@ phony {
 }
 
 phony {
-    name: "adbd_system_binaries_recovery",
+    name: "adbd_system_api_recovery",
     required: [
+        "libadbd_auth",
+        "libadbd_fs",
         "reboot.recovery",
     ],
 }

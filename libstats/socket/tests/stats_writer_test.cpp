@@ -20,12 +20,9 @@
 #include "stats_socket.h"
 
 TEST(StatsWriterTest, TestSocketClose) {
-    EXPECT_TRUE(stats_log_is_closed());
-
     AStatsEvent* event = AStatsEvent_obtain();
     AStatsEvent_setAtomId(event, 100);
     AStatsEvent_writeInt32(event, 5);
-    AStatsEvent_build(event);
     int successResult = AStatsEvent_write(event);
     AStatsEvent_release(event);
 

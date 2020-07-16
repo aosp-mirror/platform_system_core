@@ -18,7 +18,7 @@
 #include <gtest/gtest.h>
 #include <utils/SystemClock.h>
 
-// Keep in sync stats_event.c. Consider moving to separate header file to avoid duplication.
+// Keep in sync with stats_event.c. Consider moving to separate header file to avoid duplication.
 /* ERRORS */
 #define ERROR_NO_TIMESTAMP 0x1
 #define ERROR_NO_ATOM_ID 0x2
@@ -343,24 +343,88 @@ TEST(StatsEventTest, TestNoAtomIdError) {
     AStatsEvent_build(event);
 
     uint32_t errors = AStatsEvent_getErrors(event);
-    EXPECT_NE(errors | ERROR_NO_ATOM_ID, 0);
+    EXPECT_EQ(errors & ERROR_NO_ATOM_ID, ERROR_NO_ATOM_ID);
 
     AStatsEvent_release(event);
 }
 
-TEST(StatsEventTest, TestOverflowError) {
+TEST(StatsEventTest, TestPushOverflowError) {
+    const char* str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const int writeCount = 120;  // Number of times to write str in the event.
+
     AStatsEvent* event = AStatsEvent_obtain();
     AStatsEvent_setAtomId(event, 100);
-    // Add 1000 int32s to the event. Each int32 takes 5 bytes so this will
+
+    // Add str to the event 120 times. Each str takes >35 bytes so this will
     // overflow the 4068 byte buffer.
-    for (int i = 0; i < 1000; i++) {
-        AStatsEvent_writeInt32(event, 0);
+    // We want to keep writeCount less than 127 to avoid hitting
+    // ERROR_TOO_MANY_FIELDS.
+    for (int i = 0; i < writeCount; i++) {
+        AStatsEvent_writeString(event, str);
+    }
+    AStatsEvent_write(event);
+
+    uint32_t errors = AStatsEvent_getErrors(event);
+    EXPECT_EQ(errors & ERROR_OVERFLOW, ERROR_OVERFLOW);
+
+    AStatsEvent_release(event);
+}
+
+TEST(StatsEventTest, TestPullOverflowError) {
+    const uint32_t atomId = 10100;
+    const vector<uint8_t> bytes(430 /* number of elements */, 1 /* value of each element */);
+    const int writeCount = 120;  // Number of times to write bytes in the event.
+
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, atomId);
+
+    // Add bytes to the event 120 times. Size of bytes is 430 so this will
+    // overflow the 50 KB pulled event buffer.
+    // We want to keep writeCount less than 127 to avoid hitting
+    // ERROR_TOO_MANY_FIELDS.
+    for (int i = 0; i < writeCount; i++) {
+        AStatsEvent_writeByteArray(event, bytes.data(), bytes.size());
     }
     AStatsEvent_build(event);
 
     uint32_t errors = AStatsEvent_getErrors(event);
-    EXPECT_NE(errors | ERROR_OVERFLOW, 0);
+    EXPECT_EQ(errors & ERROR_OVERFLOW, ERROR_OVERFLOW);
 
+    AStatsEvent_release(event);
+}
+
+TEST(StatsEventTest, TestLargePull) {
+    const uint32_t atomId = 100;
+    const string str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const int writeCount = 120;  // Number of times to write str in the event.
+    const int64_t startTime = android::elapsedRealtimeNano();
+
+    AStatsEvent* event = AStatsEvent_obtain();
+    AStatsEvent_setAtomId(event, atomId);
+
+    // Add str to the event 120 times.
+    // We want to keep writeCount less than 127 to avoid hitting
+    // ERROR_TOO_MANY_FIELDS.
+    for (int i = 0; i < writeCount; i++) {
+        AStatsEvent_writeString(event, str.c_str());
+    }
+    AStatsEvent_build(event);
+    int64_t endTime = android::elapsedRealtimeNano();
+
+    size_t bufferSize;
+    uint8_t* buffer = AStatsEvent_getBuffer(event, &bufferSize);
+    uint8_t* bufferEnd = buffer + bufferSize;
+
+    checkMetadata(&buffer, writeCount, startTime, endTime, atomId);
+
+    // Check all instances of str have been written.
+    for (int i = 0; i < writeCount; i++) {
+        checkTypeHeader(&buffer, STRING_TYPE);
+        checkString(&buffer, str);
+    }
+
+    EXPECT_EQ(buffer, bufferEnd);  // Ensure that we have read the entire buffer.
+    EXPECT_EQ(AStatsEvent_getErrors(event), 0);
     AStatsEvent_release(event);
 }
 
@@ -372,7 +436,7 @@ TEST(StatsEventTest, TestAtomIdInvalidPositionError) {
     AStatsEvent_build(event);
 
     uint32_t errors = AStatsEvent_getErrors(event);
-    EXPECT_NE(errors | ERROR_ATOM_ID_INVALID_POSITION, 0);
+    EXPECT_EQ(errors & ERROR_ATOM_ID_INVALID_POSITION, ERROR_ATOM_ID_INVALID_POSITION);
 
     AStatsEvent_release(event);
 }
