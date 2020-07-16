@@ -591,7 +591,7 @@ int main(int argc, char** argv) {
         return EXIT_SUCCESS;
     }
 
-    open_flags = O_RDWR;
+    open_flags = O_RDWR | O_SYNC;
     if (init) {
         open_flags |= O_CREAT | O_TRUNC;
     }

@@ -44,7 +44,9 @@ class SerializedLogChunk {
     // If this buffer has been compressed, we only consider its compressed size when accounting for
     // memory consumption for pruning.  This is since the uncompressed log is only by used by
     // readers, and thus not a representation of how much these logs cost to keep in memory.
-    size_t PruneSize() const { return compressed_log_.size() ?: contents_.size(); }
+    size_t PruneSize() const {
+        return sizeof(*this) + (compressed_log_.size() ?: contents_.size());
+    }
 
     void FinishWriting() {
         writer_active_ = false;

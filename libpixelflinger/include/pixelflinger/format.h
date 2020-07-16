@@ -82,7 +82,7 @@ enum GGLFormatComponentIndex {
     GGL_INDEX_CR      = 2,
 };
 
-typedef struct {
+typedef struct GGLFormat {
 #ifdef __cplusplus
     enum {
         ALPHA   = GGL_INDEX_ALPHA,
