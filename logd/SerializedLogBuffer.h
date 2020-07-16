@@ -37,7 +37,6 @@
 class SerializedLogBuffer final : public LogBuffer {
   public:
     SerializedLogBuffer(LogReaderList* reader_list, LogTags* tags, LogStatistics* stats);
-    ~SerializedLogBuffer();
     void Init() override;
 
     int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
@@ -61,10 +60,8 @@ class SerializedLogBuffer final : public LogBuffer {
             REQUIRES_SHARED(lock_);
     void NotifyReadersOfPrune(log_id_t log_id, const std::list<SerializedLogChunk>::iterator& chunk)
             REQUIRES(reader_list_->reader_threads_lock());
+    void RemoveChunkFromStats(log_id_t log_id, SerializedLogChunk& chunk);
     unsigned long GetSizeUsed(log_id_t id) REQUIRES(lock_);
-
-    void StartDeleterThread() REQUIRES(lock_);
-    void DeleterThread();
 
     LogReaderList* reader_list_;
     LogTags* tags_;
@@ -73,10 +70,6 @@ class SerializedLogBuffer final : public LogBuffer {
     unsigned long max_size_[LOG_ID_MAX] GUARDED_BY(lock_) = {};
     std::list<SerializedLogChunk> logs_[LOG_ID_MAX] GUARDED_BY(lock_);
     RwLock lock_;
-
-    std::list<SerializedLogChunk> chunks_to_delete_[LOG_ID_MAX] GUARDED_BY(lock_);
-    std::thread deleter_thread_ GUARDED_BY(lock_);
-    bool deleter_thread_running_ GUARDED_BY(lock_) = false;
 
     std::atomic<uint64_t> sequence_ = 1;
 };

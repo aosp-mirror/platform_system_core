@@ -32,12 +32,6 @@ SerializedLogBuffer::SerializedLogBuffer(LogReaderList* reader_list, LogTags* ta
     Init();
 }
 
-SerializedLogBuffer::~SerializedLogBuffer() {
-    if (deleter_thread_.joinable()) {
-        deleter_thread_.join();
-    }
-}
-
 void SerializedLogBuffer::Init() {
     log_id_for_each(i) {
         if (SetSize(i, __android_logger_get_buffer_size(i))) {
@@ -121,54 +115,15 @@ void SerializedLogBuffer::MaybePrune(log_id_t log_id) {
     stats_->set_overhead(log_id, after_size);
 }
 
-void SerializedLogBuffer::StartDeleterThread() {
-    if (deleter_thread_running_) {
-        return;
+void SerializedLogBuffer::RemoveChunkFromStats(log_id_t log_id, SerializedLogChunk& chunk) {
+    chunk.IncReaderRefCount();
+    int read_offset = 0;
+    while (read_offset < chunk.write_offset()) {
+        auto* entry = chunk.log_entry(read_offset);
+        stats_->Subtract(entry->ToLogStatisticsElement(log_id));
+        read_offset += entry->total_len();
     }
-    if (deleter_thread_.joinable()) {
-        deleter_thread_.join();
-    }
-    auto new_thread = std::thread([this] { DeleterThread(); });
-    deleter_thread_.swap(new_thread);
-    deleter_thread_running_ = true;
-}
-
-// Decompresses the chunks, call LogStatistics::Subtract() on each entry, then delete the chunks and
-// the list.  Note that the SerializedLogChunk objects have been removed from logs_ and their
-// references have been deleted from any SerializedFlushToState objects, so this can be safely done
-// without holding lock_.  It is done in a separate thread to avoid delaying the writer thread.
-void SerializedLogBuffer::DeleterThread() {
-    prctl(PR_SET_NAME, "logd.deleter");
-    while (true) {
-        std::list<SerializedLogChunk> local_chunks_to_delete;
-        log_id_t log_id;
-        {
-            auto lock = std::lock_guard{lock_};
-            log_id_for_each(i) {
-                if (!chunks_to_delete_[i].empty()) {
-                    local_chunks_to_delete = std::move(chunks_to_delete_[i]);
-                    chunks_to_delete_[i].clear();
-                    log_id = i;
-                    break;
-                }
-            }
-            if (local_chunks_to_delete.empty()) {
-                deleter_thread_running_ = false;
-                return;
-            }
-        }
-
-        for (auto& chunk : local_chunks_to_delete) {
-            chunk.IncReaderRefCount();
-            int read_offset = 0;
-            while (read_offset < chunk.write_offset()) {
-                auto* entry = chunk.log_entry(read_offset);
-                stats_->Subtract(entry->ToLogStatisticsElement(log_id));
-                read_offset += entry->total_len();
-            }
-            chunk.DecReaderRefCount(false);
-        }
-    }
+    chunk.DecReaderRefCount(false);
 }
 
 void SerializedLogBuffer::NotifyReadersOfPrune(
@@ -194,8 +149,6 @@ bool SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid
         }
     }
 
-    StartDeleterThread();
-
     auto& log_buffer = logs_[log_id];
     auto it = log_buffer.begin();
     while (it != log_buffer.end()) {
@@ -203,7 +156,7 @@ bool SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid
             break;
         }
 
-        // Increment ahead of time since we're going to splice this iterator from the list.
+        // Increment ahead of time since we're going to erase this iterator from the list.
         auto it_to_prune = it++;
 
         // The sequence number check ensures that all readers have read all logs in this chunk, but
@@ -219,8 +172,8 @@ bool SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid
             }
         } else {
             size_t buffer_size = it_to_prune->PruneSize();
-            chunks_to_delete_[log_id].splice(chunks_to_delete_[log_id].end(), log_buffer,
-                                             it_to_prune);
+            RemoveChunkFromStats(log_id, *it_to_prune);
+            log_buffer.erase(it_to_prune);
             if (buffer_size >= bytes_to_free) {
                 return true;
             }
