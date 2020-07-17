@@ -123,7 +123,7 @@ void SerializedLogBuffer::RemoveChunkFromStats(log_id_t log_id, SerializedLogChu
         stats_->Subtract(entry->ToLogStatisticsElement(log_id));
         read_offset += entry->total_len();
     }
-    chunk.DecReaderRefCount(false);
+    chunk.DecReaderRefCount();
 }
 
 void SerializedLogBuffer::NotifyReadersOfPrune(
