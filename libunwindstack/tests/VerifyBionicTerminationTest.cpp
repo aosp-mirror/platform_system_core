@@ -55,7 +55,7 @@ static DwarfLocationEnum GetReturnAddressLocation(uint64_t rel_pc, DwarfSection*
     return DWARF_LOCATION_INVALID;
   }
   dwarf_loc_regs_t regs;
-  if (!section->GetCfaLocationInfo(rel_pc, fde, &regs)) {
+  if (!section->GetCfaLocationInfo(rel_pc, fde, &regs, ARCH_UNKNOWN)) {
     return DWARF_LOCATION_INVALID;
   }
 
