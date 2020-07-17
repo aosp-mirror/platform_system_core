@@ -113,8 +113,7 @@ TEST(SerializedLogChunk, three_logs) {
 TEST(SerializedLogChunk, catch_DecCompressedRef_CHECK) {
     size_t chunk_size = 10 * 4096;
     auto chunk = SerializedLogChunk{chunk_size};
-    EXPECT_DEATH({ chunk.DecReaderRefCount(true); }, "");
-    EXPECT_DEATH({ chunk.DecReaderRefCount(false); }, "");
+    EXPECT_DEATH({ chunk.DecReaderRefCount(); }, "");
 }
 
 // Check that the CHECK() in ClearUidLogs() if the ref count is greater than 0 is caught.
@@ -123,7 +122,7 @@ TEST(SerializedLogChunk, catch_ClearUidLogs_CHECK) {
     auto chunk = SerializedLogChunk{chunk_size};
     chunk.IncReaderRefCount();
     EXPECT_DEATH({ chunk.ClearUidLogs(1000, LOG_ID_MAIN, nullptr); }, "");
-    chunk.DecReaderRefCount(false);
+    chunk.DecReaderRefCount();
 }
 
 class UidClearTest : public testing::TestWithParam<bool> {
@@ -144,7 +143,7 @@ class UidClearTest : public testing::TestWithParam<bool> {
         check(chunk_);
 
         if (finish_writing) {
-            chunk_.DecReaderRefCount(false);
+            chunk_.DecReaderRefCount();
         }
     }
 

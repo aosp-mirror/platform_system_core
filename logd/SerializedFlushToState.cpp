@@ -31,7 +31,7 @@ SerializedFlushToState::SerializedFlushToState(uint64_t start, LogMask log_mask)
 SerializedFlushToState::~SerializedFlushToState() {
     log_id_for_each(i) {
         if (log_positions_[i]) {
-            log_positions_[i]->buffer_it->DecReaderRefCount(true);
+            log_positions_[i]->buffer_it->DecReaderRefCount();
         }
     }
 }
@@ -78,7 +78,7 @@ void SerializedFlushToState::AddMinHeapEntry(log_id_t log_id) {
             logs_needed_from_next_position_[log_id] = true;
         } else {
             // Otherwise, if there is another buffer piece, move to that and do the same check.
-            buffer_it->DecReaderRefCount(true);
+            buffer_it->DecReaderRefCount();
             ++buffer_it;
             buffer_it->IncReaderRefCount();
             log_positions_[log_id]->read_offset = 0;
@@ -134,7 +134,7 @@ void SerializedFlushToState::Prune(log_id_t log_id,
     }
 
     // // Decrease the ref count since we're deleting our reference.
-    buffer_it->DecReaderRefCount(false);
+    buffer_it->DecReaderRefCount();
 
     // Delete in the reference.
     log_positions_[log_id].reset();
