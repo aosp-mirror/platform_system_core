@@ -145,6 +145,7 @@ static Image images[] = {
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  ImageType::BootCritical },
     { "dts",      "dt.img",           "dt.sig",       "dts",      true,  ImageType::BootCritical },
     { "odm",      "odm.img",          "odm.sig",      "odm",      true,  ImageType::Normal },
+    { "odm_dlkm", "odm_dlkm.img",     "odm_dlkm.sig", "odm_dlkm", true,  ImageType::Normal },
     { "product",  "product.img",      "product.sig",  "product",  true,  ImageType::Normal },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  ImageType::BootCritical },
     { "super",    "super.img",        "super.sig",    "super",    true,  ImageType::Extra },
