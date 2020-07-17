@@ -64,7 +64,8 @@ void PrintExpression(Memory* memory, uint8_t class_type, uint64_t end, uint64_t 
   }
 }
 
-void PrintRegInformation(DwarfSection* section, Memory* memory, uint64_t pc, uint8_t class_type) {
+void PrintRegInformation(DwarfSection* section, Memory* memory, uint64_t pc, uint8_t class_type,
+                         ArchEnum arch) {
   const DwarfFde* fde = section->GetFdeFromPc(pc);
   if (fde == nullptr) {
     printf("  No fde found.\n");
@@ -72,7 +73,7 @@ void PrintRegInformation(DwarfSection* section, Memory* memory, uint64_t pc, uin
   }
 
   dwarf_loc_regs_t regs;
-  if (!section->GetCfaLocationInfo(pc, fde, &regs)) {
+  if (!section->GetCfaLocationInfo(pc, fde, &regs, arch)) {
     printf("  Cannot get location information.\n");
     return;
   }
@@ -125,6 +126,11 @@ void PrintRegInformation(DwarfSection* section, Memory* memory, uint64_t pc, uin
       case DWARF_LOCATION_VAL_EXPRESSION: {
         printf("VAL EXPRESSION\n");
         PrintExpression(memory, class_type, loc->values[1], loc->values[0]);
+        break;
+      }
+
+      case DWARF_LOCATION_PSEUDO_REGISTER: {
+        printf("%" PRId64 " (pseudo)\n", loc->values[0]);
         break;
       }
 
@@ -199,7 +205,7 @@ int GetInfo(const char* file, uint64_t offset, uint64_t pc) {
   DwarfSection* section = interface->eh_frame();
   if (section != nullptr) {
     printf("\neh_frame:\n");
-    PrintRegInformation(section, elf.memory(), pc, elf.class_type());
+    PrintRegInformation(section, elf.memory(), pc, elf.class_type(), elf.arch());
   } else {
     printf("\nno eh_frame information\n");
   }
@@ -207,7 +213,7 @@ int GetInfo(const char* file, uint64_t offset, uint64_t pc) {
   section = interface->debug_frame();
   if (section != nullptr) {
     printf("\ndebug_frame:\n");
-    PrintRegInformation(section, elf.memory(), pc, elf.class_type());
+    PrintRegInformation(section, elf.memory(), pc, elf.class_type(), elf.arch());
     printf("\n");
   } else {
     printf("\nno debug_frame information\n");
@@ -219,7 +225,8 @@ int GetInfo(const char* file, uint64_t offset, uint64_t pc) {
     section = gnu_debugdata_interface->eh_frame();
     if (section != nullptr) {
       printf("\ngnu_debugdata (eh_frame):\n");
-      PrintRegInformation(section, gnu_debugdata_interface->memory(), pc, elf.class_type());
+      PrintRegInformation(section, gnu_debugdata_interface->memory(), pc, elf.class_type(),
+                          elf.arch());
       printf("\n");
     } else {
       printf("\nno gnu_debugdata (eh_frame)\n");
@@ -228,7 +235,8 @@ int GetInfo(const char* file, uint64_t offset, uint64_t pc) {
     section = gnu_debugdata_interface->debug_frame();
     if (section != nullptr) {
       printf("\ngnu_debugdata (debug_frame):\n");
-      PrintRegInformation(section, gnu_debugdata_interface->memory(), pc, elf.class_type());
+      PrintRegInformation(section, gnu_debugdata_interface->memory(), pc, elf.class_type(),
+                          elf.arch());
       printf("\n");
     } else {
       printf("\nno gnu_debugdata (debug_frame)\n");
