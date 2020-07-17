@@ -26,6 +26,7 @@
 #include <unwindstack/DwarfLocation.h>
 #include <unwindstack/DwarfMemory.h>
 #include <unwindstack/DwarfStructs.h>
+#include <unwindstack/Elf.h>
 #include <unwindstack/Log.h>
 
 #include "DwarfCfa.h"
@@ -57,7 +58,7 @@ class DwarfCfaLogTest : public ::testing::Test {
     fde_.pc_end = 0x2000;
     fde_.pc_end = 0x10000;
     fde_.cie = &cie_;
-    cfa_.reset(new DwarfCfa<TypeParam>(dmem_.get(), &fde_));
+    cfa_.reset(new DwarfCfa<TypeParam>(dmem_.get(), &fde_, ARCH_UNKNOWN));
   }
 
   MemoryFake memory_;
@@ -72,8 +73,8 @@ TYPED_TEST_SUITE_P(DwarfCfaLogTest);
 
 TYPED_TEST_P(DwarfCfaLogTest, cfa_illegal) {
   for (uint8_t i = 0x17; i < 0x3f; i++) {
-    if (i == 0x2e || i == 0x2f) {
-      // Skip gnu extension ops.
+    if (i == 0x2d || i == 0x2e || i == 0x2f) {
+      // Skip gnu extension ops and aarch64 specialized op.
       continue;
     }
     this->memory_.SetMemory(0x2000, std::vector<uint8_t>{i});
@@ -763,6 +764,26 @@ TYPED_TEST_P(DwarfCfaLogTest, cfa_register_override) {
   ASSERT_EQ("", GetFakeLogBuf());
 }
 
+TYPED_TEST_P(DwarfCfaLogTest, cfa_aarch64_negate_ra_state) {
+  // Verify that if the cfa op is handled properly depending on aarch.
+  this->memory_.SetMemory(0x2000, std::vector<uint8_t>{0x2d});
+
+  ASSERT_TRUE(this->cfa_->Log(0, this->fde_.pc_start, 0x2000, 0x2001));
+  std::string expected = "4 unwind Illegal (Only valid on aarch64)\n";
+  expected += "4 unwind Raw Data: 0x2d\n";
+  ASSERT_EQ(expected, GetFakeLogPrint());
+  ASSERT_EQ("", GetFakeLogBuf());
+
+  ResetLogs();
+  this->cfa_.reset(new DwarfCfa<TypeParam>(this->dmem_.get(), &this->fde_, ARCH_ARM64));
+
+  ASSERT_TRUE(this->cfa_->Log(0, this->fde_.pc_start, 0x2000, 0x2001));
+  expected = "4 unwind DW_CFA_AARCH64_negate_ra_state\n";
+  expected += "4 unwind Raw Data: 0x2d\n";
+  ASSERT_EQ(expected, GetFakeLogPrint());
+  ASSERT_EQ("", GetFakeLogBuf());
+}
+
 REGISTER_TYPED_TEST_SUITE_P(DwarfCfaLogTest, cfa_illegal, cfa_nop, cfa_offset, cfa_offset_extended,
                             cfa_offset_extended_sf, cfa_restore, cfa_restore_extended, cfa_set_loc,
                             cfa_advance_loc, cfa_advance_loc1, cfa_advance_loc2, cfa_advance_loc4,
@@ -771,7 +792,8 @@ REGISTER_TYPED_TEST_SUITE_P(DwarfCfaLogTest, cfa_illegal, cfa_nop, cfa_offset, c
                             cfa_def_cfa_register, cfa_def_cfa_offset, cfa_def_cfa_offset_sf,
                             cfa_def_cfa_expression, cfa_expression, cfa_val_offset,
                             cfa_val_offset_sf, cfa_val_expression, cfa_gnu_args_size,
-                            cfa_gnu_negative_offset_extended, cfa_register_override);
+                            cfa_gnu_negative_offset_extended, cfa_register_override,
+                            cfa_aarch64_negate_ra_state);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfCfaLogTestTypes;
 INSTANTIATE_TYPED_TEST_SUITE_P(Libunwindstack, DwarfCfaLogTest, DwarfCfaLogTestTypes);
