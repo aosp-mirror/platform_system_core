@@ -38,6 +38,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
@@ -60,6 +61,8 @@
 #include "LogUtils.h"
 #include "SerializedLogBuffer.h"
 #include "SimpleLogBuffer.h"
+
+using android::base::GetProperty;
 
 #define KMSG_PRIORITY(PRI)                                 \
     '<', '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) / 10, \
@@ -255,28 +258,33 @@ int main(int argc, char* argv[]) {
     // Pruning configuration.
     PruneList prune_list;
 
+    std::string buffer_type = GetProperty("logd.buffer_type", "chatty");
+
     // Partial (required for chatty) or full logging statistics.
     bool enable_full_log_statistics = __android_logger_property_get_bool(
             "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
                                        BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
-    LogStatistics log_statistics(enable_full_log_statistics, false);
+    LogStatistics log_statistics(enable_full_log_statistics, buffer_type == "serialized");
 
-    // Serves the purpose of managing the last logs times read on a
-    // socket connection, and as a reader lock on a range of log
-    // entries.
+    // Serves the purpose of managing the last logs times read on a socket connection, and as a
+    // reader lock on a range of log entries.
     LogReaderList reader_list;
 
     // LogBuffer is the object which is responsible for holding all log entries.
-    LogBuffer* logBuf;
-    if (true) {
-        logBuf = new ChattyLogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
+    LogBuffer* log_buffer = nullptr;
+    if (buffer_type == "chatty") {
+        log_buffer = new ChattyLogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
+    } else if (buffer_type == "serialized") {
+        log_buffer = new SerializedLogBuffer(&reader_list, &log_tags, &log_statistics);
+    } else if (buffer_type == "simple") {
+        log_buffer = new SimpleLogBuffer(&reader_list, &log_tags, &log_statistics);
     } else {
-        logBuf = new SimpleLogBuffer(&reader_list, &log_tags, &log_statistics);
+        LOG(FATAL) << "buffer_type must be one of 'chatty', 'serialized', or 'simple'";
     }
 
     // LogReader listens on /dev/socket/logdr. When a client
     // connects, log entries in the LogBuffer are written to the client.
-    LogReader* reader = new LogReader(logBuf, &reader_list);
+    LogReader* reader = new LogReader(log_buffer, &reader_list);
     if (reader->startListener()) {
         return EXIT_FAILURE;
     }
@@ -284,14 +292,14 @@ int main(int argc, char* argv[]) {
     // LogListener listens on /dev/socket/logdw for client
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
-    LogListener* swl = new LogListener(logBuf);
+    LogListener* swl = new LogListener(log_buffer);
     if (!swl->StartListener()) {
         return EXIT_FAILURE;
     }
 
     // Command listener listens on /dev/socket/logd for incoming logd
     // administrative commands.
-    CommandListener* cl = new CommandListener(logBuf, &log_tags, &prune_list, &log_statistics);
+    CommandListener* cl = new CommandListener(log_buffer, &log_tags, &prune_list, &log_statistics);
     if (cl->startListener()) {
         return EXIT_FAILURE;
     }
@@ -304,12 +312,12 @@ int main(int argc, char* argv[]) {
         int dmesg_fd = __android_logger_property_get_bool("ro.logd.auditd.dmesg", BOOL_DEFAULT_TRUE)
                                ? fdDmesg
                                : -1;
-        al = new LogAudit(logBuf, dmesg_fd, &log_statistics);
+        al = new LogAudit(log_buffer, dmesg_fd, &log_statistics);
     }
 
     LogKlog* kl = nullptr;
     if (klogd) {
-        kl = new LogKlog(logBuf, fdDmesg, fdPmesg, al != nullptr, &log_statistics);
+        kl = new LogKlog(log_buffer, fdDmesg, fdPmesg, al != nullptr, &log_statistics);
     }
 
     readDmesg(al, kl);
