@@ -20,6 +20,7 @@
 
 #include <unwindstack/DwarfError.h>
 #include <unwindstack/DwarfSection.h>
+#include <unwindstack/Elf.h>
 
 #include "DwarfEncoding.h"
 
@@ -505,7 +506,7 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCfaLocationInfo_cie_not_cached) {
   this->memory_.SetMemory(0x6000, std::vector<uint8_t>{0x09, 0x04, 0x03});
 
   dwarf_loc_regs_t loc_regs;
-  ASSERT_TRUE(this->section_->GetCfaLocationInfo(0x100, &fde, &loc_regs));
+  ASSERT_TRUE(this->section_->GetCfaLocationInfo(0x100, &fde, &loc_regs, ARCH_UNKNOWN));
   ASSERT_EQ(2U, loc_regs.size());
 
   auto entry = loc_regs.find(2);
@@ -535,7 +536,7 @@ TYPED_TEST_P(DwarfSectionImplTest, GetCfaLocationInfo_cie_cached) {
   this->memory_.SetMemory(0x6000, std::vector<uint8_t>{0x09, 0x04, 0x03});
 
   dwarf_loc_regs_t loc_regs;
-  ASSERT_TRUE(this->section_->GetCfaLocationInfo(0x100, &fde, &loc_regs));
+  ASSERT_TRUE(this->section_->GetCfaLocationInfo(0x100, &fde, &loc_regs, ARCH_UNKNOWN));
   ASSERT_EQ(2U, loc_regs.size());
 
   auto entry = loc_regs.find(6);
@@ -560,7 +561,7 @@ TYPED_TEST_P(DwarfSectionImplTest, Log) {
 
   this->memory_.SetMemory(0x5000, std::vector<uint8_t>{0x00});
   this->memory_.SetMemory(0x6000, std::vector<uint8_t>{0xc2});
-  ASSERT_TRUE(this->section_->Log(2, 0x1000, &fde));
+  ASSERT_TRUE(this->section_->Log(2, 0x1000, &fde, ARCH_UNKNOWN));
 
   ASSERT_EQ(
       "4 unwind     DW_CFA_nop\n"
