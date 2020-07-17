@@ -15,13 +15,17 @@ USAGE="USAGE: `basename ${0}` [--help] [--serial <SerialNumber>] [options]
 
 adb remount tests
 
---color                     Dress output with highlighting colors
---help                      This help
---no-wait-screen            Do not wait for display screen to settle
---print-time                Report the test duration
---serial                    Specify device (must if multiple are present)
---wait-adb <duration>       adb wait timeout
---wait-fastboot <duration>  fastboot wait timeout
+-c --color                     Dress output with highlighting colors
+-h --help                      This help
+-D --no-wait-screen            Do not wait for display screen to settle
+-t --print-time                Report the test duration
+-s --serial                    Specify device (must if multiple are present)"
+if [ -n "`which timeout`" ]; then
+  USAGE="${USAGE}
+-a --wait-adb <duration>       adb wait timeout
+-f --wait-fastboot <duration>  fastboot wait timeout"
+fi
+USAGE="${USAGE}
 
 Conditions:
  - Must be a userdebug build.
@@ -72,7 +76,7 @@ inFastboot() {
     if [ -n "${ANDROID_SERIAL}" ]; then
       grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
     else
-      wc -l | grep '^1$' >/dev/null
+      wc -l | grep "^[${SPACE}${TAB}]*1\$" >/dev/null
     fi
 }
 
@@ -85,7 +89,7 @@ inAdb() {
     if [ -n "${ANDROID_SERIAL}" ]; then
       grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
     else
-      wc -l | grep '^1$' >/dev/null
+      wc -l | grep "^[${SPACE}${TAB}]*1\$" >/dev/null
     fi
 }
 
@@ -100,7 +104,7 @@ inRecovery() {
       grep "^${ANDROID_SERIAL}[${SPACE}${TAB}][${SPACE}${TAB}]*recovery\$" >/dev/null
     return ${?}
   fi
-  if echo "${list}" | wc -l | grep '^1$' >/dev/null; then
+  if echo "${list}" | wc -l | grep "^[${SPACE}${TAB}]*1\$" >/dev/null; then
     echo "${list}" |
       grep "[${SPACE}${TAB}]recovery\$" >/dev/null
     return ${?}
@@ -143,7 +147,7 @@ adb_logcat() {
   adb logcat "${@}" </dev/null |
     tr -d '\r' |
     grep -v 'logd    : logdr: UID=' |
-    sed -e '${/------- beginning of kernel/d}' -e 's/^[0-1][0-9]-[0-3][0-9] //'
+    sed -e '${ /------- beginning of kernel/d }' -e 's/^[0-1][0-9]-[0-3][0-9] //'
 }
 
 [ "USAGE: avc_check >/dev/stderr
@@ -284,7 +288,7 @@ adb_wait() {
   local start=`date +%s`
   local duration=
   local ret
-  if [ -n "${1}" ]; then
+  if [ -n "${1}" -a -n "`which timeout`" ]; then
     USB_DEVICE=`usb_devnum --next`
     duration=`format_duration ${1}`
     echo -n ". . . waiting ${duration}" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
@@ -359,18 +363,22 @@ usb_status() {
     echo "(In adb mode `adb_user`)"
   else
     echo "(USB stack borken for ${USB_ADDRESS})"
-    USB_DEVICE=`usb_devnum`
-    if [ -n "${USB_DEVICE}" ]; then
-      echo "# lsusb -v -s ${USB_DEVICE#dev}"
-      local D=`lsusb -v -s ${USB_DEVICE#dev} 2>&1`
-      if [ -n "${D}" ]; then
-        echo "${D}"
-      else
-        lsusb -v
+    if [ -n "`which usb_devnum`" ]; then
+      USB_DEVICE=`usb_devnum`
+      if [ -n "`which lsusb`" ]; then
+        if [ -n "${USB_DEVICE}" ]; then
+          echo "# lsusb -v -s ${USB_DEVICE#dev}"
+          local D=`lsusb -v -s ${USB_DEVICE#dev} 2>&1`
+          if [ -n "${D}" ]; then
+            echo "${D}"
+          else
+            lsusb -v
+          fi
+        else
+          echo "# lsusb -v (expected device missing)"
+          lsusb -v
+        fi
       fi
-    else
-      echo "# lsusb -v (expected device missing)"
-      lsusb -v
     fi >&2
   fi
 }
@@ -382,7 +390,7 @@ fastboot_wait() {
   local ret
   # fastboot has no wait-for-device, but it does an automatic
   # wait and requires (even a nonsensical) command to do so.
-  if [ -n "${1}" ]; then
+  if [ -n "${1}" -a -n "`which timeout`" ]; then
     USB_DEVICE=`usb_devnum --next`
     echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
     timeout --preserve-status --signal=KILL ${1} fastboot wait-for-device >/dev/null 2>/dev/null
@@ -409,7 +417,7 @@ fastboot_wait() {
 Returns: waits until the device has returned for recovery or optional timeout" ]
 recovery_wait() {
   local ret
-  if [ -n "${1}" ]; then
+  if [ -n "${1}" -a -n "`which timeout`" ]; then
     USB_DEVICE=`usb_devnum --next`
     echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
     timeout --preserve-status --signal=KILL ${1} adb wait-for-recovery 2>/dev/null
@@ -754,13 +762,28 @@ skip_unrelated_mounts() {
 ##  MAINLINE
 ##
 
-OPTIONS=`getopt --alternative --unquoted \
-                --longoptions help,serial:,colour,color,no-colour,no-color \
-                --longoptions wait-adb:,wait-fastboot: \
-                --longoptions wait-screen,wait-display \
-                --longoptions no-wait-screen,no-wait-display \
-                --longoptions gtest_print_time,print-time \
-                -- "?hs:" ${*}` ||
+HOSTOS=`uname`
+GETOPTS="--alternative --unquoted
+         --longoptions help,serial:,colour,color,no-colour,no-color
+         --longoptions wait-adb:,wait-fastboot:
+         --longoptions wait-screen,wait-display
+         --longoptions no-wait-screen,no-wait-display
+         --longoptions gtest_print_time,print-time
+         --"
+if [ "Darwin" = "${HOSTOS}" ]; then
+  GETOPTS=
+  USAGE="`echo \"${USAGE}\" |
+            sed 's/--color/       /g
+                 1s/--help/-h/
+                 s/--help/      /g
+                 s/--no-wait-screen/                /g
+                 s/--print-time/            /g
+                 1s/--serial/-s/
+                 s/--serial/        /g
+                 s/--wait-adb/          /g
+                 s/--wait-fastboot/               /g'`"
+fi
+OPTIONS=`getopt ${GETOPTS} "?a:cCdDf:hs:t" ${*}` ||
   ( echo "${USAGE}" >&2 ; false ) ||
   die "getopt failure"
 set -- ${OPTIONS}
@@ -776,26 +799,26 @@ while [ ${#} -gt 0 ]; do
       export ANDROID_SERIAL=${2}
       shift
       ;;
-    --color | --colour)
+    -c | --color | --colour)
       color=true
       ;;
-    --no-color | --no-colour)
+    -C | --no-color | --no-colour)
       color=false
       ;;
-    --no-wait-display | --no-wait-screen)
+    -D | --no-wait-display | --no-wait-screen)
       screen_wait=false
       ;;
-    --wait-display | --wait-screen)
+    -d | --wait-display | --wait-screen)
       screen_wait=true
       ;;
-    --print-time | --gtest_print_time)
+    -t | --print-time | --gtest_print_time)
       print_time=true
       ;;
-    --wait-adb)
+    -a | --wait-adb)
       ADB_WAIT=${2}
       shift
       ;;
-    --wait-fastboot)
+    -f | --wait-fastboot)
       FASTBOOT_WAIT=${2}
       shift
       ;;
@@ -847,9 +870,13 @@ D=`get_property ro.serialno`
 [ -n "${D}" ] || D=`get_property ro.boot.serialno`
 [ -z "${D}" -o -n "${ANDROID_SERIAL}" ] || ANDROID_SERIAL=${D}
 USB_SERIAL=
-[ -z "${ANDROID_SERIAL}" ] || USB_SERIAL=`find /sys/devices -name serial |
-                                          grep usb |
-                                          xargs -r grep -l ${ANDROID_SERIAL}`
+if [ -n "${ANDROID_SERIAL}" -a "Darwin" != "${HOSTOS}" ]; then
+  USB_SERIAL="`find /sys/devices -name serial | grep usb`"
+  if [ -n "${USB_SERIAL}" ]; then
+    USB_SERIAL=`echo "${USB_SERIAL}" |
+                  xargs grep -l ${ANDROID_SERIAL}`
+  fi
+fi
 USB_ADDRESS=
 if [ -n "${USB_SERIAL}" ]; then
   USB_ADDRESS=${USB_SERIAL%/serial}
