@@ -172,6 +172,8 @@ class CrasherTest : public ::testing::Test {
   void StartCrasher(const std::string& crash_type);
   void FinishCrasher();
   void AssertDeath(int signo);
+
+  static void Trap(void* ptr);
 };
 
 CrasherTest::CrasherTest() {
@@ -332,6 +334,48 @@ TEST_F(CrasherTest, tagged_fault_addr) {
   ASSERT_MATCH(
       result,
       R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr (0x100000000000dead|0xdead))");
+}
+
+// Marked as weak to prevent the compiler from removing the malloc in the caller. In theory, the
+// compiler could still clobber the argument register before trapping, but that's unlikely.
+__attribute__((weak)) void CrasherTest::Trap(void* ptr ATTRIBUTE_UNUSED) {
+  __builtin_trap();
+}
+
+TEST_F(CrasherTest, heap_addr_in_register) {
+#if defined(__i386__)
+  GTEST_SKIP() << "architecture does not pass arguments in registers";
+#endif
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    // Crash with a heap pointer in the first argument register.
+    Trap(malloc(1));
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  int status;
+  ASSERT_EQ(crasher_pid, TIMEOUT(30, waitpid(crasher_pid, &status, 0)));
+  ASSERT_TRUE(WIFSIGNALED(status)) << "crasher didn't terminate via a signal";
+  // Don't test the signal number because different architectures use different signals for
+  // __builtin_trap().
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+#if defined(__aarch64__)
+  ASSERT_MATCH(result, "memory near x0");
+#elif defined(__arm__)
+  ASSERT_MATCH(result, "memory near r0");
+#elif defined(__x86_64__)
+  ASSERT_MATCH(result, "memory near rdi");
+#else
+  ASSERT_TRUE(false) << "unsupported architecture";
+#endif
 }
 
 #if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
