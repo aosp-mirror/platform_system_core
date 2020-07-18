@@ -271,6 +271,7 @@ cc_binary_host {
     required: [
         "mke2fs",
         "make_f2fs",
+        "make_f2fs_casefold",
     ],
     dist: {
         targets: [
