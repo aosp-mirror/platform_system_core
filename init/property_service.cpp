@@ -632,10 +632,11 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
     char *key, *value, *eol, *sol, *tmp, *fn;
     size_t flen = 0;
 
-    static constexpr const char* const kVendorPathPrefixes[3] = {
+    static constexpr const char* const kVendorPathPrefixes[4] = {
             "/vendor",
             "/odm",
             "/vendor_dlkm",
+            "/odm_dlkm",
     };
 
     const char* context = kInitContext;
@@ -941,6 +942,7 @@ void PropertyLoadBootDefaults() {
     // }
     load_properties_from_file("/vendor/build.prop", nullptr, &properties);
     load_properties_from_file("/vendor_dlkm/etc/build.prop", nullptr, &properties);
+    load_properties_from_file("/odm_dlkm/etc/build.prop", nullptr, &properties);
     load_properties_from_partition("odm", /* support_legacy_path_until */ 28);
     load_properties_from_partition("product", /* support_legacy_path_until */ 30);
 

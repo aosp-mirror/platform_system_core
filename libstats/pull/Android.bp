@@ -30,39 +30,18 @@ cc_defaults {
     shared_libs: [
         "libbinder_ndk",
         "liblog",
+        "libstatssocket",
     ],
     static_libs: [
         "libutils",
         "statsd-aidl-ndk_platform",
     ],
-    target: {
-        android: {
-            shared_libs: ["libstatssocket"],
-        },
-        host: {
-            static_libs: ["libstatssocket"],
-        },
-    },
 }
-cc_library {
+cc_library_shared {
     name: "libstatspull",
     defaults: [
-        "libstatspull_defaults",
-        "libbinder_ndk_host_user",
+        "libstatspull_defaults"
     ],
-    host_supported: true,
-    target: {
-        android: {
-            static: {
-                enabled: false,
-            },
-        },
-        host: {
-            shared: {
-                enabled: false,
-            },
-        },
-    },
     // enumerate stable entry points for APEX use
     stubs: {
         symbol_file: "libstatspull.map.txt",
