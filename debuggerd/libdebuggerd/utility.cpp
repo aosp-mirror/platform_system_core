@@ -135,6 +135,10 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
     addr -= 32;
   }
 
+  // We don't want the address tag to interfere with the bounds check below or appear in the
+  // addresses in the memory dump.
+  addr = untag_address(addr);
+
   // Don't bother if the address looks too low, or looks too high.
   if (addr < 4096 ||
 #if defined(__LP64__)
