@@ -15,13 +15,17 @@ USAGE="USAGE: `basename ${0}` [--help] [--serial <SerialNumber>] [options]
 
 adb remount tests
 
---color                     Dress output with highlighting colors
---help                      This help
---no-wait-screen            Do not wait for display screen to settle
---print-time                Report the test duration
---serial                    Specify device (must if multiple are present)
---wait-adb <duration>       adb wait timeout
---wait-fastboot <duration>  fastboot wait timeout
+-c --color                     Dress output with highlighting colors
+-h --help                      This help
+-D --no-wait-screen            Do not wait for display screen to settle
+-t --print-time                Report the test duration
+-s --serial                    Specify device (must if multiple are present)"
+if [ -n "`which timeout`" ]; then
+  USAGE="${USAGE}
+-a --wait-adb <duration>       adb wait timeout
+-f --wait-fastboot <duration>  fastboot wait timeout"
+fi
+USAGE="${USAGE}
 
 Conditions:
  - Must be a userdebug build.
@@ -46,10 +50,10 @@ TAB="`echo | tr '\n' '\t'`"
 ESCAPE="`echo | tr '\n' '\033'`"
 # A _real_ embedded carriage return character
 CR="`echo | tr '\n' '\r'`"
-GREEN="${ESCAPE}[38;5;40m"
-RED="${ESCAPE}[38;5;196m"
-ORANGE="${ESCAPE}[38;5;255:165:0m"
-BLUE="${ESCAPE}[35m"
+GREEN="${ESCAPE}[32m"
+RED="${ESCAPE}[31m"
+YELLOW="${ESCAPE}[33m"
+BLUE="${ESCAPE}[34m"
 NORMAL="${ESCAPE}[0m"
 TMPDIR=${TMPDIR:-/tmp}
 print_time=false
@@ -72,7 +76,7 @@ inFastboot() {
     if [ -n "${ANDROID_SERIAL}" ]; then
       grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
     else
-      wc -l | grep '^1$' >/dev/null
+      wc -l | grep "^[${SPACE}${TAB}]*1\$" >/dev/null
     fi
 }
 
@@ -85,7 +89,7 @@ inAdb() {
     if [ -n "${ANDROID_SERIAL}" ]; then
       grep "^${ANDROID_SERIAL}[${SPACE}${TAB}]" > /dev/null
     else
-      wc -l | grep '^1$' >/dev/null
+      wc -l | grep "^[${SPACE}${TAB}]*1\$" >/dev/null
     fi
 }
 
@@ -100,7 +104,7 @@ inRecovery() {
       grep "^${ANDROID_SERIAL}[${SPACE}${TAB}][${SPACE}${TAB}]*recovery\$" >/dev/null
     return ${?}
   fi
-  if echo "${list}" | wc -l | grep '^1$' >/dev/null; then
+  if echo "${list}" | wc -l | grep "^[${SPACE}${TAB}]*1\$" >/dev/null; then
     echo "${list}" |
       grep "[${SPACE}${TAB}]recovery\$" >/dev/null
     return ${?}
@@ -143,7 +147,7 @@ adb_logcat() {
   adb logcat "${@}" </dev/null |
     tr -d '\r' |
     grep -v 'logd    : logdr: UID=' |
-    sed -e '${/------- beginning of kernel/d}' -e 's/^[0-1][0-9]-[0-3][0-9] //'
+    sed -e '${ /------- beginning of kernel/d }' -e 's/^[0-1][0-9]-[0-3][0-9] //'
 }
 
 [ "USAGE: avc_check >/dev/stderr
@@ -160,7 +164,7 @@ avc_check() {
   if [ -z "${L}" ]; then
     return
   fi
-  echo "${ORANGE}[  WARNING ]${NORMAL} unlabeled sepolicy violations:" >&2
+  echo "${YELLOW}[  WARNING ]${NORMAL} unlabeled sepolicy violations:" >&2
   echo "${L}" | sed "s/^/${INDENT}/" >&2
 }
 
@@ -284,7 +288,7 @@ adb_wait() {
   local start=`date +%s`
   local duration=
   local ret
-  if [ -n "${1}" ]; then
+  if [ -n "${1}" -a -n "`which timeout`" ]; then
     USB_DEVICE=`usb_devnum --next`
     duration=`format_duration ${1}`
     echo -n ". . . waiting ${duration}" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
@@ -299,7 +303,7 @@ adb_wait() {
   if [ 0 = ${ret} -a -n "${ACTIVE_SLOT}" ]; then
     local active_slot=`get_active_slot`
     if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
-      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}" >&2
+      echo "${YELLOW}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}" >&2
     fi
   fi
   local end=`date +%s`
@@ -359,18 +363,22 @@ usb_status() {
     echo "(In adb mode `adb_user`)"
   else
     echo "(USB stack borken for ${USB_ADDRESS})"
-    USB_DEVICE=`usb_devnum`
-    if [ -n "${USB_DEVICE}" ]; then
-      echo "# lsusb -v -s ${USB_DEVICE#dev}"
-      local D=`lsusb -v -s ${USB_DEVICE#dev} 2>&1`
-      if [ -n "${D}" ]; then
-        echo "${D}"
-      else
-        lsusb -v
+    if [ -n "`which usb_devnum`" ]; then
+      USB_DEVICE=`usb_devnum`
+      if [ -n "`which lsusb`" ]; then
+        if [ -n "${USB_DEVICE}" ]; then
+          echo "# lsusb -v -s ${USB_DEVICE#dev}"
+          local D=`lsusb -v -s ${USB_DEVICE#dev} 2>&1`
+          if [ -n "${D}" ]; then
+            echo "${D}"
+          else
+            lsusb -v
+          fi
+        else
+          echo "# lsusb -v (expected device missing)"
+          lsusb -v
+        fi
       fi
-    else
-      echo "# lsusb -v (expected device missing)"
-      lsusb -v
     fi >&2
   fi
 }
@@ -382,7 +390,7 @@ fastboot_wait() {
   local ret
   # fastboot has no wait-for-device, but it does an automatic
   # wait and requires (even a nonsensical) command to do so.
-  if [ -n "${1}" ]; then
+  if [ -n "${1}" -a -n "`which timeout`" ]; then
     USB_DEVICE=`usb_devnum --next`
     echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
     timeout --preserve-status --signal=KILL ${1} fastboot wait-for-device >/dev/null 2>/dev/null
@@ -398,7 +406,7 @@ fastboot_wait() {
   if [ 0 = ${ret} -a -n "${ACTIVE_SLOT}" ]; then
     local active_slot=`get_active_slot`
     if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
-      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+      echo "${YELLOW}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
     fi >&2
   fi
   return ${ret}
@@ -409,7 +417,7 @@ fastboot_wait() {
 Returns: waits until the device has returned for recovery or optional timeout" ]
 recovery_wait() {
   local ret
-  if [ -n "${1}" ]; then
+  if [ -n "${1}" -a -n "`which timeout`" ]; then
     USB_DEVICE=`usb_devnum --next`
     echo -n ". . . waiting `format_duration ${1}`" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
     timeout --preserve-status --signal=KILL ${1} adb wait-for-recovery 2>/dev/null
@@ -423,7 +431,7 @@ recovery_wait() {
   if [ 0 = ${ret} -a -n "${ACTIVE_SLOT}" ]; then
     local active_slot=`get_active_slot`
     if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
-      echo "${ORANGE}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+      echo "${YELLOW}[  WARNING ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
     fi >&2
   fi
   return ${ret}
@@ -732,6 +740,7 @@ skip_administrative_mounts() {
   grep -v \
     -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\|bpf\) " \
     -e "^\(binfmt_misc\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
+    -e "^\(ramdumpfs\) " \
     -e " functionfs " \
     -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
     -e "^rootfs / rootfs rw," \
@@ -753,13 +762,28 @@ skip_unrelated_mounts() {
 ##  MAINLINE
 ##
 
-OPTIONS=`getopt --alternative --unquoted \
-                --longoptions help,serial:,colour,color,no-colour,no-color \
-                --longoptions wait-adb:,wait-fastboot: \
-                --longoptions wait-screen,wait-display \
-                --longoptions no-wait-screen,no-wait-display \
-                --longoptions gtest_print_time,print-time \
-                -- "?hs:" ${*}` ||
+HOSTOS=`uname`
+GETOPTS="--alternative --unquoted
+         --longoptions help,serial:,colour,color,no-colour,no-color
+         --longoptions wait-adb:,wait-fastboot:
+         --longoptions wait-screen,wait-display
+         --longoptions no-wait-screen,no-wait-display
+         --longoptions gtest_print_time,print-time
+         --"
+if [ "Darwin" = "${HOSTOS}" ]; then
+  GETOPTS=
+  USAGE="`echo \"${USAGE}\" |
+            sed 's/--color/       /g
+                 1s/--help/-h/
+                 s/--help/      /g
+                 s/--no-wait-screen/                /g
+                 s/--print-time/            /g
+                 1s/--serial/-s/
+                 s/--serial/        /g
+                 s/--wait-adb/          /g
+                 s/--wait-fastboot/               /g'`"
+fi
+OPTIONS=`getopt ${GETOPTS} "?a:cCdDf:hs:t" ${*}` ||
   ( echo "${USAGE}" >&2 ; false ) ||
   die "getopt failure"
 set -- ${OPTIONS}
@@ -775,26 +799,26 @@ while [ ${#} -gt 0 ]; do
       export ANDROID_SERIAL=${2}
       shift
       ;;
-    --color | --colour)
+    -c | --color | --colour)
       color=true
       ;;
-    --no-color | --no-colour)
+    -C | --no-color | --no-colour)
       color=false
       ;;
-    --no-wait-display | --no-wait-screen)
+    -D | --no-wait-display | --no-wait-screen)
       screen_wait=false
       ;;
-    --wait-display | --wait-screen)
+    -d | --wait-display | --wait-screen)
       screen_wait=true
       ;;
-    --print-time | --gtest_print_time)
+    -t | --print-time | --gtest_print_time)
       print_time=true
       ;;
-    --wait-adb)
+    -a | --wait-adb)
       ADB_WAIT=${2}
       shift
       ;;
-    --wait-fastboot)
+    -f | --wait-fastboot)
       FASTBOOT_WAIT=${2}
       shift
       ;;
@@ -815,7 +839,7 @@ done
 if ! ${color}; then
   GREEN=""
   RED=""
-  ORANGE=""
+  YELLOW=""
   BLUE=""
   NORMAL=""
 fi
@@ -827,14 +851,14 @@ fi
 inFastboot && die "device in fastboot mode"
 inRecovery && die "device in recovery mode"
 if ! inAdb; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} device not in adb mode" >&2
+  echo "${YELLOW}[  WARNING ]${NORMAL} device not in adb mode" >&2
   adb_wait ${ADB_WAIT}
 fi
 inAdb || die "specified device not in adb mode"
 isDebuggable || die "device not a debug build"
 enforcing=true
 if ! adb_su getenforce </dev/null | grep 'Enforcing' >/dev/null; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} device does not have sepolicy in enforcing mode" >&2
+  echo "${YELLOW}[  WARNING ]${NORMAL} device does not have sepolicy in enforcing mode" >&2
   enforcing=false
 fi
 
@@ -846,9 +870,13 @@ D=`get_property ro.serialno`
 [ -n "${D}" ] || D=`get_property ro.boot.serialno`
 [ -z "${D}" -o -n "${ANDROID_SERIAL}" ] || ANDROID_SERIAL=${D}
 USB_SERIAL=
-[ -z "${ANDROID_SERIAL}" ] || USB_SERIAL=`find /sys/devices -name serial |
-                                          grep usb |
-                                          xargs -r grep -l ${ANDROID_SERIAL}`
+if [ -n "${ANDROID_SERIAL}" -a "Darwin" != "${HOSTOS}" ]; then
+  USB_SERIAL="`find /sys/devices -name serial | grep usb`"
+  if [ -n "${USB_SERIAL}" ]; then
+    USB_SERIAL=`echo "${USB_SERIAL}" |
+                  xargs grep -l ${ANDROID_SERIAL}`
+  fi
+fi
 USB_ADDRESS=
 if [ -n "${USB_SERIAL}" ]; then
   USB_ADDRESS=${USB_SERIAL%/serial}
@@ -860,13 +888,16 @@ fi
 BUILD_DESCRIPTION=`get_property ro.build.description`
 [ -z "${BUILD_DESCRIPTION}" ] ||
   echo "${BLUE}[     INFO ]${NORMAL} ${BUILD_DESCRIPTION}" >&2
+KERNEL_VERSION="`adb_su cat /proc/version </dev/null 2>/dev/null`"
+[ -z "${KERNEL_VERSION}" ] ||
+  echo "${BLUE}[     INFO ]${NORMAL} ${KERNEL_VERSION}" >&2
 ACTIVE_SLOT=`get_active_slot`
 [ -z "${ACTIVE_SLOT}" ] ||
   echo "${BLUE}[     INFO ]${NORMAL} active slot is ${ACTIVE_SLOT}" >&2
 
 # Acquire list of system partitions
 
-PARTITIONS=`adb_su cat /vendor/etc/fstab* |
+PARTITIONS=`adb_su cat /vendor/etc/fstab* </dev/null |
               skip_administrative_mounts |
               sed -n "s@^\([^ ${TAB}/][^ ${TAB}/]*\)[ ${TAB}].*[, ${TAB}]ro[, ${TAB}].*@\1@p" |
               sort -u |
@@ -903,9 +934,12 @@ adb_sh ls -l /dev/block/by-name/ /dev/block/mapper/ </dev/null 2>/dev/null |
   done
 
 # If reboot too soon after fresh flash, could trip device update failure logic
+if ${screen_wait}; then
+  echo "${YELLOW}[  WARNING ]${NORMAL} waiting for screen to come up. Consider --no-wait-screen option" >&2
+fi
 if ! wait_for_screen && ${screen_wait}; then
   screen_wait=false
-  echo "${ORANGE}[  WARNING ]${NORMAL} not healthy, no launcher, skipping wait for screen" >&2
+  echo "${YELLOW}[  WARNING ]${NORMAL} not healthy, no launcher, skipping wait for screen" >&2
 fi
 
 # Can we test remount -R command?
@@ -954,7 +988,7 @@ else
   adb_su remount -R system </dev/null
   err=${?}
   if [ "${err}" != 0 ]; then
-    echo "${ORANGE}[  WARNING ]${NORMAL} adb shell su root remount -R system = ${err}, likely did not reboot!" >&2
+    echo "${YELLOW}[  WARNING ]${NORMAL} adb shell su root remount -R system = ${err}, likely did not reboot!" >&2
     T="-t ${T}"
   else
     # Rebooted, logcat will be meaningless, and last logcat will likely be clear
@@ -980,7 +1014,7 @@ adb_sh ls -d /sys/module/overlay </dev/null >/dev/null 2>/dev/null ||
   adb_sh grep "nodev${TAB}overlay" /proc/filesystems </dev/null >/dev/null 2>/dev/null &&
   echo "${GREEN}[       OK ]${NORMAL} overlay module present" >&2 ||
   (
-    echo "${ORANGE}[  WARNING ]${NORMAL} overlay module not present" >&2 &&
+    echo "${YELLOW}[  WARNING ]${NORMAL} overlay module not present" >&2 &&
       false
   ) ||
   overlayfs_supported=false
@@ -989,7 +1023,7 @@ if ${overlayfs_supported}; then
     echo "${GREEN}[       OK ]${NORMAL} overlay module supports override_creds" >&2 ||
     case `adb_sh uname -r </dev/null` in
       4.[456789].* | 4.[1-9][0-9]* | [56789].*)
-        echo "${ORANGE}[  WARNING ]${NORMAL} overlay module does not support override_creds" >&2 &&
+        echo "${YELLOW}[  WARNING ]${NORMAL} overlay module does not support override_creds" >&2 &&
         overlayfs_supported=false
         ;;
       *)
@@ -1011,14 +1045,14 @@ echo "${GREEN}[ RUN      ]${NORMAL} Checking current overlayfs status" >&2
 reboot=false
 for d in ${OVERLAYFS_BACKING}; do
   if adb_sh ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
-    echo "${ORANGE}[  WARNING ]${NORMAL} /${d}/overlay is setup, surgically wiping" >&2
+    echo "${YELLOW}[  WARNING ]${NORMAL} /${d}/overlay is setup, surgically wiping" >&2
     adb_sh rm -rf /${d}/overlay </dev/null ||
       die "/${d}/overlay wipe"
     reboot=true
   fi
 done
 if ${reboot}; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} rebooting before test" >&2
+  echo "${YELLOW}[  WARNING ]${NORMAL} rebooting before test" >&2
   adb_reboot &&
     adb_wait ${ADB_WAIT} ||
     die "lost device after reboot after wipe `usb_status`"
@@ -1030,7 +1064,7 @@ D=`adb_sh df -k </dev/null` &&
   D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` &&
   echo "${H}" &&
   echo "${D}" &&
-  echo "${ORANGE}[  WARNING ]${NORMAL} overlays present before setup" >&2 ||
+  echo "${YELLOW}[  WARNING ]${NORMAL} overlays present before setup" >&2 ||
   echo "${GREEN}[       OK ]${NORMAL} no overlay present before setup" >&2
 overlayfs_needed=true
 D=`adb_sh cat /proc/mounts </dev/null |
@@ -1083,7 +1117,7 @@ rebooted=false
 if [ X"${D}" != X"${H}" ]; then
   echo "${H}"
   if [ X"${D}" != X"${D##*setup failed}" ]; then
-    echo "${ORANGE}[  WARNING ]${NORMAL} overlayfs setup whined" >&2
+    echo "${YELLOW}[  WARNING ]${NORMAL} overlayfs setup whined" >&2
   fi
   D=`adb_sh df -k </dev/null` &&
     H=`echo "${D}" | head -1` &&
@@ -1130,7 +1164,7 @@ if [ X"${D}" != X"${D##*Successfully disabled verity}" ]; then
 elif ${rebooted}; then
   echo "${GREEN}[       OK ]${NORMAL} verity already disabled" >&2
 else
-  echo "${ORANGE}[  WARNING ]${NORMAL} verity already disabled" >&2
+  echo "${YELLOW}[  WARNING ]${NORMAL} verity already disabled" >&2
 fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} remount" >&2
@@ -1160,7 +1194,7 @@ if ${overlayfs_needed}; then
     die -t ${T} "overlay takeover failed"
   fi
   echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
-   echo "${ORANGE}[  WARNING ]${NORMAL} overlay takeover not complete" >&2
+   echo "${YELLOW}[  WARNING ]${NORMAL} overlay takeover not complete" >&2
   if [ -z "${virtual_ab}" ]; then
     scratch_partition=scratch
   fi
@@ -1292,7 +1326,7 @@ echo "${GREEN}[ RUN      ]${NORMAL} reboot to confirm content persistent" >&2
 
 fixup_from_recovery() {
   inRecovery || return 1
-  echo "${ORANGE}[    ERROR ]${NORMAL} Device in recovery" >&2
+  echo "${YELLOW}[    ERROR ]${NORMAL} Device in recovery" >&2
   adb reboot </dev/null
   adb_wait ${ADB_WAIT}
 }
@@ -1312,7 +1346,7 @@ if ${overlayfs_needed}; then
   adb_su sed -n '1,/overlay \/system/p' /proc/mounts </dev/null |
     skip_administrative_mounts |
     grep -v ' \(erofs\|squashfs\|ext4\|f2fs\|vfat\) ' &&
-    echo "${ORANGE}[  WARNING ]${NORMAL} overlay takeover after first stage init" >&2 ||
+    echo "${YELLOW}[  WARNING ]${NORMAL} overlay takeover after first stage init" >&2 ||
     echo "${GREEN}[       OK ]${NORMAL} overlay takeover in first stage init" >&2
 fi
 
@@ -1373,20 +1407,20 @@ is_bootloader_fastboot=false
 is_userspace_fastboot=false
 
 if ! ${is_bootloader_fastboot}; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} does not support fastboot, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} does not support fastboot, skipping"
 elif [ -z "${ANDROID_PRODUCT_OUT}" ]; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} build tree not setup, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} build tree not setup, skipping"
 elif [ ! -s "${ANDROID_PRODUCT_OUT}/vendor.img" ]; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} vendor image missing, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} vendor image missing, skipping"
 elif [ "${ANDROID_PRODUCT_OUT}" = "${ANDROID_PRODUCT_OUT%*/${H}}" ]; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} wrong vendor image, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} wrong vendor image, skipping"
 elif [ -z "${ANDROID_HOST_OUT}" ]; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} please run lunch, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} please run lunch, skipping"
 elif ! (
           adb_cat /vendor/build.prop |
           cmp -s ${ANDROID_PRODUCT_OUT}/vendor/build.prop
        ) >/dev/null 2>/dev/null; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} vendor image signature mismatch, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} vendor image signature mismatch, skipping"
 else
   wait_for_screen
   avc_check
@@ -1432,7 +1466,7 @@ else
   fi
   fastboot reboot ||
     die "can not reboot out of fastboot"
-  echo "${ORANGE}[  WARNING ]${NORMAL} adb after fastboot"
+  echo "${YELLOW}[  WARNING ]${NORMAL} adb after fastboot"
   adb_wait ${ADB_WAIT} ||
     fixup_from_recovery ||
     die "did not reboot after formatting ${scratch_partition} `usb_status`"
@@ -1449,8 +1483,8 @@ else
       if ${is_userspace_fastboot}; then
         die  "overlay supposed to be minus /vendor takeover after flash vendor"
       else
-        echo "${ORANGE}[  WARNING ]${NORMAL} user fastboot missing required to invalidate, ignoring a failure" >&2
-        echo "${ORANGE}[  WARNING ]${NORMAL} overlay supposed to be minus /vendor takeover after flash vendor" >&2
+        echo "${YELLOW}[  WARNING ]${NORMAL} user fastboot missing required to invalidate, ignoring a failure" >&2
+        echo "${YELLOW}[  WARNING ]${NORMAL} overlay supposed to be minus /vendor takeover after flash vendor" >&2
       fi
   fi
   B="`adb_cat /system/hello`"
@@ -1468,7 +1502,7 @@ else
     check_eq "cat: /vendor/hello: No such file or directory" "${B}" \
              vendor content after flash vendor
   else
-    echo "${ORANGE}[  WARNING ]${NORMAL} user fastboot missing required to invalidate, ignoring a failure" >&2
+    echo "${YELLOW}[  WARNING ]${NORMAL} user fastboot missing required to invalidate, ignoring a failure" >&2
     check_eq "cat: /vendor/hello: No such file or directory" "${B}" \
              --warning vendor content after flash vendor
   fi
@@ -1489,7 +1523,7 @@ err=${?}
 L=
 D="${H%?Now reboot your device for settings to take effect*}"
 if [ X"${H}" != X"${D}" ]; then
-  echo "${ORANGE}[  WARNING ]${NORMAL} adb remount requires a reboot after partial flash (legacy avb)"
+  echo "${YELLOW}[  WARNING ]${NORMAL} adb remount requires a reboot after partial flash (legacy avb)"
   L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
   adb_reboot &&
     adb_wait ${ADB_WAIT} &&
@@ -1547,7 +1581,7 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
   err=${?}
   if [ X"${D}" != "${D%?Now reboot your device for settings to take effect*}" ]
   then
-    echo "${ORANGE}[  WARNING ]${NORMAL} adb disable-verity requires a reboot after partial flash"
+    echo "${YELLOW}[  WARNING ]${NORMAL} adb disable-verity requires a reboot after partial flash"
     adb_reboot &&
       adb_wait ${ADB_WAIT} &&
       adb_root ||
@@ -1580,9 +1614,9 @@ fixup_from_fastboot() {
   if [ -n "${ACTIVE_SLOT}" ]; then
     local active_slot=`get_active_slot`
     if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
-      echo "${ORANGE}[    ERROR ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
+      echo "${YELLOW}[    ERROR ]${NORMAL} Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
     else
-      echo "${ORANGE}[    ERROR ]${NORMAL} Active slot to be set to ${ACTIVE_SLOT}"
+      echo "${YELLOW}[    ERROR ]${NORMAL} Active slot to be set to ${ACTIVE_SLOT}"
     fi >&2
     fastboot --set-active=${ACTIVE_SLOT}
   fi

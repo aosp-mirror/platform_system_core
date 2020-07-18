@@ -30,7 +30,10 @@
 namespace unwindstack {
 
 RegsArm64::RegsArm64()
-    : RegsImpl<uint64_t>(ARM64_REG_LAST, Location(LOCATION_REGISTER, ARM64_REG_LR)) {}
+    : RegsImpl<uint64_t>(ARM64_REG_LAST, Location(LOCATION_REGISTER, ARM64_REG_LR)) {
+  ResetPseudoRegisters();
+  pac_mask_ = 0;
+}
 
 ArchEnum RegsArm64::Arch() {
   return ARCH_ARM64;
@@ -45,6 +48,23 @@ uint64_t RegsArm64::sp() {
 }
 
 void RegsArm64::set_pc(uint64_t pc) {
+  // If the target is aarch64 then the return address may have been
+  // signed using the Armv8.3-A Pointer Authentication extension. The
+  // original return address can be restored by stripping out the
+  // authentication code using a mask or xpaclri. xpaclri is a NOP on
+  // pre-Armv8.3-A architectures.
+  if ((0 != pc) && IsRASigned()) {
+    if (pac_mask_) {
+      pc &= ~pac_mask_;
+#if defined(__aarch64__)
+    } else {
+      register uint64_t x30 __asm("x30") = pc;
+      // This is XPACLRI.
+      asm("hint 0x7" : "+r"(x30));
+      pc = x30;
+#endif
+    }
+  }
   regs_[ARM64_REG_PC] = pc;
 }
 
@@ -142,6 +162,37 @@ bool RegsArm64::StepIfSignalHandler(uint64_t elf_offset, Elf* elf, Memory* proce
     return false;
   }
   return true;
+}
+
+void RegsArm64::ResetPseudoRegisters(void) {
+  // DWARF for AArch64 says RA_SIGN_STATE should be initialized to 0.
+  this->SetPseudoRegister(Arm64Reg::ARM64_PREG_RA_SIGN_STATE, 0);
+}
+
+bool RegsArm64::SetPseudoRegister(uint16_t id, uint64_t value) {
+  if ((id >= Arm64Reg::ARM64_PREG_FIRST) && (id < Arm64Reg::ARM64_PREG_LAST)) {
+    pseudo_regs_[id - Arm64Reg::ARM64_PREG_FIRST] = value;
+    return true;
+  }
+  return false;
+}
+
+bool RegsArm64::GetPseudoRegister(uint16_t id, uint64_t* value) {
+  if ((id >= Arm64Reg::ARM64_PREG_FIRST) && (id < Arm64Reg::ARM64_PREG_LAST)) {
+    *value = pseudo_regs_[id - Arm64Reg::ARM64_PREG_FIRST];
+    return true;
+  }
+  return false;
+}
+
+bool RegsArm64::IsRASigned() {
+  uint64_t value;
+  auto result = this->GetPseudoRegister(Arm64Reg::ARM64_PREG_RA_SIGN_STATE, &value);
+  return (result && (value != 0));
+}
+
+void RegsArm64::SetPACMask(uint64_t mask) {
+  pac_mask_ = mask;
 }
 
 Regs* RegsArm64::Clone() {

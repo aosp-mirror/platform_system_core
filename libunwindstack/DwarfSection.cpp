@@ -21,6 +21,7 @@
 #include <unwindstack/DwarfMemory.h>
 #include <unwindstack/DwarfSection.h>
 #include <unwindstack/DwarfStructs.h>
+#include <unwindstack/Elf.h>
 #include <unwindstack/Log.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
@@ -49,7 +50,7 @@ bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* f
 
     // Now get the location information for this pc.
     dwarf_loc_regs_t loc_regs;
-    if (!GetCfaLocationInfo(pc, fde, &loc_regs)) {
+    if (!GetCfaLocationInfo(pc, fde, &loc_regs, regs->Arch())) {
       return false;
     }
     loc_regs.cie = fde->cie;
@@ -464,6 +465,13 @@ bool DwarfSectionImpl<AddressType>::EvalRegister(const DwarfLocation* loc, uint3
         eval_info->return_address_undefined = true;
       }
       break;
+    case DWARF_LOCATION_PSEUDO_REGISTER: {
+      if (!eval_info->regs_info.regs->SetPseudoRegister(reg, loc->values[0])) {
+        last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
+        return false;
+      }
+      break;
+    }
     default:
       break;
   }
@@ -490,6 +498,10 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
 
   // Always set the dex pc to zero when evaluating.
   cur_regs->set_dex_pc(0);
+
+  // Reset necessary pseudo registers before evaluation.
+  // This is needed for ARM64, for example.
+  regs->ResetPseudoRegisters();
 
   EvalInfo<AddressType> eval_info{.loc_regs = &loc_regs,
                                   .cie = cie,
@@ -527,8 +539,10 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
 
     AddressType* reg_ptr;
     if (reg >= cur_regs->total_regs()) {
-      // Skip this unknown register.
-      continue;
+      if (entry.second.type != DWARF_LOCATION_PSEUDO_REGISTER) {
+        // Skip this unknown register.
+        continue;
+      }
     }
 
     reg_ptr = eval_info.regs_info.Save(reg);
@@ -554,8 +568,8 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
 
 template <typename AddressType>
 bool DwarfSectionImpl<AddressType>::GetCfaLocationInfo(uint64_t pc, const DwarfFde* fde,
-                                                       dwarf_loc_regs_t* loc_regs) {
-  DwarfCfa<AddressType> cfa(&memory_, fde);
+                                                       dwarf_loc_regs_t* loc_regs, ArchEnum arch) {
+  DwarfCfa<AddressType> cfa(&memory_, fde, arch);
 
   // Look for the cached copy of the cie data.
   auto reg_entry = cie_loc_regs_.find(fde->cie_offset);
@@ -576,8 +590,9 @@ bool DwarfSectionImpl<AddressType>::GetCfaLocationInfo(uint64_t pc, const DwarfF
 }
 
 template <typename AddressType>
-bool DwarfSectionImpl<AddressType>::Log(uint8_t indent, uint64_t pc, const DwarfFde* fde) {
-  DwarfCfa<AddressType> cfa(&memory_, fde);
+bool DwarfSectionImpl<AddressType>::Log(uint8_t indent, uint64_t pc, const DwarfFde* fde,
+                                        ArchEnum arch) {
+  DwarfCfa<AddressType> cfa(&memory_, fde, arch);
 
   // Always print the cie information.
   const DwarfCie* cie = fde->cie;
