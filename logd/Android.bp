@@ -180,3 +180,23 @@ cc_test {
         "vts10",
     ],
 }
+
+cc_binary {
+    name: "replay_messages",
+    defaults: ["logd_defaults"],
+    host_supported: true,
+
+    srcs: [
+        "ReplayMessages.cpp",
+    ],
+
+    static_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+        "liblogd",
+        "libselinux",
+        "libz",
+        "libzstd",
+    ],
+}
