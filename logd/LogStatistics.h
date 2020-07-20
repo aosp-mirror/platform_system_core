@@ -515,7 +515,8 @@ class LogStatistics {
     }
 
   public:
-    LogStatistics(bool enable_statistics, bool track_total_size);
+    LogStatistics(bool enable_statistics, bool track_total_size,
+                  std::optional<log_time> start_time = {});
 
     void AddTotal(log_id_t log_id, uint16_t size) EXCLUDES(lock_);
 
@@ -556,6 +557,7 @@ class LogStatistics {
         return SizesTotal;
     }
 
+    std::string ReportInteresting() const EXCLUDES(lock_);
     std::string Format(uid_t uid, pid_t pid, unsigned int logMask) const EXCLUDES(lock_);
 
     const char* PidToName(pid_t pid) const EXCLUDES(lock_);
