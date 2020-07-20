@@ -37,6 +37,12 @@ enum class ListenerAction {
     kContinue,  // Continue regenerating uevents as we haven't seen the one(s) we're interested in.
 };
 
+enum class ReadUeventResult {
+    kSuccess = 0,  // Uevent was successfully read.
+    kFailed,       // Uevent reading has failed.
+    kInvalid,      // An Invalid Uevent was read (like say, the msg received is >= UEVENT_MSG_LEN).
+};
+
 using ListenerCallback = std::function<ListenerAction(const Uevent&)>;
 
 class UeventListener {
@@ -50,7 +56,7 @@ class UeventListener {
               const std::optional<std::chrono::milliseconds> relative_timeout = {}) const;
 
   private:
-    bool ReadUevent(Uevent* uevent) const;
+    ReadUeventResult ReadUevent(Uevent* uevent) const;
     ListenerAction RegenerateUeventsForDir(DIR* d, const ListenerCallback& callback) const;
 
     android::base::unique_fd device_fd_;
