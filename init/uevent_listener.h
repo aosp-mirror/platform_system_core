@@ -27,7 +27,7 @@
 
 #include "uevent.h"
 
-#define UEVENT_MSG_LEN 2048
+#define UEVENT_MSG_LEN 8192
 
 namespace android {
 namespace init {
