@@ -129,8 +129,9 @@ void _VLOG(log_t* log, enum logtype ltype, const char* fmt, va_list ap) {
 #define MEMORY_BYTES_PER_LINE 16
 
 void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const std::string& label) {
-  // Align the address to sizeof(long) and start 32 bytes before the address.
-  addr &= ~(sizeof(long) - 1);
+  // Align the address to the number of bytes per line to avoid confusing memory tag output if
+  // memory is tagged and we start from a misaligned address. Start 32 bytes before the address.
+  addr &= ~(MEMORY_BYTES_PER_LINE - 1);
   if (addr >= 4128) {
     addr -= 32;
   }
@@ -204,8 +205,13 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
   size_t current = 0;
   size_t total_bytes = start + bytes;
   for (size_t line = 0; line < MEMORY_BYTES_TO_DUMP / MEMORY_BYTES_PER_LINE; line++) {
+    uint64_t tagged_addr = addr;
+    long tag = memory->ReadTag(addr);
+    if (tag >= 0) {
+      tagged_addr |= static_cast<uint64_t>(tag) << 56;
+    }
     std::string logline;
-    android::base::StringAppendF(&logline, "    %" PRIPTR, addr);
+    android::base::StringAppendF(&logline, "    %" PRIPTR, tagged_addr);
 
     addr += MEMORY_BYTES_PER_LINE;
     std::string ascii;
