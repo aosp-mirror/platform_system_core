@@ -112,7 +112,10 @@ class MemoryMock : public unwindstack::Memory {
     if (last_read_addr_ > 0) {
       offset = addr - last_read_addr_;
     }
-    size_t bytes_available = buffer_.size() - offset;
+    size_t bytes_available = 0;
+    if (offset < buffer_.size()) {
+      bytes_available = buffer_.size() - offset;
+    }
 
     if (partial_read_) {
       bytes = std::min(bytes, bytes_partial_read_);
@@ -258,44 +261,7 @@ TEST_F(DumpMemoryTest, memory_unreadable) {
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  const char* expected_dump = \
-"\nmemory near pc:\n"
-#if defined(__LP64__)
-"    00000000a2345658 ---------------- ----------------  ................\n"
-"    00000000a2345668 ---------------- ----------------  ................\n"
-"    00000000a2345678 ---------------- ----------------  ................\n"
-"    00000000a2345688 ---------------- ----------------  ................\n"
-"    00000000a2345698 ---------------- ----------------  ................\n"
-"    00000000a23456a8 ---------------- ----------------  ................\n"
-"    00000000a23456b8 ---------------- ----------------  ................\n"
-"    00000000a23456c8 ---------------- ----------------  ................\n"
-"    00000000a23456d8 ---------------- ----------------  ................\n"
-"    00000000a23456e8 ---------------- ----------------  ................\n"
-"    00000000a23456f8 ---------------- ----------------  ................\n"
-"    00000000a2345708 ---------------- ----------------  ................\n"
-"    00000000a2345718 ---------------- ----------------  ................\n"
-"    00000000a2345728 ---------------- ----------------  ................\n"
-"    00000000a2345738 ---------------- ----------------  ................\n"
-"    00000000a2345748 ---------------- ----------------  ................\n";
-#else
-"    a2345658 -------- -------- -------- --------  ................\n"
-"    a2345668 -------- -------- -------- --------  ................\n"
-"    a2345678 -------- -------- -------- --------  ................\n"
-"    a2345688 -------- -------- -------- --------  ................\n"
-"    a2345698 -------- -------- -------- --------  ................\n"
-"    a23456a8 -------- -------- -------- --------  ................\n"
-"    a23456b8 -------- -------- -------- --------  ................\n"
-"    a23456c8 -------- -------- -------- --------  ................\n"
-"    a23456d8 -------- -------- -------- --------  ................\n"
-"    a23456e8 -------- -------- -------- --------  ................\n"
-"    a23456f8 -------- -------- -------- --------  ................\n"
-"    a2345708 -------- -------- -------- --------  ................\n"
-"    a2345718 -------- -------- -------- --------  ................\n"
-"    a2345728 -------- -------- -------- --------  ................\n"
-"    a2345738 -------- -------- -------- --------  ................\n"
-"    a2345748 -------- -------- -------- --------  ................\n";
-#endif
-  ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
+  ASSERT_STREQ("", tombstone_contents.c_str());
 
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
@@ -429,57 +395,17 @@ TEST_F(DumpMemoryTest, address_low_fence) {
   ASSERT_STREQ("", getFakeLogPrint().c_str());
 }
 
-TEST_F(DumpMemoryTest, memory_address_too_low) {
-  uint8_t buffer[256];
-  memset(buffer, 0, sizeof(buffer));
-  memory_mock_->SetReadData(buffer, sizeof(buffer));
-
-  dump_memory(&log_, memory_mock_.get(), 0, "memory near r1");
-
-  std::string tombstone_contents;
-  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
-  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  ASSERT_STREQ("", tombstone_contents.c_str());
-
-  // Verify that the log buf is empty, and no error messages.
-  ASSERT_STREQ("", getFakeLogBuf().c_str());
-  ASSERT_STREQ("", getFakeLogPrint().c_str());
-}
-
 TEST_F(DumpMemoryTest, memory_address_too_high) {
   uint8_t buffer[256];
   memset(buffer, 0, sizeof(buffer));
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
 #if defined(__LP64__)
-  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL, "memory near r1");
-  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 32, "memory near r1");
-  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 216, "memory near r1");
+  dump_memory(&log_, memory_mock_.get(), -32, "memory near r1");
+  dump_memory(&log_, memory_mock_.get(), -208, "memory near r1");
 #else
-  dump_memory(&log_, memory_mock_.get(), 0xffff0000, "memory near r1");
-  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 32, "memory near r1");
-  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 220, "memory near r1");
-#endif
-
-  std::string tombstone_contents;
-  ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
-  ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  ASSERT_STREQ("", tombstone_contents.c_str());
-
-  // Verify that the log buf is empty, and no error messages.
-  ASSERT_STREQ("", getFakeLogBuf().c_str());
-  ASSERT_STREQ("", getFakeLogPrint().c_str());
-}
-
-TEST_F(DumpMemoryTest, memory_address_would_overflow) {
-  uint8_t buffer[256];
-  memset(buffer, 0, sizeof(buffer));
-  memory_mock_->SetReadData(buffer, sizeof(buffer));
-
-#if defined(__LP64__)
-  dump_memory(&log_, memory_mock_.get(), 0xfffffffffffffff0, "memory near r1");
-#else
-  dump_memory(&log_, memory_mock_.get(), 0xfffffff0, "memory near r1");
+  dump_memory(&log_, memory_mock_.get(), 0x100000000 - 32, "memory near r1");
+  dump_memory(&log_, memory_mock_.get(), 0x100000000 - 208, "memory near r1");
 #endif
 
   std::string tombstone_contents;
@@ -500,9 +426,9 @@ TEST_F(DumpMemoryTest, memory_address_nearly_too_high) {
   memory_mock_->SetReadData(buffer, sizeof(buffer));
 
 #if defined(__LP64__)
-  dump_memory(&log_, memory_mock_.get(), 0x4000000000000000UL - 224, "memory near r4");
+  dump_memory(&log_, memory_mock_.get(), -224, "memory near r4");
 #else
-  dump_memory(&log_, memory_mock_.get(), 0xffff0000 - 224, "memory near r4");
+  dump_memory(&log_, memory_mock_.get(), 0x100000000 - 224, "memory near r4");
 #endif
 
   std::string tombstone_contents;
@@ -510,40 +436,57 @@ TEST_F(DumpMemoryTest, memory_address_nearly_too_high) {
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
   const char* expected_dump = \
 "\nmemory near r4:\n"
-#if defined(__LP64__)
-"    3fffffffffffff00 0706050403020100 0f0e0d0c0b0a0908  ................\n"
-"    3fffffffffffff10 1716151413121110 1f1e1d1c1b1a1918  ................\n"
-"    3fffffffffffff20 2726252423222120 2f2e2d2c2b2a2928   !\"#$%&'()*+,-./\n"
-"    3fffffffffffff30 3736353433323130 3f3e3d3c3b3a3938  0123456789:;<=>?\n"
-"    3fffffffffffff40 4746454443424140 4f4e4d4c4b4a4948  @ABCDEFGHIJKLMNO\n"
-"    3fffffffffffff50 5756555453525150 5f5e5d5c5b5a5958  PQRSTUVWXYZ[\\]^_\n"
-"    3fffffffffffff60 6766656463626160 6f6e6d6c6b6a6968  `abcdefghijklmno\n"
-"    3fffffffffffff70 7776757473727170 7f7e7d7c7b7a7978  pqrstuvwxyz{|}~.\n"
-"    3fffffffffffff80 8786858483828180 8f8e8d8c8b8a8988  ................\n"
-"    3fffffffffffff90 9796959493929190 9f9e9d9c9b9a9998  ................\n"
-"    3fffffffffffffa0 a7a6a5a4a3a2a1a0 afaeadacabaaa9a8  ................\n"
-"    3fffffffffffffb0 b7b6b5b4b3b2b1b0 bfbebdbcbbbab9b8  ................\n"
-"    3fffffffffffffc0 c7c6c5c4c3c2c1c0 cfcecdcccbcac9c8  ................\n"
-"    3fffffffffffffd0 d7d6d5d4d3d2d1d0 dfdedddcdbdad9d8  ................\n"
-"    3fffffffffffffe0 e7e6e5e4e3e2e1e0 efeeedecebeae9e8  ................\n"
-"    3ffffffffffffff0 f7f6f5f4f3f2f1f0 fffefdfcfbfaf9f8  ................\n";
+#if defined(__aarch64__)
+"    00ffffffffffff00 0706050403020100 0f0e0d0c0b0a0908  ................\n"
+"    00ffffffffffff10 1716151413121110 1f1e1d1c1b1a1918  ................\n"
+"    00ffffffffffff20 2726252423222120 2f2e2d2c2b2a2928   !\"#$%&'()*+,-./\n"
+"    00ffffffffffff30 3736353433323130 3f3e3d3c3b3a3938  0123456789:;<=>?\n"
+"    00ffffffffffff40 4746454443424140 4f4e4d4c4b4a4948  @ABCDEFGHIJKLMNO\n"
+"    00ffffffffffff50 5756555453525150 5f5e5d5c5b5a5958  PQRSTUVWXYZ[\\]^_\n"
+"    00ffffffffffff60 6766656463626160 6f6e6d6c6b6a6968  `abcdefghijklmno\n"
+"    00ffffffffffff70 7776757473727170 7f7e7d7c7b7a7978  pqrstuvwxyz{|}~.\n"
+"    00ffffffffffff80 8786858483828180 8f8e8d8c8b8a8988  ................\n"
+"    00ffffffffffff90 9796959493929190 9f9e9d9c9b9a9998  ................\n"
+"    00ffffffffffffa0 a7a6a5a4a3a2a1a0 afaeadacabaaa9a8  ................\n"
+"    00ffffffffffffb0 b7b6b5b4b3b2b1b0 bfbebdbcbbbab9b8  ................\n"
+"    00ffffffffffffc0 c7c6c5c4c3c2c1c0 cfcecdcccbcac9c8  ................\n"
+"    00ffffffffffffd0 d7d6d5d4d3d2d1d0 dfdedddcdbdad9d8  ................\n"
+"    00ffffffffffffe0 e7e6e5e4e3e2e1e0 efeeedecebeae9e8  ................\n"
+"    00fffffffffffff0 f7f6f5f4f3f2f1f0 fffefdfcfbfaf9f8  ................\n";
+#elif defined(__LP64__)
+"    ffffffffffffff00 0706050403020100 0f0e0d0c0b0a0908  ................\n"
+"    ffffffffffffff10 1716151413121110 1f1e1d1c1b1a1918  ................\n"
+"    ffffffffffffff20 2726252423222120 2f2e2d2c2b2a2928   !\"#$%&'()*+,-./\n"
+"    ffffffffffffff30 3736353433323130 3f3e3d3c3b3a3938  0123456789:;<=>?\n"
+"    ffffffffffffff40 4746454443424140 4f4e4d4c4b4a4948  @ABCDEFGHIJKLMNO\n"
+"    ffffffffffffff50 5756555453525150 5f5e5d5c5b5a5958  PQRSTUVWXYZ[\\]^_\n"
+"    ffffffffffffff60 6766656463626160 6f6e6d6c6b6a6968  `abcdefghijklmno\n"
+"    ffffffffffffff70 7776757473727170 7f7e7d7c7b7a7978  pqrstuvwxyz{|}~.\n"
+"    ffffffffffffff80 8786858483828180 8f8e8d8c8b8a8988  ................\n"
+"    ffffffffffffff90 9796959493929190 9f9e9d9c9b9a9998  ................\n"
+"    ffffffffffffffa0 a7a6a5a4a3a2a1a0 afaeadacabaaa9a8  ................\n"
+"    ffffffffffffffb0 b7b6b5b4b3b2b1b0 bfbebdbcbbbab9b8  ................\n"
+"    ffffffffffffffc0 c7c6c5c4c3c2c1c0 cfcecdcccbcac9c8  ................\n"
+"    ffffffffffffffd0 d7d6d5d4d3d2d1d0 dfdedddcdbdad9d8  ................\n"
+"    ffffffffffffffe0 e7e6e5e4e3e2e1e0 efeeedecebeae9e8  ................\n"
+"    fffffffffffffff0 f7f6f5f4f3f2f1f0 fffefdfcfbfaf9f8  ................\n";
 #else
-"    fffeff00 03020100 07060504 0b0a0908 0f0e0d0c  ................\n"
-"    fffeff10 13121110 17161514 1b1a1918 1f1e1d1c  ................\n"
-"    fffeff20 23222120 27262524 2b2a2928 2f2e2d2c   !\"#$%&'()*+,-./\n"
-"    fffeff30 33323130 37363534 3b3a3938 3f3e3d3c  0123456789:;<=>?\n"
-"    fffeff40 43424140 47464544 4b4a4948 4f4e4d4c  @ABCDEFGHIJKLMNO\n"
-"    fffeff50 53525150 57565554 5b5a5958 5f5e5d5c  PQRSTUVWXYZ[\\]^_\n"
-"    fffeff60 63626160 67666564 6b6a6968 6f6e6d6c  `abcdefghijklmno\n"
-"    fffeff70 73727170 77767574 7b7a7978 7f7e7d7c  pqrstuvwxyz{|}~.\n"
-"    fffeff80 83828180 87868584 8b8a8988 8f8e8d8c  ................\n"
-"    fffeff90 93929190 97969594 9b9a9998 9f9e9d9c  ................\n"
-"    fffeffa0 a3a2a1a0 a7a6a5a4 abaaa9a8 afaeadac  ................\n"
-"    fffeffb0 b3b2b1b0 b7b6b5b4 bbbab9b8 bfbebdbc  ................\n"
-"    fffeffc0 c3c2c1c0 c7c6c5c4 cbcac9c8 cfcecdcc  ................\n"
-"    fffeffd0 d3d2d1d0 d7d6d5d4 dbdad9d8 dfdedddc  ................\n"
-"    fffeffe0 e3e2e1e0 e7e6e5e4 ebeae9e8 efeeedec  ................\n"
-"    fffefff0 f3f2f1f0 f7f6f5f4 fbfaf9f8 fffefdfc  ................\n";
+"    ffffff00 03020100 07060504 0b0a0908 0f0e0d0c  ................\n"
+"    ffffff10 13121110 17161514 1b1a1918 1f1e1d1c  ................\n"
+"    ffffff20 23222120 27262524 2b2a2928 2f2e2d2c   !\"#$%&'()*+,-./\n"
+"    ffffff30 33323130 37363534 3b3a3938 3f3e3d3c  0123456789:;<=>?\n"
+"    ffffff40 43424140 47464544 4b4a4948 4f4e4d4c  @ABCDEFGHIJKLMNO\n"
+"    ffffff50 53525150 57565554 5b5a5958 5f5e5d5c  PQRSTUVWXYZ[\\]^_\n"
+"    ffffff60 63626160 67666564 6b6a6968 6f6e6d6c  `abcdefghijklmno\n"
+"    ffffff70 73727170 77767574 7b7a7978 7f7e7d7c  pqrstuvwxyz{|}~.\n"
+"    ffffff80 83828180 87868584 8b8a8988 8f8e8d8c  ................\n"
+"    ffffff90 93929190 97969594 9b9a9998 9f9e9d9c  ................\n"
+"    ffffffa0 a3a2a1a0 a7a6a5a4 abaaa9a8 afaeadac  ................\n"
+"    ffffffb0 b3b2b1b0 b7b6b5b4 bbbab9b8 bfbebdbc  ................\n"
+"    ffffffc0 c3c2c1c0 c7c6c5c4 cbcac9c8 cfcecdcc  ................\n"
+"    ffffffd0 d3d2d1d0 d7d6d5d4 dbdad9d8 dfdedddc  ................\n"
+"    ffffffe0 e3e2e1e0 e7e6e5e4 ebeae9e8 efeeedec  ................\n"
+"    fffffff0 f3f2f1f0 f7f6f5f4 fbfaf9f8 fffefdfc  ................\n";
 #endif
   ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
 
@@ -684,44 +627,7 @@ TEST_F(DumpMemoryTest, first_read_empty_next_page_out_of_range) {
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  const char* expected_dump = \
-"\nmemory near r4:\n"
-#if defined(__LP64__)
-"    0000000010000000 ---------------- ----------------  ................\n"
-"    0000000010000010 ---------------- ----------------  ................\n"
-"    0000000010000020 ---------------- ----------------  ................\n"
-"    0000000010000030 ---------------- ----------------  ................\n"
-"    0000000010000040 ---------------- ----------------  ................\n"
-"    0000000010000050 ---------------- ----------------  ................\n"
-"    0000000010000060 ---------------- ----------------  ................\n"
-"    0000000010000070 ---------------- ----------------  ................\n"
-"    0000000010000080 ---------------- ----------------  ................\n"
-"    0000000010000090 ---------------- ----------------  ................\n"
-"    00000000100000a0 ---------------- ----------------  ................\n"
-"    00000000100000b0 ---------------- ----------------  ................\n"
-"    00000000100000c0 ---------------- ----------------  ................\n"
-"    00000000100000d0 ---------------- ----------------  ................\n"
-"    00000000100000e0 ---------------- ----------------  ................\n"
-"    00000000100000f0 ---------------- ----------------  ................\n";
-#else
-"    10000000 -------- -------- -------- --------  ................\n"
-"    10000010 -------- -------- -------- --------  ................\n"
-"    10000020 -------- -------- -------- --------  ................\n"
-"    10000030 -------- -------- -------- --------  ................\n"
-"    10000040 -------- -------- -------- --------  ................\n"
-"    10000050 -------- -------- -------- --------  ................\n"
-"    10000060 -------- -------- -------- --------  ................\n"
-"    10000070 -------- -------- -------- --------  ................\n"
-"    10000080 -------- -------- -------- --------  ................\n"
-"    10000090 -------- -------- -------- --------  ................\n"
-"    100000a0 -------- -------- -------- --------  ................\n"
-"    100000b0 -------- -------- -------- --------  ................\n"
-"    100000c0 -------- -------- -------- --------  ................\n"
-"    100000d0 -------- -------- -------- --------  ................\n"
-"    100000e0 -------- -------- -------- --------  ................\n"
-"    100000f0 -------- -------- -------- --------  ................\n";
-#endif
-  ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
+  ASSERT_STREQ("", tombstone_contents.c_str());
 
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());
@@ -744,44 +650,7 @@ TEST_F(DumpMemoryTest, first_read_empty_next_page_out_of_range_fence_post) {
   std::string tombstone_contents;
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  const char* expected_dump = \
-"\nmemory near r4:\n"
-#if defined(__LP64__)
-"    0000000010000f00 ---------------- ----------------  ................\n"
-"    0000000010000f10 ---------------- ----------------  ................\n"
-"    0000000010000f20 ---------------- ----------------  ................\n"
-"    0000000010000f30 ---------------- ----------------  ................\n"
-"    0000000010000f40 ---------------- ----------------  ................\n"
-"    0000000010000f50 ---------------- ----------------  ................\n"
-"    0000000010000f60 ---------------- ----------------  ................\n"
-"    0000000010000f70 ---------------- ----------------  ................\n"
-"    0000000010000f80 ---------------- ----------------  ................\n"
-"    0000000010000f90 ---------------- ----------------  ................\n"
-"    0000000010000fa0 ---------------- ----------------  ................\n"
-"    0000000010000fb0 ---------------- ----------------  ................\n"
-"    0000000010000fc0 ---------------- ----------------  ................\n"
-"    0000000010000fd0 ---------------- ----------------  ................\n"
-"    0000000010000fe0 ---------------- ----------------  ................\n"
-"    0000000010000ff0 ---------------- ----------------  ................\n";
-#else
-"    10000f00 -------- -------- -------- --------  ................\n"
-"    10000f10 -------- -------- -------- --------  ................\n"
-"    10000f20 -------- -------- -------- --------  ................\n"
-"    10000f30 -------- -------- -------- --------  ................\n"
-"    10000f40 -------- -------- -------- --------  ................\n"
-"    10000f50 -------- -------- -------- --------  ................\n"
-"    10000f60 -------- -------- -------- --------  ................\n"
-"    10000f70 -------- -------- -------- --------  ................\n"
-"    10000f80 -------- -------- -------- --------  ................\n"
-"    10000f90 -------- -------- -------- --------  ................\n"
-"    10000fa0 -------- -------- -------- --------  ................\n"
-"    10000fb0 -------- -------- -------- --------  ................\n"
-"    10000fc0 -------- -------- -------- --------  ................\n"
-"    10000fd0 -------- -------- -------- --------  ................\n"
-"    10000fe0 -------- -------- -------- --------  ................\n"
-"    10000ff0 -------- -------- -------- --------  ................\n";
-#endif
-  ASSERT_STREQ(expected_dump, tombstone_contents.c_str());
+  ASSERT_STREQ("", tombstone_contents.c_str());
 
   // Verify that the log buf is empty, and no error messages.
   ASSERT_STREQ("", getFakeLogBuf().c_str());

@@ -135,21 +135,15 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
     addr -= 32;
   }
 
-  // We don't want the address tag to interfere with the bounds check below or appear in the
-  // addresses in the memory dump.
+  // We don't want the address tag to appear in the addresses in the memory dump.
   addr = untag_address(addr);
 
-  // Don't bother if the address looks too low, or looks too high.
-  if (addr < 4096 ||
-#if defined(__LP64__)
-      addr > 0x4000000000000000UL - MEMORY_BYTES_TO_DUMP) {
-#else
-      addr > 0xffff0000 - MEMORY_BYTES_TO_DUMP) {
-#endif
+  // Don't bother if the address would overflow, taking tag bits into account. Note that
+  // untag_address truncates to 32 bits on 32-bit platforms as a side effect of returning a
+  // uintptr_t, so this also checks for 32-bit overflow.
+  if (untag_address(addr + MEMORY_BYTES_TO_DUMP - 1) < addr) {
     return;
   }
-
-  _LOG(log, logtype::MEMORY, "\n%s:\n", label.c_str());
 
   // Dump 256 bytes
   uintptr_t data[MEMORY_BYTES_TO_DUMP/sizeof(uintptr_t)];
@@ -190,6 +184,15 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
       bytes &= ~(sizeof(uintptr_t) - 1);
     }
   }
+
+  // If we were unable to read anything, it probably means that the register doesn't contain a
+  // valid pointer. In that case, skip the output for this register entirely rather than emitting 16
+  // lines of dashes.
+  if (bytes == 0) {
+    return;
+  }
+
+  _LOG(log, logtype::MEMORY, "\n%s:\n", label.c_str());
 
   // Dump the code around memory as:
   //  addr             contents                           ascii
