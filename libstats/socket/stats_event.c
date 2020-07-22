@@ -232,14 +232,19 @@ void AStatsEvent_writeBool(AStatsEvent* event, bool value) {
 
 void AStatsEvent_writeByteArray(AStatsEvent* event, const uint8_t* buf, size_t numBytes) {
     start_field(event, BYTE_ARRAY_TYPE);
+    if (buf == NULL) {
+        numBytes = 0;
+    }
     append_int32(event, numBytes);
-    append_byte_array(event, buf, numBytes);
+    if (numBytes > 0) {
+        append_byte_array(event, buf, numBytes);
+    }
 }
 
 // Value is assumed to be encoded using UTF8
 void AStatsEvent_writeString(AStatsEvent* event, const char* value) {
     start_field(event, STRING_TYPE);
-    append_string(event, value);
+    append_string(event, value == NULL ? "" : value);
 }
 
 // Tags are assumed to be encoded using UTF8
@@ -255,7 +260,7 @@ void AStatsEvent_writeAttributionChain(AStatsEvent* event, const uint32_t* uids,
 
     for (uint8_t i = 0; i < numNodes; i++) {
         append_int32(event, uids[i]);
-        append_string(event, tags[i]);
+        append_string(event, tags[i] == NULL ? "" : tags[i]);
     }
 }
 
