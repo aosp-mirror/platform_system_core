@@ -253,7 +253,6 @@ cc_test {
         "libcutils",
         "libdebuggerd_client",
         "liblog",
-        "libminijail",
         "libnativehelper",
         "libunwindstack",
     ],
@@ -261,6 +260,7 @@ cc_test {
     static_libs: [
         "libdebuggerd",
         "libgmock",
+        "libminijail",
     ],
 
     header_libs: [
