@@ -129,27 +129,22 @@ void _VLOG(log_t* log, enum logtype ltype, const char* fmt, va_list ap) {
 #define MEMORY_BYTES_PER_LINE 16
 
 void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const std::string& label) {
-  // Align the address to sizeof(long) and start 32 bytes before the address.
-  addr &= ~(sizeof(long) - 1);
+  // Align the address to the number of bytes per line to avoid confusing memory tag output if
+  // memory is tagged and we start from a misaligned address. Start 32 bytes before the address.
+  addr &= ~(MEMORY_BYTES_PER_LINE - 1);
   if (addr >= 4128) {
     addr -= 32;
   }
 
-  // We don't want the address tag to interfere with the bounds check below or appear in the
-  // addresses in the memory dump.
+  // We don't want the address tag to appear in the addresses in the memory dump.
   addr = untag_address(addr);
 
-  // Don't bother if the address looks too low, or looks too high.
-  if (addr < 4096 ||
-#if defined(__LP64__)
-      addr > 0x4000000000000000UL - MEMORY_BYTES_TO_DUMP) {
-#else
-      addr > 0xffff0000 - MEMORY_BYTES_TO_DUMP) {
-#endif
+  // Don't bother if the address would overflow, taking tag bits into account. Note that
+  // untag_address truncates to 32 bits on 32-bit platforms as a side effect of returning a
+  // uintptr_t, so this also checks for 32-bit overflow.
+  if (untag_address(addr + MEMORY_BYTES_TO_DUMP - 1) < addr) {
     return;
   }
-
-  _LOG(log, logtype::MEMORY, "\n%s:\n", label.c_str());
 
   // Dump 256 bytes
   uintptr_t data[MEMORY_BYTES_TO_DUMP/sizeof(uintptr_t)];
@@ -191,6 +186,15 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
     }
   }
 
+  // If we were unable to read anything, it probably means that the register doesn't contain a
+  // valid pointer. In that case, skip the output for this register entirely rather than emitting 16
+  // lines of dashes.
+  if (bytes == 0) {
+    return;
+  }
+
+  _LOG(log, logtype::MEMORY, "\n%s:\n", label.c_str());
+
   // Dump the code around memory as:
   //  addr             contents                           ascii
   //  0000000000008d34 ef000000e8bd0090 e1b00000512fff1e  ............../Q
@@ -201,8 +205,13 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
   size_t current = 0;
   size_t total_bytes = start + bytes;
   for (size_t line = 0; line < MEMORY_BYTES_TO_DUMP / MEMORY_BYTES_PER_LINE; line++) {
+    uint64_t tagged_addr = addr;
+    long tag = memory->ReadTag(addr);
+    if (tag >= 0) {
+      tagged_addr |= static_cast<uint64_t>(tag) << 56;
+    }
     std::string logline;
-    android::base::StringAppendF(&logline, "    %" PRIPTR, addr);
+    android::base::StringAppendF(&logline, "    %" PRIPTR, tagged_addr);
 
     addr += MEMORY_BYTES_PER_LINE;
     std::string ascii;
