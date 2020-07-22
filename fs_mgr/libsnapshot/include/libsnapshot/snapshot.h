@@ -553,9 +553,8 @@ class SnapshotManager final : public ISnapshotManager {
     // This should only be called in recovery.
     bool UnmapAllPartitions();
 
-    // Sanity check no snapshot overflows. Note that this returns false negatives if the snapshot
-    // overflows, then is remapped and not written afterwards. Hence, the function may only serve
-    // as a sanity check.
+    // Check no snapshot overflows. Note that this returns false negatives if the snapshot
+    // overflows, then is remapped and not written afterwards.
     bool EnsureNoOverflowSnapshot(LockedFile* lock);
 
     enum class Slot { Unknown, Source, Target };
