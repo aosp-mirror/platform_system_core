@@ -1286,7 +1286,7 @@ TEST_P(UserdataPartition, UnlockErases) {
     ASSERT_TRUE(PartitionHash(fb.get(), "userdata", &hash_buf, &retcode, &err_msg)) << err_msg;
     ASSERT_EQ(retcode, 0) << err_msg;
 
-    // Sanity check of hash
+    // Validity check of hash
     EXPECT_NE(hash_before, hash_buf)
             << "Writing a random buffer to 'userdata' had the same hash as after erasing it";
     SetLockState(true);  // Lock the device
