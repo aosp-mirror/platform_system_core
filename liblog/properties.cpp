@@ -474,36 +474,7 @@ bool __android_logger_property_get_bool(const char* key, int flag) {
 }
 
 bool __android_logger_valid_buffer_size(unsigned long value) {
-  static long pages, pagesize;
-  unsigned long maximum;
-
-  if ((value < LOG_BUFFER_MIN_SIZE) || (LOG_BUFFER_MAX_SIZE < value)) {
-    return false;
-  }
-
-  if (!pages) {
-    pages = sysconf(_SC_PHYS_PAGES);
-  }
-  if (pages < 1) {
-    return true;
-  }
-
-  if (!pagesize) {
-    pagesize = sysconf(_SC_PAGESIZE);
-    if (pagesize <= 1) {
-      pagesize = PAGE_SIZE;
-    }
-  }
-
-  /* maximum memory impact a somewhat arbitrary ~3% */
-  pages = (pages + 31) / 32;
-  maximum = pages * pagesize;
-
-  if ((maximum < LOG_BUFFER_MIN_SIZE) || (LOG_BUFFER_MAX_SIZE < maximum)) {
-    return true;
-  }
-
-  return value <= maximum;
+  return LOG_BUFFER_MIN_SIZE <= value && value <= LOG_BUFFER_MAX_SIZE;
 }
 
 struct cache2_property_size {

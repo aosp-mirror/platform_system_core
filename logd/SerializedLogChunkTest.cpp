@@ -27,7 +27,7 @@ using android::base::StringPrintf;
 TEST(SerializedLogChunk, smoke) {
     size_t chunk_size = 10 * 4096;
     auto chunk = SerializedLogChunk{chunk_size};
-    EXPECT_EQ(chunk_size, chunk.PruneSize());
+    EXPECT_EQ(chunk_size + sizeof(SerializedLogChunk), chunk.PruneSize());
 
     static const char log_message[] = "log message";
     size_t expected_total_len = sizeof(SerializedLogEntry) + sizeof(log_message);
@@ -58,7 +58,7 @@ TEST(SerializedLogChunk, fill_log_exactly) {
     size_t individual_message_size = sizeof(SerializedLogEntry) + sizeof(log_message);
     size_t chunk_size = individual_message_size * 3;
     auto chunk = SerializedLogChunk{chunk_size};
-    EXPECT_EQ(chunk_size, chunk.PruneSize());
+    EXPECT_EQ(chunk_size + sizeof(SerializedLogChunk), chunk.PruneSize());
 
     ASSERT_TRUE(chunk.CanLog(individual_message_size));
     EXPECT_NE(nullptr, chunk.Log(1, log_time(), 1000, 1, 1, log_message, sizeof(log_message)));
@@ -113,8 +113,7 @@ TEST(SerializedLogChunk, three_logs) {
 TEST(SerializedLogChunk, catch_DecCompressedRef_CHECK) {
     size_t chunk_size = 10 * 4096;
     auto chunk = SerializedLogChunk{chunk_size};
-    EXPECT_DEATH({ chunk.DecReaderRefCount(true); }, "");
-    EXPECT_DEATH({ chunk.DecReaderRefCount(false); }, "");
+    EXPECT_DEATH({ chunk.DecReaderRefCount(); }, "");
 }
 
 // Check that the CHECK() in ClearUidLogs() if the ref count is greater than 0 is caught.
@@ -123,7 +122,7 @@ TEST(SerializedLogChunk, catch_ClearUidLogs_CHECK) {
     auto chunk = SerializedLogChunk{chunk_size};
     chunk.IncReaderRefCount();
     EXPECT_DEATH({ chunk.ClearUidLogs(1000, LOG_ID_MAIN, nullptr); }, "");
-    chunk.DecReaderRefCount(false);
+    chunk.DecReaderRefCount();
 }
 
 class UidClearTest : public testing::TestWithParam<bool> {
@@ -144,7 +143,7 @@ class UidClearTest : public testing::TestWithParam<bool> {
         check(chunk_);
 
         if (finish_writing) {
-            chunk_.DecReaderRefCount(false);
+            chunk_.DecReaderRefCount();
         }
     }
 
