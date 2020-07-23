@@ -234,7 +234,7 @@ TEST_F(BuilderTest, InternalPartitionAlignment) {
         EXPECT_EQ(lba, aligned_lba);
     }
 
-    // Sanity check one extent.
+    // Check one extent.
     EXPECT_EQ(exported->extents.back().target_data, 3072);
 }
 
