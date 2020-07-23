@@ -30,9 +30,7 @@ class SerializedLogChunk {
 
     void Compress();
     void IncReaderRefCount();
-    // Decrease the reader ref count and compress the log if appropriate.  `compress` should only be
-    // set to false in the case that the log buffer will be deleted afterwards.
-    void DecReaderRefCount(bool compress);
+    void DecReaderRefCount();
 
     // Must have no readers referencing this.  Return true if there are no logs left in this chunk.
     bool ClearUidLogs(uid_t uid, log_id_t log_id, LogStatistics* stats);
@@ -44,12 +42,15 @@ class SerializedLogChunk {
     // If this buffer has been compressed, we only consider its compressed size when accounting for
     // memory consumption for pruning.  This is since the uncompressed log is only by used by
     // readers, and thus not a representation of how much these logs cost to keep in memory.
-    size_t PruneSize() const { return compressed_log_.size() ?: contents_.size(); }
+    size_t PruneSize() const {
+        return sizeof(*this) + (compressed_log_.size() ?: contents_.size());
+    }
 
     void FinishWriting() {
         writer_active_ = false;
+        Compress();
         if (reader_ref_count_ == 0) {
-            Compress();
+            contents_.Resize(0);
         }
     }
 
