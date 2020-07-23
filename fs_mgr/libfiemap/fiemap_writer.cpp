@@ -45,7 +45,7 @@ namespace fiemap {
 
 using namespace android::dm;
 
-// We cap the maximum number of extents as a sanity measure.
+// We cap the maximum number of extents as a robustness measure.
 static constexpr uint32_t kMaxExtents = 50000;
 
 // TODO: Fallback to using fibmap if FIEMAP_EXTENT_MERGED is set.
