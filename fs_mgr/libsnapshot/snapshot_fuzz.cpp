@@ -141,7 +141,7 @@ SNAPSHOT_FUZZ_FUNCTION(RecoveryCreateSnapshotDevicesWithMetadata, CreateResult,
                        const RecoveryCreateSnapshotDevicesArgs& args) {
     std::unique_ptr<AutoDevice> device;
     if (args.has_metadata_device_object()) {
-        device = std::make_unique<DummyAutoDevice>(args.metadata_mounted());
+        device = std::make_unique<NoOpAutoDevice>(args.metadata_mounted());
     }
     return snapshot->RecoveryCreateSnapshotDevices(device);
 }
