@@ -239,23 +239,6 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
   }
 }
 
-void read_with_default(const char* path, char* buf, size_t len, const char* default_value) {
-  unique_fd fd(open(path, O_RDONLY | O_CLOEXEC));
-  if (fd != -1) {
-    int rc = TEMP_FAILURE_RETRY(read(fd.get(), buf, len - 1));
-    if (rc != -1) {
-      buf[rc] = '\0';
-
-      // Trim trailing newlines.
-      if (rc > 0 && buf[rc - 1] == '\n') {
-        buf[rc - 1] = '\0';
-      }
-      return;
-    }
-  }
-  strcpy(buf, default_value);
-}
-
 void drop_capabilities() {
   __user_cap_header_struct capheader;
   memset(&capheader, 0, sizeof(capheader));

@@ -58,6 +58,7 @@
 #include "libdebuggerd/open_files_list.h"
 #include "libdebuggerd/scudo.h"
 #include "libdebuggerd/utility.h"
+#include "util.h"
 
 #include "gwp_asan/common.h"
 #include "gwp_asan/crash_handler.h"
@@ -78,15 +79,6 @@ static void dump_header_info(log_t* log) {
   _LOG(log, logtype::HEADER, "Build fingerprint: '%s'\n", fingerprint.c_str());
   _LOG(log, logtype::HEADER, "Revision: '%s'\n", revision.c_str());
   _LOG(log, logtype::HEADER, "ABI: '%s'\n", ABI_STRING);
-}
-
-static void dump_timestamp(log_t* log, time_t time) {
-  struct tm tm;
-  localtime_r(&time, &tm);
-
-  char buf[strlen("1970-01-01 00:00:00+0830") + 1];
-  strftime(buf, sizeof(buf), "%F %T%z", &tm);
-  _LOG(log, logtype::HEADER, "Timestamp: %s\n", buf);
 }
 
 static std::string get_stack_overflow_cause(uint64_t fault_addr, uint64_t sp,
@@ -507,10 +499,9 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename, unsigned 
     // (although in this case the pid is redundant).
     char timeBuf[32];
     time_t sec = static_cast<time_t>(log_entry.entry.sec);
-    struct tm tmBuf;
-    struct tm* ptm;
-    ptm = localtime_r(&sec, &tmBuf);
-    strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
+    tm tm;
+    localtime_r(&sec, &tm);
+    strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", &tm);
 
     char* msg = log_entry.msg();
     if (msg == nullptr) {
@@ -571,23 +562,20 @@ void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, si
   log.tfd = tombstone_fd;
   log.amfd_data = nullptr;
 
-  char thread_name[16];
-  char process_name[128];
-
-  read_with_default("/proc/self/comm", thread_name, sizeof(thread_name), "<unknown>");
-  read_with_default("/proc/self/cmdline", process_name, sizeof(process_name), "<unknown>");
+  std::string thread_name = get_thread_name(tid);
+  std::string process_name = get_process_name(pid);
 
   std::unique_ptr<unwindstack::Regs> regs(
       unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
 
   std::map<pid_t, ThreadInfo> threads;
-  threads[gettid()] = ThreadInfo{
+  threads[tid] = ThreadInfo{
       .registers = std::move(regs),
       .uid = uid,
       .tid = tid,
-      .thread_name = thread_name,
+      .thread_name = thread_name.c_str(),
       .pid = pid,
-      .process_name = process_name,
+      .process_name = process_name.c_str(),
       .siginfo = siginfo,
   };
 
@@ -606,8 +594,8 @@ void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
                        const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
                        const ProcessInfo& process_info, OpenFilesList* open_files,
                        std::string* amfd_data) {
-  // don't copy log messages to tombstone unless this is a dev device
-  bool want_logs = android::base::GetBoolProperty("ro.debuggable", false);
+  // Don't copy log messages to tombstone unless this is a development device.
+  bool want_logs = GetBoolProperty("ro.debuggable", false);
 
   log_t log;
   log.current_tid = target_thread;
@@ -617,7 +605,7 @@ void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
 
   _LOG(&log, logtype::HEADER, "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
   dump_header_info(&log);
-  dump_timestamp(&log, time(nullptr));
+  _LOG(&log, logtype::HEADER, "Timestamp: %s\n", get_timestamp().c_str());
 
   auto it = threads.find(target_thread);
   if (it == threads.end()) {
