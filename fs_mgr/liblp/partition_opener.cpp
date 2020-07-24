@@ -49,7 +49,7 @@ std::string GetPartitionAbsolutePath(const std::string& path) {
         // Dynamic System Update is installed to an sdcard, which won't be in
         // the boot device list.
         //
-        // We whitelist because most devices in /dev/block are not valid for
+        // mmcblk* is allowed because most devices in /dev/block are not valid for
         // storing fiemaps.
         if (android::base::StartsWith(path, "mmcblk")) {
             return "/dev/block/" + path;
