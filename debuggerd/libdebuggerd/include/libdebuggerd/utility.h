@@ -83,8 +83,6 @@ void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* pref
 
 void dump_memory(log_t* log, unwindstack::Memory* backtrace, uint64_t addr, const std::string&);
 
-void read_with_default(const char* path, char* buf, size_t len, const char* default_value);
-
 void drop_capabilities();
 
 bool signal_has_sender(const siginfo_t*, pid_t caller_pid);
