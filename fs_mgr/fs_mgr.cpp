@@ -607,7 +607,7 @@ static void tune_metadata_csum(const std::string& blk_device, const FstabEntry& 
 
     LINFO << "Enabling ext4 metadata_csum on " << blk_device;
 
-    // requires to give last_fsck_time to current to avoid insane time.
+    // Must give `-T now` to prevent last_fsck_time from growing too large,
     // otherwise, tune2fs won't enable metadata_csum.
     const char* tune2fs_args[] = {TUNE2FS_BIN, "-O",        "metadata_csum,64bit,extent",
                                   "-T",        "now", blk_device.c_str()};
