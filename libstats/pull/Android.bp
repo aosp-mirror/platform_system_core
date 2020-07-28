@@ -25,7 +25,6 @@ cc_defaults {
     cflags: [
         "-Wall",
         "-Werror",
-        "-DLIB_STATS_PULL_TESTS_FLAG",
     ],
     export_include_dirs: ["include"],
     shared_libs: [
@@ -89,6 +88,9 @@ cc_library_static {
     name: "libstatspull_private",
     defaults: [
         "libstatspull_defaults",
+    ],
+    cflags: [
+        "-DLIB_STATS_PULL_TESTS_FLAG",
     ],
     visibility: [
         "//frameworks/base/apex/statsd/tests/libstatspull",
