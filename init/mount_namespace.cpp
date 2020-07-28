@@ -44,50 +44,17 @@ namespace android {
 namespace init {
 namespace {
 
-static bool BindMount(const std::string& source, const std::string& mount_point,
-                      bool recursive = false) {
-    unsigned long mountflags = MS_BIND;
-    if (recursive) {
-        mountflags |= MS_REC;
-    }
-    if (mount(source.c_str(), mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
+static bool BindMount(const std::string& source, const std::string& mount_point) {
+    if (mount(source.c_str(), mount_point.c_str(), nullptr, MS_BIND | MS_REC, nullptr) == -1) {
         PLOG(ERROR) << "Failed to bind mount " << source;
         return false;
     }
     return true;
 }
 
-static bool MakeShared(const std::string& mount_point, bool recursive = false) {
-    unsigned long mountflags = MS_SHARED;
-    if (recursive) {
-        mountflags |= MS_REC;
-    }
+static bool ChangeMount(const std::string& mount_point, unsigned long mountflags) {
     if (mount(nullptr, mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
-        PLOG(ERROR) << "Failed to change propagation type to shared";
-        return false;
-    }
-    return true;
-}
-
-static bool MakeSlave(const std::string& mount_point, bool recursive = false) {
-    unsigned long mountflags = MS_SLAVE;
-    if (recursive) {
-        mountflags |= MS_REC;
-    }
-    if (mount(nullptr, mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
-        PLOG(ERROR) << "Failed to change propagation type to slave";
-        return false;
-    }
-    return true;
-}
-
-static bool MakePrivate(const std::string& mount_point, bool recursive = false) {
-    unsigned long mountflags = MS_PRIVATE;
-    if (recursive) {
-        mountflags |= MS_REC;
-    }
-    if (mount(nullptr, mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
-        PLOG(ERROR) << "Failed to change propagation type to private";
+        PLOG(ERROR) << "Failed to remount " << mount_point << " as " << std::hex << mountflags;
         return false;
     }
     return true;
@@ -225,17 +192,17 @@ bool SetupMountNamespaces() {
     // needed for /foo/bar, then we will make /foo/bar as a mount point (by
     // bind-mounting by to itself) and set the propagation type of the mount
     // point to private.
-    if (!MakeShared("/", true /*recursive*/)) return false;
+    if (!ChangeMount("/", MS_SHARED | MS_REC)) return false;
 
     // /apex is a private mountpoint to give different sets of APEXes for
     // the bootstrap and default mount namespaces. The processes running with
     // the bootstrap namespace get APEXes from the read-only partition.
-    if (!(MakePrivate("/apex"))) return false;
+    if (!(ChangeMount("/apex", MS_PRIVATE))) return false;
 
     // /linkerconfig is a private mountpoint to give a different linker configuration
     // based on the mount namespace. Subdirectory will be bind-mounted based on current mount
     // namespace
-    if (!(MakePrivate("/linkerconfig"))) return false;
+    if (!(ChangeMount("/linkerconfig", MS_PRIVATE))) return false;
 
     // The two mount namespaces present challenges for scoped storage, because
     // vold, which is responsible for most of the mounting, lives in the
@@ -266,15 +233,15 @@ bool SetupMountNamespaces() {
     if (!mkdir_recursive("/mnt/user", 0755)) return false;
     if (!mkdir_recursive("/mnt/installer", 0755)) return false;
     if (!mkdir_recursive("/mnt/androidwritable", 0755)) return false;
-    if (!(BindMount("/mnt/user", "/mnt/installer", true))) return false;
-    if (!(BindMount("/mnt/user", "/mnt/androidwritable", true))) return false;
+    if (!(BindMount("/mnt/user", "/mnt/installer"))) return false;
+    if (!(BindMount("/mnt/user", "/mnt/androidwritable"))) return false;
     // First, make /mnt/installer and /mnt/androidwritable a slave bind mount
-    if (!(MakeSlave("/mnt/installer"))) return false;
-    if (!(MakeSlave("/mnt/androidwritable"))) return false;
+    if (!(ChangeMount("/mnt/installer", MS_SLAVE))) return false;
+    if (!(ChangeMount("/mnt/androidwritable", MS_SLAVE))) return false;
     // Then, make it shared again - effectively creating a new peer group, that
     // will be inherited by new mount namespaces.
-    if (!(MakeShared("/mnt/installer"))) return false;
-    if (!(MakeShared("/mnt/androidwritable"))) return false;
+    if (!(ChangeMount("/mnt/installer", MS_SHARED))) return false;
+    if (!(ChangeMount("/mnt/androidwritable", MS_SHARED))) return false;
 
     bootstrap_ns_fd.reset(OpenMountNamespace());
     bootstrap_ns_id = GetMountNamespaceId();
