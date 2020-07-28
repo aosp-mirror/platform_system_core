@@ -258,7 +258,7 @@ int main(int argc, char* argv[]) {
     // Pruning configuration.
     PruneList prune_list;
 
-    std::string buffer_type = GetProperty("logd.buffer_type", "chatty");
+    std::string buffer_type = GetProperty("logd.buffer_type", "serialized");
 
     // Partial (required for chatty) or full logging statistics.
     bool enable_full_log_statistics = __android_logger_property_get_bool(
