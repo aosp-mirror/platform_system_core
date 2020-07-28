@@ -20,6 +20,7 @@
 
 #include <string>
 
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android/log.h>  // minimal logging API
 #include <gtest/gtest.h>
@@ -28,6 +29,8 @@
 #include <log/log_read.h>
 // Do not use anything in log/log_time.h despite side effects of the above.
 #include <private/android_logger.h>
+
+using android::base::GetBoolProperty;
 
 TEST(liblog, android_logger_get_) {
 #ifdef __ANDROID__
@@ -38,31 +41,27 @@ TEST(liblog, android_logger_get_) {
 
   for (int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
     log_id_t id = static_cast<log_id_t>(i);
-    const char* name = android_log_id_to_name(id);
-    if (id != android_name_to_log_id(name)) {
-      continue;
-    }
-    fprintf(stderr, "log buffer %s\r", name);
+    std::string name = android_log_id_to_name(id);
+    fprintf(stderr, "log buffer %s\r", name.c_str());
     struct logger* logger;
     EXPECT_TRUE(NULL != (logger = android_logger_open(logger_list, id)));
     EXPECT_EQ(id, android_logger_get_id(logger));
     ssize_t get_log_size = android_logger_get_log_size(logger);
     /* security buffer is allowed to be denied */
-    if (strcmp("security", name)) {
-      EXPECT_LT(0, get_log_size);
+    if (name != "security") {
+      EXPECT_GT(get_log_size, 0);
       // crash buffer is allowed to be empty, that is actually healthy!
-      // kernel buffer is allowed to be empty on "user" builds
-      // stats buffer is allowed to be empty TEMPORARILY.
-      // TODO: remove stats buffer from here once we start to use it in
-      // framework (b/68266385).
-      EXPECT_LE(  // boolean 1 or 0 depending on expected content or empty
-          !!((strcmp("crash", name) != 0) &&
-             ((strcmp("kernel", name) != 0) ||
-              __android_logger_property_get_bool(
-                  "ro.logd.kernel", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_ENG |
-                                        BOOL_DEFAULT_FLAG_SVELTE)) &&
-             (strcmp("stats", name) != 0)),
-          android_logger_get_log_readable_size(logger));
+      // stats buffer is no longer in use.
+      if (name == "crash" || name == "stats") {
+        continue;
+      }
+
+      // kernel buffer is empty if ro.logd.kernel is false
+      if (name == "kernel" && !GetBoolProperty("ro.logd.kernel", false)) {
+        continue;
+      }
+
+      EXPECT_LE(0, android_logger_get_log_readable_size(logger));
     } else {
       EXPECT_NE(0, get_log_size);
       if (get_log_size < 0) {
@@ -71,7 +70,6 @@ TEST(liblog, android_logger_get_) {
         EXPECT_LE(0, android_logger_get_log_readable_size(logger));
       }
     }
-    EXPECT_LT(0, android_logger_get_log_version(logger));
   }
 
   android_logger_list_close(logger_list);

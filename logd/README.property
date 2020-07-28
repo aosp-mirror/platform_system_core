@@ -7,8 +7,8 @@ ro.logd.auditd.main        bool   true   selinux audit messages sent to main.
 ro.logd.auditd.events      bool   true   selinux audit messages sent to events.
 persist.logd.security      bool   false  Enable security buffer.
 ro.organization_owned      bool   false  Override persist.logd.security to false
-ro.logd.kernel             bool+ svelte+ Enable klogd daemon
-ro.logd.statistics         bool+ svelte+ Enable logcat -S statistics.
+ro.logd.kernel             bool  svelte+ Enable klogd daemon
+logd.statistics            bool  svelte+ Enable logcat -S statistics.
 ro.debuggable              number        if not "1", logd.statistics &
                                          ro.logd.kernel default false.
 logd.logpersistd.enable    bool   auto   Safe to start logpersist daemon service
@@ -57,11 +57,8 @@ logd.buffer_type           string (empty) Set the log buffer type.  Current choi
 
 NB:
 - auto - managed by /init
-- bool+ - "true", "false" and comma separated list of "eng" (forced false if
-  ro.debuggable is not "1") or "svelte" (forced false if ro.config.low_ram is
-  true).
 - svelte - see ro.config.low_ram for details.
-- svelte+ - see ro.config.low_ram and ro.debuggable for details.
+- svelte+ - If empty, default to true if `ro.config.low_ram == false && ro.debuggable == true`
 - ro - <base property> temporary override, ro.<base property> platform default.
 - persist - <base property> override, persist.<base property> platform default.
 - build - VERBOSE for native, DEBUG for jvm isLoggable, or developer option.
