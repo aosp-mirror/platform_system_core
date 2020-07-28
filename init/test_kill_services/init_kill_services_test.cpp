@@ -54,7 +54,7 @@ class InitKillServicesTest : public ::testing::TestWithParam<std::string> {};
 TEST_P(InitKillServicesTest, KillCriticalProcesses) {
     ExpectKillingServiceRecovers(GetParam());
 
-    // sanity check init is still responding
+    // Ensure that init is still responding
     EXPECT_TRUE(SetProperty("test.death.test", "asdf"));
     EXPECT_EQ(GetProperty("test.death.test", ""), "asdf");
     EXPECT_TRUE(SetProperty("test.death.test", ""));
