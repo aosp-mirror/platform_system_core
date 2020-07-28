@@ -60,13 +60,14 @@ Result<void> EnterNamespace(int nstype, const char* path) {
 Result<void> SetUpMountNamespace(bool remount_proc, bool remount_sys) {
     constexpr unsigned int kSafeFlags = MS_NODEV | MS_NOEXEC | MS_NOSUID;
 
-    // Recursively remount / as slave like zygote does so unmounting and mounting /proc
-    // doesn't interfere with the parent namespace's /proc mount. This will also
-    // prevent any other mounts/unmounts initiated by the service from interfering
-    // with the parent namespace but will still allow mount events from the parent
+    // Recursively remount / as MS_SLAVE like zygote does so that
+    // unmounting and mounting /proc doesn't interfere with the parent
+    // namespace's /proc mount. This will also prevent any other
+    // mounts/unmounts initiated by the service from interfering with the
+    // parent namespace but will still allow mount events from the parent
     // namespace to propagate to the child.
     if (mount("rootfs", "/", nullptr, (MS_SLAVE | MS_REC), nullptr) == -1) {
-        return ErrnoError() << "Could not remount(/) recursively as slave";
+        return ErrnoError() << "Could not remount(/) recursively as MS_SLAVE";
     }
 
     // umount() then mount() /proc and/or /sys
