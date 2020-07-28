@@ -81,6 +81,11 @@ on early-init
     # Mount tracefs
     mount tracefs tracefs /sys/kernel/tracing
 
+    # create sys dirctory
+    mkdir /dev/sys 0755 system system
+    mkdir /dev/sys/fs 0755 system system
+    mkdir /dev/sys/block 0755 system system
+
 # Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
 on early-init && property:ro.product.cpu.abilist32=*
     exec_start boringssl_self_test32
@@ -867,18 +872,26 @@ on boot
     chown root system /sys/block/zram0/writeback
     chmod 0664 /sys/block/zram0/writeback
 
+    # to access F2FS sysfs on dm-<num> directly
+    mkdir /dev/sys/fs/by-name 0755 system system
+    symlink /sys/fs/f2fs/${dev.mnt.blk.data} /dev/sys/fs/by-name/userdata
+
+    # to access dm-<num> sysfs
+    mkdir /dev/sys/block/by-name 0755 system system
+    symlink /sys/devices/virtual/block/${dev.mnt.blk.data} /dev/sys/block/by-name/userdata
+
     # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs, 30 secs,
     # to avoid power consumption when system becomes mostly idle. Be careful
     # to make it too large, since it may bring userdata loss, if they
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
-    write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
-    write /sys/fs/f2fs/${dev.mnt.blk.data}/gc_urgent_sleep_time 50
-    write /sys/fs/f2fs/${dev.mnt.blk.data}/iostat_enable 1
+    write /dev/sys/fs/by-name/userdata/cp_interval 200
+    write /dev/sys/fs/by-name/userdata/gc_urgent_sleep_time 50
+    write /dev/sys/fs/by-name/userdata/iostat_enable 1
 
     # limit discard size to 128MB in order to avoid long IO latency
     # for filesystem tuning first (dm or sda)
     # Note that, if dm-<num> is used, sda/mmcblk0 should be tuned in vendor/init.rc
-    write /sys/devices/virtual/block/${dev.mnt.blk.data}/queue/discard_max_bytes 134217728
+    write /dev/sys/block/by-name/userdata/queue/discard_max_bytes 134217728
 
     # Permissions for System Server and daemons.
     chown system system /sys/power/autosleep
