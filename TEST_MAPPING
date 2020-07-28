@@ -61,5 +61,10 @@
     {
       "name": "propertyinfoserializer_tests"
     }
+  ],
+  "imports": [
+    {
+      "path": "frameworks/base/tests/StagedInstallTest"
+    }
   ]
 }
