@@ -97,6 +97,7 @@ cc_test {
     cflags: ["-DNO_PSTORE"],
     test_suites: [
         "cts",
+        "device-tests",
         "vts10",
     ],
 }
