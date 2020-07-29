@@ -456,7 +456,6 @@ bool __android_logger_property_get_bool(const char* key, int flag) {
     flag |= BOOL_DEFAULT_FLAG_SVELTE;
   }
 
-  /* Sanity Check */
   if (flag & (BOOL_DEFAULT_FLAG_SVELTE | BOOL_DEFAULT_FLAG_ENG)) {
     flag &= ~BOOL_DEFAULT_FLAG_TRUE_FALSE;
     flag |= BOOL_DEFAULT_TRUE;

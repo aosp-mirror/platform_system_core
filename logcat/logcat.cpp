@@ -616,15 +616,15 @@ int Logcat::Run(int argc, char** argv) {
                 if (long_options[option_index].name == wrap_str) {
                     mode |= ANDROID_LOG_WRAP | ANDROID_LOG_NONBLOCK;
                     // ToDo: implement API that supports setting a wrap timeout
-                    size_t dummy = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
-                    if (optarg && (!ParseUint(optarg, &dummy) || dummy < 1)) {
+                    size_t timeout = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
+                    if (optarg && (!ParseUint(optarg, &timeout) || timeout < 1)) {
                         error(EXIT_FAILURE, 0, "%s %s out of range.",
                               long_options[option_index].name, optarg);
                     }
-                    if (dummy != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
+                    if (timeout != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
                         fprintf(stderr, "WARNING: %s %u seconds, ignoring %zu\n",
                                 long_options[option_index].name, ANDROID_LOG_WRAP_DEFAULT_TIMEOUT,
-                                dummy);
+                                timeout);
                     }
                     break;
                 }
