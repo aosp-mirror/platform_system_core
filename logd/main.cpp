@@ -62,7 +62,9 @@
 #include "SerializedLogBuffer.h"
 #include "SimpleLogBuffer.h"
 
+using android::base::GetBoolProperty;
 using android::base::GetProperty;
+using android::base::SetProperty;
 
 #define KMSG_PRIORITY(PRI)                                 \
     '<', '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) / 10, \
@@ -82,9 +84,10 @@ static void DropPrivs(bool klogd, bool auditd) {
         PLOG(FATAL) << "failed to set batch scheduler";
     }
 
-    if (!__android_logger_property_get_bool("ro.debuggable", BOOL_DEFAULT_FALSE) &&
-        prctl(PR_SET_DUMPABLE, 0) == -1) {
-        PLOG(FATAL) << "failed to clear PR_SET_DUMPABLE";
+    if (!GetBoolProperty("ro.debuggable", false)) {
+        if (prctl(PR_SET_DUMPABLE, 0) == -1) {
+            PLOG(FATAL) << "failed to clear PR_SET_DUMPABLE";
+        }
     }
 
     std::unique_ptr<struct _cap_struct, int (*)(void*)> caps(cap_init(), cap_free);
@@ -108,6 +111,14 @@ static void DropPrivs(bool klogd, bool auditd) {
     if (cap_set_proc(caps.get()) < 0) {
         PLOG(FATAL) << "cap_set_proc() failed";
     }
+}
+
+// GetBoolProperty that defaults to true if `ro.debuggable == true && ro.config.low_rawm == false`.
+static bool GetBoolPropertyEngSvelteDefault(const std::string& name) {
+    bool default_value =
+            GetBoolProperty("ro.debuggable", false) && !GetBoolProperty("ro.config.low_ram", false);
+
+    return GetBoolProperty(name, default_value);
 }
 
 char* android::uidToName(uid_t u) {
@@ -236,10 +247,9 @@ int main(int argc, char* argv[]) {
     }
 
     int fdPmesg = -1;
-    bool klogd = __android_logger_property_get_bool(
-        "ro.logd.kernel",
-        BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
+    bool klogd = GetBoolPropertyEngSvelteDefault("ro.logd.kernel");
     if (klogd) {
+        SetProperty("ro.logd.kernel", "true");
         static const char proc_kmsg[] = "/proc/kmsg";
         fdPmesg = android_get_control_file(proc_kmsg);
         if (fdPmesg < 0) {
@@ -249,7 +259,7 @@ int main(int argc, char* argv[]) {
         if (fdPmesg < 0) PLOG(ERROR) << "Failed to open " << proc_kmsg;
     }
 
-    bool auditd = __android_logger_property_get_bool("ro.logd.auditd", BOOL_DEFAULT_TRUE);
+    bool auditd = GetBoolProperty("ro.logd.auditd", true);
     DropPrivs(klogd, auditd);
 
     // A cache of event log tags
@@ -261,10 +271,8 @@ int main(int argc, char* argv[]) {
     std::string buffer_type = GetProperty("logd.buffer_type", "serialized");
 
     // Partial (required for chatty) or full logging statistics.
-    bool enable_full_log_statistics = __android_logger_property_get_bool(
-            "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
-                                       BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
-    LogStatistics log_statistics(enable_full_log_statistics, buffer_type == "serialized");
+    LogStatistics log_statistics(GetBoolPropertyEngSvelteDefault("logd.statistics"),
+                                 buffer_type == "serialized");
 
     // Serves the purpose of managing the last logs times read on a socket connection, and as a
     // reader lock on a range of log entries.
@@ -309,9 +317,7 @@ int main(int argc, char* argv[]) {
     // and LogReader is notified to send updates to connected clients.
     LogAudit* al = nullptr;
     if (auditd) {
-        int dmesg_fd = __android_logger_property_get_bool("ro.logd.auditd.dmesg", BOOL_DEFAULT_TRUE)
-                               ? fdDmesg
-                               : -1;
+        int dmesg_fd = GetBoolProperty("ro.logd.auditd.dmesg", true) ? fdDmesg : -1;
         al = new LogAudit(log_buffer, dmesg_fd, &log_statistics);
     }
 
