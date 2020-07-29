@@ -122,7 +122,8 @@ static bool check_vendor_memfd_allowed() {
         return true;
     }
 
-    /* If its not a number, assume string, but check if its a sane string */
+    // Non-numeric should be a single ASCII character. Characters after the
+    // first are ignored.
     if (tolower(vndk_version[0]) < 'a' || tolower(vndk_version[0]) > 'z') {
         ALOGE("memfd: ro.vndk.version not defined or invalid (%s), this is mandated since P.\n",
               vndk_version.c_str());
