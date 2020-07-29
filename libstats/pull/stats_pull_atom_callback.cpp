@@ -120,6 +120,9 @@ class StatsPullAtomCallbackInternal : public BnPullAtomCallback {
 
         // Convert stats_events into StatsEventParcels.
         std::vector<StatsEventParcel> parcels;
+
+        // Resolves fuzz build failure in b/161575591.
+#if defined(__ANDROID_APEX__) || defined(LIB_STATS_PULL_TESTS_FLAG)
         for (int i = 0; i < statsEventList.data.size(); i++) {
             size_t size;
             uint8_t* buffer = AStatsEvent_getBuffer(statsEventList.data[i], &size);
@@ -130,6 +133,7 @@ class StatsPullAtomCallbackInternal : public BnPullAtomCallback {
             p.buffer.assign(buffer, buffer + size);
             parcels.push_back(std::move(p));
         }
+#endif
 
         Status status = resultReceiver->pullFinished(atomTag, success, parcels);
         if (!status.isOk()) {
