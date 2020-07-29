@@ -162,9 +162,9 @@ int32_t utf32_from_utf8_at(const char *src, size_t src_len, size_t index, size_t
     if (index >= src_len) {
         return -1;
     }
-    size_t dummy_index;
+    size_t unused_index;
     if (next_index == nullptr) {
-        next_index = &dummy_index;
+        next_index = &unused_index;
     }
     size_t num_read;
     int32_t ret = utf32_at_internal(src + index, &num_read);
