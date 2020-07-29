@@ -32,13 +32,15 @@
 #include <sstream>
 
 #include <android-base/macros.h>
-#include <log/log_properties.h>
+#include <android-base/properties.h>
 #include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
 #include "LogKlog.h"
 #include "LogUtils.h"
 #include "libaudit.h"
+
+using android::base::GetBoolProperty;
 
 #define KMSG_PRIORITY(PRI)                               \
     '<', '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) / 10, \
@@ -48,8 +50,8 @@ LogAudit::LogAudit(LogBuffer* buf, int fdDmesg, LogStatistics* stats)
     : SocketListener(getLogSocket(), false),
       logbuf(buf),
       fdDmesg(fdDmesg),
-      main(__android_logger_property_get_bool("ro.logd.auditd.main", BOOL_DEFAULT_TRUE)),
-      events(__android_logger_property_get_bool("ro.logd.auditd.events", BOOL_DEFAULT_TRUE)),
+      main(GetBoolProperty("ro.logd.auditd.main", true)),
+      events(GetBoolProperty("ro.logd.auditd.events", true)),
       initialized(false),
       stats_(stats) {
     static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
