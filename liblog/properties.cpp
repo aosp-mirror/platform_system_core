@@ -294,33 +294,12 @@ int __android_log_is_loggable(int prio, const char* tag, int default_prio) {
 }
 
 int __android_log_is_debuggable() {
-  static uint32_t serial;
-  static struct cache_char tag_cache;
-  static const char key[] = "ro.debuggable";
-  int ret;
+  static int is_debuggable = [] {
+    char value[PROP_VALUE_MAX] = {};
+    return __system_property_get("ro.debuggable", value) > 0 && !strcmp(value, "1");
+  }();
 
-  if (tag_cache.c) { /* ro property does not change after set */
-    ret = tag_cache.c == '1';
-  } else if (lock()) {
-    struct cache_char temp_cache = {{NULL, 0xFFFFFFFF}, '\0'};
-    refresh_cache(&temp_cache, key);
-    ret = temp_cache.c == '1';
-  } else {
-    int change_detected = check_cache(&tag_cache.cache);
-    uint32_t current_serial = __system_property_area_serial();
-    if (current_serial != serial) {
-      change_detected = 1;
-    }
-    if (change_detected) {
-      refresh_cache(&tag_cache, key);
-      serial = current_serial;
-    }
-    ret = tag_cache.c == '1';
-
-    unlock();
-  }
-
-  return ret;
+  return is_debuggable;
 }
 
 /*
