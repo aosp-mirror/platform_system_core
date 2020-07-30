@@ -16,13 +16,19 @@
       "name": "adb_tls_connection_test"
     },
     {
+      "name": "CtsFsMgrTestCases"
+    },
+    {
       "name": "CtsInitTestCases"
     },
     {
-      "name": "debuggerd_test"
+      "name": "CtsLiblogTestCases"
     },
     {
-      "name": "CtsFsMgrTestCases"
+      "name": "CtsLogdTestCases"
+    },
+    {
+      "name": "debuggerd_test"
     },
     {
       "name": "fs_mgr_vendor_overlay_test"
