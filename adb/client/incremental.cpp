@@ -55,9 +55,10 @@ static std::pair<unique_fd, std::vector<char>> read_signature(Size file_size,
         return {};
     }
 
-    std::vector<char> invalid_signature;
+    auto [signature, tree_size] = read_id_sig_headers(fd);
 
-    if (st.st_size > kMaxSignatureSize) {
+    std::vector<char> invalid_signature;
+    if (signature.size() > kMaxSignatureSize) {
         if (!silent) {
             fprintf(stderr, "Signature is too long. Max allowed is %d. Abort.\n",
                     kMaxSignatureSize);
@@ -65,7 +66,6 @@ static std::pair<unique_fd, std::vector<char>> read_signature(Size file_size,
         return {std::move(fd), std::move(invalid_signature)};
     }
 
-    auto [signature, tree_size] = read_id_sig_headers(fd);
     if (auto expected = verity_tree_size_for_file(file_size); tree_size != expected) {
         if (!silent) {
             fprintf(stderr,
