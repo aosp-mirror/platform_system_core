@@ -162,6 +162,7 @@ static char* find_benchmark_spam(char* cp) {
 }
 #endif
 
+#ifdef LOGD_ENABLE_FLAKY_TESTS
 TEST(logd, statistics) {
 #ifdef __ANDROID__
     size_t len;
@@ -237,6 +238,7 @@ TEST(logd, statistics) {
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif
 
 #ifdef __ANDROID__
 static void caught_signal(int /* signum */) {
@@ -720,6 +722,7 @@ TEST(logd, timeout) {
 }
 #endif
 
+#ifdef LOGD_ENABLE_FLAKY_TESTS
 // b/27242723 confirmed fixed
 TEST(logd, SNDTIMEO) {
 #ifdef __ANDROID__
@@ -777,6 +780,7 @@ TEST(logd, SNDTIMEO) {
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif
 
 TEST(logd, getEventTag_list) {
 #ifdef __ANDROID__
