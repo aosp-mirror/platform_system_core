@@ -39,6 +39,8 @@ namespace snapshot {
 SnapshotMetadataUpdater::SnapshotMetadataUpdater(MetadataBuilder* builder, uint32_t target_slot,
                                                  const DeltaArchiveManifest& manifest)
     : builder_(builder), target_suffix_(SlotSuffixForSlotNumber(target_slot)) {
+    partial_update_ = manifest.partial_update();
+
     if (!manifest.has_dynamic_partition_metadata()) {
         return;
     }
@@ -63,7 +65,6 @@ SnapshotMetadataUpdater::SnapshotMetadataUpdater(MetadataBuilder* builder, uint3
         }
     }
 
-    partial_update_ = manifest.partial_update();
 }
 
 bool SnapshotMetadataUpdater::ShrinkPartitions() const {
