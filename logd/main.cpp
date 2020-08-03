@@ -218,6 +218,8 @@ static int issueReinit() {
 // logging plugins like auditd and restart control. Additional
 // transitory per-client threads are created for each reader.
 int main(int argc, char* argv[]) {
+    // We want EPIPE when a reader disconnects, not to terminate logd.
+    signal(SIGPIPE, SIG_IGN);
     // logd is written under the assumption that the timezone is UTC.
     // If TZ is not set, persist.sys.timezone is looked up in some time utility
     // libc functions, including mktime. It confuses the logd time handling,
