@@ -82,7 +82,7 @@ Nonce generateNonce() {
 
 /**
  * This is an implementation of the SecureInput protocol in unserspace. This is
- * just an example and should not be used as is. The protocol implemented her
+ * just an example and should not be used as is. The protocol implemented here
  * should be used by a trusted input device that can assert user events with
  * high assurance even if the HLOS kernel is compromised. A confirmationui HAL
  * that links directly against this implementation is not secure and shal not be
