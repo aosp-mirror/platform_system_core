@@ -381,8 +381,8 @@ pid_t LogKlog::sniffPid(const char*& buf, ssize_t len) {
         }
         if ((i == 9) && (cp[i] == ' ')) {
             int pid = 0;
-            char dummy;
-            if (sscanf(cp + 4, "%d%c", &pid, &dummy) == 2) {
+            char placeholder;
+            if (sscanf(cp + 4, "%d%c", &pid, &placeholder) == 2) {
                 buf = cp + 10;  // skip-it-all
                 return pid;
             }
@@ -392,8 +392,8 @@ pid_t LogKlog::sniffPid(const char*& buf, ssize_t len) {
         // Mediatek kernels with modified printk
         if (*cp == '[') {
             int pid = 0;
-            char dummy;
-            if (sscanf(cp, "[%d:%*[a-z_./0-9:A-Z]]%c", &pid, &dummy) == 2) {
+            char placeholder;
+            if (sscanf(cp, "[%d:%*[a-z_./0-9:A-Z]]%c", &pid, &placeholder) == 2) {
                 return pid;
             }
             break;  // Only the first one
@@ -703,7 +703,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
         p = " ";
         b = 1;
     }
-    // paranoid sanity check, can not happen ...
+    // This shouldn't happen, but clamp the size if it does.
     if (b > LOGGER_ENTRY_MAX_PAYLOAD) {
         b = LOGGER_ENTRY_MAX_PAYLOAD;
     }
@@ -712,7 +712,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
     }
     // calculate buffer copy requirements
     ssize_t n = 1 + taglen + 1 + b + 1;
-    // paranoid sanity check, first two just can not happen ...
+    // Extra checks for likely impossible cases.
     if ((taglen > n) || (b > n) || (n > (ssize_t)USHRT_MAX) || (n <= 0)) {
         return -EINVAL;
     }
@@ -722,7 +722,7 @@ int LogKlog::log(const char* buf, ssize_t len) {
     // If we malloc'd this buffer, we could get away without n's USHRT_MAX
     // test above, but we would then required a max(n, USHRT_MAX) as
     // truncating length argument to logbuf->log() below. Gain is protection
-    // of stack sanity and speedup, loss is truncated long-line content.
+    // against stack corruption and speedup, loss is truncated long-line content.
     char newstr[n];
     char* np = newstr;
 

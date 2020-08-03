@@ -27,11 +27,14 @@ class BlockDevInitializer final {
     BlockDevInitializer();
 
     bool InitDeviceMapper();
+    bool InitDmUser();
     bool InitDevices(std::set<std::string> devices);
     bool InitDmDevice(const std::string& device);
 
   private:
     ListenerAction HandleUevent(const Uevent& uevent, std::set<std::string>* devices);
+
+    bool InitMiscDevice(const std::string& name);
 
     std::unique_ptr<DeviceHandler> device_handler_;
     UeventListener uevent_listener_;

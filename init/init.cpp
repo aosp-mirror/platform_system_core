@@ -18,6 +18,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <paths.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -726,6 +727,12 @@ int SecondStageMain(int argc, char** argv) {
     SetStdioToDevNull(argv);
     InitSecondStageLogging(argv);
     LOG(INFO) << "init second stage started!";
+
+    // Update $PATH in the case the second stage init is newer than first stage init, where it is
+    // first set.
+    if (setenv("PATH", _PATH_DEFPATH, 1) != 0) {
+        PLOG(FATAL) << "Could not set $PATH to '" << _PATH_DEFPATH << "' in second stage";
+    }
 
     // Init should not crash because of a dependence on any other process, therefore we ignore
     // SIGPIPE and handle EPIPE at the call site directly.  Note that setting a signal to SIG_IGN

@@ -56,9 +56,9 @@ TrustyGateKeeperDevice::~TrustyGateKeeperDevice() {
 
 SizedBuffer hidl_vec2sized_buffer(const hidl_vec<uint8_t>& vec) {
     if (vec.size() == 0 || vec.size() > std::numeric_limits<uint32_t>::max()) return {};
-    auto dummy = new uint8_t[vec.size()];
-    std::copy(vec.begin(), vec.end(), dummy);
-    return {dummy, static_cast<uint32_t>(vec.size())};
+    auto buffer = new uint8_t[vec.size()];
+    std::copy(vec.begin(), vec.end(), buffer);
+    return {buffer, static_cast<uint32_t>(vec.size())};
 }
 
 Return<void> TrustyGateKeeperDevice::enroll(uint32_t uid,

@@ -294,33 +294,12 @@ int __android_log_is_loggable(int prio, const char* tag, int default_prio) {
 }
 
 int __android_log_is_debuggable() {
-  static uint32_t serial;
-  static struct cache_char tag_cache;
-  static const char key[] = "ro.debuggable";
-  int ret;
+  static int is_debuggable = [] {
+    char value[PROP_VALUE_MAX] = {};
+    return __system_property_get("ro.debuggable", value) > 0 && !strcmp(value, "1");
+  }();
 
-  if (tag_cache.c) { /* ro property does not change after set */
-    ret = tag_cache.c == '1';
-  } else if (lock()) {
-    struct cache_char temp_cache = {{NULL, 0xFFFFFFFF}, '\0'};
-    refresh_cache(&temp_cache, key);
-    ret = temp_cache.c == '1';
-  } else {
-    int change_detected = check_cache(&tag_cache.cache);
-    uint32_t current_serial = __system_property_area_serial();
-    if (current_serial != serial) {
-      change_detected = 1;
-    }
-    if (change_detected) {
-      refresh_cache(&tag_cache, key);
-      serial = current_serial;
-    }
-    ret = tag_cache.c == '1';
-
-    unlock();
-  }
-
-  return ret;
+  return is_debuggable;
 }
 
 /*
@@ -390,21 +369,6 @@ int __android_log_security() {
  * need not guess our intentions.
  */
 
-/* Property helper */
-static bool check_flag(const char* prop, const char* flag) {
-  const char* cp = strcasestr(prop, flag);
-  if (!cp) {
-    return false;
-  }
-  /* We only will document comma (,) */
-  static const char sep[] = ",:;|+ \t\f";
-  if ((cp != prop) && !strchr(sep, cp[-1])) {
-    return false;
-  }
-  cp += strlen(flag);
-  return !*cp || !!strchr(sep, *cp);
-}
-
 /* cache structure */
 struct cache_property {
   struct cache cache;
@@ -420,57 +384,6 @@ static void refresh_cache_property(struct cache_property* cache, const char* key
   }
   cache->cache.serial = __system_property_serial(cache->cache.pinfo);
   __system_property_read(cache->cache.pinfo, 0, cache->property);
-}
-
-/* get boolean with the logger twist that supports eng adjustments */
-bool __android_logger_property_get_bool(const char* key, int flag) {
-  struct cache_property property = {{NULL, 0xFFFFFFFF}, {0}};
-  if (flag & BOOL_DEFAULT_FLAG_PERSIST) {
-    char newkey[strlen("persist.") + strlen(key) + 1];
-    snprintf(newkey, sizeof(newkey), "ro.%s", key);
-    refresh_cache_property(&property, newkey);
-    property.cache.pinfo = NULL;
-    property.cache.serial = 0xFFFFFFFF;
-    snprintf(newkey, sizeof(newkey), "persist.%s", key);
-    refresh_cache_property(&property, newkey);
-    property.cache.pinfo = NULL;
-    property.cache.serial = 0xFFFFFFFF;
-  }
-
-  refresh_cache_property(&property, key);
-
-  if (check_flag(property.property, "true")) {
-    return true;
-  }
-  if (check_flag(property.property, "false")) {
-    return false;
-  }
-  if (property.property[0]) {
-    flag &= ~(BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
-  }
-  if (check_flag(property.property, "eng")) {
-    flag |= BOOL_DEFAULT_FLAG_ENG;
-  }
-  /* this is really a "not" flag */
-  if (check_flag(property.property, "svelte")) {
-    flag |= BOOL_DEFAULT_FLAG_SVELTE;
-  }
-
-  /* Sanity Check */
-  if (flag & (BOOL_DEFAULT_FLAG_SVELTE | BOOL_DEFAULT_FLAG_ENG)) {
-    flag &= ~BOOL_DEFAULT_FLAG_TRUE_FALSE;
-    flag |= BOOL_DEFAULT_TRUE;
-  }
-
-  if ((flag & BOOL_DEFAULT_FLAG_SVELTE) &&
-      __android_logger_property_get_bool("ro.config.low_ram", BOOL_DEFAULT_FALSE)) {
-    return false;
-  }
-  if ((flag & BOOL_DEFAULT_FLAG_ENG) && !__android_log_is_debuggable()) {
-    return false;
-  }
-
-  return (flag & BOOL_DEFAULT_FLAG_TRUE_FALSE) != BOOL_DEFAULT_FALSE;
 }
 
 bool __android_logger_valid_buffer_size(unsigned long value) {
@@ -574,9 +487,12 @@ unsigned long __android_logger_get_buffer_size(log_id_t logId) {
 
   default_size = do_cache2_property_size(&global);
   if (!default_size) {
-    default_size = __android_logger_property_get_bool("ro.config.low_ram", BOOL_DEFAULT_FALSE)
-                       ? LOG_BUFFER_MIN_SIZE /* 64K  */
-                       : LOG_BUFFER_SIZE;    /* 256K */
+    char value[PROP_VALUE_MAX] = {};
+    if (__system_property_get("ro.config.low_ram", value) == 0 || strcmp(value, "true") != 0) {
+      default_size = LOG_BUFFER_SIZE;
+    } else {
+      default_size = LOG_BUFFER_MIN_SIZE;
+    }
   }
 
   snprintf(key_persist, sizeof(key_persist), "%s.%s", global_tunable,
