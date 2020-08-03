@@ -185,7 +185,6 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
     if (!checkRtNetlinkLength(nh, sizeof(*ifaddr)))
         return false;
 
-    // Sanity check.
     int type = nh->nlmsg_type;
     if (type != RTM_NEWADDR && type != RTM_DELADDR) {
         SLOGE("parseIfAddrMessage on incorrect message type 0x%x\n", type);
@@ -349,7 +348,6 @@ bool NetlinkEvent::parseRtMessage(const struct nlmsghdr *nh) {
     uint8_t type = nh->nlmsg_type;
     const char *msgname = rtMessageName(type);
 
-    // Sanity check.
     if (type != RTM_NEWROUTE && type != RTM_DELROUTE) {
         SLOGE("%s: incorrect message type %d (%s)\n", __func__, type, msgname);
         return false;

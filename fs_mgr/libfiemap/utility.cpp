@@ -139,8 +139,7 @@ bool BlockDeviceToName(uint32_t major, uint32_t minor, std::string* bdev_name) {
     }
 
     *bdev_name = ::android::base::Basename(sysfs_bdev);
-    // Paranoid sanity check to make sure we just didn't get the
-    // input in return as-is.
+    // Check that the symlink doesn't point to itself.
     if (sysfs_bdev == *bdev_name) {
         LOG(ERROR) << "Malformed symlink for block device: " << sysfs_bdev;
         return false;

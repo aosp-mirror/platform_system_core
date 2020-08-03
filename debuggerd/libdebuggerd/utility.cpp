@@ -44,7 +44,6 @@
 
 using android::base::unique_fd;
 
-// Whitelist output desired in the logcat output.
 bool is_allowed_in_logcat(enum logtype ltype) {
   if ((ltype == HEADER)
    || (ltype == REGISTERS)
@@ -237,23 +236,6 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
     }
     _LOG(log, logtype::MEMORY, "%s  %s\n", logline.c_str(), ascii.c_str());
   }
-}
-
-void read_with_default(const char* path, char* buf, size_t len, const char* default_value) {
-  unique_fd fd(open(path, O_RDONLY | O_CLOEXEC));
-  if (fd != -1) {
-    int rc = TEMP_FAILURE_RETRY(read(fd.get(), buf, len - 1));
-    if (rc != -1) {
-      buf[rc] = '\0';
-
-      // Trim trailing newlines.
-      if (rc > 0 && buf[rc - 1] == '\n') {
-        buf[rc - 1] = '\0';
-      }
-      return;
-    }
-  }
-  strcpy(buf, default_value);
 }
 
 void drop_capabilities() {

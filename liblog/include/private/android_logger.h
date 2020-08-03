@@ -144,14 +144,6 @@ int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len);
 int __android_log_security_bswrite(int32_t tag, const char* payload);
 int __android_log_security(); /* Device Owner is present */
 
-#define BOOL_DEFAULT_FLAG_TRUE_FALSE 0x1
-#define BOOL_DEFAULT_FALSE 0x0        /* false if property not present   */
-#define BOOL_DEFAULT_TRUE 0x1         /* true if property not present    */
-#define BOOL_DEFAULT_FLAG_PERSIST 0x2 /* <key>, persist.<key>, ro.<key>  */
-#define BOOL_DEFAULT_FLAG_ENG 0x4     /* off for user                    */
-#define BOOL_DEFAULT_FLAG_SVELTE 0x8  /* off for low_ram                 */
-bool __android_logger_property_get_bool(const char* key, int flag);
-
 #define LOG_BUFFER_SIZE (256 * 1024) /* Tuned with ro.logd.size per-platform \
                                       */
 #define LOG_BUFFER_MIN_SIZE (64 * 1024UL)
