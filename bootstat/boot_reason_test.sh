@@ -1331,7 +1331,7 @@ if [ X"--macros" != X"${1}" ]; then
     shift
   fi
 
-  # Check if all conditions for the script are sane
+  # Check if all conditions for the script are valid
 
   if [ -z "${ANDROID_SERIAL}" ]; then
     ndev=`(
