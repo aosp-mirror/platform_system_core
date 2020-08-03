@@ -117,6 +117,23 @@ static log_time GetFirstTimeStamp(const MappedFile& recorded_messages) {
     return meta->realtime;
 }
 
+static LogMask BuffersToLogMask(const char* buffers) {
+    if (buffers == nullptr || !strcmp(buffers, "all")) {
+        return kLogMaskAll;
+    }
+    auto string_ids = Split(buffers, ",");
+    LogMask log_mask = 0;
+    for (const auto& string_id : string_ids) {
+        int buffer_id;
+        if (!ParseInt(string_id, &buffer_id, 0, 7)) {
+            fprintf(stderr, "Could not parse buffer_id '%s'\n", string_id.c_str());
+            exit(1);
+        }
+        log_mask |= 1 << buffer_id;
+    }
+    return log_mask;
+}
+
 class StdoutWriter : public LogWriter {
   public:
     StdoutWriter() : LogWriter(0, true) {}
@@ -132,6 +149,11 @@ class StdoutWriter : public LogWriter {
         PrintMessage(&log_msg);
 
         return true;
+    }
+
+    void Shutdown() override {
+        fprintf(stderr, "LogWriter::Shutdown() called\n");
+        exit(1);
     }
 
     std::string name() const override { return "stdout writer"; }
@@ -291,24 +313,7 @@ class PrintLogs : public SingleBufferOperation {
     PrintLogs(log_time first_log_timestamp, const char* buffer, const char* buffers,
               const char* print_point)
         : SingleBufferOperation(first_log_timestamp, buffer) {
-        if (buffers != nullptr) {
-            if (strcmp(buffers, "all") != 0) {
-                std::vector<int> buffer_ids;
-                auto string_ids = Split(buffers, ",");
-                for (const auto& string_id : string_ids) {
-                    int result;
-                    if (!ParseInt(string_id, &result, 0, 7)) {
-                        fprintf(stderr, "Could not parse buffer_id '%s'\n", string_id.c_str());
-                        exit(1);
-                    }
-                    buffer_ids.emplace_back(result);
-                }
-                mask_ = 0;
-                for (const auto& buffer_id : buffer_ids) {
-                    mask_ |= 1 << buffer_id;
-                }
-            }
-        }
+        mask_ = BuffersToLogMask(buffers);
         if (print_point != nullptr) {
             uint64_t result = 0;
             if (!ParseUint(print_point, &result)) {
@@ -326,7 +331,7 @@ class PrintLogs : public SingleBufferOperation {
         }
     }
 
-    void End() {
+    void End() override {
         std::unique_ptr<LogWriter> test_writer(new StdoutWriter());
         std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, mask_);
         log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr);
@@ -353,7 +358,7 @@ class PrintLatency : public SingleBufferOperation {
         durations_.emplace_back(duration);
     }
 
-    void End() {
+    void End() override {
         std::sort(durations_.begin(), durations_.end());
         auto q1 = durations_.size() / 4;
         auto q2 = durations_.size() / 2;
@@ -371,6 +376,27 @@ class PrintLatency : public SingleBufferOperation {
   private:
     std::chrono::steady_clock::time_point operation_start_;
     std::vector<long long> durations_;
+};
+
+class PrintAllLogs : public SingleBufferOperation {
+  public:
+    PrintAllLogs(log_time first_log_timestamp, const char* buffer, const char* buffers)
+        : SingleBufferOperation(first_log_timestamp, buffer) {
+        LogMask mask = BuffersToLogMask(buffers);
+        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        std::unique_ptr<LogWriter> stdout_writer(new StdoutWriter());
+        std::unique_ptr<LogReaderThread> log_reader(
+                new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(stdout_writer),
+                                    false, 0, mask, 0, {}, 1, {}));
+        reader_list_.reader_threads().emplace_back(std::move(log_reader));
+    }
+
+    void Operation() override {
+        // If the rate of reading logs is slower than the rate of incoming logs, then the reader
+        // thread is disconnected to not overflow log buffers, therefore we artificially slow down
+        // the incoming log rate.
+        usleep(100);
+    }
 };
 
 int main(int argc, char** argv) {
@@ -415,6 +441,9 @@ int main(int argc, char** argv) {
     } else if (!strcmp(argv[2], "print_logs")) {
         operation.reset(new PrintLogs(first_log_timestamp, argv[3], argc > 4 ? argv[4] : nullptr,
                                       argc > 5 ? argv[5] : nullptr));
+    } else if (!strcmp(argv[2], "print_all_logs")) {
+        operation.reset(
+                new PrintAllLogs(first_log_timestamp, argv[3], argc > 4 ? argv[4] : nullptr));
     } else if (!strcmp(argv[2], "nothing")) {
         operation.reset(new SingleBufferOperation(first_log_timestamp, argv[3]));
     } else {
