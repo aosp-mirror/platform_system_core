@@ -36,7 +36,7 @@
 
 #pragma once
 
-/* This is the master Users and Groups config for the platform.
+/* This is the main Users and Groups config for the platform.
  * DO NOT EVER RENUMBER
  */
 
