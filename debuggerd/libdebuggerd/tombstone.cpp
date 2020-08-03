@@ -174,12 +174,8 @@ static void dump_signal_info(log_t* log, const ThreadInfo& thread_info,
 }
 
 static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
-  // Deny logd, logd.reader, logd.writer, logd.auditd, logd.control ...
-  // TODO: Why is this controlled by thread name?
-  if (thread_info.thread_name == "logd" ||
-      android::base::StartsWith(thread_info.thread_name, "logd.")) {
-    log->should_retrieve_logcat = false;
-  }
+  // Don't try to collect logs from the threads that implement the logging system itself.
+  if (thread_info.uid == AID_LOGD) log->should_retrieve_logcat = false;
 
   _LOG(log, logtype::HEADER, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", thread_info.pid,
        thread_info.tid, thread_info.thread_name.c_str(), thread_info.process_name.c_str());
