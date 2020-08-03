@@ -174,7 +174,7 @@ static void dump_signal_info(log_t* log, const ThreadInfo& thread_info,
 }
 
 static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
-  // Blacklist logd, logd.reader, logd.writer, logd.auditd, logd.control ...
+  // Deny logd, logd.reader, logd.writer, logd.auditd, logd.control ...
   // TODO: Why is this controlled by thread name?
   if (thread_info.thread_name == "logd" ||
       android::base::StartsWith(thread_info.thread_name, "logd.")) {

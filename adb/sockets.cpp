@@ -856,7 +856,7 @@ static int smart_socket_enqueue(asocket* s, apacket::payload_type data) {
     s->peer->shutdown = nullptr;
     s->peer->close = local_socket_close_notify;
     s->peer->peer = nullptr;
-    /* give him our transport and upref it */
+    /* give them our transport and upref it */
     s->peer->transport = s->transport;
 
     connect_to_remote(s->peer, std::string_view(s->smart_socket_data).substr(4));
