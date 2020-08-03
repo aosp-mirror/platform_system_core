@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
+#define __USE_GNU
+#include <sys/mman.h>
 #include <sys/uio.h>
 
 #include <trusty/tipc.h>
@@ -39,6 +41,7 @@ static const char *closer1_name = "com.android.ipc-unittest.srv.closer1";
 static const char *closer2_name = "com.android.ipc-unittest.srv.closer2";
 static const char *closer3_name = "com.android.ipc-unittest.srv.closer3";
 static const char *main_ctrl_name = "com.android.ipc-unittest.ctrl";
+static const char* receiver_name = "com.android.trusty.memref.receiver";
 
 static const char *_sopts = "hsvD:t:r:m:b:";
 static const struct option _lopts[] =  {
@@ -66,25 +69,25 @@ static const char *usage =
 "\n"
 ;
 
-static const char *usage_long =
-"\n"
-"The following tests are available:\n"
-"   connect      - connect to datasink service\n"
-"   connect_foo  - connect to non existing service\n"
-"   burst_write  - send messages to datasink service\n"
-"   echo         - send/receive messages to echo service\n"
-"   select       - test select call\n"
-"   blocked_read - test blocked read\n"
-"   closer1      - connection closed by remote (test1)\n"
-"   closer2      - connection closed by remote (test2)\n"
-"   closer3      - connection closed by remote (test3)\n"
-"   ta2ta-ipc    - execute TA to TA unittest\n"
-"   dev-uuid     - print device uuid\n"
-"   ta-access    - test ta-access flags\n"
-"   writev       - writev test\n"
-"   readv        - readv test\n"
-"\n"
-;
+static const char* usage_long =
+        "\n"
+        "The following tests are available:\n"
+        "   connect      - connect to datasink service\n"
+        "   connect_foo  - connect to non existing service\n"
+        "   burst_write  - send messages to datasink service\n"
+        "   echo         - send/receive messages to echo service\n"
+        "   select       - test select call\n"
+        "   blocked_read - test blocked read\n"
+        "   closer1      - connection closed by remote (test1)\n"
+        "   closer2      - connection closed by remote (test2)\n"
+        "   closer3      - connection closed by remote (test3)\n"
+        "   ta2ta-ipc    - execute TA to TA unittest\n"
+        "   dev-uuid     - print device uuid\n"
+        "   ta-access    - test ta-access flags\n"
+        "   writev       - writev test\n"
+        "   readv        - readv test\n"
+        "   send-fd      - transmit memfd to trusty, use as shm\n"
+        "\n";
 
 static uint opt_repeat  = 1;
 static uint opt_msgsize = 32;
@@ -885,6 +888,66 @@ static int readv_test(uint repeat, uint msgsz, bool var)
 	return 0;
 }
 
+static int send_fd_test(void) {
+    int ret;
+    int memfd = -1;
+    int fd = -1;
+    volatile char* buf = MAP_FAILED;
+
+    fd = tipc_connect(dev_name, receiver_name);
+    if (fd < 0) {
+        fprintf(stderr, "Failed to connect to test support TA - is it missing?\n");
+        ret = -1;
+        goto cleanup;
+    }
+
+    memfd = memfd_create("tipc-send-fd", 0);
+    if (memfd < 0) {
+        fprintf(stderr, "Failed to create memfd: %s\n", strerror(errno));
+        ret = -1;
+        goto cleanup;
+    }
+
+    if (ftruncate(memfd, PAGE_SIZE) < 0) {
+        fprintf(stderr, "Failed to resize memfd: %s\n", strerror(errno));
+        ret = -1;
+        goto cleanup;
+    }
+
+    buf = mmap(0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0);
+    if (buf == MAP_FAILED) {
+        fprintf(stderr, "Failed to map memfd: %s\n", strerror(errno));
+        ret = -1;
+        goto cleanup;
+    }
+
+    strcpy((char*)buf, "From NS");
+
+    struct trusty_shm shm = {
+            .fd = memfd,
+            .transfer = TRUSTY_SHARE,
+    };
+
+    ssize_t rc = tipc_send(fd, NULL, 0, &shm, 1);
+    if (rc < 0) {
+        fprintf(stderr, "tipc_send failed\n");
+        ret = rc;
+        goto cleanup;
+    }
+    char c;
+    read(fd, &c, 1);
+    tipc_close(fd);
+
+    ret = strcmp("Hello from Trusty!", (const char*)buf) ? (-1) : 0;
+
+cleanup:
+    if (buf != MAP_FAILED) {
+        munmap((char*)buf, PAGE_SIZE);
+    }
+    close(memfd);
+    tipc_close(fd);
+    return ret;
+}
 
 int main(int argc, char **argv)
 {
@@ -933,10 +996,12 @@ int main(int argc, char **argv)
 		rc = writev_test(opt_repeat, opt_msgsize, opt_variable);
 	} else if (strcmp(test_name, "readv") == 0) {
 		rc = readv_test(opt_repeat, opt_msgsize, opt_variable);
-	} else {
-		fprintf(stderr, "Unrecognized test name '%s'\n", test_name);
-		print_usage_and_exit(argv[0], EXIT_FAILURE, true);
-	}
+    } else if (strcmp(test_name, "send-fd") == 0) {
+        rc = send_fd_test();
+    } else {
+        fprintf(stderr, "Unrecognized test name '%s'\n", test_name);
+        print_usage_and_exit(argv[0], EXIT_FAILURE, true);
+    }
 
-	return rc == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    return rc == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
