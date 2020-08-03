@@ -185,6 +185,7 @@ TEST(liblog_global_state, is_loggable_minimum_log_priority_only) {
   EXPECT_EQ(1, __android_log_is_loggable(ANDROID_LOG_WARN, LOG_TAG, ANDROID_LOG_INFO));
 }
 
+#ifdef LIBLOG_FLAKY_PROPERTY_TEST
 TEST(liblog_global_state, is_loggable_tag_log_priority_only) {
 #ifdef __ANDROID__
   EXPECT_EQ(0, __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG, ANDROID_LOG_INFO));
@@ -247,3 +248,4 @@ TEST(liblog_global_state, is_loggable_both_set) {
   GTEST_SKIP() << "No log tag properties on host";
 #endif
 }
+#endif
