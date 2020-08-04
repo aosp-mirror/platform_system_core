@@ -346,8 +346,14 @@ status_t String8::appendFormatV(const char* fmt, va_list args)
     n = vsnprintf(NULL, 0, fmt, tmp_args);
     va_end(tmp_args);
 
-    if (n != 0) {
+    if (n < 0) return UNKNOWN_ERROR;
+
+    if (n > 0) {
         size_t oldLength = length();
+        if ((size_t)n > SIZE_MAX - 1 ||
+            oldLength > SIZE_MAX - (size_t)n - 1) {
+            return NO_MEMORY;
+        }
         char* buf = lockBuffer(oldLength + n);
         if (buf) {
             vsnprintf(buf + oldLength, n + 1, fmt, args);
