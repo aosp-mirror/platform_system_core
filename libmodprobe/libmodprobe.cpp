@@ -336,7 +336,6 @@ Modprobe::Modprobe(const std::vector<std::string>& base_paths, const std::string
     }
 
     ParseKernelCmdlineOptions();
-    android::base::SetMinimumLogSeverity(android::base::INFO);
 }
 
 void Modprobe::EnableBlocklist(bool enable) {
