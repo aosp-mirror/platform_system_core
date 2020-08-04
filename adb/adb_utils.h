@@ -55,7 +55,7 @@ std::string perror_str(const char* msg);
 
 bool set_file_block_mode(borrowed_fd fd, bool block);
 
-// Given forward/reverse targets, returns true if they look sane. If an error is found, fills
+// Given forward/reverse targets, returns true if they look valid. If an error is found, fills
 // |error| and returns false.
 // Currently this only checks "tcp:" targets. Additional checking could be added for other targets
 // if needed.
