@@ -34,16 +34,6 @@ using android::base::Join;
 using android::base::Split;
 using android::base::StringPrintf;
 
-#ifndef __ANDROID__
-unsigned long __android_logger_get_buffer_size(log_id_t) {
-    return 1024 * 1024;
-}
-
-bool __android_logger_valid_buffer_size(unsigned long) {
-    return true;
-}
-#endif
-
 char* android::uidToName(uid_t) {
     return nullptr;
 }
