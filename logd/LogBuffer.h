@@ -68,8 +68,8 @@ class LogBuffer {
                                              log_time realtime)>& filter) = 0;
 
     virtual bool Clear(log_id_t id, uid_t uid) = 0;
-    virtual unsigned long GetSize(log_id_t id) = 0;
-    virtual int SetSize(log_id_t id, unsigned long size) = 0;
+    virtual size_t GetSize(log_id_t id) = 0;
+    virtual bool SetSize(log_id_t id, size_t size) = 0;
 
     virtual uint64_t sequence() const = 0;
 };
