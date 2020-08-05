@@ -16,6 +16,11 @@
 
 #include "UnwinderComponentCreator.h"
 
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
 std::unique_ptr<Regs> GetRegisters(ArchEnum arch) {
   switch (arch) {
     case unwindstack::ARCH_ARM: {
@@ -109,13 +114,28 @@ ElfFake* PopulateElfFake(FuzzedDataProvider* data_provider) {
   return elf;
 }
 
+static constexpr size_t kPageSize = 4096;
+
+static constexpr uint64_t AlignToPage(uint64_t address) {
+  return (address + kPageSize - 1) & ~(kPageSize - 1);
+}
+
 std::unique_ptr<Maps> GetMaps(FuzzedDataProvider* data_provider) {
   std::unique_ptr<Maps> maps = std::make_unique<Maps>();
+  std::map<uint64_t, uint64_t> map_ends;
   uint8_t entry_count = data_provider->ConsumeIntegralInRange<uint8_t>(0, kMaxMapEntryCount);
   for (uint8_t i = 0; i < entry_count; i++) {
-    uint64_t start = data_provider->ConsumeIntegral<uint64_t>();
-    uint64_t end = data_provider->ConsumeIntegralInRange<uint64_t>(start, UINT64_MAX);
-    uint64_t offset = data_provider->ConsumeIntegral<uint64_t>();
+    uint64_t start = AlignToPage(data_provider->ConsumeIntegral<uint64_t>());
+    uint64_t end = AlignToPage(data_provider->ConsumeIntegralInRange<uint64_t>(start, UINT64_MAX));
+    // Make sure not to add overlapping maps, that is not something that can
+    // happen in the real world.
+    auto entry = map_ends.upper_bound(start);
+    if (entry != map_ends.end() && end > entry->second) {
+      continue;
+    }
+    map_ends[end] = start;
+
+    uint64_t offset = AlignToPage(data_provider->ConsumeIntegral<uint64_t>());
     std::string map_info_name = data_provider->ConsumeRandomLengthString(kMaxMapInfoNameLen);
     uint8_t flags = PROT_READ | PROT_WRITE;
 
