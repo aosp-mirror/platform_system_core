@@ -64,6 +64,7 @@ using android::base::ParseByteCount;
 using android::base::ParseUint;
 using android::base::Split;
 using android::base::StringPrintf;
+using android::base::WriteFully;
 
 class Logcat {
   public:
@@ -864,8 +865,7 @@ int Logcat::Run(int argc, char** argv) {
 
                     if (consolePipe) {
                         // need the trailing '\0'
-                        if (!android::base::WriteFully(fd, pipePurpose.c_str(),
-                                                       pipePurpose.size() + 1)) {
+                        if (!WriteFully(fd, pipePurpose.c_str(), pipePurpose.size() + 1)) {
                             close(fd);
                             return EXIT_FAILURE;
                         }
@@ -1078,7 +1078,9 @@ int Logcat::Run(int argc, char** argv) {
                         buffer_name, size_format.first, size_format.second, consumed_format.first,
                         consumed_format.second, readable_format.first, readable_format.second,
                         (int)LOGGER_ENTRY_MAX_LEN, (int)LOGGER_ENTRY_MAX_PAYLOAD);
-                TEMP_FAILURE_RETRY(write(output_fd_.get(), str.data(), str.length()));
+                if (!WriteFully(output_fd_, str.data(), str.length())) {
+                    error(EXIT_FAILURE, errno, "Failed to write to output fd");
+                }
             }
         }
     }
@@ -1148,7 +1150,9 @@ int Logcat::Run(int argc, char** argv) {
         if (*cp == '\n') ++cp;
 
         size_t len = strlen(cp);
-        TEMP_FAILURE_RETRY(write(output_fd_.get(), cp, len));
+        if (!WriteFully(output_fd_, cp, len)) {
+            error(EXIT_FAILURE, errno, "Failed to write to output fd");
+        }
         return EXIT_SUCCESS;
     }
 
@@ -1192,7 +1196,9 @@ If you have enabled significant logging, look into using the -G option to increa
         PrintDividers(log_msg.id(), printDividers);
 
         if (print_binary_) {
-            TEMP_FAILURE_RETRY(write(output_fd_.get(), &log_msg, log_msg.len()));
+            if (!WriteFully(output_fd_, &log_msg, log_msg.len())) {
+                error(EXIT_FAILURE, errno, "Failed to write to output fd");
+            }
         } else {
             ProcessBuffer(&log_msg);
         }
