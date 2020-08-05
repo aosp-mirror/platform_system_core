@@ -57,6 +57,7 @@ class CommandListener : public FrameworkListener {
     LogCmd(Clear, clear);
     LogCmd(GetBufSize, getLogSize);
     LogCmd(SetBufSize, setLogSize);
+    LogCmd(GetBufSizeReadable, getLogSizeReadable);
     LogCmd(GetBufSizeUsed, getLogSizeUsed);
     LogCmd(GetStatistics, getStatistics);
     LogCmd(GetPruneList, getPruneList);
