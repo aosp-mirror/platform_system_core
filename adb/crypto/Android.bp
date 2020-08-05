@@ -48,6 +48,7 @@ cc_defaults {
 
     shared_libs: [
         "libadb_protos",
+        "libadb_sysdeps",
         "libbase",
         "liblog",
         "libcrypto",
@@ -76,5 +77,6 @@ cc_library_static {
 
     static_libs: [
         "libadb_protos_static",
+        "libadb_sysdeps",
     ],
 }
