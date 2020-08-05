@@ -1064,18 +1064,20 @@ int Logcat::Run(int argc, char** argv) {
         if (getLogSize) {
             long size = android_logger_get_log_size(logger);
             long readable = android_logger_get_log_readable_size(logger);
+            long consumed = android_logger_get_log_consumed_size(logger);
 
             if (size < 0 || readable < 0) {
                 ReportErrorName(buffer_name, security_buffer_selected, &get_size_failures);
             } else {
                 auto size_format = format_of_size(size);
                 auto readable_format = format_of_size(readable);
+                auto consumed_format = format_of_size(consumed);
                 std::string str = android::base::StringPrintf(
-                        "%s: ring buffer is %lu %sB (%lu %sB consumed),"
+                        "%s: ring buffer is %lu %sB (%lu %sB consumed, %lu %sB readable),"
                         " max entry is %d B, max payload is %d B\n",
-                        buffer_name, size_format.first, size_format.second, readable_format.first,
-                        readable_format.second, (int)LOGGER_ENTRY_MAX_LEN,
-                        (int)LOGGER_ENTRY_MAX_PAYLOAD);
+                        buffer_name, size_format.first, size_format.second, consumed_format.first,
+                        consumed_format.second, readable_format.first, readable_format.second,
+                        (int)LOGGER_ENTRY_MAX_LEN, (int)LOGGER_ENTRY_MAX_PAYLOAD);
                 TEMP_FAILURE_RETRY(write(output_fd_.get(), str.data(), str.length()));
             }
         }
