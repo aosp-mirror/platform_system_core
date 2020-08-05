@@ -117,6 +117,7 @@ cc_defaults {
     static_libs: [
         "libadb_crypto",
         "libadb_pairing_connection",
+        "libadb_sysdeps",
         "libadb_tls_connection",
         "libadbd",
         "libadbd_core",
@@ -167,6 +168,7 @@ libadb_srcs = [
     "services.cpp",
     "sockets.cpp",
     "socket_spec.cpp",
+    "sysdeps/env.cpp",
     "sysdeps/errno.cpp",
     "transport.cpp",
     "transport_fd.cpp",
@@ -261,6 +263,43 @@ cc_library_host_static {
     ],
 }
 
+cc_library {
+    name: "libadb_sysdeps",
+    defaults: ["adb_defaults"],
+    recovery_available: true,
+    host_supported: true,
+    compile_multilib: "both",
+    min_sdk_version: "apex_inherit",
+
+    srcs: [
+        "sysdeps/env.cpp",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+
+    target: {
+        windows: {
+            enabled: true,
+            ldflags: ["-municode"],
+        },
+    },
+
+    export_include_dirs: ["."],
+
+    visibility: [
+        "//system/core/adb:__subpackages__",
+        "//bootable/recovery/minadbd:__subpackages__",
+    ],
+
+    apex_available: [
+        "com.android.adbd",
+        "test_com.android.adbd",
+    ],
+}
+
 cc_test_host {
     name: "adb_test",
     defaults: ["adb_defaults"],
@@ -274,6 +313,7 @@ cc_test_host {
         "libadb_pairing_auth_static",
         "libadb_pairing_connection_static",
         "libadb_protos_static",
+        "libadb_sysdeps",
         "libadb_tls_connection_static",
         "libbase",
         "libcutils",
@@ -330,6 +370,7 @@ cc_binary_host {
         "libadb_pairing_auth",
         "libadb_pairing_connection",
         "libadb_protos",
+        "libadb_sysdeps",
         "libadb_tls_connection",
         "libandroidfw",
         "libapp_processes_protos_full",
@@ -833,6 +874,7 @@ cc_test_host {
         "libadb_pairing_auth_static",
         "libadb_pairing_connection_static",
         "libadb_protos_static",
+        "libadb_sysdeps",
         "libadb_tls_connection_static",
         "libandroidfw",
         "libbase",
