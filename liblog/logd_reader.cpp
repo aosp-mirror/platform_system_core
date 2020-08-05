@@ -41,7 +41,7 @@
 
 // Connects to /dev/socket/<name> and returns the associated fd or returns -1 on error.
 // O_CLOEXEC is always set.
-static int socket_local_client(const std::string& name, int type) {
+static int socket_local_client(const std::string& name, int type, bool timeout) {
   sockaddr_un addr = {.sun_family = AF_LOCAL};
 
   std::string path = "/dev/socket/" + name;
@@ -53,6 +53,18 @@ static int socket_local_client(const std::string& name, int type) {
   int fd = socket(AF_LOCAL, type | SOCK_CLOEXEC, 0);
   if (fd == -1) {
     return -1;
+  }
+
+  if (timeout) {
+    // Sending and receiving messages should be instantaneous, but we don't want to wait forever if
+    // logd is hung, so we set a gracious 2s timeout.
+    struct timeval t = {2, 0};
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &t, sizeof(t)) == -1) {
+      return -1;
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t)) == -1) {
+      return -1;
+    }
   }
 
   if (connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == -1) {
@@ -69,7 +81,7 @@ ssize_t SendLogdControlMessage(char* buf, size_t buf_size) {
   size_t len;
   char* cp;
   int errno_save = 0;
-  int sock = socket_local_client("logd", SOCK_STREAM);
+  int sock = socket_local_client("logd", SOCK_STREAM, true);
   if (sock < 0) {
     return sock;
   }
@@ -268,7 +280,7 @@ static int logdOpen(struct logger_list* logger_list) {
     return sock;
   }
 
-  sock = socket_local_client("logdr", SOCK_SEQPACKET);
+  sock = socket_local_client("logdr", SOCK_SEQPACKET, false);
   if (sock <= 0) {
     if ((sock == -1) && errno) {
       return -errno;
