@@ -240,3 +240,16 @@ cc_test {
     defaults: ["charger_defaults"],
     srcs: ["charger_test.cpp"],
 }
+
+cc_test {
+    name: "libhealthd_charger_test",
+    srcs: ["AnimationParser_test.cpp"],
+    shared_libs: [
+        "liblog",
+        "libbase",
+        "libcutils",
+    ],
+    static_libs: [
+        "libhealthd_charger",
+    ],
+}
