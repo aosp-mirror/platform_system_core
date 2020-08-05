@@ -252,4 +252,8 @@ cc_test {
     static_libs: [
         "libhealthd_charger",
     ],
+    test_suites: [
+        "general-tests",
+        "device-tests",
+    ],
 }
