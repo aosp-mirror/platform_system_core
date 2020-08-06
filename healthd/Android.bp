@@ -257,3 +257,27 @@ cc_test {
         "device-tests",
     ],
 }
+
+// /system/etc/res/images/charger/battery_fail.png
+prebuilt_etc {
+    name: "system_core_charger_res_images_battery_fail.png",
+    src: "images/battery_fail.png",
+    relative_install_path: "res/images/charger",
+    filename: "battery_fail.png",
+}
+
+// /system/etc/res/images/charger/battery_scale.png
+prebuilt_etc {
+    name: "system_core_charger_res_images_battery_scale.png",
+    src: "images/battery_scale.png",
+    relative_install_path: "res/images/charger",
+    filename: "battery_scale.png",
+}
+
+phony {
+    name: "charger_res_images",
+    required: [
+        "system_core_charger_res_images_battery_fail.png",
+        "system_core_charger_res_images_battery_scale.png",
+    ],
+}
