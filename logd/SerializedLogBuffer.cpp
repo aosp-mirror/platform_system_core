@@ -23,6 +23,7 @@
 #include <android-base/logging.h>
 #include <android-base/scopeguard.h>
 
+#include "LogSize.h"
 #include "LogStatistics.h"
 #include "SerializedFlushToState.h"
 
@@ -34,8 +35,8 @@ SerializedLogBuffer::SerializedLogBuffer(LogReaderList* reader_list, LogTags* ta
 
 void SerializedLogBuffer::Init() {
     log_id_for_each(i) {
-        if (SetSize(i, __android_logger_get_buffer_size(i))) {
-            SetSize(i, LOG_BUFFER_MIN_SIZE);
+        if (!SetSize(i, GetBufferSizeFromProperties(i))) {
+            SetSize(i, kLogBufferMinSize);
         }
     }
 
@@ -299,7 +300,7 @@ bool SerializedLogBuffer::Clear(log_id_t id, uid_t uid) {
     return Prune(id, ULONG_MAX, uid);
 }
 
-unsigned long SerializedLogBuffer::GetSizeUsed(log_id_t id) {
+size_t SerializedLogBuffer::GetSizeUsed(log_id_t id) {
     size_t total_size = 0;
     for (const auto& chunk : logs_[id]) {
         total_size += chunk.PruneSize();
@@ -307,7 +308,7 @@ unsigned long SerializedLogBuffer::GetSizeUsed(log_id_t id) {
     return total_size;
 }
 
-unsigned long SerializedLogBuffer::GetSize(log_id_t id) {
+size_t SerializedLogBuffer::GetSize(log_id_t id) {
     auto lock = std::lock_guard{lock_};
     return max_size_[id];
 }
@@ -315,10 +316,10 @@ unsigned long SerializedLogBuffer::GetSize(log_id_t id) {
 // New SerializedLogChunk objects will be allocated according to the new size, but older one are
 // unchanged.  MaybePrune() is called on the log buffer to reduce it to an appropriate size if the
 // new size is lower.
-int SerializedLogBuffer::SetSize(log_id_t id, unsigned long size) {
+bool SerializedLogBuffer::SetSize(log_id_t id, size_t size) {
     // Reasonable limits ...
-    if (!__android_logger_valid_buffer_size(size)) {
-        return -1;
+    if (!IsValidBufferSize(size)) {
+        return false;
     }
 
     auto lock = std::lock_guard{lock_};
@@ -326,5 +327,5 @@ int SerializedLogBuffer::SetSize(log_id_t id, unsigned long size) {
 
     MaybePrune(id);
 
-    return 0;
+    return true;
 }
