@@ -19,6 +19,7 @@
 #include <android-base/logging.h>
 
 #include "LogBufferElement.h"
+#include "LogSize.h"
 
 SimpleLogBuffer::SimpleLogBuffer(LogReaderList* reader_list, LogTags* tags, LogStatistics* stats)
     : reader_list_(reader_list), tags_(tags), stats_(stats) {
@@ -29,8 +30,8 @@ SimpleLogBuffer::~SimpleLogBuffer() {}
 
 void SimpleLogBuffer::Init() {
     log_id_for_each(i) {
-        if (SetSize(i, __android_logger_get_buffer_size(i))) {
-            SetSize(i, LOG_BUFFER_MIN_SIZE);
+        if (!SetSize(i, GetBufferSizeFromProperties(i))) {
+            SetSize(i, kLogBufferMinSize);
         }
     }
 
@@ -247,22 +248,22 @@ bool SimpleLogBuffer::Clear(log_id_t id, uid_t uid) {
 }
 
 // get the total space allocated to "id"
-unsigned long SimpleLogBuffer::GetSize(log_id_t id) {
+size_t SimpleLogBuffer::GetSize(log_id_t id) {
     auto lock = SharedLock{lock_};
     size_t retval = max_size_[id];
     return retval;
 }
 
 // set the total space allocated to "id"
-int SimpleLogBuffer::SetSize(log_id_t id, unsigned long size) {
+bool SimpleLogBuffer::SetSize(log_id_t id, size_t size) {
     // Reasonable limits ...
-    if (!__android_logger_valid_buffer_size(size)) {
-        return -1;
+    if (!IsValidBufferSize(size)) {
+        return false;
     }
 
     auto lock = std::lock_guard{lock_};
     max_size_[id] = size;
-    return 0;
+    return true;
 }
 
 void SimpleLogBuffer::MaybePrune(log_id_t id) {
