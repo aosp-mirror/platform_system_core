@@ -46,6 +46,7 @@ CommandListener::CommandListener(LogBuffer* buf, LogTags* tags, PruneList* prune
     registerCmd(new ClearCmd(this));
     registerCmd(new GetBufSizeCmd(this));
     registerCmd(new SetBufSizeCmd(this));
+    registerCmd(new GetBufSizeReadableCmd(this));
     registerCmd(new GetBufSizeUsedCmd(this));
     registerCmd(new GetStatisticsCmd(this));
     registerCmd(new SetPruneListCmd(this));
@@ -133,6 +134,26 @@ int CommandListener::SetBufSizeCmd::runCommand(SocketClient* cli, int argc,
     }
 
     cli->sendMsg("success");
+    return 0;
+}
+
+int CommandListener::GetBufSizeReadableCmd::runCommand(SocketClient* cli, int argc, char** argv) {
+    setname();
+    if (argc < 2) {
+        cli->sendMsg("Missing Argument");
+        return 0;
+    }
+
+    int id = atoi(argv[1]);
+    if (id < LOG_ID_MIN || LOG_ID_MAX <= id) {
+        cli->sendMsg("Range Error");
+        return 0;
+    }
+
+    unsigned long size = stats()->SizeReadable((log_id_t)id);
+    char buf[512];
+    snprintf(buf, sizeof(buf), "%lu", size);
+    cli->sendMsg(buf);
     return 0;
 }
 
