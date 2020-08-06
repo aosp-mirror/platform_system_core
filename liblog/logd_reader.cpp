@@ -35,6 +35,7 @@
 
 #include <string>
 
+#include <android-base/parseint.h>
 #include <private/android_logger.h>
 
 #include "logger.h"
@@ -160,26 +161,56 @@ int android_logger_clear(struct logger* logger) {
   return check_log_success(buf, SendLogdControlMessage(buf, sizeof(buf)));
 }
 
-/* returns the total size of the log's ring buffer */
-long android_logger_get_log_size(struct logger* logger) {
+enum class LogSizeType : uint32_t {
+  kAllotted = 0,
+  kReadable,
+  kConsumed,
+};
+
+static long GetLogSize(struct logger* logger, LogSizeType type) {
   if (!android_logger_is_logd(logger)) {
     return -EINVAL;
   }
 
   uint32_t log_id = android_logger_get_id(logger);
   char buf[512];
-  snprintf(buf, sizeof(buf), "getLogSize %" PRIu32, log_id);
+  switch (type) {
+    case LogSizeType::kAllotted:
+      snprintf(buf, sizeof(buf), "getLogSize %" PRIu32, log_id);
+      break;
+    case LogSizeType::kReadable:
+      snprintf(buf, sizeof(buf), "getLogSizeReadable %" PRIu32, log_id);
+      break;
+    case LogSizeType::kConsumed:
+      snprintf(buf, sizeof(buf), "getLogSizeUsed %" PRIu32, log_id);
+      break;
+    default:
+      abort();
+  }
 
   ssize_t ret = SendLogdControlMessage(buf, sizeof(buf));
   if (ret < 0) {
     return ret;
   }
 
-  if ((buf[0] < '0') || ('9' < buf[0])) {
+  long size;
+  if (!android::base::ParseInt(buf, &size)) {
     return -1;
   }
 
-  return atol(buf);
+  return size;
+}
+
+long android_logger_get_log_size(struct logger* logger) {
+  return GetLogSize(logger, LogSizeType::kAllotted);
+}
+
+long android_logger_get_log_readable_size(struct logger* logger) {
+  return GetLogSize(logger, LogSizeType::kReadable);
+}
+
+long android_logger_get_log_consumed_size(struct logger* logger) {
+  return GetLogSize(logger, LogSizeType::kConsumed);
 }
 
 int android_logger_set_log_size(struct logger* logger, unsigned long size) {
@@ -192,31 +223,6 @@ int android_logger_set_log_size(struct logger* logger, unsigned long size) {
   snprintf(buf, sizeof(buf), "setLogSize %" PRIu32 " %lu", log_id, size);
 
   return check_log_success(buf, SendLogdControlMessage(buf, sizeof(buf)));
-}
-
-/*
- * returns the readable size of the log's ring buffer (that is, amount of the
- * log consumed)
- */
-long android_logger_get_log_readable_size(struct logger* logger) {
-  if (!android_logger_is_logd(logger)) {
-    return -EINVAL;
-  }
-
-  uint32_t log_id = android_logger_get_id(logger);
-  char buf[512];
-  snprintf(buf, sizeof(buf), "getLogSizeUsed %" PRIu32, log_id);
-
-  ssize_t ret = SendLogdControlMessage(buf, sizeof(buf));
-  if (ret < 0) {
-    return ret;
-  }
-
-  if ((buf[0] < '0') || ('9' < buf[0])) {
-    return -1;
-  }
-
-  return atol(buf);
 }
 
 int android_logger_get_log_version(struct logger*) {
