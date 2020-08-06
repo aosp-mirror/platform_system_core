@@ -41,8 +41,8 @@ class SimpleLogBuffer : public LogBuffer {
                                                   log_time realtime)>& filter) override;
 
     bool Clear(log_id_t id, uid_t uid) override;
-    unsigned long GetSize(log_id_t id) override;
-    int SetSize(log_id_t id, unsigned long size) override final;
+    size_t GetSize(log_id_t id) override;
+    bool SetSize(log_id_t id, size_t size) override final;
 
     uint64_t sequence() const override { return sequence_.load(std::memory_order_relaxed); }
 
@@ -60,7 +60,7 @@ class SimpleLogBuffer : public LogBuffer {
 
     LogStatistics* stats() { return stats_; }
     LogReaderList* reader_list() { return reader_list_; }
-    unsigned long max_size(log_id_t id) REQUIRES_SHARED(lock_) { return max_size_[id]; }
+    size_t max_size(log_id_t id) REQUIRES_SHARED(lock_) { return max_size_[id]; }
     std::list<LogBufferElement>& logs() { return logs_; }
 
     RwLock lock_;
@@ -75,7 +75,7 @@ class SimpleLogBuffer : public LogBuffer {
 
     std::atomic<uint64_t> sequence_ = 1;
 
-    unsigned long max_size_[LOG_ID_MAX] GUARDED_BY(lock_);
+    size_t max_size_[LOG_ID_MAX] GUARDED_BY(lock_);
     std::list<LogBufferElement> logs_ GUARDED_BY(lock_);
     // Keeps track of the iterator to the oldest log message of a given log type, as an
     // optimization when pruning logs.  Use GetOldest() to retrieve.
