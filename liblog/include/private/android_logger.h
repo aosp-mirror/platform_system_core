@@ -144,13 +144,6 @@ int __android_log_security_bwrite(int32_t tag, const void* payload, size_t len);
 int __android_log_security_bswrite(int32_t tag, const char* payload);
 int __android_log_security(); /* Device Owner is present */
 
-#define LOG_BUFFER_SIZE (256 * 1024) /* Tuned with ro.logd.size per-platform \
-                                      */
-#define LOG_BUFFER_MIN_SIZE (64 * 1024UL)
-#define LOG_BUFFER_MAX_SIZE (256 * 1024 * 1024UL)
-unsigned long __android_logger_get_buffer_size(log_id_t logId);
-bool __android_logger_valid_buffer_size(unsigned long value);
-
 /* Retrieve the composed event buffer */
 int android_log_write_list_buffer(android_log_context ctx, const char** msg);
 

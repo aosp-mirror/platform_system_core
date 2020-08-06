@@ -101,9 +101,9 @@ int CommandListener::GetBufSizeCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    unsigned long size = buf()->GetSize((log_id_t)id);
+    size_t size = buf()->GetSize(static_cast<log_id_t>(id));
     char buf[512];
-    snprintf(buf, sizeof(buf), "%lu", size);
+    snprintf(buf, sizeof(buf), "%zu", size);
     cli->sendMsg(buf);
     return 0;
 }
@@ -127,8 +127,8 @@ int CommandListener::SetBufSizeCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    unsigned long size = atol(argv[2]);
-    if (buf()->SetSize((log_id_t)id, size)) {
+    size_t size = atol(argv[2]);
+    if (!buf()->SetSize(static_cast<log_id_t>(id), size)) {
         cli->sendMsg("Range Error");
         return 0;
     }
@@ -150,9 +150,9 @@ int CommandListener::GetBufSizeReadableCmd::runCommand(SocketClient* cli, int ar
         return 0;
     }
 
-    unsigned long size = stats()->SizeReadable((log_id_t)id);
+    size_t size = stats()->SizeReadable(static_cast<log_id_t>(id));
     char buf[512];
-    snprintf(buf, sizeof(buf), "%lu", size);
+    snprintf(buf, sizeof(buf), "%zu", size);
     cli->sendMsg(buf);
     return 0;
 }
@@ -171,9 +171,9 @@ int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient* cli, int argc,
         return 0;
     }
 
-    unsigned long size = stats()->Sizes((log_id_t)id);
+    size_t size = stats()->Sizes(static_cast<log_id_t>(id));
     char buf[512];
-    snprintf(buf, sizeof(buf), "%lu", size);
+    snprintf(buf, sizeof(buf), "%zu", size);
     cli->sendMsg(buf);
     return 0;
 }

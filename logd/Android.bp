@@ -57,6 +57,7 @@ cc_library_static {
         "LogReaderList.cpp",
         "LogReaderThread.cpp",
         "LogBufferElement.cpp",
+        "LogSize.cpp",
         "LogStatistics.cpp",
         "LogTags.cpp",
         "PruneList.cpp",
