@@ -75,6 +75,8 @@ class LogBufferTest : public testing::TestWithParam<std::string> {
         } else {
             FAIL() << "Unknown buffer type selected for test";
         }
+
+        log_id_for_each(i) { log_buffer_->SetSize(i, 1024 * 1024); }
     }
 
     void LogMessages(const std::vector<LogMessage>& messages) {
