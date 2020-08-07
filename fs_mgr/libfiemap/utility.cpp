@@ -167,5 +167,30 @@ bool FilesystemHasReliablePinning(const std::string& file, bool* supported) {
     return F2fsPinBeforeAllocate(fd, supported);
 }
 
+bool IsSubdir(const std::string& child, const std::string& parent) {
+    // Precondition: both are absolute paths.
+    CHECK(android::base::StartsWith(child, "/")) << "Not an absolute path: " << child;
+    CHECK(android::base::StartsWith(parent, "/")) << "Not an absolute path: " << parent;
+
+    // Remove extraneous "/" at the end.
+    std::string_view child_sv = child;
+    while (child_sv != "/" && android::base::ConsumeSuffix(&child_sv, "/"))
+        ;
+
+    std::string_view parent_sv = parent;
+    while (parent_sv != "/" && android::base::ConsumeSuffix(&parent_sv, "/"))
+        ;
+
+    // IsSubdir(anything, "/") => true
+    if (parent_sv == "/") return true;
+
+    // IsSubdir("/foo", "/foo") => true
+    if (parent_sv == child_sv) return true;
+
+    // IsSubdir("/foo/bar", "/foo") => true
+    // IsSubdir("/foo-bar", "/foo") => false
+    return android::base::StartsWith(child_sv, std::string(parent_sv) + "/");
+}
+
 }  // namespace fiemap
 }  // namespace android
