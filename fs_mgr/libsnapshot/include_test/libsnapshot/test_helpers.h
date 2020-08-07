@@ -180,5 +180,22 @@ class LowSpaceUserdata {
     uint64_t bsize_ = 0;
 };
 
+bool IsVirtualAbEnabled();
+
+#define SKIP_IF_NON_VIRTUAL_AB()                                                        \
+    do {                                                                                \
+        if (!IsVirtualAbEnabled()) GTEST_SKIP() << "Test for Virtual A/B devices only"; \
+    } while (0)
+
+#define RETURN_IF_NON_VIRTUAL_AB_MSG(msg) \
+    do {                                  \
+        if (!IsVirtualAbEnabled()) {      \
+            std::cerr << (msg);           \
+            return;                       \
+        }                                 \
+    } while (0)
+
+#define RETURN_IF_NON_VIRTUAL_AB() RETURN_IF_NON_VIRTUAL_AB_MSG("")
+
 }  // namespace snapshot
 }  // namespace android
