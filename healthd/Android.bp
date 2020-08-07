@@ -243,19 +243,22 @@ cc_test {
 
 cc_test {
     name: "libhealthd_charger_test",
-    srcs: ["AnimationParser_test.cpp"],
-    shared_libs: [
-        "liblog",
-        "libbase",
-        "libcutils",
+    defaults: ["charger_defaults"],
+    srcs: [
+        "AnimationParser_test.cpp",
+        "healthd_mode_charger_test.cpp"
     ],
     static_libs: [
-        "libhealthd_charger",
+        "libgmock",
     ],
     test_suites: [
         "general-tests",
         "device-tests",
     ],
+    data: [
+        ":libhealthd_charger_test_data",
+    ],
+    require_root: true,
 }
 
 // /system/etc/res/images/charger/battery_fail.png
