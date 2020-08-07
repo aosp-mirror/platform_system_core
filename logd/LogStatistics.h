@@ -544,7 +544,7 @@ class LogStatistics {
     bool ShouldPrune(log_id id, unsigned long max_size, unsigned long* prune_rows) const
             EXCLUDES(lock_);
 
-    // Snapshot of the sizes for a given log buffer.
+    // Return the consumed size of the given buffer.
     size_t Sizes(log_id_t id) const EXCLUDES(lock_) {
         auto lock = std::lock_guard{lock_};
         if (overhead_[id]) {
@@ -552,6 +552,13 @@ class LogStatistics {
         }
         return mSizes[id];
     }
+
+    // Return the uncompressed size of the contents of the given buffer.
+    size_t SizeReadable(log_id_t id) const EXCLUDES(lock_) {
+        auto lock = std::lock_guard{lock_};
+        return mSizes[id];
+    }
+
     // TODO: Get rid of this entirely.
     static size_t sizesTotal() {
         return SizesTotal;
