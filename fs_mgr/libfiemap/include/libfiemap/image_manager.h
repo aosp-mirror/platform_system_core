@@ -176,6 +176,8 @@ class ImageManager final : public IImageManager {
     bool MapWithDmLinear(const IPartitionOpener& opener, const std::string& name,
                          const std::chrono::milliseconds& timeout_ms, std::string* path);
     bool UnmapImageDevice(const std::string& name, bool force);
+    bool IsUnreliablePinningAllowed() const;
+    bool MetadataDirIsTest() const;
 
     ImageManager(const ImageManager&) = delete;
     ImageManager& operator=(const ImageManager&) = delete;
