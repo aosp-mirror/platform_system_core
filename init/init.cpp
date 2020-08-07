@@ -310,14 +310,14 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
         // late_import is available only in Q and earlier release. As we don't
         // have system_ext in those versions, skip late_import for system_ext.
         parser.ParseConfig("/system_ext/etc/init");
-        if (!parser.ParseConfig("/product/etc/init")) {
-            late_import_paths.emplace_back("/product/etc/init");
+        if (!parser.ParseConfig("/vendor/etc/init")) {
+            late_import_paths.emplace_back("/vendor/etc/init");
         }
         if (!parser.ParseConfig("/odm/etc/init")) {
             late_import_paths.emplace_back("/odm/etc/init");
         }
-        if (!parser.ParseConfig("/vendor/etc/init")) {
-            late_import_paths.emplace_back("/vendor/etc/init");
+        if (!parser.ParseConfig("/product/etc/init")) {
+            late_import_paths.emplace_back("/product/etc/init");
         }
     } else {
         parser.ParseConfig(bootscript);
