@@ -32,6 +32,7 @@
 #include <string>
 
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <cutils/sockets.h>
 #include <log/log_properties.h>
@@ -64,53 +65,58 @@ static void setname() {
     }
 }
 
-int CommandListener::ClearCmd::runCommand(SocketClient* cli, int argc,
-                                          char** argv) {
+template <typename F>
+static int LogIdCommand(SocketClient* cli, int argc, char** argv, F&& function) {
     setname();
+    if (argc < 2) {
+        cli->sendMsg("Missing Argument");
+        return 0;
+    }
+
+    int log_id;
+    if (!android::base::ParseInt(argv[1], &log_id, static_cast<int>(LOG_ID_MAIN),
+                                 static_cast<int>(LOG_ID_KERNEL))) {
+        cli->sendMsg("Range Error");
+        return 0;
+    }
+
+    function(static_cast<log_id_t>(log_id));
+    return 0;
+}
+
+int CommandListener::ClearCmd::runCommand(SocketClient* cli, int argc, char** argv) {
     uid_t uid = cli->getUid();
     if (clientHasLogCredentials(cli)) {
         uid = AID_ROOT;
     }
 
-    if (argc < 2) {
-        cli->sendMsg("Missing Argument");
-        return 0;
-    }
-
-    int id = atoi(argv[1]);
-    if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
-        cli->sendMsg("Range Error");
-        return 0;
-    }
-
-    cli->sendMsg(buf()->Clear((log_id_t)id, uid) ? "success" : "busy");
-    return 0;
+    return LogIdCommand(cli, argc, argv, [&](log_id_t id) {
+        cli->sendMsg(buf()->Clear(id, uid) ? "success" : "busy");
+    });
 }
 
-int CommandListener::GetBufSizeCmd::runCommand(SocketClient* cli, int argc,
-                                               char** argv) {
-    setname();
-    if (argc < 2) {
-        cli->sendMsg("Missing Argument");
-        return 0;
-    }
+template <typename F>
+static int LogSizeCommand(SocketClient* cli, int argc, char** argv, F&& size_function) {
+    return LogIdCommand(cli, argc, argv, [&](log_id_t log_id) {
+        cli->sendMsg(std::to_string(size_function(log_id)).c_str());
+    });
+}
 
-    int id = atoi(argv[1]);
-    if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
-        cli->sendMsg("Range Error");
-        return 0;
-    }
+int CommandListener::GetBufSizeCmd::runCommand(SocketClient* cli, int argc, char** argv) {
+    return LogSizeCommand(cli, argc, argv, [this](log_id_t id) { return buf()->GetSize(id); });
+}
 
-    size_t size = buf()->GetSize(static_cast<log_id_t>(id));
-    char buf[512];
-    snprintf(buf, sizeof(buf), "%zu", size);
-    cli->sendMsg(buf);
-    return 0;
+int CommandListener::GetBufSizeReadableCmd::runCommand(SocketClient* cli, int argc, char** argv) {
+    return LogSizeCommand(cli, argc, argv,
+                          [this](log_id_t id) { return stats()->SizeReadable(id); });
+}
+
+int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient* cli, int argc, char** argv) {
+    return LogSizeCommand(cli, argc, argv, [this](log_id_t id) { return stats()->Sizes(id); });
 }
 
 int CommandListener::SetBufSizeCmd::runCommand(SocketClient* cli, int argc,
                                                char** argv) {
-    setname();
     if (!clientHasLogCredentials(cli)) {
         cli->sendMsg("Permission Denied");
         return 0;
@@ -120,62 +126,11 @@ int CommandListener::SetBufSizeCmd::runCommand(SocketClient* cli, int argc,
         cli->sendMsg("Missing Argument");
         return 0;
     }
-
-    int id = atoi(argv[1]);
-    if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
-        cli->sendMsg("Range Error");
-        return 0;
-    }
-
     size_t size = atol(argv[2]);
-    if (!buf()->SetSize(static_cast<log_id_t>(id), size)) {
-        cli->sendMsg("Range Error");
-        return 0;
-    }
 
-    cli->sendMsg("success");
-    return 0;
-}
-
-int CommandListener::GetBufSizeReadableCmd::runCommand(SocketClient* cli, int argc, char** argv) {
-    setname();
-    if (argc < 2) {
-        cli->sendMsg("Missing Argument");
-        return 0;
-    }
-
-    int id = atoi(argv[1]);
-    if (id < LOG_ID_MIN || LOG_ID_MAX <= id) {
-        cli->sendMsg("Range Error");
-        return 0;
-    }
-
-    size_t size = stats()->SizeReadable(static_cast<log_id_t>(id));
-    char buf[512];
-    snprintf(buf, sizeof(buf), "%zu", size);
-    cli->sendMsg(buf);
-    return 0;
-}
-
-int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient* cli, int argc,
-                                                   char** argv) {
-    setname();
-    if (argc < 2) {
-        cli->sendMsg("Missing Argument");
-        return 0;
-    }
-
-    int id = atoi(argv[1]);
-    if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
-        cli->sendMsg("Range Error");
-        return 0;
-    }
-
-    size_t size = stats()->Sizes(static_cast<log_id_t>(id));
-    char buf[512];
-    snprintf(buf, sizeof(buf), "%zu", size);
-    cli->sendMsg(buf);
-    return 0;
+    return LogIdCommand(cli, argc, argv, [&](log_id_t log_id) {
+        cli->sendMsg(buf()->SetSize(log_id, size) ? "success" : "busy");
+    });
 }
 
 // This returns a string with a length prefix with the format <length>\n<data>\n\f.  The length
@@ -200,8 +155,7 @@ static std::string PackageString(const std::string& str) {
     return android::base::StringPrintf("%zu\n%s\n\f", total_size, str.c_str());
 }
 
-int CommandListener::GetStatisticsCmd::runCommand(SocketClient* cli, int argc,
-                                                  char** argv) {
+int CommandListener::GetStatisticsCmd::runCommand(SocketClient* cli, int argc, char** argv) {
     setname();
     uid_t uid = cli->getUid();
     if (clientHasLogCredentials(cli)) {
@@ -266,8 +220,7 @@ int CommandListener::SetPruneListCmd::runCommand(SocketClient* cli, int argc, ch
     return 0;
 }
 
-int CommandListener::GetEventTagCmd::runCommand(SocketClient* cli, int argc,
-                                                char** argv) {
+int CommandListener::GetEventTagCmd::runCommand(SocketClient* cli, int argc, char** argv) {
     setname();
     uid_t uid = cli->getUid();
     if (clientHasLogCredentials(cli)) {
@@ -311,8 +264,7 @@ int CommandListener::GetEventTagCmd::runCommand(SocketClient* cli, int argc,
     return 0;
 }
 
-int CommandListener::ReinitCmd::runCommand(SocketClient* cli, int /*argc*/,
-                                           char** /*argv*/) {
+int CommandListener::ReinitCmd::runCommand(SocketClient* cli, int, char**) {
     setname();
 
     LOG(INFO) << "logd reinit";
@@ -335,8 +287,7 @@ int CommandListener::ReinitCmd::runCommand(SocketClient* cli, int /*argc*/,
     return 0;
 }
 
-int CommandListener::ExitCmd::runCommand(SocketClient* cli, int /*argc*/,
-                                         char** /*argv*/) {
+int CommandListener::ExitCmd::runCommand(SocketClient* cli, int, char**) {
     setname();
 
     cli->sendMsg("success");
