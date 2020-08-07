@@ -43,11 +43,11 @@ namespace snapshot {
 
 class SnapshotMetadataUpdaterTest : public ::testing::TestWithParam<uint32_t> {
   public:
-    SnapshotMetadataUpdaterTest() {
-        is_virtual_ab_ = android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
-    }
+    SnapshotMetadataUpdaterTest() = default;
 
     void SetUp() override {
+        SKIP_IF_NON_VIRTUAL_AB();
+
         target_slot_ = GetParam();
         target_suffix_ = SlotSuffixForSlotNumber(target_slot_);
         SnapshotTestPropertyFetcher::SetUp(SlotSuffixForSlotNumber(1 - target_slot_));
@@ -68,7 +68,11 @@ class SnapshotMetadataUpdaterTest : public ::testing::TestWithParam<uint32_t> {
         ASSERT_TRUE(FillFakeMetadata(builder_.get(), manifest_, target_suffix_));
     }
 
-    void TearDown() override { SnapshotTestPropertyFetcher::TearDown(); }
+    void TearDown() override {
+        RETURN_IF_NON_VIRTUAL_AB();
+
+        SnapshotTestPropertyFetcher::TearDown();
+    }
 
     // Append suffix to name.
     std::string T(std::string_view name) { return std::string(name) + target_suffix_; }
@@ -127,7 +131,6 @@ class SnapshotMetadataUpdaterTest : public ::testing::TestWithParam<uint32_t> {
                                   << ".";
     }
 
-    bool is_virtual_ab_;
     std::unique_ptr<MetadataBuilder> builder_;
     uint32_t target_slot_;
     std::string target_suffix_;
