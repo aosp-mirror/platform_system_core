@@ -7,7 +7,7 @@
       "name": "liblp_test"
     },
     {
-      "name": "fiemap_image_test_presubmit"
+      "name": "fiemap_image_test"
     },
     {
       "name": "fiemap_writer_test"
