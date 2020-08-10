@@ -59,8 +59,7 @@ static void GetSocket() {
     return;
   }
 
-  int new_socket =
-      TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0));
+  int new_socket = TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0));
   if (new_socket <= 0) {
     return;
   }
@@ -91,8 +90,6 @@ int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr)
   struct iovec newVec[nr + headerLength];
   android_log_header_t header;
   size_t i, payloadSize;
-  static atomic_int dropped;
-  static atomic_int droppedSecurity;
 
   GetSocket();
 
@@ -110,50 +107,13 @@ int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr)
     return 0;
   }
 
+  header.id = logId;
   header.tid = gettid();
   header.realtime.tv_sec = ts->tv_sec;
   header.realtime.tv_nsec = ts->tv_nsec;
 
   newVec[0].iov_base = (unsigned char*)&header;
   newVec[0].iov_len = sizeof(header);
-
-  int32_t snapshot = atomic_exchange_explicit(&droppedSecurity, 0, memory_order_relaxed);
-  if (snapshot) {
-    android_log_event_int_t buffer;
-
-    header.id = LOG_ID_SECURITY;
-    buffer.header.tag = LIBLOG_LOG_TAG;
-    buffer.payload.type = EVENT_TYPE_INT;
-    buffer.payload.data = snapshot;
-
-    newVec[headerLength].iov_base = &buffer;
-    newVec[headerLength].iov_len = sizeof(buffer);
-
-    ret = TEMP_FAILURE_RETRY(writev(logd_socket, newVec, 2));
-    if (ret != (ssize_t)(sizeof(header) + sizeof(buffer))) {
-      atomic_fetch_add_explicit(&droppedSecurity, snapshot, memory_order_relaxed);
-    }
-  }
-  snapshot = atomic_exchange_explicit(&dropped, 0, memory_order_relaxed);
-  if (snapshot && __android_log_is_loggable_len(ANDROID_LOG_INFO, "liblog", strlen("liblog"),
-                                                ANDROID_LOG_VERBOSE)) {
-    android_log_event_int_t buffer;
-
-    header.id = LOG_ID_EVENTS;
-    buffer.header.tag = LIBLOG_LOG_TAG;
-    buffer.payload.type = EVENT_TYPE_INT;
-    buffer.payload.data = snapshot;
-
-    newVec[headerLength].iov_base = &buffer;
-    newVec[headerLength].iov_len = sizeof(buffer);
-
-    ret = TEMP_FAILURE_RETRY(writev(logd_socket, newVec, 2));
-    if (ret != (ssize_t)(sizeof(header) + sizeof(buffer))) {
-      atomic_fetch_add_explicit(&dropped, snapshot, memory_order_relaxed);
-    }
-  }
-
-  header.id = logId;
 
   for (payloadSize = 0, i = headerLength; i < nr + headerLength; i++) {
     newVec[i].iov_base = vec[i - headerLength].iov_base;
@@ -168,11 +128,8 @@ int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr)
     }
   }
 
-  // The write below could be lost, but will never block.
-  // EAGAIN occurs if logd is overloaded, other errors indicate that something went wrong with
-  // the connection, so we reset it and try again.
   ret = TEMP_FAILURE_RETRY(writev(logd_socket, newVec, i));
-  if (ret < 0 && errno != EAGAIN) {
+  if (ret < 0) {
     LogdConnect();
 
     ret = TEMP_FAILURE_RETRY(writev(logd_socket, newVec, i));
@@ -180,15 +137,6 @@ int LogdWrite(log_id_t logId, struct timespec* ts, struct iovec* vec, size_t nr)
 
   if (ret < 0) {
     ret = -errno;
-  }
-
-  if (ret > (ssize_t)sizeof(header)) {
-    ret -= sizeof(header);
-  } else if (ret < 0) {
-    atomic_fetch_add_explicit(&dropped, 1, memory_order_relaxed);
-    if (logId == LOG_ID_SECURITY) {
-      atomic_fetch_add_explicit(&droppedSecurity, 1, memory_order_relaxed);
-    }
   }
 
   return ret;
