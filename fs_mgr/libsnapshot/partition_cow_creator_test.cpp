@@ -41,8 +41,14 @@ namespace snapshot {
 
 class PartitionCowCreatorTest : public ::testing::Test {
   public:
-    void SetUp() override { SnapshotTestPropertyFetcher::SetUp(); }
-    void TearDown() override { SnapshotTestPropertyFetcher::TearDown(); }
+    void SetUp() override {
+        SKIP_IF_NON_VIRTUAL_AB();
+        SnapshotTestPropertyFetcher::SetUp();
+    }
+    void TearDown() override {
+        RETURN_IF_NON_VIRTUAL_AB();
+        SnapshotTestPropertyFetcher::TearDown();
+    }
 };
 
 TEST_F(PartitionCowCreatorTest, IntersectSelf) {
@@ -198,6 +204,8 @@ TEST_F(PartitionCowCreatorTest, CowSize) {
 }
 
 TEST(DmSnapshotInternals, CowSizeCalculator) {
+    SKIP_IF_NON_VIRTUAL_AB();
+
     DmSnapCowSizeCalculator cc(512, 8);
     unsigned long int b;
 
@@ -261,7 +269,9 @@ struct OptimizeOperationTestParam {
     std::optional<InstallOperation> expected_output;
 };
 
-class OptimizeOperationTest : public ::testing::TestWithParam<OptimizeOperationTestParam> {};
+class OptimizeOperationTest : public ::testing::TestWithParam<OptimizeOperationTestParam> {
+    void SetUp() override { SKIP_IF_NON_VIRTUAL_AB(); }
+};
 TEST_P(OptimizeOperationTest, Test) {
     InstallOperation actual_output;
     EXPECT_EQ(GetParam().expected_output.has_value(),
