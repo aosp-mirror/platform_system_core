@@ -1113,10 +1113,9 @@ class CheckpointManager {
                 // metadata-encrypted device with smaller blocks, we must not change this for
                 // devices shipped with Q or earlier unless they explicitly selected dm-default-key
                 // v2
-                constexpr unsigned int pre_gki_level = __ANDROID_API_Q__;
                 unsigned int options_format_version = android::base::GetUintProperty<unsigned int>(
                         "ro.crypto.dm_default_key.options_format.version",
-                        (android::fscrypt::GetFirstApiLevel() <= pre_gki_level ? 1 : 2));
+                        (android::fscrypt::GetFirstApiLevel() <= __ANDROID_API_Q__ ? 1 : 2));
                 if (options_format_version > 1) {
                     bowTarget->SetBlockSize(4096);
                 }
