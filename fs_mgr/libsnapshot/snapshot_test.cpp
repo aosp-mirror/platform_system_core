@@ -1799,7 +1799,6 @@ class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t
   protected:
     void SetUp() override {
         if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
-        GTEST_SKIP() << "WIP failure b/149738928";
 
         SnapshotTest::SetUp();
         userdata_ = std::make_unique<LowSpaceUserdata>();
