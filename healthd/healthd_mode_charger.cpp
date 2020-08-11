@@ -33,7 +33,9 @@
 #include <optional>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/strings.h>
 
 #include <linux/netlink.h>
 #include <sys/socket.h>
@@ -58,6 +60,7 @@
 #include <health2impl/Health.h>
 #include <healthd/healthd.h>
 
+using std::string_literals::operator""s;
 using namespace android;
 using android::hardware::Return;
 using android::hardware::health::GetHealthServiceOrDefault;
@@ -103,7 +106,13 @@ char* locale;
 
 namespace android {
 
-// Resources in /product/etc/res overrides resources in /res.
+// Legacy animation resources are loaded from this directory.
+static constexpr const char* legacy_animation_root = "/res/images/";
+
+// Built-in animation resources are loaded from this directory.
+static constexpr const char* system_animation_root = "/system/etc/res/images/";
+
+// Resources in /product/etc/res overrides resources in /res and /system/etc/res.
 // If the device is using the Generic System Image (GSI), resources may exist in
 // both paths.
 static constexpr const char* product_animation_desc_path =
@@ -625,6 +634,12 @@ void Charger::InitAnimation() {
         batt_anim_.set_resource_root(product_animation_root);
     } else if (base::ReadFileToString(animation_desc_path, &content)) {
         parse_success = parse_animation_desc(content, &batt_anim_);
+        // Fallback resources always exist in system_animation_root. On legacy devices with an old
+        // ramdisk image, resources may be overridden under root. For example,
+        // /res/images/charger/battery_fail.png may not be the same as
+        // system/core/healthd/images/battery_fail.png in the source tree, but is a device-specific
+        // image. Hence, load from /res, and fall back to /system/etc/res.
+        batt_anim_.set_resource_root(legacy_animation_root, system_animation_root);
     } else {
         LOGW("Could not open animation description at %s\n", animation_desc_path);
         parse_success = false;
@@ -633,13 +648,13 @@ void Charger::InitAnimation() {
     if (!parse_success) {
         LOGW("Could not parse animation description. Using default animation.\n");
         batt_anim_ = BASE_ANIMATION;
-        batt_anim_.animation_file.assign("charger/battery_scale");
+        batt_anim_.animation_file.assign(system_animation_root + "charger/battery_scale.png"s);
         InitDefaultAnimationFrames();
         batt_anim_.frames = owned_frames_.data();
         batt_anim_.num_frames = owned_frames_.size();
     }
     if (batt_anim_.fail_file.empty()) {
-        batt_anim_.fail_file.assign("charger/battery_fail");
+        batt_anim_.fail_file.assign(system_animation_root + "charger/battery_fail.png"s);
     }
 
     LOGV("Animation Description:\n");
@@ -678,10 +693,11 @@ void Charger::Init(struct healthd_config* config) {
 
     InitAnimation();
 
-    ret = res_create_display_surface(batt_anim_.fail_file.c_str(), &surf_unknown_);
+    ret = CreateDisplaySurface(batt_anim_.fail_file.c_str(), &surf_unknown_);
     if (ret < 0) {
         LOGE("Cannot load custom battery_fail image. Reverting to built in: %d\n", ret);
-        ret = res_create_display_surface("charger/battery_fail", &surf_unknown_);
+        ret = CreateDisplaySurface((system_animation_root + "charger/battery_fail.png"s).c_str(),
+                                   &surf_unknown_);
         if (ret < 0) {
             LOGE("Cannot load built in battery_fail image\n");
             surf_unknown_ = NULL;
@@ -692,8 +708,8 @@ void Charger::Init(struct healthd_config* config) {
     int scale_count;
     int scale_fps;  // Not in use (charger/battery_scale doesn't have FPS text
                     // chunk). We are using hard-coded frame.disp_time instead.
-    ret = res_create_multi_display_surface(batt_anim_.animation_file.c_str(), &scale_count,
-                                           &scale_fps, &scale_frames);
+    ret = CreateMultiDisplaySurface(batt_anim_.animation_file.c_str(), &scale_count, &scale_fps,
+                                    &scale_frames);
     if (ret < 0) {
         LOGE("Cannot load battery_scale image\n");
         batt_anim_.num_frames = 0;
@@ -720,6 +736,43 @@ void Charger::Init(struct healthd_config* config) {
     HalHealthLoop::Init(config);
 
     boot_min_cap_ = config->boot_min_cap;
+}
+
+int Charger::CreateDisplaySurface(const std::string& name, GRSurface** surface) {
+    return res_create_display_surface(name.c_str(), surface);
+}
+
+int Charger::CreateMultiDisplaySurface(const std::string& name, int* frames, int* fps,
+                                       GRSurface*** surface) {
+    return res_create_multi_display_surface(name.c_str(), frames, fps, surface);
+}
+
+void set_resource_root_for(const std::string& root, const std::string& backup_root,
+                           std::string* value) {
+    if (value->empty()) {
+        return;
+    }
+
+    std::string new_value = root + *value + ".png";
+    // If |backup_root| is provided, additionally check whether the file under |root| is
+    // accessible or not. If not accessible, fallback to file under |backup_root|.
+    if (!backup_root.empty() && access(new_value.data(), F_OK) == -1) {
+        new_value = backup_root + *value + ".png";
+    }
+
+    *value = new_value;
+}
+
+void animation::set_resource_root(const std::string& root, const std::string& backup_root) {
+    CHECK(android::base::StartsWith(root, "/") && android::base::EndsWith(root, "/"))
+            << "animation root " << root << " must start and end with /";
+    CHECK(backup_root.empty() || (android::base::StartsWith(backup_root, "/") &&
+                                  android::base::EndsWith(backup_root, "/")))
+            << "animation backup root " << backup_root << " must start and end with /";
+    set_resource_root_for(root, backup_root, &animation_file);
+    set_resource_root_for(root, backup_root, &fail_file);
+    set_resource_root_for(root, backup_root, &text_clock.font_file);
+    set_resource_root_for(root, backup_root, &text_percent.font_file);
 }
 
 }  // namespace android
