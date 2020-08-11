@@ -243,17 +243,44 @@ cc_test {
 
 cc_test {
     name: "libhealthd_charger_test",
-    srcs: ["AnimationParser_test.cpp"],
-    shared_libs: [
-        "liblog",
-        "libbase",
-        "libcutils",
+    defaults: ["charger_defaults"],
+    srcs: [
+        "AnimationParser_test.cpp",
+        "healthd_mode_charger_test.cpp"
     ],
     static_libs: [
-        "libhealthd_charger",
+        "libgmock",
     ],
     test_suites: [
         "general-tests",
         "device-tests",
+    ],
+    data: [
+        ":libhealthd_charger_test_data",
+    ],
+    require_root: true,
+}
+
+// /system/etc/res/images/charger/battery_fail.png
+prebuilt_etc {
+    name: "system_core_charger_res_images_battery_fail.png",
+    src: "images/battery_fail.png",
+    relative_install_path: "res/images/charger",
+    filename: "battery_fail.png",
+}
+
+// /system/etc/res/images/charger/battery_scale.png
+prebuilt_etc {
+    name: "system_core_charger_res_images_battery_scale.png",
+    src: "images/battery_scale.png",
+    relative_install_path: "res/images/charger",
+    filename: "battery_scale.png",
+}
+
+phony {
+    name: "charger_res_images",
+    required: [
+        "system_core_charger_res_images_battery_fail.png",
+        "system_core_charger_res_images_battery_scale.png",
     ],
 }
