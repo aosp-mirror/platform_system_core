@@ -17,6 +17,8 @@
 #ifndef HEALTHD_ANIMATION_PARSER_H
 #define HEALTHD_ANIMATION_PARSER_H
 
+#include <string_view>
+
 #include "animation.h"
 
 namespace android {
@@ -24,7 +26,7 @@ namespace android {
 bool parse_animation_desc(const std::string& content, animation* anim);
 
 bool can_ignore_line(const char* str);
-bool remove_prefix(const std::string& str, const char* prefix, const char** rest);
+bool remove_prefix(std::string_view str, const char* prefix, const char** rest);
 bool parse_text_field(const char* in, animation::text_field* field);
 }  // namespace android
 

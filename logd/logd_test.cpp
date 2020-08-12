@@ -30,6 +30,7 @@
 #include <android-base/file.h>
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
 #include <log/log_read.h>
@@ -40,6 +41,8 @@
 #endif
 
 #include "LogReader.h"  // pickup LOGD_SNDTIMEO
+
+using android::base::unique_fd;
 
 #ifdef __ANDROID__
 static void send_to_control(char* buf, size_t len) {
@@ -832,6 +835,37 @@ TEST(logd, getEventTag_newentry) {
     EXPECT_TRUE(strstr(buffer, name) != nullptr);
 // ToDo: also look for this in /data/misc/logd/event-log-tags and
 // /dev/event-log-tags.
+#else
+    GTEST_LOG_(INFO) << "This test does nothing.\n";
+#endif
+}
+
+TEST(logd, no_epipe) {
+#ifdef __ANDROID__
+    // Actually generating SIGPIPE in logd is racy, since we need to close the socket quicker than
+    // logd finishes writing the data to it, so we try 10 times, which should be enough to trigger
+    // SIGPIPE if logd isn't ignoring SIGPIPE
+    for (int i = 0; i < 10; ++i) {
+        unique_fd sock1(
+                socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM));
+        ASSERT_GT(sock1, 0);
+        unique_fd sock2(
+                socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM));
+        ASSERT_GT(sock2, 0);
+
+        std::string message = "getStatistics 0 1 2 3 4 5 6 7";
+
+        ASSERT_GT(write(sock1, message.c_str(), message.length()), 0);
+        sock1.reset();
+        ASSERT_GT(write(sock2, message.c_str(), message.length()), 0);
+
+        struct pollfd p = {.fd = sock2, .events = POLLIN, .revents = 0};
+
+        int ret = poll(&p, 1, 20);
+        EXPECT_EQ(ret, 1);
+        EXPECT_TRUE(p.revents & POLLIN);
+        EXPECT_FALSE(p.revents & POLL_ERR);
+    }
 #else
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
