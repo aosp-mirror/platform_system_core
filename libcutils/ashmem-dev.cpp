@@ -212,13 +212,16 @@ static int __ashmem_open_locked()
 
     // fallback for APEX w/ use_vendor on Q, which would have still used /dev/ashmem
     if (fd < 0) {
+        int saved_errno = errno;
         fd = TEMP_FAILURE_RETRY(open("/dev/ashmem", O_RDWR | O_CLOEXEC));
+        if (fd < 0) {
+            /* Q launching devices and newer must not reach here since they should have been
+             * able to open ashmem_device_path */
+            ALOGE("Unable to open ashmem device %s (error = %s) and /dev/ashmem(error = %s)",
+                  ashmem_device_path.c_str(), strerror(saved_errno), strerror(errno));
+            return fd;
+        }
     }
-
-    if (fd < 0) {
-        return fd;
-    }
-
     struct stat st;
     int ret = TEMP_FAILURE_RETRY(fstat(fd, &st));
     if (ret < 0) {
