@@ -20,31 +20,10 @@
 #include <crypto_utils/android_pubkey.h>
 #include <openssl/bn.h>
 #include <openssl/rsa.h>
+#include <sysdeps/env.h>
 
 namespace adb {
 namespace crypto {
-
-namespace {
-std::string get_user_info() {
-    std::string hostname;
-    if (getenv("HOSTNAME")) hostname = getenv("HOSTNAME");
-#if !defined(_WIN32)
-    char buf[64];
-    if (hostname.empty() && gethostname(buf, sizeof(buf)) != -1) hostname = buf;
-#endif
-    if (hostname.empty()) hostname = "unknown";
-
-    std::string username;
-    if (getenv("LOGNAME")) username = getenv("LOGNAME");
-#if !defined(_WIN32)
-    if (username.empty() && getlogin()) username = getlogin();
-#endif
-    if (username.empty()) hostname = "unknown";
-
-    return " " + username + "@" + hostname;
-}
-
-}  // namespace
 
 bool CalculatePublicKey(std::string* out, RSA* private_key) {
     uint8_t binary_key_data[ANDROID_PUBKEY_ENCODED_SIZE];
@@ -63,7 +42,10 @@ bool CalculatePublicKey(std::string* out, RSA* private_key) {
     size_t actual_length = EVP_EncodeBlock(reinterpret_cast<uint8_t*>(out->data()), binary_key_data,
                                            sizeof(binary_key_data));
     out->resize(actual_length);
-    out->append(get_user_info());
+    out->append(" ");
+    out->append(sysdeps::GetLoginNameUTF8());
+    out->append("@");
+    out->append(sysdeps::GetHostNameUTF8());
     return true;
 }
 

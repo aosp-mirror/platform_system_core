@@ -559,21 +559,6 @@ const char* android_lookupEventFormat_len(const EventTagMap* map, size_t* len, u
   return str->second.data();
 }
 
-// This function is deprecated and replaced with android_lookupEventTag_len
-// since it will cause the map to change from Shared and backed by a file,
-// to Private Dirty and backed up by swap, albeit highly compressible. By
-// deprecating this function everywhere, we save 100s of MB of memory space.
-const char* android_lookupEventTag(const EventTagMap* map, unsigned int tag) {
-  size_t len;
-  const char* tagStr = android_lookupEventTag_len(map, &len, tag);
-
-  if (!tagStr) return tagStr;
-  char* cp = const_cast<char*>(tagStr);
-  cp += len;
-  if (*cp) *cp = '\0';  // Trigger copy on write :-( and why deprecated.
-  return tagStr;
-}
-
 // Look up tagname, generate one if necessary, and return a tag
 int android_lookupEventTagNum(EventTagMap* map, const char* tagname, const char* format, int prio) {
   const char* ep = endOfTag(tagname);
