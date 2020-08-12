@@ -119,6 +119,13 @@ LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.
 LOCAL_NOSANITIZE := hwaddress
 include $(BUILD_EXECUTABLE)
+
+# LOCAL_FORCE_STATIC_EXECUTABLE targets are skipped and not defined for ASAN builds
+init_vendor_deps :=
+ifneq (true,$(my_skip_this_target))
+  init_vendor_deps += init_first_stage
+endif # my_skip_this_target is true
+
 endif
 
 include $(CLEAR_VARS)
@@ -133,8 +140,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := init_vendor
 ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
-LOCAL_REQUIRED_MODULES := \
-   init_first_stage \
-
+LOCAL_REQUIRED_MODULES := $(init_vendor_deps)
 endif
 include $(BUILD_PHONY_PACKAGE)
+init_vendor_deps :=
