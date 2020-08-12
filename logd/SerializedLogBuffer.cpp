@@ -143,9 +143,16 @@ bool SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid
         if (!reader_thread->IsWatching(log_id)) {
             continue;
         }
-        if (!oldest || oldest->start() > reader_thread->start() ||
-            (oldest->start() == reader_thread->start() &&
-             reader_thread->deadline().time_since_epoch().count() != 0)) {
+        if (reader_thread->deadline().time_since_epoch().count() != 0) {
+            // Always wake up wrapped readers when pruning.  'Wrapped' readers are an optimization
+            // that allows the reader to wait until logs starting at a specified time stamp are
+            // about to be pruned.  This is error-prone however, since if that timestamp is about to
+            // be pruned, the reader is not likely to read the messages fast enough to not back-up
+            // logd.  Instead, we can achieve an nearly-as-efficient but not error-prune batching
+            // effect by waking the reader whenever any chunk is about to be pruned.
+            reader_thread->triggerReader_Locked();
+        }
+        if (!oldest || oldest->start() > reader_thread->start()) {
             oldest = reader_thread.get();
         }
     }
@@ -202,9 +209,6 @@ void SerializedLogBuffer::KickReader(LogReaderThread* reader, log_id_t id, size_
         LOG(WARNING) << "Kicking blocked reader, " << reader->name()
                      << ", from LogBuffer::kickMe()";
         reader->release_Locked();
-    } else if (reader->deadline().time_since_epoch().count() != 0) {
-        // Allow a blocked WRAP deadline reader to trigger and start reporting the log data.
-        reader->triggerReader_Locked();
     } else {
         // Tell slow reader to skip entries to catch up.
         unsigned long prune_rows = bytes_to_free / 300;
