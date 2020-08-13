@@ -693,7 +693,7 @@ void Charger::Init(struct healthd_config* config) {
 
     InitAnimation();
 
-    ret = CreateDisplaySurface(batt_anim_.fail_file.c_str(), &surf_unknown_);
+    ret = CreateDisplaySurface(batt_anim_.fail_file, &surf_unknown_);
     if (ret < 0) {
         LOGE("Cannot load custom battery_fail image. Reverting to built in: %d\n", ret);
         ret = CreateDisplaySurface((system_animation_root + "charger/battery_fail.png"s).c_str(),
@@ -708,7 +708,7 @@ void Charger::Init(struct healthd_config* config) {
     int scale_count;
     int scale_fps;  // Not in use (charger/battery_scale doesn't have FPS text
                     // chunk). We are using hard-coded frame.disp_time instead.
-    ret = CreateMultiDisplaySurface(batt_anim_.animation_file.c_str(), &scale_count, &scale_fps,
+    ret = CreateMultiDisplaySurface(batt_anim_.animation_file, &scale_count, &scale_fps,
                                     &scale_frames);
     if (ret < 0) {
         LOGE("Cannot load battery_scale image\n");
