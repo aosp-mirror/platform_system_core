@@ -113,6 +113,7 @@ class Unwinder {
 
   ErrorCode LastErrorCode() { return last_error_.code; }
   uint64_t LastErrorAddress() { return last_error_.address; }
+  uint64_t warnings() { return warnings_; }
 
   // Builds a frame for symbolization using the maps from this unwinder. The
   // constructed frame contains just enough information to be used to symbolize
@@ -141,6 +142,7 @@ class Unwinder {
   // file. This is only true if there is an actual file backing up the elf.
   bool elf_from_memory_not_file_ = false;
   ErrorData last_error_;
+  uint64_t warnings_;
 };
 
 class UnwinderFromPid : public Unwinder {
