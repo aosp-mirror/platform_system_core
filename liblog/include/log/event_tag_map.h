@@ -53,12 +53,6 @@ const char* android_lookupEventTag_len(const EventTagMap* map, size_t* len,
 const char* android_lookupEventFormat_len(const EventTagMap* map, size_t* len,
                                           unsigned int tag);
 
-/*
- * Look up tagname, generate one if necessary, and return a tag
- */
-int android_lookupEventTagNum(EventTagMap* map, const char* tagname,
-                              const char* format, int prio);
-
 #ifdef __cplusplus
 }
 #endif
