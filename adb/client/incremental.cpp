@@ -122,7 +122,7 @@ static unique_fd start_install(const Files& files, const Args& passthrough_args,
         }
 
         auto [signature_fd, signature] = read_and_encode_signature(st.st_size, file, silent);
-        if (signature_fd.ok() && signature.empty()) {
+        if (!signature_fd.ok() || signature.empty()) {
             return {};
         }
 
