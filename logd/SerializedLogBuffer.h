@@ -55,9 +55,7 @@ class SerializedLogBuffer final : public LogBuffer {
   private:
     bool ShouldLog(log_id_t log_id, const char* msg, uint16_t len);
     void MaybePrune(log_id_t log_id) REQUIRES(lock_);
-    bool Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid) REQUIRES(lock_);
-    void KickReader(LogReaderThread* reader, log_id_t id, size_t bytes_to_free)
-            REQUIRES_SHARED(lock_);
+    void Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid) REQUIRES(lock_);
     void NotifyReadersOfPrune(log_id_t log_id, const std::list<SerializedLogChunk>::iterator& chunk)
             REQUIRES(reader_list_->reader_threads_lock());
     void RemoveChunkFromStats(log_id_t log_id, SerializedLogChunk& chunk);
