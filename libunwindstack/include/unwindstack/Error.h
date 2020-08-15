@@ -21,6 +21,13 @@
 
 namespace unwindstack {
 
+// A bit map of warnings, multiple warnings can be set at the same time.
+enum WarningCode : uint64_t {
+  WARNING_NONE = 0,
+  WARNING_DEX_PC_NOT_IN_MAP = 0x1,  // A dex pc was found, but it doesn't exist
+                                    // in any valid map.
+};
+
 enum ErrorCode : uint8_t {
   ERROR_NONE,                 // No error.
   ERROR_MEMORY_INVALID,       // Memory read failed.
