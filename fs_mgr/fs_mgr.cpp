@@ -521,13 +521,13 @@ static void tune_verity(const std::string& blk_device, const FstabEntry& entry,
 }
 
 // Enable casefold if needed.
-static void tune_casefold(const std::string& blk_device, const struct ext4_super_block* sb,
-                          int* fs_stat) {
+static void tune_casefold(const std::string& blk_device, const FstabEntry& entry,
+                          const struct ext4_super_block* sb, int* fs_stat) {
     bool has_casefold = (sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_CASEFOLD)) != 0;
     bool wants_casefold =
             android::base::GetBoolProperty("external_storage.casefold.enabled", false);
 
-    if (!wants_casefold || has_casefold) return;
+    if (entry.mount_point != "data" || !wants_casefold || has_casefold ) return;
 
     std::string casefold_support;
     if (!android::base::ReadFileToString(SYSFS_EXT4_CASEFOLD, &casefold_support)) {
@@ -696,7 +696,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
             tune_reserved_size(blk_device, entry, &sb, &fs_stat);
             tune_encrypt(blk_device, entry, &sb, &fs_stat);
             tune_verity(blk_device, entry, &sb, &fs_stat);
-            tune_casefold(blk_device, &sb, &fs_stat);
+            tune_casefold(blk_device, entry, &sb, &fs_stat);
             tune_metadata_csum(blk_device, entry, &sb, &fs_stat);
         }
     }
