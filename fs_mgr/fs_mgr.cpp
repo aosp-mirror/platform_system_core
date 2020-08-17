@@ -976,6 +976,19 @@ static int handle_encryptable(const FstabEntry& entry) {
     }
 }
 
+static void set_type_property(int status) {
+    switch (status) {
+        case FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED:
+            SetProperty("ro.crypto.type", "block");
+            break;
+        case FS_MGR_MNTALL_DEV_FILE_ENCRYPTED:
+        case FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED:
+        case FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION:
+            SetProperty("ro.crypto.type", "file");
+            break;
+    }
+}
+
 static bool call_vdc(const std::vector<std::string>& args, int* ret) {
     std::vector<char const*> argv;
     argv.emplace_back("/system/bin/vdc");
@@ -1366,6 +1379,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 avb_handle = AvbHandle::Open();
                 if (!avb_handle) {
                     LERROR << "Failed to open AvbHandle";
+                    set_type_property(encryptable);
                     return FS_MGR_MNTALL_FAIL;
                 }
             }
@@ -1422,6 +1436,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                                    attempted_entry.mount_point},
                                   nullptr)) {
                         LERROR << "Encryption failed";
+                        set_type_property(encryptable);
                         return FS_MGR_MNTALL_FAIL;
                     }
                 }
@@ -1518,6 +1533,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             continue;
         }
     }
+
+    set_type_property(encryptable);
 
 #if ALLOW_ADBD_DISABLE_VERITY == 1  // "userdebug" build
     fs_mgr_overlayfs_mount_all(fstab);
