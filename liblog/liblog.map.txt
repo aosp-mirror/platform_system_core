@@ -89,6 +89,5 @@ LIBLOG_PRIVATE {
     android_log_processLogBuffer;
     android_log_read_next;
     android_log_write_list_buffer;
-    android_lookupEventTagNum;
     create_android_log_parser;
 };

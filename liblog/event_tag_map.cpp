@@ -31,84 +31,13 @@
 #include <unordered_map>
 
 #include <log/event_tag_map.h>
-#include <log/log_properties.h>
 #include <private/android_logger.h>
 #include <utils/FastStrcmp.h>
 #include <utils/RWLock.h>
 
-#include "logd_reader.h"
-
 #define OUT_TAG "EventTagMap"
 
-class MapString {
- private:
-  const std::string* alloc;                  // HAS-AN
-  const std::string_view str;                // HAS-A
-
- public:
-  operator const std::string_view() const {
-    return str;
-  }
-
-  const char* data() const {
-    return str.data();
-  }
-  size_t length() const {
-    return str.length();
-  }
-
-  bool operator==(const MapString& rval) const {
-    if (length() != rval.length()) return false;
-    if (length() == 0) return true;
-    return fastcmp<strncmp>(data(), rval.data(), length()) == 0;
-  }
-  bool operator!=(const MapString& rval) const {
-    return !(*this == rval);
-  }
-
-  MapString(const char* str, size_t len) : alloc(NULL), str(str, len) {
-  }
-  explicit MapString(const std::string& str)
-      : alloc(new std::string(str)), str(alloc->data(), alloc->length()) {
-  }
-  MapString(MapString&& rval) noexcept
-      : alloc(rval.alloc), str(rval.data(), rval.length()) {
-    rval.alloc = NULL;
-  }
-  explicit MapString(const MapString& rval)
-      : alloc(rval.alloc ? new std::string(*rval.alloc) : NULL),
-        str(alloc ? alloc->data() : rval.data(), rval.length()) {
-  }
-
-  ~MapString() {
-    if (alloc) delete alloc;
-  }
-};
-
-// Hash for MapString
-template <>
-struct std::hash<MapString>
-    : public std::unary_function<const MapString&, size_t> {
-  size_t operator()(const MapString& __t) const noexcept {
-    if (!__t.length()) return 0;
-    return std::hash<std::string_view>()(std::string_view(__t));
-  }
-};
-
-typedef std::pair<MapString, MapString> TagFmt;
-
-template <>
-struct std::hash<TagFmt> : public std::unary_function<const TagFmt&, size_t> {
-  size_t operator()(const TagFmt& __t) const noexcept {
-    // Tag is typically unique.  Will cost us an extra 100ns for the
-    // unordered_map lookup if we instead did a hash that combined
-    // both of tag and fmt members, e.g.:
-    //
-    // return std::hash<MapString>()(__t.first) ^
-    //        std::hash<MapString>()(__t.second);
-    return std::hash<MapString>()(__t.first);
-  }
-};
+typedef std::pair<std::string_view, std::string_view> TagFmt;
 
 // Map
 struct EventTagMap {
@@ -119,8 +48,7 @@ struct EventTagMap {
 
  private:
   std::unordered_map<uint32_t, TagFmt> Idx2TagFmt;
-  std::unordered_map<TagFmt, uint32_t> TagFmt2Idx;
-  std::unordered_map<MapString, uint32_t> Tag2Idx;
+  std::unordered_map<std::string_view, uint32_t> Tag2Idx;
   // protect unordered sets
   android::RWLock rwlock;
 
@@ -132,7 +60,6 @@ struct EventTagMap {
 
   ~EventTagMap() {
     Idx2TagFmt.clear();
-    TagFmt2Idx.clear();
     Tag2Idx.clear();
     for (size_t which = 0; which < NUM_MAPS; ++which) {
       if (mapAddr[which]) {
@@ -144,8 +71,7 @@ struct EventTagMap {
 
   bool emplaceUnique(uint32_t tag, const TagFmt& tagfmt, bool verbose = false);
   const TagFmt* find(uint32_t tag) const;
-  int find(TagFmt&& tagfmt) const;
-  int find(MapString&& tag) const;
+  int find(std::string_view tag) const;
 };
 
 bool EventTagMap::emplaceUnique(uint32_t tag, const TagFmt& tagfmt,
@@ -156,8 +82,7 @@ bool EventTagMap::emplaceUnique(uint32_t tag, const TagFmt& tagfmt,
               ":%.*s:%.*s)\n";
   android::RWLock::AutoWLock writeLock(rwlock);
   {
-    std::unordered_map<uint32_t, TagFmt>::const_iterator it;
-    it = Idx2TagFmt.find(tag);
+    auto it = Idx2TagFmt.find(tag);
     if (it != Idx2TagFmt.end()) {
       if (verbose) {
         fprintf(stderr, errorFormat, it->first, (int)it->second.first.length(),
@@ -173,25 +98,7 @@ bool EventTagMap::emplaceUnique(uint32_t tag, const TagFmt& tagfmt,
   }
 
   {
-    std::unordered_map<TagFmt, uint32_t>::const_iterator it;
-    it = TagFmt2Idx.find(tagfmt);
-    if (it != TagFmt2Idx.end()) {
-      if (verbose) {
-        fprintf(stderr, errorFormat, it->second, (int)it->first.first.length(),
-                it->first.first.data(), (int)it->first.second.length(),
-                it->first.second.data(), tag, (int)tagfmt.first.length(),
-                tagfmt.first.data(), (int)tagfmt.second.length(),
-                tagfmt.second.data());
-      }
-      ret = false;
-    } else {
-      TagFmt2Idx.emplace(std::make_pair(tagfmt, tag));
-    }
-  }
-
-  {
-    std::unordered_map<MapString, uint32_t>::const_iterator it;
-    it = Tag2Idx.find(tagfmt.first);
+    auto it = Tag2Idx.find(tagfmt.first);
     if (!tagfmt.second.length() && (it != Tag2Idx.end())) {
       Tag2Idx.erase(it);
       it = Tag2Idx.end();
@@ -205,25 +112,15 @@ bool EventTagMap::emplaceUnique(uint32_t tag, const TagFmt& tagfmt,
 }
 
 const TagFmt* EventTagMap::find(uint32_t tag) const {
-  std::unordered_map<uint32_t, TagFmt>::const_iterator it;
   android::RWLock::AutoRLock readLock(const_cast<android::RWLock&>(rwlock));
-  it = Idx2TagFmt.find(tag);
+  auto it = Idx2TagFmt.find(tag);
   if (it == Idx2TagFmt.end()) return NULL;
   return &(it->second);
 }
 
-int EventTagMap::find(TagFmt&& tagfmt) const {
-  std::unordered_map<TagFmt, uint32_t>::const_iterator it;
+int EventTagMap::find(std::string_view tag) const {
   android::RWLock::AutoRLock readLock(const_cast<android::RWLock&>(rwlock));
-  it = TagFmt2Idx.find(std::move(tagfmt));
-  if (it == TagFmt2Idx.end()) return -1;
-  return it->second;
-}
-
-int EventTagMap::find(MapString&& tag) const {
-  std::unordered_map<MapString, uint32_t>::const_iterator it;
-  android::RWLock::AutoRLock readLock(const_cast<android::RWLock&>(rwlock));
-  it = Tag2Idx.find(std::move(tag));
+  auto it = Tag2Idx.find(std::move(tag));
   if (it == Tag2Idx.end()) return -1;
   return it->second;
 }
@@ -241,29 +138,20 @@ static const char* endOfTag(const char* cp) {
 // successful return, it will be pointing to the last character in the
 // tag line (i.e. the character before the start of the next line).
 //
-// lineNum = 0 removes verbose comments and requires us to cache the
-// content rather than make direct raw references since the content
-// will disappear after the call. A non-zero lineNum means we own the
-// data and it will outlive the call.
-//
 // Returns 0 on success, nonzero on failure.
-static int scanTagLine(EventTagMap* map, const char*& pData, int lineNum) {
+static int scanTagLine(EventTagMap* map, const char*& pData, int line_num) {
   char* ep;
   unsigned long val = strtoul(pData, &ep, 10);
   const char* cp = ep;
   if (cp == pData) {
-    if (lineNum) {
-      fprintf(stderr, OUT_TAG ": malformed tag number on line %d\n", lineNum);
-    }
+    fprintf(stderr, OUT_TAG ": malformed tag number on line %d\n", line_num);
     errno = EINVAL;
     return -1;
   }
 
   uint32_t tagIndex = val;
   if (tagIndex != val) {
-    if (lineNum) {
-      fprintf(stderr, OUT_TAG ": tag number too large on line %d\n", lineNum);
-    }
+    fprintf(stderr, OUT_TAG ": tag number too large on line %d\n", line_num);
     errno = ERANGE;
     return -1;
   }
@@ -272,9 +160,7 @@ static int scanTagLine(EventTagMap* map, const char*& pData, int lineNum) {
   }
 
   if (*cp == '\n') {
-    if (lineNum) {
-      fprintf(stderr, OUT_TAG ": missing tag string on line %d\n", lineNum);
-    }
+    fprintf(stderr, OUT_TAG ": missing tag string on line %d\n", line_num);
     errno = EINVAL;
     return -1;
   }
@@ -284,10 +170,7 @@ static int scanTagLine(EventTagMap* map, const char*& pData, int lineNum) {
   size_t tagLen = cp - tag;
 
   if (!isspace(*cp)) {
-    if (lineNum) {
-      fprintf(stderr, OUT_TAG ": invalid tag char %c on line %d\n", *cp,
-              lineNum);
-    }
+    fprintf(stderr, OUT_TAG ": invalid tag char %c on line %d\n", *cp, line_num);
     errno = EINVAL;
     return -1;
   }
@@ -317,25 +200,15 @@ static int scanTagLine(EventTagMap* map, const char*& pData, int lineNum) {
 
   while (*cp && (*cp != '\n')) ++cp;
 #ifdef DEBUG
-  fprintf(stderr, "%d: %p: %.*s\n", lineNum, tag, (int)(cp - pData), pData);
+  fprintf(stderr, "%d: %p: %.*s\n", line_num, tag, (int)(cp - pData), pData);
 #endif
   pData = cp;
 
-  if (lineNum) {
-    if (map->emplaceUnique(tagIndex,
-                           TagFmt(std::make_pair(MapString(tag, tagLen),
-                                                 MapString(fmt, fmtLen))),
-                           verbose)) {
-      return 0;
-    }
-  } else {
-    // cache
-    if (map->emplaceUnique(
-            tagIndex,
-            TagFmt(std::make_pair(MapString(std::string(tag, tagLen)),
-                                  MapString(std::string(fmt, fmtLen)))))) {
-      return 0;
-    }
+  if (map->emplaceUnique(
+          tagIndex,
+          TagFmt(std::make_pair(std::string_view(tag, tagLen), std::string_view(fmt, fmtLen))),
+          verbose)) {
+    return 0;
   }
   errno = EMLINK;
   return -1;
@@ -491,57 +364,10 @@ void android_closeEventTagMap(EventTagMap* map) {
   if (map) delete map;
 }
 
-// Cache miss, go to logd to acquire a public reference.
-// Because we lack access to a SHARED PUBLIC /dev/event-log-tags file map?
-static const TagFmt* __getEventTag([[maybe_unused]] EventTagMap* map, unsigned int tag) {
-  // call event tag service to arrange for a new tag
-  char* buf = NULL;
-  // Can not use android::base::StringPrintf, asprintf + free instead.
-  static const char command_template[] = "getEventTag id=%u";
-  int ret = asprintf(&buf, command_template, tag);
-  if (ret > 0) {
-    // Add some buffer margin for an estimate of the full return content.
-    size_t size =
-        ret - strlen(command_template) +
-        strlen("65535\n4294967295\t?\t\t\t?\t# uid=32767\n\n\f?success?");
-    if (size > (size_t)ret) {
-      char* np = static_cast<char*>(realloc(buf, size));
-      if (np) {
-        buf = np;
-      } else {
-        size = ret;
-      }
-    } else {
-      size = ret;
-    }
-#ifdef __ANDROID__
-    // Ask event log tag service for an existing entry
-    if (SendLogdControlMessage(buf, size) >= 0) {
-      buf[size - 1] = '\0';
-      char* ep;
-      unsigned long val = strtoul(buf, &ep, 10);  // return size
-      const char* cp = ep;
-      if ((buf != cp) && (val > 0) && (*cp == '\n')) {  // truncation OK
-        ++cp;
-        if (!scanTagLine(map, cp, 0)) {
-          free(buf);
-          return map->find(tag);
-        }
-      }
-    }
-#endif
-    free(buf);
-  }
-  return NULL;
-}
-
 // Look up an entry in the map.
 const char* android_lookupEventTag_len(const EventTagMap* map, size_t* len, unsigned int tag) {
   if (len) *len = 0;
   const TagFmt* str = map->find(tag);
-  if (!str) {
-    str = __getEventTag(const_cast<EventTagMap*>(map), tag);
-  }
   if (!str) return NULL;
   if (len) *len = str->first.length();
   return str->first.data();
@@ -551,83 +377,8 @@ const char* android_lookupEventTag_len(const EventTagMap* map, size_t* len, unsi
 const char* android_lookupEventFormat_len(const EventTagMap* map, size_t* len, unsigned int tag) {
   if (len) *len = 0;
   const TagFmt* str = map->find(tag);
-  if (!str) {
-    str = __getEventTag(const_cast<EventTagMap*>(map), tag);
-  }
   if (!str) return NULL;
   if (len) *len = str->second.length();
   return str->second.data();
 }
 
-// Look up tagname, generate one if necessary, and return a tag
-int android_lookupEventTagNum(EventTagMap* map, const char* tagname, const char* format, int prio) {
-  const char* ep = endOfTag(tagname);
-  size_t len = ep - tagname;
-  if (!len || *ep) {
-    errno = EINVAL;
-    return -1;
-  }
-
-  if ((prio != ANDROID_LOG_UNKNOWN) && (prio < ANDROID_LOG_SILENT) &&
-      !__android_log_is_loggable_len(prio, tagname, len,
-                                     __android_log_is_debuggable()
-                                         ? ANDROID_LOG_VERBOSE
-                                         : ANDROID_LOG_DEBUG)) {
-    errno = EPERM;
-    return -1;
-  }
-
-  if (!format) format = "";
-  ssize_t fmtLen = strlen(format);
-  int ret = map->find(TagFmt(
-      std::make_pair(MapString(tagname, len), MapString(format, fmtLen))));
-  if (ret != -1) return ret;
-
-  // call event tag service to arrange for a new tag
-  char* buf = NULL;
-  // Can not use android::base::StringPrintf, asprintf + free instead.
-  static const char command_template[] = "getEventTag name=%s format=\"%s\"";
-  ret = asprintf(&buf, command_template, tagname, format);
-  if (ret > 0) {
-    // Add some buffer margin for an estimate of the full return content.
-    char* cp;
-    size_t size =
-        ret - strlen(command_template) +
-        strlen("65535\n4294967295\t?\t\t\t?\t# uid=32767\n\n\f?success?");
-    if (size > (size_t)ret) {
-      cp = static_cast<char*>(realloc(buf, size));
-      if (cp) {
-        buf = cp;
-      } else {
-        size = ret;
-      }
-    } else {
-      size = ret;
-    }
-#ifdef __ANDROID__
-    // Ask event log tag service for an allocation
-    if (SendLogdControlMessage(buf, size) >= 0) {
-      buf[size - 1] = '\0';
-      unsigned long val = strtoul(buf, &cp, 10);        // return size
-      if ((buf != cp) && (val > 0) && (*cp == '\n')) {  // truncation OK
-        val = strtoul(cp + 1, &cp, 10);                 // allocated tag number
-        if ((val > 0) && (val < UINT32_MAX) && (*cp == '\t')) {
-          free(buf);
-          ret = val;
-          // cache
-          map->emplaceUnique(ret, TagFmt(std::make_pair(
-                                      MapString(std::string(tagname, len)),
-                                      MapString(std::string(format, fmtLen)))));
-          return ret;
-        }
-      }
-    }
-#endif
-    free(buf);
-  }
-
-  // Hail Mary
-  ret = map->find(MapString(tagname, len));
-  if (ret == -1) errno = ESRCH;
-  return ret;
-}
