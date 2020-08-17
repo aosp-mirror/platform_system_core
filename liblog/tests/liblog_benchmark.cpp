@@ -879,30 +879,6 @@ static void BM_lookupEventFormat(benchmark::State& state) {
 }
 BENCHMARK(BM_lookupEventFormat);
 
-/*
- *	Measure the time it takes for android_lookupEventTagNum plus above
- */
-static void BM_lookupEventTagNum(benchmark::State& state) {
-  prechargeEventMap();
-
-  std::unordered_set<uint32_t>::const_iterator it = set.begin();
-
-  while (state.KeepRunning()) {
-    size_t len;
-    const char* name = android_lookupEventTag_len(map, &len, (*it));
-    std::string Name(name, len);
-    const char* format = android_lookupEventFormat_len(map, &len, (*it));
-    std::string Format(format, len);
-    state.ResumeTiming();
-    android_lookupEventTagNum(map, Name.c_str(), Format.c_str(),
-                              ANDROID_LOG_UNKNOWN);
-    state.PauseTiming();
-    ++it;
-    if (it == set.end()) it = set.begin();
-  }
-}
-BENCHMARK(BM_lookupEventTagNum);
-
 // Must be functionally identical to liblog internal SendLogdControlMessage()
 static void send_to_control(char* buf, size_t len) {
   int sock =

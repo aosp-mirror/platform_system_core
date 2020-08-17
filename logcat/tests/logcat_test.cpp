@@ -1654,48 +1654,6 @@ TEST(logcat, descriptive) {
         EXPECT_GE(ret, 0);
         EXPECT_TRUE(End_to_End(sync.tagStr, ""));
     }
-
-    {
-        // Invent new entries because existing can not serve
-        EventTagMap* map = android_openEventTagMap(nullptr);
-        ASSERT_TRUE(nullptr != map);
-        static const char name[] = logcat_executable ".descriptive-monotonic";
-        int myTag = android_lookupEventTagNum(map, name, "(new|1|s)",
-                                              ANDROID_LOG_UNKNOWN);
-        android_closeEventTagMap(map);
-        ASSERT_NE(-1, myTag);
-
-        const struct tag sync = { (uint32_t)myTag, name };
-
-        {
-            android_log_event_list ctx(sync.tagNo);
-            ctx << (uint32_t)7;
-            for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_GE(ret, 0);
-            EXPECT_TRUE(End_to_End(sync.tagStr, "new=7s"));
-        }
-        {
-            android_log_event_list ctx(sync.tagNo);
-            ctx << (uint32_t)62;
-            for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_GE(ret, 0);
-            EXPECT_TRUE(End_to_End(sync.tagStr, "new=1:02"));
-        }
-        {
-            android_log_event_list ctx(sync.tagNo);
-            ctx << (uint32_t)3673;
-            for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_GE(ret, 0);
-            EXPECT_TRUE(End_to_End(sync.tagStr, "new=1:01:13"));
-        }
-        {
-            android_log_event_list ctx(sync.tagNo);
-            ctx << (uint32_t)(86400 + 7200 + 180 + 58);
-            for (ret = -EBUSY; ret == -EBUSY; rest()) ret = ctx.write();
-            EXPECT_GE(ret, 0);
-            EXPECT_TRUE(End_to_End(sync.tagStr, "new=1d 2:03:58"));
-        }
-    }
 }
 
 static bool reportedSecurity(const char* command) {
