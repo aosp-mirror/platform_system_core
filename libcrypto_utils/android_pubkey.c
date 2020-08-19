@@ -45,27 +45,19 @@ typedef struct RSAPublicKey {
     // RSA modulus as a little-endian array.
     uint8_t modulus[ANDROID_PUBKEY_MODULUS_SIZE];
 
-    // Montgomery parameter R^2 as a little-endian array of little-endian words.
+    // Montgomery parameter R^2 as a little-endian array.
     uint8_t rr[ANDROID_PUBKEY_MODULUS_SIZE];
 
     // RSA modulus: 3 or 65537
     uint32_t exponent;
 } RSAPublicKey;
 
-// Reverses byte order in |buffer|.
-static void reverse_bytes(uint8_t* buffer, size_t size) {
-  for (size_t i = 0; i < (size + 1) / 2; ++i) {
-    uint8_t tmp = buffer[i];
-    buffer[i] = buffer[size - i - 1];
-    buffer[size - i - 1] = tmp;
-  }
-}
-
 bool android_pubkey_decode(const uint8_t* key_buffer, size_t size, RSA** key) {
   const RSAPublicKey* key_struct = (RSAPublicKey*)key_buffer;
   bool ret = false;
-  uint8_t modulus_buffer[ANDROID_PUBKEY_MODULUS_SIZE];
   RSA* new_key = RSA_new();
+  BIGNUM* n = NULL;
+  BIGNUM* e = NULL;
   if (!new_key) {
     goto cleanup;
   }
@@ -79,18 +71,23 @@ bool android_pubkey_decode(const uint8_t* key_buffer, size_t size, RSA** key) {
   }
 
   // Convert the modulus to big-endian byte order as expected by BN_bin2bn.
-  memcpy(modulus_buffer, key_struct->modulus, sizeof(modulus_buffer));
-  reverse_bytes(modulus_buffer, sizeof(modulus_buffer));
-  new_key->n = BN_bin2bn(modulus_buffer, sizeof(modulus_buffer), NULL);
-  if (!new_key->n) {
+  n = BN_le2bn(key_struct->modulus, ANDROID_PUBKEY_MODULUS_SIZE, NULL);
+  if (!n) {
     goto cleanup;
   }
 
   // Read the exponent.
-  new_key->e = BN_new();
-  if (!new_key->e || !BN_set_word(new_key->e, key_struct->exponent)) {
+  e = BN_new();
+  if (!e || !BN_set_word(e, key_struct->exponent)) {
     goto cleanup;
   }
+
+  if (!RSA_set0_key(new_key, n, e, NULL)) {
+    goto cleanup;
+  }
+  // RSA_set0_key takes ownership of its inputs on success.
+  n = NULL;
+  e = NULL;
 
   // Note that we don't extract the montgomery parameters n0inv and rr from
   // the RSAPublicKey structure. They assume a word size of 32 bits, but
@@ -101,22 +98,14 @@ bool android_pubkey_decode(const uint8_t* key_buffer, size_t size, RSA** key) {
   // pre-computed montgomery parameters.
 
   *key = new_key;
+  new_key = NULL;
   ret = true;
 
 cleanup:
-  if (!ret && new_key) {
-    RSA_free(new_key);
-  }
+  RSA_free(new_key);
+  BN_free(n);
+  BN_free(e);
   return ret;
-}
-
-static bool android_pubkey_encode_bignum(const BIGNUM* num, uint8_t* buffer) {
-  if (!BN_bn2bin_padded(buffer, ANDROID_PUBKEY_MODULUS_SIZE, num)) {
-    return false;
-  }
-
-  reverse_bytes(buffer, ANDROID_PUBKEY_MODULUS_SIZE);
-  return true;
 }
 
 bool android_pubkey_encode(const RSA* key, uint8_t* key_buffer, size_t size) {
@@ -136,27 +125,26 @@ bool android_pubkey_encode(const RSA* key, uint8_t* key_buffer, size_t size) {
   key_struct->modulus_size_words = ANDROID_PUBKEY_MODULUS_SIZE_WORDS;
 
   // Compute and store n0inv = -1 / N[0] mod 2^32.
-  if (!ctx || !r32 || !n0inv || !BN_set_bit(r32, 32) ||
-      !BN_mod(n0inv, key->n, r32, ctx) ||
+  if (!ctx || !r32 || !n0inv || !BN_set_bit(r32, 32) || !BN_mod(n0inv, RSA_get0_n(key), r32, ctx) ||
       !BN_mod_inverse(n0inv, n0inv, r32, ctx) || !BN_sub(n0inv, r32, n0inv)) {
     goto cleanup;
   }
   key_struct->n0inv = (uint32_t)BN_get_word(n0inv);
 
   // Store the modulus.
-  if (!android_pubkey_encode_bignum(key->n, key_struct->modulus)) {
+  if (!BN_bn2le_padded(key_struct->modulus, ANDROID_PUBKEY_MODULUS_SIZE, RSA_get0_n(key))) {
     goto cleanup;
   }
 
   // Compute and store rr = (2^(rsa_size)) ^ 2 mod N.
   if (!ctx || !rr || !BN_set_bit(rr, ANDROID_PUBKEY_MODULUS_SIZE * 8) ||
-      !BN_mod_sqr(rr, rr, key->n, ctx) ||
-      !android_pubkey_encode_bignum(rr, key_struct->rr)) {
+      !BN_mod_sqr(rr, rr, RSA_get0_n(key), ctx) ||
+      !BN_bn2le_padded(key_struct->rr, ANDROID_PUBKEY_MODULUS_SIZE, rr)) {
     goto cleanup;
   }
 
   // Store the exponent.
-  key_struct->exponent = (uint32_t)BN_get_word(key->e);
+  key_struct->exponent = (uint32_t)BN_get_word(RSA_get0_e(key));
 
   ret = true;
 
