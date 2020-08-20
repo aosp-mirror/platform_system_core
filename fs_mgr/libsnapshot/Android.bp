@@ -122,6 +122,39 @@ cc_library_static {
     ],
 }
 
+cc_defaults {
+    name: "libsnapshot_cow_defaults",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    export_include_dirs: ["include"],
+    srcs: [
+        "cow_reader.cpp",
+        "cow_writer.cpp",
+    ],
+}
+
+cc_library_static {
+    name: "libsnapshot_cow",
+    defaults: [
+        "libsnapshot_cow_defaults",
+    ],
+    host_supported: true,
+    shared_libs: [
+        "libbase",
+        "libcrypto",
+        "liblog",
+    ],
+    static_libs: [
+        "libz",
+    ],
+}
+
 cc_library_static {
     name: "libsnapshot_test_helpers",
     defaults: ["libsnapshot_defaults"],
@@ -342,4 +375,31 @@ cc_binary {
     ramdisk: true,
     static_executable: true,
     system_shared_libs: [],
+}
+
+cc_test {
+    name: "cow_api_test",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "cow_api_test.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcrypto",
+        "liblog",
+        "libz",
+    ],
+    static_libs: [
+        "libgtest",
+        "libsnapshot_cow",
+    ],
+    test_min_api_level: 30,
+    auto_gen_config: true,
+    require_root: false,
 }
