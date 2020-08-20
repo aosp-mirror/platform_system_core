@@ -18,7 +18,6 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
@@ -240,10 +239,6 @@ uint64_t LowSpaceUserdata::available_space() const {
 uint64_t LowSpaceUserdata::bsize() const {
     CHECK(initialized_);
     return bsize_;
-}
-
-bool IsVirtualAbEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
 }
 
 }  // namespace snapshot
