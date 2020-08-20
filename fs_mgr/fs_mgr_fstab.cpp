@@ -635,13 +635,14 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
             entry.fs_mgr_flags.wait = true;
             entry.fs_mgr_flags.logical = true;
             entry.fs_mgr_flags.first_stage_mount = true;
+            fstab->emplace_back(entry);
         } else {
             // If the corresponding partition exists, transform all its Fstab
             // by pointing .blk_device to the DSU partition.
             for (auto&& entry : entries) {
                 entry->blk_device = partition;
                 // AVB keys for DSU should always be under kDsuKeysDir.
-                entry->avb_keys += kDsuKeysDir;
+                entry->avb_keys = kDsuKeysDir;
             }
             // Make sure the ext4 is included to support GSI.
             auto partition_ext4 =
