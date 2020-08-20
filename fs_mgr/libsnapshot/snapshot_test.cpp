@@ -78,9 +78,7 @@ void MountMetadata();
 
 class SnapshotTest : public ::testing::Test {
   public:
-    SnapshotTest() : dm_(DeviceMapper::Instance()) {
-        is_virtual_ab_ = android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
-    }
+    SnapshotTest() : dm_(DeviceMapper::Instance()) {}
 
     // This is exposed for main.
     void Cleanup() {
@@ -90,7 +88,7 @@ class SnapshotTest : public ::testing::Test {
 
   protected:
     void SetUp() override {
-        if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
+        SKIP_IF_NON_VIRTUAL_AB();
 
         SnapshotTestPropertyFetcher::SetUp();
         InitializeState();
@@ -101,7 +99,7 @@ class SnapshotTest : public ::testing::Test {
     }
 
     void TearDown() override {
-        if (!is_virtual_ab_) return;
+        RETURN_IF_NON_VIRTUAL_AB();
 
         lock_ = nullptr;
 
@@ -336,7 +334,6 @@ class SnapshotTest : public ::testing::Test {
     }
 
     static constexpr std::chrono::milliseconds snapshot_timeout_ = 5s;
-    bool is_virtual_ab_;
     DeviceMapper& dm_;
     std::unique_ptr<SnapshotManager::LockedFile> lock_;
     android::fiemap::IImageManager* image_manager_ = nullptr;
@@ -717,11 +714,13 @@ class LockTestConsumer {
 class LockTest : public ::testing::Test {
   public:
     void SetUp() {
+        SKIP_IF_NON_VIRTUAL_AB();
         first_consumer.StartHandleRequestsInBackground();
         second_consumer.StartHandleRequestsInBackground();
     }
 
     void TearDown() {
+        RETURN_IF_NON_VIRTUAL_AB();
         EXPECT_TRUE(first_consumer.MakeRequest(Request::EXIT));
         EXPECT_TRUE(second_consumer.MakeRequest(Request::EXIT));
     }
@@ -765,7 +764,7 @@ INSTANTIATE_TEST_SUITE_P(
 class SnapshotUpdateTest : public SnapshotTest {
   public:
     void SetUp() override {
-        if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
+        SKIP_IF_NON_VIRTUAL_AB();
 
         SnapshotTest::SetUp();
         Cleanup();
@@ -827,7 +826,7 @@ class SnapshotUpdateTest : public SnapshotTest {
         }
     }
     void TearDown() override {
-        if (!is_virtual_ab_) return;
+        RETURN_IF_NON_VIRTUAL_AB();
 
         Cleanup();
         SnapshotTest::TearDown();
@@ -1360,13 +1359,17 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 }
 
-class MetadataMountedTest : public SnapshotUpdateTest {
+class MetadataMountedTest : public ::testing::Test {
   public:
+    // This is so main() can instantiate this to invoke Cleanup.
+    virtual void TestBody() override {}
     void SetUp() override {
+        SKIP_IF_NON_VIRTUAL_AB();
         metadata_dir_ = test_device->GetMetadataDir();
         ASSERT_TRUE(ReadDefaultFstab(&fstab_));
     }
     void TearDown() override {
+        RETURN_IF_NON_VIRTUAL_AB();
         SetUp();
         // Remount /metadata
         test_device->set_recovery(false);
@@ -1697,8 +1700,6 @@ class FlashAfterUpdateTest : public SnapshotUpdateTest,
 };
 
 TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
-    if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
-
     // OTA client blindly unmaps all partitions that are possibly mapped.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
         ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
@@ -1798,15 +1799,13 @@ INSTANTIATE_TEST_SUITE_P(Snapshot, FlashAfterUpdateTest, Combine(Values(0, 1), B
 class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t> {
   protected:
     void SetUp() override {
-        if (!is_virtual_ab_) GTEST_SKIP() << "Test for Virtual A/B devices only";
-        GTEST_SKIP() << "WIP failure b/149738928";
-
+        SKIP_IF_NON_VIRTUAL_AB();
         SnapshotTest::SetUp();
         userdata_ = std::make_unique<LowSpaceUserdata>();
         ASSERT_TRUE(userdata_->Init(GetParam()));
     }
     void TearDown() override {
-        if (!is_virtual_ab_) return;
+        RETURN_IF_NON_VIRTUAL_AB();
         return;  // BUG(149738928)
 
         EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
@@ -1848,11 +1847,6 @@ std::vector<uint64_t> ImageManagerTestParams() {
 
 INSTANTIATE_TEST_SUITE_P(ImageManagerTest, ImageManagerTest, ValuesIn(ImageManagerTestParams()));
 
-}  // namespace snapshot
-}  // namespace android
-
-using namespace android::snapshot;
-
 bool Mkdir(const std::string& path) {
     if (mkdir(path.c_str(), 0700) && errno != EEXIST) {
         std::cerr << "Could not mkdir " << path << ": " << strerror(errno) << std::endl;
@@ -1861,8 +1855,21 @@ bool Mkdir(const std::string& path) {
     return true;
 }
 
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
+class SnapshotTestEnvironment : public ::testing::Environment {
+  public:
+    ~SnapshotTestEnvironment() override {}
+    void SetUp() override;
+    void TearDown() override;
+
+  private:
+    std::unique_ptr<IImageManager> super_images_;
+};
+
+void SnapshotTestEnvironment::SetUp() {
+    // b/163082876: GTEST_SKIP in Environment will make atest report incorrect results. Until
+    // that is fixed, don't call GTEST_SKIP here, but instead call GTEST_SKIP in individual test
+    // suites.
+    RETURN_IF_NON_VIRTUAL_AB_MSG("Virtual A/B is not enabled, skipping global setup.\n");
 
     std::vector<std::string> paths = {
             // clang-format off
@@ -1875,18 +1882,13 @@ int main(int argc, char** argv) {
             // clang-format on
     };
     for (const auto& path : paths) {
-        if (!Mkdir(path)) {
-            return 1;
-        }
+        ASSERT_TRUE(Mkdir(path));
     }
 
     // Create this once, otherwise, gsid will start/stop between each test.
     test_device = new TestDeviceInfo();
     sm = SnapshotManager::New(test_device);
-    if (!sm) {
-        std::cerr << "Could not create snapshot manager\n";
-        return 1;
-    }
+    ASSERT_NE(nullptr, sm) << "Could not create snapshot manager";
 
     // Clean up previous run.
     MetadataMountedTest().TearDown();
@@ -1894,31 +1896,35 @@ int main(int argc, char** argv) {
     SnapshotTest().Cleanup();
 
     // Use a separate image manager for our fake super partition.
-    auto super_images = IImageManager::Open("ota/test/super", 10s);
-    if (!super_images) {
-        std::cerr << "Could not create image manager\n";
-        return 1;
-    }
+    super_images_ = IImageManager::Open("ota/test/super", 10s);
+    ASSERT_NE(nullptr, super_images_) << "Could not create image manager";
 
     // Clean up any old copy.
-    DeleteBackingImage(super_images.get(), "fake-super");
+    DeleteBackingImage(super_images_.get(), "fake-super");
 
     // Create and map the fake super partition.
     static constexpr int kImageFlags =
             IImageManager::CREATE_IMAGE_DEFAULT | IImageManager::CREATE_IMAGE_ZERO_FILL;
-    if (!super_images->CreateBackingImage("fake-super", kSuperSize, kImageFlags)) {
-        std::cerr << "Could not create fake super partition\n";
-        return 1;
-    }
-    if (!super_images->MapImageDevice("fake-super", 10s, &fake_super)) {
-        std::cerr << "Could not map fake super partition\n";
-        return 1;
-    }
+    ASSERT_TRUE(super_images_->CreateBackingImage("fake-super", kSuperSize, kImageFlags))
+            << "Could not create fake super partition";
+
+    ASSERT_TRUE(super_images_->MapImageDevice("fake-super", 10s, &fake_super))
+            << "Could not map fake super partition";
     test_device->set_fake_super(fake_super);
+}
 
-    auto result = RUN_ALL_TESTS();
+void SnapshotTestEnvironment::TearDown() {
+    RETURN_IF_NON_VIRTUAL_AB();
+    if (super_images_ != nullptr) {
+        DeleteBackingImage(super_images_.get(), "fake-super");
+    }
+}
 
-    DeleteBackingImage(super_images.get(), "fake-super");
+}  // namespace snapshot
+}  // namespace android
 
-    return result;
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    ::testing::AddGlobalTestEnvironment(new ::android::snapshot::SnapshotTestEnvironment());
+    return RUN_ALL_TESTS();
 }
