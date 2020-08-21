@@ -27,7 +27,6 @@
 #include <memory>
 
 #include <log/log.h>
-#include <sysutils/SocketClient.h>
 
 #include "LogBuffer.h"
 #include "LogWriter.h"
