@@ -40,7 +40,7 @@
 #include <selinux/selinux.h>
 #endif
 
-#include "LogReader.h"  // pickup LOGD_SNDTIMEO
+#include "LogUtils.h"  // For LOGD_SNDTIMEO.
 
 using android::base::unique_fd;
 
