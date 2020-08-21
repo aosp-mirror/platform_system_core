@@ -24,19 +24,24 @@ message Cgroups {
     Cgroups2 cgroups2 = 2 [json_name = "Cgroups2"];
 }
 
-// Next: 6
+// Next: 7
 message Cgroup {
     string controller = 1 [json_name = "Controller"];
     string path = 2 [json_name = "Path"];
     string mode = 3 [json_name = "Mode"];
     string uid = 4 [json_name = "UID"];
     string gid = 5 [json_name = "GID"];
+// Booleans default to false when not specified. File reconstruction fails
+// when a boolean is specified as false, so leave unspecified in that case
+// https://developers.google.com/protocol-buffers/docs/proto3#default
+    bool needs_activation = 6 [json_name = "NeedsActivation"];
 }
 
-// Next: 5
+// Next: 6
 message Cgroups2 {
     string path = 1 [json_name = "Path"];
     string mode = 2 [json_name = "Mode"];
     string uid = 3 [json_name = "UID"];
     string gid = 4 [json_name = "GID"];
+    repeated Cgroup controllers = 5 [json_name = "Controllers"];
 }

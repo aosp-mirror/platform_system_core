@@ -39,19 +39,21 @@
       "Mode": "0755",
       "UID": "system",
       "GID": "system"
-    },
-    {
-      "Controller": "freezer",
-      "Path": "/dev/freezer",
-      "Mode": "0755",
-      "UID": "system",
-      "GID": "system"
     }
   ],
   "Cgroups2": {
-    "Path": "/dev/cg2_bpf",
-    "Mode": "0600",
-    "UID": "root",
-    "GID": "root"
+    "Path": "/sys/fs/cgroup",
+    "Mode": "0755",
+    "UID": "system",
+    "GID": "system",
+    "Controllers": [
+      {
+        "Controller": "freezer",
+        "Path": "freezer",
+        "Mode": "0755",
+        "UID": "system",
+        "GID": "system"
+      }
+    ]
   }
 }

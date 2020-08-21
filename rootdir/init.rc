@@ -324,16 +324,6 @@ on init
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
 
-    # freezer cgroup entries
-    mkdir /dev/freezer/frozen
-    write /dev/freezer/frozen/freezer.state FROZEN
-    chown system system /dev/freezer/cgroup.procs
-    chown system system /dev/freezer/frozen
-    chown system system /dev/freezer/frozen/freezer.state
-    chown system system /dev/freezer/frozen/cgroup.procs
-
-    chmod 0444 /dev/freezer/frozen/freezer.state
-
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
     chmod 0664 /proc/pressure/memory
@@ -348,8 +338,6 @@ on init
     # This is needed by any process that uses socket tagging.
     chmod 0644 /dev/xt_qtaguid
 
-    chown root root /dev/cg2_bpf
-    chmod 0600 /dev/cg2_bpf
     mount bpf bpf /sys/fs/bpf nodev noexec nosuid
 
     # Create location for fs_mgr to store abbreviated output from filesystem
