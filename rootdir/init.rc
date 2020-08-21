@@ -336,8 +336,6 @@ on init
     # This is needed by any process that uses socket tagging.
     chmod 0644 /dev/xt_qtaguid
 
-    chown root root /dev/cg2_bpf
-    chmod 0600 /dev/cg2_bpf
     mount bpf bpf /sys/fs/bpf nodev noexec nosuid
 
     # Create location for fs_mgr to store abbreviated output from filesystem
