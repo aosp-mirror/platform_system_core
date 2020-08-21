@@ -35,22 +35,22 @@
 // little-endian 32 bit words. Note that Android only supports little-endian
 // processors, so we don't do any byte order conversions when parsing the binary
 // struct.
-typedef struct RSAPublicKey {
-    // Modulus length. This must be ANDROID_PUBKEY_MODULUS_SIZE.
-    uint32_t modulus_size_words;
+struct RSAPublicKey {
+  // Modulus length. This must be ANDROID_PUBKEY_MODULUS_SIZE.
+  uint32_t modulus_size_words;
 
-    // Precomputed montgomery parameter: -1 / n[0] mod 2^32
-    uint32_t n0inv;
+  // Precomputed montgomery parameter: -1 / n[0] mod 2^32
+  uint32_t n0inv;
 
-    // RSA modulus as a little-endian array.
-    uint8_t modulus[ANDROID_PUBKEY_MODULUS_SIZE];
+  // RSA modulus as a little-endian array.
+  uint8_t modulus[ANDROID_PUBKEY_MODULUS_SIZE];
 
-    // Montgomery parameter R^2 as a little-endian array.
-    uint8_t rr[ANDROID_PUBKEY_MODULUS_SIZE];
+  // Montgomery parameter R^2 as a little-endian array.
+  uint8_t rr[ANDROID_PUBKEY_MODULUS_SIZE];
 
-    // RSA modulus: 3 or 65537
-    uint32_t exponent;
-} RSAPublicKey;
+  // RSA modulus: 3 or 65537
+  uint32_t exponent;
+};
 
 bool android_pubkey_decode(const uint8_t* key_buffer, size_t size, RSA** key) {
   const RSAPublicKey* key_struct = (RSAPublicKey*)key_buffer;
@@ -116,8 +116,7 @@ bool android_pubkey_encode(const RSA* key, uint8_t* key_buffer, size_t size) {
   BIGNUM* n0inv = BN_new();
   BIGNUM* rr = BN_new();
 
-  if (sizeof(RSAPublicKey) > size ||
-      RSA_size(key) != ANDROID_PUBKEY_MODULUS_SIZE) {
+  if (sizeof(RSAPublicKey) > size || RSA_size(key) != ANDROID_PUBKEY_MODULUS_SIZE) {
     goto cleanup;
   }
 
