@@ -75,7 +75,8 @@ __BEGIN_DECLS
 #define ATRACE_TAG_AIDL             (1<<24)
 #define ATRACE_TAG_NNAPI            (1<<25)
 #define ATRACE_TAG_RRO              (1<<26)
-#define ATRACE_TAG_LAST             ATRACE_TAG_RRO
+#define ATRACE_TAG_SYSPROP          (1<<27)
+#define ATRACE_TAG_LAST             ATRACE_TAG_SYSPROP
 
 // Reserved for initialization.
 #define ATRACE_TAG_NOT_READY        (1ULL<<63)
