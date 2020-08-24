@@ -75,7 +75,7 @@ void Unwinder::FillInDexFrame() {
     frame->rel_pc = dex_pc - info->start;
   } else {
     frame->rel_pc = dex_pc;
-    return;
+    warnings_ |= WARNING_DEX_PC_NOT_IN_MAP;
   }
 
   if (!resolve_names_) {
@@ -142,6 +142,7 @@ static bool ShouldStop(const std::vector<std::string>* map_suffixes_to_ignore,
 void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
                       const std::vector<std::string>* map_suffixes_to_ignore) {
   frames_.clear();
+  warnings_ = WARNING_NONE;
   last_error_.code = ERROR_NONE;
   last_error_.address = 0;
   elf_from_memory_not_file_ = false;

@@ -521,13 +521,13 @@ static void tune_verity(const std::string& blk_device, const FstabEntry& entry,
 }
 
 // Enable casefold if needed.
-static void tune_casefold(const std::string& blk_device, const struct ext4_super_block* sb,
-                          int* fs_stat) {
+static void tune_casefold(const std::string& blk_device, const FstabEntry& entry,
+                          const struct ext4_super_block* sb, int* fs_stat) {
     bool has_casefold = (sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_CASEFOLD)) != 0;
     bool wants_casefold =
             android::base::GetBoolProperty("external_storage.casefold.enabled", false);
 
-    if (!wants_casefold || has_casefold) return;
+    if (entry.mount_point != "data" || !wants_casefold || has_casefold ) return;
 
     std::string casefold_support;
     if (!android::base::ReadFileToString(SYSFS_EXT4_CASEFOLD, &casefold_support)) {
@@ -696,7 +696,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
             tune_reserved_size(blk_device, entry, &sb, &fs_stat);
             tune_encrypt(blk_device, entry, &sb, &fs_stat);
             tune_verity(blk_device, entry, &sb, &fs_stat);
-            tune_casefold(blk_device, &sb, &fs_stat);
+            tune_casefold(blk_device, entry, &sb, &fs_stat);
             tune_metadata_csum(blk_device, entry, &sb, &fs_stat);
         }
     }
@@ -973,6 +973,19 @@ static int handle_encryptable(const FstabEntry& entry) {
         return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
     } else {
         return FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE;
+    }
+}
+
+static void set_type_property(int status) {
+    switch (status) {
+        case FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED:
+            SetProperty("ro.crypto.type", "block");
+            break;
+        case FS_MGR_MNTALL_DEV_FILE_ENCRYPTED:
+        case FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED:
+        case FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION:
+            SetProperty("ro.crypto.type", "file");
+            break;
     }
 }
 
@@ -1366,6 +1379,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 avb_handle = AvbHandle::Open();
                 if (!avb_handle) {
                     LERROR << "Failed to open AvbHandle";
+                    set_type_property(encryptable);
                     return FS_MGR_MNTALL_FAIL;
                 }
             }
@@ -1422,6 +1436,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                                    attempted_entry.mount_point},
                                   nullptr)) {
                         LERROR << "Encryption failed";
+                        set_type_property(encryptable);
                         return FS_MGR_MNTALL_FAIL;
                     }
                 }
@@ -1518,6 +1533,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             continue;
         }
     }
+
+    set_type_property(encryptable);
 
 #if ALLOW_ADBD_DISABLE_VERITY == 1  // "userdebug" build
     fs_mgr_overlayfs_mount_all(fstab);
