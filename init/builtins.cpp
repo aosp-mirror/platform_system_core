@@ -570,7 +570,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             trigger_shutdown("reboot,requested-userdata-remount-on-fde-device");
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "block");
         ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
@@ -595,7 +594,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
@@ -606,7 +604,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.
@@ -617,7 +614,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.

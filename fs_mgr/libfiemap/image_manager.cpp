@@ -640,16 +640,22 @@ bool ImageManager::Validate() {
         return false;
     }
 
+    bool ok = true;
     for (const auto& partition : metadata->partitions) {
         auto name = GetPartitionName(partition);
         auto image_path = GetImageHeaderPath(name);
         auto fiemap = SplitFiemap::Open(image_path);
-        if (!fiemap || !fiemap->HasPinnedExtents()) {
-            LOG(ERROR) << "Image is missing or was moved: " << image_path;
-            return false;
+        if (fiemap == nullptr) {
+            LOG(ERROR) << "SplitFiemap::Open(\"" << image_path << "\") failed";
+            ok = false;
+            continue;
+        }
+        if (!fiemap->HasPinnedExtents()) {
+            LOG(ERROR) << "Image doesn't have pinned extents: " << image_path;
+            ok = false;
         }
     }
-    return true;
+    return ok;
 }
 
 bool ImageManager::DisableImage(const std::string& name) {

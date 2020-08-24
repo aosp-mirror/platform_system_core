@@ -492,6 +492,40 @@ TYPED_TEST_P(DwarfSectionImplTest, Eval_reg_val_expr) {
   EXPECT_EQ(0x80000000U, regs.pc());
 }
 
+TYPED_TEST_P(DwarfSectionImplTest, Eval_pseudo_register_invalid) {
+  DwarfCie cie{.return_address_register = 5};
+  RegsImplFake<TypeParam> regs(10);
+  regs.set_pseudo_reg(11);
+  dwarf_loc_regs_t loc_regs;
+
+  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_REGISTER, {8, 0}};
+  loc_regs[1] = DwarfLocation{DWARF_LOCATION_PSEUDO_REGISTER, {20, 0}};
+  bool finished;
+  ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->LastErrorCode());
+
+  loc_regs.clear();
+  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_REGISTER, {8, 0}};
+  loc_regs[12] = DwarfLocation{DWARF_LOCATION_PSEUDO_REGISTER, {20, 0}};
+  ASSERT_FALSE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
+  EXPECT_EQ(DWARF_ERROR_ILLEGAL_VALUE, this->section_->LastErrorCode());
+}
+
+TYPED_TEST_P(DwarfSectionImplTest, Eval_pseudo_register) {
+  DwarfCie cie{.return_address_register = 5};
+  RegsImplFake<TypeParam> regs(10);
+  regs.set_pseudo_reg(11);
+  dwarf_loc_regs_t loc_regs;
+
+  loc_regs[CFA_REG] = DwarfLocation{DWARF_LOCATION_REGISTER, {8, 0}};
+  loc_regs[11] = DwarfLocation{DWARF_LOCATION_PSEUDO_REGISTER, {20, 0}};
+  bool finished;
+  ASSERT_TRUE(this->section_->Eval(&cie, &this->memory_, loc_regs, &regs, &finished));
+  uint64_t pseudo_value = 0;
+  ASSERT_TRUE(regs.GetPseudoRegister(11, &pseudo_value));
+  EXPECT_EQ(20U, pseudo_value);
+}
+
 TYPED_TEST_P(DwarfSectionImplTest, GetCfaLocationInfo_cie_not_cached) {
   DwarfCie cie{};
   cie.cfa_instructions_offset = 0x3000;
@@ -581,6 +615,7 @@ REGISTER_TYPED_TEST_SUITE_P(DwarfSectionImplTest, GetCieFromOffset_fail_should_n
                             Eval_invalid_register, Eval_different_reg_locations,
                             Eval_return_address_undefined, Eval_pc_zero, Eval_return_address,
                             Eval_ignore_large_reg_loc, Eval_reg_expr, Eval_reg_val_expr,
+                            Eval_pseudo_register_invalid, Eval_pseudo_register,
                             GetCfaLocationInfo_cie_not_cached, GetCfaLocationInfo_cie_cached, Log);
 
 typedef ::testing::Types<uint32_t, uint64_t> DwarfSectionImplTestTypes;

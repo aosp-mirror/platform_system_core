@@ -49,6 +49,11 @@
       "Name": "UClampMax",
       "Controller": "cpu",
       "File": "cpu.uclamp.max"
+    },
+    {
+      "Name": "FreezerState",
+      "Controller": "freezer",
+      "File": "cgroup.freeze"
     }
   ],
 
@@ -74,7 +79,7 @@
           "Params":
           {
             "Controller": "freezer",
-            "Path": "frozen"
+            "Path": ""
           }
         }
       ]
@@ -87,7 +92,7 @@
           "Params":
           {
             "Controller": "freezer",
-            "Path": ""
+            "Path": "../"
           }
         }
       ]
@@ -528,6 +533,32 @@
           {
             "Controller": "memory",
             "Path": "system"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "FreezerDisabled",
+      "Actions": [
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "FreezerState",
+            "Value": "0"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "FreezerEnabled",
+      "Actions": [
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "FreezerState",
+            "Value": "1"
           }
         }
       ]
