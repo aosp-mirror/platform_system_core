@@ -302,7 +302,8 @@ void androidSetCreateThreadFunc(android_create_thread_fn func)
 }
 
 #if defined(__ANDROID__)
-int androidSetThreadPriority(pid_t tid, int pri, bool change_policy) {
+namespace {
+int androidSetThreadPriorityInternal(pid_t tid, int pri, bool change_policy) {
     int rc = 0;
     int lasterr = 0;
     int curr_pri = getpriority(PRIO_PROCESS, tid);
@@ -333,6 +334,15 @@ int androidSetThreadPriority(pid_t tid, int pri, bool change_policy) {
     }
 
     return rc;
+}
+}  // namespace
+
+int androidSetThreadPriority(pid_t tid, int pri) {
+    return androidSetThreadPriorityInternal(tid, pri, true);
+}
+
+int androidSetThreadPriorityAndPolicy(pid_t tid, int pri, bool change_policy) {
+    return androidSetThreadPriorityInternal(tid, pri, change_policy);
 }
 
 int androidGetThreadPriority(pid_t tid) {
