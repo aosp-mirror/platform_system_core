@@ -465,13 +465,9 @@ bool DwarfSectionImpl<AddressType>::EvalRegister(const DwarfLocation* loc, uint3
         eval_info->return_address_undefined = true;
       }
       break;
-    case DWARF_LOCATION_PSEUDO_REGISTER: {
-      if (!eval_info->regs_info.regs->SetPseudoRegister(reg, loc->values[0])) {
-        last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
-        return false;
-      }
-      break;
-    }
+    case DWARF_LOCATION_PSEUDO_REGISTER:
+      last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
+      return false;
     default:
       break;
   }
@@ -543,11 +539,15 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
         // Skip this unknown register.
         continue;
       }
-    }
-
-    reg_ptr = eval_info.regs_info.Save(reg);
-    if (!EvalRegister(&entry.second, reg, reg_ptr, &eval_info)) {
-      return false;
+      if (!eval_info.regs_info.regs->SetPseudoRegister(reg, entry.second.values[0])) {
+        last_error_.code = DWARF_ERROR_ILLEGAL_VALUE;
+        return false;
+      }
+    } else {
+      reg_ptr = eval_info.regs_info.Save(reg);
+      if (!EvalRegister(&entry.second, reg, reg_ptr, &eval_info)) {
+        return false;
+      }
     }
   }
 
