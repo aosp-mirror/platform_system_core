@@ -44,6 +44,11 @@ using android::base::WriteStringToFile;
 #define TASK_PROFILE_DB_FILE "/etc/task_profiles.json"
 #define TASK_PROFILE_DB_VENDOR_FILE "/vendor/etc/task_profiles.json"
 
+void ProfileAttribute::Reset(const CgroupController& controller, const std::string& file_name) {
+    controller_ = controller;
+    file_name_ = file_name;
+}
+
 bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
     std::string subgroup;
     if (!controller()->GetTaskGroup(tid, &subgroup)) {
@@ -380,15 +385,16 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
         std::string controller_name = attr[i]["Controller"].asString();
         std::string file_attr = attr[i]["File"].asString();
 
-        if (attributes_.find(name) == attributes_.end()) {
-            auto controller = cg_map.FindController(controller_name);
-            if (controller.HasValue()) {
+        auto controller = cg_map.FindController(controller_name);
+        if (controller.HasValue()) {
+            auto iter = attributes_.find(name);
+            if (iter == attributes_.end()) {
                 attributes_[name] = std::make_unique<ProfileAttribute>(controller, file_attr);
             } else {
-                LOG(WARNING) << "Controller " << controller_name << " is not found";
+                iter->second->Reset(controller, file_attr);
             }
         } else {
-            LOG(WARNING) << "Attribute " << name << " is already defined";
+            LOG(WARNING) << "Controller " << controller_name << " is not found";
         }
     }
 

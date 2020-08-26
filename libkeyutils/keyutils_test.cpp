@@ -33,7 +33,7 @@
 #include <gtest/gtest.h>
 
 TEST(keyutils, smoke) {
-  // Check that the exported type is sane.
+  // Check that the exported type is the right size.
   ASSERT_EQ(4U, sizeof(key_serial_t));
 
   // Check that all the functions actually exist.

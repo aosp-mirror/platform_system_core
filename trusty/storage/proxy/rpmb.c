@@ -231,7 +231,7 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
 
     if (req->read_size) {
         /* Prepare SECURITY PROTOCOL IN command. */
-        out_cdb.length = __builtin_bswap32(req->read_size);
+        in_cdb.length = __builtin_bswap32(req->read_size);
         sg_io_hdr_t io_hdr;
         set_sg_io_hdr(&io_hdr, SG_DXFER_FROM_DEV, sizeof(in_cdb), sizeof(sense_buffer),
                       req->read_size, read_buf, (unsigned char*)&in_cdb, sense_buffer);

@@ -130,6 +130,7 @@ cc_defaults {
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
         "libsnapshot_init",
+        "libxml2",
         "lib_apex_manifest_proto_lite",
         "update_metadata-protos",
     ],
@@ -164,6 +165,9 @@ cc_library_static {
         "selinux_policy_version",
     ],
     srcs: init_common_sources + init_device_sources,
+    generated_sources: [
+        "apex-info-list",
+    ],
     whole_static_libs: [
         "libcap",
         "com.android.sysprop.apex",
@@ -178,6 +182,12 @@ cc_library_static {
     target: {
         recovery: {
             cflags: ["-DRECOVERY"],
+            exclude_static_libs: [
+                "libxml2",
+            ],
+            exclude_generated_sources: [
+                "apex-info-list",
+            ],
             exclude_shared_libs: [
                 "libbinder",
                 "libutils",
@@ -212,6 +222,9 @@ cc_binary {
     target: {
         recovery: {
             cflags: ["-DRECOVERY"],
+            exclude_static_libs: [
+                "libxml2",
+            ],
             exclude_shared_libs: [
                 "libbinder",
                 "libutils",

@@ -35,13 +35,14 @@
 
 #include <string>
 
+#include <android-base/parseint.h>
 #include <private/android_logger.h>
 
 #include "logger.h"
 
 // Connects to /dev/socket/<name> and returns the associated fd or returns -1 on error.
 // O_CLOEXEC is always set.
-static int socket_local_client(const std::string& name, int type) {
+static int socket_local_client(const std::string& name, int type, bool timeout) {
   sockaddr_un addr = {.sun_family = AF_LOCAL};
 
   std::string path = "/dev/socket/" + name;
@@ -53,6 +54,18 @@ static int socket_local_client(const std::string& name, int type) {
   int fd = socket(AF_LOCAL, type | SOCK_CLOEXEC, 0);
   if (fd == -1) {
     return -1;
+  }
+
+  if (timeout) {
+    // Sending and receiving messages should be instantaneous, but we don't want to wait forever if
+    // logd is hung, so we set a gracious 2s timeout.
+    struct timeval t = {2, 0};
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &t, sizeof(t)) == -1) {
+      return -1;
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t)) == -1) {
+      return -1;
+    }
   }
 
   if (connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == -1) {
@@ -69,7 +82,7 @@ ssize_t SendLogdControlMessage(char* buf, size_t buf_size) {
   size_t len;
   char* cp;
   int errno_save = 0;
-  int sock = socket_local_client("logd", SOCK_STREAM);
+  int sock = socket_local_client("logd", SOCK_STREAM, true);
   if (sock < 0) {
     return sock;
   }
@@ -148,26 +161,56 @@ int android_logger_clear(struct logger* logger) {
   return check_log_success(buf, SendLogdControlMessage(buf, sizeof(buf)));
 }
 
-/* returns the total size of the log's ring buffer */
-long android_logger_get_log_size(struct logger* logger) {
+enum class LogSizeType : uint32_t {
+  kAllotted = 0,
+  kReadable,
+  kConsumed,
+};
+
+static long GetLogSize(struct logger* logger, LogSizeType type) {
   if (!android_logger_is_logd(logger)) {
     return -EINVAL;
   }
 
   uint32_t log_id = android_logger_get_id(logger);
   char buf[512];
-  snprintf(buf, sizeof(buf), "getLogSize %" PRIu32, log_id);
+  switch (type) {
+    case LogSizeType::kAllotted:
+      snprintf(buf, sizeof(buf), "getLogSize %" PRIu32, log_id);
+      break;
+    case LogSizeType::kReadable:
+      snprintf(buf, sizeof(buf), "getLogSizeReadable %" PRIu32, log_id);
+      break;
+    case LogSizeType::kConsumed:
+      snprintf(buf, sizeof(buf), "getLogSizeUsed %" PRIu32, log_id);
+      break;
+    default:
+      abort();
+  }
 
   ssize_t ret = SendLogdControlMessage(buf, sizeof(buf));
   if (ret < 0) {
     return ret;
   }
 
-  if ((buf[0] < '0') || ('9' < buf[0])) {
+  long size;
+  if (!android::base::ParseInt(buf, &size)) {
     return -1;
   }
 
-  return atol(buf);
+  return size;
+}
+
+long android_logger_get_log_size(struct logger* logger) {
+  return GetLogSize(logger, LogSizeType::kAllotted);
+}
+
+long android_logger_get_log_readable_size(struct logger* logger) {
+  return GetLogSize(logger, LogSizeType::kReadable);
+}
+
+long android_logger_get_log_consumed_size(struct logger* logger) {
+  return GetLogSize(logger, LogSizeType::kConsumed);
 }
 
 int android_logger_set_log_size(struct logger* logger, unsigned long size) {
@@ -180,31 +223,6 @@ int android_logger_set_log_size(struct logger* logger, unsigned long size) {
   snprintf(buf, sizeof(buf), "setLogSize %" PRIu32 " %lu", log_id, size);
 
   return check_log_success(buf, SendLogdControlMessage(buf, sizeof(buf)));
-}
-
-/*
- * returns the readable size of the log's ring buffer (that is, amount of the
- * log consumed)
- */
-long android_logger_get_log_readable_size(struct logger* logger) {
-  if (!android_logger_is_logd(logger)) {
-    return -EINVAL;
-  }
-
-  uint32_t log_id = android_logger_get_id(logger);
-  char buf[512];
-  snprintf(buf, sizeof(buf), "getLogSizeUsed %" PRIu32, log_id);
-
-  ssize_t ret = SendLogdControlMessage(buf, sizeof(buf));
-  if (ret < 0) {
-    return ret;
-  }
-
-  if ((buf[0] < '0') || ('9' < buf[0])) {
-    return -1;
-  }
-
-  return atol(buf);
 }
 
 int android_logger_get_log_version(struct logger*) {
@@ -268,7 +286,7 @@ static int logdOpen(struct logger_list* logger_list) {
     return sock;
   }
 
-  sock = socket_local_client("logdr", SOCK_SEQPACKET);
+  sock = socket_local_client("logdr", SOCK_SEQPACKET, false);
   if (sock <= 0) {
     if ((sock == -1) && errno) {
       return -errno;

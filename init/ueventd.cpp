@@ -321,6 +321,8 @@ int ueventd_main(int argc, char** argv) {
     while (waitpid(-1, nullptr, WNOHANG) > 0) {
     }
 
+    // Restore prio before main loop
+    setpriority(PRIO_PROCESS, 0, 0);
     uevent_listener.Poll([&uevent_handlers](const Uevent& uevent) {
         for (auto& uevent_handler : uevent_handlers) {
             uevent_handler->HandleUevent(uevent);

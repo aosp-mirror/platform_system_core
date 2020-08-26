@@ -23,7 +23,7 @@
 #include "LogListener.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
-#include "LogWhiteBlackList.h"
+#include "PruneList.h"
 
 class CommandListener : public FrameworkListener {
   public:
@@ -57,6 +57,7 @@ class CommandListener : public FrameworkListener {
     LogCmd(Clear, clear);
     LogCmd(GetBufSize, getLogSize);
     LogCmd(SetBufSize, setLogSize);
+    LogCmd(GetBufSizeReadable, getLogSizeReadable);
     LogCmd(GetBufSizeUsed, getLogSizeUsed);
     LogCmd(GetStatistics, getStatistics);
     LogCmd(GetPruneList, getPruneList);

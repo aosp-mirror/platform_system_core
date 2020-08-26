@@ -15,6 +15,7 @@
  */
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -29,6 +30,7 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <ext4_utils/ext4_utils.h>
 #include <openssl/sha.h>
 
@@ -283,6 +285,43 @@ bool UpdateMetadataForInPlaceSnapshot(LpMetadata* metadata, uint32_t source_slot
     metadata->groups = std::move(new_groups);
 
     return true;
+}
+
+inline std::string ToHexString(uint64_t value) {
+    return android::base::StringPrintf("0x%" PRIx64, value);
+}
+
+void SetMetadataHeaderV0(LpMetadata* metadata) {
+    if (metadata->header.minor_version <= LP_METADATA_MINOR_VERSION_MIN) {
+        return;
+    }
+    LINFO << "Forcefully setting metadata header version " << LP_METADATA_MAJOR_VERSION << "."
+          << metadata->header.minor_version << " to " << LP_METADATA_MAJOR_VERSION << "."
+          << LP_METADATA_MINOR_VERSION_MIN;
+    metadata->header.minor_version = LP_METADATA_MINOR_VERSION_MIN;
+    metadata->header.header_size = sizeof(LpMetadataHeaderV1_0);
+
+    // Retrofit Virtual A/B devices should have version 10.1, so flags shouldn't be set.
+    // Warn if this is the case, but zero it out anyways.
+    if (metadata->header.flags) {
+        LWARN << "Zeroing unexpected flags: " << ToHexString(metadata->header.flags);
+    }
+
+    // Zero out all fields beyond LpMetadataHeaderV0.
+    static_assert(sizeof(metadata->header) > sizeof(LpMetadataHeaderV1_0));
+    memset(reinterpret_cast<uint8_t*>(&metadata->header) + sizeof(LpMetadataHeaderV1_0), 0,
+           sizeof(metadata->header) - sizeof(LpMetadataHeaderV1_0));
+
+    // Clear partition attributes unknown to V0.
+    // On retrofit Virtual A/B devices, UPDATED flag may be set, so only log info here.
+    for (auto& partition : metadata->partitions) {
+        if (partition.attributes & ~LP_PARTITION_ATTRIBUTE_MASK_V0) {
+            LINFO << "Clearing " << GetPartitionName(partition)
+                  << " partition attribute: " << ToHexString(partition.attributes);
+        }
+
+        partition.attributes &= LP_PARTITION_ATTRIBUTE_MASK_V0;
+    }
 }
 
 }  // namespace fs_mgr

@@ -24,6 +24,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #include <string>
@@ -276,7 +277,9 @@ void LogTags::ReadFileEventLogTags(const char* filename, bool warn) {
             cp++;
         }
     } else if (warn) {
+#ifdef __ANDROID__
         LOG(ERROR) << "Cannot read " << filename;
+#endif
     }
 }
 

@@ -25,7 +25,8 @@
 #include "LogReaderList.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
-#include "LogWhiteBlackList.h"
+#include "PruneList.h"
+#include "SerializedLogBuffer.h"
 #include "SimpleLogBuffer.h"
 
 struct LogMessage {
@@ -67,11 +68,15 @@ class LogBufferTest : public testing::TestWithParam<std::string> {
     void SetUp() override {
         if (GetParam() == "chatty") {
             log_buffer_.reset(new ChattyLogBuffer(&reader_list_, &tags_, &prune_, &stats_));
+        } else if (GetParam() == "serialized") {
+            log_buffer_.reset(new SerializedLogBuffer(&reader_list_, &tags_, &stats_));
         } else if (GetParam() == "simple") {
             log_buffer_.reset(new SimpleLogBuffer(&reader_list_, &tags_, &stats_));
         } else {
             FAIL() << "Unknown buffer type selected for test";
         }
+
+        log_id_for_each(i) { log_buffer_->SetSize(i, 1024 * 1024); }
     }
 
     void LogMessages(const std::vector<LogMessage>& messages) {
@@ -84,6 +89,6 @@ class LogBufferTest : public testing::TestWithParam<std::string> {
     LogReaderList reader_list_;
     LogTags tags_;
     PruneList prune_;
-    LogStatistics stats_{false};
+    LogStatistics stats_{false, true};
     std::unique_ptr<LogBuffer> log_buffer_;
 };

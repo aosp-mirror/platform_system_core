@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,22 @@
  * limitations under the License.
  */
 
-#ifndef _TIPC_IOCTL_H
-#define _TIPC_IOCTL_H
+#pragma once
 
-#include <linux/ioctl.h>
-#include <linux/types.h>
+#include <optional>
+#include <string>
 
-#define TIPC_IOC_MAGIC			'r'
-#define TIPC_IOC_CONNECT		_IOW(TIPC_IOC_MAGIC, 0x80, char *)
+namespace adb {
+namespace sysdeps {
 
-#endif
+// Attempts to retrieve the environment variable value for |var|. Returns std::nullopt
+// if unset.
+std::optional<std::string> GetEnvironmentVariableUTF8(std::string_view var);
+
+// Gets the host name of the system. Returns empty string on failure.
+std::string GetHostNameUTF8();
+// Gets the current login user. Returns empty string on failure.
+std::string GetLoginNameUTF8();
+
+}  // namespace sysdeps
+}  // namespace adb

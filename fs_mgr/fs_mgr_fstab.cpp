@@ -640,13 +640,14 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
             entry.fs_mgr_flags.wait = true;
             entry.fs_mgr_flags.logical = true;
             entry.fs_mgr_flags.first_stage_mount = true;
+            fstab->emplace_back(entry);
         } else {
             // If the corresponding partition exists, transform all its Fstab
             // by pointing .blk_device to the DSU partition.
             for (auto&& entry : entries) {
                 entry->blk_device = partition;
                 // AVB keys for DSU should always be under kDsuKeysDir.
-                entry->avb_keys += kDsuKeysDir;
+                entry->avb_keys = kDsuKeysDir;
             }
             // Make sure the ext4 is included to support GSI.
             auto partition_ext4 =
@@ -696,7 +697,9 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
         TransformFstabForDsu(fstab, Split(lp_names, ","));
     }
 
+#ifndef NO_SKIP_MOUNT
     SkipMountingPartitions(fstab);
+#endif
     EnableMandatoryFlags(fstab);
 
     return true;
@@ -726,11 +729,14 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
         return false;
     }
 
+#ifndef NO_SKIP_MOUNT
     SkipMountingPartitions(fstab);
+#endif
 
     return true;
 }
 
+#ifndef NO_SKIP_MOUNT
 // For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
 // between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
 // device-specific /product and /system_ext. skip_mount.cfg belongs to system_ext partition because
@@ -762,6 +768,7 @@ bool SkipMountingPartitions(Fstab* fstab) {
 
     return true;
 }
+#endif
 
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {

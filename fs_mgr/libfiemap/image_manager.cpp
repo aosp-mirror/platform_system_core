@@ -136,13 +136,13 @@ bool ImageManager::BackingImageExists(const std::string& name) {
     return !!FindPartition(*metadata.get(), name);
 }
 
-static bool IsTestDir(const std::string& path) {
-    return android::base::StartsWith(path, kTestImageMetadataDir) ||
-           android::base::StartsWith(path, kOtaTestImageMetadataDir);
+bool ImageManager::MetadataDirIsTest() const {
+    return IsSubdir(metadata_dir_, kTestImageMetadataDir) ||
+           IsSubdir(metadata_dir_, kOtaTestImageMetadataDir);
 }
 
-static bool IsUnreliablePinningAllowed(const std::string& path) {
-    return android::base::StartsWith(path, "/data/gsi/dsu/") || IsTestDir(path);
+bool ImageManager::IsUnreliablePinningAllowed() const {
+    return IsSubdir(data_dir_, "/data/gsi/dsu/") || MetadataDirIsTest();
 }
 
 FiemapStatus ImageManager::CreateBackingImage(
@@ -159,7 +159,7 @@ FiemapStatus ImageManager::CreateBackingImage(
     if (!FilesystemHasReliablePinning(data_path, &reliable_pinning)) {
         return FiemapStatus::Error();
     }
-    if (!reliable_pinning && !IsUnreliablePinningAllowed(data_path)) {
+    if (!reliable_pinning && !IsUnreliablePinningAllowed()) {
         // For historical reasons, we allow unreliable pinning for certain use
         // cases (DSUs, testing) because the ultimate use case is either
         // developer-oriented or ephemeral (the intent is to boot immediately
@@ -178,7 +178,7 @@ FiemapStatus ImageManager::CreateBackingImage(
     // if device-mapper is stacked in some complex way not supported by
     // FiemapWriter.
     auto device_path = GetDevicePathForFile(fw.get());
-    if (android::base::StartsWith(device_path, "/dev/block/dm-") && !IsTestDir(metadata_dir_)) {
+    if (android::base::StartsWith(device_path, "/dev/block/dm-") && !MetadataDirIsTest()) {
         LOG(ERROR) << "Cannot persist images against device-mapper device: " << device_path;
 
         fw = {};
@@ -640,16 +640,22 @@ bool ImageManager::Validate() {
         return false;
     }
 
+    bool ok = true;
     for (const auto& partition : metadata->partitions) {
         auto name = GetPartitionName(partition);
         auto image_path = GetImageHeaderPath(name);
         auto fiemap = SplitFiemap::Open(image_path);
-        if (!fiemap || !fiemap->HasPinnedExtents()) {
-            LOG(ERROR) << "Image is missing or was moved: " << image_path;
-            return false;
+        if (fiemap == nullptr) {
+            LOG(ERROR) << "SplitFiemap::Open(\"" << image_path << "\") failed";
+            ok = false;
+            continue;
+        }
+        if (!fiemap->HasPinnedExtents()) {
+            LOG(ERROR) << "Image doesn't have pinned extents: " << image_path;
+            ok = false;
         }
     }
-    return true;
+    return ok;
 }
 
 bool ImageManager::DisableImage(const std::string& name) {

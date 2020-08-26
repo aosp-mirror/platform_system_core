@@ -26,7 +26,10 @@
 #include <unistd.h>
 
 #include <list>
+#include <vector>
 
+#include <android-base/logging.h>
+#include <android-base/strings.h>
 #include <private/android_logger.h>
 
 #include "LogBufferElement.h"
@@ -60,7 +63,9 @@ static std::string TagNameKey(const LogStatisticsElement& element) {
     return std::string(msg, len);
 }
 
-LogStatistics::LogStatistics(bool enable_statistics) : enable(enable_statistics) {
+LogStatistics::LogStatistics(bool enable_statistics, bool track_total_size,
+                             std::optional<log_time> start_time)
+    : enable(enable_statistics), track_total_size_(track_total_size) {
     log_time now(CLOCK_REALTIME);
     log_id_for_each(id) {
         mSizes[id] = 0;
@@ -68,8 +73,13 @@ LogStatistics::LogStatistics(bool enable_statistics) : enable(enable_statistics)
         mDroppedElements[id] = 0;
         mSizesTotal[id] = 0;
         mElementsTotal[id] = 0;
-        mOldest[id] = now;
-        mNewest[id] = now;
+        if (start_time) {
+            mOldest[id] = *start_time;
+            mNewest[id] = *start_time;
+        } else {
+            mOldest[id] = now;
+            mNewest[id] = now;
+        }
         mNewestDropped[id] = now;
     }
 }
@@ -88,7 +98,7 @@ char* pidToName(pid_t pid) {
     } else {
         char buffer[512];
         snprintf(buffer, sizeof(buffer), "/proc/%u/cmdline", pid);
-        int fd = open(buffer, O_RDONLY);
+        int fd = open(buffer, O_RDONLY | O_CLOEXEC);
         if (fd >= 0) {
             ssize_t ret = read(fd, buffer, sizeof(buffer));
             if (ret > 0) {
@@ -113,10 +123,15 @@ void LogStatistics::AddTotal(log_id_t log_id, uint16_t size) {
     ++mElementsTotal[log_id];
 }
 
-void LogStatistics::Add(const LogStatisticsElement& element) {
+void LogStatistics::Add(LogStatisticsElement element) {
     auto lock = std::lock_guard{lock_};
+
+    if (!track_total_size_) {
+        element.total_len = element.msg_len;
+    }
+
     log_id_t log_id = element.log_id;
-    uint16_t size = element.msg_len;
+    uint16_t size = element.total_len;
     mSizes[log_id] += size;
     ++mElements[log_id];
 
@@ -184,10 +199,15 @@ void LogStatistics::Add(const LogStatisticsElement& element) {
     }
 }
 
-void LogStatistics::Subtract(const LogStatisticsElement& element) {
+void LogStatistics::Subtract(LogStatisticsElement element) {
     auto lock = std::lock_guard{lock_};
+
+    if (!track_total_size_) {
+        element.total_len = element.msg_len;
+    }
+
     log_id_t log_id = element.log_id;
-    uint16_t size = element.msg_len;
+    uint16_t size = element.total_len;
     mSizes[log_id] -= size;
     --mElements[log_id];
     if (element.dropped_count) {
@@ -230,7 +250,9 @@ void LogStatistics::Subtract(const LogStatisticsElement& element) {
 
 // Atomically set an entry to drop
 // entry->setDropped(1) must follow this call, caller should do this explicitly.
-void LogStatistics::Drop(const LogStatisticsElement& element) {
+void LogStatistics::Drop(LogStatisticsElement element) {
+    CHECK_EQ(element.dropped_count, 0U);
+
     auto lock = std::lock_guard{lock_};
     log_id_t log_id = element.log_id;
     uint16_t size = element.msg_len;
@@ -263,6 +285,43 @@ void LogStatistics::Drop(const LogStatisticsElement& element) {
     }
 
     tagNameTable.Subtract(TagNameKey(element), element);
+}
+
+void LogStatistics::Erase(LogStatisticsElement element) {
+    CHECK_GT(element.dropped_count, 0U);
+    CHECK_EQ(element.msg_len, 0U);
+
+    auto lock = std::lock_guard{lock_};
+
+    if (!track_total_size_) {
+        element.total_len = 0;
+    }
+
+    log_id_t log_id = element.log_id;
+    --mElements[log_id];
+    --mDroppedElements[log_id];
+    mSizes[log_id] -= element.total_len;
+
+    uidTable[log_id].Erase(element.uid, element);
+    if (element.uid == AID_SYSTEM) {
+        pidSystemTable[log_id].Erase(element.pid, element);
+    }
+
+    if (!enable) {
+        return;
+    }
+
+    pidTable.Erase(element.pid, element);
+    tidTable.Erase(element.tid, element);
+
+    uint32_t tag = element.tag;
+    if (tag) {
+        if (log_id == LOG_ID_SECURITY) {
+            securityTagTable.Erase(tag, element);
+        } else {
+            tagTable.Erase(tag, element);
+        }
+    }
 }
 
 const char* LogStatistics::UidToName(uid_t uid) const {
@@ -733,6 +792,31 @@ std::string LogStatistics::FormatTable(const LogHashtable<TKey, TEntry>& table, 
     return output;
 }
 
+std::string LogStatistics::ReportInteresting() const {
+    auto lock = std::lock_guard{lock_};
+
+    std::vector<std::string> items;
+
+    log_id_for_each(i) { items.emplace_back(std::to_string(mElements[i])); }
+
+    log_id_for_each(i) { items.emplace_back(std::to_string(mSizes[i])); }
+
+    log_id_for_each(i) {
+        items.emplace_back(std::to_string(overhead_[i] ? *overhead_[i] : mSizes[i]));
+    }
+
+    log_id_for_each(i) {
+        uint64_t oldest = mOldest[i].msec() / 1000;
+        uint64_t newest = mNewest[i].msec() / 1000;
+
+        int span = newest - oldest;
+
+        items.emplace_back(std::to_string(span));
+    }
+
+    return android::base::Join(items, ",");
+}
+
 std::string LogStatistics::Format(uid_t uid, pid_t pid, unsigned int logMask) const {
     auto lock = std::lock_guard{lock_};
 
@@ -876,12 +960,20 @@ std::string LogStatistics::Format(uid_t uid, pid_t pid, unsigned int logMask) co
         if (els) {
             oldLength = output.length();
             if (spaces < 0) spaces = 0;
-            // estimate the std::list overhead.
-            static const size_t overhead =
-                ((sizeof(LogBufferElement) + sizeof(uint64_t) - 1) &
-                 -sizeof(uint64_t)) +
-                sizeof(std::list<LogBufferElement*>);
-            size_t szs = mSizes[id] + els * overhead;
+            size_t szs = 0;
+            if (overhead_[id]) {
+                szs = *overhead_[id];
+            } else if (track_total_size_) {
+                szs = mSizes[id];
+            } else {
+                // Legacy fallback for Chatty without track_total_size_
+                // Estimate the size of this element in the parent std::list<> by adding two void*'s
+                // corresponding to the next/prev pointers and aligning to 64 bit.
+                static const size_t overhead =
+                        (sizeof(LogBufferElement) + 2 * sizeof(void*) + sizeof(uint64_t) - 1) &
+                        -sizeof(uint64_t);
+                szs = mSizes[id] + els * overhead;
+            }
             totalSize += szs;
             output += android::base::StringPrintf("%*s%zu", spaces, "", szs);
             spaces -= output.length() - oldLength;
@@ -944,7 +1036,7 @@ namespace android {
 uid_t pidToUid(pid_t pid) {
     char buffer[512];
     snprintf(buffer, sizeof(buffer), "/proc/%u/status", pid);
-    FILE* fp = fopen(buffer, "r");
+    FILE* fp = fopen(buffer, "re");
     if (fp) {
         while (fgets(buffer, sizeof(buffer), fp)) {
             int uid = AID_LOGD;

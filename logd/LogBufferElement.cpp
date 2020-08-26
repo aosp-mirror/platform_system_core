@@ -61,7 +61,7 @@ LogBufferElement::LogBufferElement(const LogBufferElement& elem)
     }
 }
 
-LogBufferElement::LogBufferElement(LogBufferElement&& elem)
+LogBufferElement::LogBufferElement(LogBufferElement&& elem) noexcept
     : uid_(elem.uid_),
       pid_(elem.pid_),
       tid_(elem.tid_),
@@ -99,6 +99,10 @@ uint32_t LogBufferElement::GetTag() const {
 }
 
 LogStatisticsElement LogBufferElement::ToLogStatisticsElement() const {
+    // Estimate the size of this element in the parent std::list<> by adding two void*'s
+    // corresponding to the next/prev pointers and aligning to 64 bit.
+    uint16_t element_in_list_size =
+            (sizeof(*this) + 2 * sizeof(void*) + sizeof(uint64_t) - 1) & -sizeof(uint64_t);
     return LogStatisticsElement{
             .uid = uid(),
             .pid = pid(),
@@ -109,6 +113,7 @@ LogStatisticsElement LogBufferElement::ToLogStatisticsElement() const {
             .msg_len = msg_len(),
             .dropped_count = dropped_count(),
             .log_id = log_id(),
+            .total_len = static_cast<uint16_t>(element_in_list_size + msg_len()),
     };
 }
 
@@ -134,7 +139,7 @@ char* android::tidToName(pid_t tid) {
     char* retval = nullptr;
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "/proc/%u/comm", tid);
-    int fd = open(buffer, O_RDONLY);
+    int fd = open(buffer, O_RDONLY | O_CLOEXEC);
     if (fd >= 0) {
         ssize_t ret = read(fd, buffer, sizeof(buffer));
         if (ret >= (ssize_t)sizeof(buffer)) {

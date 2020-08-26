@@ -7,8 +7,8 @@ ro.logd.auditd.main        bool   true   selinux audit messages sent to main.
 ro.logd.auditd.events      bool   true   selinux audit messages sent to events.
 persist.logd.security      bool   false  Enable security buffer.
 ro.organization_owned      bool   false  Override persist.logd.security to false
-ro.logd.kernel             bool+ svelte+ Enable klogd daemon
-ro.logd.statistics         bool+ svelte+ Enable logcat -S statistics.
+ro.logd.kernel             bool  svelte+ Enable klogd daemon
+logd.statistics            bool  svelte+ Enable logcat -S statistics.
 ro.debuggable              number        if not "1", logd.statistics &
                                          ro.logd.kernel default false.
 logd.logpersistd.enable    bool   auto   Safe to start logpersist daemon service
@@ -52,21 +52,21 @@ persist.log.tag            string build  default for log.tag
 log.tag.<tag>             string persist The <tag> specific logging level.
 persist.log.tag.<tag>      string build  default for log.tag.<tag>
 
+logd.buffer_type           string (empty) Set the log buffer type.  Current choices are 'simple',
+                                          'chatty', or 'serialized'.  Defaults to 'chatty' if empty.
+
 NB:
 - auto - managed by /init
-- bool+ - "true", "false" and comma separated list of "eng" (forced false if
-  ro.debuggable is not "1") or "svelte" (forced false if ro.config.low_ram is
-  true).
 - svelte - see ro.config.low_ram for details.
-- svelte+ - see ro.config.low_ram and ro.debuggable for details.
+- svelte+ - If empty, default to true if `ro.config.low_ram == false && ro.debuggable == true`
 - ro - <base property> temporary override, ro.<base property> platform default.
 - persist - <base property> override, persist.<base property> platform default.
 - build - VERBOSE for native, DEBUG for jvm isLoggable, or developer option.
 - number - support multipliers (K or M) for convenience. Range is limited
   to between 64K and 256M for log buffer sizes. Individual log buffer ids
   such as main, system, ... override global default.
-- Pruning filter is of form of a space-separated list of [~][UID][/PID]
-  references, where '~' prefix means to blacklist otherwise whitelist. For
-  blacklisting, UID or PID may be a '!' to instead reference the chattiest
-  client, with the restriction that the PID must be in the UID group 1000
-  (system or AID_SYSTEM).
+- Pruning filter rules are specified as UID, UID/PID or /PID. A '~' prefix indicates that elements
+  matching the rule should be pruned with higher priority otherwise they're pruned with lower
+  priority. All other pruning activity is oldest first. Special case ~! represents an automatic
+  pruning for the noisiest UID as determined by the current statistics.  Special case ~1000/!
+  represents pruning of the worst PID within AID_SYSTEM when AID_SYSTEM is the noisiest UID.

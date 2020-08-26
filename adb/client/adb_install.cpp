@@ -876,7 +876,7 @@ int install_multi_package(int argc, const char** argv) {
                     "-S",
                     std::to_string(sb.st_size),
                     session_id_str,
-                    android::base::StringPrintf("%d_%s", i, android::base::Basename(file).c_str()),
+                    android::base::StringPrintf("%d_%s", i, android::base::Basename(split).c_str()),
                     "-",
             };
 

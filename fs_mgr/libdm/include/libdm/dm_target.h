@@ -309,6 +309,14 @@ class DmTargetDefaultKey final : public DmTarget {
     bool is_hw_wrapped_ = false;
 };
 
+class DmTargetUser final : public DmTarget {
+  public:
+    DmTargetUser(uint64_t start, uint64_t length) : DmTarget(start, length) {}
+
+    std::string name() const override { return "user"; }
+    std::string GetParameterString() const override;
+};
+
 }  // namespace dm
 }  // namespace android
 

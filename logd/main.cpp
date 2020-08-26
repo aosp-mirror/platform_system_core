@@ -38,6 +38,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/macros.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
@@ -58,7 +59,12 @@
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogUtils.h"
+#include "SerializedLogBuffer.h"
 #include "SimpleLogBuffer.h"
+
+using android::base::GetBoolProperty;
+using android::base::GetProperty;
+using android::base::SetProperty;
 
 #define KMSG_PRIORITY(PRI)                                 \
     '<', '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) / 10, \
@@ -68,49 +74,51 @@
 // has a 'sigstop' feature that sends SIGSTOP to a service immediately before calling exec().  This
 // allows debuggers, etc to be attached to logd at the very beginning, while still having init
 // handle the user, groups, capabilities, files, etc setup.
-static int drop_privs(bool klogd, bool auditd) {
-    sched_param param = {};
-
+static void DropPrivs(bool klogd, bool auditd) {
     if (set_sched_policy(0, SP_BACKGROUND) < 0) {
-        PLOG(ERROR) << "failed to set background scheduling policy";
-        return -1;
+        PLOG(FATAL) << "failed to set background scheduling policy";
     }
 
+    sched_param param = {};
     if (sched_setscheduler((pid_t)0, SCHED_BATCH, &param) < 0) {
-        PLOG(ERROR) << "failed to set batch scheduler";
-        return -1;
+        PLOG(FATAL) << "failed to set batch scheduler";
     }
 
-    if (!__android_logger_property_get_bool("ro.debuggable", BOOL_DEFAULT_FALSE) &&
-        prctl(PR_SET_DUMPABLE, 0) == -1) {
-        PLOG(ERROR) << "failed to clear PR_SET_DUMPABLE";
-        return -1;
+    if (!GetBoolProperty("ro.debuggable", false)) {
+        if (prctl(PR_SET_DUMPABLE, 0) == -1) {
+            PLOG(FATAL) << "failed to clear PR_SET_DUMPABLE";
+        }
     }
 
     std::unique_ptr<struct _cap_struct, int (*)(void*)> caps(cap_init(), cap_free);
     if (cap_clear(caps.get()) < 0) {
-        return -1;
+        PLOG(FATAL) << "cap_clear() failed";
     }
-    std::vector<cap_value_t> cap_value;
     if (klogd) {
-        cap_value.emplace_back(CAP_SYSLOG);
+        cap_value_t cap_syslog = CAP_SYSLOG;
+        if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, &cap_syslog, CAP_SET) < 0 ||
+            cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, &cap_syslog, CAP_SET) < 0) {
+            PLOG(FATAL) << "Failed to set CAP_SYSLOG";
+        }
     }
     if (auditd) {
-        cap_value.emplace_back(CAP_AUDIT_CONTROL);
-    }
-
-    if (cap_set_flag(caps.get(), CAP_PERMITTED, cap_value.size(), cap_value.data(), CAP_SET) < 0) {
-        return -1;
-    }
-    if (cap_set_flag(caps.get(), CAP_EFFECTIVE, cap_value.size(), cap_value.data(), CAP_SET) < 0) {
-        return -1;
+        cap_value_t cap_audit_control = CAP_AUDIT_CONTROL;
+        if (cap_set_flag(caps.get(), CAP_PERMITTED, 1, &cap_audit_control, CAP_SET) < 0 ||
+            cap_set_flag(caps.get(), CAP_EFFECTIVE, 1, &cap_audit_control, CAP_SET) < 0) {
+            PLOG(FATAL) << "Failed to set CAP_AUDIT_CONTROL";
+        }
     }
     if (cap_set_proc(caps.get()) < 0) {
-        PLOG(ERROR) << "failed to set CAP_SYSLOG or CAP_AUDIT_CONTROL";
-        return -1;
+        PLOG(FATAL) << "cap_set_proc() failed";
     }
+}
 
-    return 0;
+// GetBoolProperty that defaults to true if `ro.debuggable == true && ro.config.low_rawm == false`.
+static bool GetBoolPropertyEngSvelteDefault(const std::string& name) {
+    bool default_value =
+            GetBoolProperty("ro.debuggable", false) && !GetBoolProperty("ro.config.low_ram", false);
+
+    return GetBoolProperty(name, default_value);
 }
 
 char* android::uidToName(uid_t u) {
@@ -210,6 +218,8 @@ static int issueReinit() {
 // logging plugins like auditd and restart control. Additional
 // transitory per-client threads are created for each reader.
 int main(int argc, char* argv[]) {
+    // We want EPIPE when a reader disconnects, not to terminate logd.
+    signal(SIGPIPE, SIG_IGN);
     // logd is written under the assumption that the timezone is UTC.
     // If TZ is not set, persist.sys.timezone is looked up in some time utility
     // libc functions, including mktime. It confuses the logd time handling,
@@ -239,10 +249,9 @@ int main(int argc, char* argv[]) {
     }
 
     int fdPmesg = -1;
-    bool klogd = __android_logger_property_get_bool(
-        "ro.logd.kernel",
-        BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
+    bool klogd = GetBoolPropertyEngSvelteDefault("ro.logd.kernel");
     if (klogd) {
+        SetProperty("ro.logd.kernel", "true");
         static const char proc_kmsg[] = "/proc/kmsg";
         fdPmesg = android_get_control_file(proc_kmsg);
         if (fdPmesg < 0) {
@@ -252,10 +261,8 @@ int main(int argc, char* argv[]) {
         if (fdPmesg < 0) PLOG(ERROR) << "Failed to open " << proc_kmsg;
     }
 
-    bool auditd = __android_logger_property_get_bool("ro.logd.auditd", BOOL_DEFAULT_TRUE);
-    if (drop_privs(klogd, auditd) != 0) {
-        return EXIT_FAILURE;
-    }
+    bool auditd = GetBoolProperty("ro.logd.auditd", true);
+    DropPrivs(klogd, auditd);
 
     // A cache of event log tags
     LogTags log_tags;
@@ -263,28 +270,31 @@ int main(int argc, char* argv[]) {
     // Pruning configuration.
     PruneList prune_list;
 
-    // Partial (required for chatty) or full logging statistics.
-    bool enable_full_log_statistics = __android_logger_property_get_bool(
-            "logd.statistics", BOOL_DEFAULT_TRUE | BOOL_DEFAULT_FLAG_PERSIST |
-                                       BOOL_DEFAULT_FLAG_ENG | BOOL_DEFAULT_FLAG_SVELTE);
-    LogStatistics log_statistics(enable_full_log_statistics);
+    std::string buffer_type = GetProperty("logd.buffer_type", "serialized");
 
-    // Serves the purpose of managing the last logs times read on a
-    // socket connection, and as a reader lock on a range of log
-    // entries.
+    // Partial (required for chatty) or full logging statistics.
+    LogStatistics log_statistics(GetBoolPropertyEngSvelteDefault("logd.statistics"),
+                                 buffer_type == "serialized");
+
+    // Serves the purpose of managing the last logs times read on a socket connection, and as a
+    // reader lock on a range of log entries.
     LogReaderList reader_list;
 
     // LogBuffer is the object which is responsible for holding all log entries.
-    LogBuffer* logBuf;
-    if (true) {
-        logBuf = new ChattyLogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
+    LogBuffer* log_buffer = nullptr;
+    if (buffer_type == "chatty") {
+        log_buffer = new ChattyLogBuffer(&reader_list, &log_tags, &prune_list, &log_statistics);
+    } else if (buffer_type == "serialized") {
+        log_buffer = new SerializedLogBuffer(&reader_list, &log_tags, &log_statistics);
+    } else if (buffer_type == "simple") {
+        log_buffer = new SimpleLogBuffer(&reader_list, &log_tags, &log_statistics);
     } else {
-        logBuf = new SimpleLogBuffer(&reader_list, &log_tags, &log_statistics);
+        LOG(FATAL) << "buffer_type must be one of 'chatty', 'serialized', or 'simple'";
     }
 
     // LogReader listens on /dev/socket/logdr. When a client
     // connects, log entries in the LogBuffer are written to the client.
-    LogReader* reader = new LogReader(logBuf, &reader_list);
+    LogReader* reader = new LogReader(log_buffer, &reader_list);
     if (reader->startListener()) {
         return EXIT_FAILURE;
     }
@@ -292,14 +302,14 @@ int main(int argc, char* argv[]) {
     // LogListener listens on /dev/socket/logdw for client
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
-    LogListener* swl = new LogListener(logBuf);
+    LogListener* swl = new LogListener(log_buffer);
     if (!swl->StartListener()) {
         return EXIT_FAILURE;
     }
 
     // Command listener listens on /dev/socket/logd for incoming logd
     // administrative commands.
-    CommandListener* cl = new CommandListener(logBuf, &log_tags, &prune_list, &log_statistics);
+    CommandListener* cl = new CommandListener(log_buffer, &log_tags, &prune_list, &log_statistics);
     if (cl->startListener()) {
         return EXIT_FAILURE;
     }
@@ -309,15 +319,13 @@ int main(int argc, char* argv[]) {
     // and LogReader is notified to send updates to connected clients.
     LogAudit* al = nullptr;
     if (auditd) {
-        int dmesg_fd = __android_logger_property_get_bool("ro.logd.auditd.dmesg", BOOL_DEFAULT_TRUE)
-                               ? fdDmesg
-                               : -1;
-        al = new LogAudit(logBuf, dmesg_fd, &log_statistics);
+        int dmesg_fd = GetBoolProperty("ro.logd.auditd.dmesg", true) ? fdDmesg : -1;
+        al = new LogAudit(log_buffer, dmesg_fd, &log_statistics);
     }
 
     LogKlog* kl = nullptr;
     if (klogd) {
-        kl = new LogKlog(logBuf, fdDmesg, fdPmesg, al != nullptr, &log_statistics);
+        kl = new LogKlog(log_buffer, fdDmesg, fdPmesg, al != nullptr, &log_statistics);
     }
 
     readDmesg(al, kl);

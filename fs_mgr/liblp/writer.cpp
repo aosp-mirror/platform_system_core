@@ -81,8 +81,8 @@ std::string SerializeMetadata(const LpMetadata& input) {
     return header_blob + tables;
 }
 
-// Perform sanity checks so we don't accidentally overwrite valid metadata
-// with potentially invalid metadata, or random partition data with metadata.
+// Perform checks so we don't accidentally overwrite valid metadata with
+// potentially invalid metadata, or random partition data with metadata.
 static bool ValidateAndSerializeMetadata([[maybe_unused]] const IPartitionOpener& opener,
                                          const LpMetadata& metadata, const std::string& slot_suffix,
                                          std::string* blob) {

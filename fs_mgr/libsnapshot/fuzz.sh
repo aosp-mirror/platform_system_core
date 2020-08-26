@@ -11,7 +11,7 @@ GCOV_TOOL=${HOST_SCRATCH_DIR}/llvm-gcov
 
 build_normal() (
     pushd $(gettop)
-    NATIVE_COVERAGE="" NATIVE_LINE_COVERAGE="" COVERAGE_PATHS="" m ${FUZZ_TARGET}
+    NATIVE_COVERAGE="" NATIVE_LINE_COVERAGE="" NATIVE_COVERAGE_PATHS="" m ${FUZZ_TARGET}
     ret=$?
     popd
     return ${ret}
@@ -19,7 +19,7 @@ build_normal() (
 
 build_cov() {
     pushd $(gettop)
-    NATIVE_COVERAGE="true" NATIVE_LINE_COVERAGE="true" COVERAGE_PATHS="${PROJECT_PATH}" m ${FUZZ_TARGET}
+    NATIVE_COVERAGE="true" NATIVE_LINE_COVERAGE="true" NATIVE_COVERAGE_PATHS="${PROJECT_PATH}" m ${FUZZ_TARGET}
     ret=$?
     popd
     return ${ret}
