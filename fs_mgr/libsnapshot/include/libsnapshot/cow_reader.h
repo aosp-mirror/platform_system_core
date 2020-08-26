@@ -92,6 +92,10 @@ class CowReader : public ICowReader {
     bool Parse(android::base::borrowed_fd fd);
 
     bool GetHeader(CowHeader* header) override;
+
+    // Create a CowOpIter object which contains header_.num_ops
+    // CowOperation objects. Get() returns a unique CowOperation object
+    // whose lifeteime depends on the CowOpIter object
     std::unique_ptr<ICowOpIter> GetOpIter() override;
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len) override;
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
