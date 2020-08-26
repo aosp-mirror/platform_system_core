@@ -25,7 +25,6 @@
 #include <android-base/thread_annotations.h>
 #include <android/log.h>
 #include <private/android_filesystem_config.h>
-#include <sysutils/SocketClient.h>
 
 #include "LogBuffer.h"
 #include "LogBufferElement.h"
