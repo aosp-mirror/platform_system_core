@@ -521,13 +521,13 @@ static void tune_verity(const std::string& blk_device, const FstabEntry& entry,
 }
 
 // Enable casefold if needed.
-static void tune_casefold(const std::string& blk_device, const struct ext4_super_block* sb,
-                          int* fs_stat) {
+static void tune_casefold(const std::string& blk_device, const FstabEntry& entry,
+                          const struct ext4_super_block* sb, int* fs_stat) {
     bool has_casefold = (sb->s_feature_incompat & cpu_to_le32(EXT4_FEATURE_INCOMPAT_CASEFOLD)) != 0;
     bool wants_casefold =
             android::base::GetBoolProperty("external_storage.casefold.enabled", false);
 
-    if (!wants_casefold || has_casefold) return;
+    if (entry.mount_point != "data" || !wants_casefold || has_casefold ) return;
 
     std::string casefold_support;
     if (!android::base::ReadFileToString(SYSFS_EXT4_CASEFOLD, &casefold_support)) {
@@ -582,7 +582,7 @@ static void tune_metadata_csum(const std::string& blk_device, const FstabEntry& 
 
     LINFO << "Enabling ext4 metadata_csum on " << blk_device;
 
-    // requires to give last_fsck_time to current to avoid insane time.
+    // Must give `-T now` to prevent last_fsck_time from growing too large,
     // otherwise, tune2fs won't enable metadata_csum.
     const char* tune2fs_args[] = {TUNE2FS_BIN, "-O",        "metadata_csum,64bit,extent",
                                   "-T",        "now", blk_device.c_str()};
@@ -696,7 +696,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
             tune_reserved_size(blk_device, entry, &sb, &fs_stat);
             tune_encrypt(blk_device, entry, &sb, &fs_stat);
             tune_verity(blk_device, entry, &sb, &fs_stat);
-            tune_casefold(blk_device, &sb, &fs_stat);
+            tune_casefold(blk_device, entry, &sb, &fs_stat);
             tune_metadata_csum(blk_device, entry, &sb, &fs_stat);
         }
     }
@@ -976,6 +976,19 @@ static int handle_encryptable(const FstabEntry& entry) {
     }
 }
 
+static void set_type_property(int status) {
+    switch (status) {
+        case FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED:
+            SetProperty("ro.crypto.type", "block");
+            break;
+        case FS_MGR_MNTALL_DEV_FILE_ENCRYPTED:
+        case FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED:
+        case FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION:
+            SetProperty("ro.crypto.type", "file");
+            break;
+    }
+}
+
 static bool call_vdc(const std::vector<std::string>& args, int* ret) {
     std::vector<char const*> argv;
     argv.emplace_back("/system/bin/vdc");
@@ -1019,7 +1032,8 @@ static bool SupportsCheckpoint(FstabEntry* entry) {
 
 class CheckpointManager {
   public:
-    CheckpointManager(int needs_checkpoint = -1) : needs_checkpoint_(needs_checkpoint) {}
+    CheckpointManager(int needs_checkpoint = -1, bool metadata_encrypted = false)
+        : needs_checkpoint_(needs_checkpoint), metadata_encrypted_(metadata_encrypted) {}
 
     bool NeedsCheckpoint() {
         if (needs_checkpoint_ != UNKNOWN) {
@@ -1037,7 +1051,7 @@ class CheckpointManager {
             return true;
         }
 
-        if (entry->fs_mgr_flags.checkpoint_blk) {
+        if (entry->fs_mgr_flags.checkpoint_blk && !metadata_encrypted_) {
             call_vdc({"checkpoint", "restoreCheckpoint", entry->blk_device}, nullptr);
         }
 
@@ -1112,10 +1126,9 @@ class CheckpointManager {
                 // metadata-encrypted device with smaller blocks, we must not change this for
                 // devices shipped with Q or earlier unless they explicitly selected dm-default-key
                 // v2
-                constexpr unsigned int pre_gki_level = __ANDROID_API_Q__;
                 unsigned int options_format_version = android::base::GetUintProperty<unsigned int>(
                         "ro.crypto.dm_default_key.options_format.version",
-                        (android::fscrypt::GetFirstApiLevel() <= pre_gki_level ? 1 : 2));
+                        (android::fscrypt::GetFirstApiLevel() <= __ANDROID_API_Q__ ? 1 : 2));
                 if (options_format_version > 1) {
                     bowTarget->SetBlockSize(4096);
                 }
@@ -1146,6 +1159,7 @@ class CheckpointManager {
 
     enum { UNKNOWN = -1, NO = 0, YES = 1 };
     int needs_checkpoint_;
+    bool metadata_encrypted_;
     std::map<std::string, std::string> device_map_;
 };
 
@@ -1365,6 +1379,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 avb_handle = AvbHandle::Open();
                 if (!avb_handle) {
                     LERROR << "Failed to open AvbHandle";
+                    set_type_property(encryptable);
                     return FS_MGR_MNTALL_FAIL;
                 }
             }
@@ -1421,6 +1436,7 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                                    attempted_entry.mount_point},
                                   nullptr)) {
                         LERROR << "Encryption failed";
+                        set_type_property(encryptable);
                         return FS_MGR_MNTALL_FAIL;
                     }
                 }
@@ -1517,6 +1533,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             continue;
         }
     }
+
+    set_type_property(encryptable);
 
 #if ALLOW_ADBD_DISABLE_VERITY == 1  // "userdebug" build
     fs_mgr_overlayfs_mount_all(fstab);
@@ -1779,11 +1797,11 @@ int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point)
 // in turn, and stop on 1st success, or no more match.
 static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
                                   const std::string& n_blk_device, const char* tmp_mount_point,
-                                  int needs_checkpoint) {
+                                  int needs_checkpoint, bool metadata_encrypted) {
     int mount_errors = 0;
     int first_mount_errno = 0;
     std::string mount_point;
-    CheckpointManager checkpoint_manager(needs_checkpoint);
+    CheckpointManager checkpoint_manager(needs_checkpoint, metadata_encrypted);
     AvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
@@ -1893,12 +1911,13 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
 }
 
 int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point) {
-    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1);
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1, false);
 }
 
 int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
-                    bool needs_checkpoint) {
-    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_checkpoint);
+                    bool needs_checkpoint, bool metadata_encrypted) {
+    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_checkpoint,
+                                  metadata_encrypted);
 }
 
 /*

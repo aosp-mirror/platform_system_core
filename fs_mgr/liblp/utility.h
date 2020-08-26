@@ -103,6 +103,10 @@ bool SetBlockReadonly(int fd, bool readonly);
 bool UpdateMetadataForInPlaceSnapshot(LpMetadata* metadata, uint32_t source_slot_number,
                                       uint32_t target_slot_number);
 
+// Forcefully set metadata header version to 1.0, clearing any incompatible flags and attributes
+// so that when downgrading to a build with liblp V0, the device still boots.
+void SetMetadataHeaderV0(LpMetadata* metadata);
+
 }  // namespace fs_mgr
 }  // namespace android
 

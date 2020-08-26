@@ -400,12 +400,12 @@ static void adb_auth_inotify_init(const std::set<std::string>& paths) {
     for (const std::string& path : paths) {
         int wd = inotify_add_watch(infd, path.c_str(), IN_CREATE | IN_MOVED_TO);
         if (wd < 0) {
-            PLOG(ERROR) << "failed to inotify_add_watch on path '" << path;
+            PLOG(ERROR) << "failed to inotify_add_watch on path '" << path << "'";
             continue;
         }
 
         g_monitored_paths[wd] = path;
-        LOG(INFO) << "watch descriptor " << wd << " registered for " << path;
+        LOG(INFO) << "watch descriptor " << wd << " registered for '" << path << "'";
     }
 
     fdevent* event = fdevent_create(infd, adb_auth_inotify_update, nullptr);

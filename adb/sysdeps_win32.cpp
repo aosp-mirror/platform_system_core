@@ -1010,55 +1010,6 @@ int adb_register_socket(SOCKET s) {
     return _fh_to_int(f);
 }
 
-static bool isBlankStr(const char* str) {
-    for (; *str != '\0'; ++str) {
-        if (!isblank(*str)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-int adb_gethostname(char* name, size_t len) {
-    const char* computerName = adb_getenv("COMPUTERNAME");
-    if (computerName && !isBlankStr(computerName)) {
-        strncpy(name, computerName, len);
-        name[len - 1] = '\0';
-        return 0;
-    }
-
-    wchar_t buffer[MAX_COMPUTERNAME_LENGTH + 1];
-    DWORD size = sizeof(buffer);
-    if (!GetComputerNameW(buffer, &size)) {
-        return -1;
-    }
-    std::string name_utf8;
-    if (!android::base::WideToUTF8(buffer, &name_utf8)) {
-        return -1;
-    }
-
-    strncpy(name, name_utf8.c_str(), len);
-    name[len - 1] = '\0';
-    return 0;
-}
-
-int adb_getlogin_r(char* buf, size_t bufsize) {
-    wchar_t buffer[UNLEN + 1];
-    DWORD len = sizeof(buffer);
-    if (!GetUserNameW(buffer, &len)) {
-        return -1;
-    }
-
-    std::string login;
-    if (!android::base::WideToUTF8(buffer, &login)) {
-        return -1;
-    }
-
-    strncpy(buf, login.c_str(), bufsize);
-    buf[bufsize - 1] = '\0';
-    return 0;
-}
-
 #undef accept
 int adb_socket_accept(borrowed_fd serverfd, struct sockaddr* addr, socklen_t* addrlen) {
     FH serverfh = _fh_from_int(serverfd, __func__);

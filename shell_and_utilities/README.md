@@ -98,7 +98,7 @@ BSD: dd du grep
 toolbox: df getevent iftop ioctl ionice log ls lsof mount nandread
 newfs\_msdos ps prlimit renice sendevent start stop top uptime watchprops
 
-toybox: acpi basename blockdev bzcat cal cat chcon chgrp chmod chown
+toybox (0.5.2-ish): acpi basename blockdev bzcat cal cat chcon chgrp chmod chown
 chroot cksum clear comm cmp cp cpio cut date dirname dmesg dos2unix echo
 env expand expr fallocate false find free getenforce getprop groups
 head hostname hwclock id ifconfig inotifyd insmod kill load\_policy ln
@@ -118,7 +118,7 @@ BSD: dd grep
 toolbox: getevent iftop ioctl log nandread newfs\_msdos ps prlimit
 sendevent start stop top
 
-toybox: acpi base64 basename blockdev bzcat cal cat chcon chgrp chmod
+toybox (0.7.0-ish): acpi base64 basename blockdev bzcat cal cat chcon chgrp chmod
 chown chroot cksum clear comm cmp cp cpio cut date df dirname dmesg
 dos2unix du echo env expand expr fallocate false find flock free
 getenforce getprop groups head hostname hwclock id ifconfig inotifyd
@@ -140,7 +140,7 @@ bzip2: bzcat bzip2 bunzip2
 
 toolbox: getevent newfs\_msdos
 
-toybox: acpi base64 basename blockdev cal cat chcon chgrp chmod chown
+toybox (0.7.3-ish): acpi base64 basename blockdev cal cat chcon chgrp chmod chown
 chroot chrt cksum clear cmp comm cp cpio cut date df diff dirname dmesg
 dos2unix du echo env expand expr fallocate false file find flock free
 getenforce getprop groups gunzip gzip head hostname hwclock id ifconfig
@@ -166,7 +166,7 @@ one-true-awk: awk
 
 toolbox: getevent getprop newfs\_msdos
 
-toybox: acpi base64 basename blockdev cal cat chcon chgrp chmod chown
+toybox (0.7.6-ish): acpi base64 basename blockdev cal cat chcon chgrp chmod chown
 chroot chrt cksum clear cmp comm cp cpio cut date df diff dirname dmesg
 dos2unix du echo env expand expr fallocate false file find flock fmt free
 getenforce groups gunzip gzip head hostname hwclock id ifconfig inotifyd
@@ -192,7 +192,7 @@ one-true-awk: awk
 
 toolbox: getevent getprop
 
-toybox: acpi base64 basename bc blkid blockdev cal cat chattr chcon chgrp
+toybox (0.8.0-ish): acpi base64 basename bc blkid blockdev cal cat chattr chcon chgrp
 chmod chown chroot chrt cksum clear cmp comm cp cpio cut date dd df
 diff dirname dmesg dos2unix du echo egrep env expand expr fallocate
 false fgrep file find flock fmt free freeramdisk fsfreeze getconf
@@ -224,7 +224,7 @@ one-true-awk: awk
 
 toolbox: getevent getprop setprop start stop
 
-toybox: acpi base64 basename blkid blockdev cal cat chattr chcon chgrp chmod
+toybox (0.8.3-ish): acpi base64 basename blkid blockdev cal cat chattr chcon chgrp chmod
 chown chroot chrt cksum clear cmp comm cp cpio cut date dd devmem
 df diff dirname dmesg dos2unix du echo egrep env expand expr fallocate
 false fgrep file find flock fmt free freeramdisk fsfreeze fsync getconf

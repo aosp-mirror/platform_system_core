@@ -52,7 +52,8 @@ int main(int argc, char** argv) {
 #if __has_feature(address_sanitizer)
     __asan_set_error_report_callback(AsanReportCallback);
 #endif
-
+    // Boost prio which will be restored later
+    setpriority(PRIO_PROCESS, 0, -20);
     if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
     }

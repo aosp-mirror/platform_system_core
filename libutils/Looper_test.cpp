@@ -2,12 +2,13 @@
 // Copyright 2010 The Android Open Source Project
 //
 
-#include <utils/Looper.h>
-#include <utils/Timers.h>
-#include <utils/StopWatch.h>
 #include <gtest/gtest.h>
-#include <unistd.h>
 #include <time.h>
+#include <unistd.h>
+#include <utils/Looper.h>
+#include <utils/StopWatch.h>
+#include <utils/Timers.h>
+#include "Looper_test_pipe.h"
 
 #include <utils/threads.h>
 
@@ -22,41 +23,6 @@ enum {
     MSG_TEST2 = 2,
     MSG_TEST3 = 3,
     MSG_TEST4 = 4,
-};
-
-class Pipe {
-public:
-    int sendFd;
-    int receiveFd;
-
-    Pipe() {
-        int fds[2];
-        ::pipe(fds);
-
-        receiveFd = fds[0];
-        sendFd = fds[1];
-    }
-
-    ~Pipe() {
-        if (sendFd != -1) {
-            ::close(sendFd);
-        }
-
-        if (receiveFd != -1) {
-            ::close(receiveFd);
-        }
-    }
-
-    status_t writeSignal() {
-        ssize_t nWritten = ::write(sendFd, "*", 1);
-        return nWritten == 1 ? 0 : -errno;
-    }
-
-    status_t readSignal() {
-        char buf[1];
-        ssize_t nRead = ::read(receiveFd, buf, 1);
-        return nRead == 1 ? 0 : nRead == 0 ? -EPIPE : -errno;
-    }
 };
 
 class DelayedTask : public Thread {

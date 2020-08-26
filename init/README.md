@@ -197,11 +197,14 @@ runs the service.
   Currently defaults to root.  (??? probably should default to nobody)
 
 `interface <interface name> <instance name>`
-> Associates this service with a list of the HIDL services that it provides. The interface name
-  must be a fully-qualified name and not a value name. For instance, this is used to allow
-  hwservicemanager to lazily start services. When multiple interfaces are served, this tag should
-  be used multiple times.
-  For example: interface vendor.foo.bar@1.0::IBaz default
+> Associates this service with a list of the AIDL or HIDL services that it provides. The interface
+  name must be a fully-qualified name and not a value name. For instance, this is used to allow
+  servicemanager or hwservicemanager to lazily start services. When multiple interfaces are served,
+  this tag should be used multiple times. An example of an entry for a HIDL
+  interface is `interface vendor.foo.bar@1.0::IBaz default`. For an AIDL interface, use
+  `interface aidl <instance name>`. The instance name for an AIDL interface is
+  whatever is registered with servicemanager, and these can be listed with `adb
+  shell dumpsys -l`.
 
 `ioprio <class> <priority>`
 > Sets the IO priority and IO priority class for this service via the SYS_ioprio_set syscall.

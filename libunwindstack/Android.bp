@@ -124,6 +124,8 @@ cc_library {
     name: "libunwindstack",
     vendor_available: true,
     recovery_available: true,
+    // TODO(b/153609531): remove when no longer needed.
+    native_bridge_supported: true,
     vndk: {
         enabled: true,
         support_system_process: true,
@@ -141,6 +143,11 @@ cc_library {
             exclude_shared_libs: ["libdexfile_support"],
         },
         recovery: {
+            cflags: ["-UDEXFILE_SUPPORT"],
+            exclude_srcs: ["DexFile.cpp"],
+            exclude_shared_libs: ["libdexfile_support"],
+        },
+        native_bridge: {
             cflags: ["-UDEXFILE_SUPPORT"],
             exclude_srcs: ["DexFile.cpp"],
             exclude_shared_libs: ["libdexfile_support"],
@@ -334,6 +341,37 @@ cc_test {
 }
 
 //-------------------------------------------------------------------------
+// Fuzzers
+//-------------------------------------------------------------------------
+cc_defaults {
+    name: "libunwindstack_fuzz_defaults",
+    host_supported: true,
+    defaults: ["libunwindstack_flags"],
+    cflags: [
+        "-Wno-exit-time-destructors",
+        "-g",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "liblzma",
+        "libunwindstack",
+        "libdexfile_support",
+    ],
+}
+
+cc_fuzz {
+    name: "libunwindstack_fuzz_unwinder",
+    defaults: ["libunwindstack_fuzz_defaults"],
+    srcs: [
+        "tests/MemoryFake.cpp",
+        "tests/ElfFake.cpp",
+        "tests/fuzz/UnwinderComponentCreator.cpp",
+        "tests/fuzz/UnwinderFuzz.cpp",
+    ],
+}
+
+//-------------------------------------------------------------------------
 // Tools
 //-------------------------------------------------------------------------
 cc_defaults {
@@ -451,3 +489,4 @@ cc_binary_host {
         "tests/GenGnuDebugdata.cpp",
     ],
 }
+

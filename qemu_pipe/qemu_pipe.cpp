@@ -35,7 +35,6 @@ using android::base::WriteFully;
 #endif
 
 int qemu_pipe_open(const char* pipeName) {
-    // Sanity check.
     if (!pipeName) {
         errno = EINVAL;
         return -1;

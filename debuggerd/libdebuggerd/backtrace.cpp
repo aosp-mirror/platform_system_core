@@ -27,7 +27,6 @@
 #include <string.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <map>
@@ -40,14 +39,10 @@
 
 #include "libdebuggerd/types.h"
 #include "libdebuggerd/utility.h"
+#include "util.h"
 
 static void dump_process_header(log_t* log, pid_t pid, const char* process_name) {
-  time_t t = time(NULL);
-  struct tm tm;
-  localtime_r(&t, &tm);
-  char timestr[64];
-  strftime(timestr, sizeof(timestr), "%F %T", &tm);
-  _LOG(log, logtype::BACKTRACE, "\n\n----- pid %d at %s -----\n", pid, timestr);
+  _LOG(log, logtype::BACKTRACE, "\n\n----- pid %d at %s -----\n", pid, get_timestamp().c_str());
 
   if (process_name) {
     _LOG(log, logtype::BACKTRACE, "Cmd line: %s\n", process_name);
@@ -106,9 +101,8 @@ void dump_backtrace_header(int output_fd) {
   log.tfd = output_fd;
   log.amfd_data = nullptr;
 
-  char process_name[128];
-  read_with_default("/proc/self/cmdline", process_name, sizeof(process_name), "<unknown>");
-  dump_process_header(&log, getpid(), process_name);
+  pid_t pid = getpid();
+  dump_process_header(&log, pid, get_process_name(pid).c_str());
 }
 
 void dump_backtrace_footer(int output_fd) {

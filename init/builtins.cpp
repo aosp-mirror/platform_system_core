@@ -570,7 +570,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             trigger_shutdown("reboot,requested-userdata-remount-on-fde-device");
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "block");
         ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
@@ -595,7 +594,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
@@ -606,7 +604,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.
@@ -617,7 +614,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.
@@ -1221,6 +1217,20 @@ static Result<void> GenerateLinkerConfiguration() {
     return {};
 }
 
+static Result<void> MountLinkerConfigForDefaultNamespace() {
+    // No need to mount linkerconfig for default mount namespace if the path does not exist (which
+    // would mean it is already mounted)
+    if (access("/linkerconfig/default", 0) != 0) {
+        return {};
+    }
+
+    if (mount("/linkerconfig/default", "/linkerconfig", nullptr, MS_BIND | MS_REC, nullptr) != 0) {
+        return ErrnoError() << "Failed to mount linker configuration for default mount namespace.";
+    }
+
+    return {};
+}
+
 static bool IsApexUpdatable() {
     static bool updatable = android::sysprop::ApexProperties::updatable().value_or(false);
     return updatable;
@@ -1319,11 +1329,14 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
 }
 
 static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
-    if (SwitchToDefaultMountNamespace()) {
-        return {};
-    } else {
-        return Error() << "Failed to enter into default mount namespace";
+    if (auto result = SwitchToMountNamespaceIfNeeded(NS_DEFAULT); !result.ok()) {
+        return result.error();
     }
+    if (auto result = MountLinkerConfigForDefaultNamespace(); !result.ok()) {
+        return result.error();
+    }
+    LOG(INFO) << "Switched to default mount namespace";
+    return {};
 }
 
 // Builtin-function-map start

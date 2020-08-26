@@ -226,7 +226,7 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
             return nullptr;
     }
 
-    // Sanity check here because we have to use vbmeta_images_[0] below.
+    // Validity check here because we have to use vbmeta_images_[0] below.
     if (avb_handle->vbmeta_images_.size() < 1) {
         LERROR << "LoadAndVerifyVbmetaByPartition failed, no vbmeta loaded";
         return nullptr;
@@ -405,11 +405,11 @@ AvbUniquePtr AvbHandle::Open() {
     //   - AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION (UNLOCKED only).
     //     Might occur in either the top-level vbmeta or a chained vbmeta.
     //   - AVB_SLOT_VERIFY_RESULT_ERROR_PUBLIC_KEY_REJECTED (UNLOCKED only).
-    //     Could only occur in a chained vbmeta. Because we have *dummy* operations in
+    //     Could only occur in a chained vbmeta. Because we have *no-op* operations in
     //     FsManagerAvbOps such that avb_ops->validate_vbmeta_public_key() used to validate
     //     the public key of the top-level vbmeta always pass in userspace here.
     //
-    // The following verify result won't happen, because the *dummy* operation
+    // The following verify result won't happen, because the *no-op* operation
     // avb_ops->read_rollback_index() always returns the minimum value zero. So rollbacked
     // vbmeta images, which should be caught in the bootloader stage, won't be detected here.
     //   - AVB_SLOT_VERIFY_RESULT_ERROR_ROLLBACK_INDEX

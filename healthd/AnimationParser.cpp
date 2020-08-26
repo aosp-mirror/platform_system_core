@@ -37,8 +37,8 @@ bool can_ignore_line(const char* str) {
     return true;
 }
 
-bool remove_prefix(const std::string& line, const char* prefix, const char** rest) {
-    const char* str = line.c_str();
+bool remove_prefix(std::string_view line, const char* prefix, const char** rest) {
+    const char* str = line.data();
     int start;
     char c;
 

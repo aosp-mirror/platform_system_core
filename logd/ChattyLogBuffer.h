@@ -25,7 +25,6 @@
 #include <android-base/thread_annotations.h>
 #include <android/log.h>
 #include <private/android_filesystem_config.h>
-#include <sysutils/SocketClient.h>
 
 #include "LogBuffer.h"
 #include "LogBufferElement.h"
@@ -33,8 +32,8 @@
 #include "LogReaderThread.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
-#include "LogWhiteBlackList.h"
 #include "LogWriter.h"
+#include "PruneList.h"
 #include "SimpleLogBuffer.h"
 #include "rwlock.h"
 

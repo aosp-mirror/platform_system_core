@@ -17,6 +17,7 @@
 #include <functional>
 
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <gtest/gtest.h>
 
 #include "action.h"
@@ -31,6 +32,8 @@
 #include "service_list.h"
 #include "service_parser.h"
 #include "util.h"
+
+using android::base::GetIntProperty;
 
 namespace android {
 namespace init {
@@ -240,6 +243,10 @@ TEST(init, EventTriggerOrderMultipleFiles) {
 }
 
 TEST(init, RejectsCriticalAndOneshotService) {
+    if (GetIntProperty("ro.product.first_api_level", 10000) < 30) {
+        GTEST_SKIP() << "Test only valid for devices launching with R or later";
+    }
+
     std::string init_script =
             R"init(
 service A something

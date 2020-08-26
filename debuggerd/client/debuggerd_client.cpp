@@ -70,36 +70,6 @@ static void populate_timeval(struct timeval* tv, const Duration& duration) {
   tv->tv_usec = static_cast<long>(microseconds.count());
 }
 
-static void get_wchan_header(pid_t pid, std::stringstream& buffer) {
-  struct tm now;
-  time_t t = time(nullptr);
-  localtime_r(&t, &now);
-  char timestamp[32];
-  strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &now);
-  std::string time_now(timestamp);
-
-  std::string path = "/proc/" + std::to_string(pid) + "/cmdline";
-
-  char proc_name_buf[1024];
-  const char* proc_name = nullptr;
-  std::unique_ptr<FILE, decltype(&fclose)> fp(fopen(path.c_str(), "r"), &fclose);
-
-  if (fp) {
-    proc_name = fgets(proc_name_buf, sizeof(proc_name_buf), fp.get());
-  }
-
-  if (!proc_name) {
-    proc_name = "<unknown>";
-  }
-
-  buffer << "\n----- Waiting Channels: pid " << pid << " at " << time_now << " -----\n"
-         << "Cmd line: " << proc_name << "\n";
-}
-
-static void get_wchan_footer(pid_t pid, std::stringstream& buffer) {
-  buffer << "----- end " << std::to_string(pid) << " -----\n";
-}
-
 /**
  * Returns the wchan data for each thread in the process,
  * or empty string if unable to obtain any data.
@@ -125,9 +95,10 @@ static std::string get_wchan_data(pid_t pid) {
   }
 
   if (std::string str = data.str(); !str.empty()) {
-    get_wchan_header(pid, buffer);
+    buffer << "\n----- Waiting Channels: pid " << pid << " at " << get_timestamp() << " -----\n"
+           << "Cmd line: " << get_process_name(pid) << "\n";
     buffer << "\n" << str << "\n";
-    get_wchan_footer(pid, buffer);
+    buffer << "----- end " << std::to_string(pid) << " -----\n";
     buffer << "\n";
   }
 

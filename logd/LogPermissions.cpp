@@ -89,7 +89,7 @@ bool clientHasLogCredentials(uid_t uid, gid_t gid, pid_t pid) {
     //
     for (int retry = 3; !(ret = foundGid && foundUid && foundLog) && retry;
          --retry) {
-        FILE* file = fopen(filename, "r");
+        FILE* file = fopen(filename, "re");
         if (!file) {
             continue;
         }

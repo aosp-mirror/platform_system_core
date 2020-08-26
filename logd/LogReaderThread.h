@@ -27,7 +27,6 @@
 #include <memory>
 
 #include <log/log.h>
-#include <sysutils/SocketClient.h>
 
 #include "LogBuffer.h"
 #include "LogWriter.h"
@@ -60,6 +59,7 @@ class LogReaderThread {
     std::string name() const { return writer_->name(); }
     uint64_t start() const { return flush_to_state_->start(); }
     std::chrono::steady_clock::time_point deadline() const { return deadline_; }
+    FlushToState& flush_to_state() { return *flush_to_state_; }
 
   private:
     void ThreadFunction();

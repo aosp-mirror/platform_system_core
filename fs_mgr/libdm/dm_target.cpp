@@ -280,5 +280,12 @@ std::string DmTargetDefaultKey::GetParameterString() const {
     return android::base::Join(argv, " ");
 }
 
+std::string DmTargetUser::GetParameterString() const {
+    std::vector<std::string> argv;
+    argv.push_back(std::to_string(start()));
+    argv.push_back(std::to_string(size()));
+    return android::base::Join(argv, " ");
+}
+
 }  // namespace dm
 }  // namespace android

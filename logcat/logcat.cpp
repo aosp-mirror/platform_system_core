@@ -64,6 +64,7 @@ using android::base::ParseByteCount;
 using android::base::ParseUint;
 using android::base::Split;
 using android::base::StringPrintf;
+using android::base::WriteFully;
 
 class Logcat {
   public:
@@ -333,14 +334,14 @@ Logd control:
                               This can individually control each buffer's size with -b.
   -S, --statistics            Output statistics.
                               --pid can be used to provide pid specific stats.
-  -p, --prune                 Print prune white and ~black list. Service is specified as UID,
-                              UID/PID or /PID. Weighed for quicker pruning if prefix with ~,
-                              otherwise weighed for longevity if unadorned. All other pruning
-                              activity is oldest first. Special case ~! represents an automatic
-                              quicker pruning for the noisiest UID as determined by the current
-                              statistics.
-  -P, --prune='<list> ...'    Set prune white and ~black list, using same format as listed above.
-                              Must be quoted.
+  -p, --prune                 Print prune rules. Each rule is specified as UID, UID/PID or /PID. A
+                              '~' prefix indicates that elements matching the rule should be pruned
+                              with higher priority otherwise they're pruned with lower priority. All
+                              other pruning activity is oldest first. Special case ~! represents an
+                              automatic pruning for the noisiest UID as determined by the current
+                              statistics.  Special case ~1000/! represents pruning of the worst PID
+                              within AID_SYSTEM when AID_SYSTEM is the noisiest UID.
+  -P, --prune='<list> ...'    Set prune rules, using same format as listed above. Must be quoted.
 
 Filtering:
   -s                          Set default filter to silent. Equivalent to filterspec '*:S'
@@ -402,8 +403,8 @@ static void show_format_help() {
         "  time       — Display the date, invocation time, priority/tag, and PID of the\n"
         "             process issuing the message.\n"
         "\nAdverb modifiers can be used in combination:\n"
-        "  color       — Display in highlighted color to match priority. i.e. \x1B[38;5;231mVERBOSE\n"
-        "                \x1B[38;5;75mDEBUG \x1B[38;5;40mINFO \x1B[38;5;166mWARNING \x1B[38;5;196mERROR FATAL\x1B[0m\n"
+        "  color       — Display in highlighted color to match priority. i.e. \x1B[39mVERBOSE\n"
+        "                \x1B[34mDEBUG \x1B[32mINFO \x1B[33mWARNING \x1B[31mERROR FATAL\x1B[0m\n"
         "  descriptive — events logs only, descriptions from event-log-tags database.\n"
         "  epoch       — Display time as seconds since Jan 1 1970.\n"
         "  monotonic   — Display time as cpu seconds since last boot.\n"
@@ -616,15 +617,15 @@ int Logcat::Run(int argc, char** argv) {
                 if (long_options[option_index].name == wrap_str) {
                     mode |= ANDROID_LOG_WRAP | ANDROID_LOG_NONBLOCK;
                     // ToDo: implement API that supports setting a wrap timeout
-                    size_t dummy = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
-                    if (optarg && (!ParseUint(optarg, &dummy) || dummy < 1)) {
+                    size_t timeout = ANDROID_LOG_WRAP_DEFAULT_TIMEOUT;
+                    if (optarg && (!ParseUint(optarg, &timeout) || timeout < 1)) {
                         error(EXIT_FAILURE, 0, "%s %s out of range.",
                               long_options[option_index].name, optarg);
                     }
-                    if (dummy != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
+                    if (timeout != ANDROID_LOG_WRAP_DEFAULT_TIMEOUT) {
                         fprintf(stderr, "WARNING: %s %u seconds, ignoring %zu\n",
                                 long_options[option_index].name, ANDROID_LOG_WRAP_DEFAULT_TIMEOUT,
-                                dummy);
+                                timeout);
                     }
                     break;
                 }
@@ -864,8 +865,7 @@ int Logcat::Run(int argc, char** argv) {
 
                     if (consolePipe) {
                         // need the trailing '\0'
-                        if (!android::base::WriteFully(fd, pipePurpose.c_str(),
-                                                       pipePurpose.size() + 1)) {
+                        if (!WriteFully(fd, pipePurpose.c_str(), pipePurpose.size() + 1)) {
                             close(fd);
                             return EXIT_FAILURE;
                         }
@@ -1064,19 +1064,23 @@ int Logcat::Run(int argc, char** argv) {
         if (getLogSize) {
             long size = android_logger_get_log_size(logger);
             long readable = android_logger_get_log_readable_size(logger);
+            long consumed = android_logger_get_log_consumed_size(logger);
 
             if (size < 0 || readable < 0) {
                 ReportErrorName(buffer_name, security_buffer_selected, &get_size_failures);
             } else {
                 auto size_format = format_of_size(size);
                 auto readable_format = format_of_size(readable);
+                auto consumed_format = format_of_size(consumed);
                 std::string str = android::base::StringPrintf(
-                        "%s: ring buffer is %lu %sB (%lu %sB consumed),"
+                        "%s: ring buffer is %lu %sB (%lu %sB consumed, %lu %sB readable),"
                         " max entry is %d B, max payload is %d B\n",
-                        buffer_name, size_format.first, size_format.second, readable_format.first,
-                        readable_format.second, (int)LOGGER_ENTRY_MAX_LEN,
-                        (int)LOGGER_ENTRY_MAX_PAYLOAD);
-                TEMP_FAILURE_RETRY(write(output_fd_.get(), str.data(), str.length()));
+                        buffer_name, size_format.first, size_format.second, consumed_format.first,
+                        consumed_format.second, readable_format.first, readable_format.second,
+                        (int)LOGGER_ENTRY_MAX_LEN, (int)LOGGER_ENTRY_MAX_PAYLOAD);
+                if (!WriteFully(output_fd_, str.data(), str.length())) {
+                    error(EXIT_FAILURE, errno, "Failed to write to output fd");
+                }
             }
         }
     }
@@ -1146,7 +1150,9 @@ int Logcat::Run(int argc, char** argv) {
         if (*cp == '\n') ++cp;
 
         size_t len = strlen(cp);
-        TEMP_FAILURE_RETRY(write(output_fd_.get(), cp, len));
+        if (!WriteFully(output_fd_, cp, len)) {
+            error(EXIT_FAILURE, errno, "Failed to write to output fd");
+        }
         return EXIT_SUCCESS;
     }
 
@@ -1190,7 +1196,9 @@ If you have enabled significant logging, look into using the -G option to increa
         PrintDividers(log_msg.id(), printDividers);
 
         if (print_binary_) {
-            TEMP_FAILURE_RETRY(write(output_fd_.get(), &log_msg, log_msg.len()));
+            if (!WriteFully(output_fd_, &log_msg, log_msg.len())) {
+                error(EXIT_FAILURE, errno, "Failed to write to output fd");
+            }
         } else {
             ProcessBuffer(&log_msg);
         }

@@ -20,7 +20,7 @@
 
 class LogListener {
   public:
-    LogListener(LogBuffer* buf);
+    explicit LogListener(LogBuffer* buf);
     bool StartListener();
 
   private:

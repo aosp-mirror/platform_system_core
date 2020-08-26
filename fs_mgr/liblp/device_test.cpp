@@ -47,7 +47,7 @@ TEST_F(DeviceTest, BlockDeviceInfo) {
     BlockDeviceInfo device_info;
     ASSERT_TRUE(opener.GetInfo(fs_mgr_get_super_partition_name(), &device_info));
 
-    // Sanity check that the device doesn't give us some weird inefficient
+    // Check that the device doesn't give us some weird inefficient
     // alignment.
     EXPECT_EQ(device_info.alignment % LP_SECTOR_SIZE, 0);
     EXPECT_EQ(device_info.logical_block_size % LP_SECTOR_SIZE, 0);
