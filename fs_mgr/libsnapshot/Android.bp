@@ -403,30 +403,3 @@ cc_test {
     auto_gen_config: true,
     require_root: false,
 }
-
-cc_binary {
-    name: "make_cow_from_ab_ota",
-    host_supported: true,
-    device_supported: false,
-    static_libs: [
-        "libbase",
-        "libbspatch",
-        "libbrotli",
-        "libbz",
-        "libchrome",
-        "libcrypto",
-        "libgflags",
-        "liblog",
-        "libprotobuf-cpp-lite",
-        "libpuffpatch",
-        "libsnapshot_cow",
-        "libsparse",
-        "libxz",
-        "libz",
-        "libziparchive",
-        "update_metadata-protos",
-    ],
-    srcs: [
-        "make_cow_from_ab_ota.cpp",
-    ],
-}
