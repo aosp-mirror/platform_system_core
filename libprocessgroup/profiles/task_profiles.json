@@ -53,7 +53,7 @@
     {
       "Name": "FreezerState",
       "Controller": "freezer",
-      "File": "frozen/freezer.state"
+      "File": "cgroup.freeze"
     }
   ],
 
@@ -79,7 +79,7 @@
           "Params":
           {
             "Controller": "freezer",
-            "Path": "frozen"
+            "Path": ""
           }
         }
       ]
@@ -92,7 +92,7 @@
           "Params":
           {
             "Controller": "freezer",
-            "Path": ""
+            "Path": "../"
           }
         }
       ]
@@ -538,27 +538,27 @@
       ]
     },
     {
-      "Name": "FreezerThawed",
+      "Name": "FreezerDisabled",
       "Actions": [
         {
           "Name": "SetAttribute",
           "Params":
           {
             "Name": "FreezerState",
-            "Value": "THAWED"
+            "Value": "0"
           }
         }
       ]
     },
     {
-      "Name": "FreezerFrozen",
+      "Name": "FreezerEnabled",
       "Actions": [
         {
           "Name": "SetAttribute",
           "Params":
           {
             "Name": "FreezerState",
-            "Value": "FROZEN"
+            "Value": "1"
           }
         }
       ]
