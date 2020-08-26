@@ -20,11 +20,12 @@
 #include <sys/types.h>
 
 #include <private/android_logger.h>
-#include <sysutils/SocketClient.h>
 #include <utils/FastStrcmp.h>
 
 // Hijack this header as a common include file used by most all sources
 // to report some utilities defined here and there.
+
+#define LOGD_SNDTIMEO 32
 
 namespace android {
 
