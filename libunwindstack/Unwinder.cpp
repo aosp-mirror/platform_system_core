@@ -76,6 +76,7 @@ void Unwinder::FillInDexFrame() {
   } else {
     frame->rel_pc = dex_pc;
     warnings_ |= WARNING_DEX_PC_NOT_IN_MAP;
+    return;
   }
 
   if (!resolve_names_) {
