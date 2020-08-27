@@ -252,7 +252,7 @@ static uint64_t SizeOfAllExtents(const T& extents) {
 
 class PuffInputStream final : public puffin::StreamInterface {
   public:
-    PuffInputStream(uint8_t* buffer, size_t length) : buffer_(buffer), length_(length) {}
+    PuffInputStream(uint8_t* buffer, size_t length) : buffer_(buffer), length_(length), pos_(0) {}
 
     bool GetSize(uint64_t* size) const override {
         *size = length_;
@@ -472,7 +472,7 @@ template <typename ContainerType>
 class ExtentIter final {
   public:
     ExtentIter(const ContainerType& container)
-        : iter_(container.cbegin()), end_(container.cend()) {}
+        : iter_(container.cbegin()), end_(container.cend()), dst_index_(0) {}
 
     bool GetNext(uint64_t* block) {
         while (iter_ != end_) {
