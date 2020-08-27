@@ -57,6 +57,9 @@ class UnwinderTest : public ::testing::Test {
   static void SetUpTestSuite() {
     maps_.reset(new Maps);
 
+    memory_ = new MemoryFake;
+    process_memory_.reset(memory_);
+
     ElfFake* elf = new ElfFake(new MemoryFake);
     ElfInterfaceFake* interface_fake = new ElfInterfaceFake(nullptr);
     interface_fake->FakeSetBuildID("FAKE");
@@ -136,7 +139,19 @@ class UnwinderTest : public ::testing::Test {
     const auto& info7 = *--maps_->end();
     info7->load_bias = 0;
 
-    process_memory_.reset(new MemoryFake);
+    elf = new ElfFake(new MemoryFake);
+    interface = new ElfInterfaceFake(nullptr);
+    elf->FakeSetInterface(interface);
+    interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x1800);
+    interface->FakeSetDataOffset(0x1000);
+    interface->FakeSetDataVaddrStart(0x1000);
+    interface->FakeSetDataVaddrEnd(0x3000);
+    AddMapInfo(0xf0000, 0xf1000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/global.so", elf);
+    AddMapInfo(0xf1000, 0xf9000, 0x1000, PROT_READ | PROT_WRITE, "/fake/global.so");
+    memory_->SetData32(0xf180c, 0xf3000);
+    memory_->SetData32(0xf3000, 0xf4000);
+    memory_->SetData32(0xf3004, 0xf4000);
+    memory_->SetData32(0xf3008, 0xf5000);
   }
 
   void SetUp() override {
@@ -147,11 +162,13 @@ class UnwinderTest : public ::testing::Test {
 
   static std::unique_ptr<Maps> maps_;
   static RegsFake regs_;
+  static MemoryFake* memory_;
   static std::shared_ptr<Memory> process_memory_;
 };
 
 std::unique_ptr<Maps> UnwinderTest::maps_;
 RegsFake UnwinderTest::regs_(5);
+MemoryFake* UnwinderTest::memory_;
 std::shared_ptr<Memory> UnwinderTest::process_memory_(nullptr);
 
 TEST_F(UnwinderTest, multiple_frames) {
@@ -1091,6 +1108,53 @@ TEST_F(UnwinderTest, dex_pc_not_in_map) {
   regs_.FakeSetDexPc(0x50000);
 
   Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
+  unwinder.Unwind();
+  EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
+  EXPECT_EQ(WARNING_DEX_PC_NOT_IN_MAP, unwinder.warnings());
+  EXPECT_FALSE(unwinder.elf_from_memory_not_file());
+
+  ASSERT_EQ(2U, unwinder.NumFrames());
+
+  auto* frame = &unwinder.frames()[0];
+  EXPECT_EQ(0U, frame->num);
+  EXPECT_EQ(0x50000U, frame->rel_pc);
+  EXPECT_EQ(0x50000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("", frame->map_name);
+  EXPECT_EQ(0U, frame->map_elf_start_offset);
+  EXPECT_EQ(0U, frame->map_exact_offset);
+  EXPECT_EQ(0U, frame->map_start);
+  EXPECT_EQ(0U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(0, frame->map_flags);
+
+  frame = &unwinder.frames()[1];
+  EXPECT_EQ(1U, frame->num);
+  EXPECT_EQ(0U, frame->rel_pc);
+  EXPECT_EQ(0x1000U, frame->pc);
+  EXPECT_EQ(0x10000U, frame->sp);
+  EXPECT_EQ("Frame0", frame->function_name);
+  EXPECT_EQ(0U, frame->function_offset);
+  EXPECT_EQ("/system/fake/libc.so", frame->map_name);
+  EXPECT_EQ(0U, frame->map_elf_start_offset);
+  EXPECT_EQ(0U, frame->map_exact_offset);
+  EXPECT_EQ(0x1000U, frame->map_start);
+  EXPECT_EQ(0x8000U, frame->map_end);
+  EXPECT_EQ(0U, frame->map_load_bias);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame->map_flags);
+}
+
+TEST_F(UnwinderTest, dex_pc_not_in_map_valid_dex_files) {
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 0));
+  regs_.set_pc(0x1000);
+  regs_.set_sp(0x10000);
+  regs_.FakeSetDexPc(0x50000);
+
+  DexFiles dex_files(process_memory_);
+  Unwinder unwinder(64, maps_.get(), &regs_, process_memory_);
+  unwinder.SetDexFiles(&dex_files, ARCH_ARM);
   unwinder.Unwind();
   EXPECT_EQ(ERROR_NONE, unwinder.LastErrorCode());
   EXPECT_EQ(WARNING_DEX_PC_NOT_IN_MAP, unwinder.warnings());
