@@ -22,8 +22,6 @@
 #include "LogReaderList.h"
 #include "LogReaderThread.h"
 
-#define LOGD_SNDTIMEO 32
-
 class LogReader : public SocketListener {
   public:
     explicit LogReader(LogBuffer* logbuf, LogReaderList* reader_list);

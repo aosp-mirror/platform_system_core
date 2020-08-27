@@ -23,7 +23,7 @@ cc_library {
     },
     host_supported: true,
     srcs: [
-        "android_pubkey.c",
+        "android_pubkey.cpp",
     ],
     cflags: [
         "-Wall",
