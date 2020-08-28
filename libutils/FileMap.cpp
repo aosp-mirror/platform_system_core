@@ -168,12 +168,6 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
         return false;
     }
 #else // !defined(__MINGW32__)
-    int     prot, flags, adjust;
-    off64_t adjOffset;
-    size_t  adjLength;
-
-    void* ptr;
-
     assert(fd >= 0);
     assert(offset >= 0);
     assert(length > 0);
@@ -187,20 +181,19 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
         }
     }
 
-    adjust = offset % mPageSize;
-    adjOffset = offset - adjust;
-    adjLength = length + adjust;
+    int adjust = offset % mPageSize;
+    off64_t adjOffset = offset - adjust;
+    size_t adjLength;
     if (__builtin_add_overflow(length, adjust, &adjLength)) {
         ALOGE("adjusted length overflow: length %zu adjust %d", length, adjust);
         return false;
     }
 
-    flags = MAP_SHARED;
-    prot = PROT_READ;
-    if (!readOnly)
-        prot |= PROT_WRITE;
+    int flags = MAP_SHARED;
+    int prot = PROT_READ;
+    if (!readOnly) prot |= PROT_WRITE;
 
-    ptr = mmap(NULL, adjLength, prot, flags, fd, adjOffset);
+    void* ptr = mmap(nullptr, adjLength, prot, flags, fd, adjOffset);
     if (ptr == MAP_FAILED) {
         ALOGE("mmap(%lld,%zu) failed: %s\n",
             (long long)adjOffset, adjLength, strerror(errno));
