@@ -752,6 +752,8 @@ cc_test {
         "mdns_test.cpp",
     ],
 
+    test_config: "adb_test.xml",
+
     shared_libs: [
         "liblog",
     ],
