@@ -37,6 +37,7 @@
 #include <unwindstack/Unwinder.h>
 
 #include "ElfFake.h"
+#include "ElfTestUtils.h"
 #include "MemoryFake.h"
 #include "RegsFake.h"
 
@@ -44,14 +45,15 @@ namespace unwindstack {
 
 class UnwinderTest : public ::testing::Test {
  protected:
-  static void AddMapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
-                         const char* name, Elf* elf = nullptr) {
+  static MapInfo* AddMapInfo(uint64_t start, uint64_t end, uint64_t offset, uint64_t flags,
+                             const char* name, Elf* elf = nullptr) {
     std::string str_name(name);
     maps_->Add(start, end, offset, flags, name, static_cast<uint64_t>(-1));
+    MapInfo* map_info = maps_->Find(start);
     if (elf != nullptr) {
-      const auto& map_info = *--maps_->end();
       map_info->elf.reset(elf);
     }
+    return map_info;
   }
 
   static void SetUpTestSuite() {
@@ -60,10 +62,14 @@ class UnwinderTest : public ::testing::Test {
     memory_ = new MemoryFake;
     process_memory_.reset(memory_);
 
-    ElfFake* elf = new ElfFake(new MemoryFake);
-    ElfInterfaceFake* interface_fake = new ElfInterfaceFake(nullptr);
-    interface_fake->FakeSetBuildID("FAKE");
-    elf->FakeSetInterface(interface_fake);
+    ElfFake* elf;
+    ElfInterfaceFake* interface;
+    MapInfo* map_info;
+
+    elf = new ElfFake(new MemoryFake);
+    interface = new ElfInterfaceFake(nullptr);
+    interface->FakeSetBuildID("FAKE");
+    elf->FakeSetInterface(interface);
     AddMapInfo(0x1000, 0x8000, 0, PROT_READ | PROT_WRITE, "/system/fake/libc.so", elf);
 
     AddMapInfo(0x10000, 0x12000, 0, PROT_READ | PROT_WRITE, "[stack]");
@@ -84,19 +90,17 @@ class UnwinderTest : public ::testing::Test {
     AddMapInfo(0x33000, 0x34000, 0, PROT_READ | PROT_WRITE, "/fake/compressed.so", elf);
 
     elf = new ElfFake(new MemoryFake);
-    ElfInterfaceFake* interface = new ElfInterfaceFake(nullptr);
+    interface = new ElfInterfaceFake(nullptr);
     interface->FakeSetSoname("lib_fake.so");
     elf->FakeSetInterface(interface);
-    AddMapInfo(0x43000, 0x44000, 0x1d000, PROT_READ | PROT_WRITE, "/fake/fake.apk", elf);
-    MapInfo* map_info = maps_->Find(0x43000);
-    ASSERT_TRUE(map_info != nullptr);
+    map_info = AddMapInfo(0x43000, 0x44000, 0x1d000, PROT_READ | PROT_WRITE, "/fake/fake.apk", elf);
     map_info->elf_start_offset = 0x1d000;
 
     AddMapInfo(0x53000, 0x54000, 0, PROT_READ | PROT_WRITE, "/fake/fake.oat");
 
-    AddMapInfo(0xa3000, 0xa4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake.vdex");
-    const auto& info = *--maps_->end();
-    info->load_bias = 0;
+    map_info =
+        AddMapInfo(0xa3000, 0xa4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake.vdex");
+    map_info->load_bias = 0;
 
     elf = new ElfFake(new MemoryFake);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
@@ -106,52 +110,76 @@ class UnwinderTest : public ::testing::Test {
 
     elf = new ElfFake(new MemoryFake);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
-    AddMapInfo(0xa7000, 0xa8000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake_offset.oat",
-               elf);
-    const auto& info2 = *--maps_->end();
-    info2->elf_offset = 0x8000;
+    map_info = AddMapInfo(0xa7000, 0xa8000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+                          "/fake/fake_offset.oat", elf);
+    map_info->elf_offset = 0x8000;
 
     elf = new ElfFake(new MemoryFake);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
-    AddMapInfo(0xc0000, 0xc1000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/unreadable.so", elf);
-    const auto& info3 = *--maps_->end();
-    info3->memory_backed_elf = true;
+    map_info = AddMapInfo(0xc0000, 0xc1000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+                          "/fake/unreadable.so", elf);
+    map_info->memory_backed_elf = true;
 
     elf = new ElfFake(new MemoryFake);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
-    AddMapInfo(0xc1000, 0xc2000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "[vdso]", elf);
-    const auto& info4 = *--maps_->end();
-    info4->memory_backed_elf = true;
+    map_info = AddMapInfo(0xc1000, 0xc2000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "[vdso]", elf);
+    map_info->memory_backed_elf = true;
 
     elf = new ElfFake(new MemoryFake);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
-    AddMapInfo(0xc2000, 0xc3000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "", elf);
-    const auto& info5 = *--maps_->end();
-    info5->memory_backed_elf = true;
+    map_info = AddMapInfo(0xc2000, 0xc3000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "", elf);
+    map_info->memory_backed_elf = true;
 
     elf = new ElfFake(new MemoryFake);
     elf->FakeSetInterface(new ElfInterfaceFake(nullptr));
-    AddMapInfo(0xc3000, 0xc4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/memfd:/jit-cache", elf);
-    const auto& info6 = *--maps_->end();
-    info6->memory_backed_elf = true;
+    map_info = AddMapInfo(0xc3000, 0xc4000, 0, PROT_READ | PROT_WRITE | PROT_EXEC,
+                          "/memfd:/jit-cache", elf);
+    map_info->memory_backed_elf = true;
 
-    AddMapInfo(0xd0000, 0xd1000, 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake.apk");
-    const auto& info7 = *--maps_->end();
-    info7->load_bias = 0;
+    map_info =
+        AddMapInfo(0xd0000, 0xd1000, 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/fake.apk");
+    map_info->load_bias = 0;
 
     elf = new ElfFake(new MemoryFake);
     interface = new ElfInterfaceFake(nullptr);
     elf->FakeSetInterface(interface);
     interface->FakeSetGlobalVariable("__dex_debug_descriptor", 0x1800);
+    interface->FakeSetGlobalVariable("__jit_debug_descriptor", 0x1900);
     interface->FakeSetDataOffset(0x1000);
     interface->FakeSetDataVaddrStart(0x1000);
-    interface->FakeSetDataVaddrEnd(0x3000);
+    interface->FakeSetDataVaddrEnd(0x8000);
     AddMapInfo(0xf0000, 0xf1000, 0, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/global.so", elf);
     AddMapInfo(0xf1000, 0xf9000, 0x1000, PROT_READ | PROT_WRITE, "/fake/global.so");
+    // dex debug data
     memory_->SetData32(0xf180c, 0xf3000);
     memory_->SetData32(0xf3000, 0xf4000);
     memory_->SetData32(0xf3004, 0xf4000);
     memory_->SetData32(0xf3008, 0xf5000);
+    // jit debug data
+    memory_->SetData32(0xf1900, 1);
+    memory_->SetData32(0xf1904, 0);
+    memory_->SetData32(0xf1908, 0xf6000);
+    memory_->SetData32(0xf190c, 0xf6000);
+    memory_->SetData32(0xf6000, 0);
+    memory_->SetData32(0xf6004, 0);
+    memory_->SetData32(0xf6008, 0xf7000);
+    memory_->SetData32(0xf600c, 0);
+    memory_->SetData64(0xf6010, 0x1000);
+
+    elf = new ElfFake(new MemoryFake);
+    elf->FakeSetValid(false);
+    elf->FakeSetLoadBias(0x300);
+    map_info = AddMapInfo(0x100000, 0x101000, 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC,
+                          "/fake/jit.so", elf);
+    map_info->elf_start_offset = 0x100;
+    map_info->offset = 0x200;
+
+#if 0
+    elf = new ElfFake(new MemoryFake);
+    interface = new ElfInterfaceFake(nullptr);
+    interface->FakePushFunctionData(FunctionData("Fake0", 10));
+    AddMapInfo(0x110000, 0x111000, 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC, "/fake/elf.so", elf);
+#endif
   }
 
   void SetUp() override {
@@ -1564,6 +1592,163 @@ TEST_F(UnwinderTest, format_frame_by_arch) {
         << "Mismatch of frame format for regs arch " << ArchToString(regs->Arch());
     delete regs;
   }
+}
+
+TEST_F(UnwinderTest, build_frame_pc_only_errors) {
+  RegsFake regs(10);
+  regs.FakeSetArch(ARCH_ARM);
+  Unwinder unwinder(10, maps_.get(), &regs, process_memory_);
+
+  FrameData frame;
+
+  // Pc not in map
+  frame = unwinder.BuildFrameFromPcOnly(0x10);
+  EXPECT_EQ(0x10U, frame.pc);
+  EXPECT_EQ(0x10U, frame.rel_pc);
+
+  // No regs set
+  unwinder.SetRegs(nullptr);
+  frame = unwinder.BuildFrameFromPcOnly(0x100310);
+  EXPECT_EQ(0x100310U, frame.pc);
+  EXPECT_EQ(0x100310U, frame.rel_pc);
+  unwinder.SetRegs(&regs);
+
+  // Invalid elf
+  frame = unwinder.BuildFrameFromPcOnly(0x100310);
+  EXPECT_EQ(0x10030eU, frame.pc);
+  EXPECT_EQ(0x60eU, frame.rel_pc);
+  EXPECT_EQ("/fake/jit.so", frame.map_name);
+  EXPECT_EQ(0x100U, frame.map_elf_start_offset);
+  EXPECT_EQ(0x200U, frame.map_exact_offset);
+  EXPECT_EQ(0x100000U, frame.map_start);
+  EXPECT_EQ(0x101000U, frame.map_end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame.map_flags);
+  EXPECT_EQ(0x300U, frame.map_load_bias);
+  EXPECT_EQ("", frame.function_name);
+  EXPECT_EQ(0U, frame.function_offset);
+}
+
+TEST_F(UnwinderTest, build_frame_pc_valid_elf) {
+  RegsFake regs(10);
+  regs.FakeSetArch(ARCH_ARM);
+  Unwinder unwinder(10, maps_.get(), &regs, process_memory_);
+
+  FrameData frame;
+
+  // Valid elf, no function data.
+  frame = unwinder.BuildFrameFromPcOnly(0x1010);
+  EXPECT_EQ(0x100cU, frame.pc);
+  EXPECT_EQ(0xcU, frame.rel_pc);
+  EXPECT_EQ("/system/fake/libc.so", frame.map_name);
+  EXPECT_EQ(0U, frame.map_elf_start_offset);
+  EXPECT_EQ(0U, frame.map_exact_offset);
+  EXPECT_EQ(0x1000U, frame.map_start);
+  EXPECT_EQ(0x8000U, frame.map_end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame.map_flags);
+  EXPECT_EQ(0U, frame.map_load_bias);
+  EXPECT_EQ("", frame.function_name);
+  EXPECT_EQ(0U, frame.function_offset);
+
+  // Valid elf, function data present, but do not resolve.
+  ElfInterfaceFake::FakePushFunctionData(FunctionData("Frame0", 10));
+  unwinder.SetResolveNames(false);
+
+  frame = unwinder.BuildFrameFromPcOnly(0x1010);
+  EXPECT_EQ(0x100cU, frame.pc);
+  EXPECT_EQ(0xcU, frame.rel_pc);
+  EXPECT_EQ("/system/fake/libc.so", frame.map_name);
+  EXPECT_EQ(0U, frame.map_elf_start_offset);
+  EXPECT_EQ(0U, frame.map_exact_offset);
+  EXPECT_EQ(0x1000U, frame.map_start);
+  EXPECT_EQ(0x8000U, frame.map_end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame.map_flags);
+  EXPECT_EQ(0U, frame.map_load_bias);
+  EXPECT_EQ("", frame.function_name);
+  EXPECT_EQ(0U, frame.function_offset);
+
+  // Valid elf, function data present.
+  unwinder.SetResolveNames(true);
+
+  frame = unwinder.BuildFrameFromPcOnly(0x1010);
+  EXPECT_EQ(0x100cU, frame.pc);
+  EXPECT_EQ(0xcU, frame.rel_pc);
+  EXPECT_EQ("/system/fake/libc.so", frame.map_name);
+  EXPECT_EQ(0U, frame.map_elf_start_offset);
+  EXPECT_EQ(0U, frame.map_exact_offset);
+  EXPECT_EQ(0x1000U, frame.map_start);
+  EXPECT_EQ(0x8000U, frame.map_end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE, frame.map_flags);
+  EXPECT_EQ(0U, frame.map_load_bias);
+  EXPECT_EQ("Frame0", frame.function_name);
+  EXPECT_EQ(10U, frame.function_offset);
+}
+
+TEST_F(UnwinderTest, build_frame_pc_in_jit) {
+  // Create the elf data for the jit debug information.
+  Elf32_Ehdr ehdr = {};
+  TestInitEhdr<Elf32_Ehdr>(&ehdr, ELFCLASS32, EM_ARM);
+  ehdr.e_phoff = 0x50;
+  ehdr.e_phnum = 1;
+  ehdr.e_phentsize = sizeof(Elf32_Phdr);
+  ehdr.e_shoff = 0x100;
+  ehdr.e_shstrndx = 1;
+  ehdr.e_shentsize = sizeof(Elf32_Shdr);
+  ehdr.e_shnum = 3;
+  memory_->SetMemory(0xf7000, &ehdr, sizeof(ehdr));
+
+  Elf32_Phdr phdr = {};
+  phdr.p_flags = PF_X;
+  phdr.p_type = PT_LOAD;
+  phdr.p_offset = 0x100000;
+  phdr.p_vaddr = 0x100000;
+  phdr.p_memsz = 0x1000;
+  memory_->SetMemory(0xf7050, &phdr, sizeof(phdr));
+
+  Elf32_Shdr shdr = {};
+  shdr.sh_type = SHT_NULL;
+  memory_->SetMemory(0xf7100, &shdr, sizeof(shdr));
+
+  shdr.sh_type = SHT_SYMTAB;
+  shdr.sh_link = 2;
+  shdr.sh_addr = 0x300;
+  shdr.sh_offset = 0x300;
+  shdr.sh_entsize = sizeof(Elf32_Sym);
+  shdr.sh_size = shdr.sh_entsize;
+  memory_->SetMemory(0xf7100 + sizeof(shdr), &shdr, sizeof(shdr));
+
+  memset(&shdr, 0, sizeof(shdr));
+  shdr.sh_type = SHT_STRTAB;
+  shdr.sh_name = 0x500;
+  shdr.sh_offset = 0x400;
+  shdr.sh_size = 0x100;
+  memory_->SetMemory(0xf7100 + 2 * sizeof(shdr), &shdr, sizeof(shdr));
+
+  Elf32_Sym sym = {};
+  sym.st_shndx = 2;
+  sym.st_info = STT_FUNC;
+  sym.st_value = 0x100300;
+  sym.st_size = 0x100;
+  memory_->SetMemory(0xf7300, &sym, sizeof(sym));
+  memory_->SetMemory(0xf7400, "FakeJitFunction");
+
+  RegsFake regs(10);
+  regs.FakeSetArch(ARCH_ARM);
+  JitDebug jit_debug(process_memory_);
+  Unwinder unwinder(10, maps_.get(), &regs, process_memory_);
+  unwinder.SetJitDebug(&jit_debug, ARCH_ARM);
+
+  FrameData frame = unwinder.BuildFrameFromPcOnly(0x100310);
+  EXPECT_EQ(0x10030eU, frame.pc);
+  EXPECT_EQ(0x60eU, frame.rel_pc);
+  EXPECT_EQ("/fake/jit.so", frame.map_name);
+  EXPECT_EQ(0x100U, frame.map_elf_start_offset);
+  EXPECT_EQ(0x200U, frame.map_exact_offset);
+  EXPECT_EQ(0x100000U, frame.map_start);
+  EXPECT_EQ(0x101000U, frame.map_end);
+  EXPECT_EQ(PROT_READ | PROT_WRITE | PROT_EXEC, frame.map_flags);
+  EXPECT_EQ(0U, frame.map_load_bias);
+  EXPECT_EQ("FakeJitFunction", frame.function_name);
+  EXPECT_EQ(0xeU, frame.function_offset);
 }
 
 }  // namespace unwindstack
