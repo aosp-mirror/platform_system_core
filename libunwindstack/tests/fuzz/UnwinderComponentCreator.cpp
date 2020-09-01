@@ -127,6 +127,13 @@ std::unique_ptr<Maps> GetMaps(FuzzedDataProvider* data_provider) {
   for (uint8_t i = 0; i < entry_count; i++) {
     uint64_t start = AlignToPage(data_provider->ConsumeIntegral<uint64_t>());
     uint64_t end = AlignToPage(data_provider->ConsumeIntegralInRange<uint64_t>(start, UINT64_MAX));
+    if (start == end) {
+      // It's impossible to see start == end in the real world, so
+      // make sure the map contains at least one page of data.
+      if (__builtin_add_overflow(end, 0x1000, &end)) {
+        continue;
+      }
+    }
     // Make sure not to add overlapping maps, that is not something that can
     // happen in the real world.
     auto entry = map_ends.upper_bound(start);
