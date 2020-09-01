@@ -145,6 +145,7 @@ cc_library_static {
         "libsnapshot_cow_defaults",
     ],
     host_supported: true,
+    recovery_available: true,
     shared_libs: [
         "libbase",
         "libcrypto",
