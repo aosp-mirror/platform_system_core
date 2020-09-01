@@ -1173,6 +1173,10 @@ static Result<void> do_remount_userdata(const BuiltinArguments& args) {
     }
     // TODO(b/135984674): check that fstab contains /data.
     if (auto rc = fs_mgr_remount_userdata_into_checkpointing(&fstab); rc < 0) {
+        std::string proc_mounts_output;
+        android::base::ReadFileToString("/proc/mounts", &proc_mounts_output, true);
+        android::base::WriteStringToFile(proc_mounts_output,
+                                         "/metadata/userspacereboot/mount_info.txt");
         trigger_shutdown("reboot,mount_userdata_failed");
     }
     if (auto result = queue_fs_event(initial_mount_fstab_return_code, true); !result.ok()) {
