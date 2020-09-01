@@ -251,7 +251,7 @@ cc_library_host_static {
         darwin: {
             srcs: ["usb_osx.cpp"],
         },
-        linux_glibc: {
+        linux: {
             srcs: ["usb_linux.cpp"],
         },
     },
