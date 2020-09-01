@@ -270,6 +270,8 @@ cc_library {
     host_supported: true,
     compile_multilib: "both",
     min_sdk_version: "apex_inherit",
+    // This library doesn't use build::GetBuildNumber()
+    use_version_lib: false,
 
     srcs: [
         "sysdeps/env.cpp",
