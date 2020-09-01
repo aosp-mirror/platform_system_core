@@ -182,6 +182,9 @@ on init
     mount binder binder /dev/binderfs stats=global
     chmod 0755 /dev/binderfs
 
+    # Mount fusectl
+    mount fusectl none /sys/fs/fuse/connections
+
     symlink /dev/binderfs/binder /dev/binder
     symlink /dev/binderfs/hwbinder /dev/hwbinder
     symlink /dev/binderfs/vndbinder /dev/vndbinder
@@ -521,6 +524,7 @@ on post-fs
     # no-op.
     restorecon_recursive /metadata/apex
 
+    mkdir /metadata/staged-install 0770 root system
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -789,12 +793,12 @@ on post-fs-data
     # IOCTLs on ashmem fds any more.
     setprop sys.use_memfd false
 
-    # Explicitly disable FUSE
-    setprop persist.sys.fuse false
-
     # Set fscklog permission
     chown root system /dev/fscklogs/log
     chmod 0770 /dev/fscklogs/log
+
+    # Enable FUSE by default
+    setprop persist.sys.fuse true
 
 # Switch between sdcardfs and FUSE depending on persist property
 # TODO: Move this to ro property before launch because FDE devices
@@ -817,6 +821,7 @@ on zygote-start && property:persist.sys.fuse=""
 on zygote-start && property:ro.crypto.state=unencrypted
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
+    start statsd
     start netd
     start zygote
     start zygote_secondary
@@ -824,6 +829,7 @@ on zygote-start && property:ro.crypto.state=unencrypted
 on zygote-start && property:ro.crypto.state=unsupported
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
+    start statsd
     start netd
     start zygote
     start zygote_secondary
@@ -831,6 +837,7 @@ on zygote-start && property:ro.crypto.state=unsupported
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
+    start statsd
     start netd
     start zygote
     start zygote_secondary

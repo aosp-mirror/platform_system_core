@@ -62,6 +62,7 @@ static int statsdOpen();
 static void statsdClose();
 static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr);
 static void statsdNoteDrop();
+static int statsdIsClosed();
 
 struct android_log_transport_write statsdLoggerWrite = {
         .name = "statsd",
@@ -71,6 +72,7 @@ struct android_log_transport_write statsdLoggerWrite = {
         .close = statsdClose,
         .write = statsdWrite,
         .noteDrop = statsdNoteDrop,
+        .isClosed = statsdIsClosed,
 };
 
 /* log_init_lock assumed */
@@ -151,6 +153,13 @@ static void statsdNoteDrop(int error, int tag) {
     atomic_fetch_add_explicit(&dropped, 1, memory_order_relaxed);
     atomic_exchange_explicit(&log_error, error, memory_order_relaxed);
     atomic_exchange_explicit(&atom_tag, tag, memory_order_relaxed);
+}
+
+static int statsdIsClosed() {
+    if (atomic_load(&statsdLoggerWrite.sock) < 0) {
+        return 1;
+    }
+    return 0;
 }
 
 static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {

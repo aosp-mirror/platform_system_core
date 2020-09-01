@@ -17,37 +17,68 @@
 // =========================================================================
 // Native library to write stats log to statsd socket on Android R and later
 // =========================================================================
-cc_library {
-    name: "libstatssocket",
+cc_defaults {
+    name: "libstatssocket_defaults",
     srcs: [
         "stats_buffer_writer.c",
         "stats_event.c",
-        // TODO(b/145573568): Remove stats_event_list once stats_event
-        // migration is complete.
-        "stats_event_list.c",
+        "stats_socket.c",
         "statsd_writer.c",
     ],
-    host_supported: true,
+    export_include_dirs: ["include"],
+    static_libs: [
+        "libcutils", // does not expose a stable C API
+    ],
     cflags: [
         "-Wall",
         "-Werror",
-        "-DLIBLOG_LOG_TAG=1006",
-        "-DWRITE_TO_STATSD=1",
-        "-DWRITE_TO_LOGD=0",
     ],
-    export_include_dirs: ["include"],
-    shared_libs: [
-        "libcutils",
-        "liblog",
+}
+
+cc_library {
+    name: "libstatssocket",
+    defaults: [
+        "libstatssocket_defaults",
     ],
+    host_supported: true,
+    target: {
+        // On android, libstatssocket should only be linked as a shared lib
+        android: {
+            static: {
+                enabled: false,
+            },
+        },
+        host: {
+            shared: {
+                enabled: false,
+            },
+        },
+    },
+    stl: "libc++_static",
 
     // enumerate stable entry points for APEX use
     stubs: {
         symbol_file: "libstatssocket.map.txt",
         versions: [
-            "1",
+            "30",
         ],
-    }
+    },
+    apex_available: [
+        "com.android.os.statsd",
+        "test_com.android.os.statsd",
+    ],
+}
+
+//TODO (b/149842105): Figure out if there is a better solution for this.
+cc_test_library {
+    name: "libstatssocket_private",
+    defaults: [
+        "libstatssocket_defaults",
+    ],
+    visibility: [
+        "//frameworks/base/apex/statsd/tests/libstatspull",
+        "//frameworks/base/cmds/statsd",
+    ],
 }
 
 cc_library_headers {
@@ -58,41 +89,36 @@ cc_library_headers {
     min_sdk_version: "29",
 }
 
-cc_benchmark {
-    name: "libstatssocket_benchmark",
-    srcs: [
-        "benchmark/main.cpp",
-        "benchmark/stats_event_benchmark.cpp",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-    static_libs: [
-        "libstatssocket",
-    ],
-    shared_libs: [
-        "libcutils",
-        "liblog",
-        "libgtest_prod",
-    ],
-}
-
 cc_test {
     name: "libstatssocket_test",
-    srcs: ["tests/stats_event_test.cpp"],
+    srcs: [
+        "tests/stats_event_test.cpp",
+        "tests/stats_writer_test.cpp",
+    ],
     cflags: [
         "-Wall",
         "-Werror",
     ],
     static_libs: [
         "libgmock",
-        "libstatssocket",
+        "libstatssocket_private",
     ],
     shared_libs: [
         "libcutils",
-        "liblog",
         "libutils",
     ],
-    test_suites: ["device_tests"],
+    test_suites: ["device-tests", "mts"],
+    test_config: "libstatssocket_test.xml",
+    //TODO(b/153588990): Remove when the build system properly separates.
+    //32bit and 64bit architectures.
+    compile_multilib: "both",
+    multilib: {
+        lib64: {
+            suffix: "64",
+        },
+        lib32: {
+            suffix: "32",
+        },
+    },
+    require_root: true,
 }
