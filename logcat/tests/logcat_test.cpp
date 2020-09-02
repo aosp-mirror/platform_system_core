@@ -539,7 +539,6 @@ TEST(logcat, End_to_End_multitude) {
 static int get_groups(const char* cmd) {
     FILE* fp;
 
-    // NB: crash log only available in user space
     EXPECT_TRUE(NULL != (fp = popen(cmd, "r")));
 
     if (fp == NULL) {
@@ -551,17 +550,18 @@ static int get_groups(const char* cmd) {
     int count = 0;
 
     while (fgets(buffer, sizeof(buffer), fp)) {
-        int size, consumed, max, payload;
-        char size_mult[4], consumed_mult[4];
+        int size, consumed, readable, max, payload;
+        char size_mult[4], consumed_mult[4], readable_mult[4];
         long full_size, full_consumed;
 
         size = consumed = max = payload = 0;
         // NB: crash log can be very small, not hit a Kb of consumed space
         //     doubly lucky we are not including it.
-        EXPECT_EQ(6, sscanf(buffer,
-                            "%*s ring buffer is %d %3s (%d %3s consumed),"
+        EXPECT_EQ(8, sscanf(buffer,
+                            "%*s ring buffer is %d %3s (%d %3s consumed, %d %3s readable),"
                             " max entry is %d B, max payload is %d B",
-                            &size, size_mult, &consumed, consumed_mult, &max, &payload))
+                            &size, size_mult, &consumed, consumed_mult, &readable, readable_mult,
+                            &max, &payload))
                 << "Parse error on: " << buffer;
         full_size = size;
         switch (size_mult[0]) {
@@ -1224,13 +1224,14 @@ TEST(logcat, blocking_clear) {
             break;
         }
 
-        int size, consumed, max, payload;
-        char size_mult[4], consumed_mult[4];
+        int size, consumed, readable, max, payload;
+        char size_mult[4], consumed_mult[4], readable_mult[4];
         size = consumed = max = payload = 0;
-        if (6 == sscanf(buffer,
-                        "events: ring buffer is %d %3s (%d %3s consumed),"
+        if (8 == sscanf(buffer,
+                        "events: ring buffer is %d %3s (%d %3s consumed, %d %3s readable),"
                         " max entry is %d B, max payload is %d B",
-                        &size, size_mult, &consumed, consumed_mult, &max, &payload)) {
+                        &size, size_mult, &consumed, consumed_mult, &readable, readable_mult, &max,
+                        &payload)) {
             long full_size = size, full_consumed = consumed;
 
             switch (size_mult[0]) {
@@ -1656,26 +1657,6 @@ TEST(logcat, descriptive) {
     }
 }
 
-static bool reportedSecurity(const char* command) {
-    FILE* fp = popen(command, "r");
-    if (!fp) return true;
-
-    std::string ret;
-    bool val = android::base::ReadFdToString(fileno(fp), &ret);
-    pclose(fp);
-
-    if (!val) return true;
-    return std::string::npos != ret.find("'security'");
-}
-
-TEST(logcat, security) {
-    EXPECT_FALSE(reportedSecurity(logcat_executable " -b all -g 2>&1"));
-    EXPECT_TRUE(reportedSecurity(logcat_executable " -b security -g 2>&1"));
-    EXPECT_TRUE(reportedSecurity(logcat_executable " -b security -c 2>&1"));
-    EXPECT_TRUE(
-        reportedSecurity(logcat_executable " -b security -G 256K 2>&1"));
-}
-
 static size_t commandOutputSize(const char* command) {
     FILE* fp = popen(command, "r");
     if (!fp) return 0;
@@ -1707,7 +1688,7 @@ TEST(logcat, invalid_buffer) {
   ASSERT_TRUE(android::base::ReadFdToString(fileno(fp), &output));
   pclose(fp);
 
-  ASSERT_TRUE(android::base::StartsWith(output, "unknown buffer foo\n"));
+  EXPECT_NE(std::string::npos, output.find("Unknown buffer 'foo'"));
 }
 
 static void SniffUid(const std::string& line, uid_t& uid) {
