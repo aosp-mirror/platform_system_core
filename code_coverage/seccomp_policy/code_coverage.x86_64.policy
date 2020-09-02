@@ -1,0 +1,12 @@
+close: 1
+mkdirat: 1
+msync: 1
+munmap: 1
+openat: 1
+write: 1
+fcntl: 1
+fstat: 1
+geteuid: 1
+lseek: 1
+mmap: 1
+rt_sigreturn: 1

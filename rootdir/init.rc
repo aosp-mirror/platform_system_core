@@ -687,6 +687,11 @@ on boot
     write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
     write /sys/fs/f2fs/${dev.mnt.blk.data}/gc_urgent_sleep_time 50
 
+    # limit discard size to 128MB in order to avoid long IO latency
+    # for filesystem tuning first (dm or sda)
+    # Note that, if dm-<num> is used, sda/mmcblk0 should be tuned in vendor/init.rc
+    write /sys/devices/virtual/block/${dev.mnt.blk.data}/queue/discard_max_bytes 134217728
+
     # Permissions for System Server and daemons.
     chown radio system /sys/android_power/state
     chown radio system /sys/android_power/request_state
