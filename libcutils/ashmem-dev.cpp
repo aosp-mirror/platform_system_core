@@ -159,9 +159,11 @@ static bool __has_memfd_support() {
         return false;
     }
 
-    /* Check if kernel support exists, otherwise fall back to ashmem */
+    // Check if kernel support exists, otherwise fall back to ashmem.
+    // This code needs to build on old API levels, so we can't use the libc
+    // wrapper.
     android::base::unique_fd fd(
-            syscall(__NR_memfd_create, "test_android_memfd", MFD_ALLOW_SEALING));
+            syscall(__NR_memfd_create, "test_android_memfd", MFD_CLOEXEC | MFD_ALLOW_SEALING));
     if (fd == -1) {
         ALOGE("memfd_create failed: %s, no memfd support.\n", strerror(errno));
         return false;
@@ -333,7 +335,9 @@ int ashmem_valid(int fd)
 }
 
 static int memfd_create_region(const char* name, size_t size) {
-    android::base::unique_fd fd(syscall(__NR_memfd_create, name, MFD_ALLOW_SEALING));
+    // This code needs to build on old API levels, so we can't use the libc
+    // wrapper.
+    android::base::unique_fd fd(syscall(__NR_memfd_create, name, MFD_CLOEXEC | MFD_ALLOW_SEALING));
 
     if (fd == -1) {
         ALOGE("memfd_create(%s, %zd) failed: %s\n", name, size, strerror(errno));
