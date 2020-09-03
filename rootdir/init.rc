@@ -661,6 +661,15 @@ on post-fs-data
     mkdir /data/vendor/tombstones 0771 root root
     mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
 
+    # Create directories to push tests to for each linker namespace.
+    # Create the subdirectories in case the first test is run as root
+    # so it doesn't end up owned by root.
+    mkdir /data/local/tests 0700 shell shell
+    mkdir /data/local/tests/product 0700 shell shell
+    mkdir /data/local/tests/system 0700 shell shell
+    mkdir /data/local/tests/unrestricted 0700 shell shell
+    mkdir /data/local/tests/vendor 0700 shell shell
+
     # create dalvik-cache, so as to enforce our permissions
     mkdir /data/dalvik-cache 0771 root root encryption=Require
     # create the A/B OTA directory, so as to enforce our permissions
