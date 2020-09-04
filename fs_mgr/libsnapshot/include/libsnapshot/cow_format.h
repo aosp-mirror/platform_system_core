@@ -98,6 +98,7 @@ static constexpr uint8_t kCowZeroOp = 3;
 
 static constexpr uint8_t kCowCompressNone = 0;
 static constexpr uint8_t kCowCompressGz = 1;
+static constexpr uint8_t kCowCompressBrotli = 2;
 
 }  // namespace snapshot
 }  // namespace android

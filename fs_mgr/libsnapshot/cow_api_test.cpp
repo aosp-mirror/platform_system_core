@@ -30,12 +30,12 @@ namespace snapshot {
 
 class CowTest : public ::testing::Test {
   protected:
-    void SetUp() override {
+    virtual void SetUp() override {
         cow_ = std::make_unique<TemporaryFile>();
         ASSERT_GE(cow_->fd, 0) << strerror(errno);
     }
 
-    void TearDown() override { cow_ = nullptr; }
+    virtual void TearDown() override { cow_ = nullptr; }
 
     std::unique_ptr<TemporaryFile> cow_;
 };
@@ -211,9 +211,11 @@ class HorribleStringSink : public StringSink {
     void* GetBuffer(size_t, size_t* actual) override { return StringSink::GetBuffer(1, actual); }
 };
 
-TEST_F(CowTest, HorribleSink) {
+class CompressionTest : public CowTest, public testing::WithParamInterface<const char*> {};
+
+TEST_P(CompressionTest, HorribleSink) {
     CowOptions options;
-    options.compression = "gz";
+    options.compression = GetParam();
     CowWriter writer(options);
 
     ASSERT_TRUE(writer.Initialize(cow_->fd));
@@ -238,6 +240,8 @@ TEST_F(CowTest, HorribleSink) {
     ASSERT_TRUE(reader.ReadData(*op, &sink));
     ASSERT_EQ(sink.stream(), data);
 }
+
+INSTANTIATE_TEST_SUITE_P(CowApi, CompressionTest, testing::Values("none", "gz", "brotli"));
 
 TEST_F(CowTest, GetSize) {
     CowOptions options;

@@ -22,6 +22,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
+#include <brotli/encode.h>
 #include <libsnapshot/cow_writer.h>
 #include <zlib.h>
 
@@ -63,6 +64,10 @@ bool CowWriter::Initialize(android::base::borrowed_fd fd) {
 
     if (options_.compression == "gz") {
         compression_ = kCowCompressGz;
+    } else if (options_.compression == "brotli") {
+        compression_ = kCowCompressBrotli;
+    } else if (options_.compression == "none") {
+        compression_ = kCowCompressNone;
     } else if (!options_.compression.empty()) {
         LOG(ERROR) << "unrecognized compression: " << options_.compression;
         return false;
@@ -170,6 +175,24 @@ std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) 
                 return {};
             }
             return std::basic_string<uint8_t>(buffer.get(), dest_len);
+        }
+        case kCowCompressBrotli: {
+            auto bound = BrotliEncoderMaxCompressedSize(length);
+            if (!bound) {
+                LOG(ERROR) << "BrotliEncoderMaxCompressedSize returned 0";
+                return {};
+            }
+            auto buffer = std::make_unique<uint8_t[]>(bound);
+
+            size_t encoded_size = bound;
+            auto rv = BrotliEncoderCompress(
+                    BROTLI_DEFAULT_QUALITY, BROTLI_DEFAULT_WINDOW, BROTLI_DEFAULT_MODE, length,
+                    reinterpret_cast<const uint8_t*>(data), &encoded_size, buffer.get());
+            if (!rv) {
+                LOG(ERROR) << "BrotliEncoderCompress failed";
+                return {};
+            }
+            return std::basic_string<uint8_t>(buffer.get(), encoded_size);
         }
         default:
             LOG(ERROR) << "unhandled compression type: " << compression_;

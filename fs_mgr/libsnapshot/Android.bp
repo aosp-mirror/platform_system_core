@@ -152,6 +152,7 @@ cc_library_static {
         "liblog",
     ],
     static_libs: [
+        "libbrotli",
         "libz",
     ],
     ramdisk_available: true,
@@ -362,10 +363,11 @@ cc_defaults {
 
     static_libs: [
         "libbase",
+        "libbrotli",
         "liblog",
         "libdm",
-	"libz",
-	"libsnapshot_cow",
+        "libz",
+        "libsnapshot_cow",
     ],
 }
 
@@ -403,6 +405,7 @@ cc_test {
         "libz",
     ],
     static_libs: [
+        "libbrotli",
         "libgtest",
         "libsnapshot_cow",
     ],
@@ -494,11 +497,12 @@ cc_test {
     shared_libs: [
         "libbase",
         "liblog",
-        "libz",
     ],
     static_libs: [
+        "libbrotli",
         "libgtest",
         "libsnapshot_cow",
+        "libz",
     ],
     header_libs: [
         "libstorage_literals_headers",
