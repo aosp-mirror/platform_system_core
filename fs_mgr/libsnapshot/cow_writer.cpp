@@ -21,6 +21,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/unique_fd.h>
 #include <libsnapshot/cow_writer.h>
 #include <openssl/sha.h>
 #include <zlib.h>
@@ -70,7 +71,7 @@ bool CowWriter::Initialize(android::base::borrowed_fd fd) {
 
     // Headers are not complete, but this ensures the file is at the right
     // position.
-    if (!android::base::WriteFully(fd_, &header_, sizeof(header_))) {
+    if (!WriteFully(fd_, &header_, sizeof(header_))) {
         PLOG(ERROR) << "write failed";
         return false;
     }
@@ -120,7 +121,7 @@ bool CowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t 
                 LOG(ERROR) << "Compressed block is too large: " << data.size() << " bytes";
                 return false;
             }
-            if (!android::base::WriteFully(fd_, data.data(), data.size())) {
+            if (!WriteFully(fd_, data.data(), data.size())) {
                 PLOG(ERROR) << "AddRawBlocks: write failed";
                 return false;
             }
@@ -136,7 +137,7 @@ bool CowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t 
         iter += header_.block_size;
     }
 
-    if (!compression_ && !android::base::WriteFully(fd_, data, size)) {
+    if (!compression_ && !WriteFully(fd_, data, size)) {
         PLOG(ERROR) << "AddRawBlocks: write failed";
         return false;
     }
@@ -186,6 +187,10 @@ static void SHA256(const void* data, size_t length, uint8_t out[32]) {
 }
 
 bool CowWriter::Finalize() {
+    // If both fields are set then Finalize is already called.
+    if (header_.ops_offset > 0 && header_.ops_size > 0) {
+        return true;
+    }
     auto offs = lseek(fd_.get(), 0, SEEK_CUR);
     if (offs < 0) {
         PLOG(ERROR) << "lseek failed";
@@ -197,10 +202,12 @@ bool CowWriter::Finalize() {
     SHA256(ops_.data(), ops_.size(), header_.ops_checksum);
     SHA256(&header_, sizeof(header_), header_.header_checksum);
 
-    if (lseek(fd_.get(), 0, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek start failed";
+    if (lseek(fd_.get(), 0, SEEK_SET)) {
+        PLOG(ERROR) << "lseek failed";
         return false;
     }
+    // Header is already written, calling WriteFully will increment
+    // bytes_written_. So use android::base::WriteFully() here.
     if (!android::base::WriteFully(fd_, &header_, sizeof(header_))) {
         PLOG(ERROR) << "write header failed";
         return false;
@@ -209,11 +216,18 @@ bool CowWriter::Finalize() {
         PLOG(ERROR) << "lseek ops failed";
         return false;
     }
-    if (!android::base::WriteFully(fd_, ops_.data(), ops_.size())) {
+    if (!WriteFully(fd_, ops_.data(), ops_.size())) {
         PLOG(ERROR) << "write ops failed";
         return false;
     }
+
+    // clear ops_ so that subsequent calls to GetSize() still works.
+    ops_.clear();
     return true;
+}
+
+size_t CowWriter::GetCowSize() {
+    return bytes_written_ + ops_.size() * sizeof(ops_[0]);
 }
 
 bool CowWriter::GetDataPos(uint64_t* pos) {
@@ -224,6 +238,11 @@ bool CowWriter::GetDataPos(uint64_t* pos) {
     }
     *pos = offs;
     return true;
+}
+
+bool CowWriter::WriteFully(base::borrowed_fd fd, const void* data, size_t size) {
+    bytes_written_ += size;
+    return android::base::WriteFully(fd, data, size);
 }
 
 }  // namespace snapshot
