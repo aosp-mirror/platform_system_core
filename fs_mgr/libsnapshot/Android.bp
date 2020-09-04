@@ -387,6 +387,7 @@ cc_test {
         "cow_api_test.cpp",
     ],
     cflags: [
+        "-D_FILE_OFFSET_BITS=64",
         "-Wall",
         "-Werror",
     ],
@@ -409,6 +410,11 @@ cc_binary {
     name: "make_cow_from_ab_ota",
     host_supported: true,
     device_supported: false,
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
     static_libs: [
         "libbase",
         "libbspatch",
@@ -429,6 +435,37 @@ cc_binary {
     ],
     srcs: [
         "make_cow_from_ab_ota.cpp",
+    ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+}
+
+cc_binary {
+    name: "estimate_cow_from_nonab_ota",
+    host_supported: true,
+    device_supported: false,
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: [
+        "libbase",
+        "libbrotli",
+        "libbz",
+        "libcrypto",
+        "libgflags",
+        "liblog",
+        "libsnapshot_cow",
+        "libsparse",
+        "libz",
+        "libziparchive",
+    ],
+    srcs: [
+        "estimate_cow_from_nonab_ota.cpp",
     ],
     target: {
         darwin: {
