@@ -132,7 +132,6 @@ cc_library {
         "JenkinsHash.cpp",
         "NativeHandle.cpp",
         "Printer.cpp",
-        "PropertyMap.cpp",
         "RefBase.cpp",
         "SharedBuffer.cpp",
         "StopWatch.cpp",
@@ -267,12 +266,6 @@ cc_fuzz {
     name: "libutils_fuzz_stopwatch",
     defaults: ["libutils_fuzz_defaults"],
     srcs: ["StopWatch_fuzz.cpp"],
-}
-
-cc_fuzz {
-    name: "libutils_fuzz_propertymap",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["PropertyMap_fuzz.cpp"],
 }
 
 cc_fuzz {
