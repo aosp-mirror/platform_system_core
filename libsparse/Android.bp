@@ -6,6 +6,7 @@ cc_library {
     ramdisk_available: true,
     recovery_available: true,
     unique_host_soname: true,
+    vendor_available: true,
     srcs: [
         "backed_block.cpp",
         "output_file.cpp",
