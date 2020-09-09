@@ -25,12 +25,10 @@ SerializedLogChunk::~SerializedLogChunk() {
 }
 
 void SerializedLogChunk::Compress() {
-    if (compressed_log_.size() == 0) {
-        CompressionEngine::GetInstance().Compress(contents_, write_offset_, compressed_log_);
-        LOG(INFO) << "Compressed Log, buffer max size: " << contents_.size()
-                  << " size used: " << write_offset_
-                  << " compressed size: " << compressed_log_.size();
-    }
+    CHECK_EQ(compressed_log_.size(), 0U);
+    CompressionEngine::GetInstance().Compress(contents_, write_offset_, compressed_log_);
+    LOG(INFO) << "Compressed Log, buffer max size: " << contents_.size()
+              << " size used: " << write_offset_ << " compressed size: " << compressed_log_.size();
 }
 
 // TODO: Develop a better reference counting strategy to guard against the case where the writer is
@@ -89,9 +87,11 @@ bool SerializedLogChunk::ClearUidLogs(uid_t uid, log_id_t log_id, LogStatistics*
     // Clear the old compressed logs and set write_offset_ appropriately to compress the new
     // partially cleared log.
     if (new_write_offset != write_offset_) {
-        compressed_log_.Resize(0);
         write_offset_ = new_write_offset;
-        Compress();
+        if (!writer_active_) {
+            compressed_log_.Resize(0);
+            Compress();
+        }
     }
 
     DecReaderRefCount();
