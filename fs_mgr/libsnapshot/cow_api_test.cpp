@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <sys/stat.h>
+
+#include <cstdio>
 #include <iostream>
 #include <memory>
 #include <string_view>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <gtest/gtest.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
@@ -233,6 +237,34 @@ TEST_F(CowTest, HorribleSink) {
     auto op = &iter->Get();
     ASSERT_TRUE(reader.ReadData(*op, &sink));
     ASSERT_EQ(sink.stream(), data);
+}
+
+TEST_F(CowTest, GetSize) {
+    CowOptions options;
+    CowWriter writer(options);
+    if (ftruncate(cow_->fd, 0) < 0) {
+        perror("Fails to set temp file size");
+        FAIL();
+    }
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+
+    ASSERT_TRUE(writer.AddCopy(10, 20));
+    ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
+    ASSERT_TRUE(writer.AddZeroBlocks(51, 2));
+    auto size_before = writer.GetCowSize();
+    ASSERT_TRUE(writer.Finalize());
+    auto size_after = writer.GetCowSize();
+    ASSERT_EQ(size_before, size_after);
+    struct stat buf;
+
+    if (fstat(cow_->fd, &buf) < 0) {
+        perror("Fails to determine size of cow image written");
+        FAIL();
+    }
+    ASSERT_EQ(buf.st_size, writer.GetCowSize());
 }
 
 }  // namespace snapshot
