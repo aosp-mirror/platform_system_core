@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
-#include "include/StatsEventCompat.h"
-#include <android-base/properties.h>
-#include <android/api-level.h>
-#include <gtest/gtest.h>
+#pragma once
 
-using android::base::GetProperty;
+/**
+ * Helpers to manage the statsd socket.
+ **/
 
-const static bool mPlatformAtLeastR = android_get_device_api_level() >= __ANDROID_API_R__;
+#ifdef __cplusplus
+extern "C" {
+#endif  // __CPLUSPLUS
 
-TEST(StatsEventCompatTest, TestDynamicLoading) {
-    StatsEventCompat event;
-    EXPECT_EQ(mPlatformAtLeastR, event.useRSchema());
+/**
+ * Closes the statsd socket file descriptor.
+ **/
+void AStatsSocket_close();
+#ifdef __cplusplus
 }
+#endif  // __CPLUSPLUS

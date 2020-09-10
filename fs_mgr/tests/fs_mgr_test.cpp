@@ -394,9 +394,9 @@ TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_AllBad) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source none0       swap   defaults      encryptable,forceencrypt,fileencryption,forcefdeorfbe,keydirectory,length,swapprio,zramsize,max_comp_streams,reservedsize,eraseblk,logicalblk,sysfs_path,zram_loopback_path,zram_loopback_size,zram_backing_dev_path
+source none0       swap   defaults      encryptable,forceencrypt,fileencryption,forcefdeorfbe,keydirectory,length,swapprio,zramsize,max_comp_streams,reservedsize,eraseblk,logicalblk,sysfs_path,zram_backingdev_size
 
-source none1       swap   defaults      encryptable=,forceencrypt=,fileencryption=,keydirectory=,length=,swapprio=,zramsize=,max_comp_streams=,avb=,reservedsize=,eraseblk=,logicalblk=,sysfs_path=,zram_loopback_path=,zram_loopback_size=,zram_backing_dev_path=
+source none1       swap   defaults      encryptable=,forceencrypt=,fileencryption=,keydirectory=,length=,swapprio=,zramsize=,max_comp_streams=,avb=,reservedsize=,eraseblk=,logicalblk=,sysfs_path=,zram_backingdev_size=
 
 source none2       swap   defaults      forcefdeorfbe=
 
@@ -426,9 +426,7 @@ source none2       swap   defaults      forcefdeorfbe=
     EXPECT_EQ(0, entry->erase_blk_size);
     EXPECT_EQ(0, entry->logical_blk_size);
     EXPECT_EQ("", entry->sysfs_path);
-    EXPECT_EQ("", entry->zram_loopback_path);
-    EXPECT_EQ(512U * 1024U * 1024U, entry->zram_loopback_size);
-    EXPECT_EQ("", entry->zram_backing_dev_path);
+    EXPECT_EQ(0U, entry->zram_backingdev_size);
     entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
@@ -453,9 +451,7 @@ source none2       swap   defaults      forcefdeorfbe=
     EXPECT_EQ(0, entry->erase_blk_size);
     EXPECT_EQ(0, entry->logical_blk_size);
     EXPECT_EQ("", entry->sysfs_path);
-    EXPECT_EQ("", entry->zram_loopback_path);
-    EXPECT_EQ(512U * 1024U * 1024U, entry->zram_loopback_size);
-    EXPECT_EQ("", entry->zram_backing_dev_path);
+    EXPECT_EQ(0U, entry->zram_backingdev_size);
     entry++;
 
     // forcefdeorfbe has its own encryption_options defaults, so test it separately.
@@ -960,14 +956,10 @@ TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_Zram) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source none0       swap   defaults      zram_loopback_path=/dev/path
-
-source none1       swap   defaults      zram_loopback_size=blah
-source none2       swap   defaults      zram_loopback_size=2
-source none3       swap   defaults      zram_loopback_size=1K
-source none4       swap   defaults      zram_loopback_size=2m
-
-source none5       swap   defaults      zram_backing_dev_path=/dev/path2
+source none1       swap   defaults      zram_backingdev_size=blah
+source none2       swap   defaults      zram_backingdev_size=2
+source none3       swap   defaults      zram_backingdev_size=1K
+source none4       swap   defaults      zram_backingdev_size=2m
 
 )fs";
 
@@ -975,31 +967,25 @@ source none5       swap   defaults      zram_backing_dev_path=/dev/path2
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(6U, fstab.size());
+    ASSERT_EQ(4U, fstab.size());
 
     auto entry = fstab.begin();
-    EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_EQ("/dev/path", entry->zram_loopback_path);
-    entry++;
 
     EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_EQ(512U * 1024U * 1024U, entry->zram_loopback_size);
+    EXPECT_EQ(0U, entry->zram_backingdev_size);
     entry++;
 
     EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_EQ(2U, entry->zram_loopback_size);
+    EXPECT_EQ(2U, entry->zram_backingdev_size);
     entry++;
 
     EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_EQ(1024U, entry->zram_loopback_size);
+    EXPECT_EQ(1024U, entry->zram_backingdev_size);
     entry++;
 
     EXPECT_EQ("none4", entry->mount_point);
-    EXPECT_EQ(2U * 1024U * 1024U, entry->zram_loopback_size);
+    EXPECT_EQ(2U * 1024U * 1024U, entry->zram_backingdev_size);
     entry++;
-
-    EXPECT_EQ("none5", entry->mount_point);
-    EXPECT_EQ("/dev/path2", entry->zram_backing_dev_path);
 }
 
 TEST(fs_mgr, DefaultFstabContainsUserdata) {

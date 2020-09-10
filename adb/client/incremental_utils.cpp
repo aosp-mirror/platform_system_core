@@ -305,6 +305,7 @@ static std::pair<ZipArchiveHandle, std::unique_ptr<android::base::MappedFile>> o
 static std::vector<int32_t> InstallationPriorityBlocks(borrowed_fd fd, Size fileSize) {
     static constexpr std::array<std::string_view, 3> additional_matches = {
             "resources.arsc"sv, "AndroidManifest.xml"sv, "classes.dex"sv};
+
     auto [zip, _] = openZipArchive(fd, fileSize);
     if (!zip) {
         return {};
@@ -358,7 +359,7 @@ static std::vector<int32_t> InstallationPriorityBlocks(borrowed_fd fd, Size file
 
 std::vector<int32_t> PriorityBlocksForFile(const std::string& filepath, borrowed_fd fd,
                                            Size fileSize) {
-    if (!android::base::EndsWithIgnoreCase(filepath, ".apk"sv)) {
+    if (!android::base::EndsWithIgnoreCase(filepath, ".apk")) {
         return {};
     }
     off64_t signerOffset = SignerBlockOffset(fd, fileSize);
