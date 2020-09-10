@@ -148,12 +148,12 @@ cc_library_static {
     recovery_available: true,
     shared_libs: [
         "libbase",
-        "libcrypto",
         "liblog",
     ],
     static_libs: [
         "libz",
     ],
+    ramdisk_available: true,
 }
 
 cc_library_static {
@@ -347,6 +347,9 @@ cc_test {
 
 cc_defaults {
     name: "snapuserd_defaults",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
     srcs: [
         "snapuserd.cpp",
     ],
@@ -360,6 +363,8 @@ cc_defaults {
         "libbase",
         "liblog",
         "libdm",
+	"libz",
+	"libsnapshot_cow",
     ],
 }
 
@@ -375,7 +380,6 @@ cc_binary {
 
     ramdisk: true,
     static_executable: true,
-    system_shared_libs: [],
 }
 
 cc_test {
@@ -472,4 +476,33 @@ cc_binary {
             enabled: false,
         },
     },
+}
+
+cc_test {
+    name: "cow_snapuserd_test",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "cow_snapuserd_test.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libz",
+    ],
+    static_libs: [
+        "libgtest",
+        "libsnapshot_cow",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    test_min_api_level: 30,
+    auto_gen_config: true,
+    require_root: false,
 }
