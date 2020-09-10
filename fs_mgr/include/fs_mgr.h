@@ -60,8 +60,20 @@ enum mount_mode {
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 1
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE 0
 #define FS_MGR_MNTALL_FAIL (-1)
+
+struct MountAllResult {
+    // One of the FS_MGR_MNTALL_* returned code defined above.
+    int code;
+    // Whether userdata was mounted as a result of |fs_mgr_mount_all| call.
+    bool userdata_mounted;
+};
+
 // fs_mgr_mount_all() updates fstab entries that reference device-mapper.
-int fs_mgr_mount_all(android::fs_mgr::Fstab* fstab, int mount_mode);
+// Returns a |MountAllResult|. The first element is one of the FS_MNG_MNTALL_* return codes
+// defined above, and the second element tells whether this call to fs_mgr_mount_all was responsible
+// for mounting userdata. Later is required for init to correctly enqueue fs-related events as part
+// of userdata remount during userspace reboot.
+MountAllResult fs_mgr_mount_all(android::fs_mgr::Fstab* fstab, int mount_mode);
 
 #define FS_MGR_DOMNT_FAILED (-1)
 #define FS_MGR_DOMNT_BUSY (-2)
