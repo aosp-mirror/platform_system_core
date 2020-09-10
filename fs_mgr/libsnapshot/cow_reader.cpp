@@ -20,7 +20,6 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <libsnapshot/cow_reader.h>
-#include <openssl/sha.h>
 #include <zlib.h>
 
 namespace android {
@@ -28,11 +27,13 @@ namespace snapshot {
 
 CowReader::CowReader() : fd_(-1), header_(), fd_size_(0) {}
 
-static void SHA256(const void* data, size_t length, uint8_t out[32]) {
+static void SHA256(const void*, size_t, uint8_t[]) {
+#if 0
     SHA256_CTX c;
     SHA256_Init(&c);
     SHA256_Update(&c, data, length);
     SHA256_Final(out, &c);
+#endif
 }
 
 bool CowReader::Parse(android::base::unique_fd&& fd) {
@@ -69,16 +70,35 @@ bool CowReader::Parse(android::base::borrowed_fd fd) {
         return false;
     }
 
+    if (header_.magic != kCowMagicNumber) {
+        LOG(ERROR) << "Header Magic corrupted. Magic: " << header_.magic
+                   << "Expected: " << kCowMagicNumber;
+        return false;
+    }
+
+    if ((header_.major_version != kCowVersionMajor) ||
+        (header_.minor_version != kCowVersionMinor)) {
+        LOG(ERROR) << "Header version mismatch";
+        LOG(ERROR) << "Major version: " << header_.major_version
+                   << "Expected: " << kCowVersionMajor;
+        LOG(ERROR) << "Minor version: " << header_.minor_version
+                   << "Expected: " << kCowVersionMinor;
+        return false;
+    }
+
     uint8_t header_csum[32];
     {
         CowHeader tmp = header_;
         memset(&tmp.header_checksum, 0, sizeof(tmp.header_checksum));
+        memset(header_csum, 0, sizeof(uint8_t) * 32);
+
         SHA256(&tmp, sizeof(tmp), header_csum);
     }
     if (memcmp(header_csum, header_.header_checksum, sizeof(header_csum)) != 0) {
         LOG(ERROR) << "header checksum is invalid";
         return false;
     }
+
     return true;
 }
 
@@ -140,6 +160,8 @@ std::unique_ptr<ICowOpIter> CowReader::GetOpIter() {
     }
 
     uint8_t csum[32];
+    memset(csum, 0, sizeof(uint8_t) * 32);
+
     SHA256(ops_buffer.get(), header_.ops_size, csum);
     if (memcmp(csum, header_.ops_checksum, sizeof(csum)) != 0) {
         LOG(ERROR) << "ops checksum does not match";
