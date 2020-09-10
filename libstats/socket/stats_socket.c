@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,9 @@
  * limitations under the License.
  */
 
-#include "include/StatsEventCompat.h"
-#include <android-base/properties.h>
-#include <android/api-level.h>
-#include <gtest/gtest.h>
+#include "include/stats_socket.h"
+#include "stats_buffer_writer.h"
 
-using android::base::GetProperty;
-
-const static bool mPlatformAtLeastR = android_get_device_api_level() >= __ANDROID_API_R__;
-
-TEST(StatsEventCompatTest, TestDynamicLoading) {
-    StatsEventCompat event;
-    EXPECT_EQ(mPlatformAtLeastR, event.useRSchema());
+void AStatsSocket_close() {
+    stats_log_close();
 }
