@@ -134,6 +134,7 @@ cc_defaults {
     ],
     export_include_dirs: ["include"],
     srcs: [
+        "cow_decompress.cpp",
         "cow_reader.cpp",
         "cow_writer.cpp",
     ],
