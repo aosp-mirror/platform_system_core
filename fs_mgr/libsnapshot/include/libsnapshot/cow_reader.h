@@ -61,9 +61,6 @@ class ICowReader {
     // Return an iterator for retrieving CowOperation entries.
     virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
 
-    // Get raw bytes from the data section.
-    virtual bool GetRawBytes(uint64_t offset, void* buffer, size_t len) = 0;
-
     // Get decoded bytes from the data section, handling any decompression.
     // All retrieved data is passed to the sink.
     virtual bool ReadData(const CowOperation& op, IByteSink* sink) = 0;
@@ -97,8 +94,9 @@ class CowReader : public ICowReader {
     // CowOperation objects. Get() returns a unique CowOperation object
     // whose lifeteime depends on the CowOpIter object
     std::unique_ptr<ICowOpIter> GetOpIter() override;
-    bool GetRawBytes(uint64_t offset, void* buffer, size_t len) override;
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
+
+    bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
   private:
     android::base::unique_fd owned_fd_;
