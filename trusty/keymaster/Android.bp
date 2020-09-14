@@ -75,3 +75,36 @@ cc_binary {
 
     vintf_fragments: ["4.0/android.hardware.keymaster@4.0-service.trusty.xml"],
 }
+
+prebuilt_etc {
+    name: "keymaster_soft_attestation_keys.xml",
+    vendor: true,
+    src: "set_attestation_key/keymaster_soft_attestation_keys.xml",
+}
+
+cc_binary {
+    name: "trusty_keymaster_set_attestation_key",
+    vendor: true,
+
+    srcs: [
+        "set_attestation_key/set_attestation_key.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+    ],
+
+    local_include_dirs: ["include"],
+
+    shared_libs: [
+        "libc",
+        "libcrypto",
+        "liblog",
+        "libtrusty",
+        "libhardware",
+        "libkeymaster_messages",
+        "libxml2",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
+
