@@ -17,6 +17,9 @@ subsystem sound
     devname uevent_devpath
     dirname /dev/snd
 
+subsystem dma_heap
+   devname uevent_devpath
+   dirname /dev/dma_heap
 # ueventd can only set permissions on device nodes and their associated
 # sysfs attributes, not on arbitrary paths.
 #
@@ -39,6 +42,7 @@ subsystem sound
 /dev/vndbinder            0666   root       root
 
 /dev/pmsg0                0222   root       log
+/dev/dma_heap/system      0666   system     system
 
 # kms driver for drm based gpu
 /dev/dri/*                0666   root       graphics
