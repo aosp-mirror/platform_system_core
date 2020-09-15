@@ -30,6 +30,7 @@
 
 #include "action.h"
 #include "builtins.h"
+#include "mount_namespace.h"
 #include "proto_utils.h"
 #include "util.h"
 
@@ -217,7 +218,13 @@ void Subcontext::Fork() {
                 PLOG(FATAL) << "Could not set execcon for '" << context_ << "'";
             }
         }
-
+#if defined(__ANDROID__)
+        // subcontext init runs in "default" mount namespace
+        // so that it can access /apex/*
+        if (auto result = SwitchToMountNamespaceIfNeeded(NS_DEFAULT); !result.ok()) {
+            LOG(FATAL) << "Could not switch to \"default\" mount namespace: " << result.error();
+        }
+#endif
         auto init_path = GetExecutablePath();
         auto child_fd_string = std::to_string(child_fd);
         const char* args[] = {init_path.c_str(), "subcontext", context_.c_str(),
