@@ -45,6 +45,9 @@ struct CowHeader {
     uint16_t major_version;
     uint16_t minor_version;
 
+    // Size of this struct.
+    uint16_t header_size;
+
     // Offset to the location of the operation sequence, and size of the
     // operation sequence buffer. |ops_offset| is also the end of the
     // raw data region.

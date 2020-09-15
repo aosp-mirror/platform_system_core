@@ -128,7 +128,7 @@ TEST_F(SnapuserdTest, ReadWrite) {
     ASSERT_TRUE(writer.AddRawBlocks(blk_random2_replace_start, random_buffer_2.get(), size));
 
     // Flush operations
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer.Flush());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 

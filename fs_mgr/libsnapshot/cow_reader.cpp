@@ -78,6 +78,11 @@ bool CowReader::Parse(android::base::borrowed_fd fd) {
                    << "Expected: " << kCowMagicNumber;
         return false;
     }
+    if (header_.header_size != sizeof(CowHeader)) {
+        LOG(ERROR) << "Header size unknown, read " << header_.header_size << ", expected "
+                   << sizeof(CowHeader);
+        return false;
+    }
 
     if ((header_.major_version != kCowVersionMajor) ||
         (header_.minor_version != kCowVersionMinor)) {
