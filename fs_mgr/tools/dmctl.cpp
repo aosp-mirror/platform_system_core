@@ -49,6 +49,7 @@ static int Usage(void) {
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets> [-v]" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
+    std::cerr << "  getuuid <dm-name>" << std::endl;
     std::cerr << "  info <dm-name>" << std::endl;
     std::cerr << "  status <dm-name>" << std::endl;
     std::cerr << "  resume <dm-name>" << std::endl;
@@ -391,6 +392,22 @@ static int GetPathCmdHandler(int argc, char** argv) {
     return 0;
 }
 
+static int GetUUIDCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    std::string uuid;
+    if (!dm.GetDmDeviceUUIDByName(argv[0], &uuid)) {
+        std::cerr << "Could not query uuid of device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+    std::cout << uuid << std::endl;
+    return 0;
+}
+
 static int InfoCmdHandler(int argc, char** argv) {
     if (argc != 1) {
         std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
@@ -504,6 +521,7 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         {"list", DmListCmdHandler},
         {"help", HelpCmdHandler},
         {"getpath", GetPathCmdHandler},
+        {"getuuid", GetUUIDCmdHandler},
         {"info", InfoCmdHandler},
         {"table", TableCmdHandler},
         {"status", StatusCmdHandler},
