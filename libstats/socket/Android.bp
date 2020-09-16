@@ -29,6 +29,7 @@ cc_defaults {
     static_libs: [
         "libcutils", // does not expose a stable C API
     ],
+    header_libs: ["liblog_headers"],
     cflags: [
         "-Wall",
         "-Werror",
