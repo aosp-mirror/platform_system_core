@@ -17,10 +17,12 @@
 #include <linux/types.h>
 #include <stdlib.h>
 
+#include <csignal>
 #include <cstring>
 #include <iostream>
 #include <limits>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <android-base/file.h>
@@ -35,6 +37,7 @@
 namespace android {
 namespace snapshot {
 
+using namespace android;
 using namespace android::dm;
 using android::base::unique_fd;
 
@@ -44,6 +47,60 @@ using android::base::unique_fd;
 static constexpr size_t PAYLOAD_SIZE = (1UL << 16);
 
 static_assert(PAYLOAD_SIZE >= BLOCK_SIZE);
+
+class Target {
+  public:
+    // Represents an already-created Target, which is referenced by UUID.
+    Target(std::string uuid) : uuid_(uuid) {}
+
+    const auto& uuid() { return uuid_; }
+    std::string control_path() { return std::string("/dev/dm-user-") + uuid(); }
+
+  private:
+    const std::string uuid_;
+};
+
+class Daemon {
+    // The Daemon class is a singleton to avoid
+    // instantiating more than once
+  public:
+    static Daemon& Instance() {
+        static Daemon instance;
+        return instance;
+    }
+
+    bool IsRunning();
+
+  private:
+    bool is_running_;
+
+    Daemon();
+    Daemon(Daemon const&) = delete;
+    void operator=(Daemon const&) = delete;
+
+    static void SignalHandler(int signal);
+};
+
+Daemon::Daemon() {
+    is_running_ = true;
+    signal(SIGINT, Daemon::SignalHandler);
+    signal(SIGTERM, Daemon::SignalHandler);
+}
+
+bool Daemon::IsRunning() {
+    return is_running_;
+}
+
+void Daemon::SignalHandler(int signal) {
+    LOG(DEBUG) << "Snapuserd received signal: " << signal;
+    switch (signal) {
+        case SIGINT:
+        case SIGTERM: {
+            Daemon::Instance().is_running_ = false;
+            break;
+        }
+    }
+}
 
 class BufferSink : public IByteSink {
   public:
@@ -558,10 +615,26 @@ int Snapuserd::Run() {
         return 1;
     }
 
-    // TODO: use UUID to support multiple partitions
-    ctrl_fd_.reset(open("/dev/dm-user", O_RDWR));
+    std::string str(in_cow_device_);
+    std::size_t found = str.find_last_of("/\\");
+    CHECK(found != std::string::npos);
+    std::string device_name = str.substr(found + 1);
+
+    LOG(DEBUG) << "Fetching UUID for: " << device_name;
+
+    auto& dm = dm::DeviceMapper::Instance();
+    std::string uuid;
+    if (!dm.GetDmDeviceUuidByName(device_name, &uuid)) {
+        LOG(ERROR) << "Unable to find UUID for " << in_cow_device_;
+        return 1;
+    }
+
+    LOG(DEBUG) << "UUID: " << uuid;
+    Target t(uuid);
+
+    ctrl_fd_.reset(open(t.control_path().c_str(), O_RDWR));
     if (ctrl_fd_ < 0) {
-        LOG(ERROR) << "Unable to open /dev/dm-user";
+        LOG(ERROR) << "Unable to open " << t.control_path();
         return 1;
     }
 
@@ -682,9 +755,30 @@ int Snapuserd::Run() {
 }  // namespace snapshot
 }  // namespace android
 
+void run_thread(std::string cow_device, std::string backing_device) {
+    android::snapshot::Snapuserd snapd(cow_device, backing_device);
+    snapd.Run();
+}
+
 int main([[maybe_unused]] int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::KernelLogger);
-    android::snapshot::Snapuserd snapd(argv[1], argv[2]);
 
-    return snapd.Run();
+    android::snapshot::Daemon& daemon = android::snapshot::Daemon::Instance();
+
+    while (daemon.IsRunning()) {
+        // TODO: This is hardcoded wherein:
+        // argv[1] = system_cow, argv[2] = /dev/block/mapper/system_a
+        // argv[3] = product_cow, argv[4] = /dev/block/mapper/product_a
+        //
+        // This should be fixed based on some kind of IPC or setup a
+        // command socket and spin up the thread based when a new
+        // partition is visible.
+        std::thread system_a(run_thread, argv[1], argv[2]);
+        std::thread product_a(run_thread, argv[3], argv[4]);
+
+        system_a.join();
+        product_a.join();
+    }
+
+    return 0;
 }
