@@ -527,12 +527,15 @@ static std::vector<char> LoadBootableImage(const std::string& kernel, const std:
 
 static bool UnzipToMemory(ZipArchiveHandle zip, const std::string& entry_name,
                           std::vector<char>* out) {
-    ZipEntry zip_entry;
+    ZipEntry64 zip_entry;
     if (FindEntry(zip, entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name.c_str());
         return false;
     }
 
+    if (zip_entry.uncompressed_length > std::numeric_limits<size_t>::max()) {
+      die("entry '%s' is too large: %" PRIu64, entry_name.c_str(), zip_entry.uncompressed_length);
+    }
     out->resize(zip_entry.uncompressed_length);
 
     fprintf(stderr, "extracting %s (%zu MB) to RAM...\n", entry_name.c_str(),
@@ -638,14 +641,14 @@ static void delete_fbemarker_tmpdir(const std::string& dir) {
 static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd(entry_name));
 
-    ZipEntry zip_entry;
+    ZipEntry64 zip_entry;
     if (FindEntry(zip, entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name);
         errno = ENOENT;
         return -1;
     }
 
-    fprintf(stderr, "extracting %s (%" PRIu32 " MB) to disk...", entry_name,
+    fprintf(stderr, "extracting %s (%" PRIu64 " MB) to disk...", entry_name,
             zip_entry.uncompressed_length / 1024 / 1024);
     double start = now();
     int error = ExtractEntryToFile(zip, &zip_entry, fd);
