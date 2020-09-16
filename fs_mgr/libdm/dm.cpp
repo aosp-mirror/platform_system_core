@@ -427,6 +427,20 @@ bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* p
     return true;
 }
 
+// Accepts a device mapper device name (like system_a, vendor_b etc) and
+// returns its UUID.
+bool DeviceMapper::GetDmDeviceUUIDByName(const std::string& name, std::string* uuid) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(WARNING) << "DM_DEV_STATUS failed for " << name;
+        return false;
+    }
+
+    *uuid = std::string(io.uuid);
+    return true;
+}
+
 bool DeviceMapper::GetDeviceNumber(const std::string& name, dev_t* dev) {
     struct dm_ioctl io;
     InitIo(&io, name);
