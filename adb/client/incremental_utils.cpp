@@ -325,7 +325,7 @@ static std::vector<int32_t> InstallationPriorityBlocks(borrowed_fd fd, Size file
     }
 
     std::vector<int32_t> installationPriorityBlocks;
-    ZipEntry entry;
+    ZipEntry64 entry;
     std::string_view entryName;
     while (Next(cookie, &entry, &entryName) == 0) {
         if (entryName == "classes.dex"sv) {
