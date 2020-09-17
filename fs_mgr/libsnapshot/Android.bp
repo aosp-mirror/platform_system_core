@@ -30,6 +30,7 @@ cc_defaults {
     static_libs: [
         "libdm",
         "libfstab",
+        "libsnapshot_cow",
         "update_metadata-protos",
     ],
     whole_static_libs: [
@@ -38,7 +39,9 @@ cc_defaults {
         "libfstab",
     ],
     header_libs: [
+        "libchrome",
         "libfiemap_headers",
+        "libupdate_engine_headers",
     ],
     export_static_lib_headers: [
         "update_metadata-protos",
@@ -313,8 +316,10 @@ cc_defaults {
         "libprotobuf-mutator",
     ],
     header_libs: [
+        "libchrome",
         "libfiemap_headers",
         "libstorage_literals_headers",
+        "libupdate_engine_headers",
     ],
     proto: {
         type: "full",
