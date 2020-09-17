@@ -1053,7 +1053,7 @@ static bool sync_send(SyncConnection& sc, const std::string& lpath, const std::s
         if (!sc.SendSmallFile(rpath, mode, lpath, rpath, mtime, buf, data_length, dry_run)) {
             return false;
         }
-        return sc.ReadAcknowledgements();
+        return sc.ReadAcknowledgements(sync);
 #endif
     }
 
@@ -1077,7 +1077,7 @@ static bool sync_send(SyncConnection& sc, const std::string& lpath, const std::s
             return false;
         }
     }
-    return sc.ReadAcknowledgements();
+    return sc.ReadAcknowledgements(sync);
 }
 
 static bool sync_recv_v1(SyncConnection& sc, const char* rpath, const char* lpath, const char* name,

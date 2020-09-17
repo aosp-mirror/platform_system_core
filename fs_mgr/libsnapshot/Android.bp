@@ -134,6 +134,7 @@ cc_defaults {
     ],
     export_include_dirs: ["include"],
     srcs: [
+        "cow_decompress.cpp",
         "cow_reader.cpp",
         "cow_writer.cpp",
     ],
@@ -145,14 +146,15 @@ cc_library_static {
         "libsnapshot_cow_defaults",
     ],
     host_supported: true,
+    recovery_available: true,
     shared_libs: [
         "libbase",
-        "libcrypto",
         "liblog",
     ],
     static_libs: [
         "libz",
     ],
+    ramdisk_available: true,
 }
 
 cc_library_static {
@@ -346,6 +348,9 @@ cc_test {
 
 cc_defaults {
     name: "snapuserd_defaults",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
     srcs: [
         "snapuserd.cpp",
     ],
@@ -359,6 +364,8 @@ cc_defaults {
         "libbase",
         "liblog",
         "libdm",
+	"libz",
+	"libsnapshot_cow",
     ],
 }
 
@@ -374,7 +381,6 @@ cc_binary {
 
     ramdisk: true,
     static_executable: true,
-    system_shared_libs: [],
 }
 
 cc_test {
@@ -386,6 +392,7 @@ cc_test {
         "cow_api_test.cpp",
     ],
     cflags: [
+        "-D_FILE_OFFSET_BITS=64",
         "-Wall",
         "-Werror",
     ],
@@ -408,6 +415,11 @@ cc_binary {
     name: "make_cow_from_ab_ota",
     host_supported: true,
     device_supported: false,
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
     static_libs: [
         "libbase",
         "libbspatch",
@@ -434,4 +446,64 @@ cc_binary {
             enabled: false,
         },
     },
+}
+
+cc_binary {
+    name: "estimate_cow_from_nonab_ota",
+    host_supported: true,
+    device_supported: false,
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: [
+        "libbase",
+        "libbrotli",
+        "libbz",
+        "libcrypto",
+        "libgflags",
+        "liblog",
+        "libsnapshot_cow",
+        "libsparse",
+        "libz",
+        "libziparchive",
+    ],
+    srcs: [
+        "estimate_cow_from_nonab_ota.cpp",
+    ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+}
+
+cc_test {
+    name: "cow_snapuserd_test",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "cow_snapuserd_test.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libz",
+    ],
+    static_libs: [
+        "libgtest",
+        "libsnapshot_cow",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    test_min_api_level: 30,
+    auto_gen_config: true,
+    require_root: false,
 }

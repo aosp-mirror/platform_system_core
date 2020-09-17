@@ -286,15 +286,10 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         } else if (StartsWith(flag, "sysfs_path=")) {
             // The path to trigger device gc by idle-maint of vold.
             entry->sysfs_path = arg;
-        } else if (StartsWith(flag, "zram_loopback_path=")) {
-            // The path to use loopback for zram.
-            entry->zram_loopback_path = arg;
-        } else if (StartsWith(flag, "zram_loopback_size=")) {
-            if (!ParseByteCount(arg, &entry->zram_loopback_size)) {
-                LWARNING << "Warning: zram_loopback_size= flag malformed: " << arg;
+        } else if (StartsWith(flag, "zram_backingdev_size=")) {
+            if (!ParseByteCount(arg, &entry->zram_backingdev_size)) {
+                LWARNING << "Warning: zram_backingdev_size= flag malformed: " << arg;
             }
-        } else if (StartsWith(flag, "zram_backing_dev_path=")) {
-            entry->zram_backing_dev_path = arg;
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
