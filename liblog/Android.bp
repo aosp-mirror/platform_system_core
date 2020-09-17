@@ -97,6 +97,7 @@ cc_library {
 
     header_libs: [
         "libbase_headers",
+        "libcutils_headers",
         "liblog_headers",
     ],
     export_header_lib_headers: ["liblog_headers"],
