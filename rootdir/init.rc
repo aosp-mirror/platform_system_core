@@ -182,6 +182,9 @@ on init
     mount binder binder /dev/binderfs stats=global
     chmod 0755 /dev/binderfs
 
+    # Mount fusectl
+    mount fusectl none /sys/fs/fuse/connections
+
     symlink /dev/binderfs/binder /dev/binder
     symlink /dev/binderfs/hwbinder /dev/hwbinder
     symlink /dev/binderfs/vndbinder /dev/vndbinder
@@ -461,6 +464,10 @@ on post-fs
     # The bind+remount combination allows this to work in containers.
     mount rootfs rootfs / remount bind ro nodev
 
+    # Mount default storage into root namespace
+    mount none /mnt/user/0 /storage bind rec
+    mount none none /storage slave rec
+
     # Make sure /sys/kernel/debug (if present) is labeled properly
     # Note that tracefs may be mounted under debug, so we need to cross filesystems
     restorecon --recursive --cross-filesystems /sys/kernel/debug
@@ -521,6 +528,7 @@ on post-fs
     # no-op.
     restorecon_recursive /metadata/apex
 
+    mkdir /metadata/staged-install 0770 root system
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -657,6 +665,15 @@ on post-fs-data
     mkdir /data/vendor/tombstones 0771 root root
     mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
 
+    # Create directories to push tests to for each linker namespace.
+    # Create the subdirectories in case the first test is run as root
+    # so it doesn't end up owned by root.
+    mkdir /data/local/tests 0700 shell shell
+    mkdir /data/local/tests/product 0700 shell shell
+    mkdir /data/local/tests/system 0700 shell shell
+    mkdir /data/local/tests/unrestricted 0700 shell shell
+    mkdir /data/local/tests/vendor 0700 shell shell
+
     # create dalvik-cache, so as to enforce our permissions
     mkdir /data/dalvik-cache 0771 root root encryption=Require
     # create the A/B OTA directory, so as to enforce our permissions
@@ -789,34 +806,19 @@ on post-fs-data
     # IOCTLs on ashmem fds any more.
     setprop sys.use_memfd false
 
-    # Explicitly disable FUSE
-    setprop persist.sys.fuse false
-
     # Set fscklog permission
     chown root system /dev/fscklogs/log
     chmod 0770 /dev/fscklogs/log
 
-# Switch between sdcardfs and FUSE depending on persist property
-# TODO: Move this to ro property before launch because FDE devices
-# interact with persistent properties differently during boot
-on zygote-start && property:persist.sys.fuse=true
-  # Mount default storage into root namespace
-  mount none /mnt/user/0 /storage bind rec
-  mount none none /storage slave rec
-on zygote-start && property:persist.sys.fuse=false
-  # Mount default storage into root namespace
-  mount none /mnt/runtime/default /storage bind rec
-  mount none none /storage slave rec
-on zygote-start && property:persist.sys.fuse=""
-  # Mount default storage into root namespace
-  mount none /mnt/runtime/default /storage bind rec
-  mount none none /storage slave rec
+    # Enable FUSE by default
+    setprop persist.sys.fuse true
 
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
+    start statsd
     start netd
     start zygote
     start zygote_secondary
@@ -824,6 +826,7 @@ on zygote-start && property:ro.crypto.state=unencrypted
 on zygote-start && property:ro.crypto.state=unsupported
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
+    start statsd
     start netd
     start zygote
     start zygote_secondary
@@ -831,6 +834,7 @@ on zygote-start && property:ro.crypto.state=unsupported
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
+    start statsd
     start netd
     start zygote
     start zygote_secondary

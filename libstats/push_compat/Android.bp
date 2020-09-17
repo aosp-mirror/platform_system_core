@@ -38,7 +38,6 @@ cc_defaults {
     ],
     shared_libs: [
         "liblog",
-        "libutils",
     ],
 }
 
@@ -46,6 +45,9 @@ cc_library {
     name: "libstatspush_compat",
     defaults: ["libstatspush_compat_defaults"],
     export_include_dirs: ["include"],
+    export_header_lib_headers: [
+        "libstatssocket_headers",
+    ],
     static_libs: ["libgtest_prod"],
     apex_available: ["com.android.resolv"],
     min_sdk_version: "29",
