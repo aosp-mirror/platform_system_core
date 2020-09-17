@@ -78,6 +78,11 @@ bool CowReader::Parse(android::base::borrowed_fd fd) {
                    << "Expected: " << kCowMagicNumber;
         return false;
     }
+    if (header_.header_size != sizeof(CowHeader)) {
+        LOG(ERROR) << "Header size unknown, read " << header_.header_size << ", expected "
+                   << sizeof(CowHeader);
+        return false;
+    }
 
     if ((header_.major_version != kCowVersionMajor) ||
         (header_.minor_version != kCowVersionMinor)) {
@@ -232,6 +237,9 @@ bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
             break;
         case kCowCompressGz:
             decompressor = IDecompressor::Gz();
+            break;
+        case kCowCompressBrotli:
+            decompressor = IDecompressor::Brotli();
             break;
         default:
             LOG(ERROR) << "Unknown compression type: " << op.compression;

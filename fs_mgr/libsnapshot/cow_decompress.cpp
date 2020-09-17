@@ -19,6 +19,7 @@
 #include <utility>
 
 #include <android-base/logging.h>
+#include <brotli/decode.h>
 #include <zlib.h>
 
 namespace android {
@@ -205,6 +206,58 @@ bool GzDecompressor::DecompressInput(const uint8_t* data, size_t length) {
 
 std::unique_ptr<IDecompressor> IDecompressor::Gz() {
     return std::unique_ptr<IDecompressor>(new GzDecompressor());
+}
+
+class BrotliDecompressor final : public StreamDecompressor {
+  public:
+    ~BrotliDecompressor();
+
+    bool Init() override;
+    bool DecompressInput(const uint8_t* data, size_t length) override;
+    bool Done() override { return BrotliDecoderIsFinished(decoder_); }
+
+  private:
+    BrotliDecoderState* decoder_ = nullptr;
+};
+
+bool BrotliDecompressor::Init() {
+    decoder_ = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
+    return true;
+}
+
+BrotliDecompressor::~BrotliDecompressor() {
+    if (decoder_) {
+        BrotliDecoderDestroyInstance(decoder_);
+    }
+}
+
+bool BrotliDecompressor::DecompressInput(const uint8_t* data, size_t length) {
+    size_t available_in = length;
+    const uint8_t* next_in = data;
+
+    bool needs_more_output = false;
+    while (available_in || needs_more_output) {
+        if (!output_buffer_remaining_ && !GetFreshBuffer()) {
+            return false;
+        }
+
+        auto output_buffer = output_buffer_;
+        auto r = BrotliDecoderDecompressStream(decoder_, &available_in, &next_in,
+                                               &output_buffer_remaining_, &output_buffer_, nullptr);
+        if (r == BROTLI_DECODER_RESULT_ERROR) {
+            LOG(ERROR) << "brotli decode failed";
+            return false;
+        }
+        if (!sink_->ReturnData(output_buffer, output_buffer_ - output_buffer)) {
+            return false;
+        }
+        needs_more_output = (r == BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT);
+    }
+    return true;
+}
+
+std::unique_ptr<IDecompressor> IDecompressor::Brotli() {
+    return std::unique_ptr<IDecompressor>(new BrotliDecompressor());
 }
 
 }  // namespace snapshot
