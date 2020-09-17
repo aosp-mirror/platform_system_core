@@ -38,6 +38,7 @@
 #include <vector>
 
 using namespace std::literals::string_literals;
+using namespace std::chrono_literals;
 using namespace android::dm;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
@@ -242,8 +243,9 @@ static int DmCreateCmdHandler(int argc, char** argv) {
         return ret;
     }
 
+    std::string ignore_path;
     DeviceMapper& dm = DeviceMapper::Instance();
-    if (!dm.CreateDevice(name, table)) {
+    if (!dm.CreateDevice(name, table, &ignore_path, 5s)) {
         std::cerr << "Failed to create device-mapper device with name: " << name << std::endl;
         return -EIO;
     }
@@ -392,7 +394,7 @@ static int GetPathCmdHandler(int argc, char** argv) {
     return 0;
 }
 
-static int GetUUIDCmdHandler(int argc, char** argv) {
+static int GetUuidCmdHandler(int argc, char** argv) {
     if (argc != 1) {
         std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
         return -EINVAL;
@@ -400,7 +402,7 @@ static int GetUUIDCmdHandler(int argc, char** argv) {
 
     DeviceMapper& dm = DeviceMapper::Instance();
     std::string uuid;
-    if (!dm.GetDmDeviceUUIDByName(argv[0], &uuid)) {
+    if (!dm.GetDmDeviceUuidByName(argv[0], &uuid)) {
         std::cerr << "Could not query uuid of device \"" << argv[0] << "\"." << std::endl;
         return -EINVAL;
     }
@@ -521,7 +523,7 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         {"list", DmListCmdHandler},
         {"help", HelpCmdHandler},
         {"getpath", GetPathCmdHandler},
-        {"getuuid", GetUUIDCmdHandler},
+        {"getuuid", GetUuidCmdHandler},
         {"info", InfoCmdHandler},
         {"table", TableCmdHandler},
         {"status", StatusCmdHandler},
