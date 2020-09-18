@@ -180,6 +180,9 @@ static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
   _LOG(log, logtype::HEADER, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", thread_info.pid,
        thread_info.tid, thread_info.thread_name.c_str(), thread_info.process_name.c_str());
   _LOG(log, logtype::HEADER, "uid: %d\n", thread_info.uid);
+  if (thread_info.tagged_addr_ctrl != -1) {
+    _LOG(log, logtype::HEADER, "tagged_addr_ctrl: %016lx\n", thread_info.tagged_addr_ctrl);
+  }
 }
 
 static std::string get_addr_string(uint64_t addr) {
