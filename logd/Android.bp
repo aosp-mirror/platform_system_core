@@ -66,6 +66,7 @@ cc_library_static {
         "SerializedLogChunk.cpp",
         "SimpleLogBuffer.cpp",
     ],
+    static_libs: ["liblog"],
     logtags: ["event.logtags"],
 
     export_include_dirs: ["."],

@@ -144,7 +144,6 @@ static Image images[] = {
     { "cache",    "cache.img",        "cache.sig",    "cache",    true,  ImageType::Extra },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  ImageType::BootCritical },
     { "dts",      "dt.img",           "dt.sig",       "dts",      true,  ImageType::BootCritical },
-    { "modules",  "modules.img",      "modules.sig",  "modules",  true,  ImageType::Normal },
     { "odm",      "odm.img",          "odm.sig",      "odm",      true,  ImageType::Normal },
     { "odm_dlkm", "odm_dlkm.img",     "odm_dlkm.sig", "odm_dlkm", true,  ImageType::Normal },
     { "product",  "product.img",      "product.sig",  "product",  true,  ImageType::Normal },
