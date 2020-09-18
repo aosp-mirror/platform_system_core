@@ -30,12 +30,12 @@ namespace snapshot {
 
 class CowTest : public ::testing::Test {
   protected:
-    void SetUp() override {
+    virtual void SetUp() override {
         cow_ = std::make_unique<TemporaryFile>();
         ASSERT_GE(cow_->fd, 0) << strerror(errno);
     }
 
-    void TearDown() override { cow_ = nullptr; }
+    virtual void TearDown() override { cow_ = nullptr; }
 
     std::unique_ptr<TemporaryFile> cow_;
 };
@@ -70,7 +70,7 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_TRUE(writer.AddCopy(10, 20));
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
     ASSERT_TRUE(writer.AddZeroBlocks(51, 2));
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer.Flush());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -105,7 +105,7 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_EQ(op->compression, kCowCompressNone);
     ASSERT_EQ(op->data_length, 4096);
     ASSERT_EQ(op->new_block, 50);
-    ASSERT_EQ(op->source, 104);
+    ASSERT_EQ(op->source, 106);
     ASSERT_TRUE(reader.ReadData(*op, &sink));
     ASSERT_EQ(sink.stream(), data);
 
@@ -145,7 +145,7 @@ TEST_F(CowTest, CompressGz) {
     data.resize(options.block_size, '\0');
 
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer.Flush());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -163,7 +163,7 @@ TEST_F(CowTest, CompressGz) {
     ASSERT_EQ(op->compression, kCowCompressGz);
     ASSERT_EQ(op->data_length, 56);  // compressed!
     ASSERT_EQ(op->new_block, 50);
-    ASSERT_EQ(op->source, 104);
+    ASSERT_EQ(op->source, 106);
     ASSERT_TRUE(reader.ReadData(*op, &sink));
     ASSERT_EQ(sink.stream(), data);
 
@@ -182,7 +182,7 @@ TEST_F(CowTest, CompressTwoBlocks) {
     data.resize(options.block_size * 2, '\0');
 
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer.Flush());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -211,9 +211,11 @@ class HorribleStringSink : public StringSink {
     void* GetBuffer(size_t, size_t* actual) override { return StringSink::GetBuffer(1, actual); }
 };
 
-TEST_F(CowTest, HorribleSink) {
+class CompressionTest : public CowTest, public testing::WithParamInterface<const char*> {};
+
+TEST_P(CompressionTest, HorribleSink) {
     CowOptions options;
-    options.compression = "gz";
+    options.compression = GetParam();
     CowWriter writer(options);
 
     ASSERT_TRUE(writer.Initialize(cow_->fd));
@@ -222,7 +224,7 @@ TEST_F(CowTest, HorribleSink) {
     data.resize(options.block_size, '\0');
 
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer.Flush());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -238,6 +240,8 @@ TEST_F(CowTest, HorribleSink) {
     ASSERT_TRUE(reader.ReadData(*op, &sink));
     ASSERT_EQ(sink.stream(), data);
 }
+
+INSTANTIATE_TEST_SUITE_P(CowApi, CompressionTest, testing::Values("none", "gz", "brotli"));
 
 TEST_F(CowTest, GetSize) {
     CowOptions options;
@@ -255,7 +259,7 @@ TEST_F(CowTest, GetSize) {
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
     ASSERT_TRUE(writer.AddZeroBlocks(51, 2));
     auto size_before = writer.GetCowSize();
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer.Flush());
     auto size_after = writer.GetCowSize();
     ASSERT_EQ(size_before, size_after);
     struct stat buf;
@@ -265,6 +269,60 @@ TEST_F(CowTest, GetSize) {
         FAIL();
     }
     ASSERT_EQ(buf.st_size, writer.GetCowSize());
+}
+
+TEST_F(CowTest, Append) {
+    CowOptions options;
+    auto writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer->AddRawBlocks(50, data.data(), data.size()));
+    ASSERT_TRUE(writer->Flush());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->Initialize(cow_->fd, CowWriter::OpenMode::APPEND));
+
+    std::string data2 = "More data!";
+    data2.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer->AddRawBlocks(51, data2.data(), data2.size()));
+    ASSERT_TRUE(writer->Flush());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    struct stat buf;
+    ASSERT_EQ(fstat(cow_->fd, &buf), 0);
+    ASSERT_EQ(buf.st_size, writer->GetCowSize());
+
+    // Read back both operations.
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    StringSink sink;
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+
+    ASSERT_FALSE(iter->Done());
+    auto op = &iter->Get();
+    ASSERT_EQ(op->type, kCowReplaceOp);
+    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_EQ(sink.stream(), data);
+
+    iter->Next();
+    sink.Reset();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowReplaceOp);
+    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_EQ(sink.stream(), data2);
+
+    iter->Next();
+    ASSERT_TRUE(iter->Done());
 }
 
 }  // namespace snapshot
