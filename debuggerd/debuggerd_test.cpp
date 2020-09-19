@@ -309,6 +309,11 @@ TEST_F(CrasherTest, smoke) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0xdead)");
+
+  if (mte_supported()) {
+    // Test that the default TAGGED_ADDR_CTRL value is set.
+    ASSERT_MATCH(result, R"(tagged_addr_ctrl: 000000000007fff3)");
+  }
 }
 
 TEST_F(CrasherTest, tagged_fault_addr) {
