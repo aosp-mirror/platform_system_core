@@ -343,6 +343,12 @@ cc_binary {
     apex_available: [
         "com.android.runtime",
     ],
+
+    product_variables: {
+        experimental_mte: {
+            cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
+        },
+    },
 }
 
 cc_binary {
