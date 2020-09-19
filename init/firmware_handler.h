@@ -18,6 +18,7 @@
 
 #include <pwd.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,7 @@ class FirmwareHandler : public UeventHandler {
                                            const Uevent& uevent) const;
     std::string GetFirmwarePath(const Uevent& uevent) const;
     void ProcessFirmwareEvent(const std::string& root, const std::string& firmware) const;
+    bool ForEachFirmwareDirectory(std::function<bool(const std::string&)> handler) const;
 
     std::vector<std::string> firmware_directories_;
     std::vector<ExternalFirmwareHandler> external_firmware_handlers_;
