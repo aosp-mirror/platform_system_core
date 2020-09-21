@@ -17,6 +17,7 @@
 #include "firmware_handler.h"
 
 #include <fcntl.h>
+#include <glob.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -30,6 +31,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 
@@ -203,25 +205,28 @@ void FirmwareHandler::ProcessFirmwareEvent(const std::string& root,
     }
 
     std::vector<std::string> attempted_paths_and_errors;
-
-    int booting = IsBooting();
-try_loading_again:
-    attempted_paths_and_errors.clear();
-    for (const auto& firmware_directory : firmware_directories_) {
+    auto TryLoadFirmware = [&](const std::string& firmware_directory) {
         std::string file = firmware_directory + firmware;
         unique_fd fw_fd(open(file.c_str(), O_RDONLY | O_CLOEXEC));
         if (fw_fd == -1) {
             attempted_paths_and_errors.emplace_back("firmware: attempted " + file +
                                                     ", open failed: " + strerror(errno));
-            continue;
+            return false;
         }
         struct stat sb;
         if (fstat(fw_fd, &sb) == -1) {
             attempted_paths_and_errors.emplace_back("firmware: attempted " + file +
                                                     ", fstat failed: " + strerror(errno));
-            continue;
+            return false;
         }
         LoadFirmware(firmware, root, fw_fd, sb.st_size, loading_fd, data_fd);
+        return true;
+    };
+
+    int booting = IsBooting();
+try_loading_again:
+    attempted_paths_and_errors.clear();
+    if (ForEachFirmwareDirectory(TryLoadFirmware)) {
         return;
     }
 
@@ -240,6 +245,33 @@ try_loading_again:
 
     // Write "-1" as our response to the kernel's firmware request, since we have nothing for it.
     write(loading_fd, "-1", 2);
+}
+
+bool FirmwareHandler::ForEachFirmwareDirectory(
+        std::function<bool(const std::string&)> handler) const {
+    for (const std::string& firmware_directory : firmware_directories_) {
+        if (std::invoke(handler, firmware_directory)) {
+            return true;
+        }
+    }
+
+    glob_t glob_result;
+    glob("/apex/*/firmware/", GLOB_MARK, nullptr, &glob_result);
+    auto free_glob = android::base::make_scope_guard(std::bind(&globfree, &glob_result));
+    for (size_t i = 0; i < glob_result.gl_pathc; i++) {
+        char* apex_firmware_directory = glob_result.gl_pathv[i];
+        // Filter-out /apex/<name>@<ver> paths. The paths are bind-mounted to
+        // /apex/<name> paths, so unless we filter them out, we will look into the
+        // same apex twice.
+        if (strchr(apex_firmware_directory, '@')) {
+            continue;
+        }
+        if (std::invoke(handler, apex_firmware_directory)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void FirmwareHandler::HandleUevent(const Uevent& uevent) {
