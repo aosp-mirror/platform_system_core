@@ -32,7 +32,10 @@ cc_defaults {
         "-DWRITE_TO_STATSD=1",
         "-DWRITE_TO_LOGD=0",
     ],
-    header_libs: ["libstatssocket_headers"],
+    header_libs: [
+        "libcutils_headers",
+        "libstatssocket_headers",
+    ],
     static_libs: [
         "libbase",
     ],
