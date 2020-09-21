@@ -27,6 +27,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <ext4_utils/ext4_utils.h>
@@ -68,6 +69,7 @@ using android::fs_mgr::SlotNumberForSlotSuffix;
 using android::hardware::boot::V1_1::MergeStatus;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::Extent;
+using chromeos_update_engine::FileDescriptor;
 using chromeos_update_engine::InstallOperation;
 template <typename T>
 using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
@@ -101,6 +103,10 @@ std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceI
 SnapshotManager::SnapshotManager(IDeviceInfo* device) : device_(device) {
     gsid_dir_ = device_->GetGsidDir();
     metadata_dir_ = device_->GetMetadataDir();
+}
+
+static inline bool IsCompressionEnabled() {
+    return android::base::GetBoolProperty("ro.virtual_ab.compression.enabled", false);
 }
 
 static std::string GetCowName(const std::string& snapshot_name) {
@@ -2420,6 +2426,11 @@ Return SnapshotManager::InitializeUpdateSnapshots(
 
 bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                                         std::string* snapshot_path) {
+    if (IsCompressionEnabled()) {
+        LOG(ERROR) << "MapUpdateSnapshot cannot be used in compression mode.";
+        return false;
+    }
+
     auto lock = LockShared();
     if (!lock) return false;
     if (!UnmapPartitionWithSnapshot(lock.get(), params.GetPartitionName())) {
@@ -2428,6 +2439,29 @@ bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& para
         return false;
     }
     return MapPartitionWithSnapshot(lock.get(), params, snapshot_path);
+}
+
+std::unique_ptr<ICowWriter> SnapshotManager::OpenSnapshotWriter(
+        const std::string& partition_name, std::chrono::milliseconds timeout_ms) {
+    if (!IsCompressionEnabled()) {
+        LOG(ERROR) << "OpenSnapshotWriter can only be called in compression mode.";
+        return nullptr;
+    }
+
+    (void)partition_name;
+    (void)timeout_ms;
+
+    // Not yet implemented.
+    return nullptr;
+}
+
+std::unique_ptr<FileDescriptor> SnapshotManager::OpenSnapshotReader(
+        const std::string& partition_name, std::chrono::milliseconds timeout_ms) {
+    (void)partition_name;
+    (void)timeout_ms;
+
+    // Not yet implemented.
+    return nullptr;
 }
 
 bool SnapshotManager::UnmapUpdateSnapshot(const std::string& target_partition_name) {
