@@ -28,6 +28,7 @@ cc_library_headers {
     name: "libcutils_headers",
     vendor_available: true,
     recovery_available: true,
+    ramdisk_available: true,
     host_supported: true,
     apex_available: [
         "//apex_available:platform",

@@ -36,6 +36,7 @@ cc_defaults {
         "libz",
     ],
     static_libs: ["libzstd"],
+    header_libs: ["libcutils_headers"],
     cflags: [
         "-Wextra",
         "-Wthread-safety",
