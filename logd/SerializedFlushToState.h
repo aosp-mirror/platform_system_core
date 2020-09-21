@@ -27,26 +27,19 @@
 struct LogPosition {
     std::list<SerializedLogChunk>::iterator buffer_it;
     int read_offset;
+
+    const SerializedLogEntry* log_entry() const { return buffer_it->log_entry(read_offset); }
 };
 
-struct MinHeapElement {
-    MinHeapElement(log_id_t log_id, const SerializedLogEntry* entry)
-        : log_id(log_id), entry(entry) {}
+struct LogWithId {
     log_id_t log_id;
     const SerializedLogEntry* entry;
-    // The change of comparison operators is intentional, std::priority_queue uses operator<() to
-    // compare but creates a max heap.  Since we want a min heap, we return the opposite result.
-    bool operator<(const MinHeapElement& rhs) const {
-        return entry->sequence() > rhs.entry->sequence();
-    }
 };
 
 // This class tracks the specific point where a FlushTo client has read through the logs.  It
 // directly references the std::list<> iterators from the parent SerializedLogBuffer and the offset
 // into each log chunk where it has last read.  All interactions with this class, except for its
-// construction, must be done with SerializedLogBuffer::lock_ held.  No log chunks that it
-// references may be pruned, which is handled by ensuring prune does not touch any log chunk with
-// highest sequence number greater or equal to start().
+// construction, must be done with SerializedLogBuffer::lock_ held.
 class SerializedFlushToState : public FlushToState {
   public:
     // Initializes this state object.  For each log buffer set in log_mask, this sets
@@ -61,31 +54,29 @@ class SerializedFlushToState : public FlushToState {
         if (logs_ == nullptr) logs_ = logs;
     }
 
-    bool HasUnreadLogs() {
-        CheckForNewLogs();
-        return !min_heap_.empty();
-    }
+    // Updates the state of log_positions_ and logs_needed_from_next_position_ then returns true if
+    // there are any unread logs, false otherwise.
+    bool HasUnreadLogs();
 
-    // Pops the next unread log from the min heap and sets logs_needed_from_next_position_ to
-    // indicate that we're waiting for more logs from the associated log buffer.
-    MinHeapElement PopNextUnreadLog();
+    // Returns the next unread log and sets logs_needed_from_next_position_ to indicate that we're
+    // waiting for more logs from the associated log buffer.
+    LogWithId PopNextUnreadLog();
 
     // If the parent log buffer prunes logs, the reference that this class contains may become
     // invalid, so this must be called first to drop the reference to buffer_it, if any.
     void Prune(log_id_t log_id, const std::list<SerializedLogChunk>::iterator& buffer_it);
 
   private:
-    // If there is a log in the serialized log buffer for `log_id` at the read_offset, add it to the
-    // min heap for reading, otherwise set logs_needed_from_next_position_ to indicate that we're
-    // waiting for the next log.
-    void AddMinHeapEntry(log_id_t log_id);
+    // Set logs_needed_from_next_position_[i] to indicate if log_positions_[i] points to an unread
+    // log or to the point at which the next log will appear.
+    void UpdateLogsNeeded(log_id_t log_id);
 
     // Create a LogPosition object for the given log_id by searching through the log chunks for the
     // first chunk and then first log entry within that chunk that is greater or equal to start().
     void CreateLogPosition(log_id_t log_id);
 
     // Checks to see if any log buffers set in logs_needed_from_next_position_ have new logs and
-    // calls AddMinHeapEntry() if so.
+    // calls UpdateLogsNeeded() if so.
     void CheckForNewLogs();
 
     std::list<SerializedLogChunk>* logs_ = nullptr;
@@ -97,7 +88,4 @@ class SerializedFlushToState : public FlushToState {
     // next_log_position == logs_write_position_)`.  These will be re-checked in each
     // loop in case new logs came in.
     std::bitset<LOG_ID_MAX> logs_needed_from_next_position_ = {};
-    // A min heap that has up to one entry per log buffer, sorted by sequence number, of the next
-    // element that this reader should read.
-    std::priority_queue<MinHeapElement> min_heap_;
 };
