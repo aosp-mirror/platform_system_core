@@ -211,7 +211,7 @@ bool SerializedLogBuffer::FlushTo(
     state.InitializeLogs(logs_);
 
     while (state.HasUnreadLogs()) {
-        MinHeapElement top = state.PopNextUnreadLog();
+        LogWithId top = state.PopNextUnreadLog();
         auto* entry = top.entry;
         auto log_id = top.log_id;
 
