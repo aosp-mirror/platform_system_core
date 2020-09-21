@@ -288,3 +288,20 @@ TEST_F(SerializedFlushToStateTest, no_dangling_references) {
 
     EXPECT_FALSE(state.HasUnreadLogs());
 }
+
+TEST(SerializedFlushToState, Prune) {
+    auto chunk = SerializedLogChunk{kChunkSize};
+    chunk.Log(1, log_time(), 0, 1, 1, "abc", 3);
+    chunk.Log(2, log_time(), 0, 1, 1, "abc", 3);
+    chunk.Log(3, log_time(), 0, 1, 1, "abc", 3);
+    chunk.FinishWriting();
+
+    std::list<SerializedLogChunk> log_chunks[LOG_ID_MAX];
+    log_chunks[LOG_ID_MAIN].emplace_back(std::move(chunk));
+
+    auto state = SerializedFlushToState{1, kLogMaskAll};
+    state.InitializeLogs(log_chunks);
+    ASSERT_TRUE(state.HasUnreadLogs());
+
+    state.Prune(LOG_ID_MAIN, log_chunks[LOG_ID_MAIN].begin());
+}
