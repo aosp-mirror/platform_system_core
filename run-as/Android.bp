@@ -25,4 +25,5 @@ cc_binary {
         "libpackagelistparser",
         "libminijail",
     ],
+    header_libs: ["libcutils_headers"],
 }
