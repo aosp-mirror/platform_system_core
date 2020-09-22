@@ -36,10 +36,10 @@ class SnapshotManagerStub : public ISnapshotManager {
             const chromeos_update_engine::DeltaArchiveManifest& manifest) override;
     bool MapUpdateSnapshot(const android::fs_mgr::CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
-    std::unique_ptr<ICowWriter> OpenSnapshotWriter(const std::string& partition_name,
-                                                   std::chrono::milliseconds timeout_ms) override;
+    std::unique_ptr<ICowWriter> OpenSnapshotWriter(
+            const android::fs_mgr::CreateLogicalPartitionParams& params) override;
     std::unique_ptr<FileDescriptor> OpenSnapshotReader(
-            const std::string& partition_name, std::chrono::milliseconds timeout_ms = {}) override;
+            const android::fs_mgr::CreateLogicalPartitionParams& params) override;
     bool UnmapUpdateSnapshot(const std::string& target_partition_name) override;
     bool NeedSnapshotsInFirstStageMount() override;
     bool CreateLogicalAndSnapshotPartitions(
