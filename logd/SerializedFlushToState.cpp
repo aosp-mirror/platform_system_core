@@ -91,7 +91,8 @@ void SerializedFlushToState::UpdateLogsNeeded(log_id_t log_id) {
         }
     } else {
         // read_offset > buffer_it->write_offset() should never happen.
-        CHECK(false);
+        LOG(FATAL) << "read_offset (" << read_offset << ") > buffer_it->write_offset() ("
+                   << buffer_it->write_offset() << ")";
     }
 }
 
