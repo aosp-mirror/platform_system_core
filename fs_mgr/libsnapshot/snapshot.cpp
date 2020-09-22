@@ -2442,25 +2442,18 @@ bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& para
 }
 
 std::unique_ptr<ICowWriter> SnapshotManager::OpenSnapshotWriter(
-        const std::string& partition_name, std::chrono::milliseconds timeout_ms) {
-    if (!IsCompressionEnabled()) {
-        LOG(ERROR) << "OpenSnapshotWriter can only be called in compression mode.";
-        return nullptr;
-    }
+        const android::fs_mgr::CreateLogicalPartitionParams& params) {
+    (void)params;
 
-    (void)partition_name;
-    (void)timeout_ms;
-
-    // Not yet implemented.
+    LOG(ERROR) << "OpenSnapshotWriter not yet implemented";
     return nullptr;
 }
 
 std::unique_ptr<FileDescriptor> SnapshotManager::OpenSnapshotReader(
-        const std::string& partition_name, std::chrono::milliseconds timeout_ms) {
-    (void)partition_name;
-    (void)timeout_ms;
+        const android::fs_mgr::CreateLogicalPartitionParams& params) {
+    (void)params;
 
-    // Not yet implemented.
+    LOG(ERROR) << "OpenSnapshotReader not yet implemented";
     return nullptr;
 }
 
