@@ -86,7 +86,7 @@ Ueventd by default serves firmware requests by searching through a list of firmw
 for a file matching the uevent `FIRMWARE`. It then forks a process to serve this firmware to the
 kernel.
 
-`/apex/*/firmware` is also searched after a list of firmware directories.
+`/apex/*/etc/firmware` is also searched after a list of firmware directories.
 
 The list of firmware directories is customized by a `firmware_directories` line in a ueventd.rc
 file. This line takes the format of
