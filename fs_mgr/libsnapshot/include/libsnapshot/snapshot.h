@@ -187,14 +187,15 @@ class ISnapshotManager {
     virtual bool MapUpdateSnapshot(const android::fs_mgr::CreateLogicalPartitionParams& params,
                                    std::string* snapshot_path) = 0;
 
-    // Create an ICowWriter to build a snapshot against a target partition.
+    // Create an ICowWriter to build a snapshot against a target partition. The partition name must
+    // be suffixed.
     virtual std::unique_ptr<ICowWriter> OpenSnapshotWriter(
-            const std::string& partition_name, std::chrono::milliseconds timeout_ms = {}) = 0;
+            const android::fs_mgr::CreateLogicalPartitionParams& params) = 0;
 
     // Open a snapshot for reading. A file-like interface is provided through the FileDescriptor.
-    // In this mode, writes are not supported.
+    // In this mode, writes are not supported. The partition name must be suffixed.
     virtual std::unique_ptr<FileDescriptor> OpenSnapshotReader(
-            const std::string& partition_name, std::chrono::milliseconds timeout_ms = {}) = 0;
+            const android::fs_mgr::CreateLogicalPartitionParams& params) = 0;
 
     // Unmap a snapshot device or CowWriter that was previously opened with MapUpdateSnapshot,
     // OpenSnapshotWriter, or OpenSnapshotReader. All outstanding open descriptors, writers,
@@ -310,9 +311,9 @@ class SnapshotManager final : public ISnapshotManager {
     bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
     std::unique_ptr<ICowWriter> OpenSnapshotWriter(
-            const std::string& partition_name, std::chrono::milliseconds timeout_ms = {}) override;
+            const android::fs_mgr::CreateLogicalPartitionParams& params) override;
     std::unique_ptr<FileDescriptor> OpenSnapshotReader(
-            const std::string& partition_name, std::chrono::milliseconds timeout_ms = {}) override;
+            const android::fs_mgr::CreateLogicalPartitionParams& params) override;
     bool UnmapUpdateSnapshot(const std::string& target_partition_name) override;
     bool NeedSnapshotsInFirstStageMount() override;
     bool CreateLogicalAndSnapshotPartitions(
