@@ -37,6 +37,12 @@
 #include "ThreadEntry.h"
 
 bool BacktraceCurrent::ReadWord(uint64_t ptr, word_t* out_value) {
+#if defined(__aarch64__)
+  // Tagged pointer after Android R would lead top byte to have random values
+  // https://source.android.com/devices/tech/debug/tagged-pointers
+  ptr &= (1ULL << 56) - 1;
+#endif
+
   if (!VerifyReadWordArgs(ptr, out_value)) {
     return false;
   }
@@ -54,6 +60,12 @@ bool BacktraceCurrent::ReadWord(uint64_t ptr, word_t* out_value) {
 }
 
 size_t BacktraceCurrent::Read(uint64_t addr, uint8_t* buffer, size_t bytes) {
+#if defined(__aarch64__)
+  // Tagged pointer after Android R would lead top byte to have random values
+  // https://source.android.com/devices/tech/debug/tagged-pointers
+  addr &= (1ULL << 56) - 1;
+#endif
+
   backtrace_map_t map;
   FillInMap(addr, &map);
   if (!BacktraceMap::IsValid(map) || !(map.flags & PROT_READ)) {

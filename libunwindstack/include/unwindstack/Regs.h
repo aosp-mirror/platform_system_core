@@ -24,11 +24,12 @@
 #include <string>
 #include <vector>
 
+#include <unwindstack/Arch.h>
+
 namespace unwindstack {
 
 // Forward declarations.
 class Elf;
-enum ArchEnum : uint8_t;
 class Memory;
 
 class Regs {
@@ -52,7 +53,7 @@ class Regs {
 
   virtual ArchEnum Arch() = 0;
 
-  virtual bool Is32Bit() = 0;
+  bool Is32Bit() { return ArchIs32Bit(Arch()); }
 
   virtual void* RawData() = 0;
   virtual uint64_t pc() = 0;
@@ -95,8 +96,6 @@ class RegsImpl : public Regs {
   RegsImpl(uint16_t total_regs, Location return_loc)
       : Regs(total_regs, return_loc), regs_(total_regs) {}
   virtual ~RegsImpl() = default;
-
-  bool Is32Bit() override { return sizeof(AddressType) == sizeof(uint32_t); }
 
   inline AddressType& operator[](size_t reg) { return regs_[reg]; }
 
