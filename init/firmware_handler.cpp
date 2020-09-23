@@ -256,7 +256,7 @@ bool FirmwareHandler::ForEachFirmwareDirectory(
     }
 
     glob_t glob_result;
-    glob("/apex/*/firmware/", GLOB_MARK, nullptr, &glob_result);
+    glob("/apex/*/etc/firmware/", GLOB_MARK, nullptr, &glob_result);
     auto free_glob = android::base::make_scope_guard(std::bind(&globfree, &glob_result));
     for (size_t i = 0; i < glob_result.gl_pathc; i++) {
         char* apex_firmware_directory = glob_result.gl_pathv[i];
