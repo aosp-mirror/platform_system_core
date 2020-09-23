@@ -45,6 +45,9 @@ cc_defaults {
     lto: {
         thin: true,
     },
+    sanitize: {
+        cfi: true,
+    },
     cpp_std: "experimental",
 }
 
@@ -147,7 +150,9 @@ cc_defaults {
         "SerializedLogChunkTest.cpp",
         "SerializedFlushToStateTest.cpp",
     ],
-
+    sanitize: {
+        cfi: true,
+    },
     static_libs: [
         "libbase",
         "libcutils",
