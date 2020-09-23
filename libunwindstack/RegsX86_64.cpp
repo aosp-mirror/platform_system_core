@@ -141,15 +141,14 @@ bool RegsX86_64::StepIfSignalHandler(uint64_t elf_offset, Elf* elf, Memory* proc
     return false;
   }
 
-  uint16_t data2;
-  if (!elf_memory->ReadFully(elf_offset + 8, &data2, sizeof(data2)) || data2 != 0x0f05) {
+  uint8_t data2;
+  if (!elf_memory->ReadFully(elf_offset + 8, &data2, sizeof(data2)) || data2 != 0x05) {
     return false;
   }
 
   // __restore_rt:
   // 0x48 0xc7 0xc0 0x0f 0x00 0x00 0x00   mov $0xf,%rax
   // 0x0f 0x05                            syscall
-  // 0x0f                                 nopl 0x0($rax)
 
   // Read the mcontext data from the stack.
   // sp points to the ucontext data structure, read only the mcontext part.

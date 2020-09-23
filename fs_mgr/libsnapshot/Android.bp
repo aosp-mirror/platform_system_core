@@ -30,6 +30,7 @@ cc_defaults {
     static_libs: [
         "libdm",
         "libfstab",
+        "libsnapshot_cow",
         "update_metadata-protos",
     ],
     whole_static_libs: [
@@ -38,7 +39,9 @@ cc_defaults {
         "libfstab",
     ],
     header_libs: [
+        "libchrome",
         "libfiemap_headers",
+        "libupdate_engine_headers",
     ],
     export_static_lib_headers: [
         "update_metadata-protos",
@@ -152,6 +155,7 @@ cc_library_static {
         "liblog",
     ],
     static_libs: [
+        "libbrotli",
         "libz",
     ],
     ramdisk_available: true,
@@ -312,8 +316,10 @@ cc_defaults {
         "libprotobuf-mutator",
     ],
     header_libs: [
+        "libchrome",
         "libfiemap_headers",
         "libstorage_literals_headers",
+        "libupdate_engine_headers",
     ],
     proto: {
         type: "full",
@@ -362,10 +368,11 @@ cc_defaults {
 
     static_libs: [
         "libbase",
+        "libbrotli",
         "liblog",
         "libdm",
-	"libz",
-	"libsnapshot_cow",
+        "libz",
+        "libsnapshot_cow",
     ],
 }
 
@@ -403,12 +410,14 @@ cc_test {
         "libz",
     ],
     static_libs: [
+        "libbrotli",
         "libgtest",
         "libsnapshot_cow",
     ],
     test_min_api_level: 30,
     auto_gen_config: true,
     require_root: false,
+    host_supported: true,
 }
 
 cc_binary {
@@ -494,11 +503,12 @@ cc_test {
     shared_libs: [
         "libbase",
         "liblog",
-        "libz",
     ],
     static_libs: [
+        "libbrotli",
         "libgtest",
         "libsnapshot_cow",
+        "libz",
     ],
     header_libs: [
         "libstorage_literals_headers",

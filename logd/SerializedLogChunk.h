@@ -18,6 +18,8 @@
 
 #include <sys/types.h>
 
+#include <android-base/logging.h>
+
 #include "LogWriter.h"
 #include "SerializedData.h"
 #include "SerializedLogEntry.h"
@@ -55,6 +57,7 @@ class SerializedLogChunk {
     }
 
     const SerializedLogEntry* log_entry(int offset) const {
+        CHECK(writer_active_ || reader_ref_count_ > 0);
         return reinterpret_cast<const SerializedLogEntry*>(data() + offset);
     }
     const uint8_t* data() const { return contents_.data(); }

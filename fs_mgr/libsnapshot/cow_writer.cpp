@@ -22,6 +22,8 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
+#include <brotli/encode.h>
+#include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
 #include <zlib.h>
 
@@ -39,17 +41,48 @@ void CowWriter::SetupHeaders() {
     header_.magic = kCowMagicNumber;
     header_.major_version = kCowVersionMajor;
     header_.minor_version = kCowVersionMinor;
+    header_.header_size = sizeof(CowHeader);
     header_.block_size = options_.block_size;
 }
 
-bool CowWriter::Initialize(android::base::unique_fd&& fd) {
-    owned_fd_ = std::move(fd);
-    return Initialize(android::base::borrowed_fd{owned_fd_});
+bool CowWriter::ParseOptions() {
+    if (options_.compression == "gz") {
+        compression_ = kCowCompressGz;
+    } else if (options_.compression == "brotli") {
+        compression_ = kCowCompressBrotli;
+    } else if (options_.compression == "none") {
+        compression_ = kCowCompressNone;
+    } else if (!options_.compression.empty()) {
+        LOG(ERROR) << "unrecognized compression: " << options_.compression;
+        return false;
+    }
+    return true;
 }
 
-bool CowWriter::Initialize(android::base::borrowed_fd fd) {
+bool CowWriter::Initialize(android::base::unique_fd&& fd, OpenMode mode) {
+    owned_fd_ = std::move(fd);
+    return Initialize(android::base::borrowed_fd{owned_fd_}, mode);
+}
+
+bool CowWriter::Initialize(android::base::borrowed_fd fd, OpenMode mode) {
     fd_ = fd;
 
+    if (!ParseOptions()) {
+        return false;
+    }
+
+    switch (mode) {
+        case OpenMode::WRITE:
+            return OpenForWrite();
+        case OpenMode::APPEND:
+            return OpenForAppend();
+        default:
+            LOG(ERROR) << "Unknown open mode in CowWriter";
+            return false;
+    }
+}
+
+bool CowWriter::OpenForWrite() {
     // This limitation is tied to the data field size in CowOperation.
     if (header_.block_size > std::numeric_limits<uint16_t>::max()) {
         LOG(ERROR) << "Block size is too large";
@@ -61,31 +94,52 @@ bool CowWriter::Initialize(android::base::borrowed_fd fd) {
         return false;
     }
 
-    if (options_.compression == "gz") {
-        compression_ = kCowCompressGz;
-    } else if (!options_.compression.empty()) {
-        LOG(ERROR) << "unrecognized compression: " << options_.compression;
+    // Headers are not complete, but this ensures the file is at the right
+    // position.
+    if (!android::base::WriteFully(fd_, &header_, sizeof(header_))) {
+        PLOG(ERROR) << "write failed";
         return false;
     }
 
-    // Headers are not complete, but this ensures the file is at the right
-    // position.
-    if (!WriteFully(fd_, &header_, sizeof(header_))) {
-        PLOG(ERROR) << "write failed";
+    header_.ops_offset = header_.header_size;
+    return true;
+}
+
+bool CowWriter::OpenForAppend() {
+    auto reader = std::make_unique<CowReader>();
+    if (!reader->Parse(fd_) || !reader->GetHeader(&header_)) {
+        return false;
+    }
+    options_.block_size = header_.block_size;
+
+    // Reset this, since we're going to reimport all operations.
+    header_.num_ops = 0;
+
+    auto iter = reader->GetOpIter();
+    while (!iter->Done()) {
+        auto& op = iter->Get();
+        AddOperation(op);
+
+        iter->Next();
+    }
+
+    // Free reader so we own the descriptor position again.
+    reader = nullptr;
+
+    // Seek to the end of the data section.
+    if (lseek(fd_.get(), header_.ops_offset, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek failed";
         return false;
     }
     return true;
 }
 
 bool CowWriter::AddCopy(uint64_t new_block, uint64_t old_block) {
-    header_.num_ops++;
-
     CowOperation op = {};
     op.type = kCowCopyOp;
     op.new_block = new_block;
     op.source = old_block;
-    ops_ += std::basic_string<uint8_t>(reinterpret_cast<uint8_t*>(&op), sizeof(op));
-
+    AddOperation(op);
     return true;
 }
 
@@ -103,8 +157,6 @@ bool CowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t 
 
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
     for (size_t i = 0; i < size / header_.block_size; i++) {
-        header_.num_ops++;
-
         CowOperation op = {};
         op.type = kCowReplaceOp;
         op.new_block = new_block_start + i;
@@ -120,7 +172,7 @@ bool CowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t 
                 LOG(ERROR) << "Compressed block is too large: " << data.size() << " bytes";
                 return false;
             }
-            if (!WriteFully(fd_, data.data(), data.size())) {
+            if (!WriteRawData(data.data(), data.size())) {
                 PLOG(ERROR) << "AddRawBlocks: write failed";
                 return false;
             }
@@ -132,11 +184,11 @@ bool CowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t 
             pos += header_.block_size;
         }
 
-        ops_ += std::basic_string<uint8_t>(reinterpret_cast<uint8_t*>(&op), sizeof(op));
+        AddOperation(op);
         iter += header_.block_size;
     }
 
-    if (!compression_ && !WriteFully(fd_, data, size)) {
+    if (!compression_ && !WriteRawData(data, size)) {
         PLOG(ERROR) << "AddRawBlocks: write failed";
         return false;
     }
@@ -145,13 +197,11 @@ bool CowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t 
 
 bool CowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
     for (uint64_t i = 0; i < num_blocks; i++) {
-        header_.num_ops++;
-
         CowOperation op = {};
         op.type = kCowZeroOp;
         op.new_block = new_block_start + i;
         op.source = 0;
-        ops_ += std::basic_string<uint8_t>(reinterpret_cast<uint8_t*>(&op), sizeof(op));
+        AddOperation(op);
     }
     return true;
 }
@@ -171,6 +221,24 @@ std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) 
             }
             return std::basic_string<uint8_t>(buffer.get(), dest_len);
         }
+        case kCowCompressBrotli: {
+            auto bound = BrotliEncoderMaxCompressedSize(length);
+            if (!bound) {
+                LOG(ERROR) << "BrotliEncoderMaxCompressedSize returned 0";
+                return {};
+            }
+            auto buffer = std::make_unique<uint8_t[]>(bound);
+
+            size_t encoded_size = bound;
+            auto rv = BrotliEncoderCompress(
+                    BROTLI_DEFAULT_QUALITY, BROTLI_DEFAULT_WINDOW, BROTLI_DEFAULT_MODE, length,
+                    reinterpret_cast<const uint8_t*>(data), &encoded_size, buffer.get());
+            if (!rv) {
+                LOG(ERROR) << "BrotliEncoderCompress failed";
+                return {};
+            }
+            return std::basic_string<uint8_t>(buffer.get(), encoded_size);
+        }
         default:
             LOG(ERROR) << "unhandled compression type: " << compression_;
             break;
@@ -189,17 +257,7 @@ static void SHA256(const void*, size_t, uint8_t[]) {
 #endif
 }
 
-bool CowWriter::Finalize() {
-    // If both fields are set then Finalize is already called.
-    if (header_.ops_offset > 0 && header_.ops_size > 0) {
-        return true;
-    }
-    auto offs = lseek(fd_.get(), 0, SEEK_CUR);
-    if (offs < 0) {
-        PLOG(ERROR) << "lseek failed";
-        return false;
-    }
-    header_.ops_offset = offs;
+bool CowWriter::Flush() {
     header_.ops_size = ops_.size();
 
     memset(header_.ops_checksum, 0, sizeof(uint8_t) * 32);
@@ -212,8 +270,6 @@ bool CowWriter::Finalize() {
         PLOG(ERROR) << "lseek failed";
         return false;
     }
-    // Header is already written, calling WriteFully will increment
-    // bytes_written_. So use android::base::WriteFully() here.
     if (!android::base::WriteFully(fd_, &header_, sizeof(header_))) {
         PLOG(ERROR) << "write header failed";
         return false;
@@ -227,13 +283,16 @@ bool CowWriter::Finalize() {
         return false;
     }
 
-    // clear ops_ so that subsequent calls to GetSize() still works.
-    ops_.clear();
+    // Re-position for any subsequent writes.
+    if (lseek(fd_.get(), header_.ops_offset, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek ops failed";
+        return false;
+    }
     return true;
 }
 
 size_t CowWriter::GetCowSize() {
-    return bytes_written_ + ops_.size() * sizeof(ops_[0]);
+    return header_.ops_offset + header_.num_ops * sizeof(CowOperation);
 }
 
 bool CowWriter::GetDataPos(uint64_t* pos) {
@@ -246,9 +305,17 @@ bool CowWriter::GetDataPos(uint64_t* pos) {
     return true;
 }
 
-bool CowWriter::WriteFully(base::borrowed_fd fd, const void* data, size_t size) {
-    bytes_written_ += size;
-    return android::base::WriteFully(fd, data, size);
+void CowWriter::AddOperation(const CowOperation& op) {
+    header_.num_ops++;
+    ops_.insert(ops_.size(), reinterpret_cast<const uint8_t*>(&op), sizeof(op));
+}
+
+bool CowWriter::WriteRawData(const void* data, size_t size) {
+    if (!android::base::WriteFully(fd_, data, size)) {
+        return false;
+    }
+    header_.ops_offset += size;
+    return true;
 }
 
 }  // namespace snapshot
