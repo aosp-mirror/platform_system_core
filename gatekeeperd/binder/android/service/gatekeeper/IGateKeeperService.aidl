@@ -30,7 +30,7 @@ import android.service.gatekeeper.GateKeeperResponse;
 interface IGateKeeperService {
     /**
      * Enrolls a password, returning the handle to the enrollment to be stored locally.
-     * @param uid The Android user ID associated to this enrollment
+     * @param userId The Android user ID associated to this enrollment
      * @param currentPasswordHandle The previously enrolled handle, or null if none
      * @param currentPassword The previously enrolled plaintext password, or null if none.
      *                        If provided, must verify against the currentPasswordHandle.
@@ -38,22 +38,22 @@ interface IGateKeeperService {
      *                        upon success.
      * @return an EnrollResponse or null on failure
      */
-    GateKeeperResponse enroll(int uid, in @nullable byte[] currentPasswordHandle,
+    GateKeeperResponse enroll(int userId, in @nullable byte[] currentPasswordHandle,
             in @nullable byte[] currentPassword, in byte[] desiredPassword);
 
     /**
      * Verifies an enrolled handle against a provided, plaintext blob.
-     * @param uid The Android user ID associated to this enrollment
+     * @param userId The Android user ID associated to this enrollment
      * @param enrolledPasswordHandle The handle against which the provided password will be
      *                               verified.
      * @param The plaintext blob to verify against enrolledPassword.
      * @return a VerifyResponse, or null on failure.
      */
-    GateKeeperResponse verify(int uid, in byte[] enrolledPasswordHandle, in byte[] providedPassword);
+    GateKeeperResponse verify(int userId, in byte[] enrolledPasswordHandle, in byte[] providedPassword);
 
     /**
      * Verifies an enrolled handle against a provided, plaintext blob.
-     * @param uid The Android user ID associated to this enrollment
+     * @param userId The Android user ID associated to this enrollment
      * @param challenge a challenge to authenticate agaisnt the device credential. If successful
      *                  authentication occurs, this value will be written to the returned
      *                  authentication attestation.
@@ -62,22 +62,22 @@ interface IGateKeeperService {
      * @param The plaintext blob to verify against enrolledPassword.
      * @return a VerifyResponse with an attestation, or null on failure.
      */
-    GateKeeperResponse verifyChallenge(int uid, long challenge, in byte[] enrolledPasswordHandle,
+    GateKeeperResponse verifyChallenge(int userId, long challenge, in byte[] enrolledPasswordHandle,
             in byte[] providedPassword);
 
     /**
      * Retrieves the secure identifier for the user with the provided Android ID,
      * or 0 if none is found.
-     * @param uid the Android user id
+     * @param userId the Android user id
      */
-    long getSecureUserId(int uid);
+    long getSecureUserId(int userId);
 
     /**
      * Clears secure user id associated with the provided Android ID.
      * Must be called when password is set to NONE.
-     * @param uid the Android user id.
+     * @param userId the Android user id.
      */
-    void clearSecureUserId(int uid);
+    void clearSecureUserId(int userId);
 
     /**
      * Notifies gatekeeper that device setup has been completed and any potentially still existing
