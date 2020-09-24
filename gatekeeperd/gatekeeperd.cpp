@@ -76,9 +76,9 @@ public:
     virtual ~GateKeeperProxy() {
     }
 
-    void store_sid(uint32_t uid, uint64_t sid) {
+    void store_sid(uint32_t userId, uint64_t sid) {
         char filename[21];
-        snprintf(filename, sizeof(filename), "%u", uid);
+        snprintf(filename, sizeof(filename), "%u", userId);
         int fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
         if (fd < 0) {
             ALOGE("could not open file: %s: %s", filename, strerror(errno));
@@ -117,18 +117,18 @@ public:
         return false;
     }
 
-    void maybe_store_sid(uint32_t uid, uint64_t sid) {
+    void maybe_store_sid(uint32_t userId, uint64_t sid) {
         char filename[21];
-        snprintf(filename, sizeof(filename), "%u", uid);
+        snprintf(filename, sizeof(filename), "%u", userId);
         if (access(filename, F_OK) == -1) {
-            store_sid(uid, sid);
+            store_sid(userId, sid);
         }
     }
 
-    uint64_t read_sid(uint32_t uid) {
+    uint64_t read_sid(uint32_t userId) {
         char filename[21];
         uint64_t sid;
-        snprintf(filename, sizeof(filename), "%u", uid);
+        snprintf(filename, sizeof(filename), "%u", userId);
         int fd = open(filename, O_RDONLY);
         if (fd < 0) return 0;
         read(fd, &sid, sizeof(sid));
@@ -136,30 +136,30 @@ public:
         return sid;
     }
 
-    void clear_sid(uint32_t uid) {
+    void clear_sid(uint32_t userId) {
         char filename[21];
-        snprintf(filename, sizeof(filename), "%u", uid);
+        snprintf(filename, sizeof(filename), "%u", userId);
         if (remove(filename) < 0) {
             ALOGE("%s: could not remove file [%s], attempting 0 write", __func__, strerror(errno));
-            store_sid(uid, 0);
+            store_sid(userId, 0);
         }
     }
 
-    // This should only be called on uids being passed to the GateKeeper HAL. It ensures that
+    // This should only be called on userIds being passed to the GateKeeper HAL. It ensures that
     // secure storage shared across a GSI image and a host image will not overlap.
-    uint32_t adjust_uid(uint32_t uid) {
+    uint32_t adjust_userId(uint32_t userId) {
         static constexpr uint32_t kGsiOffset = 1000000;
-        CHECK(uid < kGsiOffset);
+        CHECK(userId < kGsiOffset);
         CHECK(hw_device != nullptr);
         if (is_running_gsi) {
-            return uid + kGsiOffset;
+            return userId + kGsiOffset;
         }
-        return uid;
+        return userId;
     }
 
 #define GK_ERROR *gkResponse = GKResponse::error(), Status::ok()
 
-    Status enroll(int32_t uid, const std::optional<std::vector<uint8_t>>& currentPasswordHandle,
+    Status enroll(int32_t userId, const std::optional<std::vector<uint8_t>>& currentPasswordHandle,
                   const std::optional<std::vector<uint8_t>>& currentPassword,
                   const std::vector<uint8_t>& desiredPassword, GKResponse* gkResponse) override {
         IPCThreadState* ipc = IPCThreadState::self();
@@ -198,9 +198,10 @@ public:
         android::hardware::hidl_vec<uint8_t> newPwd;
         newPwd.setToExternal(const_cast<uint8_t*>(desiredPassword.data()), desiredPassword.size());
 
-        uint32_t hw_uid = adjust_uid(uid);
+        uint32_t hw_userId = adjust_userId(userId);
         Return<void> hwRes = hw_device->enroll(
-                hw_uid, curPwdHandle, curPwd, newPwd, [&gkResponse](const GatekeeperResponse& rsp) {
+                hw_userId, curPwdHandle, curPwd, newPwd,
+                [&gkResponse](const GatekeeperResponse& rsp) {
                     if (rsp.code >= GatekeeperStatusCode::STATUS_OK) {
                         *gkResponse = GKResponse::ok({rsp.data.begin(), rsp.data.end()});
                     } else if (rsp.code == GatekeeperStatusCode::ERROR_RETRY_TIMEOUT &&
@@ -225,12 +226,12 @@ public:
             const gatekeeper::password_handle_t* handle =
                     reinterpret_cast<const gatekeeper::password_handle_t*>(
                             gkResponse->payload().data());
-            store_sid(uid, handle->user_id);
+            store_sid(userId, handle->user_id);
 
             GKResponse verifyResponse;
             // immediately verify this password so we don't ask the user to enter it again
             // if they just created it.
-            auto status = verify(uid, gkResponse->payload(), desiredPassword, &verifyResponse);
+            auto status = verify(userId, gkResponse->payload(), desiredPassword, &verifyResponse);
             if (!status.isOk() || verifyResponse.response_code() != GKResponseCode::OK) {
                 LOG(ERROR) << "Failed to verify password after enrolling";
             }
@@ -239,13 +240,13 @@ public:
         return Status::ok();
     }
 
-    Status verify(int32_t uid, const ::std::vector<uint8_t>& enrolledPasswordHandle,
+    Status verify(int32_t userId, const ::std::vector<uint8_t>& enrolledPasswordHandle,
                   const ::std::vector<uint8_t>& providedPassword, GKResponse* gkResponse) override {
-        return verifyChallenge(uid, 0 /* challenge */, enrolledPasswordHandle, providedPassword,
+        return verifyChallenge(userId, 0 /* challenge */, enrolledPasswordHandle, providedPassword,
                                gkResponse);
     }
 
-    Status verifyChallenge(int32_t uid, int64_t challenge,
+    Status verifyChallenge(int32_t userId, int64_t challenge,
                            const std::vector<uint8_t>& enrolledPasswordHandle,
                            const std::vector<uint8_t>& providedPassword,
                            GKResponse* gkResponse) override {
@@ -269,7 +270,7 @@ public:
                 reinterpret_cast<const gatekeeper::password_handle_t*>(
                         enrolledPasswordHandle.data());
 
-        uint32_t hw_uid = adjust_uid(uid);
+        uint32_t hw_userId = adjust_userId(userId);
         android::hardware::hidl_vec<uint8_t> curPwdHandle;
         curPwdHandle.setToExternal(const_cast<uint8_t*>(enrolledPasswordHandle.data()),
                                    enrolledPasswordHandle.size());
@@ -278,7 +279,7 @@ public:
                                  providedPassword.size());
 
         Return<void> hwRes = hw_device->verify(
-                hw_uid, challenge, curPwdHandle, enteredPwd,
+                hw_userId, challenge, curPwdHandle, enteredPwd,
                 [&gkResponse](const GatekeeperResponse& rsp) {
                     if (rsp.code >= GatekeeperStatusCode::STATUS_OK) {
                         *gkResponse = GKResponse::ok(
@@ -315,18 +316,18 @@ public:
                 }
             }
 
-            maybe_store_sid(uid, handle->user_id);
+            maybe_store_sid(userId, handle->user_id);
         }
 
         return Status::ok();
     }
 
-    Status getSecureUserId(int32_t uid, int64_t* sid) override {
-        *sid = read_sid(uid);
+    Status getSecureUserId(int32_t userId, int64_t* sid) override {
+        *sid = read_sid(userId);
         return Status::ok();
     }
 
-    Status clearSecureUserId(int32_t uid) override {
+    Status clearSecureUserId(int32_t userId) override {
         IPCThreadState* ipc = IPCThreadState::self();
         const int calling_pid = ipc->getCallingPid();
         const int calling_uid = ipc->getCallingUid();
@@ -334,11 +335,11 @@ public:
             ALOGE("%s: permission denied for [%d:%d]", __func__, calling_pid, calling_uid);
             return Status::ok();
         }
-        clear_sid(uid);
+        clear_sid(userId);
 
         if (hw_device) {
-            uint32_t hw_uid = adjust_uid(uid);
-            hw_device->deleteUser(hw_uid, [] (const GatekeeperResponse &){});
+            uint32_t hw_userId = adjust_userId(userId);
+            hw_device->deleteUser(hw_userId, [](const GatekeeperResponse&) {});
         }
         return Status::ok();
     }
