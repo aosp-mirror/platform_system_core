@@ -47,12 +47,11 @@ class ICowWriter {
     // Encode a sequence of zeroed blocks. |size| must be a multiple of the block size.
     virtual bool AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) = 0;
 
-    // Finalize all COW operations and flush pending writes.
-    // Return true if successful.
-    virtual bool Finalize() = 0;
+    // Flush all pending writes. This must be called before closing the writer
+    // to ensure that the correct headers and footers are written.
+    virtual bool Flush() = 0;
 
-    // Return 0 if failed, on success return number of bytes the cow image would be
-    // after calling Finalize();
+    // Return number of bytes the cow image occupies on disk.
     virtual size_t GetCowSize() = 0;
 
   protected:
@@ -61,24 +60,30 @@ class ICowWriter {
 
 class CowWriter : public ICowWriter {
   public:
+    enum class OpenMode { WRITE, APPEND };
+
     explicit CowWriter(const CowOptions& options);
 
     // Set up the writer.
-    bool Initialize(android::base::unique_fd&& fd);
-    bool Initialize(android::base::borrowed_fd fd);
+    bool Initialize(android::base::unique_fd&& fd, OpenMode mode = OpenMode::WRITE);
+    bool Initialize(android::base::borrowed_fd fd, OpenMode mode = OpenMode::WRITE);
 
     bool AddCopy(uint64_t new_block, uint64_t old_block) override;
     bool AddRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
     bool AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
 
-    bool Finalize() override;
+    bool Flush() override;
 
     size_t GetCowSize() override;
 
   private:
     void SetupHeaders();
+    bool ParseOptions();
+    bool OpenForWrite();
+    bool OpenForAppend();
     bool GetDataPos(uint64_t* pos);
-    bool WriteFully(base::borrowed_fd fd, const void* data, size_t size);
+    bool WriteRawData(const void* data, size_t size);
+    void AddOperation(const CowOperation& op);
     std::basic_string<uint8_t> Compress(const void* data, size_t length);
 
   private:
@@ -90,7 +95,6 @@ class CowWriter : public ICowWriter {
     // :TODO: this is not efficient, but stringstream ubsan aborts because some
     // bytes overflow a signed char.
     std::basic_string<uint8_t> ops_;
-    std::atomic<size_t> bytes_written_ = 0;
 };
 
 }  // namespace snapshot
