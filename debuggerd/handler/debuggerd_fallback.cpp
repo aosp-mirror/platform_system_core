@@ -237,6 +237,8 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
   // Fetch output fd from tombstoned.
   unique_fd tombstone_socket, output_fd;
   if (!tombstoned_connect(getpid(), &tombstone_socket, &output_fd, kDebuggerdNativeBacktrace)) {
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc",
+                          "missing crash_dump_fallback() in selinux policy?");
     goto exit;
   }
 
