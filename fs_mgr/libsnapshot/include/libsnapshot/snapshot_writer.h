@@ -33,13 +33,18 @@ class ISnapshotWriter : public ICowWriter {
 
     // Set the source device. This is used for AddCopy() operations, if the
     // underlying writer needs the original bytes (for example if backed by
-    // dm-snapshot or if writing directly to an unsnapshotted region).
-    void SetSourceDevice(android::base::unique_fd&& source_fd);
+    // dm-snapshot or if writing directly to an unsnapshotted region). The
+    // device is only opened on the first operation that requires it.
+    void SetSourceDevice(const std::string& source_device);
 
     virtual std::unique_ptr<FileDescriptor> OpenReader() = 0;
 
   protected:
+    android::base::borrowed_fd GetSourceFd();
+
+  private:
     android::base::unique_fd source_fd_;
+    std::optional<std::string> source_device_;
 };
 
 // Send writes to a COW or a raw device directly, based on a threshold.
