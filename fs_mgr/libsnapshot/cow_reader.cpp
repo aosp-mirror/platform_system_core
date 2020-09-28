@@ -17,22 +17,26 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <limits>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <libsnapshot/cow_reader.h>
-#include <openssl/sha.h>
 #include <zlib.h>
+#include "cow_decompress.h"
 
 namespace android {
 namespace snapshot {
 
 CowReader::CowReader() : fd_(-1), header_(), fd_size_(0) {}
 
-static void SHA256(const void* data, size_t length, uint8_t out[32]) {
+static void SHA256(const void*, size_t, uint8_t[]) {
+#if 0
     SHA256_CTX c;
     SHA256_Init(&c);
     SHA256_Update(&c, data, length);
     SHA256_Final(out, &c);
+#endif
 }
 
 bool CowReader::Parse(android::base::unique_fd&& fd) {
@@ -69,16 +73,40 @@ bool CowReader::Parse(android::base::borrowed_fd fd) {
         return false;
     }
 
+    if (header_.magic != kCowMagicNumber) {
+        LOG(ERROR) << "Header Magic corrupted. Magic: " << header_.magic
+                   << "Expected: " << kCowMagicNumber;
+        return false;
+    }
+    if (header_.header_size != sizeof(CowHeader)) {
+        LOG(ERROR) << "Header size unknown, read " << header_.header_size << ", expected "
+                   << sizeof(CowHeader);
+        return false;
+    }
+
+    if ((header_.major_version != kCowVersionMajor) ||
+        (header_.minor_version != kCowVersionMinor)) {
+        LOG(ERROR) << "Header version mismatch";
+        LOG(ERROR) << "Major version: " << header_.major_version
+                   << "Expected: " << kCowVersionMajor;
+        LOG(ERROR) << "Minor version: " << header_.minor_version
+                   << "Expected: " << kCowVersionMinor;
+        return false;
+    }
+
     uint8_t header_csum[32];
     {
         CowHeader tmp = header_;
         memset(&tmp.header_checksum, 0, sizeof(tmp.header_checksum));
+        memset(header_csum, 0, sizeof(uint8_t) * 32);
+
         SHA256(&tmp, sizeof(tmp), header_csum);
     }
     if (memcmp(header_csum, header_.header_checksum, sizeof(header_csum)) != 0) {
         LOG(ERROR) << "header checksum is invalid";
         return false;
     }
+
     return true;
 }
 
@@ -140,6 +168,8 @@ std::unique_ptr<ICowOpIter> CowReader::GetOpIter() {
     }
 
     uint8_t csum[32];
+    memset(csum, 0, sizeof(uint8_t) * 32);
+
     SHA256(ops_buffer.get(), header_.ops_size, csum);
     if (memcmp(csum, header_.ops_checksum, sizeof(csum)) != 0) {
         LOG(ERROR) << "ops checksum does not match";
@@ -149,7 +179,7 @@ std::unique_ptr<ICowOpIter> CowReader::GetOpIter() {
     return std::make_unique<CowOpIter>(std::move(ops_buffer), header_.ops_size);
 }
 
-bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len) {
+bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {
     // Validate the offset, taking care to acknowledge possible overflow of offset+len.
     if (offset < sizeof(header_) || offset >= header_.ops_offset || len >= fd_size_ ||
         offset + len > header_.ops_offset) {
@@ -160,104 +190,66 @@ bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len) {
         PLOG(ERROR) << "lseek to read raw bytes failed";
         return false;
     }
-    if (!android::base::ReadFully(fd_, buffer, len)) {
-        PLOG(ERROR) << "read raw bytes failed";
+    ssize_t rv = TEMP_FAILURE_RETRY(::read(fd_.get(), buffer, len));
+    if (rv < 0) {
+        PLOG(ERROR) << "read failed";
         return false;
     }
+    *read = rv;
     return true;
 }
 
+class CowDataStream final : public IByteStream {
+  public:
+    CowDataStream(CowReader* reader, uint64_t offset, size_t data_length)
+        : reader_(reader), offset_(offset), data_length_(data_length) {
+        remaining_ = data_length_;
+    }
+
+    bool Read(void* buffer, size_t length, size_t* read) override {
+        size_t to_read = std::min(length, remaining_);
+        if (!to_read) {
+            *read = 0;
+            return true;
+        }
+        if (!reader_->GetRawBytes(offset_, buffer, to_read, read)) {
+            return false;
+        }
+        offset_ += *read;
+        remaining_ -= *read;
+        return true;
+    }
+
+    size_t Size() const override { return data_length_; }
+
+  private:
+    CowReader* reader_;
+    uint64_t offset_;
+    size_t data_length_;
+    size_t remaining_;
+};
+
 bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
-    uint64_t offset = op.source;
-
+    std::unique_ptr<IDecompressor> decompressor;
     switch (op.compression) {
-        case kCowCompressNone: {
-            size_t remaining = op.data_length;
-            while (remaining) {
-                size_t amount = remaining;
-                void* buffer = sink->GetBuffer(amount, &amount);
-                if (!buffer) {
-                    LOG(ERROR) << "Could not acquire buffer from sink";
-                    return false;
-                }
-                if (!GetRawBytes(offset, buffer, amount)) {
-                    return false;
-                }
-                if (!sink->ReturnData(buffer, amount)) {
-                    LOG(ERROR) << "Could not return buffer to sink";
-                    return false;
-                }
-                remaining -= amount;
-                offset += amount;
-            }
-            return true;
-        }
-        case kCowCompressGz: {
-            auto input = std::make_unique<Bytef[]>(op.data_length);
-            if (!GetRawBytes(offset, input.get(), op.data_length)) {
-                return false;
-            }
-
-            z_stream z = {};
-            z.next_in = input.get();
-            z.avail_in = op.data_length;
-            if (int rv = inflateInit(&z); rv != Z_OK) {
-                LOG(ERROR) << "inflateInit returned error code " << rv;
-                return false;
-            }
-
-            while (z.total_out < header_.block_size) {
-                // If no more output buffer, grab a new buffer.
-                if (z.avail_out == 0) {
-                    size_t amount = header_.block_size - z.total_out;
-                    z.next_out = reinterpret_cast<Bytef*>(sink->GetBuffer(amount, &amount));
-                    if (!z.next_out) {
-                        LOG(ERROR) << "Could not acquire buffer from sink";
-                        return false;
-                    }
-                    z.avail_out = amount;
-                }
-
-                // Remember the position of the output buffer so we can call ReturnData.
-                auto buffer = z.next_out;
-                auto avail_out = z.avail_out;
-
-                // Decompress.
-                int rv = inflate(&z, Z_NO_FLUSH);
-                if (rv != Z_OK && rv != Z_STREAM_END) {
-                    LOG(ERROR) << "inflate returned error code " << rv;
-                    return false;
-                }
-
-                // Return the section of the buffer that was updated.
-                if (z.avail_out < avail_out && !sink->ReturnData(buffer, avail_out - z.avail_out)) {
-                    LOG(ERROR) << "Could not return buffer to sink";
-                    return false;
-                }
-
-                if (rv == Z_STREAM_END) {
-                    // Error if the stream has ended, but we didn't fill the entire block.
-                    if (z.total_out != header_.block_size) {
-                        LOG(ERROR) << "Reached gz stream end but did not read a full block of data";
-                        return false;
-                    }
-                    break;
-                }
-
-                CHECK(rv == Z_OK);
-
-                // Error if the stream is expecting more data, but we don't have any to read.
-                if (z.avail_in == 0) {
-                    LOG(ERROR) << "Gz stream ended prematurely";
-                    return false;
-                }
-            }
-            return true;
-        }
+        case kCowCompressNone:
+            decompressor = IDecompressor::Uncompressed();
+            break;
+        case kCowCompressGz:
+            decompressor = IDecompressor::Gz();
+            break;
+        case kCowCompressBrotli:
+            decompressor = IDecompressor::Brotli();
+            break;
         default:
             LOG(ERROR) << "Unknown compression type: " << op.compression;
             return false;
     }
+
+    CowDataStream stream(this, op.source, op.data_length);
+    decompressor->set_stream(&stream);
+    decompressor->set_sink(sink);
+    return decompressor->Decompress(header_.block_size);
 }
 
 }  // namespace snapshot

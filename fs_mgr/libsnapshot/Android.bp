@@ -30,6 +30,7 @@ cc_defaults {
     static_libs: [
         "libdm",
         "libfstab",
+        "libsnapshot_cow",
         "update_metadata-protos",
     ],
     whole_static_libs: [
@@ -38,7 +39,9 @@ cc_defaults {
         "libfstab",
     ],
     header_libs: [
+        "libchrome",
         "libfiemap_headers",
+        "libupdate_engine_headers",
     ],
     export_static_lib_headers: [
         "update_metadata-protos",
@@ -134,6 +137,7 @@ cc_defaults {
     ],
     export_include_dirs: ["include"],
     srcs: [
+        "cow_decompress.cpp",
         "cow_reader.cpp",
         "cow_writer.cpp",
     ],
@@ -148,12 +152,13 @@ cc_library_static {
     recovery_available: true,
     shared_libs: [
         "libbase",
-        "libcrypto",
         "liblog",
     ],
     static_libs: [
+        "libbrotli",
         "libz",
     ],
+    ramdisk_available: true,
 }
 
 cc_library_static {
@@ -311,8 +316,10 @@ cc_defaults {
         "libprotobuf-mutator",
     ],
     header_libs: [
+        "libchrome",
         "libfiemap_headers",
         "libstorage_literals_headers",
+        "libupdate_engine_headers",
     ],
     proto: {
         type: "full",
@@ -347,6 +354,9 @@ cc_test {
 
 cc_defaults {
     name: "snapuserd_defaults",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
     srcs: [
         "snapuserd.cpp",
     ],
@@ -358,8 +368,11 @@ cc_defaults {
 
     static_libs: [
         "libbase",
+        "libbrotli",
         "liblog",
         "libdm",
+        "libz",
+        "libsnapshot_cow",
     ],
 }
 
@@ -375,7 +388,6 @@ cc_binary {
 
     ramdisk: true,
     static_executable: true,
-    system_shared_libs: [],
 }
 
 cc_test {
@@ -398,12 +410,14 @@ cc_test {
         "libz",
     ],
     static_libs: [
+        "libbrotli",
         "libgtest",
         "libsnapshot_cow",
     ],
     test_min_api_level: 30,
     auto_gen_config: true,
     require_root: false,
+    host_supported: true,
 }
 
 cc_binary {
@@ -472,4 +486,34 @@ cc_binary {
             enabled: false,
         },
     },
+}
+
+cc_test {
+    name: "cow_snapuserd_test",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "cow_snapuserd_test.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libbrotli",
+        "libgtest",
+        "libsnapshot_cow",
+        "libz",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    test_min_api_level: 30,
+    auto_gen_config: true,
+    require_root: false,
 }

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <libsnapshot/snapshot.h>
+#include <payload_consumer/file_descriptor.h>
 
 #include <gmock/gmock.h>
 
@@ -37,6 +38,10 @@ class MockSnapshotManager : public ISnapshotManager {
                 (const android::fs_mgr::CreateLogicalPartitionParams& params,
                  std::string* snapshot_path),
                 (override));
+    MOCK_METHOD(std::unique_ptr<ICowWriter>, OpenSnapshotWriter,
+                (const android::fs_mgr::CreateLogicalPartitionParams& params), (override));
+    MOCK_METHOD(std::unique_ptr<FileDescriptor>, OpenSnapshotReader,
+                (const android::fs_mgr::CreateLogicalPartitionParams& params), (override));
     MOCK_METHOD(bool, UnmapUpdateSnapshot, (const std::string& target_partition_name), (override));
     MOCK_METHOD(bool, NeedSnapshotsInFirstStageMount, (), (override));
     MOCK_METHOD(bool, CreateLogicalAndSnapshotPartitions,

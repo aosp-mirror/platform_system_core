@@ -27,6 +27,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
+#include <unwindstack/DexFiles.h>
 #include <unwindstack/Elf.h>
 #include <unwindstack/JitDebug.h>
 #include <unwindstack/MapInfo.h>
@@ -34,7 +35,7 @@
 #include <unwindstack/Memory.h>
 #include <unwindstack/Unwinder.h>
 
-#include <unwindstack/DexFiles.h>
+#include "Check.h"
 
 // Use the demangler from libc++.
 extern "C" char* __cxa_demangle(const char*, char*, size_t*, int* status);
@@ -142,13 +143,11 @@ static bool ShouldStop(const std::vector<std::string>* map_suffixes_to_ignore,
 
 void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
                       const std::vector<std::string>* map_suffixes_to_ignore) {
-  frames_.clear();
-  warnings_ = WARNING_NONE;
-  last_error_.code = ERROR_NONE;
-  last_error_.address = 0;
-  elf_from_memory_not_file_ = false;
+  CHECK(arch_ != ARCH_UNKNOWN);
+  ClearErrors();
 
-  ArchEnum arch = regs_->Arch();
+  frames_.clear();
+  elf_from_memory_not_file_ = false;
 
   bool return_address_attempt = false;
   bool adjust_pc = false;
@@ -169,7 +168,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
       if (ShouldStop(map_suffixes_to_ignore, map_info->name)) {
         break;
       }
-      elf = map_info->GetElf(process_memory_, arch);
+      elf = map_info->GetElf(process_memory_, arch_);
       // If this elf is memory backed, and there is a valid file, then set
       // an indicator that we couldn't open the file.
       if (!elf_from_memory_not_file_ && map_info->memory_backed_elf && !map_info->name.empty() &&
@@ -183,7 +182,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
         step_pc = rel_pc;
       }
       if (adjust_pc) {
-        pc_adjustment = GetPcAdjustment(rel_pc, elf, arch);
+        pc_adjustment = GetPcAdjustment(rel_pc, elf, arch_);
       } else {
         pc_adjustment = 0;
       }
@@ -311,7 +310,7 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
 
 std::string Unwinder::FormatFrame(const FrameData& frame) const {
   std::string data;
-  if (regs_->Is32Bit()) {
+  if (ArchIs32Bit(arch_)) {
     data += android::base::StringPrintf("  #%02zu pc %08" PRIx64, frame.num, frame.rel_pc);
   } else {
     data += android::base::StringPrintf("  #%02zu pc %016" PRIx64, frame.num, frame.rel_pc);
@@ -362,23 +361,33 @@ std::string Unwinder::FormatFrame(size_t frame_num) const {
   return FormatFrame(frames_[frame_num]);
 }
 
-void Unwinder::SetJitDebug(JitDebug* jit_debug, ArchEnum arch) {
-  jit_debug->SetArch(arch);
+void Unwinder::SetJitDebug(JitDebug* jit_debug) {
+  CHECK(arch_ != ARCH_UNKNOWN);
+  jit_debug->SetArch(arch_);
   jit_debug_ = jit_debug;
 }
 
-void Unwinder::SetDexFiles(DexFiles* dex_files, ArchEnum arch) {
-  dex_files->SetArch(arch);
+void Unwinder::SetDexFiles(DexFiles* dex_files) {
+  CHECK(arch_ != ARCH_UNKNOWN);
+  dex_files->SetArch(arch_);
   dex_files_ = dex_files;
 }
 
-bool UnwinderFromPid::Init(ArchEnum arch) {
+bool UnwinderFromPid::Init() {
+  CHECK(arch_ != ARCH_UNKNOWN);
+  if (initted_) {
+    return true;
+  }
+  initted_ = true;
+
   if (pid_ == getpid()) {
     maps_ptr_.reset(new LocalMaps());
   } else {
     maps_ptr_.reset(new RemoteMaps(pid_));
   }
   if (!maps_ptr_->Parse()) {
+    ClearErrors();
+    last_error_.code = ERROR_INVALID_MAP;
     return false;
   }
   maps_ = maps_ptr_.get();
@@ -387,14 +396,22 @@ bool UnwinderFromPid::Init(ArchEnum arch) {
 
   jit_debug_ptr_.reset(new JitDebug(process_memory_));
   jit_debug_ = jit_debug_ptr_.get();
-  SetJitDebug(jit_debug_, arch);
+  SetJitDebug(jit_debug_);
 #if defined(DEXFILE_SUPPORT)
   dex_files_ptr_.reset(new DexFiles(process_memory_));
   dex_files_ = dex_files_ptr_.get();
-  SetDexFiles(dex_files_, arch);
+  SetDexFiles(dex_files_);
 #endif
 
   return true;
+}
+
+void UnwinderFromPid::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
+                             const std::vector<std::string>* map_suffixes_to_ignore) {
+  if (!Init()) {
+    return;
+  }
+  Unwinder::Unwind(initial_map_names_to_skip, map_suffixes_to_ignore);
 }
 
 FrameData Unwinder::BuildFrameFromPcOnly(uint64_t pc, ArchEnum arch, Maps* maps,
@@ -449,8 +466,7 @@ FrameData Unwinder::BuildFrameFromPcOnly(uint64_t pc, ArchEnum arch, Maps* maps,
 }
 
 FrameData Unwinder::BuildFrameFromPcOnly(uint64_t pc) {
-  return BuildFrameFromPcOnly(pc, regs_ ? regs_->Arch() : ARCH_UNKNOWN, maps_, jit_debug_,
-                              process_memory_, resolve_names_);
+  return BuildFrameFromPcOnly(pc, arch_, maps_, jit_debug_, process_memory_, resolve_names_);
 }
 
 }  // namespace unwindstack

@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include <unwindstack/Arch.h>
 #include <unwindstack/ElfInterface.h>
 #include <unwindstack/Memory.h>
 
@@ -37,16 +38,6 @@ namespace unwindstack {
 // Forward declaration.
 struct MapInfo;
 class Regs;
-
-enum ArchEnum : uint8_t {
-  ARCH_UNKNOWN = 0,
-  ARCH_ARM,
-  ARCH_ARM64,
-  ARCH_X86,
-  ARCH_X86_64,
-  ARCH_MIPS,
-  ARCH_MIPS64,
-};
 
 class Elf {
  public:
