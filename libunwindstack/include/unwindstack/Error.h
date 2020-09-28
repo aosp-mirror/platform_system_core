@@ -39,6 +39,27 @@ enum ErrorCode : uint8_t {
   ERROR_INVALID_ELF,          // Unwind in an invalid elf.
 };
 
+static inline const char* GetErrorCodeString(ErrorCode error) {
+  switch (error) {
+    case ERROR_NONE:
+      return "None";
+    case ERROR_MEMORY_INVALID:
+      return "Memory Invalid";
+    case ERROR_UNWIND_INFO:
+      return "Unwind Info";
+    case ERROR_UNSUPPORTED:
+      return "Unsupported";
+    case ERROR_INVALID_MAP:
+      return "Invalid Map";
+    case ERROR_MAX_FRAMES_EXCEEDED:
+      return "Maximum Frames Exceeded";
+    case ERROR_REPEATED_FRAME:
+      return "Repeated Frame";
+    case ERROR_INVALID_ELF:
+      return "Invalid Elf";
+  }
+}
+
 struct ErrorData {
   ErrorCode code;
   uint64_t address;  // Only valid when code is ERROR_MEMORY_INVALID.
