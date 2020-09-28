@@ -82,16 +82,12 @@ static void debuggerd_fallback_trace(int output_fd, ucontext_t* ucontext) {
     thread.pid = getpid();
     thread.tid = gettid();
     thread.thread_name = get_thread_name(gettid());
-    unwindstack::ArchEnum arch = unwindstack::Regs::CurrentArch();
-    thread.registers.reset(unwindstack::Regs::CreateFromUcontext(arch, ucontext));
+    thread.registers.reset(
+        unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
 
     // TODO: Create this once and store it in a global?
     unwindstack::UnwinderFromPid unwinder(kMaxFrames, getpid());
-    if (unwinder.Init(arch)) {
-      dump_backtrace_thread(output_fd, &unwinder, thread);
-    } else {
-      async_safe_format_log(ANDROID_LOG_ERROR, "libc", "Unable to init unwinder.");
-    }
+    dump_backtrace_thread(output_fd, &unwinder, thread);
   }
   __linker_disable_fallback_allocator();
 }
