@@ -180,6 +180,9 @@ static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
   _LOG(log, logtype::HEADER, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", thread_info.pid,
        thread_info.tid, thread_info.thread_name.c_str(), thread_info.process_name.c_str());
   _LOG(log, logtype::HEADER, "uid: %d\n", thread_info.uid);
+  if (thread_info.tagged_addr_ctrl != -1) {
+    _LOG(log, logtype::HEADER, "tagged_addr_ctrl: %016lx\n", thread_info.tagged_addr_ctrl);
+  }
 }
 
 static std::string get_addr_string(uint64_t addr) {
@@ -404,7 +407,11 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
   unwinder->SetRegs(regs_copy.get());
   unwinder->Unwind();
   if (unwinder->NumFrames() == 0) {
-    _LOG(log, logtype::THREAD, "Failed to unwind");
+    _LOG(log, logtype::THREAD, "Failed to unwind\n");
+    if (unwinder->LastErrorCode() != unwindstack::ERROR_NONE) {
+      _LOG(log, logtype::THREAD, "  Error code: %s\n", unwinder->LastErrorCodeString());
+      _LOG(log, logtype::THREAD, "  Error address: 0x%" PRIx64 "\n", unwinder->LastErrorAddress());
+    }
   } else {
     _LOG(log, logtype::BACKTRACE, "\nbacktrace:\n");
     log_backtrace(log, unwinder, "    ");
@@ -575,8 +582,8 @@ void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, si
       .siginfo = siginfo,
   };
 
-  unwindstack::UnwinderFromPid unwinder(kMaxFrames, pid);
-  if (!unwinder.Init(unwindstack::Regs::CurrentArch())) {
+  unwindstack::UnwinderFromPid unwinder(kMaxFrames, pid, unwindstack::Regs::CurrentArch());
+  if (!unwinder.Init()) {
     LOG(FATAL) << "Failed to init unwinder object.";
   }
 

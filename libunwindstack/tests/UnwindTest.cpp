@@ -170,7 +170,6 @@ extern "C" void InnerFunction(TestTypeEnum test_type) {
     unwinder.reset(new Unwinder(512, maps.get(), regs.get(), process_memory));
   } else {
     UnwinderFromPid* unwinder_from_pid = new UnwinderFromPid(512, getpid());
-    ASSERT_TRUE(unwinder_from_pid->Init(regs->Arch()));
     unwinder_from_pid->SetRegs(regs.get());
     unwinder.reset(unwinder_from_pid);
   }
@@ -283,7 +282,6 @@ TEST_F(UnwindTest, unwind_from_pid_remote) {
   ASSERT_TRUE(regs.get() != nullptr);
 
   UnwinderFromPid unwinder(512, pid);
-  ASSERT_TRUE(unwinder.Init(regs->Arch()));
   unwinder.SetRegs(regs.get());
 
   VerifyUnwind(&unwinder, kFunctionOrder);
@@ -335,7 +333,6 @@ static void RemoteUnwindFromPid(void* data) {
   ASSERT_TRUE(regs.get() != nullptr);
 
   UnwinderFromPid unwinder(512, *pid);
-  ASSERT_TRUE(unwinder.Init(regs->Arch()));
   unwinder.SetRegs(regs.get());
 
   VerifyUnwind(&unwinder, kFunctionOrder);

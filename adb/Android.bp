@@ -25,6 +25,7 @@ cc_defaults {
         "-Wextra",
         "-Werror",
         "-Wexit-time-destructors",
+        "-Wno-non-virtual-dtor",
         "-Wno-unused-parameter",
         "-Wno-missing-field-initializers",
         "-Wthread-safety",
@@ -753,6 +754,8 @@ cc_test {
         "shell_service_protocol_test.cpp",
         "mdns_test.cpp",
     ],
+
+    test_config: "adb_test.xml",
 
     shared_libs: [
         "liblog",
