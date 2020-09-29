@@ -68,7 +68,31 @@ uint64_t CompressedSnapshotWriter::GetCowSize() {
 }
 
 std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
-    return nullptr;
+    unique_fd cow_fd(dup(cow_device_.get()));
+    if (cow_fd < 0) {
+        PLOG(ERROR) << "dup COW device";
+        return nullptr;
+    }
+
+    auto cow = std::make_unique<CowReader>();
+    if (!cow->Parse(std::move(cow_fd))) {
+        LOG(ERROR) << "Unable to read COW";
+        return nullptr;
+    }
+
+    auto reader = std::make_unique<CompressedSnapshotReader>();
+    if (!reader->SetCow(std::move(cow))) {
+        LOG(ERROR) << "Unable to initialize COW reader";
+        return nullptr;
+    }
+    if (source_device_) {
+        reader->SetSourceDevice(*source_device_);
+    }
+
+    const auto& cow_options = options();
+    reader->SetBlockDeviceSize(*cow_options.max_blocks * cow_options.block_size);
+
+    return reader;
 }
 
 bool CompressedSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {

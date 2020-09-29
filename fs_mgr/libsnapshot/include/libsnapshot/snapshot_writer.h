@@ -42,9 +42,10 @@ class ISnapshotWriter : public ICowWriter {
   protected:
     android::base::borrowed_fd GetSourceFd();
 
+    std::optional<std::string> source_device_;
+
   private:
     android::base::unique_fd source_fd_;
-    std::optional<std::string> source_device_;
 };
 
 // Send writes to a COW or a raw device directly, based on a threshold.
@@ -52,7 +53,7 @@ class CompressedSnapshotWriter : public ISnapshotWriter {
   public:
     CompressedSnapshotWriter(const CowOptions& options);
 
-    // Sets the COW device, if needed.
+    // Sets the COW device; this is required.
     bool SetCowDevice(android::base::unique_fd&& cow_device);
 
     bool Finalize() override;
