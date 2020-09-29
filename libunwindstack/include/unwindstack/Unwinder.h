@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include <unwindstack/Arch.h>
 #include <unwindstack/DexFiles.h>
 #include <unwindstack/Error.h>
 #include <unwindstack/JitDebug.h>
@@ -35,7 +36,6 @@ namespace unwindstack {
 
 // Forward declarations.
 class Elf;
-enum ArchEnum : uint8_t;
 
 struct FrameData {
   size_t num;
@@ -64,7 +64,11 @@ struct FrameData {
 class Unwinder {
  public:
   Unwinder(size_t max_frames, Maps* maps, Regs* regs, std::shared_ptr<Memory> process_memory)
-      : max_frames_(max_frames), maps_(maps), regs_(regs), process_memory_(process_memory) {
+      : max_frames_(max_frames),
+        maps_(maps),
+        regs_(regs),
+        process_memory_(process_memory),
+        arch_(regs->Arch()) {
     frames_.reserve(max_frames);
   }
   Unwinder(size_t max_frames, Maps* maps, std::shared_ptr<Memory> process_memory)
@@ -74,8 +78,8 @@ class Unwinder {
 
   virtual ~Unwinder() = default;
 
-  void Unwind(const std::vector<std::string>* initial_map_names_to_skip = nullptr,
-              const std::vector<std::string>* map_suffixes_to_ignore = nullptr);
+  virtual void Unwind(const std::vector<std::string>* initial_map_names_to_skip = nullptr,
+                      const std::vector<std::string>* map_suffixes_to_ignore = nullptr);
 
   size_t NumFrames() const { return frames_.size(); }
 
@@ -90,9 +94,14 @@ class Unwinder {
   std::string FormatFrame(size_t frame_num) const;
   std::string FormatFrame(const FrameData& frame) const;
 
-  void SetJitDebug(JitDebug* jit_debug, ArchEnum arch);
+  void SetArch(ArchEnum arch) { arch_ = arch; };
 
-  void SetRegs(Regs* regs) { regs_ = regs; }
+  void SetJitDebug(JitDebug* jit_debug);
+
+  void SetRegs(Regs* regs) {
+    regs_ = regs;
+    arch_ = regs_ != nullptr ? regs->Arch() : ARCH_UNKNOWN;
+  }
   Maps* GetMaps() { return maps_; }
   std::shared_ptr<Memory>& GetProcessMemory() { return process_memory_; }
 
@@ -107,11 +116,12 @@ class Unwinder {
 
   void SetDisplayBuildID(bool display_build_id) { display_build_id_ = display_build_id; }
 
-  void SetDexFiles(DexFiles* dex_files, ArchEnum arch);
+  void SetDexFiles(DexFiles* dex_files);
 
   bool elf_from_memory_not_file() { return elf_from_memory_not_file_; }
 
   ErrorCode LastErrorCode() { return last_error_.code; }
+  const char* LastErrorCodeString() { return GetErrorCodeString(last_error_.code); }
   uint64_t LastErrorAddress() { return last_error_.address; }
   uint64_t warnings() { return warnings_; }
 
@@ -126,6 +136,15 @@ class Unwinder {
 
  protected:
   Unwinder(size_t max_frames) : max_frames_(max_frames) { frames_.reserve(max_frames); }
+  Unwinder(size_t max_frames, ArchEnum arch) : max_frames_(max_frames), arch_(arch) {
+    frames_.reserve(max_frames);
+  }
+
+  void ClearErrors() {
+    warnings_ = WARNING_NONE;
+    last_error_.code = ERROR_NONE;
+    last_error_.address = 0;
+  }
 
   void FillInDexFrame();
   FrameData* FillInFrame(MapInfo* map_info, Elf* elf, uint64_t rel_pc, uint64_t pc_adjustment);
@@ -145,20 +164,27 @@ class Unwinder {
   bool elf_from_memory_not_file_ = false;
   ErrorData last_error_;
   uint64_t warnings_;
+  ArchEnum arch_ = ARCH_UNKNOWN;
 };
 
 class UnwinderFromPid : public Unwinder {
  public:
   UnwinderFromPid(size_t max_frames, pid_t pid) : Unwinder(max_frames), pid_(pid) {}
+  UnwinderFromPid(size_t max_frames, pid_t pid, ArchEnum arch)
+      : Unwinder(max_frames, arch), pid_(pid) {}
   virtual ~UnwinderFromPid() = default;
 
-  bool Init(ArchEnum arch);
+  bool Init();
+
+  void Unwind(const std::vector<std::string>* initial_map_names_to_skip = nullptr,
+              const std::vector<std::string>* map_suffixes_to_ignore = nullptr) override;
 
  private:
   pid_t pid_;
   std::unique_ptr<Maps> maps_ptr_;
   std::unique_ptr<JitDebug> jit_debug_ptr_;
   std::unique_ptr<DexFiles> dex_files_ptr_;
+  bool initted_ = false;
 };
 
 }  // namespace unwindstack

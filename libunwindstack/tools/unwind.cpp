@@ -90,11 +90,6 @@ void DoUnwind(pid_t pid) {
   printf("\n");
 
   unwindstack::UnwinderFromPid unwinder(1024, pid);
-  if (!unwinder.Init(regs->Arch())) {
-    printf("Failed to init unwinder object.\n");
-    return;
-  }
-
   unwinder.SetRegs(regs);
   unwinder.Unwind();
 

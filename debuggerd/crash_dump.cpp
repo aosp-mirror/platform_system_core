@@ -597,8 +597,8 @@ int main(int argc, char** argv) {
   }
 
   // TODO: Use seccomp to lock ourselves down.
-  unwindstack::UnwinderFromPid unwinder(256, vm_pid);
-  if (!unwinder.Init(unwindstack::Regs::CurrentArch())) {
+  unwindstack::UnwinderFromPid unwinder(256, vm_pid, unwindstack::Regs::CurrentArch());
+  if (!unwinder.Init()) {
     LOG(FATAL) << "Failed to init unwinder object.";
   }
 
