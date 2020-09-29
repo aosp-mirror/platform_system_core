@@ -127,6 +127,48 @@ bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size,
     return true;
 }
 
+bool WriteRandomData(ICowWriter* writer, std::string* hash) {
+    unique_fd rand(open("/dev/urandom", O_RDONLY));
+    if (rand < 0) {
+        PLOG(ERROR) << "open /dev/urandom";
+        return false;
+    }
+
+    SHA256_CTX ctx;
+    if (hash) {
+        SHA256_Init(&ctx);
+    }
+
+    if (!writer->options().max_blocks) {
+        LOG(ERROR) << "CowWriter must specify maximum number of blocks";
+        return false;
+    }
+    uint64_t num_blocks = writer->options().max_blocks.value();
+
+    size_t block_size = writer->options().block_size;
+    std::string block(block_size, '\0');
+    for (uint64_t i = 0; i < num_blocks; i++) {
+        if (!ReadFully(rand, block.data(), block.size())) {
+            PLOG(ERROR) << "read /dev/urandom";
+            return false;
+        }
+        if (!writer->AddRawBlocks(i, block.data(), block.size())) {
+            LOG(ERROR) << "Failed to add raw block " << i;
+            return false;
+        }
+        if (hash) {
+            SHA256_Update(&ctx, block.data(), block.size());
+        }
+    }
+
+    if (hash) {
+        uint8_t out[32];
+        SHA256_Final(out, &ctx);
+        *hash = ToHexString(out, sizeof(out));
+    }
+    return true;
+}
+
 std::optional<std::string> GetHash(const std::string& path) {
     std::string content;
     if (!android::base::ReadFileToString(path, &content, true)) {
