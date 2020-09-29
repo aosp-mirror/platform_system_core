@@ -147,6 +147,7 @@ cc_binary {
     static_libs: [
         "libgtest_prod",
         "libhealthhalutils",
+        "libsnapshot_cow",
         "libsnapshot_nobinder",
         "update_metadata-protos",
     ],
