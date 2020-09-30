@@ -19,10 +19,12 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <payload_consumer/file_descriptor.h>
+#include "snapshot_reader.h"
 
 namespace android {
 namespace snapshot {
 
+using android::base::unique_fd;
 using chromeos_update_engine::FileDescriptor;
 
 ISnapshotWriter::ISnapshotWriter(const CowOptions& options) : ICowWriter(options) {}
@@ -83,8 +85,12 @@ bool OnlineKernelSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block
 }
 
 std::unique_ptr<FileDescriptor> OnlineKernelSnapshotWriter::OpenReader() {
-    LOG(ERROR) << "OnlineKernelSnapshotWriter::OpenReader not yet implemented";
-    return nullptr;
+    unique_fd fd(dup(snapshot_fd_.get()));
+    if (fd < 0) {
+        PLOG(ERROR) << "dup2 failed in OpenReader";
+        return nullptr;
+    }
+    return std::make_unique<ReadFdFileDescriptor>(std::move(fd));
 }
 
 }  // namespace snapshot
