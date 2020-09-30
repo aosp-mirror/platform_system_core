@@ -35,18 +35,14 @@
 #include <update_engine/update_metadata.pb.h>
 
 #include <libsnapshot/auto_device.h>
-#include <libsnapshot/cow_writer.h>
 #include <libsnapshot/return.h>
+#include <libsnapshot/snapshot_writer.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
     friend class test_set_name##_##individual_test##_Test
 #define DEFINED_FRIEND_TEST
 #endif
-
-namespace chromeos_update_engine {
-class FileDescriptor;
-}  // namespace chromeos_update_engine
 
 namespace android {
 
@@ -109,8 +105,6 @@ class ISnapshotManager {
         virtual bool IsRecovery() const = 0;
     };
     virtual ~ISnapshotManager() = default;
-
-    using FileDescriptor = chromeos_update_engine::FileDescriptor;
 
     // Begin an update. This must be called before creating any snapshots. It
     // will fail if GetUpdateState() != None.
@@ -187,19 +181,14 @@ class ISnapshotManager {
     virtual bool MapUpdateSnapshot(const android::fs_mgr::CreateLogicalPartitionParams& params,
                                    std::string* snapshot_path) = 0;
 
-    // Create an ICowWriter to build a snapshot against a target partition. The partition name must
-    // be suffixed.
-    virtual std::unique_ptr<ICowWriter> OpenSnapshotWriter(
-            const android::fs_mgr::CreateLogicalPartitionParams& params) = 0;
-
-    // Open a snapshot for reading. A file-like interface is provided through the FileDescriptor.
-    // In this mode, writes are not supported. The partition name must be suffixed.
-    virtual std::unique_ptr<FileDescriptor> OpenSnapshotReader(
+    // Create an ISnapshotWriter to build a snapshot against a target partition. The partition name
+    // must be suffixed.
+    virtual std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
             const android::fs_mgr::CreateLogicalPartitionParams& params) = 0;
 
     // Unmap a snapshot device or CowWriter that was previously opened with MapUpdateSnapshot,
-    // OpenSnapshotWriter, or OpenSnapshotReader. All outstanding open descriptors, writers,
-    // or readers must be deleted before this is called.
+    // OpenSnapshotWriter. All outstanding open descriptors, writers, or
+    // readers must be deleted before this is called.
     virtual bool UnmapUpdateSnapshot(const std::string& target_partition_name) = 0;
 
     // If this returns true, first-stage mount must call
@@ -310,9 +299,7 @@ class SnapshotManager final : public ISnapshotManager {
     Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) override;
     bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
-    std::unique_ptr<ICowWriter> OpenSnapshotWriter(
-            const android::fs_mgr::CreateLogicalPartitionParams& params) override;
-    std::unique_ptr<FileDescriptor> OpenSnapshotReader(
+    std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
             const android::fs_mgr::CreateLogicalPartitionParams& params) override;
     bool UnmapUpdateSnapshot(const std::string& target_partition_name) override;
     bool NeedSnapshotsInFirstStageMount() override;
@@ -532,9 +519,39 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetSnapshotDeviceName(const std::string& snapshot_name,
                                       const SnapshotStatus& status);
 
+    // Reason for calling MapPartitionWithSnapshot.
+    enum class SnapshotContext {
+        // For writing or verification (during update_engine).
+        Update,
+
+        // For mounting a full readable device.
+        Mount,
+    };
+
+    struct SnapshotPaths {
+        // Target/base device (eg system_b), always present.
+        std::string target_device;
+
+        // COW path (eg system_cow). Not present if no COW is needed.
+        std::string cow_device;
+
+        // dm-snapshot instance. Not present in Update mode for VABC.
+        std::string snapshot_device;
+    };
+
+    // Helpers for OpenSnapshotWriter.
+    std::unique_ptr<ISnapshotWriter> OpenCompressedSnapshotWriter(LockedFile* lock,
+                                                                  const std::string& partition_name,
+                                                                  const SnapshotStatus& status,
+                                                                  const SnapshotPaths& paths);
+    std::unique_ptr<ISnapshotWriter> OpenKernelSnapshotWriter(LockedFile* lock,
+                                                              const std::string& partition_name,
+                                                              const SnapshotStatus& status,
+                                                              const SnapshotPaths& paths);
+
     // Map the base device, COW devices, and snapshot device.
     bool MapPartitionWithSnapshot(LockedFile* lock, CreateLogicalPartitionParams params,
-                                  std::string* path);
+                                  SnapshotContext context, SnapshotPaths* paths);
 
     // Map the COW devices, including the partition in super and the images.
     // |params|:

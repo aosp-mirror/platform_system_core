@@ -32,6 +32,9 @@ namespace snapshot {
 
 static_assert(sizeof(off_t) == sizeof(uint64_t));
 
+using android::base::borrowed_fd;
+using android::base::unique_fd;
+
 bool ICowWriter::AddCopy(uint64_t new_block, uint64_t old_block) {
     if (!ValidateNewBlock(new_block)) {
         return false;
@@ -98,12 +101,12 @@ bool CowWriter::ParseOptions() {
     return true;
 }
 
-bool CowWriter::Initialize(android::base::unique_fd&& fd, OpenMode mode) {
+bool CowWriter::Initialize(unique_fd&& fd, OpenMode mode) {
     owned_fd_ = std::move(fd);
-    return Initialize(android::base::borrowed_fd{owned_fd_}, mode);
+    return Initialize(borrowed_fd{owned_fd_}, mode);
 }
 
-bool CowWriter::Initialize(android::base::borrowed_fd fd, OpenMode mode) {
+bool CowWriter::Initialize(borrowed_fd fd, OpenMode mode) {
     fd_ = fd;
 
     if (!ParseOptions()) {
