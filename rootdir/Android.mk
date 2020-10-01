@@ -131,6 +131,16 @@ LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/vendor_dlkm
 # via /vendor/lib/modules directly.
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/vendor_dlkm/etc $(TARGET_ROOT_OUT)/vendor_dlkm/etc
 
+# For /odm_dlkm partition.
+LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/odm_dlkm
+# For Treble Generic System Image (GSI), system-as-root GSI needs to work on
+# both devices with and without /odm_dlkm partition. Those symlinks are for
+# devices without /odm_dlkm partition. For devices with /odm_dlkm
+# partition, mount odm_dlkm.img under /odm_dlkm will hide those symlinks.
+# Note that /odm_dlkm/lib is omitted because odm DLKMs should be accessed
+# via /odm/lib/modules directly.
+LOCAL_POST_INSTALL_CMD += ; ln -sf /odm/odm_dlkm/etc $(TARGET_ROOT_OUT)/odm_dlkm/etc
+
 ifdef BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/cache
 else

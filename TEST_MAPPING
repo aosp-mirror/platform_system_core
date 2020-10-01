@@ -16,16 +16,25 @@
       "name": "adb_tls_connection_test"
     },
     {
+      "name": "CtsFsMgrTestCases"
+    },
+    {
       "name": "CtsInitTestCases"
+    },
+    {
+      "name": "CtsLiblogTestCases"
+    },
+    {
+      "name": "CtsLogdTestCases"
     },
     {
       "name": "debuggerd_test"
     },
     {
-      "name": "CtsFsMgrTestCases"
+      "name": "fs_mgr_vendor_overlay_test"
     },
     {
-      "name": "fs_mgr_vendor_overlay_test"
+      "name": "init_kill_services_test"
     },
     {
       "name": "libpackagelistparser_test"
@@ -57,6 +66,11 @@
     },
     {
       "name": "propertyinfoserializer_tests"
+    }
+  ],
+  "imports": [
+    {
+      "path": "frameworks/base/tests/StagedInstallTest"
     }
   ]
 }

@@ -247,6 +247,14 @@ TEST_F(RegsTest, mips64_verify_sp_pc) {
   EXPECT_EQ(0xc200000000U, mips64.pc());
 }
 
+TEST_F(RegsTest, arm64_strip_pac_mask) {
+  RegsArm64 arm64;
+  arm64.SetPseudoRegister(Arm64Reg::ARM64_PREG_RA_SIGN_STATE, 1);
+  arm64.SetPACMask(0x007fff8000000000ULL);
+  arm64.set_pc(0x0020007214bb3a04ULL);
+  EXPECT_EQ(0x0000007214bb3a04ULL, arm64.pc());
+}
+
 TEST_F(RegsTest, machine_type) {
   RegsArm arm_regs;
   EXPECT_EQ(ARCH_ARM, arm_regs.Arch());

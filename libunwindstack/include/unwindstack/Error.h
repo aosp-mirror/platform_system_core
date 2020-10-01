@@ -21,6 +21,13 @@
 
 namespace unwindstack {
 
+// A bit map of warnings, multiple warnings can be set at the same time.
+enum WarningCode : uint64_t {
+  WARNING_NONE = 0,
+  WARNING_DEX_PC_NOT_IN_MAP = 0x1,  // A dex pc was found, but it doesn't exist
+                                    // in any valid map.
+};
+
 enum ErrorCode : uint8_t {
   ERROR_NONE,                 // No error.
   ERROR_MEMORY_INVALID,       // Memory read failed.
@@ -31,6 +38,27 @@ enum ErrorCode : uint8_t {
   ERROR_REPEATED_FRAME,       // The last frame has the same pc/sp as the next.
   ERROR_INVALID_ELF,          // Unwind in an invalid elf.
 };
+
+static inline const char* GetErrorCodeString(ErrorCode error) {
+  switch (error) {
+    case ERROR_NONE:
+      return "None";
+    case ERROR_MEMORY_INVALID:
+      return "Memory Invalid";
+    case ERROR_UNWIND_INFO:
+      return "Unwind Info";
+    case ERROR_UNSUPPORTED:
+      return "Unsupported";
+    case ERROR_INVALID_MAP:
+      return "Invalid Map";
+    case ERROR_MAX_FRAMES_EXCEEDED:
+      return "Maximum Frames Exceeded";
+    case ERROR_REPEATED_FRAME:
+      return "Repeated Frame";
+    case ERROR_INVALID_ELF:
+      return "Invalid Elf";
+  }
+}
 
 struct ErrorData {
   ErrorCode code;

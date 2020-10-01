@@ -85,7 +85,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   // Create instance
   Unwinder unwinder(max_frames, maps.get(), regs.get(), memory);
-  unwinder.SetJitDebug(jit_debug_ptr.get(), arch);
+  unwinder.SetJitDebug(jit_debug_ptr.get());
   unwinder.SetResolveNames(data_provider.ConsumeBool());
   // Call unwind
   PerformUnwind(&data_provider, &unwinder);

@@ -20,8 +20,10 @@
 #include <gtest/gtest.h>
 
 #include <unwindstack/DwarfSection.h>
+#include <unwindstack/Elf.h>
 
 #include "MemoryFake.h"
+#include "RegsFake.h"
 
 namespace unwindstack {
 
@@ -35,13 +37,14 @@ class MockDwarfSection : public DwarfSection {
   MOCK_METHOD(bool, Eval, (const DwarfCie*, Memory*, const dwarf_loc_regs_t&, Regs*, bool*),
               (override));
 
-  MOCK_METHOD(bool, Log, (uint8_t, uint64_t, const DwarfFde*), (override));
+  MOCK_METHOD(bool, Log, (uint8_t, uint64_t, const DwarfFde*, ArchEnum arch), (override));
 
   MOCK_METHOD(void, GetFdes, (std::vector<const DwarfFde*>*), (override));
 
   MOCK_METHOD(const DwarfFde*, GetFdeFromPc, (uint64_t), (override));
 
-  MOCK_METHOD(bool, GetCfaLocationInfo, (uint64_t, const DwarfFde*, dwarf_loc_regs_t*), (override));
+  MOCK_METHOD(bool, GetCfaLocationInfo,
+              (uint64_t, const DwarfFde*, dwarf_loc_regs_t*, ArchEnum arch), (override));
 
   MOCK_METHOD(uint64_t, GetCieOffsetFromFde32, (uint32_t), (override));
 
@@ -56,7 +59,10 @@ class DwarfSectionTest : public ::testing::Test {
 
   MemoryFake memory_;
   std::unique_ptr<MockDwarfSection> section_;
+  static RegsFake regs_;
 };
+
+RegsFake DwarfSectionTest::regs_(10);
 
 TEST_F(DwarfSectionTest, Step_fail_fde) {
   EXPECT_CALL(*section_, GetFdeFromPc(0x1000)).WillOnce(::testing::Return(nullptr));
@@ -73,7 +79,7 @@ TEST_F(DwarfSectionTest, Step_fail_cie_null) {
   EXPECT_CALL(*section_, GetFdeFromPc(0x1000)).WillOnce(::testing::Return(&fde));
 
   bool finished;
-  ASSERT_FALSE(section_->Step(0x1000, nullptr, nullptr, &finished));
+  ASSERT_FALSE(section_->Step(0x1000, &regs_, nullptr, &finished));
 }
 
 TEST_F(DwarfSectionTest, Step_fail_cfa_location) {
@@ -83,11 +89,11 @@ TEST_F(DwarfSectionTest, Step_fail_cfa_location) {
   fde.cie = &cie;
 
   EXPECT_CALL(*section_, GetFdeFromPc(0x1000)).WillOnce(::testing::Return(&fde));
-  EXPECT_CALL(*section_, GetCfaLocationInfo(0x1000, &fde, ::testing::_))
+  EXPECT_CALL(*section_, GetCfaLocationInfo(0x1000, &fde, ::testing::_, ::testing::_))
       .WillOnce(::testing::Return(false));
 
   bool finished;
-  ASSERT_FALSE(section_->Step(0x1000, nullptr, nullptr, &finished));
+  ASSERT_FALSE(section_->Step(0x1000, &regs_, nullptr, &finished));
 }
 
 TEST_F(DwarfSectionTest, Step_pass) {
@@ -97,19 +103,19 @@ TEST_F(DwarfSectionTest, Step_pass) {
   fde.cie = &cie;
 
   EXPECT_CALL(*section_, GetFdeFromPc(0x1000)).WillOnce(::testing::Return(&fde));
-  EXPECT_CALL(*section_, GetCfaLocationInfo(0x1000, &fde, ::testing::_))
+  EXPECT_CALL(*section_, GetCfaLocationInfo(0x1000, &fde, ::testing::_, ::testing::_))
       .WillOnce(::testing::Return(true));
 
   MemoryFake process;
-  EXPECT_CALL(*section_, Eval(&cie, &process, ::testing::_, nullptr, ::testing::_))
+  EXPECT_CALL(*section_, Eval(&cie, &process, ::testing::_, &regs_, ::testing::_))
       .WillOnce(::testing::Return(true));
 
   bool finished;
-  ASSERT_TRUE(section_->Step(0x1000, nullptr, &process, &finished));
+  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished));
 }
 
 static bool MockGetCfaLocationInfo(::testing::Unused, const DwarfFde* fde,
-                                   dwarf_loc_regs_t* loc_regs) {
+                                   dwarf_loc_regs_t* loc_regs, ArchEnum) {
   loc_regs->pc_start = fde->pc_start;
   loc_regs->pc_end = fde->pc_end;
   return true;
@@ -123,17 +129,17 @@ TEST_F(DwarfSectionTest, Step_cache) {
   fde.cie = &cie;
 
   EXPECT_CALL(*section_, GetFdeFromPc(0x1000)).WillOnce(::testing::Return(&fde));
-  EXPECT_CALL(*section_, GetCfaLocationInfo(0x1000, &fde, ::testing::_))
+  EXPECT_CALL(*section_, GetCfaLocationInfo(0x1000, &fde, ::testing::_, ::testing::_))
       .WillOnce(::testing::Invoke(MockGetCfaLocationInfo));
 
   MemoryFake process;
-  EXPECT_CALL(*section_, Eval(&cie, &process, ::testing::_, nullptr, ::testing::_))
+  EXPECT_CALL(*section_, Eval(&cie, &process, ::testing::_, &regs_, ::testing::_))
       .WillRepeatedly(::testing::Return(true));
 
   bool finished;
-  ASSERT_TRUE(section_->Step(0x1000, nullptr, &process, &finished));
-  ASSERT_TRUE(section_->Step(0x1000, nullptr, &process, &finished));
-  ASSERT_TRUE(section_->Step(0x1500, nullptr, &process, &finished));
+  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished));
+  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished));
+  ASSERT_TRUE(section_->Step(0x1500, &regs_, &process, &finished));
 }
 
 TEST_F(DwarfSectionTest, Step_cache_not_in_pc) {
@@ -143,26 +149,26 @@ TEST_F(DwarfSectionTest, Step_cache_not_in_pc) {
   fde0.pc_end = 0x2000;
   fde0.cie = &cie;
   EXPECT_CALL(*section_, GetFdeFromPc(0x1000)).WillOnce(::testing::Return(&fde0));
-  EXPECT_CALL(*section_, GetCfaLocationInfo(0x1000, &fde0, ::testing::_))
+  EXPECT_CALL(*section_, GetCfaLocationInfo(0x1000, &fde0, ::testing::_, ::testing::_))
       .WillOnce(::testing::Invoke(MockGetCfaLocationInfo));
 
   MemoryFake process;
-  EXPECT_CALL(*section_, Eval(&cie, &process, ::testing::_, nullptr, ::testing::_))
+  EXPECT_CALL(*section_, Eval(&cie, &process, ::testing::_, &regs_, ::testing::_))
       .WillRepeatedly(::testing::Return(true));
 
   bool finished;
-  ASSERT_TRUE(section_->Step(0x1000, nullptr, &process, &finished));
+  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished));
 
   DwarfFde fde1{};
   fde1.pc_start = 0x500;
   fde1.pc_end = 0x800;
   fde1.cie = &cie;
   EXPECT_CALL(*section_, GetFdeFromPc(0x600)).WillOnce(::testing::Return(&fde1));
-  EXPECT_CALL(*section_, GetCfaLocationInfo(0x600, &fde1, ::testing::_))
+  EXPECT_CALL(*section_, GetCfaLocationInfo(0x600, &fde1, ::testing::_, ::testing::_))
       .WillOnce(::testing::Invoke(MockGetCfaLocationInfo));
 
-  ASSERT_TRUE(section_->Step(0x600, nullptr, &process, &finished));
-  ASSERT_TRUE(section_->Step(0x700, nullptr, &process, &finished));
+  ASSERT_TRUE(section_->Step(0x600, &regs_, &process, &finished));
+  ASSERT_TRUE(section_->Step(0x700, &regs_, &process, &finished));
 }
 
 }  // namespace unwindstack

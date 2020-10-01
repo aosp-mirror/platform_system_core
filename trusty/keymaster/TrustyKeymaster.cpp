@@ -173,7 +173,7 @@ void TrustyKeymaster::AbortOperation(const AbortOperationRequest& request,
 }
 
 GetHmacSharingParametersResponse TrustyKeymaster::GetHmacSharingParameters() {
-    // Dummy empty buffer to allow ForwardCommand to have something to serialize
+    // Empty buffer to allow ForwardCommand to have something to serialize
     Buffer request;
     GetHmacSharingParametersResponse response;
     ForwardCommand(KM_GET_HMAC_SHARING_PARAMETERS, request, &response);

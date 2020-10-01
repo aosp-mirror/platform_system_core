@@ -113,8 +113,7 @@ TEST(SerializedLogChunk, three_logs) {
 TEST(SerializedLogChunk, catch_DecCompressedRef_CHECK) {
     size_t chunk_size = 10 * 4096;
     auto chunk = SerializedLogChunk{chunk_size};
-    EXPECT_DEATH({ chunk.DecReaderRefCount(true); }, "");
-    EXPECT_DEATH({ chunk.DecReaderRefCount(false); }, "");
+    EXPECT_DEATH({ chunk.DecReaderRefCount(); }, "");
 }
 
 // Check that the CHECK() in ClearUidLogs() if the ref count is greater than 0 is caught.
@@ -123,7 +122,7 @@ TEST(SerializedLogChunk, catch_ClearUidLogs_CHECK) {
     auto chunk = SerializedLogChunk{chunk_size};
     chunk.IncReaderRefCount();
     EXPECT_DEATH({ chunk.ClearUidLogs(1000, LOG_ID_MAIN, nullptr); }, "");
-    chunk.DecReaderRefCount(false);
+    chunk.DecReaderRefCount();
 }
 
 class UidClearTest : public testing::TestWithParam<bool> {
@@ -144,7 +143,7 @@ class UidClearTest : public testing::TestWithParam<bool> {
         check(chunk_);
 
         if (finish_writing) {
-            chunk_.DecReaderRefCount(false);
+            chunk_.DecReaderRefCount();
         }
     }
 
@@ -282,3 +281,27 @@ TEST_P(UidClearTest, save_beginning_and_end) {
 }
 
 INSTANTIATE_TEST_CASE_P(UidClearTests, UidClearTest, testing::Values(true, false));
+
+// b/166187079: ClearUidLogs() should not compress the log if writer_active_ is true
+TEST(SerializedLogChunk, ClearUidLogs_then_FinishWriting) {
+    static constexpr size_t kChunkSize = 10 * 4096;
+    static constexpr uid_t kUidToClear = 1000;
+    static constexpr uid_t kOtherUid = 1234;
+
+    SerializedLogChunk chunk{kChunkSize};
+    static const char msg1[] = "saved first message";
+    static const char msg2[] = "cleared interior message";
+    static const char msg3[] = "last message stays";
+    ASSERT_NE(nullptr, chunk.Log(1, log_time(), kOtherUid, 1, 2, msg1, sizeof(msg1)));
+    ASSERT_NE(nullptr, chunk.Log(2, log_time(), kUidToClear, 1, 2, msg2, sizeof(msg2)));
+    ASSERT_NE(nullptr, chunk.Log(3, log_time(), kOtherUid, 1, 2, msg3, sizeof(msg3)));
+
+    chunk.ClearUidLogs(kUidToClear, LOG_ID_MAIN, nullptr);
+
+    ASSERT_NE(nullptr, chunk.Log(4, log_time(), kOtherUid, 1, 2, msg3, sizeof(msg3)));
+
+    chunk.FinishWriting();
+    // The next line would violate a CHECK() during decompression with the faulty code.
+    chunk.IncReaderRefCount();
+    chunk.DecReaderRefCount();
+}

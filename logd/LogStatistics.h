@@ -515,7 +515,8 @@ class LogStatistics {
     }
 
   public:
-    LogStatistics(bool enable_statistics, bool track_total_size);
+    LogStatistics(bool enable_statistics, bool track_total_size,
+                  std::optional<log_time> start_time = {});
 
     void AddTotal(log_id_t log_id, uint16_t size) EXCLUDES(lock_);
 
@@ -543,7 +544,7 @@ class LogStatistics {
     bool ShouldPrune(log_id id, unsigned long max_size, unsigned long* prune_rows) const
             EXCLUDES(lock_);
 
-    // Snapshot of the sizes for a given log buffer.
+    // Return the consumed size of the given buffer.
     size_t Sizes(log_id_t id) const EXCLUDES(lock_) {
         auto lock = std::lock_guard{lock_};
         if (overhead_[id]) {
@@ -551,11 +552,19 @@ class LogStatistics {
         }
         return mSizes[id];
     }
+
+    // Return the uncompressed size of the contents of the given buffer.
+    size_t SizeReadable(log_id_t id) const EXCLUDES(lock_) {
+        auto lock = std::lock_guard{lock_};
+        return mSizes[id];
+    }
+
     // TODO: Get rid of this entirely.
     static size_t sizesTotal() {
         return SizesTotal;
     }
 
+    std::string ReportInteresting() const EXCLUDES(lock_);
     std::string Format(uid_t uid, pid_t pid, unsigned int logMask) const EXCLUDES(lock_);
 
     const char* PidToName(pid_t pid) const EXCLUDES(lock_);
