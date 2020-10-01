@@ -35,6 +35,11 @@ void TestCreateRegion(size_t size, unique_fd &fd, int prot) {
     ASSERT_TRUE(ashmem_valid(fd));
     ASSERT_EQ(size, static_cast<size_t>(ashmem_get_size_region(fd)));
     ASSERT_EQ(0, ashmem_set_prot_region(fd, prot));
+
+    // We've been inconsistent historically about whether or not these file
+    // descriptors were CLOEXEC. Make sure we're consistent going forward.
+    // https://issuetracker.google.com/165667331
+    ASSERT_EQ(FD_CLOEXEC, (fcntl(fd, F_GETFD) & FD_CLOEXEC));
 }
 
 void TestMmap(const unique_fd& fd, size_t size, int prot, void** region, off_t off = 0) {

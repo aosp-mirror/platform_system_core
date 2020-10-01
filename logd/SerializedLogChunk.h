@@ -18,6 +18,8 @@
 
 #include <sys/types.h>
 
+#include <android-base/logging.h>
+
 #include "LogWriter.h"
 #include "SerializedData.h"
 #include "SerializedLogEntry.h"
@@ -30,9 +32,7 @@ class SerializedLogChunk {
 
     void Compress();
     void IncReaderRefCount();
-    // Decrease the reader ref count and compress the log if appropriate.  `compress` should only be
-    // set to false in the case that the log buffer will be deleted afterwards.
-    void DecReaderRefCount(bool compress);
+    void DecReaderRefCount();
 
     // Must have no readers referencing this.  Return true if there are no logs left in this chunk.
     bool ClearUidLogs(uid_t uid, log_id_t log_id, LogStatistics* stats);
@@ -50,12 +50,14 @@ class SerializedLogChunk {
 
     void FinishWriting() {
         writer_active_ = false;
+        Compress();
         if (reader_ref_count_ == 0) {
-            Compress();
+            contents_.Resize(0);
         }
     }
 
     const SerializedLogEntry* log_entry(int offset) const {
+        CHECK(writer_active_ || reader_ref_count_ > 0);
         return reinterpret_cast<const SerializedLogEntry*>(data() + offset);
     }
     const uint8_t* data() const { return contents_.data(); }

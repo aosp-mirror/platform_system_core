@@ -39,6 +39,8 @@ namespace snapshot {
 SnapshotMetadataUpdater::SnapshotMetadataUpdater(MetadataBuilder* builder, uint32_t target_slot,
                                                  const DeltaArchiveManifest& manifest)
     : builder_(builder), target_suffix_(SlotSuffixForSlotNumber(target_slot)) {
+    partial_update_ = manifest.partial_update();
+
     if (!manifest.has_dynamic_partition_metadata()) {
         return;
     }
@@ -63,7 +65,6 @@ SnapshotMetadataUpdater::SnapshotMetadataUpdater(MetadataBuilder* builder, uint3
         }
     }
 
-    partial_update_ = manifest.partial_update();
 }
 
 bool SnapshotMetadataUpdater::ShrinkPartitions() const {
@@ -173,9 +174,9 @@ bool SnapshotMetadataUpdater::DeleteGroups() const {
         if (iter != groups_.end()) {
             continue;
         }
-        // Update package metadata doesn't have this group. Before deleting it, sanity check that it
-        // doesn't have any partitions left. Update metadata shouldn't assign any partitions to this
-        // group, so all partitions that originally belong to this group should be moved by
+        // Update package metadata doesn't have this group. Before deleting it, check that it
+        // doesn't have any partitions left. Update metadata shouldn't assign any partitions to
+        // this group, so all partitions that originally belong to this group should be moved by
         // MovePartitionsToDefault at this point.
         auto existing_partitions_in_group = builder_->ListPartitionsInGroup(existing_group_name);
         if (!existing_partitions_in_group.empty()) {

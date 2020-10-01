@@ -18,6 +18,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <paths.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -309,14 +310,14 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
         // late_import is available only in Q and earlier release. As we don't
         // have system_ext in those versions, skip late_import for system_ext.
         parser.ParseConfig("/system_ext/etc/init");
-        if (!parser.ParseConfig("/product/etc/init")) {
-            late_import_paths.emplace_back("/product/etc/init");
+        if (!parser.ParseConfig("/vendor/etc/init")) {
+            late_import_paths.emplace_back("/vendor/etc/init");
         }
         if (!parser.ParseConfig("/odm/etc/init")) {
             late_import_paths.emplace_back("/odm/etc/init");
         }
-        if (!parser.ParseConfig("/vendor/etc/init")) {
-            late_import_paths.emplace_back("/vendor/etc/init");
+        if (!parser.ParseConfig("/product/etc/init")) {
+            late_import_paths.emplace_back("/product/etc/init");
         }
     } else {
         parser.ParseConfig(bootscript);
@@ -726,6 +727,12 @@ int SecondStageMain(int argc, char** argv) {
     SetStdioToDevNull(argv);
     InitSecondStageLogging(argv);
     LOG(INFO) << "init second stage started!";
+
+    // Update $PATH in the case the second stage init is newer than first stage init, where it is
+    // first set.
+    if (setenv("PATH", _PATH_DEFPATH, 1) != 0) {
+        PLOG(FATAL) << "Could not set $PATH to '" << _PATH_DEFPATH << "' in second stage";
+    }
 
     // Init should not crash because of a dependence on any other process, therefore we ignore
     // SIGPIPE and handle EPIPE at the call site directly.  Note that setting a signal to SIG_IGN

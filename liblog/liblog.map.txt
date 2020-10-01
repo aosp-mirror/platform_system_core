@@ -84,13 +84,10 @@ LIBLOG_PRIVATE {
   global:
     __android_log_pmsg_file_read;
     __android_log_pmsg_file_write;
-    __android_logger_get_buffer_size;
-    __android_logger_property_get_bool;
     android_openEventTagMap;
     android_log_processBinaryLogBuffer;
     android_log_processLogBuffer;
     android_log_read_next;
     android_log_write_list_buffer;
-    android_lookupEventTagNum;
     create_android_log_parser;
 };

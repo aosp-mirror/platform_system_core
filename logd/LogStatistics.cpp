@@ -26,8 +26,10 @@
 #include <unistd.h>
 
 #include <list>
+#include <vector>
 
 #include <android-base/logging.h>
+#include <android-base/strings.h>
 #include <private/android_logger.h>
 
 #include "LogBufferElement.h"
@@ -61,7 +63,8 @@ static std::string TagNameKey(const LogStatisticsElement& element) {
     return std::string(msg, len);
 }
 
-LogStatistics::LogStatistics(bool enable_statistics, bool track_total_size)
+LogStatistics::LogStatistics(bool enable_statistics, bool track_total_size,
+                             std::optional<log_time> start_time)
     : enable(enable_statistics), track_total_size_(track_total_size) {
     log_time now(CLOCK_REALTIME);
     log_id_for_each(id) {
@@ -70,8 +73,13 @@ LogStatistics::LogStatistics(bool enable_statistics, bool track_total_size)
         mDroppedElements[id] = 0;
         mSizesTotal[id] = 0;
         mElementsTotal[id] = 0;
-        mOldest[id] = now;
-        mNewest[id] = now;
+        if (start_time) {
+            mOldest[id] = *start_time;
+            mNewest[id] = *start_time;
+        } else {
+            mOldest[id] = now;
+            mNewest[id] = now;
+        }
         mNewestDropped[id] = now;
     }
 }
@@ -782,6 +790,31 @@ std::string LogStatistics::FormatTable(const LogHashtable<TKey, TEntry>& table, 
         output += entry->format(*this, id, *sorted_keys[index]);
     }
     return output;
+}
+
+std::string LogStatistics::ReportInteresting() const {
+    auto lock = std::lock_guard{lock_};
+
+    std::vector<std::string> items;
+
+    log_id_for_each(i) { items.emplace_back(std::to_string(mElements[i])); }
+
+    log_id_for_each(i) { items.emplace_back(std::to_string(mSizes[i])); }
+
+    log_id_for_each(i) {
+        items.emplace_back(std::to_string(overhead_[i] ? *overhead_[i] : mSizes[i]));
+    }
+
+    log_id_for_each(i) {
+        uint64_t oldest = mOldest[i].msec() / 1000;
+        uint64_t newest = mNewest[i].msec() / 1000;
+
+        int span = newest - oldest;
+
+        items.emplace_back(std::to_string(span));
+    }
+
+    return android::base::Join(items, ",");
 }
 
 std::string LogStatistics::Format(uid_t uid, pid_t pid, unsigned int logMask) const {

@@ -36,6 +36,7 @@ cc_defaults {
         "libz",
     ],
     static_libs: ["libzstd"],
+    header_libs: ["libcutils_headers"],
     cflags: [
         "-Wextra",
         "-Wthread-safety",
@@ -43,6 +44,9 @@ cc_defaults {
 
     lto: {
         thin: true,
+    },
+    sanitize: {
+        cfi: true,
     },
     cpp_std: "experimental",
 }
@@ -57,6 +61,7 @@ cc_library_static {
         "LogReaderList.cpp",
         "LogReaderThread.cpp",
         "LogBufferElement.cpp",
+        "LogSize.cpp",
         "LogStatistics.cpp",
         "LogTags.cpp",
         "PruneList.cpp",
@@ -65,6 +70,7 @@ cc_library_static {
         "SerializedLogChunk.cpp",
         "SimpleLogBuffer.cpp",
     ],
+    static_libs: ["liblog"],
     logtags: ["event.logtags"],
 
     export_include_dirs: ["."],
@@ -144,7 +150,9 @@ cc_defaults {
         "SerializedLogChunkTest.cpp",
         "SerializedFlushToStateTest.cpp",
     ],
-
+    sanitize: {
+        cfi: true,
+    },
     static_libs: [
         "libbase",
         "libcutils",
@@ -177,6 +185,27 @@ cc_test {
     },
     test_suites: [
         "cts",
+        "device-tests",
         "vts10",
+    ],
+}
+
+cc_binary {
+    name: "replay_messages",
+    defaults: ["logd_defaults"],
+    host_supported: true,
+
+    srcs: [
+        "ReplayMessages.cpp",
+    ],
+
+    static_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+        "liblogd",
+        "libselinux",
+        "libz",
+        "libzstd",
     ],
 }

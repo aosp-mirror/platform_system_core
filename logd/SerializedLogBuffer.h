@@ -47,27 +47,25 @@ class SerializedLogBuffer final : public LogBuffer {
                                                   log_time realtime)>& filter) override;
 
     bool Clear(log_id_t id, uid_t uid) override;
-    unsigned long GetSize(log_id_t id) override;
-    int SetSize(log_id_t id, unsigned long size) override;
+    size_t GetSize(log_id_t id) override;
+    bool SetSize(log_id_t id, size_t size) override;
 
     uint64_t sequence() const override { return sequence_.load(std::memory_order_relaxed); }
 
   private:
     bool ShouldLog(log_id_t log_id, const char* msg, uint16_t len);
     void MaybePrune(log_id_t log_id) REQUIRES(lock_);
-    bool Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid) REQUIRES(lock_);
-    void KickReader(LogReaderThread* reader, log_id_t id, size_t bytes_to_free)
-            REQUIRES_SHARED(lock_);
+    void Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid) REQUIRES(lock_);
     void NotifyReadersOfPrune(log_id_t log_id, const std::list<SerializedLogChunk>::iterator& chunk)
             REQUIRES(reader_list_->reader_threads_lock());
     void RemoveChunkFromStats(log_id_t log_id, SerializedLogChunk& chunk);
-    unsigned long GetSizeUsed(log_id_t id) REQUIRES(lock_);
+    size_t GetSizeUsed(log_id_t id) REQUIRES(lock_);
 
     LogReaderList* reader_list_;
     LogTags* tags_;
     LogStatistics* stats_;
 
-    unsigned long max_size_[LOG_ID_MAX] GUARDED_BY(lock_) = {};
+    size_t max_size_[LOG_ID_MAX] GUARDED_BY(lock_) = {};
     std::list<SerializedLogChunk> logs_[LOG_ID_MAX] GUARDED_BY(lock_);
     RwLock lock_;
 

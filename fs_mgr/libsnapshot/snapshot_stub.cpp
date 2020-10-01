@@ -20,6 +20,7 @@
 
 using android::fs_mgr::CreateLogicalPartitionParams;
 using chromeos_update_engine::DeltaArchiveManifest;
+using chromeos_update_engine::FileDescriptor;
 
 namespace android::snapshot {
 
@@ -127,6 +128,12 @@ ISnapshotMergeStats* SnapshotManagerStub::GetSnapshotMergeStatsInstance() {
     static SnapshotMergeStatsStub snapshot_merge_stats;
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return &snapshot_merge_stats;
+}
+
+std::unique_ptr<ISnapshotWriter> SnapshotManagerStub::OpenSnapshotWriter(
+        const CreateLogicalPartitionParams&) {
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
+    return nullptr;
 }
 
 }  // namespace android::snapshot

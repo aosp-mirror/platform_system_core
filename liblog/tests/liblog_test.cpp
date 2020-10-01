@@ -2768,20 +2768,3 @@ TEST(liblog, __android_log_pmsg_file_read) {
 #endif
 }
 #endif  // ENABLE_FLAKY_TESTS
-
-TEST(liblog, android_lookupEventTagNum) {
-#ifdef __ANDROID__
-  EventTagMap* map = android_openEventTagMap(NULL);
-  EXPECT_TRUE(NULL != map);
-  std::string Name = android::base::StringPrintf("a%d", getpid());
-  int tag = android_lookupEventTagNum(map, Name.c_str(), "(new|1)",
-                                      ANDROID_LOG_UNKNOWN);
-  android_closeEventTagMap(map);
-  if (tag == -1) system("tail -3 /dev/event-log-tags >&2");
-  EXPECT_NE(-1, tag);
-  EXPECT_NE(0, tag);
-  EXPECT_GT(UINT32_MAX, (unsigned)tag);
-#else
-  GTEST_LOG_(INFO) << "This test does nothing.\n";
-#endif
-}

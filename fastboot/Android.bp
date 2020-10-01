@@ -147,6 +147,7 @@ cc_binary {
     static_libs: [
         "libgtest_prod",
         "libhealthhalutils",
+        "libsnapshot_cow",
         "libsnapshot_nobinder",
         "update_metadata-protos",
     ],
@@ -251,7 +252,7 @@ cc_library_host_static {
         darwin: {
             srcs: ["usb_osx.cpp"],
         },
-        linux_glibc: {
+        linux: {
             srcs: ["usb_linux.cpp"],
         },
     },
@@ -271,6 +272,7 @@ cc_binary_host {
     required: [
         "mke2fs",
         "make_f2fs",
+        "make_f2fs_casefold",
     ],
     dist: {
         targets: [

@@ -36,6 +36,7 @@
 
 #include <libsnapshot/auto_device.h>
 #include <libsnapshot/return.h>
+#include <libsnapshot/snapshot_writer.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -173,11 +174,21 @@ class ISnapshotManager {
 
     // Map a snapshotted partition for OTA clients to write to. Write-protected regions are
     // determined previously in CreateSnapshots.
+    //
     // |snapshot_path| must not be nullptr.
+    //
+    // This method will return false if ro.virtual_ab.compression.enabled is true.
     virtual bool MapUpdateSnapshot(const android::fs_mgr::CreateLogicalPartitionParams& params,
                                    std::string* snapshot_path) = 0;
 
-    // Unmap a snapshot device that's previously mapped with MapUpdateSnapshot.
+    // Create an ISnapshotWriter to build a snapshot against a target partition. The partition name
+    // must be suffixed.
+    virtual std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
+            const android::fs_mgr::CreateLogicalPartitionParams& params) = 0;
+
+    // Unmap a snapshot device or CowWriter that was previously opened with MapUpdateSnapshot,
+    // OpenSnapshotWriter. All outstanding open descriptors, writers, or
+    // readers must be deleted before this is called.
     virtual bool UnmapUpdateSnapshot(const std::string& target_partition_name) = 0;
 
     // If this returns true, first-stage mount must call
@@ -288,6 +299,8 @@ class SnapshotManager final : public ISnapshotManager {
     Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) override;
     bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
+    std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
+            const android::fs_mgr::CreateLogicalPartitionParams& params) override;
     bool UnmapUpdateSnapshot(const std::string& target_partition_name) override;
     bool NeedSnapshotsInFirstStageMount() override;
     bool CreateLogicalAndSnapshotPartitions(
@@ -506,9 +519,39 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetSnapshotDeviceName(const std::string& snapshot_name,
                                       const SnapshotStatus& status);
 
+    // Reason for calling MapPartitionWithSnapshot.
+    enum class SnapshotContext {
+        // For writing or verification (during update_engine).
+        Update,
+
+        // For mounting a full readable device.
+        Mount,
+    };
+
+    struct SnapshotPaths {
+        // Target/base device (eg system_b), always present.
+        std::string target_device;
+
+        // COW path (eg system_cow). Not present if no COW is needed.
+        std::string cow_device;
+
+        // dm-snapshot instance. Not present in Update mode for VABC.
+        std::string snapshot_device;
+    };
+
+    // Helpers for OpenSnapshotWriter.
+    std::unique_ptr<ISnapshotWriter> OpenCompressedSnapshotWriter(LockedFile* lock,
+                                                                  const std::string& partition_name,
+                                                                  const SnapshotStatus& status,
+                                                                  const SnapshotPaths& paths);
+    std::unique_ptr<ISnapshotWriter> OpenKernelSnapshotWriter(LockedFile* lock,
+                                                              const std::string& partition_name,
+                                                              const SnapshotStatus& status,
+                                                              const SnapshotPaths& paths);
+
     // Map the base device, COW devices, and snapshot device.
     bool MapPartitionWithSnapshot(LockedFile* lock, CreateLogicalPartitionParams params,
-                                  std::string* path);
+                                  SnapshotContext context, SnapshotPaths* paths);
 
     // Map the COW devices, including the partition in super and the images.
     // |params|:
@@ -553,9 +596,8 @@ class SnapshotManager final : public ISnapshotManager {
     // This should only be called in recovery.
     bool UnmapAllPartitions();
 
-    // Sanity check no snapshot overflows. Note that this returns false negatives if the snapshot
-    // overflows, then is remapped and not written afterwards. Hence, the function may only serve
-    // as a sanity check.
+    // Check no snapshot overflows. Note that this returns false negatives if the snapshot
+    // overflows, then is remapped and not written afterwards.
     bool EnsureNoOverflowSnapshot(LockedFile* lock);
 
     enum class Slot { Unknown, Source, Target };

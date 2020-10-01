@@ -35,6 +35,7 @@ cc_test {
     static_libs: [
         "libadb_crypto_static",
         "libadb_protos_static",
+        "libadb_sysdeps",
     ],
 
     test_suites: ["device-tests"],

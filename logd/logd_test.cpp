@@ -30,6 +30,7 @@
 #include <android-base/file.h>
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <gtest/gtest.h>
 #include <log/log_read.h>
@@ -39,7 +40,9 @@
 #include <selinux/selinux.h>
 #endif
 
-#include "LogReader.h"  // pickup LOGD_SNDTIMEO
+#include "LogUtils.h"  // For LOGD_SNDTIMEO.
+
+using android::base::unique_fd;
 
 #ifdef __ANDROID__
 static void send_to_control(char* buf, size_t len) {
@@ -162,6 +165,7 @@ static char* find_benchmark_spam(char* cp) {
 }
 #endif
 
+#ifdef LOGD_ENABLE_FLAKY_TESTS
 TEST(logd, statistics) {
 #ifdef __ANDROID__
     size_t len;
@@ -237,6 +241,7 @@ TEST(logd, statistics) {
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif
 
 #ifdef __ANDROID__
 static void caught_signal(int /* signum */) {
@@ -720,6 +725,7 @@ TEST(logd, timeout) {
 }
 #endif
 
+#ifdef LOGD_ENABLE_FLAKY_TESTS
 // b/27242723 confirmed fixed
 TEST(logd, SNDTIMEO) {
 #ifdef __ANDROID__
@@ -777,6 +783,7 @@ TEST(logd, SNDTIMEO) {
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
 }
+#endif
 
 TEST(logd, getEventTag_list) {
 #ifdef __ANDROID__
@@ -833,126 +840,33 @@ TEST(logd, getEventTag_newentry) {
 #endif
 }
 
+TEST(logd, no_epipe) {
 #ifdef __ANDROID__
-static inline uint32_t get4LE(const uint8_t* src) {
-  return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
-}
+    // Actually generating SIGPIPE in logd is racy, since we need to close the socket quicker than
+    // logd finishes writing the data to it, so we try 10 times, which should be enough to trigger
+    // SIGPIPE if logd isn't ignoring SIGPIPE
+    for (int i = 0; i < 10; ++i) {
+        unique_fd sock1(
+                socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM));
+        ASSERT_GT(sock1, 0);
+        unique_fd sock2(
+                socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM));
+        ASSERT_GT(sock2, 0);
 
-static inline uint32_t get4LE(const char* src) {
-  return get4LE(reinterpret_cast<const uint8_t*>(src));
-}
-#endif
+        std::string message = "getStatistics 0 1 2 3 4 5 6 7";
 
-void __android_log_btwrite_multiple__helper(int count) {
-#ifdef __ANDROID__
-    log_time ts(CLOCK_MONOTONIC);
-    usleep(100);
-    log_time ts1(CLOCK_MONOTONIC);
+        ASSERT_GT(write(sock1, message.c_str(), message.length()), 0);
+        sock1.reset();
+        ASSERT_GT(write(sock2, message.c_str(), message.length()), 0);
 
-    // We fork to create a unique pid for the submitted log messages
-    // so that we do not collide with the other _multiple_ tests.
+        struct pollfd p = {.fd = sock2, .events = POLLIN, .revents = 0};
 
-    pid_t pid = fork();
-
-    if (pid == 0) {
-        // child
-        for (int i = count; i; --i) {
-            ASSERT_LT(
-                0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
-            usleep(100);
-        }
-        ASSERT_LT(0,
-                  __android_log_btwrite(0, EVENT_TYPE_LONG, &ts1, sizeof(ts1)));
-        usleep(1000000);
-
-        _exit(0);
+        int ret = poll(&p, 1, 20);
+        EXPECT_EQ(ret, 1);
+        EXPECT_TRUE(p.revents & POLLIN);
+        EXPECT_FALSE(p.revents & POLL_ERR);
     }
-
-    siginfo_t info = {};
-    ASSERT_EQ(0, TEMP_FAILURE_RETRY(waitid(P_PID, pid, &info, WEXITED)));
-    ASSERT_EQ(0, info.si_status);
-
-    struct logger_list* logger_list;
-    ASSERT_TRUE(nullptr != (logger_list = android_logger_list_open(LOG_ID_EVENTS,
-                                                                   ANDROID_LOG_NONBLOCK, 0, pid)));
-
-    int expected_count = (count < 2) ? count : 2;
-    int expected_chatty_count = (count <= 2) ? 0 : 1;
-    int expected_identical_count = (count < 2) ? 0 : (count - 2);
-    static const int expected_expire_count = 0;
-
-    count = 0;
-    int second_count = 0;
-    int chatty_count = 0;
-    int identical_count = 0;
-    int expire_count = 0;
-
-    for (;;) {
-        log_msg log_msg;
-        if (android_logger_list_read(logger_list, &log_msg) <= 0) break;
-
-        if ((log_msg.entry.pid != pid) || (log_msg.entry.len < (4 + 1 + 8)) ||
-            (log_msg.id() != LOG_ID_EVENTS))
-            continue;
-
-        char* eventData = log_msg.msg();
-        if (!eventData) continue;
-
-        uint32_t tag = get4LE(eventData);
-
-        if ((eventData[4] == EVENT_TYPE_LONG) &&
-            (log_msg.entry.len == (4 + 1 + 8))) {
-            if (tag != 0) continue;
-
-            log_time* tx = reinterpret_cast<log_time*>(eventData + 4 + 1);
-            if (ts == *tx) {
-                ++count;
-            } else if (ts1 == *tx) {
-                ++second_count;
-            }
-        } else if (eventData[4] == EVENT_TYPE_STRING) {
-            if (tag != CHATTY_LOG_TAG) continue;
-            ++chatty_count;
-            // int len = get4LE(eventData + 4 + 1);
-            log_msg.buf[LOGGER_ENTRY_MAX_LEN] = '\0';
-            const char* cp;
-            if ((cp = strstr(eventData + 4 + 1 + 4, " identical "))) {
-                unsigned val = 0;
-                sscanf(cp, " identical %u lines", &val);
-                identical_count += val;
-            } else if ((cp = strstr(eventData + 4 + 1 + 4, " expire "))) {
-                unsigned val = 0;
-                sscanf(cp, " expire %u lines", &val);
-                expire_count += val;
-            }
-        }
-    }
-
-    android_logger_list_close(logger_list);
-
-    EXPECT_EQ(expected_count, count);
-    EXPECT_EQ(1, second_count);
-    EXPECT_EQ(expected_chatty_count, chatty_count);
-    EXPECT_EQ(expected_identical_count, identical_count);
-    EXPECT_EQ(expected_expire_count, expire_count);
 #else
-    count = 0;
     GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif
-}
-
-TEST(logd, multiple_test_1) {
-    __android_log_btwrite_multiple__helper(1);
-}
-
-TEST(logd, multiple_test_2) {
-    __android_log_btwrite_multiple__helper(2);
-}
-
-TEST(logd, multiple_test_3) {
-    __android_log_btwrite_multiple__helper(3);
-}
-
-TEST(logd, multiple_test_10) {
-    __android_log_btwrite_multiple__helper(10);
 }

@@ -30,6 +30,7 @@ cc_defaults {
     static_libs: [
         "libdm",
         "libfstab",
+        "libsnapshot_cow",
         "update_metadata-protos",
     ],
     whole_static_libs: [
@@ -38,7 +39,9 @@ cc_defaults {
         "libfstab",
     ],
     header_libs: [
+        "libchrome",
         "libfiemap_headers",
+        "libupdate_engine_headers",
     ],
     export_static_lib_headers: [
         "update_metadata-protos",
@@ -71,9 +74,11 @@ filegroup {
         "android/snapshot/snapshot.proto",
         "device_info.cpp",
         "snapshot.cpp",
+        "snapshot_reader.cpp",
         "snapshot_stats.cpp",
         "snapshot_stub.cpp",
         "snapshot_metadata_updater.cpp",
+        "snapshot_writer.cpp",
         "partition_cow_creator.cpp",
         "return.cpp",
         "utility.cpp",
@@ -120,6 +125,42 @@ cc_library_static {
     static_libs: [
         "libfs_mgr",
     ],
+}
+
+cc_defaults {
+    name: "libsnapshot_cow_defaults",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    export_include_dirs: ["include"],
+    srcs: [
+        "cow_decompress.cpp",
+        "cow_reader.cpp",
+        "cow_writer.cpp",
+    ],
+}
+
+cc_library_static {
+    name: "libsnapshot_cow",
+    defaults: [
+        "libsnapshot_cow_defaults",
+    ],
+    host_supported: true,
+    recovery_available: true,
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libbrotli",
+        "libz",
+    ],
+    ramdisk_available: true,
 }
 
 cc_library_static {
@@ -176,6 +217,7 @@ cc_defaults {
         "libgmock",
         "liblp",
         "libsnapshot",
+        "libsnapshot_cow",
         "libsnapshot_test_helpers",
         "libsparse",
     ],
@@ -210,6 +252,7 @@ cc_binary {
     static_libs: [
         "libfstab",
         "libsnapshot",
+        "libsnapshot_cow",
         "update_metadata-protos",
     ],
     shared_libs: [
@@ -273,12 +316,15 @@ cc_defaults {
         "libgmock", // from libsnapshot_test_helpers
         "liblog",
         "liblp",
+        "libsnapshot_cow",
         "libsnapshot_test_helpers",
         "libprotobuf-mutator",
     ],
     header_libs: [
+        "libchrome",
         "libfiemap_headers",
         "libstorage_literals_headers",
+        "libupdate_engine_headers",
     ],
     proto: {
         type: "full",
@@ -309,4 +355,170 @@ cc_test {
     ],
     auto_gen_config: true,
     require_root: true,
+}
+
+cc_defaults {
+    name: "snapuserd_defaults",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "snapuserd.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror"
+    ],
+
+    static_libs: [
+        "libbase",
+        "libbrotli",
+        "liblog",
+        "libdm",
+        "libz",
+        "libsnapshot_cow",
+    ],
+}
+
+cc_binary {
+    name: "snapuserd",
+    defaults: ["snapuserd_defaults"],
+}
+
+cc_binary {
+    name: "snapuserd_ramdisk",
+    stem: "snapuserd",
+    defaults: ["snapuserd_defaults"],
+
+    ramdisk: true,
+    static_executable: true,
+}
+
+cc_test {
+    name: "cow_api_test",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "cow_api_test.cpp",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcrypto",
+        "liblog",
+        "libz",
+    ],
+    static_libs: [
+        "libbrotli",
+        "libgtest",
+        "libsnapshot_cow",
+    ],
+    test_min_api_level: 30,
+    auto_gen_config: true,
+    require_root: false,
+    host_supported: true,
+}
+
+cc_binary {
+    name: "make_cow_from_ab_ota",
+    host_supported: true,
+    device_supported: false,
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: [
+        "libbase",
+        "libbspatch",
+        "libbrotli",
+        "libbz",
+        "libchrome",
+        "libcrypto",
+        "libgflags",
+        "liblog",
+        "libprotobuf-cpp-lite",
+        "libpuffpatch",
+        "libsnapshot_cow",
+        "libsparse",
+        "libxz",
+        "libz",
+        "libziparchive",
+        "update_metadata-protos",
+    ],
+    srcs: [
+        "make_cow_from_ab_ota.cpp",
+    ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+}
+
+cc_binary {
+    name: "estimate_cow_from_nonab_ota",
+    host_supported: true,
+    device_supported: false,
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: [
+        "libbase",
+        "libbrotli",
+        "libbz",
+        "libcrypto",
+        "libgflags",
+        "liblog",
+        "libsnapshot_cow",
+        "libsparse",
+        "libz",
+        "libziparchive",
+    ],
+    srcs: [
+        "estimate_cow_from_nonab_ota.cpp",
+    ],
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+}
+
+cc_test {
+    name: "cow_snapuserd_test",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "cow_snapuserd_test.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libbrotli",
+        "libgtest",
+        "libsnapshot_cow",
+        "libz",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    test_min_api_level: 30,
+    auto_gen_config: true,
+    require_root: false,
 }

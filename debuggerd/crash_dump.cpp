@@ -40,6 +40,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <bionic/mte_kernel.h>
 #include <bionic/reserved_signals.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
@@ -486,6 +487,17 @@ int main(int argc, char** argv) {
         continue;
       }
 
+#ifdef ANDROID_EXPERIMENTAL_MTE
+      struct iovec iov = {
+          &info.tagged_addr_ctrl,
+          sizeof(info.tagged_addr_ctrl),
+      };
+      if (ptrace(PTRACE_GETREGSET, thread, NT_ARM_TAGGED_ADDR_CTRL,
+                 reinterpret_cast<void*>(&iov)) == -1) {
+        info.tagged_addr_ctrl = -1;
+      }
+#endif
+
       if (thread == g_target_thread) {
         // Read the thread's registers along with the rest of the crash info out of the pipe.
         ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info);
@@ -585,8 +597,8 @@ int main(int argc, char** argv) {
   }
 
   // TODO: Use seccomp to lock ourselves down.
-  unwindstack::UnwinderFromPid unwinder(256, vm_pid);
-  if (!unwinder.Init(unwindstack::Regs::CurrentArch())) {
+  unwindstack::UnwinderFromPid unwinder(256, vm_pid, unwindstack::Regs::CurrentArch());
+  if (!unwinder.Init()) {
     LOG(FATAL) << "Failed to init unwinder object.";
   }
 

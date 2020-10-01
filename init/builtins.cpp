@@ -570,7 +570,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             trigger_shutdown("reboot,requested-userdata-remount-on-fde-device");
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "block");
         ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
         return {};
     } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
@@ -595,7 +594,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
@@ -606,7 +604,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.
@@ -617,7 +614,6 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
             return Error() << "FscryptInstallKeyring() failed";
         }
         SetProperty("ro.crypto.state", "encrypted");
-        SetProperty("ro.crypto.type", "file");
 
         // Although encrypted, vold has already set the device up, so we do not need to
         // do anything different from the nonencrypted case.
@@ -666,18 +662,26 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
         }
     }
 
-    auto mount_fstab_return_code = fs_mgr_mount_all(&fstab, mount_all->mode);
+    auto mount_fstab_result = fs_mgr_mount_all(&fstab, mount_all->mode);
     SetProperty(prop_name, std::to_string(t.duration().count()));
 
     if (mount_all->import_rc) {
         import_late(mount_all->rc_paths);
     }
 
+    if (mount_fstab_result.userdata_mounted) {
+        // This call to fs_mgr_mount_all mounted userdata. Keep the result in
+        // order for userspace reboot to correctly remount userdata.
+        LOG(INFO) << "Userdata mounted using "
+                  << (mount_all->fstab_path.empty() ? "(default fstab)" : mount_all->fstab_path)
+                  << " result : " << mount_fstab_result.code;
+        initial_mount_fstab_return_code = mount_fstab_result.code;
+    }
+
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
-        initial_mount_fstab_return_code = mount_fstab_return_code;
-        auto queue_fs_result = queue_fs_event(mount_fstab_return_code, false);
+        auto queue_fs_result = queue_fs_event(mount_fstab_result.code, false);
         if (!queue_fs_result.ok()) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
@@ -1177,6 +1181,10 @@ static Result<void> do_remount_userdata(const BuiltinArguments& args) {
     }
     // TODO(b/135984674): check that fstab contains /data.
     if (auto rc = fs_mgr_remount_userdata_into_checkpointing(&fstab); rc < 0) {
+        std::string proc_mounts_output;
+        android::base::ReadFileToString("/proc/mounts", &proc_mounts_output, true);
+        android::base::WriteStringToFile(proc_mounts_output,
+                                         "/metadata/userspacereboot/mount_info.txt");
         trigger_shutdown("reboot,mount_userdata_failed");
     }
     if (auto result = queue_fs_event(initial_mount_fstab_return_code, true); !result.ok()) {

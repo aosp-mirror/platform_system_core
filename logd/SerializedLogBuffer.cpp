@@ -23,6 +23,7 @@
 #include <android-base/logging.h>
 #include <android-base/scopeguard.h>
 
+#include "LogSize.h"
 #include "LogStatistics.h"
 #include "SerializedFlushToState.h"
 
@@ -34,8 +35,8 @@ SerializedLogBuffer::SerializedLogBuffer(LogReaderList* reader_list, LogTags* ta
 
 void SerializedLogBuffer::Init() {
     log_id_for_each(i) {
-        if (SetSize(i, __android_logger_get_buffer_size(i))) {
-            SetSize(i, LOG_BUFFER_MIN_SIZE);
+        if (!SetSize(i, GetBufferSizeFromProperties(i))) {
+            SetSize(i, kLogBufferMinSize);
         }
     }
 
@@ -74,6 +75,10 @@ int SerializedLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_
         return -EINVAL;
     }
 
+    if (len > LOGGER_ENTRY_MAX_PAYLOAD) {
+        len = LOGGER_ENTRY_MAX_PAYLOAD;
+    }
+
     if (!ShouldLog(log_id, msg, len)) {
         stats_->AddTotal(log_id, len);
         return -EACCES;
@@ -108,8 +113,8 @@ void SerializedLogBuffer::MaybePrune(log_id_t log_id) {
     if (total_size > max_size_[log_id]) {
         Prune(log_id, total_size - max_size_[log_id], 0);
         after_size = GetSizeUsed(log_id);
-        LOG(INFO) << "Pruned Logs from log_id: " << log_id << ", previous size: " << total_size
-                  << " after size: " << after_size;
+        LOG(VERBOSE) << "Pruned Logs from log_id: " << log_id << ", previous size: " << total_size
+                     << " after size: " << after_size;
     }
 
     stats_->set_overhead(log_id, after_size);
@@ -123,7 +128,7 @@ void SerializedLogBuffer::RemoveChunkFromStats(log_id_t log_id, SerializedLogChu
         stats_->Subtract(entry->ToLogStatisticsElement(log_id));
         read_offset += entry->total_len();
     }
-    chunk.DecReaderRefCount(false);
+    chunk.DecReaderRefCount();
 }
 
 void SerializedLogBuffer::NotifyReadersOfPrune(
@@ -134,33 +139,42 @@ void SerializedLogBuffer::NotifyReadersOfPrune(
     }
 }
 
-bool SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid) {
-    // Don't prune logs that are newer than the point at which any reader threads are reading from.
-    LogReaderThread* oldest = nullptr;
+void SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid) {
     auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
-    for (const auto& reader_thread : reader_list_->reader_threads()) {
-        if (!reader_thread->IsWatching(log_id)) {
-            continue;
-        }
-        if (!oldest || oldest->start() > reader_thread->start() ||
-            (oldest->start() == reader_thread->start() &&
-             reader_thread->deadline().time_since_epoch().count() != 0)) {
-            oldest = reader_thread.get();
-        }
-    }
 
     auto& log_buffer = logs_[log_id];
     auto it = log_buffer.begin();
     while (it != log_buffer.end()) {
-        if (oldest != nullptr && it->highest_sequence_number() >= oldest->start()) {
-            break;
+        for (const auto& reader_thread : reader_list_->reader_threads()) {
+            if (!reader_thread->IsWatching(log_id)) {
+                continue;
+            }
+
+            if (reader_thread->deadline().time_since_epoch().count() != 0) {
+                // Always wake up wrapped readers when pruning.  'Wrapped' readers are an
+                // optimization that allows the reader to wait until logs starting at a specified
+                // time stamp are about to be pruned.  This is error-prone however, since if that
+                // timestamp is about to be pruned, the reader is not likely to read the messages
+                // fast enough to not back-up logd.  Instead, we can achieve an nearly-as-efficient
+                // but not error-prune batching effect by waking the reader whenever any chunk is
+                // about to be pruned.
+                reader_thread->triggerReader_Locked();
+            }
+
+            // Some readers may be still reading from this log chunk, log a warning that they are
+            // about to lose logs.
+            // TODO: We should forcefully disconnect the reader instead, such that the reader itself
+            // has an indication that they've lost logs.
+            if (reader_thread->start() <= it->highest_sequence_number()) {
+                LOG(WARNING) << "Skipping entries from slow reader, " << reader_thread->name()
+                             << ", from LogBuffer::Prune()";
+            }
         }
 
         // Increment ahead of time since we're going to erase this iterator from the list.
         auto it_to_prune = it++;
 
-        // The sequence number check ensures that all readers have read all logs in this chunk, but
-        // they may still hold a reference to the chunk to track their last read log_position.
+        // Readers may have a reference to the chunk to track their last read log_position.
         // Notify them to delete the reference.
         NotifyReadersOfPrune(log_id, it_to_prune);
 
@@ -175,41 +189,10 @@ bool SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid
             RemoveChunkFromStats(log_id, *it_to_prune);
             log_buffer.erase(it_to_prune);
             if (buffer_size >= bytes_to_free) {
-                return true;
+                return;
             }
             bytes_to_free -= buffer_size;
         }
-    }
-
-    // If we've deleted all buffers without bytes_to_free hitting 0, then we're called by Clear()
-    // and should return true.
-    if (it == log_buffer.end()) {
-        return true;
-    }
-
-    // Otherwise we are stuck due to a reader, so mitigate it.
-    CHECK(oldest != nullptr);
-    KickReader(oldest, log_id, bytes_to_free);
-    return false;
-}
-
-// If the selected reader is blocking our pruning progress, decide on
-// what kind of mitigation is necessary to unblock the situation.
-void SerializedLogBuffer::KickReader(LogReaderThread* reader, log_id_t id, size_t bytes_to_free) {
-    if (bytes_to_free >= max_size_[id]) {  // +100%
-        // A misbehaving or slow reader is dropped if we hit too much memory pressure.
-        LOG(WARNING) << "Kicking blocked reader, " << reader->name()
-                     << ", from LogBuffer::kickMe()";
-        reader->release_Locked();
-    } else if (reader->deadline().time_since_epoch().count() != 0) {
-        // Allow a blocked WRAP deadline reader to trigger and start reporting the log data.
-        reader->triggerReader_Locked();
-    } else {
-        // Tell slow reader to skip entries to catch up.
-        unsigned long prune_rows = bytes_to_free / 300;
-        LOG(WARNING) << "Skipping " << prune_rows << " entries from slow reader, " << reader->name()
-                     << ", from LogBuffer::kickMe()";
-        reader->triggerSkip_Locked(id, prune_rows);
     }
 }
 
@@ -228,7 +211,7 @@ bool SerializedLogBuffer::FlushTo(
     state.InitializeLogs(logs_);
 
     while (state.HasUnreadLogs()) {
-        MinHeapElement top = state.PopNextUnreadLog();
+        LogWithId top = state.PopNextUnreadLog();
         auto* entry = top.entry;
         auto log_id = top.log_id;
 
@@ -251,12 +234,18 @@ bool SerializedLogBuffer::FlushTo(
             }
         }
 
+        // We copy the log entry such that we can flush it without the lock.  We never block pruning
+        // waiting for this Flush() to complete.
+        constexpr size_t kMaxEntrySize = sizeof(*entry) + LOGGER_ENTRY_MAX_PAYLOAD + 1;
+        unsigned char entry_copy[kMaxEntrySize] __attribute__((uninitialized));
+        CHECK_LT(entry->msg_len(), LOGGER_ENTRY_MAX_PAYLOAD + 1);
+        memcpy(entry_copy, entry, sizeof(*entry) + entry->msg_len());
         lock.unlock();
-        // We never prune logs equal to or newer than any LogReaderThreads' `start` value, so the
-        // `entry` pointer is safe here without the lock
-        if (!entry->Flush(writer, log_id)) {
+
+        if (!reinterpret_cast<SerializedLogEntry*>(entry_copy)->Flush(writer, log_id)) {
             return false;
         }
+
         lock.lock();
     }
 
@@ -265,41 +254,14 @@ bool SerializedLogBuffer::FlushTo(
 }
 
 bool SerializedLogBuffer::Clear(log_id_t id, uid_t uid) {
-    // Try three times to clear, then disconnect the readers and try one final time.
-    for (int retry = 0; retry < 3; ++retry) {
-        {
-            auto lock = std::lock_guard{lock_};
-            bool prune_success = Prune(id, ULONG_MAX, uid);
-            if (prune_success) {
-                return true;
-            }
-        }
-        sleep(1);
-    }
-    // Check if it is still busy after the sleep, we try to prune one entry, not another clear run,
-    // so we are looking for the quick side effect of the return value to tell us if we have a
-    // _blocked_ reader.
-    bool busy = false;
-    {
-        auto lock = std::lock_guard{lock_};
-        busy = !Prune(id, 1, uid);
-    }
-    // It is still busy, disconnect all readers.
-    if (busy) {
-        auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
-        for (const auto& reader_thread : reader_list_->reader_threads()) {
-            if (reader_thread->IsWatching(id)) {
-                LOG(WARNING) << "Kicking blocked reader, " << reader_thread->name()
-                             << ", from LogBuffer::clear()";
-                reader_thread->release_Locked();
-            }
-        }
-    }
     auto lock = std::lock_guard{lock_};
-    return Prune(id, ULONG_MAX, uid);
+    Prune(id, ULONG_MAX, uid);
+
+    // Clearing SerializedLogBuffer never waits for readers and therefore is always successful.
+    return true;
 }
 
-unsigned long SerializedLogBuffer::GetSizeUsed(log_id_t id) {
+size_t SerializedLogBuffer::GetSizeUsed(log_id_t id) {
     size_t total_size = 0;
     for (const auto& chunk : logs_[id]) {
         total_size += chunk.PruneSize();
@@ -307,7 +269,7 @@ unsigned long SerializedLogBuffer::GetSizeUsed(log_id_t id) {
     return total_size;
 }
 
-unsigned long SerializedLogBuffer::GetSize(log_id_t id) {
+size_t SerializedLogBuffer::GetSize(log_id_t id) {
     auto lock = std::lock_guard{lock_};
     return max_size_[id];
 }
@@ -315,10 +277,10 @@ unsigned long SerializedLogBuffer::GetSize(log_id_t id) {
 // New SerializedLogChunk objects will be allocated according to the new size, but older one are
 // unchanged.  MaybePrune() is called on the log buffer to reduce it to an appropriate size if the
 // new size is lower.
-int SerializedLogBuffer::SetSize(log_id_t id, unsigned long size) {
+bool SerializedLogBuffer::SetSize(log_id_t id, size_t size) {
     // Reasonable limits ...
-    if (!__android_logger_valid_buffer_size(size)) {
-        return -1;
+    if (!IsValidBufferSize(size)) {
+        return false;
     }
 
     auto lock = std::lock_guard{lock_};
@@ -326,5 +288,5 @@ int SerializedLogBuffer::SetSize(log_id_t id, unsigned long size) {
 
     MaybePrune(id);
 
-    return 0;
+    return true;
 }

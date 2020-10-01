@@ -809,15 +809,26 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
     entry.fs_type = mnt_type;
     if ((mnt_type == "f2fs") && !f2fs) entry.fs_type = "ext4";
     if ((mnt_type == "ext4") && !ext4) entry.fs_type = "f2fs";
-    entry.flags = MS_NOATIME;
-    if (readonly) {
-        entry.flags |= MS_RDONLY;
-    } else {
+    entry.flags = MS_NOATIME | MS_RDONLY;
+    auto mounted = true;
+    if (!readonly) {
+        if (entry.fs_type == "ext4") {
+            // check if ext4 de-dupe
+            entry.flags |= MS_RDONLY;
+            auto save_errno = errno;
+            mounted = fs_mgr_do_mount_one(entry) == 0;
+            if (mounted) {
+                mounted = !fs_mgr_has_shared_blocks(entry.mount_point, entry.blk_device);
+                fs_mgr_overlayfs_umount_scratch();
+            }
+            errno = save_errno;
+        }
+        entry.flags &= ~MS_RDONLY;
         fs_mgr_set_blk_ro(device_path, false);
     }
     entry.fs_mgr_flags.check = true;
     auto save_errno = errno;
-    auto mounted = fs_mgr_do_mount_one(entry) == 0;
+    if (mounted) mounted = fs_mgr_do_mount_one(entry) == 0;
     if (!mounted) {
         if ((entry.fs_type == "f2fs") && ext4) {
             entry.fs_type = "ext4";

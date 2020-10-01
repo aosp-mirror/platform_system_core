@@ -248,10 +248,6 @@ int SaveData(pid_t pid) {
   // Do an unwind so we know how much of the stack to save, and what
   // elf files are involved.
   unwindstack::UnwinderFromPid unwinder(1024, pid);
-  if (!unwinder.Init(regs->Arch())) {
-    printf("Unable to init unwinder object.\n");
-    return 1;
-  }
   unwinder.SetRegs(regs);
   uint64_t sp = regs->sp();
   unwinder.Unwind();

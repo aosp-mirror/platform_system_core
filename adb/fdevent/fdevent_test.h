@@ -65,7 +65,7 @@ class FdeventTest : public ::testing::Test {
         ASSERT_EQ(0u, fdevent_installed_count());
     }
 
-    // Register a dummy socket used to wake up the fdevent loop to tell it to die.
+    // Register a placeholder socket used to wake up the fdevent loop to tell it to die.
     void PrepareThread() {
         int dummy_fds[2];
         if (adb_socketpair(dummy_fds) != 0) {
@@ -84,7 +84,7 @@ class FdeventTest : public ::testing::Test {
     }
 
     size_t GetAdditionalLocalSocketCount() {
-        // dummy socket installed in PrepareThread()
+        // placeholder socket installed in PrepareThread()
         return 1;
     }
 

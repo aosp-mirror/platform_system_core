@@ -96,7 +96,7 @@ void DumpDwarfSection(Elf* elf, DwarfSection* section, uint64_t) {
       printf(" <%s>", name.c_str());
     }
     printf("\n");
-    if (!section->Log(2, UINT64_MAX, fde)) {
+    if (!section->Log(2, UINT64_MAX, fde, elf->arch())) {
       printf("Failed to process cfa information for entry at 0x%" PRIx64 "\n", fde->pc_start);
     }
   }
