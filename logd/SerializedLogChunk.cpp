@@ -27,8 +27,9 @@ SerializedLogChunk::~SerializedLogChunk() {
 void SerializedLogChunk::Compress() {
     CHECK_EQ(compressed_log_.size(), 0U);
     CompressionEngine::GetInstance().Compress(contents_, write_offset_, compressed_log_);
-    LOG(INFO) << "Compressed Log, buffer max size: " << contents_.size()
-              << " size used: " << write_offset_ << " compressed size: " << compressed_log_.size();
+    LOG(VERBOSE) << "Compressed Log, buffer max size: " << contents_.size()
+                 << " size used: " << write_offset_
+                 << " compressed size: " << compressed_log_.size();
 }
 
 // TODO: Develop a better reference counting strategy to guard against the case where the writer is
