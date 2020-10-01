@@ -80,6 +80,7 @@ TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
 
 void MountMetadata();
+bool IsCompressionEnabled();
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -892,42 +893,39 @@ class SnapshotUpdateTest : public SnapshotTest {
         return AssertionSuccess();
     }
 
-    AssertionResult MapUpdateSnapshot(const std::string& name, std::string* path = nullptr) {
-        std::string real_path;
-        if (!sm->MapUpdateSnapshot(
-                    CreateLogicalPartitionParams{
-                            .block_device = fake_super,
-                            .metadata_slot = 1,
-                            .partition_name = name,
-                            .timeout_ms = 10s,
-                            .partition_opener = opener_.get(),
-                    },
-                    &real_path)) {
-            return AssertionFailure() << "Unable to map snapshot " << name;
+    AssertionResult MapUpdateSnapshot(const std::string& name,
+                                      std::unique_ptr<ICowWriter>* writer = nullptr) {
+        CreateLogicalPartitionParams params{
+                .block_device = fake_super,
+                .metadata_slot = 1,
+                .partition_name = name,
+                .timeout_ms = 10s,
+                .partition_opener = opener_.get(),
+        };
+
+        auto result = sm->OpenSnapshotWriter(params);
+        if (!result) {
+            return AssertionFailure() << "Cannot open snapshot for writing: " << name;
         }
-        if (path) {
-            *path = real_path;
+
+        if (writer) {
+            *writer = std::move(result);
         }
-        return AssertionSuccess() << "Mapped snapshot " << name << " to " << real_path;
+        return AssertionSuccess();
     }
 
-    AssertionResult WriteSnapshotAndHash(const std::string& name,
-                                         std::optional<size_t> size = std::nullopt) {
-        std::string path;
-        auto res = MapUpdateSnapshot(name, &path);
+    AssertionResult WriteSnapshotAndHash(const std::string& name) {
+        std::unique_ptr<ICowWriter> writer;
+        auto res = MapUpdateSnapshot(name, &writer);
         if (!res) {
             return res;
         }
 
-        std::string size_string = size ? (std::to_string(*size) + " bytes") : "";
-
-        if (!WriteRandomData(path, size, &hashes_[name])) {
-            return AssertionFailure() << "Unable to write " << size_string << " to " << path
-                                      << " for partition " << name;
+        if (!WriteRandomData(writer.get(), &hashes_[name])) {
+            return AssertionFailure() << "Unable to write random data to snapshot " << name;
         }
 
-        return AssertionSuccess() << "Written " << size_string << " to " << path
-                                  << " for snapshot partition " << name
+        return AssertionSuccess() << "Written random data to snapshot " << name
                                   << ", hash: " << hashes_[name];
     }
 
@@ -1003,7 +1001,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Write some data to target partitions.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name, partition_size));
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
     }
 
     // Assert that source partitions aren't affected.
@@ -1406,6 +1404,10 @@ void MountMetadata() {
     MetadataMountedTest().TearDown();
 }
 
+bool IsCompressionEnabled() {
+    return android::base::GetBoolProperty("ro.virtual_ab.compression.enabled", false);
+}
+
 TEST_F(MetadataMountedTest, Android) {
     auto device = sm->EnsureMetadataMounted();
     EXPECT_NE(nullptr, device);
@@ -1623,7 +1625,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
     // Map and write some data to target partition.
     ASSERT_TRUE(MapUpdateSnapshots({"vnd_b", "prd_b"}));
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b", partition_size));
+    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
 
     // Finish update.
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
@@ -1655,7 +1657,7 @@ TEST_F(SnapshotUpdateTest, Overflow) {
 
     // Map and write some data to target partitions.
     ASSERT_TRUE(MapUpdateSnapshots({"vnd_b", "prd_b"}));
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b", actual_write_size));
+    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
 
     std::vector<android::dm::DeviceMapper::TargetInfo> table;
     ASSERT_TRUE(DeviceMapper::Instance().GetTableStatus("sys_b", &table));
