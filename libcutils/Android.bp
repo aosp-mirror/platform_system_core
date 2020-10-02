@@ -55,6 +55,7 @@ cc_library {
     name: "libcutils_sockets",
     vendor_available: true,
     recovery_available: true,
+    ramdisk_available: true,
     host_supported: true,
     native_bridge_supported: true,
     apex_available: [
