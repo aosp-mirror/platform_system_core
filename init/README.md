@@ -31,14 +31,13 @@ The init language is used in plain text files that take the .rc file
 extension.  There are typically multiple of these in multiple
 locations on the system, described below.
 
-/init.rc is the primary .rc file and is loaded by the init executable
-at the beginning of its execution.  It is responsible for the initial
-set up of the system.
+`/system/etc/init/hw/init.rc` is the primary .rc file and is loaded by the init executable at the
+beginning of its execution.  It is responsible for the initial set up of the system.
 
 Init loads all of the files contained within the
-/{system,vendor,odm}/etc/init/ directories immediately after loading
-the primary /init.rc.  This is explained in more details in the
-Imports section of this file.
+`/{system,system_ext,vendor,odm,product}/etc/init/` directories immediately after loading
+the primary `/system/etc/init/hw/init.rc`.  This is explained in more details in the
+[Imports](#imports) section of this file.
 
 Legacy devices without the first stage mount mechanism previously were
 able to import init scripts during mount_all, however that is deprecated
@@ -689,29 +688,22 @@ imports are handled as a file is being parsed and follow the below logic.
 
 There are only three times where the init executable imports .rc files:
 
-   1. When it imports /init.rc or the script indicated by the property
+   1. When it imports `/system/etc/init/hw/init.rc` or the script indicated by the property
       `ro.boot.init_rc` during initial boot.
-   2. When it imports /{system,vendor,odm}/etc/init/ for first stage mount
-      devices immediately after importing /init.rc.
+   2. When it imports `/{system,system_ext,vendor,odm,product}/etc/init/` immediately after
+      importing `/system/etc/init/hw/init.rc`.
    3. (Deprecated) When it imports /{system,vendor,odm}/etc/init/ or .rc files
       at specified paths during mount_all, not allowed for devices launching
       after Q.
 
-The order that files are imported is a bit complex for legacy reasons
-and to keep backwards compatibility.  It is not strictly guaranteed.
+The order that files are imported is a bit complex for legacy reasons.  The below is guaranteed:
 
-The only correct way to guarantee that a command has been run before a
-different command is to either 1) place it in an Action with an
-earlier executed trigger, or 2) place it in an Action with the same
-trigger within the same file at an earlier line.
-
-Nonetheless, the de facto order for first stage mount devices is:
-1. /init.rc is parsed then recursively each of its imports are
+1. `/system/etc/init/hw/init.rc` is parsed then recursively each of its imports are
    parsed.
-2. The contents of /system/etc/init/ are alphabetized and parsed
-   sequentially, with imports happening recursively after each file is
-   parsed.
-3. Step 2 is repeated for /vendor/etc/init then /odm/etc/init
+2. The contents of `/system/etc/init/` are alphabetized and parsed sequentially, with imports
+   happening recursively after each file is parsed.
+3. Step 2 is repeated for `/system_ext/etc/init`, `/vendor/etc/init`, `/odm/etc/init`,
+   `/product/etc/init`
 
 The below pseudocode may explain this more clearly:
 
@@ -720,13 +712,17 @@ The below pseudocode may explain this more clearly:
       for (import : file.imports)
         Import(import)
 
-    Import(/init.rc)
-    Directories = [/system/etc/init, /vendor/etc/init, /odm/etc/init]
+    Import(/system/etc/init/hw/init.rc)
+    Directories = [/system/etc/init, /system_ext/etc/init, /vendor/etc/init, /odm/etc/init, /product/etc/init]
     for (directory : Directories)
       files = <Alphabetical order of directory's contents>
       for (file : files)
         Import(file)
 
+Actions are executed in the order that they are parsed.  For example the `post-fs-data` action(s)
+in `/system/etc/init/hw/init.rc` are always the first `post-fs-data` action(s) to be executed in
+order of how they appear in that file.  Then the `post-fs-data` actions of the imports of
+`/system/etc/init/hw/init.rc` in the order that they're imported, etc.
 
 Properties
 ----------
