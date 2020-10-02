@@ -14,25 +14,11 @@
  * limitations under the License.
  */
 
-#include <linux/types.h>
-#include <stdlib.h>
-
 #include <csignal>
-#include <cstring>
-#include <iostream>
-#include <limits>
-#include <string>
-#include <thread>
-#include <vector>
 
-#include <android-base/file.h>
-#include <android-base/logging.h>
-#include <android-base/stringprintf.h>
-#include <android-base/unique_fd.h>
-#include <libdm/dm.h>
-#include <libsnapshot/cow_reader.h>
-#include <libsnapshot/cow_writer.h>
 #include <libsnapshot/snapuserd.h>
+#include <libsnapshot/snapuserd_daemon.h>
+#include <libsnapshot/snapuserd_server.h>
 
 namespace android {
 namespace snapshot {
@@ -60,140 +46,36 @@ class Target {
     const std::string uuid_;
 };
 
-class Daemon {
-    // The Daemon class is a singleton to avoid
-    // instantiating more than once
-  public:
-    static Daemon& Instance() {
-        static Daemon instance;
-        return instance;
-    }
-
-    bool IsRunning();
-
-  private:
-    bool is_running_;
-
-    Daemon();
-    Daemon(Daemon const&) = delete;
-    void operator=(Daemon const&) = delete;
-
-    static void SignalHandler(int signal);
-};
-
-Daemon::Daemon() {
-    is_running_ = true;
-    signal(SIGINT, Daemon::SignalHandler);
-    signal(SIGTERM, Daemon::SignalHandler);
+void BufferSink::Initialize(size_t size) {
+    buffer_size_ = size;
+    buffer_offset_ = 0;
+    buffer_ = std::make_unique<uint8_t[]>(size);
 }
 
-bool Daemon::IsRunning() {
-    return is_running_;
+void* BufferSink::GetPayloadBuffer(size_t size) {
+    if ((buffer_size_ - buffer_offset_) < size) return nullptr;
+
+    char* buffer = reinterpret_cast<char*>(GetBufPtr());
+    struct dm_user_message* msg = (struct dm_user_message*)(&(buffer[0]));
+    return (char*)msg->payload.buf + buffer_offset_;
 }
 
-void Daemon::SignalHandler(int signal) {
-    LOG(DEBUG) << "Snapuserd received signal: " << signal;
-    switch (signal) {
-        case SIGINT:
-        case SIGTERM: {
-            Daemon::Instance().is_running_ = false;
-            break;
-        }
+void* BufferSink::GetBuffer(size_t requested, size_t* actual) {
+    void* buf = GetPayloadBuffer(requested);
+    if (!buf) {
+        *actual = 0;
+        return nullptr;
     }
+    *actual = requested;
+    return buf;
 }
 
-class BufferSink : public IByteSink {
-  public:
-    void Initialize(size_t size) {
-        buffer_size_ = size;
-        buffer_offset_ = 0;
-        buffer_ = std::make_unique<uint8_t[]>(size);
-    }
-
-    void* GetBufPtr() { return buffer_.get(); }
-
-    void Clear() { memset(GetBufPtr(), 0, buffer_size_); }
-
-    void* GetPayloadBuffer(size_t size) {
-        if ((buffer_size_ - buffer_offset_) < size) return nullptr;
-
-        char* buffer = reinterpret_cast<char*>(GetBufPtr());
-        struct dm_user_message* msg = (struct dm_user_message*)(&(buffer[0]));
-        return (char*)msg->payload.buf + buffer_offset_;
-    }
-
-    void* GetBuffer(size_t requested, size_t* actual) override {
-        void* buf = GetPayloadBuffer(requested);
-        if (!buf) {
-            *actual = 0;
-            return nullptr;
-        }
-        *actual = requested;
-        return buf;
-    }
-
-    void UpdateBufferOffset(size_t size) { buffer_offset_ += size; }
-
-    struct dm_user_header* GetHeaderPtr() {
-        CHECK(sizeof(struct dm_user_header) <= buffer_size_);
-        char* buf = reinterpret_cast<char*>(GetBufPtr());
-        struct dm_user_header* header = (struct dm_user_header*)(&(buf[0]));
-        return header;
-    }
-
-    bool ReturnData(void*, size_t) override { return true; }
-    void ResetBufferOffset() { buffer_offset_ = 0; }
-
-  private:
-    std::unique_ptr<uint8_t[]> buffer_;
-    loff_t buffer_offset_;
-    size_t buffer_size_;
-};
-
-class Snapuserd final {
-  public:
-    Snapuserd(const std::string& in_cow_device, const std::string& in_backing_store_device)
-        : in_cow_device_(in_cow_device),
-          in_backing_store_device_(in_backing_store_device),
-          metadata_read_done_(false) {}
-
-    int Run();
-    int ReadDmUserHeader();
-    int WriteDmUserPayload(size_t size);
-    int ConstructKernelCowHeader();
-    int ReadMetadata();
-    int ZerofillDiskExceptions(size_t read_size);
-    int ReadDiskExceptions(chunk_t chunk, size_t size);
-    int ReadData(chunk_t chunk, size_t size);
-
-  private:
-    int ProcessReplaceOp(const CowOperation* cow_op);
-    int ProcessCopyOp(const CowOperation* cow_op);
-    int ProcessZeroOp();
-
-    std::string in_cow_device_;
-    std::string in_backing_store_device_;
-
-    unique_fd cow_fd_;
-    unique_fd backing_store_fd_;
-    unique_fd ctrl_fd_;
-
-    uint32_t exceptions_per_area_;
-
-    std::unique_ptr<ICowOpIter> cowop_iter_;
-    std::unique_ptr<CowReader> reader_;
-
-    // Vector of disk exception which is a
-    // mapping of old-chunk to new-chunk
-    std::vector<std::unique_ptr<uint8_t[]>> vec_;
-
-    // Index - Chunk ID
-    // Value - cow operation
-    std::vector<const CowOperation*> chunk_vec_;
-
-    bool metadata_read_done_;
-    BufferSink bufsink_;
-};
+struct dm_user_header* BufferSink::GetHeaderPtr() {
+    CHECK(sizeof(struct dm_user_header) <= buffer_size_);
+    char* buf = reinterpret_cast<char*>(GetBufPtr());
+    struct dm_user_header* header = (struct dm_user_header*)(&(buf[0]));
+    return header;
+}
 
 // Construct kernel COW header in memory
 // This header will be in sector 0. The IO
@@ -581,9 +463,12 @@ void MyLogger(android::base::LogId, android::base::LogSeverity severity, const c
 // Read Header from dm-user misc device. This gives
 // us the sector number for which IO is issued by dm-snapshot device
 int Snapuserd::ReadDmUserHeader() {
-    if (!android::base::ReadFully(ctrl_fd_, bufsink_.GetBufPtr(), sizeof(struct dm_user_header))) {
-        PLOG(ERROR) << "Control read failed";
-        return -1;
+    int ret;
+
+    ret = read(ctrl_fd_, bufsink_.GetBufPtr(), sizeof(struct dm_user_header));
+    if (ret < 0) {
+        PLOG(ERROR) << "Control-read failed with: " << ret;
+        return ret;
     }
 
     return sizeof(struct dm_user_header);
@@ -600,22 +485,20 @@ int Snapuserd::WriteDmUserPayload(size_t size) {
     return sizeof(struct dm_user_header) + size;
 }
 
-// Start the daemon.
-// TODO: Handle signals
-int Snapuserd::Run() {
-    backing_store_fd_.reset(open(in_backing_store_device_.c_str(), O_RDONLY));
+int Snapuserd::Init() {
+    backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
     if (backing_store_fd_ < 0) {
-        LOG(ERROR) << "Open Failed: " << in_backing_store_device_;
+        LOG(ERROR) << "Open Failed: " << backing_store_device_;
         return 1;
     }
 
-    cow_fd_.reset(open(in_cow_device_.c_str(), O_RDWR));
+    cow_fd_.reset(open(cow_device_.c_str(), O_RDWR));
     if (cow_fd_ < 0) {
-        LOG(ERROR) << "Open Failed: " << in_cow_device_;
+        LOG(ERROR) << "Open Failed: " << cow_device_;
         return 1;
     }
 
-    std::string str(in_cow_device_);
+    std::string str(cow_device_);
     std::size_t found = str.find_last_of("/\\");
     CHECK(found != std::string::npos);
     std::string device_name = str.substr(found + 1);
@@ -625,7 +508,7 @@ int Snapuserd::Run() {
     auto& dm = dm::DeviceMapper::Instance();
     std::string uuid;
     if (!dm.GetDmDeviceUuidByName(device_name, &uuid)) {
-        LOG(ERROR) << "Unable to find UUID for " << in_cow_device_;
+        LOG(ERROR) << "Unable to find UUID for " << cow_device_;
         return 1;
     }
 
@@ -638,8 +521,6 @@ int Snapuserd::Run() {
         return 1;
     }
 
-    int ret = 0;
-
     // Allocate the buffer which is used to communicate between
     // daemon and dm-user. The buffer comprises of header and a fixed payload.
     // If the dm-user requests a big IO, the IO will be broken into chunks
@@ -647,107 +528,111 @@ int Snapuserd::Run() {
     size_t buf_size = sizeof(struct dm_user_header) + PAYLOAD_SIZE;
     bufsink_.Initialize(buf_size);
 
-    while (true) {
-        struct dm_user_header* header = bufsink_.GetHeaderPtr();
+    return 0;
+}
 
-        bufsink_.Clear();
+int Snapuserd::Run() {
+    int ret = 0;
 
-        ret = ReadDmUserHeader();
-        if (ret < 0) return ret;
+    struct dm_user_header* header = bufsink_.GetHeaderPtr();
 
-        LOG(DEBUG) << "dm-user returned " << ret << " bytes";
+    bufsink_.Clear();
 
-        LOG(DEBUG) << "msg->seq: " << std::hex << header->seq;
-        LOG(DEBUG) << "msg->type: " << std::hex << header->type;
-        LOG(DEBUG) << "msg->flags: " << std::hex << header->flags;
-        LOG(DEBUG) << "msg->sector: " << std::hex << header->sector;
-        LOG(DEBUG) << "msg->len: " << std::hex << header->len;
+    ret = ReadDmUserHeader();
+    if (ret < 0) return ret;
 
-        switch (header->type) {
-            case DM_USER_MAP_READ: {
-                size_t remaining_size = header->len;
-                loff_t offset = 0;
-                header->io_in_progress = 0;
-                ret = 0;
-                do {
-                    size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
+    LOG(DEBUG) << "dm-user returned " << ret << " bytes";
 
-                    // Request to sector 0 is always for kernel
-                    // representation of COW header. This IO should be only
-                    // once during dm-snapshot device creation. We should
-                    // never see multiple IO requests. Additionally this IO
-                    // will always be a single 4k.
-                    if (header->sector == 0) {
-                        // Read the metadata from internal COW device
-                        // and build the in-memory data structures
-                        // for all the operations in the internal COW.
-                        if (!metadata_read_done_ && ReadMetadata()) {
-                            LOG(ERROR) << "Metadata read failed";
-                            return 1;
+    LOG(DEBUG) << "msg->seq: " << std::hex << header->seq;
+    LOG(DEBUG) << "msg->type: " << std::hex << header->type;
+    LOG(DEBUG) << "msg->flags: " << std::hex << header->flags;
+    LOG(DEBUG) << "msg->sector: " << std::hex << header->sector;
+    LOG(DEBUG) << "msg->len: " << std::hex << header->len;
+
+    switch (header->type) {
+        case DM_USER_MAP_READ: {
+            size_t remaining_size = header->len;
+            loff_t offset = 0;
+            header->io_in_progress = 0;
+            ret = 0;
+            do {
+                size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
+
+                // Request to sector 0 is always for kernel
+                // representation of COW header. This IO should be only
+                // once during dm-snapshot device creation. We should
+                // never see multiple IO requests. Additionally this IO
+                // will always be a single 4k.
+                if (header->sector == 0) {
+                    // Read the metadata from internal COW device
+                    // and build the in-memory data structures
+                    // for all the operations in the internal COW.
+                    if (!metadata_read_done_ && ReadMetadata()) {
+                        LOG(ERROR) << "Metadata read failed";
+                        return 1;
+                    }
+                    metadata_read_done_ = true;
+
+                    CHECK(read_size == BLOCK_SIZE);
+                    ret = ConstructKernelCowHeader();
+                    if (ret < 0) return ret;
+                } else {
+                    // Convert the sector number to a chunk ID.
+                    //
+                    // Check if the chunk ID represents a metadata
+                    // page. If the chunk ID is not found in the
+                    // vector, then it points to a metadata page.
+                    chunk_t chunk = (header->sector >> CHUNK_SHIFT);
+
+                    if (chunk >= chunk_vec_.size()) {
+                        ret = ZerofillDiskExceptions(read_size);
+                        if (ret < 0) {
+                            LOG(ERROR) << "ZerofillDiskExceptions failed";
+                            return ret;
                         }
-                        metadata_read_done_ = true;
-
-                        CHECK(read_size == BLOCK_SIZE);
-                        ret = ConstructKernelCowHeader();
-                        if (ret < 0) return ret;
+                    } else if (chunk_vec_[chunk] == nullptr) {
+                        ret = ReadDiskExceptions(chunk, read_size);
+                        if (ret < 0) {
+                            LOG(ERROR) << "ReadDiskExceptions failed";
+                            return ret;
+                        }
                     } else {
-                        // Convert the sector number to a chunk ID.
-                        //
-                        // Check if the chunk ID represents a metadata
-                        // page. If the chunk ID is not found in the
-                        // vector, then it points to a metadata page.
-                        chunk_t chunk = (header->sector >> CHUNK_SHIFT);
-
-                        if (chunk >= chunk_vec_.size()) {
-                            ret = ZerofillDiskExceptions(read_size);
-                            if (ret < 0) {
-                                LOG(ERROR) << "ZerofillDiskExceptions failed";
-                                return ret;
-                            }
-                        } else if (chunk_vec_[chunk] == nullptr) {
-                            ret = ReadDiskExceptions(chunk, read_size);
-                            if (ret < 0) {
-                                LOG(ERROR) << "ReadDiskExceptions failed";
-                                return ret;
-                            }
-                        } else {
-                            chunk_t num_chunks_read = (offset >> BLOCK_SHIFT);
-                            ret = ReadData(chunk + num_chunks_read, read_size);
-                            if (ret < 0) {
-                                LOG(ERROR) << "ReadData failed";
-                                return ret;
-                            }
+                        chunk_t num_chunks_read = (offset >> BLOCK_SHIFT);
+                        ret = ReadData(chunk + num_chunks_read, read_size);
+                        if (ret < 0) {
+                            LOG(ERROR) << "ReadData failed";
+                            return ret;
                         }
                     }
+                }
 
-                    ssize_t written = WriteDmUserPayload(ret);
-                    if (written < 0) return written;
+                ssize_t written = WriteDmUserPayload(ret);
+                if (written < 0) return written;
 
-                    remaining_size -= ret;
-                    offset += ret;
-                    if (remaining_size) {
-                        LOG(DEBUG) << "Write done ret: " << ret
-                                   << " remaining size: " << remaining_size;
-                        bufsink_.GetHeaderPtr()->io_in_progress = 1;
-                    }
-                } while (remaining_size);
+                remaining_size -= ret;
+                offset += ret;
+                if (remaining_size) {
+                    LOG(DEBUG) << "Write done ret: " << ret
+                               << " remaining size: " << remaining_size;
+                    bufsink_.GetHeaderPtr()->io_in_progress = 1;
+                }
+            } while (remaining_size);
 
-                break;
-            }
-
-            case DM_USER_MAP_WRITE: {
-                // TODO: After merge operation is completed, kernel issues write
-                // to flush all the exception mappings where the merge is
-                // completed. If dm-user routes the WRITE IO, we need to clear
-                // in-memory data structures representing those exception
-                // mappings.
-                abort();
-                break;
-            }
+            break;
         }
 
-        LOG(DEBUG) << "read() finished, next message";
+        case DM_USER_MAP_WRITE: {
+            // TODO: After merge operation is completed, kernel issues write
+            // to flush all the exception mappings where the merge is
+            // completed. If dm-user routes the WRITE IO, we need to clear
+            // in-memory data structures representing those exception
+            // mappings.
+            abort();
+            break;
+        }
     }
+
+    LOG(DEBUG) << "read() finished, next message";
 
     return 0;
 }
@@ -755,30 +640,13 @@ int Snapuserd::Run() {
 }  // namespace snapshot
 }  // namespace android
 
-void run_thread(std::string cow_device, std::string backing_device) {
-    android::snapshot::Snapuserd snapd(cow_device, backing_device);
-    snapd.Run();
-}
-
 int main([[maybe_unused]] int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::KernelLogger);
 
     android::snapshot::Daemon& daemon = android::snapshot::Daemon::Instance();
 
-    while (daemon.IsRunning()) {
-        // TODO: This is hardcoded wherein:
-        // argv[1] = system_cow, argv[2] = /dev/block/mapper/system_a
-        // argv[3] = product_cow, argv[4] = /dev/block/mapper/product_a
-        //
-        // This should be fixed based on some kind of IPC or setup a
-        // command socket and spin up the thread based when a new
-        // partition is visible.
-        std::thread system_a(run_thread, argv[1], argv[2]);
-        std::thread product_a(run_thread, argv[3], argv[4]);
-
-        system_a.join();
-        product_a.join();
-    }
+    daemon.StartServer(argv[1]);
+    daemon.Run();
 
     return 0;
 }
