@@ -561,6 +561,12 @@ on post-fs-data
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
 
+    # Start tombstoned early to be able to store tombstones.
+    mkdir /data/tombstones 0771 system system encryption=Require
+    mkdir /data/vendor/tombstones 0771 root root
+    mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
+    start tombstoned
+
     # /data/apex is now available. Start apexd to scan and activate APEXes.
     mkdir /data/apex 0755 root system encryption=None
     mkdir /data/apex/active 0755 root system
@@ -661,9 +667,6 @@ on post-fs-data
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
     mkdir /data/property 0700 root root encryption=Require
-    mkdir /data/tombstones 0771 system system encryption=Require
-    mkdir /data/vendor/tombstones 0771 root root
-    mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
 
     # Create directories to push tests to for each linker namespace.
     # Create the subdirectories in case the first test is run as root
