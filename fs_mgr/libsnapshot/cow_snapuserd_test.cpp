@@ -26,6 +26,7 @@
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <libsnapshot/cow_writer.h>
+#include <libsnapshot/snapuserd_client.h>
 #include <storage_literals/storage_literals.h>
 
 namespace android {
@@ -43,16 +44,28 @@ class SnapuserdTest : public ::testing::Test {
         cow_product_ = std::make_unique<TemporaryFile>();
         ASSERT_GE(cow_product_->fd, 0) << strerror(errno);
 
+        cow_system_1_ = std::make_unique<TemporaryFile>();
+        ASSERT_GE(cow_system_1_->fd, 0) << strerror(errno);
+
+        cow_product_1_ = std::make_unique<TemporaryFile>();
+        ASSERT_GE(cow_product_1_->fd, 0) << strerror(errno);
+
         size_ = 100_MiB;
     }
 
     void TearDown() override {
         cow_system_ = nullptr;
         cow_product_ = nullptr;
+
+        cow_system_1_ = nullptr;
+        cow_product_1_ = nullptr;
     }
 
     std::unique_ptr<TemporaryFile> cow_system_;
     std::unique_ptr<TemporaryFile> cow_product_;
+
+    std::unique_ptr<TemporaryFile> cow_system_1_;
+    std::unique_ptr<TemporaryFile> cow_product_1_;
 
     unique_fd sys_fd_;
     unique_fd product_fd_;
@@ -71,12 +84,14 @@ class SnapuserdTest : public ::testing::Test {
 
     void Init();
     void CreateCowDevice(std::unique_ptr<TemporaryFile>& cow);
-    void CreateSystemDmUser();
-    void CreateProductDmUser();
+    void CreateSystemDmUser(std::unique_ptr<TemporaryFile>& cow);
+    void CreateProductDmUser(std::unique_ptr<TemporaryFile>& cow);
     void StartSnapuserdDaemon();
     void CreateSnapshotDevices();
+    void SwitchSnapshotDevices();
 
-    void TestIO(unique_fd& snapshot_fd, std::unique_ptr<uint8_t[]>&& buf);
+    void TestIO(unique_fd& snapshot_fd, std::unique_ptr<uint8_t[]>& buffer);
+    SnapuserdClient client_;
 };
 
 void SnapuserdTest::Init() {
@@ -112,7 +127,7 @@ void SnapuserdTest::Init() {
     // Read from system partition from offset 0 of size 100MB
     ASSERT_EQ(ReadFullyAtOffset(sys_fd_, system_buffer_.get(), size_, 0), true);
 
-    // Read from system partition from offset 0 of size 100MB
+    // Read from product partition from offset 0 of size 100MB
     ASSERT_EQ(ReadFullyAtOffset(product_fd_, product_buffer_.get(), size_, 0), true);
 }
 
@@ -167,9 +182,10 @@ void SnapuserdTest::CreateCowDevice(std::unique_ptr<TemporaryFile>& cow) {
     ASSERT_EQ(lseek(cow->fd, 0, SEEK_SET), 0);
 }
 
-void SnapuserdTest::CreateSystemDmUser() {
+void SnapuserdTest::CreateSystemDmUser(std::unique_ptr<TemporaryFile>& cow) {
     unique_fd system_a_fd;
     std::string cmd;
+    system_device_name_.clear();
 
     // Create a COW device. Number of sectors is chosen random which can
     // hold at least 400MB of data
@@ -180,7 +196,7 @@ void SnapuserdTest::CreateSystemDmUser() {
     int err = ioctl(system_a_fd.get(), BLKGETSIZE, &system_blksize_);
     ASSERT_GE(err, 0);
 
-    std::string str(cow_system_->path);
+    std::string str(cow->path);
     std::size_t found = str.find_last_of("/\\");
     ASSERT_NE(found, std::string::npos);
     system_device_name_ = str.substr(found + 1);
@@ -189,9 +205,10 @@ void SnapuserdTest::CreateSystemDmUser() {
     system(cmd.c_str());
 }
 
-void SnapuserdTest::CreateProductDmUser() {
+void SnapuserdTest::CreateProductDmUser(std::unique_ptr<TemporaryFile>& cow) {
     unique_fd product_a_fd;
     std::string cmd;
+    product_device_name_.clear();
 
     // Create a COW device. Number of sectors is chosen random which can
     // hold at least 400MB of data
@@ -202,7 +219,7 @@ void SnapuserdTest::CreateProductDmUser() {
     int err = ioctl(product_a_fd.get(), BLKGETSIZE, &product_blksize_);
     ASSERT_GE(err, 0);
 
-    std::string str(cow_product_->path);
+    std::string str(cow->path);
     std::size_t found = str.find_last_of("/\\");
     ASSERT_NE(found, std::string::npos);
     product_device_name_ = str.substr(found + 1);
@@ -212,15 +229,16 @@ void SnapuserdTest::CreateProductDmUser() {
 }
 
 void SnapuserdTest::StartSnapuserdDaemon() {
-    // Start the snapuserd daemon
-    if (fork() == 0) {
-        const char* argv[] = {"/system/bin/snapuserd",       cow_system_->path,
-                              "/dev/block/mapper/system_a",  cow_product_->path,
-                              "/dev/block/mapper/product_a", nullptr};
-        if (execv(argv[0], const_cast<char**>(argv))) {
-            ASSERT_TRUE(0);
-        }
-    }
+    int ret;
+
+    ret = client_.StartSnapuserd();
+    ASSERT_EQ(ret, 0);
+
+    ret = client_.InitializeSnapuserd(cow_system_->path, "/dev/block/mapper/system_a");
+    ASSERT_EQ(ret, 0);
+
+    ret = client_.InitializeSnapuserd(cow_product_->path, "/dev/block/mapper/product_a");
+    ASSERT_EQ(ret, 0);
 }
 
 void SnapuserdTest::CreateSnapshotDevices() {
@@ -243,9 +261,29 @@ void SnapuserdTest::CreateSnapshotDevices() {
     system(cmd.c_str());
 }
 
-void SnapuserdTest::TestIO(unique_fd& snapshot_fd, std::unique_ptr<uint8_t[]>&& buf) {
+void SnapuserdTest::SwitchSnapshotDevices() {
+    std::string cmd;
+
+    cmd = "dmctl create system-snapshot-1 -ro snapshot 0 " + std::to_string(system_blksize_);
+    cmd += " /dev/block/mapper/system_a";
+    cmd += " /dev/block/mapper/" + system_device_name_;
+    cmd += " P 8";
+
+    system(cmd.c_str());
+
+    cmd.clear();
+
+    cmd = "dmctl create product-snapshot-1 -ro snapshot 0 " + std::to_string(product_blksize_);
+    cmd += " /dev/block/mapper/product_a";
+    cmd += " /dev/block/mapper/" + product_device_name_;
+    cmd += " P 8";
+
+    system(cmd.c_str());
+}
+
+void SnapuserdTest::TestIO(unique_fd& snapshot_fd, std::unique_ptr<uint8_t[]>& buffer) {
     loff_t offset = 0;
-    std::unique_ptr<uint8_t[]> buffer = std::move(buf);
+    // std::unique_ptr<uint8_t[]> buffer = std::move(buf);
 
     std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(size_);
 
@@ -326,8 +364,8 @@ TEST_F(SnapuserdTest, ReadWrite) {
     CreateCowDevice(cow_system_);
     CreateCowDevice(cow_product_);
 
-    CreateSystemDmUser();
-    CreateProductDmUser();
+    CreateSystemDmUser(cow_system_);
+    CreateProductDmUser(cow_product_);
 
     StartSnapuserdDaemon();
 
@@ -335,11 +373,44 @@ TEST_F(SnapuserdTest, ReadWrite) {
 
     snapshot_fd.reset(open("/dev/block/mapper/system-snapshot", O_RDONLY));
     ASSERT_TRUE(snapshot_fd > 0);
-    TestIO(snapshot_fd, std::move(system_buffer_));
+    TestIO(snapshot_fd, system_buffer_);
 
     snapshot_fd.reset(open("/dev/block/mapper/product-snapshot", O_RDONLY));
     ASSERT_TRUE(snapshot_fd > 0);
-    TestIO(snapshot_fd, std::move(product_buffer_));
+    TestIO(snapshot_fd, product_buffer_);
+
+    // Sequence of operations for transition
+    CreateCowDevice(cow_system_1_);
+    CreateCowDevice(cow_product_1_);
+
+    CreateSystemDmUser(cow_system_1_);
+    CreateProductDmUser(cow_product_1_);
+
+    std::vector<std::pair<std::string, std::string>> vec;
+    vec.push_back(std::make_pair(cow_system_1_->path, "/dev/block/mapper/system_a"));
+    vec.push_back(std::make_pair(cow_product_1_->path, "/dev/block/mapper/product_a"));
+
+    // Start the second stage deamon and send the devices
+    ASSERT_EQ(client_.RestartSnapuserd(vec), 0);
+
+    // TODO: This is not switching snapshot device but creates a new table;
+    // however, it should serve the testing purpose.
+    SwitchSnapshotDevices();
+
+    // Stop the first stage daemon
+    ASSERT_EQ(client_.StopSnapuserd(true), 0);
+
+    // Test the IO again with the second stage daemon
+    snapshot_fd.reset(open("/dev/block/mapper/system-snapshot-1", O_RDONLY));
+    ASSERT_TRUE(snapshot_fd > 0);
+    TestIO(snapshot_fd, system_buffer_);
+
+    snapshot_fd.reset(open("/dev/block/mapper/product-snapshot-1", O_RDONLY));
+    ASSERT_TRUE(snapshot_fd > 0);
+    TestIO(snapshot_fd, product_buffer_);
+
+    // Stop the second stage daemon
+    ASSERT_EQ(client_.StopSnapuserd(false), 0);
 }
 
 }  // namespace snapshot
