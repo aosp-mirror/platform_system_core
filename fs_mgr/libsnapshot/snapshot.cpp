@@ -44,7 +44,6 @@
 #include "device_info.h"
 #include "partition_cow_creator.h"
 #include "snapshot_metadata_updater.h"
-#include "snapshot_reader.h"
 #include "utility.h"
 
 namespace android {
