@@ -77,7 +77,6 @@ filegroup {
         "snapshot_stats.cpp",
         "snapshot_stub.cpp",
         "snapshot_metadata_updater.cpp",
-        "snapshot_writer.cpp",
         "partition_cow_creator.cpp",
         "return.cpp",
         "utility.cpp",
@@ -248,7 +247,6 @@ cc_defaults {
         "libgmock",
         "liblp",
         "libsnapshot",
-        "libsnapshot_cow",
         "libsnapshot_test_helpers",
         "libsparse",
     ],
@@ -283,7 +281,6 @@ cc_binary {
     static_libs: [
         "libfstab",
         "libsnapshot",
-        "libsnapshot_cow",
         "update_metadata-protos",
     ],
     shared_libs: [
@@ -347,7 +344,6 @@ cc_defaults {
         "libgmock", // from libsnapshot_test_helpers
         "liblog",
         "liblp",
-        "libsnapshot_cow",
         "libsnapshot_test_helpers",
         "libprotobuf-mutator",
     ],

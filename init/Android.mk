@@ -112,7 +112,6 @@ LOCAL_STATIC_LIBRARIES := \
     libmodprobe \
     libext2_uuid \
     libprotobuf-cpp-lite \
-    libsnapshot_cow \
     libsnapshot_init \
     update_metadata-protos \
 
