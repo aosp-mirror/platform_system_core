@@ -129,7 +129,6 @@ cc_defaults {
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
-        "libsnapshot_cow",
         "libsnapshot_init",
         "libxml2",
         "lib_apex_manifest_proto_lite",
