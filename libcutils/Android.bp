@@ -14,6 +14,11 @@
 // limitations under the License.
 //
 
+filegroup {
+    name: "android_filesystem_config_header",
+    srcs: ["include/private/android_filesystem_config.h"],
+}
+
 // some files must not be compiled when building against Mingw
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
