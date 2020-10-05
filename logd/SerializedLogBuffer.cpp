@@ -201,6 +201,11 @@ std::unique_ptr<FlushToState> SerializedLogBuffer::CreateFlushToState(uint64_t s
     return std::make_unique<SerializedFlushToState>(start, log_mask);
 }
 
+void SerializedLogBuffer::DeleteFlushToState(std::unique_ptr<FlushToState> state) {
+    auto lock = std::unique_lock{lock_};
+    state.reset();
+}
+
 bool SerializedLogBuffer::FlushTo(
         LogWriter* writer, FlushToState& abstract_state,
         const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
