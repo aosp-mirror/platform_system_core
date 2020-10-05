@@ -3,8 +3,9 @@
 #ifndef _LIBS_LOG_LOG_H
 #define _LIBS_LOG_LOG_H
 
-/* Historically vendors have depended on this header being included. */
+/* Historically vendors have depended on these headers being included. */
 #include <fcntl.h>
+#include <unistd.h>
 
 #include <android/log.h>
 #include <log/log_id.h>
