@@ -499,25 +499,27 @@ bool ElfInterface::GetGlobalVariableWithTemplate(const std::string& name, uint64
   return false;
 }
 
-bool ElfInterface::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
+bool ElfInterface::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished,
+                        bool* is_signal_frame) {
   last_error_.code = ERROR_NONE;
   last_error_.address = 0;
 
   // Try the debug_frame first since it contains the most specific unwind
   // information.
   DwarfSection* debug_frame = debug_frame_.get();
-  if (debug_frame != nullptr && debug_frame->Step(pc, regs, process_memory, finished)) {
+  if (debug_frame != nullptr &&
+      debug_frame->Step(pc, regs, process_memory, finished, is_signal_frame)) {
     return true;
   }
 
   // Try the eh_frame next.
   DwarfSection* eh_frame = eh_frame_.get();
-  if (eh_frame != nullptr && eh_frame->Step(pc, regs, process_memory, finished)) {
+  if (eh_frame != nullptr && eh_frame->Step(pc, regs, process_memory, finished, is_signal_frame)) {
     return true;
   }
 
   if (gnu_debugdata_interface_ != nullptr &&
-      gnu_debugdata_interface_->Step(pc, regs, process_memory, finished)) {
+      gnu_debugdata_interface_->Step(pc, regs, process_memory, finished, is_signal_frame)) {
     return true;
   }
 

@@ -37,7 +37,8 @@ namespace unwindstack {
 
 DwarfSection::DwarfSection(Memory* memory) : memory_(memory) {}
 
-bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
+bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished,
+                        bool* is_signal_frame) {
   // Lookup the pc in the cache.
   auto it = loc_regs_.upper_bound(pc);
   if (it == loc_regs_.end() || pc < it->second.pc_start) {
@@ -58,6 +59,8 @@ bool DwarfSection::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* f
     // Store it in the cache.
     it = loc_regs_.emplace(loc_regs.pc_end, std::move(loc_regs)).first;
   }
+
+  *is_signal_frame = it->second.cie->is_signal_frame;
 
   // Now eval the actual registers.
   return Eval(it->second.cie, process_memory, it->second, regs, finished);
@@ -240,6 +243,9 @@ bool DwarfSectionImpl<AddressType>::FillInCie(DwarfCie* cie) {
           last_error_.address = memory_.cur_offset();
           return false;
         }
+        break;
+      case 'S':
+        cie->is_signal_frame = true;
         break;
     }
   }
@@ -558,8 +564,10 @@ bool DwarfSectionImpl<AddressType>::Eval(const DwarfCie* cie, Memory* regular_me
     cur_regs->set_pc((*cur_regs)[cie->return_address_register]);
   }
 
-  // If the pc was set to zero, consider this the final frame.
-  *finished = (cur_regs->pc() == 0) ? true : false;
+  // If the pc was set to zero, consider this the final frame. Exception: if
+  // this is the sigreturn frame, then we want to try to recover the real PC
+  // using the return address (from LR or the stack), so keep going.
+  *finished = (cur_regs->pc() == 0 && !cie->is_signal_frame) ? true : false;
 
   cur_regs->set_sp(eval_info.cfa);
 

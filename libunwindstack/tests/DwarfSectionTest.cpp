@@ -68,7 +68,8 @@ TEST_F(DwarfSectionTest, Step_fail_fde) {
   EXPECT_CALL(*section_, GetFdeFromPc(0x1000)).WillOnce(::testing::Return(nullptr));
 
   bool finished;
-  ASSERT_FALSE(section_->Step(0x1000, nullptr, nullptr, &finished));
+  bool is_signal_frame;
+  ASSERT_FALSE(section_->Step(0x1000, nullptr, nullptr, &finished, &is_signal_frame));
 }
 
 TEST_F(DwarfSectionTest, Step_fail_cie_null) {
@@ -79,7 +80,8 @@ TEST_F(DwarfSectionTest, Step_fail_cie_null) {
   EXPECT_CALL(*section_, GetFdeFromPc(0x1000)).WillOnce(::testing::Return(&fde));
 
   bool finished;
-  ASSERT_FALSE(section_->Step(0x1000, &regs_, nullptr, &finished));
+  bool is_signal_frame;
+  ASSERT_FALSE(section_->Step(0x1000, &regs_, nullptr, &finished, &is_signal_frame));
 }
 
 TEST_F(DwarfSectionTest, Step_fail_cfa_location) {
@@ -93,7 +95,8 @@ TEST_F(DwarfSectionTest, Step_fail_cfa_location) {
       .WillOnce(::testing::Return(false));
 
   bool finished;
-  ASSERT_FALSE(section_->Step(0x1000, &regs_, nullptr, &finished));
+  bool is_signal_frame;
+  ASSERT_FALSE(section_->Step(0x1000, &regs_, nullptr, &finished, &is_signal_frame));
 }
 
 TEST_F(DwarfSectionTest, Step_pass) {
@@ -111,7 +114,8 @@ TEST_F(DwarfSectionTest, Step_pass) {
       .WillOnce(::testing::Return(true));
 
   bool finished;
-  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished));
+  bool is_signal_frame;
+  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished, &is_signal_frame));
 }
 
 static bool MockGetCfaLocationInfo(::testing::Unused, const DwarfFde* fde,
@@ -137,9 +141,10 @@ TEST_F(DwarfSectionTest, Step_cache) {
       .WillRepeatedly(::testing::Return(true));
 
   bool finished;
-  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished));
-  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished));
-  ASSERT_TRUE(section_->Step(0x1500, &regs_, &process, &finished));
+  bool is_signal_frame;
+  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished, &is_signal_frame));
+  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished, &is_signal_frame));
+  ASSERT_TRUE(section_->Step(0x1500, &regs_, &process, &finished, &is_signal_frame));
 }
 
 TEST_F(DwarfSectionTest, Step_cache_not_in_pc) {
@@ -157,7 +162,8 @@ TEST_F(DwarfSectionTest, Step_cache_not_in_pc) {
       .WillRepeatedly(::testing::Return(true));
 
   bool finished;
-  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished));
+  bool is_signal_frame;
+  ASSERT_TRUE(section_->Step(0x1000, &regs_, &process, &finished, &is_signal_frame));
 
   DwarfFde fde1{};
   fde1.pc_start = 0x500;
@@ -167,8 +173,8 @@ TEST_F(DwarfSectionTest, Step_cache_not_in_pc) {
   EXPECT_CALL(*section_, GetCfaLocationInfo(0x600, &fde1, ::testing::_, ::testing::_))
       .WillOnce(::testing::Invoke(MockGetCfaLocationInfo));
 
-  ASSERT_TRUE(section_->Step(0x600, &regs_, &process, &finished));
-  ASSERT_TRUE(section_->Step(0x700, &regs_, &process, &finished));
+  ASSERT_TRUE(section_->Step(0x600, &regs_, &process, &finished, &is_signal_frame));
+  ASSERT_TRUE(section_->Step(0x700, &regs_, &process, &finished, &is_signal_frame));
 }
 
 }  // namespace unwindstack

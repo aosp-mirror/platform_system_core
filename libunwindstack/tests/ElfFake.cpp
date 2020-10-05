@@ -52,7 +52,7 @@ bool ElfInterfaceFake::GetGlobalVariable(const std::string& global, uint64_t* of
   return true;
 }
 
-bool ElfInterfaceFake::Step(uint64_t, Regs* regs, Memory*, bool* finished) {
+bool ElfInterfaceFake::Step(uint64_t, Regs* regs, Memory*, bool* finished, bool* is_signal_frame) {
   if (steps_.empty()) {
     return false;
   }
@@ -68,6 +68,7 @@ bool ElfInterfaceFake::Step(uint64_t, Regs* regs, Memory*, bool* finished) {
   fake_regs->set_pc(entry.pc);
   fake_regs->set_sp(entry.sp);
   *finished = entry.finished;
+  *is_signal_frame = false;
   return true;
 }
 
