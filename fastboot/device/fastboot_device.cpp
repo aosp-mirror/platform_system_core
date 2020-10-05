@@ -22,7 +22,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
-#include <android/hardware/fastboot/1.0/IFastboot.h>
+#include <android/hardware/fastboot/1.1/IFastboot.h>
 #include <fs_mgr.h>
 #include <fs_mgr/roots.h>
 #include <healthhalutils/HealthHalUtils.h>
@@ -37,7 +37,7 @@ using android::fs_mgr::Fstab;
 using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::IBootControl;
 using ::android::hardware::boot::V1_0::Slot;
-using ::android::hardware::fastboot::V1_0::IFastboot;
+using ::android::hardware::fastboot::V1_1::IFastboot;
 using ::android::hardware::health::V2_0::get_health_service;
 
 namespace sph = std::placeholders;
