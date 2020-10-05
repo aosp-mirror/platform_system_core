@@ -242,17 +242,20 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
           // some of the speculative frames.
           in_device_map = true;
         } else {
+          bool is_signal_frame = false;
           if (elf->StepIfSignalHandler(rel_pc, regs_, process_memory_.get())) {
             stepped = true;
-            if (frame != nullptr) {
-              // Need to adjust the relative pc because the signal handler
-              // pc should not be adjusted.
-              frame->rel_pc = rel_pc;
-              frame->pc += pc_adjustment;
-              step_pc = rel_pc;
-            }
-          } else if (elf->Step(step_pc, regs_, process_memory_.get(), &finished)) {
+            is_signal_frame = true;
+          } else if (elf->Step(step_pc, regs_, process_memory_.get(), &finished,
+                               &is_signal_frame)) {
             stepped = true;
+          }
+          if (is_signal_frame && frame != nullptr) {
+            // Need to adjust the relative pc because the signal handler
+            // pc should not be adjusted.
+            frame->rel_pc = rel_pc;
+            frame->pc += pc_adjustment;
+            step_pc = rel_pc;
           }
           elf->GetLastError(&last_error_);
         }
