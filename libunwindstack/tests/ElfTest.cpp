@@ -138,7 +138,8 @@ TEST_F(ElfTest, elf_invalid) {
   EXPECT_EQ(ERROR_INVALID_ELF, elf.GetLastErrorCode());
 
   bool finished;
-  ASSERT_FALSE(elf.Step(0, nullptr, nullptr, &finished));
+  bool is_signal_frame;
+  ASSERT_FALSE(elf.Step(0, nullptr, nullptr, &finished, &is_signal_frame));
   EXPECT_EQ(ERROR_INVALID_ELF, elf.GetLastErrorCode());
 }
 
@@ -327,7 +328,7 @@ class ElfInterfaceMock : public ElfInterface {
   bool GetFunctionName(uint64_t, std::string*, uint64_t*) override { return false; }
   std::string GetBuildID() override { return ""; }
 
-  MOCK_METHOD(bool, Step, (uint64_t, Regs*, Memory*, bool*), (override));
+  MOCK_METHOD(bool, Step, (uint64_t, Regs*, Memory*, bool*, bool*), (override));
   MOCK_METHOD(bool, GetGlobalVariable, (const std::string&, uint64_t*), (override));
   MOCK_METHOD(bool, IsValidPc, (uint64_t), (override));
 
@@ -351,10 +352,11 @@ TEST_F(ElfTest, step_in_interface) {
   MemoryFake process_memory;
 
   bool finished;
-  EXPECT_CALL(*interface, Step(0x1000, &regs, &process_memory, &finished))
+  bool is_signal_frame;
+  EXPECT_CALL(*interface, Step(0x1000, &regs, &process_memory, &finished, &is_signal_frame))
       .WillOnce(::testing::Return(true));
 
-  ASSERT_TRUE(elf.Step(0x1000, &regs, &process_memory, &finished));
+  ASSERT_TRUE(elf.Step(0x1000, &regs, &process_memory, &finished, &is_signal_frame));
 }
 
 TEST_F(ElfTest, get_global_invalid_elf) {

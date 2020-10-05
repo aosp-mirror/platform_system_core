@@ -1736,4 +1736,158 @@ TEST_F(UnwindOfflineTest, empty_arm64) {
   EXPECT_EQ(0x7ffb6c0f30U, unwinder.frames()[6].sp);
 }
 
+// This test has a libc.so where the __restore has been changed so
+// that the signal handler match does not occur and it uses the
+// fde to do the unwind.
+TEST_F(UnwindOfflineTest, signal_fde_x86) {
+  ASSERT_NO_FATAL_FAILURE(Init("signal_fde_x86/", ARCH_X86));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(20U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 007914d9  libunwindstack_test (SignalInnerFunction+25)\n"
+      "  #01 pc 007914fc  libunwindstack_test (SignalMiddleFunction+28)\n"
+      "  #02 pc 0079152c  libunwindstack_test (SignalOuterFunction+28)\n"
+      "  #03 pc 0079af62  libunwindstack_test (unwindstack::SignalCallerHandler(int, siginfo*, "
+      "void*)+50)\n"
+      "  #04 pc 00058fb0  libc.so (__restore)\n"
+      "  #05 pc 00000000  <unknown>\n"
+      "  #06 pc 0079161a  libunwindstack_test (InnerFunction+218)\n"
+      "  #07 pc 007923aa  libunwindstack_test (MiddleFunction+42)\n"
+      "  #08 pc 007923ea  libunwindstack_test (OuterFunction+42)\n"
+      "  #09 pc 00797444  libunwindstack_test (unwindstack::RemoteThroughSignal(int, unsigned "
+      "int)+868)\n"
+      "  #10 pc 007985b8  libunwindstack_test "
+      "(unwindstack::UnwindTest_remote_through_signal_with_invalid_func_Test::TestBody()+56)\n"
+      "  #11 pc 00817a19  libunwindstack_test\n"
+      "  #12 pc 008178c5  libunwindstack_test (testing::Test::Run()+277)\n"
+      "  #13 pc 00818d3e  libunwindstack_test (testing::TestInfo::Run()+318)\n"
+      "  #14 pc 008198b4  libunwindstack_test (testing::TestSuite::Run()+436)\n"
+      "  #15 pc 00828cb0  libunwindstack_test "
+      "(testing::internal::UnitTestImpl::RunAllTests()+1216)\n"
+      "  #16 pc 0082870f  libunwindstack_test (testing::UnitTest::Run()+367)\n"
+      "  #17 pc 0084031e  libunwindstack_test (IsolateMain+2334)\n"
+      "  #18 pc 0083f9e9  libunwindstack_test (main+41)\n"
+      "  #19 pc 00050646  libc.so (__libc_init+118)\n",
+      frame_info);
+
+  EXPECT_EQ(0x5ae0d4d9U, unwinder.frames()[0].pc);
+  EXPECT_EQ(0xecb37188U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x5ae0d4fcU, unwinder.frames()[1].pc);
+  EXPECT_EQ(0xecb37190U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x5ae0d52cU, unwinder.frames()[2].pc);
+  EXPECT_EQ(0xecb371b0U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x5ae16f62U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0xecb371d0U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0xec169fb0U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0xecb371f0U, unwinder.frames()[4].sp);
+  EXPECT_EQ(0x0U, unwinder.frames()[5].pc);
+  EXPECT_EQ(0xffcfac6cU, unwinder.frames()[5].sp);
+  EXPECT_EQ(0x5ae0d61aU, unwinder.frames()[6].pc);
+  EXPECT_EQ(0xffcfac6cU, unwinder.frames()[6].sp);
+  EXPECT_EQ(0x5ae0e3aaU, unwinder.frames()[7].pc);
+  EXPECT_EQ(0xffcfad60U, unwinder.frames()[7].sp);
+  EXPECT_EQ(0x5ae0e3eaU, unwinder.frames()[8].pc);
+  EXPECT_EQ(0xffcfad90U, unwinder.frames()[8].sp);
+  EXPECT_EQ(0x5ae13444U, unwinder.frames()[9].pc);
+  EXPECT_EQ(0xffcfadc0U, unwinder.frames()[9].sp);
+  EXPECT_EQ(0x5ae145b8U, unwinder.frames()[10].pc);
+  EXPECT_EQ(0xffcfb020U, unwinder.frames()[10].sp);
+  EXPECT_EQ(0x5ae93a19U, unwinder.frames()[11].pc);
+  EXPECT_EQ(0xffcfb050U, unwinder.frames()[11].sp);
+  EXPECT_EQ(0x5ae938c5U, unwinder.frames()[12].pc);
+  EXPECT_EQ(0xffcfb090U, unwinder.frames()[12].sp);
+  EXPECT_EQ(0x5ae94d3eU, unwinder.frames()[13].pc);
+  EXPECT_EQ(0xffcfb0f0U, unwinder.frames()[13].sp);
+  EXPECT_EQ(0x5ae958b4U, unwinder.frames()[14].pc);
+  EXPECT_EQ(0xffcfb160U, unwinder.frames()[14].sp);
+  EXPECT_EQ(0x5aea4cb0U, unwinder.frames()[15].pc);
+  EXPECT_EQ(0xffcfb1d0U, unwinder.frames()[15].sp);
+  EXPECT_EQ(0x5aea470fU, unwinder.frames()[16].pc);
+  EXPECT_EQ(0xffcfb270U, unwinder.frames()[16].sp);
+  EXPECT_EQ(0x5aebc31eU, unwinder.frames()[17].pc);
+  EXPECT_EQ(0xffcfb2c0U, unwinder.frames()[17].sp);
+  EXPECT_EQ(0x5aebb9e9U, unwinder.frames()[18].pc);
+  EXPECT_EQ(0xffcfc3c0U, unwinder.frames()[18].sp);
+  EXPECT_EQ(0xec161646U, unwinder.frames()[19].pc);
+  EXPECT_EQ(0xffcfc3f0U, unwinder.frames()[19].sp);
+}
+
+// This test has a libc.so where the __restore_rt has been changed so
+// that the signal handler match does not occur and it uses the
+// fde to do the unwind.
+TEST_F(UnwindOfflineTest, signal_fde_x86_64) {
+  ASSERT_NO_FATAL_FAILURE(Init("signal_fde_x86_64/", ARCH_X86_64));
+
+  Unwinder unwinder(128, maps_.get(), regs_.get(), process_memory_);
+  unwinder.Unwind();
+
+  std::string frame_info(DumpFrames(unwinder));
+  ASSERT_EQ(18U, unwinder.NumFrames()) << "Unwind:\n" << frame_info;
+  EXPECT_EQ(
+      "  #00 pc 000000000058415b  libunwindstack_test (SignalInnerFunction+11)\n"
+      "  #01 pc 0000000000584168  libunwindstack_test (SignalMiddleFunction+8)\n"
+      "  #02 pc 0000000000584178  libunwindstack_test (SignalOuterFunction+8)\n"
+      "  #03 pc 000000000058ac77  libunwindstack_test (unwindstack::SignalCallerHandler(int, "
+      "siginfo*, void*)+23)\n"
+      "  #04 pc 0000000000057d10  libc.so (__restore_rt)\n"
+      "  #05 pc 0000000000000000  <unknown>\n"
+      "  #06 pc 0000000000584244  libunwindstack_test (InnerFunction+196)\n"
+      "  #07 pc 0000000000584b44  libunwindstack_test (MiddleFunction+20)\n"
+      "  #08 pc 0000000000584b64  libunwindstack_test (OuterFunction+20)\n"
+      "  #09 pc 0000000000588457  libunwindstack_test (unwindstack::RemoteThroughSignal(int, "
+      "unsigned int)+583)\n"
+      "  #10 pc 0000000000588f67  libunwindstack_test "
+      "(unwindstack::UnwindTest_remote_through_signal_with_invalid_func_Test::TestBody()+23)\n"
+      "  #11 pc 00000000005d9c38  libunwindstack_test (testing::Test::Run()+216)\n"
+      "  #12 pc 00000000005daf9a  libunwindstack_test (testing::TestInfo::Run()+266)\n"
+      "  #13 pc 00000000005dba46  libunwindstack_test (testing::TestSuite::Run()+390)\n"
+      "  #14 pc 00000000005ea4c6  libunwindstack_test "
+      "(testing::internal::UnitTestImpl::RunAllTests()+1190)\n"
+      "  #15 pc 00000000005e9f61  libunwindstack_test (testing::UnitTest::Run()+337)\n"
+      "  #16 pc 0000000000600155  libunwindstack_test (IsolateMain+2037)\n"
+      "  #17 pc 000000000004e405  libc.so (__libc_init+101)\n",
+      frame_info);
+
+  EXPECT_EQ(0x5bb41271e15bU, unwinder.frames()[0].pc);
+  EXPECT_EQ(0x707eb5aa8320U, unwinder.frames()[0].sp);
+  EXPECT_EQ(0x5bb41271e168U, unwinder.frames()[1].pc);
+  EXPECT_EQ(0x707eb5aa8330U, unwinder.frames()[1].sp);
+  EXPECT_EQ(0x5bb41271e178U, unwinder.frames()[2].pc);
+  EXPECT_EQ(0x707eb5aa8340U, unwinder.frames()[2].sp);
+  EXPECT_EQ(0x5bb412724c77U, unwinder.frames()[3].pc);
+  EXPECT_EQ(0x707eb5aa8350U, unwinder.frames()[3].sp);
+  EXPECT_EQ(0x707eb2ca5d10U, unwinder.frames()[4].pc);
+  EXPECT_EQ(0x707eb5aa8380U, unwinder.frames()[4].sp);
+  EXPECT_EQ(0x0U, unwinder.frames()[5].pc);
+  EXPECT_EQ(0x7ffcaadde078U, unwinder.frames()[5].sp);
+  EXPECT_EQ(0x5bb41271e244U, unwinder.frames()[6].pc);
+  EXPECT_EQ(0x7ffcaadde078U, unwinder.frames()[6].sp);
+  EXPECT_EQ(0x5bb41271eb44U, unwinder.frames()[7].pc);
+  EXPECT_EQ(0x7ffcaadde1a0U, unwinder.frames()[7].sp);
+  EXPECT_EQ(0x5bb41271eb64U, unwinder.frames()[8].pc);
+  EXPECT_EQ(0x7ffcaadde1c0U, unwinder.frames()[8].sp);
+  EXPECT_EQ(0x5bb412722457U, unwinder.frames()[9].pc);
+  EXPECT_EQ(0x7ffcaadde1e0U, unwinder.frames()[9].sp);
+  EXPECT_EQ(0x5bb412722f67U, unwinder.frames()[10].pc);
+  EXPECT_EQ(0x7ffcaadde510U, unwinder.frames()[10].sp);
+  EXPECT_EQ(0x5bb412773c38U, unwinder.frames()[11].pc);
+  EXPECT_EQ(0x7ffcaadde530U, unwinder.frames()[11].sp);
+  EXPECT_EQ(0x5bb412774f9aU, unwinder.frames()[12].pc);
+  EXPECT_EQ(0x7ffcaadde560U, unwinder.frames()[12].sp);
+  EXPECT_EQ(0x5bb412775a46U, unwinder.frames()[13].pc);
+  EXPECT_EQ(0x7ffcaadde5b0U, unwinder.frames()[13].sp);
+  EXPECT_EQ(0x5bb4127844c6U, unwinder.frames()[14].pc);
+  EXPECT_EQ(0x7ffcaadde5f0U, unwinder.frames()[14].sp);
+  EXPECT_EQ(0x5bb412783f61U, unwinder.frames()[15].pc);
+  EXPECT_EQ(0x7ffcaadde6c0U, unwinder.frames()[15].sp);
+  EXPECT_EQ(0x5bb41279a155U, unwinder.frames()[16].pc);
+  EXPECT_EQ(0x7ffcaadde720U, unwinder.frames()[16].sp);
+  EXPECT_EQ(0x707eb2c9c405U, unwinder.frames()[17].pc);
+  EXPECT_EQ(0x7ffcaaddf870U, unwinder.frames()[17].sp);
+}
+
 }  // namespace unwindstack
