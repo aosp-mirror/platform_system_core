@@ -53,7 +53,7 @@ class LogReaderThread {
 
     bool IsWatching(log_id_t id) const { return flush_to_state_->log_mask() & (1 << id); }
     bool IsWatchingMultiple(LogMask log_mask) const {
-        return flush_to_state_->log_mask() & log_mask;
+        return flush_to_state_ && flush_to_state_->log_mask() & log_mask;
     }
 
     std::string name() const { return writer_->name(); }

@@ -72,6 +72,7 @@ void LogReaderThread::ThreadFunction() {
                     [this](log_id_t log_id, pid_t pid, uint64_t sequence, log_time realtime) {
                         return FilterFirstPass(log_id, pid, sequence, realtime);
                     });
+            log_buffer_->DeleteFlushToState(std::move(first_pass_state));
         }
         bool flush_success = log_buffer_->FlushTo(
                 writer_.get(), *flush_to_state_,
@@ -104,6 +105,10 @@ void LogReaderThread::ThreadFunction() {
             thread_triggered_condition_.wait(lock);
         }
     }
+
+    lock.unlock();
+    log_buffer_->DeleteFlushToState(std::move(flush_to_state_));
+    lock.lock();
 
     writer_->Release();
 
