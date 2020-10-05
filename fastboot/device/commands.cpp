@@ -171,24 +171,13 @@ bool OemPostWipeData(FastbootDevice* device) {
     }
 
     Result ret;
-    // Check whether fastboot_hal support "oem postwipedata" API or not.
-    const std::string checkPostWipeDataCmd("oem postwipedata support");
-    auto check_cmd_ret_val = fastboot_hal->doOemCommand(checkPostWipeDataCmd,
-                                        [&](Result result) { ret = result; });
-    if (!check_cmd_ret_val.isOk()) {
-        return false;
-    }
-    if (ret.status != Status::SUCCESS) {
-        return false;
-    }
-
-    const std::string postWipeDataCmd("oem postwipedata userdata");
-    auto ret_val = fastboot_hal->doOemCommand(postWipeDataCmd,
-                                        [&](Result result) { ret = result; });
+    auto ret_val = fastboot_hal->doOemSpecificErase([&](Result result) { ret = result; });
     if (!ret_val.isOk()) {
         return false;
     }
-    if (ret.status != Status::SUCCESS) {
+    if (ret.status == Status::NOT_SUPPORTED) {
+        return false;
+    } else if (ret.status != Status::SUCCESS) {
         device->WriteStatus(FastbootResult::FAIL, ret.message);
     } else {
         device->WriteStatus(FastbootResult::OKAY, "Erasing succeeded");
