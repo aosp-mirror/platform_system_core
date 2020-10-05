@@ -100,12 +100,13 @@ void ElfInterfaceArm::HandleUnknownType(uint32_t type, uint64_t ph_offset, uint6
   total_entries_ = ph_filesz / 8;
 }
 
-bool ElfInterfaceArm::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) {
+bool ElfInterfaceArm::Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished,
+                           bool* is_signal_frame) {
   // Dwarf unwind information is precise about whether a pc is covered or not,
   // but arm unwind information only has ranges of pc. In order to avoid
   // incorrectly doing a bad unwind using arm unwind information for a
   // different function, always try and unwind with the dwarf information first.
-  return ElfInterface32::Step(pc, regs, process_memory, finished) ||
+  return ElfInterface32::Step(pc, regs, process_memory, finished, is_signal_frame) ||
          StepExidx(pc, regs, process_memory, finished);
 }
 
