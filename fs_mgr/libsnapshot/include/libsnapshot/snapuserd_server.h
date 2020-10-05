@@ -14,18 +14,6 @@
 
 #pragma once
 
-#include <stdint.h>
-
-#include <arpa/inet.h>
-#include <cutils/sockets.h>
-#include <netinet/in.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
-
-#include <errno.h>
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -89,6 +77,7 @@ class SnapuserdServer : public Stoppable {
     android::base::unique_fd sockfd_;
     bool terminating_;
     std::vector<std::unique_ptr<Client>> clients_vec_;
+
     void ThreadStart(std::string cow_device, std::string backing_device) override;
     void ShutdownThreads();
     DaemonOperations Resolveop(std::string& input);
@@ -100,8 +89,6 @@ class SnapuserdServer : public Stoppable {
     bool IsTerminating() { return terminating_; }
 
   public:
-    ~SnapuserdServer() { clients_vec_.clear(); }
-
     SnapuserdServer() { terminating_ = false; }
 
     int Start(std::string socketname);
@@ -109,6 +96,7 @@ class SnapuserdServer : public Stoppable {
     int Receivemsg(int fd);
     int Sendmsg(int fd, char* msg, size_t len);
     std::string Recvmsg(int fd, int* ret);
+    android::base::borrowed_fd GetSocketFd() { return sockfd_; }
 };
 
 }  // namespace snapshot
