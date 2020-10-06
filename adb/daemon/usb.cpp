@@ -584,12 +584,11 @@ struct UsbFfsConnection : public Connection {
                 incoming_header_ = msg;
             } else {
                 size_t bytes_left = incoming_header_->data_length - incoming_payload_.size();
-                Block payload = std::move(block->payload);
                 if (block->payload.size() > bytes_left) {
                     HandleError("received too many bytes while waiting for payload");
                     return false;
                 }
-                incoming_payload_.append(std::move(payload));
+                incoming_payload_.append(std::move(block->payload));
             }
 
             if (incoming_header_->data_length == incoming_payload_.size()) {
