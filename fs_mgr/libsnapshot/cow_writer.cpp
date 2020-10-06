@@ -32,6 +32,45 @@ namespace snapshot {
 
 static_assert(sizeof(off_t) == sizeof(uint64_t));
 
+bool ICowWriter::AddCopy(uint64_t new_block, uint64_t old_block) {
+    if (!ValidateNewBlock(new_block)) {
+        return false;
+    }
+    return EmitCopy(new_block, old_block);
+}
+
+bool ICowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
+    if (size % options_.block_size != 0) {
+        LOG(ERROR) << "AddRawBlocks: size " << size << " is not a multiple of "
+                   << options_.block_size;
+        return false;
+    }
+
+    uint64_t num_blocks = size / options_.block_size;
+    uint64_t last_block = new_block_start + num_blocks - 1;
+    if (!ValidateNewBlock(last_block)) {
+        return false;
+    }
+    return EmitRawBlocks(new_block_start, data, size);
+}
+
+bool ICowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
+    uint64_t last_block = new_block_start + num_blocks - 1;
+    if (!ValidateNewBlock(last_block)) {
+        return false;
+    }
+    return EmitZeroBlocks(new_block_start, num_blocks);
+}
+
+bool ICowWriter::ValidateNewBlock(uint64_t new_block) {
+    if (options_.max_blocks && new_block >= options_.max_blocks.value()) {
+        LOG(ERROR) << "New block " << new_block << " exceeds maximum block count "
+                   << options_.max_blocks.value();
+        return false;
+    }
+    return true;
+}
+
 CowWriter::CowWriter(const CowOptions& options) : ICowWriter(options), fd_(-1) {
     SetupHeaders();
 }
@@ -134,7 +173,7 @@ bool CowWriter::OpenForAppend() {
     return true;
 }
 
-bool CowWriter::AddCopy(uint64_t new_block, uint64_t old_block) {
+bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
     CowOperation op = {};
     op.type = kCowCopyOp;
     op.new_block = new_block;
@@ -143,13 +182,7 @@ bool CowWriter::AddCopy(uint64_t new_block, uint64_t old_block) {
     return true;
 }
 
-bool CowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
-    if (size % header_.block_size != 0) {
-        LOG(ERROR) << "AddRawBlocks: size " << size << " is not a multiple of "
-                   << header_.block_size;
-        return false;
-    }
-
+bool CowWriter::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
     uint64_t pos;
     if (!GetDataPos(&pos)) {
         return false;
@@ -195,7 +228,7 @@ bool CowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t 
     return true;
 }
 
-bool CowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
+bool CowWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
     for (uint64_t i = 0; i < num_blocks; i++) {
         CowOperation op = {};
         op.type = kCowZeroOp;
@@ -291,7 +324,7 @@ bool CowWriter::Flush() {
     return true;
 }
 
-size_t CowWriter::GetCowSize() {
+uint64_t CowWriter::GetCowSize() {
     return header_.ops_offset + header_.num_ops * sizeof(CowOperation);
 }
 

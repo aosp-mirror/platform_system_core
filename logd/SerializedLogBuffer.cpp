@@ -113,8 +113,8 @@ void SerializedLogBuffer::MaybePrune(log_id_t log_id) {
     if (total_size > max_size_[log_id]) {
         Prune(log_id, total_size - max_size_[log_id], 0);
         after_size = GetSizeUsed(log_id);
-        LOG(INFO) << "Pruned Logs from log_id: " << log_id << ", previous size: " << total_size
-                  << " after size: " << after_size;
+        LOG(VERBOSE) << "Pruned Logs from log_id: " << log_id << ", previous size: " << total_size
+                     << " after size: " << after_size;
     }
 
     stats_->set_overhead(log_id, after_size);
@@ -199,6 +199,11 @@ void SerializedLogBuffer::Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid
 std::unique_ptr<FlushToState> SerializedLogBuffer::CreateFlushToState(uint64_t start,
                                                                       LogMask log_mask) {
     return std::make_unique<SerializedFlushToState>(start, log_mask);
+}
+
+void SerializedLogBuffer::DeleteFlushToState(std::unique_ptr<FlushToState> state) {
+    auto lock = std::unique_lock{lock_};
+    state.reset();
 }
 
 bool SerializedLogBuffer::FlushTo(

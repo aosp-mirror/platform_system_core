@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 
 #include <android-base/unique_fd.h>
@@ -27,6 +28,9 @@ namespace snapshot {
 struct CowOptions {
     uint32_t block_size = 4096;
     std::string compression;
+
+    // Maximum number of blocks that can be written.
+    std::optional<uint64_t> max_blocks;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
@@ -39,20 +43,29 @@ class ICowWriter {
 
     // Encode an operation that copies the contents of |old_block| to the
     // location of |new_block|.
-    virtual bool AddCopy(uint64_t new_block, uint64_t old_block) = 0;
+    bool AddCopy(uint64_t new_block, uint64_t old_block);
 
     // Encode a sequence of raw blocks. |size| must be a multiple of the block size.
-    virtual bool AddRawBlocks(uint64_t new_block_start, const void* data, size_t size) = 0;
+    bool AddRawBlocks(uint64_t new_block_start, const void* data, size_t size);
 
     // Encode a sequence of zeroed blocks. |size| must be a multiple of the block size.
-    virtual bool AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) = 0;
+    bool AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks);
 
     // Flush all pending writes. This must be called before closing the writer
     // to ensure that the correct headers and footers are written.
     virtual bool Flush() = 0;
 
     // Return number of bytes the cow image occupies on disk.
-    virtual size_t GetCowSize() = 0;
+    virtual uint64_t GetCowSize() = 0;
+
+    const CowOptions& options() { return options_; }
+
+  protected:
+    virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) = 0;
+    virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) = 0;
+    virtual bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) = 0;
+
+    bool ValidateNewBlock(uint64_t new_block);
 
   protected:
     CowOptions options_;
@@ -68,13 +81,14 @@ class CowWriter : public ICowWriter {
     bool Initialize(android::base::unique_fd&& fd, OpenMode mode = OpenMode::WRITE);
     bool Initialize(android::base::borrowed_fd fd, OpenMode mode = OpenMode::WRITE);
 
-    bool AddCopy(uint64_t new_block, uint64_t old_block) override;
-    bool AddRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
-    bool AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
-
     bool Flush() override;
 
-    size_t GetCowSize() override;
+    uint64_t GetCowSize() override;
+
+  protected:
+    virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) override;
+    virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
+    virtual bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
 
   private:
     void SetupHeaders();

@@ -19,6 +19,7 @@
 #include <sys/types.h>
 
 #include <functional>
+#include <memory>
 
 #include <log/log.h>
 #include <log/log_read.h>
@@ -62,6 +63,7 @@ class LogBuffer {
                     const char* msg, uint16_t len) = 0;
 
     virtual std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask) = 0;
+    virtual void DeleteFlushToState(std::unique_ptr<FlushToState>) {}
     virtual bool FlushTo(
             LogWriter* writer, FlushToState& state,
             const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,

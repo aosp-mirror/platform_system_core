@@ -113,9 +113,11 @@ bool LocalUnwinder::Unwind(std::vector<LocalFrameData>* frame_info, size_t max_f
     step_pc -= pc_adjustment;
 
     bool finished = false;
+    bool is_signal_frame = false;
     if (elf->StepIfSignalHandler(rel_pc, regs.get(), process_memory_.get())) {
       step_pc = rel_pc;
-    } else if (!elf->Step(step_pc, regs.get(), process_memory_.get(), &finished)) {
+    } else if (!elf->Step(step_pc, regs.get(), process_memory_.get(), &finished,
+                          &is_signal_frame)) {
       finished = true;
     }
 

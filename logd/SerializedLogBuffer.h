@@ -42,6 +42,7 @@ class SerializedLogBuffer final : public LogBuffer {
     int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
             uint16_t len) override;
     std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask) override;
+    void DeleteFlushToState(std::unique_ptr<FlushToState> state) override;
     bool FlushTo(LogWriter* writer, FlushToState& state,
                  const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
                                                   log_time realtime)>& filter) override;
