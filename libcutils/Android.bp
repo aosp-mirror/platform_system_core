@@ -14,6 +14,11 @@
 // limitations under the License.
 //
 
+filegroup {
+    name: "android_filesystem_config_header",
+    srcs: ["include/private/android_filesystem_config.h"],
+}
+
 // some files must not be compiled when building against Mingw
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
@@ -55,6 +60,7 @@ cc_library {
     name: "libcutils_sockets",
     vendor_available: true,
     recovery_available: true,
+    ramdisk_available: true,
     host_supported: true,
     native_bridge_supported: true,
     apex_available: [

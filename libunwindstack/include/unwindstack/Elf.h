@@ -60,7 +60,8 @@ class Elf {
 
   bool StepIfSignalHandler(uint64_t rel_pc, Regs* regs, Memory* process_memory);
 
-  bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished);
+  bool Step(uint64_t rel_pc, Regs* regs, Memory* process_memory, bool* finished,
+            bool* is_signal_frame);
 
   ElfInterface* CreateInterfaceFromMemory(Memory* memory);
 

@@ -116,8 +116,12 @@ ElfFake* PopulateElfFake(FuzzedDataProvider* data_provider) {
 
 static constexpr size_t kPageSize = 4096;
 
-static constexpr uint64_t AlignToPage(uint64_t address) {
-  return (address + kPageSize - 1) & ~(kPageSize - 1);
+static inline bool AlignToPage(uint64_t address, uint64_t* aligned_address) {
+  if (__builtin_add_overflow(address, kPageSize - 1, aligned_address)) {
+    return false;
+  }
+  *aligned_address &= ~(kPageSize - 1);
+  return true;
 }
 
 std::unique_ptr<Maps> GetMaps(FuzzedDataProvider* data_provider) {
@@ -125,8 +129,16 @@ std::unique_ptr<Maps> GetMaps(FuzzedDataProvider* data_provider) {
   std::map<uint64_t, uint64_t> map_ends;
   uint8_t entry_count = data_provider->ConsumeIntegralInRange<uint8_t>(0, kMaxMapEntryCount);
   for (uint8_t i = 0; i < entry_count; i++) {
-    uint64_t start = AlignToPage(data_provider->ConsumeIntegral<uint64_t>());
-    uint64_t end = AlignToPage(data_provider->ConsumeIntegralInRange<uint64_t>(start, UINT64_MAX));
+    uint64_t start;
+    if (!AlignToPage(data_provider->ConsumeIntegral<uint64_t>(), &start)) {
+      // Overflowed.
+      continue;
+    }
+    uint64_t end;
+    if (!AlignToPage(data_provider->ConsumeIntegralInRange<uint64_t>(start, UINT64_MAX), &end)) {
+      // Overflowed.
+      continue;
+    }
     if (start == end) {
       // It's impossible to see start == end in the real world, so
       // make sure the map contains at least one page of data.
@@ -142,7 +154,11 @@ std::unique_ptr<Maps> GetMaps(FuzzedDataProvider* data_provider) {
     }
     map_ends[end] = start;
 
-    uint64_t offset = AlignToPage(data_provider->ConsumeIntegral<uint64_t>());
+    uint64_t offset;
+    if (!AlignToPage(data_provider->ConsumeIntegral<uint64_t>(), &offset)) {
+      // Overflowed.
+      continue;
+    }
     std::string map_info_name = data_provider->ConsumeRandomLengthString(kMaxMapInfoNameLen);
     uint8_t flags = PROT_READ | PROT_WRITE;
 
