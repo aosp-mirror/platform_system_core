@@ -72,7 +72,8 @@ class ElfInterfaceArm : public ElfInterface32 {
 
   void HandleUnknownType(uint32_t type, uint64_t ph_offset, uint64_t ph_filesz) override;
 
-  bool Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished) override;
+  bool Step(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished,
+            bool* is_signal_frame) override;
 
   bool StepExidx(uint64_t pc, Regs* regs, Memory* process_memory, bool* finished);
 

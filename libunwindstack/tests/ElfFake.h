@@ -76,7 +76,7 @@ class ElfInterfaceFake : public ElfInterface {
   bool GetGlobalVariable(const std::string&, uint64_t*) override;
   std::string GetBuildID() override { return fake_build_id_; }
 
-  bool Step(uint64_t, Regs*, Memory*, bool*) override;
+  bool Step(uint64_t, Regs*, Memory*, bool*, bool*) override;
 
   void FakeSetGlobalVariable(const std::string& global, uint64_t offset) {
     globals_[global] = offset;
