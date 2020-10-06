@@ -1,10 +1,10 @@
 /*Special log.h file for VNDK linking modules*/
 
-#ifndef _LIBS_LOG_LOG_H
-#define _LIBS_LOG_LOG_H
+#pragma once
 
 /* Historically vendors have depended on these headers being included. */
 #include <fcntl.h>
+#include <pthread.h>
 #include <unistd.h>
 
 #include <android/log.h>
@@ -25,5 +25,3 @@
 #ifndef LOG_TAG
 #define LOG_TAG NULL
 #endif
-
-#endif /*_LIBS_LOG_LOG_H*/
