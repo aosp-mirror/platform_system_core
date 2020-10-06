@@ -71,6 +71,7 @@
 #include "proto_utils.h"
 #include "reboot.h"
 #include "reboot_utils.h"
+#include "second_stage_resources.h"
 #include "security.h"
 #include "selabel.h"
 #include "selinux.h"
@@ -668,6 +669,12 @@ static void UmountDebugRamdisk() {
     }
 }
 
+static void UmountSecondStageRes() {
+    if (umount(kSecondStageRes) != 0) {
+        PLOG(ERROR) << "Failed to umount " << kSecondStageRes;
+    }
+}
+
 static void MountExtraFilesystems() {
 #define CHECKCALL(x) \
     if ((x) != 0) PLOG(FATAL) << #x " failed.";
@@ -775,6 +782,9 @@ int SecondStageMain(int argc, char** argv) {
     }
 
     PropertyInit();
+
+    // Umount second stage resources after property service has read the .prop files.
+    UmountSecondStageRes();
 
     // Umount the debug ramdisk after property service has read the .prop files when it means to.
     if (load_debug_prop) {

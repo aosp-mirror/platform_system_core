@@ -67,6 +67,7 @@
 #include "persistent_properties.h"
 #include "property_type.h"
 #include "proto_utils.h"
+#include "second_stage_resources.h"
 #include "selinux.h"
 #include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
@@ -745,6 +746,15 @@ static bool load_properties_from_file(const char* filename, const char* filter,
     return true;
 }
 
+static void LoadPropertiesFromSecondStageRes(std::map<std::string, std::string>* properties) {
+    std::string prop = GetRamdiskPropForSecondStage();
+    if (access(prop.c_str(), R_OK) != 0) {
+        CHECK(errno == ENOENT) << "Cannot access " << prop << ": " << strerror(errno);
+        return;
+    }
+    load_properties_from_file(prop.c_str(), nullptr, properties);
+}
+
 // persist.sys.usb.config values can't be combined on build-time when property
 // files are split into each partition.
 // So we need to apply the same rule of build/make/tools/post_process_props.py
@@ -933,6 +943,7 @@ void PropertyLoadBootDefaults() {
 
     // Order matters here. The more the partition is specific to a product, the higher its
     // precedence is.
+    LoadPropertiesFromSecondStageRes(&properties);
     load_properties_from_file("/system/build.prop", nullptr, &properties);
     load_properties_from_partition("system_ext", /* support_legacy_path_until */ 30);
     // TODO(b/117892318): uncomment the following condition when vendor.imgs for aosp_* targets are

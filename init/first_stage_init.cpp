@@ -41,6 +41,7 @@
 #include "first_stage_console.h"
 #include "first_stage_mount.h"
 #include "reboot_utils.h"
+#include "second_stage_resources.h"
 #include "switch_root.h"
 #include "util.h"
 
@@ -235,6 +236,11 @@ int FirstStageMain(int argc, char** argv) {
     // /debug_ramdisk is used to preserve additional files from the debug ramdisk
     CHECKCALL(mount("tmpfs", "/debug_ramdisk", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
+
+    // /second_stage_resources is used to preserve files from first to second
+    // stage init
+    CHECKCALL(mount("tmpfs", kSecondStageRes, "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                    "mode=0755,uid=0,gid=0"))
 #undef CHECKCALL
 
     SetStdioToDevNull(argv);
@@ -274,6 +280,20 @@ int FirstStageMain(int argc, char** argv) {
 
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
         StartConsole();
+    }
+
+    if (access(kBootImageRamdiskProp, F_OK) == 0) {
+        std::string dest = GetRamdiskPropForSecondStage();
+        std::string dir = android::base::Dirname(dest);
+        std::error_code ec;
+        if (!fs::create_directories(dir, ec)) {
+            LOG(FATAL) << "Can't mkdir " << dir << ": " << ec.message();
+        }
+        if (!fs::copy_file(kBootImageRamdiskProp, dest, ec)) {
+            LOG(FATAL) << "Can't copy " << kBootImageRamdiskProp << " to " << dest << ": "
+                       << ec.message();
+        }
+        LOG(INFO) << "Copied ramdisk prop to " << dest;
     }
 
     if (ForceNormalBoot(cmdline)) {
