@@ -267,12 +267,6 @@ cc_test {
     defaults: ["libsnapshot_test_defaults"],
 }
 
-// For VTS 10
-vts_config {
-    name: "VtsLibsnapshotTest",
-    test_config: "VtsLibsnapshotTest.xml"
-}
-
 cc_binary {
     name: "snapshotctl",
     srcs: [
