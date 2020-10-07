@@ -104,8 +104,3 @@ cc_test {
         "vts",
     ],
 }
-
-vts_config {
-    name: "VtsProcessgroupValidateTest",
-    test_config: "vts_processgroup_validate_test.xml",
-}
