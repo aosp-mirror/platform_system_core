@@ -224,7 +224,8 @@ int Bugreport::DoIt(int argc, const char** argv) {
         // 'bugreport' would generate a lot of output the user might not be prepared to handle).
         fprintf(stderr,
                 "Failed to get bugreportz version: 'bugreportz -v' returned '%s' (code %d).\n"
-                "If the device does not run Android 7.0 or above, try 'adb bugreport' instead.\n",
+                "If the device does not run Android 7.0 or above, try this instead:\n"
+                "\tadb bugreport > bugreport.txt\n",
                 bugz_output.c_str(), status);
         return status != 0 ? status : -1;
     }
