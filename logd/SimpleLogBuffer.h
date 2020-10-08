@@ -25,7 +25,7 @@
 #include "LogReaderList.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
-#include "rwlock.h"
+#include "LogdLock.h"
 
 class SimpleLogBuffer : public LogBuffer {
   public:
@@ -35,10 +35,12 @@ class SimpleLogBuffer : public LogBuffer {
 
     int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
             uint16_t len) override;
-    std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask) override;
+    std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask)
+            REQUIRES(logd_lock) override;
     bool FlushTo(LogWriter* writer, FlushToState& state,
                  const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
-                                                  log_time realtime)>& filter) override;
+                                                  log_time realtime)>& filter)
+            REQUIRES(logd_lock) override;
 
     bool Clear(log_id_t id, uid_t uid) override;
     size_t GetSize(log_id_t id) override;
@@ -47,27 +49,25 @@ class SimpleLogBuffer : public LogBuffer {
     uint64_t sequence() const override { return sequence_.load(std::memory_order_relaxed); }
 
   protected:
-    virtual bool Prune(log_id_t id, unsigned long prune_rows, uid_t uid) REQUIRES(lock_);
-    virtual void LogInternal(LogBufferElement&& elem) REQUIRES(lock_);
+    virtual bool Prune(log_id_t id, unsigned long prune_rows, uid_t uid) REQUIRES(logd_lock);
+    virtual void LogInternal(LogBufferElement&& elem) REQUIRES(logd_lock);
 
     // Returns an iterator to the oldest element for a given log type, or logs_.end() if
-    // there are no logs for the given log type. Requires logs_lock_ to be held.
-    std::list<LogBufferElement>::iterator GetOldest(log_id_t log_id) REQUIRES(lock_);
+    // there are no logs for the given log type. Requires logs_logd_lock to be held.
+    std::list<LogBufferElement>::iterator GetOldest(log_id_t log_id) REQUIRES(logd_lock);
     std::list<LogBufferElement>::iterator Erase(std::list<LogBufferElement>::iterator it)
-            REQUIRES(lock_);
+            REQUIRES(logd_lock);
     void KickReader(LogReaderThread* reader, log_id_t id, unsigned long prune_rows)
-            REQUIRES_SHARED(lock_);
+            REQUIRES(logd_lock);
 
     LogStatistics* stats() { return stats_; }
     LogReaderList* reader_list() { return reader_list_; }
-    size_t max_size(log_id_t id) REQUIRES_SHARED(lock_) { return max_size_[id]; }
+    size_t max_size(log_id_t id) REQUIRES_SHARED(logd_lock) { return max_size_[id]; }
     std::list<LogBufferElement>& logs() { return logs_; }
-
-    RwLock lock_;
 
   private:
     bool ShouldLog(log_id_t log_id, const char* msg, uint16_t len);
-    void MaybePrune(log_id_t id) REQUIRES(lock_);
+    void MaybePrune(log_id_t id) REQUIRES(logd_lock);
 
     LogReaderList* reader_list_;
     LogTags* tags_;
@@ -75,9 +75,9 @@ class SimpleLogBuffer : public LogBuffer {
 
     std::atomic<uint64_t> sequence_ = 1;
 
-    size_t max_size_[LOG_ID_MAX] GUARDED_BY(lock_);
-    std::list<LogBufferElement> logs_ GUARDED_BY(lock_);
+    size_t max_size_[LOG_ID_MAX] GUARDED_BY(logd_lock);
+    std::list<LogBufferElement> logs_ GUARDED_BY(logd_lock);
     // Keeps track of the iterator to the oldest log message of a given log type, as an
     // optimization when pruning logs.  Use GetOldest() to retrieve.
-    std::optional<std::list<LogBufferElement>::iterator> oldest_[LOG_ID_MAX] GUARDED_BY(lock_);
+    std::optional<std::list<LogBufferElement>::iterator> oldest_[LOG_ID_MAX] GUARDED_BY(logd_lock);
 };

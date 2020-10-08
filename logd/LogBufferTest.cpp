@@ -190,10 +190,14 @@ TEST_P(LogBufferTest, smoke) {
     LogMessages(log_messages);
 
     std::vector<LogMessage> read_log_messages;
-    std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
-    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
-    EXPECT_EQ(2ULL, flush_to_state->start());
+    {
+        auto lock = std::lock_guard{logd_lock};
+        std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
+        std::unique_ptr<FlushToState> flush_to_state =
+                log_buffer_->CreateFlushToState(1, kLogMaskAll);
+        EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
+        EXPECT_EQ(2ULL, flush_to_state->start());
+    }
     CompareLogMessages(log_messages, read_log_messages);
 }
 
@@ -227,7 +231,7 @@ TEST_P(LogBufferTest, smoke_with_reader_thread) {
     bool released = false;
 
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, &released));
         std::unique_ptr<LogReaderThread> log_reader(
                 new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(test_writer), true,
@@ -239,7 +243,7 @@ TEST_P(LogBufferTest, smoke_with_reader_thread) {
         usleep(5000);
     }
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         EXPECT_EQ(0U, reader_list_.reader_threads().size());
     }
     CompareLogMessages(log_messages, read_log_messages);
@@ -301,7 +305,7 @@ TEST_P(LogBufferTest, random_messages) {
     bool released = false;
 
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, &released));
         std::unique_ptr<LogReaderThread> log_reader(
                 new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(test_writer), true,
@@ -313,7 +317,7 @@ TEST_P(LogBufferTest, random_messages) {
         usleep(5000);
     }
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         EXPECT_EQ(0U, reader_list_.reader_threads().size());
     }
     CompareLogMessages(log_messages, read_log_messages);
@@ -335,7 +339,7 @@ TEST_P(LogBufferTest, read_last_sequence) {
     bool released = false;
 
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, &released));
         std::unique_ptr<LogReaderThread> log_reader(
                 new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(test_writer), true,
@@ -347,7 +351,7 @@ TEST_P(LogBufferTest, read_last_sequence) {
         usleep(5000);
     }
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         EXPECT_EQ(0U, reader_list_.reader_threads().size());
     }
     std::vector<LogMessage> expected_log_messages = {log_messages.back()};
@@ -372,7 +376,7 @@ TEST_P(LogBufferTest, clear_logs) {
 
     // Connect a blocking reader.
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, &released));
         std::unique_ptr<LogReaderThread> log_reader(
                 new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(test_writer), false,
@@ -385,7 +389,7 @@ TEST_P(LogBufferTest, clear_logs) {
     int count = 0;
     for (; count < kMaxRetryCount; ++count) {
         usleep(5000);
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         if (reader_list_.reader_threads().back()->start() == 4) {
             break;
         }
@@ -410,7 +414,7 @@ TEST_P(LogBufferTest, clear_logs) {
     // Wait up to 250ms for the reader to read the 3 additional logs.
     for (count = 0; count < kMaxRetryCount; ++count) {
         usleep(5000);
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         if (reader_list_.reader_threads().back()->start() == 7) {
             break;
         }
@@ -419,14 +423,14 @@ TEST_P(LogBufferTest, clear_logs) {
 
     // Release the reader, wait for it to get the signal then check that it has been deleted.
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
-        reader_list_.reader_threads().back()->release_Locked();
+        auto lock = std::lock_guard{logd_lock};
+        reader_list_.reader_threads().back()->Release();
     }
     while (!released) {
         usleep(5000);
     }
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         EXPECT_EQ(0U, reader_list_.reader_threads().size());
     }
 
@@ -438,10 +442,15 @@ TEST_P(LogBufferTest, clear_logs) {
 
     // Finally, call FlushTo and ensure that only the 3 logs after the clear remain in the buffer.
     std::vector<LogMessage> read_log_messages_after_clear;
-    std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages_after_clear, nullptr));
-    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
-    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
-    EXPECT_EQ(7ULL, flush_to_state->start());
+    {
+        auto lock = std::lock_guard{logd_lock};
+        std::unique_ptr<LogWriter> test_writer(
+                new TestWriter(&read_log_messages_after_clear, nullptr));
+        std::unique_ptr<FlushToState> flush_to_state =
+                log_buffer_->CreateFlushToState(1, kLogMaskAll);
+        EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
+        EXPECT_EQ(7ULL, flush_to_state->start());
+    }
     CompareLogMessages(after_clear_messages, read_log_messages_after_clear);
 }
 
