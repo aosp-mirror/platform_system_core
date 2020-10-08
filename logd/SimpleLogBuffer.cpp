@@ -36,9 +36,9 @@ void SimpleLogBuffer::Init() {
     }
 
     // Release any sleeping reader threads to dump their current content.
-    auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
+    auto lock = std::lock_guard{logd_lock};
     for (const auto& reader_thread : reader_list_->reader_threads()) {
-        reader_thread->triggerReader_Locked();
+        reader_thread->TriggerReader();
     }
 }
 
@@ -95,7 +95,7 @@ int SimpleLogBuffer::Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pi
     // exact entry with time specified in ms or us precision.
     if ((realtime.tv_nsec % 1000) == 0) ++realtime.tv_nsec;
 
-    auto lock = std::lock_guard{lock_};
+    auto lock = std::lock_guard{logd_lock};
     auto sequence = sequence_.fetch_add(1, std::memory_order_relaxed);
     LogInternal(LogBufferElement(log_id, realtime, uid, pid, tid, sequence, msg, len));
     return len;
@@ -136,8 +136,6 @@ bool SimpleLogBuffer::FlushTo(
         LogWriter* writer, FlushToState& abstract_state,
         const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
                                          log_time realtime)>& filter) {
-    auto shared_lock = SharedLock{lock_};
-
     auto& state = reinterpret_cast<ChattyFlushToState&>(abstract_state);
 
     std::list<LogBufferElement>::iterator it;
@@ -200,13 +198,14 @@ bool SimpleLogBuffer::FlushTo(
         state.last_tid()[element.log_id()] =
                 (element.dropped_count() && !same_tid) ? 0 : element.tid();
 
-        shared_lock.unlock();
+        logd_lock.unlock();
         // We never prune logs equal to or newer than any LogReaderThreads' `start` value, so the
         // `element` pointer is safe here without the lock
         if (!element.FlushTo(writer, stats_, same_tid)) {
+            logd_lock.lock();
             return false;
         }
-        shared_lock.lock_shared();
+        logd_lock.lock();
     }
 
     state.set_start(state.start() + 1);
@@ -217,7 +216,7 @@ bool SimpleLogBuffer::Clear(log_id_t id, uid_t uid) {
     // Try three times to clear, then disconnect the readers and try one final time.
     for (int retry = 0; retry < 3; ++retry) {
         {
-            auto lock = std::lock_guard{lock_};
+            auto lock = std::lock_guard{logd_lock};
             if (Prune(id, ULONG_MAX, uid)) {
                 return true;
             }
@@ -229,27 +228,27 @@ bool SimpleLogBuffer::Clear(log_id_t id, uid_t uid) {
     // _blocked_ reader.
     bool busy = false;
     {
-        auto lock = std::lock_guard{lock_};
+        auto lock = std::lock_guard{logd_lock};
         busy = !Prune(id, 1, uid);
     }
     // It is still busy, disconnect all readers.
     if (busy) {
-        auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         for (const auto& reader_thread : reader_list_->reader_threads()) {
             if (reader_thread->IsWatching(id)) {
                 LOG(WARNING) << "Kicking blocked reader, " << reader_thread->name()
                              << ", from LogBuffer::clear()";
-                reader_thread->release_Locked();
+                reader_thread->Release();
             }
         }
     }
-    auto lock = std::lock_guard{lock_};
+    auto lock = std::lock_guard{logd_lock};
     return Prune(id, ULONG_MAX, uid);
 }
 
 // get the total space allocated to "id"
 size_t SimpleLogBuffer::GetSize(log_id_t id) {
-    auto lock = SharedLock{lock_};
+    auto lock = std::lock_guard{logd_lock};
     size_t retval = max_size_[id];
     return retval;
 }
@@ -261,7 +260,7 @@ bool SimpleLogBuffer::SetSize(log_id_t id, size_t size) {
         return false;
     }
 
-    auto lock = std::lock_guard{lock_};
+    auto lock = std::lock_guard{logd_lock};
     max_size_[id] = size;
     return true;
 }
@@ -274,8 +273,6 @@ void SimpleLogBuffer::MaybePrune(log_id_t id) {
 }
 
 bool SimpleLogBuffer::Prune(log_id_t id, unsigned long prune_rows, uid_t caller_uid) {
-    auto reader_threads_lock = std::lock_guard{reader_list_->reader_threads_lock()};
-
     // Don't prune logs that are newer than the point at which any reader threads are reading from.
     LogReaderThread* oldest = nullptr;
     for (const auto& reader_thread : reader_list_->reader_threads()) {
@@ -347,14 +344,14 @@ void SimpleLogBuffer::KickReader(LogReaderThread* reader, log_id_t id, unsigned 
         // dropped if we hit too much memory pressure.
         LOG(WARNING) << "Kicking blocked reader, " << reader->name()
                      << ", from LogBuffer::kickMe()";
-        reader->release_Locked();
+        reader->Release();
     } else if (reader->deadline().time_since_epoch().count() != 0) {
         // Allow a blocked WRAP deadline reader to trigger and start reporting the log data.
-        reader->triggerReader_Locked();
+        reader->TriggerReader();
     } else {
         // tell slow reader to skip entries to catch up
         LOG(WARNING) << "Skipping " << prune_rows << " entries from slow reader, " << reader->name()
                      << ", from LogBuffer::kickMe()";
-        reader->triggerSkip_Locked(id, prune_rows);
+        reader->TriggerSkip(id, prune_rows);
     }
 }
