@@ -14,22 +14,8 @@
 
 #pragma once
 
-#include <arpa/inet.h>
-#include <cutils/sockets.h>
-#include <errno.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
-
-#include <chrono>
 #include <cstring>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
