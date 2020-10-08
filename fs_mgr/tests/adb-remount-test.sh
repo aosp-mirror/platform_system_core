@@ -740,7 +740,7 @@ skip_administrative_mounts() {
   grep -v \
     -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\|bpf\) " \
     -e "^\(binfmt_misc\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
-    -e "^\(ramdumpfs\) " \
+    -e "^\(ramdumpfs\|binder\|/sys/kernel/debug\) " \
     -e " functionfs " \
     -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
     -e "^rootfs / rootfs rw," \
@@ -755,7 +755,7 @@ Filters out all apex and vendor override administrative overlay mounts
 uninteresting to the test" ]
 skip_unrelated_mounts() {
     grep -v "^overlay.* /\(apex\|bionic\|system\|vendor\)/[^ ]" |
-      grep -v "[%] /\(apex\|bionic\|system\|vendor\)/[^ ][^ ]*$"
+      grep -v "[%] /\(data_mirror\|apex\|bionic\|system\|vendor\)/[^ ][^ ]*$"
 }
 
 ##
@@ -1301,9 +1301,9 @@ else
 fi
 check_ne "${BASE_SYSTEM_DEVT}" "${BASE_VENDOR_DEVT}" --warning system/vendor devt
 [ -n "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
-  die "system devt ${SYSTEM_DEVT} is major 0"
+  echo "${YELLOW}[  WARNING ]${NORMAL} system devt ${SYSTEM_DEVT} major 0" >&2
 [ -n "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
-  die "vendor devt ${SYSTEM_DEVT} is major 0"
+  echo "${YELLOW}[  WARNING ]${NORMAL} vendor devt ${VENDOR_DEVT} major 0" >&2
 
 # Download libc.so, append some gargage, push back, and check if the file
 # is updated.
