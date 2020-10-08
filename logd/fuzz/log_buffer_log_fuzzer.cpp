@@ -126,7 +126,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
     // Read out all of the logs.
     {
-        auto lock = std::unique_lock{reader_list.reader_threads_lock()};
+        auto lock = std::unique_lock{logd_lock};
         std::unique_ptr<LogWriter> test_writer(new NoopWriter());
         std::unique_ptr<LogReaderThread> log_reader(
                 new LogReaderThread(log_buffer.get(), &reader_list, std::move(test_writer), true, 0,
@@ -137,7 +137,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // Wait until the reader has finished.
     while (true) {
         usleep(50);
-        auto lock = std::unique_lock{reader_list.reader_threads_lock()};
+        auto lock = std::unique_lock{logd_lock};
         if (reader_list.reader_threads().size() == 0) {
             break;
         }

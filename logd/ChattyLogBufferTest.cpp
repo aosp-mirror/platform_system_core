@@ -60,9 +60,14 @@ TEST_P(ChattyLogBufferTest, deduplication_simple) {
     LogMessages(log_messages);
 
     std::vector<LogMessage> read_log_messages;
-    std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
-    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
+    {
+        auto lock = std::lock_guard{logd_lock};
+        std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
+
+        std::unique_ptr<FlushToState> flush_to_state =
+                log_buffer_->CreateFlushToState(1, kLogMaskAll);
+        EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
+    }
 
     std::vector<LogMessage> expected_log_messages = {
             make_message(0, "test_tag", "duplicate"),
@@ -117,9 +122,13 @@ TEST_P(ChattyLogBufferTest, deduplication_overflow) {
     LogMessages(log_messages);
 
     std::vector<LogMessage> read_log_messages;
-    std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
-    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
+    {
+        auto lock = std::lock_guard{logd_lock};
+        std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
+        std::unique_ptr<FlushToState> flush_to_state =
+                log_buffer_->CreateFlushToState(1, kLogMaskAll);
+        EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
+    }
 
     std::vector<LogMessage> expected_log_messages = {
             make_message(0, "test_tag", "normal"),
@@ -173,9 +182,13 @@ TEST_P(ChattyLogBufferTest, deduplication_liblog) {
     LogMessages(log_messages);
 
     std::vector<LogMessage> read_log_messages;
-    std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
-    std::unique_ptr<FlushToState> flush_to_state = log_buffer_->CreateFlushToState(1, kLogMaskAll);
-    EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
+    {
+        auto lock = std::lock_guard{logd_lock};
+        std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, nullptr));
+        std::unique_ptr<FlushToState> flush_to_state =
+                log_buffer_->CreateFlushToState(1, kLogMaskAll);
+        EXPECT_TRUE(log_buffer_->FlushTo(test_writer.get(), *flush_to_state, nullptr));
+    }
 
     std::vector<LogMessage> expected_log_messages = {
             make_message(0, 1234, 1),
@@ -257,7 +270,7 @@ TEST_P(ChattyLogBufferTest, no_leading_chatty_simple) {
     std::vector<LogMessage> read_log_messages;
     bool released = false;
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, &released));
         std::unique_ptr<LogReaderThread> log_reader(
                 new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(test_writer), true,
@@ -317,7 +330,7 @@ TEST_P(ChattyLogBufferTest, no_leading_chatty_tail) {
     std::vector<LogMessage> read_log_messages;
     bool released = false;
     {
-        auto lock = std::unique_lock{reader_list_.reader_threads_lock()};
+        auto lock = std::lock_guard{logd_lock};
         std::unique_ptr<LogWriter> test_writer(new TestWriter(&read_log_messages, &released));
         std::unique_ptr<LogReaderThread> log_reader(
                 new LogReaderThread(log_buffer_.get(), &reader_list_, std::move(test_writer), true,

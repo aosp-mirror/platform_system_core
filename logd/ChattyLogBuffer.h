@@ -33,19 +33,19 @@
 #include "LogStatistics.h"
 #include "LogTags.h"
 #include "LogWriter.h"
+#include "LogdLock.h"
 #include "PruneList.h"
 #include "SimpleLogBuffer.h"
-#include "rwlock.h"
 
 typedef std::list<LogBufferElement> LogBufferElementCollection;
 
 class ChattyLogBuffer : public SimpleLogBuffer {
     // watermark of any worst/chatty uid processing
     typedef std::unordered_map<uid_t, LogBufferElementCollection::iterator> LogBufferIteratorMap;
-    LogBufferIteratorMap mLastWorst[LOG_ID_MAX] GUARDED_BY(lock_);
+    LogBufferIteratorMap mLastWorst[LOG_ID_MAX] GUARDED_BY(logd_lock);
     // watermark of any worst/chatty pid of system processing
     typedef std::unordered_map<pid_t, LogBufferElementCollection::iterator> LogBufferPidIteratorMap;
-    LogBufferPidIteratorMap mLastWorstPidOfSystem[LOG_ID_MAX] GUARDED_BY(lock_);
+    LogBufferPidIteratorMap mLastWorstPidOfSystem[LOG_ID_MAX] GUARDED_BY(logd_lock);
 
   public:
     ChattyLogBuffer(LogReaderList* reader_list, LogTags* tags, PruneList* prune,
@@ -53,18 +53,18 @@ class ChattyLogBuffer : public SimpleLogBuffer {
     ~ChattyLogBuffer();
 
   protected:
-    bool Prune(log_id_t id, unsigned long pruneRows, uid_t uid) REQUIRES(lock_) override;
-    void LogInternal(LogBufferElement&& elem) REQUIRES(lock_) override;
+    bool Prune(log_id_t id, unsigned long pruneRows, uid_t uid) REQUIRES(logd_lock) override;
+    void LogInternal(LogBufferElement&& elem) REQUIRES(logd_lock) override;
 
   private:
     LogBufferElementCollection::iterator Erase(LogBufferElementCollection::iterator it,
-                                               bool coalesce = false) REQUIRES(lock_);
+                                               bool coalesce = false) REQUIRES(logd_lock);
 
     PruneList* prune_;
 
     // This always contains a copy of the last message logged, for deduplication.
-    std::optional<LogBufferElement> last_logged_elements_[LOG_ID_MAX] GUARDED_BY(lock_);
+    std::optional<LogBufferElement> last_logged_elements_[LOG_ID_MAX] GUARDED_BY(logd_lock);
     // This contains an element if duplicate messages are seen.
     // Its `dropped` count is `duplicates seen - 1`.
-    std::optional<LogBufferElement> duplicate_elements_[LOG_ID_MAX] GUARDED_BY(lock_);
+    std::optional<LogBufferElement> duplicate_elements_[LOG_ID_MAX] GUARDED_BY(logd_lock);
 };

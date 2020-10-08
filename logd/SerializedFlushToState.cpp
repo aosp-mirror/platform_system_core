@@ -20,8 +20,9 @@
 
 #include <android-base/logging.h>
 
-SerializedFlushToState::SerializedFlushToState(uint64_t start, LogMask log_mask)
-    : FlushToState(start, log_mask) {
+SerializedFlushToState::SerializedFlushToState(uint64_t start, LogMask log_mask,
+                                               std::list<SerializedLogChunk>* logs)
+    : FlushToState(start, log_mask), logs_(logs) {
     log_id_for_each(i) {
         if (((1 << i) & log_mask) == 0) {
             continue;
