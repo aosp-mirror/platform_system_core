@@ -65,7 +65,7 @@ class Snapuserd final {
           backing_store_device_(in_backing_store_device),
           metadata_read_done_(false) {}
 
-    int Init();
+    bool Init();
     int Run();
     int ReadDmUserHeader();
     int WriteDmUserPayload(size_t size);
