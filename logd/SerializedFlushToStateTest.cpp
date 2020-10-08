@@ -36,8 +36,8 @@ class SerializedFlushToStateTest : public testing::Test {
     }
     void TearDown() override { android::base::SetMinimumLogSeverity(old_log_severity_); }
 
-    std::string TestReport(const std::vector<uint64_t>& expected,
-                           const std::vector<uint64_t>& read) {
+    std::string TestReport(const std::vector<uint64_t>& expected, const std::vector<uint64_t>& read)
+            REQUIRES(logd_lock) {
         auto sequence_to_log_id = [&](uint64_t sequence) -> int {
             for (const auto& [log_id, sequences] : sequence_numbers_per_buffer_) {
                 if (std::find(sequences.begin(), sequences.end(), sequence) != sequences.end()) {
@@ -82,13 +82,12 @@ class SerializedFlushToStateTest : public testing::Test {
     // Read sequence numbers in order from SerializedFlushToState for every mask combination and all
     // sequence numbers from 0 through the highest logged sequence number + 1.
     // This assumes that all of the logs have already been written.
-    void TestAllReading() {
+    void TestAllReading() REQUIRES(logd_lock) {
         uint64_t max_sequence = sequence_ + 1;
         uint32_t max_mask = (1 << LOG_ID_MAX) - 1;
         for (uint64_t sequence = 0; sequence < max_sequence; ++sequence) {
             for (uint32_t mask = 0; mask < max_mask; ++mask) {
-                auto state = SerializedFlushToState{sequence, mask};
-                state.InitializeLogs(log_chunks_);
+                auto state = SerializedFlushToState{sequence, mask, log_chunks_};
                 TestReading(sequence, mask, state);
             }
         }
@@ -98,14 +97,14 @@ class SerializedFlushToStateTest : public testing::Test {
     // it calls write_logs() in a loop for sequence/mask combination.  It clears log_chunks_ and
     // sequence_numbers_per_buffer_ between calls, such that only the sequence numbers written in
     // the previous call to write_logs() are expected.
-    void TestAllReadingWithFutureMessages(const std::function<bool(int)>& write_logs) {
+    void TestAllReadingWithFutureMessages(const std::function<bool(int)>& write_logs)
+            REQUIRES(logd_lock) {
         uint64_t max_sequence = sequence_ + 1;
         uint32_t max_mask = (1 << LOG_ID_MAX) - 1;
         for (uint64_t sequence = 1; sequence < max_sequence; ++sequence) {
             for (uint32_t mask = 1; mask < max_mask; ++mask) {
                 log_id_for_each(i) { log_chunks_[i].clear(); }
-                auto state = SerializedFlushToState{sequence, mask};
-                state.InitializeLogs(log_chunks_);
+                auto state = SerializedFlushToState{sequence, mask, log_chunks_};
                 int loop_count = 0;
                 while (write_logs(loop_count++)) {
                     TestReading(sequence, mask, state);
@@ -115,7 +114,8 @@ class SerializedFlushToStateTest : public testing::Test {
         }
     }
 
-    void TestReading(uint64_t start, LogMask log_mask, SerializedFlushToState& state) {
+    void TestReading(uint64_t start, LogMask log_mask, SerializedFlushToState& state)
+            REQUIRES(logd_lock) {
         std::vector<uint64_t> expected_sequence;
         log_id_for_each(i) {
             if (((1 << i) & log_mask) == 0) {
@@ -148,7 +148,7 @@ class SerializedFlushToStateTest : public testing::Test {
     // Add a chunk with the given messages to the a given log buffer.  Keep track of the sequence
     // numbers for future validation.  Optionally mark the block as having finished writing.
     void AddChunkWithMessages(bool finish_writing, int buffer,
-                              const std::vector<std::string>& messages) {
+                              const std::vector<std::string>& messages) REQUIRES(logd_lock) {
         auto chunk = SerializedLogChunk{kChunkSize};
         for (const auto& message : messages) {
             auto sequence = sequence_++;
@@ -175,6 +175,7 @@ class SerializedFlushToStateTest : public testing::Test {
 // 4: 1 chunk with 0 logs and finished writing (impossible, but SerializedFlushToState handles it)
 // 5-7: 0 chunks
 TEST_F(SerializedFlushToStateTest, smoke) {
+    auto lock = std::lock_guard{logd_lock};
     AddChunkWithMessages(true, 0, {"1st", "2nd"});
     AddChunkWithMessages(true, 1, {"3rd"});
     AddChunkWithMessages(false, 0, {"4th"});
@@ -188,6 +189,7 @@ TEST_F(SerializedFlushToStateTest, smoke) {
 }
 
 TEST_F(SerializedFlushToStateTest, random) {
+    auto lock = std::lock_guard{logd_lock};
     srand(1);
     for (int count = 0; count < 20; ++count) {
         unsigned int num_messages = 1 + rand() % 15;
@@ -204,7 +206,8 @@ TEST_F(SerializedFlushToStateTest, random) {
 
 // Same start as smoke, but we selectively write logs to the buffers and ensure they're read.
 TEST_F(SerializedFlushToStateTest, future_writes) {
-    auto write_logs = [&](int loop_count) {
+    auto lock = std::lock_guard{logd_lock};
+    auto write_logs = [&](int loop_count) REQUIRES(logd_lock) {
         switch (loop_count) {
             case 0:
                 // Initial writes.
@@ -252,11 +255,11 @@ TEST_F(SerializedFlushToStateTest, future_writes) {
 }
 
 TEST_F(SerializedFlushToStateTest, no_dangling_references) {
+    auto lock = std::lock_guard{logd_lock};
     AddChunkWithMessages(true, 0, {"1st", "2nd"});
     AddChunkWithMessages(true, 0, {"3rd", "4th"});
 
-    auto state = SerializedFlushToState{1, kLogMaskAll};
-    state.InitializeLogs(log_chunks_);
+    auto state = SerializedFlushToState{1, kLogMaskAll, log_chunks_};
 
     ASSERT_EQ(log_chunks_[0].size(), 2U);
     auto first_chunk = log_chunks_[0].begin();
@@ -290,6 +293,7 @@ TEST_F(SerializedFlushToStateTest, no_dangling_references) {
 }
 
 TEST(SerializedFlushToState, Prune) {
+    auto lock = std::lock_guard{logd_lock};
     auto chunk = SerializedLogChunk{kChunkSize};
     chunk.Log(1, log_time(), 0, 1, 1, "abc", 3);
     chunk.Log(2, log_time(), 0, 1, 1, "abc", 3);
@@ -299,8 +303,7 @@ TEST(SerializedFlushToState, Prune) {
     std::list<SerializedLogChunk> log_chunks[LOG_ID_MAX];
     log_chunks[LOG_ID_MAIN].emplace_back(std::move(chunk));
 
-    auto state = SerializedFlushToState{1, kLogMaskAll};
-    state.InitializeLogs(log_chunks);
+    auto state = SerializedFlushToState{1, kLogMaskAll, log_chunks};
     ASSERT_TRUE(state.HasUnreadLogs());
 
     state.Prune(LOG_ID_MAIN, log_chunks[LOG_ID_MAIN].begin());
