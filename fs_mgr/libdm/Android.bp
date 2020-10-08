@@ -99,7 +99,3 @@ cc_fuzz {
         "liblog",
     ],
 }
-
-vts_config {
-    name: "VtsKernelLibdmTest",
-}
