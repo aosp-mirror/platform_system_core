@@ -30,9 +30,9 @@
 #include "LogReaderList.h"
 #include "LogStatistics.h"
 #include "LogTags.h"
+#include "LogdLock.h"
 #include "SerializedLogChunk.h"
 #include "SerializedLogEntry.h"
-#include "rwlock.h"
 
 class SerializedLogBuffer final : public LogBuffer {
   public:
@@ -41,11 +41,12 @@ class SerializedLogBuffer final : public LogBuffer {
 
     int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid, const char* msg,
             uint16_t len) override;
-    std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask) override;
-    void DeleteFlushToState(std::unique_ptr<FlushToState> state) override;
+    std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask)
+            REQUIRES(logd_lock) override;
     bool FlushTo(LogWriter* writer, FlushToState& state,
                  const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
-                                                  log_time realtime)>& filter) override;
+                                                  log_time realtime)>& filter)
+            REQUIRES(logd_lock) override;
 
     bool Clear(log_id_t id, uid_t uid) override;
     size_t GetSize(log_id_t id) override;
@@ -55,20 +56,19 @@ class SerializedLogBuffer final : public LogBuffer {
 
   private:
     bool ShouldLog(log_id_t log_id, const char* msg, uint16_t len);
-    void MaybePrune(log_id_t log_id) REQUIRES(lock_);
-    void Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid) REQUIRES(lock_);
+    void MaybePrune(log_id_t log_id) REQUIRES(logd_lock);
+    void Prune(log_id_t log_id, size_t bytes_to_free, uid_t uid) REQUIRES(logd_lock);
     void NotifyReadersOfPrune(log_id_t log_id, const std::list<SerializedLogChunk>::iterator& chunk)
-            REQUIRES(reader_list_->reader_threads_lock());
+            REQUIRES(logd_lock);
     void RemoveChunkFromStats(log_id_t log_id, SerializedLogChunk& chunk);
-    size_t GetSizeUsed(log_id_t id) REQUIRES(lock_);
+    size_t GetSizeUsed(log_id_t id) REQUIRES(logd_lock);
 
     LogReaderList* reader_list_;
     LogTags* tags_;
     LogStatistics* stats_;
 
-    size_t max_size_[LOG_ID_MAX] GUARDED_BY(lock_) = {};
-    std::list<SerializedLogChunk> logs_[LOG_ID_MAX] GUARDED_BY(lock_);
-    RwLock lock_;
+    size_t max_size_[LOG_ID_MAX] GUARDED_BY(logd_lock) = {};
+    std::list<SerializedLogChunk> logs_[LOG_ID_MAX] GUARDED_BY(logd_lock);
 
     std::atomic<uint64_t> sequence_ = 1;
 };

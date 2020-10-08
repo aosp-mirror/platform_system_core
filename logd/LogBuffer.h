@@ -21,10 +21,12 @@
 #include <functional>
 #include <memory>
 
+#include <android-base/thread_annotations.h>
 #include <log/log.h>
 #include <log/log_read.h>
 
 #include "LogWriter.h"
+#include "LogdLock.h"
 
 // A mask to represent which log buffers a reader is watching, values are (1 << LOG_ID_MAIN), etc.
 using LogMask = uint32_t;
@@ -62,12 +64,12 @@ class LogBuffer {
     virtual int Log(log_id_t log_id, log_time realtime, uid_t uid, pid_t pid, pid_t tid,
                     const char* msg, uint16_t len) = 0;
 
-    virtual std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask) = 0;
-    virtual void DeleteFlushToState(std::unique_ptr<FlushToState>) {}
+    virtual std::unique_ptr<FlushToState> CreateFlushToState(uint64_t start, LogMask log_mask)
+            REQUIRES(logd_lock) = 0;
     virtual bool FlushTo(
             LogWriter* writer, FlushToState& state,
             const std::function<FilterResult(log_id_t log_id, pid_t pid, uint64_t sequence,
-                                             log_time realtime)>& filter) = 0;
+                                             log_time realtime)>& filter) REQUIRES(logd_lock) = 0;
 
     virtual bool Clear(log_id_t id, uid_t uid) = 0;
     virtual size_t GetSize(log_id_t id) = 0;
