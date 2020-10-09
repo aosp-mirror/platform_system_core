@@ -485,17 +485,17 @@ int Snapuserd::WriteDmUserPayload(size_t size) {
     return sizeof(struct dm_user_header) + size;
 }
 
-int Snapuserd::Init() {
+bool Snapuserd::Init() {
     backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
     if (backing_store_fd_ < 0) {
         LOG(ERROR) << "Open Failed: " << backing_store_device_;
-        return 1;
+        return false;
     }
 
     cow_fd_.reset(open(cow_device_.c_str(), O_RDWR));
     if (cow_fd_ < 0) {
         LOG(ERROR) << "Open Failed: " << cow_device_;
-        return 1;
+        return false;
     }
 
     std::string str(cow_device_);
@@ -509,7 +509,7 @@ int Snapuserd::Init() {
     std::string uuid;
     if (!dm.GetDmDeviceUuidByName(device_name, &uuid)) {
         LOG(ERROR) << "Unable to find UUID for " << cow_device_;
-        return 1;
+        return false;
     }
 
     LOG(DEBUG) << "UUID: " << uuid;
@@ -518,7 +518,7 @@ int Snapuserd::Init() {
     ctrl_fd_.reset(open(t.control_path().c_str(), O_RDWR));
     if (ctrl_fd_ < 0) {
         LOG(ERROR) << "Unable to open " << t.control_path();
-        return 1;
+        return false;
     }
 
     // Allocate the buffer which is used to communicate between
@@ -528,7 +528,7 @@ int Snapuserd::Init() {
     size_t buf_size = sizeof(struct dm_user_header) + PAYLOAD_SIZE;
     bufsink_.Initialize(buf_size);
 
-    return 0;
+    return true;
 }
 
 int Snapuserd::Run() {
@@ -601,6 +601,11 @@ int Snapuserd::Run() {
                         ret = ReadData(chunk + num_chunks_read, read_size);
                         if (ret < 0) {
                             LOG(ERROR) << "ReadData failed";
+                            // TODO: Bug 168259959: All the error paths from this function
+                            // should send error code to dm-user thereby IO
+                            // terminates with an error from dm-user. Returning
+                            // here without sending error code will block the
+                            // IO.
                             return ret;
                         }
                     }
@@ -622,7 +627,7 @@ int Snapuserd::Run() {
         }
 
         case DM_USER_MAP_WRITE: {
-            // TODO: After merge operation is completed, kernel issues write
+            // TODO: Bug: 168311203: After merge operation is completed, kernel issues write
             // to flush all the exception mappings where the merge is
             // completed. If dm-user routes the WRITE IO, we need to clear
             // in-memory data structures representing those exception
