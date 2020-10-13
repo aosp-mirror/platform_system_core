@@ -248,7 +248,12 @@ ClientUsbTransport::ClientUsbTransport()
 }
 
 ssize_t ClientUsbTransport::Read(void* data, size_t len) {
-    if (handle_ == nullptr || len > SSIZE_MAX) {
+    if (handle_ == nullptr) {
+        LOG(ERROR) << "ClientUsbTransport: no handle";
+        return -1;
+    }
+    if (len > SSIZE_MAX) {
+        LOG(ERROR) << "ClientUsbTransport: maximum length exceeds bounds";
         return -1;
     }
     char* char_data = static_cast<char*>(data);
@@ -258,6 +263,7 @@ ssize_t ClientUsbTransport::Read(void* data, size_t len) {
         auto bytes_read_now =
                 handle_->read(handle_.get(), char_data, bytes_to_read, true /* allow_partial */);
         if (bytes_read_now < 0) {
+            PLOG(ERROR) << "ClientUsbTransport: read failed";
             return bytes_read_total == 0 ? -1 : bytes_read_total;
         }
         bytes_read_total += bytes_read_now;
