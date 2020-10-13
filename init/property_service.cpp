@@ -860,7 +860,7 @@ static void property_derive_build_fingerprint() {
     build_fingerprint += '/';
     build_fingerprint += GetProperty("ro.product.device", UNKNOWN);
     build_fingerprint += ':';
-    build_fingerprint += GetProperty("ro.build.version.release", UNKNOWN);
+    build_fingerprint += GetProperty("ro.build.version.release_or_codename", UNKNOWN);
     build_fingerprint += '/';
     build_fingerprint += GetProperty("ro.build.id", UNKNOWN);
     build_fingerprint += '/';
