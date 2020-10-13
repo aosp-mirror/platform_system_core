@@ -60,9 +60,11 @@ class BufferSink : public IByteSink {
 
 class Snapuserd final {
   public:
-    Snapuserd(const std::string& in_cow_device, const std::string& in_backing_store_device)
+    Snapuserd(const std::string& in_cow_device, const std::string& in_backing_store_device,
+              const std::string& in_control_device)
         : cow_device_(in_cow_device),
           backing_store_device_(in_backing_store_device),
+          control_device_(in_control_device),
           metadata_read_done_(false) {}
 
     bool Init();
@@ -75,6 +77,8 @@ class Snapuserd final {
     int ReadDiskExceptions(chunk_t chunk, size_t size);
     int ReadData(chunk_t chunk, size_t size);
 
+    std::string GetControlDevicePath() { return control_device_; }
+
   private:
     int ProcessReplaceOp(const CowOperation* cow_op);
     int ProcessCopyOp(const CowOperation* cow_op);
@@ -82,6 +86,7 @@ class Snapuserd final {
 
     std::string cow_device_;
     std::string backing_store_device_;
+    std::string control_device_;
 
     unique_fd cow_fd_;
     unique_fd backing_store_fd_;
