@@ -139,7 +139,13 @@ bool FastbootDevice::WriteStatus(FastbootResult result, const std::string& messa
 bool FastbootDevice::HandleData(bool read, std::vector<char>* data) {
     auto read_write_data_size = read ? this->get_transport()->Read(data->data(), data->size())
                                      : this->get_transport()->Write(data->data(), data->size());
-    if (read_write_data_size == -1 || static_cast<size_t>(read_write_data_size) != data->size()) {
+    if (read_write_data_size == -1) {
+        LOG(ERROR) << (read ? "read from" : "write to") << " transport failed";
+        return false;
+    }
+    if (static_cast<size_t>(read_write_data_size) != data->size()) {
+        LOG(ERROR) << (read ? "read" : "write") << " expected " << data->size() << " bytes, got "
+                   << read_write_data_size;
         return false;
     }
     return true;
