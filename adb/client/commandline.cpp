@@ -1149,7 +1149,7 @@ static bool adb_root(const char* command) {
     // If we were using a specific transport ID, there's nothing we can wait for.
     if (previous_id == 0) {
         adb_set_transport(previous_type, previous_serial, 0);
-        wait_for_device("wait-for-device", 6000ms);
+        wait_for_device("wait-for-device", 12000ms);
     }
 
     return true;
