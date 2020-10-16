@@ -130,13 +130,7 @@ ISnapshotMergeStats* SnapshotManagerStub::GetSnapshotMergeStatsInstance() {
     return &snapshot_merge_stats;
 }
 
-std::unique_ptr<ICowWriter> SnapshotManagerStub::OpenSnapshotWriter(
-        const CreateLogicalPartitionParams&) {
-    LOG(ERROR) << __FUNCTION__ << " should never be called.";
-    return nullptr;
-}
-
-std::unique_ptr<FileDescriptor> SnapshotManagerStub::OpenSnapshotReader(
+std::unique_ptr<ISnapshotWriter> SnapshotManagerStub::OpenSnapshotWriter(
         const CreateLogicalPartitionParams&) {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return nullptr;
