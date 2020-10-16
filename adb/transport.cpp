@@ -129,8 +129,8 @@ class ReconnectHandler {
     };
 
     // Only retry for up to one minute.
-    static constexpr const std::chrono::seconds kDefaultTimeout = 10s;
-    static constexpr const size_t kMaxAttempts = 6;
+    static constexpr const std::chrono::seconds kDefaultTimeout = 3s;
+    static constexpr const size_t kMaxAttempts = 20;
 
     // Protects all members.
     std::mutex reconnect_mutex_;
