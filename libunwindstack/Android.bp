@@ -171,6 +171,8 @@ cc_library_static {
         "//system/core/debuggerd",
         "//system/core/init",
         "//system/core/libbacktrace",
+	// Temporary add the new path in preparation for migration.
+        "//system/unwinding/libbacktrace",
     ],
     apex_available: [
         "//apex_available:platform",
