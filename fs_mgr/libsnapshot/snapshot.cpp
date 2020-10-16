@@ -15,6 +15,7 @@
 #include <libsnapshot/snapshot.h>
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <math.h>
 #include <sys/file.h>
 #include <sys/types.h>
@@ -1569,8 +1570,8 @@ bool SnapshotManager::CreateLogicalAndSnapshotPartitions(
                 .partition_opener = &opener,
                 .timeout_ms = timeout_ms,
         };
-        std::string ignore_path;
-        if (!MapPartitionWithSnapshot(lock.get(), std::move(params), &ignore_path)) {
+        if (!MapPartitionWithSnapshot(lock.get(), std::move(params), SnapshotContext::Mount,
+                                      nullptr)) {
             return false;
         }
     }
@@ -1598,11 +1599,10 @@ static std::chrono::milliseconds GetRemainingTime(
 
 bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
                                                CreateLogicalPartitionParams params,
-                                               std::string* path) {
+                                               SnapshotContext context, SnapshotPaths* paths) {
     auto begin = std::chrono::steady_clock::now();
 
     CHECK(lock);
-    path->clear();
 
     if (params.GetPartitionName() != params.GetDeviceName()) {
         LOG(ERROR) << "Mapping snapshot with a different name is unsupported: partition_name = "
@@ -1683,8 +1683,11 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     }
     created_devices.EmplaceBack<AutoUnmapDevice>(&dm, params.GetDeviceName());
 
+    if (paths) {
+        paths->target_device = base_path;
+    }
+
     if (!live_snapshot_status.has_value()) {
-        *path = base_path;
         created_devices.Release();
         return true;
     }
@@ -1711,21 +1714,33 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         LOG(ERROR) << "Could not determine major/minor for: " << cow_name;
         return false;
     }
+    if (paths) {
+        paths->cow_device = cow_device;
+    }
 
     remaining_time = GetRemainingTime(params.timeout_ms, begin);
     if (remaining_time.count() < 0) return false;
 
+    if (context == SnapshotContext::Update && IsCompressionEnabled()) {
+        // Stop here, we can't run dm-user yet, the COW isn't built.
+        return true;
+    }
+
+    std::string path;
     if (!MapSnapshot(lock, params.GetPartitionName(), base_device, cow_device, remaining_time,
-                     path)) {
+                     &path)) {
         LOG(ERROR) << "Could not map snapshot for partition: " << params.GetPartitionName();
         return false;
     }
     // No need to add params.GetPartitionName() to created_devices since it is immediately released.
 
+    if (paths) {
+        paths->snapshot_device = path;
+    }
+
     created_devices.Release();
 
-    LOG(INFO) << "Mapped " << params.GetPartitionName() << " as snapshot device at " << *path;
-
+    LOG(INFO) << "Mapped " << params.GetPartitionName() << " as snapshot device at " << path;
     return true;
 }
 
@@ -2438,23 +2453,85 @@ bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& para
                    << params.GetPartitionName();
         return false;
     }
-    return MapPartitionWithSnapshot(lock.get(), params, snapshot_path);
+
+    SnapshotPaths paths;
+    if (!MapPartitionWithSnapshot(lock.get(), params, SnapshotContext::Update, &paths)) {
+        return false;
+    }
+
+    if (!paths.snapshot_device.empty()) {
+        *snapshot_path = paths.snapshot_device;
+    } else {
+        *snapshot_path = paths.target_device;
+    }
+    DCHECK(!snapshot_path->empty());
+    return true;
 }
 
-std::unique_ptr<ICowWriter> SnapshotManager::OpenSnapshotWriter(
+std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
         const android::fs_mgr::CreateLogicalPartitionParams& params) {
-    (void)params;
+    // First unmap any existing mapping.
+    auto lock = LockShared();
+    if (!lock) return nullptr;
+    if (!UnmapPartitionWithSnapshot(lock.get(), params.GetPartitionName())) {
+        LOG(ERROR) << "Cannot unmap existing snapshot before re-mapping it: "
+                   << params.GetPartitionName();
+        return nullptr;
+    }
 
-    LOG(ERROR) << "OpenSnapshotWriter not yet implemented";
+    SnapshotPaths paths;
+    if (!MapPartitionWithSnapshot(lock.get(), params, SnapshotContext::Update, &paths)) {
+        return nullptr;
+    }
+
+    SnapshotStatus status;
+    if (!paths.cow_device.empty()) {
+        if (!ReadSnapshotStatus(lock.get(), params.GetPartitionName(), &status)) {
+            return nullptr;
+        }
+    } else {
+        // Currently, partition_cow_creator always creates snapshots. The
+        // reason is that if partition X shrinks while partition Y grows, we
+        // cannot bindly write to the newly freed extents in X. This would
+        // make the old slot unusable. So, the entire size of the target
+        // partition is currently considered snapshottable.
+        LOG(ERROR) << "No snapshot available for partition " << params.GetPartitionName();
+        return nullptr;
+    }
+
+    if (IsCompressionEnabled()) {
+        return OpenCompressedSnapshotWriter(lock.get(), params.GetPartitionName(), status, paths);
+    }
+    return OpenKernelSnapshotWriter(lock.get(), params.GetPartitionName(), status, paths);
+}
+
+std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
+        LockedFile*, const std::string&, const SnapshotStatus&, const SnapshotPaths&) {
+    LOG(ERROR) << "OpenSnapshotWriter not yet implemented for compression";
     return nullptr;
 }
 
-std::unique_ptr<FileDescriptor> SnapshotManager::OpenSnapshotReader(
-        const android::fs_mgr::CreateLogicalPartitionParams& params) {
-    (void)params;
+std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenKernelSnapshotWriter(
+        LockedFile* lock, [[maybe_unused]] const std::string& partition_name,
+        const SnapshotStatus& status, const SnapshotPaths& paths) {
+    CHECK(lock);
 
-    LOG(ERROR) << "OpenSnapshotReader not yet implemented";
-    return nullptr;
+    CowOptions cow_options;
+    cow_options.max_blocks = {status.device_size() / cow_options.block_size};
+
+    auto writer = std::make_unique<OnlineKernelSnapshotWriter>(cow_options);
+
+    std::string path = paths.snapshot_device.empty() ? paths.target_device : paths.snapshot_device;
+    unique_fd fd(open(path.c_str(), O_RDWR | O_CLOEXEC));
+    if (fd < 0) {
+        PLOG(ERROR) << "open failed: " << path;
+        return nullptr;
+    }
+
+    uint64_t cow_size = status.cow_partition_size() + status.cow_file_size();
+    writer->SetSnapshotDevice(std::move(fd), cow_size);
+
+    return writer;
 }
 
 bool SnapshotManager::UnmapUpdateSnapshot(const std::string& target_partition_name) {
