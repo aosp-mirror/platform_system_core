@@ -127,24 +127,6 @@ std::string SnapuserdClient::Receivemsg() {
     return msgStr;
 }
 
-#if 0
-std::string SnapuserdClient::Receivemsg() {
-    char msg[PACKET_SIZE];
-    std::string msgStr("fail");
-    int ret;
-
-    ret = TEMP_FAILURE_RETRY(recv(sockfd_, msg, PACKET_SIZE, 0));
-    if (ret <= 0) {
-        LOG(ERROR) << "recv failed " << strerror(errno);
-        return msgStr;
-    }
-
-    msgStr.clear();
-    msgStr = msg;
-    return msgStr;
-}
-#endif
-
 int SnapuserdClient::StopSnapuserd(bool firstStageDaemon) {
     if (firstStageDaemon) {
         sockfd_ = socket_local_client(GetSocketNameFirstStage().c_str(),
@@ -209,7 +191,8 @@ int SnapuserdClient::StartSnapuserd() {
     return 0;
 }
 
-int SnapuserdClient::InitializeSnapuserd(std::string cow_device, std::string backing_device) {
+int SnapuserdClient::InitializeSnapuserd(std::string cow_device, std::string backing_device,
+                                         std::string control_device) {
     int ret = 0;
 
     if (!ConnectToServer()) {
@@ -217,7 +200,7 @@ int SnapuserdClient::InitializeSnapuserd(std::string cow_device, std::string bac
         return -1;
     }
 
-    std::string msg = "start," + cow_device + "," + backing_device;
+    std::string msg = "start," + cow_device + "," + backing_device + "," + control_device;
 
     ret = Sendmsg(msg.c_str(), msg.size());
     if (ret < 0) {
@@ -270,7 +253,7 @@ int SnapuserdClient::InitializeSnapuserd(std::string cow_device, std::string bac
  * completely active to serve the IO and merging process.
  *
  */
-int SnapuserdClient::RestartSnapuserd(std::vector<std::pair<std::string, std::string>>& vec) {
+int SnapuserdClient::RestartSnapuserd(std::vector<std::vector<std::string>>& vec) {
     // Connect to first-stage daemon and send a terminate-request control
     // message. This will not terminate the daemon but will mark the daemon as
     // passive.
@@ -306,14 +289,19 @@ int SnapuserdClient::RestartSnapuserd(std::vector<std::pair<std::string, std::st
 
     LOG(DEBUG) << "Second stage Snapuserd daemon created successfully at socket "
                << GetSocketNameSecondStage();
-    CHECK(vec.size() % 2 == 0);
 
+    // Vector contains all the device information to be passed to the new
+    // daemon. Note that the caller can choose to initialize separately
+    // by calling InitializeSnapuserd() API as well. In that case, vector
+    // should be empty
     for (int i = 0; i < vec.size(); i++) {
-        std::string& cow_device = vec[i].first;
-        std::string& base_device = vec[i].second;
+        std::string& cow_device = vec[i][0];
+        std::string& base_device = vec[i][1];
+        std::string& control_device = vec[i][2];
 
-        InitializeSnapuserd(cow_device, base_device);
-        LOG(DEBUG) << "Daemon initialized with " << cow_device << " and " << base_device;
+        InitializeSnapuserd(cow_device, base_device, control_device);
+        LOG(DEBUG) << "Daemon initialized with " << cow_device << ", " << base_device << " and "
+                   << control_device;
     }
 
     return 0;
