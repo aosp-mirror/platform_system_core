@@ -51,8 +51,9 @@ class SnapuserdClient {
   public:
     int StartSnapuserd();
     int StopSnapuserd(bool firstStageDaemon);
-    int RestartSnapuserd(std::vector<std::pair<std::string, std::string>>& vec);
-    int InitializeSnapuserd(std::string cow_device, std::string backing_device);
+    int RestartSnapuserd(std::vector<std::vector<std::string>>& vec);
+    int InitializeSnapuserd(std::string cow_device, std::string backing_device,
+                            std::string control_device);
 };
 
 }  // namespace snapshot

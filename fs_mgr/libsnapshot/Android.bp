@@ -544,9 +544,11 @@ cc_test {
 	"libsnapshot_snapuserd",
         "libcutils_sockets",
         "libz",
+	"libdm",
     ],
     header_libs: [
         "libstorage_literals_headers",
+        "libfiemap_headers",
     ],
     test_min_api_level: 30,
     auto_gen_config: true,
