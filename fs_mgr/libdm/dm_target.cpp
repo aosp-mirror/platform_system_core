@@ -284,6 +284,7 @@ std::string DmTargetUser::GetParameterString() const {
     std::vector<std::string> argv;
     argv.push_back(std::to_string(start()));
     argv.push_back(std::to_string(size()));
+    argv.push_back(control_device());
     return android::base::Join(argv, " ");
 }
 
