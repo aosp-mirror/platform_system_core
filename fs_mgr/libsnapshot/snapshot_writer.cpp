@@ -40,7 +40,7 @@ void OnlineKernelSnapshotWriter::SetSnapshotDevice(android::base::unique_fd&& sn
     cow_size_ = cow_size;
 }
 
-bool OnlineKernelSnapshotWriter::Flush() {
+bool OnlineKernelSnapshotWriter::Finalize() {
     if (fsync(snapshot_fd_.get()) < 0) {
         PLOG(ERROR) << "fsync";
         return false;
