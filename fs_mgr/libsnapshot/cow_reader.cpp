@@ -18,17 +18,19 @@
 #include <unistd.h>
 
 #include <limits>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <libsnapshot/cow_reader.h>
 #include <zlib.h>
+
 #include "cow_decompress.h"
 
 namespace android {
 namespace snapshot {
 
-CowReader::CowReader() : fd_(-1), header_(), fd_size_(0) {}
+CowReader::CowReader() : fd_(-1), header_(), footer_(), fd_size_(0), has_footer_(false) {}
 
 static void SHA256(const void*, size_t, uint8_t[]) {
 #if 0
@@ -63,16 +65,6 @@ bool CowReader::Parse(android::base::borrowed_fd fd) {
         return false;
     }
 
-    // Validity check the ops range.
-    if (header_.ops_offset >= fd_size_) {
-        LOG(ERROR) << "ops offset " << header_.ops_offset << " larger than fd size " << fd_size_;
-        return false;
-    }
-    if (fd_size_ - header_.ops_offset < header_.ops_size) {
-        LOG(ERROR) << "ops size " << header_.ops_size << " is too large";
-        return false;
-    }
-
     if (header_.magic != kCowMagicNumber) {
         LOG(ERROR) << "Header Magic corrupted. Magic: " << header_.magic
                    << "Expected: " << kCowMagicNumber;
@@ -81,6 +73,11 @@ bool CowReader::Parse(android::base::borrowed_fd fd) {
     if (header_.header_size != sizeof(CowHeader)) {
         LOG(ERROR) << "Header size unknown, read " << header_.header_size << ", expected "
                    << sizeof(CowHeader);
+        return false;
+    }
+    if (header_.footer_size != sizeof(CowFooter)) {
+        LOG(ERROR) << "Footer size unknown, read " << header_.footer_size << ", expected "
+                   << sizeof(CowFooter);
         return false;
     }
 
@@ -94,19 +91,16 @@ bool CowReader::Parse(android::base::borrowed_fd fd) {
         return false;
     }
 
-    uint8_t header_csum[32];
-    {
-        CowHeader tmp = header_;
-        memset(&tmp.header_checksum, 0, sizeof(tmp.header_checksum));
-        memset(header_csum, 0, sizeof(uint8_t) * 32);
-
-        SHA256(&tmp, sizeof(tmp), header_csum);
-    }
-    if (memcmp(header_csum, header_.header_checksum, sizeof(header_csum)) != 0) {
-        LOG(ERROR) << "header checksum is invalid";
+    auto footer_pos = lseek(fd_.get(), -header_.footer_size, SEEK_END);
+    if (footer_pos != fd_size_ - header_.footer_size) {
+        LOG(ERROR) << "Failed to read full footer!";
         return false;
     }
-
+    if (!android::base::ReadFully(fd_, &footer_, sizeof(footer_))) {
+        PLOG(ERROR) << "read footer failed";
+        return false;
+    }
+    has_footer_ = (footer_.op.type == kCowFooterOp);
     return true;
 }
 
@@ -115,74 +109,88 @@ bool CowReader::GetHeader(CowHeader* header) {
     return true;
 }
 
+bool CowReader::GetFooter(CowFooter* footer) {
+    if (!has_footer_) return false;
+    *footer = footer_;
+    return true;
+}
+
 class CowOpIter final : public ICowOpIter {
   public:
-    CowOpIter(std::unique_ptr<uint8_t[]>&& ops, size_t len);
+    CowOpIter(std::unique_ptr<std::vector<CowOperation>>&& ops);
 
     bool Done() override;
     const CowOperation& Get() override;
     void Next() override;
 
   private:
-    bool HasNext();
-
-    std::unique_ptr<uint8_t[]> ops_;
-    const uint8_t* pos_;
-    const uint8_t* end_;
-    bool done_;
+    std::unique_ptr<std::vector<CowOperation>> ops_;
+    std::vector<CowOperation>::iterator op_iter_;
 };
 
-CowOpIter::CowOpIter(std::unique_ptr<uint8_t[]>&& ops, size_t len)
-    : ops_(std::move(ops)), pos_(ops_.get()), end_(pos_ + len), done_(!HasNext()) {}
-
-bool CowOpIter::Done() {
-    return done_;
+CowOpIter::CowOpIter(std::unique_ptr<std::vector<CowOperation>>&& ops) {
+    ops_ = std::move(ops);
+    op_iter_ = ops_.get()->begin();
 }
 
-bool CowOpIter::HasNext() {
-    return pos_ < end_ && size_t(end_ - pos_) >= sizeof(CowOperation);
+bool CowOpIter::Done() {
+    return op_iter_ == ops_.get()->end();
 }
 
 void CowOpIter::Next() {
     CHECK(!Done());
-
-    pos_ += sizeof(CowOperation);
-    if (!HasNext()) done_ = true;
+    op_iter_++;
 }
 
 const CowOperation& CowOpIter::Get() {
     CHECK(!Done());
-    CHECK(HasNext());
-    return *reinterpret_cast<const CowOperation*>(pos_);
+    return (*op_iter_);
 }
 
 std::unique_ptr<ICowOpIter> CowReader::GetOpIter() {
-    if (lseek(fd_.get(), header_.ops_offset, SEEK_SET) < 0) {
+    uint64_t pos = lseek(fd_.get(), sizeof(header_), SEEK_SET);
+    if (pos != sizeof(header_)) {
         PLOG(ERROR) << "lseek ops failed";
         return nullptr;
     }
-    auto ops_buffer = std::make_unique<uint8_t[]>(header_.ops_size);
-    if (!android::base::ReadFully(fd_, ops_buffer.get(), header_.ops_size)) {
-        PLOG(ERROR) << "read ops failed";
-        return nullptr;
+    auto ops_buffer = std::make_unique<std::vector<CowOperation>>();
+    if (has_footer_) ops_buffer->reserve(footer_.op.num_ops);
+    uint64_t current_op_num = 0;
+    uint64_t last_pos = fd_size_ - (has_footer_ ? sizeof(footer_) : sizeof(CowOperation));
+
+    // Alternating op and data
+    while (pos < last_pos) {
+        ops_buffer->resize(current_op_num + 1);
+        if (!android::base::ReadFully(fd_, ops_buffer->data() + current_op_num,
+                                      sizeof(CowOperation))) {
+            PLOG(ERROR) << "read op failed";
+            return nullptr;
+        }
+        auto current_op = ops_buffer->data()[current_op_num];
+        pos = lseek(fd_.get(), GetNextOpOffset(current_op), SEEK_CUR);
+        current_op_num++;
     }
 
     uint8_t csum[32];
     memset(csum, 0, sizeof(uint8_t) * 32);
 
-    SHA256(ops_buffer.get(), header_.ops_size, csum);
-    if (memcmp(csum, header_.ops_checksum, sizeof(csum)) != 0) {
-        LOG(ERROR) << "ops checksum does not match";
-        return nullptr;
+    if (has_footer_) {
+        SHA256(ops_buffer.get()->data(), footer_.op.ops_size, csum);
+        if (memcmp(csum, footer_.data.ops_checksum, sizeof(csum)) != 0) {
+            LOG(ERROR) << "ops checksum does not match";
+            return nullptr;
+        }
+    } else {
+        LOG(INFO) << "No Footer, recovered data";
     }
 
-    return std::make_unique<CowOpIter>(std::move(ops_buffer), header_.ops_size);
+    return std::make_unique<CowOpIter>(std::move(ops_buffer));
 }
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {
     // Validate the offset, taking care to acknowledge possible overflow of offset+len.
-    if (offset < sizeof(header_) || offset >= header_.ops_offset || len >= fd_size_ ||
-        offset + len > header_.ops_offset) {
+    if (offset < sizeof(header_) || offset >= fd_size_ - sizeof(footer_) || len >= fd_size_ ||
+        offset + len > fd_size_ - sizeof(footer_)) {
         LOG(ERROR) << "invalid data offset: " << offset << ", " << len << " bytes";
         return false;
     }

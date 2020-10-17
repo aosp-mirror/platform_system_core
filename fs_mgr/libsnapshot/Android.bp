@@ -149,6 +149,7 @@ cc_defaults {
         "cow_decompress.cpp",
         "cow_reader.cpp",
         "cow_writer.cpp",
+        "cow_format.cpp",
     ],
 }
 

@@ -51,6 +51,9 @@ class ICowWriter {
     // Encode a sequence of zeroed blocks. |size| must be a multiple of the block size.
     bool AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks);
 
+    // Add a label to the op sequence.
+    bool AddLabel(uint64_t label);
+
     // Flush all pending writes. This must be called before closing the writer
     // to ensure that the correct headers and footers are written.
     virtual bool Finalize() = 0;
@@ -67,6 +70,7 @@ class ICowWriter {
     virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) = 0;
     virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) = 0;
     virtual bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) = 0;
+    virtual bool EmitLabel(uint64_t label) = 0;
 
     bool ValidateNewBlock(uint64_t new_block);
 
@@ -92,6 +96,7 @@ class CowWriter : public ICowWriter {
     virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) override;
     virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
     virtual bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
+    virtual bool EmitLabel(uint64_t label) override;
 
   private:
     void SetupHeaders();
@@ -100,6 +105,7 @@ class CowWriter : public ICowWriter {
     bool OpenForAppend();
     bool GetDataPos(uint64_t* pos);
     bool WriteRawData(const void* data, size_t size);
+    bool WriteOperation(const CowOperation& op, const void* data = nullptr, size_t size = 0);
     void AddOperation(const CowOperation& op);
     std::basic_string<uint8_t> Compress(const void* data, size_t length);
 
@@ -107,7 +113,9 @@ class CowWriter : public ICowWriter {
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
     CowHeader header_{};
+    CowFooter footer_{};
     int compression_ = 0;
+    uint64_t next_op_pos_ = 0;
 
     // :TODO: this is not efficient, but stringstream ubsan aborts because some
     // bytes overflow a signed char.

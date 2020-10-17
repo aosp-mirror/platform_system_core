@@ -63,6 +63,7 @@ class CompressedSnapshotWriter : public ISnapshotWriter {
     bool EmitCopy(uint64_t new_block, uint64_t old_block) override;
     bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
     bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
+    bool EmitLabel(uint64_t label) override;
 
   private:
     android::base::unique_fd cow_device_;
@@ -86,6 +87,7 @@ class OnlineKernelSnapshotWriter : public ISnapshotWriter {
     bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
     bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
     bool EmitCopy(uint64_t new_block, uint64_t old_block) override;
+    bool EmitLabel(uint64_t label) override;
 
   private:
     android::base::unique_fd snapshot_fd_;

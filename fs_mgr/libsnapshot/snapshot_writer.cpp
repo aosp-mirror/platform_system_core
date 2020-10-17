@@ -84,6 +84,10 @@ bool CompressedSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t
     return cow_->AddZeroBlocks(new_block_start, num_blocks);
 }
 
+bool CompressedSnapshotWriter::EmitLabel(uint64_t label) {
+    return cow_->AddLabel(label);
+}
+
 OnlineKernelSnapshotWriter::OnlineKernelSnapshotWriter(const CowOptions& options)
     : ISnapshotWriter(options) {}
 
@@ -138,6 +142,11 @@ bool OnlineKernelSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block
         return false;
     }
     return EmitRawBlocks(new_block, buffer.data(), buffer.size());
+}
+
+bool OnlineKernelSnapshotWriter::EmitLabel(uint64_t) {
+    // Not Needed
+    return true;
 }
 
 std::unique_ptr<FileDescriptor> OnlineKernelSnapshotWriter::OpenReader() {

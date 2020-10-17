@@ -58,6 +58,9 @@ class ICowReader {
     // Return the file header.
     virtual bool GetHeader(CowHeader* header) = 0;
 
+    // Return the file footer.
+    virtual bool GetFooter(CowFooter* footer) = 0;
+
     // Return an iterator for retrieving CowOperation entries.
     virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
 
@@ -89,6 +92,7 @@ class CowReader : public ICowReader {
     bool Parse(android::base::borrowed_fd fd);
 
     bool GetHeader(CowHeader* header) override;
+    bool GetFooter(CowFooter* footer) override;
 
     // Create a CowOpIter object which contains header_.num_ops
     // CowOperation objects. Get() returns a unique CowOperation object
@@ -102,7 +106,9 @@ class CowReader : public ICowReader {
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
     CowHeader header_;
+    CowFooter footer_;
     uint64_t fd_size_;
+    bool has_footer_;
 };
 
 }  // namespace snapshot
