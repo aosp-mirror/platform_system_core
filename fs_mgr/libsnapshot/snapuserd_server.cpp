@@ -63,8 +63,9 @@ void SnapuserdServer::Parsemsg(std::string const& msg, const char delim,
 }
 
 // new thread
-void SnapuserdServer::ThreadStart(std::string cow_device, std::string backing_device) {
-    Snapuserd snapd(cow_device, backing_device);
+void SnapuserdServer::ThreadStart(std::string cow_device, std::string backing_device,
+                                  std::string control_device) {
+    Snapuserd snapd(cow_device, backing_device, control_device);
     if (!snapd.Init()) {
         PLOG(ERROR) << "Snapuserd: Init failed";
         return;
@@ -73,10 +74,9 @@ void SnapuserdServer::ThreadStart(std::string cow_device, std::string backing_de
     while (StopRequested() == false) {
         int ret = snapd.Run();
 
-        if (ret == -ETIMEDOUT) continue;
-
         if (ret < 0) {
-            PLOG(ERROR) << "snapd.Run() failed..." << ret;
+            LOG(ERROR) << "Snapuserd: Thread terminating as control device is de-registered";
+            break;
         }
     }
 }
@@ -159,12 +159,12 @@ int SnapuserdServer::Receivemsg(int fd) {
         switch (op) {
             case DaemonOperations::START: {
                 // Message format:
-                // start,<cow_device_path>,<source_device_path>
+                // start,<cow_device_path>,<source_device_path>,<control_device>
                 //
                 // Start the new thread which binds to dm-user misc device
                 newClient = std::make_unique<Client>();
                 newClient->SetThreadHandler(
-                        std::bind(&SnapuserdServer::ThreadStart, this, out[1], out[2]));
+                        std::bind(&SnapuserdServer::ThreadStart, this, out[1], out[2], out[3]));
                 clients_vec_.push_back(std::move(newClient));
                 sprintf(msg, "success");
                 Sendmsg(fd, msg, MAX_PACKET_SIZE);

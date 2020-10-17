@@ -80,7 +80,6 @@ struct dm_user_header {
     __u64 flags;
     __u64 sector;
     __u64 len;
-    __u64 io_in_progress;
 } __attribute__((packed));
 
 struct dm_user_payload {
