@@ -30,7 +30,14 @@
 namespace android {
 namespace snapshot {
 
-CowReader::CowReader() : fd_(-1), header_(), footer_(), fd_size_(0), has_footer_(false) {}
+CowReader::CowReader()
+    : fd_(-1),
+      header_(),
+      footer_(),
+      fd_size_(0),
+      has_footer_(false),
+      last_label_(0),
+      has_last_label_(false) {}
 
 static void SHA256(const void*, size_t, uint8_t[]) {
 #if 0
@@ -101,6 +108,65 @@ bool CowReader::Parse(android::base::borrowed_fd fd) {
         return false;
     }
     has_footer_ = (footer_.op.type == kCowFooterOp);
+    return ParseOps();
+}
+
+bool CowReader::ParseOps() {
+    uint64_t pos = lseek(fd_.get(), sizeof(header_), SEEK_SET);
+    if (pos != sizeof(header_)) {
+        PLOG(ERROR) << "lseek ops failed";
+        return false;
+    }
+    uint64_t next_last_label = 0;
+    bool has_next = false;
+    auto ops_buffer = std::make_shared<std::vector<CowOperation>>();
+    if (has_footer_) ops_buffer->reserve(footer_.op.num_ops);
+    uint64_t current_op_num = 0;
+    // Look until we reach the last possible non-footer position.
+    uint64_t last_pos = fd_size_ - (has_footer_ ? sizeof(footer_) : sizeof(CowOperation));
+
+    // Alternating op and data
+    while (pos < last_pos) {
+        ops_buffer->resize(current_op_num + 1);
+        if (!android::base::ReadFully(fd_, ops_buffer->data() + current_op_num,
+                                      sizeof(CowOperation))) {
+            PLOG(ERROR) << "read op failed";
+            return false;
+        }
+        auto& current_op = ops_buffer->data()[current_op_num];
+        pos = lseek(fd_.get(), GetNextOpOffset(current_op), SEEK_CUR);
+        if (pos < 0) {
+            PLOG(ERROR) << "lseek next op failed";
+            return false;
+        }
+        current_op_num++;
+        if (current_op.type == kCowLabelOp) {
+            // If we don't have a footer, the last label may be incomplete
+            if (has_footer_) {
+                has_last_label_ = true;
+                last_label_ = current_op.source;
+            } else {
+                last_label_ = next_last_label;
+                if (has_next) has_last_label_ = true;
+                next_last_label = current_op.source;
+                has_next = true;
+            }
+        }
+    }
+
+    uint8_t csum[32];
+    memset(csum, 0, sizeof(uint8_t) * 32);
+
+    if (has_footer_) {
+        SHA256(ops_buffer.get()->data(), footer_.op.ops_size, csum);
+        if (memcmp(csum, footer_.data.ops_checksum, sizeof(csum)) != 0) {
+            LOG(ERROR) << "ops checksum does not match";
+            return false;
+        }
+    } else {
+        LOG(INFO) << "No Footer, recovered data";
+    }
+    ops_ = ops_buffer;
     return true;
 }
 
@@ -115,21 +181,27 @@ bool CowReader::GetFooter(CowFooter* footer) {
     return true;
 }
 
+bool CowReader::GetLastLabel(uint64_t* label) {
+    if (!has_last_label_) return false;
+    *label = last_label_;
+    return true;
+}
+
 class CowOpIter final : public ICowOpIter {
   public:
-    CowOpIter(std::unique_ptr<std::vector<CowOperation>>&& ops);
+    CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops);
 
     bool Done() override;
     const CowOperation& Get() override;
     void Next() override;
 
   private:
-    std::unique_ptr<std::vector<CowOperation>> ops_;
+    std::shared_ptr<std::vector<CowOperation>> ops_;
     std::vector<CowOperation>::iterator op_iter_;
 };
 
-CowOpIter::CowOpIter(std::unique_ptr<std::vector<CowOperation>>&& ops) {
-    ops_ = std::move(ops);
+CowOpIter::CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops) {
+    ops_ = ops;
     op_iter_ = ops_.get()->begin();
 }
 
@@ -148,43 +220,7 @@ const CowOperation& CowOpIter::Get() {
 }
 
 std::unique_ptr<ICowOpIter> CowReader::GetOpIter() {
-    uint64_t pos = lseek(fd_.get(), sizeof(header_), SEEK_SET);
-    if (pos != sizeof(header_)) {
-        PLOG(ERROR) << "lseek ops failed";
-        return nullptr;
-    }
-    auto ops_buffer = std::make_unique<std::vector<CowOperation>>();
-    if (has_footer_) ops_buffer->reserve(footer_.op.num_ops);
-    uint64_t current_op_num = 0;
-    uint64_t last_pos = fd_size_ - (has_footer_ ? sizeof(footer_) : sizeof(CowOperation));
-
-    // Alternating op and data
-    while (pos < last_pos) {
-        ops_buffer->resize(current_op_num + 1);
-        if (!android::base::ReadFully(fd_, ops_buffer->data() + current_op_num,
-                                      sizeof(CowOperation))) {
-            PLOG(ERROR) << "read op failed";
-            return nullptr;
-        }
-        auto current_op = ops_buffer->data()[current_op_num];
-        pos = lseek(fd_.get(), GetNextOpOffset(current_op), SEEK_CUR);
-        current_op_num++;
-    }
-
-    uint8_t csum[32];
-    memset(csum, 0, sizeof(uint8_t) * 32);
-
-    if (has_footer_) {
-        SHA256(ops_buffer.get()->data(), footer_.op.ops_size, csum);
-        if (memcmp(csum, footer_.data.ops_checksum, sizeof(csum)) != 0) {
-            LOG(ERROR) << "ops checksum does not match";
-            return nullptr;
-        }
-    } else {
-        LOG(INFO) << "No Footer, recovered data";
-    }
-
-    return std::make_unique<CowOpIter>(std::move(ops_buffer));
+    return std::make_unique<CowOpIter>(ops_);
 }
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {

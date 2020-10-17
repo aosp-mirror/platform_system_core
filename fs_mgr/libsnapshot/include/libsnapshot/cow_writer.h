@@ -16,11 +16,13 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <optional>
 #include <string>
 
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
+#include <libsnapshot/cow_reader.h>
 
 namespace android {
 namespace snapshot {
@@ -85,8 +87,16 @@ class CowWriter : public ICowWriter {
     explicit CowWriter(const CowOptions& options);
 
     // Set up the writer.
+    // If opening for write, the file starts from the beginning.
+    // If opening for append, if the file has a footer, we start appending to the last op.
+    // If the footer isn't found, the last label is considered corrupt, and dropped.
     bool Initialize(android::base::unique_fd&& fd, OpenMode mode = OpenMode::WRITE);
     bool Initialize(android::base::borrowed_fd fd, OpenMode mode = OpenMode::WRITE);
+    // Set up a writer, assuming that the given label is the last valid label.
+    // This will result in dropping any labels that occur after the given on, and will fail
+    // if the given label does not appear.
+    bool InitializeAppend(android::base::unique_fd&&, uint64_t label);
+    bool InitializeAppend(android::base::borrowed_fd fd, uint64_t label);
 
     bool Finalize() override;
 
@@ -103,6 +113,8 @@ class CowWriter : public ICowWriter {
     bool ParseOptions();
     bool OpenForWrite();
     bool OpenForAppend();
+    bool OpenForAppend(uint64_t label);
+    bool ImportOps(std::unique_ptr<ICowOpIter> iter);
     bool GetDataPos(uint64_t* pos);
     bool WriteRawData(const void* data, size_t size);
     bool WriteOperation(const CowOperation& op, const void* data = nullptr, size_t size = 0);

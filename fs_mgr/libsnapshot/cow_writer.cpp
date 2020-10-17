@@ -133,6 +133,21 @@ bool CowWriter::Initialize(borrowed_fd fd, OpenMode mode) {
     }
 }
 
+bool CowWriter::InitializeAppend(android::base::unique_fd&& fd, uint64_t label) {
+    owned_fd_ = std::move(fd);
+    return InitializeAppend(android::base::borrowed_fd{owned_fd_}, label);
+}
+
+bool CowWriter::InitializeAppend(android::base::borrowed_fd fd, uint64_t label) {
+    fd_ = fd;
+
+    if (!ParseOptions()) {
+        return false;
+    }
+
+    return OpenForAppend(label);
+}
+
 bool CowWriter::OpenForWrite() {
     // This limitation is tied to the data field size in CowOperation.
     if (header_.block_size > std::numeric_limits<uint16_t>::max()) {
@@ -188,6 +203,52 @@ bool CowWriter::OpenForAppend() {
             AddOperation(op);
         }
         iter->Next();
+    }
+
+    // Free reader so we own the descriptor position again.
+    reader = nullptr;
+
+    // Position for new writing
+    if (ftruncate(fd_.get(), next_op_pos_) != 0) {
+        PLOG(ERROR) << "Failed to trim file";
+        return false;
+    }
+    if (lseek(fd_.get(), 0, SEEK_END) < 0) {
+        PLOG(ERROR) << "lseek failed";
+        return false;
+    }
+    return true;
+}
+
+bool CowWriter::OpenForAppend(uint64_t label) {
+    auto reader = std::make_unique<CowReader>();
+    std::queue<CowOperation> toAdd;
+    if (!reader->Parse(fd_) || !reader->GetHeader(&header_)) {
+        return false;
+    }
+
+    options_.block_size = header_.block_size;
+    bool found_label = false;
+
+    // Reset this, since we're going to reimport all operations.
+    footer_.op.num_ops = 0;
+    next_op_pos_ = sizeof(header_);
+
+    auto iter = reader->GetOpIter();
+    while (!iter->Done()) {
+        CowOperation op = iter->Get();
+        if (op.type == kCowFooterOp) break;
+        if (op.type == kCowLabelOp) {
+            if (found_label) break;
+            if (op.source == label) found_label = true;
+        }
+        AddOperation(op);
+        iter->Next();
+    }
+
+    if (!found_label) {
+        PLOG(ERROR) << "Failed to find last label";
+        return false;
     }
 
     // Free reader so we own the descriptor position again.

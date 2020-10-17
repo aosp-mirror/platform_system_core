@@ -61,6 +61,9 @@ class ICowReader {
     // Return the file footer.
     virtual bool GetFooter(CowFooter* footer) = 0;
 
+    // Return the last valid label
+    virtual bool GetLastLabel(uint64_t* label) = 0;
+
     // Return an iterator for retrieving CowOperation entries.
     virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
 
@@ -94,21 +97,28 @@ class CowReader : public ICowReader {
     bool GetHeader(CowHeader* header) override;
     bool GetFooter(CowFooter* footer) override;
 
-    // Create a CowOpIter object which contains header_.num_ops
+    bool GetLastLabel(uint64_t* label) override;
+
+    // Create a CowOpIter object which contains footer_.num_ops
     // CowOperation objects. Get() returns a unique CowOperation object
-    // whose lifeteime depends on the CowOpIter object
+    // whose lifetime depends on the CowOpIter object
     std::unique_ptr<ICowOpIter> GetOpIter() override;
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
 
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
   private:
+    bool ParseOps();
+
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
     CowHeader header_;
     CowFooter footer_;
     uint64_t fd_size_;
     bool has_footer_;
+    uint64_t last_label_;
+    bool has_last_label_;
+    std::shared_ptr<std::vector<CowOperation>> ops_;
 };
 
 }  // namespace snapshot
