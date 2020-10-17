@@ -60,7 +60,8 @@ class Stoppable {
 
     virtual ~Stoppable() {}
 
-    virtual void ThreadStart(std::string cow_device, std::string backing_device) = 0;
+    virtual void ThreadStart(std::string cow_device, std::string backing_device,
+                             std::string control_device) = 0;
 
     bool StopRequested() {
         // checks if value in future object is available
@@ -78,7 +79,8 @@ class SnapuserdServer : public Stoppable {
     bool terminating_;
     std::vector<std::unique_ptr<Client>> clients_vec_;
 
-    void ThreadStart(std::string cow_device, std::string backing_device) override;
+    void ThreadStart(std::string cow_device, std::string backing_device,
+                     std::string control_device) override;
     void ShutdownThreads();
     DaemonOperations Resolveop(std::string& input);
     std::string GetDaemonStatus();
