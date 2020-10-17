@@ -53,7 +53,7 @@ class ICowWriter {
 
     // Flush all pending writes. This must be called before closing the writer
     // to ensure that the correct headers and footers are written.
-    virtual bool Flush() = 0;
+    virtual bool Finalize() = 0;
 
     // Return number of bytes the cow image occupies on disk.
     virtual uint64_t GetCowSize() = 0;
@@ -84,7 +84,7 @@ class CowWriter : public ICowWriter {
     bool Initialize(android::base::unique_fd&& fd, OpenMode mode = OpenMode::WRITE);
     bool Initialize(android::base::borrowed_fd fd, OpenMode mode = OpenMode::WRITE);
 
-    bool Flush() override;
+    bool Finalize() override;
 
     uint64_t GetCowSize() override;
 

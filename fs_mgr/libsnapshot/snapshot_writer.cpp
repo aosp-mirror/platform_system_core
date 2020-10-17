@@ -59,8 +59,8 @@ bool CompressedSnapshotWriter::SetCowDevice(android::base::unique_fd&& cow_devic
 
     return cow_->Initialize(cow_device_);
 }
-bool CompressedSnapshotWriter::Flush() {
-    return cow_->Flush();
+bool CompressedSnapshotWriter::Finalize() {
+    return cow_->Finalize();
 }
 
 uint64_t CompressedSnapshotWriter::GetCowSize() {
@@ -93,7 +93,7 @@ void OnlineKernelSnapshotWriter::SetSnapshotDevice(android::base::unique_fd&& sn
     cow_size_ = cow_size;
 }
 
-bool OnlineKernelSnapshotWriter::Flush() {
+bool OnlineKernelSnapshotWriter::Finalize() {
     if (fsync(snapshot_fd_.get()) < 0) {
         PLOG(ERROR) << "fsync";
         return false;

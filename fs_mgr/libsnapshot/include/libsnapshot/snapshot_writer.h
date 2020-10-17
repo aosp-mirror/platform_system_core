@@ -55,7 +55,7 @@ class CompressedSnapshotWriter : public ISnapshotWriter {
     // Sets the COW device, if needed.
     bool SetCowDevice(android::base::unique_fd&& cow_device);
 
-    bool Flush() override;
+    bool Finalize() override;
     uint64_t GetCowSize() override;
     std::unique_ptr<FileDescriptor> OpenReader() override;
 
@@ -78,7 +78,7 @@ class OnlineKernelSnapshotWriter : public ISnapshotWriter {
     // Set the device used for all writes.
     void SetSnapshotDevice(android::base::unique_fd&& snapshot_fd, uint64_t cow_size);
 
-    bool Flush() override;
+    bool Finalize() override;
     uint64_t GetCowSize() override { return cow_size_; }
     std::unique_ptr<FileDescriptor> OpenReader() override;
 
