@@ -293,8 +293,9 @@ cc_library {
     export_include_dirs: ["."],
 
     visibility: [
-        "//system/core/adb:__subpackages__",
         "//bootable/recovery/minadbd:__subpackages__",
+        "//packages/modules/adb:__subpackages__",
+        "//system/core/adb:__subpackages__",
     ],
 
     apex_available: [
@@ -499,6 +500,7 @@ cc_library_static {
     ],
     visibility: [
         "//bootable/recovery/minadbd",
+        "//packages/modules/adb:__subpackages__",
         "//system/core/adb",
     ],
 }
@@ -578,6 +580,7 @@ cc_library {
         "com.android.adbd",
     ],
     visibility: [
+        "//packages/modules/adb",
         "//system/core/adb",
     ],
 
@@ -636,6 +639,7 @@ cc_library {
 
     visibility: [
         "//bootable/recovery/minadbd",
+        "//packages/modules/adb",
         "//system/core/adb",
     ],
 }
