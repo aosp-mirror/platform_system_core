@@ -40,6 +40,7 @@ cc_defaults {
 
     visibility: [
         "//art:__subpackages__",
+        "//packages/modules/adb:__subpackages__",
         "//system/core/adb:__subpackages__",
     ],
 

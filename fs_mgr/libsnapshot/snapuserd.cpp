@@ -34,18 +34,6 @@ static constexpr size_t PAYLOAD_SIZE = (1UL << 16);
 
 static_assert(PAYLOAD_SIZE >= BLOCK_SIZE);
 
-class Target {
-  public:
-    // Represents an already-created Target, which is referenced by UUID.
-    Target(std::string uuid) : uuid_(uuid) {}
-
-    const auto& uuid() { return uuid_; }
-    std::string control_path() { return std::string("/dev/dm-user-") + uuid(); }
-
-  private:
-    const std::string uuid_;
-};
-
 void BufferSink::Initialize(size_t size) {
     buffer_size_ = size;
     buffer_offset_ = 0;
@@ -498,26 +486,13 @@ bool Snapuserd::Init() {
         return false;
     }
 
-    std::string str(cow_device_);
-    std::size_t found = str.find_last_of("/\\");
-    CHECK(found != std::string::npos);
-    std::string device_name = str.substr(found + 1);
+    std::string control_path = GetControlDevicePath();
 
-    LOG(DEBUG) << "Fetching UUID for: " << device_name;
+    LOG(DEBUG) << "Opening control device " << control_path;
 
-    auto& dm = dm::DeviceMapper::Instance();
-    std::string uuid;
-    if (!dm.GetDmDeviceUuidByName(device_name, &uuid)) {
-        LOG(ERROR) << "Unable to find UUID for " << cow_device_;
-        return false;
-    }
-
-    LOG(DEBUG) << "UUID: " << uuid;
-    Target t(uuid);
-
-    ctrl_fd_.reset(open(t.control_path().c_str(), O_RDWR));
+    ctrl_fd_.reset(open(control_path.c_str(), O_RDWR));
     if (ctrl_fd_ < 0) {
-        LOG(ERROR) << "Unable to open " << t.control_path();
+        LOG(ERROR) << "Unable to open " << control_path;
         return false;
     }
 
@@ -553,7 +528,6 @@ int Snapuserd::Run() {
         case DM_USER_MAP_READ: {
             size_t remaining_size = header->len;
             loff_t offset = 0;
-            header->io_in_progress = 0;
             ret = 0;
             do {
                 size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
@@ -619,7 +593,6 @@ int Snapuserd::Run() {
                 if (remaining_size) {
                     LOG(DEBUG) << "Write done ret: " << ret
                                << " remaining size: " << remaining_size;
-                    bufsink_.GetHeaderPtr()->io_in_progress = 1;
                 }
             } while (remaining_size);
 

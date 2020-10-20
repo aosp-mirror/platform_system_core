@@ -561,6 +561,11 @@ on post-fs-data
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
 
+    mkdir /data/vendor 0771 root root encryption=Require
+    mkdir /data/vendor_ce 0771 root root encryption=None
+    mkdir /data/vendor_de 0771 root root encryption=None
+    mkdir /data/vendor/hardware 0771 root root
+
     # Start tombstoned early to be able to store tombstones.
     mkdir /data/tombstones 0771 system system encryption=Require
     mkdir /data/vendor/tombstones 0771 root root
@@ -601,6 +606,8 @@ on post-fs-data
     chown bluetooth bluetooth /data/misc/bluedroid/bt_config.conf
     mkdir /data/misc/bluetooth 0770 bluetooth bluetooth
     mkdir /data/misc/bluetooth/logs 0770 bluetooth bluetooth
+    mkdir /data/misc/nfc 0770 nfc nfc
+    mkdir /data/misc/nfc/logs 0770 nfc nfc
     mkdir /data/misc/credstore 0700 credstore credstore
     mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/gatekeeper 0700 system system
@@ -650,11 +657,6 @@ on post-fs-data
     mkdir /data/misc/prereboot 0700 system system
 
     mkdir /data/preloads 0775 system system encryption=None
-
-    mkdir /data/vendor 0771 root root encryption=Require
-    mkdir /data/vendor_ce 0771 root root encryption=None
-    mkdir /data/vendor_de 0771 root root encryption=None
-    mkdir /data/vendor/hardware 0771 root root
 
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
