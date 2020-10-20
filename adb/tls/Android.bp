@@ -40,6 +40,7 @@ cc_defaults {
 
     visibility: [
         "//bootable/recovery/minadbd:__subpackages__",
+        "//packages/modules/adb:__subpackages__",
         "//system/core/adb:__subpackages__",
     ],
 
