@@ -179,3 +179,16 @@ TEST(libmodprobe, Test) {
     m.EnableBlocklist(true);
     EXPECT_FALSE(m.LoadWithAliases("test4", true));
 }
+
+TEST(libmodprobe, ModuleDepLineWithoutColonIsSkipped) {
+    TemporaryDir dir;
+    auto dir_path = std::string(dir.path);
+    ASSERT_TRUE(android::base::WriteStringToFile(
+            "no_colon.ko no_colon.ko\n", dir_path + "/modules.dep", 0600, getuid(), getgid()));
+
+    kernel_cmdline = "";
+    test_modules = {dir_path + "/no_colon.ko"};
+
+    Modprobe m({dir.path});
+    EXPECT_FALSE(m.LoadWithAliases("no_colon", true));
+}
