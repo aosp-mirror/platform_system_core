@@ -39,8 +39,9 @@ cc_defaults {
     export_include_dirs: ["include"],
 
     visibility: [
-        "//system/core/adb:__subpackages__",
         "//bootable/recovery/minadbd:__subpackages__",
+        "//packages/modules/adb:__subpackages__",
+        "//system/core/adb:__subpackages__",
     ],
 
     host_supported: true,
