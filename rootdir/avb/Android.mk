@@ -2,6 +2,8 @@ LOCAL_PATH:= $(call my-dir)
 
 ifeq ($(BOARD_USES_RECOVERY_AS_BOOT),true)
   my_gsi_avb_keys_path := $(TARGET_RECOVERY_ROOT_OUT)/first_stage_ramdisk/avb
+else ifeq ($(BOARD_MOVE_GSI_AVB_KEYS_TO_VENDOR_BOOT),true)
+  my_gsi_avb_keys_path := $(TARGET_VENDOR_RAMDISK_OUT)/avb
 else
   my_gsi_avb_keys_path := $(TARGET_RAMDISK_OUT)/avb
 endif
