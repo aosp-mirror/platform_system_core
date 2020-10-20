@@ -402,7 +402,7 @@ cc_defaults {
     ],
     srcs: [
 	"snapuserd_server.cpp",
-        "snapuserd.cpp",
+    "snapuserd.cpp",
 	"snapuserd_daemon.cpp",
     ],
 
@@ -554,7 +554,7 @@ cc_test {
         "libbrotli",
         "libgtest",
         "libsnapshot_cow",
-	"libsnapshot_snapuserd",
+        "libsnapshot_snapuserd",
         "libcutils_sockets",
         "libz",
 	"libdm",

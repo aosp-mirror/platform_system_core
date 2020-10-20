@@ -25,22 +25,21 @@ class Daemon {
     // The Daemon class is a singleton to avoid
     // instantiating more than once
   public:
+    Daemon() {}
+
     static Daemon& Instance() {
         static Daemon instance;
         return instance;
     }
 
-    int StartServer(std::string socketname);
-    bool IsRunning();
+    bool StartServer(const std::string& socketname);
     void Run();
+    void Interrupt();
 
   private:
-    bool is_running_;
-    std::unique_ptr<struct pollfd> poll_fd_;
     // Signal mask used with ppoll()
     sigset_t signal_mask_;
 
-    Daemon();
     Daemon(Daemon const&) = delete;
     void operator=(Daemon const&) = delete;
 
