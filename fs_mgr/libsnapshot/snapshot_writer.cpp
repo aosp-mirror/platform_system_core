@@ -33,6 +33,40 @@ void ISnapshotWriter::SetSourceDevice(android::base::unique_fd&& source_fd) {
     source_fd_ = std::move(source_fd);
 }
 
+CompressedSnapshotWriter::CompressedSnapshotWriter(const CowOptions& options)
+    : ISnapshotWriter(options) {}
+
+bool CompressedSnapshotWriter::SetCowDevice(android::base::unique_fd&& cow_device) {
+    cow_device_ = std::move(cow_device);
+    cow_ = std::make_unique<CowWriter>(options_);
+
+    return cow_->Initialize(cow_device_);
+}
+bool CompressedSnapshotWriter::Flush() {
+    return cow_->Flush();
+}
+
+uint64_t CompressedSnapshotWriter::GetCowSize() {
+    return cow_->GetCowSize();
+}
+
+std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
+    return nullptr;
+}
+
+bool CompressedSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
+    return cow_->AddCopy(new_block, old_block);
+}
+
+bool CompressedSnapshotWriter::EmitRawBlocks(uint64_t new_block_start, const void* data,
+                                             size_t size) {
+    return cow_->AddRawBlocks(new_block_start, data, size);
+}
+
+bool CompressedSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
+    return cow_->AddZeroBlocks(new_block_start, num_blocks);
+}
+
 OnlineKernelSnapshotWriter::OnlineKernelSnapshotWriter(const CowOptions& options)
     : ISnapshotWriter(options) {}
 

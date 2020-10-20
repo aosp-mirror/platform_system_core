@@ -28,6 +28,7 @@ cc_defaults {
         "liblog",
     ],
     static_libs: [
+        "libbrotli",
         "libdm",
         "libfstab",
         "libsnapshot_cow",
@@ -109,6 +110,9 @@ cc_library_static {
     defaults: ["libsnapshot_defaults"],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
+    cflags: [
+        "-DLIBSNAPSHOT_NO_COW_WRITE",
+    ],
     static_libs: [
         "libfs_mgr",
     ],
@@ -122,6 +126,9 @@ cc_library_static {
     ],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
+    cflags: [
+        "-DLIBSNAPSHOT_NO_COW_WRITE",
+    ],
     static_libs: [
         "libfs_mgr",
     ],
@@ -244,6 +251,7 @@ cc_defaults {
     static_libs: [
         "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
+        "libbrotli",
         "libfs_mgr",
         "libgsi",
         "libgmock",
@@ -276,9 +284,11 @@ cc_binary {
         "snapshotctl.cpp",
     ],
     static_libs: [
+        "libbrotli",
         "libfstab",
         "libsnapshot",
         "libsnapshot_cow",
+        "libz",
         "update_metadata-protos",
     ],
     shared_libs: [
@@ -332,6 +342,7 @@ cc_defaults {
     ],
     static_libs: [
         "libbase",
+        "libbrotli",
         "libcrypto_static",
         "libcutils",
         "libext2_uuid",
@@ -345,6 +356,7 @@ cc_defaults {
         "libsnapshot_cow",
         "libsnapshot_test_helpers",
         "libprotobuf-mutator",
+        "libz",
     ],
     header_libs: [
         "libchrome",
