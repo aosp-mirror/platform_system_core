@@ -91,7 +91,7 @@ class SnapuserdServer : public Stoppable {
     bool HandleClient(android::base::borrowed_fd fd, int revents);
     bool Recv(android::base::borrowed_fd fd, std::string* data);
     bool Sendmsg(android::base::borrowed_fd fd, const std::string& msg);
-    bool Receivemsg(android::base::borrowed_fd fd, const std::string& msg);
+    bool Receivemsg(android::base::borrowed_fd fd, const std::string& str);
 
     void ShutdownThreads();
     bool WaitForDelete(const std::string& control_device);

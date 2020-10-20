@@ -35,9 +35,11 @@ cc_defaults {
         "update_metadata-protos",
     ],
     whole_static_libs: [
+        "libcutils",
         "libext2_uuid",
         "libext4_utils",
         "libfstab",
+        "libsnapshot_snapuserd",
     ],
     header_libs: [
         "libchrome",
