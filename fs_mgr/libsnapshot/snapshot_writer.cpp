@@ -24,13 +24,30 @@
 namespace android {
 namespace snapshot {
 
+using android::base::borrowed_fd;
 using android::base::unique_fd;
 using chromeos_update_engine::FileDescriptor;
 
 ISnapshotWriter::ISnapshotWriter(const CowOptions& options) : ICowWriter(options) {}
 
-void ISnapshotWriter::SetSourceDevice(android::base::unique_fd&& source_fd) {
-    source_fd_ = std::move(source_fd);
+void ISnapshotWriter::SetSourceDevice(const std::string& source_device) {
+    source_device_ = {source_device};
+}
+
+borrowed_fd ISnapshotWriter::GetSourceFd() {
+    if (!source_device_) {
+        LOG(ERROR) << "Attempted to read from source device but none was set";
+        return borrowed_fd{-1};
+    }
+
+    if (source_fd_ < 0) {
+        source_fd_.reset(open(source_device_->c_str(), O_RDONLY | O_CLOEXEC));
+        if (source_fd_ < 0) {
+            PLOG(ERROR) << "open " << *source_device_;
+            return borrowed_fd{-1};
+        }
+    }
+    return source_fd_;
 }
 
 CompressedSnapshotWriter::CompressedSnapshotWriter(const CowOptions& options)
@@ -109,9 +126,14 @@ bool OnlineKernelSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64
 }
 
 bool OnlineKernelSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
+    auto source_fd = GetSourceFd();
+    if (source_fd < 0) {
+        return false;
+    }
+
     std::string buffer(options_.block_size, 0);
     uint64_t offset = old_block * options_.block_size;
-    if (!android::base::ReadFullyAtOffset(source_fd_, buffer.data(), buffer.size(), offset)) {
+    if (!android::base::ReadFullyAtOffset(source_fd, buffer.data(), buffer.size(), offset)) {
         PLOG(ERROR) << "EmitCopy read";
         return false;
     }
