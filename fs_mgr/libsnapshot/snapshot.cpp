@@ -271,7 +271,7 @@ bool SnapshotManager::FinishedSnapshotWrites(bool wipe) {
         return false;
     }
 
-    if (!EnsureNoOverflowSnapshot(lock.get())) {
+    if (!IsCompressionEnabled() && !EnsureNoOverflowSnapshot(lock.get())) {
         LOG(ERROR) << "Cannot ensure there are no overflow snapshots.";
         return false;
     }
@@ -1716,7 +1716,7 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         return false;
     }
     if (paths) {
-        paths->cow_device = cow_device;
+        paths->cow_device_name = cow_name;
     }
 
     remaining_time = GetRemainingTime(params.timeout_ms, begin);
@@ -1724,6 +1724,7 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
 
     if (context == SnapshotContext::Update && IsCompressionEnabled()) {
         // Stop here, we can't run dm-user yet, the COW isn't built.
+        created_devices.Release();
         return true;
     }
 
@@ -2471,6 +2472,12 @@ bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& para
 
 std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
         const android::fs_mgr::CreateLogicalPartitionParams& params) {
+#if defined(LIBSNAPSHOT_NO_COW_WRITE)
+    (void)params;
+
+    LOG(ERROR) << "Snapshots cannot be written in first-stage init or recovery";
+    return nullptr;
+#else
     // First unmap any existing mapping.
     auto lock = LockShared();
     if (!lock) return nullptr;
@@ -2486,7 +2493,7 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
     }
 
     SnapshotStatus status;
-    if (!paths.cow_device.empty()) {
+    if (!paths.cow_device_name.empty()) {
         if (!ReadSnapshotStatus(lock.get(), params.GetPartitionName(), &status)) {
             return nullptr;
         }
@@ -2504,12 +2511,49 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
         return OpenCompressedSnapshotWriter(lock.get(), params.GetPartitionName(), status, paths);
     }
     return OpenKernelSnapshotWriter(lock.get(), params.GetPartitionName(), status, paths);
+#endif
 }
 
+#if !defined(LIBSNAPSHOT_NO_COW_WRITE)
 std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
-        LockedFile*, const std::string&, const SnapshotStatus&, const SnapshotPaths&) {
-    LOG(ERROR) << "OpenSnapshotWriter not yet implemented for compression";
-    return nullptr;
+        LockedFile* lock, [[maybe_unused]] const std::string& partition_name,
+        const SnapshotStatus& status, const SnapshotPaths& paths) {
+    CHECK(lock);
+
+    CowOptions cow_options;
+    cow_options.compression = "gz";
+    cow_options.max_blocks = {status.device_size() / cow_options.block_size};
+
+    // Currently we don't support partial snapshots, since partition_cow_creator
+    // never creates this scenario.
+    CHECK(status.snapshot_size() == status.device_size());
+
+    auto writer = std::make_unique<CompressedSnapshotWriter>(cow_options);
+
+    unique_fd base_fd(open(paths.target_device.c_str(), O_RDWR | O_CLOEXEC));
+    if (base_fd < 0) {
+        PLOG(ERROR) << "OpenCompressedSnapshotWriter: open " << paths.target_device;
+        return nullptr;
+    }
+    writer->SetSourceDevice(std::move(base_fd));
+
+    std::string cow_path;
+    if (!GetMappedImageDevicePath(paths.cow_device_name, &cow_path)) {
+        LOG(ERROR) << "Could not determine path for " << paths.cow_device_name;
+        return nullptr;
+    }
+
+    unique_fd cow_fd(open(cow_path.c_str(), O_RDWR | O_CLOEXEC));
+    if (cow_fd < 0) {
+        PLOG(ERROR) << "OpenCompressedSnapshotWriter: open " << cow_path;
+        return nullptr;
+    }
+    if (!writer->SetCowDevice(std::move(cow_fd))) {
+        LOG(ERROR) << "Could not create COW writer from " << cow_path;
+        return nullptr;
+    }
+
+    return writer;
 }
 
 std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenKernelSnapshotWriter(
@@ -2534,6 +2578,7 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenKernelSnapshotWriter(
 
     return writer;
 }
+#endif  // !defined(LIBSNAPSHOT_NO_COW_WRITE)
 
 bool SnapshotManager::UnmapUpdateSnapshot(const std::string& target_partition_name) {
     auto lock = LockShared();
@@ -2870,6 +2915,22 @@ bool SnapshotManager::UpdateForwardMergeIndicator(bool wipe) {
 
 ISnapshotMergeStats* SnapshotManager::GetSnapshotMergeStatsInstance() {
     return SnapshotMergeStats::GetInstance(*this);
+}
+
+// This is only to be used in recovery or normal Android (not first-stage init).
+// We don't guarantee dm paths are available in first-stage init, because ueventd
+// isn't running yet.
+bool SnapshotManager::GetMappedImageDevicePath(const std::string& device_name,
+                                               std::string* device_path) {
+    auto& dm = DeviceMapper::Instance();
+
+    // Try getting the device string if it is a device mapper device.
+    if (dm.GetState(device_name) != DmDeviceState::INVALID) {
+        return dm.GetDmDevicePathByName(device_name, device_path);
+    }
+
+    // Otherwise, get path from IImageManager.
+    return images_->GetMappedImageDevice(device_name, device_path);
 }
 
 bool SnapshotManager::GetMappedImageDeviceStringOrPath(const std::string& device_name,
