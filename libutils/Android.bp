@@ -43,7 +43,13 @@ cc_library_headers {
             header_libs: ["libbacktrace_headers"],
             export_header_lib_headers: ["libbacktrace_headers"],
         },
+        linux_glibc: {
+            header_libs: ["libbacktrace_headers"],
+            export_header_lib_headers: ["libbacktrace_headers"],
+        },
         linux_bionic: {
+            header_libs: ["libbacktrace_headers"],
+            export_header_lib_headers: ["libbacktrace_headers"],
             enabled: true,
         },
         windows: {
