@@ -1011,8 +1011,8 @@ on property:sys.sysctl.extra_free_kbytes=*
     write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
 
 # "tcp_default_init_rwnd" Is too long!
-on property:sys.sysctl.tcp_def_init_rwnd=*
-    write /proc/sys/net/ipv4/tcp_default_init_rwnd ${sys.sysctl.tcp_def_init_rwnd}
+on property:net.tcp_def_init_rwnd=*
+    write /proc/sys/net/ipv4/tcp_default_init_rwnd ${net.tcp_def_init_rwnd}
 
 # perf_event_open syscall security:
 # Newer kernels have the ability to control the use of the syscall via SELinux
