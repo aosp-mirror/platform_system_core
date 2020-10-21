@@ -227,7 +227,7 @@ void SnapuserdTest::CreateCowDevice(std::unique_ptr<TemporaryFile>& cow) {
     ASSERT_TRUE(writer.AddRawBlocks(blk_random2_replace_start, random_buffer_2_.get(), size_));
 
     // Flush operations
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer.Flush());
 
     ASSERT_EQ(lseek(cow->fd, 0, SEEK_SET), 0);
 }
