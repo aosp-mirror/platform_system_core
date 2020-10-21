@@ -903,7 +903,7 @@ class SnapshotUpdateTest : public SnapshotTest {
                 .partition_opener = opener_.get(),
         };
 
-        auto result = sm->OpenSnapshotWriter(params);
+        auto result = sm->OpenSnapshotWriter(params, {});
         if (!result) {
             return AssertionFailure() << "Cannot open snapshot for writing: " << name;
         }
