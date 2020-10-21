@@ -73,7 +73,7 @@ class OnlineKernelSnapshotWriter : public ISnapshotWriter {
     // Set the device used for all writes.
     void SetSnapshotDevice(android::base::unique_fd&& snapshot_fd, uint64_t cow_size);
 
-    bool Flush() override;
+    bool Finalize() override;
     uint64_t GetCowSize() override { return cow_size_; }
     std::unique_ptr<FileDescriptor> OpenReader() override;
 

@@ -204,7 +204,7 @@ bool PayloadConverter::ProcessPartition(const PartitionUpdate& update) {
         }
     }
 
-    if (!writer_->Flush()) {
+    if (!writer_->Finalize()) {
         LOG(ERROR) << "Unable to finalize COW for " << partition_name;
         return false;
     }
