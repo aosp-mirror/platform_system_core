@@ -55,7 +55,7 @@
 // case.
 #define DEBUG_REFBASE_DESTRUCTION 1
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__APPLE__)
 // CallStack is only supported on linux type platforms.
 #define CALLSTACK_ENABLED 1
 #else
