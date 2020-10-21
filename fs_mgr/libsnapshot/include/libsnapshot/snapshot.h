@@ -532,8 +532,8 @@ class SnapshotManager final : public ISnapshotManager {
         // Target/base device (eg system_b), always present.
         std::string target_device;
 
-        // COW path (eg system_cow). Not present if no COW is needed.
-        std::string cow_device;
+        // COW name (eg system_cow). Not present if no COW is needed.
+        std::string cow_device_name;
 
         // dm-snapshot instance. Not present in Update mode for VABC.
         std::string snapshot_device;
@@ -625,6 +625,9 @@ class SnapshotManager final : public ISnapshotManager {
     // Return device string of a mapped image, or if it is not available, the mapped image path.
     bool GetMappedImageDeviceStringOrPath(const std::string& device_name,
                                           std::string* device_string_or_mapped_path);
+
+    // Same as above, but for paths only (no major:minor device strings).
+    bool GetMappedImageDevicePath(const std::string& device_name, std::string* device_path);
 
     std::string gsid_dir_;
     std::string metadata_dir_;

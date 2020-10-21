@@ -66,6 +66,7 @@ bool Modprobe::ParseDepCallback(const std::string& base_path,
         deps.emplace_back(prefix + args[0].substr(0, pos));
     } else {
         LOG(ERROR) << "dependency lines must start with name followed by ':'";
+        return false;
     }
 
     // Remaining items are dependencies of our module

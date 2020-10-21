@@ -42,6 +42,29 @@ class ISnapshotWriter : public ICowWriter {
     android::base::unique_fd source_fd_;
 };
 
+// Send writes to a COW or a raw device directly, based on a threshold.
+class CompressedSnapshotWriter : public ISnapshotWriter {
+  public:
+    CompressedSnapshotWriter(const CowOptions& options);
+
+    // Sets the COW device, if needed.
+    bool SetCowDevice(android::base::unique_fd&& cow_device);
+
+    bool Flush() override;
+    uint64_t GetCowSize() override;
+    std::unique_ptr<FileDescriptor> OpenReader() override;
+
+  protected:
+    bool EmitCopy(uint64_t new_block, uint64_t old_block) override;
+    bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
+    bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
+
+  private:
+    android::base::unique_fd cow_device_;
+
+    std::unique_ptr<CowWriter> cow_;
+};
+
 // Write directly to a dm-snapshot device.
 class OnlineKernelSnapshotWriter : public ISnapshotWriter {
   public:
@@ -52,7 +75,7 @@ class OnlineKernelSnapshotWriter : public ISnapshotWriter {
 
     bool Flush() override;
     uint64_t GetCowSize() override { return cow_size_; }
-    virtual std::unique_ptr<FileDescriptor> OpenReader() override;
+    std::unique_ptr<FileDescriptor> OpenReader() override;
 
   protected:
     bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
