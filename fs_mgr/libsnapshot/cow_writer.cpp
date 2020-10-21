@@ -293,7 +293,7 @@ static void SHA256(const void*, size_t, uint8_t[]) {
 #endif
 }
 
-bool CowWriter::Finalize() {
+bool CowWriter::Flush() {
     header_.ops_size = ops_.size();
 
     memset(header_.ops_checksum, 0, sizeof(uint8_t) * 32);
