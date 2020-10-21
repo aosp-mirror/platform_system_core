@@ -70,7 +70,7 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_TRUE(writer.AddCopy(10, 20));
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
     ASSERT_TRUE(writer.AddZeroBlocks(51, 2));
-    ASSERT_TRUE(writer.Flush());
+    ASSERT_TRUE(writer.Finalize());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -145,7 +145,7 @@ TEST_F(CowTest, CompressGz) {
     data.resize(options.block_size, '\0');
 
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
-    ASSERT_TRUE(writer.Flush());
+    ASSERT_TRUE(writer.Finalize());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -182,7 +182,7 @@ TEST_F(CowTest, CompressTwoBlocks) {
     data.resize(options.block_size * 2, '\0');
 
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
-    ASSERT_TRUE(writer.Flush());
+    ASSERT_TRUE(writer.Finalize());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -224,7 +224,7 @@ TEST_P(CompressionTest, HorribleSink) {
     data.resize(options.block_size, '\0');
 
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
-    ASSERT_TRUE(writer.Flush());
+    ASSERT_TRUE(writer.Finalize());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -259,7 +259,7 @@ TEST_F(CowTest, GetSize) {
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
     ASSERT_TRUE(writer.AddZeroBlocks(51, 2));
     auto size_before = writer.GetCowSize();
-    ASSERT_TRUE(writer.Flush());
+    ASSERT_TRUE(writer.Finalize());
     auto size_after = writer.GetCowSize();
     ASSERT_EQ(size_before, size_after);
     struct stat buf;
@@ -279,7 +279,7 @@ TEST_F(CowTest, Append) {
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
     ASSERT_TRUE(writer->AddRawBlocks(50, data.data(), data.size()));
-    ASSERT_TRUE(writer->Flush());
+    ASSERT_TRUE(writer->Finalize());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -289,7 +289,7 @@ TEST_F(CowTest, Append) {
     std::string data2 = "More data!";
     data2.resize(options.block_size, '\0');
     ASSERT_TRUE(writer->AddRawBlocks(51, data2.data(), data2.size()));
-    ASSERT_TRUE(writer->Flush());
+    ASSERT_TRUE(writer->Finalize());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
