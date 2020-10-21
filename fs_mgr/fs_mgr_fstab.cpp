@@ -590,7 +590,7 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
     FstabEntry userdata;
     if (FstabEntry* entry = GetEntryForMountPoint(fstab, "/data")) {
         userdata = *entry;
-        userdata.blk_device = "userdata_gsi";
+        userdata.blk_device = android::gsi::kDsuUserdata;
         userdata.fs_mgr_flags.logical = true;
         userdata.fs_mgr_flags.formattable = true;
         if (!userdata.metadata_key_dir.empty()) {
@@ -610,7 +610,11 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
             continue;
         }
         // userdata has been handled
-        if (StartsWith(partition, "user")) {
+        if (partition == android::gsi::kDsuUserdata) {
+            continue;
+        }
+        // scratch is handled by fs_mgr_overlayfs
+        if (partition == android::gsi::kDsuScratch) {
             continue;
         }
         // dsu_partition_name = corresponding_partition_name + kDsuPostfix
