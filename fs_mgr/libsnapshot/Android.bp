@@ -425,6 +425,9 @@ cc_defaults {
 cc_binary {
     name: "snapuserd",
     defaults: ["snapuserd_defaults"],
+    init_rc: [
+        "snapuserd.rc",
+    ],
 }
 
 cc_binary {
