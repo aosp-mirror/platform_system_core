@@ -2471,9 +2471,11 @@ bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& para
 }
 
 std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
-        const android::fs_mgr::CreateLogicalPartitionParams& params) {
+        const android::fs_mgr::CreateLogicalPartitionParams& params,
+        const std::optional<std::string>& source_device) {
 #if defined(LIBSNAPSHOT_NO_COW_WRITE)
     (void)params;
+    (void)source_device;
 
     LOG(ERROR) << "Snapshots cannot be written in first-stage init or recovery";
     return nullptr;
@@ -2508,16 +2510,19 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
     }
 
     if (IsCompressionEnabled()) {
-        return OpenCompressedSnapshotWriter(lock.get(), params.GetPartitionName(), status, paths);
+        return OpenCompressedSnapshotWriter(lock.get(), source_device, params.GetPartitionName(),
+                                            status, paths);
     }
-    return OpenKernelSnapshotWriter(lock.get(), params.GetPartitionName(), status, paths);
+    return OpenKernelSnapshotWriter(lock.get(), source_device, params.GetPartitionName(), status,
+                                    paths);
 #endif
 }
 
 #if !defined(LIBSNAPSHOT_NO_COW_WRITE)
 std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
-        LockedFile* lock, [[maybe_unused]] const std::string& partition_name,
-        const SnapshotStatus& status, const SnapshotPaths& paths) {
+        LockedFile* lock, const std::optional<std::string>& source_device,
+        [[maybe_unused]] const std::string& partition_name, const SnapshotStatus& status,
+        const SnapshotPaths& paths) {
     CHECK(lock);
 
     CowOptions cow_options;
@@ -2529,13 +2534,9 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     CHECK(status.snapshot_size() == status.device_size());
 
     auto writer = std::make_unique<CompressedSnapshotWriter>(cow_options);
-
-    unique_fd base_fd(open(paths.target_device.c_str(), O_RDWR | O_CLOEXEC));
-    if (base_fd < 0) {
-        PLOG(ERROR) << "OpenCompressedSnapshotWriter: open " << paths.target_device;
-        return nullptr;
+    if (source_device) {
+        writer->SetSourceDevice(*source_device);
     }
-    writer->SetSourceDevice(std::move(base_fd));
 
     std::string cow_path;
     if (!GetMappedImageDevicePath(paths.cow_device_name, &cow_path)) {
@@ -2557,8 +2558,9 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
 }
 
 std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenKernelSnapshotWriter(
-        LockedFile* lock, [[maybe_unused]] const std::string& partition_name,
-        const SnapshotStatus& status, const SnapshotPaths& paths) {
+        LockedFile* lock, const std::optional<std::string>& source_device,
+        [[maybe_unused]] const std::string& partition_name, const SnapshotStatus& status,
+        const SnapshotPaths& paths) {
     CHECK(lock);
 
     CowOptions cow_options;
@@ -2571,6 +2573,10 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenKernelSnapshotWriter(
     if (fd < 0) {
         PLOG(ERROR) << "open failed: " << path;
         return nullptr;
+    }
+
+    if (source_device) {
+        writer->SetSourceDevice(*source_device);
     }
 
     uint64_t cow_size = status.cow_partition_size() + status.cow_file_size();
