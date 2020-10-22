@@ -123,6 +123,20 @@ bool SnapuserdClient::Sendmsg(const std::string& msg) {
     return true;
 }
 
+bool SnapuserdClient::WaitForDeviceDelete(const std::string& control_device) {
+    std::string msg = "delete," + control_device;
+    if (!Sendmsg(msg)) {
+        LOG(ERROR) << "Failed to send message " << msg << " to snapuserd";
+        return false;
+    }
+    std::string response = Receivemsg();
+    if (response != "success") {
+        LOG(ERROR) << "Failed waiting to delete device " << control_device;
+        return false;
+    }
+    return true;
+}
+
 std::string SnapuserdClient::Receivemsg() {
     int ret;
     struct timeval tv;
