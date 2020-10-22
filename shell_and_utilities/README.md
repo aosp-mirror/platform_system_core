@@ -182,7 +182,7 @@ umount uname uniq unix2dos uptime usleep uudecode uuencode vmstat wc
 which whoami xargs xxd yes zcat
 
 
-## Android Q
+## Android 10 ("Q")
 
 BSD: grep fsck\_msdos newfs\_msdos
 
@@ -212,7 +212,7 @@ true truncate tty tunctl ulimit umount uname uniq unix2dos unlink
 unshare uptime usleep uudecode uuencode uuidgen vconfig vmstat watch
 wc which whoami xargs xxd yes zcat
 
-## Android R
+## Android 11 ("R")
 
 BSD: fsck\_msdos newfs\_msdos
 
