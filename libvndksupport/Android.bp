@@ -1,6 +1,7 @@
 cc_library {
     name: "libvndksupport",
     native_bridge_supported: true,
+    llndk_stubs: "libvndksupport.llndk",
     srcs: ["linker.cpp"],
     cflags: [
         "-Wall",
@@ -20,7 +21,7 @@ cc_library {
 }
 
 llndk_library {
-    name: "libvndksupport",
+    name: "libvndksupport.llndk",
     native_bridge_supported: true,
     symbol_file: "libvndksupport.map.txt",
     export_include_dirs: ["include"],
