@@ -138,33 +138,17 @@ bool SnapuserdClient::WaitForDeviceDelete(const std::string& control_device) {
 }
 
 std::string SnapuserdClient::Receivemsg() {
-    int ret;
-    struct timeval tv;
-    fd_set set;
     char msg[PACKET_SIZE];
-    std::string msgStr("fail");
-
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
-    FD_ZERO(&set);
-    FD_SET(sockfd_, &set);
-    ret = select(sockfd_ + 1, &set, NULL, NULL, &tv);
-    if (ret == -1) {  // select failed
-        LOG(ERROR) << "Snapuserd:client: Select call failed";
-    } else if (ret == 0) {  // timeout
-        LOG(ERROR) << "Snapuserd:client: Select call timeout";
-    } else {
-        ret = TEMP_FAILURE_RETRY(recv(sockfd_, msg, PACKET_SIZE, 0));
-        if (ret < 0) {
-            PLOG(ERROR) << "Snapuserd:client: recv failed";
-        } else if (ret == 0) {
-            LOG(DEBUG) << "Snapuserd:client disconnected";
-        } else {
-            msgStr.clear();
-            msgStr = msg;
-        }
+    ssize_t ret = TEMP_FAILURE_RETRY(recv(sockfd_, msg, sizeof(msg), 0));
+    if (ret < 0) {
+        PLOG(ERROR) << "Snapuserd:client: recv failed";
+        return {};
     }
-    return msgStr;
+    if (ret == 0) {
+        LOG(DEBUG) << "Snapuserd:client disconnected";
+        return {};
+    }
+    return std::string(msg, ret);
 }
 
 bool SnapuserdClient::StopSnapuserd() {
