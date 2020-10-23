@@ -29,72 +29,98 @@
 #include <chrono>
 
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <libsnapshot/snapuserd_client.h>
 
 namespace android {
 namespace snapshot {
 
-bool SnapuserdClient::ConnectToServerSocket(std::string socketname) {
-    sockfd_ = 0;
+using namespace std::chrono_literals;
+using android::base::unique_fd;
 
-    sockfd_ =
-            socket_local_client(socketname.c_str(), ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM);
-    if (sockfd_ < 0) {
-        LOG(ERROR) << "Failed to connect to " << socketname;
-        return false;
+bool EnsureSnapuserdStarted() {
+    if (android::base::GetProperty("init.svc.snapuserd", "") == "running") {
+        return true;
     }
 
-    std::string msg = "query";
+    android::base::SetProperty("ctl.start", "snapuserd");
+    if (!android::base::WaitForProperty("init.svc.snapuserd", "running", 10s)) {
+        LOG(ERROR) << "Timed out waiting for snapuserd to start.";
+        return false;
+    }
+    return true;
+}
 
-    int sendRet = Sendmsg(msg.c_str(), msg.size());
-    if (sendRet < 0) {
-        LOG(ERROR) << "Failed to send query message to snapuserd daemon with socket " << socketname;
-        DisconnectFromServer();
+SnapuserdClient::SnapuserdClient(android::base::unique_fd&& sockfd) : sockfd_(std::move(sockfd)) {}
+
+static inline bool IsRetryErrno() {
+    return errno == ECONNREFUSED || errno == EINTR;
+}
+
+std::unique_ptr<SnapuserdClient> SnapuserdClient::Connect(const std::string& socket_name,
+                                                          std::chrono::milliseconds timeout_ms) {
+    unique_fd fd;
+    auto start = std::chrono::steady_clock::now();
+    while (true) {
+        fd.reset(socket_local_client(socket_name.c_str(), ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                     SOCK_STREAM));
+        if (fd >= 0) break;
+        if (fd < 0 && !IsRetryErrno()) {
+            PLOG(ERROR) << "connect failed: " << socket_name;
+            return nullptr;
+        }
+
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
+        if (elapsed >= timeout_ms) {
+            LOG(ERROR) << "Timed out connecting to snapuserd socket: " << socket_name;
+            return nullptr;
+        }
+
+        std::this_thread::sleep_for(100ms);
+    }
+
+    auto client = std::make_unique<SnapuserdClient>(std::move(fd));
+    if (!client->ValidateConnection()) {
+        return nullptr;
+    }
+    return client;
+}
+
+bool SnapuserdClient::ValidateConnection() {
+    if (!Sendmsg("query")) {
         return false;
     }
 
     std::string str = Receivemsg();
 
-    if (str.find("fail") != std::string::npos) {
-        LOG(ERROR) << "Failed to receive message from snapuserd daemon with socket " << socketname;
-        DisconnectFromServer();
-        return false;
-    }
-
     // If the daemon is passive then fallback to secondary active daemon. Daemon
     // is passive during transition phase. Please see RestartSnapuserd()
     if (str.find("passive") != std::string::npos) {
-        LOG(DEBUG) << "Snapuserd is passive with socket " << socketname;
-        DisconnectFromServer();
+        LOG(ERROR) << "Snapuserd is terminating";
         return false;
     }
 
-    CHECK(str.find("active") != std::string::npos);
-
+    if (str != "active") {
+        LOG(ERROR) << "Received failure querying daemon";
+        return false;
+    }
     return true;
 }
 
-bool SnapuserdClient::ConnectToServer() {
-    if (ConnectToServerSocket(GetSocketNameFirstStage())) return true;
-
-    if (ConnectToServerSocket(GetSocketNameSecondStage())) return true;
-
-    return false;
-}
-
-int SnapuserdClient::Sendmsg(const char* msg, size_t size) {
-    int numBytesSent = TEMP_FAILURE_RETRY(send(sockfd_, msg, size, 0));
+bool SnapuserdClient::Sendmsg(const std::string& msg) {
+    ssize_t numBytesSent = TEMP_FAILURE_RETRY(send(sockfd_, msg.data(), msg.size(), 0));
     if (numBytesSent < 0) {
-        LOG(ERROR) << "Send failed " << strerror(errno);
-        return -1;
+        PLOG(ERROR) << "Send failed";
+        return false;
     }
 
-    if ((uint)numBytesSent < size) {
-        LOG(ERROR) << "Partial data sent " << strerror(errno);
-        return -1;
+    if ((size_t)numBytesSent < msg.size()) {
+        LOG(ERROR) << "Partial data sent, expected " << msg.size() << " bytes, sent "
+                   << numBytesSent;
+        return false;
     }
-
-    return 0;
+    return true;
 }
 
 std::string SnapuserdClient::Receivemsg() {
@@ -127,98 +153,33 @@ std::string SnapuserdClient::Receivemsg() {
     return msgStr;
 }
 
-int SnapuserdClient::StopSnapuserd(bool firstStageDaemon) {
-    if (firstStageDaemon) {
-        sockfd_ = socket_local_client(GetSocketNameFirstStage().c_str(),
-                                      ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_STREAM);
-        if (sockfd_ < 0) {
-            LOG(ERROR) << "Failed to connect to " << GetSocketNameFirstStage();
-            return -1;
-        }
-    } else {
-        if (!ConnectToServer()) {
-            LOG(ERROR) << "Failed to connect to socket " << GetSocketNameSecondStage();
-            return -1;
-        }
-    }
-
-    std::string msg = "stop";
-
-    int sendRet = Sendmsg(msg.c_str(), msg.size());
-    if (sendRet < 0) {
+bool SnapuserdClient::StopSnapuserd() {
+    if (!Sendmsg("stop")) {
         LOG(ERROR) << "Failed to send stop message to snapuserd daemon";
-        return -1;
+        return false;
     }
 
-    DisconnectFromServer();
-
-    return 0;
+    sockfd_ = {};
+    return true;
 }
 
-int SnapuserdClient::StartSnapuserdaemon(std::string socketname) {
-    int retry_count = 0;
-
-    if (fork() == 0) {
-        const char* argv[] = {"/system/bin/snapuserd", socketname.c_str(), nullptr};
-        if (execv(argv[0], const_cast<char**>(argv))) {
-            LOG(ERROR) << "Failed to exec snapuserd daemon";
-            return -1;
-        }
-    }
-
-    // snapuserd is a daemon and will never exit; parent can't wait here
-    // to get the return code. Since Snapuserd starts the socket server,
-    // give it some time to fully launch.
-    //
-    // Try to connect to server to verify snapuserd server is started
-    while (retry_count < MAX_CONNECT_RETRY_COUNT) {
-        if (!ConnectToServer()) {
-            retry_count++;
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        } else {
-            close(sockfd_);
-            return 0;
-        }
-    }
-
-    LOG(ERROR) << "Failed to start snapuserd daemon";
-    return -1;
-}
-
-int SnapuserdClient::StartSnapuserd() {
-    if (StartSnapuserdaemon(GetSocketNameFirstStage()) < 0) return -1;
-
-    return 0;
-}
-
-int SnapuserdClient::InitializeSnapuserd(std::string cow_device, std::string backing_device,
-                                         std::string control_device) {
-    int ret = 0;
-
-    if (!ConnectToServer()) {
-        LOG(ERROR) << "Failed to connect to server ";
-        return -1;
-    }
-
+bool SnapuserdClient::InitializeSnapuserd(const std::string& cow_device,
+                                          const std::string& backing_device,
+                                          const std::string& control_device) {
     std::string msg = "start," + cow_device + "," + backing_device + "," + control_device;
-
-    ret = Sendmsg(msg.c_str(), msg.size());
-    if (ret < 0) {
+    if (!Sendmsg(msg)) {
         LOG(ERROR) << "Failed to send message " << msg << " to snapuserd daemon";
-        return -1;
+        return false;
     }
 
     std::string str = Receivemsg();
-
-    if (str.find("fail") != std::string::npos) {
+    if (str != "success") {
         LOG(ERROR) << "Failed to receive ack for " << msg << " from snapuserd daemon";
-        return -1;
+        return false;
     }
 
-    DisconnectFromServer();
-
     LOG(DEBUG) << "Snapuserd daemon initialized with " << msg;
-    return 0;
+    return true;
 }
 
 /*
@@ -254,18 +215,8 @@ int SnapuserdClient::InitializeSnapuserd(std::string cow_device, std::string bac
  *
  */
 int SnapuserdClient::RestartSnapuserd(std::vector<std::vector<std::string>>& vec) {
-    // Connect to first-stage daemon and send a terminate-request control
-    // message. This will not terminate the daemon but will mark the daemon as
-    // passive.
-    if (!ConnectToServer()) {
-        LOG(ERROR) << "Failed to connect to server ";
-        return -1;
-    }
-
     std::string msg = "terminate-request";
-
-    int sendRet = Sendmsg(msg.c_str(), msg.size());
-    if (sendRet < 0) {
+    if (!Sendmsg(msg)) {
         LOG(ERROR) << "Failed to send message " << msg << " to snapuserd daemon";
         return -1;
     }
@@ -279,16 +230,13 @@ int SnapuserdClient::RestartSnapuserd(std::vector<std::vector<std::string>>& vec
 
     CHECK(str.find("success") != std::string::npos);
 
-    DisconnectFromServer();
-
     // Start the new daemon
-    if (StartSnapuserdaemon(GetSocketNameSecondStage()) < 0) {
-        LOG(ERROR) << "Failed to start new daemon at socket " << GetSocketNameSecondStage();
+    if (!EnsureSnapuserdStarted()) {
+        LOG(ERROR) << "Failed to start new daemon";
         return -1;
     }
 
-    LOG(DEBUG) << "Second stage Snapuserd daemon created successfully at socket "
-               << GetSocketNameSecondStage();
+    LOG(DEBUG) << "Second stage Snapuserd daemon created successfully";
 
     // Vector contains all the device information to be passed to the new
     // daemon. Note that the caller can choose to initialize separately
