@@ -375,7 +375,7 @@ bool NonAbEstimator::AnalyzePartition(const std::string& partition_name) {
         }
     }
 
-    if (!writer->Flush()) {
+    if (!writer->Finalize()) {
         return false;
     }
 
