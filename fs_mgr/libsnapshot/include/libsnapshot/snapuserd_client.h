@@ -26,6 +26,9 @@ namespace snapshot {
 static constexpr uint32_t PACKET_SIZE = 512;
 static constexpr uint32_t MAX_CONNECT_RETRY_COUNT = 10;
 
+static constexpr char kSnapuserdSocketFirstStage[] = "snapuserd_first_stage";
+static constexpr char kSnapuserdSocket[] = "snapuserd";
+
 class SnapuserdClient {
   private:
     int sockfd_ = 0;
