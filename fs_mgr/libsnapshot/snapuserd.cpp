@@ -17,6 +17,7 @@
 #include <csignal>
 
 #include <libsnapshot/snapuserd.h>
+#include <libsnapshot/snapuserd_client.h>
 #include <libsnapshot/snapuserd_daemon.h>
 #include <libsnapshot/snapuserd_server.h>
 
@@ -482,13 +483,13 @@ int Snapuserd::WriteDmUserPayload(size_t size) {
 bool Snapuserd::Init() {
     backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
     if (backing_store_fd_ < 0) {
-        LOG(ERROR) << "Open Failed: " << backing_store_device_;
+        PLOG(ERROR) << "Open Failed: " << backing_store_device_;
         return false;
     }
 
     cow_fd_.reset(open(cow_device_.c_str(), O_RDWR));
     if (cow_fd_ < 0) {
-        LOG(ERROR) << "Open Failed: " << cow_device_;
+        PLOG(ERROR) << "Open Failed: " << cow_device_;
         return false;
     }
 
@@ -498,7 +499,7 @@ bool Snapuserd::Init() {
 
     ctrl_fd_.reset(open(control_path.c_str(), O_RDWR));
     if (ctrl_fd_ < 0) {
-        LOG(ERROR) << "Unable to open " << control_path;
+        PLOG(ERROR) << "Unable to open " << control_path;
         return false;
     }
 
@@ -629,7 +630,11 @@ int main([[maybe_unused]] int argc, char** argv) {
 
     android::snapshot::Daemon& daemon = android::snapshot::Daemon::Instance();
 
-    daemon.StartServer(argv[1]);
+    std::string socket = android::snapshot::kSnapuserdSocket;
+    if (argc >= 2) {
+        socket = argv[1];
+    }
+    daemon.StartServer(socket);
     daemon.Run();
 
     return 0;
