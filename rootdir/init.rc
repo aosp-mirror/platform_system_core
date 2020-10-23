@@ -1041,6 +1041,14 @@ on property:security.perf_harden=1
     write /proc/sys/kernel/perf_cpu_time_max_percent 25
     write /proc/sys/kernel/perf_event_mlock_kb 516
 
+# This property can be set only on userdebug/eng. See neverallow rule in
+# /system/sepolicy/private/property.te .
+on property:security.lower_kptr_restrict=1
+    write /proc/sys/kernel/kptr_restrict 0
+
+on property:security.lower_kptr_restrict=0
+    write /proc/sys/kernel/kptr_restrict 2
+
 
 # on shutdown
 # In device's init.rc, this trigger can be used to do device-specific actions
