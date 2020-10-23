@@ -59,8 +59,8 @@ bool CompressedSnapshotWriter::SetCowDevice(android::base::unique_fd&& cow_devic
 
     return cow_->Initialize(cow_device_);
 }
-bool CompressedSnapshotWriter::Flush() {
-    return cow_->Flush();
+bool CompressedSnapshotWriter::Finalize() {
+    return cow_->Finalize();
 }
 
 uint64_t CompressedSnapshotWriter::GetCowSize() {
@@ -84,6 +84,10 @@ bool CompressedSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t
     return cow_->AddZeroBlocks(new_block_start, num_blocks);
 }
 
+bool CompressedSnapshotWriter::EmitLabel(uint64_t label) {
+    return cow_->AddLabel(label);
+}
+
 OnlineKernelSnapshotWriter::OnlineKernelSnapshotWriter(const CowOptions& options)
     : ISnapshotWriter(options) {}
 
@@ -93,7 +97,7 @@ void OnlineKernelSnapshotWriter::SetSnapshotDevice(android::base::unique_fd&& sn
     cow_size_ = cow_size;
 }
 
-bool OnlineKernelSnapshotWriter::Flush() {
+bool OnlineKernelSnapshotWriter::Finalize() {
     if (fsync(snapshot_fd_.get()) < 0) {
         PLOG(ERROR) << "fsync";
         return false;
@@ -138,6 +142,11 @@ bool OnlineKernelSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block
         return false;
     }
     return EmitRawBlocks(new_block, buffer.data(), buffer.size());
+}
+
+bool OnlineKernelSnapshotWriter::EmitLabel(uint64_t) {
+    // Not Needed
+    return true;
 }
 
 std::unique_ptr<FileDescriptor> OnlineKernelSnapshotWriter::OpenReader() {
