@@ -14,49 +14,45 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include <android-base/unique_fd.h>
+
 namespace android {
 namespace snapshot {
 
 static constexpr uint32_t PACKET_SIZE = 512;
-static constexpr uint32_t MAX_CONNECT_RETRY_COUNT = 10;
 
 static constexpr char kSnapuserdSocketFirstStage[] = "snapuserd_first_stage";
 static constexpr char kSnapuserdSocket[] = "snapuserd";
 
+// Ensure that the second-stage daemon for snapuserd is running.
+bool EnsureSnapuserdStarted();
+
 class SnapuserdClient {
   private:
-    int sockfd_ = 0;
+    android::base::unique_fd sockfd_;
 
-    int Sendmsg(const char* msg, size_t size);
+    bool Sendmsg(const std::string& msg);
     std::string Receivemsg();
-    int StartSnapuserdaemon(std::string socketname);
-    bool ConnectToServerSocket(std::string socketname);
-    bool ConnectToServer();
 
-    void DisconnectFromServer() { close(sockfd_); }
-
-    std::string GetSocketNameFirstStage() {
-        static std::string snapd_one("snapdone");
-        return snapd_one;
-    }
-
-    std::string GetSocketNameSecondStage() {
-        static std::string snapd_two("snapdtwo");
-        return snapd_two;
-    }
+    bool ValidateConnection();
 
   public:
-    int StartSnapuserd();
-    int StopSnapuserd(bool firstStageDaemon);
+    explicit SnapuserdClient(android::base::unique_fd&& sockfd);
+
+    static std::unique_ptr<SnapuserdClient> Connect(const std::string& socket_name,
+                                                    std::chrono::milliseconds timeout_ms);
+
+    bool StopSnapuserd();
     int RestartSnapuserd(std::vector<std::vector<std::string>>& vec);
-    int InitializeSnapuserd(std::string cow_device, std::string backing_device,
-                            std::string control_device);
+    bool InitializeSnapuserd(const std::string& cow_device, const std::string& backing_device,
+                             const std::string& control_device);
 };
 
 }  // namespace snapshot
