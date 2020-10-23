@@ -1,1 +1,0 @@
-rule com.google.protobuf.** com.android.framework.protobuf.@1
