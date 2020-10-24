@@ -65,7 +65,7 @@ class SnapuserdTest : public ::testing::Test {
         product_a_ = std::make_unique<TemporaryFile>(path);
         ASSERT_GE(product_a_->fd, 0) << strerror(errno);
 
-        size_ = 100_MiB;
+        size_ = 1_MiB;
     }
 
     void TearDown() override {
@@ -123,7 +123,7 @@ class SnapuserdTest : public ::testing::Test {
     }
 
     void TestIO(unique_fd& snapshot_fd, std::unique_ptr<uint8_t[]>& buffer);
-    SnapuserdClient client_;
+    std::unique_ptr<SnapuserdClient> client_;
 };
 
 void SnapuserdTest::Init() {
@@ -151,12 +151,12 @@ void SnapuserdTest::Init() {
         offset += 1_MiB;
     }
 
-    for (size_t j = 0; j < (800_MiB / 1_MiB); j++) {
+    for (size_t j = 0; j < (8_MiB / 1_MiB); j++) {
         ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer.get(), 1_MiB, 0), true);
         ASSERT_EQ(android::base::WriteFully(system_a_->fd, random_buffer.get(), 1_MiB), true);
     }
 
-    for (size_t j = 0; j < (800_MiB / 1_MiB); j++) {
+    for (size_t j = 0; j < (8_MiB / 1_MiB); j++) {
         ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer.get(), 1_MiB, 0), true);
         ASSERT_EQ(android::base::WriteFully(product_a_->fd, random_buffer.get(), 1_MiB), true);
     }
@@ -297,18 +297,18 @@ void SnapuserdTest::CreateProductDmUser(std::unique_ptr<TemporaryFile>& cow) {
 }
 
 void SnapuserdTest::StartSnapuserdDaemon() {
-    int ret;
+    ASSERT_TRUE(EnsureSnapuserdStarted());
 
-    ret = client_.StartSnapuserd();
-    ASSERT_EQ(ret, 0);
+    client_ = SnapuserdClient::Connect(kSnapuserdSocket, 5s);
+    ASSERT_NE(client_, nullptr);
 
-    ret = client_.InitializeSnapuserd(cow_system_->path, system_a_loop_->device(),
-                                      GetSystemControlPath());
-    ASSERT_EQ(ret, 0);
+    bool ok = client_->InitializeSnapuserd(cow_system_->path, system_a_loop_->device(),
+                                           GetSystemControlPath());
+    ASSERT_TRUE(ok);
 
-    ret = client_.InitializeSnapuserd(cow_product_->path, product_a_loop_->device(),
+    ok = client_->InitializeSnapuserd(cow_product_->path, product_a_loop_->device(),
                                       GetProductControlPath());
-    ASSERT_EQ(ret, 0);
+    ASSERT_TRUE(ok);
 }
 
 void SnapuserdTest::CreateSnapshotDevices() {
@@ -464,10 +464,6 @@ TEST_F(SnapuserdTest, ReadWrite) {
             {cow_system_1_->path, system_a_loop_->device(), GetSystemControlPath()},
             {cow_product_1_->path, product_a_loop_->device(), GetProductControlPath()}};
 
-    // Start the second stage deamon and send the devices information through
-    // vector.
-    ASSERT_EQ(client_.RestartSnapuserd(vec), 0);
-
     // TODO: This is not switching snapshot device but creates a new table;
     // Second stage daemon will be ready to serve the IO request. From now
     // onwards, we can go ahead and shutdown the first stage daemon
@@ -475,9 +471,6 @@ TEST_F(SnapuserdTest, ReadWrite) {
 
     DeleteDmUser(cow_system_, "system-snapshot");
     DeleteDmUser(cow_product_, "product-snapshot");
-
-    // Stop the first stage daemon
-    ASSERT_EQ(client_.StopSnapuserd(true), 0);
 
     // Test the IO again with the second stage daemon
     snapshot_fd.reset(open("/dev/block/mapper/system-snapshot-1", O_RDONLY));
@@ -494,7 +487,7 @@ TEST_F(SnapuserdTest, ReadWrite) {
     DeleteDmUser(cow_product_1_, "product-snapshot-1");
 
     // Stop the second stage daemon
-    ASSERT_EQ(client_.StopSnapuserd(false), 0);
+    ASSERT_TRUE(client_->StopSnapuserd());
 }
 
 }  // namespace snapshot
