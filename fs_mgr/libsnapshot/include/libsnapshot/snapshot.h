@@ -185,6 +185,9 @@ class ISnapshotManager {
     // must be suffixed. If a source partition exists, it must be specified as well. The source
     // partition will only be used if raw bytes are needed. The source partition should be an
     // absolute path to the device, not a partition name.
+    //
+    // After calling OpenSnapshotWriter, the caller must invoke Initialize or InitializeForAppend
+    // before invoking write operations.
     virtual std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
             const android::fs_mgr::CreateLogicalPartitionParams& params,
             const std::optional<std::string>& source_device) = 0;

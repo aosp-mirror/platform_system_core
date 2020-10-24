@@ -56,9 +56,9 @@ CompressedSnapshotWriter::CompressedSnapshotWriter(const CowOptions& options)
 bool CompressedSnapshotWriter::SetCowDevice(android::base::unique_fd&& cow_device) {
     cow_device_ = std::move(cow_device);
     cow_ = std::make_unique<CowWriter>(options_);
-
-    return cow_->Initialize(cow_device_);
+    return true;
 }
+
 bool CompressedSnapshotWriter::Finalize() {
     return cow_->Finalize();
 }
@@ -110,6 +110,17 @@ bool CompressedSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t
 
 bool CompressedSnapshotWriter::EmitLabel(uint64_t label) {
     return cow_->AddLabel(label);
+}
+
+bool CompressedSnapshotWriter::Initialize() {
+    return cow_->Initialize(cow_device_, CowWriter::OpenMode::WRITE);
+}
+
+bool CompressedSnapshotWriter::InitializeAppend(std::optional<uint64_t> label) {
+    if (label) {
+        return cow_->InitializeAppend(cow_device_, *label);
+    }
+    return cow_->Initialize(cow_device_, CowWriter::OpenMode::APPEND);
 }
 
 OnlineKernelSnapshotWriter::OnlineKernelSnapshotWriter(const CowOptions& options)
