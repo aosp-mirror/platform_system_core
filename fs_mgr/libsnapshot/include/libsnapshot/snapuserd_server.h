@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <poll.h>
+
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -34,12 +36,11 @@ static constexpr uint32_t MAX_PACKET_SIZE = 512;
 enum class DaemonOperations {
     START,
     QUERY,
-    TERMINATING,
     STOP,
     INVALID,
 };
 
-class Client {
+class DmUserHandler {
   private:
     std::unique_ptr<std::thread> threadHandler_;
 
@@ -77,7 +78,15 @@ class SnapuserdServer : public Stoppable {
   private:
     android::base::unique_fd sockfd_;
     bool terminating_;
-    std::vector<std::unique_ptr<Client>> clients_vec_;
+    std::vector<std::unique_ptr<DmUserHandler>> dm_users_;
+    std::vector<struct pollfd> watched_fds_;
+
+    void AddWatchedFd(android::base::borrowed_fd fd);
+    void AcceptClient();
+    bool HandleClient(android::base::borrowed_fd fd, int revents);
+    bool Recv(android::base::borrowed_fd fd, std::string* data);
+    bool Sendmsg(android::base::borrowed_fd fd, const std::string& msg);
+    bool Receivemsg(android::base::borrowed_fd fd, const std::string& msg);
 
     void ThreadStart(std::string cow_device, std::string backing_device,
                      std::string control_device) override;
@@ -92,13 +101,11 @@ class SnapuserdServer : public Stoppable {
 
   public:
     SnapuserdServer() { terminating_ = false; }
+    ~SnapuserdServer();
 
-    int Start(std::string socketname);
-    int AcceptClient();
-    int Receivemsg(int fd);
-    int Sendmsg(int fd, char* msg, size_t len);
-    std::string Recvmsg(int fd, int* ret);
-    android::base::borrowed_fd GetSocketFd() { return sockfd_; }
+    bool Start(const std::string& socketname);
+    bool Run();
+    void Interrupt();
 };
 
 }  // namespace snapshot
