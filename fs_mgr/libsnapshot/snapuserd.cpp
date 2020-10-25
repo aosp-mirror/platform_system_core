@@ -17,6 +17,7 @@
 #include <csignal>
 
 #include <libsnapshot/snapuserd.h>
+#include <libsnapshot/snapuserd_client.h>
 #include <libsnapshot/snapuserd_daemon.h>
 #include <libsnapshot/snapuserd_server.h>
 
@@ -326,6 +327,7 @@ int Snapuserd::ReadDiskExceptions(chunk_t chunk, size_t read_size) {
 int Snapuserd::ReadMetadata() {
     reader_ = std::make_unique<CowReader>();
     CowHeader header;
+    CowFooter footer;
 
     if (!reader_->Parse(cow_fd_)) {
         LOG(ERROR) << "Failed to parse";
@@ -337,11 +339,15 @@ int Snapuserd::ReadMetadata() {
         return 1;
     }
 
+    if (!reader_->GetFooter(&footer)) {
+        LOG(ERROR) << "Failed to get footer";
+        return 1;
+    }
+
     CHECK(header.block_size == BLOCK_SIZE);
 
-    LOG(DEBUG) << "Num-ops: " << std::hex << header.num_ops;
-    LOG(DEBUG) << "ops-offset: " << std::hex << header.ops_offset;
-    LOG(DEBUG) << "ops-size: " << std::hex << header.ops_size;
+    LOG(DEBUG) << "Num-ops: " << std::hex << footer.op.num_ops;
+    LOG(DEBUG) << "ops-size: " << std::hex << footer.op.ops_size;
 
     cowop_iter_ = reader_->GetOpIter();
 
@@ -373,6 +379,7 @@ int Snapuserd::ReadMetadata() {
         struct disk_exception* de =
                 reinterpret_cast<struct disk_exception*>((char*)de_ptr.get() + offset);
 
+        if (cow_op->type == kCowFooterOp || cow_op->type == kCowLabelOp) continue;
         if (!(cow_op->type == kCowReplaceOp || cow_op->type == kCowZeroOp ||
               cow_op->type == kCowCopyOp)) {
             LOG(ERROR) << "Unknown operation-type found: " << cow_op->type;
@@ -476,13 +483,13 @@ int Snapuserd::WriteDmUserPayload(size_t size) {
 bool Snapuserd::Init() {
     backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
     if (backing_store_fd_ < 0) {
-        LOG(ERROR) << "Open Failed: " << backing_store_device_;
+        PLOG(ERROR) << "Open Failed: " << backing_store_device_;
         return false;
     }
 
     cow_fd_.reset(open(cow_device_.c_str(), O_RDWR));
     if (cow_fd_ < 0) {
-        LOG(ERROR) << "Open Failed: " << cow_device_;
+        PLOG(ERROR) << "Open Failed: " << cow_device_;
         return false;
     }
 
@@ -492,7 +499,7 @@ bool Snapuserd::Init() {
 
     ctrl_fd_.reset(open(control_path.c_str(), O_RDWR));
     if (ctrl_fd_ < 0) {
-        LOG(ERROR) << "Unable to open " << control_path;
+        PLOG(ERROR) << "Unable to open " << control_path;
         return false;
     }
 
@@ -623,7 +630,11 @@ int main([[maybe_unused]] int argc, char** argv) {
 
     android::snapshot::Daemon& daemon = android::snapshot::Daemon::Instance();
 
-    daemon.StartServer(argv[1]);
+    std::string socket = android::snapshot::kSnapuserdSocket;
+    if (argc >= 2) {
+        socket = argv[1];
+    }
+    daemon.StartServer(socket);
     daemon.Run();
 
     return 0;
