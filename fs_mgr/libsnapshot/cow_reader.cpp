@@ -135,7 +135,7 @@ bool CowReader::ParseOps() {
         }
         auto& current_op = ops_buffer->data()[current_op_num];
         pos = lseek(fd_.get(), GetNextOpOffset(current_op), SEEK_CUR);
-        if (pos < 0) {
+        if (pos == uint64_t(-1)) {
             PLOG(ERROR) << "lseek next op failed";
             return false;
         }
