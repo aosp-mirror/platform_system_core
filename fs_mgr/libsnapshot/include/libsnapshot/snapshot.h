@@ -206,6 +206,14 @@ class ISnapshotManager {
     virtual bool CreateLogicalAndSnapshotPartitions(
             const std::string& super_device, const std::chrono::milliseconds& timeout_ms = {}) = 0;
 
+    // Map all snapshots. This is analogous to CreateLogicalAndSnapshotPartitions, except it maps
+    // the target slot rather than the current slot. It should only be used immediately after
+    // applying an update, before rebooting to the new slot.
+    virtual bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms = {}) = 0;
+
+    // Unmap all snapshots. This should be called to undo MapAllSnapshots().
+    virtual bool UnmapAllSnapshots() = 0;
+
     // This method should be called preceding any wipe or flash of metadata or
     // userdata. It is only valid in recovery or fastbootd, and it ensures that
     // a merge has been completed.
@@ -321,6 +329,8 @@ class SnapshotManager final : public ISnapshotManager {
     bool Dump(std::ostream& os) override;
     std::unique_ptr<AutoDevice> EnsureMetadataMounted() override;
     ISnapshotMergeStats* GetSnapshotMergeStatsInstance() override;
+    bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms = {}) override;
+    bool UnmapAllSnapshots() override;
 
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);

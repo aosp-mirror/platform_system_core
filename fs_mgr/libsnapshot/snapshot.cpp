@@ -1861,6 +1861,16 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
     return true;
 }
 
+bool SnapshotManager::MapAllSnapshots(const std::chrono::milliseconds&) {
+    LOG(ERROR) << "Not yet implemented.";
+    return false;
+}
+
+bool SnapshotManager::UnmapAllSnapshots() {
+    LOG(ERROR) << "Not yet implemented.";
+    return false;
+}
+
 auto SnapshotManager::OpenFile(const std::string& file, int lock_flags)
         -> std::unique_ptr<LockedFile> {
     unique_fd fd(open(file.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
