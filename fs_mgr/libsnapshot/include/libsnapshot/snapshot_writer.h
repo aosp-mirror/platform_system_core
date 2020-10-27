@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <android-base/unique_fd.h>
 
 #include <libsnapshot/cow_writer.h>
@@ -37,14 +39,22 @@ class ISnapshotWriter : public ICowWriter {
     // device is only opened on the first operation that requires it.
     void SetSourceDevice(const std::string& source_device);
 
+    // Open the writer in write mode (no append).
+    virtual bool Initialize() = 0;
+
+    // Open the writer in append mode, optionally with the last label to resume
+    // from. See CowWriter::InitializeAppend.
+    virtual bool InitializeAppend(std::optional<uint64_t> label = {}) = 0;
+
     virtual std::unique_ptr<FileDescriptor> OpenReader() = 0;
 
   protected:
     android::base::borrowed_fd GetSourceFd();
 
+    std::optional<std::string> source_device_;
+
   private:
     android::base::unique_fd source_fd_;
-    std::optional<std::string> source_device_;
 };
 
 // Send writes to a COW or a raw device directly, based on a threshold.
@@ -52,9 +62,11 @@ class CompressedSnapshotWriter : public ISnapshotWriter {
   public:
     CompressedSnapshotWriter(const CowOptions& options);
 
-    // Sets the COW device, if needed.
+    // Sets the COW device; this is required.
     bool SetCowDevice(android::base::unique_fd&& cow_device);
 
+    bool Initialize() override;
+    bool InitializeAppend(std::optional<uint64_t> label = {}) override;
     bool Finalize() override;
     uint64_t GetCowSize() override;
     std::unique_ptr<FileDescriptor> OpenReader() override;
@@ -78,6 +90,9 @@ class OnlineKernelSnapshotWriter : public ISnapshotWriter {
 
     // Set the device used for all writes.
     void SetSnapshotDevice(android::base::unique_fd&& snapshot_fd, uint64_t cow_size);
+
+    bool Initialize() override { return true; }
+    bool InitializeAppend(std::optional<uint64_t>) override { return true; }
 
     bool Finalize() override;
     uint64_t GetCowSize() override { return cow_size_; }
