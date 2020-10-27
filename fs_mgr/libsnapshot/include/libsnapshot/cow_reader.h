@@ -39,11 +39,17 @@ class IByteSink {
     // maximum number of bytes that can be written to the returned buffer.
     //
     // The returned buffer is owned by IByteSink, but must remain valid until
-    // the ready operation has completed (or the entire buffer has been
+    // the read operation has completed (or the entire buffer has been
     // covered by calls to ReturnData).
     //
     // After calling GetBuffer(), all previous buffers returned are no longer
     // valid.
+    //
+    // GetBuffer() is intended to be sequential. A returned size of N indicates
+    // that the output stream will advance by N bytes, and the ReturnData call
+    // indicates that those bytes have been fulfilled. Therefore, it is
+    // possible to have ReturnBuffer do nothing, if the implementation doesn't
+    // care about incremental writes.
     virtual void* GetBuffer(size_t requested, size_t* actual) = 0;
 
     // Called when a section returned by |GetBuffer| has been filled with data.

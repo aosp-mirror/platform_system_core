@@ -239,6 +239,7 @@ cc_defaults {
     srcs: [
         "partition_cow_creator_test.cpp",
         "snapshot_metadata_updater_test.cpp",
+        "snapshot_reader_test.cpp",
         "snapshot_test.cpp",
     ],
     shared_libs: [

@@ -907,6 +907,9 @@ class SnapshotUpdateTest : public SnapshotTest {
         if (!result) {
             return AssertionFailure() << "Cannot open snapshot for writing: " << name;
         }
+        if (!result->Initialize()) {
+            return AssertionFailure() << "Cannot initialize snapshot for writing: " << name;
+        }
 
         if (writer) {
             *writer = std::move(result);
