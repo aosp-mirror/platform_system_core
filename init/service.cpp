@@ -45,6 +45,7 @@
 #include <android/api-level.h>
 
 #include "mount_namespace.h"
+#include "reboot_utils.h"
 #include "selinux.h"
 #else
 #include "host_init_stubs.h"
@@ -312,20 +313,24 @@ void Service::Reap(const siginfo_t& siginfo) {
 #endif
     const bool is_process_updatable = !pre_apexd_ && is_apex_updatable;
 
-    // If we crash > 4 times in 4 minutes or before boot_completed,
+    // If we crash > 4 times in 'fatal_crash_window_' minutes or before boot_completed,
     // reboot into bootloader or set crashing property
     boot_clock::time_point now = boot_clock::now();
     if (((flags_ & SVC_CRITICAL) || is_process_updatable) && !(flags_ & SVC_RESTART)) {
         bool boot_completed = android::base::GetBoolProperty("sys.boot_completed", false);
-        if (now < time_crashed_ + 4min || !boot_completed) {
+        if (now < time_crashed_ + fatal_crash_window_ || !boot_completed) {
             if (++crash_count_ > 4) {
+                auto exit_reason = boot_completed ?
+                    "in " + std::to_string(fatal_crash_window_.count()) + " minutes" :
+                    "before boot completed";
                 if (flags_ & SVC_CRITICAL) {
-                    // Aborts into bootloader
+                    // Aborts into `fatal_reboot_target_'.
+                    SetFatalRebootTarget(fatal_reboot_target_);
                     LOG(FATAL) << "critical process '" << name_ << "' exited 4 times "
-                               << (boot_completed ? "in 4 minutes" : "before boot completed");
+                               << exit_reason;
                 } else {
                     LOG(ERROR) << "updatable process '" << name_ << "' exited 4 times "
-                               << (boot_completed ? "in 4 minutes" : "before boot completed");
+                               << exit_reason;
                     // Notifies update_verifier and apexd
                     SetProperty("sys.init.updatable_crashing_process_name", name_);
                     SetProperty("sys.init.updatable_crashing", "1");

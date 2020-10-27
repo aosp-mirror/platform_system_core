@@ -172,9 +172,12 @@ runs the service.
   This option connects stdin, stdout, and stderr to the console. It is mutually exclusive with the
   stdio_to_kmsg option, which only connects stdout and stderr to kmsg.
 
-`critical`
+`critical [window=<fatal crash window mins>] [target=<fatal reboot target>]`
 > This is a device-critical service. If it exits more than four times in
-  four minutes or before boot completes, the device will reboot into bootloader.
+  _fatal crash window mins_ minutes or before boot completes, the device
+  will reboot into _fatal reboot target_.
+  The default value of _fatal crash window mins_ is 4, and default value
+  of _fatal reboot target_ is 'bootloader'.
 
 `disabled`
 > This service will not automatically start with its class.
