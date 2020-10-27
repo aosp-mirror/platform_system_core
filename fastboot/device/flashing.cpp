@@ -67,7 +67,7 @@ void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partit
 
         if ((partition + device->GetCurrentSlot()) == partition_name) {
             mount_metadata.emplace();
-            fs_mgr_overlayfs_teardown(entry.mount_point.c_str());
+            android::fs_mgr::TeardownAllOverlayForMountPoint(entry.mount_point);
         }
     }
 }
@@ -194,7 +194,7 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
         if (!FlashPartitionTable(super_name, *new_metadata.get())) {
             return device->WriteFail("Unable to flash new partition table");
         }
-        fs_mgr_overlayfs_teardown();
+        android::fs_mgr::TeardownAllOverlayForMountPoint();
         sync();
         return device->WriteOkay("Successfully flashed partition table");
     }
@@ -234,7 +234,7 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
     if (!UpdateAllPartitionMetadata(device, super_name, *new_metadata.get())) {
         return device->WriteFail("Unable to write new partition table");
     }
-    fs_mgr_overlayfs_teardown();
+    android::fs_mgr::TeardownAllOverlayForMountPoint();
     sync();
     return device->WriteOkay("Successfully updated partition table");
 }
