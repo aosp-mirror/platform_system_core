@@ -56,9 +56,9 @@ CompressedSnapshotWriter::CompressedSnapshotWriter(const CowOptions& options)
 bool CompressedSnapshotWriter::SetCowDevice(android::base::unique_fd&& cow_device) {
     cow_device_ = std::move(cow_device);
     cow_ = std::make_unique<CowWriter>(options_);
-
-    return cow_->Initialize(cow_device_);
+    return true;
 }
+
 bool CompressedSnapshotWriter::Finalize() {
     return cow_->Finalize();
 }
@@ -68,7 +68,31 @@ uint64_t CompressedSnapshotWriter::GetCowSize() {
 }
 
 std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
-    return nullptr;
+    unique_fd cow_fd(dup(cow_device_.get()));
+    if (cow_fd < 0) {
+        PLOG(ERROR) << "dup COW device";
+        return nullptr;
+    }
+
+    auto cow = std::make_unique<CowReader>();
+    if (!cow->Parse(std::move(cow_fd))) {
+        LOG(ERROR) << "Unable to read COW";
+        return nullptr;
+    }
+
+    auto reader = std::make_unique<CompressedSnapshotReader>();
+    if (!reader->SetCow(std::move(cow))) {
+        LOG(ERROR) << "Unable to initialize COW reader";
+        return nullptr;
+    }
+    if (source_device_) {
+        reader->SetSourceDevice(*source_device_);
+    }
+
+    const auto& cow_options = options();
+    reader->SetBlockDeviceSize(*cow_options.max_blocks * cow_options.block_size);
+
+    return reader;
 }
 
 bool CompressedSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
@@ -86,6 +110,17 @@ bool CompressedSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t
 
 bool CompressedSnapshotWriter::EmitLabel(uint64_t label) {
     return cow_->AddLabel(label);
+}
+
+bool CompressedSnapshotWriter::Initialize() {
+    return cow_->Initialize(cow_device_, CowWriter::OpenMode::WRITE);
+}
+
+bool CompressedSnapshotWriter::InitializeAppend(std::optional<uint64_t> label) {
+    if (label) {
+        return cow_->InitializeAppend(cow_device_, *label);
+    }
+    return cow_->Initialize(cow_device_, CowWriter::OpenMode::APPEND);
 }
 
 OnlineKernelSnapshotWriter::OnlineKernelSnapshotWriter(const CowOptions& options)
