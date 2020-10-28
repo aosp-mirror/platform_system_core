@@ -113,7 +113,8 @@ std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string
 //     dsu_partitions[0] = "system_gsi"
 //     dsu_partitions[1] = "userdata_gsi"
 //     dsu_partitions[2] = ...
-void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_partitions);
+void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
+                          const std::vector<std::string>& dsu_partitions);
 
 std::set<std::string> GetBootDevices();
 

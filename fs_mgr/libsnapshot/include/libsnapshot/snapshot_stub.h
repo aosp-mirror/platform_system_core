@@ -37,7 +37,8 @@ class SnapshotManagerStub : public ISnapshotManager {
     bool MapUpdateSnapshot(const android::fs_mgr::CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
     std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
-            const android::fs_mgr::CreateLogicalPartitionParams& params) override;
+            const android::fs_mgr::CreateLogicalPartitionParams& params,
+            const std::optional<std::string>& source_device) override;
     bool UnmapUpdateSnapshot(const std::string& target_partition_name) override;
     bool NeedSnapshotsInFirstStageMount() override;
     bool CreateLogicalAndSnapshotPartitions(

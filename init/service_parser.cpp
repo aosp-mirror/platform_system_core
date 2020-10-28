@@ -93,6 +93,39 @@ Result<void> ServiceParser::ParseConsole(std::vector<std::string>&& args) {
 }
 
 Result<void> ServiceParser::ParseCritical(std::vector<std::string>&& args) {
+    std::optional<std::string> fatal_reboot_target;
+    std::optional<std::chrono::minutes> fatal_crash_window;
+
+    for (auto it = args.begin() + 1; it != args.end(); ++it) {
+        auto arg = android::base::Split(*it, "=");
+        if (arg.size() != 2) {
+            return Error() << "critical: Argument '" << *it << "' is not supported";
+        } else if (arg[0] == "target") {
+            fatal_reboot_target = arg[1];
+        } else if (arg[0] == "window") {
+            int minutes;
+            auto window = ExpandProps(arg[1]);
+            if (!window.ok()) {
+                return Error() << "critical: Could not expand argument ': " << arg[1];
+            }
+            if (*window == "off") {
+                return {};
+            }
+            if (!ParseInt(*window, &minutes, 0)) {
+                return Error() << "critical: 'fatal_crash_window' must be an integer > 0";
+            }
+            fatal_crash_window = std::chrono::minutes(minutes);
+        } else {
+            return Error() << "critical: Argument '" << *it << "' is not supported";
+        }
+    }
+
+    if (fatal_reboot_target) {
+        service_->fatal_reboot_target_ = *fatal_reboot_target;
+    }
+    if (fatal_crash_window) {
+        service_->fatal_crash_window_ = *fatal_crash_window;
+    }
     service_->flags_ |= SVC_CRITICAL;
     return {};
 }
@@ -506,7 +539,7 @@ const KeywordMap<ServiceParser::OptionParser>& ServiceParser::GetParserMap() con
         {"capabilities",            {0,     kMax, &ServiceParser::ParseCapabilities}},
         {"class",                   {1,     kMax, &ServiceParser::ParseClass}},
         {"console",                 {0,     1,    &ServiceParser::ParseConsole}},
-        {"critical",                {0,     0,    &ServiceParser::ParseCritical}},
+        {"critical",                {0,     2,    &ServiceParser::ParseCritical}},
         {"disabled",                {0,     0,    &ServiceParser::ParseDisabled}},
         {"enter_namespace",         {2,     2,    &ServiceParser::ParseEnterNamespace}},
         {"file",                    {2,     2,    &ServiceParser::ParseFile}},
