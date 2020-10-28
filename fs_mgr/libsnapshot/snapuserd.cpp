@@ -379,7 +379,11 @@ int Snapuserd::ReadMetadata() {
         struct disk_exception* de =
                 reinterpret_cast<struct disk_exception*>((char*)de_ptr.get() + offset);
 
-        if (cow_op->type == kCowFooterOp || cow_op->type == kCowLabelOp) continue;
+        if (cow_op->type == kCowFooterOp || cow_op->type == kCowLabelOp) {
+            cowop_iter_->Next();
+            continue;
+        }
+
         if (!(cow_op->type == kCowReplaceOp || cow_op->type == kCowZeroOp ||
               cow_op->type == kCowCopyOp)) {
             LOG(ERROR) << "Unknown operation-type found: " << cow_op->type;
