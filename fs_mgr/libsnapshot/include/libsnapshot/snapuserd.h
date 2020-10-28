@@ -77,7 +77,7 @@ class Snapuserd final {
     int ReadDiskExceptions(chunk_t chunk, size_t size);
     int ReadData(chunk_t chunk, size_t size);
 
-    std::string GetControlDevicePath() { return control_device_; }
+    const std::string& GetControlDevicePath() { return control_device_; }
 
   private:
     int ProcessReplaceOp(const CowOperation* cow_op);
