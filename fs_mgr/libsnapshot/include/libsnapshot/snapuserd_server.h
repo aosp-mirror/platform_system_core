@@ -21,12 +21,14 @@
 #include <functional>
 #include <future>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <android-base/unique_fd.h>
+#include <libsnapshot/snapuserd.h>
 
 namespace android {
 namespace snapshot {
@@ -37,19 +39,23 @@ enum class DaemonOperations {
     START,
     QUERY,
     STOP,
+    DELETE,
     INVALID,
 };
 
 class DmUserHandler {
   private:
-    std::unique_ptr<std::thread> threadHandler_;
+    std::thread thread_;
+    std::unique_ptr<Snapuserd> snapuserd_;
 
   public:
-    void SetThreadHandler(std::function<void(void)> func) {
-        threadHandler_ = std::make_unique<std::thread>(func);
-    }
+    explicit DmUserHandler(std::unique_ptr<Snapuserd>&& snapuserd)
+        : snapuserd_(std::move(snapuserd)) {}
 
-    std::unique_ptr<std::thread>& GetThreadHandler() { return threadHandler_; }
+    const std::unique_ptr<Snapuserd>& snapuserd() const { return snapuserd_; }
+    std::thread& thread() { return thread_; }
+
+    const std::string& GetControlDevice() const;
 };
 
 class Stoppable {
@@ -60,9 +66,6 @@ class Stoppable {
     Stoppable() : futureObj_(exitSignal_.get_future()) {}
 
     virtual ~Stoppable() {}
-
-    virtual void ThreadStart(std::string cow_device, std::string backing_device,
-                             std::string control_device) = 0;
 
     bool StopRequested() {
         // checks if value in future object is available
@@ -78,26 +81,32 @@ class SnapuserdServer : public Stoppable {
   private:
     android::base::unique_fd sockfd_;
     bool terminating_;
-    std::vector<std::unique_ptr<DmUserHandler>> dm_users_;
     std::vector<struct pollfd> watched_fds_;
+
+    std::mutex lock_;
+    std::vector<std::unique_ptr<DmUserHandler>> dm_users_;
 
     void AddWatchedFd(android::base::borrowed_fd fd);
     void AcceptClient();
     bool HandleClient(android::base::borrowed_fd fd, int revents);
     bool Recv(android::base::borrowed_fd fd, std::string* data);
     bool Sendmsg(android::base::borrowed_fd fd, const std::string& msg);
-    bool Receivemsg(android::base::borrowed_fd fd, const std::string& msg);
+    bool Receivemsg(android::base::borrowed_fd fd, const std::string& str);
 
-    void ThreadStart(std::string cow_device, std::string backing_device,
-                     std::string control_device) override;
     void ShutdownThreads();
+    bool WaitForDelete(const std::string& control_device);
     DaemonOperations Resolveop(std::string& input);
     std::string GetDaemonStatus();
     void Parsemsg(std::string const& msg, const char delim, std::vector<std::string>& out);
 
     void SetTerminating() { terminating_ = true; }
-
     bool IsTerminating() { return terminating_; }
+
+    void RunThread(DmUserHandler* handler);
+
+    // Remove a DmUserHandler from dm_users_, searching by its control device.
+    // If none is found, return nullptr.
+    std::unique_ptr<DmUserHandler> RemoveHandler(const std::string& control_device);
 
   public:
     SnapuserdServer() { terminating_ = false; }

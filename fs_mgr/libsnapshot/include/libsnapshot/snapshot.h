@@ -37,6 +37,7 @@
 #include <libsnapshot/auto_device.h>
 #include <libsnapshot/return.h>
 #include <libsnapshot/snapshot_writer.h>
+#include <libsnapshot/snapuserd_client.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -358,6 +359,9 @@ class SnapshotManager final : public ISnapshotManager {
     // This is created lazily since it can connect via binder.
     bool EnsureImageManager();
 
+    // Ensure we're connected to snapuserd.
+    bool EnsureSnapuserdConnected();
+
     // Helper for first-stage init.
     bool ForceLocalImageManager();
 
@@ -413,6 +417,11 @@ class SnapshotManager final : public ISnapshotManager {
     bool MapSnapshot(LockedFile* lock, const std::string& name, const std::string& base_device,
                      const std::string& cow_device, const std::chrono::milliseconds& timeout_ms,
                      std::string* dev_path);
+
+    // Create a dm-user device for a given snapshot.
+    bool MapDmUserCow(LockedFile* lock, const std::string& name, const std::string& cow_file,
+                      const std::string& base_device, const std::chrono::milliseconds& timeout_ms,
+                      std::string* path);
 
     // Map a COW image that was previous created with CreateCowImage.
     std::optional<std::string> MapCowImage(const std::string& name,
@@ -642,6 +651,7 @@ class SnapshotManager final : public ISnapshotManager {
     std::unique_ptr<IImageManager> images_;
     bool has_local_image_manager_ = false;
     bool in_factory_data_reset_ = false;
+    std::unique_ptr<SnapuserdClient> snapuserd_client_;
 };
 
 }  // namespace snapshot
