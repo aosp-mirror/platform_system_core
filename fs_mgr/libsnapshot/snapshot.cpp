@@ -56,6 +56,7 @@ using android::dm::DmDeviceState;
 using android::dm::DmTable;
 using android::dm::DmTargetLinear;
 using android::dm::DmTargetSnapshot;
+using android::dm::DmTargetUser;
 using android::dm::kSectorSize;
 using android::dm::SnapshotStorageMode;
 using android::fiemap::FiemapStatus;
@@ -113,6 +114,10 @@ static inline bool IsCompressionEnabled() {
 
 static std::string GetCowName(const std::string& snapshot_name) {
     return snapshot_name + "-cow";
+}
+
+static std::string GetDmUserCowName(const std::string& snapshot_name) {
+    return snapshot_name + "-user-cow";
 }
 
 static std::string GetCowImageDeviceName(const std::string& snapshot_name) {
@@ -368,6 +373,45 @@ Return SnapshotManager::CreateCowImage(LockedFile* lock, const std::string& name
     std::string cow_image_name = GetCowImageDeviceName(name);
     int cow_flags = IImageManager::CREATE_IMAGE_DEFAULT;
     return Return(images_->CreateBackingImage(cow_image_name, status.cow_file_size(), cow_flags));
+}
+
+bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
+                                   const std::string& cow_file, const std::string& base_device,
+                                   const std::chrono::milliseconds& timeout_ms, std::string* path) {
+    CHECK(lock);
+
+    auto& dm = DeviceMapper::Instance();
+
+    // Use the size of the base device for the COW device. It doesn't really
+    // matter, it just needs to look similar enough so the kernel doesn't complain
+    // about alignment or being too small.
+    uint64_t base_sectors = 0;
+    {
+        unique_fd fd(open(base_device.c_str(), O_RDONLY | O_CLOEXEC));
+        if (fd < 0) {
+            PLOG(ERROR) << "open failed: " << base_device;
+            return false;
+        }
+        auto dev_size = get_block_device_size(fd);
+        if (!dev_size) {
+            PLOG(ERROR) << "Could not determine block device size: " << base_device;
+            return false;
+        }
+        base_sectors = dev_size / kSectorSize;
+    }
+
+    DmTable table;
+    table.Emplace<DmTargetUser>(0, base_sectors, name);
+    if (!dm.CreateDevice(name, table, path, timeout_ms)) {
+        return false;
+    }
+
+    if (!EnsureSnapuserdConnected()) {
+        return false;
+    }
+
+    auto control_device = "/dev/dm-user/" + name;
+    return snapuserd_client_->InitializeSnapuserd(cow_file, base_device, control_device);
 }
 
 bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
@@ -1728,6 +1772,30 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         return true;
     }
 
+    if (IsCompressionEnabled()) {
+        auto name = GetDmUserCowName(params.GetPartitionName());
+
+        // :TODO: need to force init to process uevents for these in first-stage.
+        std::string cow_path;
+        if (!GetMappedImageDevicePath(cow_name, &cow_path)) {
+            LOG(ERROR) << "Could not determine path for: " << cow_name;
+            return false;
+        }
+
+        std::string new_cow_device;
+        if (!MapDmUserCow(lock, name, cow_path, base_path, remaining_time, &new_cow_device)) {
+            LOG(ERROR) << "Could not map dm-user device for partition "
+                       << params.GetPartitionName();
+            return false;
+        }
+        created_devices.EmplaceBack<AutoUnmapDevice>(&dm, name);
+
+        remaining_time = GetRemainingTime(params.timeout_ms, begin);
+        if (remaining_time.count() < 0) return false;
+
+        cow_device = new_cow_device;
+    }
+
     std::string path;
     if (!MapSnapshot(lock, params.GetPartitionName(), base_device, cow_device, remaining_time,
                      &path)) {
@@ -1847,6 +1915,22 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
     if (!EnsureImageManager()) return false;
 
     auto& dm = DeviceMapper::Instance();
+
+    auto dm_user_name = GetDmUserCowName(name);
+    if (IsCompressionEnabled() && dm.GetState(dm_user_name) != DmDeviceState::INVALID) {
+        if (!EnsureSnapuserdConnected()) {
+            return false;
+        }
+        if (!dm.DeleteDevice(dm_user_name)) {
+            LOG(ERROR) << "Cannot unmap " << dm_user_name;
+            return false;
+        }
+        if (!snapuserd_client_->WaitForDeviceDelete("/dev/dm-user/" + dm_user_name)) {
+            LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
+            return false;
+        }
+    }
+
     auto cow_name = GetCowName(name);
     if (!dm.DeleteDeviceIfExists(cow_name)) {
         LOG(ERROR) << "Cannot unmap " << cow_name;
@@ -2113,6 +2197,20 @@ bool SnapshotManager::EnsureImageManager() {
     if (!images_) {
         LOG(ERROR) << "Could not open ImageManager";
         return false;
+    }
+    return true;
+}
+
+bool SnapshotManager::EnsureSnapuserdConnected() {
+    if (!snapuserd_client_) {
+        if (!EnsureSnapuserdStarted()) {
+            return false;
+        }
+        snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, 10s);
+        if (!snapuserd_client_) {
+            LOG(ERROR) << "Unable to connect to snapuserd";
+            return false;
+        }
     }
     return true;
 }

@@ -53,6 +53,10 @@ class SnapuserdClient {
     int RestartSnapuserd(std::vector<std::vector<std::string>>& vec);
     bool InitializeSnapuserd(const std::string& cow_device, const std::string& backing_device,
                              const std::string& control_device);
+
+    // Wait for snapuserd to disassociate with a dm-user control device. This
+    // must ONLY be called if the control device has already been deleted.
+    bool WaitForDeviceDelete(const std::string& control_device);
 };
 
 }  // namespace snapshot
