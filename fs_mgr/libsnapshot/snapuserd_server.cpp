@@ -35,10 +35,17 @@ namespace snapshot {
 DaemonOperations SnapuserdServer::Resolveop(std::string& input) {
     if (input == "start") return DaemonOperations::START;
     if (input == "stop") return DaemonOperations::STOP;
-    if (input == "terminate-request") return DaemonOperations::TERMINATING;
     if (input == "query") return DaemonOperations::QUERY;
+    if (input == "delete") return DaemonOperations::DELETE;
 
     return DaemonOperations::INVALID;
+}
+
+SnapuserdServer::~SnapuserdServer() {
+    // Close any client sockets that were added via AcceptClient().
+    for (size_t i = 1; i < watched_fds_.size(); i++) {
+        close(watched_fds_[i].fd);
+    }
 }
 
 std::string SnapuserdServer::GetDaemonStatus() {
@@ -62,180 +69,264 @@ void SnapuserdServer::Parsemsg(std::string const& msg, const char delim,
     }
 }
 
-// new thread
-void SnapuserdServer::ThreadStart(std::string cow_device, std::string backing_device,
-                                  std::string control_device) {
-    Snapuserd snapd(cow_device, backing_device, control_device);
-    if (!snapd.Init()) {
-        PLOG(ERROR) << "Snapuserd: Init failed";
-        return;
-    }
-
-    while (StopRequested() == false) {
-        int ret = snapd.Run();
-
-        if (ret < 0) {
-            LOG(ERROR) << "Snapuserd: Thread terminating as control device is de-registered";
-            break;
-        }
-    }
-}
-
 void SnapuserdServer::ShutdownThreads() {
     StopThreads();
 
-    for (auto& client : clients_vec_) {
-        auto& th = client->GetThreadHandler();
+    // Acquire the thread list within the lock.
+    std::vector<std::unique_ptr<DmUserHandler>> dm_users;
+    {
+        std::lock_guard<std::mutex> guard(lock_);
+        dm_users = std::move(dm_users_);
+    }
 
-        if (th->joinable()) th->join();
+    for (auto& client : dm_users) {
+        auto& th = client->thread();
+
+        if (th.joinable()) th.join();
     }
 }
 
-int SnapuserdServer::Sendmsg(int fd, char* msg, size_t size) {
-    int ret = TEMP_FAILURE_RETRY(send(fd, (char*)msg, size, 0));
+const std::string& DmUserHandler::GetControlDevice() const {
+    return snapuserd_->GetControlDevicePath();
+}
+
+bool SnapuserdServer::Sendmsg(android::base::borrowed_fd fd, const std::string& msg) {
+    ssize_t ret = TEMP_FAILURE_RETRY(send(fd.get(), msg.data(), msg.size(), 0));
     if (ret < 0) {
         PLOG(ERROR) << "Snapuserd:server: send() failed";
-        return -1;
+        return false;
     }
 
-    if (ret < size) {
-        PLOG(ERROR) << "Partial data sent";
-        return -1;
+    if (ret < msg.size()) {
+        LOG(ERROR) << "Partial send; expected " << msg.size() << " bytes, sent " << ret;
+        return false;
     }
-
-    return 0;
+    return true;
 }
 
-std::string SnapuserdServer::Recvmsg(int fd, int* ret) {
-    struct timeval tv;
-    fd_set set;
+bool SnapuserdServer::Recv(android::base::borrowed_fd fd, std::string* data) {
     char msg[MAX_PACKET_SIZE];
+    ssize_t rv = TEMP_FAILURE_RETRY(recv(fd.get(), msg, sizeof(msg), 0));
+    if (rv < 0) {
+        PLOG(ERROR) << "recv failed";
+        return false;
+    }
+    *data = std::string(msg, rv);
+    return true;
+}
 
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
-    FD_ZERO(&set);
-    FD_SET(fd, &set);
-    *ret = select(fd + 1, &set, NULL, NULL, &tv);
-    if (*ret == -1) {  // select failed
-        return {};
-    } else if (*ret == 0) {  // timeout
-        return {};
+bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::string& str) {
+    const char delim = ',';
+
+    std::vector<std::string> out;
+    Parsemsg(str, delim, out);
+    DaemonOperations op = Resolveop(out[0]);
+
+    switch (op) {
+        case DaemonOperations::START: {
+            // Message format:
+            // start,<cow_device_path>,<source_device_path>,<control_device>
+            //
+            // Start the new thread which binds to dm-user misc device
+            if (out.size() != 4) {
+                LOG(ERROR) << "Malformed start message, " << out.size() << " parts";
+                return Sendmsg(fd, "fail");
+            }
+
+            auto snapuserd = std::make_unique<Snapuserd>(out[1], out[2], out[3]);
+            if (!snapuserd->Init()) {
+                LOG(ERROR) << "Failed to initialize Snapuserd";
+                return Sendmsg(fd, "fail");
+            }
+
+            auto handler = std::make_unique<DmUserHandler>(std::move(snapuserd));
+            {
+                std::lock_guard<std::mutex> lock(lock_);
+
+                handler->thread() =
+                        std::thread(std::bind(&SnapuserdServer::RunThread, this, handler.get()));
+                dm_users_.push_back(std::move(handler));
+            }
+            return Sendmsg(fd, "success");
+        }
+        case DaemonOperations::STOP: {
+            // Message format: stop
+            //
+            // Stop all the threads gracefully and then shutdown the
+            // main thread
+            SetTerminating();
+            ShutdownThreads();
+            return true;
+        }
+        case DaemonOperations::QUERY: {
+            // Message format: query
+            //
+            // As part of transition, Second stage daemon will be
+            // created before terminating the first stage daemon. Hence,
+            // for a brief period client may have to distiguish between
+            // first stage daemon and second stage daemon.
+            //
+            // Second stage daemon is marked as active and hence will
+            // be ready to receive control message.
+            return Sendmsg(fd, GetDaemonStatus());
+        }
+        case DaemonOperations::DELETE: {
+            // Message format:
+            // delete,<cow_device_path>
+            if (out.size() != 2) {
+                LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
+                return Sendmsg(fd, "fail");
+            }
+            if (!WaitForDelete(out[1])) {
+                return Sendmsg(fd, "fail");
+            }
+            return Sendmsg(fd, "success");
+        }
+        default: {
+            LOG(ERROR) << "Received unknown message type from client";
+            Sendmsg(fd, "fail");
+            return false;
+        }
+    }
+}
+
+void SnapuserdServer::RunThread(DmUserHandler* handler) {
+    while (!StopRequested()) {
+        if (handler->snapuserd()->Run() < 0) {
+            LOG(INFO) << "Snapuserd: Thread terminating as control device is de-registered";
+            break;
+        }
+    }
+
+    if (auto client = RemoveHandler(handler->GetControlDevice())) {
+        // The main thread did not receive a WaitForDelete request for this
+        // control device. Since we transferred ownership within the lock,
+        // we know join() was never called, and will never be called. We can
+        // safely detach here.
+        client->thread().detach();
+    }
+}
+
+bool SnapuserdServer::Start(const std::string& socketname) {
+    sockfd_.reset(android_get_control_socket(socketname.c_str()));
+    if (sockfd_ >= 0) {
+        if (listen(sockfd_.get(), 4) < 0) {
+            PLOG(ERROR) << "listen socket failed: " << socketname;
+            return false;
+        }
     } else {
-        *ret = TEMP_FAILURE_RETRY(recv(fd, msg, MAX_PACKET_SIZE, 0));
-        if (*ret < 0) {
-            PLOG(ERROR) << "Snapuserd:server: recv failed";
-            return {};
-        } else if (*ret == 0) {
-            LOG(DEBUG) << "Snapuserd client disconnected";
-            return {};
-        } else {
-            std::string str(msg);
-            return str;
+        sockfd_.reset(socket_local_server(socketname.c_str(), ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                          SOCK_STREAM));
+        if (sockfd_ < 0) {
+            PLOG(ERROR) << "Failed to create server socket " << socketname;
+            return false;
         }
     }
-}
 
-int SnapuserdServer::Receivemsg(int fd) {
-    char msg[MAX_PACKET_SIZE];
-    std::unique_ptr<Client> newClient;
-    int ret = 0;
-
-    while (1) {
-        memset(msg, '\0', MAX_PACKET_SIZE);
-        std::string str = Recvmsg(fd, &ret);
-
-        if (ret <= 0) {
-            LOG(DEBUG) << "recv failed with ret: " << ret;
-            return 0;
-        }
-
-        const char delim = ',';
-
-        std::vector<std::string> out;
-        Parsemsg(str, delim, out);
-        DaemonOperations op = Resolveop(out[0]);
-        memset(msg, '\0', MAX_PACKET_SIZE);
-
-        switch (op) {
-            case DaemonOperations::START: {
-                // Message format:
-                // start,<cow_device_path>,<source_device_path>,<control_device>
-                //
-                // Start the new thread which binds to dm-user misc device
-                newClient = std::make_unique<Client>();
-                newClient->SetThreadHandler(
-                        std::bind(&SnapuserdServer::ThreadStart, this, out[1], out[2], out[3]));
-                clients_vec_.push_back(std::move(newClient));
-                sprintf(msg, "success");
-                Sendmsg(fd, msg, MAX_PACKET_SIZE);
-                return 0;
-            }
-            case DaemonOperations::STOP: {
-                // Message format: stop
-                //
-                // Stop all the threads gracefully and then shutdown the
-                // main thread
-                ShutdownThreads();
-                return static_cast<int>(DaemonOperations::STOP);
-            }
-            case DaemonOperations::TERMINATING: {
-                // Message format: terminate-request
-                //
-                // This is invoked during transition. First stage
-                // daemon will receive this request. First stage daemon
-                // will be considered as a passive daemon from hereon.
-                SetTerminating();
-                sprintf(msg, "success");
-                Sendmsg(fd, msg, MAX_PACKET_SIZE);
-                return 0;
-            }
-            case DaemonOperations::QUERY: {
-                // Message format: query
-                //
-                // As part of transition, Second stage daemon will be
-                // created before terminating the first stage daemon. Hence,
-                // for a brief period client may have to distiguish between
-                // first stage daemon and second stage daemon.
-                //
-                // Second stage daemon is marked as active and hence will
-                // be ready to receive control message.
-                std::string dstr = GetDaemonStatus();
-                memcpy(msg, dstr.c_str(), dstr.size());
-                Sendmsg(fd, msg, MAX_PACKET_SIZE);
-                if (dstr == "active")
-                    break;
-                else
-                    return 0;
-            }
-            default: {
-                sprintf(msg, "fail");
-                Sendmsg(fd, msg, MAX_PACKET_SIZE);
-                return 0;
-            }
-        }
-    }
-}
-
-int SnapuserdServer::Start(std::string socketname) {
-    sockfd_.reset(socket_local_server(socketname.c_str(), ANDROID_SOCKET_NAMESPACE_RESERVED,
-                                      SOCK_STREAM));
-    if (sockfd_ < 0) {
-        PLOG(ERROR) << "Failed to create server socket " << socketname;
-        return -1;
-    }
+    AddWatchedFd(sockfd_);
 
     LOG(DEBUG) << "Snapuserd server successfully started with socket name " << socketname;
-    return 0;
+    return true;
 }
 
-int SnapuserdServer::AcceptClient() {
-    int fd = accept(sockfd_.get(), NULL, NULL);
+bool SnapuserdServer::Run() {
+    while (!IsTerminating()) {
+        int rv = TEMP_FAILURE_RETRY(poll(watched_fds_.data(), watched_fds_.size(), -1));
+        if (rv < 0) {
+            PLOG(ERROR) << "poll failed";
+            return false;
+        }
+        if (!rv) {
+            continue;
+        }
+
+        if (watched_fds_[0].revents) {
+            AcceptClient();
+        }
+
+        auto iter = watched_fds_.begin() + 1;
+        while (iter != watched_fds_.end()) {
+            if (iter->revents && !HandleClient(iter->fd, iter->revents)) {
+                close(iter->fd);
+                iter = watched_fds_.erase(iter);
+            } else {
+                iter++;
+            }
+        }
+    }
+    return true;
+}
+
+void SnapuserdServer::AddWatchedFd(android::base::borrowed_fd fd) {
+    struct pollfd p = {};
+    p.fd = fd.get();
+    p.events = POLLIN;
+    watched_fds_.emplace_back(std::move(p));
+}
+
+void SnapuserdServer::AcceptClient() {
+    int fd = TEMP_FAILURE_RETRY(accept4(sockfd_.get(), nullptr, nullptr, SOCK_CLOEXEC));
     if (fd < 0) {
-        PLOG(ERROR) << "Socket accept failed: " << strerror(errno);
-        return -1;
+        PLOG(ERROR) << "accept4 failed";
+        return;
     }
 
-    return Receivemsg(fd);
+    AddWatchedFd(fd);
+}
+
+bool SnapuserdServer::HandleClient(android::base::borrowed_fd fd, int revents) {
+    if (revents & POLLHUP) {
+        LOG(DEBUG) << "Snapuserd client disconnected";
+        return false;
+    }
+
+    std::string str;
+    if (!Recv(fd, &str)) {
+        return false;
+    }
+    if (!Receivemsg(fd, str)) {
+        LOG(ERROR) << "Encountered error handling client message, revents: " << revents;
+        return false;
+    }
+    return true;
+}
+
+void SnapuserdServer::Interrupt() {
+    // Force close the socket so poll() fails.
+    sockfd_ = {};
+    SetTerminating();
+}
+
+std::unique_ptr<DmUserHandler> SnapuserdServer::RemoveHandler(const std::string& control_device) {
+    std::unique_ptr<DmUserHandler> client;
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        auto iter = dm_users_.begin();
+        while (iter != dm_users_.end()) {
+            if ((*iter)->GetControlDevice() == control_device) {
+                client = std::move(*iter);
+                iter = dm_users_.erase(iter);
+                break;
+            }
+            iter++;
+        }
+    }
+    return client;
+}
+
+bool SnapuserdServer::WaitForDelete(const std::string& control_device) {
+    auto client = RemoveHandler(control_device);
+
+    // Client already deleted.
+    if (!client) {
+        return true;
+    }
+
+    auto& th = client->thread();
+    if (th.joinable()) {
+        th.join();
+    }
+    return true;
 }
 
 }  // namespace snapshot

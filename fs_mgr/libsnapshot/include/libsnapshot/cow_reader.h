@@ -39,11 +39,17 @@ class IByteSink {
     // maximum number of bytes that can be written to the returned buffer.
     //
     // The returned buffer is owned by IByteSink, but must remain valid until
-    // the ready operation has completed (or the entire buffer has been
+    // the read operation has completed (or the entire buffer has been
     // covered by calls to ReturnData).
     //
     // After calling GetBuffer(), all previous buffers returned are no longer
     // valid.
+    //
+    // GetBuffer() is intended to be sequential. A returned size of N indicates
+    // that the output stream will advance by N bytes, and the ReturnData call
+    // indicates that those bytes have been fulfilled. Therefore, it is
+    // possible to have ReturnBuffer do nothing, if the implementation doesn't
+    // care about incremental writes.
     virtual void* GetBuffer(size_t requested, size_t* actual) = 0;
 
     // Called when a section returned by |GetBuffer| has been filled with data.
@@ -57,6 +63,12 @@ class ICowReader {
 
     // Return the file header.
     virtual bool GetHeader(CowHeader* header) = 0;
+
+    // Return the file footer.
+    virtual bool GetFooter(CowFooter* footer) = 0;
+
+    // Return the last valid label
+    virtual bool GetLastLabel(uint64_t* label) = 0;
 
     // Return an iterator for retrieving CowOperation entries.
     virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
@@ -89,20 +101,30 @@ class CowReader : public ICowReader {
     bool Parse(android::base::borrowed_fd fd);
 
     bool GetHeader(CowHeader* header) override;
+    bool GetFooter(CowFooter* footer) override;
 
-    // Create a CowOpIter object which contains header_.num_ops
+    bool GetLastLabel(uint64_t* label) override;
+
+    // Create a CowOpIter object which contains footer_.num_ops
     // CowOperation objects. Get() returns a unique CowOperation object
-    // whose lifeteime depends on the CowOpIter object
+    // whose lifetime depends on the CowOpIter object
     std::unique_ptr<ICowOpIter> GetOpIter() override;
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
 
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
   private:
+    bool ParseOps();
+
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
     CowHeader header_;
+    CowFooter footer_;
     uint64_t fd_size_;
+    bool has_footer_;
+    uint64_t last_label_;
+    bool has_last_label_;
+    std::shared_ptr<std::vector<CowOperation>> ops_;
 };
 
 }  // namespace snapshot

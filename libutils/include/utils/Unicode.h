@@ -111,24 +111,6 @@ ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len);
 void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst, size_t dst_len);
 
 /**
- * Returns the length of "src" when "src" is valid UTF-8 string.
- * Returns 0 if src is NULL or 0-length string. Returns -1 when the source
- * is an invalid string.
- *
- * This function should be used to determine whether "src" is valid UTF-8
- * characters with valid unicode codepoints. "src" must be nul-terminated.
- *
- * If you are going to use other utf8_to_... functions defined in this header
- * with string which may not be valid UTF-8 with valid codepoint (form 0 to
- * 0x10FFFF), you should use this function before calling others, since the
- * other functions do not check whether the string is valid UTF-8 or not.
- *
- * If you do not care whether "src" is valid UTF-8 or not, you should use
- * strlen() as usual, which should be much faster.
- */
-ssize_t utf8_length(const char *src);
-
-/**
  * Returns the UTF-16 length of UTF-8 string "src". Returns -1 in case
  * it's invalid utf8. No buffer over-read occurs because of bound checks. Using overreadIsFatal you
  * can ask to log a message and fail in case the invalid utf8 could have caused an override if no

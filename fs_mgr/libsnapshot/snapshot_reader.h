@@ -16,7 +16,11 @@
 
 #pragma once
 
+#include <optional>
+#include <vector>
+
 #include <android-base/file.h>
+#include <libsnapshot/cow_reader.h>
 #include <payload_consumer/file_descriptor.h>
 
 namespace android {
@@ -44,6 +48,37 @@ class ReadFdFileDescriptor : public ReadOnlyFileDescriptor {
 
   private:
     android::base::unique_fd fd_;
+};
+
+class CompressedSnapshotReader : public ReadOnlyFileDescriptor {
+  public:
+    bool SetCow(std::unique_ptr<CowReader>&& cow);
+    void SetSourceDevice(const std::string& source_device);
+    void SetBlockDeviceSize(uint64_t block_device_size);
+
+    ssize_t Read(void* buf, size_t count) override;
+    off64_t Seek(off64_t offset, int whence) override;
+    uint64_t BlockDevSize() override;
+    bool Close() override;
+    bool IsSettingErrno() override;
+    bool IsOpen() override;
+    bool Flush() override;
+
+  private:
+    ssize_t ReadBlock(uint64_t chunk, IByteSink* sink, size_t start_offset,
+                      const std::optional<uint64_t>& max_bytes = {});
+    android::base::borrowed_fd GetSourceFd();
+
+    std::unique_ptr<CowReader> cow_;
+    std::unique_ptr<ICowOpIter> op_iter_;
+    uint32_t block_size_ = 0;
+
+    std::optional<std::string> source_device_;
+    android::base::unique_fd source_fd_;
+    uint64_t block_device_size_ = 0;
+    off64_t offset_ = 0;
+
+    std::vector<const CowOperation*> ops_;
 };
 
 }  // namespace snapshot

@@ -613,7 +613,7 @@ void FirstStageMount::UseDsuIfPresent() {
     }
     // Publish the logical partition names for TransformFstabForDsu
     WriteFile(gsi::kGsiLpNamesFile, lp_names);
-    TransformFstabForDsu(&fstab_, dsu_partitions);
+    TransformFstabForDsu(&fstab_, active_dsu, dsu_partitions);
 }
 
 bool FirstStageMountVBootV1::GetDmVerityDevices(std::set<std::string>* devices) {

@@ -28,15 +28,18 @@ cc_defaults {
         "liblog",
     ],
     static_libs: [
+        "libbrotli",
         "libdm",
         "libfstab",
         "libsnapshot_cow",
         "update_metadata-protos",
     ],
     whole_static_libs: [
+        "libcutils",
         "libext2_uuid",
         "libext4_utils",
         "libfstab",
+        "libsnapshot_snapuserd",
     ],
     header_libs: [
         "libchrome",
@@ -109,6 +112,9 @@ cc_library_static {
     defaults: ["libsnapshot_defaults"],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
+    cflags: [
+        "-DLIBSNAPSHOT_NO_COW_WRITE",
+    ],
     static_libs: [
         "libfs_mgr",
     ],
@@ -122,6 +128,9 @@ cc_library_static {
     ],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
+    cflags: [
+        "-DLIBSNAPSHOT_NO_COW_WRITE",
+    ],
     static_libs: [
         "libfs_mgr",
     ],
@@ -142,6 +151,7 @@ cc_defaults {
         "cow_decompress.cpp",
         "cow_reader.cpp",
         "cow_writer.cpp",
+        "cow_format.cpp",
     ],
 }
 
@@ -231,6 +241,7 @@ cc_defaults {
     srcs: [
         "partition_cow_creator_test.cpp",
         "snapshot_metadata_updater_test.cpp",
+        "snapshot_reader_test.cpp",
         "snapshot_test.cpp",
     ],
     shared_libs: [
@@ -244,6 +255,7 @@ cc_defaults {
     static_libs: [
         "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
+        "libbrotli",
         "libfs_mgr",
         "libgsi",
         "libgmock",
@@ -276,9 +288,11 @@ cc_binary {
         "snapshotctl.cpp",
     ],
     static_libs: [
+        "libbrotli",
         "libfstab",
         "libsnapshot",
         "libsnapshot_cow",
+        "libz",
         "update_metadata-protos",
     ],
     shared_libs: [
@@ -332,6 +346,7 @@ cc_defaults {
     ],
     static_libs: [
         "libbase",
+        "libbrotli",
         "libcrypto_static",
         "libcutils",
         "libext2_uuid",
@@ -345,6 +360,7 @@ cc_defaults {
         "libsnapshot_cow",
         "libsnapshot_test_helpers",
         "libprotobuf-mutator",
+        "libz",
     ],
     header_libs: [
         "libchrome",
@@ -390,7 +406,7 @@ cc_defaults {
     ],
     srcs: [
 	"snapuserd_server.cpp",
-        "snapuserd.cpp",
+    "snapuserd.cpp",
 	"snapuserd_daemon.cpp",
     ],
 
@@ -413,6 +429,9 @@ cc_defaults {
 cc_binary {
     name: "snapuserd",
     defaults: ["snapuserd_defaults"],
+    init_rc: [
+        "snapuserd.rc",
+    ],
 }
 
 cc_binary {
@@ -542,7 +561,7 @@ cc_test {
         "libbrotli",
         "libgtest",
         "libsnapshot_cow",
-	"libsnapshot_snapuserd",
+        "libsnapshot_snapuserd",
         "libcutils_sockets",
         "libz",
 	"libdm",
