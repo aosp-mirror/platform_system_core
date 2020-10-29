@@ -191,12 +191,16 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
 }
 
 void SnapuserdServer::RunThread(DmUserHandler* handler) {
+    LOG(INFO) << "Entering thread for handler: " << handler->GetControlDevice();
+
     while (!StopRequested()) {
         if (handler->snapuserd()->Run() < 0) {
             LOG(INFO) << "Snapuserd: Thread terminating as control device is de-registered";
             break;
         }
     }
+
+    LOG(INFO) << "Exiting thread for handler: " << handler->GetControlDevice();
 
     if (auto client = RemoveHandler(handler->GetControlDevice())) {
         // The main thread did not receive a WaitForDelete request for this

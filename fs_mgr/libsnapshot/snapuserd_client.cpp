@@ -51,6 +51,25 @@ bool EnsureSnapuserdStarted() {
     return true;
 }
 
+pid_t StartFirstStageSnapuserd() {
+    pid_t pid = fork();
+    if (pid < 0) {
+        PLOG(ERROR) << "fork failed";
+        return pid;
+    }
+    if (pid != 0) {
+        return pid;
+    }
+
+    std::string arg0 = "/system/bin/snapuserd";
+    std::string arg1 = kSnapuserdSocketFirstStage;
+    char* const argv[] = {arg0.data(), arg1.data(), nullptr};
+    if (execv(arg0.c_str(), argv) < 0) {
+        PLOG(FATAL) << "execv failed";
+    }
+    return pid;
+}
+
 SnapuserdClient::SnapuserdClient(android::base::unique_fd&& sockfd) : sockfd_(std::move(sockfd)) {}
 
 static inline bool IsRetryErrno() {
