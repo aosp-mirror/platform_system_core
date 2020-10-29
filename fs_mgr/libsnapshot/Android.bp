@@ -574,3 +574,27 @@ cc_test {
     auto_gen_config: true,
     require_root: false,
 }
+
+cc_binary {
+    name: "inspect_cow",
+    host_supported: true,
+    device_supported: true,
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: [
+        "libbase",
+        "libbrotli",
+        "libcrypto_static",
+        "liblog",
+        "libsnapshot_cow",
+        "libz",
+    ],
+    shared_libs: [
+    ],
+    srcs: [
+        "inspect_cow.cpp",
+    ],
+}
