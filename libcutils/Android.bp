@@ -34,6 +34,7 @@ cc_library_headers {
     vendor_available: true,
     recovery_available: true,
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     apex_available: [
         "//apex_available:platform",
@@ -61,6 +62,7 @@ cc_library {
     vendor_available: true,
     recovery_available: true,
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     native_bridge_supported: true,
     apex_available: [
@@ -146,6 +148,7 @@ cc_library {
         support_system_process: true,
     },
     recovery_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     apex_available: [
         "//apex_available:platform",
