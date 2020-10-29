@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include <android-base/file.h>
@@ -117,8 +118,7 @@ bool CowReader::ParseOps() {
         PLOG(ERROR) << "lseek ops failed";
         return false;
     }
-    uint64_t next_last_label = 0;
-    bool has_next = false;
+    std::optional<uint64_t> next_last_label;
     auto ops_buffer = std::make_shared<std::vector<CowOperation>>();
     if (has_footer_) ops_buffer->reserve(footer_.op.num_ops);
     uint64_t current_op_num = 0;
@@ -146,11 +146,23 @@ bool CowReader::ParseOps() {
                 has_last_label_ = true;
                 last_label_ = current_op.source;
             } else {
-                last_label_ = next_last_label;
-                if (has_next) has_last_label_ = true;
-                next_last_label = current_op.source;
-                has_next = true;
+                if (next_last_label) {
+                    last_label_ = next_last_label.value();
+                    has_last_label_ = true;
+                }
+                next_last_label = {current_op.source};
             }
+        } else if (current_op.type == kCowFooterOp) {
+            memcpy(&footer_.op, &current_op, sizeof(footer_.op));
+
+            if (android::base::ReadFully(fd_, &footer_.data, sizeof(footer_.data))) {
+                has_footer_ = true;
+                if (next_last_label) {
+                    last_label_ = next_last_label.value();
+                    has_last_label_ = true;
+                }
+            }
+            break;
         }
     }
 

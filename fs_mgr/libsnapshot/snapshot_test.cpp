@@ -953,6 +953,9 @@ class SnapshotUpdateTest : public SnapshotTest {
             if (!WriteRandomData(writer.get(), &hashes_[name])) {
                 return AssertionFailure() << "Unable to write random data to snapshot " << name;
             }
+            if (!writer->Finalize()) {
+                return AssertionFailure() << "Unable to finalize COW for " << name;
+            }
         } else {
             std::string path;
             auto res = MapUpdateSnapshot(name, &path);
