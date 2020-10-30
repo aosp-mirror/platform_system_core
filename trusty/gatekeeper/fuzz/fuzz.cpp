@@ -35,7 +35,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
      * If we can't connect, then assume TA crashed.
      * TODO: Get some more info, e.g. stacks, to help Haiku dedup crashes.
      */
-    assert(ret.ok());
+    if (!ret.ok()) {
+        android::trusty::fuzz::Abort();
+    }
 
     /* Send message to test server */
     ret = ta.Write(data, size);

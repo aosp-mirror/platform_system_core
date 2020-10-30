@@ -43,6 +43,8 @@ class TrustyApp {
     android::base::unique_fd ta_fd_;
 };
 
+void Abort();
+
 }  // namespace fuzz
 }  // namespace trusty
 }  // namespace android
