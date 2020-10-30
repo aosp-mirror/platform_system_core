@@ -47,6 +47,8 @@ class MockSnapshotManager : public ISnapshotManager {
     MOCK_METHOD(bool, CreateLogicalAndSnapshotPartitions,
                 (const std::string& super_device, const std::chrono::milliseconds& timeout_ms),
                 (override));
+    MOCK_METHOD(bool, MapAllSnapshots, (const std::chrono::milliseconds& timeout_ms), (override));
+    MOCK_METHOD(bool, UnmapAllSnapshots, (), (override));
     MOCK_METHOD(bool, HandleImminentDataWipe, (const std::function<void()>& callback), (override));
     MOCK_METHOD(bool, FinishMergeInRecovery, (), (override));
     MOCK_METHOD(CreateResult, RecoveryCreateSnapshotDevices, (), (override));
