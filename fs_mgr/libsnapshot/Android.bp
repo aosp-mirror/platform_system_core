@@ -46,6 +46,7 @@ cc_defaults {
     header_libs: [
         "libchrome",
         "libfiemap_headers",
+        "libstorage_literals_headers",
         "libupdate_engine_headers",
     ],
     export_static_lib_headers: [
