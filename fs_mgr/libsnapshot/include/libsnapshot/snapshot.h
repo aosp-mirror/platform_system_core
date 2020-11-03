@@ -15,6 +15,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <map>
@@ -77,6 +78,7 @@ class SnapshotMergeStats;
 class SnapshotStatus;
 
 static constexpr const std::string_view kCowGroupName = "cow";
+static constexpr char kVirtualAbCompressionProp[] = "ro.virtual_ab.compression.enabled";
 
 bool OptimizeSourceCopyOperation(const chromeos_update_engine::InstallOperation& operation,
                                  chromeos_update_engine::InstallOperation* optimized);
@@ -104,6 +106,7 @@ class ISnapshotManager {
                 android::hardware::boot::V1_1::MergeStatus status) = 0;
         virtual bool SetSlotAsUnbootable(unsigned int slot) = 0;
         virtual bool IsRecovery() const = 0;
+        virtual bool IsTestDevice() const { return false; }
     };
     virtual ~ISnapshotManager() = default;
 
@@ -303,6 +306,14 @@ class SnapshotManager final : public ISnapshotManager {
     // Helper function for second stage init to restorecon on the rollback indicator.
     static std::string GetGlobalRollbackIndicatorPath();
 
+    // Initiate the transition from first-stage to second-stage snapuserd. This
+    // process involves re-creating the dm-user table entries for each device,
+    // so that they connect to the new daemon. Once all new tables have been
+    // activated, we ask the first-stage daemon to cleanly exit.
+    //
+    // The caller must pass a function which starts snapuserd.
+    bool PerformSecondStageTransition();
+
     // ISnapshotManager overrides.
     bool BeginUpdate() override;
     bool CancelUpdate() override;
@@ -345,6 +356,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotTest, Merge);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
     FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
+    FRIEND_TEST(SnapshotUpdateTest, DaemonTransition);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeAfterRollback);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeRollbackInRecovery);
     FRIEND_TEST(SnapshotUpdateTest, FullUpdateFlow);
@@ -372,11 +384,13 @@ class SnapshotManager final : public ISnapshotManager {
     // Ensure we're connected to snapuserd.
     bool EnsureSnapuserdConnected();
 
-    // Helper for first-stage init.
+    // Helpers for first-stage init.
     bool ForceLocalImageManager();
+    const std::unique_ptr<IDeviceInfo>& device() const { return device_; }
 
-    // Helper function for tests.
+    // Helper functions for tests.
     IImageManager* image_manager() const { return images_.get(); }
+    void set_use_first_stage_snapuserd(bool value) { use_first_stage_snapuserd_ = value; }
 
     // Since libsnapshot is included into multiple processes, we flock() our
     // files for simple synchronization. LockedFile is a helper to assist with
@@ -660,6 +674,7 @@ class SnapshotManager final : public ISnapshotManager {
     std::unique_ptr<IDeviceInfo> device_;
     std::unique_ptr<IImageManager> images_;
     bool has_local_image_manager_ = false;
+    bool use_first_stage_snapuserd_ = false;
     bool in_factory_data_reset_ = false;
     std::unique_ptr<SnapuserdClient> snapuserd_client_;
 };
