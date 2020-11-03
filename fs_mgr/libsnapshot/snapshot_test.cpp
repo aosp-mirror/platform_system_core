@@ -1793,6 +1793,21 @@ TEST_F(SnapshotUpdateTest, DaemonTransition) {
     ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), 0);
 }
 
+TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
+    AddOperationForPartitions();
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
+    }
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+    ASSERT_TRUE(sm->MapAllSnapshots(10s));
+
+    // Read bytes back and verify they match the cache.
+    ASSERT_TRUE(IsPartitionUnchanged("sys_b"));
+}
+
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
                              public WithParamInterface<std::tuple<uint32_t, bool>> {
   public:
