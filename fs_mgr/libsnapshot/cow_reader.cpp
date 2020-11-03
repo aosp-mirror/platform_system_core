@@ -154,7 +154,8 @@ bool CowReader::ParseOps() {
             }
         } else if (current_op.type == kCowFooterOp) {
             memcpy(&footer_.op, &current_op, sizeof(footer_.op));
-
+            // we don't consider this an operation for the checksum
+            current_op_num--;
             if (android::base::ReadFully(fd_, &footer_.data, sizeof(footer_.data))) {
                 has_footer_ = true;
                 if (next_last_label) {
@@ -170,6 +171,19 @@ bool CowReader::ParseOps() {
     memset(csum, 0, sizeof(uint8_t) * 32);
 
     if (has_footer_) {
+        if (ops_buffer->size() != footer_.op.num_ops) {
+            LOG(ERROR) << "num ops does not match";
+            return false;
+        }
+        if (ops_buffer->size() * sizeof(CowOperation) != footer_.op.ops_size) {
+            LOG(ERROR) << "ops size does not match ";
+            return false;
+        }
+        SHA256(&footer_.op, sizeof(footer_.op), footer_.data.footer_checksum);
+        if (memcmp(csum, footer_.data.ops_checksum, sizeof(csum)) != 0) {
+            LOG(ERROR) << "ops checksum does not match";
+            return false;
+        }
         SHA256(ops_buffer.get()->data(), footer_.op.ops_size, csum);
         if (memcmp(csum, footer_.data.ops_checksum, sizeof(csum)) != 0) {
             LOG(ERROR) << "ops checksum does not match";
