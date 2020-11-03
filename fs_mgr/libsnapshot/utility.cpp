@@ -91,7 +91,7 @@ AutoDeleteSnapshot::~AutoDeleteSnapshot() {
     }
 }
 
-Return InitializeCow(const std::string& device) {
+Return InitializeKernelCow(const std::string& device) {
     // When the kernel creates a persistent dm-snapshot, it requires a CoW file
     // to store the modifications. The kernel interface does not specify how
     // the CoW is used, and there is no standard associated.

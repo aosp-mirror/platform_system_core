@@ -15,6 +15,7 @@
 #include <libsnapshot/snapshot.h>
 
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -29,6 +30,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <fs_mgr/file_wait.h>
 #include <fs_mgr/roots.h>
 #include <fs_mgr_dm_linear.h>
 #include <gtest/gtest.h>
@@ -118,6 +120,8 @@ class SnapshotTest : public ::testing::Test {
         image_manager_ = sm->image_manager();
 
         test_device->set_slot_suffix("_a");
+
+        sm->set_use_first_stage_snapuserd(false);
     }
 
     void CleanupTestArtifacts() {
@@ -265,7 +269,7 @@ class SnapshotTest : public ::testing::Test {
         if (!map_res) {
             return map_res;
         }
-        if (!InitializeCow(cow_device)) {
+        if (!InitializeKernelCow(cow_device)) {
             return AssertionFailure() << "Cannot zero fill " << cow_device;
         }
         if (!sm->UnmapCowImage(name)) {
@@ -1734,6 +1738,74 @@ TEST_F(SnapshotUpdateTest, LowSpace) {
     ASSERT_EQ(Return::ErrorCode::NO_SPACE, res.error_code());
     ASSERT_GE(res.required_size(), 14_MiB);
     ASSERT_LT(res.required_size(), 15_MiB);
+}
+
+class AutoKill final {
+  public:
+    explicit AutoKill(pid_t pid) : pid_(pid) {}
+    ~AutoKill() {
+        if (pid_ > 0) kill(pid_, SIGKILL);
+    }
+
+    bool valid() const { return pid_ > 0; }
+
+  private:
+    pid_t pid_;
+};
+
+TEST_F(SnapshotUpdateTest, DaemonTransition) {
+    if (!IsCompressionEnabled()) {
+        GTEST_SKIP() << "Skipping Virtual A/B Compression test";
+    }
+
+    AutoKill auto_kill(StartFirstStageSnapuserd());
+    ASSERT_TRUE(auto_kill.valid());
+
+    // Ensure a connection to the second-stage daemon, but use the first-stage
+    // code paths thereafter.
+    ASSERT_TRUE(sm->EnsureSnapuserdConnected());
+    sm->set_use_first_stage_snapuserd(true);
+
+    AddOperationForPartitions();
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(MapUpdateSnapshots());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+    ASSERT_TRUE(UnmapAll());
+
+    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    ASSERT_NE(init, nullptr);
+
+    ASSERT_TRUE(init->EnsureSnapuserdConnected());
+    init->set_use_first_stage_snapuserd(true);
+
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+
+    ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow-init", F_OK), 0);
+    ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), -1);
+
+    ASSERT_TRUE(init->PerformSecondStageTransition());
+
+    // The control device should have been renamed.
+    ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted("/dev/dm-user/sys_b-user-cow-init", 10s));
+    ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), 0);
+}
+
+TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
+    AddOperationForPartitions();
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
+    }
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+    ASSERT_TRUE(sm->MapAllSnapshots(10s));
+
+    // Read bytes back and verify they match the cache.
+    ASSERT_TRUE(IsPartitionUnchanged("sys_b"));
 }
 
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
