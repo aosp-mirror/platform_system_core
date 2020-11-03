@@ -31,15 +31,17 @@ cc_defaults {
         "libbrotli",
         "libdm",
         "libfstab",
-        "libsnapshot_cow",
         "update_metadata-protos",
     ],
     whole_static_libs: [
+        "libbrotli",
         "libcutils",
         "libext2_uuid",
         "libext4_utils",
         "libfstab",
+        "libsnapshot_cow",
         "libsnapshot_snapuserd",
+        "libz",
     ],
     header_libs: [
         "libchrome",
@@ -432,6 +434,7 @@ cc_binary {
     init_rc: [
         "snapuserd.rc",
     ],
+    static_executable: true,
 }
 
 cc_binary {
