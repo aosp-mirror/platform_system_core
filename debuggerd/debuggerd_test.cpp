@@ -312,7 +312,7 @@ TEST_F(CrasherTest, smoke) {
 
   if (mte_supported()) {
     // Test that the default TAGGED_ADDR_CTRL value is set.
-    ASSERT_MATCH(result, R"(tagged_addr_ctrl: 000000000007fff3)");
+    ASSERT_MATCH(result, R"(tagged_addr_ctrl: 000000000007fff5)");
   }
 }
 
