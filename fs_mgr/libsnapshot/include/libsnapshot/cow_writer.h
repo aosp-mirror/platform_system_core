@@ -33,6 +33,9 @@ struct CowOptions {
 
     // Maximum number of blocks that can be written.
     std::optional<uint64_t> max_blocks;
+
+    // Number of CowOperations in a cluster. 0 for no clustering. Cannot be 1.
+    uint32_t cluster_ops = 0;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
@@ -111,6 +114,7 @@ class CowWriter : public ICowWriter {
     virtual bool EmitLabel(uint64_t label) override;
 
   private:
+    bool EmitCluster();
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();
@@ -120,6 +124,7 @@ class CowWriter : public ICowWriter {
     bool WriteOperation(const CowOperation& op, const void* data = nullptr, size_t size = 0);
     void AddOperation(const CowOperation& op);
     std::basic_string<uint8_t> Compress(const void* data, size_t length);
+    void InitPos();
 
     bool SetFd(android::base::borrowed_fd fd);
     bool Sync();
@@ -132,6 +137,10 @@ class CowWriter : public ICowWriter {
     CowFooter footer_{};
     int compression_ = 0;
     uint64_t next_op_pos_ = 0;
+    uint64_t next_data_pos_ = 0;
+    uint32_t cluster_size_ = 0;
+    uint32_t current_cluster_size_ = 0;
+    uint64_t current_data_size_ = 0;
     bool is_dev_null_ = false;
     bool merge_in_progress_ = false;
     bool is_block_device_ = false;
