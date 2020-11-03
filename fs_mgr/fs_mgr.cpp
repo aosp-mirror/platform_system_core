@@ -1534,6 +1534,8 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                            attempted_entry.mount_point},
                           nullptr)) {
                 ++error_count;
+            } else if (current_entry.mount_point == "/data") {
+                userdata_mounted = true;
             }
             encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
             continue;
