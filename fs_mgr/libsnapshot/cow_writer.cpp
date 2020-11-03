@@ -247,7 +247,7 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     }
 
     if (!found_label) {
-        PLOG(ERROR) << "Failed to find last label";
+        LOG(ERROR) << "Failed to find last label";
         return false;
     }
 
