@@ -31,8 +31,10 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <cutils/sockets.h>
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr.h>
+#include <fs_mgr/file_wait.h>
 #include <fs_mgr_dm_linear.h>
 #include <fstab/fstab.h>
 #include <libdm/dm.h>
@@ -99,6 +101,12 @@ std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceI
     auto sm = New(info);
     if (!sm || !sm->ForceLocalImageManager()) {
         return nullptr;
+    }
+
+    // The first-stage version of snapuserd is explicitly started by init. Do
+    // not attempt to using it during tests (which run in normal AOSP).
+    if (!sm->device()->IsTestDevice()) {
+        sm->use_first_stage_snapuserd_ = true;
     }
     return sm;
 }
@@ -400,8 +408,15 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
         base_sectors = dev_size / kSectorSize;
     }
 
+    // Use an extra decoration for first-stage init, so we can transition
+    // to a new table entry in second-stage.
+    std::string misc_name = name;
+    if (use_first_stage_snapuserd_) {
+        misc_name += "-init";
+    }
+
     DmTable table;
-    table.Emplace<DmTargetUser>(0, base_sectors, name);
+    table.Emplace<DmTargetUser>(0, base_sectors, misc_name);
     if (!dm.CreateDevice(name, table, path, timeout_ms)) {
         return false;
     }
@@ -410,7 +425,7 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
         return false;
     }
 
-    auto control_device = "/dev/dm-user/" + name;
+    auto control_device = "/dev/dm-user/" + misc_name;
     return snapuserd_client_->InitializeSnapuserd(cow_file, base_device, control_device);
 }
 
@@ -1284,6 +1299,107 @@ bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock,
     return RemoveAllUpdateState(lock, before_cancel);
 }
 
+bool SnapshotManager::PerformSecondStageTransition() {
+    LOG(INFO) << "Performing second-stage transition for snapuserd.";
+
+    // Don't use EnsuerSnapuserdConnected() because this is called from init,
+    // and attempting to do so will deadlock.
+    if (!snapuserd_client_) {
+        snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, 10s);
+        if (!snapuserd_client_) {
+            LOG(ERROR) << "Unable to connect to snapuserd";
+            return false;
+        }
+    }
+
+    auto& dm = DeviceMapper::Instance();
+
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock.get(), &snapshots)) {
+        LOG(ERROR) << "Failed to list snapshots.";
+        return false;
+    }
+
+    size_t num_cows = 0;
+    size_t ok_cows = 0;
+    for (const auto& snapshot : snapshots) {
+        std::string cow_name = GetDmUserCowName(snapshot);
+        if (dm.GetState(cow_name) == DmDeviceState::INVALID) {
+            continue;
+        }
+
+        DeviceMapper::TargetInfo target;
+        if (!GetSingleTarget(cow_name, TableQuery::Table, &target)) {
+            continue;
+        }
+
+        auto target_type = DeviceMapper::GetTargetType(target.spec);
+        if (target_type != "user") {
+            LOG(ERROR) << "Unexpected target type for " << cow_name << ": " << target_type;
+            continue;
+        }
+
+        num_cows++;
+
+        DmTable table;
+        table.Emplace<DmTargetUser>(0, target.spec.length, cow_name);
+        if (!dm.LoadTableAndActivate(cow_name, table)) {
+            LOG(ERROR) << "Unable to swap tables for " << cow_name;
+            continue;
+        }
+
+        std::string backing_device;
+        if (!dm.GetDmDevicePathByName(GetBaseDeviceName(snapshot), &backing_device)) {
+            LOG(ERROR) << "Could not get device path for " << GetBaseDeviceName(snapshot);
+            continue;
+        }
+
+        std::string cow_device;
+        if (!dm.GetDmDevicePathByName(GetCowName(snapshot), &cow_device)) {
+            LOG(ERROR) << "Could not get device path for " << GetCowName(snapshot);
+            continue;
+        }
+
+        // Wait for ueventd to acknowledge and create the control device node.
+        std::string control_device = "/dev/dm-user/" + cow_name;
+        if (!android::fs_mgr::WaitForFile(control_device, 10s)) {
+            LOG(ERROR) << "Could not find control device: " << control_device;
+            continue;
+        }
+
+        if (!snapuserd_client_->InitializeSnapuserd(cow_device, backing_device, control_device)) {
+            // This error is unrecoverable. We cannot proceed because reads to
+            // the underlying device will fail.
+            LOG(FATAL) << "Could not initialize snapuserd for " << cow_name;
+            return false;
+        }
+
+        ok_cows++;
+    }
+
+    if (ok_cows != num_cows) {
+        LOG(ERROR) << "Could not transition all snapuserd consumers.";
+        return false;
+    }
+
+    int pid;
+    const char* pid_str = getenv(kSnapuserdFirstStagePidVar);
+    if (pid_str && android::base::ParseInt(pid_str, &pid)) {
+        if (kill(pid, SIGTERM) < 0 && errno != ESRCH) {
+            LOG(ERROR) << "kill snapuserd failed";
+            return false;
+        }
+    } else {
+        LOG(ERROR) << "Could not find or parse " << kSnapuserdFirstStagePidVar
+                   << " for snapuserd pid";
+        return false;
+    }
+    return true;
+}
+
 std::unique_ptr<LpMetadata> SnapshotManager::ReadCurrentMetadata() {
     const auto& opener = device_->GetPartitionOpener();
     uint32_t slot = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
@@ -1621,6 +1737,15 @@ bool SnapshotManager::CreateLogicalAndSnapshotPartitions(
         }
     }
 
+    if (use_first_stage_snapuserd_) {
+        // Remove the first-stage socket as a precaution, there is no need to
+        // access the daemon anymore and we'll be killing it once second-stage
+        // is running.
+        auto socket = ANDROID_SOCKET_DIR + "/"s + kSnapuserdSocketFirstStage;
+        snapuserd_client_ = nullptr;
+        unlink(socket.c_str());
+    }
+
     LOG(INFO) << "Created logical partitions with snapshot.";
     return true;
 }
@@ -1925,8 +2050,16 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
             LOG(ERROR) << "Cannot unmap " << dm_user_name;
             return false;
         }
-        if (!snapuserd_client_->WaitForDeviceDelete("/dev/dm-user/" + dm_user_name)) {
+
+        auto control_device = "/dev/dm-user/" + dm_user_name;
+        if (!snapuserd_client_->WaitForDeviceDelete(control_device)) {
             LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
+            return false;
+        }
+
+        // Ensure the control device is gone so we don't run into ABA problems.
+        if (!android::fs_mgr::WaitForFileDeleted(control_device, 10s)) {
+            LOG(ERROR) << "Timed out waiting for " << control_device << " to unlink";
             return false;
         }
     }
@@ -2212,15 +2345,35 @@ bool SnapshotManager::EnsureImageManager() {
 }
 
 bool SnapshotManager::EnsureSnapuserdConnected() {
-    if (!snapuserd_client_) {
+    if (snapuserd_client_) {
+        return true;
+    }
+
+    std::string socket;
+    if (use_first_stage_snapuserd_) {
+        auto pid = StartFirstStageSnapuserd();
+        if (pid < 0) {
+            LOG(ERROR) << "Failed to start snapuserd";
+            return false;
+        }
+
+        auto pid_str = std::to_string(static_cast<int>(pid));
+        if (setenv(kSnapuserdFirstStagePidVar, pid_str.c_str(), 1) < 0) {
+            PLOG(ERROR) << "setenv failed storing the snapuserd pid";
+        }
+
+        socket = kSnapuserdSocketFirstStage;
+    } else {
         if (!EnsureSnapuserdStarted()) {
             return false;
         }
-        snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, 10s);
-        if (!snapuserd_client_) {
-            LOG(ERROR) << "Unable to connect to snapuserd";
-            return false;
-        }
+        socket = kSnapuserdSocket;
+    }
+
+    snapuserd_client_ = SnapuserdClient::Connect(socket, 10s);
+    if (!snapuserd_client_) {
+        LOG(ERROR) << "Unable to connect to snapuserd";
+        return false;
     }
     return true;
 }
@@ -2538,11 +2691,26 @@ Return SnapshotManager::InitializeUpdateSnapshots(
             return Return::Error();
         }
 
-        auto ret = InitializeCow(cow_path);
-        if (!ret.is_ok()) {
-            LOG(ERROR) << "Can't zero-fill COW device for " << target_partition->name() << ": "
-                       << cow_path;
-            return AddRequiredSpace(ret, all_snapshot_status);
+        if (IsCompressionEnabled()) {
+            unique_fd fd(open(cow_path.c_str(), O_RDWR | O_CLOEXEC));
+            if (fd < 0) {
+                PLOG(ERROR) << "open " << cow_path << " failed for snapshot "
+                            << cow_params.partition_name;
+                return Return::Error();
+            }
+
+            CowWriter writer(CowOptions{});
+            if (!writer.Initialize(fd) || !writer.Finalize()) {
+                LOG(ERROR) << "Could not initialize COW device for " << target_partition->name();
+                return Return::Error();
+            }
+        } else {
+            auto ret = InitializeKernelCow(cow_path);
+            if (!ret.is_ok()) {
+                LOG(ERROR) << "Can't zero-fill COW device for " << target_partition->name() << ": "
+                           << cow_path;
+                return AddRequiredSpace(ret, all_snapshot_status);
+            }
         }
         // Let destructor of created_devices_for_cow to unmap the COW devices.
     };
