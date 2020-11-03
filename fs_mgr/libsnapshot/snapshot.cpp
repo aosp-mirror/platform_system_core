@@ -1709,8 +1709,13 @@ bool SnapshotManager::CreateLogicalAndSnapshotPartitions(
     auto lock = LockExclusive();
     if (!lock) return false;
 
-    const auto& opener = device_->GetPartitionOpener();
     uint32_t slot = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+    return MapAllPartitions(lock.get(), super_device, slot, timeout_ms);
+}
+
+bool SnapshotManager::MapAllPartitions(LockedFile* lock, const std::string& super_device,
+                                       uint32_t slot, const std::chrono::milliseconds& timeout_ms) {
+    const auto& opener = device_->GetPartitionOpener();
     auto metadata = android::fs_mgr::ReadMetadata(opener, super_device, slot);
     if (!metadata) {
         LOG(ERROR) << "Could not read dynamic partition metadata for device: " << super_device;
@@ -1731,8 +1736,7 @@ bool SnapshotManager::CreateLogicalAndSnapshotPartitions(
                 .partition_opener = &opener,
                 .timeout_ms = timeout_ms,
         };
-        if (!MapPartitionWithSnapshot(lock.get(), std::move(params), SnapshotContext::Mount,
-                                      nullptr)) {
+        if (!MapPartitionWithSnapshot(lock, std::move(params), SnapshotContext::Mount, nullptr)) {
             return false;
         }
     }
@@ -2078,14 +2082,49 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
     return true;
 }
 
-bool SnapshotManager::MapAllSnapshots(const std::chrono::milliseconds&) {
-    LOG(ERROR) << "Not yet implemented.";
-    return false;
+bool SnapshotManager::MapAllSnapshots(const std::chrono::milliseconds& timeout_ms) {
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    auto state = ReadUpdateState(lock.get());
+    if (state == UpdateState::Unverified) {
+        if (GetCurrentSlot() == Slot::Target) {
+            LOG(ERROR) << "Cannot call MapAllSnapshots when booting from the target slot.";
+            return false;
+        }
+    } else if (state != UpdateState::Initiated) {
+        LOG(ERROR) << "Cannot call MapAllSnapshots from update state: " << state;
+        return false;
+    }
+
+    if (!UnmapAllSnapshots(lock.get())) {
+        return false;
+    }
+
+    uint32_t slot = SlotNumberForSlotSuffix(device_->GetOtherSlotSuffix());
+    return MapAllPartitions(lock.get(), device_->GetSuperDevice(slot), slot, timeout_ms);
 }
 
 bool SnapshotManager::UnmapAllSnapshots() {
-    LOG(ERROR) << "Not yet implemented.";
-    return false;
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    return UnmapAllSnapshots(lock.get());
+}
+
+bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock, &snapshots)) {
+        return false;
+    }
+
+    for (const auto& snapshot : snapshots) {
+        if (!UnmapPartitionWithSnapshot(lock, snapshot)) {
+            LOG(ERROR) << "Failed to unmap snapshot: " << snapshot;
+            return false;
+        }
+    }
+    return true;
 }
 
 auto SnapshotManager::OpenFile(const std::string& file, int lock_flags)
@@ -2868,7 +2907,7 @@ bool SnapshotManager::UnmapUpdateSnapshot(const std::string& target_partition_na
     return UnmapPartitionWithSnapshot(lock.get(), target_partition_name);
 }
 
-bool SnapshotManager::UnmapAllPartitions() {
+bool SnapshotManager::UnmapAllPartitionsInRecovery() {
     auto lock = LockExclusive();
     if (!lock) return false;
 
@@ -3012,7 +3051,7 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
     }
 
     // Nothing should be depending on partitions now, so unmap them all.
-    if (!UnmapAllPartitions()) {
+    if (!UnmapAllPartitionsInRecovery()) {
         LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
     }
     return true;
@@ -3043,7 +3082,7 @@ bool SnapshotManager::FinishMergeInRecovery() {
     }
 
     // Nothing should be depending on partitions now, so unmap them all.
-    if (!UnmapAllPartitions()) {
+    if (!UnmapAllPartitionsInRecovery()) {
         LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
     }
     return true;

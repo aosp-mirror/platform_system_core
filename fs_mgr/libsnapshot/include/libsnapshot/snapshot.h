@@ -559,6 +559,9 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetSnapshotDeviceName(const std::string& snapshot_name,
                                       const SnapshotStatus& status);
 
+    bool MapAllPartitions(LockedFile* lock, const std::string& super_device, uint32_t slot,
+                          const std::chrono::milliseconds& timeout_ms);
+
     // Reason for calling MapPartitionWithSnapshot.
     enum class SnapshotContext {
         // For writing or verification (during update_engine).
@@ -632,9 +635,12 @@ class SnapshotManager final : public ISnapshotManager {
             const LpMetadata* exported_target_metadata, const std::string& target_suffix,
             const std::map<std::string, SnapshotStatus>& all_snapshot_status);
 
+    // Implementation of UnmapAllSnapshots(), with the lock provided.
+    bool UnmapAllSnapshots(LockedFile* lock);
+
     // Unmap all partitions that were mapped by CreateLogicalAndSnapshotPartitions.
     // This should only be called in recovery.
-    bool UnmapAllPartitions();
+    bool UnmapAllPartitionsInRecovery();
 
     // Check no snapshot overflows. Note that this returns false negatives if the snapshot
     // overflows, then is remapped and not written afterwards.
