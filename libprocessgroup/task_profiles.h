@@ -139,6 +139,19 @@ class SetCgroupAction : public ProfileAction {
     bool IsFdValid() const { return fd_ > FDS_INACCESSIBLE; }
 };
 
+// Write to file action
+class WriteFileAction : public ProfileAction {
+  public:
+    WriteFileAction(const std::string& filepath, const std::string& value) noexcept
+        : filepath_(filepath), value_(value) {}
+
+    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
+    virtual bool ExecuteForTask(int tid) const;
+
+  private:
+    std::string filepath_, value_;
+};
+
 class TaskProfile {
   public:
     TaskProfile() : res_cached_(false) {}
