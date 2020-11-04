@@ -272,7 +272,6 @@ TEST_F(CowTest, GetSize) {
 }
 
 TEST_F(CowTest, Append) {
-    cow_->DoNotRemove();
     CowOptions options;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
