@@ -82,7 +82,6 @@ TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
 
 void MountMetadata();
-bool IsCompressionEnabled();
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -796,12 +795,15 @@ class SnapshotUpdateTest : public SnapshotTest {
         group_->add_partition_names("prd");
         sys_ = manifest_.add_partitions();
         sys_->set_partition_name("sys");
+        sys_->set_estimate_cow_size(6_MiB);
         SetSize(sys_, 3_MiB);
         vnd_ = manifest_.add_partitions();
         vnd_->set_partition_name("vnd");
+        vnd_->set_estimate_cow_size(6_MiB);
         SetSize(vnd_, 3_MiB);
         prd_ = manifest_.add_partitions();
         prd_->set_partition_name("prd");
+        prd_->set_estimate_cow_size(6_MiB);
         SetSize(prd_, 3_MiB);
 
         // Initialize source partition metadata using |manifest_|.
@@ -1045,7 +1047,11 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     auto tgt = MetadataBuilder::New(*opener_, "super", 1);
     ASSERT_NE(tgt, nullptr);
     ASSERT_NE(nullptr, tgt->FindPartition("sys_b-cow"));
-    ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
+    if (IsCompressionEnabled()) {
+        ASSERT_EQ(nullptr, tgt->FindPartition("vnd_b-cow"));
+    } else {
+        ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
+    }
     ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
 
     // Write some data to target partitions.
@@ -1451,10 +1457,6 @@ class MetadataMountedTest : public ::testing::Test {
 
 void MountMetadata() {
     MetadataMountedTest().TearDown();
-}
-
-bool IsCompressionEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.compression.enabled", false);
 }
 
 TEST_F(MetadataMountedTest, Android) {

@@ -75,7 +75,7 @@ using android::hardware::boot::V1_1::MergeStatus;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::Extent;
 using chromeos_update_engine::FileDescriptor;
-using chromeos_update_engine::InstallOperation;
+using chromeos_update_engine::PartitionUpdate;
 template <typename T>
 using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 using std::chrono::duration_cast;
@@ -114,10 +114,6 @@ std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceI
 SnapshotManager::SnapshotManager(IDeviceInfo* device) : device_(device) {
     gsid_dir_ = device_->GetGsidDir();
     metadata_dir_ = device_->GetMetadataDir();
-}
-
-static inline bool IsCompressionEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.compression.enabled", false);
 }
 
 static std::string GetCowName(const std::string& snapshot_name) {
@@ -2527,8 +2523,9 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .target_partition = nullptr,
             .current_metadata = current_metadata.get(),
             .current_suffix = current_suffix,
-            .operations = nullptr,
+            .update = nullptr,
             .extra_extents = {},
+            .compression_enabled = IsCompressionEnabled(),
     };
 
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
@@ -2572,12 +2569,11 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
         return Return::Error();
     }
 
-    std::map<std::string, const RepeatedPtrField<InstallOperation>*> install_operation_map;
+    std::map<std::string, const PartitionUpdate*> partition_map;
     std::map<std::string, std::vector<Extent>> extra_extents_map;
     for (const auto& partition_update : manifest.partitions()) {
         auto suffixed_name = partition_update.partition_name() + target_suffix;
-        auto&& [it, inserted] =
-                install_operation_map.emplace(suffixed_name, &partition_update.operations());
+        auto&& [it, inserted] = partition_map.emplace(suffixed_name, &partition_update);
         if (!inserted) {
             LOG(ERROR) << "Duplicated partition " << partition_update.partition_name()
                        << " in update manifest.";
@@ -2595,10 +2591,10 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
 
     for (auto* target_partition : ListPartitionsWithSuffix(target_metadata, target_suffix)) {
         cow_creator->target_partition = target_partition;
-        cow_creator->operations = nullptr;
-        auto operations_it = install_operation_map.find(target_partition->name());
-        if (operations_it != install_operation_map.end()) {
-            cow_creator->operations = operations_it->second;
+        cow_creator->update = nullptr;
+        auto iter = partition_map.find(target_partition->name());
+        if (iter != partition_map.end()) {
+            cow_creator->update = iter->second;
         } else {
             LOG(INFO) << target_partition->name()
                       << " isn't included in the payload, skipping the cow creation.";
@@ -2614,6 +2610,7 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
         // Compute the device sizes for the partition.
         auto cow_creator_ret = cow_creator->Run();
         if (!cow_creator_ret.has_value()) {
+            LOG(ERROR) << "PartitionCowCreator returned no value for " << target_partition->name();
             return Return::Error();
         }
 

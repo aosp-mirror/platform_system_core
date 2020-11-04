@@ -145,13 +145,15 @@ TEST_F(PartitionCowCreatorTest, CowSize) {
 
     auto cow_device_size = [](const std::vector<InstallOperation>& iopv, MetadataBuilder* builder_a,
                               MetadataBuilder* builder_b, Partition* system_b) {
-        RepeatedInstallOperationPtr riop(iopv.begin(), iopv.end());
+        PartitionUpdate update;
+        *update.mutable_operations() = RepeatedInstallOperationPtr(iopv.begin(), iopv.end());
+
         PartitionCowCreator creator{.target_metadata = builder_b,
                                     .target_suffix = "_b",
                                     .target_partition = system_b,
                                     .current_metadata = builder_a,
                                     .current_suffix = "_a",
-                                    .operations = &riop};
+                                    .update = &update};
 
         auto ret = creator.Run();
 
@@ -218,7 +220,7 @@ TEST_F(PartitionCowCreatorTest, Zero) {
                                 .target_partition = system_b,
                                 .current_metadata = builder_a.get(),
                                 .current_suffix = "_a",
-                                .operations = nullptr};
+                                .update = nullptr};
 
     auto ret = creator.Run();
 
@@ -226,6 +228,58 @@ TEST_F(PartitionCowCreatorTest, Zero) {
     ASSERT_EQ(0u, ret->snapshot_status.snapshot_size());
     ASSERT_EQ(0u, ret->snapshot_status.cow_file_size());
     ASSERT_EQ(0u, ret->snapshot_status.cow_partition_size());
+}
+
+TEST_F(PartitionCowCreatorTest, CompressionEnabled) {
+    constexpr uint64_t super_size = 1_MiB;
+    auto builder_a = MetadataBuilder::New(super_size, 1_KiB, 2);
+    ASSERT_NE(builder_a, nullptr);
+
+    auto builder_b = MetadataBuilder::New(super_size, 1_KiB, 2);
+    ASSERT_NE(builder_b, nullptr);
+    auto system_b = builder_b->AddPartition("system_b", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(system_b, nullptr);
+    ASSERT_TRUE(builder_b->ResizePartition(system_b, 128_KiB));
+
+    PartitionUpdate update;
+    update.set_estimate_cow_size(256_KiB);
+
+    PartitionCowCreator creator{.target_metadata = builder_b.get(),
+                                .target_suffix = "_b",
+                                .target_partition = system_b,
+                                .current_metadata = builder_a.get(),
+                                .current_suffix = "_a",
+                                .compression_enabled = true,
+                                .update = &update};
+
+    auto ret = creator.Run();
+    ASSERT_TRUE(ret.has_value());
+    ASSERT_EQ(ret->snapshot_status.cow_file_size(), 1458176);
+}
+
+TEST_F(PartitionCowCreatorTest, CompressionWithNoManifest) {
+    constexpr uint64_t super_size = 1_MiB;
+    auto builder_a = MetadataBuilder::New(super_size, 1_KiB, 2);
+    ASSERT_NE(builder_a, nullptr);
+
+    auto builder_b = MetadataBuilder::New(super_size, 1_KiB, 2);
+    ASSERT_NE(builder_b, nullptr);
+    auto system_b = builder_b->AddPartition("system_b", LP_PARTITION_ATTR_READONLY);
+    ASSERT_NE(system_b, nullptr);
+    ASSERT_TRUE(builder_b->ResizePartition(system_b, 128_KiB));
+
+    PartitionUpdate update;
+
+    PartitionCowCreator creator{.target_metadata = builder_b.get(),
+                                .target_suffix = "_b",
+                                .target_partition = system_b,
+                                .current_metadata = builder_a.get(),
+                                .current_suffix = "_a",
+                                .compression_enabled = true,
+                                .update = nullptr};
+
+    auto ret = creator.Run();
+    ASSERT_FALSE(ret.has_value());
 }
 
 TEST(DmSnapshotInternals, CowSizeCalculator) {
