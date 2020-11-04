@@ -36,6 +36,7 @@ struct PartitionCowCreator {
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
     using Partition = android::fs_mgr::Partition;
     using InstallOperation = chromeos_update_engine::InstallOperation;
+    using PartitionUpdate = chromeos_update_engine::PartitionUpdate;
     template <typename T>
     using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 
@@ -50,11 +51,13 @@ struct PartitionCowCreator {
     MetadataBuilder* current_metadata = nullptr;
     // The suffix of the current slot.
     std::string current_suffix;
-    // List of operations to be applied on the partition.
-    const RepeatedPtrField<InstallOperation>* operations = nullptr;
+    // Partition information from the OTA manifest.
+    const PartitionUpdate* update = nullptr;
     // Extra extents that are going to be invalidated during the update
     // process.
     std::vector<ChromeOSExtent> extra_extents = {};
+    // True if compression is enabled.
+    bool compression_enabled = false;
 
     struct Return {
         SnapshotStatus snapshot_status;
