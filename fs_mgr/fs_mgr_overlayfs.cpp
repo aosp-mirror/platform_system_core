@@ -132,8 +132,11 @@ bool fs_mgr_overlayfs_is_setup() {
 namespace android {
 namespace fs_mgr {
 
-void MapScratchPartitionIfNeeded(Fstab*,
-                                 const std::function<bool(const std::set<std::string>&)>&) {}
+void MapScratchPartitionIfNeeded(Fstab*, const std::function<bool(const std::set<std::string>&)>&) {
+}
+
+void TeardownAllOverlayForMountPoint(const std::string&) {}
+
 }  // namespace fs_mgr
 }  // namespace android
 
@@ -1376,6 +1379,11 @@ static bool EnsureScratchMapped(std::string* device, bool* mapped) {
         return true;
     }
 
+    if (!fs_mgr_in_recovery()) {
+        errno = EINVAL;
+        return false;
+    }
+
     auto partition_name = android::base::Basename(kScratchMountPoint);
 
     // Check for scratch on /data first, before looking for a modified super
@@ -1417,47 +1425,28 @@ static bool EnsureScratchMapped(std::string* device, bool* mapped) {
     return true;
 }
 
-static void UnmapScratchDevice() {
-    // This should only be reachable in recovery, where scratch is not
-    // automatically mapped and therefore can be unmapped.
-    DestroyLogicalPartition(android::base::Basename(kScratchMountPoint));
-}
-
-#if !defined __ANDROID_RECOVERY__
-// Provide stubs for non-recovery variant.
-static void fs_mgr_overlayfs_teardown_dsu(const char*) {}
-#else
-// Note: This should only be called from recovery or fastbootd.
-static void fs_mgr_overlayfs_teardown_dsu(const char* mount_point) {
+// This should only be reachable in recovery, where DSU scratch is not
+// automatically mapped.
+static bool MapDsuScratchDevice(std::string* device) {
     std::string dsu_slot;
     if (!android::gsi::IsGsiInstalled() || !android::gsi::GetActiveDsu(&dsu_slot) ||
         dsu_slot.empty()) {
         // Nothing to do if no DSU installation present.
-        return;
+        return false;
     }
 
     auto images = IImageManager::Open("dsu/" + dsu_slot, 10s);
     if (!images || !images->BackingImageExists(android::gsi::kDsuScratch)) {
         // Nothing to do if DSU scratch device doesn't exist.
-        return;
-    }
-
-    std::string scratch_device;
-    images->UnmapImageDevice(android::gsi::kDsuScratch);
-    if (!images->MapImageDevice(android::gsi::kDsuScratch, 10s, &scratch_device)) {
-        return;
-    }
-
-    fs_mgr_overlayfs_umount_scratch();
-    if (fs_mgr_overlayfs_mount_scratch(scratch_device, fs_mgr_overlayfs_scratch_mount_type())) {
-        fs_mgr_overlayfs_teardown_one(kScratchMountPoint,
-                                      mount_point ? fs_mgr_mount_point(mount_point) : "", nullptr);
-        fs_mgr_overlayfs_umount_scratch();
+        return false;
     }
 
     images->UnmapImageDevice(android::gsi::kDsuScratch);
+    if (!images->MapImageDevice(android::gsi::kDsuScratch, 10s, device)) {
+        return false;
+    }
+    return true;
 }
-#endif
 
 // Returns false if teardown not permitted, errno set to last error.
 // If something is altered, set *change.
@@ -1468,10 +1457,9 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     // If scratch exists, but is not mounted, lets gain access to clean
     // specific override entries.
     auto mount_scratch = false;
-    bool unmap = false;
     if ((mount_point != nullptr) && !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
-        std::string scratch_device;
-        if (EnsureScratchMapped(&scratch_device, &unmap)) {
+        std::string scratch_device = GetBootScratchDevice();
+        if (!scratch_device.empty()) {
             mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,
                                                            fs_mgr_overlayfs_scratch_mount_type());
         }
@@ -1485,15 +1473,11 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     // Do not attempt to destroy DSU scratch if within a DSU system,
     // because DSU scratch partition is managed by gsid.
     if (should_destroy_scratch && !fs_mgr_is_dsu_running()) {
-        // Note: Reaching here in recovery or fastbootd means that a scratch device
-        // is mounted and cleaned up. Such scratch device mustn't be the DSU scratch,
-        // because EnsureScratchMapped() is not allowed to map the DSU scratch in
-        // recovery. In other words, it is safe to destroy the scratch device here.
         ret &= fs_mgr_overlayfs_teardown_scratch(kScratchMountPoint, change);
     }
     if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) {
         // After obligatory teardown to make sure everything is clean, but if
-        // we didn't want overlayfs in the the first place, we do not want to
+        // we didn't want overlayfs in the first place, we do not want to
         // waste time on a reboot (or reboot request message).
         if (change) *change = false;
     }
@@ -1507,15 +1491,6 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
     if (mount_scratch) {
         fs_mgr_overlayfs_umount_scratch();
     }
-    if (unmap) {
-        UnmapScratchDevice();
-    }
-
-    if (fs_mgr_in_recovery()) {
-        // Destroy DSU overlay if present.
-        fs_mgr_overlayfs_teardown_dsu(mount_point);
-    }
-
     return ret;
 }
 
@@ -1580,6 +1555,54 @@ void CleanupOldScratchFiles() {
     }
     if (auto images = IImageManager::Open("remount", 0ms)) {
         images->RemoveDisabledImages();
+    }
+}
+
+void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
+    if (!fs_mgr_in_recovery()) {
+        LERROR << __FUNCTION__ << "(): must be called within recovery.";
+        return;
+    }
+
+    // Empty string means teardown everything.
+    const std::string teardown_dir = mount_point.empty() ? "" : fs_mgr_mount_point(mount_point);
+    constexpr bool* ignore_change = nullptr;
+
+    // Teardown legacy overlay mount points that's not backed by a scratch device.
+    for (const auto& overlay_mount_point : kOverlayMountPoints) {
+        if (overlay_mount_point == kScratchMountPoint) {
+            continue;
+        }
+        fs_mgr_overlayfs_teardown_one(overlay_mount_point, teardown_dir, ignore_change);
+    }
+
+    // Map scratch device, mount kScratchMountPoint and teardown kScratchMountPoint.
+    bool mapped = false;
+    std::string scratch_device;
+    if (EnsureScratchMapped(&scratch_device, &mapped)) {
+        fs_mgr_overlayfs_umount_scratch();
+        if (fs_mgr_overlayfs_mount_scratch(scratch_device, fs_mgr_overlayfs_scratch_mount_type())) {
+            bool should_destroy_scratch = false;
+            fs_mgr_overlayfs_teardown_one(kScratchMountPoint, teardown_dir, ignore_change,
+                                          &should_destroy_scratch);
+            if (should_destroy_scratch) {
+                fs_mgr_overlayfs_teardown_scratch(kScratchMountPoint, nullptr);
+            }
+            fs_mgr_overlayfs_umount_scratch();
+        }
+        if (mapped) {
+            DestroyLogicalPartition(android::base::Basename(kScratchMountPoint));
+        }
+    }
+
+    // Teardown DSU overlay if present.
+    if (MapDsuScratchDevice(&scratch_device)) {
+        fs_mgr_overlayfs_umount_scratch();
+        if (fs_mgr_overlayfs_mount_scratch(scratch_device, fs_mgr_overlayfs_scratch_mount_type())) {
+            fs_mgr_overlayfs_teardown_one(kScratchMountPoint, teardown_dir, ignore_change);
+            fs_mgr_overlayfs_umount_scratch();
+        }
+        DestroyLogicalPartition(android::gsi::kDsuScratch);
     }
 }
 
