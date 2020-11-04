@@ -73,25 +73,6 @@ bool fs_mgr_access(const std::string& path) {
     return ret;
 }
 
-bool fs_mgr_in_recovery() {
-    // Check the existence of recovery binary instead of using the compile time
-    // macro, because first-stage-init is compiled with __ANDROID_RECOVERY__
-    // defined, albeit not in recovery. More details: system/core/init/README.md
-    return fs_mgr_access("/system/bin/recovery");
-}
-
-bool fs_mgr_is_dsu_running() {
-    // Since android::gsi::CanBootIntoGsi() or android::gsi::MarkSystemAsGsi() is
-    // never called in recovery, the return value of android::gsi::IsGsiRunning()
-    // is not well-defined. In this case, just return false as being in recovery
-    // implies not running a DSU system.
-    if (fs_mgr_in_recovery()) return false;
-    auto saved_errno = errno;
-    auto ret = android::gsi::IsGsiRunning();
-    errno = saved_errno;
-    return ret;
-}
-
 // determine if a filesystem is available
 bool fs_mgr_overlayfs_filesystem_available(const std::string& filesystem) {
     std::string filesystems;
@@ -186,6 +167,25 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
 
     return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100)) &&
            (vst.f_bfree * vst.f_bsize) >= kSizeThreshold;
+}
+
+bool fs_mgr_in_recovery() {
+    // Check the existence of recovery binary instead of using the compile time
+    // macro, because first-stage-init is compiled with __ANDROID_RECOVERY__
+    // defined, albeit not in recovery. More details: system/core/init/README.md
+    return fs_mgr_access("/system/bin/recovery");
+}
+
+bool fs_mgr_is_dsu_running() {
+    // Since android::gsi::CanBootIntoGsi() or android::gsi::MarkSystemAsGsi() is
+    // never called in recovery, the return value of android::gsi::IsGsiRunning()
+    // is not well-defined. In this case, just return false as being in recovery
+    // implies not running a DSU system.
+    if (fs_mgr_in_recovery()) return false;
+    auto saved_errno = errno;
+    auto ret = android::gsi::IsGsiRunning();
+    errno = saved_errno;
+    return ret;
 }
 
 const auto kPhysicalDevice = "/dev/block/by-name/"s;
