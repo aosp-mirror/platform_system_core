@@ -18,6 +18,7 @@
 
 #include <android-base/logging.h>
 #include <android/snapshot/snapshot.pb.h>
+#include <storage_literals/storage_literals.h>
 
 #include "dm_snapshot_internals.h"
 #include "utility.h"
@@ -33,6 +34,8 @@ using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 
 namespace android {
 namespace snapshot {
+
+using namespace android::storage_literals;
 
 // Intersect two linear extents. If no intersection, return an extent with length 0.
 static std::unique_ptr<Extent> Intersect(Extent* target_extent, Extent* existing_extent) {
@@ -138,6 +141,17 @@ void WriteExtent(DmSnapCowSizeCalculator* sc, const chromeos_update_engine::Exte
 }
 
 uint64_t PartitionCowCreator::GetCowSize() {
+    if (compression_enabled) {
+        if (update == nullptr || !update->has_estimate_cow_size()) {
+            LOG(ERROR) << "Update manifest does not include a COW size";
+            return 0;
+        }
+
+        // Add an extra 2MB of wiggle room for any minor differences in labels/metadata
+        // that might come up.
+        return update->estimate_cow_size() + 2_MiB;
+    }
+
     // WARNING: The origin partition should be READ-ONLY
     const uint64_t logical_block_size = current_metadata->logical_block_size();
     const unsigned int sectors_per_block = logical_block_size / kSectorSize;
@@ -149,9 +163,9 @@ uint64_t PartitionCowCreator::GetCowSize() {
         WriteExtent(&sc, de, sectors_per_block);
     }
 
-    if (operations == nullptr) return sc.cow_size_bytes();
+    if (update == nullptr) return sc.cow_size_bytes();
 
-    for (const auto& iop : *operations) {
+    for (const auto& iop : update->operations()) {
         const InstallOperation* written_op = &iop;
         InstallOperation buf;
         // Do not allocate space for extents that are going to be skipped
@@ -213,6 +227,9 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
 
     LOG(INFO) << "Remaining free space for COW: " << free_region_length << " bytes";
     auto cow_size = GetCowSize();
+    if (!cow_size) {
+        return {};
+    }
 
     // Compute the COW partition size.
     uint64_t cow_partition_size = std::min(cow_size, free_region_length);
