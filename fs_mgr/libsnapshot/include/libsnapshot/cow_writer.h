@@ -112,8 +112,7 @@ class CowWriter : public ICowWriter {
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();
-    bool OpenForAppend();
-    bool OpenForAppend(uint64_t label);
+    bool OpenForAppend(std::optional<uint64_t> label = std::nullopt);
     bool GetDataPos(uint64_t* pos);
     bool WriteRawData(const void* data, size_t size);
     bool WriteOperation(const CowOperation& op, const void* data = nullptr, size_t size = 0);
