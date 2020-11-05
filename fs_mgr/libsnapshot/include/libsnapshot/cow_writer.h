@@ -90,6 +90,9 @@ class CowWriter : public ICowWriter {
     // If opening for write, the file starts from the beginning.
     // If opening for append, if the file has a footer, we start appending to the last op.
     // If the footer isn't found, the last label is considered corrupt, and dropped.
+    //
+    // If fd is < 0, the CowWriter will be opened against /dev/null. This is for
+    // computing COW sizes without using storage space.
     bool Initialize(android::base::unique_fd&& fd, OpenMode mode = OpenMode::WRITE);
     bool Initialize(android::base::borrowed_fd fd, OpenMode mode = OpenMode::WRITE);
     // Set up a writer, assuming that the given label is the last valid label.
@@ -112,13 +115,15 @@ class CowWriter : public ICowWriter {
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();
-    bool OpenForAppend();
-    bool OpenForAppend(uint64_t label);
+    bool OpenForAppend(std::optional<uint64_t> label = std::nullopt);
     bool GetDataPos(uint64_t* pos);
     bool WriteRawData(const void* data, size_t size);
     bool WriteOperation(const CowOperation& op, const void* data = nullptr, size_t size = 0);
     void AddOperation(const CowOperation& op);
     std::basic_string<uint8_t> Compress(const void* data, size_t length);
+
+    bool SetFd(android::base::borrowed_fd fd);
+    bool Sync();
 
   private:
     android::base::unique_fd owned_fd_;
@@ -127,6 +132,7 @@ class CowWriter : public ICowWriter {
     CowFooter footer_{};
     int compression_ = 0;
     uint64_t next_op_pos_ = 0;
+    bool is_dev_null_ = false;
 
     // :TODO: this is not efficient, but stringstream ubsan aborts because some
     // bytes overflow a signed char.
