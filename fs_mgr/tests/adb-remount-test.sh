@@ -1380,9 +1380,9 @@ check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" s
 check_eq "${VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/hello </dev/null`" vendor devt after reboot
 check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
 check_eq "${VENDOR_INO}" "`adb_sh stat --format=%i /vendor/hello </dev/null`" vendor inode after reboot
-check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" base system devt after reboot
-check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/null`" base system devt after reboot
-check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" devt for su after reboot
+check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" --warning base system devt after reboot
+check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/null`" --warning base vendor devt after reboot
+check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 # Feed log with selinux denials as a result of overlays
 adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
@@ -1509,8 +1509,8 @@ else
 
   check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
   check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
-  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" base system devt after reboot
-  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" devt for su after reboot
+  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" --warning base system devt after reboot
+  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 fi
 
