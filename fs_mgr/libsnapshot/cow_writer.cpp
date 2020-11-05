@@ -185,6 +185,7 @@ bool CowWriter::OpenForAppend() {
     // Reset this, since we're going to reimport all operations.
     footer_.op.num_ops = 0;
     next_op_pos_ = sizeof(header_);
+    ops_.resize(0);
 
     auto iter = reader->GetOpIter();
     while (!iter->Done()) {
@@ -233,6 +234,7 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     // Reset this, since we're going to reimport all operations.
     footer_.op.num_ops = 0;
     next_op_pos_ = sizeof(header_);
+    ops_.resize(0);
 
     auto iter = reader->GetOpIter();
     while (!iter->Done()) {
@@ -247,7 +249,7 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     }
 
     if (!found_label) {
-        PLOG(ERROR) << "Failed to find last label";
+        LOG(ERROR) << "Failed to find last label";
         return false;
     }
 
@@ -384,7 +386,7 @@ static void SHA256(const void*, size_t, uint8_t[]) {
 }
 
 bool CowWriter::Finalize() {
-    footer_.op.ops_size = ops_.size() + sizeof(footer_.op);
+    footer_.op.ops_size = ops_.size();
     uint64_t pos;
 
     if (!GetDataPos(&pos)) {
