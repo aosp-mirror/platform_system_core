@@ -140,16 +140,17 @@ bool CowReader::ParseOps() {
             return false;
         }
         current_op_num++;
+        if (next_last_label) {
+            last_label_ = next_last_label.value();
+            has_last_label_ = true;
+        }
         if (current_op.type == kCowLabelOp) {
-            // If we don't have a footer, the last label may be incomplete
+            // If we don't have a footer, the last label may be incomplete.
+            // If we see any operation after it, we can infer the flush finished.
             if (has_footer_) {
                 has_last_label_ = true;
                 last_label_ = current_op.source;
             } else {
-                if (next_last_label) {
-                    last_label_ = next_last_label.value();
-                    has_last_label_ = true;
-                }
                 next_last_label = {current_op.source};
             }
         } else if (current_op.type == kCowFooterOp) {
