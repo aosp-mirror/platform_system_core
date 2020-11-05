@@ -271,7 +271,7 @@ TEST_F(CowTest, GetSize) {
     ASSERT_EQ(buf.st_size, writer.GetCowSize());
 }
 
-TEST_F(CowTest, Append) {
+TEST_F(CowTest, AppendLabelSmall) {
     CowOptions options;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
@@ -279,12 +279,13 @@ TEST_F(CowTest, Append) {
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
     ASSERT_TRUE(writer->AddRawBlocks(50, data.data(), data.size()));
+    ASSERT_TRUE(writer->AddLabel(3));
     ASSERT_TRUE(writer->Finalize());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
     writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd, CowWriter::OpenMode::APPEND));
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 3));
 
     std::string data2 = "More data!";
     data2.resize(options.block_size, '\0');
@@ -297,11 +298,12 @@ TEST_F(CowTest, Append) {
     ASSERT_EQ(fstat(cow_->fd, &buf), 0);
     ASSERT_EQ(buf.st_size, writer->GetCowSize());
 
-    // Read back both operations.
+    // Read back both operations, and label.
     CowReader reader;
     uint64_t label;
     ASSERT_TRUE(reader.Parse(cow_->fd));
-    ASSERT_FALSE(reader.GetLastLabel(&label));
+    ASSERT_TRUE(reader.GetLastLabel(&label));
+    ASSERT_EQ(label, 3);
 
     StringSink sink;
 
@@ -316,6 +318,13 @@ TEST_F(CowTest, Append) {
 
     iter->Next();
     sink.Reset();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowLabelOp);
+    ASSERT_EQ(op->source, 3);
+
+    iter->Next();
 
     ASSERT_FALSE(iter->Done());
     op = &iter->Get();
@@ -327,33 +336,26 @@ TEST_F(CowTest, Append) {
     ASSERT_TRUE(iter->Done());
 }
 
-TEST_F(CowTest, AppendCorrupted) {
+TEST_F(CowTest, AppendLabelMissing) {
     CowOptions options;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
 
+    ASSERT_TRUE(writer->AddLabel(0));
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
     ASSERT_TRUE(writer->AddRawBlocks(50, data.data(), data.size()));
-    ASSERT_TRUE(writer->AddLabel(0));
-    ASSERT_TRUE(writer->AddZeroBlocks(50, 1));
-    ASSERT_TRUE(writer->Finalize());
-    // Drop the tail end of the header. Last entry may be corrupted.
-    ftruncate(cow_->fd, writer->GetCowSize() - 5);
+    ASSERT_TRUE(writer->AddLabel(1));
+    // Drop the tail end of the last op header, corrupting it.
+    ftruncate(cow_->fd, writer->GetCowSize() - sizeof(CowFooter) - 3);
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
     writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd, CowWriter::OpenMode::APPEND));
+    ASSERT_FALSE(writer->InitializeAppend(cow_->fd, 1));
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 0));
 
     ASSERT_TRUE(writer->AddZeroBlocks(51, 1));
-    ASSERT_TRUE(writer->AddLabel(1));
-
-    std::string data2 = "More data!";
-    data2.resize(options.block_size, '\0');
-    ASSERT_TRUE(writer->AddRawBlocks(52, data2.data(), data2.size()));
-    ASSERT_TRUE(writer->AddLabel(2));
-
     ASSERT_TRUE(writer->Finalize());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
@@ -362,7 +364,7 @@ TEST_F(CowTest, AppendCorrupted) {
     ASSERT_EQ(fstat(cow_->fd, &buf), 0);
     ASSERT_EQ(buf.st_size, writer->GetCowSize());
 
-    // Read back all three operations.
+    // Read back both operations.
     CowReader reader;
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
@@ -373,15 +375,6 @@ TEST_F(CowTest, AppendCorrupted) {
 
     ASSERT_FALSE(iter->Done());
     auto op = &iter->Get();
-    ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data);
-
-    iter->Next();
-    sink.Reset();
-
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 0);
 
@@ -391,27 +384,6 @@ TEST_F(CowTest, AppendCorrupted) {
     op = &iter->Get();
     ASSERT_EQ(op->type, kCowZeroOp);
 
-    iter->Next();
-
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
-    ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 1);
-
-    iter->Next();
-
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
-    ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data2);
-
-    iter->Next();
-
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
-    ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 2);
     iter->Next();
 
     ASSERT_TRUE(iter->Done());
@@ -429,7 +401,7 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
     ASSERT_TRUE(writer->AddRawBlocks(50, data.data(), data.size()));
     ASSERT_TRUE(writer->AddLabel(6));
 
-    // fail to write the footer
+    // fail to write the footer. Cow Format does not know if Label 6 is valid
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -443,7 +415,7 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
     writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd, CowWriter::OpenMode::APPEND));
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 5));
 
     ASSERT_TRUE(writer->Finalize());
 
