@@ -110,15 +110,28 @@ bool CowWriter::ParseOptions() {
     return true;
 }
 
+bool CowWriter::SetFd(android::base::borrowed_fd fd) {
+    if (fd.get() < 0) {
+        owned_fd_.reset(open("/dev/null", O_RDWR | O_CLOEXEC));
+        if (owned_fd_ < 0) {
+            PLOG(ERROR) << "open /dev/null failed";
+            return false;
+        }
+        fd_ = owned_fd_;
+        is_dev_null_ = true;
+    } else {
+        fd_ = fd;
+    }
+    return true;
+}
+
 bool CowWriter::Initialize(unique_fd&& fd, OpenMode mode) {
     owned_fd_ = std::move(fd);
     return Initialize(borrowed_fd{owned_fd_}, mode);
 }
 
 bool CowWriter::Initialize(borrowed_fd fd, OpenMode mode) {
-    fd_ = fd;
-
-    if (!ParseOptions()) {
+    if (!SetFd(fd) || !ParseOptions()) {
         return false;
     }
 
@@ -139,9 +152,7 @@ bool CowWriter::InitializeAppend(android::base::unique_fd&& fd, uint64_t label) 
 }
 
 bool CowWriter::InitializeAppend(android::base::borrowed_fd fd, uint64_t label) {
-    fd_ = fd;
-
-    if (!ParseOptions()) {
+    if (!SetFd(fd) || !ParseOptions()) {
         return false;
     }
 
@@ -304,7 +315,7 @@ bool CowWriter::EmitLabel(uint64_t label) {
     CowOperation op = {};
     op.type = kCowLabelOp;
     op.source = label;
-    return WriteOperation(op) && !fsync(fd_.get());
+    return WriteOperation(op) && Sync();
 }
 
 std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) {
@@ -383,7 +394,7 @@ bool CowWriter::Finalize() {
         PLOG(ERROR) << "lseek ops failed";
         return false;
     }
-    return !fsync(fd_.get());
+    return Sync();
 }
 
 uint64_t CowWriter::GetCowSize() {
@@ -419,6 +430,17 @@ void CowWriter::AddOperation(const CowOperation& op) {
 
 bool CowWriter::WriteRawData(const void* data, size_t size) {
     if (!android::base::WriteFully(fd_, data, size)) {
+        return false;
+    }
+    return true;
+}
+
+bool CowWriter::Sync() {
+    if (is_dev_null_) {
+        return true;
+    }
+    if (fsync(fd_.get()) < 0) {
+        PLOG(ERROR) << "fsync failed";
         return false;
     }
     return true;
