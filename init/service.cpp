@@ -329,8 +329,8 @@ void Service::Reap(const siginfo_t& siginfo) {
                     LOG(FATAL) << "critical process '" << name_ << "' exited 4 times "
                                << exit_reason;
                 } else {
-                    LOG(ERROR) << "updatable process '" << name_ << "' exited 4 times "
-                               << exit_reason;
+                    LOG(ERROR) << "process with updatable components '" << name_
+                               << "' exited 4 times " << exit_reason;
                     // Notifies update_verifier and apexd
                     SetProperty("sys.init.updatable_crashing_process_name", name_);
                     SetProperty("sys.init.updatable_crashing", "1");
