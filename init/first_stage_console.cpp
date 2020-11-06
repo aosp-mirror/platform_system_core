@@ -30,6 +30,41 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 
+static bool KernelConsolePresent(const std::string& cmdline) {
+    size_t pos = 0;
+    while (true) {
+        pos = cmdline.find("console=", pos);
+        if (pos == std::string::npos) return false;
+        if (pos == 0 || cmdline[pos - 1] == ' ') return true;
+        pos++;
+    }
+}
+
+static bool SetupConsole() {
+    if (mknod("/dev/console", S_IFCHR | 0600, makedev(5, 1))) {
+        PLOG(ERROR) << "unable to create /dev/console";
+        return false;
+    }
+    int fd = -1;
+    int tries = 50;  // should timeout after 5s
+    // The device driver for console may not be ready yet so retry for a while in case of failure.
+    while (tries--) {
+        fd = open("/dev/console", O_RDWR);
+        if (fd != -1) break;
+        std::this_thread::sleep_for(100ms);
+    }
+    if (fd == -1) {
+        PLOG(ERROR) << "could not open /dev/console";
+        return false;
+    }
+    ioctl(fd, TIOCSCTTY, 0);
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    close(fd);
+    return true;
+}
+
 static void RunScript() {
     LOG(INFO) << "Attempting to run /first_stage.sh...";
     pid_t pid = fork();
@@ -48,11 +83,9 @@ static void RunScript() {
 namespace android {
 namespace init {
 
-void StartConsole() {
-    if (mknod("/dev/console", S_IFCHR | 0600, makedev(5, 1))) {
-        PLOG(ERROR) << "unable to create /dev/console";
-        return;
-    }
+void StartConsole(const std::string& cmdline) {
+    bool console = KernelConsolePresent(cmdline);
+
     pid_t pid = fork();
     if (pid != 0) {
         int status;
@@ -60,31 +93,15 @@ void StartConsole() {
         LOG(ERROR) << "console shell exited with status " << status;
         return;
     }
-    int fd = -1;
-    int tries = 50; // should timeout after 5s
-    // The device driver for console may not be ready yet so retry for a while in case of failure.
-    while (tries--) {
-        fd = open("/dev/console", O_RDWR);
-        if (fd != -1) {
-            break;
-        }
-        std::this_thread::sleep_for(100ms);
-    }
-    if (fd == -1) {
-        LOG(ERROR) << "Could not open /dev/console, errno = " << errno;
-        _exit(127);
-    }
-    ioctl(fd, TIOCSCTTY, 0);
-    dup2(fd, STDIN_FILENO);
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
-    close(fd);
 
+    if (console) console = SetupConsole();
     RunScript();
-    const char* path = "/system/bin/sh";
-    const char* args[] = {path, nullptr};
-    int rv = execv(path, const_cast<char**>(args));
-    LOG(ERROR) << "unable to execv, returned " << rv << " errno " << errno;
+    if (console) {
+        const char* path = "/system/bin/sh";
+        const char* args[] = {path, nullptr};
+        int rv = execv(path, const_cast<char**>(args));
+        LOG(ERROR) << "unable to execv, returned " << rv << " errno " << errno;
+    }
     _exit(127);
 }
 
