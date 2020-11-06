@@ -42,9 +42,9 @@ class ISnapshotWriter : public ICowWriter {
     // Open the writer in write mode (no append).
     virtual bool Initialize() = 0;
 
-    // Open the writer in append mode, optionally with the last label to resume
+    // Open the writer in append mode, with the last label to resume
     // from. See CowWriter::InitializeAppend.
-    virtual bool InitializeAppend(std::optional<uint64_t> label = {}) = 0;
+    virtual bool InitializeAppend(uint64_t label) = 0;
 
     virtual std::unique_ptr<FileDescriptor> OpenReader() = 0;
 
@@ -66,7 +66,7 @@ class CompressedSnapshotWriter : public ISnapshotWriter {
     bool SetCowDevice(android::base::unique_fd&& cow_device);
 
     bool Initialize() override;
-    bool InitializeAppend(std::optional<uint64_t> label = {}) override;
+    bool InitializeAppend(uint64_t label) override;
     bool Finalize() override;
     uint64_t GetCowSize() override;
     std::unique_ptr<FileDescriptor> OpenReader() override;
@@ -92,7 +92,7 @@ class OnlineKernelSnapshotWriter : public ISnapshotWriter {
     void SetSnapshotDevice(android::base::unique_fd&& snapshot_fd, uint64_t cow_size);
 
     bool Initialize() override { return true; }
-    bool InitializeAppend(std::optional<uint64_t>) override { return true; }
+    bool InitializeAppend(uint64_t) override { return true; }
 
     bool Finalize() override;
     uint64_t GetCowSize() override { return cow_size_; }
