@@ -135,6 +135,8 @@ class CowReader : public ICowReader {
 
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
+    void UpdateMergeProgress(uint64_t merge_ops) { header_.num_merge_ops += merge_ops; }
+
   private:
     bool ParseOps();
 
