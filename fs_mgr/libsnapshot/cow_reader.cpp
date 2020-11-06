@@ -246,8 +246,44 @@ const CowOperation& CowOpIter::Get() {
     return (*op_iter_);
 }
 
+class CowOpReverseIter final : public ICowOpReverseIter {
+  public:
+    explicit CowOpReverseIter(std::shared_ptr<std::vector<CowOperation>> ops);
+
+    bool Done() override;
+    const CowOperation& Get() override;
+    void Next() override;
+
+  private:
+    std::shared_ptr<std::vector<CowOperation>> ops_;
+    std::vector<CowOperation>::reverse_iterator op_riter_;
+};
+
+CowOpReverseIter::CowOpReverseIter(std::shared_ptr<std::vector<CowOperation>> ops) {
+    ops_ = ops;
+    op_riter_ = ops_.get()->rbegin();
+}
+
+bool CowOpReverseIter::Done() {
+    return op_riter_ == ops_.get()->rend();
+}
+
+void CowOpReverseIter::Next() {
+    CHECK(!Done());
+    op_riter_++;
+}
+
+const CowOperation& CowOpReverseIter::Get() {
+    CHECK(!Done());
+    return (*op_riter_);
+}
+
 std::unique_ptr<ICowOpIter> CowReader::GetOpIter() {
     return std::make_unique<CowOpIter>(ops_);
+}
+
+std::unique_ptr<ICowOpReverseIter> CowReader::GetRevOpIter() {
+    return std::make_unique<CowOpReverseIter>(ops_);
 }
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {
