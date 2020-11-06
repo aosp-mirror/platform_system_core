@@ -110,15 +110,28 @@ bool CowWriter::ParseOptions() {
     return true;
 }
 
+bool CowWriter::SetFd(android::base::borrowed_fd fd) {
+    if (fd.get() < 0) {
+        owned_fd_.reset(open("/dev/null", O_RDWR | O_CLOEXEC));
+        if (owned_fd_ < 0) {
+            PLOG(ERROR) << "open /dev/null failed";
+            return false;
+        }
+        fd_ = owned_fd_;
+        is_dev_null_ = true;
+    } else {
+        fd_ = fd;
+    }
+    return true;
+}
+
 bool CowWriter::Initialize(unique_fd&& fd, OpenMode mode) {
     owned_fd_ = std::move(fd);
     return Initialize(borrowed_fd{owned_fd_}, mode);
 }
 
 bool CowWriter::Initialize(borrowed_fd fd, OpenMode mode) {
-    fd_ = fd;
-
-    if (!ParseOptions()) {
+    if (!SetFd(fd) || !ParseOptions()) {
         return false;
     }
 
@@ -139,9 +152,7 @@ bool CowWriter::InitializeAppend(android::base::unique_fd&& fd, uint64_t label) 
 }
 
 bool CowWriter::InitializeAppend(android::base::borrowed_fd fd, uint64_t label) {
-    fd_ = fd;
-
-    if (!ParseOptions()) {
+    if (!SetFd(fd) || !ParseOptions()) {
         return false;
     }
 
@@ -171,10 +182,13 @@ bool CowWriter::OpenForWrite() {
     return true;
 }
 
-bool CowWriter::OpenForAppend() {
+bool CowWriter::OpenForAppend(std::optional<uint64_t> label) {
     auto reader = std::make_unique<CowReader>();
     bool incomplete = false;
+    bool add_next = false;
     std::queue<CowOperation> toAdd;
+    bool found_label = false;
+
     if (!reader->Parse(fd_) || !reader->GetHeader(&header_)) {
         return false;
     }
@@ -188,67 +202,37 @@ bool CowWriter::OpenForAppend() {
     ops_.resize(0);
 
     auto iter = reader->GetOpIter();
-    while (!iter->Done()) {
+    while (!iter->Done() && !found_label) {
         CowOperation op = iter->Get();
         if (op.type == kCowFooterOp) break;
-        if (incomplete) {
-            // Last operation translation may be corrupt. Wait to add it.
+        if (label.has_value()) {
+            if (op.type == kCowFooterOp) break;
             if (op.type == kCowLabelOp) {
-                while (!toAdd.empty()) {
-                    AddOperation(toAdd.front());
-                    toAdd.pop();
-                }
+                if (op.source == label) found_label = true;
             }
-            toAdd.push(op);
-        } else {
             AddOperation(op);
+        } else {
+            if (incomplete) {
+                // Last set of labeled operations may be corrupt. Wait to add it.
+                // We always sync after a label. If we see ops after a label, we
+                // can infer that sync must have completed.
+                if (add_next) {
+                    add_next = false;
+                    while (!toAdd.empty()) {
+                        AddOperation(toAdd.front());
+                        toAdd.pop();
+                    }
+                }
+                toAdd.push(op);
+                if (op.type == kCowLabelOp) add_next = true;
+            } else {
+                AddOperation(op);
+            }
         }
         iter->Next();
     }
 
-    // Free reader so we own the descriptor position again.
-    reader = nullptr;
-
-    // Position for new writing
-    if (ftruncate(fd_.get(), next_op_pos_) != 0) {
-        PLOG(ERROR) << "Failed to trim file";
-        return false;
-    }
-    if (lseek(fd_.get(), 0, SEEK_END) < 0) {
-        PLOG(ERROR) << "lseek failed";
-        return false;
-    }
-    return true;
-}
-
-bool CowWriter::OpenForAppend(uint64_t label) {
-    auto reader = std::make_unique<CowReader>();
-    std::queue<CowOperation> toAdd;
-    if (!reader->Parse(fd_) || !reader->GetHeader(&header_)) {
-        return false;
-    }
-
-    options_.block_size = header_.block_size;
-    bool found_label = false;
-
-    // Reset this, since we're going to reimport all operations.
-    footer_.op.num_ops = 0;
-    next_op_pos_ = sizeof(header_);
-    ops_.resize(0);
-
-    auto iter = reader->GetOpIter();
-    while (!iter->Done()) {
-        CowOperation op = iter->Get();
-        if (op.type == kCowFooterOp) break;
-        if (op.type == kCowLabelOp) {
-            if (found_label) break;
-            if (op.source == label) found_label = true;
-        }
-        AddOperation(op);
-        iter->Next();
-    }
-
-    if (!found_label) {
+    if (label.has_value() && !found_label) {
         LOG(ERROR) << "Failed to find last label";
         return false;
     }
@@ -331,7 +315,7 @@ bool CowWriter::EmitLabel(uint64_t label) {
     CowOperation op = {};
     op.type = kCowLabelOp;
     op.source = label;
-    return WriteOperation(op);
+    return WriteOperation(op) && Sync();
 }
 
 std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) {
@@ -410,7 +394,7 @@ bool CowWriter::Finalize() {
         PLOG(ERROR) << "lseek ops failed";
         return false;
     }
-    return true;
+    return Sync();
 }
 
 uint64_t CowWriter::GetCowSize() {
@@ -431,10 +415,11 @@ bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t 
     if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&op), sizeof(op))) {
         return false;
     }
-    if (data != NULL && size > 0)
+    if (data != nullptr && size > 0) {
         if (!WriteRawData(data, size)) return false;
+    }
     AddOperation(op);
-    return !fsync(fd_.get());
+    return true;
 }
 
 void CowWriter::AddOperation(const CowOperation& op) {
@@ -445,6 +430,17 @@ void CowWriter::AddOperation(const CowOperation& op) {
 
 bool CowWriter::WriteRawData(const void* data, size_t size) {
     if (!android::base::WriteFully(fd_, data, size)) {
+        return false;
+    }
+    return true;
+}
+
+bool CowWriter::Sync() {
+    if (is_dev_null_) {
+        return true;
+    }
+    if (fsync(fd_.get()) < 0) {
+        PLOG(ERROR) << "fsync failed";
         return false;
     }
     return true;
