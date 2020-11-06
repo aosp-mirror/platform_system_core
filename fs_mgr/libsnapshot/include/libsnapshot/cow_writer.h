@@ -82,19 +82,15 @@ class ICowWriter {
 
 class CowWriter : public ICowWriter {
   public:
-    enum class OpenMode { WRITE, APPEND };
-
     explicit CowWriter(const CowOptions& options);
 
     // Set up the writer.
-    // If opening for write, the file starts from the beginning.
-    // If opening for append, if the file has a footer, we start appending to the last op.
-    // If the footer isn't found, the last label is considered corrupt, and dropped.
+    // The file starts from the beginning.
     //
     // If fd is < 0, the CowWriter will be opened against /dev/null. This is for
     // computing COW sizes without using storage space.
-    bool Initialize(android::base::unique_fd&& fd, OpenMode mode = OpenMode::WRITE);
-    bool Initialize(android::base::borrowed_fd fd, OpenMode mode = OpenMode::WRITE);
+    bool Initialize(android::base::unique_fd&& fd);
+    bool Initialize(android::base::borrowed_fd fd);
     // Set up a writer, assuming that the given label is the last valid label.
     // This will result in dropping any labels that occur after the given on, and will fail
     // if the given label does not appear.
@@ -115,7 +111,7 @@ class CowWriter : public ICowWriter {
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();
-    bool OpenForAppend(std::optional<uint64_t> label = std::nullopt);
+    bool OpenForAppend(uint64_t label);
     bool GetDataPos(uint64_t* pos);
     bool WriteRawData(const void* data, size_t size);
     bool WriteOperation(const CowOperation& op, const void* data = nullptr, size_t size = 0);
