@@ -90,6 +90,9 @@ bool CompressedSnapshotReader::SetCow(std::unique_ptr<CowReader>&& cow) {
     op_iter_ = cow_->GetOpIter();
     while (!op_iter_->Done()) {
         const CowOperation* op = &op_iter_->Get();
+        if (op->type == kCowLabelOp || op->type == kCowFooterOp) {
+            continue;
+        }
         if (op->new_block >= ops_.size()) {
             ops_.resize(op->new_block + 1, nullptr);
         }
@@ -274,7 +277,7 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, IByteSink* sink, siz
             return -1;
         }
     } else {
-        LOG(ERROR) << "CompressedSnapshotReader unknown op type: " << op->type;
+        LOG(ERROR) << "CompressedSnapshotReader unknown op type: " << uint32_t(op->type);
         errno = EINVAL;
         return -1;
     }
