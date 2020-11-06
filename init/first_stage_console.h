@@ -28,7 +28,7 @@ enum FirstStageConsoleParam {
     MAX_PARAM_VALUE = IGNORE_FAILURE,
 };
 
-void StartConsole();
+void StartConsole(const std::string& cmdline);
 int FirstStageConsole(const std::string& cmdline);
 
 }  // namespace init
