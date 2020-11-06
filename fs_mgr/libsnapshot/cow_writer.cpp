@@ -125,25 +125,17 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
     return true;
 }
 
-bool CowWriter::Initialize(unique_fd&& fd, OpenMode mode) {
+bool CowWriter::Initialize(unique_fd&& fd) {
     owned_fd_ = std::move(fd);
-    return Initialize(borrowed_fd{owned_fd_}, mode);
+    return Initialize(borrowed_fd{owned_fd_});
 }
 
-bool CowWriter::Initialize(borrowed_fd fd, OpenMode mode) {
+bool CowWriter::Initialize(borrowed_fd fd) {
     if (!SetFd(fd) || !ParseOptions()) {
         return false;
     }
 
-    switch (mode) {
-        case OpenMode::WRITE:
-            return OpenForWrite();
-        case OpenMode::APPEND:
-            return OpenForAppend();
-        default:
-            LOG(ERROR) << "Unknown open mode in CowWriter";
-            return false;
-    }
+    return OpenForWrite();
 }
 
 bool CowWriter::InitializeAppend(android::base::unique_fd&& fd, uint64_t label) {
@@ -182,17 +174,15 @@ bool CowWriter::OpenForWrite() {
     return true;
 }
 
-bool CowWriter::OpenForAppend(std::optional<uint64_t> label) {
+bool CowWriter::OpenForAppend(uint64_t label) {
     auto reader = std::make_unique<CowReader>();
-    bool incomplete = false;
-    bool add_next = false;
     std::queue<CowOperation> toAdd;
     bool found_label = false;
 
     if (!reader->Parse(fd_) || !reader->GetHeader(&header_)) {
         return false;
     }
-    incomplete = !reader->GetFooter(&footer_);
+    reader->GetFooter(&footer_);
 
     options_.block_size = header_.block_size;
 
@@ -203,36 +193,16 @@ bool CowWriter::OpenForAppend(std::optional<uint64_t> label) {
 
     auto iter = reader->GetOpIter();
     while (!iter->Done() && !found_label) {
-        CowOperation op = iter->Get();
+        const CowOperation& op = iter->Get();
+
         if (op.type == kCowFooterOp) break;
-        if (label.has_value()) {
-            if (op.type == kCowFooterOp) break;
-            if (op.type == kCowLabelOp) {
-                if (op.source == label) found_label = true;
-            }
-            AddOperation(op);
-        } else {
-            if (incomplete) {
-                // Last set of labeled operations may be corrupt. Wait to add it.
-                // We always sync after a label. If we see ops after a label, we
-                // can infer that sync must have completed.
-                if (add_next) {
-                    add_next = false;
-                    while (!toAdd.empty()) {
-                        AddOperation(toAdd.front());
-                        toAdd.pop();
-                    }
-                }
-                toAdd.push(op);
-                if (op.type == kCowLabelOp) add_next = true;
-            } else {
-                AddOperation(op);
-            }
-        }
+        if (op.type == kCowLabelOp && op.source == label) found_label = true;
+        AddOperation(op);
+
         iter->Next();
     }
 
-    if (label.has_value() && !found_label) {
+    if (!found_label) {
         LOG(ERROR) << "Failed to find last label";
         return false;
     }
