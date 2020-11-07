@@ -35,6 +35,8 @@ using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 namespace android {
 namespace snapshot {
 
+static constexpr uint64_t kBlockSize = 4096;
+
 using namespace android::storage_literals;
 
 // Intersect two linear extents. If no intersection, return an extent with length 0.
@@ -149,7 +151,12 @@ uint64_t PartitionCowCreator::GetCowSize() {
 
         // Add an extra 2MB of wiggle room for any minor differences in labels/metadata
         // that might come up.
-        return update->estimate_cow_size() + 2_MiB;
+        auto size = update->estimate_cow_size() + 2_MiB;
+
+        // Align to nearest block.
+        size += kBlockSize - 1;
+        size &= ~(kBlockSize - 1);
+        return size;
     }
 
     // WARNING: The origin partition should be READ-ONLY
