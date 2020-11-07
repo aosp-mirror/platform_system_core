@@ -113,14 +113,11 @@ bool CompressedSnapshotWriter::EmitLabel(uint64_t label) {
 }
 
 bool CompressedSnapshotWriter::Initialize() {
-    return cow_->Initialize(cow_device_, CowWriter::OpenMode::WRITE);
+    return cow_->Initialize(cow_device_);
 }
 
-bool CompressedSnapshotWriter::InitializeAppend(std::optional<uint64_t> label) {
-    if (label) {
-        return cow_->InitializeAppend(cow_device_, *label);
-    }
-    return cow_->Initialize(cow_device_, CowWriter::OpenMode::APPEND);
+bool CompressedSnapshotWriter::InitializeAppend(uint64_t label) {
+    return cow_->InitializeAppend(cow_device_, label);
 }
 
 OnlineKernelSnapshotWriter::OnlineKernelSnapshotWriter(const CowOptions& options)
