@@ -91,6 +91,7 @@ bool CompressedSnapshotReader::SetCow(std::unique_ptr<CowReader>&& cow) {
     while (!op_iter_->Done()) {
         const CowOperation* op = &op_iter_->Get();
         if (op->type == kCowLabelOp || op->type == kCowFooterOp) {
+            op_iter_->Next();
             continue;
         }
         if (op->new_block >= ops_.size()) {
