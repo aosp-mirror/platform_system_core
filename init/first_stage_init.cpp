@@ -307,7 +307,7 @@ int FirstStageMain(int argc, char** argv) {
     }
 
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
-        StartConsole();
+        StartConsole(cmdline);
     }
 
     if (access(kBootImageRamdiskProp, F_OK) == 0) {
