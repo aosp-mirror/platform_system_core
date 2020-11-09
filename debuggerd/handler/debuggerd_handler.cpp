@@ -313,7 +313,7 @@ static DebuggerdDumpType get_dump_type(const debugger_thread_info* thread_info) 
     return kDebuggerdNativeBacktrace;
   }
 
-  return kDebuggerdTombstone;
+  return kDebuggerdTombstoneProto;
 }
 
 static int debuggerd_dispatch_pseudothread(void* arg) {
