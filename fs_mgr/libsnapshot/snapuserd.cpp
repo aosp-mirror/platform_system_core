@@ -159,7 +159,7 @@ int Snapuserd::ReadData(chunk_t chunk, size_t size) {
     CHECK((read_size & (BLOCK_SIZE - 1)) == 0);
 
     while (read_size > 0) {
-        const CowOperation* cow_op = chunk_vec_[chunk_key];
+        const CowOperation* cow_op = chunk_map_[chunk_key];
         CHECK(cow_op != nullptr);
         int result;
 
@@ -201,6 +201,8 @@ int Snapuserd::ReadData(chunk_t chunk, size_t size) {
         // constructing the metadata, we know that the chunk IDs
         // are contiguous
         chunk_key += 1;
+
+        if (cow_op->type == kCowCopyOp) CHECK(read_size == 0);
 
         // This is similar to the way when chunk IDs were assigned
         // in ReadMetadata().
@@ -287,6 +289,24 @@ int Snapuserd::ReadDiskExceptions(chunk_t chunk, size_t read_size) {
     return size;
 }
 
+bool Snapuserd::IsChunkIdMetadata(chunk_t chunk) {
+    uint32_t stride = exceptions_per_area_ + 1;
+    lldiv_t divresult = lldiv(chunk, stride);
+
+    return divresult.rem == NUM_SNAPSHOT_HDR_CHUNKS;
+}
+
+// Find the next free chunk-id to be assigned. Check if the next free
+// chunk-id represents a metadata page. If so, skip it.
+chunk_t Snapuserd::GetNextAllocatableChunkId(chunk_t chunk) {
+    chunk_t next_chunk = chunk + 1;
+
+    if (IsChunkIdMetadata(next_chunk)) {
+        next_chunk += 1;
+    }
+    return next_chunk;
+}
+
 /*
  * Read the metadata from COW device and
  * construct the metadata as required by the kernel.
@@ -304,12 +324,26 @@ int Snapuserd::ReadDiskExceptions(chunk_t chunk, size_t read_size) {
  *    This represents the old_chunk in the kernel COW format
  * 4: We need to assign new_chunk for a corresponding old_chunk
  * 5: The algorithm is similar to how kernel assigns chunk number
- *    while creating exceptions.
+ *    while creating exceptions. However, there are few cases
+ *    which needs to be addressed here:
+ *      a: During merge process, kernel scans the metadata page
+ *      from backwards when merge is initiated. Since, we need
+ *      to make sure that the merge ordering follows our COW format,
+ *      we read the COW operation from backwards and populate the
+ *      metadata so that when kernel starts the merging from backwards,
+ *      those ops correspond to the beginning of our COW format.
+ *      b: Kernel can merge successive operations if the two chunk IDs
+ *      are contiguous. This can be problematic when there is a crash
+ *      during merge; specifically when the merge operation has dependency.
+ *      These dependencies can only happen during copy operations.
+ *
+ *      To avoid this problem, we make sure that no two copy-operations
+ *      do not have contiguous chunk IDs. Additionally, we make sure
+ *      that each copy operation is merged individually.
  * 6: Use a monotonically increasing chunk number to assign the
  *    new_chunk
  * 7: Each chunk-id represents either a: Metadata page or b: Data page
- * 8: Chunk-id representing a data page is stored in a vector. Index is the
- *    chunk-id and value is the pointer to the CowOperation
+ * 8: Chunk-id representing a data page is stored in a map.
  * 9: Chunk-id representing a metadata page is converted into a vector
  *    index. We store this in vector as kernel requests metadata during
  *    two stage:
@@ -327,7 +361,10 @@ int Snapuserd::ReadDiskExceptions(chunk_t chunk, size_t read_size) {
 int Snapuserd::ReadMetadata() {
     reader_ = std::make_unique<CowReader>();
     CowHeader header;
-    CowFooter footer;
+    CowOptions options;
+    bool prev_copy_op = false;
+
+    LOG(DEBUG) << "ReadMetadata Start...";
 
     if (!reader_->Parse(cow_fd_)) {
         LOG(ERROR) << "Failed to parse";
@@ -339,48 +376,33 @@ int Snapuserd::ReadMetadata() {
         return 1;
     }
 
-    if (!reader_->GetFooter(&footer)) {
-        LOG(ERROR) << "Failed to get footer";
-        return 1;
-    }
-
     CHECK(header.block_size == BLOCK_SIZE);
 
-    LOG(DEBUG) << "Num-ops: " << std::hex << footer.op.num_ops;
-    LOG(DEBUG) << "ops-size: " << std::hex << footer.op.ops_size;
-
-    cowop_iter_ = reader_->GetOpIter();
-
-    if (cowop_iter_ == nullptr) {
-        LOG(ERROR) << "Failed to get cowop_iter";
-        return 1;
-    }
+    cowop_riter_ = reader_->GetRevOpIter();
 
     exceptions_per_area_ = (CHUNK_SIZE << SECTOR_SHIFT) / sizeof(struct disk_exception);
 
     // Start from chunk number 2. Chunk 0 represents header and chunk 1
     // represents first metadata page.
     chunk_t next_free = NUM_SNAPSHOT_HDR_CHUNKS + 1;
-    chunk_vec_.push_back(nullptr);
-    chunk_vec_.push_back(nullptr);
 
     loff_t offset = 0;
     std::unique_ptr<uint8_t[]> de_ptr =
             std::make_unique<uint8_t[]>(exceptions_per_area_ * sizeof(struct disk_exception));
 
     // This memset is important. Kernel will stop issuing IO when new-chunk ID
-    // is 0. When Area is not filled completely will all 256 exceptions,
+    // is 0. When Area is not filled completely with all 256 exceptions,
     // this memset will ensure that metadata read is completed.
     memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
     size_t num_ops = 0;
 
-    while (!cowop_iter_->Done()) {
-        const CowOperation* cow_op = &cowop_iter_->Get();
+    while (!cowop_riter_->Done()) {
+        const CowOperation* cow_op = &cowop_riter_->Get();
         struct disk_exception* de =
                 reinterpret_cast<struct disk_exception*>((char*)de_ptr.get() + offset);
 
         if (cow_op->type == kCowFooterOp || cow_op->type == kCowLabelOp) {
-            cowop_iter_->Next();
+            cowop_riter_->Next();
             continue;
         }
 
@@ -390,61 +412,52 @@ int Snapuserd::ReadMetadata() {
             return 1;
         }
 
+        if ((cow_op->type == kCowCopyOp || prev_copy_op)) {
+            next_free = GetNextAllocatableChunkId(next_free);
+        }
+
+        prev_copy_op = (cow_op->type == kCowCopyOp);
+
         // Construct the disk-exception
         de->old_chunk = cow_op->new_block;
         de->new_chunk = next_free;
 
         LOG(DEBUG) << "Old-chunk: " << de->old_chunk << "New-chunk: " << de->new_chunk;
 
-        // Store operation pointer. Note, new-chunk ID is the index
-        chunk_vec_.push_back(cow_op);
-        CHECK(next_free == (chunk_vec_.size() - 1));
+        // Store operation pointer.
+        chunk_map_[next_free] = cow_op;
+        num_ops += 1;
 
         offset += sizeof(struct disk_exception);
 
-        cowop_iter_->Next();
+        cowop_riter_->Next();
 
-        // Find the next free chunk-id to be assigned. Check if the next free
-        // chunk-id represents a metadata page. If so, skip it.
-        next_free += 1;
-        uint32_t stride = exceptions_per_area_ + 1;
-        lldiv_t divresult = lldiv(next_free, stride);
-        num_ops += 1;
-
-        if (divresult.rem == NUM_SNAPSHOT_HDR_CHUNKS) {
-            CHECK(num_ops == exceptions_per_area_);
+        if (num_ops == exceptions_per_area_) {
             // Store it in vector at the right index. This maps the chunk-id to
             // vector index.
             vec_.push_back(std::move(de_ptr));
             offset = 0;
             num_ops = 0;
 
-            chunk_t metadata_chunk = (next_free - exceptions_per_area_ - NUM_SNAPSHOT_HDR_CHUNKS);
-
-            LOG(DEBUG) << "Area: " << vec_.size() - 1;
-            LOG(DEBUG) << "Metadata-chunk: " << metadata_chunk;
-            LOG(DEBUG) << "Sector number of Metadata-chunk: " << (metadata_chunk << CHUNK_SHIFT);
-
             // Create buffer for next area
             de_ptr = std::make_unique<uint8_t[]>(exceptions_per_area_ *
                                                  sizeof(struct disk_exception));
             memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
 
-            // Since this is a metadata, store at this index
-            chunk_vec_.push_back(nullptr);
-
-            // Find the next free chunk-id
-            next_free += 1;
-            if (cowop_iter_->Done()) {
+            if (cowop_riter_->Done()) {
                 vec_.push_back(std::move(de_ptr));
+                LOG(DEBUG) << "ReadMetadata() completed; Number of Areas: " << vec_.size();
             }
         }
+
+        next_free = GetNextAllocatableChunkId(next_free);
     }
 
     // Partially filled area
     if (num_ops) {
-        LOG(DEBUG) << "Partially filled area num_ops: " << num_ops;
         vec_.push_back(std::move(de_ptr));
+        LOG(DEBUG) << "ReadMetadata() completed. Partially filled area num_ops: " << num_ops
+                   << "Areas : " << vec_.size();
     }
 
     return 0;
@@ -569,13 +582,7 @@ int Snapuserd::Run() {
                     // vector, then it points to a metadata page.
                     chunk_t chunk = (header->sector >> CHUNK_SHIFT);
 
-                    if (chunk >= chunk_vec_.size()) {
-                        ret = ZerofillDiskExceptions(read_size);
-                        if (ret < 0) {
-                            LOG(ERROR) << "ZerofillDiskExceptions failed";
-                            return ret;
-                        }
-                    } else if (chunk_vec_[chunk] == nullptr) {
+                    if (chunk_map_.find(chunk) == chunk_map_.end()) {
                         ret = ReadDiskExceptions(chunk, read_size);
                         if (ret < 0) {
                             LOG(ERROR) << "ReadDiskExceptions failed";
