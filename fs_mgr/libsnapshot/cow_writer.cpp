@@ -191,12 +191,10 @@ bool CowWriter::OpenForWrite() {
 bool CowWriter::OpenForAppend(uint64_t label) {
     auto reader = std::make_unique<CowReader>();
     std::queue<CowOperation> toAdd;
-    bool found_label = false;
 
-    if (!reader->Parse(fd_) || !reader->GetHeader(&header_)) {
+    if (!reader->Parse(fd_, {label}) || !reader->GetHeader(&header_)) {
         return false;
     }
-    reader->GetFooter(&footer_);
 
     options_.block_size = header_.block_size;
 
@@ -206,19 +204,9 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     ops_.resize(0);
 
     auto iter = reader->GetOpIter();
-    while (!iter->Done() && !found_label) {
-        const CowOperation& op = iter->Get();
-
-        if (op.type == kCowFooterOp) break;
-        if (op.type == kCowLabelOp && op.source == label) found_label = true;
-        AddOperation(op);
-
+    while (!iter->Done()) {
+        AddOperation(iter->Get());
         iter->Next();
-    }
-
-    if (!found_label) {
-        LOG(ERROR) << "Failed to find last label";
-        return false;
     }
 
     // Free reader so we own the descriptor position again.
