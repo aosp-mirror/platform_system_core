@@ -122,6 +122,13 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
         is_dev_null_ = true;
     } else {
         fd_ = fd;
+
+        struct stat stat;
+        if (fstat(fd.get(), &stat) < 0) {
+            PLOG(ERROR) << "fstat failed";
+            return false;
+        }
+        is_block_device_ = S_ISBLK(stat.st_mode);
     }
     return true;
 }
@@ -217,12 +224,11 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     // Free reader so we own the descriptor position again.
     reader = nullptr;
 
-    // Position for new writing
-    if (ftruncate(fd_.get(), next_op_pos_) != 0) {
-        PLOG(ERROR) << "Failed to trim file";
+    // Remove excess data
+    if (!Truncate(next_op_pos_)) {
         return false;
     }
-    if (lseek(fd_.get(), 0, SEEK_END) < 0) {
+    if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed";
         return false;
     }
@@ -443,6 +449,17 @@ bool CowWriter::CommitMerge(int merged_ops) {
     }
 
     return Sync();
+}
+
+bool CowWriter::Truncate(off_t length) {
+    if (is_dev_null_ || is_block_device_) {
+        return true;
+    }
+    if (ftruncate(fd_.get(), length) < 0) {
+        PLOG(ERROR) << "Failed to truncate.";
+        return false;
+    }
+    return true;
 }
 
 }  // namespace snapshot
