@@ -342,6 +342,9 @@ void InitializeSubcontext() {
                 new Subcontext(std::vector<std::string>{"/vendor", "/odm"}, kVendorContext));
     }
 }
+void InitializeHostSubcontext(std::vector<std::string> vendor_prefixes) {
+    subcontext.reset(new Subcontext(vendor_prefixes, kVendorContext, /*host=*/true));
+}
 
 Subcontext* GetSubcontext() {
     return subcontext.get();
