@@ -74,6 +74,7 @@ class Snapuserd final {
 
   private:
     int ReadDmUserHeader();
+    bool ReadDmUserPayload(void* buffer, size_t size);
     int WriteDmUserPayload(size_t size);
     int ConstructKernelCowHeader();
     int ReadMetadata();
@@ -86,6 +87,13 @@ class Snapuserd final {
     int ProcessReplaceOp(const CowOperation* cow_op);
     int ProcessCopyOp(const CowOperation* cow_op);
     int ProcessZeroOp();
+
+    loff_t GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer,
+                               int* unmerged_exceptions);
+    int GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, loff_t offset,
+                             int unmerged_exceptions);
+    bool AdvanceMergedOps(int merged_ops_cur_iter);
+    bool ProcessMergeComplete(chunk_t chunk, void* buffer);
 
     std::string cow_device_;
     std::string backing_store_device_;
@@ -100,6 +108,7 @@ class Snapuserd final {
     std::unique_ptr<ICowOpIter> cowop_iter_;
     std::unique_ptr<ICowOpReverseIter> cowop_riter_;
     std::unique_ptr<CowReader> reader_;
+    std::unique_ptr<CowWriter> writer_;
 
     // Vector of disk exception which is a
     // mapping of old-chunk to new-chunk

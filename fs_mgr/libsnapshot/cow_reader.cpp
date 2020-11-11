@@ -193,6 +193,26 @@ bool CowReader::ParseOps() {
     } else {
         LOG(INFO) << "No Footer, recovered data";
     }
+
+    if (header_.num_merge_ops > 0) {
+        uint64_t merge_ops = header_.num_merge_ops;
+        uint64_t metadata_ops = 0;
+        current_op_num = 0;
+
+        CHECK(ops_buffer->size() >= merge_ops);
+        while (merge_ops) {
+            auto& current_op = ops_buffer->data()[current_op_num];
+            if (current_op.type == kCowLabelOp || current_op.type == kCowFooterOp) {
+                metadata_ops += 1;
+            } else {
+                merge_ops -= 1;
+            }
+            current_op_num += 1;
+        }
+        ops_buffer->erase(ops_buffer.get()->begin(),
+                          ops_buffer.get()->begin() + header_.num_merge_ops + metadata_ops);
+    }
+
     ops_ = ops_buffer;
     return true;
 }

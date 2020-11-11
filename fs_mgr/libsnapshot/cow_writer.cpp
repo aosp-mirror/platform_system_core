@@ -91,6 +91,7 @@ void CowWriter::SetupHeaders() {
     header_.header_size = sizeof(CowHeader);
     header_.footer_size = sizeof(CowFooter);
     header_.block_size = options_.block_size;
+    header_.num_merge_ops = 0;
     footer_ = {};
     footer_.op.data_length = 64;
     footer_.op.type = kCowFooterOp;
@@ -123,6 +124,12 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
         fd_ = fd;
     }
     return true;
+}
+
+void CowWriter::InitializeMerge(borrowed_fd fd, CowHeader* header) {
+    fd_ = fd;
+    memcpy(&header_, header, sizeof(CowHeader));
+    merge_in_progress_ = true;
 }
 
 bool CowWriter::Initialize(unique_fd&& fd) {
@@ -223,6 +230,7 @@ bool CowWriter::OpenForAppend(uint64_t label) {
 }
 
 bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
+    CHECK(!merge_in_progress_);
     CowOperation op = {};
     op.type = kCowCopyOp;
     op.new_block = new_block;
@@ -233,6 +241,7 @@ bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
 bool CowWriter::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
     uint64_t pos;
+    CHECK(!merge_in_progress_);
     for (size_t i = 0; i < size / header_.block_size; i++) {
         CowOperation op = {};
         op.type = kCowReplaceOp;
@@ -271,6 +280,7 @@ bool CowWriter::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t
 }
 
 bool CowWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
+    CHECK(!merge_in_progress_);
     for (uint64_t i = 0; i < num_blocks; i++) {
         CowOperation op = {};
         op.type = kCowZeroOp;
@@ -282,6 +292,7 @@ bool CowWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
 }
 
 bool CowWriter::EmitLabel(uint64_t label) {
+    CHECK(!merge_in_progress_);
     CowOperation op = {};
     op.type = kCowLabelOp;
     op.source = label;
@@ -414,6 +425,24 @@ bool CowWriter::Sync() {
         return false;
     }
     return true;
+}
+
+bool CowWriter::CommitMerge(int merged_ops) {
+    CHECK(merge_in_progress_);
+    header_.num_merge_ops += merged_ops;
+
+    if (lseek(fd_.get(), 0, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek failed";
+        return false;
+    }
+
+    if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&header_),
+                                   sizeof(header_))) {
+        PLOG(ERROR) << "WriteFully failed";
+        return false;
+    }
+
+    return Sync();
 }
 
 }  // namespace snapshot
