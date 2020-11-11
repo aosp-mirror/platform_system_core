@@ -24,6 +24,7 @@
 #include <limits>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <android-base/file.h>
@@ -69,6 +70,9 @@ class Snapuserd final {
 
     bool Init();
     int Run();
+    const std::string& GetControlDevicePath() { return control_device_; }
+
+  private:
     int ReadDmUserHeader();
     int WriteDmUserPayload(size_t size);
     int ConstructKernelCowHeader();
@@ -76,10 +80,9 @@ class Snapuserd final {
     int ZerofillDiskExceptions(size_t read_size);
     int ReadDiskExceptions(chunk_t chunk, size_t size);
     int ReadData(chunk_t chunk, size_t size);
+    bool IsChunkIdMetadata(chunk_t chunk);
+    chunk_t GetNextAllocatableChunkId(chunk_t chunk);
 
-    const std::string& GetControlDevicePath() { return control_device_; }
-
-  private:
     int ProcessReplaceOp(const CowOperation* cow_op);
     int ProcessCopyOp(const CowOperation* cow_op);
     int ProcessZeroOp();
@@ -95,15 +98,16 @@ class Snapuserd final {
     uint32_t exceptions_per_area_;
 
     std::unique_ptr<ICowOpIter> cowop_iter_;
+    std::unique_ptr<ICowOpReverseIter> cowop_riter_;
     std::unique_ptr<CowReader> reader_;
 
     // Vector of disk exception which is a
     // mapping of old-chunk to new-chunk
     std::vector<std::unique_ptr<uint8_t[]>> vec_;
 
-    // Index - Chunk ID
+    // Key - Chunk ID
     // Value - cow operation
-    std::vector<const CowOperation*> chunk_vec_;
+    std::unordered_map<chunk_t, const CowOperation*> chunk_map_;
 
     bool metadata_read_done_;
     BufferSink bufsink_;
