@@ -36,6 +36,7 @@ namespace snapshot {
 static constexpr uint32_t MAX_PACKET_SIZE = 512;
 
 enum class DaemonOperations {
+    INIT,
     START,
     QUERY,
     STOP,
