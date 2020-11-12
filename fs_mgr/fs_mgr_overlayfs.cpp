@@ -1097,7 +1097,7 @@ static bool CreateDynamicScratch(std::string* scratch_device, bool* partition_ex
 
 static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exists, bool* change) {
     *partition_exists = false;
-    *change = false;
+    if (change) *change = false;
 
     auto images = IImageManager::Open("remount", 10s);
     if (!images) {
@@ -1117,7 +1117,7 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
         return false;
     }
 
-    *change = true;
+    if (change) *change = true;
 
     // Note: calling RemoveDisabledImages here ensures that we do not race with
     // clean_scratch_files and accidentally try to map an image that will be
