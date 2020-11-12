@@ -122,6 +122,13 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
         is_dev_null_ = true;
     } else {
         fd_ = fd;
+
+        struct stat stat;
+        if (fstat(fd.get(), &stat) < 0) {
+            PLOG(ERROR) << "fstat failed";
+            return false;
+        }
+        is_block_device_ = S_ISBLK(stat.st_mode);
     }
     return true;
 }
@@ -184,12 +191,10 @@ bool CowWriter::OpenForWrite() {
 bool CowWriter::OpenForAppend(uint64_t label) {
     auto reader = std::make_unique<CowReader>();
     std::queue<CowOperation> toAdd;
-    bool found_label = false;
 
-    if (!reader->Parse(fd_) || !reader->GetHeader(&header_)) {
+    if (!reader->Parse(fd_, {label}) || !reader->GetHeader(&header_)) {
         return false;
     }
-    reader->GetFooter(&footer_);
 
     options_.block_size = header_.block_size;
 
@@ -199,30 +204,19 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     ops_.resize(0);
 
     auto iter = reader->GetOpIter();
-    while (!iter->Done() && !found_label) {
-        const CowOperation& op = iter->Get();
-
-        if (op.type == kCowFooterOp) break;
-        if (op.type == kCowLabelOp && op.source == label) found_label = true;
-        AddOperation(op);
-
+    while (!iter->Done()) {
+        AddOperation(iter->Get());
         iter->Next();
-    }
-
-    if (!found_label) {
-        LOG(ERROR) << "Failed to find last label";
-        return false;
     }
 
     // Free reader so we own the descriptor position again.
     reader = nullptr;
 
-    // Position for new writing
-    if (ftruncate(fd_.get(), next_op_pos_) != 0) {
-        PLOG(ERROR) << "Failed to trim file";
+    // Remove excess data
+    if (!Truncate(next_op_pos_)) {
         return false;
     }
-    if (lseek(fd_.get(), 0, SEEK_END) < 0) {
+    if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed";
         return false;
     }
@@ -443,6 +437,17 @@ bool CowWriter::CommitMerge(int merged_ops) {
     }
 
     return Sync();
+}
+
+bool CowWriter::Truncate(off_t length) {
+    if (is_dev_null_ || is_block_device_) {
+        return true;
+    }
+    if (ftruncate(fd_.get(), length) < 0) {
+        PLOG(ERROR) << "Failed to truncate.";
+        return false;
+    }
+    return true;
 }
 
 }  // namespace snapshot
