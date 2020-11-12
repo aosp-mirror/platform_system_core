@@ -123,6 +123,7 @@ class CowWriter : public ICowWriter {
 
     bool SetFd(android::base::borrowed_fd fd);
     bool Sync();
+    bool Truncate(off_t length);
 
   private:
     android::base::unique_fd owned_fd_;
@@ -133,6 +134,7 @@ class CowWriter : public ICowWriter {
     uint64_t next_op_pos_ = 0;
     bool is_dev_null_ = false;
     bool merge_in_progress_ = false;
+    bool is_block_device_ = false;
 
     // :TODO: this is not efficient, but stringstream ubsan aborts because some
     // bytes overflow a signed char.
