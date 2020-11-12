@@ -229,4 +229,16 @@ TEST(String16Test, EmptyStringIsStatic) {
     EXPECT_TRUE(tmp.isStaticString());
 }
 
+TEST(String16Test, OverreadUtf8Conversion) {
+    char tmp[] = {'a', static_cast<char>(0xe0), '\0'};
+    String16 another(tmp);
+    EXPECT_TRUE(another.size() == 0);
+}
+
+TEST(String16Test, ValidUtf8Conversion) {
+    String16 another("abcdef");
+    EXPECT_EQ(6U, another.size());
+    EXPECT_STR16EQ(another, u"abcdef");
+}
+
 }  // namespace android

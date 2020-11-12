@@ -96,4 +96,9 @@ TEST_F(String8Test, CheckUtf32Conversion) {
     EXPECT_EQ(10U, string8.length());
 }
 
+TEST_F(String8Test, ValidUtf16Conversion) {
+    char16_t tmp[] = u"abcdef";
+    String8 valid = String8(String16(tmp));
+    EXPECT_STREQ(valid, "abcdef");
+}
 }
