@@ -33,6 +33,7 @@ namespace android {
 namespace snapshot {
 
 DaemonOperations SnapuserdServer::Resolveop(std::string& input) {
+    if (input == "init") return DaemonOperations::INIT;
     if (input == "start") return DaemonOperations::START;
     if (input == "stop") return DaemonOperations::STOP;
     if (input == "query") return DaemonOperations::QUERY;
@@ -123,6 +124,32 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
     DaemonOperations op = Resolveop(out[0]);
 
     switch (op) {
+        case DaemonOperations::INIT: {
+            // Message format:
+            // init,<cow_device_path>
+            //
+            // Reads the metadata and send the number of sectors
+            if (out.size() != 2) {
+                LOG(ERROR) << "Malformed init message, " << out.size() << " parts";
+                return Sendmsg(fd, "fail");
+            }
+
+            auto snapuserd = std::make_unique<Snapuserd>();
+            if (!snapuserd->InitCowDevice(out[1])) {
+                LOG(ERROR) << "Failed to initialize Snapuserd";
+                return Sendmsg(fd, "fail");
+            }
+
+            std::string retval = "success," + std::to_string(snapuserd->GetNumSectors());
+
+            auto handler = std::make_unique<DmUserHandler>(std::move(snapuserd));
+            {
+                std::lock_guard<std::mutex> lock(lock_);
+                dm_users_.push_back(std::move(handler));
+            }
+
+            return Sendmsg(fd, retval);
+        }
         case DaemonOperations::START: {
             // Message format:
             // start,<cow_device_path>,<source_device_path>,<control_device>
@@ -133,21 +160,29 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
                 return Sendmsg(fd, "fail");
             }
 
-            auto snapuserd = std::make_unique<Snapuserd>(out[1], out[2], out[3]);
-            if (!snapuserd->Init()) {
-                LOG(ERROR) << "Failed to initialize Snapuserd";
-                return Sendmsg(fd, "fail");
-            }
-
-            auto handler = std::make_unique<DmUserHandler>(std::move(snapuserd));
+            bool found = false;
             {
                 std::lock_guard<std::mutex> lock(lock_);
-
-                handler->thread() =
-                        std::thread(std::bind(&SnapuserdServer::RunThread, this, handler.get()));
-                dm_users_.push_back(std::move(handler));
+                auto iter = dm_users_.begin();
+                while (iter != dm_users_.end()) {
+                    if ((*iter)->snapuserd()->GetCowDevice() == out[1]) {
+                        if (!((*iter)->snapuserd()->InitBackingAndControlDevice(out[2], out[3]))) {
+                            LOG(ERROR) << "Failed to initialize control device: " << out[3];
+                            break;
+                        }
+                        (*iter)->thread() = std::thread(
+                                std::bind(&SnapuserdServer::RunThread, this, (*iter).get()));
+                        found = true;
+                        break;
+                    }
+                    iter++;
+                }
             }
-            return Sendmsg(fd, "success");
+            if (found) {
+                return Sendmsg(fd, "success");
+            } else {
+                return Sendmsg(fd, "fail");
+            }
         }
         case DaemonOperations::STOP: {
             // Message format: stop
@@ -172,7 +207,7 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
         }
         case DaemonOperations::DELETE: {
             // Message format:
-            // delete,<cow_device_path>
+            // delete,<control_device_path>
             if (out.size() != 2) {
                 LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
                 return Sendmsg(fd, "fail");
