@@ -97,6 +97,9 @@ class CowWriter : public ICowWriter {
     bool InitializeAppend(android::base::unique_fd&&, uint64_t label);
     bool InitializeAppend(android::base::borrowed_fd fd, uint64_t label);
 
+    void InitializeMerge(android::base::borrowed_fd fd, CowHeader* header);
+    bool CommitMerge(int merged_ops);
+
     bool Finalize() override;
 
     uint64_t GetCowSize() override;
@@ -129,6 +132,7 @@ class CowWriter : public ICowWriter {
     int compression_ = 0;
     uint64_t next_op_pos_ = 0;
     bool is_dev_null_ = false;
+    bool merge_in_progress_ = false;
 
     // :TODO: this is not efficient, but stringstream ubsan aborts because some
     // bytes overflow a signed char.
