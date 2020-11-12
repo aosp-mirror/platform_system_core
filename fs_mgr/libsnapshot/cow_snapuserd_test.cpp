@@ -108,6 +108,8 @@ class SnapuserdTest : public ::testing::Test {
     std::unique_ptr<uint8_t[]> product_buffer_;
 
     void Init();
+    void InitCowDevices();
+    void InitDaemon();
     void CreateCowDevice(std::unique_ptr<TemporaryFile>& cow);
     void CreateSystemDmUser(std::unique_ptr<TemporaryFile>& cow);
     void CreateProductDmUser(std::unique_ptr<TemporaryFile>& cow);
@@ -238,12 +240,6 @@ void SnapuserdTest::CreateSystemDmUser(std::unique_ptr<TemporaryFile>& cow) {
     system_device_name_.clear();
     system_device_ctrl_name_.clear();
 
-    // Create a COW device. Number of sectors is chosen random which can
-    // hold at least 400MB of data
-
-    int err = ioctl(sys_fd_.get(), BLKGETSIZE, &system_blksize_);
-    ASSERT_GE(err, 0);
-
     std::string str(cow->path);
     std::size_t found = str.find_last_of("/\\");
     ASSERT_NE(found, std::string::npos);
@@ -280,12 +276,6 @@ void SnapuserdTest::CreateProductDmUser(std::unique_ptr<TemporaryFile>& cow) {
     product_device_name_.clear();
     product_device_ctrl_name_.clear();
 
-    // Create a COW device. Number of sectors is chosen random which can
-    // hold at least 400MB of data
-
-    int err = ioctl(product_fd_.get(), BLKGETSIZE, &product_blksize_);
-    ASSERT_GE(err, 0);
-
     std::string str(cow->path);
     std::size_t found = str.find_last_of("/\\");
     ASSERT_NE(found, std::string::npos);
@@ -297,12 +287,15 @@ void SnapuserdTest::CreateProductDmUser(std::unique_ptr<TemporaryFile>& cow) {
     system(cmd.c_str());
 }
 
-void SnapuserdTest::StartSnapuserdDaemon() {
-    ASSERT_TRUE(EnsureSnapuserdStarted());
+void SnapuserdTest::InitCowDevices() {
+    system_blksize_ = client_->InitDmUserCow(cow_system_->path);
+    ASSERT_NE(system_blksize_, 0);
 
-    client_ = SnapuserdClient::Connect(kSnapuserdSocket, 5s);
-    ASSERT_NE(client_, nullptr);
+    product_blksize_ = client_->InitDmUserCow(cow_product_->path);
+    ASSERT_NE(product_blksize_, 0);
+}
 
+void SnapuserdTest::InitDaemon() {
     bool ok = client_->InitializeSnapuserd(cow_system_->path, system_a_loop_->device(),
                                            GetSystemControlPath());
     ASSERT_TRUE(ok);
@@ -310,6 +303,13 @@ void SnapuserdTest::StartSnapuserdDaemon() {
     ok = client_->InitializeSnapuserd(cow_product_->path, product_a_loop_->device(),
                                       GetProductControlPath());
     ASSERT_TRUE(ok);
+}
+
+void SnapuserdTest::StartSnapuserdDaemon() {
+    ASSERT_TRUE(EnsureSnapuserdStarted());
+
+    client_ = SnapuserdClient::Connect(kSnapuserdSocket, 5s);
+    ASSERT_NE(client_, nullptr);
 }
 
 void SnapuserdTest::CreateSnapshotDevices() {
@@ -435,10 +435,13 @@ TEST_F(SnapuserdTest, ReadWrite) {
     CreateCowDevice(cow_system_);
     CreateCowDevice(cow_product_);
 
+    StartSnapuserdDaemon();
+    InitCowDevices();
+
     CreateSystemDmUser(cow_system_);
     CreateProductDmUser(cow_product_);
 
-    StartSnapuserdDaemon();
+    InitDaemon();
 
     CreateSnapshotDevices();
 

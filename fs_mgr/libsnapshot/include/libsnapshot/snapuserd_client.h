@@ -58,7 +58,7 @@ class SnapuserdClient {
                                                     std::chrono::milliseconds timeout_ms);
 
     bool StopSnapuserd();
-    int RestartSnapuserd(std::vector<std::vector<std::string>>& vec);
+    uint64_t InitDmUserCow(const std::string& cow_device);
     bool InitializeSnapuserd(const std::string& cow_device, const std::string& backing_device,
                              const std::string& control_device);
 

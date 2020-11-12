@@ -61,23 +61,19 @@ class BufferSink : public IByteSink {
 
 class Snapuserd final {
   public:
-    Snapuserd(const std::string& in_cow_device, const std::string& in_backing_store_device,
-              const std::string& in_control_device)
-        : cow_device_(in_cow_device),
-          backing_store_device_(in_backing_store_device),
-          control_device_(in_control_device),
-          metadata_read_done_(false) {}
-
-    bool Init();
+    bool InitBackingAndControlDevice(std::string& backing_device, std::string& control_device);
+    bool InitCowDevice(std::string& cow_device);
     int Run();
     const std::string& GetControlDevicePath() { return control_device_; }
+    const std::string& GetCowDevice() { return cow_device_; }
+    uint64_t GetNumSectors() { return num_sectors_; }
 
   private:
     int ReadDmUserHeader();
     bool ReadDmUserPayload(void* buffer, size_t size);
     int WriteDmUserPayload(size_t size);
     int ConstructKernelCowHeader();
-    int ReadMetadata();
+    bool ReadMetadata();
     int ZerofillDiskExceptions(size_t read_size);
     int ReadDiskExceptions(chunk_t chunk, size_t size);
     int ReadData(chunk_t chunk, size_t size);
@@ -94,6 +90,8 @@ class Snapuserd final {
                              int unmerged_exceptions);
     bool AdvanceMergedOps(int merged_ops_cur_iter);
     bool ProcessMergeComplete(chunk_t chunk, void* buffer);
+    sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
+    chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
 
     std::string cow_device_;
     std::string backing_store_device_;
@@ -104,6 +102,7 @@ class Snapuserd final {
     unique_fd ctrl_fd_;
 
     uint32_t exceptions_per_area_;
+    uint64_t num_sectors_;
 
     std::unique_ptr<ICowOpIter> cowop_iter_;
     std::unique_ptr<ICowOpReverseIter> cowop_riter_;
@@ -118,7 +117,7 @@ class Snapuserd final {
     // Value - cow operation
     std::unordered_map<chunk_t, const CowOperation*> chunk_map_;
 
-    bool metadata_read_done_;
+    bool metadata_read_done_ = false;
     BufferSink bufsink_;
 };
 
