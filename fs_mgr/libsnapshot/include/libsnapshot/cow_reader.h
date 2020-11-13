@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
@@ -116,8 +117,10 @@ class CowReader : public ICowReader {
   public:
     CowReader();
 
-    bool Parse(android::base::unique_fd&& fd);
-    bool Parse(android::base::borrowed_fd fd);
+    // Parse the COW, optionally, up to the given label. If no label is
+    // specified, the COW must have an intact footer.
+    bool Parse(android::base::unique_fd&& fd, std::optional<uint64_t> label = {});
+    bool Parse(android::base::borrowed_fd fd, std::optional<uint64_t> label = {});
 
     bool GetHeader(CowHeader* header) override;
     bool GetFooter(CowFooter* footer) override;
@@ -138,16 +141,14 @@ class CowReader : public ICowReader {
     void UpdateMergeProgress(uint64_t merge_ops) { header_.num_merge_ops += merge_ops; }
 
   private:
-    bool ParseOps();
+    bool ParseOps(std::optional<uint64_t> label);
 
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
     CowHeader header_;
-    CowFooter footer_;
+    std::optional<CowFooter> footer_;
     uint64_t fd_size_;
-    bool has_footer_;
-    uint64_t last_label_;
-    bool has_last_label_;
+    std::optional<uint64_t> last_label_;
     std::shared_ptr<std::vector<CowOperation>> ops_;
 };
 

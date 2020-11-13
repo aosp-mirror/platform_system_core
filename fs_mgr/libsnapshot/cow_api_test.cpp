@@ -264,10 +264,7 @@ TEST_F(CowTest, GetSize) {
     ASSERT_EQ(size_before, size_after);
     struct stat buf;
 
-    if (fstat(cow_->fd, &buf) < 0) {
-        perror("Fails to determine size of cow image written");
-        FAIL();
-    }
+    ASSERT_GE(fstat(cow_->fd, &buf), 0) << strerror(errno);
     ASSERT_EQ(buf.st_size, writer.GetCowSize());
 }
 
@@ -408,7 +405,7 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
     // Get the last known good label
     CowReader label_reader;
     uint64_t label;
-    ASSERT_TRUE(label_reader.Parse(cow_->fd));
+    ASSERT_TRUE(label_reader.Parse(cow_->fd, {5}));
     ASSERT_TRUE(label_reader.GetLastLabel(&label));
     ASSERT_EQ(label, 5);
 

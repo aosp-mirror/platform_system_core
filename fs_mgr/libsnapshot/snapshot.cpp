@@ -386,24 +386,6 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
 
     auto& dm = DeviceMapper::Instance();
 
-    // Use the size of the base device for the COW device. It doesn't really
-    // matter, it just needs to look similar enough so the kernel doesn't complain
-    // about alignment or being too small.
-    uint64_t base_sectors = 0;
-    {
-        unique_fd fd(open(base_device.c_str(), O_RDONLY | O_CLOEXEC));
-        if (fd < 0) {
-            PLOG(ERROR) << "open failed: " << base_device;
-            return false;
-        }
-        auto dev_size = get_block_device_size(fd);
-        if (!dev_size) {
-            PLOG(ERROR) << "Could not determine block device size: " << base_device;
-            return false;
-        }
-        base_sectors = dev_size / kSectorSize;
-    }
-
     // Use an extra decoration for first-stage init, so we can transition
     // to a new table entry in second-stage.
     std::string misc_name = name;
@@ -411,13 +393,19 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
         misc_name += "-init";
     }
 
-    DmTable table;
-    table.Emplace<DmTargetUser>(0, base_sectors, misc_name);
-    if (!dm.CreateDevice(name, table, path, timeout_ms)) {
+    if (!EnsureSnapuserdConnected()) {
         return false;
     }
 
-    if (!EnsureSnapuserdConnected()) {
+    uint64_t base_sectors = snapuserd_client_->InitDmUserCow(cow_file);
+    if (base_sectors == 0) {
+        LOG(ERROR) << "Failed to retrieve base_sectors from Snapuserd";
+        return false;
+    }
+
+    DmTable table;
+    table.Emplace<DmTargetUser>(0, base_sectors, misc_name);
+    if (!dm.CreateDevice(name, table, path, timeout_ms)) {
         return false;
     }
 
@@ -1365,6 +1353,15 @@ bool SnapshotManager::PerformSecondStageTransition() {
             LOG(ERROR) << "Could not find control device: " << control_device;
             continue;
         }
+
+        uint64_t base_sectors = snapuserd_client_->InitDmUserCow(cow_device);
+        if (base_sectors == 0) {
+            // Unrecoverable as metadata reads from cow device failed
+            LOG(FATAL) << "Failed to retrieve base_sectors from Snapuserd";
+            return false;
+        }
+
+        CHECK(base_sectors == target.spec.length);
 
         if (!snapuserd_client_->InitializeSnapuserd(cow_device, backing_device, control_device)) {
             // This error is unrecoverable. We cannot proceed because reads to

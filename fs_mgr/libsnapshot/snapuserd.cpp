@@ -505,7 +505,7 @@ chunk_t Snapuserd::GetNextAllocatableChunkId(chunk_t chunk) {
  *    exceptions_per_area_
  * 12: Kernel will stop issuing metadata IO request when new-chunk ID is 0.
  */
-int Snapuserd::ReadMetadata() {
+bool Snapuserd::ReadMetadata() {
     reader_ = std::make_unique<CowReader>();
     CowHeader header;
     CowOptions options;
@@ -516,12 +516,12 @@ int Snapuserd::ReadMetadata() {
 
     if (!reader_->Parse(cow_fd_)) {
         LOG(ERROR) << "Failed to parse";
-        return 1;
+        return false;
     }
 
     if (!reader_->GetHeader(&header)) {
         LOG(ERROR) << "Failed to get header";
-        return 1;
+        return false;
     }
 
     CHECK(header.block_size == BLOCK_SIZE);
@@ -563,7 +563,7 @@ int Snapuserd::ReadMetadata() {
         if (!(cow_op->type == kCowReplaceOp || cow_op->type == kCowZeroOp ||
               cow_op->type == kCowCopyOp)) {
             LOG(ERROR) << "Unknown operation-type found: " << cow_op->type;
-            return 1;
+            return false;
         }
 
         metadata_found = true;
@@ -609,16 +609,24 @@ int Snapuserd::ReadMetadata() {
     }
 
     // Partially filled area or there is no metadata
+    // If there is no metadata, fill with zero so that kernel
+    // is aware that merge is completed.
     if (num_ops || !metadata_found) {
         vec_.push_back(std::move(de_ptr));
         LOG(DEBUG) << "ReadMetadata() completed. Partially filled area num_ops: " << num_ops
                    << "Areas : " << vec_.size();
     }
 
+    LOG(DEBUG) << "ReadMetadata() completed. chunk_id: " << next_free
+               << "Num Sector: " << ChunkToSector(next_free);
+
     // Initialize the iterator for merging
     cowop_iter_ = reader_->GetOpIter();
 
-    return 0;
+    // Total number of sectors required for creating dm-user device
+    num_sectors_ = ChunkToSector(next_free);
+    metadata_read_done_ = true;
+    return true;
 }
 
 void MyLogger(android::base::LogId, android::base::LogSeverity severity, const char*, const char*,
@@ -664,26 +672,12 @@ bool Snapuserd::ReadDmUserPayload(void* buffer, size_t size) {
     return true;
 }
 
-bool Snapuserd::Init() {
-    backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
-    if (backing_store_fd_ < 0) {
-        PLOG(ERROR) << "Open Failed: " << backing_store_device_;
-        return false;
-    }
+bool Snapuserd::InitCowDevice(std::string& cow_device) {
+    cow_device_ = cow_device;
 
     cow_fd_.reset(open(cow_device_.c_str(), O_RDWR));
     if (cow_fd_ < 0) {
         PLOG(ERROR) << "Open Failed: " << cow_device_;
-        return false;
-    }
-
-    std::string control_path = GetControlDevicePath();
-
-    LOG(DEBUG) << "Opening control device " << control_path;
-
-    ctrl_fd_.reset(open(control_path.c_str(), O_RDWR));
-    if (ctrl_fd_ < 0) {
-        PLOG(ERROR) << "Unable to open " << control_path;
         return false;
     }
 
@@ -693,6 +687,26 @@ bool Snapuserd::Init() {
     // of PAYLOAD_SIZE.
     size_t buf_size = sizeof(struct dm_user_header) + PAYLOAD_SIZE;
     bufsink_.Initialize(buf_size);
+
+    return ReadMetadata();
+}
+
+bool Snapuserd::InitBackingAndControlDevice(std::string& backing_device,
+                                            std::string& control_device) {
+    backing_store_device_ = backing_device;
+    control_device_ = control_device;
+
+    backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
+    if (backing_store_fd_ < 0) {
+        PLOG(ERROR) << "Open Failed: " << backing_store_device_;
+        return false;
+    }
+
+    ctrl_fd_.reset(open(control_device_.c_str(), O_RDWR));
+    if (ctrl_fd_ < 0) {
+        PLOG(ERROR) << "Unable to open " << control_device_;
+        return false;
+    }
 
     return true;
 }
@@ -729,15 +743,7 @@ int Snapuserd::Run() {
                 // never see multiple IO requests. Additionally this IO
                 // will always be a single 4k.
                 if (header->sector == 0) {
-                    // Read the metadata from internal COW device
-                    // and build the in-memory data structures
-                    // for all the operations in the internal COW.
-                    if (!metadata_read_done_ && ReadMetadata()) {
-                        LOG(ERROR) << "Metadata read failed";
-                        return 1;
-                    }
-                    metadata_read_done_ = true;
-
+                    CHECK(metadata_read_done_ == true);
                     CHECK(read_size == BLOCK_SIZE);
                     ret = ConstructKernelCowHeader();
                     if (ret < 0) return ret;
@@ -747,7 +753,7 @@ int Snapuserd::Run() {
                     // Check if the chunk ID represents a metadata
                     // page. If the chunk ID is not found in the
                     // vector, then it points to a metadata page.
-                    chunk_t chunk = (header->sector >> CHUNK_SHIFT);
+                    chunk_t chunk = SectorToChunk(header->sector);
 
                     if (chunk_map_.find(chunk) == chunk_map_.end()) {
                         ret = ReadDiskExceptions(chunk, read_size);
@@ -789,7 +795,7 @@ int Snapuserd::Run() {
             size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
             CHECK(read_size == BLOCK_SIZE);
             CHECK(header->sector > 0);
-            chunk_t chunk = (header->sector >> CHUNK_SHIFT);
+            chunk_t chunk = SectorToChunk(header->sector);
             CHECK(chunk_map_.find(chunk) == chunk_map_.end());
 
             void* buffer = bufsink_.GetPayloadBuffer(read_size);
