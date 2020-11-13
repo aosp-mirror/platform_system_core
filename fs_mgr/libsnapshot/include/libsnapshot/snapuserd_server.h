@@ -56,7 +56,7 @@ class DmUserHandler {
     const std::unique_ptr<Snapuserd>& snapuserd() const { return snapuserd_; }
     std::thread& thread() { return thread_; }
 
-    const std::string& GetControlDevice() const;
+    const std::string& GetMiscName() const;
 };
 
 class Stoppable {
@@ -85,7 +85,9 @@ class SnapuserdServer : public Stoppable {
     std::vector<struct pollfd> watched_fds_;
 
     std::mutex lock_;
-    std::vector<std::unique_ptr<DmUserHandler>> dm_users_;
+
+    using HandlerList = std::vector<std::shared_ptr<DmUserHandler>>;
+    HandlerList dm_users_;
 
     void AddWatchedFd(android::base::borrowed_fd fd);
     void AcceptClient();
@@ -95,7 +97,7 @@ class SnapuserdServer : public Stoppable {
     bool Receivemsg(android::base::borrowed_fd fd, const std::string& str);
 
     void ShutdownThreads();
-    bool WaitForDelete(const std::string& control_device);
+    bool RemoveHandler(const std::string& control_device, bool wait);
     DaemonOperations Resolveop(std::string& input);
     std::string GetDaemonStatus();
     void Parsemsg(std::string const& msg, const char delim, std::vector<std::string>& out);
@@ -103,11 +105,11 @@ class SnapuserdServer : public Stoppable {
     void SetTerminating() { terminating_ = true; }
     bool IsTerminating() { return terminating_; }
 
-    void RunThread(DmUserHandler* handler);
+    void RunThread(std::shared_ptr<DmUserHandler> handler);
 
-    // Remove a DmUserHandler from dm_users_, searching by its control device.
-    // If none is found, return nullptr.
-    std::unique_ptr<DmUserHandler> RemoveHandler(const std::string& control_device);
+    // Find a DmUserHandler within a lock.
+    HandlerList::iterator FindHandler(std::lock_guard<std::mutex>* proof_of_lock,
+                                      const std::string& misc_name);
 
   public:
     SnapuserdServer() { terminating_ = false; }
