@@ -1378,8 +1378,13 @@ bool SnapshotManager::PerformSecondStageTransition() {
         return false;
     }
 
+    std::string pid_var = device_->GetSnapuserdFirstStagePidVar();
+    if (pid_var.empty()) {
+        return true;
+    }
+
     int pid;
-    const char* pid_str = getenv(kSnapuserdFirstStagePidVar);
+    const char* pid_str = getenv(pid_var.c_str());
     if (pid_str && android::base::ParseInt(pid_str, &pid)) {
         if (kill(pid, SIGTERM) < 0 && errno != ESRCH) {
             LOG(ERROR) << "kill snapuserd failed";
