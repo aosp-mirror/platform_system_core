@@ -440,13 +440,6 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
             }
         }
         unlink(devpath.c_str());
-
-        if (android::base::StartsWith(devpath, "/dev/dm-user/")) {
-            std::error_code ec;
-            if (std::filesystem::is_empty("/dev/dm-user/", ec)) {
-                rmdir("/dev/dm-user");
-            }
-        }
     }
 }
 
