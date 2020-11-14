@@ -792,6 +792,7 @@ on post-fs-data
     # Delete these if need be, per b/139193659
     mkdir /data/rollback 0700 system system encryption=DeleteIfNecessary
     mkdir /data/rollback-observer 0700 system system encryption=DeleteIfNecessary
+    mkdir /data/rollback-history 0700 system system encryption=DeleteIfNecessary
 
     # Create root dir for Incremental Service
     mkdir /data/incremental 0771 system system encryption=Require
