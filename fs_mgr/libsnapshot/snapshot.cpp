@@ -280,7 +280,7 @@ bool SnapshotManager::FinishedSnapshotWrites(bool wipe) {
         return false;
     }
 
-    if (!IsCompressionEnabled() && !EnsureNoOverflowSnapshot(lock.get())) {
+    if (!EnsureNoOverflowSnapshot(lock.get())) {
         LOG(ERROR) << "Cannot ensure there are no overflow snapshots.";
         return false;
     }
@@ -349,6 +349,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
     status->set_state(SnapshotState::CREATED);
     status->set_sectors_allocated(0);
     status->set_metadata_sectors(0);
+    status->set_compression_enabled(IsCompressionEnabled());
 
     if (!WriteSnapshotStatus(lock, *status)) {
         PLOG(ERROR) << "Could not write snapshot status: " << status->name();
@@ -1914,13 +1915,13 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     remaining_time = GetRemainingTime(params.timeout_ms, begin);
     if (remaining_time.count() < 0) return false;
 
-    if (context == SnapshotContext::Update && IsCompressionEnabled()) {
+    if (context == SnapshotContext::Update && live_snapshot_status->compression_enabled()) {
         // Stop here, we can't run dm-user yet, the COW isn't built.
         created_devices.Release();
         return true;
     }
 
-    if (IsCompressionEnabled()) {
+    if (live_snapshot_status->compression_enabled()) {
         auto name = GetDmUserCowName(params.GetPartitionName());
 
         // :TODO: need to force init to process uevents for these in first-stage.
@@ -2750,7 +2751,7 @@ Return SnapshotManager::InitializeUpdateSnapshots(
             return Return::Error();
         }
 
-        if (IsCompressionEnabled()) {
+        if (it->second.compression_enabled()) {
             unique_fd fd(open(cow_path.c_str(), O_RDWR | O_CLOEXEC));
             if (fd < 0) {
                 PLOG(ERROR) << "open " << cow_path << " failed for snapshot "
@@ -3169,6 +3170,14 @@ bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
 
     auto& dm = DeviceMapper::Instance();
     for (const auto& snapshot : snapshots) {
+        SnapshotStatus status;
+        if (!ReadSnapshotStatus(lock, snapshot, &status)) {
+            return false;
+        }
+        if (status.compression_enabled()) {
+            continue;
+        }
+
         std::vector<DeviceMapper::TargetInfo> targets;
         if (!dm.GetTableStatus(snapshot, &targets)) {
             LOG(ERROR) << "Could not read snapshot device table: " << snapshot;
