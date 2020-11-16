@@ -124,6 +124,7 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
         return data_->allow_set_slot_as_unbootable();
     }
     bool IsRecovery() const override { return data_->is_recovery(); }
+    std::string GetSnapuserdFirstStagePidVar() const override { return {}; }
 
     void SwitchSlot() { switched_slot_ = !switched_slot_; }
 
