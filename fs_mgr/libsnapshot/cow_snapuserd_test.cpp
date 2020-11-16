@@ -288,20 +288,20 @@ void SnapuserdTest::CreateProductDmUser(std::unique_ptr<TemporaryFile>& cow) {
 }
 
 void SnapuserdTest::InitCowDevices() {
-    system_blksize_ = client_->InitDmUserCow(cow_system_->path);
+    system_blksize_ = client_->InitDmUserCow(system_device_ctrl_name_, cow_system_->path,
+                                             system_a_loop_->device());
     ASSERT_NE(system_blksize_, 0);
 
-    product_blksize_ = client_->InitDmUserCow(cow_product_->path);
+    product_blksize_ = client_->InitDmUserCow(product_device_ctrl_name_, cow_product_->path,
+                                              product_a_loop_->device());
     ASSERT_NE(product_blksize_, 0);
 }
 
 void SnapuserdTest::InitDaemon() {
-    bool ok = client_->InitializeSnapuserd(cow_system_->path, system_a_loop_->device(),
-                                           GetSystemControlPath());
+    bool ok = client_->AttachDmUser(system_device_ctrl_name_);
     ASSERT_TRUE(ok);
 
-    ok = client_->InitializeSnapuserd(cow_product_->path, product_a_loop_->device(),
-                                      GetProductControlPath());
+    ok = client_->AttachDmUser(product_device_ctrl_name_);
     ASSERT_TRUE(ok);
 }
 
