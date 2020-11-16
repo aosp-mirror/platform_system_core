@@ -39,6 +39,7 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
     bool SetBootControlMergeStatus(MergeStatus status) override;
     bool SetSlotAsUnbootable(unsigned int slot) override;
     bool IsRecovery() const override;
+    std::string GetSnapuserdFirstStagePidVar() const override;
 
   private:
     bool EnsureBootHal();
