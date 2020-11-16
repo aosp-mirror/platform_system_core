@@ -226,8 +226,8 @@ void SnapuserdServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->GetMiscName();
 
     while (!StopRequested()) {
-        if (handler->snapuserd()->Run() < 0) {
-            LOG(INFO) << "Snapuserd: Thread terminating as control device is de-registered";
+        if (!handler->snapuserd()->Run()) {
+            LOG(INFO) << "Snapuserd: Thread terminating";
             break;
         }
     }
