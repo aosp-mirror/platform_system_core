@@ -66,6 +66,14 @@ struct dm_user_header* BufferSink::GetHeaderPtr() {
     return header;
 }
 
+Snapuserd::Snapuserd(const std::string& misc_name, const std::string& cow_device,
+                     const std::string& backing_device) {
+    misc_name_ = misc_name;
+    cow_device_ = cow_device;
+    backing_store_device_ = backing_device;
+    control_device_ = "/dev/dm-user/" + misc_name;
+}
+
 // Construct kernel COW header in memory
 // This header will be in sector 0. The IO
 // request will always be 4k. After constructing
@@ -672,9 +680,7 @@ bool Snapuserd::ReadDmUserPayload(void* buffer, size_t size) {
     return true;
 }
 
-bool Snapuserd::InitCowDevice(std::string& cow_device) {
-    cow_device_ = cow_device;
-
+bool Snapuserd::InitCowDevice() {
     cow_fd_.reset(open(cow_device_.c_str(), O_RDWR));
     if (cow_fd_ < 0) {
         PLOG(ERROR) << "Open Failed: " << cow_device_;
@@ -691,11 +697,7 @@ bool Snapuserd::InitCowDevice(std::string& cow_device) {
     return ReadMetadata();
 }
 
-bool Snapuserd::InitBackingAndControlDevice(std::string& backing_device,
-                                            std::string& control_device) {
-    backing_store_device_ = backing_device;
-    control_device_ = control_device;
-
+bool Snapuserd::InitBackingAndControlDevice() {
     backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
     if (backing_store_fd_ < 0) {
         PLOG(ERROR) << "Open Failed: " << backing_store_device_;
