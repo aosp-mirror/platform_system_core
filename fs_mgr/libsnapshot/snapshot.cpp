@@ -397,7 +397,7 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
         return false;
     }
 
-    uint64_t base_sectors = snapuserd_client_->InitDmUserCow(cow_file);
+    uint64_t base_sectors = snapuserd_client_->InitDmUserCow(misc_name, cow_file, base_device);
     if (base_sectors == 0) {
         LOG(ERROR) << "Failed to retrieve base_sectors from Snapuserd";
         return false;
@@ -410,7 +410,12 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
     }
 
     auto control_device = "/dev/dm-user/" + misc_name;
-    return snapuserd_client_->InitializeSnapuserd(cow_file, base_device, control_device);
+    if (!android::fs_mgr::WaitForFile(control_device, timeout_ms)) {
+        LOG(ERROR) << "Timed out waiting for dm-user misc device: " << control_device;
+        return false;
+    }
+
+    return snapuserd_client_->AttachDmUser(misc_name);
 }
 
 bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
@@ -1310,28 +1315,34 @@ bool SnapshotManager::PerformSecondStageTransition() {
     size_t num_cows = 0;
     size_t ok_cows = 0;
     for (const auto& snapshot : snapshots) {
-        std::string cow_name = GetDmUserCowName(snapshot);
-        if (dm.GetState(cow_name) == DmDeviceState::INVALID) {
+        std::string user_cow_name = GetDmUserCowName(snapshot);
+        if (dm.GetState(user_cow_name) == DmDeviceState::INVALID) {
             continue;
         }
 
         DeviceMapper::TargetInfo target;
-        if (!GetSingleTarget(cow_name, TableQuery::Table, &target)) {
+        if (!GetSingleTarget(user_cow_name, TableQuery::Table, &target)) {
             continue;
         }
 
         auto target_type = DeviceMapper::GetTargetType(target.spec);
         if (target_type != "user") {
-            LOG(ERROR) << "Unexpected target type for " << cow_name << ": " << target_type;
+            LOG(ERROR) << "Unexpected target type for " << user_cow_name << ": " << target_type;
             continue;
         }
 
         num_cows++;
 
+        SnapshotStatus snapshot_status;
+        if (!ReadSnapshotStatus(lock.get(), snapshot, &snapshot_status)) {
+            LOG(ERROR) << "Unable to read snapshot status: " << snapshot;
+            continue;
+        }
+
         DmTable table;
-        table.Emplace<DmTargetUser>(0, target.spec.length, cow_name);
-        if (!dm.LoadTableAndActivate(cow_name, table)) {
-            LOG(ERROR) << "Unable to swap tables for " << cow_name;
+        table.Emplace<DmTargetUser>(0, target.spec.length, user_cow_name);
+        if (!dm.LoadTableAndActivate(user_cow_name, table)) {
+            LOG(ERROR) << "Unable to swap tables for " << user_cow_name;
             continue;
         }
 
@@ -1341,20 +1352,30 @@ bool SnapshotManager::PerformSecondStageTransition() {
             continue;
         }
 
-        std::string cow_device;
-        if (!dm.GetDmDevicePathByName(GetCowName(snapshot), &cow_device)) {
-            LOG(ERROR) << "Could not get device path for " << GetCowName(snapshot);
+        // If no partition was created (the COW exists entirely on /data), the
+        // device-mapper layering is different than if we had a partition.
+        std::string cow_image_name;
+        if (snapshot_status.cow_partition_size() == 0) {
+            cow_image_name = GetCowImageDeviceName(snapshot);
+        } else {
+            cow_image_name = GetCowName(snapshot);
+        }
+
+        std::string cow_image_device;
+        if (!dm.GetDmDevicePathByName(cow_image_name, &cow_image_device)) {
+            LOG(ERROR) << "Could not get device path for " << cow_image_name;
             continue;
         }
 
         // Wait for ueventd to acknowledge and create the control device node.
-        std::string control_device = "/dev/dm-user/" + cow_name;
+        std::string control_device = "/dev/dm-user/" + user_cow_name;
         if (!android::fs_mgr::WaitForFile(control_device, 10s)) {
             LOG(ERROR) << "Could not find control device: " << control_device;
             continue;
         }
 
-        uint64_t base_sectors = snapuserd_client_->InitDmUserCow(cow_device);
+        uint64_t base_sectors =
+                snapuserd_client_->InitDmUserCow(user_cow_name, cow_image_device, backing_device);
         if (base_sectors == 0) {
             // Unrecoverable as metadata reads from cow device failed
             LOG(FATAL) << "Failed to retrieve base_sectors from Snapuserd";
@@ -1363,10 +1384,10 @@ bool SnapshotManager::PerformSecondStageTransition() {
 
         CHECK(base_sectors == target.spec.length);
 
-        if (!snapuserd_client_->InitializeSnapuserd(cow_device, backing_device, control_device)) {
+        if (!snapuserd_client_->AttachDmUser(user_cow_name)) {
             // This error is unrecoverable. We cannot proceed because reads to
             // the underlying device will fail.
-            LOG(FATAL) << "Could not initialize snapuserd for " << cow_name;
+            LOG(FATAL) << "Could not initialize snapuserd for " << user_cow_name;
             return false;
         }
 
@@ -1378,8 +1399,13 @@ bool SnapshotManager::PerformSecondStageTransition() {
         return false;
     }
 
+    std::string pid_var = device_->GetSnapuserdFirstStagePidVar();
+    if (pid_var.empty()) {
+        return true;
+    }
+
     int pid;
-    const char* pid_str = getenv(kSnapuserdFirstStagePidVar);
+    const char* pid_str = getenv(pid_var.c_str());
     if (pid_str && android::base::ParseInt(pid_str, &pid)) {
         if (kill(pid, SIGTERM) < 0 && errno != ESRCH) {
             LOG(ERROR) << "kill snapuserd failed";
@@ -2048,13 +2074,13 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
             return false;
         }
 
-        auto control_device = "/dev/dm-user/" + dm_user_name;
-        if (!snapuserd_client_->WaitForDeviceDelete(control_device)) {
+        if (!snapuserd_client_->WaitForDeviceDelete(dm_user_name)) {
             LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
             return false;
         }
 
         // Ensure the control device is gone so we don't run into ABA problems.
+        auto control_device = "/dev/dm-user/" + dm_user_name;
         if (!android::fs_mgr::WaitForFileDeleted(control_device, 10s)) {
             LOG(ERROR) << "Timed out waiting for " << control_device << " to unlink";
             return false;

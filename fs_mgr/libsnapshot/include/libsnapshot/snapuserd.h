@@ -61,12 +61,15 @@ class BufferSink : public IByteSink {
 
 class Snapuserd final {
   public:
-    bool InitBackingAndControlDevice(std::string& backing_device, std::string& control_device);
-    bool InitCowDevice(std::string& cow_device);
+    Snapuserd(const std::string& misc_name, const std::string& cow_device,
+              const std::string& backing_device);
+    bool InitBackingAndControlDevice();
+    bool InitCowDevice();
     int Run();
     const std::string& GetControlDevicePath() { return control_device_; }
-    const std::string& GetCowDevice() { return cow_device_; }
+    const std::string& GetMiscName() { return misc_name_; }
     uint64_t GetNumSectors() { return num_sectors_; }
+    bool IsAttached() const { return ctrl_fd_ >= 0; }
 
   private:
     int ReadDmUserHeader();
@@ -96,6 +99,7 @@ class Snapuserd final {
     std::string cow_device_;
     std::string backing_store_device_;
     std::string control_device_;
+    std::string misc_name_;
 
     unique_fd cow_fd_;
     unique_fd backing_store_fd_;
