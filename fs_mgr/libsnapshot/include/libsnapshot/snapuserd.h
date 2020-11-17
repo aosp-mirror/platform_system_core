@@ -24,6 +24,7 @@
 #include <limits>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <android-base/file.h>
@@ -60,52 +61,67 @@ class BufferSink : public IByteSink {
 
 class Snapuserd final {
   public:
-    Snapuserd(const std::string& in_cow_device, const std::string& in_backing_store_device,
-              const std::string& in_control_device)
-        : cow_device_(in_cow_device),
-          backing_store_device_(in_backing_store_device),
-          control_device_(in_control_device),
-          metadata_read_done_(false) {}
-
-    bool Init();
-    int Run();
-    int ReadDmUserHeader();
-    int WriteDmUserPayload(size_t size);
-    int ConstructKernelCowHeader();
-    int ReadMetadata();
-    int ZerofillDiskExceptions(size_t read_size);
-    int ReadDiskExceptions(chunk_t chunk, size_t size);
-    int ReadData(chunk_t chunk, size_t size);
-
+    Snapuserd(const std::string& misc_name, const std::string& cow_device,
+              const std::string& backing_device);
+    bool InitBackingAndControlDevice();
+    bool InitCowDevice();
+    bool Run();
     const std::string& GetControlDevicePath() { return control_device_; }
+    const std::string& GetMiscName() { return misc_name_; }
+    uint64_t GetNumSectors() { return num_sectors_; }
+    bool IsAttached() const { return ctrl_fd_ >= 0; }
 
   private:
-    int ProcessReplaceOp(const CowOperation* cow_op);
-    int ProcessCopyOp(const CowOperation* cow_op);
-    int ProcessZeroOp();
+    bool ReadDmUserHeader();
+    bool ReadDmUserPayload(void* buffer, size_t size);
+    bool WriteDmUserPayload(size_t size);
+    void ConstructKernelCowHeader();
+    bool ReadMetadata();
+    bool ZerofillDiskExceptions(size_t read_size);
+    bool ReadDiskExceptions(chunk_t chunk, size_t size);
+    bool ReadData(chunk_t chunk, size_t size);
+    bool IsChunkIdMetadata(chunk_t chunk);
+    chunk_t GetNextAllocatableChunkId(chunk_t chunk);
+
+    bool ProcessReplaceOp(const CowOperation* cow_op);
+    bool ProcessCopyOp(const CowOperation* cow_op);
+    bool ProcessZeroOp();
+
+    loff_t GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer,
+                               int* unmerged_exceptions);
+    int GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, loff_t offset,
+                             int unmerged_exceptions);
+    bool AdvanceMergedOps(int merged_ops_cur_iter);
+    bool ProcessMergeComplete(chunk_t chunk, void* buffer);
+    sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
+    chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
 
     std::string cow_device_;
     std::string backing_store_device_;
     std::string control_device_;
+    std::string misc_name_;
 
     unique_fd cow_fd_;
     unique_fd backing_store_fd_;
     unique_fd ctrl_fd_;
 
     uint32_t exceptions_per_area_;
+    uint64_t num_sectors_;
 
     std::unique_ptr<ICowOpIter> cowop_iter_;
+    std::unique_ptr<ICowOpReverseIter> cowop_riter_;
     std::unique_ptr<CowReader> reader_;
+    std::unique_ptr<CowWriter> writer_;
 
     // Vector of disk exception which is a
     // mapping of old-chunk to new-chunk
     std::vector<std::unique_ptr<uint8_t[]>> vec_;
 
-    // Index - Chunk ID
+    // Key - Chunk ID
     // Value - cow operation
-    std::vector<const CowOperation*> chunk_vec_;
+    std::unordered_map<chunk_t, const CowOperation*> chunk_map_;
 
-    bool metadata_read_done_;
+    bool metadata_read_done_ = false;
     BufferSink bufsink_;
 };
 

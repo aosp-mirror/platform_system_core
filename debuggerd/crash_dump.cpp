@@ -299,11 +299,8 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
       process_info->abort_msg_address = crash_info->data.s.abort_msg_address;
       *siginfo = crash_info->data.s.siginfo;
       if (signal_has_si_addr(siginfo)) {
-        // Make a copy of the ucontext field because otherwise it is not aligned enough (due to
-        // being in a packed struct) and clang complains about that.
-        ucontext_t ucontext = crash_info->data.s.ucontext;
         process_info->has_fault_address = true;
-        process_info->fault_address = get_fault_address(siginfo, &ucontext);
+        process_info->fault_address = reinterpret_cast<uintptr_t>(siginfo->si_addr);
       }
       regs->reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(),
                                                         &crash_info->data.s.ucontext));
