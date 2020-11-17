@@ -17,6 +17,13 @@
 namespace android {
 namespace snapshot {
 
+#define DM_USER_REQ_MAP_READ 0
+#define DM_USER_REQ_MAP_WRITE 1
+
+#define DM_USER_RESP_SUCCESS 0
+#define DM_USER_RESP_ERROR 1
+#define DM_USER_RESP_UNSUPPORTED 2
+
 // Kernel COW header fields
 static constexpr uint32_t SNAP_MAGIC = 0x70416e53;
 
