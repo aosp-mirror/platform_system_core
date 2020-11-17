@@ -51,3 +51,13 @@ phony {
         "toybox_vendor",
     ],
 }
+
+// shell and utilities for first stage console. The list of binaries are
+// enough for debugging purposes.
+phony {
+    name: "shell_and_utilities_vendor_ramdisk",
+    required: [
+        "sh.vendor_ramdisk",
+        "toybox.vendor_ramdisk",
+    ],
+}

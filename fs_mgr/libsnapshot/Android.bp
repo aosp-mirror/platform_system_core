@@ -31,19 +31,22 @@ cc_defaults {
         "libbrotli",
         "libdm",
         "libfstab",
-        "libsnapshot_cow",
         "update_metadata-protos",
     ],
     whole_static_libs: [
+        "libbrotli",
         "libcutils",
         "libext2_uuid",
         "libext4_utils",
         "libfstab",
+        "libsnapshot_cow",
         "libsnapshot_snapuserd",
+        "libz",
     ],
     header_libs: [
         "libchrome",
         "libfiemap_headers",
+        "libstorage_literals_headers",
         "libupdate_engine_headers",
     ],
     export_static_lib_headers: [
@@ -432,6 +435,7 @@ cc_binary {
     init_rc: [
         "snapuserd.rc",
     ],
+    static_executable: true,
 }
 
 cc_binary {
@@ -573,4 +577,28 @@ cc_test {
     test_min_api_level: 30,
     auto_gen_config: true,
     require_root: false,
+}
+
+cc_binary {
+    name: "inspect_cow",
+    host_supported: true,
+    device_supported: true,
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    static_libs: [
+        "libbase",
+        "libbrotli",
+        "libcrypto_static",
+        "liblog",
+        "libsnapshot_cow",
+        "libz",
+    ],
+    shared_libs: [
+    ],
+    srcs: [
+        "inspect_cow.cpp",
+    ],
 }

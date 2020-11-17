@@ -91,6 +91,7 @@ void CowWriter::SetupHeaders() {
     header_.header_size = sizeof(CowHeader);
     header_.footer_size = sizeof(CowFooter);
     header_.block_size = options_.block_size;
+    header_.num_merge_ops = 0;
     footer_ = {};
     footer_.op.data_length = 64;
     footer_.op.type = kCowFooterOp;
@@ -110,27 +111,45 @@ bool CowWriter::ParseOptions() {
     return true;
 }
 
-bool CowWriter::Initialize(unique_fd&& fd, OpenMode mode) {
-    owned_fd_ = std::move(fd);
-    return Initialize(borrowed_fd{owned_fd_}, mode);
+bool CowWriter::SetFd(android::base::borrowed_fd fd) {
+    if (fd.get() < 0) {
+        owned_fd_.reset(open("/dev/null", O_RDWR | O_CLOEXEC));
+        if (owned_fd_ < 0) {
+            PLOG(ERROR) << "open /dev/null failed";
+            return false;
+        }
+        fd_ = owned_fd_;
+        is_dev_null_ = true;
+    } else {
+        fd_ = fd;
+
+        struct stat stat;
+        if (fstat(fd.get(), &stat) < 0) {
+            PLOG(ERROR) << "fstat failed";
+            return false;
+        }
+        is_block_device_ = S_ISBLK(stat.st_mode);
+    }
+    return true;
 }
 
-bool CowWriter::Initialize(borrowed_fd fd, OpenMode mode) {
+void CowWriter::InitializeMerge(borrowed_fd fd, CowHeader* header) {
     fd_ = fd;
+    memcpy(&header_, header, sizeof(CowHeader));
+    merge_in_progress_ = true;
+}
 
-    if (!ParseOptions()) {
+bool CowWriter::Initialize(unique_fd&& fd) {
+    owned_fd_ = std::move(fd);
+    return Initialize(borrowed_fd{owned_fd_});
+}
+
+bool CowWriter::Initialize(borrowed_fd fd) {
+    if (!SetFd(fd) || !ParseOptions()) {
         return false;
     }
 
-    switch (mode) {
-        case OpenMode::WRITE:
-            return OpenForWrite();
-        case OpenMode::APPEND:
-            return OpenForAppend();
-        default:
-            LOG(ERROR) << "Unknown open mode in CowWriter";
-            return false;
-    }
+    return OpenForWrite();
 }
 
 bool CowWriter::InitializeAppend(android::base::unique_fd&& fd, uint64_t label) {
@@ -139,9 +158,7 @@ bool CowWriter::InitializeAppend(android::base::unique_fd&& fd, uint64_t label) 
 }
 
 bool CowWriter::InitializeAppend(android::base::borrowed_fd fd, uint64_t label) {
-    fd_ = fd;
-
-    if (!ParseOptions()) {
+    if (!SetFd(fd) || !ParseOptions()) {
         return false;
     }
 
@@ -171,95 +188,35 @@ bool CowWriter::OpenForWrite() {
     return true;
 }
 
-bool CowWriter::OpenForAppend() {
-    auto reader = std::make_unique<CowReader>();
-    bool incomplete = false;
-    std::queue<CowOperation> toAdd;
-    if (!reader->Parse(fd_) || !reader->GetHeader(&header_)) {
-        return false;
-    }
-    incomplete = !reader->GetFooter(&footer_);
-
-    options_.block_size = header_.block_size;
-
-    // Reset this, since we're going to reimport all operations.
-    footer_.op.num_ops = 0;
-    next_op_pos_ = sizeof(header_);
-
-    auto iter = reader->GetOpIter();
-    while (!iter->Done()) {
-        CowOperation op = iter->Get();
-        if (op.type == kCowFooterOp) break;
-        if (incomplete) {
-            // Last operation translation may be corrupt. Wait to add it.
-            if (op.type == kCowLabelOp) {
-                while (!toAdd.empty()) {
-                    AddOperation(toAdd.front());
-                    toAdd.pop();
-                }
-            }
-            toAdd.push(op);
-        } else {
-            AddOperation(op);
-        }
-        iter->Next();
-    }
-
-    // Free reader so we own the descriptor position again.
-    reader = nullptr;
-
-    // Position for new writing
-    if (ftruncate(fd_.get(), next_op_pos_) != 0) {
-        PLOG(ERROR) << "Failed to trim file";
-        return false;
-    }
-    if (lseek(fd_.get(), 0, SEEK_END) < 0) {
-        PLOG(ERROR) << "lseek failed";
-        return false;
-    }
-    return true;
-}
-
 bool CowWriter::OpenForAppend(uint64_t label) {
     auto reader = std::make_unique<CowReader>();
     std::queue<CowOperation> toAdd;
-    if (!reader->Parse(fd_) || !reader->GetHeader(&header_)) {
+
+    if (!reader->Parse(fd_, {label}) || !reader->GetHeader(&header_)) {
         return false;
     }
 
     options_.block_size = header_.block_size;
-    bool found_label = false;
 
     // Reset this, since we're going to reimport all operations.
     footer_.op.num_ops = 0;
     next_op_pos_ = sizeof(header_);
+    ops_.resize(0);
 
     auto iter = reader->GetOpIter();
     while (!iter->Done()) {
-        CowOperation op = iter->Get();
-        if (op.type == kCowFooterOp) break;
-        if (op.type == kCowLabelOp) {
-            if (found_label) break;
-            if (op.source == label) found_label = true;
-        }
-        AddOperation(op);
+        AddOperation(iter->Get());
         iter->Next();
-    }
-
-    if (!found_label) {
-        PLOG(ERROR) << "Failed to find last label";
-        return false;
     }
 
     // Free reader so we own the descriptor position again.
     reader = nullptr;
 
-    // Position for new writing
-    if (ftruncate(fd_.get(), next_op_pos_) != 0) {
-        PLOG(ERROR) << "Failed to trim file";
+    // Remove excess data
+    if (!Truncate(next_op_pos_)) {
         return false;
     }
-    if (lseek(fd_.get(), 0, SEEK_END) < 0) {
+    if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed";
         return false;
     }
@@ -267,6 +224,7 @@ bool CowWriter::OpenForAppend(uint64_t label) {
 }
 
 bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
+    CHECK(!merge_in_progress_);
     CowOperation op = {};
     op.type = kCowCopyOp;
     op.new_block = new_block;
@@ -277,6 +235,7 @@ bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
 bool CowWriter::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
     uint64_t pos;
+    CHECK(!merge_in_progress_);
     for (size_t i = 0; i < size / header_.block_size; i++) {
         CowOperation op = {};
         op.type = kCowReplaceOp;
@@ -315,6 +274,7 @@ bool CowWriter::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t
 }
 
 bool CowWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
+    CHECK(!merge_in_progress_);
     for (uint64_t i = 0; i < num_blocks; i++) {
         CowOperation op = {};
         op.type = kCowZeroOp;
@@ -326,10 +286,11 @@ bool CowWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
 }
 
 bool CowWriter::EmitLabel(uint64_t label) {
+    CHECK(!merge_in_progress_);
     CowOperation op = {};
     op.type = kCowLabelOp;
     op.source = label;
-    return WriteOperation(op);
+    return WriteOperation(op) && Sync();
 }
 
 std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) {
@@ -384,7 +345,7 @@ static void SHA256(const void*, size_t, uint8_t[]) {
 }
 
 bool CowWriter::Finalize() {
-    footer_.op.ops_size = ops_.size() + sizeof(footer_.op);
+    footer_.op.ops_size = ops_.size();
     uint64_t pos;
 
     if (!GetDataPos(&pos)) {
@@ -408,7 +369,7 @@ bool CowWriter::Finalize() {
         PLOG(ERROR) << "lseek ops failed";
         return false;
     }
-    return true;
+    return Sync();
 }
 
 uint64_t CowWriter::GetCowSize() {
@@ -429,10 +390,11 @@ bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t 
     if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&op), sizeof(op))) {
         return false;
     }
-    if (data != NULL && size > 0)
+    if (data != nullptr && size > 0) {
         if (!WriteRawData(data, size)) return false;
+    }
     AddOperation(op);
-    return !fsync(fd_.get());
+    return true;
 }
 
 void CowWriter::AddOperation(const CowOperation& op) {
@@ -443,6 +405,46 @@ void CowWriter::AddOperation(const CowOperation& op) {
 
 bool CowWriter::WriteRawData(const void* data, size_t size) {
     if (!android::base::WriteFully(fd_, data, size)) {
+        return false;
+    }
+    return true;
+}
+
+bool CowWriter::Sync() {
+    if (is_dev_null_) {
+        return true;
+    }
+    if (fsync(fd_.get()) < 0) {
+        PLOG(ERROR) << "fsync failed";
+        return false;
+    }
+    return true;
+}
+
+bool CowWriter::CommitMerge(int merged_ops) {
+    CHECK(merge_in_progress_);
+    header_.num_merge_ops += merged_ops;
+
+    if (lseek(fd_.get(), 0, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek failed";
+        return false;
+    }
+
+    if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&header_),
+                                   sizeof(header_))) {
+        PLOG(ERROR) << "WriteFully failed";
+        return false;
+    }
+
+    return Sync();
+}
+
+bool CowWriter::Truncate(off_t length) {
+    if (is_dev_null_ || is_block_device_) {
+        return true;
+    }
+    if (ftruncate(fd_.get(), length) < 0) {
+        PLOG(ERROR) << "Failed to truncate.";
         return false;
     }
     return true;

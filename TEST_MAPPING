@@ -22,12 +22,6 @@
       "name": "CtsInitTestCases"
     },
     {
-      "name": "CtsLiblogTestCases"
-    },
-    {
-      "name": "CtsLogdTestCases"
-    },
-    {
       "name": "debuggerd_test"
     },
     {

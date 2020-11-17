@@ -95,6 +95,8 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
         unbootable_slots_.insert(slot);
         return true;
     }
+    bool IsTestDevice() const override { return true; }
+    std::string GetSnapuserdFirstStagePidVar() const override { return {}; }
 
     bool IsSlotUnbootable(uint32_t slot) { return unbootable_slots_.count(slot) != 0; }
 
