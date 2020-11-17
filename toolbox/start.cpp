@@ -37,7 +37,6 @@ static void ControlService(bool start, const std::string& service) {
 
 static void ControlDefaultServices(bool start) {
     std::vector<std::string> services = {
-        "iorapd",
         "netd",
         "surfaceflinger",
         "audioserver",
