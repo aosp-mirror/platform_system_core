@@ -29,3 +29,15 @@ cc_binary {
 
     cflags: ["-Werror"],
 }
+
+cc_binary {
+    name: "dmuserd",
+    srcs: ["dmuserd.cpp"],
+
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+
+    cflags: ["-Werror"],
+}
