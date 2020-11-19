@@ -117,7 +117,7 @@ void PrepareSwitchRoot() {
 
     auto dst_dir = android::base::Dirname(dst);
     std::error_code ec;
-    if (!fs::create_directories(dst_dir, ec)) {
+    if (!fs::create_directories(dst_dir, ec) && !!ec) {
         LOG(FATAL) << "Cannot create " << dst_dir << ": " << ec.message();
     }
     if (rename(src, dst) != 0) {
@@ -314,7 +314,7 @@ int FirstStageMain(int argc, char** argv) {
         std::string dest = GetRamdiskPropForSecondStage();
         std::string dir = android::base::Dirname(dest);
         std::error_code ec;
-        if (!fs::create_directories(dir, ec)) {
+        if (!fs::create_directories(dir, ec) && !!ec) {
             LOG(FATAL) << "Can't mkdir " << dir << ": " << ec.message();
         }
         if (!fs::copy_file(kBootImageRamdiskProp, dest, ec)) {
