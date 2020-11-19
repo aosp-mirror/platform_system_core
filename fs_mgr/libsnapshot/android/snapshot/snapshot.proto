@@ -34,7 +34,7 @@ enum SnapshotState {
     MERGE_COMPLETED = 3;
 }
 
-// Next: 9
+// Next: 10
 message SnapshotStatus {
     // Name of the snapshot. This is usually the name of the snapshotted
     // logical partition; for example, "system_b".
@@ -84,6 +84,9 @@ message SnapshotStatus {
     // the merge process.
     // This is non-zero when |state| == MERGING or MERGE_COMPLETED.
     uint64 metadata_sectors = 8;
+
+    // True if compression is enabled, false otherwise.
+    bool compression_enabled = 9;
 }
 
 // Next: 8
