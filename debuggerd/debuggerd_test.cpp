@@ -34,7 +34,6 @@
 #include <android/set_abort_message.h>
 #include <bionic/malloc.h>
 #include <bionic/mte.h>
-#include <bionic/mte_kernel.h>
 #include <bionic/reserved_signals.h>
 
 #include <android-base/cmsg.h>
@@ -386,16 +385,6 @@ TEST_F(CrasherTest, heap_addr_in_register) {
 
 #if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
 static void SetTagCheckingLevelSync() {
-  int tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
-  if (tagged_addr_ctrl < 0) {
-    abort();
-  }
-
-  tagged_addr_ctrl = (tagged_addr_ctrl & ~PR_MTE_TCF_MASK) | PR_MTE_TCF_SYNC;
-  if (prctl(PR_SET_TAGGED_ADDR_CTRL, tagged_addr_ctrl, 0, 0, 0) != 0) {
-    abort();
-  }
-
   HeapTaggingLevel heap_tagging_level = M_HEAP_TAGGING_LEVEL_SYNC;
   if (!android_mallopt(M_SET_HEAP_TAGGING_LEVEL, &heap_tagging_level, sizeof(heap_tagging_level))) {
     abort();
