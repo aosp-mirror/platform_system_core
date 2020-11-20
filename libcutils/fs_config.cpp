@@ -203,9 +203,14 @@ static const struct fs_path_config android_files[] = {
                                            CAP_MASK_LONG(CAP_SETGID),
                                               "system/bin/simpleperf_app_runner" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/e2fsck" },
-    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/tune2fs" },
+#ifdef __LP64__
+    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/linker64" },
+#else
+    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/linker" },
+#endif
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/resize2fs" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/snapuserd" },
+    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/tune2fs" },
     // generic defaults
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
