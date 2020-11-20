@@ -451,6 +451,10 @@ Commands
   exist. And it will be truncated if dst file is a normal regular file and
   already exists.
 
+`copy_per_line <src> <dst>`
+> Copies a file line by line. Similar to copy, but useful for dst is a sysfs node
+  that doesn't handle multiple lines of data.
+
 `domainname <name>`
 > Set the domain name.
 
