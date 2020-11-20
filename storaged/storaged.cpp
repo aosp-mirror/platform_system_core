@@ -163,6 +163,8 @@ storaged_t::storaged_t(void) {
 }
 
 void storaged_t::add_user_ce(userid_t user_id) {
+    Mutex::Autolock _l(proto_lock);
+
     if (!proto_loaded[user_id]) {
         load_proto(user_id);
         proto_loaded[user_id] = true;
@@ -170,6 +172,8 @@ void storaged_t::add_user_ce(userid_t user_id) {
 }
 
 void storaged_t::remove_user_ce(userid_t user_id) {
+    Mutex::Autolock _l(proto_lock);
+
     proto_loaded[user_id] = false;
     mUidm.clear_user_history(user_id);
     RemoveFileIfExists(proto_path(user_id), nullptr);
@@ -300,6 +304,8 @@ void storaged_t::flush_proto(userid_t user_id, StoragedProto* proto) {
 }
 
 void storaged_t::flush_protos(unordered_map<int, StoragedProto>* protos) {
+    Mutex::Autolock _l(proto_lock);
+
     for (auto& it : *protos) {
         /*
          * Don't flush proto if we haven't attempted to load it from file.
