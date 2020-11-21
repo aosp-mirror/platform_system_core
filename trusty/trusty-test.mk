@@ -16,3 +16,4 @@ PRODUCT_PACKAGES += \
 	spiproxyd \
 	trusty_keymaster_set_attestation_key \
 	keymaster_soft_attestation_keys.xml \
+
