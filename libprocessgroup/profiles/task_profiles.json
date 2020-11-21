@@ -100,7 +100,7 @@
           "Params":
           {
             "Controller": "cpu",
-            "Path": ""
+            "Path": "system"
           }
         }
       ]
