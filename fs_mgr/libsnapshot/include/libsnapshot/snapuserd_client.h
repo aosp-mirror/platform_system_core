@@ -30,17 +30,12 @@ namespace snapshot {
 
 static constexpr uint32_t PACKET_SIZE = 512;
 
-static constexpr char kSnapuserdSocketFirstStage[] = "snapuserd_first_stage";
 static constexpr char kSnapuserdSocket[] = "snapuserd";
 
 static constexpr char kSnapuserdFirstStagePidVar[] = "FIRST_STAGE_SNAPUSERD_PID";
 
 // Ensure that the second-stage daemon for snapuserd is running.
 bool EnsureSnapuserdStarted();
-
-// Start the first-stage version of snapuserd, returning its pid. This is used
-// by first-stage init, as well as vts_libsnapshot_test. On failure, -1 is returned.
-pid_t StartFirstStageSnapuserd();
 
 class SnapuserdClient {
   private:
