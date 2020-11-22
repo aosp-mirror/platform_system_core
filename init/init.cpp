@@ -875,13 +875,13 @@ int SecondStageMain(int argc, char** argv) {
     SetProperty(gsi::kGsiInstalledProp, is_installed);
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
-    am.QueueBuiltinAction(TransitionSnapuserdAction, "TransitionSnapuserd");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
     am.QueueBuiltinAction(TestPerfEventSelinuxAction, "TestPerfEventSelinux");
     am.QueueEventTrigger("early-init");
 
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
     am.QueueBuiltinAction(wait_for_coldboot_done_action, "wait_for_coldboot_done");
+    am.QueueBuiltinAction(TransitionSnapuserdAction, "TransitionSnapuserd");
     // ... so that we can start queuing up actions that require stuff from /dev.
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
