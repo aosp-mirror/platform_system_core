@@ -118,7 +118,7 @@ enum UpdateState {
     Cancelled = 7;
 };
 
-// Next: 5
+// Next: 6
 message SnapshotUpdateStatus {
     UpdateState state = 1;
 
@@ -133,6 +133,9 @@ message SnapshotUpdateStatus {
 
     // Sectors allocated for metadata in all the snapshot devices.
     uint64 metadata_sectors = 4;
+
+    // Whether compression/dm-user was used for any snapshots.
+    bool compression_enabled = 5;
 }
 
 // Next: 4
