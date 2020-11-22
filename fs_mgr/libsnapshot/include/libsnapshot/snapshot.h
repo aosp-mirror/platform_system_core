@@ -345,6 +345,14 @@ class SnapshotManager final : public ISnapshotManager {
     bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms = {}) override;
     bool UnmapAllSnapshots() override;
 
+    // We can't use WaitForFile during first-stage init, because ueventd is not
+    // running and therefore will not automatically create symlinks. Instead,
+    // we let init provide us with the correct function to use to ensure
+    // uevents have been processed and symlink/mknod calls completed.
+    void SetUeventRegenCallback(std::function<bool(const std::string&)> callback) {
+        uevent_regen_callback_ = callback;
+    }
+
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
@@ -676,6 +684,12 @@ class SnapshotManager final : public ISnapshotManager {
     // Same as above, but for paths only (no major:minor device strings).
     bool GetMappedImageDevicePath(const std::string& device_name, std::string* device_path);
 
+    // Wait for a device to be created by ueventd (eg, its symlink or node to be populated).
+    // This is needed for any code that uses device-mapper path in first-stage init. If
+    // |timeout_ms| is empty or the given device is not a path, WaitForDevice immediately
+    // returns true.
+    bool WaitForDevice(const std::string& device, std::chrono::milliseconds timeout_ms);
+
     std::string gsid_dir_;
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;
@@ -683,6 +697,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool has_local_image_manager_ = false;
     bool use_first_stage_snapuserd_ = false;
     bool in_factory_data_reset_ = false;
+    std::function<bool(const std::string&)> uevent_regen_callback_;
     std::unique_ptr<SnapuserdClient> snapuserd_client_;
 };
 
