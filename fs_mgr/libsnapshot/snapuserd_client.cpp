@@ -210,5 +210,13 @@ uint64_t SnapuserdClient::InitDmUserCow(const std::string& misc_name, const std:
     return num_sectors;
 }
 
+bool SnapuserdClient::DetachSnapuserd() {
+    if (!Sendmsg("detach")) {
+        LOG(ERROR) << "Failed to detach snapuserd.";
+        return false;
+    }
+    return true;
+}
+
 }  // namespace snapshot
 }  // namespace android

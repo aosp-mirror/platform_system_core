@@ -70,6 +70,11 @@ class SnapuserdClient {
     // Wait for snapuserd to disassociate with a dm-user control device. This
     // must ONLY be called if the control device has already been deleted.
     bool WaitForDeviceDelete(const std::string& control_device);
+
+    // Detach snapuserd. This shuts down the listener socket, and will cause
+    // snapuserd to gracefully exit once all handler threads have terminated.
+    // This should only be used on first-stage instances of snapuserd.
+    bool DetachSnapuserd();
 };
 
 }  // namespace snapshot
