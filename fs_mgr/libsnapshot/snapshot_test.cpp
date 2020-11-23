@@ -1760,9 +1760,6 @@ TEST_F(SnapshotUpdateTest, DaemonTransition) {
         GTEST_SKIP() << "Skipping Virtual A/B Compression test";
     }
 
-    AutoKill auto_kill(StartFirstStageSnapuserd());
-    ASSERT_TRUE(auto_kill.valid());
-
     // Ensure a connection to the second-stage daemon, but use the first-stage
     // code paths thereafter.
     ASSERT_TRUE(sm->EnsureSnapuserdConnected());

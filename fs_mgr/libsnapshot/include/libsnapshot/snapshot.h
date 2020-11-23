@@ -107,7 +107,6 @@ class ISnapshotManager {
         virtual bool SetSlotAsUnbootable(unsigned int slot) = 0;
         virtual bool IsRecovery() const = 0;
         virtual bool IsTestDevice() const { return false; }
-        virtual std::string GetSnapuserdFirstStagePidVar() const = 0;
     };
     virtual ~ISnapshotManager() = default;
 

@@ -41,6 +41,7 @@ enum class DaemonOperations {
     QUERY,
     STOP,
     DELETE,
+    DETACH,
     INVALID,
 };
 
@@ -106,6 +107,7 @@ class SnapuserdServer : public Stoppable {
     bool IsTerminating() { return terminating_; }
 
     void RunThread(std::shared_ptr<DmUserHandler> handler);
+    void JoinAllThreads();
 
     // Find a DmUserHandler within a lock.
     HandlerList::iterator FindHandler(std::lock_guard<std::mutex>* proof_of_lock,
