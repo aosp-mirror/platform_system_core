@@ -302,8 +302,6 @@ on init
     write /proc/sys/vm/mmap_min_addr 32768
     write /proc/sys/net/ipv4/ping_group_range "0 2147483647"
     write /proc/sys/net/unix/max_dgram_qlen 600
-    write /proc/sys/kernel/sched_rt_runtime_us 950000
-    write /proc/sys/kernel/sched_rt_period_us 1000000
 
     # Assign reasonable ceiling values for socket rcv/snd buffers.
     # These should almost always be overridden by the target per the
@@ -324,11 +322,6 @@ on init
 
     # /proc/net/fib_trie leaks interface IP addresses
     chmod 0400 /proc/net/fib_trie
-
-    # Create cgroup mount points for process groups
-    chown system system /dev/cpuctl
-    chown system system /dev/cpuctl/tasks
-    chmod 0666 /dev/cpuctl/tasks
 
     # sets up initial cpusets for ActivityManager
     # this ensures that the cpusets are present and usable, but the device's
