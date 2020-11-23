@@ -343,6 +343,15 @@ bool FirstStageMount::CreateLogicalPartitions() {
             if (!InitRequiredDevices({"userdata"})) {
                 return false;
             }
+            sm->SetUeventRegenCallback([this](const std::string& device) -> bool {
+                if (android::base::StartsWith(device, "/dev/block/dm-")) {
+                    return block_dev_init_.InitDmDevice(device);
+                }
+                if (android::base::StartsWith(device, "/dev/dm-user/")) {
+                    return block_dev_init_.InitDmUser(android::base::Basename(device));
+                }
+                return block_dev_init_.InitDevices({device});
+            });
             return sm->CreateLogicalAndSnapshotPartitions(super_path_);
         }
     }
