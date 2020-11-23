@@ -1402,24 +1402,6 @@ bool SnapshotManager::PerformSecondStageTransition() {
         LOG(ERROR) << "Could not transition all snapuserd consumers.";
         return false;
     }
-
-    std::string pid_var = device_->GetSnapuserdFirstStagePidVar();
-    if (pid_var.empty()) {
-        return true;
-    }
-
-    int pid;
-    const char* pid_str = getenv(pid_var.c_str());
-    if (pid_str && android::base::ParseInt(pid_str, &pid)) {
-        if (kill(pid, SIGTERM) < 0 && errno != ESRCH) {
-            LOG(ERROR) << "kill snapuserd failed";
-            return false;
-        }
-    } else {
-        LOG(ERROR) << "Could not find or parse " << kSnapuserdFirstStagePidVar
-                   << " for snapuserd pid";
-        return false;
-    }
     return true;
 }
 
@@ -1762,15 +1744,6 @@ bool SnapshotManager::MapAllPartitions(LockedFile* lock, const std::string& supe
         if (!MapPartitionWithSnapshot(lock, std::move(params), SnapshotContext::Mount, nullptr)) {
             return false;
         }
-    }
-
-    if (use_first_stage_snapuserd_) {
-        // Remove the first-stage socket as a precaution, there is no need to
-        // access the daemon anymore and we'll be killing it once second-stage
-        // is running.
-        auto socket = ANDROID_SOCKET_DIR + "/"s + kSnapuserdSocketFirstStage;
-        snapuserd_client_ = nullptr;
-        unlink(socket.c_str());
     }
 
     LOG(INFO) << "Created logical partitions with snapshot.";
@@ -2419,28 +2392,11 @@ bool SnapshotManager::EnsureSnapuserdConnected() {
         return true;
     }
 
-    std::string socket;
-    if (use_first_stage_snapuserd_) {
-        auto pid = StartFirstStageSnapuserd();
-        if (pid < 0) {
-            LOG(ERROR) << "Failed to start snapuserd";
-            return false;
-        }
-
-        auto pid_str = std::to_string(static_cast<int>(pid));
-        if (setenv(kSnapuserdFirstStagePidVar, pid_str.c_str(), 1) < 0) {
-            PLOG(ERROR) << "setenv failed storing the snapuserd pid";
-        }
-
-        socket = kSnapuserdSocketFirstStage;
-    } else {
-        if (!EnsureSnapuserdStarted()) {
-            return false;
-        }
-        socket = kSnapuserdSocket;
+    if (!use_first_stage_snapuserd_ && !EnsureSnapuserdStarted()) {
+        return false;
     }
 
-    snapuserd_client_ = SnapuserdClient::Connect(socket, 10s);
+    snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, 10s);
     if (!snapuserd_client_) {
         LOG(ERROR) << "Unable to connect to snapuserd";
         return false;
