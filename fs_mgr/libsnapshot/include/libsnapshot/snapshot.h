@@ -353,6 +353,10 @@ class SnapshotManager final : public ISnapshotManager {
         uevent_regen_callback_ = callback;
     }
 
+    // If true, compression is enabled for this update. This is used by
+    // first-stage to decide whether to launch snapuserd.
+    bool IsSnapuserdRequired();
+
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
