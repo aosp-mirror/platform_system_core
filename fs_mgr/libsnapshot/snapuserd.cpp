@@ -334,7 +334,7 @@ int Snapuserd::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, 
     int merged_ops_cur_iter = 0;
 
     // Find the operations which are merged in this cycle.
-    while ((unmerged_exceptions + merged_ops_cur_iter) <= exceptions_per_area_) {
+    while ((unmerged_exceptions + merged_ops_cur_iter) < exceptions_per_area_) {
         struct disk_exception* merged_de =
                 reinterpret_cast<struct disk_exception*>((char*)merged_buffer + offset);
         struct disk_exception* cow_de =
