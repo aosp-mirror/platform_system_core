@@ -174,6 +174,7 @@ cc_library_static {
         "libz",
     ],
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
 }
 
 cc_defaults {
@@ -408,9 +409,9 @@ cc_defaults {
         "fs_mgr_defaults",
     ],
     srcs: [
-	"snapuserd_server.cpp",
-    "snapuserd.cpp",
-	"snapuserd_daemon.cpp",
+        "snapuserd_server.cpp",
+        "snapuserd.cpp",
+        "snapuserd_daemon.cpp",
     ],
 
     cflags: [
@@ -421,7 +422,7 @@ cc_defaults {
     static_libs: [
         "libbase",
         "libbrotli",
-	"libcutils_sockets",
+        "libcutils_sockets",
         "liblog",
         "libdm",
         "libz",
@@ -436,15 +437,9 @@ cc_binary {
         "snapuserd.rc",
     ],
     static_executable: true,
-}
-
-cc_binary {
-    name: "snapuserd_ramdisk",
-    stem: "snapuserd",
-    defaults: ["snapuserd_defaults"],
-
-    ramdisk: true,
-    static_executable: true,
+    system_shared_libs: [],
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
 }
 
 cc_test {
@@ -568,7 +563,7 @@ cc_test {
         "libsnapshot_snapuserd",
         "libcutils_sockets",
         "libz",
-	"libdm",
+        "libdm",
     ],
     header_libs: [
         "libstorage_literals_headers",
