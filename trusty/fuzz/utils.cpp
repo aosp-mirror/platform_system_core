@@ -25,15 +25,13 @@
 #include <linux/uio.h>
 #include <log/log_read.h>
 #include <time.h>
+#include <trusty/tipc.h>
 #include <iostream>
 
 using android::base::ErrnoError;
 using android::base::Error;
 using android::base::Result;
 using android::base::unique_fd;
-
-#define TIPC_IOC_MAGIC 'r'
-#define TIPC_IOC_CONNECT _IOW(TIPC_IOC_MAGIC, 0x80, char*)
 
 namespace {
 
@@ -80,26 +78,13 @@ TrustyApp::TrustyApp(std::string tipc_dev, std::string ta_port)
     : tipc_dev_(tipc_dev), ta_port_(ta_port), ta_fd_(-1) {}
 
 Result<void> TrustyApp::Connect() {
-    /*
-     * TODO: We can't use libtrusty because (yet)
-     * (1) cc_fuzz can't deal with vendor components (b/170753563)
-     * (2) We need non-blocking behavior to detect Trusty going down.
-     * (we could implement the timeout in the fuzzing code though, as
-     * it needs to be around the call to read())
-     */
     alarm(kTimeoutSeconds);
-    int fd = open(tipc_dev_.c_str(), O_RDWR);
+    int fd = tipc_connect(tipc_dev_.c_str(), ta_port_.c_str());
     alarm(0);
     if (fd < 0) {
         return ErrnoError() << "failed to open TIPC device: ";
     }
     ta_fd_.reset(fd);
-
-    // This ioctl will time out in the kernel if it can't connect.
-    int rc = TEMP_FAILURE_RETRY(ioctl(ta_fd_, TIPC_IOC_CONNECT, ta_port_.c_str()));
-    if (rc < 0) {
-        return ErrnoError() << "failed to connect to TIPC service: ";
-    }
 
     return {};
 }
