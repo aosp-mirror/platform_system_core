@@ -40,8 +40,8 @@ bool BlockDevInitializer::InitDeviceMapper() {
     return InitMiscDevice("device-mapper");
 }
 
-bool BlockDevInitializer::InitDmUser() {
-    return InitMiscDevice("dm-user");
+bool BlockDevInitializer::InitDmUser(const std::string& name) {
+    return InitMiscDevice("dm-user!" + name);
 }
 
 bool BlockDevInitializer::InitMiscDevice(const std::string& name) {
