@@ -23,6 +23,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/threads.h>
@@ -38,13 +39,17 @@
 #endif
 
 using android::base::GetThreadId;
+using android::base::GetUintProperty;
 using android::base::StringPrintf;
 using android::base::StringReplace;
 using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
-#define TASK_PROFILE_DB_FILE "/etc/task_profiles.json"
-#define TASK_PROFILE_DB_VENDOR_FILE "/vendor/etc/task_profiles.json"
+static constexpr const char* TASK_PROFILE_DB_FILE = "/etc/task_profiles.json";
+static constexpr const char* TASK_PROFILE_DB_VENDOR_FILE = "/vendor/etc/task_profiles.json";
+
+static constexpr const char* TEMPLATE_TASK_PROFILE_API_FILE =
+        "/etc/task_profiles/task_profiles_%u.json";
 
 void ProfileAttribute::Reset(const CgroupController& controller, const std::string& file_name) {
     controller_ = controller;
@@ -386,9 +391,21 @@ TaskProfiles& TaskProfiles::GetInstance() {
 }
 
 TaskProfiles::TaskProfiles() {
+    unsigned int api_level = GetUintProperty<unsigned int>("ro.product.first_api_level", 0);
+    std::string sys_profiles_path = TASK_PROFILE_DB_FILE;
+
+    // load API-level specific system task profiles if available
+    if (api_level > 0) {
+        std::string api_profiles_path =
+                android::base::StringPrintf(TEMPLATE_TASK_PROFILE_API_FILE, api_level);
+        if (!access(api_profiles_path.c_str(), F_OK) || errno != ENOENT) {
+            sys_profiles_path = api_profiles_path;
+        }
+    }
+
     // load system task profiles
-    if (!Load(CgroupMap::GetInstance(), TASK_PROFILE_DB_FILE)) {
-        LOG(ERROR) << "Loading " << TASK_PROFILE_DB_FILE << " for [" << getpid() << "] failed";
+    if (!Load(CgroupMap::GetInstance(), sys_profiles_path)) {
+        LOG(ERROR) << "Loading " << sys_profiles_path << " for [" << getpid() << "] failed";
     }
 
     // load vendor task profiles if the file exists
