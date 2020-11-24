@@ -45,7 +45,7 @@
 
 #include "cgroup_descriptor.h"
 
-using android::base::GetBoolProperty;
+using android::base::GetUintProperty;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 
@@ -54,6 +54,8 @@ namespace cgrouprc {
 
 static constexpr const char* CGROUPS_DESC_FILE = "/etc/cgroups.json";
 static constexpr const char* CGROUPS_DESC_VENDOR_FILE = "/vendor/etc/cgroups.json";
+
+static constexpr const char* TEMPLATE_CGROUPS_DESC_API_FILE = "/etc/task_profiles/cgroups_%u.json";
 
 static bool ChangeDirModeAndOwner(const std::string& path, mode_t mode, const std::string& uid,
                                   const std::string& gid, bool permissive_mode = false) {
@@ -212,8 +214,20 @@ static bool ReadDescriptorsFromFile(const std::string& file_name,
 }
 
 static bool ReadDescriptors(std::map<std::string, CgroupDescriptor>* descriptors) {
+    unsigned int api_level = GetUintProperty<unsigned int>("ro.product.first_api_level", 0);
+    std::string sys_cgroups_path = CGROUPS_DESC_FILE;
+
+    // load API-level specific system cgroups descriptors if available
+    if (api_level > 0) {
+        std::string api_cgroups_path =
+                android::base::StringPrintf(TEMPLATE_CGROUPS_DESC_API_FILE, api_level);
+        if (!access(api_cgroups_path.c_str(), F_OK) || errno != ENOENT) {
+            sys_cgroups_path = api_cgroups_path;
+        }
+    }
+
     // load system cgroup descriptors
-    if (!ReadDescriptorsFromFile(CGROUPS_DESC_FILE, descriptors)) {
+    if (!ReadDescriptorsFromFile(sys_cgroups_path, descriptors)) {
         return false;
     }
 
