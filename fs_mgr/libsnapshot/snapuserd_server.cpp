@@ -38,6 +38,7 @@ DaemonOperations SnapuserdServer::Resolveop(std::string& input) {
     if (input == "stop") return DaemonOperations::STOP;
     if (input == "query") return DaemonOperations::QUERY;
     if (input == "delete") return DaemonOperations::DELETE;
+    if (input == "detach") return DaemonOperations::DETACH;
 
     return DaemonOperations::INVALID;
 }
@@ -72,19 +73,7 @@ void SnapuserdServer::Parsemsg(std::string const& msg, const char delim,
 
 void SnapuserdServer::ShutdownThreads() {
     StopThreads();
-
-    // Acquire the thread list within the lock.
-    std::vector<std::shared_ptr<DmUserHandler>> dm_users;
-    {
-        std::lock_guard<std::mutex> guard(lock_);
-        dm_users = std::move(dm_users_);
-    }
-
-    for (auto& client : dm_users) {
-        auto& th = client->thread();
-
-        if (th.joinable()) th.join();
-    }
+    JoinAllThreads();
 }
 
 const std::string& DmUserHandler::GetMiscName() const {
@@ -214,6 +203,10 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
             }
             return Sendmsg(fd, "success");
         }
+        case DaemonOperations::DETACH: {
+            terminating_ = true;
+            return Sendmsg(fd, "success");
+        }
         default: {
             LOG(ERROR) << "Received unknown message type from client";
             Sendmsg(fd, "fail");
@@ -234,7 +227,7 @@ void SnapuserdServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
 
     LOG(INFO) << "Exiting thread for handler: " << handler->GetMiscName();
 
-    // If the main thread called /emoveHandler, the handler was already removed
+    // If the main thread called RemoveHandler, the handler was already removed
     // from within the lock, and calling RemoveHandler again has no effect.
     RemoveHandler(handler->GetMiscName(), false);
 }
@@ -286,7 +279,24 @@ bool SnapuserdServer::Run() {
             }
         }
     }
+
+    JoinAllThreads();
     return true;
+}
+
+void SnapuserdServer::JoinAllThreads() {
+    // Acquire the thread list within the lock.
+    std::vector<std::shared_ptr<DmUserHandler>> dm_users;
+    {
+        std::lock_guard<std::mutex> guard(lock_);
+        dm_users = std::move(dm_users_);
+    }
+
+    for (auto& client : dm_users) {
+        auto& th = client->thread();
+
+        if (th.joinable()) th.join();
+    }
 }
 
 void SnapuserdServer::AddWatchedFd(android::base::borrowed_fd fd) {

@@ -120,9 +120,5 @@ bool DeviceInfo::SetSlotAsUnbootable([[maybe_unused]] unsigned int slot) {
 #endif
 }
 
-std::string DeviceInfo::GetSnapuserdFirstStagePidVar() const {
-    return kSnapuserdFirstStagePidVar;
-}
-
 }  // namespace snapshot
 }  // namespace android

@@ -32,7 +32,6 @@ class MockDeviceInfo : public SnapshotManager::IDeviceInfo {
     MOCK_METHOD(bool, SetBootControlMergeStatus, (MergeStatus status), (override));
     MOCK_METHOD(bool, SetSlotAsUnbootable, (unsigned int slot), (override));
     MOCK_METHOD(bool, IsRecovery, (), (const, override));
-    MOCK_METHOD(std::string, GetSnapuserdFirstStagePidVar, (), (const, override));
 };
 
 }  // namespace android::snapshot
