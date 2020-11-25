@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-cc_library {
-    name: "libtrusty",
-    vendor: true,
-
+cc_defaults {
+    name: "libtrusty_defaults",
     srcs: ["trusty.c"],
     export_include_dirs: ["include"],
     cflags: [
@@ -24,4 +22,17 @@ cc_library {
     ],
 
     shared_libs: ["liblog"],
+}
+
+cc_library {
+    name: "libtrusty",
+    vendor: true,
+    defaults: ["libtrusty_defaults"],
+}
+
+// TODO(b/170753563): cc_fuzz can't deal with vendor components. Build libtrusty
+// for system.
+cc_test_library {
+    name: "libtrusty_test",
+    defaults: ["libtrusty_defaults"],
 }
