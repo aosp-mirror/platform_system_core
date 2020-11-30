@@ -355,7 +355,6 @@ on init
 
     # system-background is for system tasks that should only run on
     # little cores, not on bigs
-    # to be used only by init, so don't change system-bg permissions
     mkdir /dev/cpuset/system-background
     copy /dev/cpuset/cpus /dev/cpuset/system-background/cpus
     copy /dev/cpuset/mems /dev/cpuset/system-background/mems
