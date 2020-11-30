@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <thread>
@@ -496,6 +497,8 @@ void DeviceHandler::HandleUevent(const Uevent& uevent) {
     } else if (StartsWith(uevent.subsystem, "usb")) {
         // ignore other USB events
         return;
+    } else if (uevent.subsystem == "misc" && StartsWith(uevent.device_name, "dm-user/")) {
+        devpath = "/dev/dm-user/" + uevent.device_name.substr(8);
     } else {
         devpath = "/dev/" + Basename(uevent.path);
     }

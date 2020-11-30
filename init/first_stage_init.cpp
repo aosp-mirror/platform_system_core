@@ -41,6 +41,7 @@
 #include "first_stage_console.h"
 #include "first_stage_mount.h"
 #include "reboot_utils.h"
+#include "second_stage_resources.h"
 #include "switch_root.h"
 #include "util.h"
 
@@ -96,6 +97,34 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
 
 bool ForceNormalBoot(const std::string& cmdline) {
     return cmdline.find("androidboot.force_normal_boot=1") != std::string::npos;
+}
+
+// Move e2fsck before switching root, so that it is available at the same path
+// after switching root.
+void PrepareSwitchRoot() {
+    constexpr const char* src = "/system/bin/e2fsck";
+    constexpr const char* dst = "/first_stage_ramdisk/system/bin/e2fsck";
+
+    if (access(dst, X_OK) == 0) {
+        LOG(INFO) << dst << " already exists and it can be executed";
+        return;
+    }
+
+    if (access(src, F_OK) != 0) {
+        PLOG(INFO) << "Not moving " << src << " because it cannot be accessed";
+        return;
+    }
+
+    auto dst_dir = android::base::Dirname(dst);
+    std::error_code ec;
+    if (!fs::create_directories(dst_dir, ec) && !!ec) {
+        LOG(FATAL) << "Cannot create " << dst_dir << ": " << ec.message();
+    }
+    if (rename(src, dst) != 0) {
+        PLOG(FATAL) << "Cannot move " << src << " to " << dst
+                    << ". Either install e2fsck.ramdisk so that it is at the correct place (" << dst
+                    << "), or make ramdisk writable";
+    }
 }
 
 }  // namespace
@@ -192,6 +221,7 @@ int FirstStageMain(int argc, char** argv) {
     CHECKCALL(mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755"));
     CHECKCALL(mkdir("/dev/pts", 0755));
     CHECKCALL(mkdir("/dev/socket", 0755));
+    CHECKCALL(mkdir("/dev/dm-user", 0755));
     CHECKCALL(mount("devpts", "/dev/pts", "devpts", 0, NULL));
 #define MAKE_STR(x) __STRING(x)
     CHECKCALL(mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC)));
@@ -235,6 +265,11 @@ int FirstStageMain(int argc, char** argv) {
     // /debug_ramdisk is used to preserve additional files from the debug ramdisk
     CHECKCALL(mount("tmpfs", "/debug_ramdisk", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
+
+    // /second_stage_resources is used to preserve files from first to second
+    // stage init
+    CHECKCALL(mount("tmpfs", kSecondStageRes, "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                    "mode=0755,uid=0,gid=0"))
 #undef CHECKCALL
 
     SetStdioToDevNull(argv);
@@ -273,11 +308,26 @@ int FirstStageMain(int argc, char** argv) {
     }
 
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
-        StartConsole();
+        StartConsole(cmdline);
+    }
+
+    if (access(kBootImageRamdiskProp, F_OK) == 0) {
+        std::string dest = GetRamdiskPropForSecondStage();
+        std::string dir = android::base::Dirname(dest);
+        std::error_code ec;
+        if (!fs::create_directories(dir, ec) && !!ec) {
+            LOG(FATAL) << "Can't mkdir " << dir << ": " << ec.message();
+        }
+        if (!fs::copy_file(kBootImageRamdiskProp, dest, ec)) {
+            LOG(FATAL) << "Can't copy " << kBootImageRamdiskProp << " to " << dest << ": "
+                       << ec.message();
+        }
+        LOG(INFO) << "Copied ramdisk prop to " << dest;
     }
 
     if (ForceNormalBoot(cmdline)) {
         mkdir("/first_stage_ramdisk", 0755);
+        PrepareSwitchRoot();
         // SwitchRoot() must be called with a mount point as the target, so we bind mount the
         // target directory to itself here.
         if (mount("/first_stage_ramdisk", "/first_stage_ramdisk", nullptr, MS_BIND, nullptr) != 0) {

@@ -14,85 +14,115 @@
 
 #pragma once
 
+#include <linux/types.h>
 #include <stdint.h>
+#include <stdlib.h>
+
+#include <csignal>
+#include <cstring>
+#include <iostream>
+#include <limits>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
+#include <libdm/dm.h>
+#include <libsnapshot/cow_reader.h>
+#include <libsnapshot/cow_writer.h>
+#include <libsnapshot/snapuserd_kernel.h>
 
 namespace android {
 namespace snapshot {
 
-// Kernel COW header fields
-static constexpr uint32_t SNAP_MAGIC = 0x70416e53;
+using android::base::unique_fd;
 
-static constexpr uint32_t SNAPSHOT_DISK_VERSION = 1;
+class BufferSink : public IByteSink {
+  public:
+    void Initialize(size_t size);
+    void* GetBufPtr() { return buffer_.get(); }
+    void Clear() { memset(GetBufPtr(), 0, buffer_size_); }
+    void* GetPayloadBuffer(size_t size);
+    void* GetBuffer(size_t requested, size_t* actual) override;
+    void UpdateBufferOffset(size_t size) { buffer_offset_ += size; }
+    struct dm_user_header* GetHeaderPtr();
+    bool ReturnData(void*, size_t) override { return true; }
+    void ResetBufferOffset() { buffer_offset_ = 0; }
 
-static constexpr uint32_t NUM_SNAPSHOT_HDR_CHUNKS = 1;
-
-static constexpr uint32_t SNAPSHOT_VALID = 1;
-
-/*
- * The basic unit of block I/O is a sector. It is used in a number of contexts
- * in Linux (blk, bio, genhd). The size of one sector is 512 = 2**9
- * bytes. Variables of type sector_t represent an offset or size that is a
- * multiple of 512 bytes. Hence these two constants.
- */
-static constexpr uint32_t SECTOR_SHIFT = 9;
-
-typedef __u64 sector_t;
-typedef sector_t chunk_t;
-
-static constexpr uint32_t CHUNK_SIZE = 8;
-static constexpr uint32_t CHUNK_SHIFT = (__builtin_ffs(CHUNK_SIZE) - 1);
-
-static constexpr uint32_t BLOCK_SIZE = 4096;
-static constexpr uint32_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SIZE) - 1);
-
-// This structure represents the kernel COW header.
-// All the below fields should be in Little Endian format.
-struct disk_header {
-    uint32_t magic;
-
-    /*
-     * Is this snapshot valid.  There is no way of recovering
-     * an invalid snapshot.
-     */
-    uint32_t valid;
-
-    /*
-     * Simple, incrementing version. no backward
-     * compatibility.
-     */
-    uint32_t version;
-
-    /* In sectors */
-    uint32_t chunk_size;
-} __packed;
-
-// A disk exception is a mapping of old_chunk to new_chunk
-// old_chunk is the chunk ID of a dm-snapshot device.
-// new_chunk is the chunk ID of the COW device.
-struct disk_exception {
-    uint64_t old_chunk;
-    uint64_t new_chunk;
-} __packed;
-
-// Control structures to communicate with dm-user
-// It comprises of header and a payload
-struct dm_user_header {
-    __u64 seq;
-    __u64 type;
-    __u64 flags;
-    __u64 sector;
-    __u64 len;
-    __u64 io_in_progress;
-} __attribute__((packed));
-
-struct dm_user_payload {
-    __u8 buf[];
+  private:
+    std::unique_ptr<uint8_t[]> buffer_;
+    loff_t buffer_offset_;
+    size_t buffer_size_;
 };
 
-// Message comprising both header and payload
-struct dm_user_message {
-    struct dm_user_header header;
-    struct dm_user_payload payload;
+class Snapuserd final {
+  public:
+    Snapuserd(const std::string& misc_name, const std::string& cow_device,
+              const std::string& backing_device);
+    bool InitBackingAndControlDevice();
+    bool InitCowDevice();
+    bool Run();
+    const std::string& GetControlDevicePath() { return control_device_; }
+    const std::string& GetMiscName() { return misc_name_; }
+    uint64_t GetNumSectors() { return num_sectors_; }
+    bool IsAttached() const { return ctrl_fd_ >= 0; }
+
+  private:
+    bool ReadDmUserHeader();
+    bool ReadDmUserPayload(void* buffer, size_t size);
+    bool WriteDmUserPayload(size_t size);
+    void ConstructKernelCowHeader();
+    bool ReadMetadata();
+    bool ZerofillDiskExceptions(size_t read_size);
+    bool ReadDiskExceptions(chunk_t chunk, size_t size);
+    bool ReadData(chunk_t chunk, size_t size);
+    bool IsChunkIdMetadata(chunk_t chunk);
+    chunk_t GetNextAllocatableChunkId(chunk_t chunk);
+
+    bool ProcessReplaceOp(const CowOperation* cow_op);
+    bool ProcessCopyOp(const CowOperation* cow_op);
+    bool ProcessZeroOp();
+
+    loff_t GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer,
+                               int* unmerged_exceptions);
+    int GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, loff_t offset,
+                             int unmerged_exceptions);
+    bool AdvanceMergedOps(int merged_ops_cur_iter);
+    bool ProcessMergeComplete(chunk_t chunk, void* buffer);
+    sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
+    chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
+
+    std::string cow_device_;
+    std::string backing_store_device_;
+    std::string control_device_;
+    std::string misc_name_;
+
+    unique_fd cow_fd_;
+    unique_fd backing_store_fd_;
+    unique_fd ctrl_fd_;
+
+    uint32_t exceptions_per_area_;
+    uint64_t num_sectors_;
+
+    std::unique_ptr<ICowOpIter> cowop_iter_;
+    std::unique_ptr<ICowOpReverseIter> cowop_riter_;
+    std::unique_ptr<CowReader> reader_;
+    std::unique_ptr<CowWriter> writer_;
+
+    // Vector of disk exception which is a
+    // mapping of old-chunk to new-chunk
+    std::vector<std::unique_ptr<uint8_t[]>> vec_;
+
+    // Key - Chunk ID
+    // Value - cow operation
+    std::unordered_map<chunk_t, const CowOperation*> chunk_map_;
+
+    bool metadata_read_done_ = false;
+    BufferSink bufsink_;
 };
 
 }  // namespace snapshot

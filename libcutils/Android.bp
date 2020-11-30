@@ -14,6 +14,11 @@
 // limitations under the License.
 //
 
+filegroup {
+    name: "android_filesystem_config_header",
+    srcs: ["include/private/android_filesystem_config.h"],
+}
+
 // some files must not be compiled when building against Mingw
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
@@ -29,6 +34,7 @@ cc_library_headers {
     vendor_available: true,
     recovery_available: true,
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     apex_available: [
         "//apex_available:platform",
@@ -55,6 +61,8 @@ cc_library {
     name: "libcutils_sockets",
     vendor_available: true,
     recovery_available: true,
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     native_bridge_supported: true,
     apex_available: [
@@ -140,6 +148,7 @@ cc_library {
         support_system_process: true,
     },
     recovery_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     apex_available: [
         "//apex_available:platform",
@@ -152,6 +161,7 @@ cc_library {
         "canned_fs_config.cpp",
         "iosched_policy.cpp",
         "load_file.cpp",
+        "memory.cpp",
         "native_handle.cpp",
         "properties.cpp",
         "record_stream.cpp",
@@ -193,6 +203,9 @@ cc_library {
                 "trace-dev.cpp",
                 "uevent.cpp",
             ],
+        },
+        bionic: {
+            header_libs: ["bionic_libc_platform_headers"],
         },
 
         android_arm: {

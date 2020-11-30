@@ -43,6 +43,7 @@ cc_library_static {
         },
     },
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
 }
 
 filegroup {
@@ -98,8 +99,4 @@ cc_fuzz {
         "libfs_mgr",
         "liblog",
     ],
-}
-
-vts_config {
-    name: "VtsKernelLibdmTest",
 }

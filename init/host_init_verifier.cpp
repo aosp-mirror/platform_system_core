@@ -25,6 +25,8 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -51,6 +53,7 @@
 
 using namespace std::literals;
 
+using android::base::EndsWith;
 using android::base::ParseInt;
 using android::base::ReadFileToString;
 using android::base::Split;
@@ -60,6 +63,10 @@ using android::properties::PropertyInfoArea;
 using android::properties::PropertyInfoEntry;
 
 static std::vector<std::string> passwd_files;
+
+// NOTE: Keep this in sync with the order used by init.cpp LoadBootScripts()
+static const std::vector<std::string> partition_search_order =
+        std::vector<std::string>({"system", "system_ext", "odm", "vendor", "product"});
 
 static std::vector<std::pair<std::string, int>> GetVendorPasswd(const std::string& passwd_file) {
     std::string passwd;
@@ -148,13 +155,24 @@ static Result<void> check_stub(const BuiltinArguments& args) {
 #include "generated_stub_builtin_function_map.h"
 
 void PrintUsage() {
-    std::cout << "usage: host_init_verifier [options] <init rc file>\n"
-                 "\n"
-                 "Tests an init script for correctness\n"
-                 "\n"
-                 "-p FILE\tSearch this passwd file for users and groups\n"
-                 "--property_contexts=FILE\t Use this file for property_contexts\n"
-              << std::endl;
+    fprintf(stdout, R"(usage: host_init_verifier [options]
+
+Tests init script(s) for correctness.
+
+Generic options:
+  -p FILE                     Search this passwd file for users and groups.
+  --property_contexts=FILE    Use this file for property_contexts.
+
+Single script mode options:
+  [init rc file]              Positional argument; test this init script.
+
+Multiple script mode options:
+  --out_system=DIR            Path to the output product directory for the system partition.
+  --out_system_ext=DIR        Path to the output product directory for the system_ext partition.
+  --out_odm=DIR               Path to the output product directory for the odm partition.
+  --out_vendor=DIR            Path to the output product directory for the vendor partition.
+  --out_product=DIR           Path to the output product directory for the product partition.
+)");
 }
 
 Result<InterfaceInheritanceHierarchyMap> ReadInterfaceInheritanceHierarchy() {
@@ -203,12 +221,18 @@ int main(int argc, char** argv) {
     android::base::SetMinimumLogSeverity(android::base::ERROR);
 
     auto property_infos = std::vector<PropertyInfoEntry>();
+    std::map<std::string, std::string> partition_map;
 
     while (true) {
         static const char kPropertyContexts[] = "property-contexts=";
         static const struct option long_options[] = {
                 {"help", no_argument, nullptr, 'h'},
                 {kPropertyContexts, required_argument, nullptr, 0},
+                {"out_system", required_argument, nullptr, 0},
+                {"out_system_ext", required_argument, nullptr, 0},
+                {"out_odm", required_argument, nullptr, 0},
+                {"out_vendor", required_argument, nullptr, 0},
+                {"out_product", required_argument, nullptr, 0},
                 {nullptr, 0, nullptr, 0},
         };
 
@@ -223,6 +247,16 @@ int main(int argc, char** argv) {
             case 0:
                 if (long_options[option_index].name == kPropertyContexts) {
                     HandlePropertyContexts(optarg, &property_infos);
+                }
+                for (const auto& p : partition_search_order) {
+                    if (long_options[option_index].name == "out_" + p) {
+                        if (partition_map.find(p) != partition_map.end()) {
+                            PrintUsage();
+                            return EXIT_FAILURE;
+                        }
+                        partition_map[p] =
+                                EndsWith(optarg, "/") ? optarg : std::string(optarg) + "/";
+                    }
                 }
                 break;
             case 'h':
@@ -240,7 +274,9 @@ int main(int argc, char** argv) {
     argc -= optind;
     argv += optind;
 
-    if (argc != 1) {
+    // If provided, use the partition map to check multiple init rc files.
+    // Otherwise, check a single init rc file.
+    if ((!partition_map.empty() && argc != 0) || (partition_map.empty() && argc != 1)) {
         PrintUsage();
         return EXIT_FAILURE;
     }
@@ -262,24 +298,42 @@ int main(int argc, char** argv) {
 
     property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_contexts.c_str());
 
+    if (!partition_map.empty()) {
+        std::vector<std::string> vendor_prefixes;
+        for (const auto& partition : {"vendor", "odm"}) {
+            if (partition_map.find(partition) != partition_map.end()) {
+                vendor_prefixes.push_back(partition_map.at(partition));
+            }
+        }
+        InitializeHostSubcontext(vendor_prefixes);
+    }
+
     const BuiltinFunctionMap& function_map = GetBuiltinFunctionMap();
     Action::set_function_map(&function_map);
     ActionManager& am = ActionManager::GetInstance();
     ServiceList& sl = ServiceList::GetInstance();
     Parser parser;
-    parser.AddSectionParser("service", std::make_unique<ServiceParser>(
-                                               &sl, nullptr, *interface_inheritance_hierarchy_map));
-    parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
+    parser.AddSectionParser("service",
+                            std::make_unique<ServiceParser>(&sl, GetSubcontext(),
+                                                            *interface_inheritance_hierarchy_map));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, GetSubcontext()));
     parser.AddSectionParser("import", std::make_unique<HostImportParser>());
 
-    if (!parser.ParseConfigFileInsecure(*argv)) {
-        LOG(ERROR) << "Failed to open init rc script '" << *argv << "'";
-        return EXIT_FAILURE;
+    if (!partition_map.empty()) {
+        for (const auto& p : partition_search_order) {
+            if (partition_map.find(p) != partition_map.end()) {
+                parser.ParseConfig(partition_map.at(p) + "etc/init");
+            }
+        }
+    } else {
+        if (!parser.ParseConfigFileInsecure(*argv)) {
+            LOG(ERROR) << "Failed to open init rc script '" << *argv << "'";
+            return EXIT_FAILURE;
+        }
     }
     size_t failures = parser.parse_error_count() + am.CheckAllCommands() + sl.CheckAllCommands();
     if (failures > 0) {
-        LOG(ERROR) << "Failed to parse init script '" << *argv << "' with " << failures
-                   << " errors";
+        LOG(ERROR) << "Failed to parse init scripts with " << failures << " error(s).";
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

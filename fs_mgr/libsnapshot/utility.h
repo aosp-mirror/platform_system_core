@@ -112,7 +112,7 @@ std::vector<android::fs_mgr::Partition*> ListPartitionsWithSuffix(
         android::fs_mgr::MetadataBuilder* builder, const std::string& suffix);
 
 // Initialize a device before using it as the COW device for a dm-snapshot device.
-Return InitializeCow(const std::string& device);
+Return InitializeKernelCow(const std::string& device);
 
 // "Atomically" write string to file. This is done by a series of actions:
 // 1. Write to path + ".tmp"
@@ -128,6 +128,8 @@ std::ostream& operator<<(std::ostream& os, const Now&);
 // Append to |extents|. Merged into the last element if possible.
 void AppendExtent(google::protobuf::RepeatedPtrField<chromeos_update_engine::Extent>* extents,
                   uint64_t start_block, uint64_t num_blocks);
+
+bool IsCompressionEnabled();
 
 }  // namespace snapshot
 }  // namespace android

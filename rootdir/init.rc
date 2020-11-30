@@ -148,6 +148,62 @@ on init
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
 
+    # cpuctl hierarchy for devices using utilclamp
+    mkdir /dev/cpuctl/foreground
+    mkdir /dev/cpuctl/background
+    mkdir /dev/cpuctl/top-app
+    mkdir /dev/cpuctl/rt
+    mkdir /dev/cpuctl/system
+    chown system system /dev/cpuctl
+    chown system system /dev/cpuctl/foreground
+    chown system system /dev/cpuctl/background
+    chown system system /dev/cpuctl/top-app
+    chown system system /dev/cpuctl/rt
+    chown system system /dev/cpuctl/system
+    chown system system /dev/cpuctl/tasks
+    chown system system /dev/cpuctl/foreground/tasks
+    chown system system /dev/cpuctl/background/tasks
+    chown system system /dev/cpuctl/top-app/tasks
+    chown system system /dev/cpuctl/rt/tasks
+    chown system system /dev/cpuctl/system/tasks
+    chmod 0664 /dev/cpuctl/tasks
+    chmod 0664 /dev/cpuctl/foreground/tasks
+    chmod 0664 /dev/cpuctl/background/tasks
+    chmod 0664 /dev/cpuctl/top-app/tasks
+    chmod 0664 /dev/cpuctl/rt/tasks
+    chmod 0664 /dev/cpuctl/system/tasks
+
+    # Create a cpu group for NNAPI HAL processes
+    mkdir /dev/cpuctl/nnapi-hal
+    chown system system /dev/cpuctl/nnapi-hal
+    chown system system /dev/cpuctl/nnapi-hal/tasks
+    chmod 0664 /dev/cpuctl/nnapi-hal/tasks
+    write /dev/cpuctl/nnapi-hal/cpu.uclamp.min 1
+    write /dev/cpuctl/nnapi-hal/cpu.uclamp.latency_sensitive 1
+
+    # Android only use global RT throttling and doesn't use CONFIG_RT_GROUP_SCHED
+    # for RT group throttling. These values here are just to make sure RT threads
+    # can be migrated to those groups. These settings can be removed once we migrate
+    # to GKI kernel.
+    write /dev/cpuctl/cpu.rt_period_us 1000000
+    write /dev/cpuctl/cpu.rt_runtime_us 950000
+    # Surfaceflinger is in FG group so giving it a bit more
+    write /dev/cpuctl/foreground/cpu.rt_runtime_us 450000
+    write /dev/cpuctl/foreground/cpu.rt_period_us 1000000
+    write /dev/cpuctl/background/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/background/cpu.rt_period_us 1000000
+    write /dev/cpuctl/top-app/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/top-app/cpu.rt_period_us 1000000
+    write /dev/cpuctl/rt/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/rt/cpu.rt_period_us 1000000
+    write /dev/cpuctl/system/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/system/cpu.rt_period_us 1000000
+    write /dev/cpuctl/nnapi-hal/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/nnapi-hal/cpu.rt_period_us 1000000
+
+    # Migrate root group to system subgroup
+    copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks
+
     # Create an stune group for NNAPI HAL processes
     mkdir /dev/stune/nnapi-hal
     chown system system /dev/stune/nnapi-hal
@@ -246,8 +302,6 @@ on init
     write /proc/sys/vm/mmap_min_addr 32768
     write /proc/sys/net/ipv4/ping_group_range "0 2147483647"
     write /proc/sys/net/unix/max_dgram_qlen 600
-    write /proc/sys/kernel/sched_rt_runtime_us 950000
-    write /proc/sys/kernel/sched_rt_period_us 1000000
 
     # Assign reasonable ceiling values for socket rcv/snd buffers.
     # These should almost always be overridden by the target per the
@@ -268,13 +322,6 @@ on init
 
     # /proc/net/fib_trie leaks interface IP addresses
     chmod 0400 /proc/net/fib_trie
-
-    # Create cgroup mount points for process groups
-    chown system system /dev/cpuctl
-    chown system system /dev/cpuctl/tasks
-    chmod 0666 /dev/cpuctl/tasks
-    write /dev/cpuctl/cpu.rt_period_us 1000000
-    write /dev/cpuctl/cpu.rt_runtime_us 950000
 
     # sets up initial cpusets for ActivityManager
     # this ensures that the cpusets are present and usable, but the device's
@@ -561,13 +608,24 @@ on post-fs-data
     # Make sure that apexd is started in the default namespace
     enter_default_mount_ns
 
+    mkdir /data/vendor 0771 root root encryption=Require
+    mkdir /data/vendor_ce 0771 root root encryption=None
+    mkdir /data/vendor_de 0771 root root encryption=None
+    mkdir /data/vendor/hardware 0771 root root
+
+    # Start tombstoned early to be able to store tombstones.
+    mkdir /data/tombstones 0771 system system encryption=Require
+    mkdir /data/vendor/tombstones 0771 root root
+    mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
+    start tombstoned
+
     # /data/apex is now available. Start apexd to scan and activate APEXes.
     mkdir /data/apex 0755 root system encryption=None
     mkdir /data/apex/active 0755 root system
     mkdir /data/apex/backup 0700 root system
     mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
-    mkdir /data/app-staging 0750 system system encryption=None
+    mkdir /data/app-staging 0750 system system encryption=DeleteIfNecessary
     start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
@@ -595,6 +653,8 @@ on post-fs-data
     chown bluetooth bluetooth /data/misc/bluedroid/bt_config.conf
     mkdir /data/misc/bluetooth 0770 bluetooth bluetooth
     mkdir /data/misc/bluetooth/logs 0770 bluetooth bluetooth
+    mkdir /data/misc/nfc 0770 nfc nfc
+    mkdir /data/misc/nfc/logs 0770 nfc nfc
     mkdir /data/misc/credstore 0700 credstore credstore
     mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/gatekeeper 0700 system system
@@ -645,11 +705,6 @@ on post-fs-data
 
     mkdir /data/preloads 0775 system system encryption=None
 
-    mkdir /data/vendor 0771 root root encryption=Require
-    mkdir /data/vendor_ce 0771 root root encryption=None
-    mkdir /data/vendor_de 0771 root root encryption=None
-    mkdir /data/vendor/hardware 0771 root root
-
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
     mkdir /data/local/tmp 0771 shell shell
@@ -661,9 +716,6 @@ on post-fs-data
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
     mkdir /data/property 0700 root root encryption=Require
-    mkdir /data/tombstones 0771 system system encryption=Require
-    mkdir /data/vendor/tombstones 0771 root root
-    mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
 
     # Create directories to push tests to for each linker namespace.
     # Create the subdirectories in case the first test is run as root
@@ -758,6 +810,7 @@ on post-fs-data
     # Delete these if need be, per b/139193659
     mkdir /data/rollback 0700 system system encryption=DeleteIfNecessary
     mkdir /data/rollback-observer 0700 system system encryption=DeleteIfNecessary
+    mkdir /data/rollback-history 0700 system system encryption=DeleteIfNecessary
 
     # Create root dir for Incremental Service
     mkdir /data/incremental 0771 system system encryption=Require
@@ -772,6 +825,10 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status activated
     perform_apex_config
+
+    # After apexes are mounted, tell keymaster early boot has ended, so it will
+    # stop allowing use of early-boot keys
+    exec - system system -- /system/bin/vdc keymaster early-boot-ended
 
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
@@ -1006,8 +1063,8 @@ on property:sys.sysctl.extra_free_kbytes=*
     write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
 
 # "tcp_default_init_rwnd" Is too long!
-on property:sys.sysctl.tcp_def_init_rwnd=*
-    write /proc/sys/net/ipv4/tcp_default_init_rwnd ${sys.sysctl.tcp_def_init_rwnd}
+on property:net.tcp_def_init_rwnd=*
+    write /proc/sys/net/ipv4/tcp_default_init_rwnd ${net.tcp_def_init_rwnd}
 
 # perf_event_open syscall security:
 # Newer kernels have the ability to control the use of the syscall via SELinux
@@ -1035,6 +1092,14 @@ on property:security.perf_harden=1
     write /proc/sys/kernel/perf_event_max_sample_rate 100000
     write /proc/sys/kernel/perf_cpu_time_max_percent 25
     write /proc/sys/kernel/perf_event_mlock_kb 516
+
+# This property can be set only on userdebug/eng. See neverallow rule in
+# /system/sepolicy/private/property.te .
+on property:security.lower_kptr_restrict=1
+    write /proc/sys/kernel/kptr_restrict 0
+
+on property:security.lower_kptr_restrict=0
+    write /proc/sys/kernel/kptr_restrict 2
 
 
 # on shutdown
@@ -1104,3 +1169,7 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
+
+# Migrate tasks again in case kernel threads are created during boot
+on property:sys.boot_completed=1
+  copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks

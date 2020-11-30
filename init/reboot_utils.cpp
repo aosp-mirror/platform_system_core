@@ -19,6 +19,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include <optional>
 #include <string>
 
 #include <android-base/file.h>
@@ -37,13 +38,18 @@ namespace init {
 static std::string init_fatal_reboot_target = "bootloader";
 static bool init_fatal_panic = false;
 
-void SetFatalRebootTarget() {
+void SetFatalRebootTarget(const std::optional<std::string>& reboot_target) {
     std::string cmdline;
     android::base::ReadFileToString("/proc/cmdline", &cmdline);
     cmdline = android::base::Trim(cmdline);
 
     const char kInitFatalPanicString[] = "androidboot.init_fatal_panic=true";
     init_fatal_panic = cmdline.find(kInitFatalPanicString) != std::string::npos;
+
+    if (reboot_target) {
+        init_fatal_reboot_target = *reboot_target;
+        return;
+    }
 
     const char kRebootTargetString[] = "androidboot.init_fatal_reboot_target=";
     auto start_pos = cmdline.find(kRebootTargetString);

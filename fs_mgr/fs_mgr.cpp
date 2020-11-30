@@ -527,7 +527,7 @@ static void tune_casefold(const std::string& blk_device, const FstabEntry& entry
     bool wants_casefold =
             android::base::GetBoolProperty("external_storage.casefold.enabled", false);
 
-    if (entry.mount_point != "data" || !wants_casefold || has_casefold ) return;
+    if (entry.mount_point != "/data" || !wants_casefold || has_casefold) return;
 
     std::string casefold_support;
     if (!android::base::ReadFileToString(SYSFS_EXT4_CASEFOLD, &casefold_support)) {
@@ -1534,6 +1534,8 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                            attempted_entry.mount_point},
                           nullptr)) {
                 ++error_count;
+            } else if (current_entry.mount_point == "/data") {
+                userdata_mounted = true;
             }
             encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
             continue;
