@@ -292,9 +292,14 @@ static int process_xml(xmlTextReaderPtr xml) {
                 value = xmlTextReaderConstValue(xml);
                 uint32_t cmd;
                 if (xmlStrEqual(element, BAD_CAST "PrivateKey")) {
-                    cmd = KM_SET_ATTESTATION_KEY;
-                } else if (xmlStrEqual(element, BAD_CAST "WrappedPrivateKey")) {
-                    cmd = KM_SET_WRAPPED_ATTESTATION_KEY;
+                    if (xmlStrEqual(element_format, BAD_CAST "pem")) {
+                        cmd = KM_SET_ATTESTATION_KEY;
+                    } else if (xmlStrEqual(element_format, BAD_CAST "iecs")) {
+                        cmd = KM_SET_WRAPPED_ATTESTATION_KEY;
+                    } else {
+                        printf("unsupported key format: %s\n", element_format);
+                        return -1;
+                    }
                 } else if (xmlStrEqual(element, BAD_CAST "Certificate")) {
                     cmd = KM_APPEND_ATTESTATION_CERT_CHAIN;
                 } else {

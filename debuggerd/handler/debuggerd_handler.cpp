@@ -167,7 +167,7 @@ static bool get_main_thread_name(char* buf, size_t len) {
  * mutex is being held, so we don't want to use any libc functions that
  * could allocate memory or hold a lock.
  */
-static void log_signal_summary(const siginfo_t* info, const ucontext_t* ucontext) {
+static void log_signal_summary(const siginfo_t* info) {
   char thread_name[MAX_TASK_NAME_LEN + 1];  // one more for termination
   if (prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(thread_name), 0, 0, 0) != 0) {
     strcpy(thread_name, "<name unknown>");
@@ -186,8 +186,7 @@ static void log_signal_summary(const siginfo_t* info, const ucontext_t* ucontext
   // Many signals don't have an address or sender.
   char addr_desc[32] = "";  // ", fault addr 0x1234"
   if (signal_has_si_addr(info)) {
-    async_safe_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p",
-                             reinterpret_cast<void*>(get_fault_address(info, ucontext)));
+    async_safe_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p", info->si_addr);
   }
   pid_t self_pid = __getpid();
   char sender_desc[32] = {};  // " from pid 1234, uid 666"
@@ -544,7 +543,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     return;
   }
 
-  log_signal_summary(info, ucontext);
+  log_signal_summary(info);
 
   debugger_thread_info thread_info = {
       .crashing_tid = __gettid(),
@@ -638,5 +637,11 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks) {
 
   // Use the alternate signal stack if available so we can catch stack overflows.
   action.sa_flags |= SA_ONSTACK;
+
+#define SA_EXPOSE_TAGBITS 0x00000800
+  // Request that the kernel set tag bits in the fault address. This is necessary for diagnosing MTE
+  // faults.
+  action.sa_flags |= SA_EXPOSE_TAGBITS;
+
   debuggerd_register_handlers(&action);
 }

@@ -740,7 +740,7 @@ skip_administrative_mounts() {
   grep -v \
     -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\|bpf\) " \
     -e "^\(binfmt_misc\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
-    -e "^\(ramdumpfs\) " \
+    -e "^\(ramdumpfs\|binder\|/sys/kernel/debug\) " \
     -e " functionfs " \
     -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
     -e "^rootfs / rootfs rw," \
@@ -755,7 +755,7 @@ Filters out all apex and vendor override administrative overlay mounts
 uninteresting to the test" ]
 skip_unrelated_mounts() {
     grep -v "^overlay.* /\(apex\|bionic\|system\|vendor\)/[^ ]" |
-      grep -v "[%] /\(apex\|bionic\|system\|vendor\)/[^ ][^ ]*$"
+      grep -v "[%] /\(data_mirror\|apex\|bionic\|system\|vendor\)/[^ ][^ ]*$"
 }
 
 ##
@@ -1301,9 +1301,9 @@ else
 fi
 check_ne "${BASE_SYSTEM_DEVT}" "${BASE_VENDOR_DEVT}" --warning system/vendor devt
 [ -n "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
-  die "system devt ${SYSTEM_DEVT} is major 0"
+  echo "${YELLOW}[  WARNING ]${NORMAL} system devt ${SYSTEM_DEVT} major 0" >&2
 [ -n "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
-  die "vendor devt ${SYSTEM_DEVT} is major 0"
+  echo "${YELLOW}[  WARNING ]${NORMAL} vendor devt ${VENDOR_DEVT} major 0" >&2
 
 # Download libc.so, append some gargage, push back, and check if the file
 # is updated.
@@ -1380,9 +1380,9 @@ check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" s
 check_eq "${VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/hello </dev/null`" vendor devt after reboot
 check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
 check_eq "${VENDOR_INO}" "`adb_sh stat --format=%i /vendor/hello </dev/null`" vendor inode after reboot
-check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" base system devt after reboot
-check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/null`" base system devt after reboot
-check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" devt for su after reboot
+check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" --warning base system devt after reboot
+check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/null`" --warning base vendor devt after reboot
+check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 # Feed log with selinux denials as a result of overlays
 adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
@@ -1509,8 +1509,8 @@ else
 
   check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
   check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
-  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" base system devt after reboot
-  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" devt for su after reboot
+  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" --warning base system devt after reboot
+  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 fi
 

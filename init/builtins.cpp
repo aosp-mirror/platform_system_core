@@ -88,6 +88,7 @@ using namespace std::literals::string_literals;
 
 using android::base::Basename;
 using android::base::SetProperty;
+using android::base::Split;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
@@ -968,6 +969,23 @@ static Result<void> do_copy(const BuiltinArguments& args) {
     return {};
 }
 
+static Result<void> do_copy_per_line(const BuiltinArguments& args) {
+    std::string file_contents;
+    if (!android::base::ReadFileToString(args[1], &file_contents, true)) {
+        return Error() << "Could not read input file '" << args[1] << "'";
+    }
+    auto lines = Split(file_contents, "\n");
+    for (const auto& line : lines) {
+        auto result = WriteFile(args[2], line);
+        if (!result.ok()) {
+            LOG(VERBOSE) << "Could not write to output file '" << args[2] << "' with '" << line
+                         << "' : " << result.error();
+        }
+    }
+
+    return {};
+}
+
 static Result<void> do_chown(const BuiltinArguments& args) {
     auto uid = DecodeUid(args[1]);
     if (!uid.ok()) {
@@ -1366,6 +1384,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"class_start_post_data",   {1,     1,    {false,  do_class_start_post_data}}},
         {"class_stop",              {1,     1,    {false,  do_class_stop}}},
         {"copy",                    {2,     2,    {true,   do_copy}}},
+        {"copy_per_line",           {2,     2,    {true,   do_copy_per_line}}},
         {"domainname",              {1,     1,    {true,   do_domainname}}},
         {"enable",                  {1,     1,    {false,  do_enable}}},
         {"exec",                    {1,     kMax, {false,  do_exec}}},

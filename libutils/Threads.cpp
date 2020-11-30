@@ -302,8 +302,8 @@ void androidSetCreateThreadFunc(android_create_thread_fn func)
 }
 
 #if defined(__ANDROID__)
-namespace {
-int androidSetThreadPriorityInternal(pid_t tid, int pri, bool change_policy) {
+int androidSetThreadPriority(pid_t tid, int pri)
+{
     int rc = 0;
     int lasterr = 0;
     int curr_pri = getpriority(PRIO_PROCESS, tid);
@@ -312,19 +312,17 @@ int androidSetThreadPriorityInternal(pid_t tid, int pri, bool change_policy) {
         return rc;
     }
 
-    if (change_policy) {
-        if (pri >= ANDROID_PRIORITY_BACKGROUND) {
-            rc = SetTaskProfiles(tid, {"SCHED_SP_BACKGROUND"}, true) ? 0 : -1;
-        } else if (curr_pri >= ANDROID_PRIORITY_BACKGROUND) {
-            SchedPolicy policy = SP_FOREGROUND;
-            // Change to the sched policy group of the process.
-            get_sched_policy(getpid(), &policy);
-            rc = SetTaskProfiles(tid, {get_sched_policy_profile_name(policy)}, true) ? 0 : -1;
-        }
+    if (pri >= ANDROID_PRIORITY_BACKGROUND) {
+        rc = SetTaskProfiles(tid, {"SCHED_SP_BACKGROUND"}, true) ? 0 : -1;
+    } else if (curr_pri >= ANDROID_PRIORITY_BACKGROUND) {
+        SchedPolicy policy = SP_FOREGROUND;
+        // Change to the sched policy group of the process.
+        get_sched_policy(getpid(), &policy);
+        rc = SetTaskProfiles(tid, {get_sched_policy_profile_name(policy)}, true) ? 0 : -1;
+    }
 
-        if (rc) {
-            lasterr = errno;
-        }
+    if (rc) {
+        lasterr = errno;
     }
 
     if (setpriority(PRIO_PROCESS, tid, pri) < 0) {
@@ -334,15 +332,6 @@ int androidSetThreadPriorityInternal(pid_t tid, int pri, bool change_policy) {
     }
 
     return rc;
-}
-}  // namespace
-
-int androidSetThreadPriority(pid_t tid, int pri) {
-    return androidSetThreadPriorityInternal(tid, pri, true);
-}
-
-int androidSetThreadPriorityAndPolicy(pid_t tid, int pri, bool change_policy) {
-    return androidSetThreadPriorityInternal(tid, pri, change_policy);
 }
 
 int androidGetThreadPriority(pid_t tid) {

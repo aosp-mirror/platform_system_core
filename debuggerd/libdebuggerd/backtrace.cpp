@@ -18,8 +18,9 @@
 
 #include "libdebuggerd/backtrace.h"
 
-#include <errno.h>
 #include <dirent.h>
+#include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -65,7 +66,11 @@ void dump_backtrace_thread(int output_fd, unwindstack::Unwinder* unwinder,
   unwinder->SetRegs(thread.registers.get());
   unwinder->Unwind();
   if (unwinder->NumFrames() == 0) {
-    _LOG(&log, logtype::THREAD, "Unwind failed: tid = %d", thread.tid);
+    _LOG(&log, logtype::THREAD, "Unwind failed: tid = %d\n", thread.tid);
+    if (unwinder->LastErrorCode() != unwindstack::ERROR_NONE) {
+      _LOG(&log, logtype::THREAD, "  Error code: %s\n", unwinder->LastErrorCodeString());
+      _LOG(&log, logtype::THREAD, "  Error address: 0x%" PRIx64 "\n", unwinder->LastErrorAddress());
+    }
     return;
   }
 
