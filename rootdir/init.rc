@@ -204,11 +204,19 @@ on init
     write /dev/cpuctl/rt/cpu.rt_period_us 1000000
     write /dev/cpuctl/system/cpu.rt_runtime_us 100000
     write /dev/cpuctl/system/cpu.rt_period_us 1000000
-    write /dev/cpuctl/nnapi-hal/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/nnapi-hal/cpu.rt_runtime_us 50000
     write /dev/cpuctl/nnapi-hal/cpu.rt_period_us 1000000
+    write /dev/cpuctl/camera-daemon/cpu.rt_runtime_us 50000
+    write /dev/cpuctl/camera-daemon/cpu.rt_period_us 1000000
 
     # Migrate root group to system subgroup
     copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks
+
+    # Create an stune group for camera-specific processes
+    mkdir /dev/stune/camera-daemon
+    chown system system /dev/stune/camera-daemon
+    chown system system /dev/stune/camera-daemon/tasks
+    chmod 0664 /dev/stune/camera-daemon/tasks
 
     # Create an stune group for NNAPI HAL processes
     mkdir /dev/stune/nnapi-hal
