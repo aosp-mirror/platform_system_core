@@ -656,7 +656,17 @@ bool fs_mgr_is_f2fs(const std::string& blk_device) {
 // If needed, we'll also enable (or disable) filesystem features as specified by
 // the fstab record.
 //
-static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry& entry) {
+static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry& entry,
+                                const std::string& alt_mount_point = "") {
+    auto& mount_point = alt_mount_point.empty() ? entry.mount_point : alt_mount_point;
+    // We need this because sometimes we have legacy symlinks that are
+    // lingering around and need cleaning up.
+    struct stat info;
+    if (lstat(mount_point.c_str(), &info) == 0 && (info.st_mode & S_IFMT) == S_IFLNK) {
+        unlink(mount_point.c_str());
+    }
+    mkdir(mount_point.c_str(), 0755);
+
     int fs_stat = 0;
 
     if (is_extfs(entry.fs_type)) {
@@ -684,7 +694,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
 
     if (entry.fs_mgr_flags.check ||
         (fs_stat & (FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED))) {
-        check_fs(blk_device, entry.fs_type, entry.mount_point, &fs_stat);
+        check_fs(blk_device, entry.fs_type, mount_point, &fs_stat);
     }
 
     if (is_extfs(entry.fs_type) &&
@@ -729,13 +739,6 @@ bool fs_mgr_is_device_unlocked() {
 // sets the underlying block device to read-only if the mount is read-only.
 // See "man 2 mount" for return values.
 static int __mount(const std::string& source, const std::string& target, const FstabEntry& entry) {
-    // We need this because sometimes we have legacy symlinks that are
-    // lingering around and need cleaning up.
-    struct stat info;
-    if (lstat(target.c_str(), &info) == 0 && (info.st_mode & S_IFMT) == S_IFLNK) {
-        unlink(target.c_str());
-    }
-    mkdir(target.c_str(), 0755);
     errno = 0;
     unsigned long mountflags = entry.flags;
     int ret = 0;
@@ -1799,17 +1802,18 @@ int fs_mgr_remount_userdata_into_checkpointing(Fstab* fstab) {
 
 // wrapper to __mount() and expects a fully prepared fstab_rec,
 // unlike fs_mgr_do_mount which does more things with avb / verity etc.
-int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& mount_point) {
+int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& alt_mount_point) {
     // First check the filesystem if requested.
     if (entry.fs_mgr_flags.wait && !WaitForFile(entry.blk_device, 20s)) {
         LERROR << "Skipping mounting '" << entry.blk_device << "'";
     }
 
-    // Run fsck if needed
-    prepare_fs_for_mount(entry.blk_device, entry);
+    auto& mount_point = alt_mount_point.empty() ? entry.mount_point : alt_mount_point;
 
-    int ret =
-            __mount(entry.blk_device, mount_point.empty() ? entry.mount_point : mount_point, entry);
+    // Run fsck if needed
+    prepare_fs_for_mount(entry.blk_device, entry, mount_point);
+
+    int ret = __mount(entry.blk_device, mount_point, entry);
     if (ret) {
       ret = (errno == EBUSY) ? FS_MGR_DOMNT_BUSY : FS_MGR_DOMNT_FAILED;
     }
@@ -1868,7 +1872,14 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
             continue;
         }
 
-        int fs_stat = prepare_fs_for_mount(n_blk_device, fstab_entry);
+        // Now mount it where requested */
+        if (tmp_mount_point) {
+            mount_point = tmp_mount_point;
+        } else {
+            mount_point = fstab_entry.mount_point;
+        }
+
+        int fs_stat = prepare_fs_for_mount(n_blk_device, fstab_entry, mount_point);
 
         if (fstab_entry.fs_mgr_flags.avb) {
             if (!avb_handle) {
@@ -1902,12 +1913,6 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
             }
         }
 
-        // Now mount it where requested */
-        if (tmp_mount_point) {
-            mount_point = tmp_mount_point;
-        } else {
-            mount_point = fstab_entry.mount_point;
-        }
         int retry_count = 2;
         while (retry_count-- > 0) {
             if (!__mount(n_blk_device, mount_point, fstab_entry)) {
@@ -1919,7 +1924,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
                 mount_errors++;
                 fs_stat |= FS_STAT_FULL_MOUNT_FAILED;
                 // try again after fsck
-                check_fs(n_blk_device, fstab_entry.fs_type, fstab_entry.mount_point, &fs_stat);
+                check_fs(n_blk_device, fstab_entry.fs_type, mount_point, &fs_stat);
             }
         }
         log_fs_stat(fstab_entry.blk_device, fs_stat);
