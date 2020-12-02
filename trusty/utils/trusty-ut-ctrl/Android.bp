@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-cc_test {
+cc_binary {
     name: "trusty-ut-ctrl",
     vendor: true,
 
@@ -24,7 +24,6 @@ cc_test {
     static_libs: [
         "libtrusty",
     ],
-    gtest: false,
     cflags: [
         "-Wall",
         "-Werror",
