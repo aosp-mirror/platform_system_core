@@ -563,6 +563,7 @@ cc_test {
         "libsnapshot_snapuserd",
         "libcutils_sockets",
         "libz",
+	"libfs_mgr",
         "libdm",
     ],
     header_libs: [

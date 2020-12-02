@@ -421,7 +421,7 @@ bool CowWriter::Sync() {
     return true;
 }
 
-bool CowWriter::CommitMerge(int merged_ops) {
+bool CowWriter::CommitMerge(int merged_ops, bool sync) {
     CHECK(merge_in_progress_);
     header_.num_merge_ops += merged_ops;
 
@@ -436,7 +436,11 @@ bool CowWriter::CommitMerge(int merged_ops) {
         return false;
     }
 
-    return Sync();
+    // Sync only for merging of copy operations.
+    if (sync) {
+        return Sync();
+    }
+    return true;
 }
 
 bool CowWriter::Truncate(off_t length) {
