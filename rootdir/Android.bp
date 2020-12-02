@@ -29,4 +29,5 @@ prebuilt_etc {
 linker_config {
     name: "system_linker_config",
     src: "etc/linker.config.json",
+    installable: false,
 }

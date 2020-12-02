@@ -1,47 +1,4 @@
 {
-  // These are list of libraries which has stub interface and installed
-  // in system image so other partition and APEX modules can link to it.
-  // TODO(b/147210213) : Generate this list on build and read from the file
-  "provideLibs": [
-    // LLNDK libraries
-    "libEGL.so",
-    "libGLESv1_CM.so",
-    "libGLESv2.so",
-    "libGLESv3.so",
-    "libRS.so",
-    "libandroid_net.so",
-    "libbinder_ndk.so",
-    "libc.so",
-    "libcgrouprc.so",
-    "libclang_rt.asan-arm-android.so",
-    "libclang_rt.asan-i686-android.so",
-    "libclang_rt.asan-x86_64-android.so",
-    "libdl.so",
-    "libft2.so",
-    "liblog.so",
-    "libm.so",
-    "libmediandk.so",
-    "libnativewindow.so",
-    "libsync.so",
-    "libvndksupport.so",
-    "libvulkan.so",
-    // NDK libraries
-    "libaaudio.so",
-    "libandroid.so",
-    // adb
-    "libadbd_auth.so",
-    "libadbd_fs.so",
-    // bionic
-    "libdl_android.so",
-    // statsd
-    "libincident.so",
-    // media
-    "libmediametrics.so",
-    // nn
-    "libneuralnetworks_packageinfo.so",
-    // SELinux
-    "libselinux.so"
-  ],
   "requireLibs": [
     // Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
     "libdexfile_external.so",
