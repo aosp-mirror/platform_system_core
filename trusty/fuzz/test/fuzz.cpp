@@ -29,17 +29,17 @@ using android::trusty::fuzz::ExtraCounters;
 using android::trusty::fuzz::TrustyApp;
 
 #define TIPC_DEV "/dev/trusty-ipc-dev0"
-#define GATEKEEPER_PORT "com.android.trusty.gatekeeper"
+#define TEST_SRV_PORT "com.android.trusty.sancov.test.srv"
 
-/* Gatekeeper TA's UUID is 38ba0cdc-df0e-11e4-9869-233fb6ae4795 */
-static struct uuid gatekeeper_uuid = {
-        0x38ba0cdc,
-        0xdf0e,
-        0x11e4,
-        {0x98, 0x69, 0x23, 0x3f, 0xb6, 0xae, 0x47, 0x95},
+/* Test server's UUID is 77f68803-c514-43ba-bdce-3254531c3d24 */
+static struct uuid test_srv_uuid = {
+        0x77f68803,
+        0xc514,
+        0x43ba,
+        {0xbd, 0xce, 0x32, 0x54, 0x53, 0x1c, 0x3d, 0x24},
 };
 
-static CoverageRecord record(TIPC_DEV, &gatekeeper_uuid);
+static CoverageRecord record(TIPC_DEV, &test_srv_uuid);
 
 extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
     auto ret = record.Open();
@@ -53,7 +53,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     ExtraCounters counters(&record);
     counters.Reset();
 
-    android::trusty::fuzz::TrustyApp ta(TIPC_DEV, GATEKEEPER_PORT);
+    TrustyApp ta(TIPC_DEV, TEST_SRV_PORT);
     auto ret = ta.Connect();
     if (!ret.ok()) {
         android::trusty::fuzz::Abort();
