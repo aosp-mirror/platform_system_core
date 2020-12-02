@@ -31,7 +31,7 @@ using android::base::unique_fd;
 #define SNAP_LOG(level) LOG(level) << misc_name_ << ": "
 #define SNAP_PLOG(level) PLOG(level) << misc_name_ << ": "
 
-static constexpr size_t PAYLOAD_SIZE = (1UL << 16);
+static constexpr size_t PAYLOAD_SIZE = (1UL << 20);
 
 static_assert(PAYLOAD_SIZE >= BLOCK_SIZE);
 
@@ -156,11 +156,11 @@ bool Snapuserd::ReadData(chunk_t chunk, size_t size) {
     size_t read_size = size;
     bool ret = true;
     chunk_t chunk_key = chunk;
-    uint32_t stride;
-    lldiv_t divresult;
 
-    // Size should always be aligned
-    CHECK((read_size & (BLOCK_SIZE - 1)) == 0);
+    if (!((read_size & (BLOCK_SIZE - 1)) == 0)) {
+        SNAP_LOG(ERROR) << "ReadData - unaligned read_size: " << read_size;
+        return false;
+    }
 
     while (read_size > 0) {
         const CowOperation* cow_op = chunk_map_[chunk_key];
@@ -204,24 +204,8 @@ bool Snapuserd::ReadData(chunk_t chunk, size_t size) {
         // are contiguous
         chunk_key += 1;
 
-        if (cow_op->type == kCowCopyOp) CHECK(read_size == 0);
-
-        // This is similar to the way when chunk IDs were assigned
-        // in ReadMetadata().
-        //
-        // Skip if the chunk id represents a metadata chunk.
-        stride = exceptions_per_area_ + 1;
-        divresult = lldiv(chunk_key, stride);
-        if (divresult.rem == NUM_SNAPSHOT_HDR_CHUNKS) {
-            // Crossing exception boundary. Kernel will never
-            // issue IO which is spanning between a data chunk
-            // and a metadata chunk. This should be perfectly aligned.
-            //
-            // Since the input read_size is 4k aligned, we will
-            // always end up reading all 256 data chunks in one area.
-            // Thus, every multiple of 4K IO represents 256 data chunks
+        if (cow_op->type == kCowCopyOp) {
             CHECK(read_size == 0);
-            break;
         }
     }
 
@@ -330,7 +314,7 @@ loff_t Snapuserd::GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer
 }
 
 int Snapuserd::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, loff_t offset,
-                                    int unmerged_exceptions) {
+                                    int unmerged_exceptions, bool* copy_op) {
     int merged_ops_cur_iter = 0;
 
     // Find the operations which are merged in this cycle.
@@ -346,6 +330,12 @@ int Snapuserd::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, 
         if (cow_de->new_chunk != 0) {
             merged_ops_cur_iter += 1;
             offset += sizeof(struct disk_exception);
+            const CowOperation* cow_op = chunk_map_[cow_de->new_chunk];
+            CHECK(cow_op != nullptr);
+            CHECK(cow_op->new_block == cow_de->old_chunk);
+            if (cow_op->type == kCowCopyOp) {
+                *copy_op = true;
+            }
             // zero out to indicate that operation is merged.
             cow_de->old_chunk = 0;
             cow_de->new_chunk = 0;
@@ -367,42 +357,10 @@ int Snapuserd::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, 
         }
     }
 
+    if (*copy_op) {
+        CHECK(merged_ops_cur_iter == 1);
+    }
     return merged_ops_cur_iter;
-}
-
-bool Snapuserd::AdvanceMergedOps(int merged_ops_cur_iter) {
-    // Advance the merge operation pointer in the
-    // vector.
-    //
-    // cowop_iter_ is already initialized in ReadMetadata(). Just resume the
-    // merge process
-    while (!cowop_iter_->Done() && merged_ops_cur_iter) {
-        const CowOperation* cow_op = &cowop_iter_->Get();
-        CHECK(cow_op != nullptr);
-
-        if (cow_op->type == kCowFooterOp || cow_op->type == kCowLabelOp) {
-            cowop_iter_->Next();
-            continue;
-        }
-
-        if (!(cow_op->type == kCowReplaceOp || cow_op->type == kCowZeroOp ||
-              cow_op->type == kCowCopyOp)) {
-            SNAP_LOG(ERROR) << "Unknown operation-type found during merge: " << cow_op->type;
-            return false;
-        }
-
-        merged_ops_cur_iter -= 1;
-        SNAP_LOG(DEBUG) << "Merge op found of type " << cow_op->type
-                        << "Pending-merge-ops: " << merged_ops_cur_iter;
-        cowop_iter_->Next();
-    }
-
-    if (cowop_iter_->Done()) {
-        CHECK(merged_ops_cur_iter == 0);
-        SNAP_LOG(DEBUG) << "All cow operations merged successfully in this cycle";
-    }
-
-    return true;
 }
 
 bool Snapuserd::ProcessMergeComplete(chunk_t chunk, void* buffer) {
@@ -423,21 +381,47 @@ bool Snapuserd::ProcessMergeComplete(chunk_t chunk, void* buffer) {
     int unmerged_exceptions = 0;
     loff_t offset = GetMergeStartOffset(buffer, vec_[divresult.quot].get(), &unmerged_exceptions);
 
-    int merged_ops_cur_iter =
-            GetNumberOfMergedOps(buffer, vec_[divresult.quot].get(), offset, unmerged_exceptions);
+    bool copy_op = false;
+    // Check if the merged operation is a copy operation. If so, then we need
+    // to explicitly sync the metadata before initiating the next merge.
+    // For ex: Consider a following sequence of copy operations in the COW file:
+    //
+    // Op-1: Copy 2 -> 3
+    // Op-2: Copy 1 -> 2
+    // Op-3: Copy 5 -> 10
+    //
+    // Op-1 and Op-2 are overlapping copy operations. The merge sequence will
+    // look like:
+    //
+    // Merge op-1: Copy 2 -> 3
+    // Merge op-2: Copy 1 -> 2
+    // Merge op-3: Copy 5 -> 10
+    //
+    // Now, let's say we have a crash _after_ Merge op-2; Block 2 contents would
+    // have been over-written by Block-1 after merge op-2. During next reboot,
+    // kernel will request the metadata for all the un-merged blocks. If we had
+    // not sync the metadata after Merge-op 1 and Merge op-2, snapuser daemon
+    // will think that these merge operations are still pending and hence will
+    // inform the kernel that Op-1 and Op-2 are un-merged blocks. When kernel
+    // resumes back the merging process, it will attempt to redo the Merge op-1
+    // once again. However, block 2 contents are wrong as it has the contents
+    // of block 1 from previous merge cycle. Although, merge will silently succeed,
+    // this will lead to silent data corruption.
+    //
+    int merged_ops_cur_iter = GetNumberOfMergedOps(buffer, vec_[divresult.quot].get(), offset,
+                                                   unmerged_exceptions, &copy_op);
 
     // There should be at least one operation merged in this cycle
     CHECK(merged_ops_cur_iter > 0);
-    if (!AdvanceMergedOps(merged_ops_cur_iter)) return false;
 
     header.num_merge_ops += merged_ops_cur_iter;
     reader_->UpdateMergeProgress(merged_ops_cur_iter);
-    if (!writer_->CommitMerge(merged_ops_cur_iter)) {
+    if (!writer_->CommitMerge(merged_ops_cur_iter, copy_op)) {
         SNAP_LOG(ERROR) << "CommitMerge failed...";
         return false;
     }
 
-    SNAP_LOG(DEBUG) << "Merge success";
+    SNAP_LOG(DEBUG) << "Merge success: " << merged_ops_cur_iter << "chunk: " << chunk;
     return true;
 }
 
@@ -532,6 +516,7 @@ bool Snapuserd::ReadMetadata() {
     CHECK(header.block_size == BLOCK_SIZE);
 
     SNAP_LOG(DEBUG) << "Merge-ops: " << header.num_merge_ops;
+    reader_->InitializeMerge();
 
     writer_ = std::make_unique<CowWriter>(options);
     writer_->InitializeMerge(cow_fd_.get(), &header);
@@ -543,7 +528,8 @@ bool Snapuserd::ReadMetadata() {
 
     // Start from chunk number 2. Chunk 0 represents header and chunk 1
     // represents first metadata page.
-    chunk_t next_free = NUM_SNAPSHOT_HDR_CHUNKS + 1;
+    chunk_t data_chunk_id = NUM_SNAPSHOT_HDR_CHUNKS + 1;
+    size_t num_ops = 0;
 
     loff_t offset = 0;
     std::unique_ptr<uint8_t[]> de_ptr =
@@ -553,7 +539,6 @@ bool Snapuserd::ReadMetadata() {
     // is 0. When Area is not filled completely with all 256 exceptions,
     // this memset will ensure that metadata read is completed.
     memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
-    size_t num_ops = 0;
 
     while (!cowop_riter_->Done()) {
         const CowOperation* cow_op = &cowop_riter_->Get();
@@ -565,31 +550,23 @@ bool Snapuserd::ReadMetadata() {
             continue;
         }
 
-        if (!(cow_op->type == kCowReplaceOp || cow_op->type == kCowZeroOp ||
-              cow_op->type == kCowCopyOp)) {
-            SNAP_LOG(ERROR) << "Unknown operation-type found: " << cow_op->type;
-            return false;
-        }
-
         metadata_found = true;
         if ((cow_op->type == kCowCopyOp || prev_copy_op)) {
-            next_free = GetNextAllocatableChunkId(next_free);
+            data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
         }
 
         prev_copy_op = (cow_op->type == kCowCopyOp);
 
         // Construct the disk-exception
         de->old_chunk = cow_op->new_block;
-        de->new_chunk = next_free;
+        de->new_chunk = data_chunk_id;
 
         SNAP_LOG(DEBUG) << "Old-chunk: " << de->old_chunk << "New-chunk: " << de->new_chunk;
 
         // Store operation pointer.
-        chunk_map_[next_free] = cow_op;
+        chunk_map_[data_chunk_id] = cow_op;
         num_ops += 1;
-
         offset += sizeof(struct disk_exception);
-
         cowop_riter_->Next();
 
         if (num_ops == exceptions_per_area_) {
@@ -610,7 +587,7 @@ bool Snapuserd::ReadMetadata() {
             }
         }
 
-        next_free = GetNextAllocatableChunkId(next_free);
+        data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
     }
 
     // Partially filled area or there is no metadata
@@ -622,14 +599,11 @@ bool Snapuserd::ReadMetadata() {
                         << "Areas : " << vec_.size();
     }
 
-    SNAP_LOG(DEBUG) << "ReadMetadata() completed. chunk_id: " << next_free
-                    << "Num Sector: " << ChunkToSector(next_free);
-
-    // Initialize the iterator for merging
-    cowop_iter_ = reader_->GetOpIter();
+    SNAP_LOG(DEBUG) << "ReadMetadata() completed. Final_chunk_id: " << data_chunk_id
+                    << "Num Sector: " << ChunkToSector(data_chunk_id);
 
     // Total number of sectors required for creating dm-user device
-    num_sectors_ = ChunkToSector(next_free);
+    num_sectors_ = ChunkToSector(data_chunk_id);
     metadata_read_done_ = true;
     return true;
 }
@@ -759,6 +733,8 @@ bool Snapuserd::Run() {
                                             << "Sector: " << header->sector;
                         }
                     } else {
+                        SNAP_LOG(DEBUG) << "ReadData: chunk: " << chunk << " len: " << header->len
+                                        << " read_size: " << read_size << " offset: " << offset;
                         chunk_t num_chunks_read = (offset >> BLOCK_SHIFT);
                         if (!ReadData(chunk + num_chunks_read, read_size)) {
                             SNAP_LOG(ERROR) << "ReadData failed for chunk id: " << chunk
