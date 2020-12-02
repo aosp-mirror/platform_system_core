@@ -181,6 +181,12 @@ on init
     write /dev/cpuctl/nnapi-hal/cpu.uclamp.min 1
     write /dev/cpuctl/nnapi-hal/cpu.uclamp.latency_sensitive 1
 
+    # Create a cpu group for camera daemon processes
+    mkdir /dev/cpuctl/camera-daemon
+    chown system system /dev/cpuctl/camera-daemon
+    chown system system /dev/cpuctl/camera-daemon/tasks
+    chmod 0664 /dev/cpuctl/camera-daemon/tasks
+
     # Android only use global RT throttling and doesn't use CONFIG_RT_GROUP_SCHED
     # for RT group throttling. These values here are just to make sure RT threads
     # can be migrated to those groups. These settings can be removed once we migrate
@@ -350,6 +356,11 @@ on init
     copy /dev/cpuset/cpus /dev/cpuset/top-app/cpus
     copy /dev/cpuset/mems /dev/cpuset/top-app/mems
 
+    # create a cpuset for camera daemon processes
+    mkdir /dev/cpuset/camera-daemon
+    copy /dev/cpuset/cpus /dev/cpuset/camera-daemon/cpus
+    copy /dev/cpuset/mems /dev/cpuset/camera-daemon/mems
+
     # change permissions for all cpusets we'll touch at runtime
     chown system system /dev/cpuset
     chown system system /dev/cpuset/foreground
@@ -357,12 +368,14 @@ on init
     chown system system /dev/cpuset/system-background
     chown system system /dev/cpuset/top-app
     chown system system /dev/cpuset/restricted
+    chown system system /dev/cpuset/camera-daemon
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
     chown system system /dev/cpuset/background/tasks
     chown system system /dev/cpuset/system-background/tasks
     chown system system /dev/cpuset/top-app/tasks
     chown system system /dev/cpuset/restricted/tasks
+    chown system system /dev/cpuset/camera-daemon/tasks
 
     # set system-background to 0775 so SurfaceFlinger can touch it
     chmod 0775 /dev/cpuset/system-background
@@ -373,6 +386,7 @@ on init
     chmod 0664 /dev/cpuset/top-app/tasks
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
+    chmod 0664 /dev/cpuset/camera-daemon/tasks
 
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
