@@ -842,7 +842,7 @@ on post-fs-data
 
     # After apexes are mounted, tell keymaster early boot has ended, so it will
     # stop allowing use of early-boot keys
-    exec - system system -- /system/bin/vdc keymaster early-boot-ended
+    exec - system system -- /system/bin/vdc keymaster earlyBootEnded
 
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
