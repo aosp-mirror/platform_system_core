@@ -228,6 +228,11 @@ bool OemCmdHandler(FastbootDevice* device, const std::vector<std::string>& args)
         return device->WriteStatus(FastbootResult::FAIL, "Unable to open fastboot HAL");
     }
 
+    //Disable "oem postwipedata userdata" to prevent user wipe oem userdata only.
+    if (args[0] == "oem postwipedata userdata") {
+        return device->WriteStatus(FastbootResult::FAIL, "Unable to do oem postwipedata userdata");
+    }
+
     Result ret;
     auto ret_val = fastboot_hal->doOemCommand(args[0], [&](Result result) { ret = result; });
     if (!ret_val.isOk()) {
