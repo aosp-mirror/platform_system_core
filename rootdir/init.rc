@@ -154,24 +154,28 @@ on init
     mkdir /dev/cpuctl/top-app
     mkdir /dev/cpuctl/rt
     mkdir /dev/cpuctl/system
+    mkdir /dev/cpuctl/system-background
     chown system system /dev/cpuctl
     chown system system /dev/cpuctl/foreground
     chown system system /dev/cpuctl/background
     chown system system /dev/cpuctl/top-app
     chown system system /dev/cpuctl/rt
     chown system system /dev/cpuctl/system
+    chown system system /dev/cpuctl/system-background
     chown system system /dev/cpuctl/tasks
     chown system system /dev/cpuctl/foreground/tasks
     chown system system /dev/cpuctl/background/tasks
     chown system system /dev/cpuctl/top-app/tasks
     chown system system /dev/cpuctl/rt/tasks
     chown system system /dev/cpuctl/system/tasks
+    chown system system /dev/cpuctl/system-background/tasks
     chmod 0664 /dev/cpuctl/tasks
     chmod 0664 /dev/cpuctl/foreground/tasks
     chmod 0664 /dev/cpuctl/background/tasks
     chmod 0664 /dev/cpuctl/top-app/tasks
     chmod 0664 /dev/cpuctl/rt/tasks
     chmod 0664 /dev/cpuctl/system/tasks
+    chmod 0664 /dev/cpuctl/system-background/tasks
 
     # Create a cpu group for NNAPI HAL processes
     mkdir /dev/cpuctl/nnapi-hal
@@ -196,7 +200,7 @@ on init
     # Surfaceflinger is in FG group so giving it a bit more
     write /dev/cpuctl/foreground/cpu.rt_runtime_us 450000
     write /dev/cpuctl/foreground/cpu.rt_period_us 1000000
-    write /dev/cpuctl/background/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/background/cpu.rt_runtime_us 50000
     write /dev/cpuctl/background/cpu.rt_period_us 1000000
     write /dev/cpuctl/top-app/cpu.rt_runtime_us 100000
     write /dev/cpuctl/top-app/cpu.rt_period_us 1000000
@@ -204,11 +208,21 @@ on init
     write /dev/cpuctl/rt/cpu.rt_period_us 1000000
     write /dev/cpuctl/system/cpu.rt_runtime_us 100000
     write /dev/cpuctl/system/cpu.rt_period_us 1000000
-    write /dev/cpuctl/nnapi-hal/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/system-background/cpu.rt_runtime_us 50000
+    write /dev/cpuctl/system-background/cpu.rt_period_us 1000000
+    write /dev/cpuctl/nnapi-hal/cpu.rt_runtime_us 50000
     write /dev/cpuctl/nnapi-hal/cpu.rt_period_us 1000000
+    write /dev/cpuctl/camera-daemon/cpu.rt_runtime_us 50000
+    write /dev/cpuctl/camera-daemon/cpu.rt_period_us 1000000
 
     # Migrate root group to system subgroup
     copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks
+
+    # Create an stune group for camera-specific processes
+    mkdir /dev/stune/camera-daemon
+    chown system system /dev/stune/camera-daemon
+    chown system system /dev/stune/camera-daemon/tasks
+    chmod 0664 /dev/stune/camera-daemon/tasks
 
     # Create an stune group for NNAPI HAL processes
     mkdir /dev/stune/nnapi-hal
@@ -341,7 +355,6 @@ on init
 
     # system-background is for system tasks that should only run on
     # little cores, not on bigs
-    # to be used only by init, so don't change system-bg permissions
     mkdir /dev/cpuset/system-background
     copy /dev/cpuset/cpus /dev/cpuset/system-background/cpus
     copy /dev/cpuset/mems /dev/cpuset/system-background/mems
