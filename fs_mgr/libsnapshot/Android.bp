@@ -439,15 +439,7 @@ cc_binary {
     static_executable: true,
     system_shared_libs: [],
     ramdisk_available: true,
-}
-
-cc_binary {
-    name: "snapuserd.vendor_ramdisk",
-    stem: "snapuserd",
-    defaults: ["snapuserd_defaults"],
-    static_executable: true,
-    system_shared_libs: [],
-    vendor_ramdisk: true,
+    vendor_ramdisk_available: true,
 }
 
 cc_test {
