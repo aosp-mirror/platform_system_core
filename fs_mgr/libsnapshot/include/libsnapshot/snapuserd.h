@@ -81,7 +81,7 @@ class Snapuserd final {
     bool ReadDiskExceptions(chunk_t chunk, size_t size);
     bool ReadData(chunk_t chunk, size_t size);
     bool IsChunkIdMetadata(chunk_t chunk);
-    chunk_t GetNextAllocatableChunkId(chunk_t chunk);
+    chunk_t GetNextAllocatableChunkId(chunk_t chunk_id);
 
     bool ProcessReplaceOp(const CowOperation* cow_op);
     bool ProcessCopyOp(const CowOperation* cow_op);
@@ -90,8 +90,7 @@ class Snapuserd final {
     loff_t GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer,
                                int* unmerged_exceptions);
     int GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, loff_t offset,
-                             int unmerged_exceptions);
-    bool AdvanceMergedOps(int merged_ops_cur_iter);
+                             int unmerged_exceptions, bool* copy_op);
     bool ProcessMergeComplete(chunk_t chunk, void* buffer);
     sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
     chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
