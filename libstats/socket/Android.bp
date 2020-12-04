@@ -78,6 +78,7 @@ cc_test_library {
     visibility: [
         "//frameworks/base/apex/statsd/tests/libstatspull",
         "//frameworks/base/cmds/statsd",
+        "//packages/modules/StatsD/apex/tests/libstatspull",
         "//packages/modules/StatsD/bin",
     ],
 }
