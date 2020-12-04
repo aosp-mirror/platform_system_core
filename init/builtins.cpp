@@ -1232,7 +1232,7 @@ static Result<void> do_mark_post_data(const BuiltinArguments& args) {
 }
 
 static Result<void> GenerateLinkerConfiguration() {
-    const char* linkerconfig_binary = "/system/bin/linkerconfig";
+    const char* linkerconfig_binary = "/apex/com.android.runtime/bin/linkerconfig";
     const char* linkerconfig_target = "/linkerconfig";
     const char* arguments[] = {linkerconfig_binary, "--target", linkerconfig_target};
 
