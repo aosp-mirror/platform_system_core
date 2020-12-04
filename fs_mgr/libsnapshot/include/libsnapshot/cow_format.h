@@ -57,8 +57,14 @@ struct CowHeader {
     // Size of footer struct
     uint16_t footer_size;
 
+    // Size of op struct
+    uint16_t op_size;
+
     // The size of block operations, in bytes.
     uint32_t block_size;
+
+    // The number of ops to cluster together. 0 For no clustering. Cannot be 1.
+    uint32_t cluster_ops;
 
     // Tracks merge operations completed
     uint64_t num_merge_ops;
@@ -113,13 +119,15 @@ struct CowOperation {
     // For copy operations, this is a block location in the source image.
     //
     // For replace operations, this is a byte offset within the COW's data
-    // section (eg, not landing within the header or metadata). It is an
+    // sections (eg, not landing within the header or metadata). It is an
     // absolute position within the image.
     //
     // For zero operations (replace with all zeroes), this is unused and must
     // be zero.
     //
     // For Label operations, this is the value of the applied label.
+    //
+    // For Cluster operations, this is the length of the following data region
     uint64_t source;
 } __attribute__((packed));
 
@@ -129,6 +137,7 @@ static constexpr uint8_t kCowCopyOp = 1;
 static constexpr uint8_t kCowReplaceOp = 2;
 static constexpr uint8_t kCowZeroOp = 3;
 static constexpr uint8_t kCowLabelOp = 4;
+static constexpr uint8_t kCowClusterOp = 5;
 static constexpr uint8_t kCowFooterOp = -1;
 
 static constexpr uint8_t kCowCompressNone = 0;
@@ -142,7 +151,10 @@ struct CowFooter {
 
 std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
 
-int64_t GetNextOpOffset(const CowOperation& op);
+int64_t GetNextOpOffset(const CowOperation& op, uint32_t cluster_size);
+int64_t GetNextDataOffset(const CowOperation& op, uint32_t cluster_size);
+
+bool IsMetadataOp(const CowOperation& op);
 
 }  // namespace snapshot
 }  // namespace android

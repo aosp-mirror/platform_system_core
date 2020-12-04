@@ -81,6 +81,24 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
                    << sizeof(CowFooter);
         return false;
     }
+    if (header_.op_size != sizeof(CowOperation)) {
+        LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
+                   << sizeof(CowOperation);
+        return false;
+    }
+    if (header_.cluster_ops == 1) {
+        LOG(ERROR) << "Clusters must contain at least two operations to function.";
+        return false;
+    }
+    if (header_.op_size != sizeof(CowOperation)) {
+        LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
+                   << sizeof(CowOperation);
+        return false;
+    }
+    if (header_.cluster_ops == 1) {
+        LOG(ERROR) << "Clusters must contain at least two operations to function.";
+        return false;
+    }
 
     if ((header_.major_version != kCowVersionMajor) ||
         (header_.minor_version != kCowVersionMinor)) {
@@ -103,45 +121,64 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
     }
 
     auto ops_buffer = std::make_shared<std::vector<CowOperation>>();
+    uint64_t current_op_num = 0;
+    uint64_t cluster_ops = header_.cluster_ops ?: 1;
+    bool done = false;
 
-    // Alternating op and data
-    while (true) {
-        ops_buffer->emplace_back();
-        if (!android::base::ReadFully(fd_, &ops_buffer->back(), sizeof(CowOperation))) {
+    // Alternating op clusters and data
+    while (!done) {
+        uint64_t to_add = std::min(cluster_ops, (fd_size_ - pos) / sizeof(CowOperation));
+        if (to_add == 0) break;
+        ops_buffer->resize(current_op_num + to_add);
+        if (!android::base::ReadFully(fd_, &ops_buffer->data()[current_op_num],
+                                      to_add * sizeof(CowOperation))) {
             PLOG(ERROR) << "read op failed";
             return false;
         }
+        // Parse current cluster to find start of next cluster
+        while (current_op_num < ops_buffer->size()) {
+            auto& current_op = ops_buffer->data()[current_op_num];
+            current_op_num++;
+            pos += sizeof(CowOperation) + GetNextOpOffset(current_op, header_.cluster_ops);
 
-        auto& current_op = ops_buffer->back();
-        off_t offs = lseek(fd_.get(), GetNextOpOffset(current_op), SEEK_CUR);
-        if (offs < 0) {
+            if (current_op.type == kCowClusterOp) {
+                break;
+            } else if (current_op.type == kCowLabelOp) {
+                last_label_ = {current_op.source};
+
+                // If we reach the requested label, stop reading.
+                if (label && label.value() == current_op.source) {
+                    done = true;
+                    break;
+                }
+            } else if (current_op.type == kCowFooterOp) {
+                footer_.emplace();
+                CowFooter* footer = &footer_.value();
+                memcpy(&footer_->op, &current_op, sizeof(footer->op));
+                off_t offs = lseek(fd_.get(), pos, SEEK_SET);
+                if (offs < 0 || pos != static_cast<uint64_t>(offs)) {
+                    PLOG(ERROR) << "lseek next op failed";
+                    return false;
+                }
+                if (!android::base::ReadFully(fd_, &footer->data, sizeof(footer->data))) {
+                    LOG(ERROR) << "Could not read COW footer";
+                    return false;
+                }
+
+                // Drop the footer from the op stream.
+                current_op_num--;
+                done = true;
+                break;
+            }
+        }
+
+        // Position for next cluster read
+        off_t offs = lseek(fd_.get(), pos, SEEK_SET);
+        if (offs < 0 || pos != static_cast<uint64_t>(offs)) {
             PLOG(ERROR) << "lseek next op failed";
             return false;
         }
-        pos = static_cast<uint64_t>(offs);
-
-        if (current_op.type == kCowLabelOp) {
-            last_label_ = {current_op.source};
-
-            // If we reach the requested label, stop reading.
-            if (label && label.value() == current_op.source) {
-                break;
-            }
-        } else if (current_op.type == kCowFooterOp) {
-            footer_.emplace();
-
-            CowFooter* footer = &footer_.value();
-            memcpy(&footer_->op, &current_op, sizeof(footer->op));
-
-            if (!android::base::ReadFully(fd_, &footer->data, sizeof(footer->data))) {
-                LOG(ERROR) << "Could not read COW footer";
-                return false;
-            }
-
-            // Drop the footer from the op stream.
-            ops_buffer->pop_back();
-            break;
-        }
+        ops_buffer->resize(current_op_num);
     }
 
     // To successfully parse a COW file, we need either:
@@ -198,9 +235,7 @@ void CowReader::InitializeMerge() {
 
     // Remove all the metadata operations
     ops_->erase(std::remove_if(ops_.get()->begin(), ops_.get()->end(),
-                               [](CowOperation& op) {
-                                   return (op.type == kCowFooterOp || op.type == kCowLabelOp);
-                               }),
+                               [](CowOperation& op) { return IsMetadataOp(op); }),
                 ops_.get()->end());
 
     // We will re-arrange the vector in such a way that
