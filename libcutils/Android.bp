@@ -32,6 +32,7 @@ libcutils_nonwindows_sources = [
 cc_library_headers {
     name: "libcutils_headers",
     vendor_available: true,
+    product_available: true,
     recovery_available: true,
     ramdisk_available: true,
     vendor_ramdisk_available: true,
@@ -45,7 +46,10 @@ cc_library_headers {
     export_include_dirs: ["include"],
     target: {
         vendor: {
-            override_export_include_dirs: ["include_vndk"],
+            override_export_include_dirs: ["include_outside_system"],
+        },
+        product: {
+            override_export_include_dirs: ["include_outside_system"],
         },
         linux_bionic: {
             enabled: true,
@@ -60,6 +64,7 @@ cc_library_headers {
 cc_library {
     name: "libcutils_sockets",
     vendor_available: true,
+    product_available: true,
     recovery_available: true,
     ramdisk_available: true,
     vendor_ramdisk_available: true,
@@ -143,6 +148,7 @@ cc_test {
 cc_library {
     name: "libcutils",
     vendor_available: true,
+    product_available: true,
     vndk: {
         enabled: true,
         support_system_process: true,
@@ -234,14 +240,19 @@ cc_library {
             },
         },
 
+        // qtaguid.cpp loads libnetd_client.so with dlopen().  Since
+        // the interface of libnetd_client.so may vary between AOSP
+        // releases, exclude qtaguid.cpp from the VNDK-SP variant.
         vendor: {
             exclude_srcs: [
-                // qtaguid.cpp loads libnetd_client.so with dlopen().  Since
-                // the interface of libnetd_client.so may vary between AOSP
-                // releases, exclude qtaguid.cpp from the VNDK-SP variant.
                 "qtaguid.cpp",
             ],
-        }
+        },
+        product: {
+            exclude_srcs: [
+                "qtaguid.cpp",
+            ],
+        },
     },
 
     whole_static_libs: ["libcutils_sockets"],
