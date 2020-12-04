@@ -15,6 +15,7 @@
 cc_library_headers {
     name: "libutils_headers",
     vendor_available: true,
+    product_available: true,
     recovery_available: true,
     vendor_ramdisk_available: true,
     host_supported: true,
@@ -62,6 +63,7 @@ cc_library_headers {
 cc_defaults {
     name: "libutils_defaults",
     vendor_available: true,
+    product_available: true,
     recovery_available: true,
     vndk: {
         enabled: true,
