@@ -1,6 +1,7 @@
 cc_library_headers {
     name: "libprocessgroup_headers",
     vendor_available: true,
+    product_available: true,
     ramdisk_available: true,
     vendor_ramdisk_available: true,
     recovery_available: true,
@@ -36,6 +37,7 @@ cc_library {
     vendor_ramdisk_available: true,
     recovery_available: true,
     vendor_available: true,
+    product_available: true,
     vndk: {
         enabled: true,
         support_system_process: true,
