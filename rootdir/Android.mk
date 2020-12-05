@@ -78,7 +78,7 @@ endif
 # create some directories (some are mount points) and symlinks
 LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
     dev proc sys system data data_mirror odm oem acct config storage mnt apex debug_ramdisk \
-    linkerconfig $(BOARD_ROOT_EXTRA_FOLDERS)); \
+    linkerconfig postinstall $(BOARD_ROOT_EXTRA_FOLDERS)); \
     ln -sf /system/bin $(TARGET_ROOT_OUT)/bin; \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /data/user_de/0/com.android.shell/files/bugreports $(TARGET_ROOT_OUT)/bugreports; \
@@ -131,11 +131,6 @@ ifdef BOARD_ROOT_EXTRA_SYMLINKS
     $(eval p := $(subst :,$(space),$(s)))\
     ; mkdir -p $(dir $(TARGET_ROOT_OUT)/$(word 2,$(p))) \
     ; ln -sf $(word 1,$(p)) $(TARGET_ROOT_OUT)/$(word 2,$(p)))
-endif
-# The A/B updater uses a top-level /postinstall directory to mount the new
-# system before reboot.
-ifeq ($(AB_OTA_UPDATER),true)
-  LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/postinstall
 endif
 
 # The init symlink must be a post install command of a file that is to TARGET_ROOT_OUT.
