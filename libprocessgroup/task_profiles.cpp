@@ -391,21 +391,22 @@ TaskProfiles& TaskProfiles::GetInstance() {
 }
 
 TaskProfiles::TaskProfiles() {
-    unsigned int api_level = GetUintProperty<unsigned int>("ro.product.first_api_level", 0);
-    std::string sys_profiles_path = TASK_PROFILE_DB_FILE;
+    // load system task profiles
+    if (!Load(CgroupMap::GetInstance(), TASK_PROFILE_DB_FILE)) {
+        LOG(ERROR) << "Loading " << TASK_PROFILE_DB_FILE << " for [" << getpid() << "] failed";
+    }
 
     // load API-level specific system task profiles if available
+    unsigned int api_level = GetUintProperty<unsigned int>("ro.product.first_api_level", 0);
     if (api_level > 0) {
         std::string api_profiles_path =
                 android::base::StringPrintf(TEMPLATE_TASK_PROFILE_API_FILE, api_level);
         if (!access(api_profiles_path.c_str(), F_OK) || errno != ENOENT) {
-            sys_profiles_path = api_profiles_path;
+            if (!Load(CgroupMap::GetInstance(), api_profiles_path)) {
+                LOG(ERROR) << "Loading " << api_profiles_path << " for [" << getpid()
+                           << "] failed";
+            }
         }
-    }
-
-    // load system task profiles
-    if (!Load(CgroupMap::GetInstance(), sys_profiles_path)) {
-        LOG(ERROR) << "Loading " << sys_profiles_path << " for [" << getpid() << "] failed";
     }
 
     // load vendor task profiles if the file exists

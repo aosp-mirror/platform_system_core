@@ -81,6 +81,24 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
                    << sizeof(CowFooter);
         return false;
     }
+    if (header_.op_size != sizeof(CowOperation)) {
+        LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
+                   << sizeof(CowOperation);
+        return false;
+    }
+    if (header_.cluster_ops == 1) {
+        LOG(ERROR) << "Clusters must contain at least two operations to function.";
+        return false;
+    }
+    if (header_.op_size != sizeof(CowOperation)) {
+        LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
+                   << sizeof(CowOperation);
+        return false;
+    }
+    if (header_.cluster_ops == 1) {
+        LOG(ERROR) << "Clusters must contain at least two operations to function.";
+        return false;
+    }
 
     if ((header_.major_version != kCowVersionMajor) ||
         (header_.minor_version != kCowVersionMinor)) {
@@ -103,45 +121,64 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
     }
 
     auto ops_buffer = std::make_shared<std::vector<CowOperation>>();
+    uint64_t current_op_num = 0;
+    uint64_t cluster_ops = header_.cluster_ops ?: 1;
+    bool done = false;
 
-    // Alternating op and data
-    while (true) {
-        ops_buffer->emplace_back();
-        if (!android::base::ReadFully(fd_, &ops_buffer->back(), sizeof(CowOperation))) {
+    // Alternating op clusters and data
+    while (!done) {
+        uint64_t to_add = std::min(cluster_ops, (fd_size_ - pos) / sizeof(CowOperation));
+        if (to_add == 0) break;
+        ops_buffer->resize(current_op_num + to_add);
+        if (!android::base::ReadFully(fd_, &ops_buffer->data()[current_op_num],
+                                      to_add * sizeof(CowOperation))) {
             PLOG(ERROR) << "read op failed";
             return false;
         }
+        // Parse current cluster to find start of next cluster
+        while (current_op_num < ops_buffer->size()) {
+            auto& current_op = ops_buffer->data()[current_op_num];
+            current_op_num++;
+            pos += sizeof(CowOperation) + GetNextOpOffset(current_op, header_.cluster_ops);
 
-        auto& current_op = ops_buffer->back();
-        off_t offs = lseek(fd_.get(), GetNextOpOffset(current_op), SEEK_CUR);
-        if (offs < 0) {
+            if (current_op.type == kCowClusterOp) {
+                break;
+            } else if (current_op.type == kCowLabelOp) {
+                last_label_ = {current_op.source};
+
+                // If we reach the requested label, stop reading.
+                if (label && label.value() == current_op.source) {
+                    done = true;
+                    break;
+                }
+            } else if (current_op.type == kCowFooterOp) {
+                footer_.emplace();
+                CowFooter* footer = &footer_.value();
+                memcpy(&footer_->op, &current_op, sizeof(footer->op));
+                off_t offs = lseek(fd_.get(), pos, SEEK_SET);
+                if (offs < 0 || pos != static_cast<uint64_t>(offs)) {
+                    PLOG(ERROR) << "lseek next op failed";
+                    return false;
+                }
+                if (!android::base::ReadFully(fd_, &footer->data, sizeof(footer->data))) {
+                    LOG(ERROR) << "Could not read COW footer";
+                    return false;
+                }
+
+                // Drop the footer from the op stream.
+                current_op_num--;
+                done = true;
+                break;
+            }
+        }
+
+        // Position for next cluster read
+        off_t offs = lseek(fd_.get(), pos, SEEK_SET);
+        if (offs < 0 || pos != static_cast<uint64_t>(offs)) {
             PLOG(ERROR) << "lseek next op failed";
             return false;
         }
-        pos = static_cast<uint64_t>(offs);
-
-        if (current_op.type == kCowLabelOp) {
-            last_label_ = {current_op.source};
-
-            // If we reach the requested label, stop reading.
-            if (label && label.value() == current_op.source) {
-                break;
-            }
-        } else if (current_op.type == kCowFooterOp) {
-            footer_.emplace();
-
-            CowFooter* footer = &footer_.value();
-            memcpy(&footer_->op, &current_op, sizeof(footer->op));
-
-            if (!android::base::ReadFully(fd_, &footer->data, sizeof(footer->data))) {
-                LOG(ERROR) << "Could not read COW footer";
-                return false;
-            }
-
-            // Drop the footer from the op stream.
-            ops_buffer->pop_back();
-            break;
-        }
+        ops_buffer->resize(current_op_num);
     }
 
     // To successfully parse a COW file, we need either:
@@ -189,27 +226,134 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
         LOG(INFO) << "No COW Footer, recovered data";
     }
 
-    if (header_.num_merge_ops > 0) {
-        uint64_t merge_ops = header_.num_merge_ops;
-        uint64_t metadata_ops = 0;
-        uint64_t current_op_num = 0;
-
-        CHECK(ops_buffer->size() >= merge_ops);
-        while (merge_ops) {
-            auto& current_op = ops_buffer->data()[current_op_num];
-            if (current_op.type == kCowLabelOp || current_op.type == kCowFooterOp) {
-                metadata_ops += 1;
-            } else {
-                merge_ops -= 1;
-            }
-            current_op_num += 1;
-        }
-        ops_buffer->erase(ops_buffer.get()->begin(),
-                          ops_buffer.get()->begin() + header_.num_merge_ops + metadata_ops);
-    }
-
     ops_ = ops_buffer;
     return true;
+}
+
+void CowReader::InitializeMerge() {
+    uint64_t num_copy_ops = 0;
+
+    // Remove all the metadata operations
+    ops_->erase(std::remove_if(ops_.get()->begin(), ops_.get()->end(),
+                               [](CowOperation& op) { return IsMetadataOp(op); }),
+                ops_.get()->end());
+
+    // We will re-arrange the vector in such a way that
+    // kernel can batch merge. Ex:
+    //
+    // Existing COW format; All the copy operations
+    // are at the beginning.
+    // =======================================
+    // Copy-op-1    - cow_op->new_block = 1
+    // Copy-op-2    - cow_op->new_block = 2
+    // Copy-op-3    - cow_op->new_block = 3
+    // Replace-op-4 - cow_op->new_block = 6
+    // Replace-op-5 - cow_op->new_block = 4
+    // Replace-op-6 - cow_op->new_block = 8
+    // Replace-op-7 - cow_op->new_block = 9
+    // Zero-op-8    - cow_op->new_block = 7
+    // Zero-op-9    - cow_op->new_block = 5
+    // =======================================
+    //
+    // First find the operation which isn't a copy-op
+    // and then sort all the operations in descending order
+    // with the key being cow_op->new_block (source block)
+    //
+    // The data-structure will look like:
+    //
+    // =======================================
+    // Copy-op-1    - cow_op->new_block = 1
+    // Copy-op-2    - cow_op->new_block = 2
+    // Copy-op-3    - cow_op->new_block = 3
+    // Replace-op-7 - cow_op->new_block = 9
+    // Replace-op-6 - cow_op->new_block = 8
+    // Zero-op-8    - cow_op->new_block = 7
+    // Replace-op-4 - cow_op->new_block = 6
+    // Zero-op-9    - cow_op->new_block = 5
+    // Replace-op-5 - cow_op->new_block = 4
+    // =======================================
+    //
+    // Daemon will read the above data-structure in reverse-order
+    // when reading metadata. Thus, kernel will get the metadata
+    // in the following order:
+    //
+    // ========================================
+    // Replace-op-5 - cow_op->new_block = 4
+    // Zero-op-9    - cow_op->new_block = 5
+    // Replace-op-4 - cow_op->new_block = 6
+    // Zero-op-8    - cow_op->new_block = 7
+    // Replace-op-6 - cow_op->new_block = 8
+    // Replace-op-7 - cow_op->new_block = 9
+    // Copy-op-3    - cow_op->new_block = 3
+    // Copy-op-2    - cow_op->new_block = 2
+    // Copy-op-1    - cow_op->new_block = 1
+    // ===========================================
+    //
+    // When merging begins, kernel will start from the last
+    // metadata which was read: In the above format, Copy-op-1
+    // will be the first merge operation.
+    //
+    // Now, batching of the merge operations happens only when
+    // 1: origin block numbers in the base device are contiguous
+    // (cow_op->new_block) and,
+    // 2: cow block numbers which are assigned by daemon in ReadMetadata()
+    // are contiguous. These are monotonically increasing numbers.
+    //
+    // When both (1) and (2) are true, kernel will batch merge the operations.
+    // However, we do not want copy operations to be batch merged as
+    // a crash or system reboot during an overlapping copy can drive the device
+    // to a corrupted state. Hence, merging of copy operations should always be
+    // done as a individual 4k block. In the above case, since the
+    // cow_op->new_block numbers are contiguous, we will ensure that the
+    // cow block numbers assigned in ReadMetadata() for these respective copy
+    // operations are not contiguous forcing kernel to issue merge for each
+    // copy operations without batch merging.
+    //
+    // For all the other operations viz. Replace and Zero op, the cow block
+    // numbers assigned by daemon will be contiguous allowing kernel to batch
+    // merge.
+    //
+    // The final format after assiging COW block numbers by the daemon will
+    // look something like:
+    //
+    // =========================================================
+    // Replace-op-5 - cow_op->new_block = 4  cow-block-num = 2
+    // Zero-op-9    - cow_op->new_block = 5  cow-block-num = 3
+    // Replace-op-4 - cow_op->new_block = 6  cow-block-num = 4
+    // Zero-op-8    - cow_op->new_block = 7  cow-block-num = 5
+    // Replace-op-6 - cow_op->new_block = 8  cow-block-num = 6
+    // Replace-op-7 - cow_op->new_block = 9  cow-block-num = 7
+    // Copy-op-3    - cow_op->new_block = 3  cow-block-num = 9
+    // Copy-op-2    - cow_op->new_block = 2  cow-block-num = 11
+    // Copy-op-1    - cow_op->new_block = 1  cow-block-num = 13
+    // ==========================================================
+    //
+    // Merge sequence will look like:
+    //
+    // Merge-1 - Copy-op-1
+    // Merge-2 - Copy-op-2
+    // Merge-3 - Copy-op-3
+    // Merge-4 - Batch-merge {Replace-op-7, Replace-op-6, Zero-op-8,
+    //                        Replace-op-4, Zero-op-9, Replace-op-5 }
+    //==============================================================
+
+    for (uint64_t i = 0; i < ops_->size(); i++) {
+        auto& current_op = ops_->data()[i];
+        if (current_op.type != kCowCopyOp) {
+            break;
+        }
+        num_copy_ops += 1;
+    }
+
+    std::sort(ops_.get()->begin() + num_copy_ops, ops_.get()->end(),
+              [](CowOperation& op1, CowOperation& op2) -> bool {
+                  return op1.new_block > op2.new_block;
+              });
+
+    if (header_.num_merge_ops > 0) {
+        CHECK(ops_->size() >= header_.num_merge_ops);
+        ops_->erase(ops_.get()->begin(), ops_.get()->begin() + header_.num_merge_ops);
+    }
 }
 
 bool CowReader::GetHeader(CowHeader* header) {

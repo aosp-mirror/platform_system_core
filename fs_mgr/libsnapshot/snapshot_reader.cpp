@@ -90,7 +90,7 @@ bool CompressedSnapshotReader::SetCow(std::unique_ptr<CowReader>&& cow) {
     op_iter_ = cow_->GetOpIter();
     while (!op_iter_->Done()) {
         const CowOperation* op = &op_iter_->Get();
-        if (op->type == kCowLabelOp || op->type == kCowFooterOp) {
+        if (IsMetadataOp(*op)) {
             op_iter_->Next();
             continue;
         }
