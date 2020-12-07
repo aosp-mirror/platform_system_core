@@ -47,7 +47,6 @@ pid_t gettid() {
 #endif  // __ANDROID__
 
 #if !defined(_WIN32)
-
 void*  thread_store_get( thread_store_t*  store )
 {
     if (!store->has_tls)
@@ -72,40 +71,4 @@ extern void   thread_store_set( thread_store_t*          store,
 
     pthread_setspecific( store->tls, value );
 }
-
-#else /* !defined(_WIN32) */
-void*  thread_store_get( thread_store_t*  store )
-{
-    if (!store->has_tls)
-        return NULL;
-
-    return (void*) TlsGetValue( store->tls );
-}
-
-void   thread_store_set( thread_store_t*          store,
-                         void*                    value,
-                         thread_store_destruct_t  /*destroy*/ )
-{
-    /* XXX: can't use destructor on thread exit */
-    if (!store->lock_init) {
-        store->lock_init = -1;
-        InitializeCriticalSection( &store->lock );
-        store->lock_init = -2;
-    } else while (store->lock_init != -2) {
-        Sleep(10); /* 10ms */
-    }
-
-    EnterCriticalSection( &store->lock );
-    if (!store->has_tls) {
-        store->tls = TlsAlloc();
-        if (store->tls == TLS_OUT_OF_INDEXES) {
-            LeaveCriticalSection( &store->lock );
-            return;
-        }
-        store->has_tls = 1;
-    }
-    LeaveCriticalSection( &store->lock );
-
-    TlsSetValue( store->tls, value );
-}
-#endif /* !defined(_WIN32) */
+#endif
