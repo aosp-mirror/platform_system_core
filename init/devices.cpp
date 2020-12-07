@@ -124,8 +124,15 @@ static bool FindDmDevice(const std::string& path, std::string* name, std::string
     return true;
 }
 
-Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid)
-    : name_(name), perm_(perm), uid_(uid), gid_(gid), prefix_(false), wildcard_(false) {
+Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid,
+                         bool no_fnm_pathname)
+    : name_(name),
+      perm_(perm),
+      uid_(uid),
+      gid_(gid),
+      prefix_(false),
+      wildcard_(false),
+      no_fnm_pathname_(no_fnm_pathname) {
     // Set 'prefix_' or 'wildcard_' based on the below cases:
     //
     // 1) No '*' in 'name' -> Neither are set and Match() checks a given path for strict
@@ -136,7 +143,6 @@ Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t 
     //
     // 3) '*' appears elsewhere -> 'wildcard_' is set to true and Match() uses fnmatch()
     //    with FNM_PATHNAME to compare 'name' to a given path.
-
     auto wildcard_position = name_.find('*');
     if (wildcard_position != std::string::npos) {
         if (wildcard_position == name_.length() - 1) {
@@ -150,7 +156,8 @@ Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t 
 
 bool Permissions::Match(const std::string& path) const {
     if (prefix_) return StartsWith(path, name_);
-    if (wildcard_) return fnmatch(name_.c_str(), path.c_str(), FNM_PATHNAME) == 0;
+    if (wildcard_)
+        return fnmatch(name_.c_str(), path.c_str(), no_fnm_pathname_ ? 0 : FNM_PATHNAME) == 0;
     return path == name_;
 }
 
