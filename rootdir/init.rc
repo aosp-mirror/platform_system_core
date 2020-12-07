@@ -612,6 +612,9 @@ on late-fs
     # HALs required before storage encryption can get unlocked (FBE/FDE)
     class_start early_hal
 
+    # Load trusted keys from dm-verity protected partitions
+    exec -- /system/bin/fsverity_init --load-verified-keys
+
 on post-fs-data
     mark_post_data
 
@@ -853,6 +856,9 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
+    # Lock the fs-verity keyring, so no more keys can be added
+    exec -- /system/bin/fsverity_init --lock
+
     # After apexes are mounted, tell keymaster early boot has ended, so it will
     # stop allowing use of early-boot keys
     exec - system system -- /system/bin/vdc keymaster earlyBootEnded
@@ -1033,9 +1039,6 @@ on boot
     class_start hal
 
     class_start core
-
-    # Requires keystore (currently a core service) to be ready first.
-    exec -- /system/bin/fsverity_init
 
 on nonencrypted
     class_start main
