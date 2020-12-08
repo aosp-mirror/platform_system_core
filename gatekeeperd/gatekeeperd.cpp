@@ -19,42 +19,44 @@
 #include <android/service/gatekeeper/BnGateKeeperService.h>
 #include <gatekeeper/GateKeeperResponse.h>
 
+#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
-#include <stdint.h>
 #include <unistd.h>
 #include <memory>
 
-#include <android/security/keystore/IKeystoreService.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android/binder_manager.h>
+#include <android/security/keystore/IKeystoreService.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
-#include <gatekeeper/password_handle.h> // for password_handle_t
-#include <hardware/gatekeeper.h>
+#include <gatekeeper/password_handle.h>  // for password_handle_t
 #include <hardware/hw_auth_token.h>
-#include <keystore/keystore.h> // For error code
 #include <keystore/keystore_return_types.h>
 #include <libgsi/libgsi.h>
 #include <log/log.h>
-#include <utils/Log.h>
 #include <utils/String16.h>
 
-#include <hidl/HidlSupport.h>
+#include <aidl/android/hardware/security/keymint/HardwareAuthToken.h>
+#include <aidl/android/security/authorization/IKeystoreAuthorization.h>
 #include <android/hardware/gatekeeper/1.0/IGatekeeper.h>
+#include <hidl/HidlSupport.h>
 
 using android::sp;
-using android::hardware::gatekeeper::V1_0::IGatekeeper;
-using android::hardware::gatekeeper::V1_0::GatekeeperStatusCode;
-using android::hardware::gatekeeper::V1_0::GatekeeperResponse;
 using android::hardware::Return;
+using android::hardware::gatekeeper::V1_0::GatekeeperResponse;
+using android::hardware::gatekeeper::V1_0::GatekeeperStatusCode;
+using android::hardware::gatekeeper::V1_0::IGatekeeper;
 
 using ::android::binder::Status;
 using ::android::service::gatekeeper::BnGateKeeperService;
 using GKResponse = ::android::service::gatekeeper::GateKeeperResponse;
 using GKResponseCode = ::android::service::gatekeeper::ResponseCode;
+using ::aidl::android::hardware::security::keymint::HardwareAuthenticatorType;
+using ::aidl::android::hardware::security::keymint::HardwareAuthToken;
+using ::aidl::android::security::authorization::IKeystoreAuthorization;
 
 namespace android {
 
@@ -62,7 +64,7 @@ static const String16 KEYGUARD_PERMISSION("android.permission.ACCESS_KEYGUARD_SE
 static const String16 DUMP_PERMISSION("android.permission.DUMP");
 
 class GateKeeperProxy : public BnGateKeeperService {
-public:
+  public:
     GateKeeperProxy() {
         clear_state_if_needed_done = false;
         hw_device = IGatekeeper::getService();
@@ -73,8 +75,7 @@ public:
         }
     }
 
-    virtual ~GateKeeperProxy() {
-    }
+    virtual ~GateKeeperProxy() {}
 
     void store_sid(uint32_t userId, uint64_t sid) {
         char filename[21];
@@ -96,7 +97,7 @@ public:
         if (mark_cold_boot() && !is_running_gsi) {
             ALOGI("cold boot: clearing state");
             if (hw_device) {
-                hw_device->deleteAllUsers([](const GatekeeperResponse &){});
+                hw_device->deleteAllUsers([](const GatekeeperResponse&) {});
             }
         }
 
@@ -104,7 +105,7 @@ public:
     }
 
     bool mark_cold_boot() {
-        const char *filename = ".coldboot";
+        const char* filename = ".coldboot";
         if (access(filename, F_OK) == -1) {
             int fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
             if (fd < 0) {
@@ -299,7 +300,34 @@ public:
 
         if (gkResponse->response_code() == GKResponseCode::OK) {
             if (gkResponse->payload().size() != 0) {
+                // try to connect to IKeystoreAuthorization AIDL service first.
+                ::ndk::SpAIBinder authzBinder(
+                        AServiceManager_getService("android.security.authorization"));
+                auto authzService = IKeystoreAuthorization::fromBinder(authzBinder);
+                if (authzService) {
+                    if (gkResponse->payload().size() != sizeof(hw_auth_token_t)) {
+                        LOG(ERROR) << "Incorrect size of AuthToken payload.";
+                        return GK_ERROR;
+                    }
+
+                    const hw_auth_token_t* hwAuthToken =
+                            reinterpret_cast<const hw_auth_token_t*>(gkResponse->payload().data());
+                    HardwareAuthToken authToken;
+
+                    authToken.timestamp.milliSeconds = betoh64(hwAuthToken->timestamp);
+                    authToken.challenge = hwAuthToken->challenge;
+                    authToken.authenticatorId = hwAuthToken->authenticator_id;
+                    authToken.authenticatorType = static_cast<HardwareAuthenticatorType>(
+                            betoh32(hwAuthToken->authenticator_type));
+                    authToken.mac.assign(&hwAuthToken->hmac[0], &hwAuthToken->hmac[32]);
+                    auto result = authzService->addAuthToken(authToken);
+                    if (!result.isOk()) {
+                        LOG(ERROR) << "Failure in sending AuthToken to AuthorizationService.";
+                        return GK_ERROR;
+                    }
+                }
                 sp<IServiceManager> sm = defaultServiceManager();
+
                 sp<IBinder> binder = sm->getService(String16("android.security.keystore"));
                 sp<security::keystore::IKeystoreService> service =
                         interface_cast<security::keystore::IKeystoreService>(binder);
@@ -310,9 +338,12 @@ public:
                     if (!binder_result.isOk() ||
                         !keystore::KeyStoreServiceReturnCode(result).isOk()) {
                         LOG(ERROR) << "Failure sending auth token to KeyStore: " << result;
+                        return GK_ERROR;
                     }
                 } else {
-                    LOG(ERROR) << "Cannot deliver auth token. Unable to communicate with Keystore.";
+                    LOG(ERROR) << "Cannot deliver auth token. Unable to communicate with "
+                                  "Keystore.";
+                    return GK_ERROR;
                 }
             }
 
@@ -366,23 +397,23 @@ public:
         }
 
         if (hw_device == NULL) {
-            const char *result = "Device not available";
+            const char* result = "Device not available";
             write(fd, result, strlen(result) + 1);
         } else {
-            const char *result = "OK";
+            const char* result = "OK";
             write(fd, result, strlen(result) + 1);
         }
 
         return OK;
     }
 
-private:
+  private:
     sp<IGatekeeper> hw_device;
 
     bool clear_state_if_needed_done;
     bool is_running_gsi;
 };
-}// namespace android
+}  // namespace android
 
 int main(int argc, char* argv[]) {
     ALOGI("Starting gatekeeperd...");
