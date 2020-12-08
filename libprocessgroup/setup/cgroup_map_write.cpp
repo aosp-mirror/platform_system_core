@@ -17,6 +17,7 @@
 //#define LOG_NDEBUG 0
 #define LOG_TAG "libprocessgroup"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <grp.h>
@@ -54,64 +55,120 @@ namespace cgrouprc {
 static constexpr const char* CGROUPS_DESC_FILE = "/etc/cgroups.json";
 static constexpr const char* CGROUPS_DESC_VENDOR_FILE = "/vendor/etc/cgroups.json";
 
-static bool Mkdir(const std::string& path, mode_t mode, const std::string& uid,
-                  const std::string& gid) {
-    if (mode == 0) {
-        mode = 0755;
-    }
-
-    if (mkdir(path.c_str(), mode) != 0) {
-        /* chmod in case the directory already exists */
-        if (errno == EEXIST) {
-            if (fchmodat(AT_FDCWD, path.c_str(), mode, AT_SYMLINK_NOFOLLOW) != 0) {
-                // /acct is a special case when the directory already exists
-                // TODO: check if file mode is already what we want instead of using EROFS
-                if (errno != EROFS) {
-                    PLOG(ERROR) << "fchmodat() failed for " << path;
-                    return false;
-                }
-            }
-        } else {
-            PLOG(ERROR) << "mkdir() failed for " << path;
-            return false;
-        }
-    }
-
-    if (uid.empty()) {
-        return true;
-    }
-
-    passwd* uid_pwd = getpwnam(uid.c_str());
-    if (!uid_pwd) {
-        PLOG(ERROR) << "Unable to decode UID for '" << uid << "'";
-        return false;
-    }
-
-    uid_t pw_uid = uid_pwd->pw_uid;
+static bool ChangeDirModeAndOwner(const std::string& path, mode_t mode, const std::string& uid,
+                                  const std::string& gid, bool permissive_mode = false) {
+    uid_t pw_uid = -1;
     gid_t gr_gid = -1;
-    if (!gid.empty()) {
-        group* gid_pwd = getgrnam(gid.c_str());
-        if (!gid_pwd) {
-            PLOG(ERROR) << "Unable to decode GID for '" << gid << "'";
+
+    if (!uid.empty()) {
+        passwd* uid_pwd = getpwnam(uid.c_str());
+        if (!uid_pwd) {
+            PLOG(ERROR) << "Unable to decode UID for '" << uid << "'";
             return false;
         }
-        gr_gid = gid_pwd->gr_gid;
+
+        pw_uid = uid_pwd->pw_uid;
+        gr_gid = -1;
+
+        if (!gid.empty()) {
+            group* gid_pwd = getgrnam(gid.c_str());
+            if (!gid_pwd) {
+                PLOG(ERROR) << "Unable to decode GID for '" << gid << "'";
+                return false;
+            }
+            gr_gid = gid_pwd->gr_gid;
+        }
     }
 
-    if (lchown(path.c_str(), pw_uid, gr_gid) < 0) {
-        PLOG(ERROR) << "lchown() failed for " << path;
+    auto dir = std::unique_ptr<DIR, decltype(&closedir)>(opendir(path.c_str()), closedir);
+
+    if (dir == NULL) {
+        PLOG(ERROR) << "opendir failed for " << path;
         return false;
     }
 
-    /* chown may have cleared S_ISUID and S_ISGID, chmod again */
-    if (mode & (S_ISUID | S_ISGID)) {
-        if (fchmodat(AT_FDCWD, path.c_str(), mode, AT_SYMLINK_NOFOLLOW) != 0) {
+    struct dirent* dir_entry;
+    while ((dir_entry = readdir(dir.get()))) {
+        if (!strcmp("..", dir_entry->d_name)) {
+            continue;
+        }
+
+        std::string file_path = path + "/" + dir_entry->d_name;
+
+        if (pw_uid != -1 && lchown(file_path.c_str(), pw_uid, gr_gid) < 0) {
+            PLOG(ERROR) << "lchown() failed for " << file_path;
+            return false;
+        }
+
+        if (fchmodat(AT_FDCWD, file_path.c_str(), mode, AT_SYMLINK_NOFOLLOW) != 0 &&
+            (errno != EROFS || !permissive_mode)) {
             PLOG(ERROR) << "fchmodat() failed for " << path;
             return false;
         }
     }
 
     return true;
+}
+
+static bool Mkdir(const std::string& path, mode_t mode, const std::string& uid,
+                  const std::string& gid) {
+    bool permissive_mode = false;
+
+    if (mode == 0) {
+        /* Allow chmod to fail */
+        permissive_mode = true;
+        mode = 0755;
+    }
+
+    if (mkdir(path.c_str(), mode) != 0) {
+        // /acct is a special case when the directory already exists
+        if (errno != EEXIST) {
+            PLOG(ERROR) << "mkdir() failed for " << path;
+            return false;
+        } else {
+            permissive_mode = true;
+        }
+    }
+
+    if (uid.empty() && permissive_mode) {
+        return true;
+    }
+
+    if (!ChangeDirModeAndOwner(path, mode, uid, gid, permissive_mode)) {
+        PLOG(ERROR) << "change of ownership or mode failed for " << path;
+        return false;
+    }
+
+    return true;
+}
+
+static void MergeCgroupToDescriptors(std::map<std::string, CgroupDescriptor>* descriptors,
+                                     const Json::Value& cgroup, const std::string& name,
+                                     const std::string& root_path, int cgroups_version) {
+    std::string path;
+
+    if (!root_path.empty()) {
+        path = root_path + "/" + cgroup["Path"].asString();
+    } else {
+        path = cgroup["Path"].asString();
+    }
+
+    uint32_t controller_flags = 0;
+
+    if (cgroup["NeedsActivation"].isBool() && cgroup["NeedsActivation"].asBool()) {
+        controller_flags |= CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION;
+    }
+
+    CgroupDescriptor descriptor(
+            cgroups_version, name, path, std::strtoul(cgroup["Mode"].asString().c_str(), 0, 8),
+            cgroup["UID"].asString(), cgroup["GID"].asString(), controller_flags);
+
+    auto iter = descriptors->find(name);
+    if (iter == descriptors->end()) {
+        descriptors->emplace(name, descriptor);
+    } else {
+        iter->second = descriptor;
+    }
 }
 
 static bool ReadDescriptorsFromFile(const std::string& file_name,
@@ -135,36 +192,19 @@ static bool ReadDescriptorsFromFile(const std::string& file_name,
         const Json::Value& cgroups = root["Cgroups"];
         for (Json::Value::ArrayIndex i = 0; i < cgroups.size(); ++i) {
             std::string name = cgroups[i]["Controller"].asString();
-            auto iter = descriptors->find(name);
-            if (iter == descriptors->end()) {
-                descriptors->emplace(
-                        name, CgroupDescriptor(
-                                      1, name, cgroups[i]["Path"].asString(),
-                                      std::strtoul(cgroups[i]["Mode"].asString().c_str(), 0, 8),
-                                      cgroups[i]["UID"].asString(), cgroups[i]["GID"].asString()));
-            } else {
-                iter->second = CgroupDescriptor(
-                        1, name, cgroups[i]["Path"].asString(),
-                        std::strtoul(cgroups[i]["Mode"].asString().c_str(), 0, 8),
-                        cgroups[i]["UID"].asString(), cgroups[i]["GID"].asString());
-            }
+            MergeCgroupToDescriptors(descriptors, cgroups[i], name, "", 1);
         }
     }
 
     if (root.isMember("Cgroups2")) {
         const Json::Value& cgroups2 = root["Cgroups2"];
-        auto iter = descriptors->find(CGROUPV2_CONTROLLER_NAME);
-        if (iter == descriptors->end()) {
-            descriptors->emplace(
-                    CGROUPV2_CONTROLLER_NAME,
-                    CgroupDescriptor(2, CGROUPV2_CONTROLLER_NAME, cgroups2["Path"].asString(),
-                                     std::strtoul(cgroups2["Mode"].asString().c_str(), 0, 8),
-                                     cgroups2["UID"].asString(), cgroups2["GID"].asString()));
-        } else {
-            iter->second =
-                    CgroupDescriptor(2, CGROUPV2_CONTROLLER_NAME, cgroups2["Path"].asString(),
-                                     std::strtoul(cgroups2["Mode"].asString().c_str(), 0, 8),
-                                     cgroups2["UID"].asString(), cgroups2["GID"].asString());
+        std::string root_path = cgroups2["Path"].asString();
+        MergeCgroupToDescriptors(descriptors, cgroups2, CGROUPV2_CONTROLLER_NAME, "", 2);
+
+        const Json::Value& childGroups = cgroups2["Controllers"];
+        for (Json::Value::ArrayIndex i = 0; i < childGroups.size(); ++i) {
+            std::string name = childGroups[i]["Controller"].asString();
+            MergeCgroupToDescriptors(descriptors, childGroups[i], name, root_path, 2);
         }
     }
 
@@ -192,17 +232,51 @@ static bool ReadDescriptors(std::map<std::string, CgroupDescriptor>* descriptors
 static bool SetupCgroup(const CgroupDescriptor& descriptor) {
     const format::CgroupController* controller = descriptor.controller();
 
-    // mkdir <path> [mode] [owner] [group]
-    if (!Mkdir(controller->path(), descriptor.mode(), descriptor.uid(), descriptor.gid())) {
-        LOG(ERROR) << "Failed to create directory for " << controller->name() << " cgroup";
-        return false;
-    }
-
     int result;
     if (controller->version() == 2) {
-        result = mount("none", controller->path(), "cgroup2", MS_NODEV | MS_NOEXEC | MS_NOSUID,
-                       nullptr);
+        result = 0;
+        if (!strcmp(controller->name(), CGROUPV2_CONTROLLER_NAME)) {
+            // /sys/fs/cgroup is created by cgroup2 with specific selinux permissions,
+            // try to create again in case the mount point is changed
+            if (!Mkdir(controller->path(), 0, "", "")) {
+                LOG(ERROR) << "Failed to create directory for " << controller->name() << " cgroup";
+                return false;
+            }
+
+            result = mount("none", controller->path(), "cgroup2", MS_NODEV | MS_NOEXEC | MS_NOSUID,
+                           nullptr);
+
+            // selinux permissions change after mounting, so it's ok to change mode and owner now
+            if (!ChangeDirModeAndOwner(controller->path(), descriptor.mode(), descriptor.uid(),
+                                       descriptor.gid())) {
+                LOG(ERROR) << "Failed to create directory for " << controller->name() << " cgroup";
+                result = -1;
+            } else {
+                LOG(ERROR) << "restored ownership for " << controller->name() << " cgroup";
+            }
+        } else {
+            if (!Mkdir(controller->path(), descriptor.mode(), descriptor.uid(), descriptor.gid())) {
+                LOG(ERROR) << "Failed to create directory for " << controller->name() << " cgroup";
+                return false;
+            }
+
+            if (controller->flags() & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
+                std::string str = std::string("+") + controller->name();
+                std::string path = std::string(controller->path()) + "/cgroup.subtree_control";
+
+                if (!base::WriteStringToFile(str, path)) {
+                    LOG(ERROR) << "Failed to activate controller " << controller->name();
+                    return false;
+                }
+            }
+        }
     } else {
+        // mkdir <path> [mode] [owner] [group]
+        if (!Mkdir(controller->path(), descriptor.mode(), descriptor.uid(), descriptor.gid())) {
+            LOG(ERROR) << "Failed to create directory for " << controller->name() << " cgroup";
+            return false;
+        }
+
         // Unfortunately historically cpuset controller was mounted using a mount command
         // different from all other controllers. This results in controller attributes not
         // to be prepended with controller name. For example this way instead of
@@ -267,8 +341,8 @@ static bool WriteRcFile(const std::map<std::string, CgroupDescriptor>& descripto
 
 CgroupDescriptor::CgroupDescriptor(uint32_t version, const std::string& name,
                                    const std::string& path, mode_t mode, const std::string& uid,
-                                   const std::string& gid)
-    : controller_(version, 0, name, path), mode_(mode), uid_(uid), gid_(gid) {}
+                                   const std::string& gid, uint32_t flags = 0)
+    : controller_(version, flags, name, path), mode_(mode), uid_(uid), gid_(gid) {}
 
 void CgroupDescriptor::set_mounted(bool mounted) {
     uint32_t flags = controller_.flags();

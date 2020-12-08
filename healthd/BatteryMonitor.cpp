@@ -79,7 +79,7 @@ static void initHealthInfo(HealthInfo_2_1* health_info_2_1) {
 
     // HIDL enum values are zero initialized, so they need to be initialized
     // properly.
-    health_info_2_1->batteryCapacityLevel = BatteryCapacityLevel::UNKNOWN;
+    health_info_2_1->batteryCapacityLevel = BatteryCapacityLevel::UNSUPPORTED;
     health_info_2_1->batteryChargeTimeToFullNowSeconds =
             (int64_t)Constants::BATTERY_CHARGE_TIME_TO_FULL_NOW_SECONDS_UNSUPPORTED;
     auto* props = &health_info_2_1->legacy.legacy;
