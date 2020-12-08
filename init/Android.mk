@@ -79,6 +79,7 @@ LOCAL_REQUIRED_MODULES := \
 my_ramdisk_dirs := \
     debug_ramdisk \
     dev \
+    metadata \
     mnt \
     proc \
     second_stage_resources \
