@@ -306,13 +306,17 @@ class SnapshotManager final : public ISnapshotManager {
     // Helper function for second stage init to restorecon on the rollback indicator.
     static std::string GetGlobalRollbackIndicatorPath();
 
-    // Initiate the transition from first-stage to second-stage snapuserd. This
-    // process involves re-creating the dm-user table entries for each device,
-    // so that they connect to the new daemon. Once all new tables have been
-    // activated, we ask the first-stage daemon to cleanly exit.
-    //
-    // The caller must pass a function which starts snapuserd.
-    bool PerformSecondStageTransition();
+    // Detach dm-user devices from the current snapuserd, and populate
+    // |snapuserd_argv| with the necessary arguments to restart snapuserd
+    // and reattach them.
+    bool DetachSnapuserdForSelinux(std::vector<std::string>* snapuserd_argv);
+
+    // Perform the transition from the selinux stage of snapuserd into the
+    // second-stage of snapuserd. This process involves re-creating the dm-user
+    // table entries for each device, so that they connect to the new daemon.
+    // Once all new tables have been activated, we ask the first-stage daemon
+    // to cleanly exit.
+    bool PerformSecondStageInitTransition();
 
     // ISnapshotManager overrides.
     bool BeginUpdate() override;
@@ -692,6 +696,19 @@ class SnapshotManager final : public ISnapshotManager {
     // |timeout_ms| is empty or the given device is not a path, WaitForDevice immediately
     // returns true.
     bool WaitForDevice(const std::string& device, std::chrono::milliseconds timeout_ms);
+
+    enum class InitTransition { SELINUX_DETACH, SECOND_STAGE };
+
+    // Initiate the transition from first-stage to second-stage snapuserd. This
+    // process involves re-creating the dm-user table entries for each device,
+    // so that they connect to the new daemon. Once all new tables have been
+    // activated, we ask the first-stage daemon to cleanly exit.
+    //
+    // If the mode is SELINUX_DETACH, snapuserd_argv must be non-null and will
+    // be populated with a list of snapuserd arguments to pass to execve(). It
+    // is otherwise ignored.
+    bool PerformInitTransition(InitTransition transition,
+                               std::vector<std::string>* snapuserd_argv = nullptr);
 
     std::string gsid_dir_;
     std::string metadata_dir_;

@@ -1778,6 +1778,9 @@ TEST_F(SnapshotUpdateTest, DaemonTransition) {
 
     ASSERT_TRUE(init->EnsureSnapuserdConnected());
     init->set_use_first_stage_snapuserd(true);
+    init->SetUeventRegenCallback([](const std::string& device) -> bool {
+        return android::fs_mgr::WaitForFile(device, snapshot_timeout_);
+    });
 
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1785,7 +1788,7 @@ TEST_F(SnapshotUpdateTest, DaemonTransition) {
     ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow-init", F_OK), 0);
     ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), -1);
 
-    ASSERT_TRUE(init->PerformSecondStageTransition());
+    ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
 
     // The control device should have been renamed.
     ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted("/dev/dm-user/sys_b-user-cow-init", 10s));
