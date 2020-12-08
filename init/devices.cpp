@@ -461,9 +461,10 @@ void DeviceHandler::HandleAshmemUevent(const Uevent& uevent) {
 }
 
 void DeviceHandler::HandleUevent(const Uevent& uevent) {
-    if (uevent.action == "add" || uevent.action == "change" || uevent.action == "online") {
-        FixupSysPermissions(uevent.path, uevent.subsystem);
-    }
+  if (uevent.action == "add" || uevent.action == "change" ||
+      uevent.action == "bind" || uevent.action == "online") {
+    FixupSysPermissions(uevent.path, uevent.subsystem);
+  }
 
     // if it's not a /dev device, nothing to do
     if (uevent.major < 0 || uevent.minor < 0) return;
