@@ -85,6 +85,9 @@ my_ramdisk_dirs := \
     sys \
 
 LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_RAMDISK_OUT)/,$(my_ramdisk_dirs))
+ifeq (true,$(BOARD_USES_GENERIC_KERNEL_IMAGE))
+    LOCAL_POST_INSTALL_CMD += $(addprefix $(TARGET_RAMDISK_OUT)/first_stage_ramdisk/,$(my_ramdisk_dirs))
+endif
 
 my_ramdisk_dirs :=
 
