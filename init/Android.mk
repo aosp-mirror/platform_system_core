@@ -75,13 +75,18 @@ LOCAL_REQUIRED_MODULES := \
    adb_debug.prop \
 
 # Set up the directories that first stage init mounts on.
-LOCAL_POST_INSTALL_CMD := mkdir -p \
-    $(TARGET_RAMDISK_OUT)/debug_ramdisk \
-    $(TARGET_RAMDISK_OUT)/dev \
-    $(TARGET_RAMDISK_OUT)/mnt \
-    $(TARGET_RAMDISK_OUT)/proc \
-    $(TARGET_RAMDISK_OUT)/second_stage_resources \
-    $(TARGET_RAMDISK_OUT)/sys \
+
+my_ramdisk_dirs := \
+    debug_ramdisk \
+    dev \
+    mnt \
+    proc \
+    second_stage_resources \
+    sys \
+
+LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_RAMDISK_OUT)/,$(my_ramdisk_dirs))
+
+my_ramdisk_dirs :=
 
 LOCAL_STATIC_LIBRARIES := \
     libc++fs \
