@@ -34,12 +34,12 @@ Result<void> ParsePermissionsLine(std::vector<std::string>&& args,
                                   std::vector<SysfsPermissions>* out_sysfs_permissions,
                                   std::vector<Permissions>* out_dev_permissions) {
     bool is_sysfs = out_sysfs_permissions != nullptr;
-    if (is_sysfs && args.size() != 5) {
-        return Error() << "/sys/ lines must have 5 entries";
+    if (is_sysfs && !(args.size() == 5 || args.size() == 6)) {
+        return Error() << "/sys/ lines must have 5 or 6 entries";
     }
 
-    if (!is_sysfs && args.size() != 4) {
-        return Error() << "/dev/ lines must have 4 entries";
+    if (!is_sysfs && !(args.size() == 4 || args.size() == 5)) {
+        return Error() << "/dev/ lines must have 4 or 5 entries";
     }
 
     auto it = args.begin();
@@ -70,10 +70,19 @@ Result<void> ParsePermissionsLine(std::vector<std::string>&& args,
     }
     gid_t gid = grp->gr_gid;
 
+    bool no_fnm_pathname = false;
+    if (it != args.end()) {
+        std::string& flags = *it++;
+        if (flags != "no_fnm_pathname") {
+            return Error() << "invalid option '" << flags << "', only no_fnm_pathname is supported";
+        }
+        no_fnm_pathname = true;
+    }
+
     if (is_sysfs) {
-        out_sysfs_permissions->emplace_back(name, sysfs_attribute, perm, uid, gid);
+        out_sysfs_permissions->emplace_back(name, sysfs_attribute, perm, uid, gid, no_fnm_pathname);
     } else {
-        out_dev_permissions->emplace_back(name, perm, uid, gid);
+        out_dev_permissions->emplace_back(name, perm, uid, gid, no_fnm_pathname);
     }
     return {};
 }
