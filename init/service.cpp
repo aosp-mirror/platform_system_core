@@ -72,12 +72,12 @@ static Result<std::string> ComputeContextFromExecutable(const std::string& servi
     if (getcon(&raw_con) == -1) {
         return Error() << "Could not get security context";
     }
-    std::unique_ptr<char> mycon(raw_con);
+    std::unique_ptr<char, decltype(&freecon)> mycon(raw_con, freecon);
 
     if (getfilecon(service_path.c_str(), &raw_filecon) == -1) {
         return Error() << "Could not get file context";
     }
-    std::unique_ptr<char> filecon(raw_filecon);
+    std::unique_ptr<char, decltype(&freecon)> filecon(raw_filecon, freecon);
 
     char* new_con = nullptr;
     int rc = security_compute_create(mycon.get(), filecon.get(),
