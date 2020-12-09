@@ -13,6 +13,16 @@ For example
     uevent_socket_rcvbuf_size 16M
 Sets the uevent socket rcvbuf_size to 16 megabytes.
 
+## Importing configuration files
+--------------------------------
+Ueventd reads /system/etc/ueventd.rc, all other files are imported via the `import` command, which
+takes the format of
+
+    import <path>
+This command parses an ueventd config file, extending the current configuration.  If _path_ is a
+directory, each file in the directory is parsed as a config file. It is not recursive, nested
+directories will not be parsed.  Imported files are parsed after the current file has been parsed.
+
 ## /dev
 ----
 Ueventd listens to the kernel uevent sockets and creates/deletes nodes in `/dev` based on the
