@@ -21,6 +21,7 @@
 
 #include <android-base/parseint.h>
 
+#include "import_parser.h"
 #include "keyword_map.h"
 #include "parser.h"
 
@@ -220,10 +221,11 @@ Result<void> SubsystemParser::EndSection() {
     return {};
 }
 
-UeventdConfiguration ParseConfig(const std::vector<std::string>& configs) {
+UeventdConfiguration ParseConfig(const std::string& config) {
     Parser parser;
     UeventdConfiguration ueventd_configuration;
 
+    parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
     parser.AddSectionParser("subsystem",
                             std::make_unique<SubsystemParser>(&ueventd_configuration.subsystems));
 
@@ -249,9 +251,7 @@ UeventdConfiguration ParseConfig(const std::vector<std::string>& configs) {
                                std::bind(ParseEnabledDisabledLine, _1,
                                          &ueventd_configuration.enable_parallel_restorecon));
 
-    for (const auto& config : configs) {
-        parser.ParseConfig(config);
-    }
+    parser.ParseConfig(config);
 
     return ueventd_configuration;
 }
