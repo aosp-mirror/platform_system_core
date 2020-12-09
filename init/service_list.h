@@ -66,7 +66,6 @@ class ServiceList {
 
     auto begin() const { return services_.begin(); }
     auto end() const { return services_.end(); }
-    const std::vector<std::unique_ptr<Service>>& services() const { return services_; }
     const std::vector<Service*> services_in_shutdown_order() const;
 
     void MarkPostData();
