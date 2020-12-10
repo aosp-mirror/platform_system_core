@@ -266,12 +266,10 @@ void DebugRebootLogging() {
     if (shutdown_state.do_shutdown()) {
         LOG(ERROR) << "sys.powerctl set while a previous shutdown command has not been handled";
         UnwindMainThreadStack();
-        DumpShutdownDebugInformation();
     }
     if (IsShuttingDown()) {
         LOG(ERROR) << "sys.powerctl set while init is already shutting down";
         UnwindMainThreadStack();
-        DumpShutdownDebugInformation();
     }
 }
 
@@ -760,7 +758,7 @@ int SecondStageMain(int argc, char** argv) {
     trigger_shutdown = [](const std::string& command) { shutdown_state.TriggerShutdown(command); };
 
     SetStdioToDevNull(argv);
-    InitSecondStageLogging(argv);
+    InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
 
     // Update $PATH in the case the second stage init is newer than first stage init, where it is
