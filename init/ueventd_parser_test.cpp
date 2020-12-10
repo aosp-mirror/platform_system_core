@@ -104,21 +104,21 @@ TEST(ueventd_parser, Permissions) {
 /dev/graphics/*           0660   root       graphics
 /dev/*/test               0660   root       system
 
-/sys/devices/platform/trusty.*      trusty_version        0440  root   log
-/sys/devices/virtual/input/input   enable      0660  root   input
-/sys/devices/virtual/*/input   poll_delay  0660  root   input
+/sys/devices/platform/trusty.*      trusty_version    0440  root   log
+/sys/devices/virtual/input/input    enable            0660  root   input
+/sys/devices/virtual/*/input        poll_delay        0660  root   input    no_fnm_pathname
 )";
 
     auto permissions = std::vector<Permissions>{
-            {"/dev/rtc0", 0640, AID_SYSTEM, AID_SYSTEM},
-            {"/dev/graphics/*", 0660, AID_ROOT, AID_GRAPHICS},
-            {"/dev/*/test", 0660, AID_ROOT, AID_SYSTEM},
+            {"/dev/rtc0", 0640, AID_SYSTEM, AID_SYSTEM, false},
+            {"/dev/graphics/*", 0660, AID_ROOT, AID_GRAPHICS, false},
+            {"/dev/*/test", 0660, AID_ROOT, AID_SYSTEM, false},
     };
 
     auto sysfs_permissions = std::vector<SysfsPermissions>{
-            {"/sys/devices/platform/trusty.*", "trusty_version", 0440, AID_ROOT, AID_LOG},
-            {"/sys/devices/virtual/input/input", "enable", 0660, AID_ROOT, AID_INPUT},
-            {"/sys/devices/virtual/*/input", "poll_delay", 0660, AID_ROOT, AID_INPUT},
+            {"/sys/devices/platform/trusty.*", "trusty_version", 0440, AID_ROOT, AID_LOG, false},
+            {"/sys/devices/virtual/input/input", "enable", 0660, AID_ROOT, AID_INPUT, false},
+            {"/sys/devices/virtual/*/input", "poll_delay", 0660, AID_ROOT, AID_INPUT, true},
     };
 
     TestUeventdFile(ueventd_file, {{}, sysfs_permissions, permissions, {}, {}});
@@ -240,7 +240,7 @@ subsystem test_devpath_dirname
     dirname /dev/graphics
 
 /dev/*/test               0660   root       system
-/sys/devices/virtual/*/input   poll_delay  0660  root   input
+/sys/devices/virtual/*/input   poll_delay  0660  root   input    no_fnm_pathname
 firmware_directories /more
 
 external_firmware_handler /devices/path/firmware/firmware001.bin root /vendor/bin/touch.sh
@@ -259,15 +259,15 @@ parallel_restorecon enabled
             {"test_devpath_dirname", Subsystem::DEVNAME_UEVENT_DEVPATH, "/dev/graphics"}};
 
     auto permissions = std::vector<Permissions>{
-            {"/dev/rtc0", 0640, AID_SYSTEM, AID_SYSTEM},
-            {"/dev/graphics/*", 0660, AID_ROOT, AID_GRAPHICS},
-            {"/dev/*/test", 0660, AID_ROOT, AID_SYSTEM},
+            {"/dev/rtc0", 0640, AID_SYSTEM, AID_SYSTEM, false},
+            {"/dev/graphics/*", 0660, AID_ROOT, AID_GRAPHICS, false},
+            {"/dev/*/test", 0660, AID_ROOT, AID_SYSTEM, false},
     };
 
     auto sysfs_permissions = std::vector<SysfsPermissions>{
-            {"/sys/devices/platform/trusty.*", "trusty_version", 0440, AID_ROOT, AID_LOG},
-            {"/sys/devices/virtual/input/input", "enable", 0660, AID_ROOT, AID_INPUT},
-            {"/sys/devices/virtual/*/input", "poll_delay", 0660, AID_ROOT, AID_INPUT},
+            {"/sys/devices/platform/trusty.*", "trusty_version", 0440, AID_ROOT, AID_LOG, false},
+            {"/sys/devices/virtual/input/input", "enable", 0660, AID_ROOT, AID_INPUT, false},
+            {"/sys/devices/virtual/*/input", "poll_delay", 0660, AID_ROOT, AID_INPUT, true},
     };
 
     auto firmware_directories = std::vector<std::string>{
@@ -299,6 +299,7 @@ firmware_directories #no directory listed
 /sys/devices/platform/trusty.*      trusty_version        badmode  root   log
 /sys/devices/platform/trusty.*      trusty_version        0440  baduidbad   log
 /sys/devices/platform/trusty.*      trusty_version        0440  root   baduidbad
+/sys/devices/platform/trusty.*      trusty_version        0440  root   root    bad_option
 
 uevent_socket_rcvbuf_size blah
 
