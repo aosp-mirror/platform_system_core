@@ -19,16 +19,39 @@
 #include <assert.h>
 #include <log/log.h>
 #include <stdlib.h>
+#include <trusty/coverage/coverage.h>
+#include <trusty/fuzz/counters.h>
 #include <trusty/fuzz/utils.h>
 #include <unistd.h>
 
+using android::trusty::coverage::CoverageRecord;
+using android::trusty::fuzz::ExtraCounters;
 using android::trusty::fuzz::TrustyApp;
 
 #define TIPC_DEV "/dev/trusty-ipc-dev0"
 #define CONFIRMATIONUI_PORT "com.android.trusty.confirmationui"
 
+/* ConfirmationUI TA's UUID is 7dee2364-c036-425b-b086-df0f6c233c1b */
+static struct uuid confirmationui_uuid = {
+    0x7dee2364,
+    0xc036,
+    0x425b,
+    {0xb0, 0x86, 0xdf, 0x0f, 0x6c, 0x23, 0x3c, 0x1b},
+};
+
+static CoverageRecord record(TIPC_DEV, &confirmationui_uuid);
+
+extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
+    auto ret = record.Open();
+    assert(ret.ok());
+    return 0;
+}
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     static uint8_t buf[TIPC_MAX_MSG_SIZE];
+
+    ExtraCounters counters(&record);
+    counters.Reset();
 
     TrustyApp ta(TIPC_DEV, CONFIRMATIONUI_PORT);
     auto ret = ta.Connect();
@@ -36,7 +59,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         android::trusty::fuzz::Abort();
     }
 
-    /* Send message to confirmationui server */
+    /* Write message to confirmationui server */
     ret = ta.Write(data, size);
     if (!ret.ok()) {
         return -1;
