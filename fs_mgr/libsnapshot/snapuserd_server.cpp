@@ -26,8 +26,9 @@
 #include <unistd.h>
 
 #include <android-base/logging.h>
-#include <libsnapshot/snapuserd.h>
-#include <libsnapshot/snapuserd_server.h>
+
+#include "snapuserd.h"
+#include "snapuserd_server.h"
 
 namespace android {
 namespace snapshot {
