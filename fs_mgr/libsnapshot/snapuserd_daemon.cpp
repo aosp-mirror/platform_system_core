@@ -17,19 +17,21 @@
 #include "snapuserd_daemon.h"
 
 #include <android-base/logging.h>
+#include <gflags/gflags.h>
 #include <libsnapshot/snapuserd_client.h>
 
 #include "snapuserd_server.h"
 
+DEFINE_string(socket, android::snapshot::kSnapuserdSocket, "Named socket or socket path.");
+
 namespace android {
 namespace snapshot {
 
-bool Daemon::StartServer(const std::string& socketname) {
-    if (!server_.Start(socketname)) {
+void Daemon::StartServer() {
+    if (!server_.Start(FLAGS_socket)) {
         LOG(ERROR) << "Snapuserd daemon failed to start...";
         exit(EXIT_FAILURE);
     }
-    return true;
 }
 
 void Daemon::MaskAllSignalsExceptIntAndTerm() {
@@ -99,11 +101,9 @@ int main([[maybe_unused]] int argc, char** argv) {
 
     android::snapshot::Daemon& daemon = android::snapshot::Daemon::Instance();
 
-    std::string socket = android::snapshot::kSnapuserdSocket;
-    if (argc >= 2) {
-        socket = argv[1];
-    }
-    daemon.StartServer(socket);
+    gflags::ParseCommandLineFlags(&argc, &argv, false);
+
+    daemon.StartServer();
     daemon.Run();
 
     return 0;

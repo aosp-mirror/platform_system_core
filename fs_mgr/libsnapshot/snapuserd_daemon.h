@@ -32,7 +32,7 @@ class Daemon {
         return instance;
     }
 
-    bool StartServer(const std::string& socketname);
+    void StartServer();
     void Run();
     void Interrupt();
 
