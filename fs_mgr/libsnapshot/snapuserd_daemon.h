@@ -16,7 +16,7 @@
 
 #include <poll.h>
 
-#include <libsnapshot/snapuserd_server.h>
+#include "snapuserd_server.h"
 
 namespace android {
 namespace snapshot {
