@@ -14,8 +14,12 @@
  * limitations under the License.
  */
 
+#include "snapuserd_daemon.h"
+
 #include <android-base/logging.h>
-#include <libsnapshot/snapuserd_daemon.h>
+#include <libsnapshot/snapuserd_client.h>
+
+#include "snapuserd_server.h"
 
 namespace android {
 namespace snapshot {
@@ -89,3 +93,18 @@ void Daemon::SignalHandler(int signal) {
 
 }  // namespace snapshot
 }  // namespace android
+
+int main([[maybe_unused]] int argc, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+
+    android::snapshot::Daemon& daemon = android::snapshot::Daemon::Instance();
+
+    std::string socket = android::snapshot::kSnapuserdSocket;
+    if (argc >= 2) {
+        socket = argv[1];
+    }
+    daemon.StartServer(socket);
+    daemon.Run();
+
+    return 0;
+}
