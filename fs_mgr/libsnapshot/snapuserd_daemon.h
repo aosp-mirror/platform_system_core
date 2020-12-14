@@ -16,6 +16,9 @@
 
 #include <poll.h>
 
+#include <string>
+#include <vector>
+
 #include "snapuserd_server.h"
 
 namespace android {
@@ -32,7 +35,7 @@ class Daemon {
         return instance;
     }
 
-    void StartServer();
+    bool StartServer(int argc, char** argv);
     void Run();
     void Interrupt();
 

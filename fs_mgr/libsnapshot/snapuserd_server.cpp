@@ -116,7 +116,7 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
     switch (op) {
         case DaemonOperations::INIT: {
             // Message format:
-            // init,<misc_name>,<cow_device_path>,<control_device>
+            // init,<misc_name>,<cow_device_path>,<backing_device>
             //
             // Reads the metadata and send the number of sectors
             if (out.size() != 4) {
@@ -124,24 +124,12 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
                 return Sendmsg(fd, "fail");
             }
 
-            auto snapuserd = std::make_unique<Snapuserd>(out[1], out[2], out[3]);
-            if (!snapuserd->InitCowDevice()) {
-                LOG(ERROR) << "Failed to initialize Snapuserd";
+            auto handler = AddHandler(out[1], out[2], out[3]);
+            if (!handler) {
                 return Sendmsg(fd, "fail");
             }
 
-            std::string retval = "success," + std::to_string(snapuserd->GetNumSectors());
-
-            auto handler = std::make_unique<DmUserHandler>(std::move(snapuserd));
-            {
-                std::lock_guard<std::mutex> lock(lock_);
-                if (FindHandler(&lock, out[1]) != dm_users_.end()) {
-                    LOG(ERROR) << "Handler already exists: " << out[1];
-                    return Sendmsg(fd, "fail");
-                }
-                dm_users_.push_back(std::move(handler));
-            }
-
+            auto retval = "success," + std::to_string(handler->snapuserd()->GetNumSectors());
             return Sendmsg(fd, retval);
         }
         case DaemonOperations::START: {
@@ -164,11 +152,9 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
                 LOG(ERROR) << "Tried to re-attach control device: " << out[1];
                 return Sendmsg(fd, "fail");
             }
-            if (!((*iter)->snapuserd()->InitBackingAndControlDevice())) {
-                LOG(ERROR) << "Failed to initialize control device: " << out[1];
+            if (!StartHandler(*iter)) {
                 return Sendmsg(fd, "fail");
             }
-            (*iter)->thread() = std::thread(std::bind(&SnapuserdServer::RunThread, this, *iter));
             return Sendmsg(fd, "success");
         }
         case DaemonOperations::STOP: {
@@ -338,6 +324,39 @@ void SnapuserdServer::Interrupt() {
     // Force close the socket so poll() fails.
     sockfd_ = {};
     SetTerminating();
+}
+
+std::shared_ptr<DmUserHandler> SnapuserdServer::AddHandler(const std::string& misc_name,
+                                                           const std::string& cow_device_path,
+                                                           const std::string& backing_device) {
+    auto snapuserd = std::make_unique<Snapuserd>(misc_name, cow_device_path, backing_device);
+    if (!snapuserd->InitCowDevice()) {
+        LOG(ERROR) << "Failed to initialize Snapuserd";
+        return nullptr;
+    }
+
+    auto handler = std::make_shared<DmUserHandler>(std::move(snapuserd));
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        if (FindHandler(&lock, misc_name) != dm_users_.end()) {
+            LOG(ERROR) << "Handler already exists: " << misc_name;
+            return nullptr;
+        }
+        dm_users_.push_back(handler);
+    }
+    return handler;
+}
+
+bool SnapuserdServer::StartHandler(const std::shared_ptr<DmUserHandler>& handler) {
+    CHECK(!handler->snapuserd()->IsAttached());
+
+    if (!handler->snapuserd()->InitBackingAndControlDevice()) {
+        LOG(ERROR) << "Failed to initialize control device: " << handler->GetMiscName();
+        return false;
+    }
+
+    handler->thread() = std::thread(std::bind(&SnapuserdServer::RunThread, this, handler));
+    return true;
 }
 
 auto SnapuserdServer::FindHandler(std::lock_guard<std::mutex>* proof_of_lock,

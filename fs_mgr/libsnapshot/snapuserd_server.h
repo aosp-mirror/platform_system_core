@@ -103,7 +103,6 @@ class SnapuserdServer : public Stoppable {
     std::string GetDaemonStatus();
     void Parsemsg(std::string const& msg, const char delim, std::vector<std::string>& out);
 
-    void SetTerminating() { terminating_ = true; }
     bool IsTerminating() { return terminating_; }
 
     void RunThread(std::shared_ptr<DmUserHandler> handler);
@@ -120,6 +119,13 @@ class SnapuserdServer : public Stoppable {
     bool Start(const std::string& socketname);
     bool Run();
     void Interrupt();
+
+    std::shared_ptr<DmUserHandler> AddHandler(const std::string& misc_name,
+                                              const std::string& cow_device_path,
+                                              const std::string& backing_device);
+    bool StartHandler(const std::shared_ptr<DmUserHandler>& handler);
+
+    void SetTerminating() { terminating_ = true; }
 };
 
 }  // namespace snapshot
