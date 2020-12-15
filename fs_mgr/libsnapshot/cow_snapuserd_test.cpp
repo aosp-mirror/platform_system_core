@@ -169,7 +169,7 @@ void CowSnapuserdTest::StartSnapuserdDaemon() {
     ASSERT_GE(pid, 0);
     if (pid == 0) {
         std::string arg0 = "/system/bin/snapuserd";
-        std::string arg1 = kSnapuserdSocketTest;
+        std::string arg1 = "-socket="s + kSnapuserdSocketTest;
         char* const argv[] = {arg0.data(), arg1.data(), nullptr};
         ASSERT_GE(execv(arg0.c_str(), argv), 0);
     } else {
