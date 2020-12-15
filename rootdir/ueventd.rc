@@ -46,7 +46,8 @@ subsystem dma_heap
 /dev/vndbinder            0666   root       root
 
 /dev/pmsg0                0222   root       log
-/dev/dma_heap/system      0666   system     system
+/dev/dma_heap/system      0444   system     system
+/dev/dma_heap/system-uncached      0444   system     system
 
 # kms driver for drm based gpu
 /dev/dri/*                0666   root       graphics
