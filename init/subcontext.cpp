@@ -351,6 +351,9 @@ Subcontext* GetSubcontext() {
 }
 
 bool SubcontextChildReap(pid_t pid) {
+    if (!subcontext) {
+        return false;
+    }
     if (subcontext->pid() == pid) {
         if (!subcontext_terminated_by_shutdown) {
             subcontext->Restart();

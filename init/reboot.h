@@ -17,11 +17,17 @@
 #ifndef _INIT_REBOOT_H
 #define _INIT_REBOOT_H
 
+#include <chrono>
+#include <set>
 #include <string>
 
 namespace android {
 namespace init {
 
+// Like StopServices, but also logs all the services that failed to stop after the provided timeout.
+// Returns number of violators.
+int StopServicesAndLogViolations(const std::set<std::string>& services,
+                                 std::chrono::milliseconds timeout, bool terminate);
 // Parses and handles a setprop sys.powerctl message.
 void HandlePowerctlMessage(const std::string& command);
 
