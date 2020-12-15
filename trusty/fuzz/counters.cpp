@@ -42,9 +42,9 @@ ExtraCounters::ExtraCounters(coverage::CoverageRecord* record) : record_(record)
     assert(fuzzer::ExtraCountersBegin());
     assert(fuzzer::ExtraCountersEnd());
 
-    uint8_t* begin = NULL;
-    uint8_t* end = NULL;
-    record_->GetRawData((volatile void**)&begin, (volatile void**)&end);
+    volatile uint8_t* begin = NULL;
+    volatile uint8_t* end = NULL;
+    record_->GetRawCounts(&begin, &end);
     assert(end - begin <= sizeof(counters));
 }
 
@@ -53,7 +53,7 @@ ExtraCounters::~ExtraCounters() {
 }
 
 void ExtraCounters::Reset() {
-    record_->Reset();
+    record_->ResetCounts();
     fuzzer::ClearExtraCounters();
 }
 
@@ -61,7 +61,7 @@ void ExtraCounters::Flush() {
     volatile uint8_t* begin = NULL;
     volatile uint8_t* end = NULL;
 
-    record_->GetRawData((volatile void**)&begin, (volatile void**)&end);
+    record_->GetRawCounts(&begin, &end);
 
     size_t num_counters = end - begin;
     for (size_t i = 0; i < num_counters; i++) {
