@@ -423,10 +423,11 @@ cc_defaults {
         "libbase",
         "libbrotli",
         "libcutils_sockets",
-        "liblog",
         "libdm",
-        "libz",
+        "libgflags",
+        "liblog",
         "libsnapshot_cow",
+        "libz",
     ],
 }
 
