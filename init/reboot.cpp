@@ -655,6 +655,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
 
         if (do_shutdown_animation) {
             SetProperty("service.bootanim.exit", "0");
+            SetProperty("service.bootanim.progress", "0");
             // Could be in the middle of animation. Stop and start so that it can pick
             // up the right mode.
             boot_anim->Stop();
