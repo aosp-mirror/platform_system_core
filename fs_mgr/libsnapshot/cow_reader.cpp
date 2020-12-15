@@ -222,8 +222,6 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
             LOG(ERROR) << "ops checksum does not match";
             return false;
         }
-    } else {
-        LOG(INFO) << "No COW Footer, recovered data";
     }
 
     ops_ = ops_buffer;
