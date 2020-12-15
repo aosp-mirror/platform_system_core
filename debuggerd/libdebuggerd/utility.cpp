@@ -370,14 +370,12 @@ const char* get_sigcode(const siginfo_t* si) {
           return "SEGV_ADIDERR";
         case SEGV_ADIPERR:
           return "SEGV_ADIPERR";
-#if defined(ANDROID_EXPERIMENTAL_MTE)
         case SEGV_MTEAERR:
           return "SEGV_MTEAERR";
         case SEGV_MTESERR:
           return "SEGV_MTESERR";
-#endif
       }
-      static_assert(NSIGSEGV == SEGV_ADIPERR, "missing SEGV_* si_code");
+      static_assert(NSIGSEGV == SEGV_MTESERR, "missing SEGV_* si_code");
       break;
     case SIGSYS:
       switch (si->si_code) {
