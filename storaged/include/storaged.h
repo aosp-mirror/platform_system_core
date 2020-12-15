@@ -86,6 +86,7 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
     sp<android::hardware::health::V2_0::IHealth> health;
     unique_ptr<storage_info_t> storage_info;
     static const uint32_t current_version;
+    Mutex proto_lock;
     unordered_map<userid_t, bool> proto_loaded;
     void load_proto(userid_t user_id);
     char* prepare_proto(userid_t user_id, StoragedProto* proto);
