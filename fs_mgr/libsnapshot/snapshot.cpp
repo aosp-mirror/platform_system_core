@@ -280,7 +280,7 @@ bool SnapshotManager::FinishedSnapshotWrites(bool wipe) {
         return false;
     }
 
-    if (!IsCompressionEnabled() && !EnsureNoOverflowSnapshot(lock.get())) {
+    if (!EnsureNoOverflowSnapshot(lock.get())) {
         LOG(ERROR) << "Cannot ensure there are no overflow snapshots.";
         return false;
     }
@@ -349,6 +349,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
     status->set_state(SnapshotState::CREATED);
     status->set_sectors_allocated(0);
     status->set_metadata_sectors(0);
+    status->set_compression_enabled(IsCompressionEnabled());
 
     if (!WriteSnapshotStatus(lock, *status)) {
         PLOG(ERROR) << "Could not write snapshot status: " << status->name();
@@ -408,10 +409,12 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
     if (!dm.CreateDevice(name, table, path, timeout_ms)) {
         return false;
     }
+    if (!WaitForDevice(*path, timeout_ms)) {
+        return false;
+    }
 
     auto control_device = "/dev/dm-user/" + misc_name;
-    if (!android::fs_mgr::WaitForFile(control_device, timeout_ms)) {
-        LOG(ERROR) << "Timed out waiting for dm-user misc device: " << control_device;
+    if (!WaitForDevice(control_device, timeout_ms)) {
         return false;
     }
 
@@ -1339,10 +1342,12 @@ bool SnapshotManager::PerformSecondStageTransition() {
             continue;
         }
 
+        auto misc_name = user_cow_name;
+
         DmTable table;
-        table.Emplace<DmTargetUser>(0, target.spec.length, user_cow_name);
+        table.Emplace<DmTargetUser>(0, target.spec.length, misc_name);
         if (!dm.LoadTableAndActivate(user_cow_name, table)) {
-            LOG(ERROR) << "Unable to swap tables for " << user_cow_name;
+            LOG(ERROR) << "Unable to swap tables for " << misc_name;
             continue;
         }
 
@@ -1368,14 +1373,13 @@ bool SnapshotManager::PerformSecondStageTransition() {
         }
 
         // Wait for ueventd to acknowledge and create the control device node.
-        std::string control_device = "/dev/dm-user/" + user_cow_name;
-        if (!android::fs_mgr::WaitForFile(control_device, 10s)) {
-            LOG(ERROR) << "Could not find control device: " << control_device;
+        std::string control_device = "/dev/dm-user/" + misc_name;
+        if (!WaitForDevice(control_device, 10s)) {
             continue;
         }
 
         uint64_t base_sectors =
-                snapuserd_client_->InitDmUserCow(user_cow_name, cow_image_device, backing_device);
+                snapuserd_client_->InitDmUserCow(misc_name, cow_image_device, backing_device);
         if (base_sectors == 0) {
             // Unrecoverable as metadata reads from cow device failed
             LOG(FATAL) << "Failed to retrieve base_sectors from Snapuserd";
@@ -1384,7 +1388,7 @@ bool SnapshotManager::PerformSecondStageTransition() {
 
         CHECK(base_sectors == target.spec.length);
 
-        if (!snapuserd_client_->AttachDmUser(user_cow_name)) {
+        if (!snapuserd_client_->AttachDmUser(misc_name)) {
             // This error is unrecoverable. We cannot proceed because reads to
             // the underlying device will fail.
             LOG(FATAL) << "Could not initialize snapuserd for " << user_cow_name;
@@ -1396,24 +1400,6 @@ bool SnapshotManager::PerformSecondStageTransition() {
 
     if (ok_cows != num_cows) {
         LOG(ERROR) << "Could not transition all snapuserd consumers.";
-        return false;
-    }
-
-    std::string pid_var = device_->GetSnapuserdFirstStagePidVar();
-    if (pid_var.empty()) {
-        return true;
-    }
-
-    int pid;
-    const char* pid_str = getenv(pid_var.c_str());
-    if (pid_str && android::base::ParseInt(pid_str, &pid)) {
-        if (kill(pid, SIGTERM) < 0 && errno != ESRCH) {
-            LOG(ERROR) << "kill snapuserd failed";
-            return false;
-        }
-    } else {
-        LOG(ERROR) << "Could not find or parse " << kSnapuserdFirstStagePidVar
-                   << " for snapuserd pid";
         return false;
     }
     return true;
@@ -1760,15 +1746,6 @@ bool SnapshotManager::MapAllPartitions(LockedFile* lock, const std::string& supe
         }
     }
 
-    if (use_first_stage_snapuserd_) {
-        // Remove the first-stage socket as a precaution, there is no need to
-        // access the daemon anymore and we'll be killing it once second-stage
-        // is running.
-        auto socket = ANDROID_SOCKET_DIR + "/"s + kSnapuserdSocketFirstStage;
-        snapuserd_client_ = nullptr;
-        unlink(socket.c_str());
-    }
-
     LOG(INFO) << "Created logical partitions with snapshot.";
     return true;
 }
@@ -1914,19 +1891,26 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     remaining_time = GetRemainingTime(params.timeout_ms, begin);
     if (remaining_time.count() < 0) return false;
 
-    if (context == SnapshotContext::Update && IsCompressionEnabled()) {
+    if (context == SnapshotContext::Update && live_snapshot_status->compression_enabled()) {
         // Stop here, we can't run dm-user yet, the COW isn't built.
         created_devices.Release();
         return true;
     }
 
-    if (IsCompressionEnabled()) {
+    if (live_snapshot_status->compression_enabled()) {
         auto name = GetDmUserCowName(params.GetPartitionName());
 
-        // :TODO: need to force init to process uevents for these in first-stage.
         std::string cow_path;
         if (!GetMappedImageDevicePath(cow_name, &cow_path)) {
             LOG(ERROR) << "Could not determine path for: " << cow_name;
+            return false;
+        }
+
+        // Ensure both |base_path| and |cow_path| are created, for snapuserd.
+        if (!WaitForDevice(base_path, remaining_time)) {
+            return false;
+        }
+        if (!WaitForDevice(cow_path, remaining_time)) {
             return false;
         }
 
@@ -2069,7 +2053,7 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
         if (!EnsureSnapuserdConnected()) {
             return false;
         }
-        if (!dm.DeleteDevice(dm_user_name)) {
+        if (!dm.DeleteDeviceIfExists(dm_user_name)) {
             LOG(ERROR) << "Cannot unmap " << dm_user_name;
             return false;
         }
@@ -2272,6 +2256,7 @@ SnapshotUpdateStatus SnapshotManager::ReadSnapshotUpdateStatus(LockedFile* lock)
 bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state) {
     SnapshotUpdateStatus status = {};
     status.set_state(state);
+    status.set_compression_enabled(IsCompressionEnabled());
     return WriteSnapshotUpdateStatus(lock, status);
 }
 
@@ -2407,28 +2392,11 @@ bool SnapshotManager::EnsureSnapuserdConnected() {
         return true;
     }
 
-    std::string socket;
-    if (use_first_stage_snapuserd_) {
-        auto pid = StartFirstStageSnapuserd();
-        if (pid < 0) {
-            LOG(ERROR) << "Failed to start snapuserd";
-            return false;
-        }
-
-        auto pid_str = std::to_string(static_cast<int>(pid));
-        if (setenv(kSnapuserdFirstStagePidVar, pid_str.c_str(), 1) < 0) {
-            PLOG(ERROR) << "setenv failed storing the snapuserd pid";
-        }
-
-        socket = kSnapuserdSocketFirstStage;
-    } else {
-        if (!EnsureSnapuserdStarted()) {
-            return false;
-        }
-        socket = kSnapuserdSocket;
+    if (!use_first_stage_snapuserd_ && !EnsureSnapuserdStarted()) {
+        return false;
     }
 
-    snapuserd_client_ = SnapuserdClient::Connect(socket, 10s);
+    snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, 10s);
     if (!snapuserd_client_) {
         LOG(ERROR) << "Unable to connect to snapuserd";
         return false;
@@ -2750,7 +2718,7 @@ Return SnapshotManager::InitializeUpdateSnapshots(
             return Return::Error();
         }
 
-        if (IsCompressionEnabled()) {
+        if (it->second.compression_enabled()) {
             unique_fd fd(open(cow_path.c_str(), O_RDWR | O_CLOEXEC));
             if (fd < 0) {
                 PLOG(ERROR) << "open " << cow_path << " failed for snapshot "
@@ -2844,7 +2812,7 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
         return nullptr;
     }
 
-    if (IsCompressionEnabled()) {
+    if (status.compression_enabled()) {
         return OpenCompressedSnapshotWriter(lock.get(), source_device, params.GetPartitionName(),
                                             status, paths);
     }
@@ -3169,6 +3137,14 @@ bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
 
     auto& dm = DeviceMapper::Instance();
     for (const auto& snapshot : snapshots) {
+        SnapshotStatus status;
+        if (!ReadSnapshotStatus(lock, snapshot, &status)) {
+            return false;
+        }
+        if (status.compression_enabled()) {
+            continue;
+        }
+
         std::vector<DeviceMapper::TargetInfo> targets;
         if (!dm.GetTableStatus(snapshot, &targets)) {
             LOG(ERROR) << "Could not read snapshot device table: " << snapshot;
@@ -3291,6 +3267,48 @@ bool SnapshotManager::GetMappedImageDeviceStringOrPath(const std::string& device
                  << (device_string_or_mapped_path ? *device_string_or_mapped_path : "(nullptr)")
                  << "may not be available in first stage init! ";
     return true;
+}
+
+bool SnapshotManager::WaitForDevice(const std::string& device,
+                                    std::chrono::milliseconds timeout_ms) {
+    if (!android::base::StartsWith(device, "/")) {
+        return true;
+    }
+
+    // In first-stage init, we rely on init setting a callback which can
+    // regenerate uevents and populate /dev for us.
+    if (uevent_regen_callback_) {
+        if (!uevent_regen_callback_(device)) {
+            LOG(ERROR) << "Failed to find device after regenerating uevents: " << device;
+            return false;
+        }
+        return true;
+    }
+
+    // Otherwise, the only kind of device we need to wait for is a dm-user
+    // misc device. Normal calls to DeviceMapper::CreateDevice() guarantee
+    // the path has been created.
+    if (!android::base::StartsWith(device, "/dev/dm-user/")) {
+        return true;
+    }
+
+    if (timeout_ms.count() == 0) {
+        LOG(ERROR) << "No timeout was specified to wait for device: " << device;
+        return false;
+    }
+    if (!android::fs_mgr::WaitForFile(device, timeout_ms)) {
+        LOG(ERROR) << "Timed out waiting for device to appear: " << device;
+        return false;
+    }
+    return true;
+}
+
+bool SnapshotManager::IsSnapuserdRequired() {
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    auto status = ReadSnapshotUpdateStatus(lock.get());
+    return status.state() != UpdateState::None && status.compression_enabled();
 }
 
 }  // namespace snapshot

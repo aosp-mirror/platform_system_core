@@ -525,6 +525,165 @@ TEST_F(CowTest, AppendbyLabel) {
     ASSERT_TRUE(iter->Done());
 }
 
+TEST_F(CowTest, ClusterTest) {
+    CowOptions options;
+    options.cluster_ops = 4;
+    auto writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer->AddRawBlocks(50, data.data(), data.size()));
+
+    ASSERT_TRUE(writer->AddLabel(4));
+
+    ASSERT_TRUE(writer->AddZeroBlocks(50, 2));  // Cluster split in middle
+
+    ASSERT_TRUE(writer->AddLabel(5));
+
+    ASSERT_TRUE(writer->AddCopy(5, 6));
+
+    // Cluster split
+
+    ASSERT_TRUE(writer->AddLabel(6));
+
+    ASSERT_TRUE(writer->Finalize());  // No data for cluster, so no cluster split needed
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    // Read back all ops
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    StringSink sink;
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+
+    ASSERT_FALSE(iter->Done());
+    auto op = &iter->Get();
+    ASSERT_EQ(op->type, kCowReplaceOp);
+    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_EQ(sink.stream(), data.substr(0, options.block_size));
+
+    iter->Next();
+    sink.Reset();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowLabelOp);
+    ASSERT_EQ(op->source, 4);
+
+    iter->Next();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowZeroOp);
+
+    iter->Next();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowClusterOp);
+
+    iter->Next();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowZeroOp);
+
+    iter->Next();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowLabelOp);
+    ASSERT_EQ(op->source, 5);
+
+    iter->Next();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowCopyOp);
+
+    iter->Next();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowClusterOp);
+
+    iter->Next();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowLabelOp);
+    ASSERT_EQ(op->source, 6);
+
+    iter->Next();
+
+    ASSERT_TRUE(iter->Done());
+}
+
+TEST_F(CowTest, ClusterAppendTest) {
+    CowOptions options;
+    options.cluster_ops = 3;
+    auto writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer->AddLabel(50));
+    ASSERT_TRUE(writer->Finalize());  // Adds a cluster op, should be dropped on append
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 50));
+
+    std::string data2 = "More data!";
+    data2.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer->AddRawBlocks(51, data2.data(), data2.size()));
+    ASSERT_TRUE(writer->Finalize());  // Adds a cluster op
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    struct stat buf;
+    ASSERT_EQ(fstat(cow_->fd, &buf), 0);
+    ASSERT_EQ(buf.st_size, writer->GetCowSize());
+
+    // Read back both operations, plus cluster op at end
+    CowReader reader;
+    uint64_t label;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    ASSERT_TRUE(reader.GetLastLabel(&label));
+    ASSERT_EQ(label, 50);
+
+    StringSink sink;
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+
+    ASSERT_FALSE(iter->Done());
+    auto op = &iter->Get();
+    ASSERT_EQ(op->type, kCowLabelOp);
+    ASSERT_EQ(op->source, 50);
+
+    iter->Next();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowReplaceOp);
+    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_EQ(sink.stream(), data2);
+
+    iter->Next();
+
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+    ASSERT_EQ(op->type, kCowClusterOp);
+
+    iter->Next();
+
+    ASSERT_TRUE(iter->Done());
+}
+
 }  // namespace snapshot
 }  // namespace android
 

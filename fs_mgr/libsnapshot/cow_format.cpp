@@ -35,6 +35,10 @@ std::ostream& operator<<(std::ostream& os, CowOperation const& op) {
         os << "kCowFooterOp,  ";
     else if (op.type == kCowLabelOp)
         os << "kCowLabelOp,   ";
+    else if (op.type == kCowClusterOp)
+        os << "kCowClusterOp  ";
+    else if (op.type == kCowFooterOp)
+        os << "kCowFooterOp  ";
     else
         os << (int)op.type << "?,";
     os << "compression:";
@@ -52,11 +56,35 @@ std::ostream& operator<<(std::ostream& os, CowOperation const& op) {
     return os;
 }
 
-int64_t GetNextOpOffset(const CowOperation& op) {
-    if (op.type == kCowReplaceOp)
+int64_t GetNextOpOffset(const CowOperation& op, uint32_t cluster_ops) {
+    if (op.type == kCowClusterOp) {
+        return op.source;
+    } else if (op.type == kCowReplaceOp && cluster_ops == 0) {
         return op.data_length;
-    else
+    } else {
         return 0;
+    }
+}
+
+int64_t GetNextDataOffset(const CowOperation& op, uint32_t cluster_ops) {
+    if (op.type == kCowClusterOp) {
+        return cluster_ops * sizeof(CowOperation);
+    } else if (cluster_ops == 0) {
+        return sizeof(CowOperation);
+    } else {
+        return 0;
+    }
+}
+
+bool IsMetadataOp(const CowOperation& op) {
+    switch (op.type) {
+        case kCowLabelOp:
+        case kCowClusterOp:
+        case kCowFooterOp:
+            return true;
+        default:
+            return false;
+    }
 }
 
 }  // namespace snapshot

@@ -14,9 +14,29 @@
  * limitations under the License.
  */
 
-#include "include/stats_socket.h"
-#include "stats_buffer_writer.h"
+#pragma once
 
-void AStatsSocket_close() {
-    stats_log_close();
-}
+#include <string>
+
+#include <android-base/result.h>
+#include <trusty/coverage/coverage.h>
+
+namespace android {
+namespace trusty {
+namespace fuzz {
+
+class ExtraCounters {
+  public:
+    ExtraCounters(coverage::CoverageRecord* record);
+    ~ExtraCounters();
+
+    void Reset();
+    void Flush();
+
+  private:
+    coverage::CoverageRecord* record_;
+};
+
+}  // namespace fuzz
+}  // namespace trusty
+}  // namespace android

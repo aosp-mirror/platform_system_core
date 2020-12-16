@@ -14,10 +14,9 @@
 
 cc_defaults {
     name: "trusty_fuzzer_defaults",
-    static_libs: [
-        "libtrusty_fuzz_utils",
-    ],
     shared_libs: [
+        "libtrusty_coverage",
+        "libtrusty_fuzz_utils",
         "libbase",
         "liblog",
     ],
@@ -33,9 +32,17 @@ cc_defaults {
 
 cc_library {
     name: "libtrusty_fuzz_utils",
-    srcs: ["utils.cpp"],
+    srcs: [
+        "counters.cpp",
+        "utils.cpp",
+    ],
     export_include_dirs: ["include"],
+    static_libs: [
+        "libFuzzer",
+        "libtrusty_test",
+    ],
     shared_libs: [
+        "libtrusty_coverage",
         "libbase",
         "liblog",
     ],

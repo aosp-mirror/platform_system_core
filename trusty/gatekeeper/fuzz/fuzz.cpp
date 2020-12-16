@@ -19,22 +19,42 @@
 #include <assert.h>
 #include <log/log.h>
 #include <stdlib.h>
+#include <trusty/coverage/coverage.h>
+#include <trusty/fuzz/counters.h>
 #include <trusty/fuzz/utils.h>
 #include <unistd.h>
+
+using android::trusty::coverage::CoverageRecord;
+using android::trusty::fuzz::ExtraCounters;
+using android::trusty::fuzz::TrustyApp;
 
 #define TIPC_DEV "/dev/trusty-ipc-dev0"
 #define GATEKEEPER_PORT "com.android.trusty.gatekeeper"
 
+/* Gatekeeper TA's UUID is 38ba0cdc-df0e-11e4-9869-233fb6ae4795 */
+static struct uuid gatekeeper_uuid = {
+        0x38ba0cdc,
+        0xdf0e,
+        0x11e4,
+        {0x98, 0x69, 0x23, 0x3f, 0xb6, 0xae, 0x47, 0x95},
+};
+
+static CoverageRecord record(TIPC_DEV, &gatekeeper_uuid);
+
+extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
+    auto ret = record.Open();
+    assert(ret.ok());
+    return 0;
+}
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     static uint8_t buf[TIPC_MAX_MSG_SIZE];
 
-    android::trusty::fuzz::TrustyApp ta(TIPC_DEV, GATEKEEPER_PORT);
+    ExtraCounters counters(&record);
+    counters.Reset();
 
+    android::trusty::fuzz::TrustyApp ta(TIPC_DEV, GATEKEEPER_PORT);
     auto ret = ta.Connect();
-    /*
-     * If we can't connect, then assume TA crashed.
-     * TODO: Get some more info, e.g. stacks, to help Haiku dedup crashes.
-     */
     if (!ret.ok()) {
         android::trusty::fuzz::Abort();
     }

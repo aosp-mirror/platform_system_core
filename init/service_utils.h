@@ -37,6 +37,8 @@ class Descriptor {
     Descriptor(const std::string& name, android::base::unique_fd fd)
         : name_(name), fd_(std::move(fd)){};
 
+    // Publish() unsets FD_CLOEXEC from the FD and publishes its name via setenv().  It should be
+    // called when starting a service after fork() and before exec().
     void Publish() const;
 
   private:
@@ -53,6 +55,9 @@ struct SocketDescriptor {
     std::string context;
     bool passcred = false;
 
+    // Create() creates the named unix domain socket in /dev/socket and returns a Descriptor object.
+    // It should be called when starting a service, before calling fork(), such that the socket is
+    // synchronously created before starting any other services, which may depend on it.
     Result<Descriptor> Create(const std::string& global_context) const;
 };
 
