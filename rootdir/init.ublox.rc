@@ -20,7 +20,7 @@
 #                                                                                                  #
 # NOTE: For GSMMUX Service configuration [Section-4], carefully read notes inside the section.     #
 #                                                                                                  #
-# NOTE: For Android 9.X and above, see below instructions:                                         #
+# NOTE: For Android 8.1, Android 9.X, Android 10.X and above, see below instructions:              #
 #       1. Section-1 "on post-fs-data" required changes:                                           #
 #          >> Comment "mkdir /data/vendor 0770 root radio"                                         #
 #                                                                                                  #
@@ -49,6 +49,8 @@
 ################################# [Section-1] on post-fs-data ######################################
 on post-fs-data
     # Create Directory for data/vendor/uril
+	# Comment for android 9.x and above
+    mkdir /data/vendor 0770 root radio
 
     mkdir /data/vendor/uril 0770 root radio
     # Copies the repository.txt file
@@ -56,16 +58,9 @@ on post-fs-data
     chmod 660 /data/vendor/uril/repository.txt
     chown root radio /data/vendor/uril/repository.txt
 
-
 ################################# [Section-2] on boot ##############################################
 on boot   
     setprop "net.uril.repository" "ready"
-
-    # Set default Interface for u-blox RIL:
-    #    >> For CDC-ACM Mode = ttyACM  (default mode is usb "ttyACM")
-    #    >> For GSMMUX Mode  = pts     (use "pts" for ttyS/ttyUSB serial interface)
-    #    >> For remote Mode  = remote  (ublox internal)
-    setprop persist.radio.uril.modInf ttyACM
 
     # Customization for logging (Can be commented if not required)    
     # Increase default log buffer size
@@ -76,60 +71,52 @@ on boot
 ############################################ SERVICES ##############################################
 
 ################################# [Section-3] Data Call Services ###################################
-service pppd_data0 /vendor/bin/init.gprs-pppd
-    user radio
+service pppd_data0 /system/bin/init.gprs-pppd
+    user root
     group radio cache inet misc
     disabled
-    capabilities NET_ADMIN    
     oneshot    
 
-service pppd_data1 /vendor/bin/init.gprs-pppd
-    user radio
+service pppd_data1 /system/bin/init.gprs-pppd
+    user root
     group radio cache inet misc
     disabled
-    capabilities NET_ADMIN    
     oneshot    
 
-service pppd_data2 /vendor/bin/init.gprs-pppd
-    user radio
+service pppd_data2 /system/bin/init.gprs-pppd
+    user root
     group radio cache inet misc
     disabled
-    capabilities NET_ADMIN        
     oneshot    
 
-service pppd_data3 /vendor/bin/init.gprs-pppd
-    user radio
+service pppd_data3 /system/bin/init.gprs-pppd
+    user root
     group radio cache inet misc
     disabled
-    capabilities NET_ADMIN        
     oneshot    
 
-service pppd_term /vendor/bin/stop_pppd 15
-    user radio
+service pppd_term /system/bin/stop_pppd 15
+    user root
     group radio cache inet misc
     disabled
-    capabilities NET_ADMIN       
     oneshot
 
-service pppd_kill /vendor/bin/stop_pppd 9
-    user radio
+service pppd_kill /system/bin/stop_pppd 9
+    user root
     group radio cache inet misc
     disabled
-    capabilities NET_ADMIN        
     oneshot
 
-service netd_ena /vendor/bin/init_data
-    user radio
+service netd_ena /system/bin/init_data
+    user root
     group radio cache inet misc
     disabled
-    capabilities NET_ADMIN        
     oneshot
 
-service netd_dis /vendor/bin/stop_data
-    user radio
+service netd_dis /system/bin/stop_data
+    user root
     group radio cache inet misc
     disabled
-    capabilities NET_ADMIN        
     oneshot
 
 
@@ -137,13 +124,16 @@ service netd_dis /vendor/bin/stop_data
 # UnComment this section if GSMMUX package needs to be used.
 #
 # NOTE: For Android 6.X and previous versions, uncomment below line: 	
-#service gsmmuxd /system/bin/logwrapper /system/bin/gsm0710muxd -s /dev/ttyUSB0 -n3 -v7 -mbasic
+#service gsmmuxd /system/bin/logwrapper /system/bin/gsm0710muxd
 #
-# NOTE: For Android 7.X and 8.X, uncomment below line:
-#service gsmmuxd /system/bin/gsm0710muxd -s /dev/ttyUSB0 -n3 -v7 -mbasic
+# NOTE: For Android 7.X uncomment below line:
+#service gsmmuxd /system/bin/gsm0710muxd
 #
-# NOTE: For Android 9.X and later, uncomment below line:			  				
-#service gsmmuxd /vendor/bin/gsm0710muxd -s /dev/ttyUSB0 -n3 -v7 -mbasic
+# NOTE: For Android 8.0 uncomment below line:
+#service vendor.gsmmuxd /system/bin/gsm0710muxd
+#
+# NOTE: For Android 8.1 AND Android 9.X, uncomment below line:			  				
+#service vendor.gsmmuxd /vendor/bin/gsm0710muxd
 #    class main
 #    user radio
 #    group radio cache inet misc
@@ -153,7 +143,7 @@ service netd_dis /vendor/bin/stop_data
 # NOTE: For Android 8.X and older versions, uncomment below line:
 #service mux_stop /system/bin/stop_muxd 15
 #
-# NOTE: For Android 9.X and later, uncomment below line:			  				
+# NOTE: For Android 8.1 AND Android 9.X and later, uncomment below line:			  				
 #service mux_stop /vendor/bin/stop_muxd 15
 #    class main
 #    user radio      
@@ -175,21 +165,27 @@ service netd_dis /vendor/bin/stop_data
 
 
 ################################# [Section-6] [u-blox internal only] ###############################
-#service gsmmuxd /system/bin/logwrapper /system/bin/gsm0710muxd -s /data/vendor/uril/ttyUBX0 -n3 -v7 -mbasic
+#service gsmmuxd /system/bin/logwrapper /system/bin/gsm0710muxd
 #    class main
 #    user radio
 #    group radio cache inet misc
 #    disabled
 #    oneshot
 #
-#service ril-daemon /system/bin/rild -l /system/lib/librapid-ril-core.so -- -a /data/vendor/uril/ttyUBX0
+#service ril-daemon /system/bin/rild -l /system/lib/librapid-ril-core.so
 #    class main
 #    socket rild stream 660 root radio
 #    socket rild-debug stream 660 radio system
-#    user root
+#    user radio
 #    group radio cache inet misc audio sdcard_r sdcard_rw log
-#
-# NOTE: For Android 7.X and above, remove "/system/bin/logwrapper" from below ubxvclient service   
+#   
+# To use below usb vertualization tool, below changes should be made:
+#       1. Set Mode option in TTY Group to "remote" present in the repository.txt file.
+#       2. Set CommandPort option in TTY Group to /data/vendor/uril/ttyUBX0 in the repository.txt file.
+#       3. Add line "BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive" in BoardConfig.mk file.
+#       4. Uncomment PRODUCT_PACKAGES line inside core_ublox.mk file to build ubxvclient and ubxvclient_data services.
+#       5. Uncomment below ubxvclient and ubxvclient_data services.
+# NOTE: For Android 7.X and above, remove "/system/bin/logwrapper" from below ubxvclient service
 #service ubxvclient /system/bin/logwrapper /system/bin/ubxvclient -p 9000 -i 10.11.1.108 -d /data/vendor/uril/ttyUBX0
 #    class main
 #    user radio
