@@ -72,12 +72,12 @@ static Result<std::string> ComputeContextFromExecutable(const std::string& servi
     if (getcon(&raw_con) == -1) {
         return Error() << "Could not get security context";
     }
-    std::unique_ptr<char> mycon(raw_con);
+    std::unique_ptr<char, decltype(&freecon)> mycon(raw_con, freecon);
 
     if (getfilecon(service_path.c_str(), &raw_filecon) == -1) {
         return Error() << "Could not get file context";
     }
-    std::unique_ptr<char> filecon(raw_filecon);
+    std::unique_ptr<char, decltype(&freecon)> filecon(raw_filecon, freecon);
 
     char* new_con = nullptr;
     int rc = security_compute_create(mycon.get(), filecon.get(),
@@ -154,6 +154,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  .priority = 0},
       namespaces_{.flags = namespace_flags},
       seclabel_(seclabel),
+      subcontext_(subcontext_for_restart_commands),
       onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0,
                  "onrestart", {}),
       oom_score_adjust_(DEFAULT_OOM_SCORE_ADJUST),

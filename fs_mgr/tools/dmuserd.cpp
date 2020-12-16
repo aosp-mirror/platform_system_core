@@ -76,7 +76,7 @@ struct dm_user_message {
 
 static bool verbose = false;
 
-size_t write_all(int fd, void* buf, size_t len) {
+ssize_t write_all(int fd, void* buf, size_t len) {
     char* buf_c = (char*)buf;
     ssize_t total = 0;
     ssize_t once;
@@ -94,7 +94,7 @@ size_t write_all(int fd, void* buf, size_t len) {
     return total;
 }
 
-size_t read_all(int fd, void* buf, size_t len) {
+ssize_t read_all(int fd, void* buf, size_t len) {
     char* buf_c = (char*)buf;
     ssize_t total = 0;
     ssize_t once;

@@ -70,7 +70,7 @@ static void parse_options(int argc, char** argv) {
 }
 
 struct SetAttestationKeyRequest : public keymaster::KeymasterMessage {
-    explicit SetAttestationKeyRequest(int32_t ver = keymaster::MAX_MESSAGE_VERSION)
+    explicit SetAttestationKeyRequest(int32_t ver = keymaster::kDefaultMessageVersion)
         : KeymasterMessage(ver) {}
 
     size_t SerializedSize() const override { return sizeof(uint32_t) + key_data.SerializedSize(); }
@@ -88,7 +88,7 @@ struct SetAttestationKeyRequest : public keymaster::KeymasterMessage {
 };
 
 struct KeymasterNoResponse : public keymaster::KeymasterResponse {
-    explicit KeymasterNoResponse(int32_t ver = keymaster::MAX_MESSAGE_VERSION)
+    explicit KeymasterNoResponse(int32_t ver = keymaster::kDefaultMessageVersion)
         : keymaster::KeymasterResponse(ver) {}
 
     size_t NonErrorSerializedSize() const override { return 0; }
@@ -99,7 +99,7 @@ struct KeymasterNoResponse : public keymaster::KeymasterResponse {
 struct SetAttestationKeyResponse : public KeymasterNoResponse {};
 
 struct ClearAttestationCertChainRequest : public keymaster::KeymasterMessage {
-    explicit ClearAttestationCertChainRequest(int32_t ver = keymaster::MAX_MESSAGE_VERSION)
+    explicit ClearAttestationCertChainRequest(int32_t ver = keymaster::kDefaultMessageVersion)
         : KeymasterMessage(ver) {}
 
     size_t SerializedSize() const override { return sizeof(uint32_t); }

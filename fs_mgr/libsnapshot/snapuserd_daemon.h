@@ -16,7 +16,10 @@
 
 #include <poll.h>
 
-#include <libsnapshot/snapuserd_server.h>
+#include <string>
+#include <vector>
+
+#include "snapuserd_server.h"
 
 namespace android {
 namespace snapshot {
@@ -32,7 +35,7 @@ class Daemon {
         return instance;
     }
 
-    bool StartServer(const std::string& socketname);
+    bool StartServer(int argc, char** argv);
     void Run();
     void Interrupt();
 

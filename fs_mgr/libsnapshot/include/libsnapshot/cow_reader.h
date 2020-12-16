@@ -140,6 +140,8 @@ class CowReader : public ICowReader {
 
     void UpdateMergeProgress(uint64_t merge_ops) { header_.num_merge_ops += merge_ops; }
 
+    void InitializeMerge();
+
   private:
     bool ParseOps(std::optional<uint64_t> label);
 

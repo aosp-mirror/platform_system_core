@@ -53,6 +53,7 @@ static constexpr uint64_t kBlockSize = 4096;
 
 DEFINE_string(source_tf, "", "Source target files (dir or zip file) for incremental payloads");
 DEFINE_string(compression, "gz", "Compression type to use (none or gz)");
+DEFINE_uint32(cluster_ops, 0, "Number of Cow Ops per cluster (0 or >1)");
 
 void MyLogger(android::base::LogId, android::base::LogSeverity severity, const char*, const char*,
               unsigned int, const char* message) {
@@ -189,6 +190,7 @@ bool PayloadConverter::ProcessPartition(const PartitionUpdate& update) {
     CowOptions options;
     options.block_size = kBlockSize;
     options.compression = FLAGS_compression;
+    options.cluster_ops = FLAGS_cluster_ops;
 
     writer_ = std::make_unique<CowWriter>(options);
     if (!writer_->Initialize(std::move(fd))) {

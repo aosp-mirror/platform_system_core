@@ -56,7 +56,7 @@ on early-init
     write /sys/module/dm_verity/parameters/prefetch_cluster 0
 
     # Generate ld.config.txt for early executed processes
-    exec -- /system/bin/linkerconfig --target /linkerconfig/bootstrap
+    exec -- /system/bin/bootstrap/linkerconfig --target /linkerconfig/bootstrap
     chmod 644 /linkerconfig/bootstrap/ld.config.txt
     copy /linkerconfig/bootstrap/ld.config.txt /linkerconfig/default/ld.config.txt
     chmod 644 /linkerconfig/default/ld.config.txt
@@ -153,21 +153,76 @@ on init
     mkdir /dev/cpuctl/background
     mkdir /dev/cpuctl/top-app
     mkdir /dev/cpuctl/rt
+    mkdir /dev/cpuctl/system
+    mkdir /dev/cpuctl/system-background
     chown system system /dev/cpuctl
     chown system system /dev/cpuctl/foreground
     chown system system /dev/cpuctl/background
     chown system system /dev/cpuctl/top-app
     chown system system /dev/cpuctl/rt
+    chown system system /dev/cpuctl/system
+    chown system system /dev/cpuctl/system-background
     chown system system /dev/cpuctl/tasks
     chown system system /dev/cpuctl/foreground/tasks
     chown system system /dev/cpuctl/background/tasks
     chown system system /dev/cpuctl/top-app/tasks
     chown system system /dev/cpuctl/rt/tasks
+    chown system system /dev/cpuctl/system/tasks
+    chown system system /dev/cpuctl/system-background/tasks
     chmod 0664 /dev/cpuctl/tasks
     chmod 0664 /dev/cpuctl/foreground/tasks
     chmod 0664 /dev/cpuctl/background/tasks
     chmod 0664 /dev/cpuctl/top-app/tasks
     chmod 0664 /dev/cpuctl/rt/tasks
+    chmod 0664 /dev/cpuctl/system/tasks
+    chmod 0664 /dev/cpuctl/system-background/tasks
+
+    # Create a cpu group for NNAPI HAL processes
+    mkdir /dev/cpuctl/nnapi-hal
+    chown system system /dev/cpuctl/nnapi-hal
+    chown system system /dev/cpuctl/nnapi-hal/tasks
+    chmod 0664 /dev/cpuctl/nnapi-hal/tasks
+    write /dev/cpuctl/nnapi-hal/cpu.uclamp.min 1
+    write /dev/cpuctl/nnapi-hal/cpu.uclamp.latency_sensitive 1
+
+    # Create a cpu group for camera daemon processes
+    mkdir /dev/cpuctl/camera-daemon
+    chown system system /dev/cpuctl/camera-daemon
+    chown system system /dev/cpuctl/camera-daemon/tasks
+    chmod 0664 /dev/cpuctl/camera-daemon/tasks
+
+    # Android only use global RT throttling and doesn't use CONFIG_RT_GROUP_SCHED
+    # for RT group throttling. These values here are just to make sure RT threads
+    # can be migrated to those groups. These settings can be removed once we migrate
+    # to GKI kernel.
+    write /dev/cpuctl/cpu.rt_period_us 1000000
+    write /dev/cpuctl/cpu.rt_runtime_us 950000
+    # Surfaceflinger is in FG group so giving it a bit more
+    write /dev/cpuctl/foreground/cpu.rt_runtime_us 450000
+    write /dev/cpuctl/foreground/cpu.rt_period_us 1000000
+    write /dev/cpuctl/background/cpu.rt_runtime_us 50000
+    write /dev/cpuctl/background/cpu.rt_period_us 1000000
+    write /dev/cpuctl/top-app/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/top-app/cpu.rt_period_us 1000000
+    write /dev/cpuctl/rt/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/rt/cpu.rt_period_us 1000000
+    write /dev/cpuctl/system/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/system/cpu.rt_period_us 1000000
+    write /dev/cpuctl/system-background/cpu.rt_runtime_us 50000
+    write /dev/cpuctl/system-background/cpu.rt_period_us 1000000
+    write /dev/cpuctl/nnapi-hal/cpu.rt_runtime_us 50000
+    write /dev/cpuctl/nnapi-hal/cpu.rt_period_us 1000000
+    write /dev/cpuctl/camera-daemon/cpu.rt_runtime_us 50000
+    write /dev/cpuctl/camera-daemon/cpu.rt_period_us 1000000
+
+    # Migrate root group to system subgroup
+    copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks
+
+    # Create an stune group for camera-specific processes
+    mkdir /dev/stune/camera-daemon
+    chown system system /dev/stune/camera-daemon
+    chown system system /dev/stune/camera-daemon/tasks
+    chmod 0664 /dev/stune/camera-daemon/tasks
 
     # Create an stune group for NNAPI HAL processes
     mkdir /dev/stune/nnapi-hal
@@ -176,14 +231,6 @@ on init
     chmod 0664 /dev/stune/nnapi-hal/tasks
     write /dev/stune/nnapi-hal/schedtune.boost 1
     write /dev/stune/nnapi-hal/schedtune.prefer_idle 1
-
-    # cpuctl hierarchy for devices using utilclamp
-    mkdir /dev/cpuctl/nnapi-hal
-    chown system system /dev/cpuctl/nnapi-hal
-    chown system system /dev/cpuctl/nnapi-hal/tasks
-    chmod 0664 /dev/cpuctl/nnapi-hal/tasks
-    write /dev/cpuctl/nnapi-hal/cpu.uclamp.min 1
-    write /dev/cpuctl/nnapi-hal/cpu.uclamp.latency_sensitive 1
 
     # Create blkio group and apply initial settings.
     # This feature needs kernel to support it, and the
@@ -275,8 +322,6 @@ on init
     write /proc/sys/vm/mmap_min_addr 32768
     write /proc/sys/net/ipv4/ping_group_range "0 2147483647"
     write /proc/sys/net/unix/max_dgram_qlen 600
-    write /proc/sys/kernel/sched_rt_runtime_us 950000
-    write /proc/sys/kernel/sched_rt_period_us 1000000
 
     # Assign reasonable ceiling values for socket rcv/snd buffers.
     # These should almost always be overridden by the target per the
@@ -298,13 +343,6 @@ on init
     # /proc/net/fib_trie leaks interface IP addresses
     chmod 0400 /proc/net/fib_trie
 
-    # Create cgroup mount points for process groups
-    chown system system /dev/cpuctl
-    chown system system /dev/cpuctl/tasks
-    chmod 0666 /dev/cpuctl/tasks
-    write /dev/cpuctl/cpu.rt_period_us 1000000
-    write /dev/cpuctl/cpu.rt_runtime_us 950000
-
     # sets up initial cpusets for ActivityManager
     # this ensures that the cpusets are present and usable, but the device's
     # init.rc must actually set the correct cpus
@@ -317,7 +355,6 @@ on init
 
     # system-background is for system tasks that should only run on
     # little cores, not on bigs
-    # to be used only by init, so don't change system-bg permissions
     mkdir /dev/cpuset/system-background
     copy /dev/cpuset/cpus /dev/cpuset/system-background/cpus
     copy /dev/cpuset/mems /dev/cpuset/system-background/mems
@@ -332,6 +369,11 @@ on init
     copy /dev/cpuset/cpus /dev/cpuset/top-app/cpus
     copy /dev/cpuset/mems /dev/cpuset/top-app/mems
 
+    # create a cpuset for camera daemon processes
+    mkdir /dev/cpuset/camera-daemon
+    copy /dev/cpuset/cpus /dev/cpuset/camera-daemon/cpus
+    copy /dev/cpuset/mems /dev/cpuset/camera-daemon/mems
+
     # change permissions for all cpusets we'll touch at runtime
     chown system system /dev/cpuset
     chown system system /dev/cpuset/foreground
@@ -339,12 +381,14 @@ on init
     chown system system /dev/cpuset/system-background
     chown system system /dev/cpuset/top-app
     chown system system /dev/cpuset/restricted
+    chown system system /dev/cpuset/camera-daemon
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
     chown system system /dev/cpuset/background/tasks
     chown system system /dev/cpuset/system-background/tasks
     chown system system /dev/cpuset/top-app/tasks
     chown system system /dev/cpuset/restricted/tasks
+    chown system system /dev/cpuset/camera-daemon/tasks
 
     # set system-background to 0775 so SurfaceFlinger can touch it
     chmod 0775 /dev/cpuset/system-background
@@ -355,6 +399,7 @@ on init
     chmod 0664 /dev/cpuset/top-app/tasks
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
+    chmod 0664 /dev/cpuset/camera-daemon/tasks
 
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
@@ -567,6 +612,9 @@ on late-fs
     # HALs required before storage encryption can get unlocked (FBE/FDE)
     class_start early_hal
 
+    # Load trusted keys from dm-verity protected partitions
+    exec -- /system/bin/fsverity_init --load-verified-keys
+
 on post-fs-data
     mark_post_data
 
@@ -607,7 +655,7 @@ on post-fs-data
     mkdir /data/apex/backup 0700 root system
     mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
-    mkdir /data/app-staging 0750 system system encryption=DeleteIfNecessary
+    mkdir /data/app-staging 0751 system system encryption=DeleteIfNecessary
     start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
@@ -808,6 +856,13 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
+    # Lock the fs-verity keyring, so no more keys can be added
+    exec -- /system/bin/fsverity_init --lock
+
+    # After apexes are mounted, tell keymaster early boot has ended, so it will
+    # stop allowing use of early-boot keys
+    exec - system system -- /system/bin/vdc keymaster earlyBootEnded
+
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
@@ -985,9 +1040,6 @@ on boot
 
     class_start core
 
-    # Requires keystore (currently a core service) to be ready first.
-    exec -- /system/bin/fsverity_init
-
 on nonencrypted
     class_start main
     class_start late_start
@@ -1147,3 +1199,7 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
+
+# Migrate tasks again in case kernel threads are created during boot
+on property:sys.boot_completed=1
+  copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks
