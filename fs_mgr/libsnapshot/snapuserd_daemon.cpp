@@ -14,17 +14,44 @@
  * limitations under the License.
  */
 
+#include "snapuserd_daemon.h"
+
 #include <android-base/logging.h>
-#include <libsnapshot/snapuserd_daemon.h>
+#include <android-base/strings.h>
+#include <gflags/gflags.h>
+#include <libsnapshot/snapuserd_client.h>
+
+#include "snapuserd_server.h"
+
+DEFINE_string(socket, android::snapshot::kSnapuserdSocket, "Named socket or socket path.");
+DEFINE_bool(no_socket, false,
+            "If true, no socket is used. Each additional argument is an INIT message.");
 
 namespace android {
 namespace snapshot {
 
-bool Daemon::StartServer(const std::string& socketname) {
-    if (!server_.Start(socketname)) {
-        LOG(ERROR) << "Snapuserd daemon failed to start...";
-        exit(EXIT_FAILURE);
+bool Daemon::StartServer(int argc, char** argv) {
+    int arg_start = gflags::ParseCommandLineFlags(&argc, &argv, true);
+
+    if (!FLAGS_no_socket) {
+        return server_.Start(FLAGS_socket);
     }
+
+    for (int i = arg_start; i < argc; i++) {
+        auto parts = android::base::Split(argv[i], ",");
+        if (parts.size() != 3) {
+            LOG(ERROR) << "Malformed message, expected three sub-arguments.";
+            return false;
+        }
+        auto handler = server_.AddHandler(parts[0], parts[1], parts[2]);
+        if (!handler || !server_.StartHandler(handler)) {
+            return false;
+        }
+    }
+
+    // Skip the accept() call to avoid spurious log spam. The server will still
+    // run until all handlers have completed.
+    server_.SetTerminating();
     return true;
 }
 
@@ -89,3 +116,17 @@ void Daemon::SignalHandler(int signal) {
 
 }  // namespace snapshot
 }  // namespace android
+
+int main(int argc, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+
+    android::snapshot::Daemon& daemon = android::snapshot::Daemon::Instance();
+
+    if (!daemon.StartServer(argc, argv)) {
+        LOG(ERROR) << "Snapuserd daemon failed to start.";
+        exit(EXIT_FAILURE);
+    }
+    daemon.Run();
+
+    return 0;
+}

@@ -79,6 +79,8 @@ TEST(firmware_handler, HandleAbort) {
 }
 
 int HandleAbort(int argc, char** argv) {
+    // Since this is an expected failure, disable debuggerd to not generate a tombstone.
+    signal(SIGABRT, SIG_DFL);
     abort();
     return 0;
 }
