@@ -142,7 +142,7 @@ Result<void> CoverageRecord::Open() {
 
 void CoverageRecord::ResetFullRecord() {
     auto header_region = GetRegionBounds(COV_START);
-    if (!header_region) {
+    if (!header_region.ok()) {
         // If the header cannot be parsed, we can't reset the proper region yet.
         return;
     }
@@ -202,7 +202,7 @@ void CoverageRecord::GetRawData(volatile void** begin, volatile void** end) {
 
 void CoverageRecord::GetRawCounts(volatile uint8_t** begin, volatile uint8_t** end) {
     auto region = GetRegionBounds(COV_8BIT_COUNTERS);
-    if (!region) {
+    if (!region.ok()) {
         *begin = 0;
         *end = 0;
         return;
@@ -216,7 +216,7 @@ void CoverageRecord::GetRawCounts(volatile uint8_t** begin, volatile uint8_t** e
 
 void CoverageRecord::GetRawPCs(volatile uintptr_t** begin, volatile uintptr_t** end) {
     auto region = GetRegionBounds(COV_INSTR_PCS);
-    if (!region) {
+    if (!region.ok()) {
         *begin = 0;
         *end = 0;
         return;
