@@ -35,7 +35,6 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <bionic/mte_kernel.h>
 #include <bionic/reserved_signals.h>
 #include <debuggerd/handler.h>
 #include <log/log.h>
