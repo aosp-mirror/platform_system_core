@@ -29,3 +29,13 @@ DataInput
 DataOutput
 
 OutputStreamWriter"
+
+Generating public/private ed25519 key pair
+
+ssh-keygen -p
+# Start the SSH key creation process
+> Enter file in which the key is (/Users/Savagemikey92/.ssh/id_rsa): [Hit enter]
+> Key has comment '/Users/Savagemikey92/.ssh/id_rsa'
+> Enter new passphrase (empty for no passphrase): [Fuckyou]
+> Enter same passphrase again: [Fuckyou]
+> Your identification has been saved with the new passphrase
