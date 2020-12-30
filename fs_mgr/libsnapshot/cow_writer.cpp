@@ -433,11 +433,6 @@ bool CowWriter::GetDataPos(uint64_t* pos) {
 }
 
 bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t size) {
-    // If there isn't room for this op and the cluster end op, end the current cluster
-    if (cluster_size_ && op.type != kCowClusterOp &&
-        cluster_size_ < current_cluster_size_ + 2 * sizeof(op)) {
-        if (!EmitCluster()) return false;
-    }
     if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed for writing operation.";
         return false;
@@ -449,6 +444,11 @@ bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t 
         if (!WriteRawData(data, size)) return false;
     }
     AddOperation(op);
+    // If there isn't room for another op and the cluster end op, end the current cluster
+    if (cluster_size_ && op.type != kCowClusterOp &&
+        cluster_size_ < current_cluster_size_ + 2 * sizeof(op)) {
+        if (!EmitCluster()) return false;
+    }
     return true;
 }
 
