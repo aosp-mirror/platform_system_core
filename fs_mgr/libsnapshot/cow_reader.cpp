@@ -157,6 +157,13 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
         // Reading a v1 version of COW which doesn't have buffer_size.
         header_.buffer_size = 0;
     }
+    uint64_t data_pos = 0;
+
+    if (header_.cluster_ops) {
+        data_pos = pos + header_.cluster_ops * sizeof(CowOperation);
+    } else {
+        data_pos = pos + sizeof(CowOperation);
+    }
 
     auto ops_buffer = std::make_shared<std::vector<CowOperation>>();
     uint64_t current_op_num = 0;
@@ -177,7 +184,11 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
         while (current_op_num < ops_buffer->size()) {
             auto& current_op = ops_buffer->data()[current_op_num];
             current_op_num++;
+            if (current_op.type == kCowXorOp) {
+                data_loc_[current_op.new_block] = data_pos;
+            }
             pos += sizeof(CowOperation) + GetNextOpOffset(current_op, header_.cluster_ops);
+            data_pos += current_op.data_length + GetNextDataOffset(current_op, header_.cluster_ops);
 
             if (current_op.type == kCowClusterOp) {
                 break;
@@ -606,7 +617,13 @@ bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
             return false;
     }
 
-    CowDataStream stream(this, op.source, op.data_length);
+    uint64_t offset;
+    if (op.type == kCowXorOp) {
+        offset = data_loc_[op.new_block];
+    } else {
+        offset = op.source;
+    }
+    CowDataStream stream(this, offset, op.data_length);
     decompressor->set_stream(&stream);
     decompressor->set_sink(sink);
     return decompressor->Decompress(header_.block_size);
