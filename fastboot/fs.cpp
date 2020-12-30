@@ -168,6 +168,19 @@ static int generate_ext4_image(const char* fileName, long long partSize,
     return exec_cmd(e2fsdroid_args[0], e2fsdroid_args.data(), nullptr);
 }
 
+enum {
+    // clang-format off
+    FSCK_SUCCESS                 = 0,
+    FSCK_ERROR_CORRECTED         = 1 << 0,
+    FSCK_SYSTEM_SHOULD_REBOOT    = 1 << 1,
+    FSCK_ERRORS_LEFT_UNCORRECTED = 1 << 2,
+    FSCK_OPERATIONAL_ERROR       = 1 << 3,
+    FSCK_USAGE_OR_SYNTAX_ERROR   = 1 << 4,
+    FSCK_USER_CANCELLED          = 1 << 5,
+    FSCK_SHARED_LIB_ERROR        = 1 << 7,
+    // clang-format on
+};
+
 static int generate_f2fs_image(const char* fileName, long long partSize,
                                const std::string& initial_dir, unsigned /* unused */,
                                unsigned /* unused */, const unsigned fsOptions) {
@@ -216,7 +229,11 @@ static int generate_f2fs_image(const char* fileName, long long partSize,
     std::vector<const char*> sload_args = {sload_path.c_str(), "-S",
                                        "-f", initial_dir.c_str(), fileName, nullptr};
 
-    return exec_cmd(sload_args[0], sload_args.data(), nullptr);
+    ret = exec_cmd(sload_args[0], sload_args.data(), nullptr);
+    if (ret != 0 && ret != FSCK_ERROR_CORRECTED) {
+        return -1;
+    }
+    return 0;
 }
 
 static const struct fs_generator {
