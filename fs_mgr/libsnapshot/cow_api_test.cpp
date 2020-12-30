@@ -171,6 +171,70 @@ TEST_F(CowTest, CompressGz) {
     ASSERT_TRUE(iter->Done());
 }
 
+TEST_F(CowTest, ClusterCompressGz) {
+    CowOptions options;
+    options.compression = "gz";
+    options.cluster_ops = 2;
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
+
+    std::string data2 = "More data!";
+    data2.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer.AddRawBlocks(51, data2.data(), data2.size()));
+
+    ASSERT_TRUE(writer.Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->Done());
+    auto op = &iter->Get();
+
+    StringSink sink;
+
+    ASSERT_EQ(op->type, kCowReplaceOp);
+    ASSERT_EQ(op->compression, kCowCompressGz);
+    ASSERT_EQ(op->data_length, 56);  // compressed!
+    ASSERT_EQ(op->new_block, 50);
+    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_EQ(sink.stream(), data);
+
+    iter->Next();
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+
+    ASSERT_EQ(op->type, kCowClusterOp);
+
+    iter->Next();
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+
+    sink.Reset();
+    ASSERT_EQ(op->compression, kCowCompressGz);
+    ASSERT_EQ(op->data_length, 41);  // compressed!
+    ASSERT_EQ(op->new_block, 51);
+    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_EQ(sink.stream(), data2);
+
+    iter->Next();
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+
+    ASSERT_EQ(op->type, kCowClusterOp);
+
+    iter->Next();
+    ASSERT_TRUE(iter->Done());
+}
+
 TEST_F(CowTest, CompressTwoBlocks) {
     CowOptions options;
     options.compression = "gz";
