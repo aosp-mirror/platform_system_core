@@ -441,6 +441,7 @@ cc_binary {
     system_shared_libs: [],
     ramdisk_available: true,
     vendor_ramdisk_available: true,
+    recovery_available: true,
 }
 
 cc_test {
