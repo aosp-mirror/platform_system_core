@@ -25,6 +25,8 @@
 #include <sys/mman.h>
 #include <sys/uio.h>
 
+#include <BufferAllocator/BufferAllocatorWrapper.h>
+
 #include <trusty/tipc.h>
 
 #define TIPC_DEFAULT_DEVNAME "/dev/trusty-ipc-dev0"
@@ -86,7 +88,7 @@ static const char* usage_long =
         "   ta-access    - test ta-access flags\n"
         "   writev       - writev test\n"
         "   readv        - readv test\n"
-        "   send-fd      - transmit memfd to trusty, use as shm\n"
+        "   send-fd      - transmit dma_buf to trusty, use as shm\n"
         "\n";
 
 static uint opt_repeat  = 1;
@@ -890,9 +892,11 @@ static int readv_test(uint repeat, uint msgsz, bool var)
 
 static int send_fd_test(void) {
     int ret;
-    int memfd = -1;
+    int dma_buf = -1;
     int fd = -1;
     volatile char* buf = MAP_FAILED;
+    BufferAllocator* allocator = NULL;
+
     const size_t num_pages = 10;
 
     fd = tipc_connect(dev_name, receiver_name);
@@ -902,23 +906,24 @@ static int send_fd_test(void) {
         goto cleanup;
     }
 
-    memfd = memfd_create("tipc-send-fd", 0);
-    if (memfd < 0) {
-        fprintf(stderr, "Failed to create memfd: %s\n", strerror(errno));
+    allocator = CreateDmabufHeapBufferAllocator();
+    if (!allocator) {
+        fprintf(stderr, "Failed to create dma-buf allocator.\n");
         ret = -1;
         goto cleanup;
     }
 
     size_t buf_size = PAGE_SIZE * num_pages;
-    if (ftruncate(memfd, buf_size) < 0) {
-        fprintf(stderr, "Failed to resize memfd: %s\n", strerror(errno));
-        ret = -1;
+    dma_buf = DmabufHeapAlloc(allocator, "system", buf_size, 0);
+    if (dma_buf < 0) {
+        ret = dma_buf;
+        fprintf(stderr, "Failed to create dma-buf fd of size %zu err (%d)\n", buf_size, ret);
         goto cleanup;
     }
 
     buf = mmap(0, buf_size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_buf, 0);
     if (buf == MAP_FAILED) {
-        fprintf(stderr, "Failed to map memfd: %s\n", strerror(errno));
+        fprintf(stderr, "Failed to map dma-buf: %s\n", strerror(errno));
         ret = -1;
         goto cleanup;
     }
@@ -926,13 +931,13 @@ static int send_fd_test(void) {
     strcpy((char*)buf, "From NS");
 
     struct trusty_shm shm = {
-            .fd = memfd,
+            .fd = dma_buf,
             .transfer = TRUSTY_SHARE,
     };
 
     ssize_t rc = tipc_send(fd, NULL, 0, &shm, 1);
     if (rc < 0) {
-        fprintf(stderr, "tipc_send failed\n");
+        fprintf(stderr, "tipc_send failed: %zd\n", rc);
         ret = rc;
         goto cleanup;
     }
@@ -949,7 +954,10 @@ cleanup:
     if (buf != MAP_FAILED) {
         munmap((char*)buf, PAGE_SIZE);
     }
-    close(memfd);
+    close(dma_buf);
+    if (allocator) {
+        FreeDmabufHeapBufferAllocator(allocator);
+    }
     tipc_close(fd);
     return ret;
 }
