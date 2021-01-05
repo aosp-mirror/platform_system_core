@@ -893,6 +893,7 @@ static int send_fd_test(void) {
     int memfd = -1;
     int fd = -1;
     volatile char* buf = MAP_FAILED;
+    const size_t num_pages = 10;
 
     fd = tipc_connect(dev_name, receiver_name);
     if (fd < 0) {
@@ -908,13 +909,14 @@ static int send_fd_test(void) {
         goto cleanup;
     }
 
-    if (ftruncate(memfd, PAGE_SIZE) < 0) {
+    size_t buf_size = PAGE_SIZE * num_pages;
+    if (ftruncate(memfd, buf_size) < 0) {
         fprintf(stderr, "Failed to resize memfd: %s\n", strerror(errno));
         ret = -1;
         goto cleanup;
     }
 
-    buf = mmap(0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0);
+    buf = mmap(0, buf_size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_buf, 0);
     if (buf == MAP_FAILED) {
         fprintf(stderr, "Failed to map memfd: %s\n", strerror(errno));
         ret = -1;
@@ -938,7 +940,10 @@ static int send_fd_test(void) {
     read(fd, &c, 1);
     tipc_close(fd);
 
-    ret = strcmp("Hello from Trusty!", (const char*)buf) ? (-1) : 0;
+    ret = 0;
+    for (size_t skip = 0; skip < num_pages; skip++) {
+        ret |= strcmp("Hello from Trusty!", (const char*)&buf[skip * PAGE_SIZE]) ? (-1) : 0;
+    }
 
 cleanup:
     if (buf != MAP_FAILED) {
