@@ -8,8 +8,8 @@ Users working with userdebug or eng builds expect to be able to remount the
 system partition as read-write and then add or modify any number of files
 without reflashing the system image, which is efficient for a development cycle.
 
-Limited memory systems use read-only types of file systems or logical resizable
-Android partitions (LRAPs). These file systems land system partition images
+Limited memory systems use read-only types of file systems or dynamic
+Android partitions (DAPs). These file systems land system partition images
 right-sized, and have been deduped at the block level to compress the content.
 This means that a remount either isn’t possible, or isn't useful because of
 space limitations or support logistics.
