@@ -31,11 +31,35 @@ int TrustyKeymaster::Initialize() {
         return err;
     }
 
-    ConfigureRequest req;
+    // Try GetVersion2 first.
+    GetVersion2Request versionReq;
+    GetVersion2Response versionRsp = GetVersion2(versionReq);
+    if (versionRsp.error != KM_ERROR_OK) {
+        ALOGW("TA appears not to support GetVersion2, falling back (err = %d)", versionRsp.error);
+
+        GetVersionRequest versionReq;
+        GetVersionResponse versionRsp;
+        GetVersion(versionReq, &versionRsp);
+        if (versionRsp.error != KM_ERROR_OK) {
+            ALOGE("Failed to get TA version %d", versionRsp.error);
+            return -1;
+        } else {
+            keymaster_error_t error;
+            message_version_ = NegotiateMessageVersion(versionRsp, &error);
+            if (error != KM_ERROR_OK) {
+                ALOGE("Failed to negotiate message version %d", error);
+                return -1;
+            }
+        }
+    } else {
+        message_version_ = NegotiateMessageVersion(versionReq, versionRsp);
+    }
+
+    ConfigureRequest req(message_version());
     req.os_version = GetOsVersion();
     req.os_patchlevel = GetOsPatchlevel();
 
-    ConfigureResponse rsp;
+    ConfigureResponse rsp(message_version());
     Configure(req, &rsp);
 
     if (rsp.error != KM_ERROR_OK) {
@@ -52,7 +76,7 @@ TrustyKeymaster::~TrustyKeymaster() {
     trusty_keymaster_disconnect();
 }
 
-static void ForwardCommand(enum keymaster_command command, const Serializable& req,
+static void ForwardCommand(enum keymaster_command command, const KeymasterMessage& req,
                            KeymasterResponse* rsp) {
     keymaster_error_t err;
     err = trusty_keymaster_send(command, req, rsp);
@@ -173,24 +197,29 @@ void TrustyKeymaster::AbortOperation(const AbortOperationRequest& request,
 }
 
 GetHmacSharingParametersResponse TrustyKeymaster::GetHmacSharingParameters() {
-    // Empty buffer to allow ForwardCommand to have something to serialize
-    Buffer request;
-    GetHmacSharingParametersResponse response;
+    GetHmacSharingParametersRequest request(message_version());
+    GetHmacSharingParametersResponse response(message_version());
     ForwardCommand(KM_GET_HMAC_SHARING_PARAMETERS, request, &response);
     return response;
 }
 
 ComputeSharedHmacResponse TrustyKeymaster::ComputeSharedHmac(
         const ComputeSharedHmacRequest& request) {
-    ComputeSharedHmacResponse response;
+    ComputeSharedHmacResponse response(message_version());
     ForwardCommand(KM_COMPUTE_SHARED_HMAC, request, &response);
     return response;
 }
 
 VerifyAuthorizationResponse TrustyKeymaster::VerifyAuthorization(
         const VerifyAuthorizationRequest& request) {
-    VerifyAuthorizationResponse response;
+    VerifyAuthorizationResponse response(message_version());
     ForwardCommand(KM_VERIFY_AUTHORIZATION, request, &response);
+    return response;
+}
+
+GetVersion2Response TrustyKeymaster::GetVersion2(const GetVersion2Request& request) {
+    GetVersion2Response response(message_version());
+    ForwardCommand(KM_GET_VERSION_2, request, &response);
     return response;
 }
 

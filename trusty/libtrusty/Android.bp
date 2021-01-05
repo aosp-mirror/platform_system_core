@@ -26,13 +26,8 @@ cc_defaults {
 
 cc_library {
     name: "libtrusty",
-    vendor: true,
-    defaults: ["libtrusty_defaults"],
-}
-
-// TODO(b/170753563): cc_fuzz can't deal with vendor components. Build libtrusty
-// for system.
-cc_test_library {
-    name: "libtrusty_test",
+    // TODO(b/170753563): cc_fuzz can't deal with vendor components. Build
+    // libtrusty for system and vendor.
+    vendor_available: true,
     defaults: ["libtrusty_defaults"],
 }
