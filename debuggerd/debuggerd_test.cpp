@@ -391,7 +391,11 @@ static void SetTagCheckingLevelSync() {
 }
 #endif
 
-TEST_F(CrasherTest, mte_uaf) {
+struct SizeParamCrasherTest : CrasherTest, testing::WithParamInterface<size_t> {};
+
+INSTANTIATE_TEST_SUITE_P(Sizes, SizeParamCrasherTest, testing::Values(16, 131072));
+
+TEST_P(SizeParamCrasherTest, mte_uaf) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
@@ -399,9 +403,9 @@ TEST_F(CrasherTest, mte_uaf) {
 
   int intercept_result;
   unique_fd output_fd;
-  StartProcess([]() {
+  StartProcess([&]() {
     SetTagCheckingLevelSync();
-    volatile int* p = (volatile int*)malloc(16);
+    volatile int* p = (volatile int*)malloc(GetParam());
     free((void *)p);
     p[0] = 42;
   });
@@ -416,8 +420,9 @@ TEST_F(CrasherTest, mte_uaf) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
 
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 9 \(SEGV_MTESERR\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a 16-byte allocation.*
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
+  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a )" +
+                           std::to_string(GetParam()) + R"(-byte allocation.*
 
 allocated by thread .*
       #00 pc)");
@@ -428,7 +433,7 @@ allocated by thread .*
 #endif
 }
 
-TEST_F(CrasherTest, mte_overflow) {
+TEST_P(SizeParamCrasherTest, mte_overflow) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
@@ -436,10 +441,10 @@ TEST_F(CrasherTest, mte_overflow) {
 
   int intercept_result;
   unique_fd output_fd;
-  StartProcess([]() {
+  StartProcess([&]() {
     SetTagCheckingLevelSync();
-    volatile int* p = (volatile int*)malloc(16);
-    p[4] = 42;
+    volatile char* p = (volatile char*)malloc(GetParam());
+    p[GetParam()] = 42;
   });
 
   StartIntercept(&output_fd);
@@ -453,7 +458,8 @@ TEST_F(CrasherTest, mte_overflow) {
   ConsumeFd(std::move(output_fd), &result);
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a 16-byte allocation.*
+  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a )" +
+                           std::to_string(GetParam()) + R"(-byte allocation.*
 
 allocated by thread .*
       #00 pc)");
@@ -462,7 +468,7 @@ allocated by thread .*
 #endif
 }
 
-TEST_F(CrasherTest, mte_underflow) {
+TEST_P(SizeParamCrasherTest, mte_underflow) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
@@ -470,9 +476,9 @@ TEST_F(CrasherTest, mte_underflow) {
 
   int intercept_result;
   unique_fd output_fd;
-  StartProcess([]() {
+  StartProcess([&]() {
     SetTagCheckingLevelSync();
-    volatile int* p = (volatile int*)malloc(16);
+    volatile int* p = (volatile int*)malloc(GetParam());
     p[-1] = 42;
   });
 
@@ -487,7 +493,8 @@ TEST_F(CrasherTest, mte_underflow) {
   ConsumeFd(std::move(output_fd), &result);
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 9 \(SEGV_MTESERR\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Underflow, 4 bytes left of a 16-byte allocation.*
+  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Underflow, 4 bytes left of a )" +
+                           std::to_string(GetParam()) + R"(-byte allocation.*
 
 allocated by thread .*
       #00 pc)");

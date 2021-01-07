@@ -43,6 +43,8 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
                                        __scudo_get_stack_depot_size());
   auto region_info = AllocAndReadFully(process_memory, process_info.scudo_region_info,
                                        __scudo_get_region_info_size());
+  auto ring_buffer = AllocAndReadFully(process_memory, process_info.scudo_ring_buffer,
+                                       __scudo_get_ring_buffer_size());
 
   untagged_fault_addr_ = process_info.untagged_fault_address;
   uintptr_t fault_page = untagged_fault_addr_ & ~(PAGE_SIZE - 1);
@@ -68,8 +70,8 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
   }
 
   __scudo_get_error_info(&error_info_, process_info.maybe_tagged_fault_address, stack_depot.get(),
-                         region_info.get(), memory.get(), memory_tags.get(), memory_begin,
-                         memory_end - memory_begin);
+                         region_info.get(), ring_buffer.get(), memory.get(), memory_tags.get(),
+                         memory_begin, memory_end - memory_begin);
 }
 
 bool ScudoCrashData::CrashIsMine() const {
