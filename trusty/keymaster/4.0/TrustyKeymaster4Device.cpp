@@ -284,7 +284,7 @@ Return<void> TrustyKeymaster4Device::getHmacSharingParameters(
 
 Return<void> TrustyKeymaster4Device::computeSharedHmac(
         const hidl_vec<HmacSharingParameters>& params, computeSharedHmac_cb _hidl_cb) {
-    ComputeSharedHmacRequest request;
+    ComputeSharedHmacRequest request(impl_->message_version());
     request.params_array.params_array = new keymaster::HmacSharingParameters[params.size()];
     request.params_array.num_params = params.size();
     for (size_t i = 0; i < params.size(); ++i) {
@@ -309,7 +309,7 @@ Return<void> TrustyKeymaster4Device::computeSharedHmac(
 Return<void> TrustyKeymaster4Device::verifyAuthorization(
         uint64_t challenge, const hidl_vec<KeyParameter>& parametersToVerify,
         const HardwareAuthToken& authToken, verifyAuthorization_cb _hidl_cb) {
-    VerifyAuthorizationRequest request;
+    VerifyAuthorizationRequest request(impl_->message_version());
     request.challenge = challenge;
     request.parameters_to_verify.Reinitialize(KmParamSet(parametersToVerify));
     request.auth_token.challenge = authToken.challenge;
@@ -336,10 +336,10 @@ Return<void> TrustyKeymaster4Device::verifyAuthorization(
 
 Return<ErrorCode> TrustyKeymaster4Device::addRngEntropy(const hidl_vec<uint8_t>& data) {
     if (data.size() == 0) return ErrorCode::OK;
-    AddEntropyRequest request;
+    AddEntropyRequest request(impl_->message_version());
     request.random_data.Reinitialize(data.data(), data.size());
 
-    AddEntropyResponse response;
+    AddEntropyResponse response(impl_->message_version());
     impl_->AddRngEntropy(request, &response);
 
     return legacy_enum_conversion(response.error);
@@ -347,10 +347,10 @@ Return<ErrorCode> TrustyKeymaster4Device::addRngEntropy(const hidl_vec<uint8_t>&
 
 Return<void> TrustyKeymaster4Device::generateKey(const hidl_vec<KeyParameter>& keyParams,
                                                  generateKey_cb _hidl_cb) {
-    GenerateKeyRequest request;
+    GenerateKeyRequest request(impl_->message_version());
     request.key_description.Reinitialize(KmParamSet(keyParams));
 
-    GenerateKeyResponse response;
+    GenerateKeyResponse response(impl_->message_version());
     impl_->GenerateKey(request, &response);
 
     KeyCharacteristics resultCharacteristics;
@@ -368,11 +368,11 @@ Return<void> TrustyKeymaster4Device::getKeyCharacteristics(const hidl_vec<uint8_
                                                            const hidl_vec<uint8_t>& clientId,
                                                            const hidl_vec<uint8_t>& appData,
                                                            getKeyCharacteristics_cb _hidl_cb) {
-    GetKeyCharacteristicsRequest request;
+    GetKeyCharacteristicsRequest request(impl_->message_version());
     request.SetKeyMaterial(keyBlob.data(), keyBlob.size());
     addClientAndAppData(clientId, appData, &request.additional_params);
 
-    GetKeyCharacteristicsResponse response;
+    GetKeyCharacteristicsResponse response(impl_->message_version());
     impl_->GetKeyCharacteristics(request, &response);
 
     KeyCharacteristics resultCharacteristics;
@@ -388,12 +388,12 @@ Return<void> TrustyKeymaster4Device::importKey(const hidl_vec<KeyParameter>& par
                                                KeyFormat keyFormat,
                                                const hidl_vec<uint8_t>& keyData,
                                                importKey_cb _hidl_cb) {
-    ImportKeyRequest request;
+    ImportKeyRequest request(impl_->message_version());
     request.key_description.Reinitialize(KmParamSet(params));
     request.key_format = legacy_enum_conversion(keyFormat);
     request.SetKeyMaterial(keyData.data(), keyData.size());
 
-    ImportKeyResponse response;
+    ImportKeyResponse response(impl_->message_version());
     impl_->ImportKey(request, &response);
 
     KeyCharacteristics resultCharacteristics;
@@ -411,7 +411,7 @@ Return<void> TrustyKeymaster4Device::importWrappedKey(
         const hidl_vec<uint8_t>& wrappedKeyData, const hidl_vec<uint8_t>& wrappingKeyBlob,
         const hidl_vec<uint8_t>& maskingKey, const hidl_vec<KeyParameter>& unwrappingParams,
         uint64_t passwordSid, uint64_t biometricSid, importWrappedKey_cb _hidl_cb) {
-    ImportWrappedKeyRequest request;
+    ImportWrappedKeyRequest request(impl_->message_version());
     request.SetWrappedMaterial(wrappedKeyData.data(), wrappedKeyData.size());
     request.SetWrappingMaterial(wrappingKeyBlob.data(), wrappingKeyBlob.size());
     request.SetMaskingKeyMaterial(maskingKey.data(), maskingKey.size());
@@ -419,7 +419,7 @@ Return<void> TrustyKeymaster4Device::importWrappedKey(
     request.password_sid = passwordSid;
     request.biometric_sid = biometricSid;
 
-    ImportWrappedKeyResponse response;
+    ImportWrappedKeyResponse response(impl_->message_version());
     impl_->ImportWrappedKey(request, &response);
 
     KeyCharacteristics resultCharacteristics;
@@ -438,12 +438,12 @@ Return<void> TrustyKeymaster4Device::exportKey(KeyFormat exportFormat,
                                                const hidl_vec<uint8_t>& clientId,
                                                const hidl_vec<uint8_t>& appData,
                                                exportKey_cb _hidl_cb) {
-    ExportKeyRequest request;
+    ExportKeyRequest request(impl_->message_version());
     request.key_format = legacy_enum_conversion(exportFormat);
     request.SetKeyMaterial(keyBlob.data(), keyBlob.size());
     addClientAndAppData(clientId, appData, &request.additional_params);
 
-    ExportKeyResponse response;
+    ExportKeyResponse response(impl_->message_version());
     impl_->ExportKey(request, &response);
 
     hidl_vec<uint8_t> resultKeyBlob;
@@ -457,11 +457,11 @@ Return<void> TrustyKeymaster4Device::exportKey(KeyFormat exportFormat,
 Return<void> TrustyKeymaster4Device::attestKey(const hidl_vec<uint8_t>& keyToAttest,
                                                const hidl_vec<KeyParameter>& attestParams,
                                                attestKey_cb _hidl_cb) {
-    AttestKeyRequest request;
+    AttestKeyRequest request(impl_->message_version());
     request.SetKeyMaterial(keyToAttest.data(), keyToAttest.size());
     request.attest_params.Reinitialize(KmParamSet(attestParams));
 
-    AttestKeyResponse response;
+    AttestKeyResponse response(impl_->message_version());
     impl_->AttestKey(request, &response);
 
     hidl_vec<hidl_vec<uint8_t>> resultCertChain;
@@ -475,11 +475,11 @@ Return<void> TrustyKeymaster4Device::attestKey(const hidl_vec<uint8_t>& keyToAtt
 Return<void> TrustyKeymaster4Device::upgradeKey(const hidl_vec<uint8_t>& keyBlobToUpgrade,
                                                 const hidl_vec<KeyParameter>& upgradeParams,
                                                 upgradeKey_cb _hidl_cb) {
-    UpgradeKeyRequest request;
+    UpgradeKeyRequest request(impl_->message_version());
     request.SetKeyMaterial(keyBlobToUpgrade.data(), keyBlobToUpgrade.size());
     request.upgrade_params.Reinitialize(KmParamSet(upgradeParams));
 
-    UpgradeKeyResponse response;
+    UpgradeKeyResponse response(impl_->message_version());
     impl_->UpgradeKey(request, &response);
 
     if (response.error == KM_ERROR_OK) {
@@ -491,18 +491,18 @@ Return<void> TrustyKeymaster4Device::upgradeKey(const hidl_vec<uint8_t>& keyBlob
 }
 
 Return<ErrorCode> TrustyKeymaster4Device::deleteKey(const hidl_vec<uint8_t>& keyBlob) {
-    DeleteKeyRequest request;
+    DeleteKeyRequest request(impl_->message_version());
     request.SetKeyMaterial(keyBlob.data(), keyBlob.size());
 
-    DeleteKeyResponse response;
+    DeleteKeyResponse response(impl_->message_version());
     impl_->DeleteKey(request, &response);
 
     return legacy_enum_conversion(response.error);
 }
 
 Return<ErrorCode> TrustyKeymaster4Device::deleteAllKeys() {
-    DeleteAllKeysRequest request;
-    DeleteAllKeysResponse response;
+    DeleteAllKeysRequest request(impl_->message_version());
+    DeleteAllKeysResponse response(impl_->message_version());
     impl_->DeleteAllKeys(request, &response);
 
     return legacy_enum_conversion(response.error);
@@ -516,12 +516,12 @@ Return<void> TrustyKeymaster4Device::begin(KeyPurpose purpose, const hidl_vec<ui
                                            const hidl_vec<KeyParameter>& inParams,
                                            const HardwareAuthToken& authToken, begin_cb _hidl_cb) {
     hidl_vec<KeyParameter> extendedParams = injectAuthToken(inParams, authToken);
-    BeginOperationRequest request;
+    BeginOperationRequest request(impl_->message_version());
     request.purpose = legacy_enum_conversion(purpose);
     request.SetKeyMaterial(key.data(), key.size());
     request.additional_params.Reinitialize(KmParamSet(extendedParams));
 
-    BeginOperationResponse response;
+    BeginOperationResponse response(impl_->message_version());
     impl_->BeginOperation(request, &response);
 
     hidl_vec<KeyParameter> resultParams;
@@ -540,8 +540,8 @@ Return<void> TrustyKeymaster4Device::update(uint64_t operationHandle,
                                             const VerificationToken& verificationToken,
                                             update_cb _hidl_cb) {
     (void)verificationToken;
-    UpdateOperationRequest request;
-    UpdateOperationResponse response;
+    UpdateOperationRequest request(impl_->message_version());
+    UpdateOperationResponse response(impl_->message_version());
     hidl_vec<KeyParameter> resultParams;
     hidl_vec<uint8_t> resultBlob;
     hidl_vec<KeyParameter> extendedParams = injectAuthToken(inParams, authToken);
@@ -581,14 +581,14 @@ Return<void> TrustyKeymaster4Device::finish(uint64_t operationHandle,
                                             const VerificationToken& verificationToken,
                                             finish_cb _hidl_cb) {
     (void)verificationToken;
-    FinishOperationRequest request;
+    FinishOperationRequest request(impl_->message_version());
     hidl_vec<KeyParameter> extendedParams = injectAuthToken(inParams, authToken);
     request.op_handle = operationHandle;
     request.input.Reinitialize(input.data(), input.size());
     request.signature.Reinitialize(signature.data(), signature.size());
     request.additional_params.Reinitialize(KmParamSet(extendedParams));
 
-    FinishOperationResponse response;
+    FinishOperationResponse response(impl_->message_version());
     impl_->FinishOperation(request, &response);
 
     hidl_vec<KeyParameter> resultParams;
@@ -602,10 +602,10 @@ Return<void> TrustyKeymaster4Device::finish(uint64_t operationHandle,
 }
 
 Return<ErrorCode> TrustyKeymaster4Device::abort(uint64_t operationHandle) {
-    AbortOperationRequest request;
+    AbortOperationRequest request(impl_->message_version());
     request.op_handle = operationHandle;
 
-    AbortOperationResponse response;
+    AbortOperationResponse response(impl_->message_version());
     impl_->AbortOperation(request, &response);
 
     return legacy_enum_conversion(response.error);
