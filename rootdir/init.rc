@@ -1071,6 +1071,7 @@ on property:vold.decrypt=trigger_restart_framework
     class_start main
     class_start late_start
     setprop service.bootanim.exit 0
+    setprop service.bootanim.progress 0
     start bootanim
 
 on property:vold.decrypt=trigger_shutdown_framework
@@ -1172,6 +1173,7 @@ on userspace-reboot-requested
   setprop sys.user.0.ce_available ""
   setprop sys.shutdown.requested ""
   setprop service.bootanim.exit ""
+  setprop service.bootanim.progress ""
 
 on userspace-reboot-fs-remount
   # Make sure that vold is running.
