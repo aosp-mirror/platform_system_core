@@ -60,6 +60,7 @@ class StringSink : public IByteSink {
 
 TEST_F(CowTest, ReadWrite) {
     CowOptions options;
+    options.cluster_ops = 0;
     CowWriter writer(options);
 
     ASSERT_TRUE(writer.Initialize(cow_->fd));
@@ -137,6 +138,7 @@ TEST_F(CowTest, ReadWrite) {
 
 TEST_F(CowTest, CompressGz) {
     CowOptions options;
+    options.cluster_ops = 0;
     options.compression = "gz";
     CowWriter writer(options);
 
@@ -238,6 +240,7 @@ TEST_F(CowTest, ClusterCompressGz) {
 TEST_F(CowTest, CompressTwoBlocks) {
     CowOptions options;
     options.compression = "gz";
+    options.cluster_ops = 0;
     CowWriter writer(options);
 
     ASSERT_TRUE(writer.Initialize(cow_->fd));
@@ -280,6 +283,7 @@ class CompressionTest : public CowTest, public testing::WithParamInterface<const
 TEST_P(CompressionTest, HorribleSink) {
     CowOptions options;
     options.compression = GetParam();
+    options.cluster_ops = 0;
     CowWriter writer(options);
 
     ASSERT_TRUE(writer.Initialize(cow_->fd));
@@ -309,6 +313,7 @@ INSTANTIATE_TEST_SUITE_P(CowApi, CompressionTest, testing::Values("none", "gz", 
 
 TEST_F(CowTest, GetSize) {
     CowOptions options;
+    options.cluster_ops = 0;
     CowWriter writer(options);
     if (ftruncate(cow_->fd, 0) < 0) {
         perror("Fails to set temp file size");
@@ -334,6 +339,7 @@ TEST_F(CowTest, GetSize) {
 
 TEST_F(CowTest, AppendLabelSmall) {
     CowOptions options;
+    options.cluster_ops = 0;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
 
@@ -399,6 +405,7 @@ TEST_F(CowTest, AppendLabelSmall) {
 
 TEST_F(CowTest, AppendLabelMissing) {
     CowOptions options;
+    options.cluster_ops = 0;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
 
@@ -452,6 +459,7 @@ TEST_F(CowTest, AppendLabelMissing) {
 
 TEST_F(CowTest, AppendExtendedCorrupted) {
     CowOptions options;
+    options.cluster_ops = 0;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
 
@@ -504,6 +512,7 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
 
 TEST_F(CowTest, AppendbyLabel) {
     CowOptions options;
+    options.cluster_ops = 0;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
 
