@@ -79,6 +79,7 @@
 #include "service.h"
 #include "service_parser.h"
 #include "sigchld_handler.h"
+#include "snapuserd_transition.h"
 #include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
@@ -741,9 +742,14 @@ static Result<void> TransitionSnapuserdAction(const BuiltinArguments&) {
         return {};
     }
     svc->Start();
+    svc->SetShutdownCritical();
 
-    if (!sm->PerformSecondStageTransition()) {
+    if (!sm->PerformSecondStageInitTransition()) {
         LOG(FATAL) << "Failed to transition snapuserd to second-stage";
+    }
+
+    if (auto pid = GetSnapuserdFirstStagePid()) {
+        KillFirstStageSnapuserd(pid.value());
     }
     return {};
 }
