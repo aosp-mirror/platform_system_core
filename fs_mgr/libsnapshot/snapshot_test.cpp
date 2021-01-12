@@ -342,6 +342,23 @@ class SnapshotTest : public ::testing::Test {
         return AssertionSuccess();
     }
 
+    std::unique_ptr<SnapshotManager> NewManagerForFirstStageMount(
+            const std::string& slot_suffix = "_a") {
+        auto info = new TestDeviceInfo(fake_super, slot_suffix);
+        return NewManagerForFirstStageMount(info);
+    }
+
+    std::unique_ptr<SnapshotManager> NewManagerForFirstStageMount(TestDeviceInfo* info) {
+        auto init = SnapshotManager::NewForFirstStageMount(info);
+        if (!init) {
+            return nullptr;
+        }
+        init->SetUeventRegenCallback([](const std::string& device) -> bool {
+            return android::fs_mgr::WaitForFile(device, snapshot_timeout_);
+        });
+        return init;
+    }
+
     static constexpr std::chrono::milliseconds snapshot_timeout_ = 5s;
     DeviceMapper& dm_;
     std::unique_ptr<SnapshotManager::LockedFile> lock_;
@@ -439,8 +456,7 @@ TEST_F(SnapshotTest, NoMergeBeforeReboot) {
 TEST_F(SnapshotTest, CleanFirstStageMount) {
     // If there's no update in progress, there should be no first-stage mount
     // needed.
-    TestDeviceInfo* info = new TestDeviceInfo(fake_super);
-    auto sm = SnapshotManager::NewForFirstStageMount(info);
+    auto sm = NewManagerForFirstStageMount();
     ASSERT_NE(sm, nullptr);
     ASSERT_FALSE(sm->NeedSnapshotsInFirstStageMount());
 }
@@ -449,8 +465,7 @@ TEST_F(SnapshotTest, FirstStageMountAfterRollback) {
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     // We didn't change the slot, so we shouldn't need snapshots.
-    TestDeviceInfo* info = new TestDeviceInfo(fake_super);
-    auto sm = SnapshotManager::NewForFirstStageMount(info);
+    auto sm = NewManagerForFirstStageMount();
     ASSERT_NE(sm, nullptr);
     ASSERT_FALSE(sm->NeedSnapshotsInFirstStageMount());
 
@@ -518,7 +533,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     ASSERT_TRUE(PrepareOneSnapshot(kDeviceSize));
     ASSERT_TRUE(SimulateReboot());
 
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -547,7 +562,7 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
     FormatFakeSuper();
     ASSERT_TRUE(CreatePartition("test_partition_b", kDeviceSize));
 
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -574,7 +589,7 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     ASSERT_TRUE(PrepareOneSnapshot(kDeviceSize));
     ASSERT_TRUE(SimulateReboot());
 
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1070,7 +1085,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1202,7 +1217,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1214,7 +1229,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
 
     // Simulate shutting down the device again.
     ASSERT_TRUE(UnmapAll());
-    init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_a"));
+    init = NewManagerForFirstStageMount("_a");
     ASSERT_NE(init, nullptr);
     ASSERT_FALSE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1251,7 +1266,7 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1387,8 +1402,8 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    // Normally we should use NewForFirstStageMount, but if so, "gsid.mapped_image.sys_b-cow-img"
-    // won't be set.
+    // Normally we should use NewManagerForFirstStageMount, but if so,
+    // "gsid.mapped_image.sys_b-cow-img" won't be set.
     auto init = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1495,7 +1510,7 @@ TEST_F(SnapshotUpdateTest, MergeInRecovery) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1509,7 +1524,7 @@ TEST_F(SnapshotUpdateTest, MergeInRecovery) {
     // Simulate a reboot into recovery.
     auto test_device = std::make_unique<TestDeviceInfo>(fake_super, "_b");
     test_device->set_recovery(true);
-    new_sm = SnapshotManager::NewForFirstStageMount(test_device.release());
+    new_sm = NewManagerForFirstStageMount(test_device.release());
 
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     ASSERT_EQ(new_sm->GetUpdateState(), UpdateState::None);
@@ -1527,7 +1542,7 @@ TEST_F(SnapshotUpdateTest, MergeInFastboot) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1541,7 +1556,7 @@ TEST_F(SnapshotUpdateTest, MergeInFastboot) {
     // Simulate a reboot into recovery.
     auto test_device = std::make_unique<TestDeviceInfo>(fake_super, "_b");
     test_device->set_recovery(true);
-    new_sm = SnapshotManager::NewForFirstStageMount(test_device.release());
+    new_sm = NewManagerForFirstStageMount(test_device.release());
 
     ASSERT_TRUE(new_sm->FinishMergeInRecovery());
 
@@ -1551,12 +1566,12 @@ TEST_F(SnapshotUpdateTest, MergeInFastboot) {
 
     // Finish the merge in a normal boot.
     test_device = std::make_unique<TestDeviceInfo>(fake_super, "_b");
-    init = SnapshotManager::NewForFirstStageMount(test_device.release());
+    init = NewManagerForFirstStageMount(test_device.release());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
     init = nullptr;
 
     test_device = std::make_unique<TestDeviceInfo>(fake_super, "_b");
-    new_sm = SnapshotManager::NewForFirstStageMount(test_device.release());
+    new_sm = NewManagerForFirstStageMount(test_device.release());
     ASSERT_EQ(new_sm->ProcessUpdateState(), UpdateState::MergeCompleted);
     ASSERT_EQ(new_sm->ProcessUpdateState(), UpdateState::None);
 }
@@ -1575,7 +1590,7 @@ TEST_F(SnapshotUpdateTest, DataWipeRollbackInRecovery) {
     // Simulate a reboot into recovery.
     auto test_device = new TestDeviceInfo(fake_super, "_b");
     test_device->set_recovery(true);
-    auto new_sm = SnapshotManager::NewForFirstStageMount(test_device);
+    auto new_sm = NewManagerForFirstStageMount(test_device);
 
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     // Manually mount metadata so that we can call GetUpdateState() below.
@@ -1600,7 +1615,7 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
     // Simulate a rollback, with reboot into recovery.
     auto test_device = new TestDeviceInfo(fake_super, "_a");
     test_device->set_recovery(true);
-    auto new_sm = SnapshotManager::NewForFirstStageMount(test_device);
+    auto new_sm = NewManagerForFirstStageMount(test_device);
 
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
@@ -1628,7 +1643,7 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     // Simulate a reboot into recovery.
     auto test_device = new TestDeviceInfo(fake_super, "_b");
     test_device->set_recovery(true);
-    auto new_sm = SnapshotManager::NewForFirstStageMount(test_device);
+    auto new_sm = NewManagerForFirstStageMount(test_device);
 
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     // Manually mount metadata so that we can call GetUpdateState() below.
@@ -1639,7 +1654,7 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
 
     // Now reboot into new slot.
     test_device = new TestDeviceInfo(fake_super, "_b");
-    auto init = SnapshotManager::NewForFirstStageMount(test_device);
+    auto init = NewManagerForFirstStageMount(test_device);
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
     // Verify that we are on the downgraded build.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1685,7 +1700,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
     ASSERT_TRUE(UnmapAll());
 
     // After reboot, init does first stage mount.
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1773,14 +1788,11 @@ TEST_F(SnapshotUpdateTest, DaemonTransition) {
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
     ASSERT_TRUE(UnmapAll());
 
-    auto init = SnapshotManager::NewForFirstStageMount(new TestDeviceInfo(fake_super, "_b"));
+    auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
 
     ASSERT_TRUE(init->EnsureSnapuserdConnected());
     init->set_use_first_stage_snapuserd(true);
-    init->SetUeventRegenCallback([](const std::string& device) -> bool {
-        return android::fs_mgr::WaitForFile(device, snapshot_timeout_);
-    });
 
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -1890,8 +1902,7 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
     ASSERT_TRUE(UnmapAll());
 
     // Simulate reboot. After reboot, init does first stage mount.
-    auto init = SnapshotManager::NewForFirstStageMount(
-            new TestDeviceInfo(fake_super, flashed_slot_suffix));
+    auto init = NewManagerForFirstStageMount(flashed_slot_suffix);
     ASSERT_NE(init, nullptr);
 
     if (flashed_slot && after_merge) {
