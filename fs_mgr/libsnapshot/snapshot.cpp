@@ -1247,6 +1247,10 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         return false;
     }
 
+    if (status.compression_enabled()) {
+        UnmapDmUserDevice(name);
+    }
+
     // Cleanup the base device as well, since it is no longer used. This does
     // not block cleanup.
     auto base_name = GetBaseDeviceName(name);
@@ -2063,27 +2067,8 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
 
     auto& dm = DeviceMapper::Instance();
 
-    auto dm_user_name = GetDmUserCowName(name);
-    if (IsCompressionEnabled() && dm.GetState(dm_user_name) != DmDeviceState::INVALID) {
-        if (!EnsureSnapuserdConnected()) {
-            return false;
-        }
-        if (!dm.DeleteDeviceIfExists(dm_user_name)) {
-            LOG(ERROR) << "Cannot unmap " << dm_user_name;
-            return false;
-        }
-
-        if (!snapuserd_client_->WaitForDeviceDelete(dm_user_name)) {
-            LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
-            return false;
-        }
-
-        // Ensure the control device is gone so we don't run into ABA problems.
-        auto control_device = "/dev/dm-user/" + dm_user_name;
-        if (!android::fs_mgr::WaitForFileDeleted(control_device, 10s)) {
-            LOG(ERROR) << "Timed out waiting for " << control_device << " to unlink";
-            return false;
-        }
+    if (IsCompressionEnabled() && !UnmapDmUserDevice(name)) {
+        return false;
     }
 
     auto cow_name = GetCowName(name);
@@ -2095,6 +2080,37 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
     std::string cow_image_name = GetCowImageDeviceName(name);
     if (!images_->UnmapImageIfExists(cow_image_name)) {
         LOG(ERROR) << "Cannot unmap image " << cow_image_name;
+        return false;
+    }
+    return true;
+}
+
+bool SnapshotManager::UnmapDmUserDevice(const std::string& snapshot_name) {
+    auto& dm = DeviceMapper::Instance();
+
+    if (!EnsureSnapuserdConnected()) {
+        return false;
+    }
+
+    auto dm_user_name = GetDmUserCowName(snapshot_name);
+    if (dm.GetState(dm_user_name) == DmDeviceState::INVALID) {
+        return true;
+    }
+
+    if (!dm.DeleteDeviceIfExists(dm_user_name)) {
+        LOG(ERROR) << "Cannot unmap " << dm_user_name;
+        return false;
+    }
+
+    if (!snapuserd_client_->WaitForDeviceDelete(dm_user_name)) {
+        LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
+        return false;
+    }
+
+    // Ensure the control device is gone so we don't run into ABA problems.
+    auto control_device = "/dev/dm-user/" + dm_user_name;
+    if (!android::fs_mgr::WaitForFileDeleted(control_device, 10s)) {
+        LOG(ERROR) << "Timed out waiting for " << control_device << " to unlink";
         return false;
     }
     return true;

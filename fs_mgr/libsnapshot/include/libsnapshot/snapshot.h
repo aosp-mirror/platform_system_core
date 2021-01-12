@@ -630,6 +630,9 @@ class SnapshotManager final : public ISnapshotManager {
     // The reverse of MapPartitionWithSnapshot.
     bool UnmapPartitionWithSnapshot(LockedFile* lock, const std::string& target_partition_name);
 
+    // Unmap a dm-user device through snapuserd.
+    bool UnmapDmUserDevice(const std::string& snapshot_name);
+
     // If there isn't a previous update, return true. |needs_merge| is set to false.
     // If there is a previous update but the device has not boot into it, tries to cancel the
     //   update and delete any snapshots. Return true if successful. |needs_merge| is set to false.
