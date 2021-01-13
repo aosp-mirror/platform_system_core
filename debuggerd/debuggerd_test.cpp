@@ -383,7 +383,7 @@ TEST_F(CrasherTest, heap_addr_in_register) {
 #endif
 }
 
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
 static void SetTagCheckingLevelSync() {
   HeapTaggingLevel heap_tagging_level = M_HEAP_TAGGING_LEVEL_SYNC;
   if (!android_mallopt(M_SET_HEAP_TAGGING_LEVEL, &heap_tagging_level, sizeof(heap_tagging_level))) {
@@ -393,7 +393,7 @@ static void SetTagCheckingLevelSync() {
 #endif
 
 TEST_F(CrasherTest, mte_uaf) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -425,12 +425,12 @@ allocated by thread .*
   ASSERT_MATCH(result, R"(deallocated by thread .*
       #00 pc)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
 TEST_F(CrasherTest, mte_overflow) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -459,12 +459,12 @@ TEST_F(CrasherTest, mte_overflow) {
 allocated by thread .*
       #00 pc)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
 TEST_F(CrasherTest, mte_underflow) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -493,12 +493,12 @@ TEST_F(CrasherTest, mte_underflow) {
 allocated by thread .*
       #00 pc)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
 TEST_F(CrasherTest, mte_multiple_causes) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -547,11 +547,11 @@ TEST_F(CrasherTest, mte_multiple_causes) {
   // overflows), so we can't match explicitly for an underflow message.
   ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a 16-byte allocation)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
 static uintptr_t CreateTagMapping() {
   uintptr_t mapping =
       reinterpret_cast<uintptr_t>(mmap(nullptr, getpagesize(), PROT_READ | PROT_WRITE | PROT_MTE,
@@ -568,7 +568,7 @@ static uintptr_t CreateTagMapping() {
 #endif
 
 TEST_F(CrasherTest, mte_tag_dump) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -596,7 +596,7 @@ TEST_F(CrasherTest, mte_tag_dump) {
     01.............0 0000000000000000 0000000000000000  ................
     00.............0)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 

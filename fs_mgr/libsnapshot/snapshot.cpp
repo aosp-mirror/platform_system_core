@@ -1247,6 +1247,10 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         return false;
     }
 
+    if (status.compression_enabled()) {
+        UnmapDmUserDevice(name);
+    }
+
     // Cleanup the base device as well, since it is no longer used. This does
     // not block cleanup.
     auto base_name = GetBaseDeviceName(name);
@@ -1291,12 +1295,13 @@ bool SnapshotManager::HandleCancelledUpdate(LockedFile* lock,
     return RemoveAllUpdateState(lock, before_cancel);
 }
 
-bool SnapshotManager::PerformSecondStageTransition() {
-    LOG(INFO) << "Performing second-stage transition for snapuserd.";
+bool SnapshotManager::PerformInitTransition(InitTransition transition,
+                                            std::vector<std::string>* snapuserd_argv) {
+    LOG(INFO) << "Performing transition for snapuserd.";
 
     // Don't use EnsuerSnapuserdConnected() because this is called from init,
     // and attempting to do so will deadlock.
-    if (!snapuserd_client_) {
+    if (!snapuserd_client_ && transition != InitTransition::SELINUX_DETACH) {
         snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, 10s);
         if (!snapuserd_client_) {
             LOG(ERROR) << "Unable to connect to snapuserd";
@@ -1343,6 +1348,9 @@ bool SnapshotManager::PerformSecondStageTransition() {
         }
 
         auto misc_name = user_cow_name;
+        if (transition == InitTransition::SELINUX_DETACH) {
+            misc_name += "-selinux";
+        }
 
         DmTable table;
         table.Emplace<DmTargetUser>(0, target.spec.length, misc_name);
@@ -1375,6 +1383,17 @@ bool SnapshotManager::PerformSecondStageTransition() {
         // Wait for ueventd to acknowledge and create the control device node.
         std::string control_device = "/dev/dm-user/" + misc_name;
         if (!WaitForDevice(control_device, 10s)) {
+            continue;
+        }
+
+        if (transition == InitTransition::SELINUX_DETACH) {
+            auto message = misc_name + "," + cow_image_device + "," + backing_device;
+            snapuserd_argv->emplace_back(std::move(message));
+
+            // Do not attempt to connect to the new snapuserd yet, it hasn't
+            // been started. We do however want to wait for the misc device
+            // to have been created.
+            ok_cows++;
             continue;
         }
 
@@ -2048,27 +2067,8 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
 
     auto& dm = DeviceMapper::Instance();
 
-    auto dm_user_name = GetDmUserCowName(name);
-    if (IsCompressionEnabled() && dm.GetState(dm_user_name) != DmDeviceState::INVALID) {
-        if (!EnsureSnapuserdConnected()) {
-            return false;
-        }
-        if (!dm.DeleteDeviceIfExists(dm_user_name)) {
-            LOG(ERROR) << "Cannot unmap " << dm_user_name;
-            return false;
-        }
-
-        if (!snapuserd_client_->WaitForDeviceDelete(dm_user_name)) {
-            LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
-            return false;
-        }
-
-        // Ensure the control device is gone so we don't run into ABA problems.
-        auto control_device = "/dev/dm-user/" + dm_user_name;
-        if (!android::fs_mgr::WaitForFileDeleted(control_device, 10s)) {
-            LOG(ERROR) << "Timed out waiting for " << control_device << " to unlink";
-            return false;
-        }
+    if (IsCompressionEnabled() && !UnmapDmUserDevice(name)) {
+        return false;
     }
 
     auto cow_name = GetCowName(name);
@@ -2080,6 +2080,37 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
     std::string cow_image_name = GetCowImageDeviceName(name);
     if (!images_->UnmapImageIfExists(cow_image_name)) {
         LOG(ERROR) << "Cannot unmap image " << cow_image_name;
+        return false;
+    }
+    return true;
+}
+
+bool SnapshotManager::UnmapDmUserDevice(const std::string& snapshot_name) {
+    auto& dm = DeviceMapper::Instance();
+
+    if (!EnsureSnapuserdConnected()) {
+        return false;
+    }
+
+    auto dm_user_name = GetDmUserCowName(snapshot_name);
+    if (dm.GetState(dm_user_name) == DmDeviceState::INVALID) {
+        return true;
+    }
+
+    if (!dm.DeleteDeviceIfExists(dm_user_name)) {
+        LOG(ERROR) << "Cannot unmap " << dm_user_name;
+        return false;
+    }
+
+    if (!snapuserd_client_->WaitForDeviceDelete(dm_user_name)) {
+        LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
+        return false;
+    }
+
+    // Ensure the control device is gone so we don't run into ABA problems.
+    auto control_device = "/dev/dm-user/" + dm_user_name;
+    if (!android::fs_mgr::WaitForFileDeleted(control_device, 10s)) {
+        LOG(ERROR) << "Timed out waiting for " << control_device << " to unlink";
         return false;
     }
     return true;
@@ -3309,6 +3340,14 @@ bool SnapshotManager::IsSnapuserdRequired() {
 
     auto status = ReadSnapshotUpdateStatus(lock.get());
     return status.state() != UpdateState::None && status.compression_enabled();
+}
+
+bool SnapshotManager::DetachSnapuserdForSelinux(std::vector<std::string>* snapuserd_argv) {
+    return PerformInitTransition(InitTransition::SELINUX_DETACH, snapuserd_argv);
+}
+
+bool SnapshotManager::PerformSecondStageInitTransition() {
+    return PerformInitTransition(InitTransition::SECOND_STAGE);
 }
 
 }  // namespace snapshot
