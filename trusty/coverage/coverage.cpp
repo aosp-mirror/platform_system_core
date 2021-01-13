@@ -16,6 +16,7 @@
 
 #define LOG_TAG "coverage"
 
+#include <BufferAllocator/BufferAllocator.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
@@ -114,24 +115,23 @@ Result<void> CoverageRecord::Open() {
     record_len_ = resp.open_args.record_len;
     shm_len_ = RoundPageUp(record_len_);
 
-    fd = memfd_create("trusty-coverage", 0);
+    BufferAllocator allocator;
+
+    fd = allocator.Alloc("system", shm_len_);
     if (fd < 0) {
-        return ErrnoError() << "failed to create memfd: ";
+        return ErrnoError() << "failed to create dmabuf of size " << shm_len_
+                            << " err code: " << fd;
     }
-    unique_fd memfd(fd);
+    unique_fd dma_buf(fd);
 
-    if (ftruncate(memfd, shm_len_) < 0) {
-        return ErrnoError() << "failed to resize memfd: ";
-    }
-
-    void* shm = mmap(0, shm_len_, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0);
+    void* shm = mmap(0, shm_len_, PROT_READ | PROT_WRITE, MAP_SHARED, dma_buf, 0);
     if (shm == MAP_FAILED) {
         return ErrnoError() << "failed to map memfd: ";
     }
 
     req.hdr.cmd = COVERAGE_CLIENT_CMD_SHARE_RECORD;
     req.share_record_args.shm_len = shm_len_;
-    ret = Rpc(&req, memfd, &resp);
+    ret = Rpc(&req, dma_buf, &resp);
     if (!ret.ok()) {
         return Error() << "failed to send shared memory: ";
     }
