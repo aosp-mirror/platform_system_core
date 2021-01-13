@@ -51,8 +51,8 @@ using namespace std::string_literals;
 extern std::unique_ptr<SnapshotManager> sm;
 extern class TestDeviceInfo* test_device;
 extern std::string fake_super;
-static constexpr uint64_t kSuperSize = 16_MiB + 4_KiB;
-static constexpr uint64_t kGroupSize = 16_MiB;
+static constexpr uint64_t kSuperSize = 32_MiB + 4_KiB;
+static constexpr uint64_t kGroupSize = 32_MiB;
 
 // Redirect requests for "super" to our fake super partition.
 class TestPartitionOpener final : public android::fs_mgr::PartitionOpener {

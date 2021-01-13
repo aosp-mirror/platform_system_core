@@ -854,15 +854,15 @@ class SnapshotUpdateTest : public SnapshotTest {
         group_->add_partition_names("prd");
         sys_ = manifest_.add_partitions();
         sys_->set_partition_name("sys");
-        sys_->set_estimate_cow_size(6_MiB);
+        sys_->set_estimate_cow_size(2_MiB);
         SetSize(sys_, 3_MiB);
         vnd_ = manifest_.add_partitions();
         vnd_->set_partition_name("vnd");
-        vnd_->set_estimate_cow_size(6_MiB);
+        vnd_->set_estimate_cow_size(2_MiB);
         SetSize(vnd_, 3_MiB);
         prd_ = manifest_.add_partitions();
         prd_->set_partition_name("prd");
-        prd_->set_estimate_cow_size(6_MiB);
+        prd_->set_estimate_cow_size(2_MiB);
         SetSize(prd_, 3_MiB);
 
         // Initialize source partition metadata using |manifest_|.
@@ -1050,11 +1050,17 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
         ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
     }
 
-    // Grow all partitions.
+    // Grow all partitions. Set |prd| large enough that |sys| and |vnd|'s COWs
+    // fit in super, but not |prd|.
     constexpr uint64_t partition_size = 3788_KiB;
     SetSize(sys_, partition_size);
     SetSize(vnd_, partition_size);
-    SetSize(prd_, partition_size);
+    SetSize(prd_, 18_MiB);
+
+    // Make sure |prd| does not fit in super at all. On VABC, this means we
+    // fake an extra large COW for |vnd| to fill up super.
+    vnd_->set_estimate_cow_size(30_MiB);
+    prd_->set_estimate_cow_size(30_MiB);
 
     AddOperationForPartitions();
 
@@ -1066,11 +1072,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     auto tgt = MetadataBuilder::New(*opener_, "super", 1);
     ASSERT_NE(tgt, nullptr);
     ASSERT_NE(nullptr, tgt->FindPartition("sys_b-cow"));
-    if (IsCompressionEnabled()) {
-        ASSERT_EQ(nullptr, tgt->FindPartition("vnd_b-cow"));
-    } else {
-        ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
-    }
+    ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
     ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
 
     // Write some data to target partitions.
@@ -1260,6 +1262,11 @@ static std::vector<Interval> ToIntervals(const std::vector<std::unique_ptr<Exten
 
 // Test that at the second update, old COW partition spaces are reclaimed.
 TEST_F(SnapshotUpdateTest, ReclaimCow) {
+    // Make sure VABC cows are small enough that they fit in fake_super.
+    sys_->set_estimate_cow_size(64_KiB);
+    vnd_->set_estimate_cow_size(64_KiB);
+    prd_->set_estimate_cow_size(64_KiB);
+
     // Execute the first update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
@@ -1376,9 +1383,13 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
 
 TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     // Make source partitions as big as possible to force COW image to be created.
-    SetSize(sys_, 5_MiB);
-    SetSize(vnd_, 5_MiB);
-    SetSize(prd_, 5_MiB);
+    SetSize(sys_, 10_MiB);
+    SetSize(vnd_, 10_MiB);
+    SetSize(prd_, 10_MiB);
+    sys_->set_estimate_cow_size(12_MiB);
+    vnd_->set_estimate_cow_size(12_MiB);
+    prd_->set_estimate_cow_size(12_MiB);
+
     src_ = MetadataBuilder::New(*opener_, "super", 0);
     ASSERT_NE(src_, nullptr);
     src_->RemoveGroupAndPartitions(group_->name() + "_a");
@@ -1676,6 +1687,8 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
     SetSize(sys_, partition_size);
     AddOperation(sys_, data_size);
 
+    sys_->set_estimate_cow_size(partition_size + data_size);
+
     // Set hastree extents.
     sys_->mutable_hash_tree_data_extent()->set_start_block(0);
     sys_->mutable_hash_tree_data_extent()->set_num_blocks(data_size / block_size);
@@ -1716,6 +1729,10 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
 // Test for overflow bit after update
 TEST_F(SnapshotUpdateTest, Overflow) {
+    if (IsCompressionEnabled()) {
+        GTEST_SKIP() << "No overflow bit set for userspace COWs";
+    }
+
     const auto actual_write_size = GetSize(sys_);
     const auto declared_write_size = actual_write_size - 1_MiB;
 
@@ -1743,12 +1760,15 @@ TEST_F(SnapshotUpdateTest, LowSpace) {
     auto userdata = std::make_unique<LowSpaceUserdata>();
     ASSERT_TRUE(userdata->Init(kMaxFree));
 
-    // Grow all partitions to 5_MiB, total 15_MiB. This requires 15 MiB of CoW space. After
-    // using the empty space in super (< 1 MiB), it uses at least 14 MiB of /userdata space.
-    constexpr uint64_t partition_size = 5_MiB;
+    // Grow all partitions to 10_MiB, total 30_MiB. This requires 30 MiB of CoW space. After
+    // using the empty space in super (< 1 MiB), it uses 30 MiB of /userdata space.
+    constexpr uint64_t partition_size = 10_MiB;
     SetSize(sys_, partition_size);
     SetSize(vnd_, partition_size);
     SetSize(prd_, partition_size);
+    sys_->set_estimate_cow_size(partition_size);
+    vnd_->set_estimate_cow_size(partition_size);
+    prd_->set_estimate_cow_size(partition_size);
 
     AddOperationForPartitions();
 
@@ -1758,7 +1778,7 @@ TEST_F(SnapshotUpdateTest, LowSpace) {
     ASSERT_FALSE(res);
     ASSERT_EQ(Return::ErrorCode::NO_SPACE, res.error_code());
     ASSERT_GE(res.required_size(), 14_MiB);
-    ASSERT_LT(res.required_size(), 15_MiB);
+    ASSERT_LT(res.required_size(), 40_MiB);
 }
 
 class AutoKill final {
