@@ -60,6 +60,7 @@ init_device_sources = [
     "selabel.cpp",
     "selinux.cpp",
     "sigchld_handler.cpp",
+    "snapuserd_transition.cpp",
     "switch_root.cpp",
     "uevent_listener.cpp",
     "ueventd.cpp",
