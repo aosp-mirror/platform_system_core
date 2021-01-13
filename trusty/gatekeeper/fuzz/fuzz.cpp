@@ -30,6 +30,7 @@ using android::trusty::fuzz::TrustyApp;
 
 #define TIPC_DEV "/dev/trusty-ipc-dev0"
 #define GATEKEEPER_PORT "com.android.trusty.gatekeeper"
+#define GATEKEEPER_MODULE_NAME "gatekeeper.syms.elf"
 
 /* Gatekeeper TA's UUID is 38ba0cdc-df0e-11e4-9869-233fb6ae4795 */
 static struct uuid gatekeeper_uuid = {
@@ -39,7 +40,7 @@ static struct uuid gatekeeper_uuid = {
         {0x98, 0x69, 0x23, 0x3f, 0xb6, 0xae, 0x47, 0x95},
 };
 
-static CoverageRecord record(TIPC_DEV, &gatekeeper_uuid);
+static CoverageRecord record(TIPC_DEV, &gatekeeper_uuid, GATEKEEPER_MODULE_NAME);
 
 extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
     auto ret = record.Open();

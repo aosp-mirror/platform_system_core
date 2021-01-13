@@ -21,6 +21,7 @@
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 #include <assert.h>
+#include <log/log.h>
 #include <stdio.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
@@ -38,6 +39,7 @@ namespace coverage {
 using android::base::ErrnoError;
 using android::base::Error;
 using std::string;
+using std::unique_ptr;
 
 static inline uintptr_t RoundPageUp(uintptr_t val) {
     return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
@@ -47,12 +49,29 @@ CoverageRecord::CoverageRecord(string tipc_dev, struct uuid* uuid)
     : tipc_dev_(std::move(tipc_dev)),
       coverage_srv_fd_(-1),
       uuid_(*uuid),
+      sancov_filename_(),
+      record_len_(0),
+      shm_(NULL),
+      shm_len_(0) {}
+
+CoverageRecord::CoverageRecord(string tipc_dev, struct uuid* uuid, string sancov_filename)
+    : tipc_dev_(std::move(tipc_dev)),
+      coverage_srv_fd_(-1),
+      uuid_(*uuid),
+      sancov_filename_(sancov_filename),
       record_len_(0),
       shm_(NULL),
       shm_len_(0) {}
 
 CoverageRecord::~CoverageRecord() {
     if (shm_) {
+        if (sancov_filename_) {
+            auto res = SaveSancovFile(*sancov_filename_);
+            if (!res.ok()) {
+                ALOGE("Could not write sancov file for module: %s\n", sancov_filename_->c_str());
+            }
+        }
+
         munmap((void*)shm_, shm_len_);
     }
 }
