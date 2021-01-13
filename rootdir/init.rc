@@ -934,6 +934,9 @@ on boot && property:ro.config.low_ram=true
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
 
+on property:sys.boot_completed=1 && property:init.mount_debugfs=1
+   umount /sys/kernel/debug
+
 on boot
     # basic network init
     ifup lo
@@ -1201,6 +1204,10 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
+
+on early-init && property:init.mount_debugfs=1
+    mount debugfs debugfs /sys/kernel/debug
+    chmod 0755 /sys/kernel/debug
 
 # Migrate tasks again in case kernel threads are created during boot
 on property:sys.boot_completed=1
