@@ -957,8 +957,6 @@ void PropertyLoadBootDefaults() {
     load_properties_from_partition("odm", /* support_legacy_path_until */ 28);
     load_properties_from_partition("product", /* support_legacy_path_until */ 30);
 
-    load_properties_from_file("/factory/factory.prop", "ro.*", &properties);
-
     if (access(kDebugRamdiskProp, R_OK) == 0) {
         LOG(INFO) << "Loading " << kDebugRamdiskProp;
         load_properties_from_file(kDebugRamdiskProp, nullptr, &properties);

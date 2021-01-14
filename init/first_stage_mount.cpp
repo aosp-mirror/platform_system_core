@@ -44,6 +44,7 @@
 
 #include "block_dev_initializer.h"
 #include "devices.h"
+#include "snapuserd_transition.h"
 #include "switch_root.h"
 #include "uevent.h"
 #include "uevent_listener.h"
@@ -87,6 +88,7 @@ class FirstStageMount {
   protected:
     bool InitRequiredDevices(std::set<std::string> devices);
     bool CreateLogicalPartitions();
+    bool CreateSnapshotPartitions(android::snapshot::SnapshotManager* sm);
     bool MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
                         Fstab::iterator* end = nullptr);
 
@@ -109,6 +111,7 @@ class FirstStageMount {
 
     bool need_dm_verity_;
     bool dsu_not_on_userdata_ = false;
+    bool use_snapuserd_ = false;
 
     Fstab fstab_;
     // The super path is only set after InitDevices, and is invalid before.
@@ -338,21 +341,7 @@ bool FirstStageMount::CreateLogicalPartitions() {
             return false;
         }
         if (sm->NeedSnapshotsInFirstStageMount()) {
-            // When COW images are present for snapshots, they are stored on
-            // the data partition.
-            if (!InitRequiredDevices({"userdata"})) {
-                return false;
-            }
-            sm->SetUeventRegenCallback([this](const std::string& device) -> bool {
-                if (android::base::StartsWith(device, "/dev/block/dm-")) {
-                    return block_dev_init_.InitDmDevice(device);
-                }
-                if (android::base::StartsWith(device, "/dev/dm-user/")) {
-                    return block_dev_init_.InitDmUser(android::base::Basename(device));
-                }
-                return block_dev_init_.InitDevices({device});
-            });
-            return sm->CreateLogicalAndSnapshotPartitions(super_path_);
+            return CreateSnapshotPartitions(sm.get());
         }
     }
 
@@ -365,6 +354,37 @@ bool FirstStageMount::CreateLogicalPartitions() {
         return false;
     }
     return android::fs_mgr::CreateLogicalPartitions(*metadata.get(), super_path_);
+}
+
+bool FirstStageMount::CreateSnapshotPartitions(SnapshotManager* sm) {
+    // When COW images are present for snapshots, they are stored on
+    // the data partition.
+    if (!InitRequiredDevices({"userdata"})) {
+        return false;
+    }
+
+    use_snapuserd_ = sm->IsSnapuserdRequired();
+    if (use_snapuserd_) {
+        LaunchFirstStageSnapuserd();
+    }
+
+    sm->SetUeventRegenCallback([this](const std::string& device) -> bool {
+        if (android::base::StartsWith(device, "/dev/block/dm-")) {
+            return block_dev_init_.InitDmDevice(device);
+        }
+        if (android::base::StartsWith(device, "/dev/dm-user/")) {
+            return block_dev_init_.InitDmUser(android::base::Basename(device));
+        }
+        return block_dev_init_.InitDevices({device});
+    });
+    if (!sm->CreateLogicalAndSnapshotPartitions(super_path_)) {
+        return false;
+    }
+
+    if (use_snapuserd_) {
+        CleanupSnapuserdSocket();
+    }
+    return true;
 }
 
 bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
@@ -465,6 +485,10 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
     });
 
     if (system_partition == fstab_.end()) return true;
+
+    if (use_snapuserd_) {
+        SaveRamdiskPathToSnapuserd();
+    }
 
     if (MountPartition(system_partition, false /* erase_same_mounts */)) {
         if (dsu_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {

@@ -19,6 +19,7 @@ cc_test {
     srcs: ["tipc_test.c"],
     shared_libs: [
         "libc",
+        "libdmabufheap",
         "liblog",
         "libtrusty",
     ],

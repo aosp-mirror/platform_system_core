@@ -239,14 +239,10 @@ void CowSnapuserdTest::CreateCowDevice() {
     ASSERT_TRUE(rnd_fd > 0);
 
     std::unique_ptr<uint8_t[]> random_buffer_1_ = std::make_unique<uint8_t[]>(size_);
-    std::unique_ptr<uint8_t[]> random_buffer_2_ = std::make_unique<uint8_t[]>(size_);
 
     // Fill random data
     for (size_t j = 0; j < (size_ / 1_MiB); j++) {
         ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_1_.get() + offset, 1_MiB, 0),
-                  true);
-
-        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_2_.get() + offset, 1_MiB, 0),
                   true);
 
         offset += 1_MiB;
@@ -280,7 +276,7 @@ void CowSnapuserdTest::CreateCowDevice() {
 
     size_t blk_random2_replace_start = blk_zero_copy_end;
 
-    ASSERT_TRUE(writer.AddRawBlocks(blk_random2_replace_start, random_buffer_2_.get(), size_));
+    ASSERT_TRUE(writer.AddRawBlocks(blk_random2_replace_start, random_buffer_1_.get(), size_));
 
     // Flush operations
     ASSERT_TRUE(writer.Finalize());
@@ -292,7 +288,7 @@ void CowSnapuserdTest::CreateCowDevice() {
     ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), size_, size_), true);
     memcpy((char*)orig_buffer_.get() + size_, random_buffer_1_.get(), size_);
     memcpy((char*)orig_buffer_.get() + (size_ * 2), (void*)zero_buffer.c_str(), size_);
-    memcpy((char*)orig_buffer_.get() + (size_ * 3), random_buffer_2_.get(), size_);
+    memcpy((char*)orig_buffer_.get() + (size_ * 3), random_buffer_1_.get(), size_);
 }
 
 void CowSnapuserdTest::InitCowDevice() {
