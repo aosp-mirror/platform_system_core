@@ -46,18 +46,19 @@ enum class DaemonOperations {
 };
 
 class DmUserHandler {
-  private:
-    std::thread thread_;
-    std::unique_ptr<Snapuserd> snapuserd_;
-
   public:
-    explicit DmUserHandler(std::unique_ptr<Snapuserd>&& snapuserd)
-        : snapuserd_(std::move(snapuserd)) {}
+    explicit DmUserHandler(std::unique_ptr<Snapuserd>&& snapuserd);
 
+    void FreeResources() { snapuserd_ = nullptr; }
     const std::unique_ptr<Snapuserd>& snapuserd() const { return snapuserd_; }
     std::thread& thread() { return thread_; }
 
-    const std::string& GetMiscName() const;
+    const std::string& misc_name() const { return misc_name_; }
+
+  private:
+    std::thread thread_;
+    std::unique_ptr<Snapuserd> snapuserd_;
+    std::string misc_name_;
 };
 
 class Stoppable {
@@ -71,8 +72,9 @@ class Stoppable {
 
     bool StopRequested() {
         // checks if value in future object is available
-        if (futureObj_.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout)
+        if (futureObj_.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout) {
             return false;
+        }
         return true;
     }
     // Request the thread to stop by setting value in promise object
@@ -98,7 +100,7 @@ class SnapuserdServer : public Stoppable {
     bool Receivemsg(android::base::borrowed_fd fd, const std::string& str);
 
     void ShutdownThreads();
-    bool RemoveHandler(const std::string& control_device, bool wait);
+    bool RemoveAndJoinHandler(const std::string& control_device);
     DaemonOperations Resolveop(std::string& input);
     std::string GetDaemonStatus();
     void Parsemsg(std::string const& msg, const char delim, std::vector<std::string>& out);
