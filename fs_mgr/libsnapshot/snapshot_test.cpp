@@ -1106,6 +1106,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
+    ASSERT_EQ(init->IsSnapuserdRequired(), IsCompressionEnabled());
     ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 
     // Check that the target partitions have the same content after the merge.
@@ -1130,6 +1131,7 @@ TEST_F(SnapshotUpdateTest, SnapshotOldPartitions) {
     SetSize(sys_, 4_MiB);  // grows
     SetSize(vnd_, 2_MiB);  // shrinks
     // prd_b is unchanged
+    ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
     ASSERT_EQ(4_MiB, GetSnapshotSize("sys_b").value_or(0));
 }
@@ -1139,6 +1141,7 @@ TEST_F(SnapshotUpdateTest, SnapshotOldPartitions) {
 TEST_F(SnapshotUpdateTest, CowPartitionDoNotTakeOldPartitions) {
     SetSize(sys_, 2_MiB);  // shrinks
     // vnd_b and prd_b are unchanged.
+    ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     auto tgt = MetadataBuilder::New(*opener_, "super", 1);
