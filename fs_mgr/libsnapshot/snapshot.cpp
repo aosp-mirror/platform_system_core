@@ -1410,7 +1410,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
             return false;
         }
 
-        CHECK(base_sectors == target.spec.length);
+        CHECK(base_sectors <= target.spec.length);
 
         if (!snapuserd_client_->AttachDmUser(misc_name)) {
             // This error is unrecoverable. We cannot proceed because reads to
