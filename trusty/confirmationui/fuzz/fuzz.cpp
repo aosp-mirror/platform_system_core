@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-#undef NDEBUG
-
-#include <assert.h>
-#include <log/log.h>
+#include <iostream>
 #include <stdlib.h>
 #include <trusty/coverage/coverage.h>
 #include <trusty/fuzz/counters.h>
@@ -52,7 +49,10 @@ static CoverageRecord record(TIPC_DEV, &confirmationui_uuid);
 
 extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
     auto ret = record.Open();
-    assert(ret.ok());
+    if (!ret.ok()) {
+        std::cerr << ret.error() << std::endl;
+        exit(-1);
+    }
     return 0;
 }
 
