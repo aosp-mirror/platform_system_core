@@ -62,29 +62,6 @@ cc_binary {
     srcs: [
         "HealthServiceDefault.cpp",
     ],
-
-    overrides: [
-        "healthd",
-    ]
-}
-
-cc_binary {
-    name: "healthd",
-    defaults: ["android.hardware.health@2.0-service_defaults"],
-
-    init_rc: ["healthd.rc"],
-    srcs: [
-        "HealthServiceHealthd.cpp",
-    ],
-    local_include_dirs: ["include"],
-
-    shared_libs: [
-        "android.hardware.health@1.0",
-    ],
-
-    vintf_fragments: [
-        "manifest_healthd.xml"
-    ],
 }
 
 cc_library_static {
