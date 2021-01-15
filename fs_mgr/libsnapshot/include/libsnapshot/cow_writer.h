@@ -35,7 +35,7 @@ struct CowOptions {
     std::optional<uint64_t> max_blocks;
 
     // Number of CowOperations in a cluster. 0 for no clustering. Cannot be 1.
-    uint32_t cluster_ops = 0;
+    uint32_t cluster_ops = 200;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
