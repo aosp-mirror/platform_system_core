@@ -18,7 +18,9 @@
 
 #include <log/log.h>
 
+#if !defined(__APPLE__)
 #include <malloc.h>
+#endif
 
 void process_disable_memory_mitigations() {
     bool success = false;
