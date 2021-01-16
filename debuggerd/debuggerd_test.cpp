@@ -16,6 +16,7 @@
 
 #include <err.h>
 #include <fcntl.h>
+#include <malloc.h>
 #include <stdlib.h>
 #include <sys/capability.h>
 #include <sys/mman.h>
@@ -32,7 +33,6 @@
 
 #include <android/fdsan.h>
 #include <android/set_abort_message.h>
-#include <bionic/malloc.h>
 #include <bionic/mte.h>
 #include <bionic/reserved_signals.h>
 
@@ -385,8 +385,7 @@ TEST_F(CrasherTest, heap_addr_in_register) {
 
 #if defined(__aarch64__)
 static void SetTagCheckingLevelSync() {
-  HeapTaggingLevel heap_tagging_level = M_HEAP_TAGGING_LEVEL_SYNC;
-  if (!android_mallopt(M_SET_HEAP_TAGGING_LEVEL, &heap_tagging_level, sizeof(heap_tagging_level))) {
+  if (mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_SYNC) == 0) {
     abort();
   }
 }
