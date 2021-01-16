@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-#undef NDEBUG
-
-#include <assert.h>
-#include <log/log.h>
 #include <stdlib.h>
 #include <trusty/coverage/coverage.h>
 #include <trusty/fuzz/counters.h>
