@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-#undef NDEBUG
-
-#include <assert.h>
-#include <log/log.h>
+#include <iostream>
 #include <stdlib.h>
 #include <trusty/coverage/coverage.h>
 #include <trusty/fuzz/counters.h>
@@ -30,6 +27,7 @@ using android::trusty::fuzz::TrustyApp;
 
 #define TIPC_DEV "/dev/trusty-ipc-dev0"
 #define CONFIRMATIONUI_PORT "com.android.trusty.confirmationui"
+#define CONFIRMATIONUI_MODULE_NAME "confirmationui.syms.elf"
 
 /* ConfirmationUI TA's UUID is 7dee2364-c036-425b-b086-df0f6c233c1b */
 static struct uuid confirmationui_uuid = {
@@ -48,11 +46,14 @@ struct data_packet {
     uint8_t payload[];
 };
 
-static CoverageRecord record(TIPC_DEV, &confirmationui_uuid);
+static CoverageRecord record(TIPC_DEV, &confirmationui_uuid, CONFIRMATIONUI_MODULE_NAME);
 
 extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
     auto ret = record.Open();
-    assert(ret.ok());
+    if (!ret.ok()) {
+        std::cerr << ret.error() << std::endl;
+        exit(-1);
+    }
     return 0;
 }
 

@@ -43,7 +43,7 @@ class CoverageRecord {
      * Create a coverage record interface. On destruction, write this coverage
      * to the given sancov filename.
      */
-    CoverageRecord(std::string tipc_dev, struct uuid* uuid, std::string sancov_filename);
+    CoverageRecord(std::string tipc_dev, struct uuid* uuid, std::string module_name);
 
     ~CoverageRecord();
     Result<void> Open();
