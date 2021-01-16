@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-#undef NDEBUG
-
-#include <assert.h>
-#include <log/log.h>
 #include <stdlib.h>
 #include <trusty/coverage/coverage.h>
 #include <trusty/fuzz/counters.h>
 #include <trusty/fuzz/utils.h>
 #include <unistd.h>
+#include <iostream>
 
 using android::trusty::coverage::CoverageRecord;
 using android::trusty::fuzz::ExtraCounters;
@@ -44,7 +41,10 @@ static CoverageRecord record(TIPC_DEV, &gatekeeper_uuid, GATEKEEPER_MODULE_NAME)
 
 extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
     auto ret = record.Open();
-    assert(ret.ok());
+    if (!ret.ok()) {
+        std::cerr << ret.error() << std::endl;
+        exit(-1);
+    }
     return 0;
 }
 

@@ -39,6 +39,7 @@ namespace coverage {
 using android::base::ErrnoError;
 using android::base::Error;
 using std::string;
+using std::to_string;
 using std::unique_ptr;
 
 static inline uintptr_t RoundPageUp(uintptr_t val) {
@@ -54,11 +55,11 @@ CoverageRecord::CoverageRecord(string tipc_dev, struct uuid* uuid)
       shm_(NULL),
       shm_len_(0) {}
 
-CoverageRecord::CoverageRecord(string tipc_dev, struct uuid* uuid, string sancov_filename)
+CoverageRecord::CoverageRecord(string tipc_dev, struct uuid* uuid, string module_name)
     : tipc_dev_(std::move(tipc_dev)),
       coverage_srv_fd_(-1),
       uuid_(*uuid),
-      sancov_filename_(sancov_filename),
+      sancov_filename_(module_name + "." + to_string(getpid()) + ".sancov"),
       record_len_(0),
       shm_(NULL),
       shm_len_(0) {}
