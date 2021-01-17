@@ -18,19 +18,18 @@
 
 #include <log/log.h>
 
-#ifdef __BIONIC__
-#include <bionic/malloc.h>
+#if !defined(__APPLE__)
+#include <malloc.h>
 #endif
 
 void process_disable_memory_mitigations() {
     bool success = false;
 #ifdef __BIONIC__
-    // TODO(b/158870657) is fixed and scudo is used globally, we can assert when an
-    // an error is returned.
-
-    success = android_mallopt(M_DISABLE_MEMORY_MITIGATIONS, nullptr, 0);
+    success = mallopt(M_BIONIC_DISABLE_MEMORY_MITIGATIONS, 0);
 #endif
 
+    // TODO: if b/158870657 is fixed and scudo is used globally,
+    // we can assert on failure rather than just log.
     if (success) {
         ALOGI("Disabled memory mitigations for process.");
     } else {
