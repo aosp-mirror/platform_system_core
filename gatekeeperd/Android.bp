@@ -28,7 +28,6 @@ cc_binary {
 
     shared_libs: [
         "libbinder",
-        "libbinder_ndk",
         "libgatekeeper",
         "libgsi",
         "liblog",
@@ -41,8 +40,6 @@ cc_binary {
         "libhidlbase",
         "android.hardware.gatekeeper@1.0",
         "libgatekeeper_aidl",
-        "android.hardware.security.keymint-unstable-ndk_platform",
-        "android.security.authorization-ndk_platform",
     ],
 
     static_libs: ["libscrypt_static"],
