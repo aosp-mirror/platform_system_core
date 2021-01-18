@@ -856,13 +856,6 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
-    # Lock the fs-verity keyring, so no more keys can be added
-    exec -- /system/bin/fsverity_init --lock
-
-    # After apexes are mounted, tell keymaster early boot has ended, so it will
-    # stop allowing use of early-boot keys
-    exec - system system -- /system/bin/vdc keymaster earlyBootEnded
-
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
@@ -872,14 +865,21 @@ on post-fs-data
 
     init_user0
 
+    # Set SELinux security contexts on upgrade or policy update.
+    restorecon --recursive --skip-ce /data
+
+    # After apexes are mounted, tell keymaster early boot has ended, so it will
+    # stop allowing use of early-boot keys
+    exec - system system -- /system/bin/vdc keymaster earlyBootEnded
+
+    # Lock the fs-verity keyring, so no more keys can be added
+    exec -- /system/bin/fsverity_init --lock
+
     # Allow apexd to snapshot and restore device encrypted apex data in the case
     # of a rollback. This should be done immediately after DE_user data keys
     # are loaded. APEXes should not access this data until this has been
     # completed and apexd.status becomes "ready".
     exec_start apexd-snapshotde
-
-    # Set SELinux security contexts on upgrade or policy update.
-    restorecon --recursive --skip-ce /data
 
     # Check any timezone data in /data is newer than the copy in the time zone data
     # module, delete if not.
