@@ -676,6 +676,8 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
         }
     }
 
+    bool compression_enabled = false;
+
     uint64_t total_cow_file_size = 0;
     DmTargetSnapshot::Status initial_target_values = {};
     for (const auto& snapshot : snapshots) {
@@ -692,6 +694,8 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
             return false;
         }
         total_cow_file_size += snapshot_status.cow_file_size();
+
+        compression_enabled |= snapshot_status.compression_enabled();
     }
 
     if (cow_file_size) {
@@ -703,6 +707,7 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
     initial_status.set_sectors_allocated(initial_target_values.sectors_allocated);
     initial_status.set_total_sectors(initial_target_values.total_sectors);
     initial_status.set_metadata_sectors(initial_target_values.metadata_sectors);
+    initial_status.set_compression_enabled(compression_enabled);
 
     // Point of no return - mark that we're starting a merge. From now on every
     // snapshot must be a merge target.
@@ -1405,7 +1410,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
             return false;
         }
 
-        CHECK(base_sectors == target.spec.length);
+        CHECK(base_sectors <= target.spec.length);
 
         if (!snapuserd_client_->AttachDmUser(misc_name)) {
             // This error is unrecoverable. We cannot proceed because reads to
@@ -2285,9 +2290,15 @@ SnapshotUpdateStatus SnapshotManager::ReadSnapshotUpdateStatus(LockedFile* lock)
 }
 
 bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state) {
-    SnapshotUpdateStatus status = {};
+    SnapshotUpdateStatus status;
     status.set_state(state);
-    status.set_compression_enabled(IsCompressionEnabled());
+
+    // If we're transitioning between two valid states (eg, we're not beginning
+    // or ending an OTA), then make sure to propagate the compression bit.
+    if (!(state == UpdateState::Initiated || state == UpdateState::None)) {
+        SnapshotUpdateStatus old_status = ReadSnapshotUpdateStatus(lock);
+        status.set_compression_enabled(old_status.compression_enabled());
+    }
     return WriteSnapshotUpdateStatus(lock, status);
 }
 
@@ -2477,6 +2488,12 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     auto lock = LockExclusive();
     if (!lock) return Return::Error();
 
+    auto update_state = ReadUpdateState(lock.get());
+    if (update_state != UpdateState::Initiated) {
+        LOG(ERROR) << "Cannot create update snapshots in state " << update_state;
+        return Return::Error();
+    }
+
     // TODO(b/134949511): remove this check. Right now, with overlayfs mounted, the scratch
     // partition takes up a big chunk of space in super, causing COW images to be created on
     // retrofit Virtual A/B devices.
@@ -2568,6 +2585,14 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     if (!UpdatePartitionTable(opener, device_->GetSuperDevice(target_slot),
                               *exported_target_metadata, target_slot)) {
         LOG(ERROR) << "Cannot write target metadata";
+        return Return::Error();
+    }
+
+    SnapshotUpdateStatus status = {};
+    status.set_state(update_state);
+    status.set_compression_enabled(cow_creator.compression_enabled);
+    if (!WriteSnapshotUpdateStatus(lock.get(), status)) {
+        LOG(ERROR) << "Unable to write new update state";
         return Return::Error();
     }
 
