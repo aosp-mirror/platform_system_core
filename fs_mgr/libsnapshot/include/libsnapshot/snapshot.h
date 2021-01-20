@@ -525,11 +525,13 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetMergeStateFilePath() const;
 
     // Helpers for merging.
+    bool MergeSecondPhaseSnapshots(LockedFile* lock);
     bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
     bool RewriteSnapshotDeviceTable(const std::string& dm_name);
     bool MarkSnapshotMergeCompleted(LockedFile* snapshot_lock, const std::string& snapshot_name);
     void AcknowledgeMergeSuccess(LockedFile* lock);
     void AcknowledgeMergeFailure();
+    MergePhase DecideMergePhase(const SnapshotStatus& status);
     std::unique_ptr<LpMetadata> ReadCurrentMetadata();
 
     enum class MetadataPartitionState {
@@ -562,7 +564,8 @@ class SnapshotManager final : public ISnapshotManager {
     //   UpdateState::MergeNeedsReboot
     UpdateState CheckMergeState(const std::function<bool()>& before_cancel);
     UpdateState CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
-    UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name);
+    UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name,
+                                      const SnapshotUpdateStatus& update_status);
 
     // Interact with status files under /metadata/ota/snapshots.
     bool WriteSnapshotStatus(LockedFile* lock, const SnapshotStatus& status);

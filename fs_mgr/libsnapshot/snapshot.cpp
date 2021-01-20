@@ -157,6 +157,9 @@ bool SnapshotManager::BeginUpdate() {
         images_->RemoveAllImages();
     }
 
+    // Clear any cached metadata (this allows re-using one manager across tests).
+    old_partition_metadata_ = nullptr;
+
     auto state = ReadUpdateState(file.get());
     if (state != UpdateState::None) {
         LOG(ERROR) << "An update is already in progress, cannot begin a new update";
@@ -480,7 +483,8 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     // have completed merging, but the start of the merge process is considered
     // atomic.
     SnapshotStorageMode mode;
-    switch (ReadUpdateState(lock)) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    switch (update_status.state()) {
         case UpdateState::MergeCompleted:
         case UpdateState::MergeNeedsReboot:
             LOG(ERROR) << "Should not create a snapshot device for " << name
@@ -490,7 +494,11 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
         case UpdateState::MergeFailed:
             // Note: MergeFailed indicates that a merge is in progress, but
             // is possibly stalled. We still have to honor the merge.
-            mode = SnapshotStorageMode::Merge;
+            if (DecideMergePhase(status) == update_status.merge_phase()) {
+                mode = SnapshotStorageMode::Merge;
+            } else {
+                mode = SnapshotStorageMode::Persistent;
+            }
             break;
         default:
             mode = SnapshotStorageMode::Persistent;
@@ -675,6 +683,8 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
 
     bool compression_enabled = false;
 
+    std::vector<std::string> first_merge_group;
+
     uint64_t total_cow_file_size = 0;
     DmTargetSnapshot::Status initial_target_values = {};
     for (const auto& snapshot : snapshots) {
@@ -693,6 +703,9 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
         total_cow_file_size += snapshot_status.cow_file_size();
 
         compression_enabled |= snapshot_status.compression_enabled();
+        if (DecideMergePhase(snapshot_status) == MergePhase::FIRST_PHASE) {
+            first_merge_group.emplace_back(snapshot);
+        }
     }
 
     if (cow_file_size) {
@@ -706,14 +719,26 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
     initial_status.set_metadata_sectors(initial_target_values.metadata_sectors);
     initial_status.set_compression_enabled(compression_enabled);
 
+    // If any partitions shrunk, we need to merge them before we merge any other
+    // partitions (see b/177935716). Otherwise, a merge from another partition
+    // may overwrite the source block of a copy operation.
+    const std::vector<std::string>* merge_group;
+    if (first_merge_group.empty()) {
+        merge_group = &snapshots;
+        initial_status.set_merge_phase(MergePhase::SECOND_PHASE);
+    } else {
+        merge_group = &first_merge_group;
+        initial_status.set_merge_phase(MergePhase::FIRST_PHASE);
+    }
+
     // Point of no return - mark that we're starting a merge. From now on every
-    // snapshot must be a merge target.
+    // eligible snapshot must be a merge target.
     if (!WriteSnapshotUpdateStatus(lock.get(), initial_status)) {
         return false;
     }
 
     bool rewrote_all = true;
-    for (const auto& snapshot : snapshots) {
+    for (const auto& snapshot : *merge_group) {
         // If this fails, we have no choice but to continue. Everything must
         // be merged. This is not an ideal state to be in, but it is safe,
         // because we the next boot will try again.
@@ -904,13 +929,13 @@ UpdateState SnapshotManager::CheckMergeState(const std::function<bool()>& before
 
 UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
                                              const std::function<bool()>& before_cancel) {
-    UpdateState state = ReadUpdateState(lock);
-    switch (state) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    switch (update_status.state()) {
         case UpdateState::None:
         case UpdateState::MergeCompleted:
             // Harmless races are allowed between two callers of WaitForMerge,
             // so in both of these cases we just propagate the state.
-            return state;
+            return update_status.state();
 
         case UpdateState::Merging:
         case UpdateState::MergeNeedsReboot:
@@ -927,10 +952,10 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
             if (HandleCancelledUpdate(lock, before_cancel)) {
                 return UpdateState::Cancelled;
             }
-            return state;
+            return update_status.state();
 
         default:
-            return state;
+            return update_status.state();
     }
 
     std::vector<std::string> snapshots;
@@ -942,8 +967,9 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
     bool failed = false;
     bool merging = false;
     bool needs_reboot = false;
+    bool wrong_phase = false;
     for (const auto& snapshot : snapshots) {
-        UpdateState snapshot_state = CheckTargetMergeState(lock, snapshot);
+        UpdateState snapshot_state = CheckTargetMergeState(lock, snapshot, update_status);
         switch (snapshot_state) {
             case UpdateState::MergeFailed:
                 failed = true;
@@ -958,6 +984,9 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
                 break;
             case UpdateState::Cancelled:
                 cancelled = true;
+                break;
+            case UpdateState::None:
+                wrong_phase = true;
                 break;
             default:
                 LOG(ERROR) << "Unknown merge status for \"" << snapshot << "\": "
@@ -978,6 +1007,14 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
         // it in WaitForMerge rather than here and elsewhere.
         return UpdateState::MergeFailed;
     }
+    if (wrong_phase) {
+        // If we got here, no other partitions are being merged, and nothing
+        // failed to merge. It's safe to move to the next merge phase.
+        if (!MergeSecondPhaseSnapshots(lock)) {
+            return UpdateState::MergeFailed;
+        }
+        return UpdateState::Merging;
+    }
     if (needs_reboot) {
         WriteUpdateState(lock, UpdateState::MergeNeedsReboot);
         return UpdateState::MergeNeedsReboot;
@@ -993,7 +1030,8 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
     return UpdateState::MergeCompleted;
 }
 
-UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string& name) {
+UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string& name,
+                                                   const SnapshotUpdateStatus& update_status) {
     SnapshotStatus snapshot_status;
     if (!ReadSnapshotStatus(lock, name, &snapshot_status)) {
         return UpdateState::MergeFailed;
@@ -1015,7 +1053,7 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
         // During a check, we decided the merge was complete, but we were unable to
         // collapse the device-mapper stack and perform COW cleanup. If we haven't
         // rebooted after this check, the device will still be a snapshot-merge
-        // target. If the have rebooted, the device will now be a linear target,
+        // target. If we have rebooted, the device will now be a linear target,
         // and we can try cleanup again.
         if (snapshot_status.state() == SnapshotState::MERGE_COMPLETED) {
             // NB: It's okay if this fails now, we gave cleanup our best effort.
@@ -1035,6 +1073,12 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
     DmTargetSnapshot::Status status;
     if (!QuerySnapshotStatus(name, &target_type, &status)) {
         return UpdateState::MergeFailed;
+    }
+    if (target_type == "snapshot" &&
+        DecideMergePhase(snapshot_status) == MergePhase::SECOND_PHASE &&
+        update_status.merge_phase() == MergePhase::FIRST_PHASE) {
+        // The snapshot is not being merged because it's in the wrong phase.
+        return UpdateState::None;
     }
     if (target_type != "snapshot-merge") {
         // We can get here if we failed to rewrite the target type in
@@ -1069,6 +1113,38 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
         return UpdateState::MergeNeedsReboot;
     }
     return UpdateState::MergeCompleted;
+}
+
+bool SnapshotManager::MergeSecondPhaseSnapshots(LockedFile* lock) {
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock, &snapshots)) {
+        return UpdateState::MergeFailed;
+    }
+
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    CHECK(update_status.state() == UpdateState::Merging);
+    CHECK(update_status.merge_phase() == MergePhase::FIRST_PHASE);
+
+    update_status.set_merge_phase(MergePhase::SECOND_PHASE);
+    if (!WriteSnapshotUpdateStatus(lock, update_status)) {
+        return false;
+    }
+
+    bool rewrote_all = true;
+    for (const auto& snapshot : snapshots) {
+        SnapshotStatus snapshot_status;
+        if (!ReadSnapshotStatus(lock, snapshot, &snapshot_status)) {
+            return UpdateState::MergeFailed;
+        }
+        if (DecideMergePhase(snapshot_status) != MergePhase::SECOND_PHASE) {
+            continue;
+        }
+        if (!SwitchSnapshotToMerge(lock, snapshot)) {
+            LOG(ERROR) << "Failed to switch snapshot to a second-phase merge target: " << snapshot;
+            rewrote_all = false;
+        }
+    }
+    return rewrote_all;
 }
 
 std::string SnapshotManager::GetSnapshotBootIndicatorPath() {
@@ -1210,6 +1286,10 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
     auto base_name = GetBaseDeviceName(name);
     if (!dm.DeleteDeviceIfExists(base_name)) {
         LOG(ERROR) << "Unable to delete base device for snapshot: " << base_name;
+    }
+    auto source_name = GetSourceDeviceName(name);
+    if (!dm.DeleteDeviceIfExists(source_name)) {
+        LOG(ERROR) << "Unable to delete source device for snapshot: " << source_name;
     }
     return true;
 }
@@ -2654,6 +2734,15 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
             continue;
         }
 
+        // Find the original partition size.
+        auto name = target_partition->name();
+        auto old_partition_name =
+                name.substr(0, name.size() - target_suffix.size()) + cow_creator->current_suffix;
+        auto old_partition = cow_creator->current_metadata->FindPartition(old_partition_name);
+        if (old_partition) {
+            cow_creator_ret->snapshot_status.set_old_partition_size(old_partition->size());
+        }
+
         // Store these device sizes to snapshot status file.
         if (!CreateSnapshot(lock, &cow_creator_ret->snapshot_status)) {
             return Return::Error();
@@ -3353,6 +3442,13 @@ const LpMetadata* SnapshotManager::ReadOldPartitionMetadata(LockedFile* lock) {
         }
     }
     return old_partition_metadata_.get();
+}
+
+MergePhase SnapshotManager::DecideMergePhase(const SnapshotStatus& status) {
+    if (status.compression_enabled() && status.device_size() < status.old_partition_size()) {
+        return MergePhase::FIRST_PHASE;
+    }
+    return MergePhase::SECOND_PHASE;
 }
 
 }  // namespace snapshot
