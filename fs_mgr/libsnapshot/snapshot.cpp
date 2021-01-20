@@ -132,6 +132,10 @@ static std::string GetBaseDeviceName(const std::string& partition_name) {
     return partition_name + "-base";
 }
 
+static std::string GetSourceDeviceName(const std::string& partition_name) {
+    return partition_name + "-src";
+}
+
 bool SnapshotManager::BeginUpdate() {
     bool needs_merge = false;
     if (!TryCancelUpdate(&needs_merge)) {
@@ -251,6 +255,7 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
             GetSnapshotBootIndicatorPath(),
             GetRollbackIndicatorPath(),
             GetForwardMergeIndicatorPath(),
+            GetOldPartitionMetadataPath(),
     };
     for (const auto& file : files) {
         RemoveFileIfExists(file);
@@ -524,6 +529,36 @@ std::optional<std::string> SnapshotManager::MapCowImage(
     }
     LOG(ERROR) << "Could not map image device: " << cow_image_name;
     return std::nullopt;
+}
+
+bool SnapshotManager::MapSourceDevice(LockedFile* lock, const std::string& name,
+                                      const std::chrono::milliseconds& timeout_ms,
+                                      std::string* path) {
+    CHECK(lock);
+
+    auto metadata = ReadOldPartitionMetadata(lock);
+    if (!metadata) {
+        LOG(ERROR) << "Could not map source device due to missing or corrupt metadata";
+        return false;
+    }
+
+    auto old_name = GetOtherPartitionName(name);
+    auto slot_suffix = device_->GetSlotSuffix();
+    auto slot = SlotNumberForSlotSuffix(slot_suffix);
+
+    CreateLogicalPartitionParams params = {
+            .block_device = device_->GetSuperDevice(slot),
+            .metadata = metadata,
+            .partition_name = old_name,
+            .timeout_ms = timeout_ms,
+            .device_name = GetSourceDeviceName(name),
+            .partition_opener = &device_->GetPartitionOpener(),
+    };
+    if (!CreateLogicalPartition(std::move(params), path)) {
+        LOG(ERROR) << "Could not create source device for snapshot " << name;
+        return false;
+    }
+    return true;
 }
 
 bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
@@ -1048,6 +1083,10 @@ std::string SnapshotManager::GetForwardMergeIndicatorPath() {
     return metadata_dir_ + "/allow-forward-merge";
 }
 
+std::string SnapshotManager::GetOldPartitionMetadataPath() {
+    return metadata_dir_ + "/old-partition-metadata";
+}
+
 void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
     // It's not possible to remove update state in recovery, so write an
     // indicator that cleanup is needed on reboot. If a factory data reset
@@ -1274,9 +1313,9 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
             continue;
         }
 
-        std::string backing_device;
-        if (!dm.GetDmDevicePathByName(GetBaseDeviceName(snapshot), &backing_device)) {
-            LOG(ERROR) << "Could not get device path for " << GetBaseDeviceName(snapshot);
+        std::string source_device;
+        if (!dm.GetDmDevicePathByName(GetSourceDeviceName(snapshot), &source_device)) {
+            LOG(ERROR) << "Could not get device path for " << GetSourceDeviceName(snapshot);
             continue;
         }
 
@@ -1302,7 +1341,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         }
 
         if (transition == InitTransition::SELINUX_DETACH) {
-            auto message = misc_name + "," + cow_image_device + "," + backing_device;
+            auto message = misc_name + "," + cow_image_device + "," + source_device;
             snapuserd_argv->emplace_back(std::move(message));
 
             // Do not attempt to connect to the new snapuserd yet, it hasn't
@@ -1313,7 +1352,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         }
 
         uint64_t base_sectors =
-                snapuserd_client_->InitDmUserCow(misc_name, cow_image_device, backing_device);
+                snapuserd_client_->InitDmUserCow(misc_name, cow_image_device, source_device);
         if (base_sectors == 0) {
             // Unrecoverable as metadata reads from cow device failed
             LOG(FATAL) << "Failed to retrieve base_sectors from Snapuserd";
@@ -1822,24 +1861,35 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     }
 
     if (live_snapshot_status->compression_enabled()) {
-        auto name = GetDmUserCowName(params.GetPartitionName());
+        // Get the source device (eg the view of the partition from before it was resized).
+        std::string source_device_path;
+        if (!MapSourceDevice(lock, params.GetPartitionName(), remaining_time,
+                             &source_device_path)) {
+            LOG(ERROR) << "Could not map source device for: " << cow_name;
+            return false;
+        }
+
+        auto source_device = GetSourceDeviceName(params.GetPartitionName());
+        created_devices.EmplaceBack<AutoUnmapDevice>(&dm, source_device);
+
+        if (!WaitForDevice(source_device_path, remaining_time)) {
+            return false;
+        }
 
         std::string cow_path;
         if (!GetMappedImageDevicePath(cow_name, &cow_path)) {
             LOG(ERROR) << "Could not determine path for: " << cow_name;
             return false;
         }
-
-        // Ensure both |base_path| and |cow_path| are created, for snapuserd.
-        if (!WaitForDevice(base_path, remaining_time)) {
-            return false;
-        }
         if (!WaitForDevice(cow_path, remaining_time)) {
             return false;
         }
 
+        auto name = GetDmUserCowName(params.GetPartitionName());
+
         std::string new_cow_device;
-        if (!MapDmUserCow(lock, name, cow_path, base_path, remaining_time, &new_cow_device)) {
+        if (!MapDmUserCow(lock, name, cow_path, source_device_path, remaining_time,
+                          &new_cow_device)) {
             LOG(ERROR) << "Could not map dm-user device for partition "
                        << params.GetPartitionName();
             return false;
@@ -1883,9 +1933,15 @@ bool SnapshotManager::UnmapPartitionWithSnapshot(LockedFile* lock,
     }
 
     auto& dm = DeviceMapper::Instance();
-    std::string base_name = GetBaseDeviceName(target_partition_name);
+    auto base_name = GetBaseDeviceName(target_partition_name);
     if (!dm.DeleteDeviceIfExists(base_name)) {
         LOG(ERROR) << "Cannot delete base device: " << base_name;
+        return false;
+    }
+
+    auto source_name = GetSourceDeviceName(target_partition_name);
+    if (!dm.DeleteDeviceIfExists(source_name)) {
+        LOG(ERROR) << "Cannot delete source device: " << source_name;
         return false;
     }
 
@@ -2478,6 +2534,24 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
                               *exported_target_metadata, target_slot)) {
         LOG(ERROR) << "Cannot write target metadata";
         return Return::Error();
+    }
+
+    // If compression is enabled, we need to retain a copy of the old metadata
+    // so we can access original blocks in case they are moved around. We do
+    // not want to rely on the old super metadata slot because we don't
+    // guarantee its validity after the slot switch is successful.
+    if (cow_creator.compression_enabled) {
+        auto metadata = current_metadata->Export();
+        if (!metadata) {
+            LOG(ERROR) << "Could not export current metadata";
+            return Return::Error();
+        }
+
+        auto path = GetOldPartitionMetadataPath();
+        if (!android::fs_mgr::WriteToImageFile(path, *metadata.get())) {
+            LOG(ERROR) << "Cannot write old metadata to " << path;
+            return Return::Error();
+        }
     }
 
     SnapshotUpdateStatus status = {};
@@ -3265,6 +3339,20 @@ bool SnapshotManager::DetachSnapuserdForSelinux(std::vector<std::string>* snapus
 
 bool SnapshotManager::PerformSecondStageInitTransition() {
     return PerformInitTransition(InitTransition::SECOND_STAGE);
+}
+
+const LpMetadata* SnapshotManager::ReadOldPartitionMetadata(LockedFile* lock) {
+    CHECK(lock);
+
+    if (!old_partition_metadata_) {
+        auto path = GetOldPartitionMetadataPath();
+        old_partition_metadata_ = android::fs_mgr::ReadFromImageFile(path);
+        if (!old_partition_metadata_) {
+            LOG(ERROR) << "Could not read old partition metadata from " << path;
+            return nullptr;
+        }
+    }
+    return old_partition_metadata_.get();
 }
 
 }  // namespace snapshot
