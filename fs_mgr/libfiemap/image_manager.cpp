@@ -486,15 +486,14 @@ bool ImageManager::MapWithLoopDevice(const std::string& name,
         if (!MapWithLoopDeviceList(loop_devices, name, timeout_ms, path)) {
             return false;
         }
+    } else {
+        auto status_message = "loop:" + loop_devices.back();
+        auto status_file = GetStatusFilePath(name);
+        if (!android::base::WriteStringToFile(status_message, status_file)) {
+            PLOG(ERROR) << "Write failed: " << status_file;
+            return false;
+        }
     }
-
-    auto status_message = "loop:" + loop_devices.back();
-    auto status_file = GetStatusFilePath(name);
-    if (!android::base::WriteStringToFile(status_message, status_file)) {
-        PLOG(ERROR) << "Write failed: " << status_file;
-        return false;
-    }
-
     auto_detach.Commit();
 
     *path = loop_devices.back();
