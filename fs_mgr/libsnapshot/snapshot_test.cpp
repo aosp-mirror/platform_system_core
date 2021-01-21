@@ -467,31 +467,6 @@ TEST_F(SnapshotTest, MapSnapshot) {
     ASSERT_TRUE(android::base::StartsWith(snap_device, "/dev/block/dm-"));
 }
 
-TEST_F(SnapshotTest, MapPartialSnapshot) {
-    ASSERT_TRUE(AcquireLock());
-
-    static const uint64_t kSnapshotSize = 1024 * 1024;
-    static const uint64_t kDeviceSize = 1024 * 1024 * 2;
-    SnapshotStatus status;
-    status.set_name("test-snapshot");
-    status.set_device_size(kDeviceSize);
-    status.set_snapshot_size(kSnapshotSize);
-    status.set_cow_file_size(kSnapshotSize);
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
-    ASSERT_TRUE(CreateCowImage("test-snapshot"));
-
-    std::string base_device;
-    ASSERT_TRUE(CreatePartition("base-device", kDeviceSize, &base_device));
-
-    std::string cow_device;
-    ASSERT_TRUE(MapCowImage("test-snapshot", 10s, &cow_device));
-
-    std::string snap_device;
-    ASSERT_TRUE(sm->MapSnapshot(lock_.get(), "test-snapshot", base_device, cow_device, 10s,
-                                &snap_device));
-    ASSERT_TRUE(android::base::StartsWith(snap_device, "/dev/block/dm-"));
-}
-
 TEST_F(SnapshotTest, NoMergeBeforeReboot) {
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
@@ -590,8 +565,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     ASSERT_EQ(status.state(), SnapshotState::CREATED);
 
     DeviceMapper::TargetInfo target;
-    auto dm_name = init->GetSnapshotDeviceName("test_partition_b", status);
-    ASSERT_TRUE(init->IsSnapshotDevice(dm_name, &target));
+    ASSERT_TRUE(init->IsSnapshotDevice("test_partition_b", &target));
     ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
 }
 
@@ -618,8 +592,7 @@ TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
 
     // We should not get a snapshot device now.
     DeviceMapper::TargetInfo target;
-    auto dm_name = init->GetSnapshotDeviceName("test_partition_b", status);
-    ASSERT_FALSE(init->IsSnapshotDevice(dm_name, &target));
+    ASSERT_FALSE(init->IsSnapshotDevice("test_partition_b", &target));
 
     // We should see a cancelled update as well.
     lock_ = nullptr;
