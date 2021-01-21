@@ -569,12 +569,6 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetRollbackIndicatorPath();
     std::string GetForwardMergeIndicatorPath();
 
-    // Return the name of the device holding the "snapshot" or "snapshot-merge"
-    // target. This may not be the final device presented via MapSnapshot(), if
-    // for example there is a linear segment.
-    std::string GetSnapshotDeviceName(const std::string& snapshot_name,
-                                      const SnapshotStatus& status);
-
     bool MapAllPartitions(LockedFile* lock, const std::string& super_device, uint32_t slot,
                           const std::chrono::milliseconds& timeout_ms);
 
@@ -673,8 +667,8 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Helper for RemoveAllSnapshots.
     // Check whether |name| should be deleted as a snapshot name.
-    bool ShouldDeleteSnapshot(LockedFile* lock, const std::map<std::string, bool>& flashing_status,
-                              Slot current_slot, const std::string& name);
+    bool ShouldDeleteSnapshot(const std::map<std::string, bool>& flashing_status, Slot current_slot,
+                              const std::string& name);
 
     // Create or delete forward merge indicator given |wipe|. Iff wipe is scheduled,
     // allow forward merge on FDR.
