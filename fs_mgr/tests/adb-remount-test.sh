@@ -740,7 +740,7 @@ skip_administrative_mounts() {
   grep -v \
     -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\|bpf\) " \
     -e "^\(binfmt_misc\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
-    -e "^\(ramdumpfs\|binder\|/sys/kernel/debug\) " \
+    -e "^\(ramdumpfs\|binder\|/sys/kernel/debug\|securityfs\) " \
     -e " functionfs " \
     -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
     -e "^rootfs / rootfs rw," \
