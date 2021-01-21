@@ -132,6 +132,10 @@ static std::string GetBaseDeviceName(const std::string& partition_name) {
     return partition_name + "-base";
 }
 
+static std::string GetSourceDeviceName(const std::string& partition_name) {
+    return partition_name + "-src";
+}
+
 bool SnapshotManager::BeginUpdate() {
     bool needs_merge = false;
     if (!TryCancelUpdate(&needs_merge)) {
@@ -152,6 +156,9 @@ bool SnapshotManager::BeginUpdate() {
     if (EnsureImageManager()) {
         images_->RemoveAllImages();
     }
+
+    // Clear any cached metadata (this allows re-using one manager across tests).
+    old_partition_metadata_ = nullptr;
 
     auto state = ReadUpdateState(file.get());
     if (state != UpdateState::None) {
@@ -251,6 +258,7 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
             GetSnapshotBootIndicatorPath(),
             GetRollbackIndicatorPath(),
             GetForwardMergeIndicatorPath(),
+            GetOldPartitionMetadataPath(),
     };
     for (const auto& file : files) {
         RemoveFileIfExists(file);
@@ -475,7 +483,8 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     // have completed merging, but the start of the merge process is considered
     // atomic.
     SnapshotStorageMode mode;
-    switch (ReadUpdateState(lock)) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    switch (update_status.state()) {
         case UpdateState::MergeCompleted:
         case UpdateState::MergeNeedsReboot:
             LOG(ERROR) << "Should not create a snapshot device for " << name
@@ -485,7 +494,11 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
         case UpdateState::MergeFailed:
             // Note: MergeFailed indicates that a merge is in progress, but
             // is possibly stalled. We still have to honor the merge.
-            mode = SnapshotStorageMode::Merge;
+            if (DecideMergePhase(status) == update_status.merge_phase()) {
+                mode = SnapshotStorageMode::Merge;
+            } else {
+                mode = SnapshotStorageMode::Persistent;
+            }
             break;
         default:
             mode = SnapshotStorageMode::Persistent;
@@ -524,6 +537,36 @@ std::optional<std::string> SnapshotManager::MapCowImage(
     }
     LOG(ERROR) << "Could not map image device: " << cow_image_name;
     return std::nullopt;
+}
+
+bool SnapshotManager::MapSourceDevice(LockedFile* lock, const std::string& name,
+                                      const std::chrono::milliseconds& timeout_ms,
+                                      std::string* path) {
+    CHECK(lock);
+
+    auto metadata = ReadOldPartitionMetadata(lock);
+    if (!metadata) {
+        LOG(ERROR) << "Could not map source device due to missing or corrupt metadata";
+        return false;
+    }
+
+    auto old_name = GetOtherPartitionName(name);
+    auto slot_suffix = device_->GetSlotSuffix();
+    auto slot = SlotNumberForSlotSuffix(slot_suffix);
+
+    CreateLogicalPartitionParams params = {
+            .block_device = device_->GetSuperDevice(slot),
+            .metadata = metadata,
+            .partition_name = old_name,
+            .timeout_ms = timeout_ms,
+            .device_name = GetSourceDeviceName(name),
+            .partition_opener = &device_->GetPartitionOpener(),
+    };
+    if (!CreateLogicalPartition(std::move(params), path)) {
+        LOG(ERROR) << "Could not create source device for snapshot " << name;
+        return false;
+    }
+    return true;
 }
 
 bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
@@ -640,6 +683,8 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
 
     bool compression_enabled = false;
 
+    std::vector<std::string> first_merge_group;
+
     uint64_t total_cow_file_size = 0;
     DmTargetSnapshot::Status initial_target_values = {};
     for (const auto& snapshot : snapshots) {
@@ -658,6 +703,9 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
         total_cow_file_size += snapshot_status.cow_file_size();
 
         compression_enabled |= snapshot_status.compression_enabled();
+        if (DecideMergePhase(snapshot_status) == MergePhase::FIRST_PHASE) {
+            first_merge_group.emplace_back(snapshot);
+        }
     }
 
     if (cow_file_size) {
@@ -671,14 +719,26 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
     initial_status.set_metadata_sectors(initial_target_values.metadata_sectors);
     initial_status.set_compression_enabled(compression_enabled);
 
+    // If any partitions shrunk, we need to merge them before we merge any other
+    // partitions (see b/177935716). Otherwise, a merge from another partition
+    // may overwrite the source block of a copy operation.
+    const std::vector<std::string>* merge_group;
+    if (first_merge_group.empty()) {
+        merge_group = &snapshots;
+        initial_status.set_merge_phase(MergePhase::SECOND_PHASE);
+    } else {
+        merge_group = &first_merge_group;
+        initial_status.set_merge_phase(MergePhase::FIRST_PHASE);
+    }
+
     // Point of no return - mark that we're starting a merge. From now on every
-    // snapshot must be a merge target.
+    // eligible snapshot must be a merge target.
     if (!WriteSnapshotUpdateStatus(lock.get(), initial_status)) {
         return false;
     }
 
     bool rewrote_all = true;
-    for (const auto& snapshot : snapshots) {
+    for (const auto& snapshot : *merge_group) {
         // If this fails, we have no choice but to continue. Everything must
         // be merged. This is not an ideal state to be in, but it is safe,
         // because we the next boot will try again.
@@ -869,13 +929,13 @@ UpdateState SnapshotManager::CheckMergeState(const std::function<bool()>& before
 
 UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
                                              const std::function<bool()>& before_cancel) {
-    UpdateState state = ReadUpdateState(lock);
-    switch (state) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    switch (update_status.state()) {
         case UpdateState::None:
         case UpdateState::MergeCompleted:
             // Harmless races are allowed between two callers of WaitForMerge,
             // so in both of these cases we just propagate the state.
-            return state;
+            return update_status.state();
 
         case UpdateState::Merging:
         case UpdateState::MergeNeedsReboot:
@@ -892,10 +952,10 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
             if (HandleCancelledUpdate(lock, before_cancel)) {
                 return UpdateState::Cancelled;
             }
-            return state;
+            return update_status.state();
 
         default:
-            return state;
+            return update_status.state();
     }
 
     std::vector<std::string> snapshots;
@@ -907,8 +967,9 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
     bool failed = false;
     bool merging = false;
     bool needs_reboot = false;
+    bool wrong_phase = false;
     for (const auto& snapshot : snapshots) {
-        UpdateState snapshot_state = CheckTargetMergeState(lock, snapshot);
+        UpdateState snapshot_state = CheckTargetMergeState(lock, snapshot, update_status);
         switch (snapshot_state) {
             case UpdateState::MergeFailed:
                 failed = true;
@@ -923,6 +984,9 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
                 break;
             case UpdateState::Cancelled:
                 cancelled = true;
+                break;
+            case UpdateState::None:
+                wrong_phase = true;
                 break;
             default:
                 LOG(ERROR) << "Unknown merge status for \"" << snapshot << "\": "
@@ -943,6 +1007,14 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
         // it in WaitForMerge rather than here and elsewhere.
         return UpdateState::MergeFailed;
     }
+    if (wrong_phase) {
+        // If we got here, no other partitions are being merged, and nothing
+        // failed to merge. It's safe to move to the next merge phase.
+        if (!MergeSecondPhaseSnapshots(lock)) {
+            return UpdateState::MergeFailed;
+        }
+        return UpdateState::Merging;
+    }
     if (needs_reboot) {
         WriteUpdateState(lock, UpdateState::MergeNeedsReboot);
         return UpdateState::MergeNeedsReboot;
@@ -958,7 +1030,8 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
     return UpdateState::MergeCompleted;
 }
 
-UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string& name) {
+UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string& name,
+                                                   const SnapshotUpdateStatus& update_status) {
     SnapshotStatus snapshot_status;
     if (!ReadSnapshotStatus(lock, name, &snapshot_status)) {
         return UpdateState::MergeFailed;
@@ -980,7 +1053,7 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
         // During a check, we decided the merge was complete, but we were unable to
         // collapse the device-mapper stack and perform COW cleanup. If we haven't
         // rebooted after this check, the device will still be a snapshot-merge
-        // target. If the have rebooted, the device will now be a linear target,
+        // target. If we have rebooted, the device will now be a linear target,
         // and we can try cleanup again.
         if (snapshot_status.state() == SnapshotState::MERGE_COMPLETED) {
             // NB: It's okay if this fails now, we gave cleanup our best effort.
@@ -1000,6 +1073,12 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
     DmTargetSnapshot::Status status;
     if (!QuerySnapshotStatus(name, &target_type, &status)) {
         return UpdateState::MergeFailed;
+    }
+    if (target_type == "snapshot" &&
+        DecideMergePhase(snapshot_status) == MergePhase::SECOND_PHASE &&
+        update_status.merge_phase() == MergePhase::FIRST_PHASE) {
+        // The snapshot is not being merged because it's in the wrong phase.
+        return UpdateState::None;
     }
     if (target_type != "snapshot-merge") {
         // We can get here if we failed to rewrite the target type in
@@ -1036,6 +1115,38 @@ UpdateState SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::
     return UpdateState::MergeCompleted;
 }
 
+bool SnapshotManager::MergeSecondPhaseSnapshots(LockedFile* lock) {
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock, &snapshots)) {
+        return UpdateState::MergeFailed;
+    }
+
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    CHECK(update_status.state() == UpdateState::Merging);
+    CHECK(update_status.merge_phase() == MergePhase::FIRST_PHASE);
+
+    update_status.set_merge_phase(MergePhase::SECOND_PHASE);
+    if (!WriteSnapshotUpdateStatus(lock, update_status)) {
+        return false;
+    }
+
+    bool rewrote_all = true;
+    for (const auto& snapshot : snapshots) {
+        SnapshotStatus snapshot_status;
+        if (!ReadSnapshotStatus(lock, snapshot, &snapshot_status)) {
+            return UpdateState::MergeFailed;
+        }
+        if (DecideMergePhase(snapshot_status) != MergePhase::SECOND_PHASE) {
+            continue;
+        }
+        if (!SwitchSnapshotToMerge(lock, snapshot)) {
+            LOG(ERROR) << "Failed to switch snapshot to a second-phase merge target: " << snapshot;
+            rewrote_all = false;
+        }
+    }
+    return rewrote_all;
+}
+
 std::string SnapshotManager::GetSnapshotBootIndicatorPath() {
     return metadata_dir_ + "/" + android::base::Basename(kBootIndicatorPath);
 }
@@ -1046,6 +1157,10 @@ std::string SnapshotManager::GetRollbackIndicatorPath() {
 
 std::string SnapshotManager::GetForwardMergeIndicatorPath() {
     return metadata_dir_ + "/allow-forward-merge";
+}
+
+std::string SnapshotManager::GetOldPartitionMetadataPath() {
+    return metadata_dir_ + "/old-partition-metadata";
 }
 
 void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
@@ -1172,6 +1287,10 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
     if (!dm.DeleteDeviceIfExists(base_name)) {
         LOG(ERROR) << "Unable to delete base device for snapshot: " << base_name;
     }
+    auto source_name = GetSourceDeviceName(name);
+    if (!dm.DeleteDeviceIfExists(source_name)) {
+        LOG(ERROR) << "Unable to delete source device for snapshot: " << source_name;
+    }
     return true;
 }
 
@@ -1274,9 +1393,9 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
             continue;
         }
 
-        std::string backing_device;
-        if (!dm.GetDmDevicePathByName(GetBaseDeviceName(snapshot), &backing_device)) {
-            LOG(ERROR) << "Could not get device path for " << GetBaseDeviceName(snapshot);
+        std::string source_device;
+        if (!dm.GetDmDevicePathByName(GetSourceDeviceName(snapshot), &source_device)) {
+            LOG(ERROR) << "Could not get device path for " << GetSourceDeviceName(snapshot);
             continue;
         }
 
@@ -1302,7 +1421,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         }
 
         if (transition == InitTransition::SELINUX_DETACH) {
-            auto message = misc_name + "," + cow_image_device + "," + backing_device;
+            auto message = misc_name + "," + cow_image_device + "," + source_device;
             snapuserd_argv->emplace_back(std::move(message));
 
             // Do not attempt to connect to the new snapuserd yet, it hasn't
@@ -1313,7 +1432,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         }
 
         uint64_t base_sectors =
-                snapuserd_client_->InitDmUserCow(misc_name, cow_image_device, backing_device);
+                snapuserd_client_->InitDmUserCow(misc_name, cow_image_device, source_device);
         if (base_sectors == 0) {
             // Unrecoverable as metadata reads from cow device failed
             LOG(FATAL) << "Failed to retrieve base_sectors from Snapuserd";
@@ -1822,24 +1941,35 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     }
 
     if (live_snapshot_status->compression_enabled()) {
-        auto name = GetDmUserCowName(params.GetPartitionName());
+        // Get the source device (eg the view of the partition from before it was resized).
+        std::string source_device_path;
+        if (!MapSourceDevice(lock, params.GetPartitionName(), remaining_time,
+                             &source_device_path)) {
+            LOG(ERROR) << "Could not map source device for: " << cow_name;
+            return false;
+        }
+
+        auto source_device = GetSourceDeviceName(params.GetPartitionName());
+        created_devices.EmplaceBack<AutoUnmapDevice>(&dm, source_device);
+
+        if (!WaitForDevice(source_device_path, remaining_time)) {
+            return false;
+        }
 
         std::string cow_path;
         if (!GetMappedImageDevicePath(cow_name, &cow_path)) {
             LOG(ERROR) << "Could not determine path for: " << cow_name;
             return false;
         }
-
-        // Ensure both |base_path| and |cow_path| are created, for snapuserd.
-        if (!WaitForDevice(base_path, remaining_time)) {
-            return false;
-        }
         if (!WaitForDevice(cow_path, remaining_time)) {
             return false;
         }
 
+        auto name = GetDmUserCowName(params.GetPartitionName());
+
         std::string new_cow_device;
-        if (!MapDmUserCow(lock, name, cow_path, base_path, remaining_time, &new_cow_device)) {
+        if (!MapDmUserCow(lock, name, cow_path, source_device_path, remaining_time,
+                          &new_cow_device)) {
             LOG(ERROR) << "Could not map dm-user device for partition "
                        << params.GetPartitionName();
             return false;
@@ -1883,9 +2013,15 @@ bool SnapshotManager::UnmapPartitionWithSnapshot(LockedFile* lock,
     }
 
     auto& dm = DeviceMapper::Instance();
-    std::string base_name = GetBaseDeviceName(target_partition_name);
+    auto base_name = GetBaseDeviceName(target_partition_name);
     if (!dm.DeleteDeviceIfExists(base_name)) {
         LOG(ERROR) << "Cannot delete base device: " << base_name;
+        return false;
+    }
+
+    auto source_name = GetSourceDeviceName(target_partition_name);
+    if (!dm.DeleteDeviceIfExists(source_name)) {
+        LOG(ERROR) << "Cannot delete source device: " << source_name;
         return false;
     }
 
@@ -2480,6 +2616,24 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         return Return::Error();
     }
 
+    // If compression is enabled, we need to retain a copy of the old metadata
+    // so we can access original blocks in case they are moved around. We do
+    // not want to rely on the old super metadata slot because we don't
+    // guarantee its validity after the slot switch is successful.
+    if (cow_creator.compression_enabled) {
+        auto metadata = current_metadata->Export();
+        if (!metadata) {
+            LOG(ERROR) << "Could not export current metadata";
+            return Return::Error();
+        }
+
+        auto path = GetOldPartitionMetadataPath();
+        if (!android::fs_mgr::WriteToImageFile(path, *metadata.get())) {
+            LOG(ERROR) << "Cannot write old metadata to " << path;
+            return Return::Error();
+        }
+    }
+
     SnapshotUpdateStatus status = {};
     status.set_state(update_state);
     status.set_compression_enabled(cow_creator.compression_enabled);
@@ -2578,6 +2732,15 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
             LOG(INFO) << "Skip creating snapshot for partition " << target_partition->name()
                       << "because nothing needs to be snapshotted.";
             continue;
+        }
+
+        // Find the original partition size.
+        auto name = target_partition->name();
+        auto old_partition_name =
+                name.substr(0, name.size() - target_suffix.size()) + cow_creator->current_suffix;
+        auto old_partition = cow_creator->current_metadata->FindPartition(old_partition_name);
+        if (old_partition) {
+            cow_creator_ret->snapshot_status.set_old_partition_size(old_partition->size());
         }
 
         // Store these device sizes to snapshot status file.
@@ -3265,6 +3428,27 @@ bool SnapshotManager::DetachSnapuserdForSelinux(std::vector<std::string>* snapus
 
 bool SnapshotManager::PerformSecondStageInitTransition() {
     return PerformInitTransition(InitTransition::SECOND_STAGE);
+}
+
+const LpMetadata* SnapshotManager::ReadOldPartitionMetadata(LockedFile* lock) {
+    CHECK(lock);
+
+    if (!old_partition_metadata_) {
+        auto path = GetOldPartitionMetadataPath();
+        old_partition_metadata_ = android::fs_mgr::ReadFromImageFile(path);
+        if (!old_partition_metadata_) {
+            LOG(ERROR) << "Could not read old partition metadata from " << path;
+            return nullptr;
+        }
+    }
+    return old_partition_metadata_.get();
+}
+
+MergePhase SnapshotManager::DecideMergePhase(const SnapshotStatus& status) {
+    if (status.compression_enabled() && status.device_size() < status.old_partition_size()) {
+        return MergePhase::FIRST_PHASE;
+    }
+    return MergePhase::SECOND_PHASE;
 }
 
 }  // namespace snapshot

@@ -234,7 +234,8 @@ class SnapshotTest : public ::testing::Test {
                 .partition_opener = &opener,
         };
 
-        auto result = sm->OpenSnapshotWriter(params, {});
+        auto old_partition = "/dev/block/mapper/" + GetOtherPartitionName(name);
+        auto result = sm->OpenSnapshotWriter(params, {old_partition});
         if (!result) {
             return AssertionFailure() << "Cannot open snapshot for writing: " << name;
         }

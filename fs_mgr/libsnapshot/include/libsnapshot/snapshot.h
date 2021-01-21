@@ -463,6 +463,10 @@ class SnapshotManager final : public ISnapshotManager {
                       const std::string& base_device, const std::chrono::milliseconds& timeout_ms,
                       std::string* path);
 
+    // Map the source device used for dm-user.
+    bool MapSourceDevice(LockedFile* lock, const std::string& name,
+                         const std::chrono::milliseconds& timeout_ms, std::string* path);
+
     // Map a COW image that was previous created with CreateCowImage.
     std::optional<std::string> MapCowImage(const std::string& name,
                                            const std::chrono::milliseconds& timeout_ms);
@@ -521,11 +525,13 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetMergeStateFilePath() const;
 
     // Helpers for merging.
+    bool MergeSecondPhaseSnapshots(LockedFile* lock);
     bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
     bool RewriteSnapshotDeviceTable(const std::string& dm_name);
     bool MarkSnapshotMergeCompleted(LockedFile* snapshot_lock, const std::string& snapshot_name);
     void AcknowledgeMergeSuccess(LockedFile* lock);
     void AcknowledgeMergeFailure();
+    MergePhase DecideMergePhase(const SnapshotStatus& status);
     std::unique_ptr<LpMetadata> ReadCurrentMetadata();
 
     enum class MetadataPartitionState {
@@ -558,7 +564,8 @@ class SnapshotManager final : public ISnapshotManager {
     //   UpdateState::MergeNeedsReboot
     UpdateState CheckMergeState(const std::function<bool()>& before_cancel);
     UpdateState CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
-    UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name);
+    UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name,
+                                      const SnapshotUpdateStatus& update_status);
 
     // Interact with status files under /metadata/ota/snapshots.
     bool WriteSnapshotStatus(LockedFile* lock, const SnapshotStatus& status);
@@ -568,6 +575,9 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetSnapshotBootIndicatorPath();
     std::string GetRollbackIndicatorPath();
     std::string GetForwardMergeIndicatorPath();
+    std::string GetOldPartitionMetadataPath();
+
+    const LpMetadata* ReadOldPartitionMetadata(LockedFile* lock);
 
     bool MapAllPartitions(LockedFile* lock, const std::string& super_device, uint32_t slot,
                           const std::chrono::milliseconds& timeout_ms);
@@ -716,6 +726,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool in_factory_data_reset_ = false;
     std::function<bool(const std::string&)> uevent_regen_callback_;
     std::unique_ptr<SnapuserdClient> snapuserd_client_;
+    std::unique_ptr<LpMetadata> old_partition_metadata_;
 };
 
 }  // namespace snapshot
