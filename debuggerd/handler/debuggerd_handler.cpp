@@ -53,7 +53,6 @@
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
 #include <bionic/reserved_signals.h>
-#include <cutils/properties.h>
 
 #include <libdebuggerd/utility.h>
 

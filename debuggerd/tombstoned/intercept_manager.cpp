@@ -27,7 +27,6 @@
 #include <android-base/cmsg.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
-#include <cutils/sockets.h>
 
 #include "protocol.h"
 #include "util.h"

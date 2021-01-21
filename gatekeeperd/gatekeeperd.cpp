@@ -27,6 +27,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android/binder_ibinder.h>
 #include <android/binder_manager.h>
 #include <android/security/keystore/IKeystoreService.h>
 #include <binder/IPCThreadState.h>
@@ -301,8 +302,9 @@ class GateKeeperProxy : public BnGateKeeperService {
         if (gkResponse->response_code() == GKResponseCode::OK) {
             if (gkResponse->payload().size() != 0) {
                 // try to connect to IKeystoreAuthorization AIDL service first.
-                ::ndk::SpAIBinder authzBinder(
-                        AServiceManager_getService("android.security.authorization"));
+                AIBinder* authzAIBinder =
+                        AServiceManager_checkService("android.security.authorization");
+                ::ndk::SpAIBinder authzBinder(authzAIBinder);
                 auto authzService = IKeystoreAuthorization::fromBinder(authzBinder);
                 if (authzService) {
                     if (gkResponse->payload().size() != sizeof(hw_auth_token_t)) {
@@ -325,6 +327,7 @@ class GateKeeperProxy : public BnGateKeeperService {
                         LOG(ERROR) << "Failure in sending AuthToken to AuthorizationService.";
                         return GK_ERROR;
                     }
+                    AIBinder_decStrong(authzAIBinder);
                 }
                 sp<IServiceManager> sm = defaultServiceManager();
 
