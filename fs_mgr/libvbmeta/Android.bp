@@ -50,4 +50,7 @@ cc_test_host {
         "avbtool",
         "vbmake",
     ],
+    data: [
+        "data/*",
+    ],
 }
