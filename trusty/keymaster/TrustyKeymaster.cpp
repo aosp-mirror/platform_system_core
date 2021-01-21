@@ -37,6 +37,12 @@ int TrustyKeymaster::Initialize() {
     if (versionRsp.error != KM_ERROR_OK) {
         ALOGW("TA appears not to support GetVersion2, falling back (err = %d)", versionRsp.error);
 
+        err = trusty_keymaster_connect();
+        if (err) {
+            ALOGE("Failed to connect to trusty keymaster %d", err);
+            return err;
+        }
+
         GetVersionRequest versionReq;
         GetVersionResponse versionRsp;
         GetVersion(versionReq, &versionRsp);
