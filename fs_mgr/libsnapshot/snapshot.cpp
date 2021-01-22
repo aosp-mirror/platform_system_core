@@ -2130,10 +2130,6 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
 bool SnapshotManager::UnmapDmUserDevice(const std::string& snapshot_name) {
     auto& dm = DeviceMapper::Instance();
 
-    if (!EnsureSnapuserdConnected()) {
-        return false;
-    }
-
     auto dm_user_name = GetDmUserCowName(snapshot_name);
     if (dm.GetState(dm_user_name) == DmDeviceState::INVALID) {
         return true;
@@ -2144,6 +2140,9 @@ bool SnapshotManager::UnmapDmUserDevice(const std::string& snapshot_name) {
         return false;
     }
 
+    if (!EnsureSnapuserdConnected()) {
+        return false;
+    }
     if (!snapuserd_client_->WaitForDeviceDelete(dm_user_name)) {
         LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
         return false;
@@ -2585,8 +2584,9 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     // these devices.
     AutoDeviceList created_devices;
 
-    bool use_compression =
-            IsCompressionEnabled() && manifest.dynamic_partition_metadata().vabc_enabled();
+    bool use_compression = IsCompressionEnabled() &&
+                           manifest.dynamic_partition_metadata().vabc_enabled() &&
+                           !device_->IsRecovery();
 
     PartitionCowCreator cow_creator{
             .target_metadata = target_metadata.get(),
