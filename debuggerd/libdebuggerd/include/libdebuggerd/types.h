@@ -46,5 +46,6 @@ struct ProcessInfo {
   uintptr_t scudo_region_info = 0;
 
   bool has_fault_address = false;
-  uintptr_t fault_address = 0;
+  uintptr_t untagged_fault_address = 0;
+  uintptr_t maybe_tagged_fault_address = 0;
 };

@@ -40,6 +40,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <bionic/macros.h>
 #include <bionic/reserved_signals.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
@@ -299,7 +300,9 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
       *siginfo = crash_info->data.s.siginfo;
       if (signal_has_si_addr(siginfo)) {
         process_info->has_fault_address = true;
-        process_info->fault_address = reinterpret_cast<uintptr_t>(siginfo->si_addr);
+        process_info->maybe_tagged_fault_address = reinterpret_cast<uintptr_t>(siginfo->si_addr);
+        process_info->untagged_fault_address =
+            untag_address(reinterpret_cast<uintptr_t>(siginfo->si_addr));
       }
       regs->reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(),
                                                         &crash_info->data.s.ucontext));
