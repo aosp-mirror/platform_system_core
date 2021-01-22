@@ -255,17 +255,23 @@ void CowSnapuserdTest::CreateCowDevice() {
     ASSERT_TRUE(writer.Initialize(cow_system_->fd));
 
     size_t num_blocks = size_ / options.block_size;
-    size_t blk_src_copy = num_blocks;
-    size_t blk_end_copy = blk_src_copy + num_blocks;
-    size_t source_blk = 0;
+    size_t blk_end_copy = num_blocks * 2;
+    size_t source_blk = num_blocks - 1;
+    size_t blk_src_copy = blk_end_copy - 1;
 
-    while (source_blk < num_blocks) {
+    size_t x = num_blocks;
+    while (1) {
         ASSERT_TRUE(writer.AddCopy(source_blk, blk_src_copy));
-        source_blk += 1;
-        blk_src_copy += 1;
+        x -= 1;
+        if (x == 0) {
+            break;
+        }
+        source_blk -= 1;
+        blk_src_copy -= 1;
     }
 
-    ASSERT_EQ(blk_src_copy, blk_end_copy);
+    source_blk = num_blocks;
+    blk_src_copy = blk_end_copy;
 
     ASSERT_TRUE(writer.AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
 
@@ -280,11 +286,9 @@ void CowSnapuserdTest::CreateCowDevice() {
 
     // Flush operations
     ASSERT_TRUE(writer.Finalize());
-
     // Construct the buffer required for validation
     orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
     std::string zero_buffer(size_, 0);
-
     ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), size_, size_), true);
     memcpy((char*)orig_buffer_.get() + size_, random_buffer_1_.get(), size_);
     memcpy((char*)orig_buffer_.get() + (size_ * 2), (void*)zero_buffer.c_str(), size_);
