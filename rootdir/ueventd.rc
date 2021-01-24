@@ -77,3 +77,5 @@ subsystem dma_heap
 /sys/devices/virtual/usb_composite/*   enable      0664  root   system
 /sys/devices/system/cpu/cpu*   cpufreq/scaling_max_freq   0664  system system
 /sys/devices/system/cpu/cpu*   cpufreq/scaling_min_freq   0664  system system
+/sys/devices/virtual/misc/uhid/*/leds/* brightness   0664  system system
+/sys/devices/virtual/misc/uhid/*/leds/* multi_intensity   0664  system system
