@@ -82,6 +82,7 @@ class FirstStageMount {
     // The factory method to create either FirstStageMountVBootV1 or FirstStageMountVBootV2
     // based on device tree configurations.
     static std::unique_ptr<FirstStageMount> Create();
+    bool DoCreateDevices();    // Creates devices and logical partitions from storage devices
     bool DoFirstStageMount();  // Mounts fstab entries read from device tree.
     bool InitDevices();
 
@@ -244,14 +245,34 @@ std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
     }
 }
 
+bool FirstStageMount::DoCreateDevices() {
+    if (!InitDevices()) return false;
+
+    // Mount /metadata before creating logical partitions, since we need to
+    // know whether a snapshot merge is in progress.
+    auto metadata_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
+        return entry.mount_point == "/metadata";
+    });
+    if (metadata_partition != fstab_.end()) {
+        if (MountPartition(metadata_partition, true /* erase_same_mounts */)) {
+            // Copies DSU AVB keys from the ramdisk to /metadata.
+            // Must be done before the following TrySwitchSystemAsRoot().
+            // Otherwise, ramdisk will be inaccessible after switching root.
+            CopyDsuAvbKeys();
+        }
+    }
+
+    if (!CreateLogicalPartitions()) return false;
+
+    return true;
+}
+
 bool FirstStageMount::DoFirstStageMount() {
     if (!IsDmLinearEnabled() && fstab_.empty()) {
         // Nothing to mount.
         LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
         return true;
     }
-
-    if (!InitDevices()) return false;
 
     if (!MountPartitions()) return false;
 
@@ -505,22 +526,6 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
 }
 
 bool FirstStageMount::MountPartitions() {
-    // Mount /metadata before creating logical partitions, since we need to
-    // know whether a snapshot merge is in progress.
-    auto metadata_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
-        return entry.mount_point == "/metadata";
-    });
-    if (metadata_partition != fstab_.end()) {
-        if (MountPartition(metadata_partition, true /* erase_same_mounts */)) {
-            // Copies DSU AVB keys from the ramdisk to /metadata.
-            // Must be done before the following TrySwitchSystemAsRoot().
-            // Otherwise, ramdisk will be inaccessible after switching root.
-            CopyDsuAvbKeys();
-        }
-    }
-
-    if (!CreateLogicalPartitions()) return false;
-
     if (!TrySwitchSystemAsRoot()) return false;
 
     if (!SkipMountingPartitions(&fstab_)) return false;
@@ -829,8 +834,18 @@ bool FirstStageMountVBootV2::InitAvbHandle() {
 
 // Public functions
 // ----------------
+// Creates devices and logical partitions from storage devices
+bool DoCreateDevices() {
+    std::unique_ptr<FirstStageMount> handle = FirstStageMount::Create();
+    if (!handle) {
+        LOG(ERROR) << "Failed to create FirstStageMount";
+        return false;
+    }
+    return handle->DoCreateDevices();
+}
+
 // Mounts partitions specified by fstab in device tree.
-bool DoFirstStageMount() {
+bool DoFirstStageMount(bool create_devices) {
     // Skips first stage mount if we're in recovery mode.
     if (IsRecoveryMode()) {
         LOG(INFO) << "First stage mount skipped (recovery mode)";
@@ -842,6 +857,11 @@ bool DoFirstStageMount() {
         LOG(ERROR) << "Failed to create FirstStageMount";
         return false;
     }
+
+    if (create_devices) {
+        if (!handle->DoCreateDevices()) return false;
+    }
+
     return handle->DoFirstStageMount();
 }
 
