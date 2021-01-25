@@ -73,6 +73,7 @@ message DynamicPartitionGroup {
 
 message DynamicPartitionMetadata {
     repeated DynamicPartitionGroup groups = 1;
+    optional bool vabc_enabled = 3;
 }
 
 message DeltaArchiveManifest {
