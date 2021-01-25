@@ -16,7 +16,6 @@
 
 #include <errno.h>
 #include <getopt.h>
-#include <libavb_user/libavb_user.h>
 #include <stdio.h>
 #include <sys/mount.h>
 #include <sys/types.h>
@@ -40,6 +39,8 @@
 #include <fs_mgr_overlayfs.h>
 #include <fs_mgr_priv.h>
 #include <fstab/fstab.h>
+#include <libavb_user/libavb_user.h>
+#include <libgsi/libgsid.h>
 
 namespace {
 
@@ -52,7 +53,9 @@ namespace {
                  "\tpartition\tspecific partition(s) (empty does all)\n"
                  "\n"
                  "Remount specified partition(s) read-write, by name or mount point.\n"
-                 "-R notwithstanding, verity must be disabled on partition(s).";
+                 "-R notwithstanding, verity must be disabled on partition(s).\n"
+                 "-R within a DSU guest system reboots into the DSU instead of the host system,\n"
+                 "this command would enable DSU (one-shot) if not already enabled.";
 
     ::exit(exit_status);
 }
@@ -137,7 +140,8 @@ enum RemountStatus {
     REMOUNT_FAILED,
     MUST_REBOOT,
     BINDER_ERROR,
-    CHECKPOINTING
+    CHECKPOINTING,
+    GSID_ERROR,
 };
 
 static int do_remount(int argc, char* argv[]) {
@@ -338,6 +342,41 @@ static int do_remount(int argc, char* argv[]) {
             continue;
         }
         ++it;
+    }
+
+    // If (1) remount requires a reboot to take effect, (2) system is currently
+    // running a DSU guest and (3) DSU is disabled, then enable DSU so that the
+    // next reboot would not take us back to the host system but stay within
+    // the guest system.
+    if (reboot_later) {
+        if (auto gsid = android::gsi::GetGsiService()) {
+            auto dsu_running = false;
+            if (auto status = gsid->isGsiRunning(&dsu_running); !status.isOk()) {
+                LOG(ERROR) << "Failed to get DSU running state: " << status;
+                return BINDER_ERROR;
+            }
+            auto dsu_enabled = false;
+            if (auto status = gsid->isGsiEnabled(&dsu_enabled); !status.isOk()) {
+                LOG(ERROR) << "Failed to get DSU enabled state: " << status;
+                return BINDER_ERROR;
+            }
+            if (dsu_running && !dsu_enabled) {
+                std::string dsu_slot;
+                if (auto status = gsid->getActiveDsuSlot(&dsu_slot); !status.isOk()) {
+                    LOG(ERROR) << "Failed to get active DSU slot: " << status;
+                    return BINDER_ERROR;
+                }
+                LOG(INFO) << "DSU is running but disabled, enable DSU so that we stay within the "
+                             "DSU guest system after reboot";
+                int error = 0;
+                if (auto status = gsid->enableGsi(/* oneShot = */ true, dsu_slot, &error);
+                    !status.isOk() || error != android::gsi::IGsiService::INSTALL_OK) {
+                    LOG(ERROR) << "Failed to enable DSU: " << status << ", error code: " << error;
+                    return !status.isOk() ? BINDER_ERROR : GSID_ERROR;
+                }
+                LOG(INFO) << "Successfully enabled DSU (one-shot mode)";
+            }
+        }
     }
 
     if (partitions.empty() || just_disabled_verity) {
