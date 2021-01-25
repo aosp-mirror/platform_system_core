@@ -187,5 +187,13 @@ bool IsCompressionEnabled() {
     return android::base::GetBoolProperty("ro.virtual_ab.compression.enabled", false);
 }
 
+std::string GetOtherPartitionName(const std::string& name) {
+    auto suffix = android::fs_mgr::GetPartitionSlotSuffix(name);
+    CHECK(suffix == "_a" || suffix == "_b");
+
+    auto other_suffix = (suffix == "_a") ? "_b" : "_a";
+    return name.substr(0, name.size() - suffix.size()) + other_suffix;
+}
+
 }  // namespace snapshot
 }  // namespace android

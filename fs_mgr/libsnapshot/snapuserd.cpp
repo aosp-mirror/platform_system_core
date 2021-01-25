@@ -324,8 +324,7 @@ loff_t Snapuserd::GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer
                 reinterpret_cast<struct disk_exception*>((char*)unmerged_buffer + offset);
 
         // Unmerged op by the kernel
-        if (merged_de->old_chunk != 0) {
-            CHECK(merged_de->new_chunk != 0);
+        if (merged_de->old_chunk != 0 || merged_de->new_chunk != 0) {
             CHECK(merged_de->old_chunk == cow_de->old_chunk);
             CHECK(merged_de->new_chunk == cow_de->new_chunk);
 
@@ -333,11 +332,6 @@ loff_t Snapuserd::GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer
             *unmerged_exceptions += 1;
             continue;
         }
-
-        // Merge complete on this exception. However, we don't know how many
-        // merged in this cycle; hence break here.
-        CHECK(merged_de->new_chunk == 0);
-        CHECK(merged_de->old_chunk == 0);
 
         break;
     }
