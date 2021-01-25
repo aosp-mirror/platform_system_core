@@ -50,6 +50,8 @@ static constexpr uint32_t CHUNK_SHIFT = (__builtin_ffs(CHUNK_SIZE) - 1);
 static constexpr uint32_t BLOCK_SIZE = 4096;
 static constexpr uint32_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SIZE) - 1);
 
+#define DIV_ROUND_UP(n, d) (((n) + (d)-1) / (d))
+
 // This structure represents the kernel COW header.
 // All the below fields should be in Little Endian format.
 struct disk_header {

@@ -48,6 +48,7 @@ subsystem dma_heap
 /dev/pmsg0                0222   root       log
 /dev/dma_heap/system      0444   system     system
 /dev/dma_heap/system-uncached      0444   system     system
+/dev/dma_heap/system-secure        0444   system     system
 
 # kms driver for drm based gpu
 /dev/dri/*                0666   root       graphics
@@ -76,3 +77,5 @@ subsystem dma_heap
 /sys/devices/virtual/usb_composite/*   enable      0664  root   system
 /sys/devices/system/cpu/cpu*   cpufreq/scaling_max_freq   0664  system system
 /sys/devices/system/cpu/cpu*   cpufreq/scaling_min_freq   0664  system system
+/sys/devices/virtual/misc/uhid/*/leds/* brightness   0664  system system
+/sys/devices/virtual/misc/uhid/*/leds/* multi_intensity   0664  system system
