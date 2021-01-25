@@ -441,7 +441,7 @@ class SnapshotManager final : public ISnapshotManager {
     //
     // All sizes are specified in bytes, and the device, snapshot, COW partition and COW file sizes
     // must be a multiple of the sector size (512 bytes).
-    bool CreateSnapshot(LockedFile* lock, SnapshotStatus* status);
+    bool CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_creator, SnapshotStatus* status);
 
     // |name| should be the base partition name (e.g. "system_a"). Create the
     // backing COW image using the size previously passed to CreateSnapshot().
