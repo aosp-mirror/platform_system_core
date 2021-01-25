@@ -151,7 +151,9 @@ static void dump_signal_info(log_t* log, const ThreadInfo& thread_info,
                              const ProcessInfo& process_info, unwindstack::Memory* process_memory) {
   char addr_desc[64];  // ", fault addr 0x1234"
   if (process_info.has_fault_address) {
-    size_t addr = process_info.fault_address;
+    // SIGILL faults will never have tagged addresses, so okay to
+    // indiscriminately use the tagged address here.
+    size_t addr = process_info.maybe_tagged_fault_address;
     if (thread_info.siginfo->si_signo == SIGILL) {
       uint32_t instruction = {};
       process_memory->Read(addr, &instruction, sizeof(instruction));
@@ -433,9 +435,8 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
                          thread_info.registers.get());
     if (maps != nullptr) {
       uint64_t addr = 0;
-      siginfo_t* si = thread_info.siginfo;
-      if (signal_has_si_addr(si)) {
-        addr = reinterpret_cast<uint64_t>(si->si_addr);
+      if (process_info.has_fault_address) {
+        addr = process_info.untagged_fault_address;
       }
       dump_all_maps(log, unwinder, addr);
     }
