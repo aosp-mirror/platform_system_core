@@ -286,7 +286,11 @@ int FirstStageMain(int argc, char** argv) {
         }
     }
 
+
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
+        if (!DoCreateDevices()) {
+            LOG(ERROR) << "Failed to create device nodes early";
+        }
         StartConsole(cmdline);
     }
 
@@ -327,7 +331,7 @@ int FirstStageMain(int argc, char** argv) {
         }
     }
 
-    if (!DoFirstStageMount()) {
+    if (!DoFirstStageMount(want_console != FirstStageConsoleParam::CONSOLE_ON_FAILURE)) {
         LOG(FATAL) << "Failed to mount required partitions early ...";
     }
 
