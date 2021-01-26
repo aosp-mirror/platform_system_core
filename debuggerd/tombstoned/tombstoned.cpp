@@ -48,8 +48,6 @@
 using android::base::GetIntProperty;
 using android::base::SendFileDescriptors;
 using android::base::StringPrintf;
-
-using android::base::borrowed_fd;
 using android::base::unique_fd;
 
 static InterceptManager* intercept_manager;
@@ -100,10 +98,6 @@ class CrashQueue {
     return (crash->crash_type == kDebuggerdJavaBacktrace) ? for_anrs() : for_tombstones();
   }
 
-  static CrashQueue* for_crash(const std::unique_ptr<Crash>& crash) {
-    return for_crash(crash.get());
-  }
-
   static CrashQueue* for_tombstones() {
     static CrashQueue queue("/data/tombstones", "tombstone_" /* file_name_prefix */,
                             GetIntProperty("tombstoned.max_tombstone_count", 32),
@@ -143,21 +137,20 @@ class CrashQueue {
     return file_name;
   }
 
-  // Consumes crash if it returns true, otherwise leaves it untouched.
-  bool maybe_enqueue_crash(std::unique_ptr<Crash>&& crash) {
+  bool maybe_enqueue_crash(Crash* crash) {
     if (num_concurrent_dumps_ == max_concurrent_dumps_) {
-      queued_requests_.emplace_back(std::move(crash));
+      queued_requests_.push_back(crash);
       return true;
     }
 
     return false;
   }
 
-  void maybe_dequeue_crashes(void (*handler)(std::unique_ptr<Crash> crash)) {
+  void maybe_dequeue_crashes(void (*handler)(Crash* crash)) {
     while (!queued_requests_.empty() && num_concurrent_dumps_ < max_concurrent_dumps_) {
-      std::unique_ptr<Crash> next_crash = std::move(queued_requests_.front());
+      Crash* next_crash = queued_requests_.front();
       queued_requests_.pop_front();
-      handler(std::move(next_crash));
+      handler(next_crash);
     }
   }
 
@@ -203,7 +196,7 @@ class CrashQueue {
   const size_t max_concurrent_dumps_;
   size_t num_concurrent_dumps_;
 
-  std::deque<std::unique_ptr<Crash>> queued_requests_;
+  std::deque<Crash*> queued_requests_;
 
   DISALLOW_COPY_AND_ASSIGN(CrashQueue);
 };
@@ -216,7 +209,7 @@ static void crash_accept_cb(evconnlistener* listener, evutil_socket_t sockfd, so
 static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg);
 static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg);
 
-static void perform_request(std::unique_ptr<Crash> crash) {
+static void perform_request(Crash* crash) {
   unique_fd output_fd;
   bool intercepted =
       intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd);
@@ -239,24 +232,25 @@ static void perform_request(std::unique_ptr<Crash> crash) {
 
   if (rc == -1) {
     PLOG(WARNING) << "failed to send response to CrashRequest";
-    return;
+    goto fail;
   } else if (rc != sizeof(response)) {
     PLOG(WARNING) << "crash socket write returned short";
-    return;
+    goto fail;
+  } else {
+    // TODO: Make this configurable by the interceptor?
+    struct timeval timeout = { 10, 0 };
+
+    event_base* base = event_get_base(crash->crash_event);
+    event_assign(crash->crash_event, base, crash->crash_socket_fd, EV_TIMEOUT | EV_READ,
+                 crash_completed_cb, crash);
+    event_add(crash->crash_event, &timeout);
   }
 
-  // TODO: Make this configurable by the interceptor?
-  struct timeval timeout = {10, 0};
-
-  event_base* base = event_get_base(crash->crash_event);
-
-  event_assign(crash->crash_event, base, crash->crash_socket_fd, EV_TIMEOUT | EV_READ,
-               crash_completed_cb, crash.get());
-  event_add(crash->crash_event, &timeout);
   CrashQueue::for_crash(crash)->on_crash_started();
+  return;
 
-  // The crash is now owned by the event loop.
-  crash.release();
+fail:
+  delete crash;
 }
 
 static void crash_accept_cb(evconnlistener* listener, evutil_socket_t sockfd, sockaddr*, int,
@@ -274,37 +268,39 @@ static void crash_accept_cb(evconnlistener* listener, evutil_socket_t sockfd, so
 }
 
 static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
-  std::unique_ptr<Crash> crash(static_cast<Crash*>(arg));
+  ssize_t rc;
+  Crash* crash = static_cast<Crash*>(arg);
+
   TombstonedCrashPacket request = {};
 
   if ((ev & EV_TIMEOUT) != 0) {
     LOG(WARNING) << "crash request timed out";
-    return;
+    goto fail;
   } else if ((ev & EV_READ) == 0) {
     LOG(WARNING) << "tombstoned received unexpected event from crash socket";
-    return;
+    goto fail;
   }
 
-  ssize_t rc = TEMP_FAILURE_RETRY(read(sockfd, &request, sizeof(request)));
+  rc = TEMP_FAILURE_RETRY(read(sockfd, &request, sizeof(request)));
   if (rc == -1) {
     PLOG(WARNING) << "failed to read from crash socket";
-    return;
+    goto fail;
   } else if (rc != sizeof(request)) {
     LOG(WARNING) << "crash socket received short read of length " << rc << " (expected "
                  << sizeof(request) << ")";
-    return;
+    goto fail;
   }
 
   if (request.packet_type != CrashPacketType::kDumpRequest) {
     LOG(WARNING) << "unexpected crash packet type, expected kDumpRequest, received  "
                  << StringPrintf("%#2hhX", request.packet_type);
-    return;
+    goto fail;
   }
 
   crash->crash_type = request.packet.dump_request.dump_type;
   if (crash->crash_type < 0 || crash->crash_type > kDebuggerdAnyIntercept) {
     LOG(WARNING) << "unexpected crash dump type: " << crash->crash_type;
-    return;
+    goto fail;
   }
 
   if (crash->crash_type != kDebuggerdJavaBacktrace) {
@@ -318,39 +314,51 @@ static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
     int ret = getsockopt(sockfd, SOL_SOCKET, SO_PEERCRED, &cr, &len);
     if (ret != 0) {
       PLOG(ERROR) << "Failed to getsockopt(..SO_PEERCRED)";
-      return;
+      goto fail;
     }
 
     crash->crash_pid = cr.pid;
   }
 
-  pid_t crash_pid = crash->crash_pid;
-  LOG(INFO) << "received crash request for pid " << crash_pid;
+  LOG(INFO) << "received crash request for pid " << crash->crash_pid;
 
-  if (CrashQueue::for_crash(crash)->maybe_enqueue_crash(std::move(crash))) {
-    LOG(INFO) << "enqueueing crash request for pid " << crash_pid;
+  if (CrashQueue::for_crash(crash)->maybe_enqueue_crash(crash)) {
+    LOG(INFO) << "enqueueing crash request for pid " << crash->crash_pid;
   } else {
-    perform_request(std::move(crash));
+    perform_request(crash);
   }
+
+  return;
+
+fail:
+  delete crash;
 }
 
-static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
+static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
+  ssize_t rc;
+  Crash* crash = static_cast<Crash*>(arg);
   TombstonedCrashPacket request = {};
 
-  ssize_t rc = TEMP_FAILURE_RETRY(read(sockfd.get(), &request, sizeof(request)));
+  CrashQueue::for_crash(crash)->on_crash_completed();
+
+  if ((ev & EV_READ) == 0) {
+    goto fail;
+  }
+
+  rc = TEMP_FAILURE_RETRY(read(sockfd, &request, sizeof(request)));
   if (rc == -1) {
     PLOG(WARNING) << "failed to read from crash socket";
-    return;
+    goto fail;
   } else if (rc != sizeof(request)) {
     LOG(WARNING) << "crash socket received short read of length " << rc << " (expected "
                  << sizeof(request) << ")";
-    return;
+    goto fail;
   }
 
   if (request.packet_type != CrashPacketType::kCompletedDump) {
     LOG(WARNING) << "unexpected crash packet type, expected kCompletedDump, received "
                  << uint32_t(request.packet_type);
-    return;
+    goto fail;
   }
 
   if (crash->crash_tombstone_fd != -1) {
@@ -361,7 +369,7 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
     int rc = unlink(tombstone_path.c_str());
     if (rc != 0 && errno != ENOENT) {
       PLOG(ERROR) << "failed to unlink tombstone at " << tombstone_path;
-      return;
+      goto fail;
     }
 
     rc = linkat(AT_FDCWD, fd_path.c_str(), AT_FDCWD, tombstone_path.c_str(), AT_SYMLINK_FOLLOW);
@@ -386,17 +394,10 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
       }
     }
   }
-}
 
-static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
-  std::unique_ptr<Crash> crash(static_cast<Crash*>(arg));
+fail:
   CrashQueue* queue = CrashQueue::for_crash(crash);
-
-  CrashQueue::for_crash(crash)->on_crash_completed();
-
-  if ((ev & EV_READ) == EV_READ) {
-    crash_completed(sockfd, std::move(crash));
-  }
+  delete crash;
 
   // If there's something queued up, let them proceed.
   queue->maybe_dequeue_crashes(perform_request);
