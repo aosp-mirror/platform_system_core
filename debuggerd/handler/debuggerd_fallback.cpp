@@ -92,15 +92,15 @@ static void debuggerd_fallback_trace(int output_fd, ucontext_t* ucontext) {
   __linker_disable_fallback_allocator();
 }
 
-static void debuggerd_fallback_tombstone(int output_fd, int proto_fd, ucontext_t* ucontext,
-                                         siginfo_t* siginfo, void* abort_message) {
+static void debuggerd_fallback_tombstone(int output_fd, ucontext_t* ucontext, siginfo_t* siginfo,
+                                         void* abort_message) {
   if (!__linker_enable_fallback_allocator()) {
     async_safe_format_log(ANDROID_LOG_ERROR, "libc", "fallback allocator already in use");
     return;
   }
 
-  engrave_tombstone_ucontext(output_fd, proto_fd, reinterpret_cast<uintptr_t>(abort_message),
-                             siginfo, ucontext);
+  engrave_tombstone_ucontext(output_fd, reinterpret_cast<uintptr_t>(abort_message), siginfo,
+                             ucontext);
   __linker_disable_fallback_allocator();
 }
 
@@ -232,8 +232,7 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
 
   // Fetch output fd from tombstoned.
   unique_fd tombstone_socket, output_fd;
-  if (!tombstoned_connect(getpid(), &tombstone_socket, &output_fd, nullptr,
-                          kDebuggerdNativeBacktrace)) {
+  if (!tombstoned_connect(getpid(), &tombstone_socket, &output_fd, kDebuggerdNativeBacktrace)) {
     async_safe_format_log(ANDROID_LOG_ERROR, "libc",
                           "missing crash_dump_fallback() in selinux policy?");
     goto exit;
@@ -326,10 +325,10 @@ static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_mes
     _exit(1);
   }
 
-  unique_fd tombstone_socket, output_fd, proto_fd;
-  bool tombstoned_connected = tombstoned_connect(getpid(), &tombstone_socket, &output_fd, &proto_fd,
-                                                 kDebuggerdTombstoneProto);
-  debuggerd_fallback_tombstone(output_fd.get(), proto_fd.get(), ucontext, info, abort_message);
+  unique_fd tombstone_socket, output_fd;
+  bool tombstoned_connected =
+      tombstoned_connect(getpid(), &tombstone_socket, &output_fd, kDebuggerdTombstone);
+  debuggerd_fallback_tombstone(output_fd.get(), ucontext, info, abort_message);
   if (tombstoned_connected) {
     tombstoned_notify_completion(tombstone_socket.get());
   }
