@@ -21,6 +21,7 @@
 #include <trusty/fuzz/counters.h>
 
 #include <android-base/logging.h>
+#include <log/log.h>
 #include <trusty/coverage/coverage.h>
 #include <trusty/coverage/tipc.h>
 
@@ -32,7 +33,8 @@ using android::base::Result;
  * We don't know how many counters the coverage record will contain. So, eyeball
  * the size of this section.
  */
-__attribute__((section("__libfuzzer_extra_counters"))) volatile uint8_t counters[PAGE_SIZE];
+static const size_t kMaxNumCounters = 0x4000;
+__attribute__((section("__libfuzzer_extra_counters"))) volatile uint8_t counters[kMaxNumCounters];
 
 namespace android {
 namespace trusty {
@@ -62,8 +64,16 @@ void ExtraCounters::Flush() {
     volatile uint8_t* end = NULL;
 
     record_->GetRawCounts(&begin, &end);
+    if (!begin || !end) {
+        ALOGE("Could not get raw counts from coverage record\n");
+        return;
+    }
 
     size_t num_counters = end - begin;
+    if (num_counters > kMaxNumCounters) {
+        ALOGE("Too many counters (%zu) to fit in the extra counters section!\n", num_counters);
+        num_counters = kMaxNumCounters;
+    }
     for (size_t i = 0; i < num_counters; i++) {
         *(counters + i) = *(begin + i);
     }

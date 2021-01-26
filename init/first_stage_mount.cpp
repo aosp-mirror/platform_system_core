@@ -44,6 +44,7 @@
 
 #include "block_dev_initializer.h"
 #include "devices.h"
+#include "snapuserd_transition.h"
 #include "switch_root.h"
 #include "uevent.h"
 #include "uevent_listener.h"
@@ -81,12 +82,14 @@ class FirstStageMount {
     // The factory method to create either FirstStageMountVBootV1 or FirstStageMountVBootV2
     // based on device tree configurations.
     static std::unique_ptr<FirstStageMount> Create();
+    bool DoCreateDevices();    // Creates devices and logical partitions from storage devices
     bool DoFirstStageMount();  // Mounts fstab entries read from device tree.
     bool InitDevices();
 
   protected:
     bool InitRequiredDevices(std::set<std::string> devices);
     bool CreateLogicalPartitions();
+    bool CreateSnapshotPartitions(android::snapshot::SnapshotManager* sm);
     bool MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
                         Fstab::iterator* end = nullptr);
 
@@ -109,6 +112,7 @@ class FirstStageMount {
 
     bool need_dm_verity_;
     bool dsu_not_on_userdata_ = false;
+    bool use_snapuserd_ = false;
 
     Fstab fstab_;
     // The super path is only set after InitDevices, and is invalid before.
@@ -241,14 +245,34 @@ std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
     }
 }
 
+bool FirstStageMount::DoCreateDevices() {
+    if (!InitDevices()) return false;
+
+    // Mount /metadata before creating logical partitions, since we need to
+    // know whether a snapshot merge is in progress.
+    auto metadata_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
+        return entry.mount_point == "/metadata";
+    });
+    if (metadata_partition != fstab_.end()) {
+        if (MountPartition(metadata_partition, true /* erase_same_mounts */)) {
+            // Copies DSU AVB keys from the ramdisk to /metadata.
+            // Must be done before the following TrySwitchSystemAsRoot().
+            // Otherwise, ramdisk will be inaccessible after switching root.
+            CopyDsuAvbKeys();
+        }
+    }
+
+    if (!CreateLogicalPartitions()) return false;
+
+    return true;
+}
+
 bool FirstStageMount::DoFirstStageMount() {
     if (!IsDmLinearEnabled() && fstab_.empty()) {
         // Nothing to mount.
         LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
         return true;
     }
-
-    if (!InitDevices()) return false;
 
     if (!MountPartitions()) return false;
 
@@ -338,21 +362,7 @@ bool FirstStageMount::CreateLogicalPartitions() {
             return false;
         }
         if (sm->NeedSnapshotsInFirstStageMount()) {
-            // When COW images are present for snapshots, they are stored on
-            // the data partition.
-            if (!InitRequiredDevices({"userdata"})) {
-                return false;
-            }
-            sm->SetUeventRegenCallback([this](const std::string& device) -> bool {
-                if (android::base::StartsWith(device, "/dev/block/dm-")) {
-                    return block_dev_init_.InitDmDevice(device);
-                }
-                if (android::base::StartsWith(device, "/dev/dm-user/")) {
-                    return block_dev_init_.InitDmUser(android::base::Basename(device));
-                }
-                return block_dev_init_.InitDevices({device});
-            });
-            return sm->CreateLogicalAndSnapshotPartitions(super_path_);
+            return CreateSnapshotPartitions(sm.get());
         }
     }
 
@@ -365,6 +375,37 @@ bool FirstStageMount::CreateLogicalPartitions() {
         return false;
     }
     return android::fs_mgr::CreateLogicalPartitions(*metadata.get(), super_path_);
+}
+
+bool FirstStageMount::CreateSnapshotPartitions(SnapshotManager* sm) {
+    // When COW images are present for snapshots, they are stored on
+    // the data partition.
+    if (!InitRequiredDevices({"userdata"})) {
+        return false;
+    }
+
+    use_snapuserd_ = sm->IsSnapuserdRequired();
+    if (use_snapuserd_) {
+        LaunchFirstStageSnapuserd();
+    }
+
+    sm->SetUeventRegenCallback([this](const std::string& device) -> bool {
+        if (android::base::StartsWith(device, "/dev/block/dm-")) {
+            return block_dev_init_.InitDmDevice(device);
+        }
+        if (android::base::StartsWith(device, "/dev/dm-user/")) {
+            return block_dev_init_.InitDmUser(android::base::Basename(device));
+        }
+        return block_dev_init_.InitDevices({device});
+    });
+    if (!sm->CreateLogicalAndSnapshotPartitions(super_path_)) {
+        return false;
+    }
+
+    if (use_snapuserd_) {
+        CleanupSnapuserdSocket();
+    }
+    return true;
 }
 
 bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
@@ -466,6 +507,10 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
 
     if (system_partition == fstab_.end()) return true;
 
+    if (use_snapuserd_) {
+        SaveRamdiskPathToSnapuserd();
+    }
+
     if (MountPartition(system_partition, false /* erase_same_mounts */)) {
         if (dsu_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {
             LOG(ERROR) << "check_most_at_once forbidden on external media";
@@ -481,22 +526,6 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
 }
 
 bool FirstStageMount::MountPartitions() {
-    // Mount /metadata before creating logical partitions, since we need to
-    // know whether a snapshot merge is in progress.
-    auto metadata_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
-        return entry.mount_point == "/metadata";
-    });
-    if (metadata_partition != fstab_.end()) {
-        if (MountPartition(metadata_partition, true /* erase_same_mounts */)) {
-            // Copies DSU AVB keys from the ramdisk to /metadata.
-            // Must be done before the following TrySwitchSystemAsRoot().
-            // Otherwise, ramdisk will be inaccessible after switching root.
-            CopyDsuAvbKeys();
-        }
-    }
-
-    if (!CreateLogicalPartitions()) return false;
-
     if (!TrySwitchSystemAsRoot()) return false;
 
     if (!SkipMountingPartitions(&fstab_)) return false;
@@ -805,8 +834,18 @@ bool FirstStageMountVBootV2::InitAvbHandle() {
 
 // Public functions
 // ----------------
+// Creates devices and logical partitions from storage devices
+bool DoCreateDevices() {
+    std::unique_ptr<FirstStageMount> handle = FirstStageMount::Create();
+    if (!handle) {
+        LOG(ERROR) << "Failed to create FirstStageMount";
+        return false;
+    }
+    return handle->DoCreateDevices();
+}
+
 // Mounts partitions specified by fstab in device tree.
-bool DoFirstStageMount() {
+bool DoFirstStageMount(bool create_devices) {
     // Skips first stage mount if we're in recovery mode.
     if (IsRecoveryMode()) {
         LOG(INFO) << "First stage mount skipped (recovery mode)";
@@ -818,6 +857,11 @@ bool DoFirstStageMount() {
         LOG(ERROR) << "Failed to create FirstStageMount";
         return false;
     }
+
+    if (create_devices) {
+        if (!handle->DoCreateDevices()) return false;
+    }
+
     return handle->DoFirstStageMount();
 }
 
