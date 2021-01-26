@@ -50,4 +50,11 @@ cc_test_host {
         "avbtool",
         "vbmake",
     ],
+    data: [
+        "data/*",
+    ],
+    // Not unit tests due to several binary and lib dependencies currently hard to replicate in continuous execution
+    test_options: {
+        unit_test: false,
+    },
 }

@@ -42,6 +42,7 @@
 #include "first_stage_mount.h"
 #include "reboot_utils.h"
 #include "second_stage_resources.h"
+#include "snapuserd_transition.h"
 #include "switch_root.h"
 #include "util.h"
 
@@ -89,6 +90,12 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
                         close(fd);
                     }
                 }
+            }
+        } else if (de->d_type == DT_REG) {
+            // Do not free snapuserd if we will need the ramdisk copy during the
+            // selinux transition.
+            if (de->d_name == "snapuserd"s && IsFirstStageSnapuserdRunning()) {
+                continue;
             }
         }
         unlinkat(dfd, de->d_name, is_dir ? AT_REMOVEDIR : 0);
@@ -279,7 +286,11 @@ int FirstStageMain(int argc, char** argv) {
         }
     }
 
+
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
+        if (!DoCreateDevices()) {
+            LOG(ERROR) << "Failed to create device nodes early";
+        }
         StartConsole(cmdline);
     }
 
@@ -320,7 +331,7 @@ int FirstStageMain(int argc, char** argv) {
         }
     }
 
-    if (!DoFirstStageMount()) {
+    if (!DoFirstStageMount(want_console != FirstStageConsoleParam::CONSOLE_ON_FAILURE)) {
         LOG(FATAL) << "Failed to mount required partitions early ...";
     }
 

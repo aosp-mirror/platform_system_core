@@ -178,6 +178,8 @@ runs the service.
   will reboot into _fatal reboot target_.
   The default value of _fatal crash window mins_ is 4, and default value
   of _fatal reboot target_ is 'bootloader'.
+  For tests, the fatal reboot can be skipped by setting property
+  `init.svc_debug.no_fatal.<service-name>` to `true` for specified critical service.
 
 `disabled`
 > This service will not automatically start with its class.

@@ -16,10 +16,12 @@
 
 #define LOG_TAG "coverage"
 
+#include <BufferAllocator/BufferAllocator.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 #include <assert.h>
+#include <log/log.h>
 #include <stdio.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
@@ -37,6 +39,8 @@ namespace coverage {
 using android::base::ErrnoError;
 using android::base::Error;
 using std::string;
+using std::to_string;
+using std::unique_ptr;
 
 static inline uintptr_t RoundPageUp(uintptr_t val) {
     return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
@@ -46,12 +50,29 @@ CoverageRecord::CoverageRecord(string tipc_dev, struct uuid* uuid)
     : tipc_dev_(std::move(tipc_dev)),
       coverage_srv_fd_(-1),
       uuid_(*uuid),
+      sancov_filename_(),
+      record_len_(0),
+      shm_(NULL),
+      shm_len_(0) {}
+
+CoverageRecord::CoverageRecord(string tipc_dev, struct uuid* uuid, string module_name)
+    : tipc_dev_(std::move(tipc_dev)),
+      coverage_srv_fd_(-1),
+      uuid_(*uuid),
+      sancov_filename_(module_name + "." + to_string(getpid()) + ".sancov"),
       record_len_(0),
       shm_(NULL),
       shm_len_(0) {}
 
 CoverageRecord::~CoverageRecord() {
     if (shm_) {
+        if (sancov_filename_) {
+            auto res = SaveSancovFile(*sancov_filename_);
+            if (!res.ok()) {
+                ALOGE("Could not write sancov file for module: %s\n", sancov_filename_->c_str());
+            }
+        }
+
         munmap((void*)shm_, shm_len_);
     }
 }
@@ -114,24 +135,23 @@ Result<void> CoverageRecord::Open() {
     record_len_ = resp.open_args.record_len;
     shm_len_ = RoundPageUp(record_len_);
 
-    fd = memfd_create("trusty-coverage", 0);
+    BufferAllocator allocator;
+
+    fd = allocator.Alloc("system", shm_len_);
     if (fd < 0) {
-        return ErrnoError() << "failed to create memfd: ";
+        return ErrnoError() << "failed to create dmabuf of size " << shm_len_
+                            << " err code: " << fd;
     }
-    unique_fd memfd(fd);
+    unique_fd dma_buf(fd);
 
-    if (ftruncate(memfd, shm_len_) < 0) {
-        return ErrnoError() << "failed to resize memfd: ";
-    }
-
-    void* shm = mmap(0, shm_len_, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0);
+    void* shm = mmap(0, shm_len_, PROT_READ | PROT_WRITE, MAP_SHARED, dma_buf, 0);
     if (shm == MAP_FAILED) {
         return ErrnoError() << "failed to map memfd: ";
     }
 
     req.hdr.cmd = COVERAGE_CLIENT_CMD_SHARE_RECORD;
     req.share_record_args.shm_len = shm_len_;
-    ret = Rpc(&req, memfd, &resp);
+    ret = Rpc(&req, dma_buf, &resp);
     if (!ret.ok()) {
         return Error() << "failed to send shared memory: ";
     }

@@ -16,7 +16,6 @@
 
 #include "util.h"
 
-#include <sys/socket.h>
 #include <time.h>
 
 #include <string>
@@ -25,7 +24,6 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <cutils/sockets.h>
 #include "protocol.h"
 
 std::string get_process_name(pid_t pid) {

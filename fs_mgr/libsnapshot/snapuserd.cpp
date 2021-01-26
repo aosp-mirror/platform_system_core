@@ -96,7 +96,7 @@ void Snapuserd::ConstructKernelCowHeader() {
 // it will be de-compressed.
 bool Snapuserd::ProcessReplaceOp(const CowOperation* cow_op) {
     if (!reader_->ReadData(*cow_op, &bufsink_)) {
-        SNAP_LOG(ERROR) << "ReadData failed for chunk: " << cow_op->new_block;
+        SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block;
         return false;
     }
 
@@ -113,7 +113,8 @@ bool Snapuserd::ProcessCopyOp(const CowOperation* cow_op) {
     // if the successive blocks are contiguous.
     if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SIZE,
                                           cow_op->source * BLOCK_SIZE)) {
-        SNAP_LOG(ERROR) << "Copy-op failed. Read from backing store at: " << cow_op->source;
+        SNAP_PLOG(ERROR) << "Copy-op failed. Read from backing store: " << backing_store_device_
+                         << "at block :" << cow_op->source;
         return false;
     }
 
@@ -129,88 +130,126 @@ bool Snapuserd::ProcessZeroOp() {
     return true;
 }
 
-/*
- * Read the data of size bytes from a given chunk.
- *
- * Kernel can potentially merge the blocks if the
- * successive chunks are contiguous. For chunk size of 8,
- * there can be 256 disk exceptions; and if
- * all 256 disk exceptions are contiguous, kernel can merge
- * them into a single IO.
- *
- * Since each chunk in the disk exception
- * mapping represents a 4k block, kernel can potentially
- * issue 256*4k = 1M IO in one shot.
- *
- * Even though kernel assumes that the blocks are
- * contiguous, we need to split the 1M IO into 4k chunks
- * as each operation represents 4k and it can either be:
- *
- * 1: Replace operation
- * 2: Copy operation
- * 3: Zero operation
- *
- */
-bool Snapuserd::ReadData(chunk_t chunk, size_t size) {
-    size_t read_size = size;
-    bool ret = true;
-    chunk_t chunk_key = chunk;
+bool Snapuserd::ProcessCowOp(const CowOperation* cow_op) {
+    CHECK(cow_op != nullptr);
 
-    if (!((read_size & (BLOCK_SIZE - 1)) == 0)) {
-        SNAP_LOG(ERROR) << "ReadData - unaligned read_size: " << read_size;
-        return false;
+    switch (cow_op->type) {
+        case kCowReplaceOp: {
+            return ProcessReplaceOp(cow_op);
+        }
+
+        case kCowZeroOp: {
+            return ProcessZeroOp();
+        }
+
+        case kCowCopyOp: {
+            return ProcessCopyOp(cow_op);
+        }
+
+        default: {
+            SNAP_LOG(ERROR) << "Unknown operation-type found: " << cow_op->type;
+        }
+    }
+    return false;
+}
+
+int Snapuserd::ReadUnalignedSector(sector_t sector, size_t size,
+                                   std::map<sector_t, const CowOperation*>::iterator& it) {
+    size_t skip_sector_size = 0;
+
+    SNAP_LOG(DEBUG) << "ReadUnalignedSector: sector " << sector << " size: " << size
+                    << " Aligned sector: " << it->second;
+
+    if (!ProcessCowOp(it->second)) {
+        SNAP_LOG(ERROR) << "ReadUnalignedSector: " << sector << " failed of size: " << size;
+        return -1;
     }
 
-    while (read_size > 0) {
-        const CowOperation* cow_op = chunk_map_[chunk_key];
-        CHECK(cow_op != nullptr);
+    int num_sectors_skip = sector - it->first;
 
-        switch (cow_op->type) {
-            case kCowReplaceOp: {
-                ret = ProcessReplaceOp(cow_op);
-                break;
-            }
+    if (num_sectors_skip > 0) {
+        skip_sector_size = num_sectors_skip << SECTOR_SHIFT;
+        char* buffer = reinterpret_cast<char*>(bufsink_.GetBufPtr());
+        struct dm_user_message* msg = (struct dm_user_message*)(&(buffer[0]));
 
-            case kCowZeroOp: {
-                ret = ProcessZeroOp();
-                break;
-            }
+        memmove(msg->payload.buf, (char*)msg->payload.buf + skip_sector_size,
+                (BLOCK_SIZE - skip_sector_size));
+    }
 
-            case kCowCopyOp: {
-                ret = ProcessCopyOp(cow_op);
-                break;
-            }
+    bufsink_.ResetBufferOffset();
+    return std::min(size, (BLOCK_SIZE - skip_sector_size));
+}
 
-            default: {
-                SNAP_LOG(ERROR) << "Unknown operation-type found: " << cow_op->type;
-                ret = false;
-                break;
-            }
+/*
+ * Read the data for a given COW Operation.
+ *
+ * Kernel can issue IO at a sector granularity.
+ * Hence, an IO may end up with reading partial
+ * data from a COW operation or we may also
+ * end up with interspersed request between
+ * two COW operations.
+ *
+ */
+int Snapuserd::ReadData(sector_t sector, size_t size) {
+    /*
+     * chunk_map stores COW operation at 4k granularity.
+     * If the requested IO with the sector falls on the 4k
+     * boundary, then we can read the COW op directly without
+     * any issue.
+     *
+     * However, if the requested sector is not 4K aligned,
+     * then we will have the find the nearest COW operation
+     * and chop the 4K block to fetch the requested sector.
+     */
+    std::map<sector_t, const CowOperation*>::iterator it = chunk_map_.find(sector);
+    if (it == chunk_map_.end()) {
+        it = chunk_map_.lower_bound(sector);
+        if (it != chunk_map_.begin()) {
+            --it;
         }
 
-        if (!ret) {
-            SNAP_LOG(ERROR) << "ReadData failed for operation: " << cow_op->type;
-            return false;
-        }
+        /*
+         * If the IO is spanned between two COW operations,
+         * split the IO into two parts:
+         *
+         * 1: Read the first part from the single COW op
+         * 2: Read the second part from the next COW op.
+         *
+         * Ex: Let's say we have a 1024 Bytes IO request.
+         *
+         * 0       COW OP-1  4096     COW OP-2  8192
+         * |******************|*******************|
+         *              |*****|*****|
+         *           3584           4608
+         *              <- 1024B - >
+         *
+         * We have two COW operations which are 4k blocks.
+         * The IO is requested for 1024 Bytes which are spanned
+         * between two COW operations. We will split this IO
+         * into two parts:
+         *
+         * 1: IO of size 512B from offset 3584 bytes (COW OP-1)
+         * 2: IO of size 512B from offset 4096 bytes (COW OP-2)
+         */
+        return ReadUnalignedSector(sector, size, it);
+    }
 
+    int num_ops = DIV_ROUND_UP(size, BLOCK_SIZE);
+    while (num_ops) {
+        if (!ProcessCowOp(it->second)) {
+            return -1;
+        }
+        num_ops -= 1;
+        it++;
         // Update the buffer offset
         bufsink_.UpdateBufferOffset(BLOCK_SIZE);
 
-        read_size -= BLOCK_SIZE;
-
-        // Start iterating the chunk incrementally; Since while
-        // constructing the metadata, we know that the chunk IDs
-        // are contiguous
-        chunk_key += 1;
-
-        if (cow_op->type == kCowCopyOp) {
-            CHECK(read_size == 0);
-        }
+        SNAP_LOG(DEBUG) << "ReadData at sector: " << sector << " size: " << size;
     }
 
     // Reset the buffer offset
     bufsink_.ResetBufferOffset();
-    return ret;
+    return size;
 }
 
 /*
@@ -261,9 +300,7 @@ bool Snapuserd::ReadDiskExceptions(chunk_t chunk, size_t read_size) {
     if (divresult.quot < vec_.size()) {
         size = exceptions_per_area_ * sizeof(struct disk_exception);
 
-        if (read_size > size) {
-            return false;
-        }
+        CHECK(read_size == size);
 
         void* buffer = bufsink_.GetPayloadBuffer(size);
         CHECK(buffer != nullptr);
@@ -288,8 +325,7 @@ loff_t Snapuserd::GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer
                 reinterpret_cast<struct disk_exception*>((char*)unmerged_buffer + offset);
 
         // Unmerged op by the kernel
-        if (merged_de->old_chunk != 0) {
-            CHECK(merged_de->new_chunk != 0);
+        if (merged_de->old_chunk != 0 || merged_de->new_chunk != 0) {
             CHECK(merged_de->old_chunk == cow_de->old_chunk);
             CHECK(merged_de->new_chunk == cow_de->new_chunk);
 
@@ -297,11 +333,6 @@ loff_t Snapuserd::GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer
             *unmerged_exceptions += 1;
             continue;
         }
-
-        // Merge complete on this exception. However, we don't know how many
-        // merged in this cycle; hence break here.
-        CHECK(merged_de->new_chunk == 0);
-        CHECK(merged_de->old_chunk == 0);
 
         break;
     }
@@ -329,7 +360,7 @@ int Snapuserd::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, 
         if (cow_de->new_chunk != 0) {
             merged_ops_cur_iter += 1;
             offset += sizeof(struct disk_exception);
-            const CowOperation* cow_op = chunk_map_[cow_de->new_chunk];
+            const CowOperation* cow_op = chunk_map_[ChunkToSector(cow_de->new_chunk)];
             CHECK(cow_op != nullptr);
             CHECK(cow_op->new_block == cow_de->old_chunk);
             if (cow_op->type == kCowCopyOp) {
@@ -347,16 +378,21 @@ int Snapuserd::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, 
             CHECK(cow_de->new_chunk == 0);
             break;
         } else {
-            SNAP_LOG(ERROR) << "Error in merge operation. Found invalid metadata";
-            SNAP_LOG(ERROR) << "merged_de-old-chunk: " << merged_de->old_chunk;
-            SNAP_LOG(ERROR) << "merged_de-new-chunk: " << merged_de->new_chunk;
-            SNAP_LOG(ERROR) << "cow_de-old-chunk: " << cow_de->old_chunk;
-            SNAP_LOG(ERROR) << "cow_de-new-chunk: " << cow_de->new_chunk;
+            SNAP_LOG(ERROR) << "Error in merge operation. Found invalid metadata: "
+                            << " merged_de-old-chunk: " << merged_de->old_chunk
+                            << " merged_de-new-chunk: " << merged_de->new_chunk
+                            << " cow_de-old-chunk: " << cow_de->old_chunk
+                            << " cow_de-new-chunk: " << cow_de->new_chunk
+                            << " unmerged_exceptions: " << unmerged_exceptions
+                            << " merged_ops_cur_iter: " << merged_ops_cur_iter
+                            << " offset: " << offset;
             return -1;
         }
     }
 
     if (*copy_op) {
+        SNAP_LOG(ERROR) << "Invalid batch merge of copy ops: merged_ops_cur_iter: "
+                        << merged_ops_cur_iter;
         CHECK(merged_ops_cur_iter == 1);
     }
     return merged_ops_cur_iter;
@@ -416,7 +452,7 @@ bool Snapuserd::ProcessMergeComplete(chunk_t chunk, void* buffer) {
     header.num_merge_ops += merged_ops_cur_iter;
     reader_->UpdateMergeProgress(merged_ops_cur_iter);
     if (!writer_->CommitMerge(merged_ops_cur_iter, copy_op)) {
-        SNAP_LOG(ERROR) << "CommitMerge failed...";
+        SNAP_LOG(ERROR) << "CommitMerge failed... merged_ops_cur_iter: " << merged_ops_cur_iter;
         return false;
     }
 
@@ -563,7 +599,7 @@ bool Snapuserd::ReadMetadata() {
         SNAP_LOG(DEBUG) << "Old-chunk: " << de->old_chunk << "New-chunk: " << de->new_chunk;
 
         // Store operation pointer.
-        chunk_map_[data_chunk_id] = cow_op;
+        chunk_map_[ChunkToSector(data_chunk_id)] = cow_op;
         num_ops += 1;
         offset += sizeof(struct disk_exception);
         cowop_riter_->Next();
@@ -631,7 +667,7 @@ bool Snapuserd::ReadDmUserHeader() {
 bool Snapuserd::WriteDmUserPayload(size_t size) {
     if (!android::base::WriteFully(ctrl_fd_, bufsink_.GetBufPtr(),
                                    sizeof(struct dm_user_header) + size)) {
-        SNAP_PLOG(ERROR) << "Write to dm-user failed";
+        SNAP_PLOG(ERROR) << "Write to dm-user failed size: " << size;
         return false;
     }
 
@@ -640,7 +676,7 @@ bool Snapuserd::WriteDmUserPayload(size_t size) {
 
 bool Snapuserd::ReadDmUserPayload(void* buffer, size_t size) {
     if (!android::base::ReadFully(ctrl_fd_, buffer, size)) {
-        SNAP_PLOG(ERROR) << "ReadDmUserPayload failed";
+        SNAP_PLOG(ERROR) << "ReadDmUserPayload failed size: " << size;
         return false;
     }
 
@@ -680,6 +716,127 @@ bool Snapuserd::InitBackingAndControlDevice() {
     return true;
 }
 
+bool Snapuserd::DmuserWriteRequest() {
+    struct dm_user_header* header = bufsink_.GetHeaderPtr();
+
+    // device mapper has the capability to allow
+    // targets to flush the cache when writes are completed. This
+    // is controlled by each target by a flag "flush_supported".
+    // This flag is set by dm-user. When flush is supported,
+    // a number of zero-length bio's will be submitted to
+    // the target for the purpose of flushing cache. It is the
+    // responsibility of the target driver - which is dm-user in this
+    // case, to remap these bio's to the underlying device. Since,
+    // there is no underlying device for dm-user, this zero length
+    // bio's gets routed to daemon.
+    //
+    // Flush operations are generated post merge by dm-snap by having
+    // REQ_PREFLUSH flag set. Snapuser daemon doesn't have anything
+    // to flush per se; hence, just respond back with a success message.
+    if (header->sector == 0) {
+        CHECK(header->len == 0);
+        header->type = DM_USER_RESP_SUCCESS;
+        if (!WriteDmUserPayload(0)) {
+            return false;
+        }
+        return true;
+    }
+
+    size_t remaining_size = header->len;
+    size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
+    CHECK(read_size == BLOCK_SIZE);
+
+    CHECK(header->sector > 0);
+    chunk_t chunk = SectorToChunk(header->sector);
+    CHECK(chunk_map_.find(header->sector) == chunk_map_.end());
+
+    void* buffer = bufsink_.GetPayloadBuffer(read_size);
+    CHECK(buffer != nullptr);
+    header->type = DM_USER_RESP_SUCCESS;
+
+    if (!ReadDmUserPayload(buffer, read_size)) {
+        SNAP_LOG(ERROR) << "ReadDmUserPayload failed for chunk id: " << chunk
+                        << "Sector: " << header->sector;
+        header->type = DM_USER_RESP_ERROR;
+    }
+
+    if (header->type == DM_USER_RESP_SUCCESS && !ProcessMergeComplete(chunk, buffer)) {
+        SNAP_LOG(ERROR) << "ProcessMergeComplete failed for chunk id: " << chunk
+                        << "Sector: " << header->sector;
+        header->type = DM_USER_RESP_ERROR;
+    } else {
+        SNAP_LOG(DEBUG) << "ProcessMergeComplete success for chunk id: " << chunk
+                        << "Sector: " << header->sector;
+    }
+
+    if (!WriteDmUserPayload(0)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool Snapuserd::DmuserReadRequest() {
+    struct dm_user_header* header = bufsink_.GetHeaderPtr();
+    size_t remaining_size = header->len;
+    loff_t offset = 0;
+    sector_t sector = header->sector;
+    do {
+        size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
+
+        int ret = read_size;
+        header->type = DM_USER_RESP_SUCCESS;
+        chunk_t chunk = SectorToChunk(header->sector);
+
+        // Request to sector 0 is always for kernel
+        // representation of COW header. This IO should be only
+        // once during dm-snapshot device creation. We should
+        // never see multiple IO requests. Additionally this IO
+        // will always be a single 4k.
+        if (header->sector == 0) {
+            CHECK(metadata_read_done_ == true);
+            CHECK(read_size == BLOCK_SIZE);
+            ConstructKernelCowHeader();
+            SNAP_LOG(DEBUG) << "Kernel header constructed";
+        } else {
+            if (!offset && (read_size == BLOCK_SIZE) &&
+                chunk_map_.find(header->sector) == chunk_map_.end()) {
+                if (!ReadDiskExceptions(chunk, read_size)) {
+                    SNAP_LOG(ERROR) << "ReadDiskExceptions failed for chunk id: " << chunk
+                                    << "Sector: " << header->sector;
+                    header->type = DM_USER_RESP_ERROR;
+                } else {
+                    SNAP_LOG(DEBUG) << "ReadDiskExceptions success for chunk id: " << chunk
+                                    << "Sector: " << header->sector;
+                }
+            } else {
+                chunk_t num_sectors_read = (offset >> SECTOR_SHIFT);
+                ret = ReadData(sector + num_sectors_read, read_size);
+                if (ret < 0) {
+                    SNAP_LOG(ERROR) << "ReadData failed for chunk id: " << chunk
+                                    << " Sector: " << (sector + num_sectors_read)
+                                    << " size: " << read_size << " header-len: " << header->len;
+                    header->type = DM_USER_RESP_ERROR;
+                } else {
+                    SNAP_LOG(DEBUG) << "ReadData success for chunk id: " << chunk
+                                    << "Sector: " << header->sector;
+                }
+            }
+        }
+
+        // Daemon will not be terminated if there is any error. We will
+        // just send the error back to dm-user.
+        if (!WriteDmUserPayload(ret)) {
+            return false;
+        }
+
+        remaining_size -= ret;
+        offset += ret;
+    } while (remaining_size > 0);
+
+    return true;
+}
+
 bool Snapuserd::Run() {
     struct dm_user_header* header = bufsink_.GetHeaderPtr();
 
@@ -698,122 +855,16 @@ bool Snapuserd::Run() {
 
     switch (header->type) {
         case DM_USER_REQ_MAP_READ: {
-            size_t remaining_size = header->len;
-            loff_t offset = 0;
-            do {
-                size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
-                header->type = DM_USER_RESP_SUCCESS;
-
-                // Request to sector 0 is always for kernel
-                // representation of COW header. This IO should be only
-                // once during dm-snapshot device creation. We should
-                // never see multiple IO requests. Additionally this IO
-                // will always be a single 4k.
-                if (header->sector == 0) {
-                    CHECK(metadata_read_done_ == true);
-                    CHECK(read_size == BLOCK_SIZE);
-                    ConstructKernelCowHeader();
-                    SNAP_LOG(DEBUG) << "Kernel header constructed";
-                } else {
-                    // Convert the sector number to a chunk ID.
-                    //
-                    // Check if the chunk ID represents a metadata
-                    // page. If the chunk ID is not found in the
-                    // vector, then it points to a metadata page.
-                    chunk_t chunk = SectorToChunk(header->sector);
-
-                    if (chunk_map_.find(chunk) == chunk_map_.end()) {
-                        if (!ReadDiskExceptions(chunk, read_size)) {
-                            SNAP_LOG(ERROR) << "ReadDiskExceptions failed for chunk id: " << chunk
-                                            << "Sector: " << header->sector;
-                            header->type = DM_USER_RESP_ERROR;
-                        } else {
-                            SNAP_LOG(DEBUG) << "ReadDiskExceptions success for chunk id: " << chunk
-                                            << "Sector: " << header->sector;
-                        }
-                    } else {
-                        SNAP_LOG(DEBUG) << "ReadData: chunk: " << chunk << " len: " << header->len
-                                        << " read_size: " << read_size << " offset: " << offset;
-                        chunk_t num_chunks_read = (offset >> BLOCK_SHIFT);
-                        if (!ReadData(chunk + num_chunks_read, read_size)) {
-                            SNAP_LOG(ERROR) << "ReadData failed for chunk id: " << chunk
-                                            << "Sector: " << header->sector;
-                            header->type = DM_USER_RESP_ERROR;
-                        } else {
-                            SNAP_LOG(DEBUG) << "ReadData success for chunk id: " << chunk
-                                            << "Sector: " << header->sector;
-                        }
-                    }
-                }
-
-                // Daemon will not be terminated if there is any error. We will
-                // just send the error back to dm-user.
-                if (!WriteDmUserPayload(read_size)) {
-                    return false;
-                }
-
-                remaining_size -= read_size;
-                offset += read_size;
-            } while (remaining_size);
-
+            if (!DmuserReadRequest()) {
+                return false;
+            }
             break;
         }
 
         case DM_USER_REQ_MAP_WRITE: {
-            // device mapper has the capability to allow
-            // targets to flush the cache when writes are completed. This
-            // is controlled by each target by a flag "flush_supported".
-            // This flag is set by dm-user. When flush is supported,
-            // a number of zero-length bio's will be submitted to
-            // the target for the purpose of flushing cache. It is the
-            // responsibility of the target driver - which is dm-user in this
-            // case, to remap these bio's to the underlying device. Since,
-            // there is no underlying device for dm-user, this zero length
-            // bio's gets routed to daemon.
-            //
-            // Flush operations are generated post merge by dm-snap by having
-            // REQ_PREFLUSH flag set. Snapuser daemon doesn't have anything
-            // to flush per se; hence, just respond back with a success message.
-            if (header->sector == 0) {
-                CHECK(header->len == 0);
-                header->type = DM_USER_RESP_SUCCESS;
-                if (!WriteDmUserPayload(0)) {
-                    return false;
-                }
-                break;
-            }
-
-            size_t remaining_size = header->len;
-            size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
-            CHECK(read_size == BLOCK_SIZE);
-
-            CHECK(header->sector > 0);
-            chunk_t chunk = SectorToChunk(header->sector);
-            CHECK(chunk_map_.find(chunk) == chunk_map_.end());
-
-            void* buffer = bufsink_.GetPayloadBuffer(read_size);
-            CHECK(buffer != nullptr);
-            header->type = DM_USER_RESP_SUCCESS;
-
-            if (!ReadDmUserPayload(buffer, read_size)) {
-                SNAP_LOG(ERROR) << "ReadDmUserPayload failed for chunk id: " << chunk
-                                << "Sector: " << header->sector;
-                header->type = DM_USER_RESP_ERROR;
-            }
-
-            if (header->type == DM_USER_RESP_SUCCESS && !ProcessMergeComplete(chunk, buffer)) {
-                SNAP_LOG(ERROR) << "ProcessMergeComplete failed for chunk id: " << chunk
-                                << "Sector: " << header->sector;
-                header->type = DM_USER_RESP_ERROR;
-            } else {
-                SNAP_LOG(DEBUG) << "ProcessMergeComplete success for chunk id: " << chunk
-                                << "Sector: " << header->sector;
-            }
-
-            if (!WriteDmUserPayload(0)) {
+            if (!DmuserWriteRequest()) {
                 return false;
             }
-
             break;
         }
     }

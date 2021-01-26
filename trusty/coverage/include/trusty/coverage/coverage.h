@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include <android-base/result.h>
@@ -32,7 +33,18 @@ using android::base::unique_fd;
 
 class CoverageRecord {
   public:
+    /**
+     * Create a coverage record interface. Coverage will not be written to a
+     * sancov output file on completion.
+     */
     CoverageRecord(std::string tipc_dev, struct uuid* uuid);
+
+    /**
+     * Create a coverage record interface. On destruction, write this coverage
+     * to the given sancov filename.
+     */
+    CoverageRecord(std::string tipc_dev, struct uuid* uuid, std::string module_name);
+
     ~CoverageRecord();
     Result<void> Open();
     void ResetFullRecord();
@@ -58,6 +70,7 @@ class CoverageRecord {
     std::string tipc_dev_;
     unique_fd coverage_srv_fd_;
     struct uuid uuid_;
+    std::optional<std::string> sancov_filename_;
     size_t record_len_;
     volatile void* shm_;
     size_t shm_len_;
