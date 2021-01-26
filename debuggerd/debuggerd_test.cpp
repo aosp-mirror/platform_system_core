@@ -1309,11 +1309,11 @@ TEST(tombstoned, java_trace_intercept_smoke) {
   tombstoned_intercept(self, &intercept_fd, &output_fd, &status, kDebuggerdJavaBacktrace);
   ASSERT_EQ(InterceptStatus::kRegistered, status);
 
-  // First connect to tombstoned requesting a native tombstone. This
+  // First connect to tombstoned requesting a native backtrace. This
   // should result in a "regular" FD and not the installed intercept.
   const char native[] = "native";
   unique_fd tombstoned_socket, input_fd;
-  ASSERT_TRUE(tombstoned_connect(self, &tombstoned_socket, &input_fd, kDebuggerdTombstone));
+  ASSERT_TRUE(tombstoned_connect(self, &tombstoned_socket, &input_fd, kDebuggerdNativeBacktrace));
   ASSERT_TRUE(android::base::WriteFully(input_fd.get(), native, sizeof(native)));
   tombstoned_notify_completion(tombstoned_socket.get());
 
