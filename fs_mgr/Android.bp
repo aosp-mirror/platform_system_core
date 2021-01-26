@@ -170,6 +170,7 @@ cc_binary {
     defaults: ["fs_mgr_defaults"],
     static_libs: [
         "libavb_user",
+        "libgsid",
         "libutils",
         "libvold_binder",
     ],
