@@ -62,22 +62,14 @@ enum CrashStatus {
 struct CrashArtifact {
   unique_fd fd;
   std::optional<std::string> temporary_path;
-
-  static CrashArtifact devnull() {
-    CrashArtifact result;
-    result.fd.reset(open("/dev/null", O_WRONLY | O_CLOEXEC));
-    return result;
-  }
 };
 
 struct CrashArtifactPaths {
   std::string text;
-  std::optional<std::string> proto;
 };
 
 struct CrashOutput {
   CrashArtifact text;
-  std::optional<CrashArtifact> proto;
 };
 
 // Ownership of Crash is a bit messy.
@@ -97,15 +89,14 @@ struct Crash {
 class CrashQueue {
  public:
   CrashQueue(const std::string& dir_path, const std::string& file_name_prefix, size_t max_artifacts,
-             size_t max_concurrent_dumps, bool supports_proto)
+             size_t max_concurrent_dumps)
       : file_name_prefix_(file_name_prefix),
         dir_path_(dir_path),
         dir_fd_(open(dir_path.c_str(), O_DIRECTORY | O_RDONLY | O_CLOEXEC)),
         max_artifacts_(max_artifacts),
         next_artifact_(0),
         max_concurrent_dumps_(max_concurrent_dumps),
-        num_concurrent_dumps_(0),
-        supports_proto_(supports_proto) {
+        num_concurrent_dumps_(0) {
     if (dir_fd_ == -1) {
       PLOG(FATAL) << "failed to open directory: " << dir_path;
     }
@@ -128,14 +119,14 @@ class CrashQueue {
   static CrashQueue* for_tombstones() {
     static CrashQueue queue("/data/tombstones", "tombstone_" /* file_name_prefix */,
                             GetIntProperty("tombstoned.max_tombstone_count", 32),
-                            1 /* max_concurrent_dumps */, true /* supports_proto */);
+                            1 /* max_concurrent_dumps */);
     return &queue;
   }
 
   static CrashQueue* for_anrs() {
     static CrashQueue queue("/data/anr", "trace_" /* file_name_prefix */,
                             GetIntProperty("tombstoned.max_anr_count", 64),
-                            4 /* max_concurrent_dumps */, false /* supports_proto */);
+                            4 /* max_concurrent_dumps */);
     return &queue;
   }
 
@@ -169,15 +160,6 @@ class CrashQueue {
         // Don't generate tombstones for backtrace requests.
         return {};
 
-      case kDebuggerdTombstoneProto:
-        if (!supports_proto_) {
-          LOG(ERROR) << "received kDebuggerdTombstoneProto on a queue that doesn't support proto";
-          return {};
-        }
-        result.proto = create_temporary_file();
-        result.text = create_temporary_file();
-        break;
-
       case kDebuggerdTombstone:
         result.text = create_temporary_file();
         break;
@@ -195,10 +177,6 @@ class CrashQueue {
   CrashArtifactPaths get_next_artifact_paths() {
     CrashArtifactPaths result;
     result.text = StringPrintf("%s%02d", file_name_prefix_.c_str(), next_artifact_);
-
-    if (supports_proto_) {
-      result.proto = StringPrintf("%s%02d.pb", file_name_prefix_.c_str(), next_artifact_);
-    }
 
     next_artifact_ = (next_artifact_ + 1) % max_artifacts_;
     return result;
@@ -265,8 +243,6 @@ class CrashQueue {
   const size_t max_concurrent_dumps_;
   size_t num_concurrent_dumps_;
 
-  bool supports_proto_;
-
   std::deque<std::unique_ptr<Crash>> queued_requests_;
 
   DISALLOW_COPY_AND_ASSIGN(CrashQueue);
@@ -285,11 +261,7 @@ static void perform_request(std::unique_ptr<Crash> crash) {
   unique_fd output_fd;
   bool intercepted =
       intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd);
-  if (intercepted) {
-    if (crash->crash_type == kDebuggerdTombstoneProto) {
-      crash->output.proto = CrashArtifact::devnull();
-    }
-  } else {
+  if (!intercepted) {
     if (auto o = CrashQueue::for_crash(crash.get())->get_output(crash->crash_type); o) {
       crash->output = std::move(*o);
       output_fd.reset(dup(crash->output.text.fd));
@@ -301,13 +273,8 @@ static void perform_request(std::unique_ptr<Crash> crash) {
 
   TombstonedCrashPacket response = {.packet_type = CrashPacketType::kPerformDump};
 
-  ssize_t rc = -1;
-  if (crash->output.proto) {
-    rc = SendFileDescriptors(crash->crash_socket_fd, &response, sizeof(response), output_fd.get(),
-                             crash->output.proto->fd.get());
-  } else {
-    rc = SendFileDescriptors(crash->crash_socket_fd, &response, sizeof(response), output_fd.get());
-  }
+  ssize_t rc =
+      SendFileDescriptors(crash->crash_socket_fd, &response, sizeof(response), output_fd.get());
 
   output_fd.reset();
 
@@ -376,7 +343,7 @@ static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
   }
 
   crash->crash_type = request.packet.dump_request.dump_type;
-  if (crash->crash_type < 0 || crash->crash_type > kDebuggerdTombstoneProto) {
+  if (crash->crash_type < 0 || crash->crash_type > kDebuggerdAnyIntercept) {
     LOG(WARNING) << "unexpected crash dump type: " << crash->crash_type;
     return;
   }
@@ -471,25 +438,11 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
     }
   }
 
-  if (crash->output.proto && crash->output.proto->fd != -1) {
-    if (!paths.proto) {
-      LOG(ERROR) << "missing path for proto tombstone";
-    } else if (!link_fd(crash->output.proto->fd, queue->dir_fd(), *paths.proto)) {
-      LOG(ERROR) << "failed to link proto tombstone";
-    }
-  }
-
   // If we don't have O_TMPFILE, we need to clean up after ourselves.
   if (crash->output.text.temporary_path) {
     rc = unlinkat(queue->dir_fd().get(), crash->output.text.temporary_path->c_str(), 0);
     if (rc != 0) {
       PLOG(ERROR) << "failed to unlink temporary tombstone at " << paths.text;
-    }
-  }
-  if (crash->output.proto && crash->output.proto->temporary_path) {
-    rc = unlinkat(queue->dir_fd().get(), crash->output.proto->temporary_path->c_str(), 0);
-    if (rc != 0) {
-      PLOG(ERROR) << "failed to unlink temporary proto tombstone";
     }
   }
 }
