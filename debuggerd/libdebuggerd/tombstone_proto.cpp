@@ -447,7 +447,7 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwind
 
   if (process_info.has_fault_address) {
     sig.set_has_fault_address(true);
-    sig.set_fault_address(process_info.untagged_fault_address);
+    sig.set_fault_address(process_info.fault_address);
   }
 
   *result.mutable_signal_info() = sig;
