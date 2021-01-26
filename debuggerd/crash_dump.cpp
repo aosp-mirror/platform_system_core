@@ -195,7 +195,6 @@ static pid_t g_target_thread = -1;
 static bool g_tombstoned_connected = false;
 static unique_fd g_tombstoned_socket;
 static unique_fd g_output_fd;
-static unique_fd g_proto_fd;
 
 static void DefuseSignalHandlers() {
   // Don't try to dump ourselves.
@@ -216,7 +215,7 @@ static void Initialize(char** argv) {
     // If we abort before we get an output fd, contact tombstoned to let any
     // potential listeners know that we failed.
     if (!g_tombstoned_connected) {
-      if (!tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd, &g_proto_fd,
+      if (!tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd,
                               kDebuggerdAnyIntercept)) {
         // We failed to connect, not much we can do.
         LOG(ERROR) << "failed to connected to tombstoned to report failure";
@@ -249,20 +248,10 @@ static void ParseArgs(int argc, char** argv, pid_t* pseudothread_tid, DebuggerdD
   }
 
   int dump_type_int;
-  if (!android::base::ParseInt(argv[3], &dump_type_int, 0)) {
+  if (!android::base::ParseInt(argv[3], &dump_type_int, 0, 1)) {
     LOG(FATAL) << "invalid requested dump type: " << argv[3];
   }
-
   *dump_type = static_cast<DebuggerdDumpType>(dump_type_int);
-  switch (*dump_type) {
-    case kDebuggerdNativeBacktrace:
-    case kDebuggerdTombstone:
-    case kDebuggerdTombstoneProto:
-      break;
-
-    default:
-      LOG(FATAL) << "invalid requested dump type: " << dump_type_int;
-  }
 }
 
 static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
@@ -491,11 +480,6 @@ int main(int argc, char** argv) {
       info.process_name = process_name;
       info.thread_name = get_thread_name(thread);
 
-      unique_fd attr_fd(openat(target_proc_fd, "attr/current", O_RDONLY | O_CLOEXEC));
-      if (!android::base::ReadFdToString(attr_fd, &info.selinux_label)) {
-        PLOG(WARNING) << "failed to read selinux label";
-      }
-
       if (!ptrace_interrupt(thread, &info.signo)) {
         PLOG(WARNING) << "failed to ptrace interrupt thread " << thread;
         ptrace(PTRACE_DETACH, thread, 0, 0);
@@ -574,8 +558,8 @@ int main(int argc, char** argv) {
   {
     ATRACE_NAME("tombstoned_connect");
     LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type;
-    g_tombstoned_connected = tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd,
-                                                &g_proto_fd, dump_type);
+    g_tombstoned_connected =
+        tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd, dump_type);
   }
 
   if (g_tombstoned_connected) {
@@ -628,8 +612,8 @@ int main(int argc, char** argv) {
 
     {
       ATRACE_NAME("engrave_tombstone");
-      engrave_tombstone(std::move(g_output_fd), std::move(g_proto_fd), &unwinder, thread_info,
-                        g_target_thread, process_info, &open_files, &amfd_data);
+      engrave_tombstone(std::move(g_output_fd), &unwinder, thread_info, g_target_thread, process_info,
+                        &open_files, &amfd_data);
     }
   }
 

@@ -81,8 +81,6 @@ class Memory;
 
 void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix);
 
-ssize_t dump_memory(void* out, size_t len, size_t* start_offset, uint64_t* addr,
-                    unwindstack::Memory* memory);
 void dump_memory(log_t* log, unwindstack::Memory* backtrace, uint64_t addr, const std::string&);
 
 void drop_capabilities();
