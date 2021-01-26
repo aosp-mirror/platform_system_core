@@ -1309,11 +1309,11 @@ TEST(tombstoned, java_trace_intercept_smoke) {
   tombstoned_intercept(self, &intercept_fd, &output_fd, &status, kDebuggerdJavaBacktrace);
   ASSERT_EQ(InterceptStatus::kRegistered, status);
 
-  // First connect to tombstoned requesting a native tombstone. This
+  // First connect to tombstoned requesting a native backtrace. This
   // should result in a "regular" FD and not the installed intercept.
   const char native[] = "native";
   unique_fd tombstoned_socket, input_fd;
-  ASSERT_TRUE(tombstoned_connect(self, &tombstoned_socket, &input_fd, kDebuggerdTombstone));
+  ASSERT_TRUE(tombstoned_connect(self, &tombstoned_socket, &input_fd, kDebuggerdNativeBacktrace));
   ASSERT_TRUE(android::base::WriteFully(input_fd.get(), native, sizeof(native)));
   tombstoned_notify_completion(tombstoned_socket.get());
 
@@ -1424,71 +1424,4 @@ TEST_F(CrasherTest, stack_overflow) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(Cause: stack pointer[^\n]*stack overflow.\n)");
-}
-
-TEST(tombstoned, proto) {
-  const pid_t self = getpid();
-  unique_fd tombstoned_socket, text_fd, proto_fd;
-  ASSERT_TRUE(
-      tombstoned_connect(self, &tombstoned_socket, &text_fd, &proto_fd, kDebuggerdTombstoneProto));
-
-  tombstoned_notify_completion(tombstoned_socket.get());
-
-  ASSERT_NE(-1, text_fd.get());
-  ASSERT_NE(-1, proto_fd.get());
-
-  struct stat text_st;
-  ASSERT_EQ(0, fstat(text_fd.get(), &text_st));
-
-  // Give tombstoned some time to link the files into place.
-  std::this_thread::sleep_for(100ms);
-
-  // Find the tombstone.
-  std::optional<int> tombstone_index;
-  for (int i = 0; i < 50; ++i) {
-    std::string path = android::base::StringPrintf("/data/tombstones/tombstone_%02d", i);
-
-    struct stat st;
-    if (TEMP_FAILURE_RETRY(stat(path.c_str(), &st)) != 0) {
-      continue;
-    }
-
-    if (st.st_dev == text_st.st_dev && st.st_ino == text_st.st_ino) {
-      tombstone_index = i;
-      break;
-    }
-  }
-
-  ASSERT_TRUE(tombstone_index);
-  std::string proto_path =
-      android::base::StringPrintf("/data/tombstones/tombstone_%02d.pb", *tombstone_index);
-
-  struct stat proto_fd_st;
-  struct stat proto_file_st;
-  ASSERT_EQ(0, fstat(proto_fd.get(), &proto_fd_st));
-  ASSERT_EQ(0, stat(proto_path.c_str(), &proto_file_st));
-
-  ASSERT_EQ(proto_fd_st.st_dev, proto_file_st.st_dev);
-  ASSERT_EQ(proto_fd_st.st_ino, proto_file_st.st_ino);
-}
-
-TEST(tombstoned, proto_intercept) {
-  const pid_t self = getpid();
-  unique_fd intercept_fd, output_fd;
-  InterceptStatus status;
-
-  tombstoned_intercept(self, &intercept_fd, &output_fd, &status, kDebuggerdTombstone);
-  ASSERT_EQ(InterceptStatus::kRegistered, status);
-
-  unique_fd tombstoned_socket, text_fd, proto_fd;
-  ASSERT_TRUE(
-      tombstoned_connect(self, &tombstoned_socket, &text_fd, &proto_fd, kDebuggerdTombstoneProto));
-  ASSERT_TRUE(android::base::WriteStringToFd("foo", text_fd.get()));
-  tombstoned_notify_completion(tombstoned_socket.get());
-
-  text_fd.reset();
-
-  std::string output;
-  ASSERT_TRUE(android::base::ReadFdToString(output_fd, &output));
-  ASSERT_EQ("foo", output);
 }
