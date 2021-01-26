@@ -41,6 +41,7 @@
 
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/test_helpers.h>
+#include "partition_cow_creator.h"
 #include "utility.h"
 
 // Mock classes are not used. Header included to ensure mocked class definition aligns with the
@@ -323,7 +324,10 @@ class SnapshotTest : public ::testing::Test {
 
         DeltaArchiveManifest manifest;
 
-        auto group = manifest.mutable_dynamic_partition_metadata()->add_groups();
+        auto dynamic_partition_metadata = manifest.mutable_dynamic_partition_metadata();
+        dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+
+        auto group = dynamic_partition_metadata->add_groups();
         group->set_name("group");
         group->set_size(device_size * 2);
         group->add_partition_names("test_partition");
@@ -416,13 +420,16 @@ class SnapshotTest : public ::testing::Test {
 TEST_F(SnapshotTest, CreateSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
+    PartitionCowCreator cow_creator;
+    cow_creator.compression_enabled = IsCompressionEnabled();
+
     static const uint64_t kDeviceSize = 1024 * 1024;
     SnapshotStatus status;
     status.set_name("test-snapshot");
     status.set_device_size(kDeviceSize);
     status.set_snapshot_size(kDeviceSize);
     status.set_cow_file_size(kDeviceSize);
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &cow_creator, &status));
     ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::vector<std::string> snapshots;
@@ -437,6 +444,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
         ASSERT_EQ(status.state(), SnapshotState::CREATED);
         ASSERT_EQ(status.device_size(), kDeviceSize);
         ASSERT_EQ(status.snapshot_size(), kDeviceSize);
+        ASSERT_EQ(status.compression_enabled(), cow_creator.compression_enabled);
     }
 
     ASSERT_TRUE(sm->UnmapSnapshot(lock_.get(), "test-snapshot"));
@@ -447,13 +455,16 @@ TEST_F(SnapshotTest, CreateSnapshot) {
 TEST_F(SnapshotTest, MapSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
+    PartitionCowCreator cow_creator;
+    cow_creator.compression_enabled = IsCompressionEnabled();
+
     static const uint64_t kDeviceSize = 1024 * 1024;
     SnapshotStatus status;
     status.set_name("test-snapshot");
     status.set_device_size(kDeviceSize);
     status.set_snapshot_size(kDeviceSize);
     status.set_cow_file_size(kDeviceSize);
-    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &status));
+    ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &cow_creator, &status));
     ASSERT_TRUE(CreateCowImage("test-snapshot"));
 
     std::string base_device;

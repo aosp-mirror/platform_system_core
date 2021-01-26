@@ -312,7 +312,8 @@ bool SnapshotManager::FinishedSnapshotWrites(bool wipe) {
     return WriteUpdateState(lock.get(), UpdateState::Unverified);
 }
 
-bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
+bool SnapshotManager::CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_creator,
+                                     SnapshotStatus* status) {
     CHECK(lock);
     CHECK(lock->lock_mode() == LOCK_EX);
     CHECK(status);
@@ -353,7 +354,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
     status->set_state(SnapshotState::CREATED);
     status->set_sectors_allocated(0);
     status->set_metadata_sectors(0);
-    status->set_compression_enabled(IsCompressionEnabled());
+    status->set_compression_enabled(cow_creator->compression_enabled);
 
     if (!WriteSnapshotStatus(lock, *status)) {
         PLOG(ERROR) << "Could not write snapshot status: " << status->name();
@@ -2584,6 +2585,9 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     // these devices.
     AutoDeviceList created_devices;
 
+    bool use_compression =
+            IsCompressionEnabled() && manifest.dynamic_partition_metadata().vabc_enabled();
+
     PartitionCowCreator cow_creator{
             .target_metadata = target_metadata.get(),
             .target_suffix = target_suffix,
@@ -2592,7 +2596,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .current_suffix = current_suffix,
             .update = nullptr,
             .extra_extents = {},
-            .compression_enabled = IsCompressionEnabled(),
+            .compression_enabled = use_compression,
     };
 
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
@@ -2744,7 +2748,7 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
         }
 
         // Store these device sizes to snapshot status file.
-        if (!CreateSnapshot(lock, &cow_creator_ret->snapshot_status)) {
+        if (!CreateSnapshot(lock, cow_creator, &cow_creator_ret->snapshot_status)) {
             return Return::Error();
         }
         created_devices->EmplaceBack<AutoDeleteSnapshot>(this, lock, target_partition->name());
@@ -2857,16 +2861,20 @@ Return SnapshotManager::InitializeUpdateSnapshots(
 
 bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                                         std::string* snapshot_path) {
-    if (IsCompressionEnabled()) {
-        LOG(ERROR) << "MapUpdateSnapshot cannot be used in compression mode.";
-        return false;
-    }
-
     auto lock = LockShared();
     if (!lock) return false;
     if (!UnmapPartitionWithSnapshot(lock.get(), params.GetPartitionName())) {
         LOG(ERROR) << "Cannot unmap existing snapshot before re-mapping it: "
                    << params.GetPartitionName();
+        return false;
+    }
+
+    SnapshotStatus status;
+    if (!ReadSnapshotStatus(lock.get(), params.GetPartitionName(), &status)) {
+        return false;
+    }
+    if (status.compression_enabled()) {
+        LOG(ERROR) << "Cannot use MapUpdateSnapshot with compressed snapshots";
         return false;
     }
 
