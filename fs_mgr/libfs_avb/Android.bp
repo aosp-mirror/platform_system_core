@@ -91,11 +91,18 @@ cc_test_host {
     name: "libfs_avb_test",
     defaults: ["libfs_avb_host_test_defaults"],
     test_suites: ["general-tests"],
+    test_options: {
+        unit_test: true,
+    },
     static_libs: [
         "libfs_avb_test_util",
     ],
     shared_libs: [
         "libcrypto",
+    ],
+    data: [
+        ":avbtool",
+        ":fec",
     ],
     srcs: [
         "tests/basic_test.cpp",
@@ -108,8 +115,16 @@ cc_test_host {
     name: "libfs_avb_internal_test",
     defaults: ["libfs_avb_host_test_defaults"],
     test_suites: ["general-tests"],
+    test_options: {
+        unit_test: true,
+    },
     static_libs: [
         "libfs_avb_test_util",
+    ],
+    compile_multilib: "first",
+    data: [
+        ":avbtool",
+        ":fec",
     ],
     srcs: [
         "avb_util.cpp",
