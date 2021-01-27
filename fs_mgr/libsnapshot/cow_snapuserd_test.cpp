@@ -98,6 +98,7 @@ class CowSnapuserdTest final {
     void ValidateMerge();
     void ReadSnapshotDeviceAndValidate();
     void Shutdown();
+    void MergeInterrupt();
 
     std::string snapshot_dev() const { return snapshot_dev_->path(); }
 
@@ -105,7 +106,11 @@ class CowSnapuserdTest final {
 
   private:
     void SetupImpl();
+
     void MergeImpl();
+    void SimulateDaemonRestart();
+    void StartMerge();
+
     void CreateCowDevice();
     void CreateBaseDevice();
     void InitCowDevice();
@@ -130,7 +135,7 @@ class CowSnapuserdTest final {
     std::unique_ptr<uint8_t[]> merged_buffer_;
     bool setup_ok_ = false;
     bool merge_ok_ = false;
-    size_t size_ = 1_MiB;
+    size_t size_ = 50_MiB;
     int cow_num_sectors_;
     int total_base_size_;
 };
@@ -154,9 +159,13 @@ unique_fd CowSnapuserdTest::CreateTempFile(const std::string& name, size_t size)
 }
 
 void CowSnapuserdTest::Shutdown() {
-    ASSERT_TRUE(client_->StopSnapuserd());
     ASSERT_TRUE(snapshot_dev_->Destroy());
     ASSERT_TRUE(dmuser_dev_->Destroy());
+
+    auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
+    ASSERT_TRUE(client_->WaitForDeviceDelete(system_device_ctrl_name_));
+    ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted(misc_device, 10s));
+    ASSERT_TRUE(client_->DetachSnapuserd());
 }
 
 bool CowSnapuserdTest::Setup() {
@@ -367,7 +376,7 @@ bool CowSnapuserdTest::Merge() {
     return merge_ok_;
 }
 
-void CowSnapuserdTest::MergeImpl() {
+void CowSnapuserdTest::StartMerge() {
     DmTable merge_table;
     ASSERT_TRUE(merge_table.AddTarget(std::make_unique<DmTargetSnapshot>(
             0, total_base_size_ / kSectorSize, base_loop_->device(), dmuser_dev_->path(),
@@ -377,6 +386,11 @@ void CowSnapuserdTest::MergeImpl() {
 
     DeviceMapper& dm = DeviceMapper::Instance();
     ASSERT_TRUE(dm.LoadTableAndActivate("cowsnapuserd-test-dm-snapshot", merge_table));
+}
+
+void CowSnapuserdTest::MergeImpl() {
+    StartMerge();
+    DeviceMapper& dm = DeviceMapper::Instance();
 
     while (true) {
         vector<DeviceMapper::TargetInfo> status;
@@ -403,6 +417,44 @@ void CowSnapuserdTest::ValidateMerge() {
     ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, merged_buffer_.get(), total_base_size_, 0),
               true);
     ASSERT_EQ(memcmp(merged_buffer_.get(), orig_buffer_.get(), total_base_size_), 0);
+}
+
+void CowSnapuserdTest::SimulateDaemonRestart() {
+    Shutdown();
+    SetDeviceControlName();
+    StartSnapuserdDaemon();
+    InitCowDevice();
+    CreateDmUserDevice();
+    InitDaemon();
+    CreateSnapshotDevice();
+}
+
+void CowSnapuserdTest::MergeInterrupt() {
+    StartMerge();
+    std::this_thread::sleep_for(4s);
+    SimulateDaemonRestart();
+
+    StartMerge();
+    std::this_thread::sleep_for(3s);
+    SimulateDaemonRestart();
+
+    StartMerge();
+    std::this_thread::sleep_for(3s);
+    SimulateDaemonRestart();
+
+    StartMerge();
+    std::this_thread::sleep_for(1s);
+    SimulateDaemonRestart();
+
+    ASSERT_TRUE(Merge());
+}
+
+TEST(Snapuserd_Test, Snapshot_Merge_Resume) {
+    CowSnapuserdTest harness;
+    ASSERT_TRUE(harness.Setup());
+    harness.MergeInterrupt();
+    harness.ValidateMerge();
+    harness.Shutdown();
 }
 
 TEST(Snapuserd_Test, Snapshot) {
