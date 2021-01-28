@@ -30,11 +30,11 @@
 
 #include <string>
 
-#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <async_safe/log.h>
 #include <bionic/reserved_signals.h>
 #include <debuggerd/handler.h>
 #include <log/log.h>
@@ -126,56 +126,56 @@ void _VLOG(log_t* log, enum logtype ltype, const char* fmt, va_list ap) {
 #define MEMORY_BYTES_TO_DUMP 256
 #define MEMORY_BYTES_PER_LINE 16
 
-void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const std::string& label) {
+ssize_t dump_memory(void* out, size_t len, size_t* start_offset, uint64_t* addr,
+                    unwindstack::Memory* memory) {
   // Align the address to the number of bytes per line to avoid confusing memory tag output if
   // memory is tagged and we start from a misaligned address. Start 32 bytes before the address.
-  addr &= ~(MEMORY_BYTES_PER_LINE - 1);
-  if (addr >= 4128) {
-    addr -= 32;
+  *addr &= ~(MEMORY_BYTES_PER_LINE - 1);
+  if (*addr >= 4128) {
+    *addr -= 32;
   }
 
   // We don't want the address tag to appear in the addresses in the memory dump.
-  addr = untag_address(addr);
+  *addr = untag_address(*addr);
 
   // Don't bother if the address would overflow, taking tag bits into account. Note that
   // untag_address truncates to 32 bits on 32-bit platforms as a side effect of returning a
   // uintptr_t, so this also checks for 32-bit overflow.
-  if (untag_address(addr + MEMORY_BYTES_TO_DUMP - 1) < addr) {
-    return;
+  if (untag_address(*addr + MEMORY_BYTES_TO_DUMP - 1) < *addr) {
+    return -1;
   }
 
-  // Dump 256 bytes
-  uintptr_t data[MEMORY_BYTES_TO_DUMP/sizeof(uintptr_t)];
-  memset(data, 0, MEMORY_BYTES_TO_DUMP);
-  size_t bytes = memory->Read(addr, reinterpret_cast<uint8_t*>(data), sizeof(data));
+  memset(out, 0, len);
+
+  size_t bytes = memory->Read(*addr, reinterpret_cast<uint8_t*>(out), len);
   if (bytes % sizeof(uintptr_t) != 0) {
     // This should never happen, but just in case.
     ALOGE("Bytes read %zu, is not a multiple of %zu", bytes, sizeof(uintptr_t));
     bytes &= ~(sizeof(uintptr_t) - 1);
   }
 
-  uint64_t start = 0;
+  *start_offset = 0;
   bool skip_2nd_read = false;
   if (bytes == 0) {
     // In this case, we might want to try another read at the beginning of
     // the next page only if it's within the amount of memory we would have
     // read.
     size_t page_size = sysconf(_SC_PAGE_SIZE);
-    start = ((addr + (page_size - 1)) & ~(page_size - 1)) - addr;
-    if (start == 0 || start >= MEMORY_BYTES_TO_DUMP) {
+    *start_offset = ((*addr + (page_size - 1)) & ~(page_size - 1)) - *addr;
+    if (*start_offset == 0 || *start_offset >= len) {
       skip_2nd_read = true;
     }
   }
 
-  if (bytes < MEMORY_BYTES_TO_DUMP && !skip_2nd_read) {
+  if (bytes < len && !skip_2nd_read) {
     // Try to do one more read. This could happen if a read crosses a map,
     // but the maps do not have any break between them. Or it could happen
     // if reading from an unreadable map, but the read would cross back
     // into a readable map. Only requires one extra read because a map has
     // to contain at least one page, and the total number of bytes to dump
     // is smaller than a page.
-    size_t bytes2 = memory->Read(addr + start + bytes, reinterpret_cast<uint8_t*>(data) + bytes,
-                                 sizeof(data) - bytes - start);
+    size_t bytes2 = memory->Read(*addr + *start_offset + bytes, static_cast<uint8_t*>(out) + bytes,
+                                 len - bytes - *start_offset);
     bytes += bytes2;
     if (bytes2 > 0 && bytes % sizeof(uintptr_t) != 0) {
       // This should never happen, but we'll try and continue any way.
@@ -185,9 +185,21 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
   }
 
   // If we were unable to read anything, it probably means that the register doesn't contain a
-  // valid pointer. In that case, skip the output for this register entirely rather than emitting 16
-  // lines of dashes.
+  // valid pointer.
   if (bytes == 0) {
+    return -1;
+  }
+
+  return bytes;
+}
+
+void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const std::string& label) {
+  // Dump 256 bytes
+  uintptr_t data[MEMORY_BYTES_TO_DUMP / sizeof(uintptr_t)];
+  size_t start_offset = 0;
+
+  ssize_t bytes = dump_memory(data, sizeof(data), &start_offset, &addr, memory);
+  if (bytes == -1) {
     return;
   }
 
@@ -201,7 +213,7 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
   // words are of course presented differently.
   uintptr_t* data_ptr = data;
   size_t current = 0;
-  size_t total_bytes = start + bytes;
+  size_t total_bytes = start_offset + bytes;
   for (size_t line = 0; line < MEMORY_BYTES_TO_DUMP / MEMORY_BYTES_PER_LINE; line++) {
     uint64_t tagged_addr = addr;
     long tag = memory->ReadTag(addr);
@@ -214,7 +226,7 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
     addr += MEMORY_BYTES_PER_LINE;
     std::string ascii;
     for (size_t i = 0; i < MEMORY_BYTES_PER_LINE / sizeof(uintptr_t); i++) {
-      if (current >= start && current + sizeof(uintptr_t) <= total_bytes) {
+      if (current >= start_offset && current + sizeof(uintptr_t) <= total_bytes) {
         android::base::StringAppendF(&logline, " %" PRIPTR, static_cast<uint64_t>(*data_ptr));
 
         // Fill out the ascii string from the data.
@@ -247,11 +259,11 @@ void drop_capabilities() {
   memset(&capdata, 0, sizeof(capdata));
 
   if (capset(&capheader, &capdata[0]) == -1) {
-    PLOG(FATAL) << "failed to drop capabilities";
+    async_safe_fatal("failed to drop capabilities: %s", strerror(errno));
   }
 
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
-    PLOG(FATAL) << "failed to set PR_SET_NO_NEW_PRIVS";
+    async_safe_fatal("failed to set PR_SET_NO_NEW_PRIVS: %s", strerror(errno));
   }
 }
 

@@ -191,6 +191,18 @@ InterceptManager::InterceptManager(event_base* base, int intercept_socket) : bas
                                       /* backlog */ -1, intercept_socket);
 }
 
+bool dump_types_compatible(DebuggerdDumpType interceptor, DebuggerdDumpType dump) {
+  if (interceptor == dump) {
+    return true;
+  }
+
+  if (interceptor == kDebuggerdTombstone && dump == kDebuggerdTombstoneProto) {
+    return true;
+  }
+
+  return false;
+}
+
 bool InterceptManager::GetIntercept(pid_t pid, DebuggerdDumpType dump_type,
                                     android::base::unique_fd* out_fd) {
   auto it = this->intercepts.find(pid);
@@ -201,7 +213,7 @@ bool InterceptManager::GetIntercept(pid_t pid, DebuggerdDumpType dump_type,
   if (dump_type == kDebuggerdAnyIntercept) {
     LOG(INFO) << "found registered intercept of type " << it->second->dump_type
               << " for requested type kDebuggerdAnyIntercept";
-  } else if (it->second->dump_type != dump_type) {
+  } else if (!dump_types_compatible(it->second->dump_type, dump_type)) {
     LOG(WARNING) << "found non-matching intercept of type " << it->second->dump_type
                  << " for requested type: " << dump_type;
     return false;
