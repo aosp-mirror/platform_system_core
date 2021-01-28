@@ -31,7 +31,9 @@ struct ThreadInfo {
   std::string thread_name;
 
   pid_t pid;
+
   std::string process_name;
+  std::string selinux_label;
 
   int signo = 0;
   siginfo_t* siginfo = nullptr;
