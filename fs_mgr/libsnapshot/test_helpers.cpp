@@ -23,6 +23,7 @@
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <openssl/sha.h>
+#include <payload_consumer/file_descriptor.h>
 
 namespace android {
 namespace snapshot {
@@ -167,6 +168,37 @@ bool WriteRandomData(ICowWriter* writer, std::string* hash) {
         *hash = ToHexString(out, sizeof(out));
     }
     return true;
+}
+
+std::string HashSnapshot(ISnapshotWriter* writer) {
+    auto reader = writer->OpenReader();
+    if (!reader) {
+        return {};
+    }
+
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+
+    uint64_t remaining = reader->BlockDevSize();
+    char buffer[4096];
+    while (remaining) {
+        size_t to_read =
+                static_cast<size_t>(std::min(remaining, static_cast<uint64_t>(sizeof(buffer))));
+        ssize_t read = reader->Read(&buffer, to_read);
+        if (read <= 0) {
+            if (read < 0) {
+                LOG(ERROR) << "Failed to read from snapshot writer";
+                return {};
+            }
+            break;
+        }
+        SHA256_Update(&ctx, buffer, to_read);
+        remaining -= static_cast<size_t>(read);
+    }
+
+    uint8_t out[32];
+    SHA256_Final(out, &ctx);
+    return ToHexString(out, sizeof(out));
 }
 
 std::optional<std::string> GetHash(const std::string& path) {

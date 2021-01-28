@@ -1,6 +1,5 @@
-import /vendor/ueventd.rc
-import /odm/ueventd.rc
-import /ueventd.${ro.hardware}.rc
+import /vendor/etc/ueventd.rc
+import /odm/etc/ueventd.rc
 
 firmware_directories /etc/firmware/ /odm/firmware/ /vendor/firmware/ /firmware/image/
 uevent_socket_rcvbuf_size 16M
