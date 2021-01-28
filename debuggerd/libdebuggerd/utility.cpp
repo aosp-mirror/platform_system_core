@@ -30,11 +30,11 @@
 
 #include <string>
 
-#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <async_safe/log.h>
 #include <bionic/reserved_signals.h>
 #include <debuggerd/handler.h>
 #include <log/log.h>
@@ -259,11 +259,11 @@ void drop_capabilities() {
   memset(&capdata, 0, sizeof(capdata));
 
   if (capset(&capheader, &capdata[0]) == -1) {
-    PLOG(FATAL) << "failed to drop capabilities";
+    async_safe_fatal("failed to drop capabilities: %s", strerror(errno));
   }
 
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
-    PLOG(FATAL) << "failed to set PR_SET_NO_NEW_PRIVS";
+    async_safe_fatal("failed to set PR_SET_NO_NEW_PRIVS: %s", strerror(errno));
   }
 }
 
