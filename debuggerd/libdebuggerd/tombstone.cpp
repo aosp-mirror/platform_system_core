@@ -36,12 +36,12 @@
 #include <string>
 
 #include <android-base/file.h>
-#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <android/log.h>
+#include <async_safe/log.h>
 #include <log/log.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
@@ -588,7 +588,7 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
 
   unwindstack::UnwinderFromPid unwinder(kMaxFrames, pid, unwindstack::Regs::CurrentArch());
   if (!unwinder.Init()) {
-    LOG(FATAL) << "Failed to init unwinder object.";
+    async_safe_fatal("failed to init unwinder object");
   }
 
   ProcessInfo process_info;
@@ -606,8 +606,11 @@ void engrave_tombstone(unique_fd output_fd, unique_fd proto_fd, unwindstack::Unw
   Tombstone tombstone;
   engrave_tombstone_proto(&tombstone, unwinder, threads, target_thread, process_info, open_files);
 
-  if (!tombstone.SerializeToFileDescriptor(proto_fd.get())) {
-    PLOG(ERROR) << "Failed to write proto tombstone";
+  if (proto_fd != -1) {
+    if (!tombstone.SerializeToFileDescriptor(proto_fd.get())) {
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to write proto tombstone: %s",
+                            strerror(errno));
+    }
   }
 
   log_t log;
@@ -631,7 +634,7 @@ void engrave_tombstone(unique_fd output_fd, unique_fd proto_fd, unwindstack::Unw
 
     auto it = threads.find(target_thread);
     if (it == threads.end()) {
-      LOG(FATAL) << "failed to find target thread";
+      async_safe_fatal("failed to find target thread");
     }
 
     dump_thread(&log, unwinder, it->second, process_info, true);
