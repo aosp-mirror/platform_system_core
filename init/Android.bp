@@ -233,6 +233,7 @@ cc_binary {
             ],
         },
     },
+    visibility: ["//packages/modules/Virtualization/microdroid"],
 }
 
 // Tests
