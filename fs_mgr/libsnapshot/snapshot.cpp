@@ -312,7 +312,8 @@ bool SnapshotManager::FinishedSnapshotWrites(bool wipe) {
     return WriteUpdateState(lock.get(), UpdateState::Unverified);
 }
 
-bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
+bool SnapshotManager::CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_creator,
+                                     SnapshotStatus* status) {
     CHECK(lock);
     CHECK(lock->lock_mode() == LOCK_EX);
     CHECK(status);
@@ -353,7 +354,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, SnapshotStatus* status) {
     status->set_state(SnapshotState::CREATED);
     status->set_sectors_allocated(0);
     status->set_metadata_sectors(0);
-    status->set_compression_enabled(IsCompressionEnabled());
+    status->set_compression_enabled(cow_creator->compression_enabled);
 
     if (!WriteSnapshotStatus(lock, *status)) {
         PLOG(ERROR) << "Could not write snapshot status: " << status->name();
@@ -2129,10 +2130,6 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
 bool SnapshotManager::UnmapDmUserDevice(const std::string& snapshot_name) {
     auto& dm = DeviceMapper::Instance();
 
-    if (!EnsureSnapuserdConnected()) {
-        return false;
-    }
-
     auto dm_user_name = GetDmUserCowName(snapshot_name);
     if (dm.GetState(dm_user_name) == DmDeviceState::INVALID) {
         return true;
@@ -2143,6 +2140,9 @@ bool SnapshotManager::UnmapDmUserDevice(const std::string& snapshot_name) {
         return false;
     }
 
+    if (!EnsureSnapuserdConnected()) {
+        return false;
+    }
     if (!snapuserd_client_->WaitForDeviceDelete(dm_user_name)) {
         LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
         return false;
@@ -2172,12 +2172,44 @@ bool SnapshotManager::MapAllSnapshots(const std::chrono::milliseconds& timeout_m
         return false;
     }
 
-    if (!UnmapAllSnapshots(lock.get())) {
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock.get(), &snapshots)) {
         return false;
     }
 
-    uint32_t slot = SlotNumberForSlotSuffix(device_->GetOtherSlotSuffix());
-    return MapAllPartitions(lock.get(), device_->GetSuperDevice(slot), slot, timeout_ms);
+    const auto& opener = device_->GetPartitionOpener();
+    auto slot_suffix = device_->GetOtherSlotSuffix();
+    auto slot_number = SlotNumberForSlotSuffix(slot_suffix);
+    auto super_device = device_->GetSuperDevice(slot_number);
+    auto metadata = android::fs_mgr::ReadMetadata(opener, super_device, slot_number);
+    if (!metadata) {
+        LOG(ERROR) << "MapAllSnapshots could not read dynamic partition metadata for device: "
+                   << super_device;
+        return false;
+    }
+
+    for (const auto& snapshot : snapshots) {
+        if (!UnmapPartitionWithSnapshot(lock.get(), snapshot)) {
+            LOG(ERROR) << "MapAllSnapshots could not unmap snapshot: " << snapshot;
+            return false;
+        }
+
+        CreateLogicalPartitionParams params = {
+                .block_device = super_device,
+                .metadata = metadata.get(),
+                .partition_name = snapshot,
+                .partition_opener = &opener,
+                .timeout_ms = timeout_ms,
+        };
+        if (!MapPartitionWithSnapshot(lock.get(), std::move(params), SnapshotContext::Mount,
+                                      nullptr)) {
+            LOG(ERROR) << "MapAllSnapshots failed to map: " << snapshot;
+            return false;
+        }
+    }
+
+    LOG(INFO) << "MapAllSnapshots succeeded.";
+    return true;
 }
 
 bool SnapshotManager::UnmapAllSnapshots() {
@@ -2584,6 +2616,10 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     // these devices.
     AutoDeviceList created_devices;
 
+    bool use_compression = IsCompressionEnabled() &&
+                           manifest.dynamic_partition_metadata().vabc_enabled() &&
+                           !device_->IsRecovery();
+
     PartitionCowCreator cow_creator{
             .target_metadata = target_metadata.get(),
             .target_suffix = target_suffix,
@@ -2592,7 +2628,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .current_suffix = current_suffix,
             .update = nullptr,
             .extra_extents = {},
-            .compression_enabled = IsCompressionEnabled(),
+            .compression_enabled = use_compression,
     };
 
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
@@ -2744,7 +2780,7 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
         }
 
         // Store these device sizes to snapshot status file.
-        if (!CreateSnapshot(lock, &cow_creator_ret->snapshot_status)) {
+        if (!CreateSnapshot(lock, cow_creator, &cow_creator_ret->snapshot_status)) {
             return Return::Error();
         }
         created_devices->EmplaceBack<AutoDeleteSnapshot>(this, lock, target_partition->name());
@@ -2857,16 +2893,20 @@ Return SnapshotManager::InitializeUpdateSnapshots(
 
 bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                                         std::string* snapshot_path) {
-    if (IsCompressionEnabled()) {
-        LOG(ERROR) << "MapUpdateSnapshot cannot be used in compression mode.";
-        return false;
-    }
-
     auto lock = LockShared();
     if (!lock) return false;
     if (!UnmapPartitionWithSnapshot(lock.get(), params.GetPartitionName())) {
         LOG(ERROR) << "Cannot unmap existing snapshot before re-mapping it: "
                    << params.GetPartitionName();
+        return false;
+    }
+
+    SnapshotStatus status;
+    if (!ReadSnapshotStatus(lock.get(), params.GetPartitionName(), &status)) {
+        return false;
+    }
+    if (status.compression_enabled()) {
+        LOG(ERROR) << "Cannot use MapUpdateSnapshot with compressed snapshots";
         return false;
     }
 
