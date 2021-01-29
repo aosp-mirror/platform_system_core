@@ -31,7 +31,8 @@
 #include <memory>
 #include <string>
 
-#include <android-base/logging.h>
+#include <async_safe/log.h>
+
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -151,13 +152,15 @@ static void dump_abort_message(Tombstone* tombstone, unwindstack::Unwinder* unwi
 
   size_t length;
   if (!process_memory->ReadFully(address, &length, sizeof(length))) {
-    PLOG(ERROR) << "Failed to read abort message header";
+    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to read abort message header: %s",
+                          strerror(errno));
     return;
   }
 
   // The length field includes the length of the length field itself.
   if (length < sizeof(size_t)) {
-    LOG(ERROR) << "Abort message header malformed: claimed length = " << length;
+    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG,
+                          "abort message header malformed: claimed length = %zu", length);
     return;
   }
 
@@ -168,7 +171,8 @@ static void dump_abort_message(Tombstone* tombstone, unwindstack::Unwinder* unwi
   msg.resize(length);
 
   if (!process_memory->ReadFully(address + sizeof(length), &msg[0], length)) {
-    PLOG(ERROR) << "Failed to read abort message header";
+    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to read abort message header: %s",
+                          strerror(errno));
     return;
   }
 
@@ -236,7 +240,11 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
 
           dump.set_begin_address(value);
 
-          CHECK(start_offset + bytes <= sizeof(buf));
+          if (start_offset + bytes > sizeof(buf)) {
+            async_safe_fatal("dump_memory overflowed? start offset = %zu, bytes read = %zd",
+                             start_offset, bytes);
+          }
+
           dump.set_memory(buf, start_offset + bytes);
 
           *thread.add_memory_dump() = std::move(dump);
@@ -247,10 +255,12 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
   unwinder->SetRegs(regs_copy.get());
   unwinder->Unwind();
   if (unwinder->NumFrames() == 0) {
-    LOG(ERROR) << "Failed to unwind";
+    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to unwind");
     if (unwinder->LastErrorCode() != unwindstack::ERROR_NONE) {
-      LOG(ERROR) << "  Error code: " << unwinder->LastErrorCodeString();
-      LOG(ERROR) << "  Error address: " << StringPrintf("0x%" PRIx64, unwinder->LastErrorAddress());
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "  error code: %s",
+                            unwinder->LastErrorCodeString());
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "  error address: 0x%" PRIx64,
+                            unwinder->LastErrorAddress());
     }
   } else {
     unwinder->SetDisplayBuildID(true);
@@ -351,11 +361,9 @@ static void dump_log_file(Tombstone* tombstone, const char* logger, pid_t pid) {
         // non-blocking EOF; we're done
         break;
       } else {
-        ALOGE("Error while reading log: %s\n", strerror(-actual));
         break;
       }
     } else if (actual == 0) {
-      ALOGE("Got zero bytes while reading log: %s\n", strerror(errno));
       break;
     }
 
@@ -431,7 +439,9 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwind
   result.set_selinux_label(main_thread.selinux_label);
 
   result.set_process_name(main_thread.process_name);
-  CHECK(main_thread.siginfo != nullptr);
+  if (!main_thread.siginfo) {
+    async_safe_fatal("siginfo missing");
+  }
 
   Signal sig;
   sig.set_number(main_thread.signo);

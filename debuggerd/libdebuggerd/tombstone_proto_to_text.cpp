@@ -25,9 +25,9 @@
 #include <utility>
 #include <vector>
 
-#include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
+#include <async_safe/log.h>
 
 #include "tombstone.pb.h"
 
@@ -113,7 +113,7 @@ static void print_thread_registers(CallbackType callback, const Tombstone& tombs
       break;
 
     default:
-      LOG(FATAL) << "unknown architecture";
+      async_safe_fatal("unknown architecture");
   }
 
   for (const auto& reg : thread.registers()) {
@@ -217,7 +217,6 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
   }
 
   if (!tombstone.has_signal_info()) {
-    LOG(ERROR) << "signal info missing in tombstone";
     CBL("signal information missing");
   } else {
     std::string fault_addr_desc;
@@ -319,7 +318,7 @@ bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback) 
   const auto& threads = tombstone.threads();
   auto main_thread_it = threads.find(tombstone.tid());
   if (main_thread_it == threads.end()) {
-    LOG(ERROR) << "failed to find entry for main thread in tombstone";
+    CBL("failed to find entry for main thread in tombstone");
     return false;
   }
 
