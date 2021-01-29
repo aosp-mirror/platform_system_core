@@ -4,6 +4,7 @@ cc_library {
     name: "libsparse",
     host_supported: true,
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     unique_host_soname: true,
     vendor_available: true,
@@ -27,6 +28,10 @@ cc_library {
             enabled: true,
         },
     },
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.virt",
+    ],
 }
 
 cc_binary {

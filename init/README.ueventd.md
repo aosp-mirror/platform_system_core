@@ -13,6 +13,16 @@ For example
     uevent_socket_rcvbuf_size 16M
 Sets the uevent socket rcvbuf_size to 16 megabytes.
 
+## Importing configuration files
+--------------------------------
+Ueventd reads /system/etc/ueventd.rc, all other files are imported via the `import` command, which
+takes the format of
+
+    import <path>
+This command parses an ueventd config file, extending the current configuration.  If _path_ is a
+directory, each file in the directory is parsed as a config file. It is not recursive, nested
+directories will not be parsed.  Imported files are parsed after the current file has been parsed.
+
 ## /dev
 ----
 Ueventd listens to the kernel uevent sockets and creates/deletes nodes in `/dev` based on the
@@ -32,7 +42,7 @@ for the node path:
 The permissions can be modified using a ueventd.rc script and a line that beings with `/dev`. These
 lines take the format of
 
-    devname mode uid gid
+    devname mode uid gid [options]
 For example
 
     /dev/null 0666 root root
@@ -70,7 +80,7 @@ Ueventd by default takes no action for `/sys`, however it can be instructed to s
 certain files in `/sys` when matching uevents are generated. This is done using a ueventd.rc script
 and a line that begins with `/sys`. These lines take the format of
 
-    nodename attr mode uid gid
+    nodename attr mode uid gid [options]
 For example
 
     /sys/devices/system/cpu/cpu* cpufreq/scaling_max_freq 0664 system system
@@ -78,7 +88,15 @@ When a uevent that matches the pattern `/sys/devices/system/cpu/cpu*` is sent, t
 attribute, `cpufreq/scaling_max_freq`, will have its mode set to `0664`, its user to to `system` and
 its group set to `system`.
 
-Note that `*` matches as a wildcard and can be used anywhere in a path.
+## Path matching
+----------------
+The path for a `/dev` or `/sys` entry can contain a `*` anywhere in the path.
+1. If the only `*` appears at the end of the string or if the _options_ parameter is set to
+`no_fnm_pathname`, ueventd matches the entry by `fnmatch(entry_path, incoming_path, 0)`
+2. Otherwise, ueventd matches the entry by `fnmatch(entry_path, incoming_path, FNM_PATHNAME)`
+
+See the [man page for fnmatch](https://www.man7.org/linux/man-pages/man3/fnmatch.3.html) for more
+details.
 
 ## Firmware loading
 ----------------

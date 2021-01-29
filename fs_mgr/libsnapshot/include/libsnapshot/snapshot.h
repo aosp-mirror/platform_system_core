@@ -15,6 +15,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <map>
@@ -37,6 +38,7 @@
 #include <libsnapshot/auto_device.h>
 #include <libsnapshot/return.h>
 #include <libsnapshot/snapshot_writer.h>
+#include <libsnapshot/snapuserd_client.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -76,6 +78,7 @@ class SnapshotMergeStats;
 class SnapshotStatus;
 
 static constexpr const std::string_view kCowGroupName = "cow";
+static constexpr char kVirtualAbCompressionProp[] = "ro.virtual_ab.compression.enabled";
 
 bool OptimizeSourceCopyOperation(const chromeos_update_engine::InstallOperation& operation,
                                  chromeos_update_engine::InstallOperation* optimized);
@@ -103,6 +106,7 @@ class ISnapshotManager {
                 android::hardware::boot::V1_1::MergeStatus status) = 0;
         virtual bool SetSlotAsUnbootable(unsigned int slot) = 0;
         virtual bool IsRecovery() const = 0;
+        virtual bool IsTestDevice() const { return false; }
     };
     virtual ~ISnapshotManager() = default;
 
@@ -182,9 +186,15 @@ class ISnapshotManager {
                                    std::string* snapshot_path) = 0;
 
     // Create an ISnapshotWriter to build a snapshot against a target partition. The partition name
-    // must be suffixed.
+    // must be suffixed. If a source partition exists, it must be specified as well. The source
+    // partition will only be used if raw bytes are needed. The source partition should be an
+    // absolute path to the device, not a partition name.
+    //
+    // After calling OpenSnapshotWriter, the caller must invoke Initialize or InitializeForAppend
+    // before invoking write operations.
     virtual std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
-            const android::fs_mgr::CreateLogicalPartitionParams& params) = 0;
+            const android::fs_mgr::CreateLogicalPartitionParams& params,
+            const std::optional<std::string>& source_device) = 0;
 
     // Unmap a snapshot device or CowWriter that was previously opened with MapUpdateSnapshot,
     // OpenSnapshotWriter. All outstanding open descriptors, writers, or
@@ -199,6 +209,14 @@ class ISnapshotManager {
     // call to CreateLogicalPartitions when snapshots are present.
     virtual bool CreateLogicalAndSnapshotPartitions(
             const std::string& super_device, const std::chrono::milliseconds& timeout_ms = {}) = 0;
+
+    // Map all snapshots. This is analogous to CreateLogicalAndSnapshotPartitions, except it maps
+    // the target slot rather than the current slot. It should only be used immediately after
+    // applying an update, before rebooting to the new slot.
+    virtual bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms = {}) = 0;
+
+    // Unmap all snapshots. This should be called to undo MapAllSnapshots().
+    virtual bool UnmapAllSnapshots() = 0;
 
     // This method should be called preceding any wipe or flash of metadata or
     // userdata. It is only valid in recovery or fastbootd, and it ensures that
@@ -288,6 +306,18 @@ class SnapshotManager final : public ISnapshotManager {
     // Helper function for second stage init to restorecon on the rollback indicator.
     static std::string GetGlobalRollbackIndicatorPath();
 
+    // Detach dm-user devices from the current snapuserd, and populate
+    // |snapuserd_argv| with the necessary arguments to restart snapuserd
+    // and reattach them.
+    bool DetachSnapuserdForSelinux(std::vector<std::string>* snapuserd_argv);
+
+    // Perform the transition from the selinux stage of snapuserd into the
+    // second-stage of snapuserd. This process involves re-creating the dm-user
+    // table entries for each device, so that they connect to the new daemon.
+    // Once all new tables have been activated, we ask the first-stage daemon
+    // to cleanly exit.
+    bool PerformSecondStageInitTransition();
+
     // ISnapshotManager overrides.
     bool BeginUpdate() override;
     bool CancelUpdate() override;
@@ -300,7 +330,8 @@ class SnapshotManager final : public ISnapshotManager {
     bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
     std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
-            const android::fs_mgr::CreateLogicalPartitionParams& params) override;
+            const android::fs_mgr::CreateLogicalPartitionParams& params,
+            const std::optional<std::string>& source_device) override;
     bool UnmapUpdateSnapshot(const std::string& target_partition_name) override;
     bool NeedSnapshotsInFirstStageMount() override;
     bool CreateLogicalAndSnapshotPartitions(
@@ -314,6 +345,20 @@ class SnapshotManager final : public ISnapshotManager {
     bool Dump(std::ostream& os) override;
     std::unique_ptr<AutoDevice> EnsureMetadataMounted() override;
     ISnapshotMergeStats* GetSnapshotMergeStatsInstance() override;
+    bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms = {}) override;
+    bool UnmapAllSnapshots() override;
+
+    // We can't use WaitForFile during first-stage init, because ueventd is not
+    // running and therefore will not automatically create symlinks. Instead,
+    // we let init provide us with the correct function to use to ensure
+    // uevents have been processed and symlink/mknod calls completed.
+    void SetUeventRegenCallback(std::function<bool(const std::string&)> callback) {
+        uevent_regen_callback_ = callback;
+    }
+
+    // If true, compression is enabled for this update. This is used by
+    // first-stage to decide whether to launch snapuserd.
+    bool IsSnapuserdRequired();
 
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
@@ -327,12 +372,14 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotTest, Merge);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
     FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
+    FRIEND_TEST(SnapshotUpdateTest, DaemonTransition);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeAfterRollback);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeRollbackInRecovery);
     FRIEND_TEST(SnapshotUpdateTest, FullUpdateFlow);
     FRIEND_TEST(SnapshotUpdateTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotUpdateTest, MergeInRecovery);
     FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
+    FRIEND_TEST(SnapshotUpdateTest, SpaceSwapUpdate);
     friend class SnapshotTest;
     friend class SnapshotUpdateTest;
     friend class FlashAfterUpdateTest;
@@ -351,11 +398,16 @@ class SnapshotManager final : public ISnapshotManager {
     // This is created lazily since it can connect via binder.
     bool EnsureImageManager();
 
-    // Helper for first-stage init.
-    bool ForceLocalImageManager();
+    // Ensure we're connected to snapuserd.
+    bool EnsureSnapuserdConnected();
 
-    // Helper function for tests.
+    // Helpers for first-stage init.
+    bool ForceLocalImageManager();
+    const std::unique_ptr<IDeviceInfo>& device() const { return device_; }
+
+    // Helper functions for tests.
     IImageManager* image_manager() const { return images_.get(); }
+    void set_use_first_stage_snapuserd(bool value) { use_first_stage_snapuserd_ = value; }
 
     // Since libsnapshot is included into multiple processes, we flock() our
     // files for simple synchronization. LockedFile is a helper to assist with
@@ -390,7 +442,7 @@ class SnapshotManager final : public ISnapshotManager {
     //
     // All sizes are specified in bytes, and the device, snapshot, COW partition and COW file sizes
     // must be a multiple of the sector size (512 bytes).
-    bool CreateSnapshot(LockedFile* lock, SnapshotStatus* status);
+    bool CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_creator, SnapshotStatus* status);
 
     // |name| should be the base partition name (e.g. "system_a"). Create the
     // backing COW image using the size previously passed to CreateSnapshot().
@@ -406,6 +458,15 @@ class SnapshotManager final : public ISnapshotManager {
     bool MapSnapshot(LockedFile* lock, const std::string& name, const std::string& base_device,
                      const std::string& cow_device, const std::chrono::milliseconds& timeout_ms,
                      std::string* dev_path);
+
+    // Create a dm-user device for a given snapshot.
+    bool MapDmUserCow(LockedFile* lock, const std::string& name, const std::string& cow_file,
+                      const std::string& base_device, const std::chrono::milliseconds& timeout_ms,
+                      std::string* path);
+
+    // Map the source device used for dm-user.
+    bool MapSourceDevice(LockedFile* lock, const std::string& name,
+                         const std::chrono::milliseconds& timeout_ms, std::string* path);
 
     // Map a COW image that was previous created with CreateCowImage.
     std::optional<std::string> MapCowImage(const std::string& name,
@@ -465,11 +526,13 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetMergeStateFilePath() const;
 
     // Helpers for merging.
+    bool MergeSecondPhaseSnapshots(LockedFile* lock);
     bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
     bool RewriteSnapshotDeviceTable(const std::string& dm_name);
     bool MarkSnapshotMergeCompleted(LockedFile* snapshot_lock, const std::string& snapshot_name);
     void AcknowledgeMergeSuccess(LockedFile* lock);
     void AcknowledgeMergeFailure();
+    MergePhase DecideMergePhase(const SnapshotStatus& status);
     std::unique_ptr<LpMetadata> ReadCurrentMetadata();
 
     enum class MetadataPartitionState {
@@ -502,7 +565,8 @@ class SnapshotManager final : public ISnapshotManager {
     //   UpdateState::MergeNeedsReboot
     UpdateState CheckMergeState(const std::function<bool()>& before_cancel);
     UpdateState CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
-    UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name);
+    UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name,
+                                      const SnapshotUpdateStatus& update_status);
 
     // Interact with status files under /metadata/ota/snapshots.
     bool WriteSnapshotStatus(LockedFile* lock, const SnapshotStatus& status);
@@ -512,12 +576,12 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetSnapshotBootIndicatorPath();
     std::string GetRollbackIndicatorPath();
     std::string GetForwardMergeIndicatorPath();
+    std::string GetOldPartitionMetadataPath();
 
-    // Return the name of the device holding the "snapshot" or "snapshot-merge"
-    // target. This may not be the final device presented via MapSnapshot(), if
-    // for example there is a linear segment.
-    std::string GetSnapshotDeviceName(const std::string& snapshot_name,
-                                      const SnapshotStatus& status);
+    const LpMetadata* ReadOldPartitionMetadata(LockedFile* lock);
+
+    bool MapAllPartitions(LockedFile* lock, const std::string& super_device, uint32_t slot,
+                          const std::chrono::milliseconds& timeout_ms);
 
     // Reason for calling MapPartitionWithSnapshot.
     enum class SnapshotContext {
@@ -532,22 +596,22 @@ class SnapshotManager final : public ISnapshotManager {
         // Target/base device (eg system_b), always present.
         std::string target_device;
 
-        // COW path (eg system_cow). Not present if no COW is needed.
-        std::string cow_device;
+        // COW name (eg system_cow). Not present if no COW is needed.
+        std::string cow_device_name;
 
         // dm-snapshot instance. Not present in Update mode for VABC.
         std::string snapshot_device;
     };
 
     // Helpers for OpenSnapshotWriter.
-    std::unique_ptr<ISnapshotWriter> OpenCompressedSnapshotWriter(LockedFile* lock,
-                                                                  const std::string& partition_name,
-                                                                  const SnapshotStatus& status,
-                                                                  const SnapshotPaths& paths);
-    std::unique_ptr<ISnapshotWriter> OpenKernelSnapshotWriter(LockedFile* lock,
-                                                              const std::string& partition_name,
-                                                              const SnapshotStatus& status,
-                                                              const SnapshotPaths& paths);
+    std::unique_ptr<ISnapshotWriter> OpenCompressedSnapshotWriter(
+            LockedFile* lock, const std::optional<std::string>& source_device,
+            const std::string& partition_name, const SnapshotStatus& status,
+            const SnapshotPaths& paths);
+    std::unique_ptr<ISnapshotWriter> OpenKernelSnapshotWriter(
+            LockedFile* lock, const std::optional<std::string>& source_device,
+            const std::string& partition_name, const SnapshotStatus& status,
+            const SnapshotPaths& paths);
 
     // Map the base device, COW devices, and snapshot device.
     bool MapPartitionWithSnapshot(LockedFile* lock, CreateLogicalPartitionParams params,
@@ -571,6 +635,9 @@ class SnapshotManager final : public ISnapshotManager {
     // The reverse of MapPartitionWithSnapshot.
     bool UnmapPartitionWithSnapshot(LockedFile* lock, const std::string& target_partition_name);
 
+    // Unmap a dm-user device through snapuserd.
+    bool UnmapDmUserDevice(const std::string& snapshot_name);
+
     // If there isn't a previous update, return true. |needs_merge| is set to false.
     // If there is a previous update but the device has not boot into it, tries to cancel the
     //   update and delete any snapshots. Return true if successful. |needs_merge| is set to false.
@@ -592,9 +659,12 @@ class SnapshotManager final : public ISnapshotManager {
             const LpMetadata* exported_target_metadata, const std::string& target_suffix,
             const std::map<std::string, SnapshotStatus>& all_snapshot_status);
 
+    // Implementation of UnmapAllSnapshots(), with the lock provided.
+    bool UnmapAllSnapshots(LockedFile* lock);
+
     // Unmap all partitions that were mapped by CreateLogicalAndSnapshotPartitions.
     // This should only be called in recovery.
-    bool UnmapAllPartitions();
+    bool UnmapAllPartitionsInRecovery();
 
     // Check no snapshot overflows. Note that this returns false negatives if the snapshot
     // overflows, then is remapped and not written afterwards.
@@ -608,8 +678,8 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Helper for RemoveAllSnapshots.
     // Check whether |name| should be deleted as a snapshot name.
-    bool ShouldDeleteSnapshot(LockedFile* lock, const std::map<std::string, bool>& flashing_status,
-                              Slot current_slot, const std::string& name);
+    bool ShouldDeleteSnapshot(const std::map<std::string, bool>& flashing_status, Slot current_slot,
+                              const std::string& name);
 
     // Create or delete forward merge indicator given |wipe|. Iff wipe is scheduled,
     // allow forward merge on FDR.
@@ -626,12 +696,40 @@ class SnapshotManager final : public ISnapshotManager {
     bool GetMappedImageDeviceStringOrPath(const std::string& device_name,
                                           std::string* device_string_or_mapped_path);
 
+    // Same as above, but for paths only (no major:minor device strings).
+    bool GetMappedImageDevicePath(const std::string& device_name, std::string* device_path);
+
+    // Wait for a device to be created by ueventd (eg, its symlink or node to be populated).
+    // This is needed for any code that uses device-mapper path in first-stage init. If
+    // |timeout_ms| is empty or the given device is not a path, WaitForDevice immediately
+    // returns true.
+    bool WaitForDevice(const std::string& device, std::chrono::milliseconds timeout_ms);
+
+    enum class InitTransition { SELINUX_DETACH, SECOND_STAGE };
+
+    // Initiate the transition from first-stage to second-stage snapuserd. This
+    // process involves re-creating the dm-user table entries for each device,
+    // so that they connect to the new daemon. Once all new tables have been
+    // activated, we ask the first-stage daemon to cleanly exit.
+    //
+    // If the mode is SELINUX_DETACH, snapuserd_argv must be non-null and will
+    // be populated with a list of snapuserd arguments to pass to execve(). It
+    // is otherwise ignored.
+    bool PerformInitTransition(InitTransition transition,
+                               std::vector<std::string>* snapuserd_argv = nullptr);
+
+    SnapuserdClient* snapuserd_client() const { return snapuserd_client_.get(); }
+
     std::string gsid_dir_;
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;
     std::unique_ptr<IImageManager> images_;
     bool has_local_image_manager_ = false;
+    bool use_first_stage_snapuserd_ = false;
     bool in_factory_data_reset_ = false;
+    std::function<bool(const std::string&)> uevent_regen_callback_;
+    std::unique_ptr<SnapuserdClient> snapuserd_client_;
+    std::unique_ptr<LpMetadata> old_partition_metadata_;
 };
 
 }  // namespace snapshot

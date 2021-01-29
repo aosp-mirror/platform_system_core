@@ -25,6 +25,7 @@ cc_library {
     recovery_available: true,
     native_bridge_supported: true,
     defaults: ["libsync_defaults"],
+    llndk_stubs: "libsync.llndk",
     stubs: {
         symbol_file: "libsync.map.txt",
         versions: [
@@ -34,7 +35,7 @@ cc_library {
 }
 
 llndk_library {
-    name: "libsync",
+    name: "libsync.llndk",
     symbol_file: "libsync.map.txt",
     export_include_dirs: ["include"],
 }

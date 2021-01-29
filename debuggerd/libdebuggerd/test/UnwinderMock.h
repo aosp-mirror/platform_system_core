@@ -34,7 +34,7 @@ class UnwinderMock : public unwindstack::Unwinder {
     unwindstack::MapInfo* map_info = GetMaps()->Find(offset);
     if (map_info != nullptr) {
       std::string* new_build_id = new std::string(build_id);
-      map_info->build_id = reinterpret_cast<uintptr_t>(new_build_id);
+      map_info->build_id = new_build_id;
     }
   }
 };

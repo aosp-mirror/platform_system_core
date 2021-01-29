@@ -88,6 +88,7 @@ using namespace std::literals::string_literals;
 
 using android::base::Basename;
 using android::base::SetProperty;
+using android::base::Split;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
@@ -860,6 +861,11 @@ static Result<void> do_verity_update_state(const BuiltinArguments& args) {
         // for system as root, so it has property [partition.system.verified].
         std::string partition = entry.mount_point == "/" ? "system" : Basename(entry.mount_point);
         SetProperty("partition." + partition + ".verified", std::to_string(mode));
+
+        std::string hash_alg = fs_mgr_get_hashtree_algorithm(entry);
+        if (!hash_alg.empty()) {
+            SetProperty("partition." + partition + ".verified.hash_alg", hash_alg);
+        }
     }
 
     return {};
@@ -963,6 +969,23 @@ static Result<void> do_copy(const BuiltinArguments& args) {
     }
     if (auto result = WriteFile(args[2], *file_contents); !result.ok()) {
         return Error() << "Could not write to output file '" << args[2] << "': " << result.error();
+    }
+
+    return {};
+}
+
+static Result<void> do_copy_per_line(const BuiltinArguments& args) {
+    std::string file_contents;
+    if (!android::base::ReadFileToString(args[1], &file_contents, true)) {
+        return Error() << "Could not read input file '" << args[1] << "'";
+    }
+    auto lines = Split(file_contents, "\n");
+    for (const auto& line : lines) {
+        auto result = WriteFile(args[2], line);
+        if (!result.ok()) {
+            LOG(VERBOSE) << "Could not write to output file '" << args[2] << "' with '" << line
+                         << "' : " << result.error();
+        }
     }
 
     return {};
@@ -1214,7 +1237,7 @@ static Result<void> do_mark_post_data(const BuiltinArguments& args) {
 }
 
 static Result<void> GenerateLinkerConfiguration() {
-    const char* linkerconfig_binary = "/system/bin/linkerconfig";
+    const char* linkerconfig_binary = "/apex/com.android.runtime/bin/linkerconfig";
     const char* linkerconfig_target = "/linkerconfig";
     const char* arguments[] = {linkerconfig_binary, "--target", linkerconfig_target};
 
@@ -1366,6 +1389,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"class_start_post_data",   {1,     1,    {false,  do_class_start_post_data}}},
         {"class_stop",              {1,     1,    {false,  do_class_stop}}},
         {"copy",                    {2,     2,    {true,   do_copy}}},
+        {"copy_per_line",           {2,     2,    {true,   do_copy_per_line}}},
         {"domainname",              {1,     1,    {true,   do_domainname}}},
         {"enable",                  {1,     1,    {false,  do_enable}}},
         {"exec",                    {1,     kMax, {false,  do_exec}}},

@@ -70,7 +70,7 @@ static void parse_options(int argc, char** argv) {
 }
 
 struct SetAttestationKeyRequest : public keymaster::KeymasterMessage {
-    explicit SetAttestationKeyRequest(int32_t ver = keymaster::MAX_MESSAGE_VERSION)
+    explicit SetAttestationKeyRequest(int32_t ver = keymaster::kDefaultMessageVersion)
         : KeymasterMessage(ver) {}
 
     size_t SerializedSize() const override { return sizeof(uint32_t) + key_data.SerializedSize(); }
@@ -88,7 +88,7 @@ struct SetAttestationKeyRequest : public keymaster::KeymasterMessage {
 };
 
 struct KeymasterNoResponse : public keymaster::KeymasterResponse {
-    explicit KeymasterNoResponse(int32_t ver = keymaster::MAX_MESSAGE_VERSION)
+    explicit KeymasterNoResponse(int32_t ver = keymaster::kDefaultMessageVersion)
         : keymaster::KeymasterResponse(ver) {}
 
     size_t NonErrorSerializedSize() const override { return 0; }
@@ -99,7 +99,7 @@ struct KeymasterNoResponse : public keymaster::KeymasterResponse {
 struct SetAttestationKeyResponse : public KeymasterNoResponse {};
 
 struct ClearAttestationCertChainRequest : public keymaster::KeymasterMessage {
-    explicit ClearAttestationCertChainRequest(int32_t ver = keymaster::MAX_MESSAGE_VERSION)
+    explicit ClearAttestationCertChainRequest(int32_t ver = keymaster::kDefaultMessageVersion)
         : KeymasterMessage(ver) {}
 
     size_t SerializedSize() const override { return sizeof(uint32_t); }
@@ -292,9 +292,14 @@ static int process_xml(xmlTextReaderPtr xml) {
                 value = xmlTextReaderConstValue(xml);
                 uint32_t cmd;
                 if (xmlStrEqual(element, BAD_CAST "PrivateKey")) {
-                    cmd = KM_SET_ATTESTATION_KEY;
-                } else if (xmlStrEqual(element, BAD_CAST "WrappedPrivateKey")) {
-                    cmd = KM_SET_WRAPPED_ATTESTATION_KEY;
+                    if (xmlStrEqual(element_format, BAD_CAST "pem")) {
+                        cmd = KM_SET_ATTESTATION_KEY;
+                    } else if (xmlStrEqual(element_format, BAD_CAST "iecs")) {
+                        cmd = KM_SET_WRAPPED_ATTESTATION_KEY;
+                    } else {
+                        printf("unsupported key format: %s\n", element_format);
+                        return -1;
+                    }
                 } else if (xmlStrEqual(element, BAD_CAST "Certificate")) {
                     cmd = KM_APPEND_ATTESTATION_CERT_CHAIN;
                 } else {

@@ -81,6 +81,8 @@ class Memory;
 
 void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix);
 
+ssize_t dump_memory(void* out, size_t len, size_t* start_offset, uint64_t* addr,
+                    unwindstack::Memory* memory);
 void dump_memory(log_t* log, unwindstack::Memory* backtrace, uint64_t addr, const std::string&);
 
 void drop_capabilities();
@@ -90,7 +92,5 @@ bool signal_has_si_addr(const siginfo_t*);
 void get_signal_sender(char* buf, size_t n, const siginfo_t*);
 const char* get_signame(const siginfo_t*);
 const char* get_sigcode(const siginfo_t*);
-
-uintptr_t get_fault_address(const siginfo_t* siginfo, const ucontext_t* ucontext);
 
 #endif // _DEBUGGERD_UTILITY_H

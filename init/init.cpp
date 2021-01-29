@@ -53,6 +53,7 @@
 #include <keyutils.h>
 #include <libavb/libavb.h>
 #include <libgsi/libgsi.h>
+#include <libsnapshot/snapshot.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
 #include <selinux/android.h>
@@ -71,12 +72,14 @@
 #include "proto_utils.h"
 #include "reboot.h"
 #include "reboot_utils.h"
+#include "second_stage_resources.h"
 #include "security.h"
 #include "selabel.h"
 #include "selinux.h"
 #include "service.h"
 #include "service_parser.h"
 #include "sigchld_handler.h"
+#include "snapuserd_transition.h"
 #include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
@@ -93,6 +96,7 @@ using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::Trim;
 using android::fs_mgr::AvbHandle;
+using android::snapshot::SnapshotManager;
 
 namespace android {
 namespace init {
@@ -263,12 +267,10 @@ void DebugRebootLogging() {
     if (shutdown_state.do_shutdown()) {
         LOG(ERROR) << "sys.powerctl set while a previous shutdown command has not been handled";
         UnwindMainThreadStack();
-        DumpShutdownDebugInformation();
     }
     if (IsShuttingDown()) {
         LOG(ERROR) << "sys.powerctl set while init is already shutting down";
         UnwindMainThreadStack();
-        DumpShutdownDebugInformation();
     }
 }
 
@@ -668,6 +670,12 @@ static void UmountDebugRamdisk() {
     }
 }
 
+static void UmountSecondStageRes() {
+    if (umount(kSecondStageRes) != 0) {
+        PLOG(ERROR) << "Failed to umount " << kSecondStageRes;
+    }
+}
+
 static void MountExtraFilesystems() {
 #define CHECKCALL(x) \
     if ((x) != 0) PLOG(FATAL) << #x " failed.";
@@ -715,6 +723,37 @@ void SendLoadPersistentPropertiesMessage() {
     }
 }
 
+static Result<void> TransitionSnapuserdAction(const BuiltinArguments&) {
+    if (!SnapshotManager::IsSnapshotManagerNeeded() ||
+        !android::base::GetBoolProperty(android::snapshot::kVirtualAbCompressionProp, false)) {
+        return {};
+    }
+
+    auto sm = SnapshotManager::New();
+    if (!sm) {
+        LOG(FATAL) << "Failed to create SnapshotManager, will not transition snapuserd";
+        return {};
+    }
+
+    ServiceList& service_list = ServiceList::GetInstance();
+    auto svc = service_list.FindService("snapuserd");
+    if (!svc) {
+        LOG(FATAL) << "Failed to find snapuserd service, aborting transition";
+        return {};
+    }
+    svc->Start();
+    svc->SetShutdownCritical();
+
+    if (!sm->PerformSecondStageInitTransition()) {
+        LOG(FATAL) << "Failed to transition snapuserd to second-stage";
+    }
+
+    if (auto pid = GetSnapuserdFirstStagePid()) {
+        KillFirstStageSnapuserd(pid.value());
+    }
+    return {};
+}
+
 int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
@@ -725,7 +764,7 @@ int SecondStageMain(int argc, char** argv) {
     trigger_shutdown = [](const std::string& command) { shutdown_state.TriggerShutdown(command); };
 
     SetStdioToDevNull(argv);
-    InitSecondStageLogging(argv);
+    InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
 
     // Update $PATH in the case the second stage init is newer than first stage init, where it is
@@ -775,6 +814,9 @@ int SecondStageMain(int argc, char** argv) {
     }
 
     PropertyInit();
+
+    // Umount second stage resources after property service has read the .prop files.
+    UmountSecondStageRes();
 
     // Umount the debug ramdisk after property service has read the .prop files when it means to.
     if (load_debug_prop) {
@@ -836,6 +878,21 @@ int SecondStageMain(int argc, char** argv) {
     auto is_installed = android::gsi::IsGsiInstalled() ? "1" : "0";
     SetProperty(gsi::kGsiInstalledProp, is_installed);
 
+    /*
+     * For debug builds of S launching devices, init mounts debugfs for
+     * enabling vendor debug data collection setup at boot time. Init will unmount it on
+     * boot-complete after vendor code has performed the required initializations
+     * during boot. Dumpstate will then mount debugfs in order to read data
+     * from the same using the dumpstate HAL during bugreport creation.
+     * Dumpstate will also unmount debugfs after bugreport creation.
+     * first_api_level comparison is done here instead
+     * of init.rc since init.rc parser does not support >/< operators.
+     */
+    auto api_level = android::base::GetIntProperty("ro.product.first_api_level", 0);
+    bool is_debuggable = android::base::GetBoolProperty("ro.debuggable", false);
+    auto mount_debugfs = (is_debuggable && (api_level >= 31)) ? "1" : "0";
+    SetProperty("init.mount_debugfs", mount_debugfs);
+
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
     am.QueueBuiltinAction(TestPerfEventSelinuxAction, "TestPerfEventSelinux");
@@ -843,6 +900,7 @@ int SecondStageMain(int argc, char** argv) {
 
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
     am.QueueBuiltinAction(wait_for_coldboot_done_action, "wait_for_coldboot_done");
+    am.QueueBuiltinAction(TransitionSnapuserdAction, "TransitionSnapuserd");
     // ... so that we can start queuing up actions that require stuff from /dev.
     am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");

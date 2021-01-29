@@ -67,6 +67,7 @@
 #include "persistent_properties.h"
 #include "property_type.h"
 #include "proto_utils.h"
+#include "second_stage_resources.h"
 #include "selinux.h"
 #include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
@@ -745,6 +746,15 @@ static bool load_properties_from_file(const char* filename, const char* filter,
     return true;
 }
 
+static void LoadPropertiesFromSecondStageRes(std::map<std::string, std::string>* properties) {
+    std::string prop = GetRamdiskPropForSecondStage();
+    if (access(prop.c_str(), R_OK) != 0) {
+        CHECK(errno == ENOENT) << "Cannot access " << prop << ": " << strerror(errno);
+        return;
+    }
+    load_properties_from_file(prop.c_str(), nullptr, properties);
+}
+
 // persist.sys.usb.config values can't be combined on build-time when property
 // files are split into each partition.
 // So we need to apply the same rule of build/make/tools/post_process_props.py
@@ -860,7 +870,7 @@ static void property_derive_build_fingerprint() {
     build_fingerprint += '/';
     build_fingerprint += GetProperty("ro.product.device", UNKNOWN);
     build_fingerprint += ':';
-    build_fingerprint += GetProperty("ro.build.version.release", UNKNOWN);
+    build_fingerprint += GetProperty("ro.build.version.release_or_codename", UNKNOWN);
     build_fingerprint += '/';
     build_fingerprint += GetProperty("ro.build.id", UNKNOWN);
     build_fingerprint += '/';
@@ -877,6 +887,69 @@ static void property_derive_build_fingerprint() {
     if (res != PROP_SUCCESS) {
         LOG(ERROR) << "Error setting property 'ro.build.fingerprint': err=" << res << " (" << error
                    << ")";
+    }
+}
+
+// If the ro.product.cpu.abilist* properties have not been explicitly
+// set, derive them from ro.${partition}.product.cpu.abilist* properties.
+static void property_initialize_ro_cpu_abilist() {
+    // From high to low priority.
+    const char* kAbilistSources[] = {
+            "product",
+            "odm",
+            "vendor",
+            "system",
+    };
+    const std::string EMPTY = "";
+    const char* kAbilistProp = "ro.product.cpu.abilist";
+    const char* kAbilist32Prop = "ro.product.cpu.abilist32";
+    const char* kAbilist64Prop = "ro.product.cpu.abilist64";
+
+    // If the properties are defined explicitly, just use them.
+    if (GetProperty(kAbilistProp, EMPTY) != EMPTY) {
+        return;
+    }
+
+    // Find the first source defining these properties by order.
+    std::string abilist32_prop_val;
+    std::string abilist64_prop_val;
+    for (const auto& source : kAbilistSources) {
+        const auto abilist32_prop = std::string("ro.") + source + ".product.cpu.abilist32";
+        const auto abilist64_prop = std::string("ro.") + source + ".product.cpu.abilist64";
+        abilist32_prop_val = GetProperty(abilist32_prop, EMPTY);
+        abilist64_prop_val = GetProperty(abilist64_prop, EMPTY);
+        // The properties could be empty on 32-bit-only or 64-bit-only devices,
+        // but we cannot identify a property is empty or undefined by GetProperty().
+        // So, we assume both of these 2 properties are empty as undefined.
+        if (abilist32_prop_val != EMPTY || abilist64_prop_val != EMPTY) {
+            break;
+        }
+    }
+
+    // Merge ABI lists for ro.product.cpu.abilist
+    auto abilist_prop_val = abilist64_prop_val;
+    if (abilist32_prop_val != EMPTY) {
+        if (abilist_prop_val != EMPTY) {
+            abilist_prop_val += ",";
+        }
+        abilist_prop_val += abilist32_prop_val;
+    }
+
+    // Set these properties
+    const std::pair<const char*, const std::string&> set_prop_list[] = {
+            {kAbilistProp, abilist_prop_val},
+            {kAbilist32Prop, abilist32_prop_val},
+            {kAbilist64Prop, abilist64_prop_val},
+    };
+    for (const auto& [prop, prop_val] : set_prop_list) {
+        LOG(INFO) << "Setting property '" << prop << "' to '" << prop_val << "'";
+
+        std::string error;
+        uint32_t res = PropertySet(prop, prop_val, &error);
+        if (res != PROP_SUCCESS) {
+            LOG(ERROR) << "Error setting property '" << prop << "': err=" << res << " (" << error
+                       << ")";
+        }
     }
 }
 
@@ -933,6 +1006,7 @@ void PropertyLoadBootDefaults() {
 
     // Order matters here. The more the partition is specific to a product, the higher its
     // precedence is.
+    LoadPropertiesFromSecondStageRes(&properties);
     load_properties_from_file("/system/build.prop", nullptr, &properties);
     load_properties_from_partition("system_ext", /* support_legacy_path_until */ 30);
     // TODO(b/117892318): uncomment the following condition when vendor.imgs for aosp_* targets are
@@ -945,8 +1019,6 @@ void PropertyLoadBootDefaults() {
     load_properties_from_file("/odm_dlkm/etc/build.prop", nullptr, &properties);
     load_properties_from_partition("odm", /* support_legacy_path_until */ 28);
     load_properties_from_partition("product", /* support_legacy_path_until */ 30);
-
-    load_properties_from_file("/factory/factory.prop", "ro.*", &properties);
 
     if (access(kDebugRamdiskProp, R_OK) == 0) {
         LOG(INFO) << "Loading " << kDebugRamdiskProp;
@@ -963,6 +1035,7 @@ void PropertyLoadBootDefaults() {
 
     property_initialize_ro_product_props();
     property_derive_build_fingerprint();
+    property_initialize_ro_cpu_abilist();
 
     update_sys_usb_config();
 }

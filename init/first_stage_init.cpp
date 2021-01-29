@@ -41,6 +41,8 @@
 #include "first_stage_console.h"
 #include "first_stage_mount.h"
 #include "reboot_utils.h"
+#include "second_stage_resources.h"
+#include "snapuserd_transition.h"
 #include "switch_root.h"
 #include "util.h"
 
@@ -88,6 +90,12 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
                         close(fd);
                     }
                 }
+            }
+        } else if (de->d_type == DT_REG) {
+            // Do not free snapuserd if we will need the ramdisk copy during the
+            // selinux transition.
+            if (de->d_name == "snapuserd"s && IsFirstStageSnapuserdRunning()) {
+                continue;
             }
         }
         unlinkat(dfd, de->d_name, is_dir ? AT_REMOVEDIR : 0);
@@ -192,6 +200,7 @@ int FirstStageMain(int argc, char** argv) {
     CHECKCALL(mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755"));
     CHECKCALL(mkdir("/dev/pts", 0755));
     CHECKCALL(mkdir("/dev/socket", 0755));
+    CHECKCALL(mkdir("/dev/dm-user", 0755));
     CHECKCALL(mount("devpts", "/dev/pts", "devpts", 0, NULL));
 #define MAKE_STR(x) __STRING(x)
     CHECKCALL(mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC)));
@@ -235,6 +244,11 @@ int FirstStageMain(int argc, char** argv) {
     // /debug_ramdisk is used to preserve additional files from the debug ramdisk
     CHECKCALL(mount("tmpfs", "/debug_ramdisk", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
+
+    // /second_stage_resources is used to preserve files from first to second
+    // stage init
+    CHECKCALL(mount("tmpfs", kSecondStageRes, "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                    "mode=0755,uid=0,gid=0"))
 #undef CHECKCALL
 
     SetStdioToDevNull(argv);
@@ -273,7 +287,21 @@ int FirstStageMain(int argc, char** argv) {
     }
 
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
-        StartConsole();
+        StartConsole(cmdline);
+    }
+
+    if (access(kBootImageRamdiskProp, F_OK) == 0) {
+        std::string dest = GetRamdiskPropForSecondStage();
+        std::string dir = android::base::Dirname(dest);
+        std::error_code ec;
+        if (!fs::create_directories(dir, ec) && !!ec) {
+            LOG(FATAL) << "Can't mkdir " << dir << ": " << ec.message();
+        }
+        if (!fs::copy_file(kBootImageRamdiskProp, dest, ec)) {
+            LOG(FATAL) << "Can't copy " << kBootImageRamdiskProp << " to " << dest << ": "
+                       << ec.message();
+        }
+        LOG(INFO) << "Copied ramdisk prop to " << dest;
     }
 
     if (ForceNormalBoot(cmdline)) {

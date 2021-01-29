@@ -115,21 +115,28 @@ static Result<void> ActivateFlattenedApexesFrom(const std::string& from_dir,
         return {};
     }
     dirent* entry;
+    std::vector<std::string> entries;
+
     while ((entry = readdir(dir.get())) != nullptr) {
         if (entry->d_name[0] == '.') continue;
         if (entry->d_type == DT_DIR) {
-            const std::string apex_path = from_dir + "/" + entry->d_name;
-            const auto apex_manifest = GetApexManifest(apex_path);
-            if (!apex_manifest.ok()) {
-                LOG(ERROR) << apex_path << " is not an APEX directory: " << apex_manifest.error();
-                continue;
-            }
-            const std::string mount_path = to_dir + "/" + apex_manifest->name();
-            if (auto result = MountDir(apex_path, mount_path); !result.ok()) {
-                return result;
-            }
-            on_activate(apex_path, *apex_manifest);
+            entries.push_back(entry->d_name);
         }
+    }
+
+    std::sort(entries.begin(), entries.end());
+    for (const auto& name : entries) {
+        const std::string apex_path = from_dir + "/" + name;
+        const auto apex_manifest = GetApexManifest(apex_path);
+        if (!apex_manifest.ok()) {
+            LOG(ERROR) << apex_path << " is not an APEX directory: " << apex_manifest.error();
+            continue;
+        }
+        const std::string mount_path = to_dir + "/" + apex_manifest->name();
+        if (auto result = MountDir(apex_path, mount_path); !result.ok()) {
+            return result;
+        }
+        on_activate(apex_path, *apex_manifest);
     }
     return {};
 }

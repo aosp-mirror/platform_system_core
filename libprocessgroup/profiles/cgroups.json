@@ -15,11 +15,6 @@
       "GID": "system"
     },
     {
-      "Controller": "cpuacct",
-      "Path": "/acct",
-      "Mode": "0555"
-    },
-    {
       "Controller": "cpuset",
       "Path": "/dev/cpuset",
       "Mode": "0755",
@@ -32,13 +27,6 @@
       "Mode": "0700",
       "UID": "root",
       "GID": "system"
-    },
-    {
-      "Controller": "schedtune",
-      "Path": "/dev/stune",
-      "Mode": "0755",
-      "UID": "system",
-      "GID": "system"
     }
   ],
   "Cgroups2": {
@@ -49,7 +37,7 @@
     "Controllers": [
       {
         "Controller": "freezer",
-        "Path": "freezer",
+        "Path": ".",
         "Mode": "0755",
         "UID": "system",
         "GID": "system"
