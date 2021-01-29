@@ -24,8 +24,7 @@
 
 PRODUCT_PACKAGES += \
 	android.hardware.keymaster@4.0-service.trusty \
-	android.hardware.gatekeeper@1.0-service.trusty \
-	trusty_apploader
+	android.hardware.gatekeeper@1.0-service.trusty
 
 PRODUCT_PROPERTY_OVERRIDES += \
 	ro.hardware.keystore=trusty \
