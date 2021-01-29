@@ -844,6 +844,9 @@ if ! ${color}; then
   NORMAL=""
 fi
 
+# Set an ERR trap handler to report any unhandled error
+trap 'die "line ${LINENO}: unhandled error"' ERR
+
 if ${print_time}; then
   echo "${BLUE}[     INFO ]${NORMAL}" start `date` >&2
 fi
@@ -1171,7 +1174,7 @@ echo "${GREEN}[ RUN      ]${NORMAL} remount" >&2
 
 # Feed log with selinux denials as baseline before overlays
 adb_unroot
-adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
+adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 adb_root
 
 D=`adb remount 2>&1`
@@ -1358,7 +1361,7 @@ if ${enforcing}; then
   echo "${GREEN}[       OK ]${NORMAL} /vendor content correct MAC after reboot" >&2
   # Feed unprivileged log with selinux denials as a result of overlays
   wait_for_screen
-  adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
+  adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 fi
 # If overlayfs has a nested security problem, this will fail.
 B="`adb_ls /system/`" ||
@@ -1385,7 +1388,7 @@ check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/
 check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 # Feed log with selinux denials as a result of overlays
-adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
+adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 
 # Check if the updated libc.so is persistent after reboot.
 adb_root &&
