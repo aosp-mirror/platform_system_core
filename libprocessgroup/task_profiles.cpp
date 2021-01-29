@@ -23,7 +23,9 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/threads.h>
 
 #include <cutils/android_filesystem_config.h>
@@ -37,12 +39,17 @@
 #endif
 
 using android::base::GetThreadId;
+using android::base::GetUintProperty;
 using android::base::StringPrintf;
+using android::base::StringReplace;
 using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
-#define TASK_PROFILE_DB_FILE "/etc/task_profiles.json"
-#define TASK_PROFILE_DB_VENDOR_FILE "/vendor/etc/task_profiles.json"
+static constexpr const char* TASK_PROFILE_DB_FILE = "/etc/task_profiles.json";
+static constexpr const char* TASK_PROFILE_DB_VENDOR_FILE = "/vendor/etc/task_profiles.json";
+
+static constexpr const char* TEMPLATE_TASK_PROFILE_API_FILE =
+        "/etc/task_profiles/task_profiles_%u.json";
 
 void ProfileAttribute::Reset(const CgroupController& controller, const std::string& file_name) {
     controller_ = controller;
@@ -257,6 +264,39 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     return true;
 }
 
+bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
+    std::string filepath(filepath_), value(value_);
+
+    filepath = StringReplace(filepath, "<uid>", std::to_string(uid), true);
+    filepath = StringReplace(filepath, "<pid>", std::to_string(pid), true);
+    value = StringReplace(value, "<uid>", std::to_string(uid), true);
+    value = StringReplace(value, "<pid>", std::to_string(pid), true);
+
+    if (!WriteStringToFile(value, filepath)) {
+        if (logfailures_) PLOG(ERROR) << "Failed to write '" << value << "' to " << filepath;
+        return false;
+    }
+
+    return true;
+}
+
+bool WriteFileAction::ExecuteForTask(int tid) const {
+    std::string filepath(filepath_), value(value_);
+    int uid = getuid();
+
+    filepath = StringReplace(filepath, "<uid>", std::to_string(uid), true);
+    filepath = StringReplace(filepath, "<pid>", std::to_string(tid), true);
+    value = StringReplace(value, "<uid>", std::to_string(uid), true);
+    value = StringReplace(value, "<pid>", std::to_string(tid), true);
+
+    if (!WriteStringToFile(value, filepath)) {
+        if (logfailures_) PLOG(ERROR) << "Failed to write '" << value << "' to " << filepath;
+        return false;
+    }
+
+    return true;
+}
+
 bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     for (const auto& profile : profiles_) {
         if (!profile->ExecuteForProcess(uid, pid)) {
@@ -354,6 +394,19 @@ TaskProfiles::TaskProfiles() {
     // load system task profiles
     if (!Load(CgroupMap::GetInstance(), TASK_PROFILE_DB_FILE)) {
         LOG(ERROR) << "Loading " << TASK_PROFILE_DB_FILE << " for [" << getpid() << "] failed";
+    }
+
+    // load API-level specific system task profiles if available
+    unsigned int api_level = GetUintProperty<unsigned int>("ro.product.first_api_level", 0);
+    if (api_level > 0) {
+        std::string api_profiles_path =
+                android::base::StringPrintf(TEMPLATE_TASK_PROFILE_API_FILE, api_level);
+        if (!access(api_profiles_path.c_str(), F_OK) || errno != ENOENT) {
+            if (!Load(CgroupMap::GetInstance(), api_profiles_path)) {
+                LOG(ERROR) << "Loading " << api_profiles_path << " for [" << getpid()
+                           << "] failed";
+            }
+        }
     }
 
     // load vendor task profiles if the file exists
@@ -458,6 +511,21 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                     }
                 } else {
                     LOG(WARNING) << "SetClamps: invalid parameter: " << boost_value;
+                }
+            } else if (action_name == "WriteFile") {
+                std::string attr_filepath = params_val["FilePath"].asString();
+                std::string attr_value = params_val["Value"].asString();
+                if (!attr_filepath.empty() && !attr_value.empty()) {
+                    const Json::Value& logfailures = params_val["LogFailures"];
+                    bool attr_logfailures = logfailures.isNull() || logfailures.asBool();
+                    profile->Add(std::make_unique<WriteFileAction>(attr_filepath, attr_value,
+                                                                   attr_logfailures));
+                } else if (attr_filepath.empty()) {
+                    LOG(WARNING) << "WriteFile: invalid parameter: "
+                                 << "empty filepath";
+                } else if (attr_value.empty()) {
+                    LOG(WARNING) << "WriteFile: invalid parameter: "
+                                 << "empty value";
                 }
             } else {
                 LOG(WARNING) << "Unknown profile action: " << action_name;

@@ -72,8 +72,8 @@ GwpAsanCrashData::GwpAsanCrashData(unwindstack::Memory* process_memory,
 
   // Get the external crash address from the thread info.
   crash_address_ = 0u;
-  if (signal_has_si_addr(thread_info.siginfo)) {
-    crash_address_ = reinterpret_cast<uintptr_t>(thread_info.siginfo->si_addr);
+  if (process_info.has_fault_address) {
+    crash_address_ = process_info.untagged_fault_address;
   }
 
   // Ensure the error belongs to GWP-ASan.

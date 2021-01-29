@@ -49,5 +49,12 @@ void MapScratchPartitionIfNeeded(Fstab* fstab,
                                  const std::function<bool(const std::set<std::string>&)>& init);
 void CleanupOldScratchFiles();
 
+// Teardown overlays of all sources (cache dir, scratch device, DSU) for |mount_point|.
+// Teardown all overlays if |mount_point| is empty.
+//
+// Note: This should be called if and only if in recovery or fastbootd to teardown
+// overlays if any partition is flashed or updated.
+void TeardownAllOverlayForMountPoint(const std::string& mount_point = {});
+
 }  // namespace fs_mgr
 }  // namespace android

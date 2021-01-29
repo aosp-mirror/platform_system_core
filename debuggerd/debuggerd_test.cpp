@@ -16,6 +16,7 @@
 
 #include <err.h>
 #include <fcntl.h>
+#include <malloc.h>
 #include <stdlib.h>
 #include <sys/capability.h>
 #include <sys/mman.h>
@@ -32,9 +33,7 @@
 
 #include <android/fdsan.h>
 #include <android/set_abort_message.h>
-#include <bionic/malloc.h>
 #include <bionic/mte.h>
-#include <bionic/mte_kernel.h>
 #include <bionic/reserved_signals.h>
 
 #include <android-base/cmsg.h>
@@ -312,7 +311,7 @@ TEST_F(CrasherTest, smoke) {
 
   if (mte_supported()) {
     // Test that the default TAGGED_ADDR_CTRL value is set.
-    ASSERT_MATCH(result, R"(tagged_addr_ctrl: 000000000007fff3)");
+    ASSERT_MATCH(result, R"(tagged_addr_ctrl: 000000000007fff5)");
   }
 }
 
@@ -384,27 +383,16 @@ TEST_F(CrasherTest, heap_addr_in_register) {
 #endif
 }
 
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
 static void SetTagCheckingLevelSync() {
-  int tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
-  if (tagged_addr_ctrl < 0) {
-    abort();
-  }
-
-  tagged_addr_ctrl = (tagged_addr_ctrl & ~PR_MTE_TCF_MASK) | PR_MTE_TCF_SYNC;
-  if (prctl(PR_SET_TAGGED_ADDR_CTRL, tagged_addr_ctrl, 0, 0, 0) != 0) {
-    abort();
-  }
-
-  HeapTaggingLevel heap_tagging_level = M_HEAP_TAGGING_LEVEL_SYNC;
-  if (!android_mallopt(M_SET_HEAP_TAGGING_LEVEL, &heap_tagging_level, sizeof(heap_tagging_level))) {
+  if (mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_SYNC) == 0) {
     abort();
   }
 }
 #endif
 
 TEST_F(CrasherTest, mte_uaf) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -436,12 +424,12 @@ allocated by thread .*
   ASSERT_MATCH(result, R"(deallocated by thread .*
       #00 pc)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
 TEST_F(CrasherTest, mte_overflow) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -470,12 +458,12 @@ TEST_F(CrasherTest, mte_overflow) {
 allocated by thread .*
       #00 pc)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
 TEST_F(CrasherTest, mte_underflow) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -504,12 +492,12 @@ TEST_F(CrasherTest, mte_underflow) {
 allocated by thread .*
       #00 pc)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
 TEST_F(CrasherTest, mte_multiple_causes) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -558,11 +546,11 @@ TEST_F(CrasherTest, mte_multiple_causes) {
   // overflows), so we can't match explicitly for an underflow message.
   ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a 16-byte allocation)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
 static uintptr_t CreateTagMapping() {
   uintptr_t mapping =
       reinterpret_cast<uintptr_t>(mmap(nullptr, getpagesize(), PROT_READ | PROT_WRITE | PROT_MTE,
@@ -579,7 +567,7 @@ static uintptr_t CreateTagMapping() {
 #endif
 
 TEST_F(CrasherTest, mte_tag_dump) {
-#if defined(__aarch64__) && defined(ANDROID_EXPERIMENTAL_MTE)
+#if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
@@ -607,7 +595,7 @@ TEST_F(CrasherTest, mte_tag_dump) {
     01.............0 0000000000000000 0000000000000000  ................
     00.............0)");
 #else
-  GTEST_SKIP() << "Requires aarch64 + ANDROID_EXPERIMENTAL_MTE";
+  GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
@@ -1321,11 +1309,11 @@ TEST(tombstoned, java_trace_intercept_smoke) {
   tombstoned_intercept(self, &intercept_fd, &output_fd, &status, kDebuggerdJavaBacktrace);
   ASSERT_EQ(InterceptStatus::kRegistered, status);
 
-  // First connect to tombstoned requesting a native backtrace. This
+  // First connect to tombstoned requesting a native tombstone. This
   // should result in a "regular" FD and not the installed intercept.
   const char native[] = "native";
   unique_fd tombstoned_socket, input_fd;
-  ASSERT_TRUE(tombstoned_connect(self, &tombstoned_socket, &input_fd, kDebuggerdNativeBacktrace));
+  ASSERT_TRUE(tombstoned_connect(self, &tombstoned_socket, &input_fd, kDebuggerdTombstone));
   ASSERT_TRUE(android::base::WriteFully(input_fd.get(), native, sizeof(native)));
   tombstoned_notify_completion(tombstoned_socket.get());
 
@@ -1436,4 +1424,71 @@ TEST_F(CrasherTest, stack_overflow) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(Cause: stack pointer[^\n]*stack overflow.\n)");
+}
+
+TEST(tombstoned, proto) {
+  const pid_t self = getpid();
+  unique_fd tombstoned_socket, text_fd, proto_fd;
+  ASSERT_TRUE(
+      tombstoned_connect(self, &tombstoned_socket, &text_fd, &proto_fd, kDebuggerdTombstoneProto));
+
+  tombstoned_notify_completion(tombstoned_socket.get());
+
+  ASSERT_NE(-1, text_fd.get());
+  ASSERT_NE(-1, proto_fd.get());
+
+  struct stat text_st;
+  ASSERT_EQ(0, fstat(text_fd.get(), &text_st));
+
+  // Give tombstoned some time to link the files into place.
+  std::this_thread::sleep_for(100ms);
+
+  // Find the tombstone.
+  std::optional<int> tombstone_index;
+  for (int i = 0; i < 50; ++i) {
+    std::string path = android::base::StringPrintf("/data/tombstones/tombstone_%02d", i);
+
+    struct stat st;
+    if (TEMP_FAILURE_RETRY(stat(path.c_str(), &st)) != 0) {
+      continue;
+    }
+
+    if (st.st_dev == text_st.st_dev && st.st_ino == text_st.st_ino) {
+      tombstone_index = i;
+      break;
+    }
+  }
+
+  ASSERT_TRUE(tombstone_index);
+  std::string proto_path =
+      android::base::StringPrintf("/data/tombstones/tombstone_%02d.pb", *tombstone_index);
+
+  struct stat proto_fd_st;
+  struct stat proto_file_st;
+  ASSERT_EQ(0, fstat(proto_fd.get(), &proto_fd_st));
+  ASSERT_EQ(0, stat(proto_path.c_str(), &proto_file_st));
+
+  ASSERT_EQ(proto_fd_st.st_dev, proto_file_st.st_dev);
+  ASSERT_EQ(proto_fd_st.st_ino, proto_file_st.st_ino);
+}
+
+TEST(tombstoned, proto_intercept) {
+  const pid_t self = getpid();
+  unique_fd intercept_fd, output_fd;
+  InterceptStatus status;
+
+  tombstoned_intercept(self, &intercept_fd, &output_fd, &status, kDebuggerdTombstone);
+  ASSERT_EQ(InterceptStatus::kRegistered, status);
+
+  unique_fd tombstoned_socket, text_fd, proto_fd;
+  ASSERT_TRUE(
+      tombstoned_connect(self, &tombstoned_socket, &text_fd, &proto_fd, kDebuggerdTombstoneProto));
+  ASSERT_TRUE(android::base::WriteStringToFd("foo", text_fd.get()));
+  tombstoned_notify_completion(tombstoned_socket.get());
+
+  text_fd.reset();
+
+  std::string output;
+  ASSERT_TRUE(android::base::ReadFdToString(output_fd, &output));
+  ASSERT_EQ("foo", output);
 }

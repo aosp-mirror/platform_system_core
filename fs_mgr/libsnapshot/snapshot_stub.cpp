@@ -131,9 +131,19 @@ ISnapshotMergeStats* SnapshotManagerStub::GetSnapshotMergeStatsInstance() {
 }
 
 std::unique_ptr<ISnapshotWriter> SnapshotManagerStub::OpenSnapshotWriter(
-        const CreateLogicalPartitionParams&) {
+        const CreateLogicalPartitionParams&, const std::optional<std::string>&) {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return nullptr;
+}
+
+bool SnapshotManagerStub::MapAllSnapshots(const std::chrono::milliseconds&) {
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
+    return false;
+}
+
+bool SnapshotManagerStub::UnmapAllSnapshots() {
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
+    return false;
 }
 
 }  // namespace android::snapshot

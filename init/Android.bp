@@ -60,6 +60,7 @@ init_device_sources = [
     "selabel.cpp",
     "selinux.cpp",
     "sigchld_handler.cpp",
+    "snapuserd_transition.cpp",
     "switch_root.cpp",
     "uevent_listener.cpp",
     "ueventd.cpp",
@@ -232,6 +233,7 @@ cc_binary {
             ],
         },
     },
+    visibility: ["//packages/modules/Virtualization/microdroid"],
 }
 
 // Tests
@@ -274,7 +276,6 @@ cc_test {
     test_suites: [
         "cts",
         "device-tests",
-        "vts10",
     ],
 }
 

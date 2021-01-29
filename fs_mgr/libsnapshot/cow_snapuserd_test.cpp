@@ -14,18 +14,26 @@
 
 #include <fcntl.h>
 #include <linux/fs.h>
+#include <linux/memfd.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
+#include <unistd.h>
 
+#include <chrono>
 #include <iostream>
 #include <memory>
 #include <string_view>
 
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
+#include <fs_mgr/file_wait.h>
 #include <gtest/gtest.h>
+#include <libdm/dm.h>
+#include <libdm/loop_control.h>
 #include <libsnapshot/cow_writer.h>
+#include <libsnapshot/snapuserd_client.h>
 #include <storage_literals/storage_literals.h>
 
 namespace android {
@@ -33,313 +41,429 @@ namespace snapshot {
 
 using namespace android::storage_literals;
 using android::base::unique_fd;
+using LoopDevice = android::dm::LoopDevice;
+using namespace std::chrono_literals;
+using namespace android::dm;
+using namespace std;
 
-class SnapuserdTest : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        cow_system_ = std::make_unique<TemporaryFile>();
-        ASSERT_GE(cow_system_->fd, 0) << strerror(errno);
+static constexpr char kSnapuserdSocketTest[] = "snapuserdTest";
 
-        cow_product_ = std::make_unique<TemporaryFile>();
-        ASSERT_GE(cow_product_->fd, 0) << strerror(errno);
+class TempDevice {
+  public:
+    TempDevice(const std::string& name, const DmTable& table)
+        : dm_(DeviceMapper::Instance()), name_(name), valid_(false) {
+        valid_ = dm_.CreateDevice(name, table, &path_, std::chrono::seconds(5));
+    }
+    TempDevice(TempDevice&& other) noexcept
+        : dm_(other.dm_), name_(other.name_), path_(other.path_), valid_(other.valid_) {
+        other.valid_ = false;
+    }
+    ~TempDevice() {
+        if (valid_) {
+            dm_.DeleteDevice(name_);
+        }
+    }
+    bool Destroy() {
+        if (!valid_) {
+            return false;
+        }
+        valid_ = false;
+        return dm_.DeleteDevice(name_);
+    }
+    const std::string& path() const { return path_; }
+    const std::string& name() const { return name_; }
+    bool valid() const { return valid_; }
 
-        size_ = 100_MiB;
+    TempDevice(const TempDevice&) = delete;
+    TempDevice& operator=(const TempDevice&) = delete;
+
+    TempDevice& operator=(TempDevice&& other) noexcept {
+        name_ = other.name_;
+        valid_ = other.valid_;
+        other.valid_ = false;
+        return *this;
     }
 
-    void TearDown() override {
-        cow_system_ = nullptr;
-        cow_product_ = nullptr;
-    }
-
-    std::unique_ptr<TemporaryFile> cow_system_;
-    std::unique_ptr<TemporaryFile> cow_product_;
-
-    unique_fd sys_fd_;
-    unique_fd product_fd_;
-    size_t size_;
-
-    int system_blksize_;
-    int product_blksize_;
-    std::string system_device_name_;
-    std::string product_device_name_;
-
-    std::unique_ptr<uint8_t[]> random_buffer_1_;
-    std::unique_ptr<uint8_t[]> random_buffer_2_;
-    std::unique_ptr<uint8_t[]> zero_buffer_;
-    std::unique_ptr<uint8_t[]> system_buffer_;
-    std::unique_ptr<uint8_t[]> product_buffer_;
-
-    void Init();
-    void CreateCowDevice(std::unique_ptr<TemporaryFile>& cow);
-    void CreateSystemDmUser();
-    void CreateProductDmUser();
-    void StartSnapuserdDaemon();
-    void CreateSnapshotDevices();
-
-    void TestIO(unique_fd& snapshot_fd, std::unique_ptr<uint8_t[]>&& buf);
+  private:
+    DeviceMapper& dm_;
+    std::string name_;
+    std::string path_;
+    bool valid_;
 };
 
-void SnapuserdTest::Init() {
+class CowSnapuserdTest final {
+  public:
+    bool Setup();
+    bool Merge();
+    void ValidateMerge();
+    void ReadSnapshotDeviceAndValidate();
+    void Shutdown();
+    void MergeInterrupt();
+
+    std::string snapshot_dev() const { return snapshot_dev_->path(); }
+
+    static const uint64_t kSectorSize = 512;
+
+  private:
+    void SetupImpl();
+
+    void MergeImpl();
+    void SimulateDaemonRestart();
+    void StartMerge();
+
+    void CreateCowDevice();
+    void CreateBaseDevice();
+    void InitCowDevice();
+    void SetDeviceControlName();
+    void InitDaemon();
+    void CreateDmUserDevice();
+    void StartSnapuserdDaemon();
+    void CreateSnapshotDevice();
+    unique_fd CreateTempFile(const std::string& name, size_t size);
+
+    unique_ptr<LoopDevice> base_loop_;
+    unique_ptr<TempDevice> dmuser_dev_;
+    unique_ptr<TempDevice> snapshot_dev_;
+
+    std::string system_device_ctrl_name_;
+    std::string system_device_name_;
+
+    unique_fd base_fd_;
+    std::unique_ptr<TemporaryFile> cow_system_;
+    std::unique_ptr<SnapuserdClient> client_;
+    std::unique_ptr<uint8_t[]> orig_buffer_;
+    std::unique_ptr<uint8_t[]> merged_buffer_;
+    bool setup_ok_ = false;
+    bool merge_ok_ = false;
+    size_t size_ = 50_MiB;
+    int cow_num_sectors_;
+    int total_base_size_;
+};
+
+unique_fd CowSnapuserdTest::CreateTempFile(const std::string& name, size_t size) {
+    unique_fd fd(syscall(__NR_memfd_create, name.c_str(), MFD_ALLOW_SEALING));
+    if (fd < 0) {
+        return {};
+    }
+    if (size) {
+        if (ftruncate(fd, size) < 0) {
+            perror("ftruncate");
+            return {};
+        }
+        if (fcntl(fd, F_ADD_SEALS, F_SEAL_GROW | F_SEAL_SHRINK) < 0) {
+            perror("fcntl");
+            return {};
+        }
+    }
+    return fd;
+}
+
+void CowSnapuserdTest::Shutdown() {
+    ASSERT_TRUE(snapshot_dev_->Destroy());
+    ASSERT_TRUE(dmuser_dev_->Destroy());
+
+    auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
+    ASSERT_TRUE(client_->WaitForDeviceDelete(system_device_ctrl_name_));
+    ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted(misc_device, 10s));
+    ASSERT_TRUE(client_->DetachSnapuserd());
+}
+
+bool CowSnapuserdTest::Setup() {
+    SetupImpl();
+    return setup_ok_;
+}
+
+void CowSnapuserdTest::StartSnapuserdDaemon() {
+    pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        std::string arg0 = "/system/bin/snapuserd";
+        std::string arg1 = "-socket="s + kSnapuserdSocketTest;
+        char* const argv[] = {arg0.data(), arg1.data(), nullptr};
+        ASSERT_GE(execv(arg0.c_str(), argv), 0);
+    } else {
+        client_ = SnapuserdClient::Connect(kSnapuserdSocketTest, 10s);
+        ASSERT_NE(client_, nullptr);
+    }
+}
+
+void CowSnapuserdTest::CreateBaseDevice() {
     unique_fd rnd_fd;
-    loff_t offset = 0;
+
+    total_base_size_ = (size_ * 4);
+    base_fd_ = CreateTempFile("base_device", total_base_size_);
+    ASSERT_GE(base_fd_, 0);
 
     rnd_fd.reset(open("/dev/random", O_RDONLY));
     ASSERT_TRUE(rnd_fd > 0);
 
-    random_buffer_1_ = std::make_unique<uint8_t[]>(size_);
-    random_buffer_2_ = std::make_unique<uint8_t[]>(size_);
-    system_buffer_ = std::make_unique<uint8_t[]>(size_);
-    product_buffer_ = std::make_unique<uint8_t[]>(size_);
-    zero_buffer_ = std::make_unique<uint8_t[]>(size_);
+    std::unique_ptr<uint8_t[]> random_buffer = std::make_unique<uint8_t[]>(1_MiB);
+
+    for (size_t j = 0; j < ((total_base_size_) / 1_MiB); j++) {
+        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer.get(), 1_MiB, 0), true);
+        ASSERT_EQ(android::base::WriteFully(base_fd_, random_buffer.get(), 1_MiB), true);
+    }
+
+    ASSERT_EQ(lseek(base_fd_, 0, SEEK_SET), 0);
+
+    base_loop_ = std::make_unique<LoopDevice>(base_fd_, 10s);
+    ASSERT_TRUE(base_loop_->valid());
+}
+
+void CowSnapuserdTest::ReadSnapshotDeviceAndValidate() {
+    unique_fd snapshot_fd(open(snapshot_dev_->path().c_str(), O_RDONLY));
+    ASSERT_TRUE(snapshot_fd > 0);
+
+    std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(size_);
+
+    // COPY
+    loff_t offset = 0;
+    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), size_, offset), true);
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), orig_buffer_.get(), size_), 0);
+
+    // REPLACE
+    offset += size_;
+    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), size_, offset), true);
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + size_, size_), 0);
+
+    // ZERO
+    offset += size_;
+    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), size_, offset), true);
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 2), size_), 0);
+
+    // REPLACE
+    offset += size_;
+    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), size_, offset), true);
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 3), size_), 0);
+}
+
+void CowSnapuserdTest::CreateCowDevice() {
+    unique_fd rnd_fd;
+    loff_t offset = 0;
+
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
+
+    rnd_fd.reset(open("/dev/random", O_RDONLY));
+    ASSERT_TRUE(rnd_fd > 0);
+
+    std::unique_ptr<uint8_t[]> random_buffer_1_ = std::make_unique<uint8_t[]>(size_);
 
     // Fill random data
     for (size_t j = 0; j < (size_ / 1_MiB); j++) {
         ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_1_.get() + offset, 1_MiB, 0),
                   true);
 
-        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_2_.get() + offset, 1_MiB, 0),
-                  true);
-
         offset += 1_MiB;
     }
-
-    sys_fd_.reset(open("/dev/block/mapper/system_a", O_RDONLY));
-    ASSERT_TRUE(sys_fd_ > 0);
-
-    product_fd_.reset(open("/dev/block/mapper/product_a", O_RDONLY));
-    ASSERT_TRUE(product_fd_ > 0);
-
-    // Read from system partition from offset 0 of size 100MB
-    ASSERT_EQ(ReadFullyAtOffset(sys_fd_, system_buffer_.get(), size_, 0), true);
-
-    // Read from system partition from offset 0 of size 100MB
-    ASSERT_EQ(ReadFullyAtOffset(product_fd_, product_buffer_.get(), size_, 0), true);
-}
-
-void SnapuserdTest::CreateCowDevice(std::unique_ptr<TemporaryFile>& cow) {
-    //================Create a COW file with the following operations===========
-    //
-    // Create COW file which is gz compressed
-    //
-    // 0-100 MB of replace operation with random data
-    // 100-200 MB of copy operation
-    // 200-300 MB of zero operation
-    // 300-400 MB of replace operation with random data
 
     CowOptions options;
     options.compression = "gz";
     CowWriter writer(options);
 
-    ASSERT_TRUE(writer.Initialize(cow->fd));
-
-    // Write 100MB random data to COW file which is gz compressed from block 0
-    ASSERT_TRUE(writer.AddRawBlocks(0, random_buffer_1_.get(), size_));
+    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
 
     size_t num_blocks = size_ / options.block_size;
-    size_t blk_start_copy = num_blocks;
-    size_t blk_end_copy = blk_start_copy + num_blocks;
-    size_t source_blk = 0;
+    size_t blk_end_copy = num_blocks * 2;
+    size_t source_blk = num_blocks - 1;
+    size_t blk_src_copy = blk_end_copy - 1;
 
-    // Copy blocks - source_blk starts from 0 as snapuserd
-    // has to read from block 0 in system_a partition
-    //
-    // This initializes copy operation from block 0 of size 100 MB from
-    // /dev/block/mapper/system_a or product_a
-    for (size_t i = blk_start_copy; i < blk_end_copy; i++) {
-        ASSERT_TRUE(writer.AddCopy(i, source_blk));
-        source_blk += 1;
+    size_t x = num_blocks;
+    while (1) {
+        ASSERT_TRUE(writer.AddCopy(source_blk, blk_src_copy));
+        x -= 1;
+        if (x == 0) {
+            break;
+        }
+        source_blk -= 1;
+        blk_src_copy -= 1;
     }
 
-    size_t blk_zero_copy_start = blk_end_copy;
+    source_blk = num_blocks;
+    blk_src_copy = blk_end_copy;
+
+    ASSERT_TRUE(writer.AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
+
+    size_t blk_zero_copy_start = source_blk + num_blocks;
     size_t blk_zero_copy_end = blk_zero_copy_start + num_blocks;
 
-    // 100 MB filled with zeroes
     ASSERT_TRUE(writer.AddZeroBlocks(blk_zero_copy_start, num_blocks));
 
-    // Final 100MB filled with random data which is gz compressed
     size_t blk_random2_replace_start = blk_zero_copy_end;
 
-    ASSERT_TRUE(writer.AddRawBlocks(blk_random2_replace_start, random_buffer_2_.get(), size_));
+    ASSERT_TRUE(writer.AddRawBlocks(blk_random2_replace_start, random_buffer_1_.get(), size_));
 
     // Flush operations
-    ASSERT_TRUE(writer.Flush());
-
-    ASSERT_EQ(lseek(cow->fd, 0, SEEK_SET), 0);
+    ASSERT_TRUE(writer.Finalize());
+    // Construct the buffer required for validation
+    orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
+    std::string zero_buffer(size_, 0);
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), size_, size_), true);
+    memcpy((char*)orig_buffer_.get() + size_, random_buffer_1_.get(), size_);
+    memcpy((char*)orig_buffer_.get() + (size_ * 2), (void*)zero_buffer.c_str(), size_);
+    memcpy((char*)orig_buffer_.get() + (size_ * 3), random_buffer_1_.get(), size_);
 }
 
-void SnapuserdTest::CreateSystemDmUser() {
-    unique_fd system_a_fd;
-    std::string cmd;
+void CowSnapuserdTest::InitCowDevice() {
+    cow_num_sectors_ = client_->InitDmUserCow(system_device_ctrl_name_, cow_system_->path,
+                                              base_loop_->device());
+    ASSERT_NE(cow_num_sectors_, 0);
+}
 
-    // Create a COW device. Number of sectors is chosen random which can
-    // hold at least 400MB of data
-
-    system_a_fd.reset(open("/dev/block/mapper/system_a", O_RDONLY));
-    ASSERT_TRUE(system_a_fd > 0);
-
-    int err = ioctl(system_a_fd.get(), BLKGETSIZE, &system_blksize_);
-    ASSERT_GE(err, 0);
+void CowSnapuserdTest::SetDeviceControlName() {
+    system_device_name_.clear();
+    system_device_ctrl_name_.clear();
 
     std::string str(cow_system_->path);
     std::size_t found = str.find_last_of("/\\");
     ASSERT_NE(found, std::string::npos);
     system_device_name_ = str.substr(found + 1);
-    cmd = "dmctl create " + system_device_name_ + " user 0 " + std::to_string(system_blksize_);
 
-    system(cmd.c_str());
+    system_device_ctrl_name_ = system_device_name_ + "-ctrl";
 }
 
-void SnapuserdTest::CreateProductDmUser() {
-    unique_fd product_a_fd;
-    std::string cmd;
+void CowSnapuserdTest::CreateDmUserDevice() {
+    DmTable dmuser_table;
+    ASSERT_TRUE(dmuser_table.AddTarget(
+            std::make_unique<DmTargetUser>(0, cow_num_sectors_, system_device_ctrl_name_)));
+    ASSERT_TRUE(dmuser_table.valid());
 
-    // Create a COW device. Number of sectors is chosen random which can
-    // hold at least 400MB of data
+    dmuser_dev_ = std::make_unique<TempDevice>(system_device_name_, dmuser_table);
+    ASSERT_TRUE(dmuser_dev_->valid());
+    ASSERT_FALSE(dmuser_dev_->path().empty());
 
-    product_a_fd.reset(open("/dev/block/mapper/product_a", O_RDONLY));
-    ASSERT_TRUE(product_a_fd > 0);
-
-    int err = ioctl(product_a_fd.get(), BLKGETSIZE, &product_blksize_);
-    ASSERT_GE(err, 0);
-
-    std::string str(cow_product_->path);
-    std::size_t found = str.find_last_of("/\\");
-    ASSERT_NE(found, std::string::npos);
-    product_device_name_ = str.substr(found + 1);
-    cmd = "dmctl create " + product_device_name_ + " user 0 " + std::to_string(product_blksize_);
-
-    system(cmd.c_str());
+    auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
+    ASSERT_TRUE(android::fs_mgr::WaitForFile(misc_device, 10s));
 }
 
-void SnapuserdTest::StartSnapuserdDaemon() {
-    // Start the snapuserd daemon
-    if (fork() == 0) {
-        const char* argv[] = {"/system/bin/snapuserd",       cow_system_->path,
-                              "/dev/block/mapper/system_a",  cow_product_->path,
-                              "/dev/block/mapper/product_a", nullptr};
-        if (execv(argv[0], const_cast<char**>(argv))) {
-            ASSERT_TRUE(0);
-        }
-    }
+void CowSnapuserdTest::InitDaemon() {
+    bool ok = client_->AttachDmUser(system_device_ctrl_name_);
+    ASSERT_TRUE(ok);
 }
 
-void SnapuserdTest::CreateSnapshotDevices() {
-    std::string cmd;
+void CowSnapuserdTest::CreateSnapshotDevice() {
+    DmTable snap_table;
+    ASSERT_TRUE(snap_table.AddTarget(std::make_unique<DmTargetSnapshot>(
+            0, total_base_size_ / kSectorSize, base_loop_->device(), dmuser_dev_->path(),
+            SnapshotStorageMode::Persistent, 8)));
+    ASSERT_TRUE(snap_table.valid());
 
-    cmd = "dmctl create system-snapshot -ro snapshot 0 " + std::to_string(system_blksize_);
-    cmd += " /dev/block/mapper/system_a";
-    cmd += " /dev/block/mapper/" + system_device_name_;
-    cmd += " P 8";
+    snap_table.set_readonly(true);
 
-    system(cmd.c_str());
-
-    cmd.clear();
-
-    cmd = "dmctl create product-snapshot -ro snapshot 0 " + std::to_string(product_blksize_);
-    cmd += " /dev/block/mapper/product_a";
-    cmd += " /dev/block/mapper/" + product_device_name_;
-    cmd += " P 8";
-
-    system(cmd.c_str());
+    snapshot_dev_ = std::make_unique<TempDevice>("cowsnapuserd-test-dm-snapshot", snap_table);
+    ASSERT_TRUE(snapshot_dev_->valid());
+    ASSERT_FALSE(snapshot_dev_->path().empty());
 }
 
-void SnapuserdTest::TestIO(unique_fd& snapshot_fd, std::unique_ptr<uint8_t[]>&& buf) {
-    loff_t offset = 0;
-    std::unique_ptr<uint8_t[]> buffer = std::move(buf);
+void CowSnapuserdTest::SetupImpl() {
+    CreateBaseDevice();
+    CreateCowDevice();
 
-    std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(size_);
-
-    //================Start IO operation on dm-snapshot device=================
-    // This will test the following paths:
-    //
-    // 1: IO path for all three operations and interleaving of operations.
-    // 2: Merging of blocks in kernel during metadata read
-    // 3: Bulk IO issued by kernel duing merge operation
-
-    // Read from snapshot device of size 100MB from offset 0. This tests the
-    // 1st replace operation.
-    //
-    // IO path:
-    //
-    // dm-snap->dm-snap-persistent->dm-user->snapuserd->read_compressed_cow (replace
-    // op)->decompress_cow->return
-
-    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), size_, offset), true);
-
-    // Update the offset
-    offset += size_;
-
-    // Compare data with random_buffer_1_.
-    ASSERT_EQ(memcmp(snapuserd_buffer.get(), random_buffer_1_.get(), size_), 0);
-
-    // Clear the buffer
-    memset(snapuserd_buffer.get(), 0, size_);
-
-    // Read from snapshot device of size 100MB from offset 100MB. This tests the
-    // copy operation.
-    //
-    // IO path:
-    //
-    // dm-snap->dm-snap-persistent->dm-user->snapuserd->read_from_system_a_partition
-    // (copy op) -> return
-    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), size_, offset), true);
-
-    // Update the offset
-    offset += size_;
-
-    // Compare data with buffer.
-    ASSERT_EQ(memcmp(snapuserd_buffer.get(), buffer.get(), size_), 0);
-
-    // Read from snapshot device of size 100MB from offset 200MB. This tests the
-    // zero operation.
-    //
-    // IO path:
-    //
-    // dm-snap->dm-snap-persistent->dm-user->snapuserd->fill_memory_with_zero
-    // (zero op) -> return
-    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), size_, offset), true);
-
-    // Compare data with zero filled buffer
-    ASSERT_EQ(memcmp(snapuserd_buffer.get(), zero_buffer_.get(), size_), 0);
-
-    // Update the offset
-    offset += size_;
-
-    // Read from snapshot device of size 100MB from offset 300MB. This tests the
-    // final replace operation.
-    //
-    // IO path:
-    //
-    // dm-snap->dm-snap-persistent->dm-user->snapuserd->read_compressed_cow (replace
-    // op)->decompress_cow->return
-    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), size_, offset), true);
-
-    // Compare data with random_buffer_2_.
-    ASSERT_EQ(memcmp(snapuserd_buffer.get(), random_buffer_2_.get(), size_), 0);
-}
-
-TEST_F(SnapuserdTest, ReadWrite) {
-    unique_fd snapshot_fd;
-
-    Init();
-
-    CreateCowDevice(cow_system_);
-    CreateCowDevice(cow_product_);
-
-    CreateSystemDmUser();
-    CreateProductDmUser();
+    SetDeviceControlName();
 
     StartSnapuserdDaemon();
+    InitCowDevice();
 
-    CreateSnapshotDevices();
+    CreateDmUserDevice();
+    InitDaemon();
 
-    snapshot_fd.reset(open("/dev/block/mapper/system-snapshot", O_RDONLY));
-    ASSERT_TRUE(snapshot_fd > 0);
-    TestIO(snapshot_fd, std::move(system_buffer_));
+    CreateSnapshotDevice();
+    setup_ok_ = true;
+}
 
-    snapshot_fd.reset(open("/dev/block/mapper/product-snapshot", O_RDONLY));
-    ASSERT_TRUE(snapshot_fd > 0);
-    TestIO(snapshot_fd, std::move(product_buffer_));
+bool CowSnapuserdTest::Merge() {
+    MergeImpl();
+    return merge_ok_;
+}
+
+void CowSnapuserdTest::StartMerge() {
+    DmTable merge_table;
+    ASSERT_TRUE(merge_table.AddTarget(std::make_unique<DmTargetSnapshot>(
+            0, total_base_size_ / kSectorSize, base_loop_->device(), dmuser_dev_->path(),
+            SnapshotStorageMode::Merge, 8)));
+    ASSERT_TRUE(merge_table.valid());
+    ASSERT_EQ(total_base_size_ / kSectorSize, merge_table.num_sectors());
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    ASSERT_TRUE(dm.LoadTableAndActivate("cowsnapuserd-test-dm-snapshot", merge_table));
+}
+
+void CowSnapuserdTest::MergeImpl() {
+    StartMerge();
+    DeviceMapper& dm = DeviceMapper::Instance();
+
+    while (true) {
+        vector<DeviceMapper::TargetInfo> status;
+        ASSERT_TRUE(dm.GetTableStatus("cowsnapuserd-test-dm-snapshot", &status));
+        ASSERT_EQ(status.size(), 1);
+        ASSERT_EQ(strncmp(status[0].spec.target_type, "snapshot-merge", strlen("snapshot-merge")),
+                  0);
+
+        DmTargetSnapshot::Status merge_status;
+        ASSERT_TRUE(DmTargetSnapshot::ParseStatusText(status[0].data, &merge_status));
+        ASSERT_TRUE(merge_status.error.empty());
+        if (merge_status.sectors_allocated == merge_status.metadata_sectors) {
+            break;
+        }
+
+        std::this_thread::sleep_for(250ms);
+    }
+
+    merge_ok_ = true;
+}
+
+void CowSnapuserdTest::ValidateMerge() {
+    merged_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, merged_buffer_.get(), total_base_size_, 0),
+              true);
+    ASSERT_EQ(memcmp(merged_buffer_.get(), orig_buffer_.get(), total_base_size_), 0);
+}
+
+void CowSnapuserdTest::SimulateDaemonRestart() {
+    Shutdown();
+    SetDeviceControlName();
+    StartSnapuserdDaemon();
+    InitCowDevice();
+    CreateDmUserDevice();
+    InitDaemon();
+    CreateSnapshotDevice();
+}
+
+void CowSnapuserdTest::MergeInterrupt() {
+    StartMerge();
+    std::this_thread::sleep_for(4s);
+    SimulateDaemonRestart();
+
+    StartMerge();
+    std::this_thread::sleep_for(3s);
+    SimulateDaemonRestart();
+
+    StartMerge();
+    std::this_thread::sleep_for(3s);
+    SimulateDaemonRestart();
+
+    StartMerge();
+    std::this_thread::sleep_for(1s);
+    SimulateDaemonRestart();
+
+    ASSERT_TRUE(Merge());
+}
+
+TEST(Snapuserd_Test, Snapshot_Merge_Resume) {
+    CowSnapuserdTest harness;
+    ASSERT_TRUE(harness.Setup());
+    harness.MergeInterrupt();
+    harness.ValidateMerge();
+    harness.Shutdown();
+}
+
+TEST(Snapuserd_Test, Snapshot) {
+    CowSnapuserdTest harness;
+    ASSERT_TRUE(harness.Setup());
+    harness.ReadSnapshotDeviceAndValidate();
+    ASSERT_TRUE(harness.Merge());
+    harness.ValidateMerge();
+    harness.Shutdown();
 }
 
 }  // namespace snapshot

@@ -14,6 +14,11 @@
 // limitations under the License.
 //
 
+filegroup {
+    name: "android_filesystem_config_header",
+    srcs: ["include/private/android_filesystem_config.h"],
+}
+
 // some files must not be compiled when building against Mingw
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
@@ -27,8 +32,10 @@ libcutils_nonwindows_sources = [
 cc_library_headers {
     name: "libcutils_headers",
     vendor_available: true,
+    product_available: true,
     recovery_available: true,
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     apex_available: [
         "//apex_available:platform",
@@ -39,7 +46,10 @@ cc_library_headers {
     export_include_dirs: ["include"],
     target: {
         vendor: {
-            override_export_include_dirs: ["include_vndk"],
+            override_export_include_dirs: ["include_outside_system"],
+        },
+        product: {
+            override_export_include_dirs: ["include_outside_system"],
         },
         linux_bionic: {
             enabled: true,
@@ -54,7 +64,10 @@ cc_library_headers {
 cc_library {
     name: "libcutils_sockets",
     vendor_available: true,
+    product_available: true,
     recovery_available: true,
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     native_bridge_supported: true,
     apex_available: [
@@ -135,11 +148,13 @@ cc_test {
 cc_library {
     name: "libcutils",
     vendor_available: true,
+    product_available: true,
     vndk: {
         enabled: true,
         support_system_process: true,
     },
     recovery_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     apex_available: [
         "//apex_available:platform",
@@ -152,6 +167,7 @@ cc_library {
         "canned_fs_config.cpp",
         "iosched_policy.cpp",
         "load_file.cpp",
+        "memory.cpp",
         "native_handle.cpp",
         "properties.cpp",
         "record_stream.cpp",
@@ -221,14 +237,19 @@ cc_library {
             },
         },
 
+        // qtaguid.cpp loads libnetd_client.so with dlopen().  Since
+        // the interface of libnetd_client.so may vary between AOSP
+        // releases, exclude qtaguid.cpp from the VNDK-SP variant.
         vendor: {
             exclude_srcs: [
-                // qtaguid.cpp loads libnetd_client.so with dlopen().  Since
-                // the interface of libnetd_client.so may vary between AOSP
-                // releases, exclude qtaguid.cpp from the VNDK-SP variant.
                 "qtaguid.cpp",
             ],
-        }
+        },
+        product: {
+            exclude_srcs: [
+                "qtaguid.cpp",
+            ],
+        },
     },
 
     whole_static_libs: ["libcutils_sockets"],

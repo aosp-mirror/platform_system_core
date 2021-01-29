@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/perf_event.h>
+#include <selinux/selinux.h>
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -222,6 +223,19 @@ Result<void> SetKptrRestrictAction(const BuiltinArguments&) {
 // supporting kernels that precede the perf_event_open hooks (Android common
 // kernels 4.4 and 4.9).
 Result<void> TestPerfEventSelinuxAction(const BuiltinArguments&) {
+    // Special case: for *development devices* that boot with permissive
+    // SELinux, treat the LSM hooks as present for the effect of lowering the
+    // perf_event_paranoid sysctl. The sysprop is reused for pragmatic reasons,
+    // as there no existing way for init rules to check for permissive boot at
+    // the time of writing.
+    if (ALLOW_PERMISSIVE_SELINUX) {
+        if (!security_getenforce()) {
+            LOG(INFO) << "Permissive SELinux boot, forcing sys.init.perf_lsm_hooks to 1.";
+            SetProperty("sys.init.perf_lsm_hooks", "1");
+            return {};
+        }
+    }
+
     // Use a trivial event that will be configured, but not started.
     struct perf_event_attr pe = {
             .type = PERF_TYPE_SOFTWARE,

@@ -583,18 +583,19 @@ bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
 
 }  // namespace
 
-void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_partitions) {
+void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
+                          const std::vector<std::string>& dsu_partitions) {
     static constexpr char kDsuKeysDir[] = "/avb";
     // Convert userdata
     // Inherit fstab properties for userdata.
     FstabEntry userdata;
     if (FstabEntry* entry = GetEntryForMountPoint(fstab, "/data")) {
         userdata = *entry;
-        userdata.blk_device = "userdata_gsi";
+        userdata.blk_device = android::gsi::kDsuUserdata;
         userdata.fs_mgr_flags.logical = true;
         userdata.fs_mgr_flags.formattable = true;
         if (!userdata.metadata_key_dir.empty()) {
-            userdata.metadata_key_dir += "/gsi";
+            userdata.metadata_key_dir = android::gsi::GetDsuMetadataKeyDir(dsu_slot);
         }
     } else {
         userdata = BuildDsuUserdataFstabEntry();
@@ -610,7 +611,11 @@ void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_part
             continue;
         }
         // userdata has been handled
-        if (StartsWith(partition, "user")) {
+        if (partition == android::gsi::kDsuUserdata) {
+            continue;
+        }
+        // scratch is handled by fs_mgr_overlayfs
+        if (partition == android::gsi::kDsuScratch) {
             continue;
         }
         // dsu_partition_name = corresponding_partition_name + kDsuPostfix
@@ -687,9 +692,21 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
         return false;
     }
     if (!is_proc_mounts && !access(android::gsi::kGsiBootedIndicatorFile, F_OK)) {
+        // This is expected to fail if host is android Q, since Q doesn't
+        // support DSU slotting. The DSU "active" indicator file would be
+        // non-existent or empty if DSU is enabled within the guest system.
+        // In that case, just use the default slot name "dsu".
+        std::string dsu_slot;
+        if (!android::gsi::GetActiveDsu(&dsu_slot)) {
+            PWARNING << __FUNCTION__ << "(): failed to get active dsu slot";
+        }
+        if (dsu_slot.empty()) {
+            dsu_slot = "dsu";
+        }
+
         std::string lp_names;
         ReadFileToString(gsi::kGsiLpNamesFile, &lp_names);
-        TransformFstabForDsu(fstab, Split(lp_names, ","));
+        TransformFstabForDsu(fstab, dsu_slot, Split(lp_names, ","));
     }
 
 #ifndef NO_SKIP_MOUNT

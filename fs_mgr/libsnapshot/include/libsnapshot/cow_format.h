@@ -15,6 +15,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <string>
 
 namespace android {
 namespace snapshot {
@@ -29,17 +30,22 @@ static constexpr uint32_t kCowVersionMinor = 0;
 //      +-----------------------+
 //      |     Header (fixed)    |
 //      +-----------------------+
-//      |  Raw Data (variable)  |
+//      | Operation  (variable) |
+//      | Data       (variable) |
 //      +-----------------------+
-//      | Operations (variable) |
+//      |    Footer (fixed)     |
 //      +-----------------------+
 //
-// The "raw data" occurs immediately after the header, and the operation
-// sequence occurs after the raw data. This ordering is intentional. While
-// streaming an OTA, we can immediately write compressed data, but store the
-// metadata in memory. At the end, we can simply append the metadata and flush
-// the file. There is no need to create separate files to store the metadata
-// and block data.
+// The operations begin immediately after the header, and the "raw data"
+// immediately follows the operation which refers to it. While streaming
+// an OTA, we can immediately write the op and data, syncing after each pair,
+// while storing operation metadata in memory. At the end, we compute data and
+// hashes for the footer, which is placed at the tail end of the file.
+//
+// A missing or corrupt footer likely indicates that writing was cut off
+// between writing the last operation/data pair, or the footer itself. In this
+// case, the safest way to proceed is to assume the last operation is faulty.
+
 struct CowHeader {
     uint64_t magic;
     uint16_t major_version;
@@ -48,18 +54,44 @@ struct CowHeader {
     // Size of this struct.
     uint16_t header_size;
 
-    // Offset to the location of the operation sequence, and size of the
-    // operation sequence buffer. |ops_offset| is also the end of the
-    // raw data region.
-    uint64_t ops_offset;
-    uint64_t ops_size;
-    uint64_t num_ops;
+    // Size of footer struct
+    uint16_t footer_size;
+
+    // Size of op struct
+    uint16_t op_size;
 
     // The size of block operations, in bytes.
     uint32_t block_size;
 
-    // SHA256 checksums of this header, with this field set to 0.
-    uint8_t header_checksum[32];
+    // The number of ops to cluster together. 0 For no clustering. Cannot be 1.
+    uint32_t cluster_ops;
+
+    // Tracks merge operations completed
+    uint64_t num_merge_ops;
+} __attribute__((packed));
+
+// This structure is the same size of a normal Operation, but is repurposed for the footer.
+struct CowFooterOperation {
+    // The operation code (always kCowFooterOp).
+    uint8_t type;
+
+    // If this operation reads from the data section of the COW, this contains
+    // the compression type of that data (see constants below).
+    uint8_t compression;
+
+    // Length of Footer Data. Currently 64 for both checksums
+    uint16_t data_length;
+
+    // The amount of file space used by Cow operations
+    uint64_t ops_size;
+
+    // The number of cow operations in the file
+    uint64_t num_ops;
+} __attribute__((packed));
+
+struct CowFooterData {
+    // SHA256 checksums of Footer op
+    uint8_t footer_checksum[32];
 
     // SHA256 of the operation sequence.
     uint8_t ops_checksum[32];
@@ -87,21 +119,42 @@ struct CowOperation {
     // For copy operations, this is a block location in the source image.
     //
     // For replace operations, this is a byte offset within the COW's data
-    // section (eg, not landing within the header or metadata). It is an
+    // sections (eg, not landing within the header or metadata). It is an
     // absolute position within the image.
     //
     // For zero operations (replace with all zeroes), this is unused and must
     // be zero.
+    //
+    // For Label operations, this is the value of the applied label.
+    //
+    // For Cluster operations, this is the length of the following data region
     uint64_t source;
 } __attribute__((packed));
+
+static_assert(sizeof(CowOperation) == sizeof(CowFooterOperation));
 
 static constexpr uint8_t kCowCopyOp = 1;
 static constexpr uint8_t kCowReplaceOp = 2;
 static constexpr uint8_t kCowZeroOp = 3;
+static constexpr uint8_t kCowLabelOp = 4;
+static constexpr uint8_t kCowClusterOp = 5;
+static constexpr uint8_t kCowFooterOp = -1;
 
 static constexpr uint8_t kCowCompressNone = 0;
 static constexpr uint8_t kCowCompressGz = 1;
 static constexpr uint8_t kCowCompressBrotli = 2;
+
+struct CowFooter {
+    CowFooterOperation op;
+    CowFooterData data;
+} __attribute__((packed));
+
+std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
+
+int64_t GetNextOpOffset(const CowOperation& op, uint32_t cluster_size);
+int64_t GetNextDataOffset(const CowOperation& op, uint32_t cluster_size);
+
+bool IsMetadataOp(const CowOperation& op);
 
 }  // namespace snapshot
 }  // namespace android

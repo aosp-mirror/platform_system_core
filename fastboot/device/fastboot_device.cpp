@@ -22,7 +22,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
-#include <android/hardware/fastboot/1.0/IFastboot.h>
+#include <android/hardware/fastboot/1.1/IFastboot.h>
 #include <fs_mgr.h>
 #include <fs_mgr/roots.h>
 #include <healthhalutils/HealthHalUtils.h>
@@ -37,7 +37,7 @@ using android::fs_mgr::Fstab;
 using ::android::hardware::hidl_string;
 using ::android::hardware::boot::V1_0::IBootControl;
 using ::android::hardware::boot::V1_0::Slot;
-using ::android::hardware::fastboot::V1_0::IFastboot;
+using ::android::hardware::fastboot::V1_1::IFastboot;
 using ::android::hardware::health::V2_0::get_health_service;
 
 namespace sph = std::placeholders;
@@ -139,7 +139,13 @@ bool FastbootDevice::WriteStatus(FastbootResult result, const std::string& messa
 bool FastbootDevice::HandleData(bool read, std::vector<char>* data) {
     auto read_write_data_size = read ? this->get_transport()->Read(data->data(), data->size())
                                      : this->get_transport()->Write(data->data(), data->size());
-    if (read_write_data_size == -1 || static_cast<size_t>(read_write_data_size) != data->size()) {
+    if (read_write_data_size == -1) {
+        LOG(ERROR) << (read ? "read from" : "write to") << " transport failed";
+        return false;
+    }
+    if (static_cast<size_t>(read_write_data_size) != data->size()) {
+        LOG(ERROR) << (read ? "read" : "write") << " expected " << data->size() << " bytes, got "
+                   << read_write_data_size;
         return false;
     }
     return true;

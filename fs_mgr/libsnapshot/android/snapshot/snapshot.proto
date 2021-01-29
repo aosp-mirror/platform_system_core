@@ -34,7 +34,19 @@ enum SnapshotState {
     MERGE_COMPLETED = 3;
 }
 
-// Next: 9
+// Next: 3
+enum MergePhase {
+    // No merge is in progress.
+    NO_MERGE = 0;
+
+    // Shrunk partitions can merge.
+    FIRST_PHASE = 1;
+
+    // Grown partitions can merge.
+    SECOND_PHASE = 2;
+}
+
+// Next: 11
 message SnapshotStatus {
     // Name of the snapshot. This is usually the name of the snapshotted
     // logical partition; for example, "system_b".
@@ -84,6 +96,12 @@ message SnapshotStatus {
     // the merge process.
     // This is non-zero when |state| == MERGING or MERGE_COMPLETED.
     uint64 metadata_sectors = 8;
+
+    // True if compression is enabled, false otherwise.
+    bool compression_enabled = 9;
+
+    // The old partition size (if none existed, this will be zero).
+    uint64 old_partition_size = 10;
 }
 
 // Next: 8
@@ -115,7 +133,7 @@ enum UpdateState {
     Cancelled = 7;
 };
 
-// Next: 5
+// Next: 7
 message SnapshotUpdateStatus {
     UpdateState state = 1;
 
@@ -130,6 +148,12 @@ message SnapshotUpdateStatus {
 
     // Sectors allocated for metadata in all the snapshot devices.
     uint64 metadata_sectors = 4;
+
+    // Whether compression/dm-user was used for any snapshots.
+    bool compression_enabled = 5;
+
+    // Merge phase (if state == MERGING).
+    MergePhase merge_phase = 6;
 }
 
 // Next: 4

@@ -24,13 +24,100 @@
 namespace android {
 namespace snapshot {
 
+using android::base::borrowed_fd;
 using android::base::unique_fd;
 using chromeos_update_engine::FileDescriptor;
 
 ISnapshotWriter::ISnapshotWriter(const CowOptions& options) : ICowWriter(options) {}
 
-void ISnapshotWriter::SetSourceDevice(android::base::unique_fd&& source_fd) {
-    source_fd_ = std::move(source_fd);
+void ISnapshotWriter::SetSourceDevice(const std::string& source_device) {
+    source_device_ = {source_device};
+}
+
+borrowed_fd ISnapshotWriter::GetSourceFd() {
+    if (!source_device_) {
+        LOG(ERROR) << "Attempted to read from source device but none was set";
+        return borrowed_fd{-1};
+    }
+
+    if (source_fd_ < 0) {
+        source_fd_.reset(open(source_device_->c_str(), O_RDONLY | O_CLOEXEC));
+        if (source_fd_ < 0) {
+            PLOG(ERROR) << "open " << *source_device_;
+            return borrowed_fd{-1};
+        }
+    }
+    return source_fd_;
+}
+
+CompressedSnapshotWriter::CompressedSnapshotWriter(const CowOptions& options)
+    : ISnapshotWriter(options) {}
+
+bool CompressedSnapshotWriter::SetCowDevice(android::base::unique_fd&& cow_device) {
+    cow_device_ = std::move(cow_device);
+    cow_ = std::make_unique<CowWriter>(options_);
+    return true;
+}
+
+bool CompressedSnapshotWriter::Finalize() {
+    return cow_->Finalize();
+}
+
+uint64_t CompressedSnapshotWriter::GetCowSize() {
+    return cow_->GetCowSize();
+}
+
+std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
+    unique_fd cow_fd(dup(cow_device_.get()));
+    if (cow_fd < 0) {
+        PLOG(ERROR) << "dup COW device";
+        return nullptr;
+    }
+
+    auto cow = std::make_unique<CowReader>();
+    if (!cow->Parse(std::move(cow_fd))) {
+        LOG(ERROR) << "Unable to read COW";
+        return nullptr;
+    }
+
+    auto reader = std::make_unique<CompressedSnapshotReader>();
+    if (!reader->SetCow(std::move(cow))) {
+        LOG(ERROR) << "Unable to initialize COW reader";
+        return nullptr;
+    }
+    if (source_device_) {
+        reader->SetSourceDevice(*source_device_);
+    }
+
+    const auto& cow_options = options();
+    reader->SetBlockDeviceSize(*cow_options.max_blocks * cow_options.block_size);
+
+    return reader;
+}
+
+bool CompressedSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
+    return cow_->AddCopy(new_block, old_block);
+}
+
+bool CompressedSnapshotWriter::EmitRawBlocks(uint64_t new_block_start, const void* data,
+                                             size_t size) {
+    return cow_->AddRawBlocks(new_block_start, data, size);
+}
+
+bool CompressedSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
+    return cow_->AddZeroBlocks(new_block_start, num_blocks);
+}
+
+bool CompressedSnapshotWriter::EmitLabel(uint64_t label) {
+    return cow_->AddLabel(label);
+}
+
+bool CompressedSnapshotWriter::Initialize() {
+    return cow_->Initialize(cow_device_);
+}
+
+bool CompressedSnapshotWriter::InitializeAppend(uint64_t label) {
+    return cow_->InitializeAppend(cow_device_, label);
 }
 
 OnlineKernelSnapshotWriter::OnlineKernelSnapshotWriter(const CowOptions& options)
@@ -42,7 +129,7 @@ void OnlineKernelSnapshotWriter::SetSnapshotDevice(android::base::unique_fd&& sn
     cow_size_ = cow_size;
 }
 
-bool OnlineKernelSnapshotWriter::Flush() {
+bool OnlineKernelSnapshotWriter::Finalize() {
     if (fsync(snapshot_fd_.get()) < 0) {
         PLOG(ERROR) << "fsync";
         return false;
@@ -75,13 +162,23 @@ bool OnlineKernelSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64
 }
 
 bool OnlineKernelSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
+    auto source_fd = GetSourceFd();
+    if (source_fd < 0) {
+        return false;
+    }
+
     std::string buffer(options_.block_size, 0);
     uint64_t offset = old_block * options_.block_size;
-    if (!android::base::ReadFullyAtOffset(source_fd_, buffer.data(), buffer.size(), offset)) {
+    if (!android::base::ReadFullyAtOffset(source_fd, buffer.data(), buffer.size(), offset)) {
         PLOG(ERROR) << "EmitCopy read";
         return false;
     }
     return EmitRawBlocks(new_block, buffer.data(), buffer.size());
+}
+
+bool OnlineKernelSnapshotWriter::EmitLabel(uint64_t) {
+    // Not Needed
+    return true;
 }
 
 std::unique_ptr<FileDescriptor> OnlineKernelSnapshotWriter::OpenReader() {

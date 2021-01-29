@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include <memory>
 #include <set>
 #include <string>
@@ -27,7 +29,7 @@ class BlockDevInitializer final {
     BlockDevInitializer();
 
     bool InitDeviceMapper();
-    bool InitDmUser();
+    bool InitDmUser(const std::string& name);
     bool InitDevices(std::set<std::string> devices);
     bool InitDmDevice(const std::string& device);
 

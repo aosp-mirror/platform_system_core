@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
@@ -26,6 +27,7 @@ namespace android {
 namespace snapshot {
 
 class ICowOpIter;
+class ICowOpReverseIter;
 
 // A ByteSink object handles requests for a buffer of a specific size. It
 // always owns the underlying buffer. It's designed to minimize potential
@@ -39,11 +41,17 @@ class IByteSink {
     // maximum number of bytes that can be written to the returned buffer.
     //
     // The returned buffer is owned by IByteSink, but must remain valid until
-    // the ready operation has completed (or the entire buffer has been
+    // the read operation has completed (or the entire buffer has been
     // covered by calls to ReturnData).
     //
     // After calling GetBuffer(), all previous buffers returned are no longer
     // valid.
+    //
+    // GetBuffer() is intended to be sequential. A returned size of N indicates
+    // that the output stream will advance by N bytes, and the ReturnData call
+    // indicates that those bytes have been fulfilled. Therefore, it is
+    // possible to have ReturnBuffer do nothing, if the implementation doesn't
+    // care about incremental writes.
     virtual void* GetBuffer(size_t requested, size_t* actual) = 0;
 
     // Called when a section returned by |GetBuffer| has been filled with data.
@@ -58,8 +66,17 @@ class ICowReader {
     // Return the file header.
     virtual bool GetHeader(CowHeader* header) = 0;
 
+    // Return the file footer.
+    virtual bool GetFooter(CowFooter* footer) = 0;
+
+    // Return the last valid label
+    virtual bool GetLastLabel(uint64_t* label) = 0;
+
     // Return an iterator for retrieving CowOperation entries.
     virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
+
+    // Return an reverse iterator for retrieving CowOperation entries.
+    virtual std::unique_ptr<ICowOpReverseIter> GetRevOpIter() = 0;
 
     // Get decoded bytes from the data section, handling any decompression.
     // All retrieved data is passed to the sink.
@@ -81,28 +98,60 @@ class ICowOpIter {
     virtual void Next() = 0;
 };
 
+// Reverse Iterate over a sequence of COW operations.
+class ICowOpReverseIter {
+  public:
+    virtual ~ICowOpReverseIter() {}
+
+    // True if there are more items to read, false otherwise.
+    virtual bool Done() = 0;
+
+    // Read the current operation.
+    virtual const CowOperation& Get() = 0;
+
+    // Advance to the next item.
+    virtual void Next() = 0;
+};
+
 class CowReader : public ICowReader {
   public:
     CowReader();
 
-    bool Parse(android::base::unique_fd&& fd);
-    bool Parse(android::base::borrowed_fd fd);
+    // Parse the COW, optionally, up to the given label. If no label is
+    // specified, the COW must have an intact footer.
+    bool Parse(android::base::unique_fd&& fd, std::optional<uint64_t> label = {});
+    bool Parse(android::base::borrowed_fd fd, std::optional<uint64_t> label = {});
 
     bool GetHeader(CowHeader* header) override;
+    bool GetFooter(CowFooter* footer) override;
 
-    // Create a CowOpIter object which contains header_.num_ops
+    bool GetLastLabel(uint64_t* label) override;
+
+    // Create a CowOpIter object which contains footer_.num_ops
     // CowOperation objects. Get() returns a unique CowOperation object
-    // whose lifeteime depends on the CowOpIter object
+    // whose lifetime depends on the CowOpIter object; the return
+    // value of these will never be null.
     std::unique_ptr<ICowOpIter> GetOpIter() override;
+    std::unique_ptr<ICowOpReverseIter> GetRevOpIter() override;
+
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
 
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
+    void UpdateMergeProgress(uint64_t merge_ops) { header_.num_merge_ops += merge_ops; }
+
+    void InitializeMerge();
+
   private:
+    bool ParseOps(std::optional<uint64_t> label);
+
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
     CowHeader header_;
+    std::optional<CowFooter> footer_;
     uint64_t fd_size_;
+    std::optional<uint64_t> last_label_;
+    std::shared_ptr<std::vector<CowOperation>> ops_;
 };
 
 }  // namespace snapshot

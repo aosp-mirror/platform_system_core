@@ -15,6 +15,8 @@
 cc_library {
     name: "libcgrouprc",
     host_supported: true,
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     // Do not ever mark this as vendor_available; otherwise, vendor modules
     // that links to the static library will behave unexpectedly. All on-device
@@ -22,6 +24,7 @@ cc_library {
     // defined below. The static library is built for tests.
     vendor_available: false,
     native_bridge_supported: true,
+    llndk_stubs: "libcgrouprc.llndk",
     srcs: [
         "cgroup_controller.cpp",
         "cgroup_file.cpp",
@@ -54,7 +57,7 @@ cc_library {
 }
 
 llndk_library {
-    name: "libcgrouprc",
+    name: "libcgrouprc.llndk",
     symbol_file: "libcgrouprc.llndk.txt",
     native_bridge_supported: true,
     export_include_dirs: [

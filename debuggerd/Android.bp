@@ -17,6 +17,7 @@ cc_library_headers {
     name: "libdebuggerd_common_headers",
     export_include_dirs: ["common/include"],
     recovery_available: true,
+    vendor_ramdisk_available: true,
 }
 
 cc_library_shared {
@@ -47,6 +48,7 @@ cc_library_static {
     name: "libtombstoned_client_static",
     defaults: ["debuggerd_defaults"],
     recovery_available: true,
+    vendor_ramdisk_available: true,
     srcs: [
         "tombstoned/tombstoned_client.cpp",
         "util.cpp",
@@ -69,6 +71,7 @@ cc_library_static {
     name: "libdebuggerd_handler_core",
     defaults: ["debuggerd_defaults"],
     recovery_available: true,
+    vendor_ramdisk_available: true,
     srcs: ["handler/debuggerd_handler.cpp"],
 
     header_libs: [
@@ -113,6 +116,7 @@ cc_library_static {
     ],
     defaults: ["debuggerd_defaults"],
     recovery_available: true,
+    vendor_ramdisk_available: true,
     srcs: [
         "handler/debuggerd_fallback.cpp",
     ],
@@ -164,6 +168,7 @@ cc_library_static {
     name: "libdebuggerd",
     defaults: ["debuggerd_defaults"],
     recovery_available: true,
+    vendor_ramdisk_available: true,
 
     srcs: [
         "libdebuggerd/backtrace.cpp",
@@ -171,6 +176,8 @@ cc_library_static {
         "libdebuggerd/open_files_list.cpp",
         "libdebuggerd/scudo.cpp",
         "libdebuggerd/tombstone.cpp",
+        "libdebuggerd/tombstone_proto.cpp",
+        "libdebuggerd/tombstone_proto_to_text.cpp",
         "libdebuggerd/utility.cpp",
     ],
 
@@ -199,12 +206,20 @@ cc_library_static {
     ],
 
     whole_static_libs: [
+        "libasync_safe",
         "gwp_asan_crash_handler",
         "libscudo",
+        "libtombstone_proto",
+        "libprotobuf-cpp-lite",
     ],
 
     target: {
         recovery: {
+            exclude_static_libs: [
+                "libdexfile_support",
+            ],
+        },
+        vendor_ramdisk: {
             exclude_static_libs: [
                 "libdexfile_support",
             ],
@@ -215,10 +230,21 @@ cc_library_static {
         debuggable: {
             cflags: ["-DROOT_POSSIBLE"],
         },
-        experimental_mte: {
-            cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
-        },
     },
+}
+
+cc_binary {
+    name: "pbtombstone",
+    defaults: ["debuggerd_defaults"],
+    srcs: ["pbtombstone.cpp"],
+    static_libs: [
+        "libbase",
+        "libdebuggerd",
+        "liblog",
+        "libprotobuf-cpp-lite",
+        "libtombstone_proto",
+        "libunwindstack",
+    ],
 }
 
 cc_test {
@@ -287,12 +313,6 @@ cc_test {
     },
 
     test_suites: ["device-tests"],
-
-    product_variables: {
-        experimental_mte: {
-            cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
-        },
-    },
 }
 
 cc_benchmark {
@@ -331,6 +351,9 @@ cc_binary {
         "libtombstoned_client_static",
         "libdebuggerd",
         "libcutils",
+
+        "libtombstone_proto",
+        "libprotobuf-cpp-lite",
     ],
 
     shared_libs: [
@@ -343,12 +366,6 @@ cc_binary {
     apex_available: [
         "com.android.runtime",
     ],
-
-    product_variables: {
-        experimental_mte: {
-            cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
-        },
-    },
 }
 
 cc_binary {
