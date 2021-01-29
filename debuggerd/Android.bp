@@ -206,6 +206,7 @@ cc_library_static {
     ],
 
     whole_static_libs: [
+        "libasync_safe",
         "gwp_asan_crash_handler",
         "libscudo",
         "libtombstone_proto",
