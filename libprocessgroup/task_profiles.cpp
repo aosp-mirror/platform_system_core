@@ -273,7 +273,7 @@ bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     value = StringReplace(value, "<pid>", std::to_string(pid), true);
 
     if (!WriteStringToFile(value, filepath)) {
-        PLOG(ERROR) << "Failed to write '" << value << "' to " << filepath;
+        if (logfailures_) PLOG(ERROR) << "Failed to write '" << value << "' to " << filepath;
         return false;
     }
 
@@ -290,7 +290,7 @@ bool WriteFileAction::ExecuteForTask(int tid) const {
     value = StringReplace(value, "<pid>", std::to_string(tid), true);
 
     if (!WriteStringToFile(value, filepath)) {
-        PLOG(ERROR) << "Failed to write '" << value << "' to " << filepath;
+        if (logfailures_) PLOG(ERROR) << "Failed to write '" << value << "' to " << filepath;
         return false;
     }
 
@@ -516,7 +516,10 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                 std::string attr_filepath = params_val["FilePath"].asString();
                 std::string attr_value = params_val["Value"].asString();
                 if (!attr_filepath.empty() && !attr_value.empty()) {
-                    profile->Add(std::make_unique<WriteFileAction>(attr_filepath, attr_value));
+                    const Json::Value& logfailures = params_val["LogFailures"];
+                    bool attr_logfailures = logfailures.isNull() || logfailures.asBool();
+                    profile->Add(std::make_unique<WriteFileAction>(attr_filepath, attr_value,
+                                                                   attr_logfailures));
                 } else if (attr_filepath.empty()) {
                     LOG(WARNING) << "WriteFile: invalid parameter: "
                                  << "empty filepath";
