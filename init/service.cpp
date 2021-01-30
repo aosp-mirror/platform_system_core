@@ -127,8 +127,7 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
 
 static bool AreRuntimeApexesReady() {
     struct stat buf;
-    return stat("/apex/com.android.art/", &buf) == 0 &&
-           stat("/apex/com.android.runtime/", &buf) == 0;
+    return stat("/apex/com.android.runtime/", &buf) == 0;
 }
 
 unsigned long Service::next_start_order_ = 1;
