@@ -44,7 +44,7 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
   auto region_info = AllocAndReadFully(process_memory, process_info.scudo_region_info,
                                        __scudo_get_region_info_size());
 
-  untagged_fault_addr_ = untag_address(process_info.fault_address);
+  untagged_fault_addr_ = process_info.untagged_fault_address;
   uintptr_t fault_page = untagged_fault_addr_ & ~(PAGE_SIZE - 1);
 
   uintptr_t memory_begin = fault_page - PAGE_SIZE * 16;
@@ -67,7 +67,7 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
     memory_tags[(i - memory_begin) / kTagGranuleSize] = process_memory->ReadTag(i);
   }
 
-  __scudo_get_error_info(&error_info_, process_info.fault_address, stack_depot.get(),
+  __scudo_get_error_info(&error_info_, process_info.maybe_tagged_fault_address, stack_depot.get(),
                          region_info.get(), memory.get(), memory_tags.get(), memory_begin,
                          memory_end - memory_begin);
 }

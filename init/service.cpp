@@ -52,6 +52,7 @@
 #endif
 
 using android::base::boot_clock;
+using android::base::GetBoolProperty;
 using android::base::GetProperty;
 using android::base::Join;
 using android::base::make_scope_guard;
@@ -72,12 +73,12 @@ static Result<std::string> ComputeContextFromExecutable(const std::string& servi
     if (getcon(&raw_con) == -1) {
         return Error() << "Could not get security context";
     }
-    std::unique_ptr<char> mycon(raw_con);
+    std::unique_ptr<char, decltype(&freecon)> mycon(raw_con, freecon);
 
     if (getfilecon(service_path.c_str(), &raw_filecon) == -1) {
         return Error() << "Could not get file context";
     }
-    std::unique_ptr<char> filecon(raw_filecon);
+    std::unique_ptr<char, decltype(&freecon)> filecon(raw_filecon, freecon);
 
     char* new_con = nullptr;
     int rc = security_compute_create(mycon.get(), filecon.get(),
@@ -126,8 +127,7 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
 
 static bool AreRuntimeApexesReady() {
     struct stat buf;
-    return stat("/apex/com.android.art/", &buf) == 0 &&
-           stat("/apex/com.android.runtime/", &buf) == 0;
+    return stat("/apex/com.android.runtime/", &buf) == 0;
 }
 
 unsigned long Service::next_start_order_ = 1;
@@ -318,17 +318,19 @@ void Service::Reap(const siginfo_t& siginfo) {
     // reboot into bootloader or set crashing property
     boot_clock::time_point now = boot_clock::now();
     if (((flags_ & SVC_CRITICAL) || is_process_updatable) && !(flags_ & SVC_RESTART)) {
-        bool boot_completed = android::base::GetBoolProperty("sys.boot_completed", false);
+        bool boot_completed = GetBoolProperty("sys.boot_completed", false);
         if (now < time_crashed_ + fatal_crash_window_ || !boot_completed) {
             if (++crash_count_ > 4) {
                 auto exit_reason = boot_completed ?
                     "in " + std::to_string(fatal_crash_window_.count()) + " minutes" :
                     "before boot completed";
                 if (flags_ & SVC_CRITICAL) {
-                    // Aborts into `fatal_reboot_target_'.
-                    SetFatalRebootTarget(fatal_reboot_target_);
-                    LOG(FATAL) << "critical process '" << name_ << "' exited 4 times "
-                               << exit_reason;
+                    if (!GetBoolProperty("init.svc_debug.no_fatal." + name_, false)) {
+                        // Aborts into `fatal_reboot_target_'.
+                        SetFatalRebootTarget(fatal_reboot_target_);
+                        LOG(FATAL) << "critical process '" << name_ << "' exited 4 times "
+                                   << exit_reason;
+                    }
                 } else {
                     LOG(ERROR) << "process with updatable components '" << name_
                                << "' exited 4 times " << exit_reason;

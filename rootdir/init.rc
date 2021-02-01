@@ -592,6 +592,7 @@ on post-fs
     mkdir /metadata/ota 0700 root system
     mkdir /metadata/ota/snapshots 0700 root system
     mkdir /metadata/userspacereboot 0770 root system
+    mkdir /metadata/watchdog 0770 root system
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
@@ -611,6 +612,9 @@ on late-fs
 
     # HALs required before storage encryption can get unlocked (FBE/FDE)
     class_start early_hal
+
+    # Load trusted keys from dm-verity protected partitions
+    exec -- /system/bin/fsverity_init --load-verified-keys
 
 on post-fs-data
     mark_post_data
@@ -632,19 +636,20 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell encryption=Require
     bootchart start
 
-    # Make sure that apexd is started in the default namespace
-    enter_default_mount_ns
-
     mkdir /data/vendor 0771 root root encryption=Require
     mkdir /data/vendor_ce 0771 root root encryption=None
     mkdir /data/vendor_de 0771 root root encryption=None
     mkdir /data/vendor/hardware 0771 root root
 
     # Start tombstoned early to be able to store tombstones.
+    mkdir /data/anr 0775 system system encryption=Require
     mkdir /data/tombstones 0771 system system encryption=Require
     mkdir /data/vendor/tombstones 0771 root root
     mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
     start tombstoned
+
+    # Make sure that apexd is started in the default namespace
+    enter_default_mount_ns
 
     # /data/apex is now available. Start apexd to scan and activate APEXes.
     mkdir /data/apex 0755 root system encryption=None
@@ -652,7 +657,7 @@ on post-fs-data
     mkdir /data/apex/backup 0700 root system
     mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
-    mkdir /data/app-staging 0750 system system encryption=DeleteIfNecessary
+    mkdir /data/app-staging 0751 system system encryption=DeleteIfNecessary
     start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
@@ -726,6 +731,7 @@ on post-fs-data
     mkdir /data/misc/installd 0700 root root
     mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
+    mkdir /data/misc/appcompat/ 0700 system system
     mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system
@@ -743,6 +749,11 @@ on post-fs-data
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
     mkdir /data/property 0700 root root encryption=Require
+
+    # create directory for updated font files.
+    mkdir /data/fonts/ 0771 root root encryption=Require
+    mkdir /data/fonts/files 0771 system system
+    mkdir /data/fonts/config 0770 system system
 
     # Create directories to push tests to for each linker namespace.
     # Create the subdirectories in case the first test is run as root
@@ -777,8 +788,6 @@ on post-fs-data
     # create directory for MediaDrm plug-ins - give drm the read/write access to
     # the following directory.
     mkdir /data/mediadrm 0770 mediadrm mediadrm encryption=Require
-
-    mkdir /data/anr 0775 system system encryption=Require
 
     # NFC: create data/nfc for nv storage
     mkdir /data/nfc 0770 nfc nfc encryption=Require
@@ -853,10 +862,6 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
-    # After apexes are mounted, tell keymaster early boot has ended, so it will
-    # stop allowing use of early-boot keys
-    exec - system system -- /system/bin/vdc keymaster earlyBootEnded
-
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
@@ -866,14 +871,21 @@ on post-fs-data
 
     init_user0
 
+    # Set SELinux security contexts on upgrade or policy update.
+    restorecon --recursive --skip-ce /data
+
+    # After apexes are mounted, tell keymaster early boot has ended, so it will
+    # stop allowing use of early-boot keys
+    exec - system system -- /system/bin/vdc keymaster earlyBootEnded
+
+    # Lock the fs-verity keyring, so no more keys can be added
+    exec -- /system/bin/fsverity_init --lock
+
     # Allow apexd to snapshot and restore device encrypted apex data in the case
     # of a rollback. This should be done immediately after DE_user data keys
     # are loaded. APEXes should not access this data until this has been
     # completed and apexd.status becomes "ready".
     exec_start apexd-snapshotde
-
-    # Set SELinux security contexts on upgrade or policy update.
-    restorecon --recursive --skip-ce /data
 
     # Check any timezone data in /data is newer than the copy in the time zone data
     # module, delete if not.
@@ -927,6 +939,9 @@ on boot && property:ro.config.low_ram=true
     # Tweak background writeout
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
+
+on property:sys.boot_completed=1 && property:init.mount_debugfs=1
+   umount /sys/kernel/debug
 
 on boot
     # basic network init
@@ -1034,9 +1049,6 @@ on boot
 
     class_start core
 
-    # Requires keystore (currently a core service) to be ready first.
-    exec -- /system/bin/fsverity_init
-
 on nonencrypted
     class_start main
     class_start late_start
@@ -1069,6 +1081,7 @@ on property:vold.decrypt=trigger_restart_framework
     class_start main
     class_start late_start
     setprop service.bootanim.exit 0
+    setprop service.bootanim.progress 0
     start bootanim
 
 on property:vold.decrypt=trigger_shutdown_framework
@@ -1170,6 +1183,7 @@ on userspace-reboot-requested
   setprop sys.user.0.ce_available ""
   setprop sys.shutdown.requested ""
   setprop service.bootanim.exit ""
+  setprop service.bootanim.progress ""
 
 on userspace-reboot-fs-remount
   # Make sure that vold is running.
@@ -1196,6 +1210,10 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
+
+on early-init && property:init.mount_debugfs=1
+    mount debugfs debugfs /sys/kernel/debug
+    chmod 0755 /sys/kernel/debug
 
 # Migrate tasks again in case kernel threads are created during boot
 on property:sys.boot_completed=1

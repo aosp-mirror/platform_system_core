@@ -14,21 +14,56 @@
  * limitations under the License.
  */
 
-#undef NDEBUG
-
-#include <assert.h>
-#include <log/log.h>
+#include <iostream>
 #include <stdlib.h>
+#include <trusty/coverage/coverage.h>
+#include <trusty/fuzz/counters.h>
 #include <trusty/fuzz/utils.h>
 #include <unistd.h>
 
+using android::trusty::coverage::CoverageRecord;
+using android::trusty::fuzz::ExtraCounters;
 using android::trusty::fuzz::TrustyApp;
 
 #define TIPC_DEV "/dev/trusty-ipc-dev0"
 #define CONFIRMATIONUI_PORT "com.android.trusty.confirmationui"
+#define CONFIRMATIONUI_MODULE_NAME "confirmationui.syms.elf"
 
+/* ConfirmationUI TA's UUID is 7dee2364-c036-425b-b086-df0f6c233c1b */
+static struct uuid confirmationui_uuid = {
+    0x7dee2364,
+    0xc036,
+    0x425b,
+    {0xb0, 0x86, 0xdf, 0x0f, 0x6c, 0x23, 0x3c, 0x1b},
+};
+
+/* The format of the packets is as following:
+ * 16 bits (uint16_t, header) + payload bytes
+ * The 16 bits header spicify the number of bytes of payload (header excluded).
+ */
+struct data_packet {
+    uint16_t header;
+    uint8_t payload[];
+};
+
+static CoverageRecord record(TIPC_DEV, &confirmationui_uuid, CONFIRMATIONUI_MODULE_NAME);
+
+extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
+    auto ret = record.Open();
+    if (!ret.ok()) {
+        std::cerr << ret.error() << std::endl;
+        exit(-1);
+    }
+    return 0;
+}
+
+/* Each corpus contains one or more data packets. */
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     static uint8_t buf[TIPC_MAX_MSG_SIZE];
+    size_t data_idx = 0;
+
+    ExtraCounters counters(&record);
+    counters.Reset();
 
     TrustyApp ta(TIPC_DEV, CONFIRMATIONUI_PORT);
     auto ret = ta.Connect();
@@ -36,16 +71,22 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         android::trusty::fuzz::Abort();
     }
 
-    /* Send message to confirmationui server */
-    ret = ta.Write(data, size);
-    if (!ret.ok()) {
-        return -1;
-    }
+    while (data_idx < size) {
+        struct data_packet* data_packet_ptr = (struct data_packet*)&data[data_idx];
+        size_t payload_size = data_packet_ptr->header;
+        data_idx += data_packet_ptr->header + sizeof(data_packet_ptr->header);
 
-    /* Read message from confirmationui server */
-    ret = ta.Read(&buf, sizeof(buf));
-    if (!ret.ok()) {
-        return -1;
+        /* Write message to confirmationui server */
+        ret = ta.Write(data_packet_ptr->payload, payload_size);
+        if (!ret.ok()) {
+            return -1;
+        }
+
+        /* Read message from confirmationui server */
+        ret = ta.Read(&buf, sizeof(buf));
+        if (!ret.ok()) {
+            return -1;
+        }
     }
 
     return 0;

@@ -98,8 +98,6 @@ Result<std::string> ParseUmountAll(const std::vector<std::string>& args);
 
 void SetStdioToDevNull(char** argv);
 void InitKernelLogging(char** argv);
-void InitSecondStageLogging(char** argv);
-void DumpShutdownDebugInformation();
 bool IsRecoveryMode();
 }  // namespace init
 }  // namespace android

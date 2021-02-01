@@ -1324,6 +1324,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
     int error_count = 0;
     CheckpointManager checkpoint_manager;
     AvbUniquePtr avb_handle(nullptr);
+    bool wiped = false;
 
     bool userdata_mounted = false;
     if (fstab->empty()) {
@@ -1457,7 +1458,8 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 encryptable = status;
                 if (status == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
                     if (!call_vdc({"cryptfs", "encryptFstab", attempted_entry.blk_device,
-                                   attempted_entry.mount_point},
+                                   attempted_entry.mount_point, wiped ? "true" : "false",
+                                   attempted_entry.fs_type},
                                   nullptr)) {
                         LERROR << "Encryption failed";
                         set_type_property(encryptable);
@@ -1474,7 +1476,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
         }
 
         // Mounting failed, understand why and retry.
-        bool wiped = partition_wiped(current_entry.blk_device.c_str());
+        wiped = partition_wiped(current_entry.blk_device.c_str());
         bool crypt_footer = false;
         if (mount_errno != EBUSY && mount_errno != EACCES &&
             current_entry.fs_mgr_flags.formattable && wiped) {
@@ -1499,6 +1501,27 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             } else if (current_entry.is_encryptable() && current_entry.key_loc == KEY_IN_FOOTER) {
                 crypt_footer = true;
             }
+
+            // EncryptInplace will be used when vdc gives an error or needs to format partitions
+            // other than /data
+            if (should_use_metadata_encryption(current_entry) &&
+                current_entry.mount_point == "/data") {
+
+                // vdc->Format requires "ro.crypto.type" to set an encryption flag
+                encryptable = FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED;
+                set_type_property(encryptable);
+
+                if (!call_vdc({"cryptfs", "encryptFstab", current_entry.blk_device,
+                               current_entry.mount_point, "true" /* shouldFormat */,
+                               current_entry.fs_type},
+                              nullptr)) {
+                    LERROR << "Encryption failed";
+                } else {
+                    userdata_mounted = true;
+                    continue;
+                }
+            }
+
             if (fs_mgr_do_format(current_entry, crypt_footer) == 0) {
                 // Let's replay the mount actions.
                 i = top_idx - 1;
@@ -2118,6 +2141,41 @@ bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
     }
 
     return false;
+}
+
+std::string fs_mgr_get_hashtree_algorithm(const android::fs_mgr::FstabEntry& entry) {
+    if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
+        return "";
+    }
+    DeviceMapper& dm = DeviceMapper::Instance();
+    std::string device = GetVerityDeviceName(entry);
+
+    std::vector<DeviceMapper::TargetInfo> table;
+    if (dm.GetState(device) == DmDeviceState::INVALID || !dm.GetTableInfo(device, &table)) {
+        return "";
+    }
+    for (const auto& target : table) {
+        if (strcmp(target.spec.target_type, "verity") != 0) {
+            continue;
+        }
+
+        // The format is stable for dm-verity version 0 & 1. And the data is expected to have
+        // the fixed format:
+        // <version> <dev> <hash_dev> <data_block_size> <hash_block_size> <num_data_blocks>
+        // <hash_start_block> <algorithm> <digest> <salt>
+        // Details in https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html
+
+        std::vector<std::string> tokens = android::base::Split(target.data, " \t\r\n");
+        if (tokens[0] != "0" && tokens[0] != "1") {
+            LOG(WARNING) << "Unrecognized device mapper version in " << target.data;
+            return "";
+        }
+
+        // Hashtree algorithm is the 8th token in the output
+        return android::base::Trim(tokens[7]);
+    }
+
+    return "";
 }
 
 bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entry) {

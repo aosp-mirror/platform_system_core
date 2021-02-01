@@ -36,10 +36,30 @@ void MyLogger(android::base::LogId, android::base::LogSeverity severity, const c
 }
 
 static void usage(void) {
-    LOG(ERROR) << "Usage: inspect_cow [-s] <COW_FILE>";
+    LOG(ERROR) << "Usage: inspect_cow [-sd] <COW_FILE>";
+    LOG(ERROR) << "\t -s Run Silent";
+    LOG(ERROR) << "\t -d Attempt to decompress\n";
 }
 
-static bool Inspect(const std::string& path, bool silent) {
+// Sink that always appends to the end of a string.
+class StringSink : public IByteSink {
+  public:
+    void* GetBuffer(size_t requested, size_t* actual) override {
+        size_t old_size = stream_.size();
+        stream_.resize(old_size + requested, '\0');
+        *actual = requested;
+        return stream_.data() + old_size;
+    }
+    bool ReturnData(void*, size_t) override { return true; }
+    void Reset() { stream_.clear(); }
+
+    std::string& stream() { return stream_; }
+
+  private:
+    std::string stream_;
+};
+
+static bool Inspect(const std::string& path, bool silent, bool decompress) {
     android::base::unique_fd fd(open(path.c_str(), O_RDONLY));
     if (fd < 0) {
         PLOG(ERROR) << "open failed: " << path;
@@ -76,15 +96,25 @@ static bool Inspect(const std::string& path, bool silent) {
     }
 
     auto iter = reader.GetOpIter();
+    StringSink sink;
+    bool success = true;
     while (!iter->Done()) {
         const CowOperation& op = iter->Get();
 
         if (!silent) std::cout << op << "\n";
 
+        if (decompress && op.type == kCowReplaceOp && op.compression != kCowCompressNone) {
+            if (!reader.ReadData(op, &sink)) {
+                std::cerr << "Failed to decompress for :" << op << "\n";
+                success = false;
+            }
+            sink.Reset();
+        }
+
         iter->Next();
     }
 
-    return true;
+    return success;
 }
 
 }  // namespace snapshot
@@ -93,10 +123,14 @@ static bool Inspect(const std::string& path, bool silent) {
 int main(int argc, char** argv) {
     int ch;
     bool silent = false;
-    while ((ch = getopt(argc, argv, "s")) != -1) {
+    bool decompress = false;
+    while ((ch = getopt(argc, argv, "sd")) != -1) {
         switch (ch) {
             case 's':
                 silent = true;
+                break;
+            case 'd':
+                decompress = true;
                 break;
             default:
                 android::snapshot::usage();
@@ -109,7 +143,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (!android::snapshot::Inspect(argv[optind], silent)) {
+    if (!android::snapshot::Inspect(argv[optind], silent, decompress)) {
         return 1;
     }
     return 0;
