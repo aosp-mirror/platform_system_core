@@ -327,7 +327,6 @@ class GateKeeperProxy : public BnGateKeeperService {
                         LOG(ERROR) << "Failure in sending AuthToken to AuthorizationService.";
                         return GK_ERROR;
                     }
-                    AIBinder_decStrong(authzAIBinder);
                 }
                 sp<IServiceManager> sm = defaultServiceManager();
 
