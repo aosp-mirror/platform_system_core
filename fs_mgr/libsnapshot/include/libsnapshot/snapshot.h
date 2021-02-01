@@ -379,6 +379,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotUpdateTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotUpdateTest, MergeInRecovery);
     FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
+    FRIEND_TEST(SnapshotUpdateTest, SpaceSwapUpdate);
     friend class SnapshotTest;
     friend class SnapshotUpdateTest;
     friend class FlashAfterUpdateTest;
@@ -441,7 +442,7 @@ class SnapshotManager final : public ISnapshotManager {
     //
     // All sizes are specified in bytes, and the device, snapshot, COW partition and COW file sizes
     // must be a multiple of the sector size (512 bytes).
-    bool CreateSnapshot(LockedFile* lock, SnapshotStatus* status);
+    bool CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_creator, SnapshotStatus* status);
 
     // |name| should be the base partition name (e.g. "system_a"). Create the
     // backing COW image using the size previously passed to CreateSnapshot().
@@ -716,6 +717,8 @@ class SnapshotManager final : public ISnapshotManager {
     // is otherwise ignored.
     bool PerformInitTransition(InitTransition transition,
                                std::vector<std::string>* snapuserd_argv = nullptr);
+
+    SnapuserdClient* snapuserd_client() const { return snapuserd_client_.get(); }
 
     std::string gsid_dir_;
     std::string metadata_dir_;

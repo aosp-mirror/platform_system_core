@@ -253,6 +253,22 @@ bool FirstStageMount::DoFirstStageMount() {
 
     if (!InitDevices()) return false;
 
+    // Mount /metadata before creating logical partitions, since we need to
+    // know whether a snapshot merge is in progress.
+    auto metadata_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
+        return entry.mount_point == "/metadata";
+    });
+    if (metadata_partition != fstab_.end()) {
+        if (MountPartition(metadata_partition, true /* erase_same_mounts */)) {
+            // Copies DSU AVB keys from the ramdisk to /metadata.
+            // Must be done before the following TrySwitchSystemAsRoot().
+            // Otherwise, ramdisk will be inaccessible after switching root.
+            CopyDsuAvbKeys();
+        }
+    }
+
+    if (!CreateLogicalPartitions()) return false;
+
     if (!MountPartitions()) return false;
 
     return true;
@@ -505,22 +521,6 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
 }
 
 bool FirstStageMount::MountPartitions() {
-    // Mount /metadata before creating logical partitions, since we need to
-    // know whether a snapshot merge is in progress.
-    auto metadata_partition = std::find_if(fstab_.begin(), fstab_.end(), [](const auto& entry) {
-        return entry.mount_point == "/metadata";
-    });
-    if (metadata_partition != fstab_.end()) {
-        if (MountPartition(metadata_partition, true /* erase_same_mounts */)) {
-            // Copies DSU AVB keys from the ramdisk to /metadata.
-            // Must be done before the following TrySwitchSystemAsRoot().
-            // Otherwise, ramdisk will be inaccessible after switching root.
-            CopyDsuAvbKeys();
-        }
-    }
-
-    if (!CreateLogicalPartitions()) return false;
-
     if (!TrySwitchSystemAsRoot()) return false;
 
     if (!SkipMountingPartitions(&fstab_)) return false;

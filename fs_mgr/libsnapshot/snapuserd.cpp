@@ -96,7 +96,7 @@ void Snapuserd::ConstructKernelCowHeader() {
 // it will be de-compressed.
 bool Snapuserd::ProcessReplaceOp(const CowOperation* cow_op) {
     if (!reader_->ReadData(*cow_op, &bufsink_)) {
-        SNAP_LOG(ERROR) << "ReadData failed for chunk: " << cow_op->new_block;
+        SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block;
         return false;
     }
 
@@ -113,7 +113,8 @@ bool Snapuserd::ProcessCopyOp(const CowOperation* cow_op) {
     // if the successive blocks are contiguous.
     if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SIZE,
                                           cow_op->source * BLOCK_SIZE)) {
-        SNAP_LOG(ERROR) << "Copy-op failed. Read from backing store at: " << cow_op->source;
+        SNAP_PLOG(ERROR) << "Copy-op failed. Read from backing store: " << backing_store_device_
+                         << "at block :" << cow_op->source;
         return false;
     }
 
@@ -160,7 +161,7 @@ int Snapuserd::ReadUnalignedSector(sector_t sector, size_t size,
                     << " Aligned sector: " << it->second;
 
     if (!ProcessCowOp(it->second)) {
-        SNAP_LOG(ERROR) << "ReadUnalignedSector: " << sector << " failed";
+        SNAP_LOG(ERROR) << "ReadUnalignedSector: " << sector << " failed of size: " << size;
         return -1;
     }
 
@@ -377,16 +378,21 @@ int Snapuserd::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, 
             CHECK(cow_de->new_chunk == 0);
             break;
         } else {
-            SNAP_LOG(ERROR) << "Error in merge operation. Found invalid metadata";
-            SNAP_LOG(ERROR) << "merged_de-old-chunk: " << merged_de->old_chunk;
-            SNAP_LOG(ERROR) << "merged_de-new-chunk: " << merged_de->new_chunk;
-            SNAP_LOG(ERROR) << "cow_de-old-chunk: " << cow_de->old_chunk;
-            SNAP_LOG(ERROR) << "cow_de-new-chunk: " << cow_de->new_chunk;
+            SNAP_LOG(ERROR) << "Error in merge operation. Found invalid metadata: "
+                            << " merged_de-old-chunk: " << merged_de->old_chunk
+                            << " merged_de-new-chunk: " << merged_de->new_chunk
+                            << " cow_de-old-chunk: " << cow_de->old_chunk
+                            << " cow_de-new-chunk: " << cow_de->new_chunk
+                            << " unmerged_exceptions: " << unmerged_exceptions
+                            << " merged_ops_cur_iter: " << merged_ops_cur_iter
+                            << " offset: " << offset;
             return -1;
         }
     }
 
     if (*copy_op) {
+        SNAP_LOG(ERROR) << "Invalid batch merge of copy ops: merged_ops_cur_iter: "
+                        << merged_ops_cur_iter;
         CHECK(merged_ops_cur_iter == 1);
     }
     return merged_ops_cur_iter;
@@ -446,7 +452,7 @@ bool Snapuserd::ProcessMergeComplete(chunk_t chunk, void* buffer) {
     header.num_merge_ops += merged_ops_cur_iter;
     reader_->UpdateMergeProgress(merged_ops_cur_iter);
     if (!writer_->CommitMerge(merged_ops_cur_iter, copy_op)) {
-        SNAP_LOG(ERROR) << "CommitMerge failed...";
+        SNAP_LOG(ERROR) << "CommitMerge failed... merged_ops_cur_iter: " << merged_ops_cur_iter;
         return false;
     }
 
@@ -661,7 +667,7 @@ bool Snapuserd::ReadDmUserHeader() {
 bool Snapuserd::WriteDmUserPayload(size_t size) {
     if (!android::base::WriteFully(ctrl_fd_, bufsink_.GetBufPtr(),
                                    sizeof(struct dm_user_header) + size)) {
-        SNAP_PLOG(ERROR) << "Write to dm-user failed";
+        SNAP_PLOG(ERROR) << "Write to dm-user failed size: " << size;
         return false;
     }
 
@@ -670,7 +676,7 @@ bool Snapuserd::WriteDmUserPayload(size_t size) {
 
 bool Snapuserd::ReadDmUserPayload(void* buffer, size_t size) {
     if (!android::base::ReadFully(ctrl_fd_, buffer, size)) {
-        SNAP_PLOG(ERROR) << "ReadDmUserPayload failed";
+        SNAP_PLOG(ERROR) << "ReadDmUserPayload failed size: " << size;
         return false;
     }
 
@@ -808,7 +814,8 @@ bool Snapuserd::DmuserReadRequest() {
                 ret = ReadData(sector + num_sectors_read, read_size);
                 if (ret < 0) {
                     SNAP_LOG(ERROR) << "ReadData failed for chunk id: " << chunk
-                                    << "Sector: " << header->sector;
+                                    << " Sector: " << (sector + num_sectors_read)
+                                    << " size: " << read_size << " header-len: " << header->len;
                     header->type = DM_USER_RESP_ERROR;
                 } else {
                     SNAP_LOG(DEBUG) << "ReadData success for chunk id: " << chunk
