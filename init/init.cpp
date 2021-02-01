@@ -79,6 +79,7 @@
 #include "service.h"
 #include "service_parser.h"
 #include "sigchld_handler.h"
+#include "snapuserd_transition.h"
 #include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
@@ -266,12 +267,10 @@ void DebugRebootLogging() {
     if (shutdown_state.do_shutdown()) {
         LOG(ERROR) << "sys.powerctl set while a previous shutdown command has not been handled";
         UnwindMainThreadStack();
-        DumpShutdownDebugInformation();
     }
     if (IsShuttingDown()) {
         LOG(ERROR) << "sys.powerctl set while init is already shutting down";
         UnwindMainThreadStack();
-        DumpShutdownDebugInformation();
     }
 }
 
@@ -743,9 +742,14 @@ static Result<void> TransitionSnapuserdAction(const BuiltinArguments&) {
         return {};
     }
     svc->Start();
+    svc->SetShutdownCritical();
 
-    if (!sm->PerformSecondStageTransition()) {
+    if (!sm->PerformSecondStageInitTransition()) {
         LOG(FATAL) << "Failed to transition snapuserd to second-stage";
+    }
+
+    if (auto pid = GetSnapuserdFirstStagePid()) {
+        KillFirstStageSnapuserd(pid.value());
     }
     return {};
 }
@@ -760,7 +764,7 @@ int SecondStageMain(int argc, char** argv) {
     trigger_shutdown = [](const std::string& command) { shutdown_state.TriggerShutdown(command); };
 
     SetStdioToDevNull(argv);
-    InitSecondStageLogging(argv);
+    InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
 
     // Update $PATH in the case the second stage init is newer than first stage init, where it is
@@ -873,6 +877,21 @@ int SecondStageMain(int argc, char** argv) {
     SetProperty(gsi::kGsiBootedProp, is_running);
     auto is_installed = android::gsi::IsGsiInstalled() ? "1" : "0";
     SetProperty(gsi::kGsiInstalledProp, is_installed);
+
+    /*
+     * For debug builds of S launching devices, init mounts debugfs for
+     * enabling vendor debug data collection setup at boot time. Init will unmount it on
+     * boot-complete after vendor code has performed the required initializations
+     * during boot. Dumpstate will then mount debugfs in order to read data
+     * from the same using the dumpstate HAL during bugreport creation.
+     * Dumpstate will also unmount debugfs after bugreport creation.
+     * first_api_level comparison is done here instead
+     * of init.rc since init.rc parser does not support >/< operators.
+     */
+    auto api_level = android::base::GetIntProperty("ro.product.first_api_level", 0);
+    bool is_debuggable = android::base::GetBoolProperty("ro.debuggable", false);
+    auto mount_debugfs = (is_debuggable && (api_level >= 31)) ? "1" : "0";
+    SetProperty("init.mount_debugfs", mount_debugfs);
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");

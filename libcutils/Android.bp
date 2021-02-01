@@ -210,9 +210,6 @@ cc_library {
                 "uevent.cpp",
             ],
         },
-        bionic: {
-            header_libs: ["bionic_libc_platform_headers"],
-        },
 
         android_arm: {
             sanitize: {

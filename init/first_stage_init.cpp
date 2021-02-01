@@ -42,6 +42,7 @@
 #include "first_stage_mount.h"
 #include "reboot_utils.h"
 #include "second_stage_resources.h"
+#include "snapuserd_transition.h"
 #include "switch_root.h"
 #include "util.h"
 
@@ -90,6 +91,12 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
                     }
                 }
             }
+        } else if (de->d_type == DT_REG) {
+            // Do not free snapuserd if we will need the ramdisk copy during the
+            // selinux transition.
+            if (de->d_name == "snapuserd"s && IsFirstStageSnapuserdRunning()) {
+                continue;
+            }
         }
         unlinkat(dfd, de->d_name, is_dir ? AT_REMOVEDIR : 0);
     }
@@ -97,34 +104,6 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
 
 bool ForceNormalBoot(const std::string& cmdline) {
     return cmdline.find("androidboot.force_normal_boot=1") != std::string::npos;
-}
-
-// Move e2fsck before switching root, so that it is available at the same path
-// after switching root.
-void PrepareSwitchRoot() {
-    constexpr const char* src = "/system/bin/e2fsck";
-    constexpr const char* dst = "/first_stage_ramdisk/system/bin/e2fsck";
-
-    if (access(dst, X_OK) == 0) {
-        LOG(INFO) << dst << " already exists and it can be executed";
-        return;
-    }
-
-    if (access(src, F_OK) != 0) {
-        PLOG(INFO) << "Not moving " << src << " because it cannot be accessed";
-        return;
-    }
-
-    auto dst_dir = android::base::Dirname(dst);
-    std::error_code ec;
-    if (!fs::create_directories(dst_dir, ec) && !!ec) {
-        LOG(FATAL) << "Cannot create " << dst_dir << ": " << ec.message();
-    }
-    if (rename(src, dst) != 0) {
-        PLOG(FATAL) << "Cannot move " << src << " to " << dst
-                    << ". Either install e2fsck.ramdisk so that it is at the correct place (" << dst
-                    << "), or make ramdisk writable";
-    }
 }
 
 }  // namespace
@@ -327,7 +306,6 @@ int FirstStageMain(int argc, char** argv) {
 
     if (ForceNormalBoot(cmdline)) {
         mkdir("/first_stage_ramdisk", 0755);
-        PrepareSwitchRoot();
         // SwitchRoot() must be called with a mount point as the target, so we bind mount the
         // target directory to itself here.
         if (mount("/first_stage_ramdisk", "/first_stage_ramdisk", nullptr, MS_BIND, nullptr) != 0) {

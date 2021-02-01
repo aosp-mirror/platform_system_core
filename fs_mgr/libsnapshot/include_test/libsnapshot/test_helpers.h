@@ -51,8 +51,8 @@ using namespace std::string_literals;
 extern std::unique_ptr<SnapshotManager> sm;
 extern class TestDeviceInfo* test_device;
 extern std::string fake_super;
-static constexpr uint64_t kSuperSize = 16_MiB + 4_KiB;
-static constexpr uint64_t kGroupSize = 16_MiB;
+static constexpr uint64_t kSuperSize = 32_MiB + 4_KiB;
+static constexpr uint64_t kGroupSize = 32_MiB;
 
 // Redirect requests for "super" to our fake super partition.
 class TestPartitionOpener final : public android::fs_mgr::PartitionOpener {
@@ -146,6 +146,7 @@ void DeleteBackingImage(android::fiemap::IImageManager* manager, const std::stri
 bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size = std::nullopt,
                      std::string* hash = nullptr);
 bool WriteRandomData(ICowWriter* writer, std::string* hash = nullptr);
+std::string HashSnapshot(ISnapshotWriter* writer);
 
 std::optional<std::string> GetHash(const std::string& path);
 

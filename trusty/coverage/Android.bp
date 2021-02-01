@@ -14,6 +14,7 @@
 
 cc_library {
     name: "libtrusty_coverage",
+    vendor_available: true,
     srcs: [
         "coverage.cpp",
     ],
@@ -21,11 +22,13 @@ cc_library {
         "include",
     ],
     static_libs: [
-        "libtrusty_test",
+        "libtrusty",
     ],
+
     shared_libs: [
         "libbase",
         "liblog",
+        "libdmabufheap",
     ],
 }
 
@@ -36,10 +39,12 @@ cc_test {
     ],
     static_libs: [
         "libtrusty_coverage",
-        "libtrusty_test",
+        "libtrusty",
     ],
     shared_libs: [
         "libbase",
         "liblog",
+        "libdmabufheap",
     ],
+    require_root: true,
 }

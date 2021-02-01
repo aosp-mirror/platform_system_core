@@ -60,6 +60,7 @@ class StringSink : public IByteSink {
 
 TEST_F(CowTest, ReadWrite) {
     CowOptions options;
+    options.cluster_ops = 0;
     CowWriter writer(options);
 
     ASSERT_TRUE(writer.Initialize(cow_->fd));
@@ -137,6 +138,7 @@ TEST_F(CowTest, ReadWrite) {
 
 TEST_F(CowTest, CompressGz) {
     CowOptions options;
+    options.cluster_ops = 0;
     options.compression = "gz";
     CowWriter writer(options);
 
@@ -171,9 +173,74 @@ TEST_F(CowTest, CompressGz) {
     ASSERT_TRUE(iter->Done());
 }
 
+TEST_F(CowTest, ClusterCompressGz) {
+    CowOptions options;
+    options.compression = "gz";
+    options.cluster_ops = 2;
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
+
+    std::string data2 = "More data!";
+    data2.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer.AddRawBlocks(51, data2.data(), data2.size()));
+
+    ASSERT_TRUE(writer.Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->Done());
+    auto op = &iter->Get();
+
+    StringSink sink;
+
+    ASSERT_EQ(op->type, kCowReplaceOp);
+    ASSERT_EQ(op->compression, kCowCompressGz);
+    ASSERT_EQ(op->data_length, 56);  // compressed!
+    ASSERT_EQ(op->new_block, 50);
+    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_EQ(sink.stream(), data);
+
+    iter->Next();
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+
+    ASSERT_EQ(op->type, kCowClusterOp);
+
+    iter->Next();
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+
+    sink.Reset();
+    ASSERT_EQ(op->compression, kCowCompressGz);
+    ASSERT_EQ(op->data_length, 41);  // compressed!
+    ASSERT_EQ(op->new_block, 51);
+    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_EQ(sink.stream(), data2);
+
+    iter->Next();
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+
+    ASSERT_EQ(op->type, kCowClusterOp);
+
+    iter->Next();
+    ASSERT_TRUE(iter->Done());
+}
+
 TEST_F(CowTest, CompressTwoBlocks) {
     CowOptions options;
     options.compression = "gz";
+    options.cluster_ops = 0;
     CowWriter writer(options);
 
     ASSERT_TRUE(writer.Initialize(cow_->fd));
@@ -216,6 +283,7 @@ class CompressionTest : public CowTest, public testing::WithParamInterface<const
 TEST_P(CompressionTest, HorribleSink) {
     CowOptions options;
     options.compression = GetParam();
+    options.cluster_ops = 0;
     CowWriter writer(options);
 
     ASSERT_TRUE(writer.Initialize(cow_->fd));
@@ -245,6 +313,7 @@ INSTANTIATE_TEST_SUITE_P(CowApi, CompressionTest, testing::Values("none", "gz", 
 
 TEST_F(CowTest, GetSize) {
     CowOptions options;
+    options.cluster_ops = 0;
     CowWriter writer(options);
     if (ftruncate(cow_->fd, 0) < 0) {
         perror("Fails to set temp file size");
@@ -270,6 +339,7 @@ TEST_F(CowTest, GetSize) {
 
 TEST_F(CowTest, AppendLabelSmall) {
     CowOptions options;
+    options.cluster_ops = 0;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
 
@@ -335,6 +405,7 @@ TEST_F(CowTest, AppendLabelSmall) {
 
 TEST_F(CowTest, AppendLabelMissing) {
     CowOptions options;
+    options.cluster_ops = 0;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
 
@@ -388,6 +459,7 @@ TEST_F(CowTest, AppendLabelMissing) {
 
 TEST_F(CowTest, AppendExtendedCorrupted) {
     CowOptions options;
+    options.cluster_ops = 0;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
 
@@ -440,6 +512,7 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
 
 TEST_F(CowTest, AppendbyLabel) {
     CowOptions options;
+    options.cluster_ops = 0;
     auto writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->Initialize(cow_->fd));
 

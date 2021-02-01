@@ -45,7 +45,7 @@
 // 2) If these hashes do not match, then either /system or /system_ext or /product (or some of them)
 //    have been updated out of sync with /vendor (or /odm if it is present) and the init needs to
 //    compile the SEPolicy.  /system contains the SEPolicy compiler, secilc, and it is used by the
-//    LoadSplitPolicy() function below to compile the SEPolicy to a temp directory and load it.
+//    OpenSplitPolicy() function below to compile the SEPolicy to a temp directory and load it.
 //    That function contains even more documentation with the specific implementation details of how
 //    the SEPolicy is compiled if needed.
 
@@ -74,6 +74,7 @@
 #include "block_dev_initializer.h"
 #include "debug_ramdisk.h"
 #include "reboot_utils.h"
+#include "snapuserd_transition.h"
 #include "util.h"
 
 using namespace std::string_literals;
@@ -298,7 +299,12 @@ bool IsSplitPolicyDevice() {
     return access(plat_policy_cil_file, R_OK) != -1;
 }
 
-bool LoadSplitPolicy() {
+struct PolicyFile {
+    unique_fd fd;
+    std::string path;
+};
+
+bool OpenSplitPolicy(PolicyFile* policy_file) {
     // IMPLEMENTATION NOTE: Split policy consists of three CIL files:
     // * platform -- policy needed due to logic contained in the system image,
     // * non-platform -- policy needed due to logic contained in the vendor image,
@@ -325,10 +331,8 @@ bool LoadSplitPolicy() {
     if (!use_userdebug_policy && FindPrecompiledSplitPolicy(&precompiled_sepolicy_file)) {
         unique_fd fd(open(precompiled_sepolicy_file.c_str(), O_RDONLY | O_CLOEXEC | O_BINARY));
         if (fd != -1) {
-            if (selinux_android_load_policy_from_fd(fd, precompiled_sepolicy_file.c_str()) < 0) {
-                LOG(ERROR) << "Failed to load SELinux policy from " << precompiled_sepolicy_file;
-                return false;
-            }
+            policy_file->fd = std::move(fd);
+            policy_file->path = std::move(precompiled_sepolicy_file);
             return true;
         }
     }
@@ -446,34 +450,39 @@ bool LoadSplitPolicy() {
     }
     unlink(compiled_sepolicy);
 
-    LOG(INFO) << "Loading compiled SELinux policy";
-    if (selinux_android_load_policy_from_fd(compiled_sepolicy_fd, compiled_sepolicy) < 0) {
-        LOG(ERROR) << "Failed to load SELinux policy from " << compiled_sepolicy;
-        return false;
-    }
-
+    policy_file->fd = std::move(compiled_sepolicy_fd);
+    policy_file->path = compiled_sepolicy;
     return true;
 }
 
-bool LoadMonolithicPolicy() {
-    LOG(VERBOSE) << "Loading SELinux policy from monolithic file";
-    if (selinux_android_load_policy() < 0) {
-        PLOG(ERROR) << "Failed to load monolithic SELinux policy";
+bool OpenMonolithicPolicy(PolicyFile* policy_file) {
+    static constexpr char kSepolicyFile[] = "/sepolicy";
+
+    LOG(VERBOSE) << "Opening SELinux policy from monolithic file";
+    policy_file->fd.reset(open(kSepolicyFile, O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
+    if (policy_file->fd < 0) {
+        PLOG(ERROR) << "Failed to open monolithic SELinux policy";
         return false;
     }
+    policy_file->path = kSepolicyFile;
     return true;
 }
 
-bool LoadPolicy() {
-    return IsSplitPolicyDevice() ? LoadSplitPolicy() : LoadMonolithicPolicy();
-}
+void ReadPolicy(std::string* policy) {
+    PolicyFile policy_file;
 
-void SelinuxInitialize() {
-    LOG(INFO) << "Loading SELinux policy";
-    if (!LoadPolicy()) {
-        LOG(FATAL) << "Unable to load SELinux policy";
+    bool ok = IsSplitPolicyDevice() ? OpenSplitPolicy(&policy_file)
+                                    : OpenMonolithicPolicy(&policy_file);
+    if (!ok) {
+        LOG(FATAL) << "Unable to open SELinux policy";
     }
 
+    if (!android::base::ReadFdToString(policy_file.fd, policy)) {
+        PLOG(FATAL) << "Failed to read policy file: " << policy_file.path;
+    }
+}
+
+void SelinuxSetEnforcement() {
     bool kernel_enforcing = (security_getenforce() == 1);
     bool is_enforcing = IsEnforcing();
     if (kernel_enforcing != is_enforcing) {
@@ -670,6 +679,30 @@ void MountMissingSystemPartitions() {
     }
 }
 
+static void LoadSelinuxPolicy(std::string& policy) {
+    LOG(INFO) << "Loading SELinux policy";
+
+    set_selinuxmnt("/sys/fs/selinux");
+    if (security_load_policy(policy.data(), policy.size()) < 0) {
+        PLOG(FATAL) << "SELinux:  Could not load policy";
+    }
+}
+
+// The SELinux setup process is carefully orchestrated around snapuserd. Policy
+// must be loaded off dynamic partitions, and during an OTA, those partitions
+// cannot be read without snapuserd. But, with kernel-privileged snapuserd
+// running, loading the policy will immediately trigger audits.
+//
+// We use a five-step process to address this:
+//  (1) Read the policy into a string, with snapuserd running.
+//  (2) Rewrite the snapshot device-mapper tables, to generate new dm-user
+//      devices and to flush I/O.
+//  (3) Kill snapuserd, which no longer has any dm-user devices to attach to.
+//  (4) Load the sepolicy and issue critical restorecons in /dev, carefully
+//      avoiding anything that would read from /system.
+//  (5) Re-launch snapuserd and attach it to the dm-user devices from step (2).
+//
+// After this sequence, it is safe to enable enforcing mode and continue booting.
 int SetupSelinux(char** argv) {
     SetStdioToDevNull(argv);
     InitKernelLogging(argv);
@@ -682,9 +715,31 @@ int SetupSelinux(char** argv) {
 
     MountMissingSystemPartitions();
 
-    // Set up SELinux, loading the SELinux policy.
     SelinuxSetupKernelLogging();
-    SelinuxInitialize();
+
+    LOG(INFO) << "Opening SELinux policy";
+
+    // Read the policy before potentially killing snapuserd.
+    std::string policy;
+    ReadPolicy(&policy);
+
+    auto snapuserd_helper = SnapuserdSelinuxHelper::CreateIfNeeded();
+    if (snapuserd_helper) {
+        // Kill the old snapused to avoid audit messages. After this we cannot
+        // read from /system (or other dynamic partitions) until we call
+        // FinishTransition().
+        snapuserd_helper->StartTransition();
+    }
+
+    LoadSelinuxPolicy(policy);
+
+    if (snapuserd_helper) {
+        // Before enforcing, finish the pending snapuserd transition.
+        snapuserd_helper->FinishTransition();
+        snapuserd_helper = nullptr;
+    }
+
+    SelinuxSetEnforcement();
 
     // We're in the kernel domain and want to transition to the init domain.  File systems that
     // store SELabels in their xattrs, such as ext4 do not need an explicit restorecon here,
