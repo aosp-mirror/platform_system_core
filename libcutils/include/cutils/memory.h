@@ -28,9 +28,6 @@ extern "C" {
 size_t strlcpy(char *dst, const char *src, size_t size);
 #endif
 
-// Disables memory mitigations for the entire process, and logs appropriately.
-void process_disable_memory_mitigations();
-
 #ifdef __cplusplus
 } // extern "C"
 #endif
