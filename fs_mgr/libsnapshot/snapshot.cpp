@@ -1439,6 +1439,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         // Wait for ueventd to acknowledge and create the control device node.
         std::string control_device = "/dev/dm-user/" + misc_name;
         if (!WaitForDevice(control_device, 10s)) {
+            LOG(ERROR) << "dm-user control device no found:  " << misc_name;
             continue;
         }
 

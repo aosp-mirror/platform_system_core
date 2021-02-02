@@ -181,6 +181,7 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
         ops_buffer->resize(current_op_num);
     }
 
+    LOG(DEBUG) << "COW file read complete. Total ops: " << ops_buffer->size();
     // To successfully parse a COW file, we need either:
     //  (1) a label to read up to, and for that label to be found, or
     //  (2) a valid footer.
@@ -298,10 +299,9 @@ void CowReader::InitializeMerge() {
     // are contiguous. These are monotonically increasing numbers.
     //
     // When both (1) and (2) are true, kernel will batch merge the operations.
-    // However, we do not want copy operations to be batch merged as
-    // a crash or system reboot during an overlapping copy can drive the device
-    // to a corrupted state. Hence, merging of copy operations should always be
-    // done as a individual 4k block. In the above case, since the
+    // In the above case, we have to ensure that the copy operations
+    // are merged first before replace operations are done. Hence,
+    // we will not change the order of copy operations. Since,
     // cow_op->new_block numbers are contiguous, we will ensure that the
     // cow block numbers assigned in ReadMetadata() for these respective copy
     // operations are not contiguous forcing kernel to issue merge for each
@@ -328,10 +328,8 @@ void CowReader::InitializeMerge() {
     //
     // Merge sequence will look like:
     //
-    // Merge-1 - Copy-op-1
-    // Merge-2 - Copy-op-2
-    // Merge-3 - Copy-op-3
-    // Merge-4 - Batch-merge {Replace-op-7, Replace-op-6, Zero-op-8,
+    // Merge-1 - Batch-merge { Copy-op-1, Copy-op-2, Copy-op-3 }
+    // Merge-2 - Batch-merge {Replace-op-7, Replace-op-6, Zero-op-8,
     //                        Replace-op-4, Zero-op-9, Replace-op-5 }
     //==============================================================
 
