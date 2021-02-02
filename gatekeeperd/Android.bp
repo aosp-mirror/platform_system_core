@@ -41,7 +41,7 @@ cc_binary {
         "libhidlbase",
         "android.hardware.gatekeeper@1.0",
         "libgatekeeper_aidl",
-        "android.hardware.security.keymint-unstable-ndk_platform",
+        "android.hardware.security.keymint-V1-ndk_platform",
         "android.security.authorization-ndk_platform",
     ],
 
