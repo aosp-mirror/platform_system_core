@@ -167,7 +167,6 @@ cc_library {
         "canned_fs_config.cpp",
         "iosched_policy.cpp",
         "load_file.cpp",
-        "memory.cpp",
         "native_handle.cpp",
         "properties.cpp",
         "record_stream.cpp",
