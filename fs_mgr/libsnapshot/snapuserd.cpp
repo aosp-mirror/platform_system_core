@@ -391,8 +391,6 @@ int Snapuserd::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, 
     }
 
     if (*copy_op) {
-        SNAP_LOG(ERROR) << "Invalid batch merge of copy ops: merged_ops_cur_iter: "
-                        << merged_ops_cur_iter;
         CHECK(merged_ops_cur_iter == 1);
     }
     return merged_ops_cur_iter;
