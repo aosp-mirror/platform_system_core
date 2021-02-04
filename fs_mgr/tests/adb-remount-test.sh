@@ -213,6 +213,13 @@ adb_ls() {
     return ${ret}
 }
 
+[ "USAGE: adb_test <expression>
+
+Returns: exit status of the test expression" ]
+adb_test() {
+  adb_sh test "${@}" </dev/null
+}
+
 [ "USAGE: adb_reboot
 
 Returns: true if the reboot command succeeded" ]
@@ -956,7 +963,7 @@ if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
     if inAdb; then
       reboot=false
       for d in ${OVERLAYFS_BACKING}; do
-        if adb_su ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
+        if adb_test -d /${d}/overlay; then
           adb_su rm -rf /${d}/overlay </dev/null
           reboot=true
         fi
@@ -1010,7 +1017,10 @@ fi
 echo "${GREEN}[ RUN      ]${NORMAL} Testing kernel support for overlayfs" >&2
 
 adb_wait || die "wait for device failed"
-adb_sh ls -d /sys/module/overlay </dev/null >/dev/null 2>/dev/null ||
+adb_root ||
+  die "initial setup"
+
+adb_test -d /sys/module/overlay ||
   adb_sh grep "nodev${TAB}overlay" /proc/filesystems </dev/null >/dev/null 2>/dev/null &&
   echo "${GREEN}[       OK ]${NORMAL} overlay module present" >&2 ||
   (
@@ -1019,7 +1029,7 @@ adb_sh ls -d /sys/module/overlay </dev/null >/dev/null 2>/dev/null ||
   ) ||
   overlayfs_supported=false
 if ${overlayfs_supported}; then
-  adb_su ls /sys/module/overlay/parameters/override_creds </dev/null >/dev/null 2>/dev/null &&
+  adb_test -f /sys/module/overlay/parameters/override_creds &&
     echo "${GREEN}[       OK ]${NORMAL} overlay module supports override_creds" >&2 ||
     case `adb_sh uname -r </dev/null` in
       4.[456789].* | 4.[1-9][0-9]* | [56789].*)
@@ -1032,9 +1042,6 @@ if ${overlayfs_supported}; then
     esac
 fi
 
-adb_root ||
-  die "initial setup"
-
 echo "${GREEN}[ RUN      ]${NORMAL} Checking current overlayfs status" >&2
 
 # We can not universally use adb enable-verity to ensure device is
@@ -1044,7 +1051,7 @@ echo "${GREEN}[ RUN      ]${NORMAL} Checking current overlayfs status" >&2
 # having to go through enable-verity transition.
 reboot=false
 for d in ${OVERLAYFS_BACKING}; do
-  if adb_sh ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
+  if adb_test -d /${d}/overlay; then
     echo "${YELLOW}[  WARNING ]${NORMAL} /${d}/overlay is setup, surgically wiping" >&2
     adb_sh rm -rf /${d}/overlay </dev/null ||
       die "/${d}/overlay wipe"
@@ -1220,7 +1227,7 @@ if ${overlayfs_needed}; then
     die "scratch size"
   echo "${BLUE}[     INFO ]${NORMAL} scratch size ${scratch_size}KB" >&2
   for d in ${OVERLAYFS_BACKING}; do
-    if adb_sh ls -d /${d}/overlay/system/upper </dev/null >/dev/null 2>/dev/null; then
+    if adb_test -d /${d}/overlay/system/upper; then
       echo "${BLUE}[     INFO ]${NORMAL} /${d}/overlay is setup" >&2
     fi
   done
@@ -1656,8 +1663,10 @@ echo "${GREEN}[       OK ]${NORMAL} remount command works from setup" >&2
 # This also saves a lot of 'noise' from the command doing a mkfs on backing
 # storage and all the related tuning and adjustment.
 for d in ${OVERLAYFS_BACKING}; do
-  adb_su rm -rf /${d}/overlay </dev/null ||
-    die "/${d}/overlay wipe"
+  if adb_test -d /${d}/overlay; then
+    adb_su rm -rf /${d}/overlay </dev/null ||
+      die "/${d}/overlay wipe"
+  fi
 done
 adb_reboot &&
   adb_wait ${ADB_WAIT} ||
