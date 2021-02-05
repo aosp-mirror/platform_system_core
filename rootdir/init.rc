@@ -470,6 +470,9 @@ on init
     chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
     start lmkd
 
+    # Set an initial boot level - start at 10 in case we need to add earlier ones.
+    setprop keystore.boot_level 10
+
     # Start essential services.
     start servicemanager
     start hwservicemanager
