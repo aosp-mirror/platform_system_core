@@ -123,9 +123,6 @@ cc_test_host {
         "cgroups.recovery.json",
         "task_profiles.json",
     ],
-    test_suites: [
-        "general-tests",
-    ],
 }
 
 cc_test {
