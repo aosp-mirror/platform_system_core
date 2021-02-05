@@ -143,13 +143,13 @@ class CrashQueue {
     CrashArtifact result;
 
     std::optional<std::string> path;
-    result.fd.reset(openat(dir_fd_, ".", O_WRONLY | O_APPEND | O_TMPFILE | O_CLOEXEC, 0640));
+    result.fd.reset(openat(dir_fd_, ".", O_WRONLY | O_APPEND | O_TMPFILE | O_CLOEXEC, 0660));
     if (result.fd == -1) {
       // We might not have O_TMPFILE. Try creating with an arbitrary filename instead.
       static size_t counter = 0;
       std::string tmp_filename = StringPrintf(".temporary%zu", counter++);
       result.fd.reset(openat(dir_fd_, tmp_filename.c_str(),
-                             O_WRONLY | O_APPEND | O_CREAT | O_TRUNC | O_CLOEXEC, 0640));
+                             O_WRONLY | O_APPEND | O_CREAT | O_TRUNC | O_CLOEXEC, 0660));
       if (result.fd == -1) {
         PLOG(FATAL) << "failed to create temporary tombstone in " << dir_path_;
       }
@@ -509,7 +509,7 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg) {
 }
 
 int main(int, char* []) {
-  umask(0137);
+  umask(0117);
 
   // Don't try to connect to ourselves if we crash.
   struct sigaction action = {};
