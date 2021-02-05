@@ -1,4 +1,9 @@
-cc_library {
+filegroup {
+    name: "libtombstone_proto-src",
+    srcs: ["tombstone.proto"],
+}
+
+cc_library_static {
     name: "libtombstone_proto",
     cflags: [
         "-Wall",
@@ -14,9 +19,11 @@ cc_library {
         type: "lite",
     },
 
-    srcs: [
-        "tombstone.proto",
-    ],
+    srcs: [":libtombstone_proto-src"],
+
+    // b/155341058: Soong doesn't automatically add libprotobuf if there aren't any explicitly
+    // listed protos in srcs.
+    static_libs: ["libprotobuf-cpp-lite"],
 
     stl: "libc++_static",
     apex_available: [
