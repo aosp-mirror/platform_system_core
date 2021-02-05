@@ -3098,7 +3098,8 @@ bool SnapshotManager::Dump(std::ostream& os) {
     std::stringstream ss;
 
     ss << "Update state: " << ReadUpdateState(file.get()) << std::endl;
-
+    ss << "Compression: " << ReadSnapshotUpdateStatus(file.get()).compression_enabled()
+       << std::endl;
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
     ss << "Rollback indicator: "
