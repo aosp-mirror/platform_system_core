@@ -19,7 +19,6 @@ genrule {
 cc_defaults {
     name: "toolbox_binary_defaults",
     defaults: ["toolbox_defaults"],
-    cpp_std: "experimental",
     srcs: [
         "toolbox.c",
         "getevent.c",
