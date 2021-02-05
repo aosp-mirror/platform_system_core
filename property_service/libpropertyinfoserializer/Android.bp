@@ -1,7 +1,6 @@
 cc_defaults {
     name: "propertyinfoserializer_defaults",
     host_supported: true,
-    cpp_std: "experimental",
     cppflags: [
         "-Wall",
         "-Wextra",
