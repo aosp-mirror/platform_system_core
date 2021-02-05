@@ -74,7 +74,6 @@ init_host_sources = [
 
 cc_defaults {
     name: "init_defaults",
-    cpp_std: "experimental",
     sanitize: {
         misc_undefined: ["signed-integer-overflow"],
     },
@@ -337,7 +336,6 @@ genrule {
 cc_binary {
     name: "host_init_verifier",
     host_supported: true,
-    cpp_std: "experimental",
     cflags: [
         "-Wall",
         "-Wextra",
