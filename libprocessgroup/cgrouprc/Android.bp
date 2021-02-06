@@ -46,19 +46,19 @@ cc_library {
         "libcgrouprc_format",
     ],
     stubs: {
-        symbol_file: "libcgrouprc.llndk.txt",
+        symbol_file: "libcgrouprc.map.txt",
         versions: ["29"],
     },
     target: {
         linux: {
-            version_script: "libcgrouprc.llndk.txt",
+            version_script: "libcgrouprc.map.txt",
         },
     },
 }
 
 llndk_library {
     name: "libcgrouprc.llndk",
-    symbol_file: "libcgrouprc.llndk.txt",
+    symbol_file: "libcgrouprc.map.txt",
     native_bridge_supported: true,
     export_include_dirs: [
         "include",
