@@ -93,4 +93,7 @@ cc_test {
         "boot_event_record_store_test.cpp",
         "testrunner.cpp",
     ],
+    test_options: {
+        unit_test: true,
+    },
 }
