@@ -4,3 +4,4 @@ service snapuserd /system/bin/snapuserd
     disabled
     user root
     group root system
+    seclabel u:r:snapuserd:s0

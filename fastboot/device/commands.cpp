@@ -659,7 +659,7 @@ bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string
             return device->WriteFail("No snapshot merge is in progress");
         }
 
-        auto sm = SnapshotManager::NewForFirstStageMount();
+        auto sm = SnapshotManager::New();
         if (!sm) {
             return device->WriteFail("Unable to create SnapshotManager");
         }
