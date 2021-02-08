@@ -1160,6 +1160,11 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 // Test that shrinking and growing partitions at the same time is handled
 // correctly in VABC.
 TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
+    if (!IsCompressionEnabled()) {
+        // b/179111359
+        GTEST_SKIP() << "Skipping Virtual A/B Compression test";
+    }
+
     // OTA client blindly unmaps all partitions that are possibly mapped.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
         ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
