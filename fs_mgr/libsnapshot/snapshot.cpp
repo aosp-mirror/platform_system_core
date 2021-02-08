@@ -1683,6 +1683,17 @@ UpdateState SnapshotManager::GetUpdateState(double* progress) {
     return state;
 }
 
+bool SnapshotManager::UpdateUsesCompression() {
+    auto lock = LockShared();
+    if (!lock) return false;
+    return UpdateUsesCompression(lock.get());
+}
+
+bool SnapshotManager::UpdateUsesCompression(LockedFile* lock) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    return update_status.compression_enabled();
+}
+
 bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots) {
     CHECK(lock);
 
@@ -2109,7 +2120,7 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
 
     auto& dm = DeviceMapper::Instance();
 
-    if (IsCompressionEnabled() && !UnmapDmUserDevice(name)) {
+    if (UpdateUsesCompression(lock) && !UnmapDmUserDevice(name)) {
         return false;
     }
 
