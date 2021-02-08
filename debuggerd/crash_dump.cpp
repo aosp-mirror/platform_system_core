@@ -153,14 +153,14 @@ static bool activity_manager_notify(pid_t pid, int signal, const std::string& am
   }
 
   struct timeval tv = {
-      .tv_sec = 1 * android::base::TimeoutMultiplier(),
+      .tv_sec = 1 * android::base::HwTimeoutMultiplier(),
       .tv_usec = 0,
   };
   if (setsockopt(amfd.get(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == -1) {
     PLOG(ERROR) << "failed to set send timeout on activity manager socket";
     return false;
   }
-  tv.tv_sec = 3 * android::base::TimeoutMultiplier();  // 3 seconds on handshake read
+  tv.tv_sec = 3 * android::base::HwTimeoutMultiplier();  // 3 seconds on handshake read
   if (setsockopt(amfd.get(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
     PLOG(ERROR) << "failed to set receive timeout on activity manager socket";
     return false;
@@ -447,7 +447,7 @@ int main(int argc, char** argv) {
   //
   // Note: processes with many threads and minidebug-info can take a bit to
   //       unwind, do not make this too small. b/62828735
-  alarm(30 * android::base::TimeoutMultiplier());
+  alarm(30 * android::base::HwTimeoutMultiplier());
 
   // Get the process name (aka cmdline).
   std::string process_name = get_process_name(g_target_thread);
