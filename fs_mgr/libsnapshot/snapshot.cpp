@@ -94,7 +94,11 @@ std::unique_ptr<SnapshotManager> SnapshotManager::New(IDeviceInfo* info) {
     if (!info) {
         info = new DeviceInfo();
     }
-    return std::unique_ptr<SnapshotManager>(new SnapshotManager(info));
+    auto sm = std::unique_ptr<SnapshotManager>(new SnapshotManager(info));
+    if (info->IsRecovery()) {
+        sm->ForceLocalImageManager();
+    }
+    return sm;
 }
 
 std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceInfo* info) {
@@ -3180,7 +3184,7 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
 
     auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
     auto super_path = device_->GetSuperDevice(slot_number);
-    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+    if (!CreateLogicalAndSnapshotPartitions(super_path, 20s)) {
         LOG(ERROR) << "Unable to map partitions to complete merge.";
         return false;
     }
@@ -3220,7 +3224,7 @@ bool SnapshotManager::FinishMergeInRecovery() {
 
     auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
     auto super_path = device_->GetSuperDevice(slot_number);
-    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+    if (!CreateLogicalAndSnapshotPartitions(super_path, 20s)) {
         LOG(ERROR) << "Unable to map partitions to complete merge.";
         return false;
     }
@@ -3366,7 +3370,7 @@ CreateResult SnapshotManager::RecoveryCreateSnapshotDevices(
     auto slot_suffix = device_->GetOtherSlotSuffix();
     auto slot_number = SlotNumberForSlotSuffix(slot_suffix);
     auto super_path = device_->GetSuperDevice(slot_number);
-    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+    if (!CreateLogicalAndSnapshotPartitions(super_path, 20s)) {
         LOG(ERROR) << "Unable to map partitions.";
         return CreateResult::ERROR;
     }
