@@ -534,7 +534,7 @@ bool Snapuserd::ReadMetadata() {
     bool prev_copy_op = false;
     bool metadata_found = false;
 
-    SNAP_LOG(DEBUG) << "ReadMetadata Start...";
+    SNAP_LOG(DEBUG) << "ReadMetadata: Parsing cow file";
 
     if (!reader_->Parse(cow_fd_)) {
         SNAP_LOG(ERROR) << "Failed to parse";
