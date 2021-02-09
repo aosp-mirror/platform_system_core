@@ -408,12 +408,21 @@ static void crash_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
   }
 }
 
-static bool link_fd(borrowed_fd fd, borrowed_fd dirfd, const std::string& path) {
-  std::string fd_path = StringPrintf("/proc/self/fd/%d", fd.get());
+static bool rename_tombstone_fd(borrowed_fd fd, borrowed_fd dirfd, const std::string& path) {
+  // Always try to unlink the tombstone file.
+  // linkat doesn't let us replace a file, so we need to unlink before linking
+  // our results onto disk, and if we fail for some reason, we should delete
+  // stale tombstones to avoid confusing inconsistency.
+  int rc = unlinkat(dirfd.get(), path.c_str(), 0);
+  if (rc != 0 && errno != ENOENT) {
+    PLOG(ERROR) << "failed to unlink tombstone at " << path;
+    return false;
+  }
 
-  int rc = linkat(AT_FDCWD, fd_path.c_str(), dirfd.get(), path.c_str(), AT_SYMLINK_FOLLOW);
+  std::string fd_path = StringPrintf("/proc/self/fd/%d", fd.get());
+  rc = linkat(AT_FDCWD, fd_path.c_str(), dirfd.get(), path.c_str(), AT_SYMLINK_FOLLOW);
   if (rc != 0) {
-    PLOG(ERROR) << "failed to link file descriptor";
+    PLOG(ERROR) << "failed to link tombstone at " << path;
     return false;
   }
   return true;
@@ -446,36 +455,22 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
 
   CrashArtifactPaths paths = queue->get_next_artifact_paths();
 
-  // Always try to unlink the tombstone file.
-  // linkat doesn't let us replace a file, so we need to unlink before linking
-  // our results onto disk, and if we fail for some reason, we should delete
-  // stale tombstones to avoid confusing inconsistency.
-  rc = unlinkat(queue->dir_fd().get(), paths.text.c_str(), 0);
-  if (rc != 0 && errno != ENOENT) {
-    PLOG(ERROR) << "failed to unlink tombstone at " << paths.text;
-    return;
-  }
-
-  if (crash->output.text.fd != -1) {
-    if (!link_fd(crash->output.text.fd, queue->dir_fd(), paths.text)) {
-      LOG(ERROR) << "failed to link tombstone";
+  if (rename_tombstone_fd(crash->output.text.fd, queue->dir_fd(), paths.text)) {
+    if (crash->crash_type == kDebuggerdJavaBacktrace) {
+      LOG(ERROR) << "Traces for pid " << crash->crash_pid << " written to: " << paths.text;
     } else {
-      if (crash->crash_type == kDebuggerdJavaBacktrace) {
-        LOG(ERROR) << "Traces for pid " << crash->crash_pid << " written to: " << paths.text;
-      } else {
-        // NOTE: Several tools parse this log message to figure out where the
-        // tombstone associated with a given native crash was written. Any changes
-        // to this message must be carefully considered.
-        LOG(ERROR) << "Tombstone written to: " << paths.text;
-      }
+      // NOTE: Several tools parse this log message to figure out where the
+      // tombstone associated with a given native crash was written. Any changes
+      // to this message must be carefully considered.
+      LOG(ERROR) << "Tombstone written to: " << paths.text;
     }
   }
 
   if (crash->output.proto && crash->output.proto->fd != -1) {
     if (!paths.proto) {
       LOG(ERROR) << "missing path for proto tombstone";
-    } else if (!link_fd(crash->output.proto->fd, queue->dir_fd(), *paths.proto)) {
-      LOG(ERROR) << "failed to link proto tombstone";
+    } else {
+      rename_tombstone_fd(crash->output.proto->fd, queue->dir_fd(), *paths.proto);
     }
   }
 
