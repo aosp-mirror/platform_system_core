@@ -881,10 +881,10 @@ D=`get_property ro.serialno`
 [ -z "${D}" -o -n "${ANDROID_SERIAL}" ] || ANDROID_SERIAL=${D}
 USB_SERIAL=
 if [ -n "${ANDROID_SERIAL}" -a "Darwin" != "${HOSTOS}" ]; then
-  USB_SERIAL="`find /sys/devices -name serial | grep usb`"
+  USB_SERIAL="`find /sys/devices -name serial | grep usb || true`"
   if [ -n "${USB_SERIAL}" ]; then
     USB_SERIAL=`echo "${USB_SERIAL}" |
-                  xargs grep -l ${ANDROID_SERIAL}`
+                  xargs grep -l ${ANDROID_SERIAL} || true`
   fi
 fi
 USB_ADDRESS=
@@ -1315,7 +1315,7 @@ check_ne "${BASE_SYSTEM_DEVT}" "${BASE_VENDOR_DEVT}" --warning system/vendor dev
 [ -n "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
   echo "${YELLOW}[  WARNING ]${NORMAL} vendor devt ${VENDOR_DEVT} major 0" >&2
 
-# Download libc.so, append some gargage, push back, and check if the file
+# Download libc.so, append some garbage, push back, and check if the file
 # is updated.
 tempdir="`mktemp -d`"
 cleanup() {
@@ -1323,8 +1323,8 @@ cleanup() {
 }
 adb pull /system/lib/bootstrap/libc.so ${tempdir} >/dev/null ||
   die "pull libc.so from device"
-garbage="`hexdump -n 16 -e '4/4 "%08X" 1 "\n"' /dev/random`"
-echo ${garbage} >> ${tempdir}/libc.so
+garbage="D105225BBFCB1EB8AB8EBDB7094646F0"
+echo "${garbage}" >> ${tempdir}/libc.so
 adb push ${tempdir}/libc.so /system/lib/bootstrap/libc.so >/dev/null ||
   die "push libc.so to device"
 adb pull /system/lib/bootstrap/libc.so ${tempdir}/libc.so.fromdevice >/dev/null ||
