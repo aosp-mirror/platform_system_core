@@ -151,8 +151,8 @@ ueventd to create the nodes.
 For boot time purposes, this is done in parallel across a set of child processes. `ueventd.cpp` in
 this directory contains documentation on how the parallelization is done.
 
-There is an option to parallelize the restorecon function during cold boot as well. This should only
-be done for devices that do not use genfscon, which is the recommended method for labeling sysfs
-nodes. To enable this option, use the below line in a ueventd.rc script:
+There is an option to parallelize the restorecon function during cold boot as well. It is
+recommended that devices use genfscon for labeling sysfs nodes. However, some devices may benefit
+from enabling the parallelization option:
 
     parallel_restorecon enabled
