@@ -116,9 +116,14 @@ std::unique_ptr<AutoDevice> SnapshotManagerStub::EnsureMetadataMounted() {
     return nullptr;
 }
 
+bool SnapshotManagerStub::UpdateUsesCompression() {
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
+    return false;
+}
+
 class SnapshotMergeStatsStub : public ISnapshotMergeStats {
     bool Start() override { return false; }
-    void set_state(android::snapshot::UpdateState) override {}
+    void set_state(android::snapshot::UpdateState, bool) override {}
     void set_cow_file_size(uint64_t) override {}
     uint64_t cow_file_size() override { return 0; }
     std::unique_ptr<Result> Finish() override { return nullptr; }
