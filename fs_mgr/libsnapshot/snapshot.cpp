@@ -94,7 +94,11 @@ std::unique_ptr<SnapshotManager> SnapshotManager::New(IDeviceInfo* info) {
     if (!info) {
         info = new DeviceInfo();
     }
-    return std::unique_ptr<SnapshotManager>(new SnapshotManager(info));
+    auto sm = std::unique_ptr<SnapshotManager>(new SnapshotManager(info));
+    if (info->IsRecovery()) {
+        sm->ForceLocalImageManager();
+    }
+    return sm;
 }
 
 std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceInfo* info) {
@@ -1683,6 +1687,17 @@ UpdateState SnapshotManager::GetUpdateState(double* progress) {
     return state;
 }
 
+bool SnapshotManager::UpdateUsesCompression() {
+    auto lock = LockShared();
+    if (!lock) return false;
+    return UpdateUsesCompression(lock.get());
+}
+
+bool SnapshotManager::UpdateUsesCompression(LockedFile* lock) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    return update_status.compression_enabled();
+}
+
 bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots) {
     CHECK(lock);
 
@@ -2109,7 +2124,7 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
 
     auto& dm = DeviceMapper::Instance();
 
-    if (IsCompressionEnabled() && !UnmapDmUserDevice(name)) {
+    if (UpdateUsesCompression(lock) && !UnmapDmUserDevice(name)) {
         return false;
     }
 
@@ -3087,7 +3102,8 @@ bool SnapshotManager::Dump(std::ostream& os) {
     std::stringstream ss;
 
     ss << "Update state: " << ReadUpdateState(file.get()) << std::endl;
-
+    ss << "Compression: " << ReadSnapshotUpdateStatus(file.get()).compression_enabled()
+       << std::endl;
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
     ss << "Rollback indicator: "
@@ -3169,7 +3185,7 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
 
     auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
     auto super_path = device_->GetSuperDevice(slot_number);
-    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+    if (!CreateLogicalAndSnapshotPartitions(super_path, 20s)) {
         LOG(ERROR) << "Unable to map partitions to complete merge.";
         return false;
     }
@@ -3209,7 +3225,7 @@ bool SnapshotManager::FinishMergeInRecovery() {
 
     auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
     auto super_path = device_->GetSuperDevice(slot_number);
-    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+    if (!CreateLogicalAndSnapshotPartitions(super_path, 20s)) {
         LOG(ERROR) << "Unable to map partitions to complete merge.";
         return false;
     }
@@ -3355,7 +3371,7 @@ CreateResult SnapshotManager::RecoveryCreateSnapshotDevices(
     auto slot_suffix = device_->GetOtherSlotSuffix();
     auto slot_number = SlotNumberForSlotSuffix(slot_suffix);
     auto super_path = device_->GetSuperDevice(slot_number);
-    if (!CreateLogicalAndSnapshotPartitions(super_path)) {
+    if (!CreateLogicalAndSnapshotPartitions(super_path, 20s)) {
         LOG(ERROR) << "Unable to map partitions.";
         return CreateResult::ERROR;
     }

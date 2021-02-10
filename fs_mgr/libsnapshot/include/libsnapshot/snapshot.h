@@ -170,6 +170,10 @@ class ISnapshotManager {
     //   Other: 0
     virtual UpdateState GetUpdateState(double* progress = nullptr) = 0;
 
+    // Returns true if compression is enabled for the current update. This always returns false if
+    // UpdateState is None, or no snapshots have been created.
+    virtual bool UpdateUsesCompression() = 0;
+
     // Create necessary COW device / files for OTA clients. New logical partitions will be added to
     // group "cow" in target_metadata. Regions of partitions of current_metadata will be
     // "write-protected" and snapshotted.
@@ -326,6 +330,7 @@ class SnapshotManager final : public ISnapshotManager {
     UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                    const std::function<bool()>& before_cancel = {}) override;
     UpdateState GetUpdateState(double* progress = nullptr) override;
+    bool UpdateUsesCompression() override;
     Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) override;
     bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
@@ -719,6 +724,9 @@ class SnapshotManager final : public ISnapshotManager {
                                std::vector<std::string>* snapuserd_argv = nullptr);
 
     SnapuserdClient* snapuserd_client() const { return snapuserd_client_.get(); }
+
+    // Helper of UpdateUsesCompression
+    bool UpdateUsesCompression(LockedFile* lock);
 
     std::string gsid_dir_;
     std::string metadata_dir_;
