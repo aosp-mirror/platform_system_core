@@ -130,7 +130,7 @@ Result<void> CoverageRecord::Open() {
     req.open_args.uuid = uuid_;
     auto ret = Rpc(&req, -1, &resp);
     if (!ret.ok()) {
-        return Error() << "failed to open coverage client: ";
+        return Error() << "failed to open coverage client: " << ret.error();
     }
     record_len_ = resp.open_args.record_len;
     shm_len_ = RoundPageUp(record_len_);
@@ -153,7 +153,7 @@ Result<void> CoverageRecord::Open() {
     req.share_record_args.shm_len = shm_len_;
     ret = Rpc(&req, dma_buf, &resp);
     if (!ret.ok()) {
-        return Error() << "failed to send shared memory: ";
+        return Error() << "failed to send shared memory: " << ret.error();
     }
 
     shm_ = shm;
