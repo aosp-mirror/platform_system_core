@@ -36,6 +36,8 @@
 #include <libsnapshot/snapuserd_client.h>
 #include <storage_literals/storage_literals.h>
 
+#include "snapuserd.h"
+
 namespace android {
 namespace snapshot {
 
@@ -119,7 +121,6 @@ class CowSnapuserdTest final {
     void CreateDmUserDevice();
     void StartSnapuserdDaemon();
     void CreateSnapshotDevice();
-    unique_fd CreateTempFile(const std::string& name, size_t size);
 
     unique_ptr<LoopDevice> base_loop_;
     unique_ptr<TempDevice> dmuser_dev_;
@@ -140,7 +141,24 @@ class CowSnapuserdTest final {
     int total_base_size_;
 };
 
-unique_fd CowSnapuserdTest::CreateTempFile(const std::string& name, size_t size) {
+class CowSnapuserdMetadataTest final {
+  public:
+    void Setup();
+    void SetupPartialArea();
+    void ValidateMetadata();
+    void ValidatePartialFilledArea();
+
+  private:
+    void InitMetadata();
+    void CreateCowDevice();
+    void CreateCowPartialFilledArea();
+
+    std::unique_ptr<Snapuserd> snapuserd_;
+    std::unique_ptr<TemporaryFile> cow_system_;
+    size_t size_ = 1_MiB;
+};
+
+static unique_fd CreateTempFile(const std::string& name, size_t size) {
     unique_fd fd(syscall(__NR_memfd_create, name.c_str(), MFD_ALLOW_SEALING));
     if (fd < 0) {
         return {};
@@ -430,23 +448,297 @@ void CowSnapuserdTest::SimulateDaemonRestart() {
 }
 
 void CowSnapuserdTest::MergeInterrupt() {
+    // Interrupt merge at various intervals
     StartMerge();
-    std::this_thread::sleep_for(4s);
+    std::this_thread::sleep_for(250ms);
     SimulateDaemonRestart();
 
     StartMerge();
-    std::this_thread::sleep_for(3s);
+    std::this_thread::sleep_for(250ms);
     SimulateDaemonRestart();
 
     StartMerge();
-    std::this_thread::sleep_for(3s);
+    std::this_thread::sleep_for(150ms);
     SimulateDaemonRestart();
 
     StartMerge();
-    std::this_thread::sleep_for(1s);
+    std::this_thread::sleep_for(100ms);
+    SimulateDaemonRestart();
+
+    StartMerge();
+    std::this_thread::sleep_for(800ms);
+    SimulateDaemonRestart();
+
+    StartMerge();
+    std::this_thread::sleep_for(600ms);
     SimulateDaemonRestart();
 
     ASSERT_TRUE(Merge());
+}
+
+void CowSnapuserdMetadataTest::CreateCowPartialFilledArea() {
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
+
+    CowOptions options;
+    options.compression = "gz";
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
+
+    // Area 0 is completely filled with 256 exceptions
+    for (int i = 0; i < 256; i++) {
+        ASSERT_TRUE(writer.AddCopy(i, 256 + i));
+    }
+
+    // Area 1 is partially filled with 2 copy ops and 10 zero ops
+    ASSERT_TRUE(writer.AddCopy(500, 1000));
+    ASSERT_TRUE(writer.AddCopy(501, 1001));
+
+    ASSERT_TRUE(writer.AddZeroBlocks(300, 10));
+
+    // Flush operations
+    ASSERT_TRUE(writer.Finalize());
+}
+
+void CowSnapuserdMetadataTest::ValidatePartialFilledArea() {
+    int area_sz = snapuserd_->GetMetadataAreaSize();
+
+    ASSERT_EQ(area_sz, 2);
+
+    size_t new_chunk = 263;
+    // Verify the partially filled area
+    void* buffer = snapuserd_->GetExceptionBuffer(1);
+    loff_t offset = 0;
+    struct disk_exception* de;
+    for (int i = 0; i < 12; i++) {
+        de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+        ASSERT_EQ(de->old_chunk, i);
+        ASSERT_EQ(de->new_chunk, new_chunk);
+        offset += sizeof(struct disk_exception);
+        new_chunk += 1;
+    }
+
+    de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+    ASSERT_EQ(de->old_chunk, 0);
+    ASSERT_EQ(de->new_chunk, 0);
+}
+
+void CowSnapuserdMetadataTest::SetupPartialArea() {
+    CreateCowPartialFilledArea();
+    InitMetadata();
+}
+
+void CowSnapuserdMetadataTest::CreateCowDevice() {
+    unique_fd rnd_fd;
+    loff_t offset = 0;
+
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
+
+    rnd_fd.reset(open("/dev/random", O_RDONLY));
+    ASSERT_TRUE(rnd_fd > 0);
+
+    std::unique_ptr<uint8_t[]> random_buffer_1_ = std::make_unique<uint8_t[]>(size_);
+
+    // Fill random data
+    for (size_t j = 0; j < (size_ / 1_MiB); j++) {
+        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_1_.get() + offset, 1_MiB, 0),
+                  true);
+
+        offset += 1_MiB;
+    }
+
+    CowOptions options;
+    options.compression = "gz";
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
+
+    size_t num_blocks = size_ / options.block_size;
+
+    // Overlapping region. This has to be split
+    // into two batch operations
+    ASSERT_TRUE(writer.AddCopy(23, 20));
+    ASSERT_TRUE(writer.AddCopy(22, 19));
+    ASSERT_TRUE(writer.AddCopy(21, 18));
+    ASSERT_TRUE(writer.AddCopy(20, 17));
+    ASSERT_TRUE(writer.AddCopy(19, 16));
+    ASSERT_TRUE(writer.AddCopy(18, 15));
+
+    // Contiguous region but blocks in ascending order
+    // Daemon has to ensure that these blocks are merged
+    // in a batch
+    ASSERT_TRUE(writer.AddCopy(50, 75));
+    ASSERT_TRUE(writer.AddCopy(51, 76));
+    ASSERT_TRUE(writer.AddCopy(52, 77));
+    ASSERT_TRUE(writer.AddCopy(53, 78));
+
+    // Dis-contiguous region
+    ASSERT_TRUE(writer.AddCopy(110, 130));
+    ASSERT_TRUE(writer.AddCopy(105, 125));
+    ASSERT_TRUE(writer.AddCopy(100, 120));
+
+    // Overlap
+    ASSERT_TRUE(writer.AddCopy(25, 30));
+    ASSERT_TRUE(writer.AddCopy(30, 31));
+
+    size_t source_blk = num_blocks;
+
+    ASSERT_TRUE(writer.AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
+
+    size_t blk_zero_copy_start = source_blk + num_blocks;
+
+    ASSERT_TRUE(writer.AddZeroBlocks(blk_zero_copy_start, num_blocks));
+
+    // Flush operations
+    ASSERT_TRUE(writer.Finalize());
+}
+
+void CowSnapuserdMetadataTest::InitMetadata() {
+    snapuserd_ = std::make_unique<Snapuserd>("", cow_system_->path, "");
+    ASSERT_TRUE(snapuserd_->InitCowDevice());
+}
+
+void CowSnapuserdMetadataTest::Setup() {
+    CreateCowDevice();
+    InitMetadata();
+}
+
+void CowSnapuserdMetadataTest::ValidateMetadata() {
+    int area_sz = snapuserd_->GetMetadataAreaSize();
+    ASSERT_EQ(area_sz, 3);
+
+    size_t old_chunk;
+    size_t new_chunk;
+
+    for (int i = 0; i < area_sz; i++) {
+        void* buffer = snapuserd_->GetExceptionBuffer(i);
+        loff_t offset = 0;
+        if (i == 0) {
+            old_chunk = 256;
+            new_chunk = 2;
+        } else if (i == 1) {
+            old_chunk = 512;
+            new_chunk = 259;
+        }
+        for (int j = 0; j < 256; j++) {
+            struct disk_exception* de =
+                    reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+
+            if (i != 2) {
+                ASSERT_EQ(de->old_chunk, old_chunk);
+                ASSERT_EQ(de->new_chunk, new_chunk);
+                old_chunk += 1;
+                new_chunk += 1;
+            } else {
+                break;
+            }
+            offset += sizeof(struct disk_exception);
+        }
+
+        if (i == 2) {
+            // The first 5 copy operation is not batch merged
+            // as the sequence is discontiguous
+            struct disk_exception* de =
+                    reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 30);
+            ASSERT_EQ(de->new_chunk, 518);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 25);
+            ASSERT_EQ(de->new_chunk, 520);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 100);
+            ASSERT_EQ(de->new_chunk, 522);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 105);
+            ASSERT_EQ(de->new_chunk, 524);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 110);
+            ASSERT_EQ(de->new_chunk, 526);
+            offset += sizeof(struct disk_exception);
+
+            // The next 4 operations are batch merged as
+            // both old and new chunk are contiguous
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 50);
+            ASSERT_EQ(de->new_chunk, 528);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 51);
+            ASSERT_EQ(de->new_chunk, 529);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 52);
+            ASSERT_EQ(de->new_chunk, 530);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 53);
+            ASSERT_EQ(de->new_chunk, 531);
+            offset += sizeof(struct disk_exception);
+
+            // This is handling overlap operation with
+            // two batch merge operations.
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 18);
+            ASSERT_EQ(de->new_chunk, 533);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 19);
+            ASSERT_EQ(de->new_chunk, 534);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 20);
+            ASSERT_EQ(de->new_chunk, 535);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 21);
+            ASSERT_EQ(de->new_chunk, 537);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 22);
+            ASSERT_EQ(de->new_chunk, 538);
+            offset += sizeof(struct disk_exception);
+
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 23);
+            ASSERT_EQ(de->new_chunk, 539);
+            offset += sizeof(struct disk_exception);
+
+            // End of metadata
+            de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
+            ASSERT_EQ(de->old_chunk, 0);
+            ASSERT_EQ(de->new_chunk, 0);
+            offset += sizeof(struct disk_exception);
+        }
+    }
+}
+
+TEST(Snapuserd_Test, Snapshot_Metadata) {
+    CowSnapuserdMetadataTest harness;
+    harness.Setup();
+    harness.ValidateMetadata();
+}
+
+TEST(Snapuserd_Test, Snapshot_Metadata_Overlap) {
+    CowSnapuserdMetadataTest harness;
+    harness.SetupPartialArea();
+    harness.ValidatePartialFilledArea();
 }
 
 TEST(Snapuserd_Test, Snapshot_Merge_Resume) {
@@ -457,7 +749,7 @@ TEST(Snapuserd_Test, Snapshot_Merge_Resume) {
     harness.Shutdown();
 }
 
-TEST(Snapuserd_Test, Snapshot) {
+TEST(Snapuserd_Test, Snapshot_IO_TEST) {
     CowSnapuserdTest harness;
     ASSERT_TRUE(harness.Setup());
     harness.ReadSnapshotDeviceAndValidate();
@@ -465,7 +757,6 @@ TEST(Snapuserd_Test, Snapshot) {
     harness.ValidateMerge();
     harness.Shutdown();
 }
-
 }  // namespace snapshot
 }  // namespace android
 
