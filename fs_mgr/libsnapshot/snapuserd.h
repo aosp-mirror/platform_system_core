@@ -75,6 +75,8 @@ class Snapuserd final {
         cow_fd_ = {};
         backing_store_fd_ = {};
     }
+    size_t GetMetadataAreaSize() { return vec_.size(); }
+    void* GetExceptionBuffer(size_t i) { return vec_[i].get(); }
 
   private:
     bool DmuserReadRequest();
@@ -101,11 +103,11 @@ class Snapuserd final {
     loff_t GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer,
                                int* unmerged_exceptions);
     int GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, loff_t offset,
-                             int unmerged_exceptions, bool* copy_op);
+                             int unmerged_exceptions);
     bool ProcessMergeComplete(chunk_t chunk, void* buffer);
     sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
     chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
-    bool IsBlockAligned(int read_size) { return ((read_size & (BLOCK_SIZE - 1)) == 0); }
+    bool IsBlockAligned(int read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
 
     std::string cow_device_;
     std::string backing_store_device_;
