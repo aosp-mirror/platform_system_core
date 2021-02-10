@@ -29,6 +29,7 @@
 #include <trusty/coverage/record.h>
 #include <trusty/coverage/tipc.h>
 #include <trusty/tipc.h>
+#include <iostream>
 
 #define COVERAGE_CLIENT_PORT "com.android.trusty.coverage.client"
 
@@ -122,7 +123,9 @@ Result<void> CoverageRecord::Open() {
 
     int fd = tipc_connect(tipc_dev_.c_str(), COVERAGE_CLIENT_PORT);
     if (fd < 0) {
-        return ErrnoError() << "failed to connect to Trusty coverarge server: ";
+        // Don't error out to support fuzzing builds without coverage, e.g. for repros.
+        std::cerr << "WARNING!!! Failed to connect to Trusty coverarge server." << std::endl;
+        return {};
     }
     coverage_srv_fd_.reset(fd);
 
@@ -158,6 +161,10 @@ Result<void> CoverageRecord::Open() {
 
     shm_ = shm;
     return {};
+}
+
+bool CoverageRecord::IsOpen() {
+    return shm_;
 }
 
 void CoverageRecord::ResetFullRecord() {
