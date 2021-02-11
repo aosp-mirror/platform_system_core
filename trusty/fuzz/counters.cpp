@@ -41,6 +41,10 @@ namespace trusty {
 namespace fuzz {
 
 ExtraCounters::ExtraCounters(coverage::CoverageRecord* record) : record_(record) {
+    if (!record_->IsOpen()) {
+        return;
+    }
+
     assert(fuzzer::ExtraCountersBegin());
     assert(fuzzer::ExtraCountersEnd());
 
@@ -51,10 +55,18 @@ ExtraCounters::ExtraCounters(coverage::CoverageRecord* record) : record_(record)
 }
 
 ExtraCounters::~ExtraCounters() {
+    if (!record_->IsOpen()) {
+        return;
+    }
+
     Flush();
 }
 
 void ExtraCounters::Reset() {
+    if (!record_->IsOpen()) {
+        return;
+    }
+
     record_->ResetCounts();
     fuzzer::ClearExtraCounters();
 }
