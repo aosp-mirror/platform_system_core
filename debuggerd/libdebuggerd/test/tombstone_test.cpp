@@ -379,7 +379,7 @@ public:
 TEST_F(TombstoneTest, gwp_asan_cause_uaf_exact) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::USE_AFTER_FREE, &meta);
   crash_data.SetCrashAddress(0x1000);
@@ -396,7 +396,7 @@ TEST_F(TombstoneTest, gwp_asan_cause_uaf_exact) {
 TEST_F(TombstoneTest, gwp_asan_cause_double_free) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::DOUBLE_FREE, &meta);
   crash_data.SetCrashAddress(0x1000);
@@ -413,7 +413,7 @@ TEST_F(TombstoneTest, gwp_asan_cause_double_free) {
 TEST_F(TombstoneTest, gwp_asan_cause_overflow) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::BUFFER_OVERFLOW, &meta);
   crash_data.SetCrashAddress(0x1025);
@@ -432,7 +432,7 @@ TEST_F(TombstoneTest, gwp_asan_cause_overflow) {
 TEST_F(TombstoneTest, gwp_asan_cause_underflow) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::BUFFER_UNDERFLOW, &meta);
   crash_data.SetCrashAddress(0xffe);
@@ -451,7 +451,7 @@ TEST_F(TombstoneTest, gwp_asan_cause_underflow) {
 TEST_F(TombstoneTest, gwp_asan_cause_invalid_free_inside) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::INVALID_FREE, &meta);
   crash_data.SetCrashAddress(0x1001);
@@ -470,7 +470,7 @@ TEST_F(TombstoneTest, gwp_asan_cause_invalid_free_inside) {
 TEST_F(TombstoneTest, gwp_asan_cause_invalid_free_outside) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::INVALID_FREE, &meta);
   crash_data.SetCrashAddress(0x1021);
