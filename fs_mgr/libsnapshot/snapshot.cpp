@@ -1234,6 +1234,25 @@ bool SnapshotManager::OnSnapshotMergeComplete(LockedFile* lock, const std::strin
     return true;
 }
 
+static bool DeleteDmDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms) {
+    auto start = std::chrono::steady_clock::now();
+    auto& dm = DeviceMapper::Instance();
+    while (true) {
+        if (dm.DeleteDeviceIfExists(name)) {
+            break;
+        }
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
+        if (elapsed >= timeout_ms) {
+            LOG(ERROR) << "DeleteDevice timeout: " << name;
+            return false;
+        }
+        std::this_thread::sleep_for(250ms);
+    }
+
+    return true;
+}
+
 bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
                                              const SnapshotStatus& status) {
     auto& dm = DeviceMapper::Instance();
@@ -1292,10 +1311,11 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
     if (!dm.DeleteDeviceIfExists(base_name)) {
         LOG(ERROR) << "Unable to delete base device for snapshot: " << base_name;
     }
-    auto source_name = GetSourceDeviceName(name);
-    if (!dm.DeleteDeviceIfExists(source_name)) {
-        LOG(ERROR) << "Unable to delete source device for snapshot: " << source_name;
+
+    if (!DeleteDmDevice(GetSourceDeviceName(name), 4000ms)) {
+        LOG(ERROR) << "Unable to delete source device for snapshot: " << GetSourceDeviceName(name);
     }
+
     return true;
 }
 
@@ -1387,9 +1407,6 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         }
 
         auto misc_name = user_cow_name;
-        if (transition == InitTransition::SELINUX_DETACH) {
-            misc_name += "-selinux";
-        }
 
         DmTable table;
         table.Emplace<DmTargetUser>(0, target.spec.length, misc_name);
@@ -1422,6 +1439,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         // Wait for ueventd to acknowledge and create the control device node.
         std::string control_device = "/dev/dm-user/" + misc_name;
         if (!WaitForDevice(control_device, 10s)) {
+            LOG(ERROR) << "dm-user control device no found:  " << misc_name;
             continue;
         }
 
@@ -2122,15 +2140,12 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
     CHECK(lock);
     if (!EnsureImageManager()) return false;
 
-    auto& dm = DeviceMapper::Instance();
-
     if (UpdateUsesCompression(lock) && !UnmapDmUserDevice(name)) {
         return false;
     }
 
-    auto cow_name = GetCowName(name);
-    if (!dm.DeleteDeviceIfExists(cow_name)) {
-        LOG(ERROR) << "Cannot unmap " << cow_name;
+    if (!DeleteDmDevice(GetCowName(name), 4000ms)) {
+        LOG(ERROR) << "Cannot unmap: " << GetCowName(name);
         return false;
     }
 
@@ -2155,12 +2170,11 @@ bool SnapshotManager::UnmapDmUserDevice(const std::string& snapshot_name) {
         return false;
     }
 
-    if (!EnsureSnapuserdConnected()) {
-        return false;
-    }
-    if (!snapuserd_client_->WaitForDeviceDelete(dm_user_name)) {
-        LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
-        return false;
+    if (EnsureSnapuserdConnected()) {
+        if (!snapuserd_client_->WaitForDeviceDelete(dm_user_name)) {
+            LOG(ERROR) << "Failed to wait for " << dm_user_name << " control device to delete";
+            return false;
+        }
     }
 
     // Ensure the control device is gone so we don't run into ABA problems.
