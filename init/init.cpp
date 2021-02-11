@@ -723,37 +723,6 @@ void SendLoadPersistentPropertiesMessage() {
     }
 }
 
-static Result<void> TransitionSnapuserdAction(const BuiltinArguments&) {
-    if (!SnapshotManager::IsSnapshotManagerNeeded() ||
-        !android::base::GetBoolProperty(android::snapshot::kVirtualAbCompressionProp, false)) {
-        return {};
-    }
-
-    auto sm = SnapshotManager::New();
-    if (!sm) {
-        LOG(FATAL) << "Failed to create SnapshotManager, will not transition snapuserd";
-        return {};
-    }
-
-    ServiceList& service_list = ServiceList::GetInstance();
-    auto svc = service_list.FindService("snapuserd");
-    if (!svc) {
-        LOG(FATAL) << "Failed to find snapuserd service, aborting transition";
-        return {};
-    }
-    svc->Start();
-    svc->SetShutdownCritical();
-
-    if (!sm->PerformSecondStageInitTransition()) {
-        LOG(FATAL) << "Failed to transition snapuserd to second-stage";
-    }
-
-    if (auto pid = GetSnapuserdFirstStagePid()) {
-        KillFirstStageSnapuserd(pid.value());
-    }
-    return {};
-}
-
 int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
@@ -900,7 +869,6 @@ int SecondStageMain(int argc, char** argv) {
 
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
     am.QueueBuiltinAction(wait_for_coldboot_done_action, "wait_for_coldboot_done");
-    am.QueueBuiltinAction(TransitionSnapuserdAction, "TransitionSnapuserd");
     // ... so that we can start queuing up actions that require stuff from /dev.
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
     Keychords keychords;

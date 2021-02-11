@@ -722,6 +722,8 @@ on post-fs-data
     mkdir /data/misc/trace 0700 root root
     # create location to store surface and window trace files
     mkdir /data/misc/wmtrace 0700 system system
+    # create location to store accessibility trace files
+    mkdir /data/misc/a11ytrace 0700 system system
     # profile file layout
     mkdir /data/misc/profiles 0771 system system
     mkdir /data/misc/profiles/cur 0771 system system
@@ -1169,6 +1171,8 @@ on property:ro.debuggable=1
     chmod 0773 /data/misc/trace
     # Give reads to anyone for the window trace folder on debug builds.
     chmod 0775 /data/misc/wmtrace
+    # Give reads to anyone for the accessibility trace folder on debug builds.
+    chmod 0775 /data/misc/a11ytrace
 
 on init && property:ro.debuggable=1
     start console

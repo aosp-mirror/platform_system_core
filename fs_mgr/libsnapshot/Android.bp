@@ -549,6 +549,7 @@ cc_test {
     ],
     srcs: [
         "cow_snapuserd_test.cpp",
+        "snapuserd.cpp",
     ],
     cflags: [
         "-Wall",
