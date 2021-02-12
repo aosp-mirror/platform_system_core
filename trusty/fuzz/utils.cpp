@@ -113,7 +113,7 @@ Result<void> TrustyApp::Write(const void* buf, size_t len) {
     int rc = write(ta_fd_, buf, len);
     alarm(0);
     if (rc < 0) {
-        return Error() << "failed to read TIPC message from TA: ";
+        return Error() << "failed to write TIPC message to TA: ";
     }
 
     return {};
