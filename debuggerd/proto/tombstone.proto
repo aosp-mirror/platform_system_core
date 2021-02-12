@@ -3,6 +3,9 @@ syntax = "proto3";
 option java_package = "com.android.server.os";
 option java_outer_classname = "TombstoneProtos";
 
+// NOTE TO OEMS:
+// If you add custom fields to this proto, do not use numbers in the reserved range.
+
 message Tombstone {
   Architecture arch = 1;
   string build_fingerprint = 2;
@@ -24,6 +27,8 @@ message Tombstone {
   repeated MemoryMapping memory_mappings = 17;
   repeated LogBuffer log_buffers = 18;
   repeated FD open_fds = 19;
+
+  reserved 20 to 999;
 }
 
 enum Architecture {
@@ -31,6 +36,8 @@ enum Architecture {
   ARM64 = 1;
   X86 = 2;
   X86_64 = 3;
+
+  reserved 4 to 999;
 }
 
 message Signal {
@@ -46,15 +53,21 @@ message Signal {
 
   bool has_fault_address = 8;
   uint64 fault_address = 9;
+
+  reserved 10 to 999;
 }
 
 message Cause {
   string human_readable = 1;
+
+  reserved 2 to 999;
 }
 
 message Register {
   string name = 1;
   uint64 u64 = 2;
+
+  reserved 3 to 999;
 }
 
 message Thread {
@@ -63,6 +76,8 @@ message Thread {
   repeated Register registers = 3;
   repeated BacktraceFrame current_backtrace = 4;
   repeated MemoryDump memory_dump = 5;
+
+  reserved 6 to 999;
 }
 
 message BacktraceFrame {
@@ -76,6 +91,8 @@ message BacktraceFrame {
   string file_name = 6;
   uint64 file_map_offset = 7;
   string build_id = 8;
+
+  reserved 9 to 999;
 }
 
 message MemoryDump {
@@ -83,6 +100,8 @@ message MemoryDump {
   string mapping_name = 2;
   uint64 begin_address = 3;
   bytes memory = 4;
+
+  reserved 5 to 999;
 }
 
 message MemoryMapping {
@@ -97,6 +116,8 @@ message MemoryMapping {
   string mapping_name = 7;
   string build_id = 8;
   uint64 load_bias = 9;
+
+  reserved 10 to 999;
 }
 
 message FD {
@@ -104,11 +125,15 @@ message FD {
   string path = 2;
   string owner = 3;
   uint64 tag = 4;
+
+  reserved 5 to 999;
 }
 
 message LogBuffer {
   string name = 1;
   repeated LogMessage logs = 2;
+
+  reserved 3 to 999;
 }
 
 message LogMessage {
@@ -118,4 +143,6 @@ message LogMessage {
   uint32 priority = 4;
   string tag = 5;
   string message = 6;
+
+  reserved 7 to 999;
 }
