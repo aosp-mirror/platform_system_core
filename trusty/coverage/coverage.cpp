@@ -29,6 +29,7 @@
 #include <trusty/coverage/record.h>
 #include <trusty/coverage/tipc.h>
 #include <trusty/tipc.h>
+#include <iostream>
 
 #define COVERAGE_CLIENT_PORT "com.android.trusty.coverage.client"
 
@@ -122,7 +123,9 @@ Result<void> CoverageRecord::Open() {
 
     int fd = tipc_connect(tipc_dev_.c_str(), COVERAGE_CLIENT_PORT);
     if (fd < 0) {
-        return ErrnoError() << "failed to connect to Trusty coverarge server: ";
+        // Don't error out to support fuzzing builds without coverage, e.g. for repros.
+        std::cerr << "WARNING!!! Failed to connect to Trusty coverarge server." << std::endl;
+        return {};
     }
     coverage_srv_fd_.reset(fd);
 
@@ -130,7 +133,7 @@ Result<void> CoverageRecord::Open() {
     req.open_args.uuid = uuid_;
     auto ret = Rpc(&req, -1, &resp);
     if (!ret.ok()) {
-        return Error() << "failed to open coverage client: ";
+        return Error() << "failed to open coverage client: " << ret.error();
     }
     record_len_ = resp.open_args.record_len;
     shm_len_ = RoundPageUp(record_len_);
@@ -153,11 +156,15 @@ Result<void> CoverageRecord::Open() {
     req.share_record_args.shm_len = shm_len_;
     ret = Rpc(&req, dma_buf, &resp);
     if (!ret.ok()) {
-        return Error() << "failed to send shared memory: ";
+        return Error() << "failed to send shared memory: " << ret.error();
     }
 
     shm_ = shm;
     return {};
+}
+
+bool CoverageRecord::IsOpen() {
+    return shm_;
 }
 
 void CoverageRecord::ResetFullRecord() {
