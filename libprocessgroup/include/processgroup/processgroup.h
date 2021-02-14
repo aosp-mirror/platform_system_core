@@ -36,7 +36,8 @@ bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& pr
 
 static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
 // Path to test against for freezer support
-static constexpr const char* CGROUP_FREEZE_PATH = "/sys/fs/cgroup/freezer/cgroup.freeze";
+// TODO: remove and replace with a function call, see http://b/180056337
+static constexpr const char* CGROUP_FREEZE_PATH = "/sys/fs/cgroup/uid_0/cgroup.freeze";
 
 bool UsePerAppMemcg();
 
