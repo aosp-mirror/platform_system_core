@@ -861,6 +861,11 @@ static Result<void> do_verity_update_state(const BuiltinArguments& args) {
         // for system as root, so it has property [partition.system.verified].
         std::string partition = entry.mount_point == "/" ? "system" : Basename(entry.mount_point);
         SetProperty("partition." + partition + ".verified", std::to_string(mode));
+
+        std::string hash_alg = fs_mgr_get_hashtree_algorithm(entry);
+        if (!hash_alg.empty()) {
+            SetProperty("partition." + partition + ".verified.hash_alg", hash_alg);
+        }
     }
 
     return {};

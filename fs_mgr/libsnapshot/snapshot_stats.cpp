@@ -84,8 +84,9 @@ bool SnapshotMergeStats::Start() {
     return WriteState();
 }
 
-void SnapshotMergeStats::set_state(android::snapshot::UpdateState state) {
+void SnapshotMergeStats::set_state(android::snapshot::UpdateState state, bool using_compression) {
     report_.set_state(state);
+    report_.set_compression_enabled(using_compression);
 }
 
 void SnapshotMergeStats::set_cow_file_size(uint64_t cow_file_size) {

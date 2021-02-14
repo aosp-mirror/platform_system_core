@@ -82,7 +82,6 @@ class FirstStageMount {
     // The factory method to create either FirstStageMountVBootV1 or FirstStageMountVBootV2
     // based on device tree configurations.
     static std::unique_ptr<FirstStageMount> Create();
-    bool DoCreateDevices();    // Creates devices and logical partitions from storage devices
     bool DoFirstStageMount();  // Mounts fstab entries read from device tree.
     bool InitDevices();
 
@@ -245,7 +244,13 @@ std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
     }
 }
 
-bool FirstStageMount::DoCreateDevices() {
+bool FirstStageMount::DoFirstStageMount() {
+    if (!IsDmLinearEnabled() && fstab_.empty()) {
+        // Nothing to mount.
+        LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
+        return true;
+    }
+
     if (!InitDevices()) return false;
 
     // Mount /metadata before creating logical partitions, since we need to
@@ -263,16 +268,6 @@ bool FirstStageMount::DoCreateDevices() {
     }
 
     if (!CreateLogicalPartitions()) return false;
-
-    return true;
-}
-
-bool FirstStageMount::DoFirstStageMount() {
-    if (!IsDmLinearEnabled() && fstab_.empty()) {
-        // Nothing to mount.
-        LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
-        return true;
-    }
 
     if (!MountPartitions()) return false;
 
@@ -834,18 +829,8 @@ bool FirstStageMountVBootV2::InitAvbHandle() {
 
 // Public functions
 // ----------------
-// Creates devices and logical partitions from storage devices
-bool DoCreateDevices() {
-    std::unique_ptr<FirstStageMount> handle = FirstStageMount::Create();
-    if (!handle) {
-        LOG(ERROR) << "Failed to create FirstStageMount";
-        return false;
-    }
-    return handle->DoCreateDevices();
-}
-
 // Mounts partitions specified by fstab in device tree.
-bool DoFirstStageMount(bool create_devices) {
+bool DoFirstStageMount() {
     // Skips first stage mount if we're in recovery mode.
     if (IsRecoveryMode()) {
         LOG(INFO) << "First stage mount skipped (recovery mode)";
@@ -857,11 +842,6 @@ bool DoFirstStageMount(bool create_devices) {
         LOG(ERROR) << "Failed to create FirstStageMount";
         return false;
     }
-
-    if (create_devices) {
-        if (!handle->DoCreateDevices()) return false;
-    }
-
     return handle->DoFirstStageMount();
 }
 

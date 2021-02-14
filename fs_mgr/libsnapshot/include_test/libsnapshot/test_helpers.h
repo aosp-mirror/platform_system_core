@@ -146,6 +146,7 @@ void DeleteBackingImage(android::fiemap::IImageManager* manager, const std::stri
 bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size = std::nullopt,
                      std::string* hash = nullptr);
 bool WriteRandomData(ICowWriter* writer, std::string* hash = nullptr);
+std::string HashSnapshot(ISnapshotWriter* writer);
 
 std::optional<std::string> GetHash(const std::string& path);
 

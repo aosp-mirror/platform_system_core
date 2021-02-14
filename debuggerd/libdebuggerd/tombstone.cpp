@@ -36,12 +36,12 @@
 #include <string>
 
 #include <android-base/file.h>
-#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <android/log.h>
+#include <async_safe/log.h>
 #include <log/log.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
@@ -62,6 +62,8 @@
 
 #include "gwp_asan/common.h"
 #include "gwp_asan/crash_handler.h"
+
+#include "tombstone.pb.h"
 
 using android::base::GetBoolProperty;
 using android::base::GetProperty;
@@ -190,8 +192,7 @@ static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
 static std::string get_addr_string(uint64_t addr) {
   std::string addr_str;
 #if defined(__LP64__)
-  addr_str = StringPrintf("%08x'%08x",
-                          static_cast<uint32_t>(addr >> 32),
+  addr_str = StringPrintf("%08x'%08x", static_cast<uint32_t>(addr >> 32),
                           static_cast<uint32_t>(addr & 0xffffffff));
 #else
   addr_str = StringPrintf("%08x", static_cast<uint32_t>(addr));
@@ -394,8 +395,7 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
   if (primary_thread && gwp_asan_crash_data->CrashIsMine()) {
     gwp_asan_crash_data->DumpCause(log);
   } else if (thread_info.siginfo && !(primary_thread && scudo_crash_data->CrashIsMine())) {
-    dump_probable_cause(log, thread_info.siginfo, unwinder->GetMaps(),
-                        thread_info.registers.get());
+    dump_probable_cause(log, thread_info.siginfo, unwinder->GetMaps(), thread_info.registers.get());
   }
 
   if (primary_thread) {
@@ -492,8 +492,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename, unsigned 
     // the tombstone file.
 
     if (first) {
-      _LOG(log, logtype::LOGS, "--------- %slog %s\n",
-        tail ? "tail end of " : "", filename);
+      _LOG(log, logtype::LOGS, "--------- %slog %s\n", tail ? "tail end of " : "", filename);
       first = false;
     }
 
@@ -554,8 +553,8 @@ static void dump_logs(log_t* log, pid_t pid, unsigned int tail) {
   dump_log_file(log, pid, "main", tail);
 }
 
-void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, siginfo_t* siginfo,
-                                ucontext_t* ucontext) {
+void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_msg_address,
+                                siginfo_t* siginfo, ucontext_t* ucontext) {
   pid_t uid = getuid();
   pid_t pid = getpid();
   pid_t tid = gettid();
@@ -572,34 +571,47 @@ void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, si
   std::unique_ptr<unwindstack::Regs> regs(
       unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
 
+  std::string selinux_label;
+  android::base::ReadFileToString("/proc/self/attr/current", &selinux_label);
+
   std::map<pid_t, ThreadInfo> threads;
   threads[tid] = ThreadInfo{
       .registers = std::move(regs),
       .uid = uid,
       .tid = tid,
-      .thread_name = thread_name.c_str(),
+      .thread_name = std::move(thread_name),
       .pid = pid,
-      .process_name = process_name.c_str(),
+      .process_name = std::move(process_name),
+      .selinux_label = std::move(selinux_label),
       .siginfo = siginfo,
   };
 
   unwindstack::UnwinderFromPid unwinder(kMaxFrames, pid, unwindstack::Regs::CurrentArch());
   if (!unwinder.Init()) {
-    LOG(FATAL) << "Failed to init unwinder object.";
+    async_safe_fatal("failed to init unwinder object");
   }
 
   ProcessInfo process_info;
+  unique_fd attr_fd(open("/proc/self/attr/current", O_RDONLY | O_CLOEXEC));
   process_info.abort_msg_address = abort_msg_address;
-  engrave_tombstone(unique_fd(dup(tombstone_fd)), &unwinder, threads, tid, process_info, nullptr,
-                    nullptr);
+  engrave_tombstone(unique_fd(dup(tombstone_fd)), unique_fd(dup(proto_fd)), &unwinder, threads, tid,
+                    process_info, nullptr, nullptr);
 }
 
-void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
+void engrave_tombstone(unique_fd output_fd, unique_fd proto_fd, unwindstack::Unwinder* unwinder,
                        const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
                        const ProcessInfo& process_info, OpenFilesList* open_files,
                        std::string* amfd_data) {
   // Don't copy log messages to tombstone unless this is a development device.
-  bool want_logs = GetBoolProperty("ro.debuggable", false);
+  Tombstone tombstone;
+  engrave_tombstone_proto(&tombstone, unwinder, threads, target_thread, process_info, open_files);
+
+  if (proto_fd != -1) {
+    if (!tombstone.SerializeToFileDescriptor(proto_fd.get())) {
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to write proto tombstone: %s",
+                            strerror(errno));
+    }
+  }
 
   log_t log;
   log.current_tid = target_thread;
@@ -607,35 +619,45 @@ void engrave_tombstone(unique_fd output_fd, unwindstack::Unwinder* unwinder,
   log.tfd = output_fd.get();
   log.amfd_data = amfd_data;
 
-  _LOG(&log, logtype::HEADER, "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
-  dump_header_info(&log);
-  _LOG(&log, logtype::HEADER, "Timestamp: %s\n", get_timestamp().c_str());
+  bool translate_proto = GetBoolProperty("debug.debuggerd.translate_proto_to_text", false);
+  if (translate_proto) {
+    tombstone_proto_to_text(tombstone, [&log](const std::string& line, bool should_log) {
+      _LOG(&log, should_log ? logtype::HEADER : logtype::LOGS, "%s\n", line.c_str());
+    });
+  } else {
+    bool want_logs = GetBoolProperty("ro.debuggable", false);
 
-  auto it = threads.find(target_thread);
-  if (it == threads.end()) {
-    LOG(FATAL) << "failed to find target thread";
-  }
+    _LOG(&log, logtype::HEADER,
+         "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
+    dump_header_info(&log);
+    _LOG(&log, logtype::HEADER, "Timestamp: %s\n", get_timestamp().c_str());
 
-  dump_thread(&log, unwinder, it->second, process_info, true);
-
-  if (want_logs) {
-    dump_logs(&log, it->second.pid, 50);
-  }
-
-  for (auto& [tid, thread_info] : threads) {
-    if (tid == target_thread) {
-      continue;
+    auto it = threads.find(target_thread);
+    if (it == threads.end()) {
+      async_safe_fatal("failed to find target thread");
     }
 
-    dump_thread(&log, unwinder, thread_info, process_info, false);
-  }
+    dump_thread(&log, unwinder, it->second, process_info, true);
 
-  if (open_files) {
-    _LOG(&log, logtype::OPEN_FILES, "\nopen files:\n");
-    dump_open_files_list(&log, *open_files, "    ");
-  }
+    if (want_logs) {
+      dump_logs(&log, it->second.pid, 50);
+    }
 
-  if (want_logs) {
-    dump_logs(&log, it->second.pid, 0);
+    for (auto& [tid, thread_info] : threads) {
+      if (tid == target_thread) {
+        continue;
+      }
+
+      dump_thread(&log, unwinder, thread_info, process_info, false);
+    }
+
+    if (open_files) {
+      _LOG(&log, logtype::OPEN_FILES, "\nopen files:\n");
+      dump_open_files_list(&log, *open_files, "    ");
+    }
+
+    if (want_logs) {
+      dump_logs(&log, it->second.pid, 0);
+    }
   }
 }
