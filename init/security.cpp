@@ -36,59 +36,6 @@ using android::base::SetProperty;
 namespace android {
 namespace init {
 
-// Writes 512 bytes of output from Hardware RNG (/dev/hw_random, backed
-// by Linux kernel's hw_random framework) into Linux RNG's via /dev/urandom.
-// Does nothing if Hardware RNG is not present.
-//
-// Since we don't yet trust the quality of Hardware RNG, these bytes are not
-// mixed into the primary pool of Linux RNG and the entropy estimate is left
-// unmodified.
-//
-// If the HW RNG device /dev/hw_random is present, we require that at least
-// 512 bytes read from it are written into Linux RNG. QA is expected to catch
-// devices/configurations where these I/O operations are blocking for a long
-// time. We do not reboot or halt on failures, as this is a best-effort
-// attempt.
-Result<void> MixHwrngIntoLinuxRngAction(const BuiltinArguments&) {
-    unique_fd hwrandom_fd(
-        TEMP_FAILURE_RETRY(open("/dev/hw_random", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
-    if (hwrandom_fd == -1) {
-        if (errno == ENOENT) {
-            LOG(INFO) << "/dev/hw_random not found";
-            // It's not an error to not have a Hardware RNG.
-            return {};
-        }
-        return ErrnoError() << "Failed to open /dev/hw_random";
-    }
-
-    unique_fd urandom_fd(
-        TEMP_FAILURE_RETRY(open("/dev/urandom", O_WRONLY | O_NOFOLLOW | O_CLOEXEC)));
-    if (urandom_fd == -1) {
-        return ErrnoError() << "Failed to open /dev/urandom";
-    }
-
-    char buf[512];
-    size_t total_bytes_written = 0;
-    while (total_bytes_written < sizeof(buf)) {
-        ssize_t chunk_size =
-            TEMP_FAILURE_RETRY(read(hwrandom_fd, buf, sizeof(buf) - total_bytes_written));
-        if (chunk_size == -1) {
-            return ErrnoError() << "Failed to read from /dev/hw_random";
-        } else if (chunk_size == 0) {
-            return Error() << "Failed to read from /dev/hw_random: EOF";
-        }
-
-        chunk_size = TEMP_FAILURE_RETRY(write(urandom_fd, buf, chunk_size));
-        if (chunk_size == -1) {
-            return ErrnoError() << "Failed to write to /dev/urandom";
-        }
-        total_bytes_written += chunk_size;
-    }
-
-    LOG(INFO) << "Mixed " << total_bytes_written << " bytes from /dev/hw_random into /dev/urandom";
-    return {};
-}
-
 static bool SetHighestAvailableOptionValue(const std::string& path, int min, int max) {
     std::ifstream inf(path, std::fstream::in);
     if (!inf) {

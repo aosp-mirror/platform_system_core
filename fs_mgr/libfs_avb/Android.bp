@@ -100,6 +100,7 @@ cc_test_host {
     shared_libs: [
         "libcrypto",
     ],
+    compile_multilib: "first",
     data: [
         ":avbtool",
         ":fec",

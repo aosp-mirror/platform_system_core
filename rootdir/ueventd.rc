@@ -1,6 +1,5 @@
-import /vendor/ueventd.rc
-import /odm/ueventd.rc
-import /ueventd.${ro.hardware}.rc
+import /vendor/etc/ueventd.rc
+import /odm/etc/ueventd.rc
 
 firmware_directories /etc/firmware/ /odm/firmware/ /vendor/firmware/ /firmware/image/
 uevent_socket_rcvbuf_size 16M
@@ -38,8 +37,6 @@ subsystem dma_heap
 /dev/tty                  0666   root       root
 /dev/random               0666   root       root
 /dev/urandom              0666   root       root
-# Make HW RNG readable by group system to let EntropyMixer read it.
-/dev/hw_random            0440   root       system
 /dev/ashmem*              0666   root       root
 /dev/binder               0666   root       root
 /dev/hwbinder             0666   root       root

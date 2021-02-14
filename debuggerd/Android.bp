@@ -176,6 +176,8 @@ cc_library_static {
         "libdebuggerd/open_files_list.cpp",
         "libdebuggerd/scudo.cpp",
         "libdebuggerd/tombstone.cpp",
+        "libdebuggerd/tombstone_proto.cpp",
+        "libdebuggerd/tombstone_proto_to_text.cpp",
         "libdebuggerd/utility.cpp",
     ],
 
@@ -204,8 +206,11 @@ cc_library_static {
     ],
 
     whole_static_libs: [
+        "libasync_safe",
         "gwp_asan_crash_handler",
         "libscudo",
+        "libtombstone_proto",
+        "libprotobuf-cpp-lite",
     ],
 
     target: {
@@ -226,6 +231,20 @@ cc_library_static {
             cflags: ["-DROOT_POSSIBLE"],
         },
     },
+}
+
+cc_binary {
+    name: "pbtombstone",
+    defaults: ["debuggerd_defaults"],
+    srcs: ["pbtombstone.cpp"],
+    static_libs: [
+        "libbase",
+        "libdebuggerd",
+        "liblog",
+        "libprotobuf-cpp-lite",
+        "libtombstone_proto",
+        "libunwindstack",
+    ],
 }
 
 cc_test {
@@ -332,6 +351,9 @@ cc_binary {
         "libtombstoned_client_static",
         "libdebuggerd",
         "libcutils",
+
+        "libtombstone_proto",
+        "libprotobuf-cpp-lite",
     ],
 
     shared_libs: [

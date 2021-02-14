@@ -8,7 +8,6 @@ cc_library_static {
     native_bridge_supported: true,
     srcs: ["property_info_parser.cpp"],
 
-    cpp_std: "experimental",
     cppflags: [
         "-Wall",
         "-Wextra",
