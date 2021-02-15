@@ -48,6 +48,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE := init.environ.rc
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
+LOCAL_REQUIRED_MODULES := etc_classpath
 
 EXPORT_GLOBAL_ASAN_OPTIONS :=
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
@@ -163,9 +164,7 @@ include $(BUILD_SYSTEM)/base_rules.mk
 $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	@echo "Generate: $< -> $@"
 	@mkdir -p $(dir $@)
-	$(hide) sed -e 's?%BOOTCLASSPATH%?$(PRODUCT_BOOTCLASSPATH)?g' $< >$@
-	$(hide) sed -i -e 's?%DEX2OATBOOTCLASSPATH%?$(PRODUCT_DEX2OAT_BOOTCLASSPATH)?g' $@
-	$(hide) sed -i -e 's?%SYSTEMSERVERCLASSPATH%?$(PRODUCT_SYSTEM_SERVER_CLASSPATH)?g' $@
+	$(hide) cp $< $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_ASAN_OPTIONS%?$(EXPORT_GLOBAL_ASAN_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_GCOV_OPTIONS%?$(EXPORT_GLOBAL_GCOV_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS%?$(EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS)?g' $@
@@ -177,6 +176,21 @@ $(strip \
   $(basename $(1)).$(PLATFORM_VNDK_VERSION)$(suffix $(1)) \
 )
 endef
+
+#######################################
+# /etc/classpath
+include $(CLEAR_VARS)
+LOCAL_MODULE := etc_classpath
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+LOCAL_MODULE_STEM := classpath
+include $(BUILD_SYSTEM)/base_rules.mk
+$(LOCAL_BUILT_MODULE):
+	@echo "Generate: $@"
+	@mkdir -p $(dir $@)
+	$(hide) echo "export BOOTCLASSPATH $(PRODUCT_BOOTCLASSPATH)" > $@
+	$(hide) echo "export DEX2OATBOOTCLASSPATH $(PRODUCT_DEX2OAT_BOOTCLASSPATH)" >> $@
+	$(hide) echo "export SYSTEMSERVERCLASSPATH $(PRODUCT_SYSTEM_SERVER_CLASSPATH)" >> $@
 
 #######################################
 # sanitizer.libraries.txt
