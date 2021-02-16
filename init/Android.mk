@@ -64,9 +64,6 @@ LOCAL_SRC_FILES := \
     util.cpp \
 
 LOCAL_MODULE := init_first_stage
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_NOTICE_FILE := $(LOCAL_PATH)/NOTICE
 LOCAL_MODULE_STEM := init
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
@@ -140,9 +137,6 @@ endif
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := init_system
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_NOTICE_FILE := $(LOCAL_PATH)/NOTICE
 LOCAL_REQUIRED_MODULES := \
    init_second_stage \
 
@@ -151,9 +145,6 @@ include $(BUILD_PHONY_PACKAGE)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := init_vendor
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_NOTICE_FILE := $(LOCAL_PATH)/NOTICE
 ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)
 LOCAL_REQUIRED_MODULES := \
    init_first_stage \
