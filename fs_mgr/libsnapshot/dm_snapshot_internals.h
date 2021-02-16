@@ -28,7 +28,7 @@ class DmSnapCowSizeCalculator {
     DmSnapCowSizeCalculator(unsigned int sector_bytes, unsigned int chunk_sectors)
         : sector_bytes_(sector_bytes),
           chunk_sectors_(chunk_sectors),
-          exceptions_per_chunk(chunk_sectors_ * sector_bytes_ / (64 * 2 / 8)) {}
+          exceptions_per_chunk(chunk_sectors_ * sector_bytes_ / exception_size_bytes) {}
 
     void WriteByte(uint64_t address) { WriteSector(address / sector_bytes_); }
     void WriteSector(uint64_t sector) { WriteChunk(sector / chunk_sectors_); }
@@ -124,17 +124,21 @@ class DmSnapCowSizeCalculator {
     const uint64_t chunk_sectors_;
 
     /*
-     * The COW device stores tables to map the modified chunks. Each table
-     * has the size of exactly 1 chunk.
-     * Each row of the table (also called exception in the kernel) contains two
-     * 64 bit indices to identify the corresponding chunk, and this 128 bit row
-     * size is a constant.
-     * The number of exceptions that each table can contain determines the
-     * number of data chunks that separate two consecutive tables. This value
-     * is then fundamental to compute the space overhead introduced by the
-     * tables in COW devices.
+     * The COW device stores tables to map the modified chunks. Each table has
+     * the size of exactly 1 chunk.
+     * Each entry of the table is called exception and the number of exceptions
+     * that each table can contain determines the number of data chunks that
+     * separate two consecutive tables. This value is then fundamental to
+     * compute the space overhead introduced by the tables in COW devices.
      */
     const uint64_t exceptions_per_chunk;
+
+    /*
+     * Each row of the table (called exception in the kernel) contains two
+     * 64 bit indices to identify the corresponding chunk, and this 128 bit
+     * pair is constant in size.
+     */
+    static constexpr unsigned int exception_size_bytes = 64 * 2 / 8;
 
     /*
      * Validity check for the container.
