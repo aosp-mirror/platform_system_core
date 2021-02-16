@@ -214,6 +214,7 @@ void SnapuserdServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
 
     auto misc_name = handler->misc_name();
     LOG(INFO) << "Handler thread about to exit: " << misc_name;
+    handler->snapuserd()->CheckMergeCompletionStatus();
 
     {
         std::lock_guard<std::mutex> lock(lock_);
