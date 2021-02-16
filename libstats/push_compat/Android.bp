@@ -19,6 +19,15 @@
 // protocols. This library should only be used by DNS resolver or other
 // native modules on Q that log pushed atoms to statsd.
 // =========================================================================
+package {
+    // See: http://go/android-license-faq
+    // A large-scale-change added 'default_applicable_licenses' to import
+    // all of the 'license_kinds' from "system_core_license"
+    // to get the below license kinds:
+    //   SPDX-license-identifier-Apache-2.0
+    default_applicable_licenses: ["system_core_license"],
+}
+
 cc_defaults {
     name: "libstatspush_compat_defaults",
     srcs: [
@@ -65,4 +74,3 @@ cc_test {
     ],
     static_libs: ["libgmock"],
 }
-
