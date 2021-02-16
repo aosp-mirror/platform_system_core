@@ -142,6 +142,10 @@ class CowReader : public ICowReader {
 
     void InitializeMerge();
 
+    void set_total_data_ops(uint64_t size) { total_data_ops_ = size; }
+
+    uint64_t total_data_ops() { return total_data_ops_; }
+
   private:
     bool ParseOps(std::optional<uint64_t> label);
 
@@ -152,6 +156,7 @@ class CowReader : public ICowReader {
     uint64_t fd_size_;
     std::optional<uint64_t> last_label_;
     std::shared_ptr<std::vector<CowOperation>> ops_;
+    uint64_t total_data_ops_;
 };
 
 }  // namespace snapshot
