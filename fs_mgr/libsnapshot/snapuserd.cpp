@@ -424,6 +424,7 @@ bool Snapuserd::ProcessMergeComplete(chunk_t chunk, void* buffer) {
     }
 
     SNAP_LOG(DEBUG) << "Merge success: " << merged_ops_cur_iter << "chunk: " << chunk;
+    merge_initiated_ = true;
     return true;
 }
 
@@ -443,6 +444,19 @@ chunk_t Snapuserd::GetNextAllocatableChunkId(chunk_t chunk) {
         next_chunk += 1;
     }
     return next_chunk;
+}
+
+void Snapuserd::CheckMergeCompletionStatus() {
+    CowHeader header;
+
+    if (merge_initiated_) {
+        reader_->GetHeader(&header);
+        SNAP_LOG(INFO) << "Merge-status: Total-Merged-ops: " << header.num_merge_ops
+                       << " Total-data-ops: " << reader_->total_data_ops();
+    } else {
+        SNAP_LOG(INFO) << "Merge was not initiated. Total-Merged-ops: " << header.num_merge_ops
+                       << " Total-data-ops: " << reader_->total_data_ops();
+    }
 }
 
 /*
@@ -818,11 +832,13 @@ bool Snapuserd::ReadMetadata() {
                    << " Num Sector: " << ChunkToSector(data_chunk_id)
                    << " Replace-ops: " << replace_ops << " Zero-ops: " << zero_ops
                    << " Copy-ops: " << copy_ops << " Areas: " << vec_.size()
-                   << " Num-ops-merged: " << header.num_merge_ops;
+                   << " Num-ops-merged: " << header.num_merge_ops
+                   << " Total-data-ops: " << reader_->total_data_ops();
 
     // Total number of sectors required for creating dm-user device
     num_sectors_ = ChunkToSector(data_chunk_id);
     metadata_read_done_ = true;
+    merge_initiated_ = false;
     return true;
 }
 
