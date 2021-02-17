@@ -14,23 +14,6 @@
 // limitations under the License.
 //
 
-package {
-    default_applicable_licenses: ["system_core_init_license"],
-}
-
-// Added automatically by a large-scale-change
-// See: http://go/android-license-faq
-license {
-    name: "system_core_init_license",
-    visibility: [":__subpackages__"],
-    license_kinds: [
-        "SPDX-license-identifier-Apache-2.0",
-    ],
-    license_text: [
-        "NOTICE",
-    ],
-}
-
 init_common_sources = [
     "action.cpp",
     "action_manager.cpp",
