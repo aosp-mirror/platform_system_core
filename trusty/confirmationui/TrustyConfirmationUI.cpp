@@ -71,7 +71,7 @@ using ::std::tie;
 using TeeuiRc = ::teeui::ResponseCode;
 
 constexpr const char kTrustyDeviceName[] = "/dev/trusty-ipc-dev0";
-constexpr const char kConfirmationuiAppName[] = "com.android.trusty.confirmationui";
+constexpr const char kConfirmationuiAppName[] = CONFIRMATIONUI_PORT;
 
 namespace {
 
