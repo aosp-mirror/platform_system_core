@@ -297,41 +297,54 @@ RetCode FastBootDriver::Upload(const std::string& outfile, std::string* response
     return result;
 }
 
-RetCode FastBootDriver::UploadInner(const std::string& outfile, std::string* response,
-                                    std::vector<std::string>* info) {
+// This function executes cmd, then expect a "DATA" response with a number N, followed
+// by N bytes, and another response.
+// This is the common way for the device to send data to the driver used by upload and fetch.
+RetCode FastBootDriver::RunAndReadBuffer(
+        const std::string& cmd, std::string* response, std::vector<std::string>* info,
+        const std::function<RetCode(const char* data, uint64_t size)>& write_fn) {
     RetCode ret;
     int dsize = 0;
-    if ((ret = RawCommand(FB_CMD_UPLOAD, response, info, &dsize))) {
-        error_ = "Upload request failed: " + error_;
+    if ((ret = RawCommand(cmd, response, info, &dsize))) {
+        error_ = android::base::StringPrintf("%s request failed: %s", cmd.c_str(), error_.c_str());
         return ret;
     }
 
-    if (!dsize) {
-        error_ = "Upload request failed, device reports 0 bytes available";
+    if (dsize <= 0) {
+        error_ = android::base::StringPrintf("%s request failed, device reports %d bytes available",
+                                             cmd.c_str(), dsize);
         return BAD_DEV_RESP;
     }
 
-    std::vector<char> data;
-    data.resize(dsize);
-
-    if ((ret = ReadBuffer(data))) {
+    std::vector<char> data(dsize);
+    if ((ret = ReadBuffer(data.data(), data.size())) != SUCCESS) {
         return ret;
     }
+    if ((ret = write_fn(data.data(), data.size())) != SUCCESS) {
+        return ret;
+    }
+    return HandleResponse(response, info);
+}
 
+RetCode FastBootDriver::UploadInner(const std::string& outfile, std::string* response,
+                                    std::vector<std::string>* info) {
     std::ofstream ofs;
     ofs.open(outfile, std::ofstream::out | std::ofstream::binary);
     if (ofs.fail()) {
         error_ = android::base::StringPrintf("Failed to open '%s'", outfile.c_str());
         return IO_ERROR;
     }
-    ofs.write(data.data(), data.size());
-    if (ofs.fail() || ofs.bad()) {
-        error_ = android::base::StringPrintf("Writing to '%s' failed", outfile.c_str());
-        return IO_ERROR;
-    }
+    auto write_fn = [&](const char* data, uint64_t size) {
+        ofs.write(data, size);
+        if (ofs.fail() || ofs.bad()) {
+            error_ = android::base::StringPrintf("Writing to '%s' failed", outfile.c_str());
+            return IO_ERROR;
+        }
+        return SUCCESS;
+    };
+    RetCode ret = RunAndReadBuffer(FB_CMD_UPLOAD, response, info, write_fn);
     ofs.close();
-
-    return HandleResponse(response, info);
+    return ret;
 }
 
 // Helpers
@@ -522,11 +535,6 @@ RetCode FastBootDriver::SendBuffer(const void* buf, size_t size) {
     }
 
     return SUCCESS;
-}
-
-RetCode FastBootDriver::ReadBuffer(std::vector<char>& buf) {
-    // Read the buffer
-    return ReadBuffer(buf.data(), buf.size());
 }
 
 RetCode FastBootDriver::ReadBuffer(void* buf, size_t size) {

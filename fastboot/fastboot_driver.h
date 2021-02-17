@@ -149,11 +149,13 @@ class FastBootDriver {
     RetCode SendBuffer(const std::vector<char>& buf);
     RetCode SendBuffer(const void* buf, size_t size);
 
-    RetCode ReadBuffer(std::vector<char>& buf);
     RetCode ReadBuffer(void* buf, size_t size);
 
     RetCode UploadInner(const std::string& outfile, std::string* response = nullptr,
                         std::vector<std::string>* info = nullptr);
+    RetCode RunAndReadBuffer(const std::string& cmd, std::string* response,
+                             std::vector<std::string>* info,
+                             const std::function<RetCode(const char*, uint64_t)>& write_fn);
 
     int SparseWriteCallback(std::vector<char>& tpbuf, const char* data, size_t len);
 
