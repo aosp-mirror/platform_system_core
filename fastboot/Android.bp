@@ -189,7 +189,8 @@ cc_binary {
     header_libs: [
         "avb_headers",
         "libsnapshot_headers",
-    ]
+        "libstorage_literals_headers",
+    ],
 }
 
 cc_defaults {

@@ -51,3 +51,4 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
 bool OemCmdHandler(FastbootDevice* device, const std::vector<std::string>& args);
 bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args);
 bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string>& args);
+bool FetchHandler(FastbootDevice* device, const std::vector<std::string>& args);
