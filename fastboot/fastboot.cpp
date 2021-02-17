@@ -77,11 +77,13 @@
 #include "usb.h"
 #include "util.h"
 
+using android::base::borrowed_fd;
 using android::base::ReadFully;
 using android::base::Split;
 using android::base::Trim;
 using android::base::unique_fd;
 using namespace std::string_literals;
+using namespace std::placeholders;
 
 static const char* serial = nullptr;
 
@@ -414,6 +416,7 @@ static int show_help() {
             " snapshot-update merge      On devices that support snapshot-based updates, finish\n"
             "                            an in-progress update if it is in the \"merging\"\n"
             "                            phase.\n"
+            " fetch PARTITION            Fetch a partition image from the device."
             "\n"
             "boot image:\n"
             " boot KERNEL [RAMDISK [SECOND]]\n"
@@ -466,7 +469,7 @@ static int show_help() {
             " --version                  Display version.\n"
             " --help, -h                 Show this message.\n"
         );
-    // clang-format off
+    // clang-format on
     return 0;
 }
 
@@ -851,24 +854,23 @@ static struct sparse_file** load_sparse_files(int fd, int64_t max_size) {
     return out_s;
 }
 
-static int64_t get_target_sparse_limit() {
-    std::string max_download_size;
-    if (fb->GetVar("max-download-size", &max_download_size) != fastboot::SUCCESS ||
-        max_download_size.empty()) {
-        verbose("target didn't report max-download-size");
+static uint64_t get_uint_var(const char* var_name) {
+    std::string value_str;
+    if (fb->GetVar(var_name, &value_str) != fastboot::SUCCESS || value_str.empty()) {
+        verbose("target didn't report %s", var_name);
         return 0;
     }
 
     // Some bootloaders (angler, for example) send spurious whitespace too.
-    max_download_size = android::base::Trim(max_download_size);
+    value_str = android::base::Trim(value_str);
 
-    uint64_t limit;
-    if (!android::base::ParseUint(max_download_size, &limit)) {
-        fprintf(stderr, "couldn't parse max-download-size '%s'\n", max_download_size.c_str());
+    uint64_t value;
+    if (!android::base::ParseUint(value_str, &value)) {
+        fprintf(stderr, "couldn't parse %s '%s'\n", var_name, value_str.c_str());
         return 0;
     }
-    if (limit > 0) verbose("target reported max download size of %" PRId64 " bytes", limit);
-    return limit;
+    if (value > 0) verbose("target reported %s of %" PRId64 " bytes", var_name, value);
+    return value;
 }
 
 static int64_t get_sparse_limit(int64_t size) {
@@ -877,7 +879,7 @@ static int64_t get_sparse_limit(int64_t size) {
         // Unlimited, so see what the target device's limit is.
         // TODO: shouldn't we apply this limit even if you've used -S?
         if (target_sparse_limit == -1) {
-            target_sparse_limit = get_target_sparse_limit();
+            target_sparse_limit = static_cast<int64_t>(get_uint_var("max-download-size"));
         }
         if (target_sparse_limit > 0) {
             limit = target_sparse_limit;
@@ -1011,21 +1013,28 @@ static std::string fb_fix_numeric_var(std::string var) {
     return var;
 }
 
-static void copy_boot_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
-    if (buf->sz < AVB_FOOTER_SIZE) {
-        return;
-    }
-
+static uint64_t get_partition_size(const std::string& partition) {
     std::string partition_size_str;
     if (fb->GetVar("partition-size:" + partition, &partition_size_str) != fastboot::SUCCESS) {
         die("cannot get partition size for %s", partition.c_str());
     }
 
     partition_size_str = fb_fix_numeric_var(partition_size_str);
-    int64_t partition_size;
-    if (!android::base::ParseInt(partition_size_str, &partition_size)) {
+    uint64_t partition_size;
+    if (!android::base::ParseUint(partition_size_str, &partition_size)) {
         die("Couldn't parse partition size '%s'.", partition_size_str.c_str());
     }
+    return partition_size;
+}
+
+static void copy_boot_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
+    if (buf->sz < AVB_FOOTER_SIZE) {
+        return;
+    }
+
+    // If overflows and negative, it should be < buf->sz.
+    int64_t partition_size = static_cast<int64_t>(get_partition_size(partition));
+
     if (partition_size == buf->sz) {
         return;
     }
@@ -1243,6 +1252,38 @@ static bool is_retrofit_device() {
         return false;
     }
     return android::base::StartsWith(value, "system_");
+}
+
+// Fetch a partition from the device to a given fd. This is a wrapper over FetchToFd to fetch
+// the full image.
+static uint64_t fetch_partition(const std::string& partition, borrowed_fd fd) {
+    uint64_t fetch_size = get_uint_var(FB_VAR_MAX_FETCH_SIZE);
+    if (fetch_size == 0) {
+        die("Unable to get %s. Device does not support fetch command.", FB_VAR_MAX_FETCH_SIZE);
+    }
+    uint64_t partition_size = get_partition_size(partition);
+    if (partition_size <= 0) {
+        die("Invalid partition size for partition %s: %" PRId64, partition.c_str(), partition_size);
+    }
+
+    uint64_t offset = 0;
+    while (offset < partition_size) {
+        uint64_t chunk_size = std::min(fetch_size, partition_size - offset);
+        if (fb->FetchToFd(partition, fd, offset, chunk_size) != fastboot::RetCode::SUCCESS) {
+            die("Unable to fetch %s (offset=%" PRIx64 ", size=%" PRIx64 ")", partition.c_str(),
+                offset, chunk_size);
+        }
+        offset += chunk_size;
+    }
+    return partition_size;
+}
+
+static void do_fetch(const std::string& partition, const std::string& slot_override,
+                     const std::string& outfile) {
+    unique_fd fd(TEMP_FAILURE_RETRY(
+            open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_BINARY, 0644)));
+    auto fetch = std::bind(fetch_partition, _1, borrowed_fd(fd));
+    do_for_partitions(partition, slot_override, fetch, false /* force slot */);
 }
 
 static void do_flash(const char* pname, const char* fname) {
@@ -2167,6 +2208,10 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 syntax_error("expected: snapshot-update [cancel|merge]");
             }
             fb->SnapshotUpdateCommand(arg);
+        } else if (command == FB_CMD_FETCH) {
+            std::string partition = next_arg(&args);
+            std::string outfile = next_arg(&args);
+            do_fetch(partition, slot_override, outfile);
         } else {
             syntax_error("unknown command %s", command.c_str());
         }

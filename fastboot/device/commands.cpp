@@ -712,13 +712,20 @@ class PartitionFetcher {
     // If successfully opened, ret_ is left untouched. Otherwise, ret_ is set to the value
     // that FetchHandler should return.
     bool Open() {
-        partition_name_ = args_->at(1);
-        if (partition_name_ != "vendor_boot") {
-            ret_ = device_->WriteFail("Fetch is only allowed on vendor_boot");
+        if (args_->size() < 2) {
+            ret_ = device_->WriteFail("Missing partition arg");
             return false;
         }
 
-        if (!OpenPartition(device_, partition_name_, &handle_)) {
+        partition_name_ = args_->at(1);
+        if (std::find(kAllowedPartitions.begin(), kAllowedPartitions.end(), partition_name_) ==
+            kAllowedPartitions.end()) {
+            ret_ = device_->WriteFail("Fetch is only allowed on [" +
+                                      android::base::Join(kAllowedPartitions, ", ") + "]");
+            return false;
+        }
+
+        if (!OpenPartition(device_, partition_name_, &handle_, true /* read */)) {
             ret_ = device_->WriteFail(
                     android::base::StringPrintf("Cannot open %s", partition_name_.c_str()));
             return false;
@@ -825,6 +832,12 @@ class PartitionFetcher {
                 "Fetched %s (offset=0x%" PRIx64 ", size=0x%" PRIx64, partition_name_.c_str(),
                 start_offset_, total_size_to_read_));
     }
+
+    static constexpr std::array<const char*, 3> kAllowedPartitions{
+            "vendor_boot",
+            "vendor_boot_a",
+            "vendor_boot_b",
+    };
 
     FastbootDevice* device_;
     const std::vector<std::string>* args_ = nullptr;
