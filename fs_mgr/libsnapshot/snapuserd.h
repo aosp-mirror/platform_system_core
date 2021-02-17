@@ -70,6 +70,7 @@ class Snapuserd final {
     const std::string& GetMiscName() { return misc_name_; }
     uint64_t GetNumSectors() { return num_sectors_; }
     bool IsAttached() const { return ctrl_fd_ >= 0; }
+    void CheckMergeCompletionStatus();
     void CloseFds() {
         ctrl_fd_ = {};
         cow_fd_ = {};
@@ -141,6 +142,7 @@ class Snapuserd final {
     std::map<sector_t, const CowOperation*> chunk_map_;
 
     bool metadata_read_done_ = false;
+    bool merge_initiated_ = false;
     BufferSink bufsink_;
 };
 
