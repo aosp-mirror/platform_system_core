@@ -1,5 +1,5 @@
 /*
- * Copyright 2020, The Android Open Source Project
+ * Copyright 2021, The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,140 +15,155 @@
  */
 
 #include "TrustyApp.h"
+#include "TrustyIpc.h"
 
+#include <BufferAllocator/BufferAllocator.h>
 #include <android-base/logging.h>
+#include <sys/mman.h>
 #include <sys/uio.h>
 #include <trusty/tipc.h>
+
+#define countof(arr) (sizeof(arr) / sizeof(arr[0]))
 
 namespace android {
 namespace trusty {
 
-// 0x1000 is the message buffer size but we need to leave some space for a protocol header.
-// This assures that packets can always be read/written in one read/write operation.
-static constexpr const uint32_t kPacketSize = 0x1000 - 32;
+using ::android::base::unique_fd;
 
-enum class PacketType : uint32_t {
-    SND,
-    RCV,
-    ACK,
-};
-
-struct PacketHeader {
-    PacketType type;
-    uint32_t remaining;
-};
-
-const char* toString(PacketType t) {
-    switch (t) {
-    case PacketType::SND:
-        return "SND";
-    case PacketType::RCV:
-        return "RCV";
-    case PacketType::ACK:
-        return "ACK";
-    default:
-        return "UNKNOWN";
-    }
+static inline uintptr_t RoundPageUp(uintptr_t val) {
+    return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
 }
 
-static constexpr const uint32_t kHeaderSize = sizeof(PacketHeader);
-static constexpr const uint32_t kPayloadSize = kPacketSize - kHeaderSize;
+ssize_t TrustyApp::TrustyRpc(const uint8_t* obegin, const uint8_t* oend, uint8_t* ibegin,
+                             uint8_t* iend) {
+    uint32_t olen = oend - obegin;
 
-ssize_t TrustyRpc(int handle, const uint8_t* obegin, const uint8_t* oend, uint8_t* ibegin,
-                  uint8_t* iend) {
-    while (obegin != oend) {
-        PacketHeader header = {
-            .type = PacketType::SND,
-            .remaining = uint32_t(oend - obegin),
-        };
-        uint32_t body_size = std::min(kPayloadSize, header.remaining);
-        iovec iov[] = {
-            {
-                .iov_base = &header,
-                .iov_len = kHeaderSize,
-            },
-            {
-                .iov_base = const_cast<uint8_t*>(obegin),
-                .iov_len = body_size,
-            },
-        };
-        int rc = writev(handle, iov, 2);
-        if (!rc) {
-            PLOG(ERROR) << "Error sending SND message. " << rc;
-            return rc;
-        }
-
-        obegin += body_size;
-
-        rc = read(handle, &header, kHeaderSize);
-        if (!rc) {
-            PLOG(ERROR) << "Error reading ACK. " << rc;
-            return rc;
-        }
-
-        if (header.type != PacketType::ACK || header.remaining != oend - obegin) {
-            LOG(ERROR) << "malformed ACK";
-            return -1;
-        }
+    if (olen > shm_len_) {
+        LOG(ERROR) << AT << "request message too long to fit in shared memory";
+        return -1;
     }
 
-    ssize_t remaining = 0;
-    auto begin = ibegin;
-    do {
-        PacketHeader header = {
-            .type = PacketType::RCV,
-            .remaining = 0,
-        };
+    memcpy(shm_base_, obegin, olen);
 
-        iovec iov[] = {
-            {
-                .iov_base = &header,
-                .iov_len = kHeaderSize,
-            },
-            {
-                .iov_base = begin,
-                .iov_len = uint32_t(iend - begin),
-            },
-        };
+    confirmationui_hdr hdr = {
+        .cmd = CONFIRMATIONUI_CMD_MSG,
+    };
+    confirmationui_msg_args args = {
+        .msg_len = olen,
+    };
+    iovec iov[] = {
+        {
+            .iov_base = &hdr,
+            .iov_len = sizeof(hdr),
+        },
+        {
+            .iov_base = &args,
+            .iov_len = sizeof(args),
+        },
+    };
 
-        ssize_t rc = writev(handle, iov, 1);
-        if (!rc) {
-            PLOG(ERROR) << "Error sending RCV message. " << rc;
-            return rc;
-        }
+    int rc = tipc_send(handle_, iov, countof(iov), NULL, 0);
+    if (rc != static_cast<int>(sizeof(hdr) + sizeof(args))) {
+        LOG(ERROR) << AT << "failed to send MSG request";
+        return -1;
+    }
 
-        rc = readv(handle, iov, 2);
-        if (rc < 0) {
-            PLOG(ERROR) << "Error reading response. " << rc;
-            return rc;
-        }
+    rc = readv(handle_, iov, countof(iov));
+    if (rc != static_cast<int>(sizeof(hdr) + sizeof(args))) {
+        LOG(ERROR) << AT << "failed to receive MSG response";
+        return -1;
+    }
 
-        uint32_t body_size = std::min(kPayloadSize, header.remaining);
-        if (body_size != rc - kHeaderSize) {
-            LOG(ERROR) << "Unexpected amount of data: " << rc;
-            return -1;
-        }
+    if (hdr.cmd != (CONFIRMATIONUI_CMD_MSG | CONFIRMATIONUI_RESP_BIT)) {
+        LOG(ERROR) << AT << "unknown response command: " << hdr.cmd;
+        return -1;
+    }
 
-        remaining = header.remaining - body_size;
-        begin += body_size;
-    } while (remaining);
+    uint32_t ilen = iend - ibegin;
+    if (args.msg_len > ilen) {
+        LOG(ERROR) << AT << "response message too long to fit in return buffer";
+        return -1;
+    }
 
-    return begin - ibegin;
+    memcpy(ibegin, shm_base_, args.msg_len);
+
+    return args.msg_len;
 }
 
 TrustyApp::TrustyApp(const std::string& path, const std::string& appname)
     : handle_(kInvalidHandle) {
-    handle_ = tipc_connect(path.c_str(), appname.c_str());
-    if (handle_ == kInvalidHandle) {
+    unique_fd tipc_handle(tipc_connect(path.c_str(), appname.c_str()));
+    if (tipc_handle < 0) {
         LOG(ERROR) << AT << "failed to connect to Trusty TA \"" << appname << "\" using dev:"
                    << "\"" << path << "\"";
+        return;
     }
+
+    uint32_t shm_len = RoundPageUp(CONFIRMATIONUI_MAX_MSG_SIZE);
+    BufferAllocator allocator;
+    unique_fd dma_buf(allocator.Alloc("system", shm_len));
+    if (dma_buf < 0) {
+        LOG(ERROR) << AT << "failed to allocate shared memory buffer";
+        return;
+    }
+
+    if (dma_buf < 0) {
+        LOG(ERROR) << AT << "failed to allocate shared memory buffer";
+        return;
+    }
+
+    confirmationui_hdr hdr = {
+        .cmd = CONFIRMATIONUI_CMD_INIT,
+    };
+    confirmationui_init_req args = {
+        .shm_len = shm_len,
+    };
+    iovec iov[] = {
+        {
+            .iov_base = &hdr,
+            .iov_len = sizeof(hdr),
+        },
+        {
+            .iov_base = &args,
+            .iov_len = sizeof(args),
+        },
+    };
+    trusty_shm shm = {
+        .fd = dma_buf,
+        .transfer = TRUSTY_SHARE,
+    };
+
+    int rc = tipc_send(tipc_handle, iov, 2, &shm, 1);
+    if (rc != static_cast<int>(sizeof(hdr) + sizeof(args))) {
+        LOG(ERROR) << AT << "failed to send INIT request";
+        return;
+    }
+
+    rc = read(tipc_handle, &hdr, sizeof(hdr));
+    if (rc != static_cast<int>(sizeof(hdr))) {
+        LOG(ERROR) << AT << "failed to receive INIT response";
+        return;
+    }
+
+    if (hdr.cmd != (CONFIRMATIONUI_CMD_INIT | CONFIRMATIONUI_RESP_BIT)) {
+        LOG(ERROR) << AT << "unknown response command: " << hdr.cmd;
+        return;
+    }
+
+    void* shm_base = mmap(0, shm_len, PROT_READ | PROT_WRITE, MAP_SHARED, dma_buf, 0);
+    if (shm_base == MAP_FAILED) {
+        LOG(ERROR) << AT << "failed to mmap() shared memory buffer";
+        return;
+    }
+
+    handle_ = std::move(tipc_handle);
+    shm_base_ = shm_base;
+    shm_len_ = shm_len;
+
     LOG(INFO) << AT << "succeeded to connect to Trusty TA \"" << appname << "\"";
 }
+
 TrustyApp::~TrustyApp() {
-    if (handle_ != kInvalidHandle) {
-        tipc_close(handle_);
-    }
     LOG(INFO) << "Done shutting down TrustyApp";
 }
 
