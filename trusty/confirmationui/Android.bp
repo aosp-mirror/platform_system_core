@@ -54,6 +54,7 @@ cc_library {
         "android.hardware.confirmationui@1.0",
         "android.hardware.keymaster@4.0",
         "libbase",
+        "libdmabufheap",
         "libhidlbase",
         "libteeui_hal_support",
         "libtrusty",
