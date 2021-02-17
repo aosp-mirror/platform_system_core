@@ -138,6 +138,12 @@ cc_binary {
 
     recovery: true,
 
+    product_variables: {
+        debuggable: {
+            cppflags: ["-DFB_ENABLE_FETCH"],
+        },
+    },
+
     srcs: [
         "device/commands.cpp",
         "device/fastboot_device.cpp",

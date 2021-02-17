@@ -77,3 +77,4 @@
 #define FB_VAR_FIRST_API_LEVEL "first-api-level"
 #define FB_VAR_SECURITY_PATCH_LEVEL "security-patch-level"
 #define FB_VAR_TREBLE_ENABLED "treble-enabled"
+#define FB_VAR_MAX_FETCH_SIZE "max-fetch-size"

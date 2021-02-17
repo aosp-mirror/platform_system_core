@@ -136,7 +136,9 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_DYNAMIC_PARTITION, {GetDynamicPartition, nullptr}},
             {FB_VAR_FIRST_API_LEVEL, {GetFirstApiLevel, nullptr}},
             {FB_VAR_SECURITY_PATCH_LEVEL, {GetSecurityPatchLevel, nullptr}},
-            {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}}};
+            {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}},
+            {FB_VAR_MAX_FETCH_SIZE, {GetMaxFetchSize, nullptr}},
+    };
 
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");

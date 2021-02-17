@@ -20,6 +20,7 @@
 #include <vector>
 
 constexpr unsigned int kMaxDownloadSizeDefault = 0x10000000;
+constexpr unsigned int kMaxFetchSizeDefault = 0x10000000;
 
 class FastbootDevice;
 
