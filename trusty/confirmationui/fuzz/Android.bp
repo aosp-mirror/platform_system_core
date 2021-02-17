@@ -17,11 +17,13 @@ package {
 }
 
 cc_fuzz {
-    name: "trusty_confirmationui_fuzzer",
+    name: "trusty_confirmationui_tipc_fuzzer",
     defaults: ["trusty_fuzzer_defaults"],
-    srcs: ["fuzz.cpp"],
+    srcs: [":trusty_tipc_fuzzer"],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.confirmationui\"",
+        "-DTRUSTY_APP_UUID=\"7dee2364-c036-425b-b086-df0f6c233c1b\"",
+        "-DTRUSTY_APP_FILENAME=\"confirmationui.syms.elf\"",
+    ],
 
-    // The initial corpus for this fuzzer was derived by dumping bytes from
-    // ConfirmationUI VTS.
-    corpus: ["corpus/*"],
 }
