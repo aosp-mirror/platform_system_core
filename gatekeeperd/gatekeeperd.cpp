@@ -318,6 +318,7 @@ class GateKeeperProxy : public BnGateKeeperService {
 
                     authToken.timestamp.milliSeconds = betoh64(hwAuthToken->timestamp);
                     authToken.challenge = hwAuthToken->challenge;
+                    authToken.userId = hwAuthToken->user_id;
                     authToken.authenticatorId = hwAuthToken->authenticator_id;
                     authToken.authenticatorType = static_cast<HardwareAuthenticatorType>(
                             betoh32(hwAuthToken->authenticator_type));
