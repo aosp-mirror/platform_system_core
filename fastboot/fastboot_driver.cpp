@@ -45,11 +45,13 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <storage_literals/storage_literals.h>
 
 #include "constants.h"
 #include "transport.h"
 
 using android::base::StringPrintf;
+using namespace android::storage_literals;
 
 namespace fastboot {
 
@@ -316,12 +318,20 @@ RetCode FastBootDriver::RunAndReadBuffer(
         return BAD_DEV_RESP;
     }
 
-    std::vector<char> data(dsize);
-    if ((ret = ReadBuffer(data.data(), data.size())) != SUCCESS) {
-        return ret;
-    }
-    if ((ret = write_fn(data.data(), data.size())) != SUCCESS) {
-        return ret;
+    const uint64_t total_size = dsize;
+    const uint64_t buf_size = std::min<uint64_t>(total_size, 1_MiB);
+    std::vector<char> data(buf_size);
+    uint64_t current_offset = 0;
+    while (current_offset < total_size) {
+        uint64_t remaining = total_size - current_offset;
+        uint64_t chunk_size = std::min(buf_size, remaining);
+        if ((ret = ReadBuffer(data.data(), chunk_size)) != SUCCESS) {
+            return ret;
+        }
+        if ((ret = write_fn(data.data(), chunk_size)) != SUCCESS) {
+            return ret;
+        }
+        current_offset += chunk_size;
     }
     return HandleResponse(response, info);
 }
