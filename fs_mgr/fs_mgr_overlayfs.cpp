@@ -194,7 +194,7 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
     static constexpr unsigned long kSizeThreshold = 8 * 1024 * 1024;  // 8MB
 
     return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100)) &&
-           (vst.f_bfree * vst.f_bsize) >= kSizeThreshold;
+           (static_cast<uint64_t>(vst.f_bfree) * vst.f_frsize) >= kSizeThreshold;
 }
 
 const auto kPhysicalDevice = "/dev/block/by-name/"s;
