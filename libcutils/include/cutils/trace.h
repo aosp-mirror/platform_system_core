@@ -104,14 +104,6 @@ void atrace_setup();
 void atrace_update_tags();
 
 /**
- * Set whether the process is debuggable.  By default the process is not
- * considered debuggable.  If the process is not debuggable then application-
- * level tracing is not allowed unless the ro.debuggable system property is
- * set to '1'.
- */
-void atrace_set_debuggable(bool debuggable);
-
-/**
  * Set whether tracing is enabled for the current process.  This is used to
  * prevent tracing within the Zygote process.
  */
