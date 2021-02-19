@@ -130,7 +130,11 @@ void MountHandler::MountHandlerFunction() {
     char* buf = nullptr;
     size_t len = 0;
     while (getline(&buf, &len, fp_.get()) != -1) {
-        auto entry = ParseMount(std::string(buf));
+        auto buf_string = std::string(buf);
+        if (buf_string.find("/emulated") != std::string::npos) {
+            continue;
+        }
+        auto entry = ParseMount(buf_string);
         auto match = untouched.find(entry);
         if (match == untouched.end()) {
             touched.emplace_back(std::move(entry));
