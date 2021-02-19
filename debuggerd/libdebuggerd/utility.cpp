@@ -391,8 +391,10 @@ const char* get_sigcode(const siginfo_t* si) {
     case SIGSYS:
       switch (si->si_code) {
         case SYS_SECCOMP: return "SYS_SECCOMP";
+        case SYS_USER_DISPATCH:
+          return "SYS_USER_DISPATCH";
       }
-      static_assert(NSIGSYS == SYS_SECCOMP, "missing SYS_* si_code");
+      static_assert(NSIGSYS == SYS_USER_DISPATCH, "missing SYS_* si_code");
       break;
     case SIGTRAP:
       switch (si->si_code) {
