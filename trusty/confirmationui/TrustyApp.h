@@ -16,7 +16,10 @@
 
 #pragma once
 
+#include "TrustyIpc.h"
+
 #include <android-base/logging.h>
+#include <android-base/unique_fd.h>
 #include <errno.h>
 #include <poll.h>
 #include <stdio.h>
@@ -60,19 +63,11 @@ enum class TrustyAppError : int32_t {
     MSG_TOO_LONG = -2,
 };
 
-/*
- * There is a hard limitation of 0x1800 bytes for the to-be-signed message size. The protocol
- * overhead is limited, so that 0x2000 is a buffer size that will be sufficient in any benign
- * mode of operation.
- */
-static constexpr const size_t kSendBufferSize = 0x2000;
-
-ssize_t TrustyRpc(int handle, const uint8_t* obegin, const uint8_t* oend, uint8_t* ibegin,
-                  uint8_t* iend);
-
 class TrustyApp {
   private:
-    int handle_;
+    android::base::unique_fd handle_;
+    void* shm_base_;
+    size_t shm_len_;
     static constexpr const int kInvalidHandle = -1;
     /*
      * This mutex serializes communication with the trusted app, not handle_.
@@ -84,6 +79,8 @@ class TrustyApp {
     TrustyApp(const std::string& path, const std::string& appname);
     ~TrustyApp();
 
+    ssize_t TrustyRpc(const uint8_t* obegin, const uint8_t* oend, uint8_t* ibegin, uint8_t* iend);
+
     template <typename Request, typename Response, typename... T>
     std::tuple<TrustyAppError, msg2tuple_t<Response>> issueCmd(const T&... args) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -93,7 +90,7 @@ class TrustyApp {
             return {TrustyAppError::ERROR, {}};
         }
 
-        uint8_t buffer[kSendBufferSize];
+        uint8_t buffer[CONFIRMATIONUI_MAX_MSG_SIZE];
         WriteStream out(buffer);
 
         out = write(Request(), out, args...);
@@ -102,8 +99,8 @@ class TrustyApp {
             return {TrustyAppError::MSG_TOO_LONG, {}};
         }
 
-        auto rc = TrustyRpc(handle_, &buffer[0], const_cast<const uint8_t*>(out.pos()), &buffer[0],
-                            &buffer[kSendBufferSize]);
+        auto rc = TrustyRpc(&buffer[0], const_cast<const uint8_t*>(out.pos()), &buffer[0],
+                            &buffer[CONFIRMATIONUI_MAX_MSG_SIZE]);
         if (rc < 0) return {TrustyAppError::ERROR, {}};
 
         ReadStream in(&buffer[0], rc);
@@ -125,7 +122,7 @@ class TrustyApp {
             return TrustyAppError::ERROR;
         }
 
-        uint8_t buffer[kSendBufferSize];
+        uint8_t buffer[CONFIRMATIONUI_MAX_MSG_SIZE];
         WriteStream out(buffer);
 
         out = write(Request(), out, args...);
@@ -134,8 +131,8 @@ class TrustyApp {
             return TrustyAppError::MSG_TOO_LONG;
         }
 
-        auto rc = TrustyRpc(handle_, &buffer[0], const_cast<const uint8_t*>(out.pos()), &buffer[0],
-                            &buffer[kSendBufferSize]);
+        auto rc = TrustyRpc(&buffer[0], const_cast<const uint8_t*>(out.pos()), &buffer[0],
+                            &buffer[CONFIRMATIONUI_MAX_MSG_SIZE]);
         if (rc < 0) {
             LOG(ERROR) << "send command failed: " << strerror(errno) << " (" << errno << ")";
             return TrustyAppError::ERROR;
