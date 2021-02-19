@@ -125,10 +125,38 @@ void TeardownAllOverlayForMountPoint(const std::string&) {}
 
 namespace {
 
+bool fs_mgr_in_recovery() {
+    // Check the existence of recovery binary instead of using the compile time
+    // macro, because first-stage-init is compiled with __ANDROID_RECOVERY__
+    // defined, albeit not in recovery. More details: system/core/init/README.md
+    return fs_mgr_access("/system/bin/recovery");
+}
+
+bool fs_mgr_is_dsu_running() {
+    // Since android::gsi::CanBootIntoGsi() or android::gsi::MarkSystemAsGsi() is
+    // never called in recovery, the return value of android::gsi::IsGsiRunning()
+    // is not well-defined. In this case, just return false as being in recovery
+    // implies not running a DSU system.
+    if (fs_mgr_in_recovery()) return false;
+    auto saved_errno = errno;
+    auto ret = android::gsi::IsGsiRunning();
+    errno = saved_errno;
+    return ret;
+}
+
 // list of acceptable overlayfs backing storage
 const auto kScratchMountPoint = "/mnt/scratch"s;
 const auto kCacheMountPoint = "/cache"s;
-const std::vector<const std::string> kOverlayMountPoints = {kScratchMountPoint, kCacheMountPoint};
+
+std::vector<const std::string> OverlayMountPoints() {
+    // Never fallback to legacy cache mount point if within a DSU system,
+    // because running a DSU system implies the device supports dynamic
+    // partitions, which means legacy cache mustn't be used.
+    if (fs_mgr_is_dsu_running()) {
+        return {kScratchMountPoint};
+    }
+    return {kScratchMountPoint, kCacheMountPoint};
+}
 
 // Return true if everything is mounted, but before adb is started.  Right
 // after 'trigger load_persist_props_action' is done.
@@ -166,26 +194,7 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
     static constexpr unsigned long kSizeThreshold = 8 * 1024 * 1024;  // 8MB
 
     return (vst.f_bfree >= (vst.f_blocks * kPercentThreshold / 100)) &&
-           (vst.f_bfree * vst.f_bsize) >= kSizeThreshold;
-}
-
-bool fs_mgr_in_recovery() {
-    // Check the existence of recovery binary instead of using the compile time
-    // macro, because first-stage-init is compiled with __ANDROID_RECOVERY__
-    // defined, albeit not in recovery. More details: system/core/init/README.md
-    return fs_mgr_access("/system/bin/recovery");
-}
-
-bool fs_mgr_is_dsu_running() {
-    // Since android::gsi::CanBootIntoGsi() or android::gsi::MarkSystemAsGsi() is
-    // never called in recovery, the return value of android::gsi::IsGsiRunning()
-    // is not well-defined. In this case, just return false as being in recovery
-    // implies not running a DSU system.
-    if (fs_mgr_in_recovery()) return false;
-    auto saved_errno = errno;
-    auto ret = android::gsi::IsGsiRunning();
-    errno = saved_errno;
-    return ret;
+           (static_cast<uint64_t>(vst.f_bfree) * vst.f_frsize) >= kSizeThreshold;
 }
 
 const auto kPhysicalDevice = "/dev/block/by-name/"s;
@@ -300,7 +309,7 @@ const auto kOverlayTopDir = "/overlay"s;
 std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point) {
     if (!fs_mgr_is_dir(mount_point)) return "";
     const auto base = android::base::Basename(mount_point) + "/";
-    for (const auto& overlay_mount_point : kOverlayMountPoints) {
+    for (const auto& overlay_mount_point : OverlayMountPoints()) {
         auto dir = overlay_mount_point + kOverlayTopDir + "/" + base;
         auto upper = dir + kUpperName;
         if (!fs_mgr_is_dir(upper)) continue;
@@ -1344,7 +1353,7 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     if (candidates.empty()) return ret;
 
     std::string dir;
-    for (const auto& overlay_mount_point : kOverlayMountPoints) {
+    for (const auto& overlay_mount_point : OverlayMountPoints()) {
         if (backing && backing[0] && (overlay_mount_point != backing)) continue;
         if (overlay_mount_point == kScratchMountPoint) {
             if (!fs_mgr_overlayfs_setup_scratch(fstab, change)) continue;
@@ -1465,7 +1474,7 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
         }
     }
     bool should_destroy_scratch = false;
-    for (const auto& overlay_mount_point : kOverlayMountPoints) {
+    for (const auto& overlay_mount_point : OverlayMountPoints()) {
         ret &= fs_mgr_overlayfs_teardown_one(
                 overlay_mount_point, mount_point ? fs_mgr_mount_point(mount_point) : "", change,
                 overlay_mount_point == kScratchMountPoint ? &should_destroy_scratch : nullptr);
@@ -1569,7 +1578,7 @@ void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
     constexpr bool* ignore_change = nullptr;
 
     // Teardown legacy overlay mount points that's not backed by a scratch device.
-    for (const auto& overlay_mount_point : kOverlayMountPoints) {
+    for (const auto& overlay_mount_point : OverlayMountPoints()) {
         if (overlay_mount_point == kScratchMountPoint) {
             continue;
         }
