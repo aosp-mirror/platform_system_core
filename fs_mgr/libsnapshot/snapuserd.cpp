@@ -447,16 +447,15 @@ chunk_t Snapuserd::GetNextAllocatableChunkId(chunk_t chunk) {
 }
 
 void Snapuserd::CheckMergeCompletionStatus() {
-    CowHeader header;
-
-    if (merge_initiated_) {
-        reader_->GetHeader(&header);
-        SNAP_LOG(INFO) << "Merge-status: Total-Merged-ops: " << header.num_merge_ops
-                       << " Total-data-ops: " << reader_->total_data_ops();
-    } else {
-        SNAP_LOG(INFO) << "Merge was not initiated. Total-Merged-ops: " << header.num_merge_ops
-                       << " Total-data-ops: " << reader_->total_data_ops();
+    if (!merge_initiated_) {
+        SNAP_LOG(INFO) << "Merge was not initiated. Total-data-ops: " << reader_->total_data_ops();
+        return;
     }
+
+    CowHeader header;
+    reader_->GetHeader(&header);
+    SNAP_LOG(INFO) << "Merge-status: Total-Merged-ops: " << header.num_merge_ops
+                   << " Total-data-ops: " << reader_->total_data_ops();
 }
 
 /*
