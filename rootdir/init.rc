@@ -738,6 +738,8 @@ on post-fs-data
     mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system
+    # directory used for on-device signing key blob
+    mkdir /data/misc/odsign 0700 root root
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -876,6 +878,10 @@ on post-fs-data
 
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
+
+    # Start the on-device signing daemon, and wait for it to finish, to ensure
+    # ART artifacts are generated if needed.
+    exec_start odsign
 
     # After apexes are mounted, tell keymaster early boot has ended, so it will
     # stop allowing use of early-boot keys
