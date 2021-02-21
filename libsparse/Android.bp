@@ -1,5 +1,9 @@
 // Copyright 2010 The Android Open Source Project
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_library {
     name: "libsparse",
     host_supported: true,
