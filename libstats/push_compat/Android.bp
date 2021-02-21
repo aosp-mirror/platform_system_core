@@ -19,6 +19,10 @@
 // protocols. This library should only be used by DNS resolver or other
 // native modules on Q that log pushed atoms to statsd.
 // =========================================================================
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_defaults {
     name: "libstatspush_compat_defaults",
     srcs: [
@@ -65,4 +69,3 @@ cc_test {
     ],
     static_libs: ["libgmock"],
 }
-

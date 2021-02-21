@@ -19,6 +19,10 @@
 // to only building on ARM if they include assembly. Individual makefiles
 // are responsible for having their own logic, for fine-grained control.
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_binary {
     name: "android.hardware.confirmationui@1.0-service.trusty",
     relative_install_path: "hw",
