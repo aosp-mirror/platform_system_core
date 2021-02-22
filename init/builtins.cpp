@@ -292,6 +292,38 @@ static Result<void> do_export(const BuiltinArguments& args) {
     return {};
 }
 
+static Result<void> do_load_exports(const BuiltinArguments& args) {
+    auto file_contents = ReadFile(args[1]);
+    if (!file_contents.ok()) {
+        return Error() << "Could not read input file '" << args[1]
+                       << "': " << file_contents.error();
+    }
+
+    auto lines = Split(*file_contents, "\n");
+    for (const auto& line : lines) {
+        if (line.empty()) {
+            continue;
+        }
+
+        auto env = Split(line, " ");
+
+        if (env.size() != 3) {
+            return ErrnoError() << "Expected a line as `export <name> <value>`, found: `" << line
+                                << "`";
+        }
+
+        if (env[0] != "export") {
+            return ErrnoError() << "Unknown action: '" << env[0] << "', expected 'export'";
+        }
+
+        if (setenv(env[1].c_str(), env[2].c_str(), 1) == -1) {
+            return ErrnoError() << "Failed to export '" << line << "' from " << args[1];
+        }
+    }
+
+    return {};
+}
+
 static Result<void> do_hostname(const BuiltinArguments& args) {
     if (auto result = WriteFile("/proc/sys/kernel/hostname", args[1]); !result.ok()) {
         return Error() << "Unable to write to /proc/sys/kernel/hostname: " << result.error();
@@ -1404,6 +1436,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"interface_restart",       {1,     1,    {false,  do_interface_restart}}},
         {"interface_start",         {1,     1,    {false,  do_interface_start}}},
         {"interface_stop",          {1,     1,    {false,  do_interface_stop}}},
+        {"load_exports",            {1,     1,    {false,  do_load_exports}}},
         {"load_persist_props",      {0,     0,    {false,  do_load_persist_props}}},
         {"load_system_props",       {0,     0,    {false,  do_load_system_props}}},
         {"loglevel",                {1,     1,    {false,  do_loglevel}}},
