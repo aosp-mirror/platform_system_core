@@ -114,7 +114,7 @@ struct fastboot_buffer {
     enum fb_buffer_type type;
     void* data;
     int64_t sz;
-    int fd;
+    unique_fd fd;
     int64_t image_size;
 };
 
@@ -640,14 +640,14 @@ static void delete_fbemarker_tmpdir(const std::string& dir) {
     }
 }
 
-static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
+static unique_fd unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd(entry_name));
 
     ZipEntry64 zip_entry;
     if (FindEntry(zip, entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", entry_name);
         errno = ENOENT;
-        return -1;
+        return unique_fd();
     }
 
     fprintf(stderr, "extracting %s (%" PRIu64 " MB) to disk...", entry_name,
@@ -664,7 +664,7 @@ static int unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
 
     fprintf(stderr, " took %.3fs\n", now() - start);
 
-    return fd.release();
+    return fd;
 }
 
 static void CheckRequirement(const std::string& cur_product, const std::string& var,
@@ -893,7 +893,7 @@ static int64_t get_sparse_limit(int64_t size) {
     return 0;
 }
 
-static bool load_buf_fd(int fd, struct fastboot_buffer* buf) {
+static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
     int64_t sz = get_file_size(fd);
     if (sz == -1) {
         return false;
@@ -918,7 +918,7 @@ static bool load_buf_fd(int fd, struct fastboot_buffer* buf) {
     } else {
         buf->type = FB_BUFFER_FD;
         buf->data = nullptr;
-        buf->fd = fd;
+        buf->fd = std::move(fd);
         buf->sz = sz;
     }
 
@@ -941,7 +941,7 @@ static bool load_buf(const char* fname, struct fastboot_buffer* buf) {
         return false;
     }
 
-    return load_buf_fd(fd.release(), buf);
+    return load_buf_fd(std::move(fd), buf);
 }
 
 static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf, bool vbmeta_in_boot) {
@@ -987,12 +987,11 @@ static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf, bool vbmeta_in_bo
         data[flags_offset] |= 0x02;
     }
 
-    int fd = make_temporary_fd("vbmeta rewriting");
+    unique_fd fd(make_temporary_fd("vbmeta rewriting"));
     if (!android::base::WriteStringToFd(data, fd)) {
         die("Failed writing to modified vbmeta");
     }
-    close(buf->fd);
-    buf->fd = fd;
+    buf->fd = std::move(fd);
     lseek(fd, 0, SEEK_SET);
 }
 
@@ -1044,7 +1043,7 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
         return;
     }
 
-    int fd = make_temporary_fd("boot rewriting");
+    unique_fd fd(make_temporary_fd("boot rewriting"));
     if (!android::base::WriteStringToFd(data, fd)) {
         die("Failed writing to modified boot");
     }
@@ -1052,8 +1051,7 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
     if (!android::base::WriteStringToFd(data.substr(footer_offset), fd)) {
         die("Failed copying AVB footer in boot");
     }
-    close(buf->fd);
-    buf->fd = fd;
+    buf->fd = std::move(fd);
     buf->sz = partition_size;
     lseek(fd, 0, SEEK_SET);
 }
@@ -1310,7 +1308,7 @@ static void CancelSnapshotIfNeeded() {
 class ImageSource {
   public:
     virtual bool ReadFile(const std::string& name, std::vector<char>* out) const = 0;
-    virtual int OpenFile(const std::string& name) const = 0;
+    virtual unique_fd OpenFile(const std::string& name) const = 0;
 };
 
 class FlashAllTool {
@@ -1428,8 +1426,8 @@ void FlashAllTool::CollectImages() {
 void FlashAllTool::FlashImages(const std::vector<std::pair<const Image*, std::string>>& images) {
     for (const auto& [image, slot] : images) {
         fastboot_buffer buf;
-        int fd = source_.OpenFile(image->img_name);
-        if (fd < 0 || !load_buf_fd(fd, &buf)) {
+        unique_fd fd = source_.OpenFile(image->img_name);
+        if (fd < 0 || !load_buf_fd(std::move(fd), &buf)) {
             if (image->optional_if_no_image) {
                 continue;
             }
@@ -1494,7 +1492,7 @@ class ZipImageSource final : public ImageSource {
   public:
     explicit ZipImageSource(ZipArchiveHandle zip) : zip_(zip) {}
     bool ReadFile(const std::string& name, std::vector<char>* out) const override;
-    int OpenFile(const std::string& name) const override;
+    unique_fd OpenFile(const std::string& name) const override;
 
   private:
     ZipArchiveHandle zip_;
@@ -1504,7 +1502,7 @@ bool ZipImageSource::ReadFile(const std::string& name, std::vector<char>* out) c
     return UnzipToMemory(zip_, name, out);
 }
 
-int ZipImageSource::OpenFile(const std::string& name) const {
+unique_fd ZipImageSource::OpenFile(const std::string& name) const {
     return unzip_to_file(zip_, name.c_str());
 }
 
@@ -1524,7 +1522,7 @@ static void do_update(const char* filename, const std::string& slot_override, bo
 class LocalImageSource final : public ImageSource {
   public:
     bool ReadFile(const std::string& name, std::vector<char>* out) const override;
-    int OpenFile(const std::string& name) const override;
+    unique_fd OpenFile(const std::string& name) const override;
 };
 
 bool LocalImageSource::ReadFile(const std::string& name, std::vector<char>* out) const {
@@ -1535,9 +1533,9 @@ bool LocalImageSource::ReadFile(const std::string& name, std::vector<char>* out)
     return ReadFileToVector(path, out);
 }
 
-int LocalImageSource::OpenFile(const std::string& name) const {
+unique_fd LocalImageSource::OpenFile(const std::string& name) const {
     auto path = find_item_given_name(name);
-    return open(path.c_str(), O_RDONLY | O_BINARY);
+    return unique_fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_BINARY)));
 }
 
 static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
@@ -1656,7 +1654,7 @@ static void fb_perform_format(
     if (fd == -1) {
         die("Cannot open generated image: %s", strerror(errno));
     }
-    if (!load_buf_fd(fd.release(), &buf)) {
+    if (!load_buf_fd(std::move(fd), &buf)) {
         die("Cannot read image: %s", strerror(errno));
     }
     flash_buf(partition, &buf);
