@@ -523,6 +523,11 @@ instance. \
 `interface_start aidl/aidl_lazy_test_1` will start the AIDL service that
 provides the `aidl_lazy_test_1` interface.
 
+`load_exports <path>`
+> Open the file at _path_ and export global environment variables declared
+  there. Each line must be in the format `export <name> <value>`, as described
+  above.
+
 `load_system_props`
 > (This action is deprecated and no-op.)
 
