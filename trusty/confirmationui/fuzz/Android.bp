@@ -27,3 +27,17 @@ cc_fuzz {
     ],
 
 }
+
+cc_fuzz {
+    name: "trusty_confirmationui_msg_fuzzer",
+    defaults: ["trusty_fuzzer_defaults"],
+    srcs: ["msg_fuzzer.cpp"],
+    include_dirs: ["system/core/trusty/confirmationui/include"],
+    shared_libs: [
+        "libdmabufheap",
+    ],
+
+    // The initial corpus for this fuzzer was derived by dumping messages from/to
+    // HAL to/from TA triggered by VtsHalConfirmationUIV1_0TargetTest.
+    corpus: ["msg_corpus/*"],
+}
