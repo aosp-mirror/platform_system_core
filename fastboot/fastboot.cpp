@@ -76,6 +76,7 @@
 #include "udp.h"
 #include "usb.h"
 #include "util.h"
+#include "vendor_boot_img_utils.h"
 
 using android::base::borrowed_fd;
 using android::base::ReadFully;
@@ -1292,6 +1293,40 @@ static void do_fetch(const std::string& partition, const std::string& slot_overr
     do_for_partitions(partition, slot_override, fetch, false /* force slot */);
 }
 
+// Return immediately if not flashing a vendor boot image. If flashing a vendor boot image,
+// repack vendor_boot image with an updated ramdisk. After execution, buf is set
+// to the new image to flash, and return value is the real partition name to flash.
+static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf) {
+    std::string_view pname_sv{pname};
+
+    if (!android::base::StartsWith(pname_sv, "vendor_boot:") &&
+        !android::base::StartsWith(pname_sv, "vendor_boot_a:") &&
+        !android::base::StartsWith(pname_sv, "vendor_boot_b:")) {
+        return std::string(pname_sv);
+    }
+    if (buf->type != FB_BUFFER_FD) {
+        die("Flashing sparse vendor ramdisk image is not supported.");
+    }
+    if (buf->sz <= 0) {
+        die("repack_ramdisk() sees negative size: %" PRId64, buf->sz);
+    }
+    std::string partition(pname_sv.substr(0, pname_sv.find(':')));
+    std::string ramdisk(pname_sv.substr(pname_sv.find(':') + 1));
+
+    unique_fd vendor_boot(make_temporary_fd("vendor boot repack"));
+    uint64_t vendor_boot_size = fetch_partition(partition, vendor_boot);
+    auto repack_res = replace_vendor_ramdisk(vendor_boot, vendor_boot_size, ramdisk, buf->fd,
+                                             static_cast<uint64_t>(buf->sz));
+    if (!repack_res.ok()) {
+        die("%s", repack_res.error().message().c_str());
+    }
+
+    buf->fd = std::move(vendor_boot);
+    buf->sz = vendor_boot_size;
+    buf->image_size = vendor_boot_size;
+    return partition;
+}
+
 static void do_flash(const char* pname, const char* fname) {
     verbose("Do flash %s %s", pname, fname);
     struct fastboot_buffer buf;
@@ -1302,7 +1337,8 @@ static void do_flash(const char* pname, const char* fname) {
     if (is_logical(pname)) {
         fb->ResizePartition(pname, std::to_string(buf.image_size));
     }
-    flash_buf(pname, &buf);
+    std::string flash_pname = repack_ramdisk(pname, &buf);
+    flash_buf(flash_pname, &buf);
 }
 
 // Sets slot_override as the active slot. If slot_override is blank,
