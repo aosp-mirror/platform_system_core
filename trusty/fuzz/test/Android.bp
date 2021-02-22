@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_fuzz {
     name: "trusty_test_fuzzer",
     defaults: ["trusty_fuzzer_defaults"],
