@@ -867,6 +867,10 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
+    # Export *CLASSPATH variables from /etc/classpath
+    # TODO(b/180105615): export from the generated file instead.
+    load_exports /etc/classpath
+
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
