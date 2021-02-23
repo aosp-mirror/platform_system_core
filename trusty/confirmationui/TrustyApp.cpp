@@ -107,11 +107,6 @@ TrustyApp::TrustyApp(const std::string& path, const std::string& appname)
         return;
     }
 
-    if (dma_buf < 0) {
-        LOG(ERROR) << AT << "failed to allocate shared memory buffer";
-        return;
-    }
-
     confirmationui_hdr hdr = {
         .cmd = CONFIRMATIONUI_CMD_INIT,
     };
