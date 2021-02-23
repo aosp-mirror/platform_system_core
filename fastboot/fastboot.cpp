@@ -1192,8 +1192,10 @@ static void do_for_partition(const std::string& part, const std::string& slot,
                              const std::function<void(const std::string&)>& func, bool force_slot) {
     std::string has_slot;
     std::string current_slot;
+    // |part| can be vendor_boot:default. Append slot to the first token.
+    auto part_tokens = android::base::Split(part, ":");
 
-    if (fb->GetVar("has-slot:" + part, &has_slot) != fastboot::SUCCESS) {
+    if (fb->GetVar("has-slot:" + part_tokens[0], &has_slot) != fastboot::SUCCESS) {
         /* If has-slot is not supported, the answer is no. */
         has_slot = "no";
     }
@@ -1203,14 +1205,15 @@ static void do_for_partition(const std::string& part, const std::string& slot,
             if (current_slot == "") {
                 die("Failed to identify current slot");
             }
-            func(part + "_" + current_slot);
+            part_tokens[0] += "_" + current_slot;
         } else {
-            func(part + '_' + slot);
+            part_tokens[0] += "_" + slot;
         }
+        func(android::base::Join(part_tokens, ":"));
     } else {
         if (force_slot && slot != "") {
-             fprintf(stderr, "Warning: %s does not support slots, and slot %s was requested.\n",
-                     part.c_str(), slot.c_str());
+            fprintf(stderr, "Warning: %s does not support slots, and slot %s was requested.\n",
+                    part_tokens[0].c_str(), slot.c_str());
         }
         func(part);
     }
@@ -1224,10 +1227,13 @@ static void do_for_partition(const std::string& part, const std::string& slot,
 static void do_for_partitions(const std::string& part, const std::string& slot,
                               const std::function<void(const std::string&)>& func, bool force_slot) {
     std::string has_slot;
+    // |part| can be vendor_boot:default. Query has-slot on the first token only.
+    auto part_tokens = android::base::Split(part, ":");
 
     if (slot == "all") {
-        if (fb->GetVar("has-slot:" + part, &has_slot) != fastboot::SUCCESS) {
-            die("Could not check if partition %s has slot %s", part.c_str(), slot.c_str());
+        if (fb->GetVar("has-slot:" + part_tokens[0], &has_slot) != fastboot::SUCCESS) {
+            die("Could not check if partition %s has slot %s", part_tokens[0].c_str(),
+                slot.c_str());
         }
         if (has_slot == "yes") {
             for (int i=0; i < get_slot_count(); i++) {
@@ -1287,6 +1293,7 @@ static void do_fetch(const std::string& partition, const std::string& slot_overr
 }
 
 static void do_flash(const char* pname, const char* fname) {
+    verbose("Do flash %s %s", pname, fname);
     struct fastboot_buffer buf;
 
     if (!load_buf(fname, &buf)) {
