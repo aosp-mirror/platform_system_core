@@ -854,7 +854,7 @@ std::set<std::string> GetBootDevices() {
     if (android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
         std::set<std::string> boot_devices;
         const std::string cmdline_key = "androidboot.boot_device";
-        for (const auto& [key, value] : fs_mgr_parse_boot_config(cmdline)) {
+        for (const auto& [key, value] : fs_mgr_parse_cmdline(cmdline)) {
             if (key == cmdline_key) {
                 boot_devices.emplace(value);
             }
