@@ -20,11 +20,18 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+// See https://developer.android.com/reference/android/os/SystemClock
+// to learn more about Android's timekeeping facilities.
+
 namespace android {
 
+// Returns milliseconds since boot, not counting time spent in deep sleep.
 int64_t uptimeMillis();
+// Returns nanoseconds since boot, not counting time spent in deep sleep.
 int64_t uptimeNanos();
+// Returns milliseconds since boot, including time spent in sleep.
 int64_t elapsedRealtime();
+// Returns nanoseconds since boot, including time spent in sleep.
 int64_t elapsedRealtimeNano();
 
 }  // namespace android
