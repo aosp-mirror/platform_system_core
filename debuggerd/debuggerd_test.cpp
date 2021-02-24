@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <dirent.h>
 #include <err.h>
 #include <fcntl.h>
 #include <malloc.h>
@@ -1444,9 +1445,16 @@ TEST(tombstoned, proto) {
   std::this_thread::sleep_for(100ms);
 
   // Find the tombstone.
-  std::optional<int> tombstone_index;
-  for (int i = 0; i < 50; ++i) {
-    std::string path = android::base::StringPrintf("/data/tombstones/tombstone_%02d", i);
+  std::optional<std::string> tombstone_file;
+  std::unique_ptr<DIR, decltype(&closedir)> dir_h(opendir("/data/tombstones"), closedir);
+  ASSERT_TRUE(dir_h != nullptr);
+  std::regex tombstone_re("tombstone_\\d+");
+  dirent* entry;
+  while ((entry = readdir(dir_h.get())) != nullptr) {
+    if (!std::regex_match(entry->d_name, tombstone_re)) {
+      continue;
+    }
+    std::string path = android::base::StringPrintf("/data/tombstones/%s", entry->d_name);
 
     struct stat st;
     if (TEMP_FAILURE_RETRY(stat(path.c_str(), &st)) != 0) {
@@ -1454,14 +1462,13 @@ TEST(tombstoned, proto) {
     }
 
     if (st.st_dev == text_st.st_dev && st.st_ino == text_st.st_ino) {
-      tombstone_index = i;
+      tombstone_file = path;
       break;
     }
   }
 
-  ASSERT_TRUE(tombstone_index);
-  std::string proto_path =
-      android::base::StringPrintf("/data/tombstones/tombstone_%02d.pb", *tombstone_index);
+  ASSERT_TRUE(tombstone_file);
+  std::string proto_path = tombstone_file.value() + ".pb";
 
   struct stat proto_fd_st;
   struct stat proto_file_st;
