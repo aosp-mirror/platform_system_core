@@ -619,7 +619,7 @@ void engrave_tombstone(unique_fd output_fd, unique_fd proto_fd, unwindstack::Unw
   log.tfd = output_fd.get();
   log.amfd_data = amfd_data;
 
-  bool translate_proto = GetBoolProperty("debug.debuggerd.translate_proto_to_text", false);
+  bool translate_proto = GetBoolProperty("debug.debuggerd.translate_proto_to_text", true);
   if (translate_proto) {
     tombstone_proto_to_text(tombstone, [&log](const std::string& line, bool should_log) {
       _LOG(&log, should_log ? logtype::HEADER : logtype::LOGS, "%s\n", line.c_str());

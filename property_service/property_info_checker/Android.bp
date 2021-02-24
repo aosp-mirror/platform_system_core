@@ -1,8 +1,11 @@
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_binary {
     name: "property_info_checker",
     host_supported: true,
     static_executable: true,
-    cpp_std: "experimental",
     static_libs: [
         "libpropertyinfoserializer",
         "libpropertyinfoparser",

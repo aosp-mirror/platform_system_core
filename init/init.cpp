@@ -713,6 +713,10 @@ static void RecordStageBoottimes(const boot_clock::time_point& second_stage_star
     SetProperty("ro.boottime.init.selinux",
                 std::to_string(second_stage_start_time.time_since_epoch().count() -
                                selinux_start_time_ns));
+    if (auto init_module_time_str = getenv(kEnvInitModuleDurationMs); init_module_time_str) {
+        SetProperty("ro.boottime.init.modules", init_module_time_str);
+        unsetenv(kEnvInitModuleDurationMs);
+    }
 }
 
 void SendLoadPersistentPropertiesMessage() {
@@ -721,37 +725,6 @@ void SendLoadPersistentPropertiesMessage() {
     if (auto result = SendMessage(property_fd, init_message); !result.ok()) {
         LOG(ERROR) << "Failed to send load persistent properties message: " << result.error();
     }
-}
-
-static Result<void> TransitionSnapuserdAction(const BuiltinArguments&) {
-    if (!SnapshotManager::IsSnapshotManagerNeeded() ||
-        !android::base::GetBoolProperty(android::snapshot::kVirtualAbCompressionProp, false)) {
-        return {};
-    }
-
-    auto sm = SnapshotManager::New();
-    if (!sm) {
-        LOG(FATAL) << "Failed to create SnapshotManager, will not transition snapuserd";
-        return {};
-    }
-
-    ServiceList& service_list = ServiceList::GetInstance();
-    auto svc = service_list.FindService("snapuserd");
-    if (!svc) {
-        LOG(FATAL) << "Failed to find snapuserd service, aborting transition";
-        return {};
-    }
-    svc->Start();
-    svc->SetShutdownCritical();
-
-    if (!sm->PerformSecondStageInitTransition()) {
-        LOG(FATAL) << "Failed to transition snapuserd to second-stage";
-    }
-
-    if (auto pid = GetSnapuserdFirstStagePid()) {
-        KillFirstStageSnapuserd(pid.value());
-    }
-    return {};
 }
 
 int SecondStageMain(int argc, char** argv) {
@@ -900,9 +873,7 @@ int SecondStageMain(int argc, char** argv) {
 
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
     am.QueueBuiltinAction(wait_for_coldboot_done_action, "wait_for_coldboot_done");
-    am.QueueBuiltinAction(TransitionSnapuserdAction, "TransitionSnapuserd");
     // ... so that we can start queuing up actions that require stuff from /dev.
-    am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
     Keychords keychords;
     am.QueueBuiltinAction(
@@ -917,10 +888,6 @@ int SecondStageMain(int argc, char** argv) {
 
     // Trigger all the boot actions to get us started.
     am.QueueEventTrigger("init");
-
-    // Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
-    // wasn't ready immediately after wait_for_coldboot_done
-    am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
 
     // Don't mount filesystems or start core system services in charger mode.
     std::string bootmode = GetProperty("ro.bootmode", "");
