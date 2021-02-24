@@ -271,6 +271,12 @@ cc_library_host_static {
 
     generated_headers: ["platform_tools_version"],
 
+    tidy_flags: [
+        // DO NOT add quotes around header-filter flag regex argument,
+        // because build/soong will add quotes around the whole flag.
+        "-header-filter=(system/core/fastboot/|development/host/windows/usb/api/)",
+    ],
+
     target: {
         windows: {
             srcs: ["usb_windows.cpp"],
