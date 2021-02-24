@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 prebuilt_etc {
     name: "cgroups.json",
     src: "cgroups.json",
@@ -122,9 +126,6 @@ cc_test_host {
         "cgroups.json",
         "cgroups.recovery.json",
         "task_profiles.json",
-    ],
-    test_suites: [
-        "general-tests",
     ],
 }
 

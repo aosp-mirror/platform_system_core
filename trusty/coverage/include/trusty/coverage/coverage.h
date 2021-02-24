@@ -47,6 +47,7 @@ class CoverageRecord {
 
     ~CoverageRecord();
     Result<void> Open();
+    bool IsOpen();
     void ResetFullRecord();
     void ResetCounts();
     void ResetPCs();

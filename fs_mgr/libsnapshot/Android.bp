@@ -14,6 +14,10 @@
 // limitations under the License.
 //
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_defaults {
     name: "libsnapshot_defaults",
     defaults: ["fs_mgr_defaults"],
@@ -549,6 +553,7 @@ cc_test {
     ],
     srcs: [
         "cow_snapuserd_test.cpp",
+        "snapuserd.cpp",
     ],
     cflags: [
         "-Wall",

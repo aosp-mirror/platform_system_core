@@ -213,6 +213,13 @@ adb_ls() {
     return ${ret}
 }
 
+[ "USAGE: adb_test <expression>
+
+Returns: exit status of the test expression" ]
+adb_test() {
+  adb_sh test "${@}" </dev/null
+}
+
 [ "USAGE: adb_reboot
 
 Returns: true if the reboot command succeeded" ]
@@ -844,6 +851,9 @@ if ! ${color}; then
   NORMAL=""
 fi
 
+# Set an ERR trap handler to report any unhandled error
+trap 'die "line ${LINENO}: unhandled error"' ERR
+
 if ${print_time}; then
   echo "${BLUE}[     INFO ]${NORMAL}" start `date` >&2
 fi
@@ -871,10 +881,10 @@ D=`get_property ro.serialno`
 [ -z "${D}" -o -n "${ANDROID_SERIAL}" ] || ANDROID_SERIAL=${D}
 USB_SERIAL=
 if [ -n "${ANDROID_SERIAL}" -a "Darwin" != "${HOSTOS}" ]; then
-  USB_SERIAL="`find /sys/devices -name serial | grep usb`"
+  USB_SERIAL="`find /sys/devices -name serial | grep usb || true`"
   if [ -n "${USB_SERIAL}" ]; then
     USB_SERIAL=`echo "${USB_SERIAL}" |
-                  xargs grep -l ${ANDROID_SERIAL}`
+                  xargs grep -l ${ANDROID_SERIAL} || true`
   fi
 fi
 USB_ADDRESS=
@@ -956,7 +966,7 @@ if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
     if inAdb; then
       reboot=false
       for d in ${OVERLAYFS_BACKING}; do
-        if adb_su ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
+        if adb_test -d /${d}/overlay; then
           adb_su rm -rf /${d}/overlay </dev/null
           reboot=true
         fi
@@ -1010,7 +1020,10 @@ fi
 echo "${GREEN}[ RUN      ]${NORMAL} Testing kernel support for overlayfs" >&2
 
 adb_wait || die "wait for device failed"
-adb_sh ls -d /sys/module/overlay </dev/null >/dev/null 2>/dev/null ||
+adb_root ||
+  die "initial setup"
+
+adb_test -d /sys/module/overlay ||
   adb_sh grep "nodev${TAB}overlay" /proc/filesystems </dev/null >/dev/null 2>/dev/null &&
   echo "${GREEN}[       OK ]${NORMAL} overlay module present" >&2 ||
   (
@@ -1019,7 +1032,7 @@ adb_sh ls -d /sys/module/overlay </dev/null >/dev/null 2>/dev/null ||
   ) ||
   overlayfs_supported=false
 if ${overlayfs_supported}; then
-  adb_su ls /sys/module/overlay/parameters/override_creds </dev/null >/dev/null 2>/dev/null &&
+  adb_test -f /sys/module/overlay/parameters/override_creds &&
     echo "${GREEN}[       OK ]${NORMAL} overlay module supports override_creds" >&2 ||
     case `adb_sh uname -r </dev/null` in
       4.[456789].* | 4.[1-9][0-9]* | [56789].*)
@@ -1032,9 +1045,6 @@ if ${overlayfs_supported}; then
     esac
 fi
 
-adb_root ||
-  die "initial setup"
-
 echo "${GREEN}[ RUN      ]${NORMAL} Checking current overlayfs status" >&2
 
 # We can not universally use adb enable-verity to ensure device is
@@ -1044,7 +1054,7 @@ echo "${GREEN}[ RUN      ]${NORMAL} Checking current overlayfs status" >&2
 # having to go through enable-verity transition.
 reboot=false
 for d in ${OVERLAYFS_BACKING}; do
-  if adb_sh ls -d /${d}/overlay </dev/null >/dev/null 2>/dev/null; then
+  if adb_test -d /${d}/overlay; then
     echo "${YELLOW}[  WARNING ]${NORMAL} /${d}/overlay is setup, surgically wiping" >&2
     adb_sh rm -rf /${d}/overlay </dev/null ||
       die "/${d}/overlay wipe"
@@ -1171,7 +1181,7 @@ echo "${GREEN}[ RUN      ]${NORMAL} remount" >&2
 
 # Feed log with selinux denials as baseline before overlays
 adb_unroot
-adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
+adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 adb_root
 
 D=`adb remount 2>&1`
@@ -1220,7 +1230,7 @@ if ${overlayfs_needed}; then
     die "scratch size"
   echo "${BLUE}[     INFO ]${NORMAL} scratch size ${scratch_size}KB" >&2
   for d in ${OVERLAYFS_BACKING}; do
-    if adb_sh ls -d /${d}/overlay/system/upper </dev/null >/dev/null 2>/dev/null; then
+    if adb_test -d /${d}/overlay/system/upper; then
       echo "${BLUE}[     INFO ]${NORMAL} /${d}/overlay is setup" >&2
     fi
   done
@@ -1305,7 +1315,7 @@ check_ne "${BASE_SYSTEM_DEVT}" "${BASE_VENDOR_DEVT}" --warning system/vendor dev
 [ -n "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
   echo "${YELLOW}[  WARNING ]${NORMAL} vendor devt ${VENDOR_DEVT} major 0" >&2
 
-# Download libc.so, append some gargage, push back, and check if the file
+# Download libc.so, append some garbage, push back, and check if the file
 # is updated.
 tempdir="`mktemp -d`"
 cleanup() {
@@ -1313,8 +1323,8 @@ cleanup() {
 }
 adb pull /system/lib/bootstrap/libc.so ${tempdir} >/dev/null ||
   die "pull libc.so from device"
-garbage="`hexdump -n 16 -e '4/4 "%08X" 1 "\n"' /dev/random`"
-echo ${garbage} >> ${tempdir}/libc.so
+garbage="D105225BBFCB1EB8AB8EBDB7094646F0"
+echo "${garbage}" >> ${tempdir}/libc.so
 adb push ${tempdir}/libc.so /system/lib/bootstrap/libc.so >/dev/null ||
   die "push libc.so to device"
 adb pull /system/lib/bootstrap/libc.so ${tempdir}/libc.so.fromdevice >/dev/null ||
@@ -1358,7 +1368,7 @@ if ${enforcing}; then
   echo "${GREEN}[       OK ]${NORMAL} /vendor content correct MAC after reboot" >&2
   # Feed unprivileged log with selinux denials as a result of overlays
   wait_for_screen
-  adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
+  adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 fi
 # If overlayfs has a nested security problem, this will fail.
 B="`adb_ls /system/`" ||
@@ -1385,7 +1395,7 @@ check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/
 check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 # Feed log with selinux denials as a result of overlays
-adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null
+adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 
 # Check if the updated libc.so is persistent after reboot.
 adb_root &&
@@ -1656,8 +1666,10 @@ echo "${GREEN}[       OK ]${NORMAL} remount command works from setup" >&2
 # This also saves a lot of 'noise' from the command doing a mkfs on backing
 # storage and all the related tuning and adjustment.
 for d in ${OVERLAYFS_BACKING}; do
-  adb_su rm -rf /${d}/overlay </dev/null ||
-    die "/${d}/overlay wipe"
+  if adb_test -d /${d}/overlay; then
+    adb_su rm -rf /${d}/overlay </dev/null ||
+      die "/${d}/overlay wipe"
+  fi
 done
 adb_reboot &&
   adb_wait ${ADB_WAIT} ||
