@@ -659,6 +659,7 @@ on post-fs-data
     mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
     mkdir /data/app-staging 0751 system system encryption=DeleteIfNecessary
+    mkdir /data/apex/ota_reserved 0700 root system encryption=Require
     start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
@@ -866,6 +867,10 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status activated
     perform_apex_config
+
+    # Export *CLASSPATH variables from /etc/classpath
+    # TODO(b/180105615): export from the generated file instead.
+    load_exports /etc/classpath
 
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
