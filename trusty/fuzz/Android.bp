@@ -19,6 +19,7 @@ package {
 cc_defaults {
     name: "trusty_fuzzer_defaults",
     shared_libs: [
+        "libtrusty",
         "libtrusty_coverage",
         "libtrusty_fuzz_utils",
         "libbase",
@@ -43,11 +44,11 @@ cc_library {
     export_include_dirs: ["include"],
     static_libs: [
         "libFuzzer",
-        "libtrusty",
     ],
     shared_libs: [
         "libtrusty_coverage",
         "libbase",
         "liblog",
+        "libtrusty",
     ],
 }
