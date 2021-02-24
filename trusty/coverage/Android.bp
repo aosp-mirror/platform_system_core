@@ -25,14 +25,11 @@ cc_library {
     export_include_dirs: [
         "include",
     ],
-    static_libs: [
-        "libtrusty",
-    ],
-
     shared_libs: [
         "libbase",
         "liblog",
         "libdmabufheap",
+        "libtrusty",
     ],
 }
 
