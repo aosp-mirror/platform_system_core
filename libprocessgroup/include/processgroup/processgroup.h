@@ -36,7 +36,8 @@ bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& pr
 
 static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
 // Path to test against for freezer support
-// TODO: remove and replace with a function call, see http://b/180056337
+// TODO: remove it once https://r.android.com/1607196 is properly merged to all branches,
+// see http://b/180056337
 static constexpr const char* CGROUP_FREEZE_PATH = "/sys/fs/cgroup/uid_0/cgroup.freeze";
 
 bool UsePerAppMemcg();
@@ -67,6 +68,10 @@ bool setProcessGroupSoftLimit(uid_t uid, int initialPid, int64_t softLimitInByte
 bool setProcessGroupLimit(uid_t uid, int initialPid, int64_t limitInBytes);
 
 void removeAllProcessGroups(void);
+
+// Provides the path for an attribute in a specific process group
+// Returns false in case of error, true in case of success
+bool getAttributePathForTask(const std::string& attr_name, int tid, std::string* path);
 
 #endif // __ANDROID_VNDK__
 
