@@ -1692,6 +1692,7 @@ UpdateState SnapshotManager::GetUpdateState(double* progress) {
     for (const auto& snapshot : snapshots) {
         DmTargetSnapshot::Status current_status;
 
+        if (!IsSnapshotDevice(snapshot)) continue;
         if (!QuerySnapshotStatus(snapshot, nullptr, &current_status)) continue;
 
         fake_snapshots_status.sectors_allocated += current_status.sectors_allocated;
