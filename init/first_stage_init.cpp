@@ -298,7 +298,15 @@ int FirstStageMain(int argc, char** argv) {
                   << module_elapse_time.count() << " ms";
     }
 
+
+    bool created_devices = false;
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
+        if (!IsRecoveryMode()) {
+            created_devices = DoCreateDevices();
+            if (!created_devices){
+                LOG(ERROR) << "Failed to create device nodes early";
+            }
+        }
         StartConsole(cmdline);
     }
 
@@ -339,7 +347,7 @@ int FirstStageMain(int argc, char** argv) {
         }
     }
 
-    if (!DoFirstStageMount()) {
+    if (!DoFirstStageMount(!created_devices)) {
         LOG(FATAL) << "Failed to mount required partitions early ...";
     }
 
