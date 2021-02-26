@@ -894,6 +894,8 @@ UpdateState SnapshotManager::ProcessUpdateState(const std::function<bool()>& cal
                                                 const std::function<bool()>& before_cancel) {
     while (true) {
         UpdateState state = CheckMergeState(before_cancel);
+        LOG(INFO) << "ProcessUpdateState handling state: " << state;
+
         if (state == UpdateState::MergeFailed) {
             AcknowledgeMergeFailure();
         }
@@ -920,13 +922,15 @@ UpdateState SnapshotManager::CheckMergeState(const std::function<bool()>& before
     }
 
     UpdateState state = CheckMergeState(lock.get(), before_cancel);
+    LOG(INFO) << "CheckMergeState for snapshots returned: " << state;
+
     if (state == UpdateState::MergeCompleted) {
         // Do this inside the same lock. Failures get acknowledged without the
         // lock, because flock() might have failed.
         AcknowledgeMergeSuccess(lock.get());
     } else if (state == UpdateState::Cancelled) {
-        if (!RemoveAllUpdateState(lock.get(), before_cancel)) {
-            return ReadSnapshotUpdateStatus(lock.get()).state();
+        if (!device_->IsRecovery() && !RemoveAllUpdateState(lock.get(), before_cancel)) {
+            LOG(ERROR) << "Failed to remove all update state after acknowleding cancelled update.";
         }
     }
     return state;
@@ -968,13 +972,23 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
         return UpdateState::MergeFailed;
     }
 
+    auto other_suffix = device_->GetOtherSlotSuffix();
+
     bool cancelled = false;
     bool failed = false;
     bool merging = false;
     bool needs_reboot = false;
     bool wrong_phase = false;
     for (const auto& snapshot : snapshots) {
+        if (android::base::EndsWith(snapshot, other_suffix)) {
+            // This will have triggered an error message in InitiateMerge already.
+            LOG(INFO) << "Skipping merge validation of unexpected snapshot: " << snapshot;
+            continue;
+        }
+
         UpdateState snapshot_state = CheckTargetMergeState(lock, snapshot, update_status);
+        LOG(INFO) << "CheckTargetMergeState for " << snapshot << " returned: " << snapshot_state;
+
         switch (snapshot_state) {
             case UpdateState::MergeFailed:
                 failed = true;
@@ -1173,7 +1187,7 @@ void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
     // indicator that cleanup is needed on reboot. If a factory data reset
     // was requested, it doesn't matter, everything will get wiped anyway.
     // To make testing easier we consider a /data wipe as cleaned up.
-    if (device_->IsRecovery() && !in_factory_data_reset_) {
+    if (device_->IsRecovery()) {
         WriteUpdateState(lock, UpdateState::MergeCompleted);
         return;
     }
@@ -3213,16 +3227,27 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
     };
 
     in_factory_data_reset_ = true;
-    bool ok = ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback);
+    UpdateState state =
+            ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback);
     in_factory_data_reset_ = false;
 
-    if (!ok) {
+    if (state == UpdateState::MergeFailed) {
         return false;
     }
 
     // Nothing should be depending on partitions now, so unmap them all.
     if (!UnmapAllPartitionsInRecovery()) {
         LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
+    }
+
+    if (state != UpdateState::None) {
+        auto lock = LockExclusive();
+        if (!lock) return false;
+
+        // Zap the update state so the bootloader doesn't think we're still
+        // merging. It's okay if this fails, it's informative only at this
+        // point.
+        WriteUpdateState(lock.get(), UpdateState::None);
     }
     return true;
 }
@@ -3258,15 +3283,15 @@ bool SnapshotManager::FinishMergeInRecovery() {
     return true;
 }
 
-bool SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
-                                                   const std::function<bool()>& callback) {
+UpdateState SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
+                                                          const std::function<bool()>& callback) {
     auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
     UpdateState state = ProcessUpdateState(callback);
     LOG(INFO) << "Update state in recovery: " << state;
     switch (state) {
         case UpdateState::MergeFailed:
             LOG(ERROR) << "Unrecoverable merge failure detected.";
-            return false;
+            return state;
         case UpdateState::Unverified: {
             // If an OTA was just applied but has not yet started merging:
             //
@@ -3286,8 +3311,12 @@ bool SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
                 if (allow_forward_merge &&
                     access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0) {
                     LOG(INFO) << "Forward merge allowed, initiating merge now.";
-                    return InitiateMerge() &&
-                           ProcessUpdateStateOnDataWipe(false /* allow_forward_merge */, callback);
+
+                    if (!InitiateMerge()) {
+                        LOG(ERROR) << "Failed to initiate merge on data wipe.";
+                        return UpdateState::MergeFailed;
+                    }
+                    return ProcessUpdateStateOnDataWipe(false /* allow_forward_merge */, callback);
                 }
 
                 LOG(ERROR) << "Reverting to old slot since update will be deleted.";
@@ -3305,7 +3334,7 @@ bool SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
         default:
             break;
     }
-    return true;
+    return state;
 }
 
 bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
