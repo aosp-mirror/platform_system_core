@@ -2551,7 +2551,11 @@ bool SnapshotManager::EnsureSnapuserdConnected() {
 }
 
 bool SnapshotManager::ForceLocalImageManager() {
-    images_ = android::fiemap::ImageManager::Open(gsid_dir_);
+    android::fiemap::ImageManager::DeviceInfo device_info = {
+            .is_recovery = {device_->IsRecovery()},
+    };
+
+    images_ = android::fiemap::ImageManager::Open(gsid_dir_, device_info);
     if (!images_) {
         LOG(ERROR) << "Could not open ImageManager";
         return false;

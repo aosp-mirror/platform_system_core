@@ -224,8 +224,9 @@ bool ImageManagerBinder::MapAllImages(const std::function<bool(std::set<std::str
     return false;
 }
 
-std::unique_ptr<IImageManager> IImageManager::Open(
-        const std::string& dir, const std::chrono::milliseconds& /*timeout_ms*/) {
+std::unique_ptr<IImageManager> IImageManager::Open(const std::string& dir,
+                                                   const std::chrono::milliseconds& /*timeout_ms*/,
+                                                   const DeviceInfo&) {
     android::sp<IGsiService> service = android::gsi::GetGsiService();
     android::sp<IImageService> manager;
 
