@@ -43,7 +43,7 @@ using ::android::hardware::hidl_vec;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
 
-using ::android::trusty::TrustyApp;
+using ::android::trusty::confirmationui::TrustyApp;
 
 class TrustyConfirmationUI : public IConfirmationUI {
   public:
