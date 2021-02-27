@@ -1834,6 +1834,67 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     }
 }
 
+// Test update package that requests data wipe.
+TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
+    AddOperationForPartitions();
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    // Write some data to target partitions.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(name)) << name;
+    }
+
+    // Create a stale snapshot that should not exist.
+    {
+        ASSERT_TRUE(AcquireLock());
+
+        PartitionCowCreator cow_creator = {
+                .compression_enabled = IsCompressionEnabled(),
+                .compression_algorithm = IsCompressionEnabled() ? "gz" : "none",
+        };
+        SnapshotStatus status;
+        status.set_name("sys_a");
+        status.set_device_size(1_MiB);
+        status.set_snapshot_size(2_MiB);
+        status.set_cow_partition_size(2_MiB);
+
+        ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &cow_creator, &status));
+        lock_ = nullptr;
+
+        ASSERT_TRUE(sm->EnsureImageManager());
+        ASSERT_TRUE(sm->image_manager()->CreateBackingImage("sys_a", 1_MiB, 0));
+    }
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(true /* wipe */));
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate a reboot into recovery.
+    auto test_device = new TestDeviceInfo(fake_super, "_b");
+    test_device->set_recovery(true);
+    auto new_sm = NewManagerForFirstStageMount(test_device);
+
+    ASSERT_TRUE(new_sm->HandleImminentDataWipe());
+    // Manually mount metadata so that we can call GetUpdateState() below.
+    MountMetadata();
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
+    ASSERT_FALSE(test_device->IsSlotUnbootable(1));
+    ASSERT_FALSE(test_device->IsSlotUnbootable(0));
+
+    // Now reboot into new slot.
+    test_device = new TestDeviceInfo(fake_super, "_b");
+    auto init = NewManagerForFirstStageMount(test_device);
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+    // Verify that we are on the downgraded build.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name)) << name;
+    }
+}
+
 TEST_F(SnapshotUpdateTest, Hashtree) {
     constexpr auto partition_size = 4_MiB;
     constexpr auto data_size = 3_MiB;
