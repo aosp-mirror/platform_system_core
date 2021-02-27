@@ -20,4 +20,9 @@ cc_fuzz {
     name: "trusty_keymaster_fuzzer",
     defaults: ["trusty_fuzzer_defaults"],
     srcs: ["fuzz.cpp"],
+
+    // The initial corpus for this fuzzer was derived by dumping messages from
+    // the `secure_env` emulator interface for cuttlefish while running the
+    // keystore2 tests in the emulator.
+    corpus: ["corpus/*"],
 }
