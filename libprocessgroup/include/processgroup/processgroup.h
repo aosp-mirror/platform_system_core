@@ -35,10 +35,6 @@ bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& pr
 #ifndef __ANDROID_VNDK__
 
 static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
-// Path to test against for freezer support
-// TODO: remove it once https://r.android.com/1607196 is properly merged to all branches,
-// see http://b/180056337
-static constexpr const char* CGROUP_FREEZE_PATH = "/sys/fs/cgroup/uid_0/cgroup.freeze";
 
 bool UsePerAppMemcg();
 
