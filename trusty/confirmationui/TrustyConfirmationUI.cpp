@@ -50,7 +50,7 @@ namespace implementation {
 
 using namespace secure_input;
 
-using ::android::trusty::TrustyAppError;
+using ::android::trusty::confirmationui::TrustyAppError;
 
 using ::teeui::AbortMsg;
 using ::teeui::DeliverTestCommandMessage;
