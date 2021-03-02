@@ -412,7 +412,8 @@ std::string GetFstabPath() {
 
         if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
 
-        for (const char* prefix : {"/odm/etc/fstab.", "/vendor/etc/fstab.", "/fstab."}) {
+        for (const char* prefix :
+             {"/odm/etc/fstab.", "/vendor/etc/fstab.", "/fstab.", "/first_stage_ramdisk/fstab."}) {
             std::string fstab_path = prefix + suffix;
             if (access(fstab_path.c_str(), F_OK) == 0) {
                 return fstab_path;
