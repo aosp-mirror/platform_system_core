@@ -308,6 +308,10 @@ TEST(DmSnapshotInternals, CowSizeCalculator) {
         cc.WriteByte(b);
         ASSERT_EQ(cc.cow_size_sectors(), 40);
     }
+
+    // Write a byte that would surely overflow the counter
+    cc.WriteChunk(std::numeric_limits<uint64_t>::max());
+    ASSERT_FALSE(cc.cow_size_sectors().has_value());
 }
 
 void BlocksToExtents(const std::vector<uint64_t>& blocks,
