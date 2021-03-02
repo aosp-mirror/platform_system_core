@@ -313,6 +313,7 @@ bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback) 
   CBL("Revision: '%s'", tombstone.revision().c_str());
   CBL("ABI: '%s'", abi_string(tombstone));
   CBL("Timestamp: %s", tombstone.timestamp().c_str());
+  CBL("Process uptime: %ds", tombstone.process_uptime());
 
   // Process header
   const auto& threads = tombstone.threads();
