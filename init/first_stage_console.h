@@ -29,7 +29,7 @@ enum FirstStageConsoleParam {
 };
 
 void StartConsole(const std::string& cmdline);
-int FirstStageConsole(const std::string& cmdline);
+int FirstStageConsole(const std::string& cmdline, const std::string& bootconfig);
 
 }  // namespace init
 }  // namespace android
