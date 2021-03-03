@@ -18,13 +18,17 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include <bitset>
 #include <csignal>
 #include <cstring>
+#include <future>
 #include <iostream>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <android-base/file.h>
@@ -40,6 +44,17 @@ namespace android {
 namespace snapshot {
 
 using android::base::unique_fd;
+using namespace std::chrono_literals;
+
+static constexpr size_t PAYLOAD_SIZE = (1UL << 20);
+static_assert(PAYLOAD_SIZE >= BLOCK_SZ);
+
+/*
+ * With 4 threads, we get optimal performance
+ * when update_verifier reads the partition during
+ * boot.
+ */
+static constexpr int NUM_THREADS_PER_PARTITION = 4;
 
 class BufferSink : public IByteSink {
   public:
@@ -59,53 +74,106 @@ class BufferSink : public IByteSink {
     size_t buffer_size_;
 };
 
-class Snapuserd final {
+class Snapuserd;
+
+class WorkerThread {
   public:
-    Snapuserd(const std::string& misc_name, const std::string& cow_device,
-              const std::string& backing_device);
-    bool InitBackingAndControlDevice();
-    bool InitCowDevice();
-    bool Run();
-    const std::string& GetControlDevicePath() { return control_device_; }
-    const std::string& GetMiscName() { return misc_name_; }
-    uint64_t GetNumSectors() { return num_sectors_; }
-    bool IsAttached() const { return ctrl_fd_ >= 0; }
-    void CheckMergeCompletionStatus();
-    void CloseFds() {
-        ctrl_fd_ = {};
-        cow_fd_ = {};
-        backing_store_fd_ = {};
-    }
-    size_t GetMetadataAreaSize() { return vec_.size(); }
-    void* GetExceptionBuffer(size_t i) { return vec_[i].get(); }
+    WorkerThread(const std::string& cow_device, const std::string& backing_device,
+                 const std::string& control_device, const std::string& misc_name,
+                 std::shared_ptr<Snapuserd> snapuserd);
+    bool RunThread();
 
   private:
+    // Initialization
+    void InitializeBufsink();
+    bool InitializeFds();
+    bool InitReader();
+    void CloseFds() {
+        ctrl_fd_ = {};
+        backing_store_fd_ = {};
+    }
+
+    // Functions interacting with dm-user
+    bool ReadDmUserHeader();
     bool DmuserReadRequest();
     bool DmuserWriteRequest();
-
-    bool ReadDmUserHeader();
     bool ReadDmUserPayload(void* buffer, size_t size);
     bool WriteDmUserPayload(size_t size);
-    void ConstructKernelCowHeader();
-    bool ReadMetadata();
-    bool ZerofillDiskExceptions(size_t read_size);
+
     bool ReadDiskExceptions(chunk_t chunk, size_t size);
+    bool ZerofillDiskExceptions(size_t read_size);
+    void ConstructKernelCowHeader();
+
+    // IO Path
+    bool ProcessIORequest();
+    int ReadData(sector_t sector, size_t size);
     int ReadUnalignedSector(sector_t sector, size_t size,
                             std::map<sector_t, const CowOperation*>::iterator& it);
-    int ReadData(sector_t sector, size_t size);
-    bool IsChunkIdMetadata(chunk_t chunk);
-    chunk_t GetNextAllocatableChunkId(chunk_t chunk_id);
 
+    // Processing COW operations
     bool ProcessCowOp(const CowOperation* cow_op);
     bool ProcessReplaceOp(const CowOperation* cow_op);
     bool ProcessCopyOp(const CowOperation* cow_op);
     bool ProcessZeroOp();
 
+    // Merge related functions
+    bool ProcessMergeComplete(chunk_t chunk, void* buffer);
     loff_t GetMergeStartOffset(void* merged_buffer, void* unmerged_buffer,
                                int* unmerged_exceptions);
     int GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, loff_t offset,
                              int unmerged_exceptions);
-    bool ProcessMergeComplete(chunk_t chunk, void* buffer);
+
+    sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
+    chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
+
+    std::unique_ptr<CowReader> reader_;
+    BufferSink bufsink_;
+
+    std::string cow_device_;
+    std::string backing_store_device_;
+    std::string control_device_;
+    std::string misc_name_;
+
+    unique_fd cow_fd_;
+    unique_fd backing_store_fd_;
+    unique_fd ctrl_fd_;
+
+    std::shared_ptr<Snapuserd> snapuserd_;
+    uint32_t exceptions_per_area_;
+};
+
+class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
+  public:
+    Snapuserd(const std::string& misc_name, const std::string& cow_device,
+              const std::string& backing_device);
+    bool InitCowDevice();
+    bool Start();
+    const std::string& GetControlDevicePath() { return control_device_; }
+    const std::string& GetMiscName() { return misc_name_; }
+    uint64_t GetNumSectors() { return num_sectors_; }
+    bool IsAttached() const { return attached_; }
+    void AttachControlDevice() { attached_ = true; }
+
+    void CheckMergeCompletionStatus();
+    bool CommitMerge(int num_merge_ops);
+
+    void CloseFds() { cow_fd_ = {}; }
+    size_t GetMetadataAreaSize() { return vec_.size(); }
+    void* GetExceptionBuffer(size_t i) { return vec_[i].get(); }
+
+    bool InitializeWorkers();
+    std::shared_ptr<Snapuserd> GetSharedPtr() { return shared_from_this(); }
+
+    std::map<sector_t, const CowOperation*>& GetChunkMap() { return chunk_map_; }
+    const std::vector<std::unique_ptr<uint8_t[]>>& GetMetadataVec() const { return vec_; }
+
+  private:
+    std::vector<std::unique_ptr<WorkerThread>> worker_threads_;
+
+    bool ReadMetadata();
+    bool IsChunkIdMetadata(chunk_t chunk);
+    chunk_t GetNextAllocatableChunkId(chunk_t chunk_id);
+
     sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
     chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
     bool IsBlockAligned(int read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
@@ -116,8 +184,6 @@ class Snapuserd final {
     std::string misc_name_;
 
     unique_fd cow_fd_;
-    unique_fd backing_store_fd_;
-    unique_fd ctrl_fd_;
 
     uint32_t exceptions_per_area_;
     uint64_t num_sectors_;
@@ -141,9 +207,10 @@ class Snapuserd final {
     // in the chunk_map to find the nearest COW op.
     std::map<sector_t, const CowOperation*> chunk_map_;
 
-    bool metadata_read_done_ = false;
+    std::mutex lock_;
+
     bool merge_initiated_ = false;
-    BufferSink bufsink_;
+    bool attached_ = false;
 };
 
 }  // namespace snapshot

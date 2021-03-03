@@ -1262,7 +1262,7 @@ static bool DeleteDmDevice(const std::string& name, const std::chrono::milliseco
             LOG(ERROR) << "DeleteDevice timeout: " << name;
             return false;
         }
-        std::this_thread::sleep_for(250ms);
+        std::this_thread::sleep_for(400ms);
     }
 
     return true;
