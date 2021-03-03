@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The Android Open Source Project
+ * Copyright (C) 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,31 +16,48 @@
 
 #include <stdlib.h>
 #include <trusty/coverage/coverage.h>
+#include <trusty/coverage/uuid.h>
 #include <trusty/fuzz/counters.h>
 #include <trusty/fuzz/utils.h>
 #include <unistd.h>
 #include <iostream>
+#include <memory>
 
 using android::trusty::coverage::CoverageRecord;
 using android::trusty::fuzz::ExtraCounters;
 using android::trusty::fuzz::TrustyApp;
 
 #define TIPC_DEV "/dev/trusty-ipc-dev0"
-#define KEYMASTER_PORT "com.android.trusty.keymaster"
-#define KEYMASTER_MODULE_FILENAME "keymaster.syms.elf"
 
-/* Keymaster TA's UUID is 5f902ace-5e5c-4cd8-ae54-87b88c22ddaf */
-static struct uuid keymaster_uuid = {
-        0x5f902ace,
-        0x5e5c,
-        0x4cd8,
-        {0xae, 0x54, 0x87, 0xb8, 0x8c, 0x22, 0xdd, 0xaf},
-};
+#ifndef TRUSTY_APP_PORT
+#error "Port name must be parameterized using -DTRUSTY_APP_PORT."
+#endif
 
-static CoverageRecord record(TIPC_DEV, &keymaster_uuid, KEYMASTER_MODULE_FILENAME);
+#ifndef TRUSTY_APP_UUID
+#error "UUID must be parameterized using -DTRUSTY_APP_UUID."
+#endif
+
+#ifndef TRUSTY_APP_FILENAME
+#error "Binary file name must be parameterized using -DTRUSTY_APP_FILENAME."
+#endif
+
+static std::unique_ptr<CoverageRecord> record;
 
 extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
-    auto ret = record.Open();
+    uuid module_uuid;
+
+    if (!str_to_uuid(TRUSTY_APP_UUID, &module_uuid)) {
+        std::cerr << "Failed to parse UUID: " << TRUSTY_APP_UUID << std::endl;
+        exit(-1);
+    }
+
+    record = std::make_unique<CoverageRecord>(TIPC_DEV, &module_uuid, TRUSTY_APP_FILENAME);
+    if (!record) {
+        std::cerr << "Failed to allocate coverage record" << std::endl;
+        exit(-1);
+    }
+
+    auto ret = record->Open();
     if (!ret.ok()) {
         std::cerr << ret.error() << std::endl;
         exit(-1);
@@ -51,22 +68,21 @@ extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     static uint8_t buf[TIPC_MAX_MSG_SIZE];
 
-    ExtraCounters counters(&record);
+    ExtraCounters counters(record.get());
     counters.Reset();
 
-    android::trusty::fuzz::TrustyApp ta(TIPC_DEV, KEYMASTER_PORT);
+    TrustyApp ta(TIPC_DEV, TRUSTY_APP_PORT);
     auto ret = ta.Connect();
     if (!ret.ok()) {
+        std::cerr << ret.error() << std::endl;
         android::trusty::fuzz::Abort();
     }
 
-    /* Send message to test server */
     ret = ta.Write(data, size);
     if (!ret.ok()) {
         return -1;
     }
 
-    /* Read message from test server */
     ret = ta.Read(&buf, sizeof(buf));
     if (!ret.ok()) {
         return -1;
