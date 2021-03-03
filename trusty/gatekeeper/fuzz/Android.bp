@@ -19,7 +19,12 @@ package {
 cc_fuzz {
     name: "trusty_gatekeeper_fuzzer",
     defaults: ["trusty_fuzzer_defaults"],
-    srcs: ["fuzz.cpp"],
+    srcs: [":trusty_tipc_fuzzer"],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.gatekeeper\"",
+        "-DTRUSTY_APP_UUID=\"38ba0cdc-df0e-11e4-9869-233fb6ae4795\"",
+        "-DTRUSTY_APP_FILENAME=\"gatekeeper.syms.elf\"",
+    ],
 
     // The initial corpus for this fuzzer was derived by dumping messages from
     // the `secure_env` emulator interface for cuttlefish while enrolling a new
