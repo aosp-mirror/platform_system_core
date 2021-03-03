@@ -19,5 +19,10 @@ package {
 cc_fuzz {
     name: "trusty_test_fuzzer",
     defaults: ["trusty_fuzzer_defaults"],
-    srcs: ["fuzz.cpp"],
+    srcs: [":trusty_tipc_fuzzer"],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.sancov.test.srv\"",
+        "-DTRUSTY_APP_UUID=\"77f68803-c514-43ba-bdce-3254531c3d24\"",
+        "-DTRUSTY_APP_FILENAME=\"srv.syms.elf\"",
+    ]
 }
