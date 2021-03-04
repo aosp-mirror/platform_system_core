@@ -1,7 +1,10 @@
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_defaults {
     name: "propertyinfoserializer_defaults",
     host_supported: true,
-    cpp_std: "experimental",
     cppflags: [
         "-Wall",
         "-Wextra",

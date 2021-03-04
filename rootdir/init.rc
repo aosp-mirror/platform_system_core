@@ -244,6 +244,7 @@ on init
     chmod 0664 /dev/blkio/background/tasks
     write /dev/blkio/blkio.weight 1000
     write /dev/blkio/background/blkio.weight 200
+    write /dev/blkio/background/blkio.bfq.weight 10
     write /dev/blkio/blkio.group_idle 0
     write /dev/blkio/background/blkio.group_idle 0
 
@@ -470,6 +471,9 @@ on init
     chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
     start lmkd
 
+    # Set an initial boot level - start at 10 in case we need to add earlier ones.
+    setprop keystore.boot_level 10
+
     # Start essential services.
     start servicemanager
     start hwservicemanager
@@ -616,6 +620,15 @@ on late-fs
     # Load trusted keys from dm-verity protected partitions
     exec -- /system/bin/fsverity_init --load-verified-keys
 
+    # Set up a tracing instance for system_server to monitor error_report_end events.
+    # These are sent by kernel tools like KASAN and KFENCE when a memory corruption
+    # is detected.
+    mkdir /sys/kernel/tracing/instances/bootreceiver 0700 system system
+    restorecon_recursive /sys/kernel/tracing/instances/bootreceiver
+    write /sys/kernel/tracing/instances/bootreceiver/buffer_size_kb 1
+    write /sys/kernel/tracing/instances/bootreceiver/trace_options disable_on_free
+    write /sys/kernel/tracing/instances/bootreceiver/events/error_report/error_report_end/enable 1
+
 on post-fs-data
     mark_post_data
 
@@ -655,9 +668,11 @@ on post-fs-data
     mkdir /data/apex 0755 root system encryption=None
     mkdir /data/apex/active 0755 root system
     mkdir /data/apex/backup 0700 root system
+    mkdir /data/apex/decompressed 0700 root system encryption=Require
     mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
     mkdir /data/app-staging 0751 system system encryption=DeleteIfNecessary
+    mkdir /data/apex/ota_reserved 0700 root system encryption=Require
     start apexd
 
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
@@ -722,6 +737,8 @@ on post-fs-data
     mkdir /data/misc/trace 0700 root root
     # create location to store surface and window trace files
     mkdir /data/misc/wmtrace 0700 system system
+    # create location to store accessibility trace files
+    mkdir /data/misc/a11ytrace 0700 system system
     # profile file layout
     mkdir /data/misc/profiles 0771 system system
     mkdir /data/misc/profiles/cur 0771 system system
@@ -731,9 +748,12 @@ on post-fs-data
     mkdir /data/misc/installd 0700 root root
     mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
+    mkdir /data/misc/appcompat/ 0700 system system
     mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system
+    # directory used for on-device signing key blob
+    mkdir /data/misc/odsign 0700 root root
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -861,6 +881,10 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
+    # Export *CLASSPATH variables from /etc/classpath
+    # TODO(b/180105615): export from the generated file instead.
+    load_exports /etc/classpath
+
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
@@ -872,6 +896,10 @@ on post-fs-data
 
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
+
+    # Start the on-device signing daemon, and wait for it to finish, to ensure
+    # ART artifacts are generated if needed.
+    exec_start odsign
 
     # After apexes are mounted, tell keymaster early boot has ended, so it will
     # stop allowing use of early-boot keys
@@ -1168,6 +1196,8 @@ on property:ro.debuggable=1
     chmod 0773 /data/misc/trace
     # Give reads to anyone for the window trace folder on debug builds.
     chmod 0775 /data/misc/wmtrace
+    # Give reads to anyone for the accessibility trace folder on debug builds.
+    chmod 0775 /data/misc/a11ytrace
 
 on init && property:ro.debuggable=1
     start console

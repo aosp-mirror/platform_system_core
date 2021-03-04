@@ -156,7 +156,7 @@ message SnapshotUpdateStatus {
     MergePhase merge_phase = 6;
 }
 
-// Next: 4
+// Next: 5
 message SnapshotMergeReport {
     // Status of the update after the merge attempts.
     UpdateState state = 1;
@@ -167,4 +167,7 @@ message SnapshotMergeReport {
 
     // Total size of all the COW images before the update.
     uint64 cow_file_size = 3;
+
+    // Whether compression/dm-user was used for any snapshots.
+    bool compression_enabled = 4;
 }

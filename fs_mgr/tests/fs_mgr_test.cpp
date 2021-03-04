@@ -119,10 +119,73 @@ const std::vector<std::pair<std::string, std::string>> result_space = {
         {"terminator", "truncated"},
 };
 
+const std::string bootconfig =
+        "androidboot.bootdevice  = \" \"1d84000.ufshc\"\n"
+        "androidboot.baseband = \"sdy\"\n"
+        "androidboot.keymaster = \"1\"\n"
+        "androidboot.serialno = \"BLAHBLAHBLAH\"\n"
+        "androidboot.slot_suffix = \"_a\"\n"
+        "androidboot.hardware.platform = \"sdw813\"\n"
+        "androidboot.hardware = \"foo\"\n"
+        "androidboot.revision = \"EVT1.0\"\n"
+        "androidboot.bootloader = \"burp-0.1-7521\"\n"
+        "androidboot.hardware.sku = \"mary\"\n"
+        "androidboot.hardware.radio.subtype = \"0\"\n"
+        "androidboot.dtbo_idx = \"2\"\n"
+        "androidboot.mode = \"normal\"\n"
+        "androidboot.hardware.ddr = \"1GB,combuchi,LPDDR4X\"\n"
+        "androidboot.ddr_info = \"combuchiandroidboot.ddr_size=2GB\"\n"
+        "androidboot.hardware.ufs = \"2GB,combushi\"\n"
+        "androidboot.boottime = \"0BLE:58,1BLL:22,1BLE:571,2BLL:105,ODT:0,AVB:123\"\n"
+        "androidboot.ramdump = \"disabled\"\n"
+        "androidboot.vbmeta.device = \"PARTUUID=aa08f1a4-c7c9-402e-9a66-9707cafa9ceb\"\n"
+        "androidboot.vbmeta.avb_version = \"1.1\"\n"
+        "androidboot.vbmeta.device_state = \"unlocked\"\n"
+        "androidboot.vbmeta.hash_alg = \"sha256\"\n"
+        "androidboot.vbmeta.size = \"5248\"\n"
+        "androidboot.vbmeta.digest = \""
+        "ac13147e959861c20f2a6da97d25fe79e60e902c022a371c5c039d31e7c68860\"\n"
+        "androidboot.vbmeta.invalidate_on_error = \"yes\"\n"
+        "androidboot.veritymode = \"enforcing\"\n"
+        "androidboot.verifiedbootstate = \"orange\"\n"
+        "androidboot.space = \"sha256 5248 androidboot.nospace = nope\"\n";
+
+const std::vector<std::pair<std::string, std::string>> bootconfig_result_space = {
+        {"androidboot.bootdevice", "1d84000.ufshc"},
+        {"androidboot.baseband", "sdy"},
+        {"androidboot.keymaster", "1"},
+        {"androidboot.serialno", "BLAHBLAHBLAH"},
+        {"androidboot.slot_suffix", "_a"},
+        {"androidboot.hardware.platform", "sdw813"},
+        {"androidboot.hardware", "foo"},
+        {"androidboot.revision", "EVT1.0"},
+        {"androidboot.bootloader", "burp-0.1-7521"},
+        {"androidboot.hardware.sku", "mary"},
+        {"androidboot.hardware.radio.subtype", "0"},
+        {"androidboot.dtbo_idx", "2"},
+        {"androidboot.mode", "normal"},
+        {"androidboot.hardware.ddr", "1GB,combuchi,LPDDR4X"},
+        {"androidboot.ddr_info", "combuchiandroidboot.ddr_size=2GB"},
+        {"androidboot.hardware.ufs", "2GB,combushi"},
+        {"androidboot.boottime", "0BLE:58,1BLL:22,1BLE:571,2BLL:105,ODT:0,AVB:123"},
+        {"androidboot.ramdump", "disabled"},
+        {"androidboot.vbmeta.device", "PARTUUID=aa08f1a4-c7c9-402e-9a66-9707cafa9ceb"},
+        {"androidboot.vbmeta.avb_version", "1.1"},
+        {"androidboot.vbmeta.device_state", "unlocked"},
+        {"androidboot.vbmeta.hash_alg", "sha256"},
+        {"androidboot.vbmeta.size", "5248"},
+        {"androidboot.vbmeta.digest",
+         "ac13147e959861c20f2a6da97d25fe79e60e902c022a371c5c039d31e7c68860"},
+        {"androidboot.vbmeta.invalidate_on_error", "yes"},
+        {"androidboot.veritymode", "enforcing"},
+        {"androidboot.verifiedbootstate", "orange"},
+        {"androidboot.space", "sha256 5248 androidboot.nospace = nope"},
+};
+
 }  // namespace
 
-TEST(fs_mgr, fs_mgr_parse_boot_config) {
-    EXPECT_EQ(result_space, fs_mgr_parse_boot_config(cmdline));
+TEST(fs_mgr, fs_mgr_parse_cmdline) {
+    EXPECT_EQ(result_space, fs_mgr_parse_cmdline(cmdline));
 }
 
 TEST(fs_mgr, fs_mgr_get_boot_config_from_kernel_cmdline) {
@@ -137,6 +200,27 @@ TEST(fs_mgr, fs_mgr_get_boot_config_from_kernel_cmdline) {
     EXPECT_FALSE(fs_mgr_get_boot_config_from_kernel(cmdline, "vbmeta.avb_versio", &content));
     EXPECT_TRUE(content.empty()) << content;
     EXPECT_FALSE(fs_mgr_get_boot_config_from_kernel(cmdline, "nospace", &content));
+    EXPECT_TRUE(content.empty()) << content;
+}
+
+TEST(fs_mgr, fs_mgr_parse_bootconfig) {
+    EXPECT_EQ(bootconfig_result_space, fs_mgr_parse_proc_bootconfig(bootconfig));
+}
+
+TEST(fs_mgr, fs_mgr_get_boot_config_from_bootconfig) {
+    std::string content;
+    for (const auto& entry : bootconfig_result_space) {
+        static constexpr char androidboot[] = "androidboot.";
+        if (!android::base::StartsWith(entry.first, androidboot)) continue;
+        auto key = entry.first.substr(strlen(androidboot));
+        EXPECT_TRUE(fs_mgr_get_boot_config_from_bootconfig(bootconfig, key, &content))
+                << " for " << key;
+        EXPECT_EQ(entry.second, content);
+    }
+
+    EXPECT_FALSE(fs_mgr_get_boot_config_from_bootconfig(bootconfig, "vbmeta.avb_versio", &content));
+    EXPECT_TRUE(content.empty()) << content;
+    EXPECT_FALSE(fs_mgr_get_boot_config_from_bootconfig(bootconfig, "nospace", &content));
     EXPECT_TRUE(content.empty()) << content;
 }
 

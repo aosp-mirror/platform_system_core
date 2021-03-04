@@ -5,6 +5,8 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := init-debug.rc
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS := notice
 LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/init
@@ -18,6 +20,8 @@ ifneq ($(filter address,$(SANITIZE_TARGET)),)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := asan.options
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS := notice
 LOCAL_MODULE_CLASS := ETC
 LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_PATH := $(TARGET_OUT)
@@ -29,6 +33,8 @@ ASAN_EXTRACT_FILES :=
 ifeq ($(SANITIZE_TARGET_SYSTEM),true)
 include $(CLEAR_VARS)
 LOCAL_MODULE:= asan_extract
+LOCAL_LICENSE_KINDS:= SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS:= notice
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_CLASS := EXECUTABLES
 LOCAL_SRC_FILES := asan_extract.sh
@@ -47,7 +53,10 @@ endif
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE := init.environ.rc
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS := notice
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
+LOCAL_REQUIRED_MODULES := etc_classpath
 
 EXPORT_GLOBAL_ASAN_OPTIONS :=
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
@@ -163,9 +172,7 @@ include $(BUILD_SYSTEM)/base_rules.mk
 $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	@echo "Generate: $< -> $@"
 	@mkdir -p $(dir $@)
-	$(hide) sed -e 's?%BOOTCLASSPATH%?$(PRODUCT_BOOTCLASSPATH)?g' $< >$@
-	$(hide) sed -i -e 's?%DEX2OATBOOTCLASSPATH%?$(PRODUCT_DEX2OAT_BOOTCLASSPATH)?g' $@
-	$(hide) sed -i -e 's?%SYSTEMSERVERCLASSPATH%?$(PRODUCT_SYSTEM_SERVER_CLASSPATH)?g' $@
+	$(hide) cp $< $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_ASAN_OPTIONS%?$(EXPORT_GLOBAL_ASAN_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_GCOV_OPTIONS%?$(EXPORT_GLOBAL_GCOV_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS%?$(EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS)?g' $@
@@ -179,9 +186,26 @@ $(strip \
 endef
 
 #######################################
+# /etc/classpath
+include $(CLEAR_VARS)
+LOCAL_MODULE := etc_classpath
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
+LOCAL_MODULE_STEM := classpath
+include $(BUILD_SYSTEM)/base_rules.mk
+$(LOCAL_BUILT_MODULE):
+	@echo "Generate: $@"
+	@mkdir -p $(dir $@)
+	$(hide) echo "export BOOTCLASSPATH $(PRODUCT_BOOTCLASSPATH)" > $@
+	$(hide) echo "export DEX2OATBOOTCLASSPATH $(PRODUCT_DEX2OAT_BOOTCLASSPATH)" >> $@
+	$(hide) echo "export SYSTEMSERVERCLASSPATH $(PRODUCT_SYSTEM_SERVER_CLASSPATH)" >> $@
+
+#######################################
 # sanitizer.libraries.txt
 include $(CLEAR_VARS)
 LOCAL_MODULE := sanitizer.libraries.txt
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS := notice
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
@@ -206,6 +230,8 @@ $(LOCAL_BUILT_MODULE):
 # adb_debug.prop in debug ramdisk
 include $(CLEAR_VARS)
 LOCAL_MODULE := adb_debug.prop
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS := notice
 LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_DEBUG_RAMDISK_OUT)

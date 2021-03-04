@@ -962,7 +962,7 @@ milliseconds llkCheck(bool checkRunning) {
     //
     // This alarm is effectively the live lock detection of llkd, as
     // we understandably can not monitor ourselves otherwise.
-    ::alarm(duration_cast<seconds>(llkTimeoutMs * 2).count());
+    ::alarm(duration_cast<seconds>(llkTimeoutMs * 2 * android::base::TimeoutMultiplier()).count());
 
     // kernel jiffy precision fastest acquisition
     static timespec last;

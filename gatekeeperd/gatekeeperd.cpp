@@ -318,6 +318,7 @@ class GateKeeperProxy : public BnGateKeeperService {
 
                     authToken.timestamp.milliSeconds = betoh64(hwAuthToken->timestamp);
                     authToken.challenge = hwAuthToken->challenge;
+                    authToken.userId = hwAuthToken->user_id;
                     authToken.authenticatorId = hwAuthToken->authenticator_id;
                     authToken.authenticatorType = static_cast<HardwareAuthenticatorType>(
                             betoh32(hwAuthToken->authenticator_type));
@@ -327,7 +328,6 @@ class GateKeeperProxy : public BnGateKeeperService {
                         LOG(ERROR) << "Failure in sending AuthToken to AuthorizationService.";
                         return GK_ERROR;
                     }
-                    AIBinder_decStrong(authzAIBinder);
                 }
                 sp<IServiceManager> sm = defaultServiceManager();
 
