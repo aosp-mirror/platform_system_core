@@ -142,11 +142,11 @@ void WriteExtent(DmSnapCowSizeCalculator* sc, const chromeos_update_engine::Exte
     }
 }
 
-uint64_t PartitionCowCreator::GetCowSize() {
+std::optional<uint64_t> PartitionCowCreator::GetCowSize() {
     if (compression_enabled) {
         if (update == nullptr || !update->has_estimate_cow_size()) {
             LOG(ERROR) << "Update manifest does not include a COW size";
-            return 0;
+            return std::nullopt;
         }
 
         // Add an extra 2MB of wiggle room for any minor differences in labels/metadata
@@ -239,7 +239,7 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     }
 
     // Compute the COW partition size.
-    uint64_t cow_partition_size = std::min(cow_size, free_region_length);
+    uint64_t cow_partition_size = std::min(cow_size.value(), free_region_length);
     // Round it down to the nearest logical block. Logical partitions must be a multiple
     // of logical blocks.
     cow_partition_size &= ~(logical_block_size - 1);
@@ -247,7 +247,7 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     // Assign cow_partition_usable_regions to indicate what regions should the COW partition uses.
     ret.cow_partition_usable_regions = std::move(free_regions);
 
-    auto cow_file_size = cow_size - cow_partition_size;
+    auto cow_file_size = cow_size.value() - cow_partition_size;
     // Round it up to the nearest sector.
     cow_file_size += kSectorSize - 1;
     cow_file_size &= ~(kSectorSize - 1);
