@@ -1,44 +1,14 @@
-//
-// Copyright (C) 2008 The Android Open Source Project
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
-
 package {
     default_applicable_licenses: ["system_core_libcutils_license"],
 }
 
-// Added automatically by a large-scale-change that took the approach of
-// 'apply every license found to every target'. While this makes sure we respect
-// every license restriction, it may not be entirely correct.
-//
-// e.g. GPL in an MIT project might only apply to the contrib/ directory.
-//
-// Please consider splitting the single license below into multiple licenses,
-// taking care not to lose any license_kind information, and overriding the
-// default license using the 'licenses: [...]' property on targets as needed.
-//
-// For unused files, consider creating a 'fileGroup' with "//visibility:private"
-// to attach the license to, and including a comment whether the files may be
-// used in the current project.
-// See: http://go/android-license-faq
 license {
     name: "system_core_libcutils_license",
     visibility: [":__subpackages__"],
     license_kinds: [
         "SPDX-license-identifier-Apache-2.0",
         "SPDX-license-identifier-BSD",
-        "SPDX-license-identifier-MIT",
+        "SPDX-license-identifier-MIT", // strlcpy.c
     ],
     license_text: [
         "NOTICE",
@@ -50,30 +20,32 @@ filegroup {
     srcs: ["include/private/android_filesystem_config.h"],
 }
 
-// some files must not be compiled when building against Mingw
-// they correspond to features not used by our host development tools
-// which are also hard or even impossible to port to native Win32
-libcutils_nonwindows_sources = [
-    "fs.cpp",
-    "hashmap.cpp",
-    "multiuser.cpp",
-    "str_parms.cpp",
-]
+cc_defaults {
+    name: "libcutils_defaults",
+    cflags: [
+        "-Wno-exit-time-destructors",
+    ],
 
-cc_library_headers {
-    name: "libcutils_headers",
-    vendor_available: true,
     product_available: true,
-    recovery_available: true,
     ramdisk_available: true,
+    recovery_available: true,
+    vendor_available: true,
     vendor_ramdisk_available: true,
+
     host_supported: true,
+    native_bridge_supported: true,
+
     apex_available: [
         "//apex_available:platform",
         "//apex_available:anyapex",
     ],
     min_sdk_version: "29",
-    native_bridge_supported: true,
+}
+
+cc_library_headers {
+    name: "libcutils_headers",
+    defaults: ["libcutils_defaults"],
+
     export_include_dirs: ["include"],
     target: {
         vendor: {
@@ -94,18 +66,7 @@ cc_library_headers {
 // Socket specific parts of libcutils that are safe to statically link into an APEX.
 cc_library {
     name: "libcutils_sockets",
-    vendor_available: true,
-    product_available: true,
-    recovery_available: true,
-    ramdisk_available: true,
-    vendor_ramdisk_available: true,
-    host_supported: true,
-    native_bridge_supported: true,
-    apex_available: [
-        "//apex_available:platform",
-        "//apex_available:anyapex",
-    ],
-    min_sdk_version: "29",
+    defaults: ["libcutils_defaults"],
 
     export_include_dirs: ["include"],
 
@@ -176,23 +137,23 @@ cc_test {
     },
 }
 
+// some files must not be compiled when building against Mingw
+// they correspond to features not used by our host development tools
+// which are also hard or even impossible to port to native Win32
+libcutils_nonwindows_sources = [
+    "fs.cpp",
+    "hashmap.cpp",
+    "multiuser.cpp",
+    "str_parms.cpp",
+]
+
 cc_library {
     name: "libcutils",
-    vendor_available: true,
-    product_available: true,
+    defaults: ["libcutils_defaults"],
     vndk: {
         enabled: true,
         support_system_process: true,
     },
-    recovery_available: true,
-    vendor_ramdisk_available: true,
-    host_supported: true,
-    apex_available: [
-        "//apex_available:platform",
-        "//apex_available:anyapex",
-    ],
-    min_sdk_version: "29",
-    native_bridge_supported: true,
     srcs: [
         "config_utils.cpp",
         "canned_fs_config.cpp",
@@ -290,7 +251,6 @@ cc_library {
     header_libs: [
         "libbase_headers",
         "libcutils_headers",
-        "libutils_headers",
         "libprocessgroup_headers",
     ],
     export_header_lib_headers: [
