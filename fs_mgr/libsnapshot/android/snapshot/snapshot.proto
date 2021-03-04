@@ -46,7 +46,7 @@ enum MergePhase {
     SECOND_PHASE = 2;
 }
 
-// Next: 11
+// Next: 12
 message SnapshotStatus {
     // Name of the snapshot. This is usually the name of the snapshotted
     // logical partition; for example, "system_b".
@@ -102,6 +102,9 @@ message SnapshotStatus {
 
     // The old partition size (if none existed, this will be zero).
     uint64 old_partition_size = 10;
+
+    // Compression algorithm (none, gz, or brotli).
+    string compression_algorithm = 11;
 }
 
 // Next: 8
