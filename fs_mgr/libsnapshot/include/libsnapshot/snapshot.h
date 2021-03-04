@@ -694,8 +694,8 @@ class SnapshotManager final : public ISnapshotManager {
     // Call ProcessUpdateState and handle states with special rules before data wipe. Specifically,
     // if |allow_forward_merge| and allow-forward-merge indicator exists, initiate merge if
     // necessary.
-    bool ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
-                                      const std::function<bool()>& callback);
+    UpdateState ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
+                                             const std::function<bool()>& callback);
 
     // Return device string of a mapped image, or if it is not available, the mapped image path.
     bool GetMappedImageDeviceStringOrPath(const std::string& device_name,
