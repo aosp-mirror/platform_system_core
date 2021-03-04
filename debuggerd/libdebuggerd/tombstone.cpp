@@ -592,7 +592,6 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
   }
 
   ProcessInfo process_info;
-  unique_fd attr_fd(open("/proc/self/attr/current", O_RDONLY | O_CLOEXEC));
   process_info.abort_msg_address = abort_msg_address;
   engrave_tombstone(unique_fd(dup(tombstone_fd)), unique_fd(dup(proto_fd)), &unwinder, threads, tid,
                     process_info, nullptr, nullptr);
