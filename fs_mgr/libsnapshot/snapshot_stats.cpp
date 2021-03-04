@@ -98,6 +98,22 @@ uint64_t SnapshotMergeStats::cow_file_size() {
     return report_.cow_file_size();
 }
 
+void SnapshotMergeStats::set_total_cow_size_bytes(uint64_t bytes) {
+    report_.set_total_cow_size_bytes(bytes);
+}
+
+void SnapshotMergeStats::set_estimated_cow_size_bytes(uint64_t bytes) {
+    report_.set_estimated_cow_size_bytes(bytes);
+}
+
+uint64_t SnapshotMergeStats::total_cow_size_bytes() {
+    return report_.total_cow_size_bytes();
+}
+
+uint64_t SnapshotMergeStats::estimated_cow_size_bytes() {
+    return report_.estimated_cow_size_bytes();
+}
+
 class SnapshotMergeStatsResultImpl : public SnapshotMergeStats::Result {
   public:
     SnapshotMergeStatsResultImpl(const SnapshotMergeReport& report,

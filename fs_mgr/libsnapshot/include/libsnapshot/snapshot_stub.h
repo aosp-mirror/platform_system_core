@@ -28,7 +28,8 @@ class SnapshotManagerStub : public ISnapshotManager {
     bool BeginUpdate() override;
     bool CancelUpdate() override;
     bool FinishedSnapshotWrites(bool wipe) override;
-    bool InitiateMerge(uint64_t* cow_file_size = nullptr) override;
+    void UpdateCowStats(ISnapshotMergeStats* stats) override;
+    bool InitiateMerge() override;
     UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                    const std::function<bool()>& before_cancel = {}) override;
     UpdateState GetUpdateState(double* progress = nullptr) override;
