@@ -26,7 +26,8 @@ each release starting with Gingerbread. This doesn't tell the full story,
 because the toolbox implementations did have bugs fixed and options added
 over the years. Gingerbread's rm, for example, supported `-r`/`-R` but not
 `-f`. But this gives you an idea of what was available in any given release,
-and how usable it was likely to be.
+and how usable it was likely to be. (**Bold** marks where we switched to toybox
+or first added something to toybox.)
 
 Also note that in any given release `toybox` probably contains more
 commands than there are symlinks for in `/system/bin`. You can get the
@@ -118,18 +119,18 @@ BSD: dd grep
 toolbox: getevent iftop ioctl log nandread newfs\_msdos ps prlimit
 sendevent start stop top
 
-toybox (0.7.0-ish): acpi base64 basename blockdev bzcat cal cat chcon chgrp chmod
-chown chroot cksum clear comm cmp cp cpio cut date df dirname dmesg
-dos2unix du echo env expand expr fallocate false find flock free
+toybox (0.7.0-ish): acpi **base64** basename blockdev bzcat cal cat chcon chgrp chmod
+chown chroot cksum clear comm cmp cp cpio cut date **df** dirname dmesg
+dos2unix **du** echo env expand expr fallocate false find **flock** free
 getenforce getprop groups head hostname hwclock id ifconfig inotifyd
-insmod ionice iorenice kill killall load\_policy ln logname losetup ls
-lsmod lsof lsusb md5sum mkdir mknod mkswap mktemp modinfo more mount
+insmod **ionice** **iorenice** kill **killall** load\_policy ln logname losetup **ls**
+lsmod **lsof** lsusb md5sum mkdir mknod mkswap mktemp modinfo more *mount*
 mountpoint mv netstat nice nl nohup od paste patch pgrep pidof pkill
-pmap printenv printf pwd readlink realpath renice restorecon rm rmdir
+pmap printenv printf pwd readlink realpath **renice** restorecon rm rmdir
 rmmod route runcon sed seq setenforce setprop setsid sha1sum sleep sort
 split stat strings swapoff swapon sync sysctl tac tail tar taskset tee
-time timeout touch tr true truncate tty ulimit umount uname uniq unix2dos
-uptime usleep vmstat wc which whoami xargs xxd yes
+time timeout touch tr true truncate **tty** **ulimit** umount uname uniq unix2dos
+**uptime** usleep vmstat wc which whoami xargs **xxd** yes
 
 
 ## Android 8.0 (Oreo)
@@ -141,19 +142,19 @@ bzip2: bzcat bzip2 bunzip2
 toolbox: getevent newfs\_msdos
 
 toybox (0.7.3-ish): acpi base64 basename blockdev cal cat chcon chgrp chmod chown
-chroot chrt cksum clear cmp comm cp cpio cut date df diff dirname dmesg
-dos2unix du echo env expand expr fallocate false file find flock free
-getenforce getprop groups gunzip gzip head hostname hwclock id ifconfig
-inotifyd insmod ionice iorenice kill killall ln load\_policy log logname
-losetup ls lsmod lsof lspci lsusb md5sum microcom mkdir mkfifo mknod
-mkswap mktemp modinfo modprobe more mount mountpoint mv netstat nice
-nl nohup od paste patch pgrep pidof pkill pmap printenv printf ps pwd
-readlink realpath renice restorecon rm rmdir rmmod runcon sed sendevent
-seq setenforce setprop setsid sha1sum sha224sum sha256sum sha384sum
-sha512sum sleep sort split start stat stop strings swapoff swapon sync
-sysctl tac tail tar taskset tee time timeout top touch tr true truncate
-tty ulimit umount uname uniq unix2dos uptime usleep uudecode uuencode
-vmstat wc which whoami xargs xxd yes zcat
+chroot chrt cksum clear cmp comm cp cpio cut date df **diff** dirname dmesg
+dos2unix du echo env expand expr fallocate false **file** find flock free
+getenforce getprop groups **gunzip** **gzip** head hostname hwclock id ifconfig
+inotifyd insmod ionice iorenice kill killall ln load\_policy **log** logname
+losetup ls lsmod lsof **lspci** lsusb md5sum **microcom** mkdir **mkfifo** mknod
+mkswap mktemp modinfo **modprobe** more mount mountpoint mv netstat nice
+nl nohup od paste patch pgrep pidof pkill pmap printenv printf **ps** pwd
+readlink realpath renice restorecon rm rmdir rmmod runcon sed **sendevent**
+seq setenforce setprop setsid sha1sum **sha224sum** **sha256sum** **sha384sum**
+**sha512sum** sleep sort split start stat stop strings swapoff swapon sync
+sysctl tac tail tar taskset tee time timeout **top** touch tr true truncate
+tty ulimit umount uname uniq unix2dos uptime usleep **uudecode** **uuencode**
+vmstat wc which whoami xargs xxd yes **zcat**
 
 
 ## Android 9.0 (Pie)
@@ -168,7 +169,7 @@ toolbox: getevent getprop newfs\_msdos
 
 toybox (0.7.6-ish): acpi base64 basename blockdev cal cat chcon chgrp chmod chown
 chroot chrt cksum clear cmp comm cp cpio cut date df diff dirname dmesg
-dos2unix du echo env expand expr fallocate false file find flock fmt free
+dos2unix du echo env expand expr fallocate false file find flock **fmt** free
 getenforce groups gunzip gzip head hostname hwclock id ifconfig inotifyd
 insmod ionice iorenice kill killall ln load\_policy log logname losetup ls
 lsmod lsof lspci lsusb md5sum microcom mkdir mkfifo mknod mkswap mktemp
@@ -176,7 +177,7 @@ modinfo modprobe more mount mountpoint mv netstat nice nl nohup od paste
 patch pgrep pidof pkill pmap printenv printf ps pwd readlink realpath
 renice restorecon rm rmdir rmmod runcon sed sendevent seq setenforce
 setprop setsid sha1sum sha224sum sha256sum sha384sum sha512sum sleep
-sort split start stat stop strings stty swapoff swapon sync sysctl tac
+sort split start stat stop strings **stty** swapoff swapon sync sysctl tac
 tail tar taskset tee time timeout top touch tr true truncate tty ulimit
 umount uname uniq unix2dos uptime usleep uudecode uuencode vmstat wc
 which whoami xargs xxd yes zcat
@@ -192,24 +193,24 @@ one-true-awk: awk
 
 toolbox: getevent getprop
 
-toybox (0.8.0-ish): acpi base64 basename bc blkid blockdev cal cat chattr chcon chgrp
+toybox (0.8.0-ish): acpi base64 basename **bc** **blkid** blockdev cal cat **chattr** chcon chgrp
 chmod chown chroot chrt cksum clear cmp comm cp cpio cut date dd df
-diff dirname dmesg dos2unix du echo egrep env expand expr fallocate
-false fgrep file find flock fmt free freeramdisk fsfreeze getconf
-getenforce getfattr grep groups gunzip gzip head help hostname hwclock
-i2cdetect i2cdump i2cget i2cset iconv id ifconfig inotifyd insmod
-install ionice iorenice iotop kill killall ln load\_policy log logname
-losetup ls lsattr lsmod lsof lspci lsusb makedevs md5sum microcom
+diff dirname dmesg dos2unix du echo **egrep** env expand expr fallocate
+false **fgrep** file find flock fmt free **freeramdisk** **fsfreeze** **getconf**
+getenforce **getfattr** grep groups gunzip gzip head **help** hostname hwclock
+**i2cdetect** **i2cdump** **i2cget** **i2cset** **iconv** id ifconfig inotifyd insmod
+**install** ionice iorenice **iotop** kill killall ln load\_policy log logname
+losetup ls **lsattr** lsmod lsof lspci lsusb **makedevs** md5sum microcom
 mkdir mkfifo mknod mkswap mktemp modinfo modprobe more mount mountpoint
-mv nbd-client nc netcat netstat nice nl nohup nproc nsenter od partprobe
-paste patch pgrep pidof ping ping6 pivot\_root pkill pmap printenv
-printf prlimit ps pwd pwdx readlink realpath renice restorecon rev
-rfkill rm rmdir rmmod runcon sed sendevent seq setenforce setfattr
+mv **nbd-client** **nc** **netcat** netstat nice nl nohup **nproc** **nsenter** od **partprobe**
+paste patch pgrep pidof **ping** **ping6** **pivot\_root** pkill pmap printenv
+printf **prlimit** ps pwd **pwdx** readlink realpath renice restorecon **rev**
+**rfkill** rm rmdir rmmod runcon sed sendevent seq setenforce **setfattr**
 setprop setsid sha1sum sha224sum sha256sum sha384sum sha512sum sleep
 sort split start stat stop strings stty swapoff swapon sync sysctl
-tac tail tar taskset tee time timeout top touch tr traceroute traceroute6
-true truncate tty tunctl ulimit umount uname uniq unix2dos unlink
-unshare uptime usleep uudecode uuencode uuidgen vconfig vmstat watch
+tac tail tar taskset tee time timeout top touch tr **traceroute** **traceroute6**
+true truncate tty **tunctl** ulimit umount uname uniq unix2dos **unlink**
+**unshare** uptime usleep uudecode uuencode **uuidgen** **vconfig** vmstat **watch**
 wc which whoami xargs xxd yes zcat
 
 ## Android 11 ("R")
@@ -225,21 +226,53 @@ one-true-awk: awk
 toolbox: getevent getprop setprop start stop
 
 toybox (0.8.3-ish): acpi base64 basename blkid blockdev cal cat chattr chcon chgrp chmod
-chown chroot chrt cksum clear cmp comm cp cpio cut date dd devmem
+chown chroot chrt cksum clear cmp comm cp cpio cut date dd **devmem**
 df diff dirname dmesg dos2unix du echo egrep env expand expr fallocate
-false fgrep file find flock fmt free freeramdisk fsfreeze fsync getconf
-getenforce getfattr getopt grep groups gunzip gzip head help hostname
+false fgrep file find flock fmt free freeramdisk fsfreeze **fsync** getconf
+getenforce getfattr **getopt** grep groups gunzip gzip head help hostname
 hwclock i2cdetect i2cdump i2cget i2cset iconv id ifconfig inotifyd
 insmod install ionice iorenice iotop kill killall ln load\_policy log
 logname losetup ls lsattr lsmod lsof lspci lsusb makedevs md5sum microcom
 mkdir mkfifo mknod mkswap mktemp modinfo modprobe more mount mountpoint
 mv nbd-client nc netcat netstat nice nl nohup nproc nsenter od partprobe
 paste patch pgrep pidof ping ping6 pivot\_root pkill pmap printenv
-printf prlimit ps pwd pwdx readelf readlink realpath renice restorecon
+printf prlimit ps pwd pwdx **readelf** readlink realpath renice restorecon
 rev rfkill rm rmdir rmmod runcon sed sendevent seq setenforce setfattr
 setsid sha1sum sha224sum sha256sum sha384sum sha512sum sleep sort
 split stat strings stty swapoff swapon sync sysctl tac tail tar taskset
 tee time timeout top touch tr traceroute traceroute6 true truncate
 tty tunctl ulimit umount uname uniq unix2dos unlink unshare uptime
-usleep uudecode uuencode uuidgen vconfig vi vmstat watch wc which
+usleep uudecode uuencode uuidgen vconfig **vi** vmstat watch wc which
 whoami xargs xxd yes zcat
+
+## Android ("S")
+
+BSD: fsck\_msdos newfs\_msdos
+
+bzip2: bzcat bzip2 bunzip2
+
+gavinhoward/bc: bc
+
+one-true-awk: awk
+
+toolbox: getevent getprop setprop start stop
+
+toybox (0.8.4-ish): **[** acpi base64 basename **blkdiscard** blkid blockdev cal cat chattr chcon
+chgrp chmod chown chroot chrt cksum clear cmp comm cp cpio cut date
+dd devmem df diff dirname dmesg dos2unix du echo egrep env expand
+expr fallocate false fgrep file find flock fmt free freeramdisk fsfreeze
+fsync getconf getenforce getfattr getopt grep groups gunzip gzip head
+help hostname hwclock i2cdetect i2cdump i2cget i2cset iconv id ifconfig
+inotifyd insmod install ionice iorenice iotop kill killall ln load\_policy
+log logname losetup ls lsattr lsmod lsof lspci lsusb makedevs md5sum
+microcom mkdir mkfifo mknod mkswap mktemp modinfo modprobe more mount
+mountpoint mv nbd-client nc netcat netstat nice nl nohup nproc nsenter
+od partprobe paste patch pgrep pidof ping ping6 pivot\_root pkill pmap
+printenv printf prlimit ps pwd pwdx readelf readlink realpath renice
+restorecon rev rfkill rm rmdir rmmod **rtcwake** runcon sed sendevent
+seq setenforce setfattr setsid sha1sum sha224sum sha256sum sha384sum
+sha512sum sleep sort split stat strings stty swapoff swapon sync sysctl
+tac tail tar taskset tee **test** time timeout top touch tr traceroute
+traceroute6 true truncate tty tunctl ulimit umount uname uniq unix2dos
+unlink unshare uptime usleep uudecode uuencode uuidgen vconfig vi
+vmstat watch wc which whoami xargs xxd yes zcat

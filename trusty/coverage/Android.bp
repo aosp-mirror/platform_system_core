@@ -12,23 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_library {
     name: "libtrusty_coverage",
     vendor_available: true,
     srcs: [
         "coverage.cpp",
+        "uuid.cpp",
     ],
     export_include_dirs: [
         "include",
     ],
-    static_libs: [
-        "libtrusty",
-    ],
-
     shared_libs: [
         "libbase",
+        "libext2_uuid",
         "liblog",
         "libdmabufheap",
+        "libtrusty",
     ],
 }
 
