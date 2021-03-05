@@ -44,6 +44,7 @@
 
 #include "block_dev_initializer.h"
 #include "devices.h"
+#include "result.h"
 #include "snapuserd_transition.h"
 #include "switch_root.h"
 #include "uevent.h"
@@ -51,6 +52,7 @@
 #include "util.h"
 
 using android::base::ReadFileToString;
+using android::base::Result;
 using android::base::Split;
 using android::base::StringPrintf;
 using android::base::Timer;
@@ -81,7 +83,8 @@ class FirstStageMount {
 
     // The factory method to create either FirstStageMountVBootV1 or FirstStageMountVBootV2
     // based on device tree configurations.
-    static std::unique_ptr<FirstStageMount> Create();
+    static Result<std::unique_ptr<FirstStageMount>> Create();
+    bool DoCreateDevices();    // Creates devices and logical partitions from storage devices
     bool DoFirstStageMount();  // Mounts fstab entries read from device tree.
     bool InitDevices();
 
@@ -159,7 +162,7 @@ static inline bool IsDtVbmetaCompatible(const Fstab& fstab) {
     return is_android_dt_value_expected("vbmeta/compatible", "android,vbmeta");
 }
 
-static Fstab ReadFirstStageFstab() {
+static Result<Fstab> ReadFirstStageFstab() {
     Fstab fstab;
     if (!ReadFstabFromDt(&fstab)) {
         if (ReadDefaultFstab(&fstab)) {
@@ -169,7 +172,7 @@ static Fstab ReadFirstStageFstab() {
                                        }),
                         fstab.end());
         } else {
-            LOG(INFO) << "Failed to fstab for first stage mount";
+            return Error() << "failed to read default fstab for first stage mount";
         }
     }
     return fstab;
@@ -235,22 +238,20 @@ FirstStageMount::FirstStageMount(Fstab fstab) : need_dm_verity_(false), fstab_(s
     super_partition_name_ = fs_mgr_get_super_partition_name();
 }
 
-std::unique_ptr<FirstStageMount> FirstStageMount::Create() {
+Result<std::unique_ptr<FirstStageMount>> FirstStageMount::Create() {
     auto fstab = ReadFirstStageFstab();
-    if (IsDtVbmetaCompatible(fstab)) {
-        return std::make_unique<FirstStageMountVBootV2>(std::move(fstab));
+    if (!fstab.ok()) {
+        return fstab.error();
+    }
+
+    if (IsDtVbmetaCompatible(*fstab)) {
+        return std::make_unique<FirstStageMountVBootV2>(std::move(*fstab));
     } else {
-        return std::make_unique<FirstStageMountVBootV1>(std::move(fstab));
+        return std::make_unique<FirstStageMountVBootV1>(std::move(*fstab));
     }
 }
 
-bool FirstStageMount::DoFirstStageMount() {
-    if (!IsDmLinearEnabled() && fstab_.empty()) {
-        // Nothing to mount.
-        LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
-        return true;
-    }
-
+bool FirstStageMount::DoCreateDevices() {
     if (!InitDevices()) return false;
 
     // Mount /metadata before creating logical partitions, since we need to
@@ -268,6 +269,16 @@ bool FirstStageMount::DoFirstStageMount() {
     }
 
     if (!CreateLogicalPartitions()) return false;
+
+    return true;
+}
+
+bool FirstStageMount::DoFirstStageMount() {
+    if (!IsDmLinearEnabled() && fstab_.empty()) {
+        // Nothing to mount.
+        LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
+        return true;
+    }
 
     if (!MountPartitions()) return false;
 
@@ -829,20 +840,35 @@ bool FirstStageMountVBootV2::InitAvbHandle() {
 
 // Public functions
 // ----------------
+// Creates devices and logical partitions from storage devices
+bool DoCreateDevices() {
+    auto fsm = FirstStageMount::Create();
+    if (!fsm.ok()) {
+        LOG(ERROR) << "Failed to create FirstStageMount: " << fsm.error();
+        return false;
+    }
+    return (*fsm)->DoCreateDevices();
+}
+
 // Mounts partitions specified by fstab in device tree.
-bool DoFirstStageMount() {
+bool DoFirstStageMount(bool create_devices) {
     // Skips first stage mount if we're in recovery mode.
     if (IsRecoveryMode()) {
         LOG(INFO) << "First stage mount skipped (recovery mode)";
         return true;
     }
 
-    std::unique_ptr<FirstStageMount> handle = FirstStageMount::Create();
-    if (!handle) {
-        LOG(ERROR) << "Failed to create FirstStageMount";
+    auto fsm = FirstStageMount::Create();
+    if (!fsm.ok()) {
+        LOG(ERROR) << "Failed to create FirstStageMount " << fsm.error();
         return false;
     }
-    return handle->DoFirstStageMount();
+
+    if (create_devices) {
+        if (!(*fsm)->DoCreateDevices()) return false;
+    }
+
+    return (*fsm)->DoFirstStageMount();
 }
 
 void SetInitAvbVersionInRecovery() {
@@ -852,8 +878,12 @@ void SetInitAvbVersionInRecovery() {
     }
 
     auto fstab = ReadFirstStageFstab();
+    if (!fstab.ok()) {
+        LOG(ERROR) << fstab.error();
+        return;
+    }
 
-    if (!IsDtVbmetaCompatible(fstab)) {
+    if (!IsDtVbmetaCompatible(*fstab)) {
         LOG(INFO) << "Skipped setting INIT_AVB_VERSION (not vbmeta compatible)";
         return;
     }
@@ -863,7 +893,7 @@ void SetInitAvbVersionInRecovery() {
     // We only set INIT_AVB_VERSION when the AVB verification succeeds, i.e., the
     // Open() function returns a valid handle.
     // We don't need to mount partitions here in recovery mode.
-    FirstStageMountVBootV2 avb_first_mount(std::move(fstab));
+    FirstStageMountVBootV2 avb_first_mount(std::move(*fstab));
     if (!avb_first_mount.InitDevices()) {
         LOG(ERROR) << "Failed to init devices for INIT_AVB_VERSION";
         return;

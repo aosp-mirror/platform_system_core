@@ -52,3 +52,12 @@ cc_library {
         "libtrusty",
     ],
 }
+
+// Generic TIPC fuzzer, must parameterized using:
+//  -DTRUSTY_APP_PORT=<port name of TA being fuzzed>
+//  -DTRUSTY_APP_UUID=<UUID of TA being fuzzed>
+//  -DTRUSTY_APP_FILENAME=<name of symbolized elf binary of the TA>
+filegroup {
+    name: "trusty_tipc_fuzzer",
+    srcs: ["tipc_fuzzer.cpp"],
+}

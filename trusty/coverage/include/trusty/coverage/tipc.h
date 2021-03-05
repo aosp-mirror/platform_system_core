@@ -19,15 +19,9 @@
 #pragma once
 
 #include <stdint.h>
+#include <trusty/coverage/uuid.h>
 
 #define COVERAGE_CLIENT_PORT "com.android.trusty.coverage.client"
-
-struct uuid {
-    uint32_t time_low;
-    uint16_t time_mid;
-    uint16_t time_hi_and_version;
-    uint8_t clock_seq_and_node[8];
-};
 
 enum coverage_client_cmd {
     COVERAGE_CLIENT_CMD_RESP_BIT = 1U,

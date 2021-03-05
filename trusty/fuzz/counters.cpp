@@ -33,7 +33,7 @@ using android::base::Result;
  * We don't know how many counters the coverage record will contain. So, eyeball
  * the size of this section.
  */
-static const size_t kMaxNumCounters = 0x4000;
+static const size_t kMaxNumCounters = 0x8000;
 __attribute__((section("__libfuzzer_extra_counters"))) volatile uint8_t counters[kMaxNumCounters];
 
 namespace android {

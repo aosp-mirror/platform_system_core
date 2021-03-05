@@ -508,3 +508,7 @@ bool setProcessGroupSoftLimit(uid_t, int pid, int64_t soft_limit_in_bytes) {
 bool setProcessGroupLimit(uid_t, int pid, int64_t limit_in_bytes) {
     return SetProcessGroupValue(pid, "MemLimit", limit_in_bytes);
 }
+
+bool getAttributePathForTask(const std::string& attr_name, int tid, std::string* path) {
+    return CgroupGetAttributePathForTask(attr_name, tid, path);
+}

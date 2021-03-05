@@ -43,7 +43,7 @@ constexpr const char kTrustyDefaultDeviceName[] = "/dev/trusty-ipc-dev0";
 
 static const char* dev_name = kTrustyDefaultDeviceName;
 
-static const char* _sopts = "hs";
+static const char* _sopts = "hD:";
 static const struct option _lopts[] = {
         {"help", no_argument, 0, 'h'},
         {"dev", required_argument, 0, 'D'},
