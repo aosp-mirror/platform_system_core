@@ -423,6 +423,11 @@ TEST_F(SnapshotTest, CreateSnapshot) {
 
     PartitionCowCreator cow_creator;
     cow_creator.compression_enabled = IsCompressionEnabled();
+    if (cow_creator.compression_enabled) {
+        cow_creator.compression_algorithm = "gz";
+    } else {
+        cow_creator.compression_algorithm = "none";
+    }
 
     static const uint64_t kDeviceSize = 1024 * 1024;
     SnapshotStatus status;
@@ -446,6 +451,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
         ASSERT_EQ(status.device_size(), kDeviceSize);
         ASSERT_EQ(status.snapshot_size(), kDeviceSize);
         ASSERT_EQ(status.compression_enabled(), cow_creator.compression_enabled);
+        ASSERT_EQ(status.compression_algorithm(), cow_creator.compression_algorithm);
     }
 
     ASSERT_TRUE(sm->UnmapSnapshot(lock_.get(), "test-snapshot"));
@@ -576,6 +582,11 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     SnapshotStatus status;
     ASSERT_TRUE(init->ReadSnapshotStatus(lock_.get(), "test_partition_b", &status));
     ASSERT_EQ(status.state(), SnapshotState::CREATED);
+    if (IsCompressionEnabled()) {
+        ASSERT_EQ(status.compression_algorithm(), "gz");
+    } else {
+        ASSERT_EQ(status.compression_algorithm(), "none");
+    }
 
     DeviceMapper::TargetInfo target;
     ASSERT_TRUE(init->IsSnapshotDevice("test_partition_b", &target));
