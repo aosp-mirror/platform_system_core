@@ -37,7 +37,6 @@
 #include <android-base/strings.h>
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
-#include <utils/Compat.h>
 
 #include "fs_config.h"
 
