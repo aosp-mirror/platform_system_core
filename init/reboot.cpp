@@ -85,12 +85,11 @@ static bool shutting_down = false;
 
 static const std::set<std::string> kDebuggingServices{"tombstoned", "logd", "adbd", "console"};
 
-static std::vector<Service*> GetDebuggingServices(bool only_post_data) {
-    std::vector<Service*> ret;
-    ret.reserve(kDebuggingServices.size());
+static std::set<std::string> GetPostDataDebuggingServices() {
+    std::set<std::string> ret;
     for (const auto& s : ServiceList::GetInstance()) {
-        if (kDebuggingServices.count(s->name()) && (!only_post_data || s->is_post_data())) {
-            ret.push_back(s.get());
+        if (kDebuggingServices.count(s->name()) && s->is_post_data()) {
+            ret.insert(s->name());
         }
     }
     return ret;
@@ -503,13 +502,18 @@ static Result<void> KillZramBackingDevice() {
 
 // Stops given services, waits for them to be stopped for |timeout| ms.
 // If terminate is true, then SIGTERM is sent to services, otherwise SIGKILL is sent.
-static void StopServices(const std::vector<Service*>& services, std::chrono::milliseconds timeout,
+// Note that services are stopped in order given by |ServiceList::services_in_shutdown_order|
+// function.
+static void StopServices(const std::set<std::string>& services, std::chrono::milliseconds timeout,
                          bool terminate) {
     LOG(INFO) << "Stopping " << services.size() << " services by sending "
               << (terminate ? "SIGTERM" : "SIGKILL");
     std::vector<pid_t> pids;
     pids.reserve(services.size());
-    for (const auto& s : services) {
+    for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
+        if (services.count(s->name()) == 0) {
+            continue;
+        }
         if (s->pid() > 0) {
             pids.push_back(s->pid());
         }
@@ -529,12 +533,12 @@ static void StopServices(const std::vector<Service*>& services, std::chrono::mil
 
 // Like StopServices, but also logs all the services that failed to stop after the provided timeout.
 // Returns number of violators.
-static int StopServicesAndLogViolations(const std::vector<Service*>& services,
+static int StopServicesAndLogViolations(const std::set<std::string>& services,
                                         std::chrono::milliseconds timeout, bool terminate) {
     StopServices(services, timeout, terminate);
     int still_running = 0;
-    for (const auto& s : services) {
-        if (s->IsRunning()) {
+    for (const auto& s : ServiceList::GetInstance()) {
+        if (s->IsRunning() && services.count(s->name())) {
             LOG(ERROR) << "[service-misbehaving] : service '" << s->name() << "' is still running "
                        << timeout.count() << "ms after receiving "
                        << (terminate ? "SIGTERM" : "SIGKILL");
@@ -620,8 +624,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
 
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
     const std::set<std::string> to_starts{"watchdogd"};
-    std::vector<Service*> stop_first;
-    stop_first.reserve(ServiceList::GetInstance().services().size());
+    std::set<std::string> stop_first;
     for (const auto& s : ServiceList::GetInstance()) {
         if (kDebuggingServices.count(s->name())) {
             // keep debugging tools until non critical ones are all gone.
@@ -639,7 +642,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
                            << "': " << result.error();
             }
         } else {
-            stop_first.push_back(s.get());
+            stop_first.insert(s->name());
         }
     }
 
@@ -703,7 +706,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
         LOG(INFO) << "vold not running, skipping vold shutdown";
     }
     // logcat stopped here
-    StopServices(GetDebuggingServices(false /* only_post_data */), 0ms, false /* SIGKILL */);
+    StopServices(kDebuggingServices, 0ms, false /* SIGKILL */);
     // 4. sync, try umount, and optionally run fsck for user shutdown
     {
         Timer sync_timer;
@@ -785,17 +788,17 @@ static Result<void> DoUserspaceReboot() {
         sub_reason = "resetprop";
         return Error() << "Failed to reset sys.powerctl property";
     }
-    std::vector<Service*> stop_first;
+    std::set<std::string> stop_first;
     // Remember the services that were enabled. We will need to manually enable them again otherwise
     // triggers like class_start won't restart them.
-    std::vector<Service*> were_enabled;
-    stop_first.reserve(ServiceList::GetInstance().services().size());
+    std::set<std::string> were_enabled;
     for (const auto& s : ServiceList::GetInstance().services_in_shutdown_order()) {
         if (s->is_post_data() && !kDebuggingServices.count(s->name())) {
-            stop_first.push_back(s);
+            stop_first.insert(s->name());
         }
+        // TODO(ioffe): we should also filter out temporary services here.
         if (s->is_post_data() && s->IsEnabled()) {
-            were_enabled.push_back(s);
+            were_enabled.insert(s->name());
         }
     }
     {
@@ -815,8 +818,8 @@ static Result<void> DoUserspaceReboot() {
         r > 0) {
         auto fd = unique_fd(TEMP_FAILURE_RETRY(open(services_file_name.c_str(), flags, 0666)));
         android::base::WriteStringToFd("Post-data services still running: \n", fd);
-        for (const auto& s : stop_first) {
-            if (s->IsRunning()) {
+        for (const auto& s : ServiceList::GetInstance()) {
+            if (s->IsRunning() && stop_first.count(s->name())) {
                 android::base::WriteStringToFd(s->name() + "\n", fd);
             }
         }
@@ -831,13 +834,14 @@ static Result<void> DoUserspaceReboot() {
         sub_reason = "vold_reset";
         return result;
     }
-    if (int r = StopServicesAndLogViolations(GetDebuggingServices(true /* only_post_data */),
-                                             sigkill_timeout, false /* SIGKILL */);
+    const auto& debugging_services = GetPostDataDebuggingServices();
+    if (int r = StopServicesAndLogViolations(debugging_services, sigkill_timeout,
+                                             false /* SIGKILL */);
         r > 0) {
         auto fd = unique_fd(TEMP_FAILURE_RETRY(open(services_file_name.c_str(), flags, 0666)));
         android::base::WriteStringToFd("Debugging services still running: \n", fd);
-        for (const auto& s : GetDebuggingServices(true)) {
-            if (s->IsRunning()) {
+        for (const auto& s : ServiceList::GetInstance()) {
+            if (s->IsRunning() && debugging_services.count(s->name())) {
                 android::base::WriteStringToFd(s->name() + "\n", fd);
             }
         }
@@ -867,9 +871,11 @@ static Result<void> DoUserspaceReboot() {
         return false;
     });
     // Re-enable services
-    for (const auto& s : were_enabled) {
-        LOG(INFO) << "Re-enabling service '" << s->name() << "'";
-        s->Enable();
+    for (const auto& s : ServiceList::GetInstance()) {
+        if (were_enabled.count(s->name())) {
+            LOG(INFO) << "Re-enabling service '" << s->name() << "'";
+            s->Enable();
+        }
     }
     ServiceList::GetInstance().ResetState();
     LeaveShutdown();

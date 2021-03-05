@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "TrustyIpc.h"
+#include <TrustyIpc.h>
 
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
@@ -41,6 +41,7 @@
 
 namespace android {
 namespace trusty {
+namespace confirmationui {
 
 using ::teeui::Message;
 using ::teeui::msg2tuple_t;
@@ -148,5 +149,6 @@ class TrustyApp {
     operator bool() const { return handle_ != kInvalidHandle; }
 };
 
+}  // namespace confirmationui
 }  // namespace trusty
 }  // namespace android

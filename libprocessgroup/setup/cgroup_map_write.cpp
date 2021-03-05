@@ -183,10 +183,12 @@ static bool ReadDescriptorsFromFile(const std::string& file_name,
         return false;
     }
 
-    Json::Reader reader;
+    Json::CharReaderBuilder builder;
+    std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
     Json::Value root;
-    if (!reader.parse(json_doc, root)) {
-        LOG(ERROR) << "Failed to parse cgroups description: " << reader.getFormattedErrorMessages();
+    std::string errorMessage;
+    if (!reader->parse(&*json_doc.begin(), &*json_doc.end(), &root, &errorMessage)) {
+        LOG(ERROR) << "Failed to parse cgroups description: " << errorMessage;
         return false;
     }
 

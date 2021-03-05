@@ -423,6 +423,11 @@ TEST_F(SnapshotTest, CreateSnapshot) {
 
     PartitionCowCreator cow_creator;
     cow_creator.compression_enabled = IsCompressionEnabled();
+    if (cow_creator.compression_enabled) {
+        cow_creator.compression_algorithm = "gz";
+    } else {
+        cow_creator.compression_algorithm = "none";
+    }
 
     static const uint64_t kDeviceSize = 1024 * 1024;
     SnapshotStatus status;
@@ -446,6 +451,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
         ASSERT_EQ(status.device_size(), kDeviceSize);
         ASSERT_EQ(status.snapshot_size(), kDeviceSize);
         ASSERT_EQ(status.compression_enabled(), cow_creator.compression_enabled);
+        ASSERT_EQ(status.compression_algorithm(), cow_creator.compression_algorithm);
     }
 
     ASSERT_TRUE(sm->UnmapSnapshot(lock_.get(), "test-snapshot"));
@@ -576,6 +582,11 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     SnapshotStatus status;
     ASSERT_TRUE(init->ReadSnapshotStatus(lock_.get(), "test_partition_b", &status));
     ASSERT_EQ(status.state(), SnapshotState::CREATED);
+    if (IsCompressionEnabled()) {
+        ASSERT_EQ(status.compression_algorithm(), "gz");
+    } else {
+        ASSERT_EQ(status.compression_algorithm(), "none");
+    }
 
     DeviceMapper::TargetInfo target;
     ASSERT_TRUE(init->IsSnapshotDevice("test_partition_b", &target));
@@ -636,8 +647,8 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
 
     // Because the status is Merging, we must call ProcessUpdateState, which should
     // detect a cancelled update.
-    ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::Cancelled);
-    ASSERT_EQ(sm->GetUpdateState(), UpdateState::None);
+    ASSERT_EQ(init->ProcessUpdateState(), UpdateState::Cancelled);
+    ASSERT_EQ(init->GetUpdateState(), UpdateState::None);
 }
 
 TEST_F(SnapshotTest, UpdateBootControlHal) {
@@ -1767,7 +1778,7 @@ TEST_F(SnapshotUpdateTest, DataWipeRollbackInRecovery) {
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     // Manually mount metadata so that we can call GetUpdateState() below.
     MountMetadata();
-    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
     EXPECT_TRUE(test_device->IsSlotUnbootable(1));
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
 }
@@ -2105,8 +2116,12 @@ TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
 
     // There should be no snapshot to merge.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, flashed_slot_suffix));
-    // update_enigne calls ProcessUpdateState first -- should see Cancelled.
-    ASSERT_EQ(UpdateState::Cancelled, new_sm->ProcessUpdateState());
+    if (flashed_slot == 0 && after_merge) {
+        ASSERT_EQ(UpdateState::MergeCompleted, new_sm->ProcessUpdateState());
+    } else {
+        // update_engine calls ProcessUpdateState first -- should see Cancelled.
+        ASSERT_EQ(UpdateState::Cancelled, new_sm->ProcessUpdateState());
+    }
 
     // Next OTA calls CancelUpdate no matter what.
     ASSERT_TRUE(new_sm->CancelUpdate());

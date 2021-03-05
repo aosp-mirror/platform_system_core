@@ -412,7 +412,8 @@ std::string GetFstabPath() {
 
         if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
 
-        for (const char* prefix : {"/odm/etc/fstab.", "/vendor/etc/fstab.", "/fstab."}) {
+        for (const char* prefix :
+             {"/odm/etc/fstab.", "/vendor/etc/fstab.", "/fstab.", "/first_stage_ramdisk/fstab."}) {
             std::string fstab_path = prefix + suffix;
             if (access(fstab_path.c_str(), F_OK) == 0) {
                 return fstab_path;
@@ -854,7 +855,7 @@ std::set<std::string> GetBootDevices() {
     if (android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
         std::set<std::string> boot_devices;
         const std::string cmdline_key = "androidboot.boot_device";
-        for (const auto& [key, value] : fs_mgr_parse_boot_config(cmdline)) {
+        for (const auto& [key, value] : fs_mgr_parse_cmdline(cmdline)) {
             if (key == cmdline_key) {
                 boot_devices.emplace(value);
             }

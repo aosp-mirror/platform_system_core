@@ -81,7 +81,7 @@ ssize_t write_all(int fd, void* buf, size_t len) {
     ssize_t total = 0;
     ssize_t once;
 
-    while (total < len) {
+    while (total < static_cast<ssize_t>(len)) {
         once = write(fd, buf_c + total, len - total);
         if (once < 0) return once;
         if (once == 0) {
@@ -99,7 +99,7 @@ ssize_t read_all(int fd, void* buf, size_t len) {
     ssize_t total = 0;
     ssize_t once;
 
-    while (total < len) {
+    while (total < static_cast<ssize_t>(len)) {
         once = read(fd, buf_c + total, len - total);
         if (once < 0) return once;
         if (once == 0) {
