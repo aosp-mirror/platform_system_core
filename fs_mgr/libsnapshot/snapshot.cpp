@@ -359,6 +359,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_
     status->set_sectors_allocated(0);
     status->set_metadata_sectors(0);
     status->set_compression_enabled(cow_creator->compression_enabled);
+    status->set_compression_algorithm(cow_creator->compression_algorithm);
 
     if (!WriteSnapshotStatus(lock, *status)) {
         PLOG(ERROR) << "Could not write snapshot status: " << status->name();
@@ -2660,9 +2661,20 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     // these devices.
     AutoDeviceList created_devices;
 
-    bool use_compression = IsCompressionEnabled() &&
-                           manifest.dynamic_partition_metadata().vabc_enabled() &&
-                           !device_->IsRecovery();
+    const auto& dap_metadata = manifest.dynamic_partition_metadata();
+    bool use_compression =
+            IsCompressionEnabled() && dap_metadata.vabc_enabled() && !device_->IsRecovery();
+
+    std::string compression_algorithm;
+    if (use_compression) {
+        compression_algorithm = dap_metadata.vabc_compression_param();
+        if (compression_algorithm.empty()) {
+            // Older OTAs don't set an explicit compression type, so default to gz.
+            compression_algorithm = "gz";
+        }
+    } else {
+        compression_algorithm = "none";
+    }
 
     PartitionCowCreator cow_creator{
             .target_metadata = target_metadata.get(),
@@ -2673,6 +2685,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .update = nullptr,
             .extra_extents = {},
             .compression_enabled = use_compression,
+            .compression_algorithm = compression_algorithm,
     };
 
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
@@ -2917,7 +2930,7 @@ Return SnapshotManager::InitializeUpdateSnapshots(
                 return Return::Error();
             }
 
-            CowWriter writer(CowOptions{});
+            CowWriter writer(CowOptions{.compression = it->second.compression_algorithm()});
             if (!writer.Initialize(fd) || !writer.Finalize()) {
                 LOG(ERROR) << "Could not initialize COW device for " << target_partition->name();
                 return Return::Error();
@@ -3024,7 +3037,7 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     CHECK(lock);
 
     CowOptions cow_options;
-    cow_options.compression = "gz";
+    cow_options.compression = status.compression_algorithm();
     cow_options.max_blocks = {status.device_size() / cow_options.block_size};
 
     // Currently we don't support partial snapshots, since partition_cow_creator
@@ -3163,6 +3176,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
         ss << "    cow file size (bytes): " << status.cow_file_size() << std::endl;
         ss << "    allocated sectors: " << status.sectors_allocated() << std::endl;
         ss << "    metadata sectors: " << status.metadata_sectors() << std::endl;
+        ss << "    compression: " << status.compression_algorithm() << std::endl;
     }
     os << ss.rdbuf();
     return ok;
