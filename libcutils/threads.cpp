@@ -25,8 +25,9 @@
 #include <windows.h>
 #endif
 
-#if defined(__BIONIC__)
+#if defined(__BIONIC__) || defined(__GLIBC__) && __GLIBC_MINOR__ >= 32
 // No definition needed for Android because we'll just pick up bionic's copy.
+// No definition needed for Glibc >= 2.32 because it exposes its own copy.
 #else
 pid_t gettid() {
 #if defined(__APPLE__)
