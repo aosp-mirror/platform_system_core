@@ -43,8 +43,10 @@
 #include <thread>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <gtest/gtest.h>
 #include <sparse/sparse.h>
 
@@ -669,6 +671,33 @@ TEST_F(UnlockPermissions, DownloadFlash) {
     EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed in unlocked mode";
 }
 
+// If the implementation supports getvar:max-fetch-size, it must also support fetch:vendor_boot*.
+TEST_F(UnlockPermissions, FetchVendorBoot) {
+    std::string var;
+    uint64_t fetch_size;
+    if (fb->GetVar("max-fetch-size", &var) != SUCCESS) {
+        GTEST_SKIP() << "This test is skipped because fetch is not supported.";
+    }
+    ASSERT_FALSE(var.empty());
+    ASSERT_TRUE(android::base::ParseUint(var, &fetch_size)) << var << " is not an integer";
+    std::vector<std::tuple<std::string, uint64_t>> parts;
+    EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
+    for (const auto& [partition, partition_size] : parts) {
+        if (!android::base::StartsWith(partition, "vendor_boot")) continue;
+        TemporaryFile fetched;
+
+        uint64_t offset = 0;
+        while (offset < partition_size) {
+            uint64_t chunk_size = std::min(fetch_size, partition_size - offset);
+            auto ret = fb->FetchToFd(partition, fetched.fd, offset, chunk_size);
+            ASSERT_EQ(fastboot::RetCode::SUCCESS, ret)
+                    << "Unable to fetch " << partition << " (offset=" << offset
+                    << ", size=" << chunk_size << ")";
+            offset += chunk_size;
+        }
+    }
+}
+
 TEST_F(LockPermissions, DownloadFlash) {
     std::vector<char> buf{'a', 'o', 's', 'p'};
     EXPECT_EQ(fb->Download(buf), SUCCESS) << "Download failed in locked mode";
@@ -728,6 +757,16 @@ TEST_F(LockPermissions, Boot) {
     ASSERT_EQ(fb->Boot(&resp), DEVICE_FAIL)
             << "The device did not respond with failure for 'boot' when locked";
     EXPECT_GT(resp.size(), 0) << "No error message was returned by device after FAIL";
+}
+
+TEST_F(LockPermissions, FetchVendorBoot) {
+    std::vector<std::tuple<std::string, uint64_t>> parts;
+    EXPECT_EQ(fb->Partitions(&parts), SUCCESS) << "getvar:all failed";
+    for (const auto& [partition, _] : parts) {
+        TemporaryFile fetched;
+        ASSERT_EQ(fb->FetchToFd(partition, fetched.fd, 0, 0), DEVICE_FAIL)
+                << "fetch:" << partition << ":0:0 did not fail in locked mode";
+    }
 }
 
 TEST_F(Fuzz, DownloadSize) {
