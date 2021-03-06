@@ -349,22 +349,35 @@ TEST_F(Conformance, GetVarBattVoltageOk) {
     EXPECT_TRUE(var == "yes" || var == "no") << "getvar:battery-soc-ok must be 'yes' or 'no'";
 }
 
+void AssertHexUint32(const std::string& name, const std::string& var) {
+    ASSERT_NE(var, "") << "getvar:" << name << " responded with empty string";
+    // This must start with 0x
+    ASSERT_FALSE(isspace(var.front()))
+            << "getvar:" << name << " responded with a string with leading whitespace";
+    ASSERT_FALSE(var.compare(0, 2, "0x"))
+            << "getvar:" << name << " responded with a string that does not start with 0x...";
+    int64_t size = strtoll(var.c_str(), nullptr, 16);
+    ASSERT_GT(size, 0) << "'" + var + "' is not a valid response from getvar:" << name;
+    // At most 32-bits
+    ASSERT_LE(size, std::numeric_limits<uint32_t>::max())
+            << "getvar:" << name << " must fit in a uint32_t";
+    ASSERT_LE(var.size(), FB_RESPONSE_SZ - 4)
+            << "getvar:" << name << " responded with too large of string: " + var;
+}
+
 TEST_F(Conformance, GetVarDownloadSize) {
     std::string var;
     EXPECT_EQ(fb->GetVar("max-download-size", &var), SUCCESS) << "getvar:max-download-size failed";
-    EXPECT_NE(var, "") << "getvar:max-download-size responded with empty string";
-    // This must start with 0x
-    EXPECT_FALSE(isspace(var.front()))
-            << "getvar:max-download-size responded with a string with leading whitespace";
-    EXPECT_FALSE(var.compare(0, 2, "0x"))
-            << "getvar:max-download-size responded with a string that does not start with 0x...";
-    int64_t size = strtoll(var.c_str(), nullptr, 16);
-    EXPECT_GT(size, 0) << "'" + var + "' is not a valid response from getvar:max-download-size";
-    // At most 32-bits
-    EXPECT_LE(size, std::numeric_limits<uint32_t>::max())
-            << "getvar:max-download-size must fit in a uint32_t";
-    EXPECT_LE(var.size(), FB_RESPONSE_SZ - 4)
-            << "getvar:max-download-size responded with too large of string: " + var;
+    AssertHexUint32("max-download-size", var);
+}
+
+// If fetch is supported, getvar:max-fetch-size must return a hex string.
+TEST_F(Conformance, GetVarFetchSize) {
+    std::string var;
+    if (SUCCESS != fb->GetVar("max-fetch-size", &var)) {
+        GTEST_SKIP() << "getvar:max-fetch-size failed";
+    }
+    AssertHexUint32("max-fetch-size", var);
 }
 
 TEST_F(Conformance, GetVarAll) {
