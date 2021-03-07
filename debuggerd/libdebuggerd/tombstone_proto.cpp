@@ -39,6 +39,7 @@
 #include <android-base/unique_fd.h>
 
 #include <android/log.h>
+#include <bionic/macros.h>
 #include <log/log.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
@@ -233,7 +234,7 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
 
           dump.set_register_name(name);
 
-          unwindstack::MapInfo* map_info = maps->Find(value);
+          unwindstack::MapInfo* map_info = maps->Find(untag_address(value));
           if (map_info) {
             dump.set_mapping_name(map_info->name);
           }
