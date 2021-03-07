@@ -374,11 +374,11 @@ TEST_F(CrasherTest, heap_addr_in_register) {
   ConsumeFd(std::move(output_fd), &result);
 
 #if defined(__aarch64__)
-  ASSERT_MATCH(result, "memory near x0");
+  ASSERT_MATCH(result, "memory near x0 \\(\\[anon:");
 #elif defined(__arm__)
-  ASSERT_MATCH(result, "memory near r0");
+  ASSERT_MATCH(result, "memory near r0 \\(\\[anon:");
 #elif defined(__x86_64__)
-  ASSERT_MATCH(result, "memory near rdi");
+  ASSERT_MATCH(result, "memory near rdi \\(\\[anon:");
 #else
   ASSERT_TRUE(false) << "unsupported architecture";
 #endif
