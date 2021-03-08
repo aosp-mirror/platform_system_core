@@ -26,5 +26,7 @@ enum MountNamespace { NS_BOOTSTRAP, NS_DEFAULT };
 bool SetupMountNamespaces();
 base::Result<void> SwitchToMountNamespaceIfNeeded(MountNamespace target_mount_namespace);
 
+base::Result<MountNamespace> GetCurrentMountNamespace();
+
 }  // namespace init
 }  // namespace android
