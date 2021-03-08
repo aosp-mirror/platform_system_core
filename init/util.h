@@ -100,5 +100,8 @@ Result<std::string> ParseUmountAll(const std::vector<std::string>& args);
 void SetStdioToDevNull(char** argv);
 void InitKernelLogging(char** argv);
 bool IsRecoveryMode();
+
+bool IsDefaultMountNamespaceReady();
+void SetDefaultMountNamespaceReady();
 }  // namespace init
 }  // namespace android
