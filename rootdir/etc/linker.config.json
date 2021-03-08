@@ -6,6 +6,7 @@
     "libnativebridge.so",
     "libnativehelper.so",
     "libnativeloader.so",
+    "libsigchain.so",
     "libandroidicu.so",
     "libicu.so",
     // TODO(b/122876336): Remove libpac.so once it's migrated to Webview
