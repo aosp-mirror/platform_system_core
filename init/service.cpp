@@ -125,11 +125,6 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
     return execv(c_strings[0], c_strings.data()) == 0;
 }
 
-static bool AreRuntimeApexesReady() {
-    struct stat buf;
-    return stat("/apex/com.android.runtime/", &buf) == 0;
-}
-
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
 
@@ -312,7 +307,7 @@ void Service::Reap(const siginfo_t& siginfo) {
 #else
     static bool is_apex_updatable = false;
 #endif
-    const bool is_process_updatable = !pre_apexd_ && is_apex_updatable;
+    const bool is_process_updatable = !use_bootstrap_ns_ && is_apex_updatable;
 
     // If we crash > 4 times in 'fatal_crash_window_' minutes or before boot_completed,
     // reboot into bootloader or set crashing property
@@ -465,12 +460,12 @@ Result<void> Service::Start() {
         scon = *result;
     }
 
-    if (!AreRuntimeApexesReady() && !pre_apexd_) {
-        // If this service is started before the Runtime and ART APEXes get
-        // available, mark it as pre-apexd one. Note that this marking is
+    if (!IsDefaultMountNamespaceReady() && name_ != "apexd") {
+        // If this service is started before APEXes and corresponding linker configuration
+        // get available, mark it as pre-apexd one. Note that this marking is
         // permanent. So for example, if the service is re-launched (e.g., due
         // to crash), it is still recognized as pre-apexd... for consistency.
-        pre_apexd_ = true;
+        use_bootstrap_ns_ = true;
     }
 
     // For pre-apexd services, override mount namespace as "bootstrap" one before starting.
@@ -479,7 +474,7 @@ Result<void> Service::Start() {
     std::optional<MountNamespace> override_mount_namespace;
     if (name_ == "ueventd") {
         override_mount_namespace = NS_DEFAULT;
-    } else if (pre_apexd_) {
+    } else if (use_bootstrap_ns_) {
         override_mount_namespace = NS_BOOTSTRAP;
     }
 
