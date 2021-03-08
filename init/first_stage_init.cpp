@@ -102,8 +102,9 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
     }
 }
 
-bool ForceNormalBoot(const std::string& cmdline) {
-    return cmdline.find("androidboot.force_normal_boot=1") != std::string::npos;
+bool ForceNormalBoot(const std::string& cmdline, const std::string& bootconfig) {
+    return bootconfig.find("androidboot.force_normal_boot = \"1\"") != std::string::npos ||
+           cmdline.find("androidboot.force_normal_boot=1") != std::string::npos;
 }
 
 }  // namespace
@@ -211,6 +212,8 @@ int FirstStageMain(int argc, char** argv) {
     android::base::ReadFileToString("/proc/cmdline", &cmdline);
     // Don't expose the raw bootconfig to unprivileged processes.
     chmod("/proc/bootconfig", 0440);
+    std::string bootconfig;
+    android::base::ReadFileToString("/proc/bootconfig", &bootconfig);
     gid_t groups[] = {AID_READPROC};
     CHECKCALL(setgroups(arraysize(groups), groups));
     CHECKCALL(mount("sysfs", "/sys", "sysfs", 0, NULL));
@@ -278,11 +281,11 @@ int FirstStageMain(int argc, char** argv) {
         old_root_dir.reset();
     }
 
-    auto want_console = ALLOW_FIRST_STAGE_CONSOLE ? FirstStageConsole(cmdline) : 0;
+    auto want_console = ALLOW_FIRST_STAGE_CONSOLE ? FirstStageConsole(cmdline, bootconfig) : 0;
 
     boot_clock::time_point module_start_time = boot_clock::now();
     int module_count = 0;
-    if (!LoadKernelModules(IsRecoveryMode() && !ForceNormalBoot(cmdline), want_console,
+    if (!LoadKernelModules(IsRecoveryMode() && !ForceNormalBoot(cmdline, bootconfig), want_console,
                            module_count)) {
         if (want_console != FirstStageConsoleParam::DISABLED) {
             LOG(ERROR) << "Failed to load kernel modules, starting console";
@@ -324,7 +327,7 @@ int FirstStageMain(int argc, char** argv) {
         LOG(INFO) << "Copied ramdisk prop to " << dest;
     }
 
-    if (ForceNormalBoot(cmdline)) {
+    if (ForceNormalBoot(cmdline, bootconfig)) {
         mkdir("/first_stage_ramdisk", 0755);
         // SwitchRoot() must be called with a mount point as the target, so we bind mount the
         // target directory to itself here.
