@@ -130,6 +130,7 @@ LOCAL_STATIC_LIBRARIES := \
     libsnapshot_cow \
     libsnapshot_init \
     update_metadata-protos \
+    libprocinfo \
 
 LOCAL_SANITIZE := signed-integer-overflow
 # First stage init is weird: it may start without stdout/stderr, and no /proc.
