@@ -423,11 +423,10 @@ TEST_P(SizeParamCrasherTest, mte_uaf) {
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
   ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a )" +
-                           std::to_string(GetParam()) + R"(-byte allocation.*
-
-allocated by thread .*
-      #00 pc)");
+                           std::to_string(GetParam()) + R"(-byte allocation)");
   ASSERT_MATCH(result, R"(deallocated by thread .*
+      #00 pc)");
+  ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";
@@ -460,9 +459,8 @@ TEST_P(SizeParamCrasherTest, mte_overflow) {
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
   ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a )" +
-                           std::to_string(GetParam()) + R"(-byte allocation.*
-
-allocated by thread .*
+                           std::to_string(GetParam()) + R"(-byte allocation)");
+  ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";
@@ -495,9 +493,8 @@ TEST_P(SizeParamCrasherTest, mte_underflow) {
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 9 \(SEGV_MTESERR\))");
   ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Underflow, 4 bytes left of a )" +
-                           std::to_string(GetParam()) + R"(-byte allocation.*
-
-allocated by thread .*
+                           std::to_string(GetParam()) + R"(-byte allocation)");
+  ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";

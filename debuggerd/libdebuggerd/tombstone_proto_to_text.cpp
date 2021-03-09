@@ -74,6 +74,9 @@ static void print_thread_header(CallbackType callback, const Tombstone& tombston
   CB(should_log, "pid: %d, tid: %d, name: %s  >>> %s <<<", tombstone.pid(), thread.id(),
      thread.name().c_str(), tombstone.process_name().c_str());
   CB(should_log, "uid: %d", tombstone.uid());
+  if (thread.tagged_addr_ctrl() != -1) {
+    CB(should_log, "tagged_addr_ctrl: %016" PRIx64, thread.tagged_addr_ctrl());
+  }
 }
 
 static void print_register_row(CallbackType callback, int word_size,
@@ -136,12 +139,11 @@ static void print_thread_registers(CallbackType callback, const Tombstone& tombs
   print_register_row(callback, word_size, special_row, should_log);
 }
 
-static void print_thread_backtrace(CallbackType callback, const Tombstone& tombstone,
-                                   const Thread& thread, bool should_log) {
-  CBS("");
-  CB(should_log, "backtrace:");
+static void print_backtrace(CallbackType callback, const Tombstone& tombstone,
+                            const google::protobuf::RepeatedPtrField<BacktraceFrame>& backtrace,
+                            bool should_log) {
   int index = 0;
-  for (const auto& frame : thread.current_backtrace()) {
+  for (const auto& frame : backtrace) {
     std::string function;
 
     if (!frame.function_name().empty()) {
@@ -159,16 +161,32 @@ static void print_thread_backtrace(CallbackType callback, const Tombstone& tombs
   }
 }
 
+static void print_thread_backtrace(CallbackType callback, const Tombstone& tombstone,
+                                   const Thread& thread, bool should_log) {
+  CBS("");
+  CB(should_log, "backtrace:");
+  print_backtrace(callback, tombstone, thread.current_backtrace(), should_log);
+}
+
 static void print_thread_memory_dump(CallbackType callback, const Tombstone& tombstone,
                                      const Thread& thread) {
   static constexpr size_t bytes_per_line = 16;
+  static_assert(bytes_per_line == kTagGranuleSize);
   int word_size = pointer_width(tombstone);
   for (const auto& mem : thread.memory_dump()) {
     CBS("");
-    CBS("memory near %s (%s):", mem.register_name().c_str(), mem.mapping_name().c_str());
+    if (mem.mapping_name().empty()) {
+      CBS("memory near %s:", mem.register_name().c_str());
+    } else {
+      CBS("memory near %s (%s):", mem.register_name().c_str(), mem.mapping_name().c_str());
+    }
     uint64_t addr = mem.begin_address();
     for (size_t offset = 0; offset < mem.memory().size(); offset += bytes_per_line) {
-      std::string line = StringPrintf("    %0*" PRIx64, word_size * 2, addr + offset);
+      uint64_t tagged_addr = addr;
+      if (mem.tags().size() > offset / kTagGranuleSize) {
+        tagged_addr |= static_cast<uint64_t>(mem.tags()[offset / kTagGranuleSize]) << 56;
+      }
+      std::string line = StringPrintf("    %0*" PRIx64, word_size * 2, tagged_addr + offset);
 
       size_t bytes = std::min(bytes_per_line, mem.memory().size() - offset);
       for (size_t i = 0; i < bytes; i += word_size) {
@@ -231,9 +249,8 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
         sender_desc.c_str(), fault_addr_desc.c_str());
   }
 
-  if (tombstone.has_cause()) {
-    const Cause& cause = tombstone.cause();
-    CBL("Cause: %s", cause.human_readable().c_str());
+  if (tombstone.causes_size() == 1) {
+    CBL("Cause: %s", tombstone.causes(0).human_readable().c_str());
   }
 
   if (!tombstone.abort_message().empty()) {
@@ -242,6 +259,36 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
 
   print_thread_registers(callback, tombstone, thread, true);
   print_thread_backtrace(callback, tombstone, thread, true);
+
+  if (tombstone.causes_size() > 1) {
+    CBS("");
+    CBS("Note: multiple potential causes for this crash were detected, listing them in decreasing "
+        "order of probability.");
+  }
+
+  for (const Cause& cause : tombstone.causes()) {
+    if (tombstone.causes_size() > 1) {
+      CBS("");
+      CBS("Cause: %s", cause.human_readable().c_str());
+    }
+
+    if (cause.has_memory_error() && cause.memory_error().has_heap()) {
+      const HeapObject& heap_object = cause.memory_error().heap();
+
+      if (heap_object.deallocation_backtrace_size() != 0) {
+        CBS("");
+        CBS("deallocated by thread %" PRIu64 ":", heap_object.deallocation_tid());
+        print_backtrace(callback, tombstone, heap_object.deallocation_backtrace(), false);
+      }
+
+      if (heap_object.allocation_backtrace_size() != 0) {
+        CBS("");
+        CBS("allocated by thread %" PRIu64 ":", heap_object.allocation_tid());
+        print_backtrace(callback, tombstone, heap_object.allocation_backtrace(), false);
+      }
+    }
+  }
+
   print_thread_memory_dump(callback, tombstone, thread);
 
   CBS("");
