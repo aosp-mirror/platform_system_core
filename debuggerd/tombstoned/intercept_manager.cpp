@@ -163,7 +163,7 @@ static void intercept_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
     event_assign(intercept->intercept_event, intercept_manager->base, sockfd, EV_READ | EV_TIMEOUT,
                  intercept_close_cb, arg);
 
-    struct timeval timeout = {.tv_sec = 10 * android::base::TimeoutMultiplier(), .tv_usec = 0};
+    struct timeval timeout = {.tv_sec = 10 * android::base::HwTimeoutMultiplier(), .tv_usec = 0};
     event_add(intercept->intercept_event, &timeout);
   }
 
@@ -179,7 +179,7 @@ static void intercept_accept_cb(evconnlistener* listener, evutil_socket_t sockfd
   intercept->intercept_manager = static_cast<InterceptManager*>(arg);
   intercept->sockfd.reset(sockfd);
 
-  struct timeval timeout = {1 * android::base::TimeoutMultiplier(), 0};
+  struct timeval timeout = {1 * android::base::HwTimeoutMultiplier(), 0};
   event_base* base = evconnlistener_get_base(listener);
   event* intercept_event =
     event_new(base, sockfd, EV_TIMEOUT | EV_READ, intercept_request_cb, intercept);
