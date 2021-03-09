@@ -127,9 +127,14 @@ class ISnapshotManager {
     // may need to be merged before wiping.
     virtual bool FinishedSnapshotWrites(bool wipe) = 0;
 
+    // Update an ISnapshotMergeStats object with statistics about COW usage.
+    // This should be called before the merge begins as otherwise snapshots
+    // may be deleted.
+    virtual void UpdateCowStats(ISnapshotMergeStats* stats) = 0;
+
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
-    virtual bool InitiateMerge(uint64_t* cow_file_size = nullptr) = 0;
+    virtual bool InitiateMerge() = 0;
 
     // Perform any necessary post-boot actions. This should be run soon after
     // /data is mounted.
@@ -326,7 +331,8 @@ class SnapshotManager final : public ISnapshotManager {
     bool BeginUpdate() override;
     bool CancelUpdate() override;
     bool FinishedSnapshotWrites(bool wipe) override;
-    bool InitiateMerge(uint64_t* cow_file_size = nullptr) override;
+    void UpdateCowStats(ISnapshotMergeStats* stats) override;
+    bool InitiateMerge() override;
     UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                    const std::function<bool()>& before_cancel = {}) override;
     UpdateState GetUpdateState(double* progress = nullptr) override;
@@ -491,7 +497,8 @@ class SnapshotManager final : public ISnapshotManager {
     bool RemoveAllSnapshots(LockedFile* lock);
 
     // List the known snapshot names.
-    bool ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots);
+    bool ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots,
+                       const std::string& suffix = "");
 
     // Check for a cancelled or rolled back merge, returning true if such a
     // condition was detected and handled.
@@ -678,6 +685,9 @@ class SnapshotManager final : public ISnapshotManager {
     enum class Slot { Unknown, Source, Target };
     friend std::ostream& operator<<(std::ostream& os, SnapshotManager::Slot slot);
     Slot GetCurrentSlot();
+
+    // Return the suffix we expect snapshots to have.
+    std::string GetSnapshotSlotSuffix();
 
     std::string ReadUpdateSourceSlotSuffix();
 
