@@ -735,5 +735,16 @@ bool IsRecoveryMode() {
     return access("/system/bin/recovery", F_OK) == 0;
 }
 
+// Check if default mount namespace is ready to be used with APEX modules
+static bool is_default_mount_namespace_ready = false;
+
+bool IsDefaultMountNamespaceReady() {
+    return is_default_mount_namespace_ready;
+}
+
+void SetDefaultMountNamespaceReady() {
+    is_default_mount_namespace_ready = true;
+}
+
 }  // namespace init
 }  // namespace android
