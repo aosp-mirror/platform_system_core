@@ -621,6 +621,9 @@ on late-fs
     exec -- /system/bin/fsverity_init --load-verified-keys
 
 on post-fs-data
+    # Boot level 30 - at this point daemons like apexd and odsign run
+    setprop keystore.boot_level 30
+
     mark_post_data
 
     # Start checkpoint before we touch data
@@ -898,6 +901,8 @@ on post-fs-data
 
     # Lock the fs-verity keyring, so no more keys can be added
     exec -- /system/bin/fsverity_init --lock
+
+    setprop keystore.boot_level 40
 
     # Allow apexd to snapshot and restore device encrypted apex data in the case
     # of a rollback. This should be done immediately after DE_user data keys
