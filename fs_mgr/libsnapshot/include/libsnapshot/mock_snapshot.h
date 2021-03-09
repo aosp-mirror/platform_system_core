@@ -26,7 +26,8 @@ class MockSnapshotManager : public ISnapshotManager {
     MOCK_METHOD(bool, BeginUpdate, (), (override));
     MOCK_METHOD(bool, CancelUpdate, (), (override));
     MOCK_METHOD(bool, FinishedSnapshotWrites, (bool wipe), (override));
-    MOCK_METHOD(bool, InitiateMerge, (uint64_t * cow_file_size), (override));
+    MOCK_METHOD(void, UpdateCowStats, (ISnapshotMergeStats * stats), (override));
+    MOCK_METHOD(bool, InitiateMerge, (), (override));
 
     MOCK_METHOD(UpdateState, ProcessUpdateState,
                 (const std::function<bool()>& callback, const std::function<bool()>& before_cancel),

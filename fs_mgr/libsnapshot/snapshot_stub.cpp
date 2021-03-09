@@ -43,7 +43,7 @@ bool SnapshotManagerStub::FinishedSnapshotWrites(bool) {
     return false;
 }
 
-bool SnapshotManagerStub::InitiateMerge(uint64_t*) {
+bool SnapshotManagerStub::InitiateMerge() {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return false;
 }
@@ -127,6 +127,10 @@ class SnapshotMergeStatsStub : public ISnapshotMergeStats {
     void set_cow_file_size(uint64_t) override {}
     uint64_t cow_file_size() override { return 0; }
     std::unique_ptr<Result> Finish() override { return nullptr; }
+    void set_total_cow_size_bytes(uint64_t) override {}
+    void set_estimated_cow_size_bytes(uint64_t) override {}
+    uint64_t total_cow_size_bytes() override { return 0; }
+    uint64_t estimated_cow_size_bytes() override { return 0; }
 };
 
 ISnapshotMergeStats* SnapshotManagerStub::GetSnapshotMergeStatsInstance() {
@@ -149,6 +153,10 @@ bool SnapshotManagerStub::MapAllSnapshots(const std::chrono::milliseconds&) {
 bool SnapshotManagerStub::UnmapAllSnapshots() {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return false;
+}
+
+void SnapshotManagerStub::UpdateCowStats(ISnapshotMergeStats*) {
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
 }
 
 }  // namespace android::snapshot
