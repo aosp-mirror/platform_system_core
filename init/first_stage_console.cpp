@@ -105,8 +105,20 @@ void StartConsole(const std::string& cmdline) {
     _exit(127);
 }
 
-int FirstStageConsole(const std::string& cmdline) {
-    auto pos = cmdline.find("androidboot.first_stage_console=");
+int FirstStageConsole(const std::string& cmdline, const std::string& bootconfig) {
+    auto pos = bootconfig.find("androidboot.first_stage_console =");
+    if (pos != std::string::npos) {
+        int val = 0;
+        if (sscanf(bootconfig.c_str() + pos, "androidboot.first_stage_console = \"%d\"", &val) !=
+            1) {
+            return FirstStageConsoleParam::DISABLED;
+        }
+        if (val <= FirstStageConsoleParam::MAX_PARAM_VALUE && val >= 0) {
+            return val;
+        }
+    }
+
+    pos = cmdline.find("androidboot.first_stage_console=");
     if (pos != std::string::npos) {
         int val = 0;
         if (sscanf(cmdline.c_str() + pos, "androidboot.first_stage_console=%d", &val) != 1) {
