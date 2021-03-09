@@ -176,10 +176,10 @@ TEST_F(BuilderTest, InternalAlignment) {
     ASSERT_NE(super_device, nullptr);
     EXPECT_EQ(super_device->first_logical_sector, 1536);
 
-    // Alignment offset without alignment doesn't mean anything.
+    // Alignment offset without alignment is ignored.
     device_info.alignment = 0;
     builder = MetadataBuilder::New(device_info, 1024, 2);
-    ASSERT_EQ(builder, nullptr);
+    ASSERT_NE(builder, nullptr);
 
     // Test a small alignment with an alignment offset.
     device_info.alignment = 12 * 1024;
@@ -442,11 +442,6 @@ TEST_F(BuilderTest, MetadataTooLarge) {
 
     // Test with alignment.
     device_info.alignment = 131072;
-    builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
-    EXPECT_EQ(builder, nullptr);
-
-    device_info.alignment = 0;
-    device_info.alignment_offset = 32768 - LP_SECTOR_SIZE;
     builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
     EXPECT_EQ(builder, nullptr);
 }
