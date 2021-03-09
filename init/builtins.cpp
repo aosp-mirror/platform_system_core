@@ -1278,6 +1278,14 @@ static Result<void> GenerateLinkerConfiguration() {
         return ErrnoError() << "failed to execute linkerconfig";
     }
 
+    auto current_mount_ns = GetCurrentMountNamespace();
+    if (!current_mount_ns.ok()) {
+        return current_mount_ns.error();
+    }
+    if (*current_mount_ns == NS_DEFAULT) {
+        SetDefaultMountNamespaceReady();
+    }
+
     LOG(INFO) << "linkerconfig generated " << linkerconfig_target
               << " with mounted APEX modules info";
 

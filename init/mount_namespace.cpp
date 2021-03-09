@@ -301,5 +301,20 @@ Result<void> SwitchToMountNamespaceIfNeeded(MountNamespace target_mount_namespac
     return {};
 }
 
+base::Result<MountNamespace> GetCurrentMountNamespace() {
+    std::string current_namespace_id = GetMountNamespaceId();
+    if (current_namespace_id == "") {
+        return Error() << "Failed to get current mount namespace ID";
+    }
+
+    if (current_namespace_id == bootstrap_ns_id) {
+        return NS_BOOTSTRAP;
+    } else if (current_namespace_id == default_ns_id) {
+        return NS_DEFAULT;
+    }
+
+    return Error() << "Failed to find current mount namespace";
+}
+
 }  // namespace init
 }  // namespace android
