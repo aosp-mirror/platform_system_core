@@ -230,6 +230,15 @@ SnapshotManager::Slot SnapshotManager::GetCurrentSlot() {
     return Slot::Target;
 }
 
+std::string SnapshotManager::GetSnapshotSlotSuffix() {
+    switch (GetCurrentSlot()) {
+        case Slot::Target:
+            return device_->GetSlotSuffix();
+        default:
+            return device_->GetOtherSlotSuffix();
+    }
+}
+
 static bool RemoveFileIfExists(const std::string& path) {
     std::string message;
     if (!android::base::RemoveFileIfExists(path, &message)) {
@@ -624,7 +633,7 @@ bool SnapshotManager::DeleteSnapshot(LockedFile* lock, const std::string& name) 
     return true;
 }
 
-bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
+bool SnapshotManager::InitiateMerge() {
     auto lock = LockExclusive();
     if (!lock) return false;
 
@@ -691,7 +700,6 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
 
     std::vector<std::string> first_merge_group;
 
-    uint64_t total_cow_file_size = 0;
     DmTargetSnapshot::Status initial_target_values = {};
     for (const auto& snapshot : snapshots) {
         DmTargetSnapshot::Status current_status;
@@ -706,16 +714,11 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
         if (!ReadSnapshotStatus(lock.get(), snapshot, &snapshot_status)) {
             return false;
         }
-        total_cow_file_size += snapshot_status.cow_file_size();
 
         compression_enabled |= snapshot_status.compression_enabled();
         if (DecideMergePhase(snapshot_status) == MergePhase::FIRST_PHASE) {
             first_merge_group.emplace_back(snapshot);
         }
-    }
-
-    if (cow_file_size) {
-        *cow_file_size = total_cow_file_size;
     }
 
     SnapshotUpdateStatus initial_status;
@@ -1732,7 +1735,8 @@ bool SnapshotManager::UpdateUsesCompression(LockedFile* lock) {
     return update_status.compression_enabled();
 }
 
-bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots) {
+bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots,
+                                    const std::string& suffix) {
     CHECK(lock);
 
     auto dir_path = metadata_dir_ + "/snapshots"s;
@@ -1745,7 +1749,12 @@ bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* 
     struct dirent* dp;
     while ((dp = readdir(dir.get())) != nullptr) {
         if (dp->d_type != DT_REG) continue;
-        snapshots->emplace_back(dp->d_name);
+
+        std::string name(dp->d_name);
+        if (!suffix.empty() && !android::base::EndsWith(name, suffix)) {
+            continue;
+        }
+        snapshots->emplace_back(std::move(name));
     }
     return true;
 }
@@ -3563,6 +3572,35 @@ MergePhase SnapshotManager::DecideMergePhase(const SnapshotStatus& status) {
         return MergePhase::FIRST_PHASE;
     }
     return MergePhase::SECOND_PHASE;
+}
+
+void SnapshotManager::UpdateCowStats(ISnapshotMergeStats* stats) {
+    auto lock = LockExclusive();
+    if (!lock) return;
+
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock.get(), &snapshots, GetSnapshotSlotSuffix())) {
+        LOG(ERROR) << "Could not list snapshots";
+        return;
+    }
+
+    uint64_t cow_file_size = 0;
+    uint64_t total_cow_size = 0;
+    uint64_t estimated_cow_size = 0;
+    for (const auto& snapshot : snapshots) {
+        SnapshotStatus status;
+        if (!ReadSnapshotStatus(lock.get(), snapshot, &status)) {
+            return;
+        }
+
+        cow_file_size += status.cow_file_size();
+        total_cow_size += status.cow_file_size() + status.cow_partition_size();
+        estimated_cow_size += status.estimated_cow_size();
+    }
+
+    stats->set_cow_file_size(cow_file_size);
+    stats->set_total_cow_size_bytes(total_cow_size);
+    stats->set_estimated_cow_size_bytes(estimated_cow_size);
 }
 
 }  // namespace snapshot
