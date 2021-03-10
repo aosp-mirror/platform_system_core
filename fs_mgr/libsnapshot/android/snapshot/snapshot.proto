@@ -46,7 +46,7 @@ enum MergePhase {
     SECOND_PHASE = 2;
 }
 
-// Next: 12
+// Next: 13
 message SnapshotStatus {
     // Name of the snapshot. This is usually the name of the snapshotted
     // logical partition; for example, "system_b".
@@ -105,6 +105,9 @@ message SnapshotStatus {
 
     // Compression algorithm (none, gz, or brotli).
     string compression_algorithm = 11;
+
+    // Estimated COW size from OTA manifest.
+    uint64 estimated_cow_size = 12;
 }
 
 // Next: 8
@@ -159,7 +162,7 @@ message SnapshotUpdateStatus {
     MergePhase merge_phase = 6;
 }
 
-// Next: 5
+// Next: 7
 message SnapshotMergeReport {
     // Status of the update after the merge attempts.
     UpdateState state = 1;
@@ -173,4 +176,10 @@ message SnapshotMergeReport {
 
     // Whether compression/dm-user was used for any snapshots.
     bool compression_enabled = 4;
+
+    // Total size used by COWs, including /data and the super partition.
+    uint64 total_cow_size_bytes = 5;
+
+    // Sum of the estimated COW fields in the OTA manifest.
+    uint64 estimated_cow_size_bytes = 6;
 }
