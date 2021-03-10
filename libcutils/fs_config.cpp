@@ -35,6 +35,7 @@
 #include <string>
 
 #include <android-base/strings.h>
+#include <cutils/fs.h>
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
 
