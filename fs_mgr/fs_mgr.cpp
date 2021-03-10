@@ -2203,7 +2203,8 @@ std::string fs_mgr_get_super_partition_name(int slot) {
     // Devices upgrading to dynamic partitions are allowed to specify a super
     // partition name. This includes cuttlefish, which is a non-A/B device.
     std::string super_partition;
-    if (fs_mgr_get_boot_config_from_kernel_cmdline("super_partition", &super_partition)) {
+    if (fs_mgr_get_boot_config_from_bootconfig_source("super_partition", &super_partition) ||
+        fs_mgr_get_boot_config_from_kernel_cmdline("super_partition", &super_partition)) {
         if (fs_mgr_get_slot_suffix().empty()) {
             return super_partition;
         }
