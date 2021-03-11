@@ -161,6 +161,10 @@ static void MergeCgroupToDescriptors(std::map<std::string, CgroupDescriptor>* de
         controller_flags |= CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION;
     }
 
+    if (cgroup["Optional"].isBool() && cgroup["Optional"].asBool()) {
+        controller_flags |= CGROUPRC_CONTROLLER_FLAG_OPTIONAL;
+    }
+
     CgroupDescriptor descriptor(
             cgroups_version, name, path, std::strtoul(cgroup["Mode"].asString().c_str(), 0, 8),
             cgroup["UID"].asString(), cgroup["GID"].asString(), controller_flags);
@@ -308,8 +312,15 @@ static bool SetupCgroup(const CgroupDescriptor& descriptor) {
     }
 
     if (result < 0) {
-        PLOG(ERROR) << "Failed to mount " << controller->name() << " cgroup";
-        return false;
+        bool optional = controller->flags() & CGROUPRC_CONTROLLER_FLAG_OPTIONAL;
+
+        if (optional && errno == EINVAL) {
+            // Optional controllers are allowed to fail to mount if kernel does not support them
+            LOG(INFO) << "Optional " << controller->name() << " cgroup controller is not mounted";
+        } else {
+            PLOG(ERROR) << "Failed to mount " << controller->name() << " cgroup";
+            return false;
+        }
     }
 
     return true;
