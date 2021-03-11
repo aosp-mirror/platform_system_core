@@ -267,8 +267,6 @@ static bool SetupCgroup(const CgroupDescriptor& descriptor) {
                                        descriptor.gid())) {
                 LOG(ERROR) << "Failed to create directory for " << controller->name() << " cgroup";
                 result = -1;
-            } else {
-                LOG(ERROR) << "restored ownership for " << controller->name() << " cgroup";
             }
         } else {
             if (!Mkdir(controller->path(), descriptor.mode(), descriptor.uid(), descriptor.gid())) {
