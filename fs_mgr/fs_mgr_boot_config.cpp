@@ -91,6 +91,12 @@ bool fs_mgr_get_boot_config_from_bootconfig(const std::string& bootconfig,
         if (key == bootconfig_key) {
             *out_val = value;
             return true;
+        } else if (android_key == "hardware" && android_key == key) {
+            // bootconfig doesn't allow subkeys and values to coexist, so
+            // "androidboot.hardware" cannot be used. It is replaced in
+            // bootconfig with "hardware"
+            *out_val = value;
+            return true;
         }
     }
 

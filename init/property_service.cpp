@@ -1184,6 +1184,10 @@ static void ProcessBootconfig() {
     ImportBootconfig([&](const std::string& key, const std::string& value) {
         if (StartsWith(key, "androidboot.")) {
             InitPropertySet("ro.boot." + key.substr(12), value);
+        } else if (key == "hardware") {
+            // "hardware" in bootconfig replaces "androidboot.hardware" kernel
+            // cmdline parameter
+            InitPropertySet("ro.boot." + key, value);
         }
     });
 }
