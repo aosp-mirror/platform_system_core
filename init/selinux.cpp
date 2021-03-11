@@ -92,7 +92,7 @@ namespace {
 
 enum EnforcingStatus { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
 
-EnforcingStatus StatusFromCmdline() {
+EnforcingStatus StatusFromProperty() {
     EnforcingStatus status = SELINUX_ENFORCING;
 
     ImportKernelCmdline([&](const std::string& key, const std::string& value) {
@@ -101,12 +101,20 @@ EnforcingStatus StatusFromCmdline() {
         }
     });
 
+    if (status == SELINUX_ENFORCING) {
+        ImportBootconfig([&](const std::string& key, const std::string& value) {
+            if (key == "androidboot.selinux" && value == "permissive") {
+                status = SELINUX_PERMISSIVE;
+            }
+        });
+    }
+
     return status;
 }
 
 bool IsEnforcing() {
     if (ALLOW_PERMISSIVE_SELINUX) {
-        return StatusFromCmdline() == SELINUX_ENFORCING;
+        return StatusFromProperty() == SELINUX_ENFORCING;
     }
     return true;
 }
