@@ -116,11 +116,14 @@ class ICowOpReverseIter {
 class CowReader : public ICowReader {
   public:
     CowReader();
+    ~CowReader() { owned_fd_ = {}; }
 
     // Parse the COW, optionally, up to the given label. If no label is
     // specified, the COW must have an intact footer.
     bool Parse(android::base::unique_fd&& fd, std::optional<uint64_t> label = {});
     bool Parse(android::base::borrowed_fd fd, std::optional<uint64_t> label = {});
+
+    bool InitForMerge(android::base::unique_fd&& fd);
 
     bool GetHeader(CowHeader* header) override;
     bool GetFooter(CowFooter* footer) override;
@@ -145,6 +148,8 @@ class CowReader : public ICowReader {
     void set_total_data_ops(uint64_t size) { total_data_ops_ = size; }
 
     uint64_t total_data_ops() { return total_data_ops_; }
+
+    void CloseCowFd() { owned_fd_ = {}; }
 
   private:
     bool ParseOps(std::optional<uint64_t> label);
