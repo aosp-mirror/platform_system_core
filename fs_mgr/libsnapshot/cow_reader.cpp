@@ -229,7 +229,8 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
 
     if (footer_) {
         if (ops_buffer->size() != footer_->op.num_ops) {
-            LOG(ERROR) << "num ops does not match";
+            LOG(ERROR) << "num ops does not match, expected " << footer_->op.num_ops << ", found "
+                       << ops_buffer->size();
             return false;
         }
         if (ops_buffer->size() * sizeof(CowOperation) != footer_->op.ops_size) {
