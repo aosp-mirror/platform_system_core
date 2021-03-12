@@ -757,6 +757,30 @@ TEST_F(CowTest, ClusterAppendTest) {
     ASSERT_TRUE(iter->Done());
 }
 
+TEST_F(CowTest, AppendAfterFinalize) {
+    CowOptions options;
+    options.cluster_ops = 0;
+    auto writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer->AddRawBlocks(50, data.data(), data.size()));
+    ASSERT_TRUE(writer->AddLabel(3));
+    ASSERT_TRUE(writer->Finalize());
+
+    std::string data2 = "More data!";
+    data2.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer->AddRawBlocks(51, data2.data(), data2.size()));
+    ASSERT_TRUE(writer->Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    // COW should be valid.
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+}
+
 }  // namespace snapshot
 }  // namespace android
 
