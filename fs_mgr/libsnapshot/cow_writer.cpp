@@ -376,6 +376,7 @@ bool CowWriter::Finalize() {
     auto continue_data_pos = next_data_pos_;
     auto continue_op_pos = next_op_pos_;
     auto continue_size = ops_.size();
+    auto continue_num_ops = footer_.op.num_ops;
     bool extra_cluster = false;
 
     // Footer should be at the end of a file, so if there is data after the current block, end it
@@ -408,9 +409,9 @@ bool CowWriter::Finalize() {
         current_data_size_ = continue_data_size;
         next_data_pos_ = continue_data_pos;
         next_op_pos_ = continue_op_pos;
+        footer_.op.num_ops = continue_num_ops;
         ops_.resize(continue_size);
     }
-
     return Sync();
 }
 
