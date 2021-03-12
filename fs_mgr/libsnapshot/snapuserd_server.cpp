@@ -77,8 +77,8 @@ void SnapuserdServer::ShutdownThreads() {
     JoinAllThreads();
 }
 
-DmUserHandler::DmUserHandler(std::unique_ptr<Snapuserd>&& snapuserd)
-    : snapuserd_(std::move(snapuserd)), misc_name_(snapuserd_->GetMiscName()) {}
+DmUserHandler::DmUserHandler(std::shared_ptr<Snapuserd> snapuserd)
+    : snapuserd_(snapuserd), misc_name_(snapuserd_->GetMiscName()) {}
 
 bool SnapuserdServer::Sendmsg(android::base::borrowed_fd fd, const std::string& msg) {
     ssize_t ret = TEMP_FAILURE_RETRY(send(fd.get(), msg.data(), msg.size(), 0));
@@ -204,10 +204,8 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
 void SnapuserdServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
-    while (!StopRequested()) {
-        if (!handler->snapuserd()->Run()) {
-            break;
-        }
+    if (!handler->snapuserd()->Start()) {
+        LOG(ERROR) << " Failed to launch all worker threads";
     }
 
     handler->snapuserd()->CloseFds();
@@ -349,13 +347,18 @@ void SnapuserdServer::Interrupt() {
 std::shared_ptr<DmUserHandler> SnapuserdServer::AddHandler(const std::string& misc_name,
                                                            const std::string& cow_device_path,
                                                            const std::string& backing_device) {
-    auto snapuserd = std::make_unique<Snapuserd>(misc_name, cow_device_path, backing_device);
+    auto snapuserd = std::make_shared<Snapuserd>(misc_name, cow_device_path, backing_device);
     if (!snapuserd->InitCowDevice()) {
         LOG(ERROR) << "Failed to initialize Snapuserd";
         return nullptr;
     }
 
-    auto handler = std::make_shared<DmUserHandler>(std::move(snapuserd));
+    if (!snapuserd->InitializeWorkers()) {
+        LOG(ERROR) << "Failed to initialize workers";
+        return nullptr;
+    }
+
+    auto handler = std::make_shared<DmUserHandler>(snapuserd);
     {
         std::lock_guard<std::mutex> lock(lock_);
         if (FindHandler(&lock, misc_name) != dm_users_.end()) {
@@ -370,10 +373,7 @@ std::shared_ptr<DmUserHandler> SnapuserdServer::AddHandler(const std::string& mi
 bool SnapuserdServer::StartHandler(const std::shared_ptr<DmUserHandler>& handler) {
     CHECK(!handler->snapuserd()->IsAttached());
 
-    if (!handler->snapuserd()->InitBackingAndControlDevice()) {
-        LOG(ERROR) << "Failed to initialize control device: " << handler->misc_name();
-        return false;
-    }
+    handler->snapuserd()->AttachControlDevice();
 
     handler->thread() = std::thread(std::bind(&SnapuserdServer::RunThread, this, handler));
     return true;
