@@ -376,6 +376,15 @@ static std::string init_android_dt_dir() {
             android_dt_dir = value;
         }
     });
+    // ..Or bootconfig
+    if (android_dt_dir == kDefaultAndroidDtDir) {
+        ImportBootconfig([&](const std::string& key, const std::string& value) {
+            if (key == "androidboot.android_dt_dir") {
+                android_dt_dir = value;
+            }
+        });
+    }
+
     LOG(INFO) << "Using Android DT directory " << android_dt_dir;
     return android_dt_dir;
 }
