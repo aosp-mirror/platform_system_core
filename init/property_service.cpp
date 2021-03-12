@@ -1169,8 +1169,11 @@ static void ProcessKernelCmdline() {
     ImportKernelCmdline([&](const std::string& key, const std::string& value) {
         if (StartsWith(key, ANDROIDBOOT_PREFIX)) {
             InitPropertySet("ro.boot." + key.substr(ANDROIDBOOT_PREFIX.size()), value);
-        } else if (StartsWith(key, "qemu."sv) || (key == "qemu")) {
+        } else if (StartsWith(key, "qemu."sv)) {
             InitPropertySet("ro.kernel." + key, value);
+        } else if (key == "qemu") {
+            InitPropertySet("ro.kernel." + key, value);  // emulator specific, deprecated
+            InitPropertySet("ro.boot." + key, value);
         }
     });
 }
