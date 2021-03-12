@@ -42,6 +42,29 @@ static void SHA256(const void*, size_t, uint8_t[]) {
 #endif
 }
 
+bool CowReader::InitForMerge(android::base::unique_fd&& fd) {
+    owned_fd_ = std::move(fd);
+    fd_ = owned_fd_.get();
+
+    auto pos = lseek(fd_.get(), 0, SEEK_END);
+    if (pos < 0) {
+        PLOG(ERROR) << "lseek end failed";
+        return false;
+    }
+    fd_size_ = pos;
+
+    if (lseek(fd_.get(), 0, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek header failed";
+        return false;
+    }
+    if (!android::base::ReadFully(fd_, &header_, sizeof(header_))) {
+        PLOG(ERROR) << "read header failed";
+        return false;
+    }
+
+    return true;
+}
+
 bool CowReader::Parse(android::base::unique_fd&& fd, std::optional<uint64_t> label) {
     owned_fd_ = std::move(fd);
     return Parse(android::base::borrowed_fd{owned_fd_}, label);
