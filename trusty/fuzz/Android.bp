@@ -30,7 +30,6 @@ cc_defaults {
         "-Werror",
     ],
     fuzz_config: {
-        fuzz_on_haiku_device: false,
         fuzz_on_haiku_host: false,
     },
 }
