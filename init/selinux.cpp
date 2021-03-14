@@ -63,6 +63,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/result.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <fs_avb/fs_avb.h>
@@ -222,8 +223,8 @@ bool ReadFirstLine(const char* file, std::string* line) {
     return true;
 }
 
-bool FindPrecompiledSplitPolicy(std::string* file) {
-    file->clear();
+Result<std::string> FindPrecompiledSplitPolicy() {
+    std::string precompiled_sepolicy;
     // If there is an odm partition, precompiled_sepolicy will be in
     // odm/etc/selinux. Otherwise it will be in vendor/etc/selinux.
     static constexpr const char vendor_precompiled_sepolicy[] =
@@ -231,62 +232,49 @@ bool FindPrecompiledSplitPolicy(std::string* file) {
     static constexpr const char odm_precompiled_sepolicy[] =
         "/odm/etc/selinux/precompiled_sepolicy";
     if (access(odm_precompiled_sepolicy, R_OK) == 0) {
-        *file = odm_precompiled_sepolicy;
+        precompiled_sepolicy = odm_precompiled_sepolicy;
     } else if (access(vendor_precompiled_sepolicy, R_OK) == 0) {
-        *file = vendor_precompiled_sepolicy;
+        precompiled_sepolicy = vendor_precompiled_sepolicy;
     } else {
-        PLOG(INFO) << "No precompiled sepolicy";
-        return false;
-    }
-    std::string actual_plat_id;
-    if (!ReadFirstLine("/system/etc/selinux/plat_sepolicy_and_mapping.sha256", &actual_plat_id)) {
-        PLOG(INFO) << "Failed to read "
-                      "/system/etc/selinux/plat_sepolicy_and_mapping.sha256";
-        return false;
-    }
-    std::string actual_system_ext_id;
-    if (!ReadFirstLine("/system_ext/etc/selinux/system_ext_sepolicy_and_mapping.sha256",
-                       &actual_system_ext_id)) {
-        PLOG(INFO) << "Failed to read "
-                      "/system_ext/etc/selinux/system_ext_sepolicy_and_mapping.sha256";
-        return false;
-    }
-    std::string actual_product_id;
-    if (!ReadFirstLine("/product/etc/selinux/product_sepolicy_and_mapping.sha256",
-                       &actual_product_id)) {
-        PLOG(INFO) << "Failed to read "
-                      "/product/etc/selinux/product_sepolicy_and_mapping.sha256";
-        return false;
+        return ErrnoError() << "No precompiled sepolicy at " << vendor_precompiled_sepolicy;
     }
 
-    std::string precompiled_plat_id;
-    std::string precompiled_plat_sha256 = *file + ".plat_sepolicy_and_mapping.sha256";
-    if (!ReadFirstLine(precompiled_plat_sha256.c_str(), &precompiled_plat_id)) {
-        PLOG(INFO) << "Failed to read " << precompiled_plat_sha256;
-        file->clear();
-        return false;
+    // Use precompiled sepolicy only when all corresponding hashes are equal.
+    // plat_sepolicy is always checked, while system_ext and product are checked only when they
+    // exist.
+    std::vector<std::pair<std::string, std::string>> sepolicy_hashes{
+            {"/system/etc/selinux/plat_sepolicy_and_mapping.sha256",
+             precompiled_sepolicy + ".plat_sepolicy_and_mapping.sha256"},
+    };
+
+    if (access("/system_ext/etc/selinux/system_ext_sepolicy.cil", F_OK) == 0) {
+        sepolicy_hashes.emplace_back(
+                "/system_ext/etc/selinux/system_ext_sepolicy_and_mapping.sha256",
+                precompiled_sepolicy + ".system_ext_sepolicy_and_mapping.sha256");
     }
-    std::string precompiled_system_ext_id;
-    std::string precompiled_system_ext_sha256 = *file + ".system_ext_sepolicy_and_mapping.sha256";
-    if (!ReadFirstLine(precompiled_system_ext_sha256.c_str(), &precompiled_system_ext_id)) {
-        PLOG(INFO) << "Failed to read " << precompiled_system_ext_sha256;
-        file->clear();
-        return false;
+
+    if (access("/product/etc/selinux/product_sepolicy.cil", F_OK) == 0) {
+        sepolicy_hashes.emplace_back("/product/etc/selinux/product_sepolicy_and_mapping.sha256",
+                                     precompiled_sepolicy + ".product_sepolicy_and_mapping.sha256");
     }
-    std::string precompiled_product_id;
-    std::string precompiled_product_sha256 = *file + ".product_sepolicy_and_mapping.sha256";
-    if (!ReadFirstLine(precompiled_product_sha256.c_str(), &precompiled_product_id)) {
-        PLOG(INFO) << "Failed to read " << precompiled_product_sha256;
-        file->clear();
-        return false;
+
+    for (const auto& [actual_id_path, precompiled_id_path] : sepolicy_hashes) {
+        std::string actual_id;
+        if (!ReadFirstLine(actual_id_path.c_str(), &actual_id)) {
+            return ErrnoError() << "Failed to read " << actual_id_path;
+        }
+
+        std::string precompiled_id;
+        if (!ReadFirstLine(precompiled_id_path.c_str(), &precompiled_id)) {
+            return ErrnoError() << "Failed to read " << precompiled_id_path;
+        }
+
+        if (actual_id.empty() || actual_id != precompiled_id) {
+            return Error() << actual_id_path << " and " << precompiled_id_path << " differ";
+        }
     }
-    if (actual_plat_id.empty() || actual_plat_id != precompiled_plat_id ||
-        actual_system_ext_id.empty() || actual_system_ext_id != precompiled_system_ext_id ||
-        actual_product_id.empty() || actual_product_id != precompiled_product_id) {
-        file->clear();
-        return false;
-    }
-    return true;
+
+    return precompiled_sepolicy;
 }
 
 bool GetVendorMappingVersion(std::string* plat_vers) {
@@ -333,15 +321,18 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
 
     // Load precompiled policy from vendor image, if a matching policy is found there. The policy
     // must match the platform policy on the system image.
-    std::string precompiled_sepolicy_file;
     // use_userdebug_policy requires compiling sepolicy with userdebug_plat_sepolicy.cil.
     // Thus it cannot use the precompiled policy from vendor image.
-    if (!use_userdebug_policy && FindPrecompiledSplitPolicy(&precompiled_sepolicy_file)) {
-        unique_fd fd(open(precompiled_sepolicy_file.c_str(), O_RDONLY | O_CLOEXEC | O_BINARY));
-        if (fd != -1) {
-            policy_file->fd = std::move(fd);
-            policy_file->path = std::move(precompiled_sepolicy_file);
-            return true;
+    if (!use_userdebug_policy) {
+        if (auto res = FindPrecompiledSplitPolicy(); res.ok()) {
+            unique_fd fd(open(res->c_str(), O_RDONLY | O_CLOEXEC | O_BINARY));
+            if (fd != -1) {
+                policy_file->fd = std::move(fd);
+                policy_file->path = std::move(*res);
+                return true;
+            }
+        } else {
+            LOG(INFO) << res.error();
         }
     }
     // No suitable precompiled policy could be loaded
