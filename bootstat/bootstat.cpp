@@ -1322,6 +1322,8 @@ void RecordBootComplete() {
 
   // Record the total time from device startup to boot complete, regardless of
   // encryption state.
+  // Note: we are recording seconds here even though the field in statsd atom specifies
+  // milliseconds.
   boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime_s.count());
 
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init");

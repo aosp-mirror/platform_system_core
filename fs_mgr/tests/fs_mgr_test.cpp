@@ -121,12 +121,13 @@ const std::vector<std::pair<std::string, std::string>> result_space = {
 
 const std::string bootconfig =
         "androidboot.bootdevice  = \" \"1d84000.ufshc\"\n"
+        "androidboot.boot_devices = \"dev1\", \"dev2,withcomma\", \"dev3\"\n"
         "androidboot.baseband = \"sdy\"\n"
         "androidboot.keymaster = \"1\"\n"
         "androidboot.serialno = \"BLAHBLAHBLAH\"\n"
         "androidboot.slot_suffix = \"_a\"\n"
         "androidboot.hardware.platform = \"sdw813\"\n"
-        "androidboot.hardware = \"foo\"\n"
+        "hardware = \"foo\"\n"
         "androidboot.revision = \"EVT1.0\"\n"
         "androidboot.bootloader = \"burp-0.1-7521\"\n"
         "androidboot.hardware.sku = \"mary\"\n"
@@ -152,12 +153,13 @@ const std::string bootconfig =
 
 const std::vector<std::pair<std::string, std::string>> bootconfig_result_space = {
         {"androidboot.bootdevice", "1d84000.ufshc"},
+        {"androidboot.boot_devices", "dev1, dev2,withcomma, dev3"},
         {"androidboot.baseband", "sdy"},
         {"androidboot.keymaster", "1"},
         {"androidboot.serialno", "BLAHBLAHBLAH"},
         {"androidboot.slot_suffix", "_a"},
         {"androidboot.hardware.platform", "sdw813"},
-        {"androidboot.hardware", "foo"},
+        {"hardware", "foo"},
         {"androidboot.revision", "EVT1.0"},
         {"androidboot.bootloader", "burp-0.1-7521"},
         {"androidboot.hardware.sku", "mary"},

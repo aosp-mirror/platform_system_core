@@ -58,6 +58,7 @@ struct PartitionCowCreator {
     std::vector<ChromeOSExtent> extra_extents = {};
     // True if compression is enabled.
     bool compression_enabled = false;
+    std::string compression_algorithm;
 
     struct Return {
         SnapshotStatus snapshot_status;
@@ -68,7 +69,7 @@ struct PartitionCowCreator {
 
   private:
     bool HasExtent(Partition* p, Extent* e);
-    uint64_t GetCowSize();
+    std::optional<uint64_t> GetCowSize();
 };
 
 }  // namespace snapshot

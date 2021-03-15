@@ -15,7 +15,6 @@
  */
 
 #include "TrustyApp.h"
-#include "TrustyIpc.h"
 
 #include <BufferAllocator/BufferAllocator.h>
 #include <android-base/logging.h>
@@ -27,6 +26,7 @@
 
 namespace android {
 namespace trusty {
+namespace confirmationui {
 
 using ::android::base::unique_fd;
 
@@ -162,5 +162,6 @@ TrustyApp::~TrustyApp() {
     LOG(INFO) << "Done shutting down TrustyApp";
 }
 
+}  // namespace confirmationui
 }  // namespace trusty
 }  // namespace android

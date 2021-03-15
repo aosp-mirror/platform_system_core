@@ -21,12 +21,14 @@ cc_library {
     vendor_available: true,
     srcs: [
         "coverage.cpp",
+        "uuid.cpp",
     ],
     export_include_dirs: [
         "include",
     ],
     shared_libs: [
         "libbase",
+        "libext2_uuid",
         "liblog",
         "libdmabufheap",
         "libtrusty",

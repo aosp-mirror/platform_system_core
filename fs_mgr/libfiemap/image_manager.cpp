@@ -16,6 +16,8 @@
 
 #include <libfiemap/image_manager.h>
 
+#include <optional>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -574,7 +576,7 @@ bool ImageManager::UnmapImageDevice(const std::string& name, bool force) {
         return false;
     }
     auto& dm = DeviceMapper::Instance();
-    LoopControl loop;
+    std::optional<LoopControl> loop;
 
     std::string status;
     auto status_file = GetStatusFilePath(name);
@@ -598,9 +600,14 @@ bool ImageManager::UnmapImageDevice(const std::string& name, bool force) {
                 return false;
             }
         } else if (pieces[0] == "loop") {
+            // Lazily connect to loop-control to avoid spurious errors in recovery.
+            if (!loop.has_value()) {
+                loop.emplace();
+            }
+
             // Failure to remove a loop device is not fatal, since we can still
             // remove the backing file if we want.
-            loop.Detach(pieces[1]);
+            loop->Detach(pieces[1]);
         } else {
             LOG(ERROR) << "Unknown status: " << pieces[0];
         }
