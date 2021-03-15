@@ -17,11 +17,27 @@ package {
 }
 
 cc_fuzz {
-    name: "trusty_confirmationui_fuzzer",
+    name: "trusty_confirmationui_tipc_fuzzer",
     defaults: ["trusty_fuzzer_defaults"],
-    srcs: ["fuzz.cpp"],
+    srcs: [":trusty_tipc_fuzzer"],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.confirmationui\"",
+        "-DTRUSTY_APP_UUID=\"7dee2364-c036-425b-b086-df0f6c233c1b\"",
+        "-DTRUSTY_APP_FILENAME=\"confirmationui.syms.elf\"",
+    ],
 
-    // The initial corpus for this fuzzer was derived by dumping bytes from
-    // ConfirmationUI VTS.
-    corpus: ["corpus/*"],
+}
+
+cc_fuzz {
+    name: "trusty_confirmationui_msg_fuzzer",
+    defaults: ["trusty_fuzzer_defaults"],
+    srcs: ["msg_fuzzer.cpp"],
+    include_dirs: ["system/core/trusty/confirmationui/include"],
+    shared_libs: [
+        "libdmabufheap",
+    ],
+
+    // The initial corpus for this fuzzer was derived by dumping messages from/to
+    // HAL to/from TA triggered by VtsHalConfirmationUIV1_0TargetTest.
+    corpus: ["msg_corpus/*"],
 }

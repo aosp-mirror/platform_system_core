@@ -30,7 +30,11 @@ class ISnapshotMergeStats {
     virtual bool Start() = 0;
     virtual void set_state(android::snapshot::UpdateState state, bool using_compression) = 0;
     virtual void set_cow_file_size(uint64_t cow_file_size) = 0;
+    virtual void set_total_cow_size_bytes(uint64_t bytes) = 0;
+    virtual void set_estimated_cow_size_bytes(uint64_t bytes) = 0;
     virtual uint64_t cow_file_size() = 0;
+    virtual uint64_t total_cow_size_bytes() = 0;
+    virtual uint64_t estimated_cow_size_bytes() = 0;
 
     // Called when merge ends. Properly clean up permanent storage.
     class Result {
@@ -54,6 +58,10 @@ class SnapshotMergeStats : public ISnapshotMergeStats {
     void set_state(android::snapshot::UpdateState state, bool using_compression) override;
     void set_cow_file_size(uint64_t cow_file_size) override;
     uint64_t cow_file_size() override;
+    void set_total_cow_size_bytes(uint64_t bytes) override;
+    void set_estimated_cow_size_bytes(uint64_t bytes) override;
+    uint64_t total_cow_size_bytes() override;
+    uint64_t estimated_cow_size_bytes() override;
     std::unique_ptr<Result> Finish() override;
 
   private:

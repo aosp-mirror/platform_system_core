@@ -471,6 +471,9 @@ on init
     chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
     start lmkd
 
+    # Set an initial boot level - start at 10 in case we need to add earlier ones.
+    setprop keystore.boot_level 10
+
     # Start essential services.
     start servicemanager
     start hwservicemanager
@@ -617,7 +620,19 @@ on late-fs
     # Load trusted keys from dm-verity protected partitions
     exec -- /system/bin/fsverity_init --load-verified-keys
 
+    # Set up a tracing instance for system_server to monitor error_report_end events.
+    # These are sent by kernel tools like KASAN and KFENCE when a memory corruption
+    # is detected.
+    mkdir /sys/kernel/tracing/instances/bootreceiver 0700 system system
+    restorecon_recursive /sys/kernel/tracing/instances/bootreceiver
+    write /sys/kernel/tracing/instances/bootreceiver/buffer_size_kb 1
+    write /sys/kernel/tracing/instances/bootreceiver/trace_options disable_on_free
+    write /sys/kernel/tracing/instances/bootreceiver/events/error_report/error_report_end/enable 1
+
 on post-fs-data
+    # Boot level 30 - at this point daemons like apexd and odsign run
+    setprop keystore.boot_level 30
+
     mark_post_data
 
     # Start checkpoint before we touch data
@@ -895,6 +910,8 @@ on post-fs-data
 
     # Lock the fs-verity keyring, so no more keys can be added
     exec -- /system/bin/fsverity_init --lock
+
+    setprop keystore.boot_level 40
 
     # Allow apexd to snapshot and restore device encrypted apex data in the case
     # of a rollback. This should be done immediately after DE_user data keys

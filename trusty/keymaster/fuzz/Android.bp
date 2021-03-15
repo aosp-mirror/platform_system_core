@@ -19,7 +19,12 @@ package {
 cc_fuzz {
     name: "trusty_keymaster_fuzzer",
     defaults: ["trusty_fuzzer_defaults"],
-    srcs: ["fuzz.cpp"],
+    srcs: [":trusty_tipc_fuzzer"],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.keymaster\"",
+        "-DTRUSTY_APP_UUID=\"5f902ace-5e5c-4cd8-ae54-87b88c22ddaf\"",
+        "-DTRUSTY_APP_FILENAME=\"keymaster.syms.elf\"",
+    ],
 
     // The initial corpus for this fuzzer was derived by dumping messages from
     // the `secure_env` emulator interface for cuttlefish while running the

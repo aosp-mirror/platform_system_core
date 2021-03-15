@@ -42,6 +42,7 @@
 #include <android-base/unique_fd.h>
 #include <android/log.h>
 #include <async_safe/log.h>
+#include <bionic/macros.h>
 #include <log/log.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
@@ -362,7 +363,7 @@ void dump_memory_and_code(log_t* log, unwindstack::Maps* maps, unwindstack::Memo
   regs->IterateRegisters([log, maps, memory](const char* reg_name, uint64_t reg_value) {
     std::string label{"memory near "s + reg_name};
     if (maps) {
-      unwindstack::MapInfo* map_info = maps->Find(reg_value);
+      unwindstack::MapInfo* map_info = maps->Find(untag_address(reg_value));
       if (map_info != nullptr && !map_info->name.empty()) {
         label += " (" + map_info->name + ")";
       }
@@ -592,7 +593,6 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
   }
 
   ProcessInfo process_info;
-  unique_fd attr_fd(open("/proc/self/attr/current", O_RDONLY | O_CLOEXEC));
   process_info.abort_msg_address = abort_msg_address;
   engrave_tombstone(unique_fd(dup(tombstone_fd)), unique_fd(dup(proto_fd)), &unwinder, threads, tid,
                     process_info, nullptr, nullptr);

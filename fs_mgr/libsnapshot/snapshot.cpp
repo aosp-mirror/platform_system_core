@@ -230,6 +230,15 @@ SnapshotManager::Slot SnapshotManager::GetCurrentSlot() {
     return Slot::Target;
 }
 
+std::string SnapshotManager::GetSnapshotSlotSuffix() {
+    switch (GetCurrentSlot()) {
+        case Slot::Target:
+            return device_->GetSlotSuffix();
+        default:
+            return device_->GetOtherSlotSuffix();
+    }
+}
+
 static bool RemoveFileIfExists(const std::string& path) {
     std::string message;
     if (!android::base::RemoveFileIfExists(path, &message)) {
@@ -359,6 +368,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_
     status->set_sectors_allocated(0);
     status->set_metadata_sectors(0);
     status->set_compression_enabled(cow_creator->compression_enabled);
+    status->set_compression_algorithm(cow_creator->compression_algorithm);
 
     if (!WriteSnapshotStatus(lock, *status)) {
         PLOG(ERROR) << "Could not write snapshot status: " << status->name();
@@ -623,7 +633,7 @@ bool SnapshotManager::DeleteSnapshot(LockedFile* lock, const std::string& name) 
     return true;
 }
 
-bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
+bool SnapshotManager::InitiateMerge() {
     auto lock = LockExclusive();
     if (!lock) return false;
 
@@ -690,7 +700,6 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
 
     std::vector<std::string> first_merge_group;
 
-    uint64_t total_cow_file_size = 0;
     DmTargetSnapshot::Status initial_target_values = {};
     for (const auto& snapshot : snapshots) {
         DmTargetSnapshot::Status current_status;
@@ -705,16 +714,11 @@ bool SnapshotManager::InitiateMerge(uint64_t* cow_file_size) {
         if (!ReadSnapshotStatus(lock.get(), snapshot, &snapshot_status)) {
             return false;
         }
-        total_cow_file_size += snapshot_status.cow_file_size();
 
         compression_enabled |= snapshot_status.compression_enabled();
         if (DecideMergePhase(snapshot_status) == MergePhase::FIRST_PHASE) {
             first_merge_group.emplace_back(snapshot);
         }
-    }
-
-    if (cow_file_size) {
-        *cow_file_size = total_cow_file_size;
     }
 
     SnapshotUpdateStatus initial_status;
@@ -894,6 +898,8 @@ UpdateState SnapshotManager::ProcessUpdateState(const std::function<bool()>& cal
                                                 const std::function<bool()>& before_cancel) {
     while (true) {
         UpdateState state = CheckMergeState(before_cancel);
+        LOG(INFO) << "ProcessUpdateState handling state: " << state;
+
         if (state == UpdateState::MergeFailed) {
             AcknowledgeMergeFailure();
         }
@@ -920,13 +926,15 @@ UpdateState SnapshotManager::CheckMergeState(const std::function<bool()>& before
     }
 
     UpdateState state = CheckMergeState(lock.get(), before_cancel);
+    LOG(INFO) << "CheckMergeState for snapshots returned: " << state;
+
     if (state == UpdateState::MergeCompleted) {
         // Do this inside the same lock. Failures get acknowledged without the
         // lock, because flock() might have failed.
         AcknowledgeMergeSuccess(lock.get());
     } else if (state == UpdateState::Cancelled) {
-        if (!RemoveAllUpdateState(lock.get(), before_cancel)) {
-            return ReadSnapshotUpdateStatus(lock.get()).state();
+        if (!device_->IsRecovery() && !RemoveAllUpdateState(lock.get(), before_cancel)) {
+            LOG(ERROR) << "Failed to remove all update state after acknowleding cancelled update.";
         }
     }
     return state;
@@ -968,13 +976,23 @@ UpdateState SnapshotManager::CheckMergeState(LockedFile* lock,
         return UpdateState::MergeFailed;
     }
 
+    auto other_suffix = device_->GetOtherSlotSuffix();
+
     bool cancelled = false;
     bool failed = false;
     bool merging = false;
     bool needs_reboot = false;
     bool wrong_phase = false;
     for (const auto& snapshot : snapshots) {
+        if (android::base::EndsWith(snapshot, other_suffix)) {
+            // This will have triggered an error message in InitiateMerge already.
+            LOG(INFO) << "Skipping merge validation of unexpected snapshot: " << snapshot;
+            continue;
+        }
+
         UpdateState snapshot_state = CheckTargetMergeState(lock, snapshot, update_status);
+        LOG(INFO) << "CheckTargetMergeState for " << snapshot << " returned: " << snapshot_state;
+
         switch (snapshot_state) {
             case UpdateState::MergeFailed:
                 failed = true;
@@ -1173,7 +1191,7 @@ void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
     // indicator that cleanup is needed on reboot. If a factory data reset
     // was requested, it doesn't matter, everything will get wiped anyway.
     // To make testing easier we consider a /data wipe as cleaned up.
-    if (device_->IsRecovery() && !in_factory_data_reset_) {
+    if (device_->IsRecovery()) {
         WriteUpdateState(lock, UpdateState::MergeCompleted);
         return;
     }
@@ -1247,7 +1265,7 @@ static bool DeleteDmDevice(const std::string& name, const std::chrono::milliseco
             LOG(ERROR) << "DeleteDevice timeout: " << name;
             return false;
         }
-        std::this_thread::sleep_for(250ms);
+        std::this_thread::sleep_for(400ms);
     }
 
     return true;
@@ -1692,6 +1710,7 @@ UpdateState SnapshotManager::GetUpdateState(double* progress) {
     for (const auto& snapshot : snapshots) {
         DmTargetSnapshot::Status current_status;
 
+        if (!IsSnapshotDevice(snapshot)) continue;
         if (!QuerySnapshotStatus(snapshot, nullptr, &current_status)) continue;
 
         fake_snapshots_status.sectors_allocated += current_status.sectors_allocated;
@@ -1716,7 +1735,8 @@ bool SnapshotManager::UpdateUsesCompression(LockedFile* lock) {
     return update_status.compression_enabled();
 }
 
-bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots) {
+bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots,
+                                    const std::string& suffix) {
     CHECK(lock);
 
     auto dir_path = metadata_dir_ + "/snapshots"s;
@@ -1729,7 +1749,12 @@ bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* 
     struct dirent* dp;
     while ((dp = readdir(dir.get())) != nullptr) {
         if (dp->d_type != DT_REG) continue;
-        snapshots->emplace_back(dp->d_name);
+
+        std::string name(dp->d_name);
+        if (!suffix.empty() && !android::base::EndsWith(name, suffix)) {
+            continue;
+        }
+        snapshots->emplace_back(std::move(name));
     }
     return true;
 }
@@ -2645,9 +2670,20 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     // these devices.
     AutoDeviceList created_devices;
 
-    bool use_compression = IsCompressionEnabled() &&
-                           manifest.dynamic_partition_metadata().vabc_enabled() &&
-                           !device_->IsRecovery();
+    const auto& dap_metadata = manifest.dynamic_partition_metadata();
+    bool use_compression =
+            IsCompressionEnabled() && dap_metadata.vabc_enabled() && !device_->IsRecovery();
+
+    std::string compression_algorithm;
+    if (use_compression) {
+        compression_algorithm = dap_metadata.vabc_compression_param();
+        if (compression_algorithm.empty()) {
+            // Older OTAs don't set an explicit compression type, so default to gz.
+            compression_algorithm = "gz";
+        }
+    } else {
+        compression_algorithm = "none";
+    }
 
     PartitionCowCreator cow_creator{
             .target_metadata = target_metadata.get(),
@@ -2658,6 +2694,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .update = nullptr,
             .extra_extents = {},
             .compression_enabled = use_compression,
+            .compression_algorithm = compression_algorithm,
     };
 
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
@@ -2902,7 +2939,7 @@ Return SnapshotManager::InitializeUpdateSnapshots(
                 return Return::Error();
             }
 
-            CowWriter writer(CowOptions{});
+            CowWriter writer(CowOptions{.compression = it->second.compression_algorithm()});
             if (!writer.Initialize(fd) || !writer.Finalize()) {
                 LOG(ERROR) << "Could not initialize COW device for " << target_partition->name();
                 return Return::Error();
@@ -3009,7 +3046,7 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     CHECK(lock);
 
     CowOptions cow_options;
-    cow_options.compression = "gz";
+    cow_options.compression = status.compression_algorithm();
     cow_options.max_blocks = {status.device_size() / cow_options.block_size};
 
     // Currently we don't support partial snapshots, since partition_cow_creator
@@ -3148,6 +3185,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
         ss << "    cow file size (bytes): " << status.cow_file_size() << std::endl;
         ss << "    allocated sectors: " << status.sectors_allocated() << std::endl;
         ss << "    metadata sectors: " << status.metadata_sectors() << std::endl;
+        ss << "    compression: " << status.compression_algorithm() << std::endl;
     }
     os << ss.rdbuf();
     return ok;
@@ -3212,16 +3250,27 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
     };
 
     in_factory_data_reset_ = true;
-    bool ok = ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback);
+    UpdateState state =
+            ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback);
     in_factory_data_reset_ = false;
 
-    if (!ok) {
+    if (state == UpdateState::MergeFailed) {
         return false;
     }
 
     // Nothing should be depending on partitions now, so unmap them all.
     if (!UnmapAllPartitionsInRecovery()) {
         LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
+    }
+
+    if (state != UpdateState::None) {
+        auto lock = LockExclusive();
+        if (!lock) return false;
+
+        // Zap the update state so the bootloader doesn't think we're still
+        // merging. It's okay if this fails, it's informative only at this
+        // point.
+        WriteUpdateState(lock.get(), UpdateState::None);
     }
     return true;
 }
@@ -3257,15 +3306,15 @@ bool SnapshotManager::FinishMergeInRecovery() {
     return true;
 }
 
-bool SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
-                                                   const std::function<bool()>& callback) {
+UpdateState SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
+                                                          const std::function<bool()>& callback) {
     auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
     UpdateState state = ProcessUpdateState(callback);
     LOG(INFO) << "Update state in recovery: " << state;
     switch (state) {
         case UpdateState::MergeFailed:
             LOG(ERROR) << "Unrecoverable merge failure detected.";
-            return false;
+            return state;
         case UpdateState::Unverified: {
             // If an OTA was just applied but has not yet started merging:
             //
@@ -3285,8 +3334,12 @@ bool SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
                 if (allow_forward_merge &&
                     access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0) {
                     LOG(INFO) << "Forward merge allowed, initiating merge now.";
-                    return InitiateMerge() &&
-                           ProcessUpdateStateOnDataWipe(false /* allow_forward_merge */, callback);
+
+                    if (!InitiateMerge()) {
+                        LOG(ERROR) << "Failed to initiate merge on data wipe.";
+                        return UpdateState::MergeFailed;
+                    }
+                    return ProcessUpdateStateOnDataWipe(false /* allow_forward_merge */, callback);
                 }
 
                 LOG(ERROR) << "Reverting to old slot since update will be deleted.";
@@ -3304,7 +3357,7 @@ bool SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
         default:
             break;
     }
-    return true;
+    return state;
 }
 
 bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
@@ -3519,6 +3572,35 @@ MergePhase SnapshotManager::DecideMergePhase(const SnapshotStatus& status) {
         return MergePhase::FIRST_PHASE;
     }
     return MergePhase::SECOND_PHASE;
+}
+
+void SnapshotManager::UpdateCowStats(ISnapshotMergeStats* stats) {
+    auto lock = LockExclusive();
+    if (!lock) return;
+
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock.get(), &snapshots, GetSnapshotSlotSuffix())) {
+        LOG(ERROR) << "Could not list snapshots";
+        return;
+    }
+
+    uint64_t cow_file_size = 0;
+    uint64_t total_cow_size = 0;
+    uint64_t estimated_cow_size = 0;
+    for (const auto& snapshot : snapshots) {
+        SnapshotStatus status;
+        if (!ReadSnapshotStatus(lock.get(), snapshot, &status)) {
+            return;
+        }
+
+        cow_file_size += status.cow_file_size();
+        total_cow_size += status.cow_file_size() + status.cow_partition_size();
+        estimated_cow_size += status.estimated_cow_size();
+    }
+
+    stats->set_cow_file_size(cow_file_size);
+    stats->set_total_cow_size_bytes(total_cow_size);
+    stats->set_estimated_cow_size_bytes(estimated_cow_size);
 }
 
 }  // namespace snapshot

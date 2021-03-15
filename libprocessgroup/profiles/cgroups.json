@@ -26,7 +26,8 @@
       "Path": "/dev/memcg",
       "Mode": "0700",
       "UID": "root",
-      "GID": "system"
+      "GID": "system",
+      "Optional": true
     }
   ],
   "Cgroups2": {
