@@ -162,7 +162,7 @@ message SnapshotUpdateStatus {
     MergePhase merge_phase = 6;
 }
 
-// Next: 7
+// Next: 9
 message SnapshotMergeReport {
     // Status of the update after the merge attempts.
     UpdateState state = 1;
@@ -182,4 +182,10 @@ message SnapshotMergeReport {
 
     // Sum of the estimated COW fields in the OTA manifest.
     uint64 estimated_cow_size_bytes = 6;
+
+    // Time from boot to sys.boot_completed, in milliseconds.
+    uint32 boot_complete_time_ms = 7;
+
+    // Time from sys.boot_completed to merge start, in milliseconds.
+    uint32 boot_complete_to_merge_start_time_ms = 8;
 }
