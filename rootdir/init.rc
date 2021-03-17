@@ -1078,7 +1078,7 @@ on boot
     chown root radio /proc/cmdline
 
     # Define default initial receive window size in segments.
-    setprop net.tcp.default_init_rwnd 60
+    setprop net.tcp_def_init_rwnd 60
 
     # Start standard binderized HAL daemons
     class_start hal
