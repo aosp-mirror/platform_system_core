@@ -207,7 +207,7 @@ Comma-separated list of uid numbers or names. Default is empty or false.
 
 The `llkd` does not monitor the specified subset of processes for live lock stack
 signatures. Default is process names
-`init,lmkd.llkd,llkd,keystore,ueventd,apexd,logd`. Prevents the sepolicy
+`init,lmkd.llkd,llkd,keystore,keystore2,ueventd,apexd,logd`. Prevents the sepolicy
 violation associated with processes that block `ptrace` (as these can't be
 checked). **Active only on userdebug and eng builds**. For details on build
 types, refer to [Building Android](/setup/build/building#choose-a-target).
