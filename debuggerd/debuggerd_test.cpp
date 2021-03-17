@@ -69,7 +69,7 @@ using android::base::unique_fd;
 #define ARCH_SUFFIX ""
 #endif
 
-constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
+constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
 
 #define TIMEOUT(seconds, expr)                                     \
   [&]() {                                                          \
@@ -157,7 +157,7 @@ static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, uniq
 class CrasherTest : public ::testing::Test {
  public:
   pid_t crasher_pid = -1;
-  bool previous_wait_for_gdb;
+  bool previous_wait_for_debugger;
   unique_fd crasher_pipe;
   unique_fd intercept_fd;
 
@@ -178,8 +178,13 @@ class CrasherTest : public ::testing::Test {
 };
 
 CrasherTest::CrasherTest() {
-  previous_wait_for_gdb = android::base::GetBoolProperty(kWaitForGdbKey, false);
-  android::base::SetProperty(kWaitForGdbKey, "0");
+  previous_wait_for_debugger = android::base::GetBoolProperty(kWaitForDebuggerKey, false);
+  android::base::SetProperty(kWaitForDebuggerKey, "0");
+
+  // Clear the old property too, just in case someone's been using it
+  // on this device. (We only document the new name, but we still support
+  // the old name so we don't break anyone's existing setups.)
+  android::base::SetProperty("debug.debuggerd.wait_for_gdb", "0");
 }
 
 CrasherTest::~CrasherTest() {
@@ -189,7 +194,7 @@ CrasherTest::~CrasherTest() {
     TEMP_FAILURE_RETRY(waitpid(crasher_pid, &status, WUNTRACED));
   }
 
-  android::base::SetProperty(kWaitForGdbKey, previous_wait_for_gdb ? "1" : "0");
+  android::base::SetProperty(kWaitForDebuggerKey, previous_wait_for_debugger ? "1" : "0");
 }
 
 void CrasherTest::StartIntercept(unique_fd* output_fd, DebuggerdDumpType intercept_type) {
@@ -734,9 +739,9 @@ TEST_F(CrasherTest, intercept_timeout) {
   AssertDeath(SIGABRT);
 }
 
-TEST_F(CrasherTest, wait_for_gdb) {
-  if (!android::base::SetProperty(kWaitForGdbKey, "1")) {
-    FAIL() << "failed to enable wait_for_gdb";
+TEST_F(CrasherTest, wait_for_debugger) {
+  if (!android::base::SetProperty(kWaitForDebuggerKey, "1")) {
+    FAIL() << "failed to enable wait_for_debugger";
   }
   sleep(1);
 
