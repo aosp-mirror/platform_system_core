@@ -250,6 +250,8 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
     }
 
     ops_ = ops_buffer;
+    ops_->shrink_to_fit();
+
     return true;
 }
 
