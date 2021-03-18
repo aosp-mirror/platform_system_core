@@ -1,6 +1,10 @@
 // Lazy loading version of libstatssocket that can be used by code
 // that is running before the statsd APEX is mounted and
 // libstatssocket.so is available.
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_library_static {
     name: "libstatssocket_lazy",
     header_libs: [
