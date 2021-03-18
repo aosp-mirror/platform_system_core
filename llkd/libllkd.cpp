@@ -115,8 +115,8 @@ std::unordered_map<std::string, std::unordered_set<std::string>> llkIgnorelistPa
 // list of uids, and uid names, to skip, default nothing
 std::unordered_set<std::string> llkIgnorelistUid;
 #ifdef __PTRACE_ENABLED__
-// list of names to skip stack checking. "init", "lmkd", "llkd", "keystore" or
-// "logd" (if not userdebug).
+// list of names to skip stack checking. "init", "lmkd", "llkd", "keystore",
+// "keystore2", or "logd" (if not userdebug).
 std::unordered_set<std::string> llkIgnorelistStack;
 #endif
 
