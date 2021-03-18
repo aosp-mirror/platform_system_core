@@ -134,14 +134,10 @@ noinline int crash(int a) {
     return a*2;
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wfree-nonheap-object"
-
 noinline void abuse_heap() {
     char buf[16];
     free(buf); // GCC is smart enough to warn about this, but we're doing it deliberately.
 }
-#pragma clang diagnostic pop
 
 noinline void leak() {
     while (true) {

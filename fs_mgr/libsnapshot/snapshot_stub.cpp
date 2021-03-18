@@ -131,10 +131,6 @@ class SnapshotMergeStatsStub : public ISnapshotMergeStats {
     void set_estimated_cow_size_bytes(uint64_t) override {}
     uint64_t total_cow_size_bytes() override { return 0; }
     uint64_t estimated_cow_size_bytes() override { return 0; }
-    void set_boot_complete_time_ms(uint32_t) override {}
-    uint32_t boot_complete_time_ms() override { return 0; }
-    void set_boot_complete_to_merge_start_time_ms(uint32_t) override {}
-    uint32_t boot_complete_to_merge_start_time_ms() override { return 0; }
 };
 
 ISnapshotMergeStats* SnapshotManagerStub::GetSnapshotMergeStatsInstance() {

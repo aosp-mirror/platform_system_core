@@ -51,21 +51,13 @@ extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
         exit(-1);
     }
 
-    /* Make sure lazy-loaded TAs have started and connected to coverage service. */
-    TrustyApp ta(TIPC_DEV, TRUSTY_APP_PORT);
-    auto ret = ta.Connect();
-    if (!ret.ok()) {
-        std::cerr << ret.error() << std::endl;
-        exit(-1);
-    }
-
     record = std::make_unique<CoverageRecord>(TIPC_DEV, &module_uuid, TRUSTY_APP_FILENAME);
     if (!record) {
         std::cerr << "Failed to allocate coverage record" << std::endl;
         exit(-1);
     }
 
-    ret = record->Open();
+    auto ret = record->Open();
     if (!ret.ok()) {
         std::cerr << ret.error() << std::endl;
         exit(-1);

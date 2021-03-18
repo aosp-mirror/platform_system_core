@@ -13,6 +13,7 @@ cc_defaults {
         "-Werror",
         "-O0",
         "-fstack-protector-all",
+        "-Wno-free-nonheap-object",
         "-Wno-date-time",
     ],
     srcs: ["crasher.cpp"],
