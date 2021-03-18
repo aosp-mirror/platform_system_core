@@ -337,12 +337,21 @@ int FirstStageMain(int argc, char** argv) {
         SwitchRoot("/first_stage_ramdisk");
     }
 
+    std::string force_debuggable("/force_debuggable");
+    std::string adb_debug_prop("/adb_debug.prop");
+    std::string userdebug_sepolicy("/userdebug_plat_sepolicy.cil");
+    if (IsRecoveryMode()) {
+        // Update these file paths since we didn't switch root
+        force_debuggable.insert(0, "/first_stage_ramdisk");
+        adb_debug_prop.insert(0, "/first_stage_ramdisk");
+        userdebug_sepolicy.insert(0, "/first_stage_ramdisk");
+    }
     // If this file is present, the second-stage init will use a userdebug sepolicy
     // and load adb_debug.prop to allow adb root, if the device is unlocked.
-    if (access("/force_debuggable", F_OK) == 0) {
+    if (access(force_debuggable.c_str(), F_OK) == 0) {
         std::error_code ec;  // to invoke the overloaded copy_file() that won't throw.
-        if (!fs::copy_file("/adb_debug.prop", kDebugRamdiskProp, ec) ||
-            !fs::copy_file("/userdebug_plat_sepolicy.cil", kDebugRamdiskSEPolicy, ec)) {
+        if (!fs::copy_file(adb_debug_prop, kDebugRamdiskProp, ec) ||
+            !fs::copy_file(userdebug_sepolicy, kDebugRamdiskSEPolicy, ec)) {
             LOG(ERROR) << "Failed to setup debug ramdisk";
         } else {
             // setenv for second-stage init to read above kDebugRamdisk* files.
