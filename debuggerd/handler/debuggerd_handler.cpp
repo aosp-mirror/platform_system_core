@@ -274,7 +274,7 @@ static void create_vm_process() {
 
     // There appears to be a bug in the kernel where our death causes SIGHUP to
     // be sent to our process group if we exit while it has stopped jobs (e.g.
-    // because of wait_for_gdb). Use setsid to create a new process group to
+    // because of wait_for_debugger). Use setsid to create a new process group to
     // avoid hitting this.
     setsid();
 
@@ -600,7 +600,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // starting to dump right before our death.
     pthread_mutex_unlock(&crash_mutex);
   } else {
-    // Resend the signal, so that either gdb or the parent's waitpid sees it.
+    // Resend the signal, so that either the debugger or the parent's waitpid sees it.
     resend_signal(info);
   }
 }

@@ -884,9 +884,12 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
-    # Export *CLASSPATH variables from /etc/classpath
-    # TODO(b/180105615): export from the generated file instead.
-    load_exports /etc/classpath
+    # Define and export *CLASSPATH variables
+    mkdir /data/system/environ 0700 system system
+    # Must start before 'odsign', as odsign depends on *CLASSPATH variables
+    exec_start derive_classpath
+    load_exports /data/system/environ/classpath
+    rm /data/system/environ/classpath
 
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
@@ -902,6 +905,7 @@ on post-fs-data
 
     # Start the on-device signing daemon, and wait for it to finish, to ensure
     # ART artifacts are generated if needed.
+    # Must start after 'derive_classpath' to have *CLASSPATH variables set.
     exec_start odsign
 
     # After apexes are mounted, tell keymaster early boot has ended, so it will
