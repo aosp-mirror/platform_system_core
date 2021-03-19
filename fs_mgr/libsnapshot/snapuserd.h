@@ -108,7 +108,7 @@ class WorkerThread {
     bool ProcessIORequest();
     int ReadData(sector_t sector, size_t size);
     int ReadUnalignedSector(sector_t sector, size_t size,
-                            std::map<sector_t, const CowOperation*>::iterator& it);
+                            std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it);
 
     // Processing COW operations
     bool ProcessCowOp(const CowOperation* cow_op);
@@ -164,16 +164,21 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     bool InitializeWorkers();
     std::shared_ptr<Snapuserd> GetSharedPtr() { return shared_from_this(); }
 
-    std::map<sector_t, const CowOperation*>& GetChunkMap() { return chunk_map_; }
+    std::vector<std::pair<sector_t, const CowOperation*>>& GetChunkVec() { return chunk_vec_; }
     const std::vector<std::unique_ptr<uint8_t[]>>& GetMetadataVec() const { return vec_; }
+
+    static bool compare(std::pair<sector_t, const CowOperation*> p1,
+                        std::pair<sector_t, const CowOperation*> p2) {
+        return p1.first < p2.first;
+    }
 
   private:
     std::vector<std::unique_ptr<WorkerThread>> worker_threads_;
 
-    bool ReadMetadata();
     bool IsChunkIdMetadata(chunk_t chunk);
     chunk_t GetNextAllocatableChunkId(chunk_t chunk_id);
 
+    bool ReadMetadata();
     sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
     chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
     bool IsBlockAligned(int read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
@@ -197,15 +202,9 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     // mapping of old-chunk to new-chunk
     std::vector<std::unique_ptr<uint8_t[]>> vec_;
 
-    // Key - Sector
-    // Value - cow operation
-    //
-    // chunk_map stores the pseudo mapping of sector
-    // to COW operations. Each COW op is 4k; however,
-    // we can get a read request which are as small
-    // as 512 bytes. Hence, we need to binary search
-    // in the chunk_map to find the nearest COW op.
-    std::map<sector_t, const CowOperation*> chunk_map_;
+    // chunk_vec stores the pseudo mapping of sector
+    // to COW operations.
+    std::vector<std::pair<sector_t, const CowOperation*>> chunk_vec_;
 
     std::mutex lock_;
 
