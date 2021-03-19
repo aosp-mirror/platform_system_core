@@ -1,0 +1,136 @@
+// Copyright (C) 2021 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+python_binary_host {
+    name: "fastboot_gen_rand",
+    visibility: [":__subpackages__"],
+    srcs: ["fastboot_gen_rand.py"],
+}
+
+genrule_defaults {
+    name: "fastboot_test_data_gen_defaults",
+    visibility: ["//system/core/fastboot"],
+    tools: [
+        "fastboot_gen_rand",
+    ],
+}
+
+// Genrules for components of test vendor boot image.
+
+// Fake dtb image.
+genrule {
+    name: "fastboot_test_dtb",
+    defaults: ["fastboot_test_data_gen_defaults"],
+    out: ["test_dtb.img"],
+    cmd: "$(location fastboot_gen_rand) --seed dtb --length 1024 > $(out)",
+}
+
+// Fake bootconfig image.
+genrule {
+    name: "fastboot_test_bootconfig",
+    defaults: ["fastboot_test_data_gen_defaults"],
+    out: ["test_bootconfig.img"],
+    cmd: "$(location fastboot_gen_rand) --seed bootconfig --length 1024 > $(out)",
+}
+
+// Fake vendor ramdisk with type "none".
+genrule {
+    name: "fastboot_test_vendor_ramdisk_none",
+    defaults: ["fastboot_test_data_gen_defaults"],
+    out: ["test_vendor_ramdisk_none.img"],
+    cmd: "$(location fastboot_gen_rand) --seed vendor_ramdisk_none --length 1024 > $(out)",
+}
+
+// Fake vendor ramdisk with type "platform".
+genrule {
+    name: "fastboot_test_vendor_ramdisk_platform",
+    defaults: ["fastboot_test_data_gen_defaults"],
+    out: ["test_vendor_ramdisk_platform.img"],
+    cmd: "$(location fastboot_gen_rand) --seed vendor_ramdisk_platform --length 1024 > $(out)",
+}
+
+// Fake replacement ramdisk.
+genrule {
+    name: "fastboot_test_vendor_ramdisk_replace",
+    defaults: ["fastboot_test_data_gen_defaults"],
+    out: ["test_vendor_ramdisk_replace.img"],
+    cmd: "$(location fastboot_gen_rand) --seed replace --length 3072 > $(out)",
+}
+
+// Genrules for test vendor boot images.
+
+fastboot_sign_test_image = "$(location avbtool) add_hash_footer --salt 00 --image $(out) " +
+    "--partition_name vendor_boot --partition_size $$(( 1 * 1024 * 1024 ))"
+
+genrule_defaults {
+    name: "fastboot_test_vendor_boot_gen_defaults",
+    defaults: ["fastboot_test_data_gen_defaults"],
+    tools: [
+        "avbtool",
+        "mkbootimg",
+    ],
+}
+
+genrule {
+    name: "fastboot_test_vendor_boot_v3",
+    defaults: ["fastboot_test_vendor_boot_gen_defaults"],
+    out: ["vendor_boot_v3.img"],
+    srcs: [
+        ":fastboot_test_dtb",
+        ":fastboot_test_vendor_ramdisk_none",
+    ],
+    cmd: "$(location mkbootimg) --header_version 3 " +
+        "--vendor_ramdisk $(location :fastboot_test_vendor_ramdisk_none) " +
+        "--dtb $(location :fastboot_test_dtb) " +
+        "--vendor_boot $(out) && " +
+        fastboot_sign_test_image,
+}
+
+genrule {
+    name: "fastboot_test_vendor_boot_v4_without_frag",
+    defaults: ["fastboot_test_vendor_boot_gen_defaults"],
+    out: ["vendor_boot_v4_without_frag.img"],
+    srcs: [
+        ":fastboot_test_dtb",
+        ":fastboot_test_vendor_ramdisk_none",
+        ":fastboot_test_bootconfig",
+    ],
+    cmd: "$(location mkbootimg) --header_version 4 " +
+        "--vendor_ramdisk $(location :fastboot_test_vendor_ramdisk_none) " +
+        "--dtb $(location :fastboot_test_dtb) " +
+        "--vendor_bootconfig $(location :fastboot_test_bootconfig) " +
+        "--vendor_boot $(out) && " +
+        fastboot_sign_test_image,
+}
+
+genrule {
+    name: "fastboot_test_vendor_boot_v4_with_frag",
+    defaults: ["fastboot_test_vendor_boot_gen_defaults"],
+    out: ["vendor_boot_v4_with_frag.img"],
+    srcs: [
+        ":fastboot_test_dtb",
+        ":fastboot_test_vendor_ramdisk_none",
+        ":fastboot_test_vendor_ramdisk_platform",
+        ":fastboot_test_bootconfig",
+    ],
+    cmd: "$(location mkbootimg) --header_version 4 " +
+        "--dtb $(location :fastboot_test_dtb) " +
+        "--vendor_bootconfig $(location :fastboot_test_bootconfig) " +
+        "--ramdisk_type none --ramdisk_name none_ramdisk " +
+        "--vendor_ramdisk_fragment $(location :fastboot_test_vendor_ramdisk_none) " +
+        "--ramdisk_type platform --ramdisk_name platform_ramdisk " +
+        "--vendor_ramdisk_fragment $(location :fastboot_test_vendor_ramdisk_platform) " +
+        "--vendor_boot $(out) && " +
+        fastboot_sign_test_image,
+}
