@@ -61,6 +61,7 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_OEM, OemCmdHandler},
               {FB_CMD_GSI, GsiHandler},
               {FB_CMD_SNAPSHOT_UPDATE, SnapshotUpdateHandler},
+              {FB_CMD_FETCH, FetchHandler},
       }),
       boot_control_hal_(IBootControl::getService()),
       health_hal_(get_health_service()),
@@ -137,14 +138,18 @@ bool FastbootDevice::WriteStatus(FastbootResult result, const std::string& messa
 }
 
 bool FastbootDevice::HandleData(bool read, std::vector<char>* data) {
-    auto read_write_data_size = read ? this->get_transport()->Read(data->data(), data->size())
-                                     : this->get_transport()->Write(data->data(), data->size());
+    return HandleData(read, data->data(), data->size());
+}
+
+bool FastbootDevice::HandleData(bool read, char* data, uint64_t size) {
+    auto read_write_data_size = read ? this->get_transport()->Read(data, size)
+                                     : this->get_transport()->Write(data, size);
     if (read_write_data_size == -1) {
         LOG(ERROR) << (read ? "read from" : "write to") << " transport failed";
         return false;
     }
-    if (static_cast<size_t>(read_write_data_size) != data->size()) {
-        LOG(ERROR) << (read ? "read" : "write") << " expected " << data->size() << " bytes, got "
+    if (static_cast<size_t>(read_write_data_size) != size) {
+        LOG(ERROR) << (read ? "read" : "write") << " expected " << size << " bytes, got "
                    << read_write_data_size;
         return false;
     }
