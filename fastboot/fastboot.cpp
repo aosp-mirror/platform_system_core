@@ -1309,6 +1309,7 @@ static void CancelSnapshotIfNeeded() {
 
 class ImageSource {
   public:
+    virtual ~ImageSource() {};
     virtual bool ReadFile(const std::string& name, std::vector<char>* out) const = 0;
     virtual int OpenFile(const std::string& name) const = 0;
 };
