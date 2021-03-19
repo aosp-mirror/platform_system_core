@@ -119,13 +119,6 @@ void GwpAsanCrashData::DumpCause(log_t* log) const {
   uintptr_t alloc_address = __gwp_asan_get_allocation_address(responsible_allocation_);
   size_t alloc_size = __gwp_asan_get_allocation_size(responsible_allocation_);
 
-  if (crash_address_ == alloc_address) {
-    // Use After Free on a 41-byte allocation at 0xdeadbeef.
-    _LOG(log, logtype::HEADER, "Cause: [GWP-ASan]: %s on a %zu-byte allocation at 0x%" PRIxPTR "\n",
-         error_string_, alloc_size, alloc_address);
-    return;
-  }
-
   uintptr_t diff;
   const char* location_str;
 
