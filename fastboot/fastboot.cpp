@@ -995,7 +995,7 @@ static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf, bool vbmeta_in_bo
         die("Failed writing to modified vbmeta");
     }
     buf->fd = std::move(fd);
-    lseek(fd, 0, SEEK_SET);
+    lseek(buf->fd, 0, SEEK_SET);
 }
 
 static bool has_vbmeta_partition() {
@@ -1063,7 +1063,7 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
     }
     buf->fd = std::move(fd);
     buf->sz = partition_size;
-    lseek(fd, 0, SEEK_SET);
+    lseek(buf->fd, 0, SEEK_SET);
 }
 
 static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
