@@ -20,6 +20,7 @@
 #include <vector>
 
 constexpr unsigned int kMaxDownloadSizeDefault = 0x10000000;
+constexpr unsigned int kMaxFetchSizeDefault = 0x10000000;
 
 class FastbootDevice;
 
@@ -50,3 +51,4 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
 bool OemCmdHandler(FastbootDevice* device, const std::vector<std::string>& args);
 bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args);
 bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string>& args);
+bool FetchHandler(FastbootDevice* device, const std::vector<std::string>& args);

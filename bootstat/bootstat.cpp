@@ -438,6 +438,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,mount_userdata_failed", 190},
     {"reboot,forcedsilent", 191},
     {"reboot,forcednonsilent", 192},
+    {"reboot,thermal,tj", 193},
 };
 
 // Converts a string value representing the reason the system booted to an

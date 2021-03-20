@@ -884,12 +884,9 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
-    # Define and export *CLASSPATH variables
-    mkdir /data/system/environ 0700 system system
-    # Must start before 'odsign', as odsign depends on *CLASSPATH variables
-    exec_start derive_classpath
-    load_exports /data/system/environ/classpath
-    rm /data/system/environ/classpath
+    # Export *CLASSPATH variables from /etc/classpath
+    # TODO(b/180105615): export from the generated file instead.
+    load_exports /etc/classpath
 
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
@@ -905,8 +902,11 @@ on post-fs-data
 
     # Start the on-device signing daemon, and wait for it to finish, to ensure
     # ART artifacts are generated if needed.
-    # Must start after 'derive_classpath' to have *CLASSPATH variables set.
-    exec_start odsign
+    start odsign
+
+    # Before we can lock keys and proceed to the next boot stage, wait for
+    # odsign to be done with the key
+    wait_for_prop odsign.key.done 1
 
     # After apexes are mounted, tell keymaster early boot has ended, so it will
     # stop allowing use of early-boot keys
@@ -948,6 +948,7 @@ on post-fs-data
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted
+    wait_for_prop odsign.verification.done 1
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
     start statsd
@@ -956,6 +957,7 @@ on zygote-start && property:ro.crypto.state=unencrypted
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=unsupported
+    wait_for_prop odsign.verification.done 1
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
     start statsd
@@ -964,6 +966,7 @@ on zygote-start && property:ro.crypto.state=unsupported
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
+    wait_for_prop odsign.verification.done 1
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
     start statsd
