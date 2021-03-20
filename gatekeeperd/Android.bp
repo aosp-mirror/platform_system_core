@@ -40,8 +40,6 @@ cc_binary {
         "libbase",
         "libutils",
         "libcrypto",
-        "libkeystore_aidl",
-        "libkeystore_binder",
         "libhidlbase",
         "android.hardware.gatekeeper@1.0",
         "libgatekeeper_aidl",
