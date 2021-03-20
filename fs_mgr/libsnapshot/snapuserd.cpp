@@ -230,7 +230,7 @@ bool Snapuserd::ReadMetadata() {
 
 
         // Store operation pointer.
-        chunk_map_[ChunkToSector(data_chunk_id)] = cow_op;
+        chunk_vec_.push_back(std::make_pair(ChunkToSector(data_chunk_id), cow_op));
         num_ops += 1;
         offset += sizeof(struct disk_exception);
         cowop_riter_->Next();
@@ -422,7 +422,7 @@ bool Snapuserd::ReadMetadata() {
             de->new_chunk = data_chunk_id;
 
             // Store operation pointer.
-            chunk_map_[ChunkToSector(data_chunk_id)] = it->second;
+            chunk_vec_.push_back(std::make_pair(ChunkToSector(data_chunk_id), it->second));
             offset += sizeof(struct disk_exception);
             num_ops += 1;
             copy_ops++;
@@ -467,6 +467,12 @@ bool Snapuserd::ReadMetadata() {
         SNAP_LOG(DEBUG) << "ReadMetadata() completed. Partially filled area num_ops: " << num_ops
                         << "Areas : " << vec_.size();
     }
+
+    chunk_vec_.shrink_to_fit();
+    vec_.shrink_to_fit();
+
+    // Sort the vector based on sectors as we need this during un-aligned access
+    std::sort(chunk_vec_.begin(), chunk_vec_.end(), compare);
 
     SNAP_LOG(INFO) << "ReadMetadata completed. Final-chunk-id: " << data_chunk_id
                    << " Num Sector: " << ChunkToSector(data_chunk_id)

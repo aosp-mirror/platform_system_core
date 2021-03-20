@@ -16,6 +16,7 @@
 
 #include "commands.h"
 
+#include <inttypes.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -36,12 +37,19 @@
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
 #include <libsnapshot/snapshot.h>
+#include <storage_literals/storage_literals.h>
 #include <uuid/uuid.h>
 
 #include "constants.h"
 #include "fastboot_device.h"
 #include "flashing.h"
 #include "utility.h"
+
+#ifdef FB_ENABLE_FETCH
+static constexpr bool kEnableFetch = true;
+#else
+static constexpr bool kEnableFetch = false;
+#endif
 
 using android::fs_mgr::MetadataBuilder;
 using ::android::hardware::hidl_string;
@@ -53,6 +61,8 @@ using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
 using android::snapshot::SnapshotManager;
 using IBootControl1_1 = ::android::hardware::boot::V1_1::IBootControl;
+
+using namespace android::storage_literals;
 
 struct VariableHandlers {
     // Callback to retrieve the value of a single variable.
@@ -136,7 +146,9 @@ bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args)
             {FB_VAR_DYNAMIC_PARTITION, {GetDynamicPartition, nullptr}},
             {FB_VAR_FIRST_API_LEVEL, {GetFirstApiLevel, nullptr}},
             {FB_VAR_SECURITY_PATCH_LEVEL, {GetSecurityPatchLevel, nullptr}},
-            {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}}};
+            {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}},
+            {FB_VAR_MAX_FETCH_SIZE, {GetMaxFetchSize, nullptr}},
+    };
 
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");
@@ -670,4 +682,176 @@ bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string
         return device->WriteFail("Invalid parameter to snapshot-update");
     }
     return device->WriteStatus(FastbootResult::OKAY, "Success");
+}
+
+namespace {
+// Helper of FetchHandler.
+class PartitionFetcher {
+  public:
+    static bool Fetch(FastbootDevice* device, const std::vector<std::string>& args) {
+        if constexpr (!kEnableFetch) {
+            return device->WriteFail("Fetch is not allowed on user build");
+        }
+
+        if (GetDeviceLockStatus()) {
+            return device->WriteFail("Fetch is not allowed on locked devices");
+        }
+
+        PartitionFetcher fetcher(device, args);
+        if (fetcher.Open()) {
+            fetcher.Fetch();
+        }
+        CHECK(fetcher.ret_.has_value());
+        return *fetcher.ret_;
+    }
+
+  private:
+    PartitionFetcher(FastbootDevice* device, const std::vector<std::string>& args)
+        : device_(device), args_(&args) {}
+    // Return whether the partition is successfully opened.
+    // If successfully opened, ret_ is left untouched. Otherwise, ret_ is set to the value
+    // that FetchHandler should return.
+    bool Open() {
+        if (args_->size() < 2) {
+            ret_ = device_->WriteFail("Missing partition arg");
+            return false;
+        }
+
+        partition_name_ = args_->at(1);
+        if (std::find(kAllowedPartitions.begin(), kAllowedPartitions.end(), partition_name_) ==
+            kAllowedPartitions.end()) {
+            ret_ = device_->WriteFail("Fetch is only allowed on [" +
+                                      android::base::Join(kAllowedPartitions, ", ") + "]");
+            return false;
+        }
+
+        if (!OpenPartition(device_, partition_name_, &handle_, true /* read */)) {
+            ret_ = device_->WriteFail(
+                    android::base::StringPrintf("Cannot open %s", partition_name_.c_str()));
+            return false;
+        }
+
+        partition_size_ = get_block_device_size(handle_.fd());
+        if (partition_size_ == 0) {
+            ret_ = device_->WriteOkay(android::base::StringPrintf("Partition %s has size 0",
+                                                                  partition_name_.c_str()));
+            return false;
+        }
+
+        start_offset_ = 0;
+        if (args_->size() >= 3) {
+            if (!android::base::ParseUint(args_->at(2), &start_offset_)) {
+                ret_ = device_->WriteFail("Invalid offset, must be integer");
+                return false;
+            }
+            if (start_offset_ > std::numeric_limits<off64_t>::max()) {
+                ret_ = device_->WriteFail(
+                        android::base::StringPrintf("Offset overflows: %" PRIx64, start_offset_));
+                return false;
+            }
+        }
+        if (start_offset_ > partition_size_) {
+            ret_ = device_->WriteFail(android::base::StringPrintf(
+                    "Invalid offset 0x%" PRIx64 ", partition %s has size 0x%" PRIx64, start_offset_,
+                    partition_name_.c_str(), partition_size_));
+            return false;
+        }
+        uint64_t maximum_total_size_to_read = partition_size_ - start_offset_;
+        total_size_to_read_ = maximum_total_size_to_read;
+        if (args_->size() >= 4) {
+            if (!android::base::ParseUint(args_->at(3), &total_size_to_read_)) {
+                ret_ = device_->WriteStatus(FastbootResult::FAIL, "Invalid size, must be integer");
+                return false;
+            }
+        }
+        if (total_size_to_read_ == 0) {
+            ret_ = device_->WriteOkay("Read 0 bytes");
+            return false;
+        }
+        if (total_size_to_read_ > maximum_total_size_to_read) {
+            ret_ = device_->WriteFail(android::base::StringPrintf(
+                    "Invalid size to read 0x%" PRIx64 ", partition %s has size 0x%" PRIx64
+                    " and fetching from offset 0x%" PRIx64,
+                    total_size_to_read_, partition_name_.c_str(), partition_size_, start_offset_));
+            return false;
+        }
+
+        if (total_size_to_read_ > kMaxFetchSizeDefault) {
+            ret_ = device_->WriteFail(android::base::StringPrintf(
+                    "Cannot fetch 0x%" PRIx64
+                    " bytes because it exceeds maximum transport size 0x%x",
+                    partition_size_, kMaxDownloadSizeDefault));
+            return false;
+        }
+
+        return true;
+    }
+
+    // Assume Open() returns true.
+    // After execution, ret_ is set to the value that FetchHandler should return.
+    void Fetch() {
+        CHECK(start_offset_ <= std::numeric_limits<off64_t>::max());
+        if (lseek64(handle_.fd(), start_offset_, SEEK_SET) != static_cast<off64_t>(start_offset_)) {
+            ret_ = device_->WriteFail(android::base::StringPrintf(
+                    "On partition %s, unable to lseek(0x%" PRIx64 ": %s", partition_name_.c_str(),
+                    start_offset_, strerror(errno)));
+            return;
+        }
+
+        if (!device_->WriteStatus(FastbootResult::DATA,
+                                  android::base::StringPrintf(
+                                          "%08x", static_cast<uint32_t>(total_size_to_read_)))) {
+            ret_ = false;
+            return;
+        }
+        uint64_t end_offset = start_offset_ + total_size_to_read_;
+        std::vector<char> buf(1_MiB);
+        uint64_t current_offset = start_offset_;
+        while (current_offset < end_offset) {
+            // On any error, exit. We can't return a status message to the driver because
+            // we are in the middle of writing data, so just let the driver guess what's wrong
+            // by ending the data stream prematurely.
+            uint64_t remaining = end_offset - current_offset;
+            uint64_t chunk_size = std::min<uint64_t>(buf.size(), remaining);
+            if (!android::base::ReadFully(handle_.fd(), buf.data(), chunk_size)) {
+                PLOG(ERROR) << std::hex << "Unable to read 0x" << chunk_size << " bytes from "
+                            << partition_name_ << " @ offset 0x" << current_offset;
+                ret_ = false;
+                return;
+            }
+            if (!device_->HandleData(false /* is read */, buf.data(), chunk_size)) {
+                PLOG(ERROR) << std::hex << "Unable to send 0x" << chunk_size << " bytes of "
+                            << partition_name_ << " @ offset 0x" << current_offset;
+                ret_ = false;
+                return;
+            }
+            current_offset += chunk_size;
+        }
+
+        ret_ = device_->WriteOkay(android::base::StringPrintf(
+                "Fetched %s (offset=0x%" PRIx64 ", size=0x%" PRIx64, partition_name_.c_str(),
+                start_offset_, total_size_to_read_));
+    }
+
+    static constexpr std::array<const char*, 3> kAllowedPartitions{
+            "vendor_boot",
+            "vendor_boot_a",
+            "vendor_boot_b",
+    };
+
+    FastbootDevice* device_;
+    const std::vector<std::string>* args_ = nullptr;
+    std::string partition_name_;
+    PartitionHandle handle_;
+    uint64_t partition_size_ = 0;
+    uint64_t start_offset_ = 0;
+    uint64_t total_size_to_read_ = 0;
+
+    // What FetchHandler should return.
+    std::optional<bool> ret_ = std::nullopt;
+};
+}  // namespace
+
+bool FetchHandler(FastbootDevice* device, const std::vector<std::string>& args) {
+    return PartitionFetcher::Fetch(device, args);
 }
