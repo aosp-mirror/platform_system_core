@@ -8,4 +8,9 @@ cc_library_headers {
     host_supported: true,
     recovery_available: true,
     export_include_dirs: ["."],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
 }
