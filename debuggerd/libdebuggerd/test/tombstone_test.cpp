@@ -388,9 +388,8 @@ TEST_F(TombstoneTest, gwp_asan_cause_uaf_exact) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   std::string tombstone_contents;
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  ASSERT_THAT(tombstone_contents,
-              MatchesRegex("Cause: \\[GWP-ASan\\]: Use After Free on a 32-byte "
-                           "allocation at 0x[a-fA-F0-9]+\n"));
+  ASSERT_THAT(tombstone_contents, MatchesRegex("Cause: \\[GWP-ASan\\]: Use After Free, 0 bytes "
+                                               "into a 32-byte allocation at 0x[a-fA-F0-9]+\n"));
 }
 
 TEST_F(TombstoneTest, gwp_asan_cause_double_free) {
@@ -405,9 +404,8 @@ TEST_F(TombstoneTest, gwp_asan_cause_double_free) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   std::string tombstone_contents;
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  ASSERT_THAT(tombstone_contents,
-              MatchesRegex("Cause: \\[GWP-ASan\\]: Double Free on a 32-byte "
-                           "allocation at 0x[a-fA-F0-9]+\n"));
+  ASSERT_THAT(tombstone_contents, MatchesRegex("Cause: \\[GWP-ASan\\]: Double Free, 0 bytes into a "
+                                               "32-byte allocation at 0x[a-fA-F0-9]+\n"));
 }
 
 TEST_F(TombstoneTest, gwp_asan_cause_overflow) {
