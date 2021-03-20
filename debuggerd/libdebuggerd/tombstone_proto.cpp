@@ -17,6 +17,8 @@
 #define LOG_TAG "DEBUG"
 
 #include "libdebuggerd/tombstone.h"
+#include "libdebuggerd/gwp_asan.h"
+#include "libdebuggerd/scudo.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -106,32 +108,120 @@ static std::optional<std::string> get_stack_overflow_cause(uint64_t fault_addr, 
   return {};
 }
 
-static void dump_probable_cause(Tombstone* tombstone, const siginfo_t* si, unwindstack::Maps* maps,
-                                unwindstack::Regs* regs) {
+void set_human_readable_cause(Cause* cause, uint64_t fault_addr) {
+  if (!cause->has_memory_error() || !cause->memory_error().has_heap()) {
+    return;
+  }
+
+  const MemoryError& memory_error = cause->memory_error();
+  const HeapObject& heap_object = memory_error.heap();
+
+  const char *tool_str;
+  switch (memory_error.tool()) {
+    case MemoryError_Tool_GWP_ASAN:
+      tool_str = "GWP-ASan";
+      break;
+    case MemoryError_Tool_SCUDO:
+      tool_str = "MTE";
+      break;
+    default:
+      tool_str = "Unknown";
+      break;
+  }
+
+  const char *error_type_str;
+  switch (memory_error.type()) {
+    case MemoryError_Type_USE_AFTER_FREE:
+      error_type_str = "Use After Free";
+      break;
+    case MemoryError_Type_DOUBLE_FREE:
+      error_type_str = "Double Free";
+      break;
+    case MemoryError_Type_INVALID_FREE:
+      error_type_str = "Invalid (Wild) Free";
+      break;
+    case MemoryError_Type_BUFFER_OVERFLOW:
+      error_type_str = "Buffer Overflow";
+      break;
+    case MemoryError_Type_BUFFER_UNDERFLOW:
+      error_type_str = "Buffer Underflow";
+      break;
+    default:
+      cause->set_human_readable(
+          StringPrintf("[%s]: Unknown error occurred at 0x%" PRIx64 ".", tool_str, fault_addr));
+      return;
+  }
+
+  uint64_t diff;
+  const char* location_str;
+
+  if (fault_addr < heap_object.address()) {
+    // Buffer Underflow, 6 bytes left of a 41-byte allocation at 0xdeadbeef.
+    location_str = "left of";
+    diff = heap_object.address() - fault_addr;
+  } else if (fault_addr - heap_object.address() < heap_object.size()) {
+    // Use After Free, 40 bytes into a 41-byte allocation at 0xdeadbeef.
+    location_str = "into";
+    diff = fault_addr - heap_object.address();
+  } else {
+    // Buffer Overflow, 6 bytes right of a 41-byte allocation at 0xdeadbeef.
+    location_str = "right of";
+    diff = fault_addr - heap_object.address() - heap_object.size();
+  }
+
+  // Suffix of 'bytes', i.e. 4 bytes' vs. '1 byte'.
+  const char* byte_suffix = "s";
+  if (diff == 1) {
+    byte_suffix = "";
+  }
+
+  cause->set_human_readable(StringPrintf(
+      "[%s]: %s, %" PRIu64 " byte%s %s a %" PRIu64 "-byte allocation at 0x%" PRIx64, tool_str,
+      error_type_str, diff, byte_suffix, location_str, heap_object.size(), heap_object.address()));
+}
+
+static void dump_probable_cause(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
+                                const ProcessInfo& process_info, const ThreadInfo& main_thread) {
+  ScudoCrashData scudo_crash_data(unwinder->GetProcessMemory().get(), process_info);
+  if (scudo_crash_data.CrashIsMine()) {
+    scudo_crash_data.AddCauseProtos(tombstone, unwinder);
+    return;
+  }
+
+  GwpAsanCrashData gwp_asan_crash_data(unwinder->GetProcessMemory().get(), process_info,
+                                       main_thread);
+  if (gwp_asan_crash_data.CrashIsMine()) {
+    gwp_asan_crash_data.AddCauseProtos(tombstone, unwinder);
+    return;
+  }
+
+  const siginfo *si = main_thread.siginfo;
+  auto fault_addr = reinterpret_cast<uint64_t>(si->si_addr);
+  unwindstack::Maps* maps = unwinder->GetMaps();
+
   std::optional<std::string> cause;
   if (si->si_signo == SIGSEGV && si->si_code == SEGV_MAPERR) {
-    if (si->si_addr < reinterpret_cast<void*>(4096)) {
+    if (fault_addr < 4096) {
       cause = "null pointer dereference";
-    } else if (si->si_addr == reinterpret_cast<void*>(0xffff0ffc)) {
+    } else if (fault_addr == 0xffff0ffc) {
       cause = "call to kuser_helper_version";
-    } else if (si->si_addr == reinterpret_cast<void*>(0xffff0fe0)) {
+    } else if (fault_addr == 0xffff0fe0) {
       cause = "call to kuser_get_tls";
-    } else if (si->si_addr == reinterpret_cast<void*>(0xffff0fc0)) {
+    } else if (fault_addr == 0xffff0fc0) {
       cause = "call to kuser_cmpxchg";
-    } else if (si->si_addr == reinterpret_cast<void*>(0xffff0fa0)) {
+    } else if (fault_addr == 0xffff0fa0) {
       cause = "call to kuser_memory_barrier";
-    } else if (si->si_addr == reinterpret_cast<void*>(0xffff0f60)) {
+    } else if (fault_addr == 0xffff0f60) {
       cause = "call to kuser_cmpxchg64";
     } else {
-      cause = get_stack_overflow_cause(reinterpret_cast<uint64_t>(si->si_addr), regs->sp(), maps);
+      cause = get_stack_overflow_cause(fault_addr, main_thread.registers->sp(), maps);
     }
   } else if (si->si_signo == SIGSEGV && si->si_code == SEGV_ACCERR) {
-    uint64_t fault_addr = reinterpret_cast<uint64_t>(si->si_addr);
     unwindstack::MapInfo* map_info = maps->Find(fault_addr);
     if (map_info != nullptr && map_info->flags == PROT_EXEC) {
       cause = "execute-only (no-read) memory access error; likely due to data in .text.";
     } else {
-      cause = get_stack_overflow_cause(fault_addr, regs->sp(), maps);
+      cause = get_stack_overflow_cause(fault_addr, main_thread.registers->sp(), maps);
     }
   } else if (si->si_signo == SIGSYS && si->si_code == SYS_SECCOMP) {
     cause = StringPrintf("seccomp prevented call to disallowed %s system call %d", ABI_STRING,
@@ -139,7 +229,8 @@ static void dump_probable_cause(Tombstone* tombstone, const siginfo_t* si, unwin
   }
 
   if (cause) {
-    tombstone->mutable_cause()->set_human_readable(*cause);
+    Cause *cause_proto = tombstone->add_causes();
+    cause_proto->set_human_readable(*cause);
   }
 }
 
@@ -205,12 +296,49 @@ static void dump_open_fds(Tombstone* tombstone, const OpenFilesList* open_files)
   }
 }
 
+void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& frame,
+                             unwindstack::Maps* maps) {
+  f->set_rel_pc(frame.rel_pc);
+  f->set_pc(frame.pc);
+  f->set_sp(frame.sp);
+
+  if (!frame.function_name.empty()) {
+    // TODO: Should this happen here, or on the display side?
+    char* demangled_name = __cxa_demangle(frame.function_name.c_str(), nullptr, nullptr, nullptr);
+    if (demangled_name) {
+      f->set_function_name(demangled_name);
+      free(demangled_name);
+    } else {
+      f->set_function_name(frame.function_name);
+    }
+  }
+
+  f->set_function_offset(frame.function_offset);
+
+  if (frame.map_start == frame.map_end) {
+    // No valid map associated with this frame.
+    f->set_file_name("<unknown>");
+  } else if (!frame.map_name.empty()) {
+    f->set_file_name(frame.map_name);
+  } else {
+    f->set_file_name(StringPrintf("<anonymous:%" PRIx64 ">", frame.map_start));
+  }
+
+  f->set_file_map_offset(frame.map_elf_start_offset);
+
+  unwindstack::MapInfo* map_info = maps->Find(frame.map_start);
+  if (map_info) {
+    f->set_build_id(map_info->GetPrintableBuildID());
+  }
+}
+
 static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
                         const ThreadInfo& thread_info, bool memory_dump = false) {
   Thread thread;
 
   thread.set_id(thread_info.tid);
   thread.set_name(thread_info.thread_name);
+  thread.set_tagged_addr_ctrl(thread_info.tagged_addr_ctrl);
 
   unwindstack::Maps* maps = unwinder->GetMaps();
   unwindstack::Memory* memory = unwinder->GetProcessMemory().get();
@@ -225,20 +353,19 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
         if (memory_dump) {
           MemoryDump dump;
 
-          char buf[256];
-          size_t start_offset = 0;
-          ssize_t bytes = dump_memory(buf, sizeof(buf), &start_offset, &value, memory);
-          if (bytes == -1) {
-            return;
-          }
-
           dump.set_register_name(name);
-
           unwindstack::MapInfo* map_info = maps->Find(untag_address(value));
           if (map_info) {
             dump.set_mapping_name(map_info->name);
           }
 
+          char buf[256];
+          uint8_t tags[256 / kTagGranuleSize];
+          size_t start_offset = 0;
+          ssize_t bytes = dump_memory(buf, sizeof(buf), tags, sizeof(tags), &value, memory);
+          if (bytes == -1) {
+            return;
+          }
           dump.set_begin_address(value);
 
           if (start_offset + bytes > sizeof(buf)) {
@@ -246,7 +373,8 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
                              start_offset, bytes);
           }
 
-          dump.set_memory(buf, start_offset + bytes);
+          dump.set_memory(buf, bytes);
+          dump.set_tags(tags, bytes / kTagGranuleSize);
 
           *thread.add_memory_dump() = std::move(dump);
         }
@@ -267,39 +395,7 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
     unwinder->SetDisplayBuildID(true);
     for (const auto& frame : unwinder->frames()) {
       BacktraceFrame* f = thread.add_current_backtrace();
-      f->set_rel_pc(frame.rel_pc);
-      f->set_pc(frame.pc);
-      f->set_sp(frame.sp);
-
-      if (!frame.function_name.empty()) {
-        // TODO: Should this happen here, or on the display side?
-        char* demangled_name =
-            __cxa_demangle(frame.function_name.c_str(), nullptr, nullptr, nullptr);
-        if (demangled_name) {
-          f->set_function_name(demangled_name);
-          free(demangled_name);
-        } else {
-          f->set_function_name(frame.function_name);
-        }
-      }
-
-      f->set_function_offset(frame.function_offset);
-
-      if (frame.map_start == frame.map_end) {
-        // No valid map associated with this frame.
-        f->set_file_name("<unknown>");
-      } else if (!frame.map_name.empty()) {
-        f->set_file_name(frame.map_name);
-      } else {
-        f->set_file_name(StringPrintf("<anonymous:%" PRIx64 ">", frame.map_start));
-      }
-
-      f->set_file_map_offset(frame.map_elf_start_offset);
-
-      unwindstack::MapInfo* map_info = maps->Find(frame.map_start);
-      if (map_info) {
-        f->set_build_id(map_info->GetPrintableBuildID());
-      }
+      fill_in_backtrace_frame(f, frame, maps);
     }
   }
 
@@ -458,7 +554,7 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwind
 
   if (process_info.has_fault_address) {
     sig.set_has_fault_address(true);
-    sig.set_fault_address(process_info.untagged_fault_address);
+    sig.set_fault_address(process_info.maybe_tagged_fault_address);
   }
 
   *result.mutable_signal_info() = sig;
@@ -473,8 +569,7 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwind
     }
   }
 
-  dump_probable_cause(&result, main_thread.siginfo, unwinder->GetMaps(),
-                      main_thread.registers.get());
+  dump_probable_cause(&result, unwinder, process_info, main_thread);
 
   dump_mappings(&result, unwinder);
 
