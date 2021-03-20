@@ -185,12 +185,13 @@ bool WorkerThread::ProcessCowOp(const CowOperation* cow_op) {
     return false;
 }
 
-int WorkerThread::ReadUnalignedSector(sector_t sector, size_t size,
-                                      std::map<sector_t, const CowOperation*>::iterator& it) {
+int WorkerThread::ReadUnalignedSector(
+        sector_t sector, size_t size,
+        std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it) {
     size_t skip_sector_size = 0;
 
     SNAP_LOG(DEBUG) << "ReadUnalignedSector: sector " << sector << " size: " << size
-                    << " Aligned sector: " << it->second;
+                    << " Aligned sector: " << it->first;
 
     if (!ProcessCowOp(it->second)) {
         SNAP_LOG(ERROR) << "ReadUnalignedSector: " << sector << " failed of size: " << size;
@@ -223,7 +224,8 @@ int WorkerThread::ReadUnalignedSector(sector_t sector, size_t size,
  *
  */
 int WorkerThread::ReadData(sector_t sector, size_t size) {
-    std::map<sector_t, const CowOperation*>& chunk_map = snapuserd_->GetChunkMap();
+    std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
+    std::vector<std::pair<sector_t, const CowOperation*>>::iterator it;
     /*
      * chunk_map stores COW operation at 4k granularity.
      * If the requested IO with the sector falls on the 4k
@@ -234,10 +236,16 @@ int WorkerThread::ReadData(sector_t sector, size_t size) {
      * then we will have the find the nearest COW operation
      * and chop the 4K block to fetch the requested sector.
      */
-    std::map<sector_t, const CowOperation*>::iterator it = chunk_map.find(sector);
-    if (it == chunk_map.end()) {
-        it = chunk_map.lower_bound(sector);
-        if (it != chunk_map.begin()) {
+    it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(), std::make_pair(sector, nullptr),
+                          Snapuserd::compare);
+
+    CHECK(it != chunk_vec.end());
+
+    // We didn't find the required sector; hence find the previous sector
+    // as lower_bound will gives us the value greater than
+    // the requested sector
+    if (it->first != sector) {
+        if (it != chunk_vec.begin()) {
             --it;
         }
 
@@ -380,7 +388,7 @@ loff_t WorkerThread::GetMergeStartOffset(void* merged_buffer, void* unmerged_buf
 int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, loff_t offset,
                                        int unmerged_exceptions) {
     int merged_ops_cur_iter = 0;
-    std::map<sector_t, const CowOperation*>& chunk_map = snapuserd_->GetChunkMap();
+    std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
 
     // Find the operations which are merged in this cycle.
     while ((unmerged_exceptions + merged_ops_cur_iter) < exceptions_per_area_) {
@@ -395,7 +403,13 @@ int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffe
         if (cow_de->new_chunk != 0) {
             merged_ops_cur_iter += 1;
             offset += sizeof(struct disk_exception);
-            const CowOperation* cow_op = chunk_map[ChunkToSector(cow_de->new_chunk)];
+            auto it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(),
+                                       std::make_pair(ChunkToSector(cow_de->new_chunk), nullptr),
+                                       Snapuserd::compare);
+            CHECK(it != chunk_vec.end());
+            CHECK(it->first == ChunkToSector(cow_de->new_chunk));
+            const CowOperation* cow_op = it->second;
+
             CHECK(cow_op != nullptr);
 
             CHECK(cow_op->new_block == cow_de->old_chunk);
@@ -510,14 +524,18 @@ bool WorkerThread::DmuserWriteRequest() {
         return true;
     }
 
-    std::map<sector_t, const CowOperation*>& chunk_map = snapuserd_->GetChunkMap();
+    std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
     size_t remaining_size = header->len;
     size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
     CHECK(read_size == BLOCK_SZ) << "DmuserWriteRequest: read_size: " << read_size;
 
     CHECK(header->sector > 0);
     chunk_t chunk = SectorToChunk(header->sector);
-    CHECK(chunk_map.find(header->sector) == chunk_map.end());
+    auto it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(),
+                               std::make_pair(header->sector, nullptr), Snapuserd::compare);
+
+    bool not_found = (it == chunk_vec.end() || it->first != header->sector);
+    CHECK(not_found);
 
     void* buffer = bufsink_.GetPayloadBuffer(read_size);
     CHECK(buffer != nullptr);
@@ -550,7 +568,7 @@ bool WorkerThread::DmuserReadRequest() {
     size_t remaining_size = header->len;
     loff_t offset = 0;
     sector_t sector = header->sector;
-    std::map<sector_t, const CowOperation*>& chunk_map = snapuserd_->GetChunkMap();
+    std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
     do {
         size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
 
@@ -568,8 +586,10 @@ bool WorkerThread::DmuserReadRequest() {
             ConstructKernelCowHeader();
             SNAP_LOG(DEBUG) << "Kernel header constructed";
         } else {
-            if (!offset && (read_size == BLOCK_SZ) &&
-                chunk_map.find(header->sector) == chunk_map.end()) {
+            auto it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(),
+                                       std::make_pair(header->sector, nullptr), Snapuserd::compare);
+            bool not_found = (it == chunk_vec.end() || it->first != header->sector);
+            if (!offset && (read_size == BLOCK_SZ) && not_found) {
                 if (!ReadDiskExceptions(chunk, read_size)) {
                     SNAP_LOG(ERROR) << "ReadDiskExceptions failed for chunk id: " << chunk
                                     << "Sector: " << header->sector;
