@@ -438,6 +438,7 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,mount_userdata_failed", 190},
     {"reboot,forcedsilent", 191},
     {"reboot,forcednonsilent", 192},
+    {"reboot,thermal,tj", 193},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -1322,6 +1323,8 @@ void RecordBootComplete() {
 
   // Record the total time from device startup to boot complete, regardless of
   // encryption state.
+  // Note: we are recording seconds here even though the field in statsd atom specifies
+  // milliseconds.
   boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime_s.count());
 
   RecordInitBootTimeProp(&boot_event_store, "ro.boottime.init");

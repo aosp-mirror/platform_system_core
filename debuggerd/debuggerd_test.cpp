@@ -34,6 +34,7 @@
 
 #include <android/fdsan.h>
 #include <android/set_abort_message.h>
+#include <bionic/malloc.h>
 #include <bionic/mte.h>
 #include <bionic/reserved_signals.h>
 
@@ -69,7 +70,7 @@ using android::base::unique_fd;
 #define ARCH_SUFFIX ""
 #endif
 
-constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
+constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
 
 #define TIMEOUT(seconds, expr)                                     \
   [&]() {                                                          \
@@ -97,6 +98,13 @@ constexpr char kWaitForGdbKey[] = "debug.debuggerd.wait_for_gdb";
 #define ASSERT_BACKTRACE_FRAME(result, frame_name) \
   ASSERT_MATCH(result,                             \
                R"(#\d\d pc [0-9a-f]+\s+ \S+ (\(offset 0x[0-9a-f]+\) )?\()" frame_name R"(\+)");
+
+// Enable GWP-ASan at the start of this process. GWP-ASan is enabled using
+// process sampling, so we need to ensure we force GWP-ASan on.
+__attribute__((constructor)) static void enable_gwp_asan() {
+  bool force = true;
+  android_mallopt(M_INITIALIZE_GWP_ASAN, &force, sizeof(force));
+}
 
 static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd,
                                  InterceptStatus* status, DebuggerdDumpType intercept_type) {
@@ -157,7 +165,7 @@ static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, uniq
 class CrasherTest : public ::testing::Test {
  public:
   pid_t crasher_pid = -1;
-  bool previous_wait_for_gdb;
+  bool previous_wait_for_debugger;
   unique_fd crasher_pipe;
   unique_fd intercept_fd;
 
@@ -178,8 +186,13 @@ class CrasherTest : public ::testing::Test {
 };
 
 CrasherTest::CrasherTest() {
-  previous_wait_for_gdb = android::base::GetBoolProperty(kWaitForGdbKey, false);
-  android::base::SetProperty(kWaitForGdbKey, "0");
+  previous_wait_for_debugger = android::base::GetBoolProperty(kWaitForDebuggerKey, false);
+  android::base::SetProperty(kWaitForDebuggerKey, "0");
+
+  // Clear the old property too, just in case someone's been using it
+  // on this device. (We only document the new name, but we still support
+  // the old name so we don't break anyone's existing setups.)
+  android::base::SetProperty("debug.debuggerd.wait_for_gdb", "0");
 }
 
 CrasherTest::~CrasherTest() {
@@ -189,7 +202,7 @@ CrasherTest::~CrasherTest() {
     TEMP_FAILURE_RETRY(waitpid(crasher_pid, &status, WUNTRACED));
   }
 
-  android::base::SetProperty(kWaitForGdbKey, previous_wait_for_gdb ? "1" : "0");
+  android::base::SetProperty(kWaitForDebuggerKey, previous_wait_for_debugger ? "1" : "0");
 }
 
 void CrasherTest::StartIntercept(unique_fd* output_fd, DebuggerdDumpType intercept_type) {
@@ -374,11 +387,11 @@ TEST_F(CrasherTest, heap_addr_in_register) {
   ConsumeFd(std::move(output_fd), &result);
 
 #if defined(__aarch64__)
-  ASSERT_MATCH(result, "memory near x0");
+  ASSERT_MATCH(result, "memory near x0 \\(\\[anon:");
 #elif defined(__arm__)
-  ASSERT_MATCH(result, "memory near r0");
+  ASSERT_MATCH(result, "memory near r0 \\(\\[anon:");
 #elif defined(__x86_64__)
-  ASSERT_MATCH(result, "memory near rdi");
+  ASSERT_MATCH(result, "memory near rdi \\(\\[anon:");
 #else
   ASSERT_TRUE(false) << "unsupported architecture";
 #endif
@@ -392,7 +405,77 @@ static void SetTagCheckingLevelSync() {
 }
 #endif
 
-TEST_F(CrasherTest, mte_uaf) {
+// Number of iterations required to reliably guarantee a GWP-ASan crash.
+// GWP-ASan's sample rate is not truly nondeterministic, it initialises a
+// thread-local counter at 2*SampleRate, and decrements on each malloc(). Once
+// the counter reaches zero, we provide a sampled allocation. Then, double that
+// figure to allow for left/right allocation alignment, as this is done randomly
+// without bias.
+#define GWP_ASAN_ITERATIONS_TO_ENSURE_CRASH (0x20000)
+
+struct GwpAsanTestParameters {
+  size_t alloc_size;
+  bool free_before_access;
+  int access_offset;
+  std::string cause_needle; // Needle to be found in the "Cause: [GWP-ASan]" line.
+};
+
+struct GwpAsanCrasherTest : CrasherTest, testing::WithParamInterface<GwpAsanTestParameters> {};
+
+GwpAsanTestParameters gwp_asan_tests[] = {
+  {/* alloc_size */ 7, /* free_before_access */ true, /* access_offset */ 0, "Use After Free, 0 bytes into a 7-byte allocation"},
+  {/* alloc_size */ 7, /* free_before_access */ true, /* access_offset */ 1, "Use After Free, 1 byte into a 7-byte allocation"},
+  {/* alloc_size */ 7, /* free_before_access */ false, /* access_offset */ 16, "Buffer Overflow, 9 bytes right of a 7-byte allocation"},
+  {/* alloc_size */ 16, /* free_before_access */ false, /* access_offset */ -1, "Buffer Underflow, 1 byte left of a 16-byte allocation"},
+};
+
+INSTANTIATE_TEST_SUITE_P(GwpAsanTests, GwpAsanCrasherTest, testing::ValuesIn(gwp_asan_tests));
+
+TEST_P(GwpAsanCrasherTest, gwp_asan_uaf) {
+  if (mte_supported()) {
+    // Skip this test on MTE hardware, as MTE will reliably catch these errors
+    // instead of GWP-ASan.
+    GTEST_SKIP() << "Skipped on MTE.";
+  }
+
+  GwpAsanTestParameters params = GetParam();
+
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([&params]() {
+    for (unsigned i = 0; i < GWP_ASAN_ITERATIONS_TO_ENSURE_CRASH; ++i) {
+      volatile char* p = reinterpret_cast<volatile char*>(malloc(params.alloc_size));
+      if (params.free_before_access) free(static_cast<void*>(const_cast<char*>(p)));
+      p[params.access_offset] = 42;
+      if (!params.free_before_access) free(static_cast<void*>(const_cast<char*>(p)));
+    }
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 2 \(SEGV_ACCERR\))");
+  ASSERT_MATCH(result, R"(Cause: \[GWP-ASan\]: )" + params.cause_needle);
+  if (params.free_before_access) {
+    ASSERT_MATCH(result, R"(deallocated by thread .*
+      #00 pc)");
+  }
+  ASSERT_MATCH(result, R"(allocated by thread .*
+      #00 pc)");
+}
+
+struct SizeParamCrasherTest : CrasherTest, testing::WithParamInterface<size_t> {};
+
+INSTANTIATE_TEST_SUITE_P(Sizes, SizeParamCrasherTest, testing::Values(16, 131072));
+
+TEST_P(SizeParamCrasherTest, mte_uaf) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
@@ -400,9 +483,9 @@ TEST_F(CrasherTest, mte_uaf) {
 
   int intercept_result;
   unique_fd output_fd;
-  StartProcess([]() {
+  StartProcess([&]() {
     SetTagCheckingLevelSync();
-    volatile int* p = (volatile int*)malloc(16);
+    volatile int* p = (volatile int*)malloc(GetParam());
     free((void *)p);
     p[0] = 42;
   });
@@ -417,19 +500,19 @@ TEST_F(CrasherTest, mte_uaf) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
 
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 9 \(SEGV_MTESERR\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a 16-byte allocation.*
-
-allocated by thread .*
-      #00 pc)");
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
+  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a )" +
+                           std::to_string(GetParam()) + R"(-byte allocation)");
   ASSERT_MATCH(result, R"(deallocated by thread .*
+      #00 pc)");
+  ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
-TEST_F(CrasherTest, mte_overflow) {
+TEST_P(SizeParamCrasherTest, mte_overflow) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
@@ -437,10 +520,10 @@ TEST_F(CrasherTest, mte_overflow) {
 
   int intercept_result;
   unique_fd output_fd;
-  StartProcess([]() {
+  StartProcess([&]() {
     SetTagCheckingLevelSync();
-    volatile int* p = (volatile int*)malloc(16);
-    p[4] = 42;
+    volatile char* p = (volatile char*)malloc(GetParam());
+    p[GetParam()] = 42;
   });
 
   StartIntercept(&output_fd);
@@ -454,16 +537,16 @@ TEST_F(CrasherTest, mte_overflow) {
   ConsumeFd(std::move(output_fd), &result);
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a 16-byte allocation.*
-
-allocated by thread .*
+  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a )" +
+                           std::to_string(GetParam()) + R"(-byte allocation)");
+  ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";
 #endif
 }
 
-TEST_F(CrasherTest, mte_underflow) {
+TEST_P(SizeParamCrasherTest, mte_underflow) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
@@ -471,9 +554,9 @@ TEST_F(CrasherTest, mte_underflow) {
 
   int intercept_result;
   unique_fd output_fd;
-  StartProcess([]() {
+  StartProcess([&]() {
     SetTagCheckingLevelSync();
-    volatile int* p = (volatile int*)malloc(16);
+    volatile int* p = (volatile int*)malloc(GetParam());
     p[-1] = 42;
   });
 
@@ -488,9 +571,9 @@ TEST_F(CrasherTest, mte_underflow) {
   ConsumeFd(std::move(output_fd), &result);
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 9 \(SEGV_MTESERR\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Underflow, 4 bytes left of a 16-byte allocation.*
-
-allocated by thread .*
+  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Underflow, 4 bytes left of a )" +
+                           std::to_string(GetParam()) + R"(-byte allocation)");
+  ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";
@@ -727,9 +810,9 @@ TEST_F(CrasherTest, intercept_timeout) {
   AssertDeath(SIGABRT);
 }
 
-TEST_F(CrasherTest, wait_for_gdb) {
-  if (!android::base::SetProperty(kWaitForGdbKey, "1")) {
-    FAIL() << "failed to enable wait_for_gdb";
+TEST_F(CrasherTest, wait_for_debugger) {
+  if (!android::base::SetProperty(kWaitForDebuggerKey, "1")) {
+    FAIL() << "failed to enable wait_for_debugger";
   }
   sleep(1);
 

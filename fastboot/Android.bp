@@ -55,6 +55,7 @@ cc_library_host_static {
         "tcp.cpp",
         "udp.cpp",
         "util.cpp",
+        "vendor_boot_img_utils.cpp",
         "fastboot_driver.cpp",
     ],
 
@@ -75,7 +76,9 @@ cc_library_host_static {
     ],
 
     header_libs: [
+        "avb_headers",
         "bootimg_headers",
+        "libstorage_literals_headers",
     ],
 
     export_header_lib_headers: [
@@ -138,6 +141,12 @@ cc_binary {
 
     recovery: true,
 
+    product_variables: {
+        debuggable: {
+            cppflags: ["-DFB_ENABLE_FETCH"],
+        },
+    },
+
     srcs: [
         "device/commands.cpp",
         "device/fastboot_device.cpp",
@@ -183,7 +192,8 @@ cc_binary {
     header_libs: [
         "avb_headers",
         "libsnapshot_headers",
-    ]
+        "libstorage_literals_headers",
+    ],
 }
 
 cc_defaults {
@@ -262,12 +272,17 @@ cc_library_host_static {
         "tcp.cpp",
         "udp.cpp",
         "util.cpp",
+        "vendor_boot_img_utils.cpp",
         "fastboot_driver.cpp",
     ],
 
     // Only version the final binaries
     use_version_lib: false,
     static_libs: ["libbuildversion"],
+    header_libs: [
+        "avb_headers",
+        "libstorage_literals_headers",
+    ],
 
     generated_headers: ["platform_tools_version"],
 
@@ -358,4 +373,34 @@ cc_test_host {
             enabled: false,
         },
     },
+}
+
+cc_test_host {
+    name: "fastboot_vendor_boot_img_utils_test",
+    srcs: ["vendor_boot_img_utils_test.cpp"],
+    static_libs: [
+        "libbase",
+        "libc++fs",
+        "libfastboot",
+        "libgmock",
+        "liblog",
+    ],
+    header_libs: [
+        "avb_headers",
+        "bootimg_headers",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    data: [
+        ":fastboot_test_dtb",
+        ":fastboot_test_bootconfig",
+        ":fastboot_test_vendor_ramdisk_none",
+        ":fastboot_test_vendor_ramdisk_platform",
+        ":fastboot_test_vendor_ramdisk_replace",
+        ":fastboot_test_vendor_boot_v3",
+        ":fastboot_test_vendor_boot_v4_without_frag",
+        ":fastboot_test_vendor_boot_v4_with_frag"
+    ],
 }
