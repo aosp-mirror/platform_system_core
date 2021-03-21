@@ -77,7 +77,8 @@ bool OpenLogicalPartition(FastbootDevice* device, const std::string& partition_n
 
 }  // namespace
 
-bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle) {
+bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle,
+                   bool read) {
     // We prioritize logical partitions over physical ones, and do this
     // consistently for other partition operations (like getvar:partition-size).
     if (LogicalPartitionExists(device, name)) {
@@ -89,7 +90,9 @@ bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHan
         return false;
     }
 
-    unique_fd fd(TEMP_FAILURE_RETRY(open(handle->path().c_str(), O_WRONLY | O_EXCL)));
+    int flags = (read ? O_RDONLY : O_WRONLY);
+    flags |= (O_EXCL | O_CLOEXEC | O_BINARY);
+    unique_fd fd(TEMP_FAILURE_RETRY(open(handle->path().c_str(), flags)));
     if (fd < 0) {
         PLOG(ERROR) << "Failed to open block device: " << handle->path();
         return false;

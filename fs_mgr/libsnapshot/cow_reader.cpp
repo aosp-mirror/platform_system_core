@@ -42,6 +42,29 @@ static void SHA256(const void*, size_t, uint8_t[]) {
 #endif
 }
 
+bool CowReader::InitForMerge(android::base::unique_fd&& fd) {
+    owned_fd_ = std::move(fd);
+    fd_ = owned_fd_.get();
+
+    auto pos = lseek(fd_.get(), 0, SEEK_END);
+    if (pos < 0) {
+        PLOG(ERROR) << "lseek end failed";
+        return false;
+    }
+    fd_size_ = pos;
+
+    if (lseek(fd_.get(), 0, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek header failed";
+        return false;
+    }
+    if (!android::base::ReadFully(fd_, &header_, sizeof(header_))) {
+        PLOG(ERROR) << "read header failed";
+        return false;
+    }
+
+    return true;
+}
+
 bool CowReader::Parse(android::base::unique_fd&& fd, std::optional<uint64_t> label) {
     owned_fd_ = std::move(fd);
     return Parse(android::base::borrowed_fd{owned_fd_}, label);
@@ -206,7 +229,8 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
 
     if (footer_) {
         if (ops_buffer->size() != footer_->op.num_ops) {
-            LOG(ERROR) << "num ops does not match";
+            LOG(ERROR) << "num ops does not match, expected " << footer_->op.num_ops << ", found "
+                       << ops_buffer->size();
             return false;
         }
         if (ops_buffer->size() * sizeof(CowOperation) != footer_->op.ops_size) {
@@ -226,6 +250,8 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
     }
 
     ops_ = ops_buffer;
+    ops_->shrink_to_fit();
+
     return true;
 }
 
