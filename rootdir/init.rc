@@ -1141,6 +1141,11 @@ on property:sys.boot_completed=1
 on property:sys.sysctl.extra_free_kbytes=*
     write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
 
+# Allow users to drop caches
+on property:perf.drop_caches=3
+    write /proc/sys/vm/drop_caches 3
+    setprop perf.drop_caches 0
+
 # "tcp_default_init_rwnd" Is too long!
 on property:net.tcp_def_init_rwnd=*
     write /proc/sys/net/ipv4/tcp_default_init_rwnd ${net.tcp_def_init_rwnd}
