@@ -15,6 +15,7 @@
  */
 
 #include "libdebuggerd/gwp_asan.h"
+#include "libdebuggerd/tombstone.h"
 #include "libdebuggerd/utility.h"
 
 #include "gwp_asan/common.h"
@@ -24,6 +25,8 @@
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
 #include <unwindstack/Unwinder.h>
+
+#include "tombstone.pb.h"
 
 // Retrieve GWP-ASan state from `state_addr` inside the process at
 // `process_memory`. Place the state into `*state`.
@@ -98,6 +101,67 @@ bool GwpAsanCrashData::CrashIsMine() const {
   return is_gwp_asan_responsible_;
 }
 
+constexpr size_t kMaxTraceLength = gwp_asan::AllocationMetadata::kMaxTraceLengthToCollect;
+
+void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinder* unwinder) const {
+  if (!CrashIsMine()) {
+    ALOGE("Internal Error: AddCauseProtos() on a non-GWP-ASan crash.");
+    return;
+  }
+
+  Cause* cause = tombstone->add_causes();
+  MemoryError* memory_error = cause->mutable_memory_error();
+  HeapObject* heap_object = memory_error->mutable_heap();
+
+  memory_error->set_tool(MemoryError_Tool_GWP_ASAN);
+  switch (error_) {
+    case gwp_asan::Error::USE_AFTER_FREE:
+      memory_error->set_type(MemoryError_Type_USE_AFTER_FREE);
+      break;
+    case gwp_asan::Error::DOUBLE_FREE:
+      memory_error->set_type(MemoryError_Type_DOUBLE_FREE);
+      break;
+    case gwp_asan::Error::INVALID_FREE:
+      memory_error->set_type(MemoryError_Type_INVALID_FREE);
+      break;
+    case gwp_asan::Error::BUFFER_OVERFLOW:
+      memory_error->set_type(MemoryError_Type_BUFFER_OVERFLOW);
+      break;
+    case gwp_asan::Error::BUFFER_UNDERFLOW:
+      memory_error->set_type(MemoryError_Type_BUFFER_UNDERFLOW);
+      break;
+    default:
+      memory_error->set_type(MemoryError_Type_UNKNOWN);
+      break;
+  }
+
+  heap_object->set_address(__gwp_asan_get_allocation_address(responsible_allocation_));
+  heap_object->set_size(__gwp_asan_get_allocation_size(responsible_allocation_));
+  unwinder->SetDisplayBuildID(true);
+
+  std::unique_ptr<uintptr_t[]> frames(new uintptr_t[kMaxTraceLength]);
+
+  heap_object->set_allocation_tid(__gwp_asan_get_allocation_thread_id(responsible_allocation_));
+  size_t num_frames =
+      __gwp_asan_get_allocation_trace(responsible_allocation_, frames.get(), kMaxTraceLength);
+  for (size_t i = 0; i != num_frames; ++i) {
+    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
+    BacktraceFrame* f = heap_object->add_allocation_backtrace();
+    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+  }
+
+  heap_object->set_deallocation_tid(__gwp_asan_get_deallocation_thread_id(responsible_allocation_));
+  num_frames =
+      __gwp_asan_get_deallocation_trace(responsible_allocation_, frames.get(), kMaxTraceLength);
+  for (size_t i = 0; i != num_frames; ++i) {
+    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
+    BacktraceFrame* f = heap_object->add_deallocation_backtrace();
+    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+  }
+
+  set_human_readable_cause(cause, crash_address_);
+}
+
 void GwpAsanCrashData::DumpCause(log_t* log) const {
   if (!CrashIsMine()) {
     ALOGE("Internal Error: DumpCause() on a non-GWP-ASan crash.");
@@ -150,8 +214,6 @@ void GwpAsanCrashData::DumpCause(log_t* log) const {
        error_string_, diff, byte_suffix, location_str, alloc_size, alloc_address);
 }
 
-constexpr size_t kMaxTraceLength = gwp_asan::AllocationMetadata::kMaxTraceLengthToCollect;
-
 bool GwpAsanCrashData::HasDeallocationTrace() const {
   assert(CrashIsMine() && "HasDeallocationTrace(): Crash is not mine!");
   if (!responsible_allocation_ || !__gwp_asan_is_deallocated(responsible_allocation_)) {
@@ -164,7 +226,7 @@ void GwpAsanCrashData::DumpDeallocationTrace(log_t* log, unwindstack::Unwinder* 
   assert(HasDeallocationTrace() && "DumpDeallocationTrace(): No dealloc trace!");
   uint64_t thread_id = __gwp_asan_get_deallocation_thread_id(responsible_allocation_);
 
-  std::unique_ptr<uintptr_t> frames(new uintptr_t[kMaxTraceLength]);
+  std::unique_ptr<uintptr_t[]> frames(new uintptr_t[kMaxTraceLength]);
   size_t num_frames =
       __gwp_asan_get_deallocation_trace(responsible_allocation_, frames.get(), kMaxTraceLength);
 
@@ -176,7 +238,7 @@ void GwpAsanCrashData::DumpDeallocationTrace(log_t* log, unwindstack::Unwinder* 
 
   unwinder->SetDisplayBuildID(true);
   for (size_t i = 0; i < num_frames; ++i) {
-    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames.get()[i]);
+    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
     frame_data.num = i;
     _LOG(log, logtype::BACKTRACE, "    %s\n", unwinder->FormatFrame(frame_data).c_str());
   }
@@ -191,7 +253,7 @@ void GwpAsanCrashData::DumpAllocationTrace(log_t* log, unwindstack::Unwinder* un
   assert(HasAllocationTrace() && "DumpAllocationTrace(): No dealloc trace!");
   uint64_t thread_id = __gwp_asan_get_allocation_thread_id(responsible_allocation_);
 
-  std::unique_ptr<uintptr_t> frames(new uintptr_t[kMaxTraceLength]);
+  std::unique_ptr<uintptr_t[]> frames(new uintptr_t[kMaxTraceLength]);
   size_t num_frames =
       __gwp_asan_get_allocation_trace(responsible_allocation_, frames.get(), kMaxTraceLength);
 
@@ -203,7 +265,7 @@ void GwpAsanCrashData::DumpAllocationTrace(log_t* log, unwindstack::Unwinder* un
 
   unwinder->SetDisplayBuildID(true);
   for (size_t i = 0; i < num_frames; ++i) {
-    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames.get()[i]);
+    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
     frame_data.num = i;
     _LOG(log, logtype::BACKTRACE, "    %s\n", unwinder->FormatFrame(frame_data).c_str());
   }

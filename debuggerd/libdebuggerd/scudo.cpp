@@ -15,12 +15,15 @@
  */
 
 #include "libdebuggerd/scudo.h"
-#include "libdebuggerd/gwp_asan.h"
+#include "libdebuggerd/tombstone.h"
 
 #include "unwindstack/Memory.h"
 #include "unwindstack/Unwinder.h"
 
+#include <android-base/macros.h>
 #include <bionic/macros.h>
+
+#include "tombstone.pb.h"
 
 std::unique_ptr<char[]> AllocAndReadFully(unwindstack::Memory* process_memory, uint64_t addr,
                                           size_t size) {
@@ -30,8 +33,6 @@ std::unique_ptr<char[]> AllocAndReadFully(unwindstack::Memory* process_memory, u
   }
   return buf;
 }
-
-static const uintptr_t kTagGranuleSize = 16;
 
 ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
                                const ProcessInfo& process_info) {
@@ -76,6 +77,58 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
 
 bool ScudoCrashData::CrashIsMine() const {
   return error_info_.reports[0].error_type != UNKNOWN;
+}
+
+void ScudoCrashData::FillInCause(Cause* cause, const scudo_error_report* report,
+                                 unwindstack::Unwinder* unwinder) const {
+  MemoryError* memory_error = cause->mutable_memory_error();
+  HeapObject* heap_object = memory_error->mutable_heap();
+
+  memory_error->set_tool(MemoryError_Tool_SCUDO);
+  switch (report->error_type) {
+    case USE_AFTER_FREE:
+      memory_error->set_type(MemoryError_Type_USE_AFTER_FREE);
+      break;
+    case BUFFER_OVERFLOW:
+      memory_error->set_type(MemoryError_Type_BUFFER_OVERFLOW);
+      break;
+    case BUFFER_UNDERFLOW:
+      memory_error->set_type(MemoryError_Type_BUFFER_UNDERFLOW);
+      break;
+    default:
+      memory_error->set_type(MemoryError_Type_UNKNOWN);
+      break;
+  }
+
+  heap_object->set_address(report->allocation_address);
+  heap_object->set_size(report->allocation_size);
+  unwinder->SetDisplayBuildID(true);
+
+  heap_object->set_allocation_tid(report->allocation_tid);
+  for (size_t i = 0; i < arraysize(report->allocation_trace) && report->allocation_trace[i]; ++i) {
+    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(report->allocation_trace[i]);
+    BacktraceFrame* f = heap_object->add_allocation_backtrace();
+    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+  }
+
+  heap_object->set_deallocation_tid(report->deallocation_tid);
+  for (size_t i = 0; i < arraysize(report->deallocation_trace) && report->deallocation_trace[i];
+       ++i) {
+    unwindstack::FrameData frame_data =
+        unwinder->BuildFrameFromPcOnly(report->deallocation_trace[i]);
+    BacktraceFrame* f = heap_object->add_deallocation_backtrace();
+    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+  }
+
+  set_human_readable_cause(cause, untagged_fault_addr_);
+}
+
+void ScudoCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinder* unwinder) const {
+  size_t report_num = 0;
+  while (report_num < sizeof(error_info_.reports) / sizeof(error_info_.reports[0]) &&
+         error_info_.reports[report_num].error_type != UNKNOWN) {
+    FillInCause(tombstone->add_causes(), &error_info_.reports[report_num++], unwinder);
+  }
 }
 
 void ScudoCrashData::DumpCause(log_t* log, unwindstack::Unwinder* unwinder) const {
@@ -140,7 +193,8 @@ void ScudoCrashData::DumpReport(const scudo_error_report* report, log_t* log,
   if (report->allocation_trace[0]) {
     _LOG(log, logtype::BACKTRACE, "\nallocated by thread %u:\n", report->allocation_tid);
     unwinder->SetDisplayBuildID(true);
-    for (size_t i = 0; i < 64 && report->allocation_trace[i]; ++i) {
+    for (size_t i = 0; i < arraysize(report->allocation_trace) && report->allocation_trace[i];
+         ++i) {
       unwindstack::FrameData frame_data =
           unwinder->BuildFrameFromPcOnly(report->allocation_trace[i]);
       frame_data.num = i;
@@ -151,7 +205,8 @@ void ScudoCrashData::DumpReport(const scudo_error_report* report, log_t* log,
   if (report->deallocation_trace[0]) {
     _LOG(log, logtype::BACKTRACE, "\ndeallocated by thread %u:\n", report->deallocation_tid);
     unwinder->SetDisplayBuildID(true);
-    for (size_t i = 0; i < 64 && report->deallocation_trace[i]; ++i) {
+    for (size_t i = 0; i < arraysize(report->deallocation_trace) && report->deallocation_trace[i];
+         ++i) {
       unwindstack::FrameData frame_data =
           unwinder->BuildFrameFromPcOnly(report->deallocation_trace[i]);
       frame_data.num = i;
