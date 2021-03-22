@@ -1172,7 +1172,8 @@ static void ProcessKernelCmdline() {
         } else if (StartsWith(key, "qemu."sv)) {
             InitPropertySet("ro.kernel." + key, value);
         } else if (key == "qemu") {
-            InitPropertySet("ro.kernel." + key, value);  // emulator specific, deprecated
+            // emulator specific, should be retired once emulator migrates to
+            // androidboot.
             InitPropertySet("ro.boot." + key, value);
         }
     });
