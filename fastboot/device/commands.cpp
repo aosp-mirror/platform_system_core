@@ -392,13 +392,13 @@ static bool EnterRecovery() {
 
     struct sockaddr_un addr = {.sun_family = AF_UNIX};
     strncpy(addr.sun_path, "/dev/socket/recovery", sizeof(addr.sun_path) - 1);
-    if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+    if (connect(sock.get(), (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         PLOG(ERROR) << "Couldn't connect to recovery";
         return false;
     }
     // Switch to recovery will not update the boot reason since it does not
     // require a reboot.
-    auto ret = write(sock, &msg_switch_to_recovery, sizeof(msg_switch_to_recovery));
+    auto ret = write(sock.get(), &msg_switch_to_recovery, sizeof(msg_switch_to_recovery));
     if (ret != sizeof(msg_switch_to_recovery)) {
         PLOG(ERROR) << "Couldn't write message to switch to recovery";
         return false;
