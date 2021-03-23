@@ -238,6 +238,7 @@ cc_library_static {
         "gwp_asan_crash_handler",
         "libscudo",
         "libtombstone_proto",
+        "libprocinfo",
         "libprotobuf-cpp-lite",
     ],
 
