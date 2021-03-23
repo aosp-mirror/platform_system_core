@@ -127,6 +127,7 @@ cc_defaults {
         "-Wextra",
         "-Werror",
         "-Wvla",
+        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
     ],
     rtti: true,
 
