@@ -31,10 +31,12 @@
 #include <time.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include <async_safe/log.h>
 
+#include <android-base/file.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -47,6 +49,7 @@
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
 
+#include <procinfo/process.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
@@ -519,6 +522,14 @@ static void dump_logcat(Tombstone* tombstone, pid_t pid) {
   dump_log_file(tombstone, "main", pid);
 }
 
+static std::optional<uint64_t> read_uptime_secs() {
+  std::string uptime;
+  if (!android::base::ReadFileToString("/proc/uptime", &uptime)) {
+    return {};
+  }
+  return strtoll(uptime.c_str(), nullptr, 10);
+}
+
 void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
                              const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
                              const ProcessInfo& process_info, const OpenFilesList* open_files) {
@@ -528,6 +539,22 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwind
   result.set_build_fingerprint(android::base::GetProperty("ro.build.fingerprint", "unknown"));
   result.set_revision(android::base::GetProperty("ro.revision", "unknown"));
   result.set_timestamp(get_timestamp());
+
+  std::optional<uint64_t> system_uptime = read_uptime_secs();
+  if (system_uptime) {
+    android::procinfo::ProcessInfo proc_info;
+    std::string error;
+    if (android::procinfo::GetProcessInfo(target_thread, &proc_info, &error)) {
+      uint64_t starttime = proc_info.starttime / sysconf(_SC_CLK_TCK);
+      result.set_process_uptime(*system_uptime - starttime);
+    } else {
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to read process info: %s",
+                            error.c_str());
+    }
+  } else {
+    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to read /proc/uptime: %s",
+                          strerror(errno));
+  }
 
   const ThreadInfo& main_thread = threads.at(target_thread);
   result.set_pid(main_thread.pid);
