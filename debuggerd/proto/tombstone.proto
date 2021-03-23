@@ -21,7 +21,7 @@ message Tombstone {
 
   Signal signal_info = 10;
   string abort_message = 14;
-  Cause cause = 15;
+  repeated Cause causes = 15;
 
   map<uint32, Thread> threads = 16;
   repeated MemoryMapping memory_mappings = 17;
@@ -57,10 +57,52 @@ message Signal {
   reserved 10 to 999;
 }
 
+message HeapObject {
+  uint64 address = 1;
+  uint64 size = 2;
+
+  uint64 allocation_tid = 3;
+  repeated BacktraceFrame allocation_backtrace = 4;
+
+  uint64 deallocation_tid = 5;
+  repeated BacktraceFrame deallocation_backtrace = 6;
+}
+
+message MemoryError {
+  enum Tool {
+    GWP_ASAN = 0;
+    SCUDO = 1;
+
+    reserved 2 to 999;
+  }
+  Tool tool = 1;
+
+  enum Type {
+    UNKNOWN = 0;
+    USE_AFTER_FREE = 1;
+    DOUBLE_FREE = 2;
+    INVALID_FREE = 3;
+    BUFFER_OVERFLOW = 4;
+    BUFFER_UNDERFLOW = 5;
+
+    reserved 6 to 999;
+  }
+  Type type = 2;
+
+  oneof location {
+    HeapObject heap = 3;
+  }
+
+  reserved 4 to 999;
+}
+
 message Cause {
   string human_readable = 1;
+  oneof details {
+    MemoryError memory_error = 2;
+  }
 
-  reserved 2 to 999;
+  reserved 3 to 999;
 }
 
 message Register {
@@ -76,8 +118,9 @@ message Thread {
   repeated Register registers = 3;
   repeated BacktraceFrame current_backtrace = 4;
   repeated MemoryDump memory_dump = 5;
+  int64 tagged_addr_ctrl = 6;
 
-  reserved 6 to 999;
+  reserved 7 to 999;
 }
 
 message BacktraceFrame {
@@ -100,8 +143,9 @@ message MemoryDump {
   string mapping_name = 2;
   uint64 begin_address = 3;
   bytes memory = 4;
+  bytes tags = 5;
 
-  reserved 5 to 999;
+  reserved 6 to 999;
 }
 
 message MemoryMapping {
