@@ -911,8 +911,9 @@ static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
 
     lseek(fd, 0, SEEK_SET);
     int64_t limit = get_sparse_limit(sz);
+    buf->fd = std::move(fd);
     if (limit) {
-        sparse_file** s = load_sparse_files(fd, limit);
+        sparse_file** s = load_sparse_files(buf->fd.get(), limit);
         if (s == nullptr) {
             return false;
         }
@@ -921,7 +922,6 @@ static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
     } else {
         buf->type = FB_BUFFER_FD;
         buf->data = nullptr;
-        buf->fd = std::move(fd);
         buf->sz = sz;
     }
 
