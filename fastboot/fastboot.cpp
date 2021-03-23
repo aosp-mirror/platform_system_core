@@ -230,9 +230,9 @@ static void InfoMessage(const std::string& info) {
     fprintf(stderr, "(bootloader) %s\n", info.c_str());
 }
 
-static int64_t get_file_size(int fd) {
+static int64_t get_file_size(borrowed_fd fd) {
     struct stat sb;
-    if (fstat(fd, &sb) == -1) {
+    if (fstat(fd.get(), &sb) == -1) {
         die("could not get file size");
     }
     return sb.st_size;
@@ -657,12 +657,12 @@ static unique_fd unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     fprintf(stderr, "extracting %s (%" PRIu64 " MB) to disk...", entry_name,
             zip_entry.uncompressed_length / 1024 / 1024);
     double start = now();
-    int error = ExtractEntryToFile(zip, &zip_entry, fd);
+    int error = ExtractEntryToFile(zip, &zip_entry, fd.get());
     if (error != 0) {
         die("\nfailed to extract '%s': %s", entry_name, ErrorCodeString(error));
     }
 
-    if (lseek(fd, 0, SEEK_SET) != 0) {
+    if (lseek(fd.get(), 0, SEEK_SET) != 0) {
         die("\nlseek on extracted file '%s' failed: %s", entry_name, strerror(errno));
     }
 
@@ -902,14 +902,14 @@ static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
         return false;
     }
 
-    if (sparse_file* s = sparse_file_import(fd, false, false)) {
+    if (sparse_file* s = sparse_file_import(fd.get(), false, false)) {
         buf->image_size = sparse_file_len(s, false, false);
         sparse_file_destroy(s);
     } else {
         buf->image_size = sz;
     }
 
-    lseek(fd, 0, SEEK_SET);
+    lseek(fd.get(), 0, SEEK_SET);
     int64_t limit = get_sparse_limit(sz);
     buf->fd = std::move(fd);
     if (limit) {
@@ -936,7 +936,7 @@ static bool load_buf(const char* fname, struct fastboot_buffer* buf) {
     }
 
     struct stat s;
-    if (fstat(fd, &s)) {
+    if (fstat(fd.get(), &s)) {
         return false;
     }
     if (!S_ISREG(s.st_mode)) {
@@ -995,7 +995,7 @@ static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf, bool vbmeta_in_bo
         die("Failed writing to modified vbmeta");
     }
     buf->fd = std::move(fd);
-    lseek(buf->fd, 0, SEEK_SET);
+    lseek(buf->fd.get(), 0, SEEK_SET);
 }
 
 static bool has_vbmeta_partition() {
@@ -1057,13 +1057,13 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
     if (!android::base::WriteStringToFd(data, fd)) {
         die("Failed writing to modified boot");
     }
-    lseek(fd, partition_size - AVB_FOOTER_SIZE, SEEK_SET);
+    lseek(fd.get(), partition_size - AVB_FOOTER_SIZE, SEEK_SET);
     if (!android::base::WriteStringToFd(data.substr(footer_offset), fd)) {
         die("Failed copying AVB footer in boot");
     }
     buf->fd = std::move(fd);
     buf->sz = partition_size;
-    lseek(buf->fd, 0, SEEK_SET);
+    lseek(buf->fd.get(), 0, SEEK_SET);
 }
 
 static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
@@ -1538,7 +1538,7 @@ void FlashAllTool::FlashImage(const Image& image, const std::string& slot, fastb
 }
 
 void FlashAllTool::UpdateSuperPartition() {
-    int fd = source_.OpenFile("super_empty.img");
+    unique_fd fd = source_.OpenFile("super_empty.img");
     if (fd < 0) {
         return;
     }
@@ -2197,7 +2197,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (!load_buf(filename.c_str(), &buf) || buf.type != FB_BUFFER_FD) {
                 die("cannot load '%s'", filename.c_str());
             }
-            fb->Download(filename, buf.fd, buf.sz);
+            fb->Download(filename, buf.fd.get(), buf.sz);
         } else if (command == "get_staged") {
             std::string filename = next_arg(&args);
             fb->Upload(filename);

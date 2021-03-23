@@ -206,6 +206,7 @@ cc_defaults {
         "-Wextra",
         "-Werror",
         "-Wunreachable-code",
+        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
     ],
 
     target: {
