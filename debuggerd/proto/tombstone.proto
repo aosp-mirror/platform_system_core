@@ -19,6 +19,9 @@ message Tombstone {
 
   string process_name = 9;
 
+  // Process uptime in seconds.
+  uint32 process_uptime = 20;
+
   Signal signal_info = 10;
   string abort_message = 14;
   repeated Cause causes = 15;
@@ -28,7 +31,7 @@ message Tombstone {
   repeated LogBuffer log_buffers = 18;
   repeated FD open_fds = 19;
 
-  reserved 20 to 999;
+  reserved 21 to 999;
 }
 
 enum Architecture {
