@@ -31,9 +31,13 @@
 #include "types.h"
 
 // Forward declarations
+class BacktraceFrame;
+class Cause;
 class Tombstone;
 
 namespace unwindstack {
+struct FrameData;
+class Maps;
 class Unwinder;
 }
 
@@ -63,5 +67,9 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwind
 bool tombstone_proto_to_text(
     const Tombstone& tombstone,
     std::function<void(const std::string& line, bool should_log)> callback);
+
+void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& frame,
+                             unwindstack::Maps* maps);
+void set_human_readable_cause(Cause* cause, uint64_t fault_addr);
 
 #endif  // _DEBUGGERD_TOMBSTONE_H

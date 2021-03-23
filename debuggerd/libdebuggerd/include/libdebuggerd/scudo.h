@@ -23,6 +23,9 @@
 
 #include "scudo/interface.h"
 
+class Cause;
+class Tombstone;
+
 class ScudoCrashData {
  public:
   ScudoCrashData() = delete;
@@ -32,6 +35,7 @@ class ScudoCrashData {
   bool CrashIsMine() const;
 
   void DumpCause(log_t* log, unwindstack::Unwinder* unwinder) const;
+  void AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinder* unwinder) const;
 
  private:
   scudo_error_info error_info_ = {};
@@ -39,4 +43,7 @@ class ScudoCrashData {
 
   void DumpReport(const scudo_error_report* report, log_t* log,
                   unwindstack::Unwinder* unwinder) const;
+
+  void FillInCause(Cause* cause, const scudo_error_report* report,
+                   unwindstack::Unwinder* unwinder) const;
 };
