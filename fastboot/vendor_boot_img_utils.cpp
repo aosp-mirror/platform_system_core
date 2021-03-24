@@ -184,7 +184,7 @@ class DataUpdater {
     if (!android::base::WriteStringToFd(data, fd)) {
         return ErrnoErrorf("Cannot write new content to {}", what);
     }
-    if (TEMP_FAILURE_RETRY(ftruncate64(fd.get(), data.size())) == -1) {
+    if (TEMP_FAILURE_RETRY(ftruncate(fd.get(), data.size())) == -1) {
         return ErrnoErrorf("Truncating new vendor boot image to 0x{:x} fails", data.size());
     }
     return {};
