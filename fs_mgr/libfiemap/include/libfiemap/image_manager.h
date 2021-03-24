@@ -198,7 +198,7 @@ class MappedDevice final {
 
     ~MappedDevice();
 
-    int fd() const { return fd_; }
+    int fd() const { return fd_.get(); }
     const std::string& path() const { return path_; }
 
   protected:
