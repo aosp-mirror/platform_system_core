@@ -82,7 +82,7 @@ static int usb_ffs_write(usb_handle* h, const void* data, int len) {
     int orig_len = len;
     while (len > 0) {
         int write_len = std::min(USB_FFS_BULK_SIZE, len);
-        int n = write(h->bulk_in, buf, write_len);
+        int n = write(h->bulk_in.get(), buf, write_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_in.get(), n, strerror(errno));
             return -1;
@@ -103,7 +103,7 @@ static int usb_ffs_read(usb_handle* h, void* data, int len, bool allow_partial) 
     unsigned count = 0;
     while (len > 0) {
         int read_len = std::min(USB_FFS_BULK_SIZE, len);
-        int n = read(h->bulk_out, buf, read_len);
+        int n = read(h->bulk_out.get(), buf, read_len);
         if (n < 0) {
             D("ERROR: fd = %d, n = %d: %s", h->bulk_out.get(), n, strerror(errno));
             return -1;

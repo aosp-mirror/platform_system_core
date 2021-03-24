@@ -1165,14 +1165,40 @@ static void ProcessKernelDt() {
 
 constexpr auto ANDROIDBOOT_PREFIX = "androidboot."sv;
 
+// emulator specific, should be removed once emulator is migrated to
+// bootconfig, see b/182291166.
+static std::string RemapEmulatorPropertyName(const std::string_view qemu_key) {
+    if (StartsWith(qemu_key, "dalvik."sv) || StartsWith(qemu_key, "opengles."sv) ||
+        StartsWith(qemu_key, "config."sv)) {
+        return std::string(qemu_key);
+    } else if (qemu_key == "uirenderer"sv) {
+        return "debug.hwui.renderer"s;
+    } else if (qemu_key == "media.ccodec"sv) {
+        return "debug.stagefright.ccodec"s;
+    } else {
+        return ""s;  // TBD
+    }
+}
+
 static void ProcessKernelCmdline() {
     ImportKernelCmdline([&](const std::string& key, const std::string& value) {
+        constexpr auto qemu_prefix = "qemu."sv;
+
         if (StartsWith(key, ANDROIDBOOT_PREFIX)) {
             InitPropertySet("ro.boot." + key.substr(ANDROIDBOOT_PREFIX.size()), value);
-        } else if (StartsWith(key, "qemu."sv)) {
-            InitPropertySet("ro.kernel." + key, value);
-        } else if (key == "qemu") {
+        } else if (StartsWith(key, qemu_prefix)) {
             InitPropertySet("ro.kernel." + key, value);  // emulator specific, deprecated
+
+            // emulator specific, should be retired once emulator migrates to
+            // androidboot.
+            const auto new_name =
+                    RemapEmulatorPropertyName(std::string_view(key).substr(qemu_prefix.size()));
+            if (!new_name.empty()) {
+                InitPropertySet("ro.boot." + new_name, value);
+            }
+        } else if (key == "qemu") {
+            // emulator specific, should be retired once emulator migrates to
+            // androidboot.
             InitPropertySet("ro.boot." + key, value);
         }
     });
