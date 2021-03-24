@@ -208,6 +208,7 @@ cc_defaults {
         "-Werror",
         "-Wunreachable-code",
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
+        "-D_FILE_OFFSET_BITS=64"
     ],
 
     target: {
