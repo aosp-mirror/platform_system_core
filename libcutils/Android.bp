@@ -354,3 +354,17 @@ cc_test {
     defaults: ["libcutils_test_static_defaults"],
     test_config: "KernelLibcutilsTest.xml",
 }
+
+rust_bindgen {
+    name: "libcutils_bindgen",
+    wrapper_src: "rust/cutils.h",
+    crate_name: "cutils_bindgen",
+    source_stem: "bindings",
+    local_include_dirs: ["include"],
+    bindgen_flags: [
+        "--whitelist-function", "multiuser_get_app_id",
+        "--whitelist-function", "multiuser_get_user_id",
+        "--whitelist-function", "multiuser_get_uid",
+        "--whitelist-var", "AID_USER_OFFSET",
+    ],
+}
