@@ -523,10 +523,12 @@ static std::vector<char> LoadBootableImage(const std::string& kernel, const std:
     fprintf(stderr,"creating boot image...\n");
 
     std::vector<char> out;
-    boot_img_hdr_v2* boot_image_data = mkbootimg(kernel_data, ramdisk_data, second_stage_data,
-                                                 dtb_data, g_base_addr, g_boot_img_hdr, &out);
+    mkbootimg(kernel_data, ramdisk_data, second_stage_data, dtb_data, g_base_addr, g_boot_img_hdr,
+              &out);
 
-    if (!g_cmdline.empty()) bootimg_set_cmdline(boot_image_data, g_cmdline);
+    if (!g_cmdline.empty()) {
+        bootimg_set_cmdline(reinterpret_cast<boot_img_hdr_v2*>(out.data()), g_cmdline);
+    }
     fprintf(stderr, "creating boot image - %zu bytes\n", out.size());
     return out;
 }
