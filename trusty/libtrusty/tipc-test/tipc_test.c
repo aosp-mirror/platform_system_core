@@ -914,7 +914,7 @@ static int send_fd_test(void) {
     }
 
     size_t buf_size = PAGE_SIZE * num_pages;
-    dma_buf = DmabufHeapAlloc(allocator, "system", buf_size, 0);
+    dma_buf = DmabufHeapAlloc(allocator, "system", buf_size, 0, 0 /* legacy align */);
     if (dma_buf < 0) {
         ret = dma_buf;
         fprintf(stderr, "Failed to create dma-buf fd of size %zu err (%d)\n", buf_size, ret);
