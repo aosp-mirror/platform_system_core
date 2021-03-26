@@ -33,8 +33,7 @@ class UnwinderMock : public unwindstack::Unwinder {
   void MockSetBuildID(uint64_t offset, const std::string& build_id) {
     unwindstack::MapInfo* map_info = GetMaps()->Find(offset);
     if (map_info != nullptr) {
-      std::string* new_build_id = new std::string(build_id);
-      map_info->build_id = new_build_id;
+      map_info->SetBuildID(std::string(build_id));
     }
   }
 };
