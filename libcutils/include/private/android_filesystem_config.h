@@ -127,6 +127,7 @@
 #define AID_EXT_DATA_RW 1078      /* GID for app-private data directories on external storage */
 #define AID_EXT_OBB_RW 1079       /* GID for OBB directories on external storage */
 #define AID_CONTEXT_HUB 1080      /* GID for access to the Context Hub */
+#define AID_VIRTMANAGER 1081      /* VirtManager daemon */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
